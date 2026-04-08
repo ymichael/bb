@@ -27,6 +27,7 @@
     "@anthropic-ai/claude-agent-sdk": "^0.2.68",
     "@anthropic-ai/sdk": "^0.73.0",
     "@bb/domain": "workspace:*",
+    "@bb/process-utils": "workspace:*",
     "@mariozechner/pi-ai": "^0.58.3",
     "@mariozechner/pi-coding-agent": "^0.58.3",
     "zod": "^4.0.0"
