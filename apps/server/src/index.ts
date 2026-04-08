@@ -79,8 +79,6 @@ async function main(): Promise<void> {
     {
       port: serverConfig.BB_SERVER_PORT,
       dataDir: commonConfig.BB_DATA_DIR,
-      inferenceModel: serverConfig.BB_INFERENCE_MODEL,
-      hasOpenAiApiKey: Boolean(serverConfig.OPENAI_API_KEY),
     },
     "Server listening",
   );
