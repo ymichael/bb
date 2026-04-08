@@ -14,9 +14,9 @@
     "bundle": "node ./scripts/build-bundles.mjs",
     "bundle:check": "node ./scripts/check-bundles.mjs",
     "start": "node dist/index.js",
-    "start:prod": "NODE_ENV=production node dist/index.js",
+    "start:prod": "cross-env NODE_ENV=production node dist/index.js",
     "dev": "node scripts/dev-supervisor.mjs",
-    "clean": "rm -rf dist",
+    "clean": "rimraf dist",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --config vitest.config.ts"
   },

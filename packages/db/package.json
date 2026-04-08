@@ -20,7 +20,7 @@
   ],
   "scripts": {
     "build": "tsc",
-    "clean": "rm -rf dist tsconfig.tsbuildinfo",
+    "clean": "rimraf dist tsconfig.tsbuildinfo",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --config vitest.config.ts",
     "predb:generate": "pnpm exec turbo run build --filter=@bb/db",

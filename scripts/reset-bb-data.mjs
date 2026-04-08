@@ -4,7 +4,7 @@ import { isAbsolute, resolve } from "node:path";
 import readline from "node:readline/promises";
 import { DEFAULTS } from "../packages/config/dist/defaults.js";
 import {
-  bold, cyan, dim, green, red, yellow,
+  bold, cyan, dim, green, yellow,
   log, endStep,
 } from "./lib/script-helpers.mjs";
 

@@ -1,1 +1,2 @@
+* text=auto eol=lf
 packages/provider-audit/fixtures/**/raw-provider-events.json -diff linguist-generated=true

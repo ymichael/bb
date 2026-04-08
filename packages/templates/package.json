@@ -13,7 +13,7 @@
   "files": ["dist"],
   "scripts": {
     "build": "node ./scripts/generate-templates.mjs && esbuild src/index.ts --bundle --platform=node --target=node20 --format=esm --outfile=dist/index.js --sourcemap && tsc --project tsconfig.json --emitDeclarationOnly --declaration --declarationMap --outDir dist",
-    "clean": "rm -rf dist tsconfig.tsbuildinfo",
+    "clean": "rimraf dist tsconfig.tsbuildinfo",
     "typecheck": "node ./scripts/generate-templates.mjs && tsc --noEmit",
     "test": "node ./scripts/generate-templates.mjs && vitest run --config vitest.config.ts"
   },

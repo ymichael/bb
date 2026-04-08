@@ -16,8 +16,8 @@
   "types": "./dist/index.d.ts",
   "files": ["dist"],
   "scripts": {
-    "build": "tsc && mkdir -p dist/test && cp src/test/fake-provider-script.cjs dist/test/fake-provider-script.cjs",
-    "clean": "rm -rf dist tsconfig.tsbuildinfo",
+    "build": "tsc && node ../../scripts/copy-file.mjs src/test/fake-provider-script.cjs dist/test/fake-provider-script.cjs",
+    "clean": "rimraf dist tsconfig.tsbuildinfo",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --config vitest.config.ts",
     "test:unit": "vitest run --config vitest.config.ts --exclude '**/integration/**'",

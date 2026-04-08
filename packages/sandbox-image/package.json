@@ -13,11 +13,11 @@
   "files": ["dist", "Dockerfile"],
   "scripts": {
     "build": "tsc",
-    "clean": "rm -rf dist tsconfig.tsbuildinfo",
+    "clean": "rimraf dist tsconfig.tsbuildinfo",
     "typecheck": "tsc --noEmit",
     "template:build": "tsx src/build-template.ts",
     "test": "vitest run --config vitest.config.ts",
-    "test:image": "SANDBOX_IMAGE_TEST=1 vitest run --config vitest.config.ts test/image.test.ts"
+    "test:image": "cross-env SANDBOX_IMAGE_TEST=1 vitest run --config vitest.config.ts test/image.test.ts"
   },
   "dependencies": {
     "e2b": "^2.18.0",
