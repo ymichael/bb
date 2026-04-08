@@ -89,6 +89,48 @@ function mockSystemConfig(): void {
   });
 }
 
+describe("systemConfigAtom", () => {
+  it("re-fetches config after websocket reconnects", async () => {
+    // First call: server unavailable, returns fallback with no daemon port
+    getSystemConfig.mockResolvedValueOnce({
+      json: async () => ({
+        hostDaemonPort: null,
+        voiceTranscriptionEnabled: false,
+      }),
+      ok: true,
+    });
+    // Second call: server recovered, returns real config
+    getSystemConfig.mockResolvedValueOnce({
+      json: async () => ({
+        hostDaemonPort: 4123,
+        voiceTranscriptionEnabled: false,
+      }),
+      ok: true,
+    });
+
+    const { systemConfigAtom } = await import("./atoms");
+    const store = getDefaultStore();
+    const unsubscribe = store.sub(systemConfigAtom, () => {});
+
+    try {
+      expect(await store.get(systemConfigAtom)).toMatchObject({
+        hostDaemonPort: null,
+      });
+
+      for (const cb of connectedCallbacks) {
+        cb({ reconnected: true });
+      }
+
+      expect(await store.get(systemConfigAtom)).toMatchObject({
+        hostDaemonPort: 4123,
+      });
+      expect(getSystemConfig).toHaveBeenCalledTimes(2);
+    } finally {
+      unsubscribe();
+    }
+  });
+});
+
 describe("localHostIdAtom", () => {
   it("re-probes when host status changes", async () => {
     mockSystemConfig();
@@ -116,7 +158,7 @@ describe("localHostIdAtom", () => {
 
   it("re-probes after websocket reconnects", async () => {
     mockSystemConfig();
-    fetchHostId.mockResolvedValueOnce(null).mockResolvedValueOnce("host-1");
+    fetchHostId.mockResolvedValueOnce(null).mockResolvedValue("host-1");
 
     const { localHostIdAtom } = await import("./atoms");
     const store = getDefaultStore();
@@ -125,10 +167,11 @@ describe("localHostIdAtom", () => {
     try {
       expect(await store.get(localHostIdAtom)).toBeNull();
 
-      connectedCallbacks[0]?.({ reconnected: true });
+      for (const cb of connectedCallbacks) {
+        cb({ reconnected: true });
+      }
 
       expect(await store.get(localHostIdAtom)).toBe("host-1");
-      expect(fetchHostId).toHaveBeenCalledTimes(2);
     } finally {
       unsubscribe();
     }

@@ -4,10 +4,6 @@ import { apiClient } from "./api-server";
 import { fetchHostId } from "./api-host-daemon";
 import { wsManager } from "./ws";
 
-// ---------------------------------------------------------------------------
-// System config — fetched once from the server on app startup
-// ---------------------------------------------------------------------------
-
 async function loadSystemConfig(): Promise<SystemConfigResponse> {
   try {
     const res = await apiClient.system.config.$get();
@@ -30,8 +26,25 @@ async function loadSystemConfig(): Promise<SystemConfigResponse> {
   }
 }
 
-/** System config from the server. Resolves once on first read. */
-export const systemConfigAtom = atom(async () => loadSystemConfig());
+// ---------------------------------------------------------------------------
+// System config — fetched from the server on startup and re-fetched on
+// websocket reconnects (the initial load may fail if the server isn't ready).
+// ---------------------------------------------------------------------------
+
+const systemConfigRefreshTickAtom = atom(0);
+systemConfigRefreshTickAtom.onMount = (setRefreshTick) => {
+  const unsubscribe = wsManager.onConnected(({ reconnected }) => {
+    if (reconnected) {
+      setRefreshTick((count) => count + 1);
+    }
+  });
+  return unsubscribe;
+};
+
+export const systemConfigAtom = atom(async (get) => {
+  get(systemConfigRefreshTickAtom);
+  return loadSystemConfig();
+});
 
 // ---------------------------------------------------------------------------
 // Local host ID — probed from the host daemon on startup.
