@@ -1,0 +1,50 @@
+import crossSpawn from "cross-spawn";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { DEFAULTS } from "../packages/config/dist/defaults.js";
+
+const scriptDir = dirname(fileURLToPath(import.meta.url));
+const repoRoot = resolve(scriptDir, "..");
+
+export function resolveBbDevEnv() {
+  return {
+    ...process.env,
+    BB_SERVER_URL: process.env.BB_SERVER_URL ?? DEFAULTS.serverUrl.dev,
+    BB_HOST_DAEMON_PORT:
+      process.env.BB_HOST_DAEMON_PORT ?? String(DEFAULTS.hostDaemonPort.dev),
+  };
+}
+
+async function main() {
+  const child = crossSpawn(
+    "pnpm",
+    ["--filter", "@bb/server", "exec", "tsx", "../cli/src/index.ts"],
+    {
+      cwd: repoRoot,
+      env: resolveBbDevEnv(),
+      stdio: "inherit",
+    },
+  );
+
+  process.on("SIGINT", () => child.kill("SIGINT"));
+  process.on("SIGTERM", () => child.kill("SIGTERM"));
+
+  const exitCode = await new Promise((resolvePromise) => {
+    child.once("exit", (code) => {
+      resolvePromise(code ?? 1);
+    });
+  });
+  process.exitCode = exitCode;
+}
+
+const isDirectExecution =
+  process.argv[1] != null &&
+  resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+
+if (isDirectExecution) {
+  void main().catch((error) => {
+    const message = error instanceof Error ? error.stack ?? error.message : String(error);
+    process.stderr.write(`${message}\n`);
+    process.exitCode = 1;
+  });
+}

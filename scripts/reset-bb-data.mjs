@@ -12,14 +12,28 @@ const defaultDataDir = resolve(homedir(), DEFAULTS.dataDir.prod);
 const defaultDevDataDir = resolve(homedir(), DEFAULTS.dataDir.dev);
 const defaultDevDaemonDataDir = resolve(homedir(), `${DEFAULTS.dataDir.dev}-host-daemon`);
 
-function resolveDataDir() {
+function resolveMode(argv) {
+  const modeFlagIndex = argv.indexOf("--mode");
+  if (modeFlagIndex === -1) {
+    return "prod";
+  }
+
+  const modeValue = argv[modeFlagIndex + 1];
+  if (modeValue === "prod" || modeValue === "dev") {
+    return modeValue;
+  }
+
+  throw new Error('Expected "--mode prod" or "--mode dev"');
+}
+
+function resolveDataDir(mode) {
   const preferred = process.env.BB_DATA_DIR?.trim();
   if (preferred) {
     return resolve(preferred.startsWith("~/")
       ? resolve(homedir(), preferred.slice(2))
       : preferred);
   }
-  return defaultDataDir;
+  return mode === "dev" ? defaultDevDataDir : defaultDataDir;
 }
 
 function uniquePaths(paths) {
@@ -65,23 +79,26 @@ async function confirmReset(targets) {
 }
 
 async function main() {
-  const args = new Set(process.argv.slice(2));
+  const argv = process.argv.slice(2);
+  const args = new Set(argv);
+  const mode = resolveMode(argv);
 
   if (args.has("--help") || args.has("-h")) {
     process.stdout.write(`
   ${bold("bb reset")}
 
   ${dim("Usage")}
-    node scripts/reset-bb-data.mjs [--all] [--yes]
+    node scripts/reset-bb-data.mjs [--mode prod|dev] [--all] [--yes]
 
   ${dim("Options")}
+    --mode  Select the default data directory for single-directory resets (${dim("prod")} or ${dim("dev")})
     --all   Remove prod, dev, and dev daemon data directories
     --yes   Skip the interactive confirmation prompt
 
   ${dim("Notes")}
     Removes bb-managed state directories (${dim("~/.bb")}, ${dim("~/.bb-dev")}, ${dim("~/.bb-dev-host-daemon")}).
     Does not touch provider auth/config managed by other tools.
-    Respects BB_DATA_DIR for single-directory resets.
+    Respects BB_DATA_DIR for single-directory resets and lets BB_DATA_DIR override --mode.
 \n`);
     return;
   }
@@ -89,8 +106,8 @@ async function main() {
   process.stdout.write(`\n  ${bold("bb reset")}\n`);
 
   const targets = args.has("--all")
-    ? uniquePaths([defaultDataDir, defaultDevDataDir, defaultDevDaemonDataDir, resolveDataDir()])
-    : [resolveDataDir()];
+    ? uniquePaths([defaultDataDir, defaultDevDataDir, defaultDevDaemonDataDir, resolveDataDir(mode)])
+    : [resolveDataDir(mode)];
 
   ensureSafeTargets(targets);
 
