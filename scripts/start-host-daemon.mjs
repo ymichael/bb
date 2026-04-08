@@ -8,7 +8,7 @@ import {
   bold, cyan, dim, green, red, yellow,
   log, beginStep, endStep,
   waitForHealth, build, createOutputBuffer,
-} from "./lib/start-helpers.mjs";
+} from "./lib/script-helpers.mjs";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, "..");
