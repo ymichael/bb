@@ -7,45 +7,42 @@ Make ephemeral sandbox hosts safe and durable enough for real thread reuse by fi
 ## Plan Status
 
 - Overall status: active
-- Milestone 1 status: planned
+- Milestone 1 status: complete
 - Milestone 2 status: planned
 - Retention rule: keep this file after Milestone 1 lands because Milestone 2 remains open; when Milestone 1 ships, update this file to mark Milestone 1 complete instead of deleting it. Delete the plan only after Milestone 2 is complete or the plan is superseded.
 
 ## Current Findings
 
-### 1. Lifecycle support exists, but lifecycle ownership is still incomplete
+### 1. Milestone 1 lifecycle ownership is now in place
 
-- `packages/sandbox-host/src/lifecycle.ts` already exposes `suspend()`, `resume()`, and `extendTimeout()`.
-- `packages/sandbox-host/src/provision.ts` already provisions E2B sandboxes with `lifecycle: { onTimeout: "pause" }`.
-- The server now provisions and resumes ephemeral sandbox hosts asynchronously through `apps/server/src/services/hosts/host-lifecycle.ts`, specifically `ensureSandboxHostSessionReady(...)`, and `apps/server/src/services/environments/environment-provisioning.ts` calls that owner during sandbox-host environment bootstrap.
-- The server currently never calls `suspend()` or `extendTimeout()` in response to thread idleness or runtime activity.
-- `apps/server/src/services/lib/entity-lookup.ts` only derives host status as `connected` or `disconnected`, even though `packages/domain/src/host.ts` already includes `suspended`.
+- `apps/server/src/services/hosts/host-lifecycle.ts` now owns ephemeral sandbox resume gating, idle suspend, activity-driven timeout extension, and runtime-sync gating.
+- `apps/server/src/services/lib/entity-lookup.ts` now surfaces `suspended` for ephemeral hosts with `suspendedAt`.
+- Thread start, thread storage access, manager-nudge execution, and environment provisioning all route through the suspend-aware `ensureHostSessionReadyForWork(...)` path before queueing host work.
+- Periodic cleanup no longer races newly joined or intentionally suspended sandbox hosts.
 
-### 2. Activity ingress points are clear
+### 2. Runtime material sync is now the server-owned path for existing cloud runtime env
 
-These are the server-owned points where real host activity arrives and where timeout extension can be driven:
+- `host.sync_runtime_material` is implemented end to end in the shared contract, server lifecycle state, daemon command dispatch, and daemon local-state persistence.
+- First ephemeral session open now requests and advances runtime material sync automatically, and reconnects invalidate then requeue the sync for the new session.
+- Existing server-scoped material (`BB_GITHUB_PAT`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`) is now delivered through runtime sync instead of depending on bootstrap-only daemon env for cloud sandboxes.
+- There is still no per-user or per-project secret store or UI for custom sandbox env vars or cloud auth connections; that remains Milestone 2.
+
+### 3. Activity and idle policy are wired to real server ingress
 
 - `apps/server/src/internal/events.ts`
 - `apps/server/src/internal/commands.ts`
 - `apps/server/src/internal/command-result-route.ts`
 - `apps/server/src/internal/tool-calls.ts`
 
-Heartbeats in `apps/server/src/ws/daemon-protocol.ts` should not count as activity. They prove connectivity, not useful work.
+These ingress points now mark real sandbox activity. Heartbeats in `apps/server/src/ws/daemon-protocol.ts` still do not count as useful activity.
 
-### 3. Resume support exists, but it is not part of the normal ephemeral-host command path
+### 4. Milestone 2 is now the remaining auth and user-material work
 
-- Thread start and turn dispatch currently require an already-connected host session via `requireConnectedHostSession(...)`.
-- `ensureSandboxHostSessionReady(...)` exists, but it is currently scoped to sandbox-host environment bootstrap rather than all ephemeral-host work paths.
-- There is still no general `ensure sandbox host session` path that resumes a paused sandbox, waits for the daemon to reconnect, ensures runtime material is current, and only then queues arbitrary host work.
-- Suspending sandboxes before fixing resume would strand idle threads.
+- Per-user and per-project secret storage is still missing.
+- App/project settings still do not expose cloud sandbox env vars or cloud auth connections.
+- Provider auth file generation and refresh-token stripping rules are still future work on top of the Milestone 1 runtime-sync foundation.
 
-### 4. Runtime material is still bootstrap-coupled and server-wide only today
-
-- `apps/server/src/services/hosts/sandbox-daemon-env.ts` only injects server-level `GITHUB_TOKEN`, `OPENAI_API_KEY`, and `ANTHROPIC_API_KEY`.
-- There is no per-user or per-project secret store.
-- There is no UI for sandbox env vars or cloud auth connections in the current app/project settings views.
-
-### 5. Pi/Codex/Claude auth needs server ownership
+### 5. Pi/Codex/Claude auth still needs server ownership
 
 - `packages/agent-runtime/src/pi/bridge/sdk-session.ts` explicitly notes that Pi built-in tools inherit from `process.env`; Pi does not support per-session env overrides cleanly.
 - That means cloud auth cannot be a browser-only concern. It has to be synchronized into the daemon/runtime model on the server side.
@@ -72,7 +69,15 @@ The smoke now passes on the real isolated-server path:
 
 I also verified two copies in parallel, each with its own local server port and Cloudflare tunnel URL.
 
-Remaining QA gap: the smoke does not yet validate runtime material sync or cloud auth file materialization.
+The smoke now also validates:
+
+- runtime material sync on first connect
+- timeout extension after real host activity
+- server-driven idle suspend
+- server-driven resume before new thread work
+- two parallel isolated runs with distinct local ports and public tunnel URLs
+
+Remaining QA gap: auth file materialization and user/project-specific runtime material remain Milestone 2 work.
 
 ## External Research
 
