@@ -1409,6 +1409,129 @@ describe("public thread routes", () => {
     }
   });
 
+  it("allows reusing a provisioning sandbox environment before the first session arrives", async () => {
+    const harness = await createTestAppHarness({
+      githubPat: "test-github-pat",
+    });
+    try {
+      let sandboxHostId: string | undefined;
+      let sandboxHostName: string | undefined;
+      let resolveProvisionHost: ((value: {
+        destroy: ReturnType<typeof vi.fn>;
+        extendTimeout: ReturnType<typeof vi.fn>;
+        externalId: string;
+        hostId: string;
+        resume: ReturnType<typeof vi.fn>;
+        suspend: ReturnType<typeof vi.fn>;
+      }) => void) | null = null;
+      const provisionHostResult = new Promise<{
+        destroy: ReturnType<typeof vi.fn>;
+        extendTimeout: ReturnType<typeof vi.fn>;
+        externalId: string;
+        hostId: string;
+        resume: ReturnType<typeof vi.fn>;
+        suspend: ReturnType<typeof vi.fn>;
+      }>((resolve) => {
+        resolveProvisionHost = resolve;
+      });
+      provisionHostMock.mockImplementation(async (options: SandboxProvisionCall) => {
+        sandboxHostId = options.hostId;
+        sandboxHostName = options.hostName;
+        return provisionHostResult;
+      });
+
+      const { project } = createProject(harness.db, harness.hub, {
+        name: "Cloud Sandbox Reuse Project",
+        source: {
+          repoUrl: "https://github.com/example/repo.git",
+          type: "github_repo",
+        },
+      });
+
+      const firstResponse = await harness.app.request("/api/v1/threads", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          projectId: project.id,
+          providerId: "codex",
+          type: "standard",
+          model: "gpt-5",
+          input: [{ type: "text", text: "Provision a sandbox thread" }],
+          environment: {
+            type: "sandbox-host",
+            sandboxType: "e2b",
+          },
+        }),
+      });
+
+      expect(firstResponse.status).toBe(201);
+      const firstThread = threadSchema.parse(await readJson(firstResponse));
+
+      const reuseResponse = await harness.app.request("/api/v1/threads", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          projectId: project.id,
+          providerId: "codex",
+          type: "standard",
+          model: "gpt-5",
+          input: [{ type: "text", text: "Reuse the provisioning sandbox" }],
+          environment: {
+            type: "reuse",
+            environmentId: firstThread.environmentId,
+          },
+        }),
+      });
+
+      expect(reuseResponse.status).toBe(201);
+      const reusedThread = threadSchema.parse(await readJson(reuseResponse));
+      expect(reusedThread.environmentId).toBe(firstThread.environmentId);
+      expect(reusedThread.status).toBe("provisioning");
+
+      await waitForAssertion(() => {
+        expect(resolveProvisionHost).not.toBeNull();
+        expect(sandboxHostId).toBeDefined();
+      });
+
+      if (!resolveProvisionHost || !sandboxHostId) {
+        throw new Error("Expected sandbox host provisioning to start");
+      }
+      resolveProvisionHost({
+        destroy: vi.fn().mockResolvedValue(undefined),
+        extendTimeout: vi.fn().mockResolvedValue(undefined),
+        externalId: "sandbox-external-reuse",
+        hostId: sandboxHostId,
+        resume: vi.fn().mockResolvedValue(undefined),
+        suspend: vi.fn().mockResolvedValue(undefined),
+      });
+
+      openSession(harness.db, harness.hub, {
+        dataDir: `/tmp/bb-host-data/${sandboxHostId}`,
+        heartbeatIntervalMs: 10_000,
+        hostId: sandboxHostId,
+        hostName: sandboxHostName ?? "Sandbox Reuse Host",
+        hostType: "ephemeral",
+        instanceId: "instance-sandbox-reuse",
+        leaseTimeoutMs: 60_000,
+        protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
+      });
+
+      const queued = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "environment.provision"
+          && command.environmentId === firstThread.environmentId,
+      );
+      expect(queued.row.hostId).toBe(sandboxHostId);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("marks the thread errored when sandbox host provisioning fails", async () => {
     const harness = await createTestAppHarness({
       githubPat: "test-github-pat",
@@ -1472,6 +1595,95 @@ describe("public thread routes", () => {
         failureEvents.flatMap((event) => event.entries.map((entry) => entry.text)),
       ).toContain("sandbox bootstrap failed");
       expect(listHosts(harness.db)).toHaveLength(2);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("finishes pending cleanup when sandbox bootstrap fails after delete-before-connect", async () => {
+    const harness = await createTestAppHarness({
+      githubPat: "test-github-pat",
+    });
+    try {
+      let sandboxHostId: string | undefined;
+      let rejectProvisionHost: ((reason?: unknown) => void) | null = null;
+      const provisionHostResult = new Promise<{
+        destroy: ReturnType<typeof vi.fn>;
+        extendTimeout: ReturnType<typeof vi.fn>;
+        externalId: string;
+        hostId: string;
+        resume: ReturnType<typeof vi.fn>;
+        suspend: ReturnType<typeof vi.fn>;
+      }>((_resolve, reject) => {
+        rejectProvisionHost = reject;
+      });
+      void provisionHostResult.catch(() => undefined);
+      provisionHostMock.mockImplementation(async (options: SandboxProvisionCall) => {
+        sandboxHostId = options.hostId;
+        return provisionHostResult;
+      });
+
+      const { project } = createProject(harness.db, harness.hub, {
+        name: "Cloud Sandbox Cleanup Project",
+        source: {
+          repoUrl: "https://github.com/example/repo.git",
+          type: "github_repo",
+        },
+      });
+
+      const createResponse = await harness.app.request("/api/v1/threads", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          projectId: project.id,
+          providerId: "codex",
+          type: "standard",
+          model: "gpt-5",
+          input: [{ type: "text", text: "Provision then delete" }],
+          environment: {
+            type: "sandbox-host",
+            sandboxType: "e2b",
+          },
+        }),
+      });
+
+      expect(createResponse.status).toBe(201);
+      const createdThread = threadSchema.parse(await readJson(createResponse));
+
+      const deleteResponse = await harness.app.request(`/api/v1/threads/${createdThread.id}`, {
+        method: "DELETE",
+      });
+      expect(deleteResponse.status).toBe(200);
+      expect(getEnvironment(harness.db, createdThread.environmentId)).toMatchObject({
+        cleanupMode: "force",
+        cleanupRequestedAt: expect.any(Number),
+        status: "provisioning",
+      });
+
+      if (!rejectProvisionHost) {
+        throw new Error("Expected sandbox host provisioning to start");
+      }
+      rejectProvisionHost(new Error("sandbox bootstrap failed"));
+
+      await waitForAssertion(() => {
+        expect(getEnvironment(harness.db, createdThread.environmentId)).toMatchObject({
+          cleanupMode: null,
+          cleanupRequestedAt: null,
+          status: "destroyed",
+        });
+      });
+      expect(sandboxHostId).toBeDefined();
+      expect(getHost(harness.db, sandboxHostId!)).toMatchObject({
+        destroyedAt: expect.any(Number),
+      });
+      const destroyCommands = harness.db
+        .select()
+        .from(hostDaemonCommands)
+        .where(eq(hostDaemonCommands.type, "environment.destroy"))
+        .all();
+      expect(destroyCommands).toHaveLength(0);
     } finally {
       await harness.cleanup();
     }

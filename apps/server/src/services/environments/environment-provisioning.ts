@@ -54,6 +54,7 @@ import {
   destroyHost,
   ensureSandboxHostSessionReady,
 } from "../hosts/host-lifecycle.js";
+import { advanceEnvironmentCleanup } from "./environment-cleanup.js";
 import { tryTransition } from "../threads/thread-transitions.js";
 
 type EnvironmentProvisionOperationKind = Extract<
@@ -490,6 +491,10 @@ async function bootstrapSandboxProvisioning(
     if (host && host.destroyedAt === null) {
       await destroyHost(deps, host.id).catch(() => undefined);
     }
+
+    await advanceEnvironmentCleanup(deps, {
+      environmentId: args.environment.id,
+    });
   }
 }
 

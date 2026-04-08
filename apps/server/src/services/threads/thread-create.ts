@@ -23,7 +23,10 @@ import {
   waitForQueuedCommandResult,
 } from "../hosts/command-wait.js";
 import { COMMAND_TIMEOUT_MS } from "../../constants.js";
-import { requireConnectedHostSession } from "../lib/entity-lookup.js";
+import {
+  requireConnectedHostSession,
+  requireNonDestroyedHostWithStatus,
+} from "../lib/entity-lookup.js";
 import { requireReachablePublicServerUrl } from "../hosts/public-server-url.js";
 import { assertSandboxProvisioningConfig } from "../hosts/sandbox-backends.js";
 import { appendClientTurnEvent, appendProvisioningEvent, buildCwdBranchEntries } from "./thread-events.js";
@@ -356,6 +359,16 @@ export async function createThreadFromRequest(
 
   if (resolvedEnvironment.type === "reuse") {
     const environment = resolvedEnvironment.environment;
+    if (environment.status === "provisioning") {
+      requireNonDestroyedHostWithStatus(deps.db, environment.hostId);
+      return createThreadInEnvironment(deps, {
+        environment,
+        projectDefaults: executionDefaults,
+        request,
+        threadStatus: "provisioning",
+      });
+    }
+
     requireConnectedHostSession(deps, environment.hostId);
     if (environment.status === "ready") {
       if (!environment.path) {
@@ -366,14 +379,6 @@ export async function createThreadFromRequest(
         projectDefaults: executionDefaults,
         request,
         threadStatus: "created",
-      });
-    }
-    if (environment.status === "provisioning") {
-      return createThreadInEnvironment(deps, {
-        environment,
-        projectDefaults: executionDefaults,
-        request,
-        threadStatus: "provisioning",
       });
     }
     throw new ApiError(409, "invalid_request", "Environment is not ready");
