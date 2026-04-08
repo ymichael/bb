@@ -1,4 +1,5 @@
-import type { StdioOptions } from "node:child_process";
+import type { ChildProcess, StdioOptions } from "node:child_process";
+import type { Readable, Writable } from "node:stream";
 import crossSpawn from "cross-spawn";
 
 export interface PortableSpawnRequest {
@@ -10,7 +11,21 @@ export interface PortableSpawnRequest {
   stdio?: StdioOptions;
 }
 
-export type PortableChildProcess = ReturnType<typeof crossSpawn>;
+export interface PortableChildProcess extends ChildProcess {}
+
+export interface PortablePipedSpawnRequest {
+  command: string;
+  args: string[];
+  cwd?: string;
+  detached?: boolean;
+  env?: NodeJS.ProcessEnv;
+}
+
+export interface PortablePipedChildProcess extends PortableChildProcess {
+  stdin: Writable;
+  stdout: Readable;
+  stderr: Readable;
+}
 
 export function spawnPortableProcess(
   request: PortableSpawnRequest,
@@ -21,4 +36,23 @@ export function spawnPortableProcess(
     env: request.env,
     stdio: request.stdio,
   });
+}
+
+export function assertPortablePipedProcess(
+  child: PortableChildProcess,
+): asserts child is PortablePipedChildProcess {
+  if (!child.stdin || !child.stdout || !child.stderr) {
+    throw new Error("Portable child process did not attach piped stdio");
+  }
+}
+
+export function spawnPortablePipedProcess(
+  request: PortablePipedSpawnRequest,
+): PortablePipedChildProcess {
+  const child = spawnPortableProcess({
+    ...request,
+    stdio: ["pipe", "pipe", "pipe"],
+  });
+  assertPortablePipedProcess(child);
+  return child;
 }

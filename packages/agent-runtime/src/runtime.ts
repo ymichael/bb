@@ -6,7 +6,7 @@ import type {
   ThreadExecutionOptions,
   ToolCallRequest,
 } from "@bb/domain";
-import { spawnPortableProcess } from "@bb/process-utils";
+import { spawnPortablePipedProcess } from "@bb/process-utils";
 import type { AgentRuntimeCaptureEntry } from "./capture-types.js";
 import type {
   AdapterOptions,
@@ -536,12 +536,11 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       ...options.env,
     };
 
-    const child = spawnPortableProcess({
+    const child = spawnPortablePipedProcess({
       command: adapter.process.command,
       args: adapter.process.args,
       cwd: options.workspacePath,
       env,
-      stdio: ["pipe", "pipe", "pipe"],
     });
 
     const proc: ProviderProcess = {
@@ -554,23 +553,21 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     };
 
     // Read stdout line by line
-    const rl = createInterface({ input: child.stdout! });
+    const rl = createInterface({ input: child.stdout });
     rl.on("line", (line) => handleStdoutLine(line, proc));
 
     // Forward stderr
-    if (child.stderr) {
-      const stderrRl = createInterface({ input: child.stderr });
-      stderrRl.on("line", (line) => {
-        proc.stderrChunks.push(line);
-        options.onStderr?.(line);
-        emitCapture({
-          kind: "provider-stderr",
-          capturedAt: Date.now(),
-          providerId,
-          line,
-        });
+    const stderrRl = createInterface({ input: child.stderr });
+    stderrRl.on("line", (line) => {
+      proc.stderrChunks.push(line);
+      options.onStderr?.(line);
+      emitCapture({
+        kind: "provider-stderr",
+        capturedAt: Date.now(),
+        providerId,
+        line,
       });
-    }
+    });
 
     // Handle spawn errors (e.g., binary not found)
     child.on("error", (err) => {

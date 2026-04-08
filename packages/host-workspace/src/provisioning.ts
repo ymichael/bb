@@ -5,7 +5,7 @@ import {
   LEGACY_POSIX_ENV_SETUP_SCRIPT_NAME,
   type ProvisioningTranscriptEntry,
 } from "@bb/domain";
-import { spawnPortableProcess } from "@bb/process-utils";
+import { spawnPortablePipedProcess } from "@bb/process-utils";
 import { Workspace } from "./workspace.js";
 import { pathExists, runGit, WorkspaceError, type GitCommandResult } from "./git.js";
 
@@ -38,14 +38,19 @@ export interface RemoveWorktreeArgs {
 const GITHUB_HOSTNAME = "github.com";
 const GITHUB_TOKEN_ENV_KEY = "GITHUB_TOKEN";
 const SETUP_SCRIPT_NODE_TRANSFORM_FLAG = "--experimental-transform-types";
-const SETUP_SCRIPT_NODE_EXTENSIONS = new Set([
-  ".cjs",
+const SETUP_SCRIPT_NODE_TS_EXTENSIONS = new Set([
   ".cts",
-  ".js",
-  ".mjs",
   ".mts",
   ".ts",
 ]);
+const SETUP_SCRIPT_NODE_JS_EXTENSIONS = new Set([
+  ".cjs",
+  ".js",
+  ".mjs",
+]);
+const LEGACY_POSIX_SETUP_SCRIPT_WARNING =
+  `Legacy ${LEGACY_POSIX_ENV_SETUP_SCRIPT_NAME} support is temporary. ` +
+  `Migrate to ${DEFAULT_ENV_SETUP_SCRIPT_NAME}.`;
 
 interface ResolvedSetupScript {
   scriptName: string;
@@ -56,6 +61,12 @@ interface SetupScriptCommand {
   command: string;
   args: string[];
   text: string;
+}
+
+interface BuildSetupScriptCommandArgs {
+  platform: NodeJS.Platform;
+  scriptName: string;
+  scriptPath: string;
 }
 
 function buildGitHubCloneEnv(sourcePath: string): NodeJS.ProcessEnv | undefined {
@@ -187,6 +198,8 @@ async function resolveSetupScript(
     args.scriptName === DEFAULT_ENV_SETUP_SCRIPT_NAME
     && process.platform !== "win32"
   ) {
+    // TODO(platform): Remove this Unix-only fallback after repositories migrate
+    // to the supported .bb-env-setup.ts contract.
     const legacyScriptPath = path.join(
       args.workspacePath,
       LEGACY_POSIX_ENV_SETUP_SCRIPT_NAME,
@@ -202,30 +215,45 @@ async function resolveSetupScript(
   return null;
 }
 
-function buildSetupScriptCommand(
-  script: ResolvedSetupScript,
+export function buildSetupScriptCommand(
+  args: BuildSetupScriptCommandArgs,
 ): SetupScriptCommand {
-  const extension = path.extname(script.scriptName).toLowerCase();
+  const extension = path.extname(args.scriptName).toLowerCase();
 
-  if (SETUP_SCRIPT_NODE_EXTENSIONS.has(extension)) {
+  if (SETUP_SCRIPT_NODE_TS_EXTENSIONS.has(extension)) {
     return {
       command: process.execPath,
-      args: [SETUP_SCRIPT_NODE_TRANSFORM_FLAG, script.scriptPath],
-      text: `node ${SETUP_SCRIPT_NODE_TRANSFORM_FLAG} ${script.scriptName}`,
+      args: [SETUP_SCRIPT_NODE_TRANSFORM_FLAG, args.scriptPath],
+      text: `node ${SETUP_SCRIPT_NODE_TRANSFORM_FLAG} ${args.scriptName}`,
+    };
+  }
+
+  if (SETUP_SCRIPT_NODE_JS_EXTENSIONS.has(extension)) {
+    return {
+      command: process.execPath,
+      args: [args.scriptPath],
+      text: `node ${args.scriptName}`,
     };
   }
 
   if (extension === ".sh") {
+    if (args.platform === "win32") {
+      throw new WorkspaceError(
+        "setup_script_failed",
+        `POSIX shell setup scripts are not supported on Windows: ${args.scriptName}`,
+      );
+    }
+
     return {
       command: "/bin/bash",
-      args: [script.scriptPath],
-      text: `/bin/bash ${script.scriptName}`,
+      args: [args.scriptPath],
+      text: `/bin/bash ${args.scriptName}`,
     };
   }
 
   throw new WorkspaceError(
     "setup_script_failed",
-    `Unsupported setup script type: ${script.scriptName}`,
+    `Unsupported setup script type: ${args.scriptName}`,
   );
 }
 
@@ -326,24 +354,24 @@ export async function runSetupScript(
     return { ran: false };
   }
 
-  const command = buildSetupScriptCommand(resolvedScript);
+  const command = buildSetupScriptCommand({
+    platform: process.platform,
+    scriptName: resolvedScript.scriptName,
+    scriptPath: resolvedScript.scriptPath,
+  });
   const commandText = command.text;
+  if (resolvedScript.scriptName === LEGACY_POSIX_ENV_SETUP_SCRIPT_NAME) {
+    emitOutput(args.onProgress, "setup-legacy-warning", LEGACY_POSIX_SETUP_SCRIPT_WARNING);
+  }
   emitStep({ onProgress: args.onProgress, key: "setup", text: commandText, status: "started" });
   const startedAt = Date.now();
 
   const { timeoutMs } = args;
-  const child = spawnPortableProcess({
+  const child = spawnPortablePipedProcess({
     command: command.command,
     args: command.args,
     cwd: args.workspacePath,
-    stdio: ["ignore", "pipe", "pipe"],
   });
-  if (!child.stdout || !child.stderr) {
-    throw new WorkspaceError(
-      "setup_script_failed",
-      `Setup script failed to attach stdio: ${resolvedScript.scriptPath}`,
-    );
-  }
 
   const outputChunks: string[] = [];
   let outputIndex = 0;
