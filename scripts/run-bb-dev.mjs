@@ -6,7 +6,7 @@ import { DEFAULTS } from "../packages/config/dist/defaults.js";
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, "..");
 
-export function resolveBbDevEnv() {
+function resolveBbDevEnv() {
   return {
     ...process.env,
     BB_SERVER_URL: process.env.BB_SERVER_URL ?? DEFAULTS.serverUrl.dev,
