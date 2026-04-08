@@ -5,7 +5,7 @@ import {
   toViewMessages,
   type ThreadEventWithMeta,
 } from "@bb/core-ui";
-import type { Thread } from "@bb/domain";
+import type { Thread, ViewMessage } from "@bb/domain";
 import type {
   ThreadTimelineResponse,
   TimelineToolDetailsResponse,
@@ -22,6 +22,28 @@ import {
 } from "./thread-data.js";
 
 const MIN_AGENT_MESSAGE_DELTAS_FOR_SUMMARY_COMPACTION = 1000;
+
+/**
+ * For manager threads in the default (non-debug) view, only show user messages,
+ * message_user output, and lifecycle operations (provisioning, compaction).
+ * Everything else (assistant text, delegations, other tool calls, etc.) is
+ * internal manager machinery.
+ */
+function filterManagerConversationMessages(
+  messages: ViewMessage[],
+): ViewMessage[] {
+  return messages.filter((message) => {
+    if (message.kind === "user") return true;
+    if (message.kind === "operation") return true;
+    if (
+      message.kind === "assistant-text" &&
+      message.isManagerUserMessage === true
+    ) {
+      return true;
+    }
+    return false;
+  });
+}
 
 export function toThreadEventWithMeta(
   row: StoredEventRow,
@@ -99,7 +121,7 @@ export function buildThreadTimeline(
       : { excludedTypes: TIMELINE_NOISE_EVENT_TYPES }),
   });
   const eventRows = compactSummaryStoredEventRows(rawEventRows);
-  const messages = toViewMessages(
+  const allMessages = toViewMessages(
     eventRows.map((row) => toThreadEventWithMeta(row)),
     {
       includeDebugRawEvents: options.includeManagerDebugView,
@@ -108,6 +130,10 @@ export function buildThreadTimeline(
       threadType: thread.type,
     },
   );
+  const messages =
+    thread.type === "manager" && !options.includeManagerDebugView
+      ? filterManagerConversationMessages(allMessages)
+      : allMessages;
   const tokenUsageRows = listTokenUsageRowsForContextWindowUsage(db, {
     threadId: thread.id,
   });

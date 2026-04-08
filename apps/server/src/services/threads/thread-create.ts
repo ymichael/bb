@@ -118,7 +118,7 @@ async function createThreadInEnvironment(
         type: "client/thread/start",
         input: args.request.input,
         execution,
-        initiator: "user",
+        initiator: args.request.type === "manager" ? "system" : "user",
         requestMethod: "thread/start",
         source: "spawn",
       },
@@ -438,7 +438,7 @@ export async function createThreadFromRequest(
     type: "client/thread/start",
     input: request.input,
     execution,
-    initiator: "user",
+    initiator: request.type === "manager" ? "system" : "user",
     requestMethod: "thread/start",
     source: "spawn",
   });

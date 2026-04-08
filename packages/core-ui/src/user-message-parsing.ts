@@ -213,5 +213,6 @@ export function parseManagerUserMessage(
     ...(turnId ? { turnId } : {}),
     text,
     status: "completed",
+    isManagerUserMessage: true,
   };
 }

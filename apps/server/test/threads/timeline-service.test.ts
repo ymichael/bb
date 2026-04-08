@@ -211,4 +211,154 @@ describe("buildThreadTimeline", () => {
       modelContextWindow: 200_000,
     });
   });
+
+  it("filters manager thread timeline to user messages, message_user output, and operations", async () => {
+    const harness = await createTestAppHarness();
+    harnesses.push(harness);
+
+    const host = seedHost(harness.deps);
+    const { project } = seedProjectWithSource(harness.deps, {
+      hostId: host.id,
+    });
+    const environment = seedEnvironment(harness.deps, {
+      hostId: host.id,
+      projectId: project.id,
+    });
+    const thread = seedThread(harness.deps, {
+      projectId: project.id,
+      environmentId: environment.id,
+      type: "manager",
+    });
+
+    // System-initiated welcome message (should be hidden)
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      sequence: 1,
+      type: "client/thread/start",
+      data: {
+        direction: "outbound",
+        source: "spawn",
+        initiator: "system",
+        input: [{ type: "text", text: "[bb system] Welcome!" }],
+        request: { method: "thread/start", params: {} },
+        execution: {
+          model: "gpt-5",
+          serviceTier: "default",
+          reasoningLevel: "medium",
+          sandboxMode: "danger-full-access",
+          source: "client/thread/start",
+        },
+      },
+    });
+
+    // Provisioning operation (should be visible)
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      sequence: 2,
+      type: "system/provisioning",
+      data: {
+        status: "completed",
+        environmentId: environment.id,
+        entries: [
+          { type: "step", key: "cwd", text: "cwd: /tmp/test", status: "completed" },
+        ],
+      },
+    });
+
+    // Internal assistant text (should be hidden)
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-1",
+      turnId: "turn-1",
+      sequence: 3,
+      type: "item/completed",
+      data: {
+        item: {
+          id: "msg-1",
+          type: "agentMessage",
+          text: "internal reasoning",
+        },
+      },
+    });
+
+    // Internal tool call (should be hidden)
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-1",
+      turnId: "turn-1",
+      sequence: 4,
+      type: "item/completed",
+      data: {
+        item: {
+          id: "tool-1",
+          type: "toolCall",
+          tool: "ToolSearch",
+          status: "completed",
+          result: "found something",
+        },
+      },
+    });
+
+    // message_user delivery (should be visible)
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      sequence: 5,
+      type: "system/manager/user_message",
+      data: {
+        text: "Hello from manager",
+        toolCallId: "tool-2",
+        turnId: "turn-1",
+      },
+    });
+
+    // User sends a follow-up message (should be visible)
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      sequence: 6,
+      type: "client/turn/requested",
+      data: {
+        direction: "outbound",
+        source: "tell",
+        initiator: "user",
+        input: [{ type: "text", text: "Thanks, do the thing" }],
+        request: { method: "turn/start", params: {} },
+        execution: {
+          model: "gpt-5",
+          serviceTier: "default",
+          reasoningLevel: "medium",
+          sandboxMode: "danger-full-access",
+          source: "client/turn/requested",
+        },
+      },
+    });
+
+    // Default view — should show only operation, message_user, and user message
+    const defaultTimeline = buildThreadTimeline(harness.db, thread, {});
+    const defaultKinds = defaultTimeline.rows.map((row) =>
+      row.kind === "message" ? row.message.kind : row.kind,
+    );
+    expect(defaultKinds).toEqual(["operation", "assistant-text", "user"]);
+
+    // Verify the assistant-text is the message_user output
+    const assistantRow = defaultTimeline.rows.find(
+      (row) => row.kind === "message" && row.message.kind === "assistant-text",
+    );
+    expect(assistantRow).toBeDefined();
+    if (assistantRow?.kind === "message" && assistantRow.message.kind === "assistant-text") {
+      expect(assistantRow.message.text).toBe("Hello from manager");
+      expect(assistantRow.message.isManagerUserMessage).toBe(true);
+    }
+
+    // Debug view — should show everything
+    const debugTimeline = buildThreadTimeline(harness.db, thread, {
+      includeManagerDebugView: true,
+    });
+    expect(debugTimeline.rows.length).toBeGreaterThan(defaultTimeline.rows.length);
+  });
 });
