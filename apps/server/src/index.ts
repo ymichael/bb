@@ -33,6 +33,9 @@ async function main(): Promise<void> {
     hostDaemonPort: serverConfig.BB_HOST_DAEMON_PORT,
     inferenceModel: serverConfig.BB_INFERENCE_MODEL,
     openAiApiKey: serverConfig.OPENAI_API_KEY,
+    sandboxActivityExtensionDebounceMs:
+      serverConfig.BB_SANDBOX_ACTIVITY_EXTENSION_DEBOUNCE_MS,
+    sandboxIdleThresholdMs: serverConfig.BB_SANDBOX_IDLE_THRESHOLD_MS,
   };
 
   if (publicUrl !== undefined) {

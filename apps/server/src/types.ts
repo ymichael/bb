@@ -15,6 +15,8 @@ export interface ServerRuntimeConfig {
   hostDaemonPort: number;
   inferenceModel: string;
   openAiApiKey: string;
+  sandboxActivityExtensionDebounceMs: number;
+  sandboxIdleThresholdMs: number;
   publicUrl?: string;
 }
 

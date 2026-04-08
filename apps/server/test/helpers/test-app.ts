@@ -109,6 +109,8 @@ export async function createTestAppHarness(
     inferenceModel: "test/mock-model",
     openAiApiKey: "test-openai-key",
     publicUrl: "https://bb.example.test",
+    sandboxActivityExtensionDebounceMs: 30_000,
+    sandboxIdleThresholdMs: 300_000,
     ...overrides,
   };
   const deps: AppDeps = {

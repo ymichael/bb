@@ -173,6 +173,23 @@ describe("server-contract canonical schemas", () => {
     expect(
       createHostJoinRequestSchema.parse({}),
     ).toEqual({});
+      createHostJoinRequestSchema.parse({
+        hostType: "ephemeral",
+        provider: "e2b",
+        externalId: "sandbox_123",
+      }),
+    ).toMatchObject({
+      hostType: "ephemeral",
+      provider: "e2b",
+      externalId: "sandbox_123",
+    });
+
+    expect(() =>
+      createHostJoinRequestSchema.parse({
+        hostType: "ephemeral",
+        externalId: "sandbox_missing_provider",
+      }),
+    ).toThrow(/provider/u);
 
     expect(
       createHostJoinResponseSchema.parse({

@@ -551,6 +551,63 @@ describe("internal session routes", () => {
     }
   });
 
+  it("queues runtime material sync on the first ephemeral session open", async () => {
+    const harness = await createTestAppHarness({
+      openAiApiKey: "test-openai-key",
+    });
+
+    try {
+      const host = upsertHost(harness.db, harness.hub, {
+        externalId: "sandbox-first-runtime-sync",
+        id: "host-first-runtime-sync",
+        name: "First Runtime Sync Host",
+        provider: "e2b",
+        type: "ephemeral",
+      });
+
+      const response = await harness.app.request("/internal/session/open", {
+        method: "POST",
+        headers: internalAuthHeaders(harness, {
+          hostId: host.id,
+          hostType: "ephemeral",
+        }),
+        body: JSON.stringify({
+          activeThreads: [],
+          dataDir: "/tmp/host-first-runtime-sync",
+          hostId: host.id,
+          instanceId: "instance-first-runtime-sync",
+          hostName: host.name,
+          hostType: "ephemeral",
+          protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
+        }),
+      });
+
+      expect(response.status).toBe(201);
+      const runtimeSyncOperation = getHostOperation(harness.db, {
+        hostId: host.id,
+        kind: "sync_runtime_material",
+      });
+      expect(runtimeSyncOperation).toMatchObject({
+        state: "queued",
+      });
+
+      const queuedRuntimeSync = await waitForQueuedCommand(
+        harness,
+        ({ command, row }) =>
+          row.hostId === host.id && command.type === "host.sync_runtime_material",
+      );
+      expect(queuedRuntimeSync.command).toMatchObject({
+        env: {
+          OPENAI_API_KEY: "test-openai-key",
+        },
+        type: "host.sync_runtime_material",
+      });
+      expect(runtimeSyncOperation?.commandId).toBe(queuedRuntimeSync.row.id);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("gives the initiator thread the daemon transcript when non-empty", async () => {
     const harness = await createTestAppHarness();
     try {

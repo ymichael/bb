@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import {
   getActiveSession,
   archiveThread,
+  closeSession,
   fetchCommands,
   getEnvironment,
   getHost,
@@ -329,6 +330,17 @@ describe("periodic sweeps", () => {
         provider: "e2b",
         type: "ephemeral",
       });
+      const session = openSession(harness.db, harness.hub, {
+        dataDir: "/tmp/bb-host-data/host-periodic-ephemeral",
+        heartbeatIntervalMs: 10_000,
+        hostId: host.id,
+        hostName: host.name,
+        hostType: "ephemeral",
+        instanceId: "instance-periodic-ephemeral",
+        leaseTimeoutMs: 60_000,
+        protocolVersion: 2,
+      });
+      closeSession(harness.db, harness.hub, session.id, "terminated");
       const cachedHost = {
         destroy: vi
           .fn()
@@ -428,6 +440,31 @@ describe("periodic sweeps", () => {
       expect(queued.command).toMatchObject({
         workspaceProvisionType: "unmanaged",
         path: "/tmp/periodic-provision",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("does not clean up a newly joined ephemeral host before its first daemon session", async () => {
+    const harness = await createTestAppHarness();
+
+    try {
+      const host = upsertHost(harness.db, harness.hub, {
+        externalId: "sandbox-pending-first-session",
+        id: "host-pending-first-session",
+        name: "Pending First Session Host",
+        provider: "e2b",
+        type: "ephemeral",
+      });
+
+      const destroySandboxHost = vi.fn(async () => undefined);
+      await runEphemeralHostCleanupSweep(harness.deps, destroySandboxHost);
+
+      expect(destroySandboxHost).not.toHaveBeenCalled();
+      expect(getHost(harness.db, host.id)).toMatchObject({
+        destroyedAt: null,
+        externalId: "sandbox-pending-first-session",
       });
     } finally {
       await harness.cleanup();

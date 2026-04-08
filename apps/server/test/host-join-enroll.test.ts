@@ -42,6 +42,36 @@ describe("host join and enroll routes", () => {
     }
   });
 
+  it("stores external sandbox identity for ephemeral host joins", async () => {
+    const harness = await createTestAppHarness();
+
+    try {
+      const response = await harness.app.request("/api/v1/hosts/join", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          hostId: "host_ephemeral_external",
+          hostType: "ephemeral",
+          provider: "e2b",
+          externalId: "sandbox-external-123",
+        }),
+      });
+
+      expect(response.status).toBe(201);
+      const body = createHostJoinResponseSchema.parse(await readJson(response));
+      expect(body.hostId).toBe("host_ephemeral_external");
+      expect(getHost(harness.db, body.hostId)).toMatchObject({
+        externalId: "sandbox-external-123",
+        provider: "e2b",
+        type: "ephemeral",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("exchanges join material for a daemon host key exactly once", async () => {
     const harness = await createTestAppHarness();
 
@@ -289,13 +319,38 @@ describe("host join and enroll routes", () => {
           "content-type": "application/json",
         },
         body: JSON.stringify({
+          externalId: "sandbox-type-conflict",
           hostId: "host_type_conflict",
           hostType: "ephemeral",
+          provider: "e2b",
         }),
       });
 
       expect(response.status).toBe(409);
       expect(getHost(harness.db, "host_type_conflict")?.type).toBe("persistent");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("rejects ephemeral joins without external sandbox identity", async () => {
+    const harness = await createTestAppHarness();
+
+    try {
+      const response = await harness.app.request("/api/v1/hosts/join", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          hostId: "host_missing_external_identity",
+          hostType: "ephemeral",
+          provider: "e2b",
+        }),
+      });
+
+      expect(response.status).toBe(400);
+      expect(getHost(harness.db, "host_missing_external_identity")).toBeNull();
     } finally {
       await harness.cleanup();
     }

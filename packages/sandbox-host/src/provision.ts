@@ -15,6 +15,8 @@ import {
   SANDBOX_DAEMON_HEALTH_RESPONSE,
   SANDBOX_DAEMON_HEALTH_RETRIES,
   SANDBOX_DAEMON_HEALTH_RETRY_MS,
+  SANDBOX_DAEMON_FILE_WRITE_RETRIES,
+  SANDBOX_DAEMON_FILE_WRITE_RETRY_MS,
   SANDBOX_DAEMON_PATH,
   SANDBOX_DAEMON_STDERR_PATH,
   SANDBOX_DAEMON_STDOUT_PATH,
@@ -199,33 +201,42 @@ async function waitForDaemonHealth(sandbox: E2BSandbox): Promise<void> {
 async function startDaemonProcess(
   options: ResolvedStartSandboxDaemonOptions,
 ): Promise<void> {
-  await Promise.all([
-    writeSandboxFile(
-      options.sandbox,
-      SANDBOX_BB_EXECUTABLE_PATH,
-      options.daemonArtifacts.bbCli,
-    ),
-    writeSandboxFile(
-      options.sandbox,
-      SANDBOX_DAEMON_PATH,
-      options.daemonArtifacts.daemon,
-    ),
-    writeSandboxFile(
-      options.sandbox,
-      SANDBOX_CLAUDE_CODE_BRIDGE_PATH,
-      options.daemonArtifacts.claudeCodeBridge,
-    ),
-    writeSandboxFile(
-      options.sandbox,
-      SANDBOX_PI_BRIDGE_PATH,
-      options.daemonArtifacts.piBridge,
-    ),
-    writeSandboxFile(
-      options.sandbox,
-      SANDBOX_PI_PACKAGE_MANIFEST_PATH,
-      options.daemonArtifacts.piPackageManifest,
-    ),
-  ]);
+  const daemonFiles = [
+    {
+      content: options.daemonArtifacts.bbCli,
+      path: SANDBOX_BB_EXECUTABLE_PATH,
+    },
+    {
+      content: options.daemonArtifacts.daemon,
+      path: SANDBOX_DAEMON_PATH,
+    },
+    {
+      content: options.daemonArtifacts.claudeCodeBridge,
+      path: SANDBOX_CLAUDE_CODE_BRIDGE_PATH,
+    },
+    {
+      content: options.daemonArtifacts.piBridge,
+      path: SANDBOX_PI_BRIDGE_PATH,
+    },
+    {
+      content: options.daemonArtifacts.piPackageManifest,
+      path: SANDBOX_PI_PACKAGE_MANIFEST_PATH,
+    },
+  ];
+
+  for (const daemonFile of daemonFiles) {
+    await pRetry(
+      async () =>
+        writeSandboxFile(options.sandbox, daemonFile.path, daemonFile.content),
+      {
+        factor: 1,
+        maxTimeout: SANDBOX_DAEMON_FILE_WRITE_RETRY_MS,
+        minTimeout: SANDBOX_DAEMON_FILE_WRITE_RETRY_MS,
+        retries: SANDBOX_DAEMON_FILE_WRITE_RETRIES,
+      },
+    );
+  }
+
   await runSandboxCommand(
     options.sandbox,
     `chmod +x ${SANDBOX_BB_EXECUTABLE_PATH}`,

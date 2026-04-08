@@ -24,4 +24,6 @@ export const SANDBOX_DAEMON_STDERR_PATH = "/tmp/bb-daemon.stderr.log";
 export const SANDBOX_DAEMON_STDOUT_PATH = "/tmp/bb-daemon.stdout.log";
 export const SANDBOX_DAEMON_HEALTH_RETRIES = 29;
 export const SANDBOX_DAEMON_HEALTH_RETRY_MS = 2_000;
+export const SANDBOX_DAEMON_FILE_WRITE_RETRIES = 2;
+export const SANDBOX_DAEMON_FILE_WRITE_RETRY_MS = 1_000;
 export const SANDBOX_PI_BRIDGE_PATH = "/tmp/bb-pi-bridge.mjs";

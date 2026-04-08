@@ -305,10 +305,22 @@ export const createProjectRequestSchema = z.object({
 });
 export type CreateProjectRequest = z.infer<typeof createProjectRequestSchema>;
 
-export const createHostJoinRequestSchema = z.object({
+const persistentHostJoinRequestSchema = z.object({
   hostId: z.string().min(1).optional(),
-  hostType: hostTypeSchema.optional(),
+  hostType: z.literal("persistent").optional(),
 }).strict();
+
+const ephemeralHostJoinRequestSchema = z.object({
+  externalId: z.string().min(1),
+  hostId: z.string().min(1).optional(),
+  hostType: z.literal("ephemeral"),
+  provider: z.string().min(1),
+}).strict();
+
+export const createHostJoinRequestSchema = z.union([
+  persistentHostJoinRequestSchema,
+  ephemeralHostJoinRequestSchema,
+]);
 export type CreateHostJoinRequest = z.infer<typeof createHostJoinRequestSchema>;
 
 export const createHostJoinResponseSchema = z.object({

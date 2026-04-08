@@ -4,7 +4,9 @@ import { tmpdir } from "node:os";
 import { setTimeout as delay } from "node:timers/promises";
 import {
   HOST_AUTH_FILE_NAME,
+  HOST_RUNTIME_MATERIAL_FILE_NAME,
   hostAuthStateSchema,
+  hostRuntimeMaterialSnapshotSchema,
   normalizeServerUrl,
 } from "../../packages/host-daemon-contract/src/index.ts";
 import {
@@ -21,12 +23,14 @@ import {
   SANDBOX_DAEMON_HEALTH_PORT,
   SANDBOX_DAEMON_HEALTH_RESPONSE,
 } from "../../packages/sandbox-host/src/constants.ts";
+import { buildSandboxRuntimeMaterialSnapshot } from "../../apps/server/src/services/hosts/sandbox-runtime-material.ts";
 import {
   buildSandboxDaemonEnv,
   startSandboxDaemon,
 } from "../../packages/sandbox-host/src/provision.ts";
 import { resolveSandboxImageTemplate } from "../../packages/sandbox-image/src/index.ts";
 import {
+  createProject,
   createHostJoin,
   killProcess,
   loadDotEnv,
@@ -37,6 +41,10 @@ import {
 } from "./shared.mjs";
 
 const SMOKE_TIMEOUT_MS = 5 * 60 * 1000;
+const INITIAL_SANDBOX_TIMEOUT_MS = 8 * 60 * 1000;
+const DAEMON_BOOTSTRAP_TIMEOUT_MS = 8 * 60 * 1000;
+const SANDBOX_HOST_RUNTIME_MATERIAL_PATH =
+  `${SANDBOX_DATA_DIR}/${HOST_RUNTIME_MATERIAL_FILE_NAME}`;
 const SANDBOX_HOST_AUTH_PATH = `${SANDBOX_DATA_DIR}/${HOST_AUTH_FILE_NAME}`;
 
 type SmokeSandbox = Awaited<ReturnType<typeof createSandbox>>;
@@ -56,11 +64,20 @@ interface PersistedHostAuthExpectation {
   serverUrl: string;
 }
 
+interface ProjectResponse {
+  id: string;
+}
+
 interface StartRealDaemonOptions {
   enrollKey?: string;
   hostId: string;
   hostName: string;
   serverUrl: string;
+}
+
+interface ThreadCreateResponse {
+  id: string;
+  status: string;
 }
 
 function formatError(error: unknown): string {
@@ -177,11 +194,16 @@ async function assertBundledBbCli(
 
 async function createEphemeralHostJoin(
   localServerUrl: string,
-  hostId: string,
+  args: {
+    externalId: string;
+    hostId: string;
+  },
 ): Promise<SmokeHostJoin> {
   const response = await createHostJoin(localServerUrl, {
-    hostId,
+    externalId: args.externalId,
+    hostId: args.hostId,
     hostType: "ephemeral",
+    provider: "e2b",
   });
 
   if (response == null || typeof response !== "object") {
@@ -193,12 +215,12 @@ async function createEphemeralHostJoin(
   if (typeof joinCode !== "string" || joinCode.trim().length === 0) {
     throw new Error("Host join response was missing joinCode");
   }
-  if (responseHostId !== hostId) {
-    throw new Error(`Host join response host ID did not match ${hostId}`);
+  if (responseHostId !== args.hostId) {
+    throw new Error(`Host join response host ID did not match ${args.hostId}`);
   }
 
   return {
-    hostId,
+    hostId: args.hostId,
     joinCode,
   };
 }
@@ -206,6 +228,15 @@ async function createEphemeralHostJoin(
 async function waitForConnectedSmokeHost(
   localServerUrl: string,
   hostId: string,
+): Promise<void> {
+  await waitForHostStatus(localServerUrl, hostId, "connected");
+}
+
+async function waitForHostStatus(
+  localServerUrl: string,
+  hostId: string,
+  expectedStatus: string,
+  timeoutMs = 15_000,
 ): Promise<void> {
   await waitFor(
     async () => {
@@ -216,16 +247,94 @@ async function waitForConnectedSmokeHost(
         }
 
         const host = await response.json();
-        return host?.status === "connected" ? host : null;
+        return host?.status === expectedStatus ? host : null;
       } catch {
         return null;
       }
     },
     {
-      timeoutMs: 15_000,
-      description: `host ${hostId} connection`,
+      timeoutMs,
+      description: `host ${hostId} to become ${expectedStatus}`,
     },
   );
+}
+
+async function waitForPersistedRuntimeMaterial(
+  sandbox: SmokeSandbox,
+  expectedSnapshot: ReturnType<typeof buildSandboxRuntimeMaterialSnapshot>,
+): Promise<void> {
+  await waitForCommandSuccess(
+    async () => {
+      const result = await runSandboxCommand(
+        sandbox,
+        `cat ${shellQuote(SANDBOX_HOST_RUNTIME_MATERIAL_PATH)}`,
+      );
+      const persistedSnapshot = hostRuntimeMaterialSnapshotSchema.parse(
+        JSON.parse(result.stdout),
+      );
+      if (persistedSnapshot.version !== expectedSnapshot.version) {
+        throw new Error(
+          `Unexpected runtime material version: ${persistedSnapshot.version}`,
+        );
+      }
+      if (JSON.stringify(persistedSnapshot.env) !== JSON.stringify(expectedSnapshot.env)) {
+        throw new Error(
+          `Unexpected runtime material env: ${JSON.stringify(persistedSnapshot.env)}`,
+        );
+      }
+    },
+    "persisted runtime material",
+  );
+}
+
+async function waitForExtendedSandboxTimeout(
+  sandbox: SmokeSandbox,
+): Promise<void> {
+  await waitForCommandSuccess(
+    async () => {
+      const info = await sandbox.getInfo();
+      const remainingMs = info.endAt.getTime() - Date.now();
+      if (remainingMs < 10 * 60 * 1000) {
+        throw new Error(`Sandbox timeout was not extended enough: ${remainingMs}ms remaining`);
+      }
+    },
+    "sandbox timeout extension",
+  );
+}
+
+async function createSmokeThread(
+  localServerUrl: string,
+  args: {
+    hostId: string;
+    projectId: string;
+  },
+): Promise<ThreadCreateResponse> {
+  const response = await fetch(`${localServerUrl}/api/v1/threads`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      projectId: args.projectId,
+      providerId: "codex",
+      model: "gpt-5",
+      input: [{ type: "text", text: "Resume the sandbox for smoke validation" }],
+      environment: {
+        type: "host",
+        hostId: args.hostId,
+        workspace: {
+          type: "unmanaged",
+          path: "/tmp",
+        },
+      },
+    }),
+  });
+  if (!response.ok) {
+    throw new Error(
+      `Failed to create smoke thread: ${response.status} ${await response.text()}`,
+    );
+  }
+  return await response.json() as ThreadCreateResponse;
 }
 
 async function startRealDaemon(
@@ -262,6 +371,14 @@ async function main(): Promise<void> {
   const serverDataDir = path.join(tmpRoot, "server-data");
   const serverLogPath = path.join(logsDir, "server.log");
   const tunnelLogPath = path.join(logsDir, "tunnel.log");
+  const smokeAnthropicApiKey = process.env.ANTHROPIC_API_KEY ?? "";
+  const smokeGithubPat = process.env.BB_GITHUB_PAT ?? "";
+  const smokeOpenAiApiKey = process.env.OPENAI_API_KEY ?? "test-openai-key";
+  const expectedRuntimeSnapshot = buildSandboxRuntimeMaterialSnapshot({
+    anthropicApiKey: smokeAnthropicApiKey,
+    githubPat: smokeGithubPat,
+    openAiApiKey: smokeOpenAiApiKey,
+  });
 
   await fs.mkdir(logsDir, { recursive: true });
 
@@ -273,7 +390,8 @@ async function main(): Promise<void> {
   const qaServer = await startQaServer({
     dataDir: serverDataDir,
     env: {
-      OPENAI_API_KEY: process.env.OPENAI_API_KEY ?? "test-openai-key",
+      BB_SANDBOX_IDLE_THRESHOLD_MS: "60000",
+      OPENAI_API_KEY: smokeOpenAiApiKey,
     },
     logPath: serverLogPath,
     port: serverPort,
@@ -281,6 +399,7 @@ async function main(): Promise<void> {
   });
   const localServerUrl = qaServer.serverUrl;
   let activeSandbox: SmokeSandbox | null = null;
+  let completed = false;
 
   try {
     console.log(`Started quick tunnel at ${publicUrl}`);
@@ -288,10 +407,9 @@ async function main(): Promise<void> {
 
     console.log("Creating sandbox");
     const sandbox = await createSandbox({
-      timeoutMs: SMOKE_TIMEOUT_MS,
+      timeoutMs: INITIAL_SANDBOX_TIMEOUT_MS,
     });
     activeSandbox = sandbox;
-
     console.log(`Created sandbox ${sandbox.sandboxId}`);
 
     console.log("Writing /tmp/hello.txt");
@@ -318,8 +436,15 @@ async function main(): Promise<void> {
     console.log(`Checking sandbox to server connectivity via ${publicUrl}`);
     await waitForPublicServerHealth(sandbox, publicUrl);
 
+    console.log("Refreshing sandbox timeout before daemon bootstrap");
+    await sandbox.setTimeout(DAEMON_BOOTSTRAP_TIMEOUT_MS);
+    const daemonBootstrapSandboxInfo = await sandbox.getInfo();
+
     console.log("Requesting real ephemeral host join material");
-    const join = await createEphemeralHostJoin(localServerUrl, smokeHost.hostId);
+    const join = await createEphemeralHostJoin(localServerUrl, {
+      externalId: sandbox.sandboxId,
+      hostId: smokeHost.hostId,
+    });
 
     console.log("Starting real bundled daemon");
     await startRealDaemon(sandbox, {
@@ -339,33 +464,69 @@ async function main(): Promise<void> {
       serverUrl: publicUrl,
     });
 
+    console.log("Checking persisted runtime material");
+    await waitForPersistedRuntimeMaterial(sandbox, expectedRuntimeSnapshot);
+
+    console.log("Checking sandbox timeout extension after daemon activity");
+    await waitForExtendedSandboxTimeout(sandbox);
+    const extendedSandboxInfo = await sandbox.getInfo();
+    if (
+      extendedSandboxInfo.endAt.getTime()
+      <= daemonBootstrapSandboxInfo.endAt.getTime()
+    ) {
+      throw new Error("Sandbox timeout did not extend past the bootstrap expiration");
+    }
+
     console.log("Checking bundled bb CLI");
     await assertBundledBbCli(sandbox);
 
-    console.log("Pausing sandbox");
-    await sandbox.pause();
+    console.log("Creating project for resume smoke coverage");
+    const project = await createProject(localServerUrl, {
+      name: "E2B Smoke Project",
+      source: {
+        type: "local_path",
+        hostId: smokeHost.hostId,
+        path: "/tmp",
+      },
+    }) as ProjectResponse;
 
-    console.log("Resuming sandbox");
+    console.log("Waiting for server-driven idle suspension");
+    await waitForHostStatus(localServerUrl, smokeHost.hostId, "suspended", 120_000);
+    const pausedSandboxInfo = await sandbox.getInfo();
+    if (pausedSandboxInfo.state !== "paused") {
+      throw new Error(`Expected paused sandbox after idle suspend, got ${pausedSandboxInfo.state}`);
+    }
+
+    console.log("Triggering server-driven resume with follow-up thread work");
+    const createdThread = await createSmokeThread(localServerUrl, {
+      hostId: smokeHost.hostId,
+      projectId: project.id,
+    });
+    if (createdThread.status !== "provisioning") {
+      throw new Error(`Unexpected resumed thread status: ${createdThread.status}`);
+    }
+
+    await waitForHostStatus(localServerUrl, smokeHost.hostId, "connected");
+    const runningSandboxInfo = await sandbox.getInfo();
+    if (runningSandboxInfo.state !== "running") {
+      throw new Error(`Expected running sandbox after resume, got ${runningSandboxInfo.state}`);
+    }
+
+    console.log("Connecting to the resumed sandbox");
     const resumedSandbox = await resumeSandbox(sandbox.sandboxId, {
       timeoutMs: SMOKE_TIMEOUT_MS,
     });
     activeSandbox = resumedSandbox;
 
-    console.log("Checking real daemon after resume");
-    try {
-      await waitForDaemonHealth(resumedSandbox);
-    } catch {
-      console.log("Real daemon did not survive pause, restarting it");
-      await startRealDaemon(resumedSandbox, {
-        hostId: smokeHost.hostId,
-        hostName: smokeHost.hostName,
-        serverUrl: publicUrl,
-      });
-      await waitForDaemonHealth(resumedSandbox);
-    }
+    console.log("Checking real daemon after server-driven resume");
+    await waitForDaemonHealth(resumedSandbox);
 
-    console.log("Checking bundled bb CLI after resume");
+    console.log("Checking runtime material after resume");
+    await waitForPersistedRuntimeMaterial(resumedSandbox, expectedRuntimeSnapshot);
+
+    console.log("Checking bundled bb CLI after server-driven resume");
     await assertBundledBbCli(resumedSandbox);
+    completed = true;
   } finally {
     console.log("Destroying sandbox");
     await activeSandbox?.kill().catch((error) => {
@@ -378,9 +539,13 @@ async function main(): Promise<void> {
     await killProcess(qaServer.process?.pid).catch((error) => {
       console.error(`Failed to stop QA server: ${formatError(error)}`);
     });
-    await fs.rm(tmpRoot, { recursive: true, force: true }).catch((error) => {
-      console.error(`Failed to remove smoke temp dir: ${formatError(error)}`);
-    });
+    if (completed) {
+      await fs.rm(tmpRoot, { recursive: true, force: true }).catch((error) => {
+        console.error(`Failed to remove smoke temp dir: ${formatError(error)}`);
+      });
+    } else {
+      console.error(`Preserving smoke temp dir at ${tmpRoot}`);
+    }
   }
 }
 

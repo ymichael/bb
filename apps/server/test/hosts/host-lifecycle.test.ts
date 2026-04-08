@@ -522,6 +522,11 @@ describe("host lifecycle", () => {
       });
       const sandboxHost = createMockSandboxHost(host.id, host.externalId ?? undefined);
       harness.deps.sandboxRegistry.set(host.id, sandboxHost);
+      const resumedSandboxHost = createMockSandboxHost(
+        host.id,
+        host.externalId ?? undefined,
+      );
+      resumeHostMock.mockResolvedValue(resumedSandboxHost);
       updateHostLifecycleState(harness.db, {
         hostId: host.id,
         suspendedAt: 1_000,
@@ -563,7 +568,17 @@ describe("host lifecycle", () => {
 
       await readyPromise;
 
-      expect(sandboxHost.resume).toHaveBeenCalledTimes(1);
+      expect(resumeHostMock).toHaveBeenCalledWith({
+        apiKey: "test-e2b-api-key",
+        daemonEnv: {},
+        externalId: "sandbox-suspended-cached",
+        hostId: host.id,
+        hostName: host.name,
+        progressCallbacks: expect.any(Object),
+        serverUrl: harness.deps.config.publicUrl!,
+      });
+      expect(harness.deps.sandboxRegistry.get(host.id)).toBe(resumedSandboxHost);
+      expect(sandboxHost.resume).not.toHaveBeenCalled();
       expect(getHost(harness.db, host.id)).toMatchObject({
         suspendedAt: null,
       });

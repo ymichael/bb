@@ -18,7 +18,11 @@ import { ApiError } from "../errors.js";
 import { listHostThreadIds } from "../services/lib/entity-lookup.js";
 import { assertAuthenticatedHostMatches, getAuthenticatedDaemon } from "./auth.js";
 import { reconcileSessionThreads } from "./reconciliation.js";
-import { advanceSandboxRuntimeMaterialSync, invalidateSandboxRuntimeMaterialAfterSessionOpen } from "../services/hosts/sandbox-runtime-material.js";
+import {
+  advanceSandboxRuntimeMaterialSync,
+  invalidateSandboxRuntimeMaterialAfterSessionOpen,
+  requestSandboxRuntimeMaterialSync,
+} from "../services/hosts/sandbox-runtime-material.js";
 
 export function registerInternalSessionRoutes(app: Hono, deps: AppDeps): void {
   const { post } = typedRoutes<HostDaemonInternalSchema>(app, {
@@ -53,6 +57,9 @@ export function registerInternalSessionRoutes(app: Hono, deps: AppDeps): void {
       suspendedAt: null,
     });
     if (daemon.hostType === "ephemeral") {
+      requestSandboxRuntimeMaterialSync(deps, {
+        hostId: daemon.hostId,
+      });
       invalidateSandboxRuntimeMaterialAfterSessionOpen(deps, {
         hostId: daemon.hostId,
       });

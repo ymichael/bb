@@ -9,7 +9,7 @@ import {
   updateManagerThreadNudge,
 } from "@bb/db";
 import { updateHostLifecycleState } from "@bb/db/internal-lifecycle";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { sweepDueNudges } from "../../src/services/scheduling/nudge-sweep.js";
 import { appendClientTurnEvent } from "../../src/services/threads/thread-events.js";
 import {
@@ -26,6 +26,16 @@ import {
   seedThread,
 } from "../helpers/seed.js";
 import { createTestAppHarness } from "../helpers/test-app.js";
+
+const provisionHostMock = vi.fn();
+const resumeHostMock = vi.fn();
+type SandboxHostMockArgs = Array<object | string | undefined>;
+
+vi.mock("@bb/sandbox-host", () => ({
+  DEFAULT_SANDBOX_TIMEOUT_MS: 15 * 60 * 1000,
+  provisionHost: (...args: SandboxHostMockArgs) => provisionHostMock(...args),
+  resumeHost: (...args: SandboxHostMockArgs) => resumeHostMock(...args),
+}));
 
 type TestHarness = Awaited<ReturnType<typeof createTestAppHarness>>;
 
@@ -91,6 +101,11 @@ function seedRunnableManagerThread(args: {
 }
 
 describe("nudge sweep", () => {
+  beforeEach(() => {
+    provisionHostMock.mockReset();
+    resumeHostMock.mockReset();
+  });
+
   it("queues turn.run for due manager nudges", async () => {
     const harness = await createTestAppHarness();
     try {
@@ -176,6 +191,11 @@ describe("nudge sweep", () => {
       });
       const sandboxHost = createMockSandboxHost(host.id, host.externalId ?? undefined);
       harness.deps.sandboxRegistry.set(host.id, sandboxHost);
+      const resumedSandboxHost = createMockSandboxHost(
+        host.id,
+        host.externalId ?? undefined,
+      );
+      resumeHostMock.mockResolvedValue(resumedSandboxHost);
       updateHostLifecycleState(harness.db, {
         hostId: host.id,
         suspendedAt: 1_000,
@@ -236,7 +256,8 @@ describe("nudge sweep", () => {
 
       await sweepPromise;
 
-      expect(sandboxHost.resume).toHaveBeenCalledTimes(1);
+      expect(resumeHostMock).toHaveBeenCalledTimes(1);
+      expect(sandboxHost.resume).not.toHaveBeenCalled();
       const queuedTurnRun = await waitForQueuedCommand(
         harness,
         ({ command }) =>

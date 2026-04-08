@@ -87,6 +87,8 @@ describe("consumer-specific config", () => {
     vi.stubEnv("BB_INFERENCE_MODEL", undefined);
     vi.stubEnv("OPENAI_API_KEY", "test-openai-key");
     vi.stubEnv("ANTHROPIC_API_KEY", "test-anthropic-key");
+    vi.stubEnv("BB_SANDBOX_ACTIVITY_EXTENSION_DEBOUNCE_MS", undefined);
+    vi.stubEnv("BB_SANDBOX_IDLE_THRESHOLD_MS", undefined);
 
     const { serverConfig } = await importFresh<typeof import("../src/server.js")>(
       "../src/server.js",
@@ -101,6 +103,8 @@ describe("consumer-specific config", () => {
     expect(serverConfig.BB_INFERENCE_MODEL).toBe("openai/gpt-4o-mini");
     expect(serverConfig.OPENAI_API_KEY).toBe("test-openai-key");
     expect(serverConfig.ANTHROPIC_API_KEY).toBe("test-anthropic-key");
+    expect(serverConfig.BB_SANDBOX_ACTIVITY_EXTENSION_DEBOUNCE_MS).toBe(30_000);
+    expect(serverConfig.BB_SANDBOX_IDLE_THRESHOLD_MS).toBe(300_000);
   });
 
   it("lets tooling read the server port without validating unrelated server env", async () => {

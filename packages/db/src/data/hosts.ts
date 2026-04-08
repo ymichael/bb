@@ -2,7 +2,7 @@ import { and, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import type { HostChangeKind, HostType } from "@bb/domain";
 import type { DbConnection } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
-import { environments, hosts } from "../schema.js";
+import { environments, hostDaemonSessions, hosts } from "../schema.js";
 import { createHostId } from "../ids.js";
 
 export interface UpsertHostInput {
@@ -177,6 +177,10 @@ export function listEphemeralHostsPendingCleanup(
         eq(hosts.type, "ephemeral"),
         isNull(hosts.destroyedAt),
         isNotNull(hosts.externalId),
+        sql`EXISTS (
+          SELECT 1 FROM ${hostDaemonSessions}
+          WHERE ${hostDaemonSessions.hostId} = ${hosts.id}
+        )`,
         hostId ? eq(hosts.id, hostId) : undefined,
         sql`NOT EXISTS (
           SELECT 1 FROM ${environments}

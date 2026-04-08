@@ -1,4 +1,5 @@
 import {
+  getActiveSession,
   getEnvironment,
   getThread,
   listStopRequestedThreads,
@@ -21,7 +22,6 @@ import {
 } from "../environments/environment-provisioning.js";
 import { handleExpiredCommands } from "../hosts/expired-commands.js";
 import {
-  DEFAULT_SANDBOX_IDLE_THRESHOLD_MS,
   destroyHost,
   maybeSuspendIdleSandbox,
 } from "../hosts/host-lifecycle.js";
@@ -70,6 +70,13 @@ export async function runEphemeralHostCleanupSweep(
   destroySandboxHost: DestroyHostFn,
 ): Promise<void> {
   for (const host of sweepEphemeralHostsPendingCleanup(deps.db)) {
+    if (host.suspendedAt !== null) {
+      continue;
+    }
+    if (getActiveSession(deps.db, host.id)) {
+      continue;
+    }
+
     try {
       await destroySandboxHost(deps, host.id);
     } catch (error) {
@@ -150,7 +157,7 @@ export async function runIdleSandboxSuspendSweep(
   deps: Pick<AppDeps, "config" | "db" | "hub" | "logger" | "sandboxRegistry">,
 ): Promise<void> {
   for (const host of sweepIdleEphemeralHostsEligibleForSuspend(deps.db, {
-    inactiveBefore: Date.now() - DEFAULT_SANDBOX_IDLE_THRESHOLD_MS,
+    inactiveBefore: Date.now() - deps.config.sandboxIdleThresholdMs,
   })) {
     try {
       await maybeSuspendIdleSandbox(deps, {

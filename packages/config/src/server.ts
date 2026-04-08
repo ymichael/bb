@@ -1,4 +1,4 @@
-import { envsafe, port, str } from "envsafe";
+import { envsafe, num, port, str } from "envsafe";
 import { commonConfig } from "./common.js";
 import { databaseConfig } from "./database.js";
 import { DEFAULTS } from "./defaults.js";
@@ -58,6 +58,16 @@ const rawServerConfig = envsafe({
     default: "",
     allowEmpty: true,
     devDefault: "",
+  }),
+  BB_SANDBOX_ACTIVITY_EXTENSION_DEBOUNCE_MS: num({
+    desc: "Debounce window for extending ephemeral sandbox TTL on activity",
+    default: DEFAULTS.sandboxActivityExtensionDebounceMs,
+    devDefault: DEFAULTS.sandboxActivityExtensionDebounceMs,
+  }),
+  BB_SANDBOX_IDLE_THRESHOLD_MS: num({
+    desc: "Idle time before the server suspends an ephemeral sandbox",
+    default: DEFAULTS.sandboxIdleThresholdMs,
+    devDefault: DEFAULTS.sandboxIdleThresholdMs,
   }),
 });
 

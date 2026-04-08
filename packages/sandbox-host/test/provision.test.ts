@@ -233,22 +233,51 @@ describe("sandbox host provisioning", () => {
 
   it("destroys the sandbox if daemon startup fails", async () => {
     const sandbox = createMockSandbox();
-    sandbox.files.write.mockRejectedValueOnce(new Error("write failed"));
+    sandbox.files.write.mockRejectedValue(new Error("write failed"));
     sandboxCreateMock.mockResolvedValue(sandbox);
 
-    await expect(
-      provisionHost({
-        daemonArtifacts: testDaemonArtifacts,
-        daemonEnv: {},
-        enrollKey: "enroll-token",
-        hostId: "host-123",
-        hostName: "sandbox-123",
-        serverUrl: "https://bb.example.test",
-        template: testSandboxTemplate,
-      }),
-    ).rejects.toThrow("write failed");
+    const provisioning = provisionHost({
+      daemonArtifacts: testDaemonArtifacts,
+      daemonEnv: {},
+      enrollKey: "enroll-token",
+      hostId: "host-123",
+      hostName: "sandbox-123",
+      serverUrl: "https://bb.example.test",
+      template: testSandboxTemplate,
+    });
+    const assertion = expect(provisioning).rejects.toThrow("write failed");
+
+    await vi.runAllTimersAsync();
+    await assertion;
 
     expect(sandbox.kill).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries daemon artifact writes before succeeding", async () => {
+    const sandbox = createMockSandbox();
+    sandbox.files.write
+      .mockRejectedValueOnce(new Error("write failed"))
+      .mockResolvedValue(undefined);
+    sandbox.commands.run
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ pid: 321 })
+      .mockResolvedValueOnce({ stdout: `${SANDBOX_DAEMON_HEALTH_RESPONSE}\n` });
+    sandboxCreateMock.mockResolvedValue(sandbox);
+
+    const provisioning = provisionHost({
+      daemonArtifacts: testDaemonArtifacts,
+      daemonEnv: {},
+      enrollKey: "enroll-token",
+      hostId: "host-123",
+      hostName: "sandbox-123",
+      serverUrl: "https://bb.example.test",
+      template: testSandboxTemplate,
+    });
+
+    await vi.runAllTimersAsync();
+    await provisioning;
+
+    expect(sandbox.files.write).toHaveBeenCalledTimes(6);
   });
 
   it("destroys the sandbox if daemon health never becomes ready", async () => {

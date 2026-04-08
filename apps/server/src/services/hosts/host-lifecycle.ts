@@ -219,19 +219,38 @@ export async function ensureSandboxHostSessionReady(
       }
 
       const cachedHost = deps.sandboxRegistry.get(args.hostId);
-      if (cachedHost && host.suspendedAt !== null) {
-        await cachedHost.resume();
+      const sandboxBackend =
+        host.provider
+          ? createSandboxBackendForId(host.provider)
+          : requireSandboxBackendForHost(host);
+      const serverUrl = requireReachablePublicServerUrl(deps.config);
+
+      if (host.suspendedAt !== null) {
+        if (host.externalId === null) {
+          if (!cachedHost) {
+            throw new ApiError(
+              409,
+              "invalid_request",
+              "Suspended sandbox host is missing an external sandbox ID",
+            );
+          }
+          await cachedHost.resume();
+        } else {
+          const resumedHost = await sandboxBackend.resumeHost({
+            config: deps.config,
+            externalId: host.externalId,
+            hostId: host.id,
+            hostName: host.name,
+            progressCallbacks: progressFanout,
+            serverUrl,
+          });
+          deps.sandboxRegistry.set(host.id, resumedHost);
+        }
         updateHostLifecycleState(deps.db, {
           hostId: host.id,
           suspendedAt: null,
         });
       } else if (!cachedHost) {
-        const sandboxBackend =
-          host.provider
-            ? createSandboxBackendForId(host.provider)
-            : requireSandboxBackendForHost(host);
-        const serverUrl = requireReachablePublicServerUrl(deps.config);
-
         const sandboxHost =
           host.externalId
             ? await sandboxBackend.resumeHost({
@@ -327,7 +346,7 @@ export async function extendSandboxLifeIfNeeded(
   }
 
   const debounceWindowMs =
-    args.debounceWindowMs ?? DEFAULT_SANDBOX_ACTIVITY_EXTENSION_DEBOUNCE_MS;
+    args.debounceWindowMs ?? deps.config.sandboxActivityExtensionDebounceMs;
   const nextAllowedAt = nextSandboxTimeoutExtensionAt.get(host.id) ?? 0;
   if (at < nextAllowedAt) {
     return false;
@@ -398,7 +417,7 @@ export async function maybeSuspendIdleSandbox(
 ): Promise<boolean> {
   const now = args.now ?? Date.now();
   const idleThresholdMs =
-    args.idleThresholdMs ?? DEFAULT_SANDBOX_IDLE_THRESHOLD_MS;
+    args.idleThresholdMs ?? deps.config.sandboxIdleThresholdMs;
   const idleHosts = sweepIdleEphemeralHostsEligibleForSuspend(deps.db, {
     hostId: args.hostId,
     inactiveBefore: now - idleThresholdMs,
