@@ -9,7 +9,6 @@ the user to:
 - approve or deny a file change
 - grant additional permissions
 - answer one or more structured questions
-- respond to MCP elicitation requests
 
 The first shipped integration should use this generic system through the Codex
 adapter. Claude and any future provider should plug into the same lifecycle
@@ -75,9 +74,9 @@ surface to:
 ### Later backend scope
 
 - permission scopes and grant persistence semantics
-- MCP elicitation forms and URLs
 - headless and deferred resolution flows
 - Claude parity on top of the same internal lifecycle
+- MCP elicitation is explicitly deferred beyond this milestone
 
 ### Final app scope
 
@@ -131,7 +130,9 @@ Add domain types for:
 - `file_change_approval`
 - `permission_request`
 - `user_input_request`
-- `mcp_elicitation`
+
+If MCP ever becomes worth supporting again, it should be added later as a new
+interaction kind rather than shaping the first milestone now.
 
 Each interaction should carry:
 
@@ -331,22 +332,21 @@ Exit condition:
 ### Phase 5: Add later backend-only kinds and parity
 
 1. Add permission-request support with explicit grant scope handling.
-2. Add MCP elicitation support for form and URL payloads.
-3. Extend the CLI and server routes to support those payloads.
-4. Remove Claude's unconditional permission bypass for supported interaction
+2. Extend the CLI and server routes to support those payloads.
+3. Remove Claude's unconditional permission bypass for supported interaction
    modes.
-5. Map Claude approval and question callbacks onto the same generic lifecycle.
-6. Add a headless or deferred flow for non-foreground runs:
+4. Map Claude approval and question callbacks onto the same generic lifecycle.
+5. Add a headless or deferred flow for non-foreground runs:
    - durable pending state
    - explicit "awaiting user input" status visible to clients
    - later resolution from CLI or API
-7. Decide how automations and background runs should behave when interaction is
+6. Decide how automations and background runs should behave when interaction is
    required.
-8. Keep these kinds on the same lifecycle model and authorization boundary.
+7. Keep these kinds on the same lifecycle model and authorization boundary.
 
 Exit condition:
 
-- permission requests, MCP elicitation, deferred flows, and Claude use the same
+- permission requests, deferred flows, and Claude use the same
   pending-interaction lifecycle and backend contract
 
 ### Phase 6: Add the app surface last
@@ -356,7 +356,7 @@ Exit condition:
    views.
 3. Add app query hooks and mutations on top of the canonical server contract.
 4. Add first-class app UI for command approval, ask-user-question,
-   file-change approval, permission requests, and MCP elicitation.
+   file-change approval, and permission requests.
 5. Reuse the same lifecycle rules, authorization rules, and dedupe semantics
    already proven through the CLI.
 
@@ -427,19 +427,17 @@ relevant UI checks once phase 6 lands:
    resolve the payload correctly.
 6. Trigger a permission request and verify the CLI applies the documented grant
    scope semantics.
-7. Trigger an MCP elicitation request and verify the CLI captures the form or
-   URL response and resumes the provider correctly.
-8. Restart the daemon while a request is pending and verify the lifecycle
+7. Restart the daemon while a request is pending and verify the lifecycle
    recovers or fails in the documented way.
-9. Kill the provider process while a request is pending and verify the
+8. Kill the provider process while a request is pending and verify the
    interaction transitions to `interrupted` with the documented recovery path.
-10. Run a deferred or headless flow once phase 5 lands and verify the pending
+9. Run a deferred or headless flow once phase 5 lands and verify the pending
     interaction remains listable and resolvable without app UI.
-11. Once phase 6 lands, refresh the app while a request is pending and verify
+10. Once phase 6 lands, refresh the app while a request is pending and verify
     the interaction is still visible and resolvable there as well.
-12. Once phase 6 lands, resolve the same kind through the app and confirm the
+11. Once phase 6 lands, resolve the same kind through the app and confirm the
     server and daemon behavior matches the CLI path.
-13. Verify unsupported kinds produce an explicit user-visible explanation
+12. Verify unsupported kinds produce an explicit user-visible explanation
     rather than disappearing.
 
 ### Manual Comparison Checklist
