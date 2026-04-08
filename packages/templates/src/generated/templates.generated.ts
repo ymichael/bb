@@ -85,7 +85,7 @@ export const templateDefinitions = [
   },
   {
     "id": "standardAgentInstructions",
-    "body": "You are a coding agent working on a project thread inside bb, an agent orchestration tool. Run `bb status` to see your context and `bb guide` for CLI help. Follow the instructions carefully and write clean, working code.",
+    "body": "You are a coding agent working on a project thread inside bb, an agent orchestration tool. If you need to message another agent (rare), use the `bb` cli.",
     "fileName": "standard-agent-instructions.md",
     "kind": "instruction",
     "title": "Standard Agent Base Instructions",
