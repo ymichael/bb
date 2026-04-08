@@ -20,6 +20,7 @@ import {
 } from "@bb/domain";
 import { ApiError } from "../../errors.js";
 import type { AppDeps } from "../../types.js";
+import { appendThreadEvent } from "../threads/thread-events.js";
 
 interface PendingInteractionWaiter {
   resolve: (outcome: PendingInteractionWaitOutcome) => void;
@@ -140,6 +141,103 @@ function notifyInteractionChanged(
   deps.hub.notifyThread(threadId, ["interactions-changed"]);
 }
 
+function formatPendingInteractionLifecycleMessage(
+  interaction: PendingInteraction,
+): string {
+  switch (interaction.status) {
+    case "pending":
+      switch (interaction.payload.kind) {
+        case "command_approval":
+          return interaction.payload.command
+            ? `Awaiting approval for command: ${interaction.payload.command}`
+            : "Awaiting command approval";
+        case "file_change_approval":
+          return interaction.payload.reason ?? "Awaiting file-change approval";
+        case "permission_request":
+          return interaction.payload.reason ?? "Awaiting permission approval";
+        case "user_input_request":
+          return `Awaiting answers to ${interaction.payload.questions.length} question(s)`;
+      }
+    case "resolved":
+      if (interaction.resolution === null) {
+        return "Interaction resolved";
+      }
+      switch (interaction.resolution.kind) {
+        case "command_approval":
+          switch (interaction.resolution.decision) {
+            case "accept":
+              return "Command approved";
+            case "accept_for_session":
+              return "Command approved for this session";
+            case "decline":
+              return "Command declined";
+            case "cancel":
+              return "Command request cancelled";
+          }
+        case "file_change_approval":
+          switch (interaction.resolution.decision) {
+            case "accept":
+              return "File changes approved";
+            case "accept_for_session":
+              return "File changes approved for this session";
+            case "decline":
+              return "File changes declined";
+            case "cancel":
+              return "File-change request cancelled";
+          }
+        case "permission_request":
+          return `Permissions granted for ${interaction.resolution.scope}`;
+        case "user_input_request":
+          return `Answered ${Object.keys(interaction.resolution.answers).length} question(s)`;
+      }
+    case "rejected":
+      return interaction.statusReason ?? "Interaction rejected";
+    case "interrupted":
+      return interaction.statusReason ?? "Interaction interrupted";
+    case "expired":
+      return interaction.statusReason ?? "Interaction expired";
+  }
+}
+
+function toPendingInteractionOperationStatus(
+  interaction: PendingInteraction,
+): "completed" | "failed" | "started" {
+  switch (interaction.status) {
+    case "pending":
+      return "started";
+    case "resolved":
+      return "completed";
+    case "rejected":
+    case "interrupted":
+    case "expired":
+      return "failed";
+  }
+}
+
+function appendPendingInteractionTimelineEvent(
+  deps: CreateLifecycleDeps,
+  interaction: PendingInteraction,
+): void {
+  const thread = getThread(deps.db, interaction.threadId);
+
+  appendThreadEvent(deps, {
+    threadId: interaction.threadId,
+    environmentId: thread?.environmentId ?? null,
+    type: "system/operation",
+    data: {
+      operation: interaction.payload.kind,
+      status: toPendingInteractionOperationStatus(interaction),
+      operationId: interaction.id,
+      message: formatPendingInteractionLifecycleMessage(interaction),
+      metadata: {
+        interactionId: interaction.id,
+        providerId: interaction.providerId,
+        providerRequestId: interaction.providerRequestId,
+      },
+    },
+  });
+}
+
 export class PendingInteractionLifecycle {
   private readonly waiters = new Map<string, Set<PendingInteractionWaiter>>();
 
@@ -239,6 +337,7 @@ export class PendingInteractionLifecycle {
 
     const pendingInteraction = toPendingInteraction(registered.row);
     if (registered.outcome === "created") {
+      appendPendingInteractionTimelineEvent(this.deps, pendingInteraction);
       notifyInteractionChanged(this.deps, pendingInteraction.threadId);
     }
 
@@ -339,6 +438,7 @@ export class PendingInteractionLifecycle {
   }
 
   private finishInteraction(interaction: PendingInteraction): void {
+    appendPendingInteractionTimelineEvent(this.deps, interaction);
     notifyInteractionChanged(this.deps, interaction.threadId);
     const outcome = requireWaitableOutcome(interaction);
     if (!outcome) {

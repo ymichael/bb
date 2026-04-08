@@ -1,5 +1,8 @@
 import { Command } from "commander";
-import type { PendingInteraction } from "@bb/domain";
+import type {
+  PendingInteraction,
+  PendingInteractionResolution,
+} from "@bb/domain";
 import { action } from "../../action.js";
 import { createClient, unwrap } from "../../client.js";
 import { renderBorderlessTable } from "../../table.js";
@@ -13,6 +16,14 @@ import {
 interface ThreadInteractionTargetOptions {
   self?: boolean;
   json?: boolean;
+}
+
+interface ThreadInteractionAnswerOptions extends ThreadInteractionTargetOptions {
+  answer?: string[];
+}
+
+function collectAnswers(value: string, previous: string[]): string[] {
+  return [...previous, value];
 }
 
 function formatInteractionKind(kind: PendingInteraction["payload"]["kind"]): string {
@@ -86,6 +97,11 @@ function printInteraction(interaction: PendingInteraction): void {
       console.log(`  Questions: ${interaction.payload.questions.length}`);
       for (const question of interaction.payload.questions) {
         console.log(`  ${question.header}: ${question.question}`);
+        if (question.options.length > 0) {
+          console.log(
+            `    Options: ${question.options.map((option) => option.label).join(", ")}`,
+          );
+        }
       }
       break;
   }
@@ -124,6 +140,92 @@ async function fetchInteraction(args: {
       },
     }),
   );
+}
+
+function buildApprovalResolution(
+  interaction: PendingInteraction,
+  decision: "accept_for_session" | "decline",
+): PendingInteractionResolution {
+  switch (interaction.payload.kind) {
+    case "command_approval":
+      return {
+        kind: "command_approval",
+        decision,
+      };
+    case "file_change_approval":
+      return {
+        kind: "file_change_approval",
+        decision,
+      };
+    case "permission_request":
+    case "user_input_request":
+      throw new Error(
+        `Interaction ${interaction.id} is ${formatInteractionKind(interaction.payload.kind)} and cannot be resolved with approve/deny.`,
+      );
+  }
+}
+
+function parseAnswerEntries(values: readonly string[]): Record<string, string[]> {
+  const answers: Record<string, string[]> = {};
+
+  for (const value of values) {
+    const separatorIndex = value.indexOf("=");
+    if (separatorIndex <= 0) {
+      throw new Error(
+        `Invalid --answer '${value}'. Expected questionId=value.`,
+      );
+    }
+    const questionId = value.slice(0, separatorIndex).trim();
+    const answer = value.slice(separatorIndex + 1).trim();
+    if (questionId.length === 0 || answer.length === 0) {
+      throw new Error(
+        `Invalid --answer '${value}'. Expected questionId=value.`,
+      );
+    }
+
+    const existing = answers[questionId] ?? [];
+    answers[questionId] = [...existing, answer];
+  }
+
+  return answers;
+}
+
+function buildUserInputResolution(
+  interaction: PendingInteraction,
+  values: readonly string[],
+): PendingInteractionResolution {
+  if (interaction.payload.kind !== "user_input_request") {
+    throw new Error(
+      `Interaction ${interaction.id} is ${formatInteractionKind(interaction.payload.kind)} and cannot be answered with this command.`,
+    );
+  }
+  if (values.length === 0) {
+    throw new Error(
+      "At least one --answer questionId=value entry is required.",
+    );
+  }
+
+  const answers = parseAnswerEntries(values);
+  const questionIds = new Set(interaction.payload.questions.map((question) => question.id));
+  const missingQuestionIds = interaction.payload.questions
+    .map((question) => question.id)
+    .filter((questionId) => !(questionId in answers));
+  if (missingQuestionIds.length > 0) {
+    throw new Error(
+      `Missing answers for ${missingQuestionIds.join(", ")}.`,
+    );
+  }
+
+  for (const questionId of Object.keys(answers)) {
+    if (!questionIds.has(questionId)) {
+      throw new Error(`Unknown question id '${questionId}'.`);
+    }
+  }
+
+  return {
+    kind: "user_input_request",
+    answers,
+  };
 }
 
 export function registerInteractionCommands(
@@ -202,7 +304,7 @@ export function registerInteractionCommands(
 
   interactions
     .command("approve <interactionId> [id]")
-    .description("Approve a command interaction for the current session")
+    .description("Approve a command or file-change interaction for the current session")
     .option("--self", "Target the current thread (from BB_THREAD_ID)")
     .option("--json", "Print machine-readable JSON output")
     .action(action(async (
@@ -217,11 +319,6 @@ export function registerInteractionCommands(
         interactionId,
         threadId: resolved.id,
       });
-      if (interaction.payload.kind !== "command_approval") {
-        throw new Error(
-          `Interaction ${interactionId} is ${formatInteractionKind(interaction.payload.kind)} and cannot be approved with this command.`,
-        );
-      }
 
       const client = createClient(getUrl());
       const updated = await unwrap<PendingInteraction>(
@@ -230,10 +327,7 @@ export function registerInteractionCommands(
             id: resolved.id,
             interactionId,
           },
-          json: {
-            kind: "command_approval",
-            decision: "accept_for_session",
-          },
+          json: buildApprovalResolution(interaction, "accept_for_session"),
         }),
       ).catch((error: unknown) => {
         throw prependErrorContext(`Failed to approve interaction ${interactionId}`, error);
@@ -247,7 +341,7 @@ export function registerInteractionCommands(
 
   interactions
     .command("deny <interactionId> [id]")
-    .description("Deny a command interaction")
+    .description("Deny a command or file-change interaction")
     .option("--self", "Target the current thread (from BB_THREAD_ID)")
     .option("--json", "Print machine-readable JSON output")
     .action(action(async (
@@ -262,11 +356,6 @@ export function registerInteractionCommands(
         interactionId,
         threadId: resolved.id,
       });
-      if (interaction.payload.kind !== "command_approval") {
-        throw new Error(
-          `Interaction ${interactionId} is ${formatInteractionKind(interaction.payload.kind)} and cannot be denied with this command.`,
-        );
-      }
 
       const client = createClient(getUrl());
       const updated = await unwrap<PendingInteraction>(
@@ -275,10 +364,7 @@ export function registerInteractionCommands(
             id: resolved.id,
             interactionId,
           },
-          json: {
-            kind: "command_approval",
-            decision: "decline",
-          },
+          json: buildApprovalResolution(interaction, "decline"),
         }),
       ).catch((error: unknown) => {
         throw prependErrorContext(`Failed to deny interaction ${interactionId}`, error);
@@ -288,5 +374,48 @@ export function registerInteractionCommands(
         return;
       }
       console.log(`Interaction ${interactionId} denied`);
+    }));
+
+  interactions
+    .command("answer <interactionId> [id]")
+    .description("Answer a user-input interaction")
+    .option("--self", "Target the current thread (from BB_THREAD_ID)")
+    .option("--json", "Print machine-readable JSON output")
+    .option(
+      "--answer <questionId=value>",
+      "Provide an answer for a question; repeat for multiple answers",
+      collectAnswers,
+      [],
+    )
+    .action(action(async (
+      interactionId: string,
+      id: string | undefined,
+      opts: ThreadInteractionAnswerOptions,
+    ) => {
+      const resolved = requireThreadIdWithLabelOrSelf(id, opts);
+      printContextLabel(resolved, "Thread", "BB_THREAD_ID", opts);
+      const interaction = await fetchInteraction({
+        getUrl,
+        interactionId,
+        threadId: resolved.id,
+      });
+
+      const client = createClient(getUrl());
+      const updated = await unwrap<PendingInteraction>(
+        client.api.v1.threads[":id"].interactions[":interactionId"].resolve.$post({
+          param: {
+            id: resolved.id,
+            interactionId,
+          },
+          json: buildUserInputResolution(interaction, opts.answer ?? []),
+        }),
+      ).catch((error: unknown) => {
+        throw prependErrorContext(`Failed to answer interaction ${interactionId}`, error);
+      });
+
+      if (outputJson(opts, updated)) {
+        return;
+      }
+      console.log(`Interaction ${interactionId} answered`);
     }));
 }

@@ -287,4 +287,211 @@ describe("public thread interaction routes", () => {
       await harness.cleanup();
     }
   });
+
+  it("resolves file-change and user-input interactions through thread routes", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-public-thread-extra-interactions",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+      });
+
+      const fileChange = harness.deps.pendingInteractions.registerPendingInteraction({
+        threadId: thread.id,
+        turnId: "turn-file-change",
+        providerId: "codex",
+        providerThreadId: "provider-thread-file-change",
+        providerRequestId: "request-file-change",
+        providerRequestMethod: "item/fileChange/requestApproval",
+        payload: {
+          kind: "file_change_approval",
+          itemId: "item-file-change",
+          reason: "Approve file changes",
+          grantRoot: "/tmp/project",
+        },
+      });
+      if (fileChange.outcome === "rejected") {
+        throw new Error(`Expected file-change interaction registration to succeed: ${fileChange.reason}`);
+      }
+
+      const fileChangeResponse = await harness.app.request(
+        `/api/v1/threads/${thread.id}/interactions/${fileChange.interaction.id}/resolve`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            kind: "file_change_approval",
+            decision: "accept_for_session",
+          }),
+        },
+      );
+      expect(fileChangeResponse.status).toBe(200);
+      await expect(readJson(fileChangeResponse)).resolves.toMatchObject({
+        id: fileChange.interaction.id,
+        status: "resolved",
+        resolution: {
+          kind: "file_change_approval",
+          decision: "accept_for_session",
+        },
+      });
+
+      const userInput = harness.deps.pendingInteractions.registerPendingInteraction({
+        threadId: thread.id,
+        turnId: "turn-user-input",
+        providerId: "codex",
+        providerThreadId: "provider-thread-user-input",
+        providerRequestId: "request-user-input",
+        providerRequestMethod: "item/tool/requestUserInput",
+        payload: {
+          kind: "user_input_request",
+          itemId: "item-user-input",
+          questions: [
+            {
+              id: "environment",
+              header: "Env",
+              question: "Which environment?",
+              allowsOther: false,
+              isSecret: false,
+              options: [
+                { label: "staging", description: "Use staging" },
+                { label: "prod", description: "Use production" },
+              ],
+            },
+            {
+              id: "ticket",
+              header: "Ticket",
+              question: "Which ticket?",
+              allowsOther: true,
+              isSecret: false,
+              options: [],
+            },
+          ],
+        },
+      });
+      if (userInput.outcome === "rejected") {
+        throw new Error(`Expected user-input interaction registration to succeed: ${userInput.reason}`);
+      }
+
+      const userInputResponse = await harness.app.request(
+        `/api/v1/threads/${thread.id}/interactions/${userInput.interaction.id}/resolve`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            kind: "user_input_request",
+            answers: {
+              environment: ["staging"],
+              ticket: ["OPS-123"],
+            },
+          }),
+        },
+      );
+      expect(userInputResponse.status).toBe(200);
+      await expect(readJson(userInputResponse)).resolves.toMatchObject({
+        id: userInput.interaction.id,
+        status: "resolved",
+        resolution: {
+          kind: "user_input_request",
+          answers: {
+            environment: ["staging"],
+            ticket: ["OPS-123"],
+          },
+        },
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("projects pending-interaction lifecycle updates into the thread timeline", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-public-thread-interaction-timeline",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+      });
+
+      const registered = harness.deps.pendingInteractions.registerPendingInteraction({
+        threadId: thread.id,
+        turnId: "turn-timeline",
+        providerId: "codex",
+        providerThreadId: "provider-thread-timeline",
+        providerRequestId: "request-timeline",
+        providerRequestMethod: "item/commandExecution/requestApproval",
+        payload: {
+          kind: "command_approval",
+          itemId: "item-timeline",
+          approvalId: null,
+          reason: "Approve command",
+          command: "git push",
+          cwd: "/tmp/project",
+          commandActions: [],
+          requestedPermissions: null,
+          availableDecisions: ["accept", "accept_for_session", "decline", "cancel"],
+        },
+      });
+      if (registered.outcome === "rejected") {
+        throw new Error(`Expected interaction registration to succeed: ${registered.reason}`);
+      }
+
+      harness.deps.pendingInteractions.resolvePendingInteraction({
+        threadId: thread.id,
+        interactionId: registered.interaction.id,
+        resolution: {
+          kind: "command_approval",
+          decision: "accept_for_session",
+        },
+      });
+
+      const timelineResponse = await harness.app.request(
+        `/api/v1/threads/${thread.id}/timeline`,
+      );
+      expect(timelineResponse.status).toBe(200);
+      await expect(readJson(timelineResponse)).resolves.toEqual(
+        expect.objectContaining({
+          rows: expect.arrayContaining([
+            expect.objectContaining({
+              kind: "message",
+              message: expect.objectContaining({
+                kind: "operation",
+                opType: "operation",
+                status: "completed",
+                threadOperation: expect.objectContaining({
+                  rawOperation: "command_approval",
+                  operationId: registered.interaction.id,
+                }),
+                detail: expect.stringContaining("Command approved for this session"),
+              }),
+            }),
+          ]),
+        }),
+      );
+    } finally {
+      await harness.cleanup();
+    }
+  });
 });
