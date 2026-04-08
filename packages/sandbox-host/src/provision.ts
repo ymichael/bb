@@ -41,6 +41,17 @@ import type {
   StartBackgroundProcessOptions,
 } from "./types.js";
 
+function emitProgress(
+  callbacks: ProvisionHostOptions["progressCallbacks"] | ResumeHostOptions["progressCallbacks"] | undefined,
+  event: {
+    externalId?: string;
+    stage: "host" | "daemon-start";
+    status: "started" | "completed";
+  },
+): void {
+  callbacks?.onProgress?.(event);
+}
+
 function buildSandboxOptions(options: CreateSandboxOptions): SandboxOpts {
   return {
     ...(options.apiKey !== undefined ? { apiKey: options.apiKey } : {}),
@@ -252,6 +263,10 @@ export async function provisionHost(
     serverUrl: normalizeServerUrl(options.serverUrl),
   });
 
+  emitProgress(options.progressCallbacks, {
+    stage: "host",
+    status: "started",
+  });
   const sandbox = await createSandbox({
     apiKey: options.apiKey,
     envs: daemonEnv,
@@ -259,10 +274,28 @@ export async function provisionHost(
     template: options.template,
     timeoutMs: options.timeoutMs,
   });
+  options.progressCallbacks?.onSandboxCreated?.({
+    externalId: sandbox.sandboxId,
+  });
+  emitProgress(options.progressCallbacks, {
+    externalId: sandbox.sandboxId,
+    stage: "host",
+    status: "completed",
+  });
   const daemonArtifacts = await resolveDaemonArtifacts(options.daemonArtifacts);
 
   try {
+    emitProgress(options.progressCallbacks, {
+      externalId: sandbox.sandboxId,
+      stage: "daemon-start",
+      status: "started",
+    });
     await startSandboxDaemon({ sandbox, daemonArtifacts, daemonEnv });
+    emitProgress(options.progressCallbacks, {
+      externalId: sandbox.sandboxId,
+      stage: "daemon-start",
+      status: "completed",
+    });
     return createSandboxHost(sandbox, options.hostId);
   } catch (error) {
     try {
@@ -281,19 +314,39 @@ export async function resumeHost(
     hostName: options.hostName,
     serverUrl: normalizeServerUrl(options.serverUrl),
   });
+  emitProgress(options.progressCallbacks, {
+    externalId: options.externalId,
+    stage: "host",
+    status: "started",
+  });
   const sandbox = await resumeSandbox(options.externalId, {
     apiKey: options.apiKey,
     timeoutMs: options.timeoutMs,
+  });
+  emitProgress(options.progressCallbacks, {
+    externalId: options.externalId,
+    stage: "host",
+    status: "completed",
   });
 
   try {
     try {
       await assertDaemonHealth(sandbox);
     } catch {
+      emitProgress(options.progressCallbacks, {
+        externalId: options.externalId,
+        stage: "daemon-start",
+        status: "started",
+      });
       await startSandboxDaemon({
         sandbox,
         daemonArtifacts: options.daemonArtifacts,
         daemonEnv,
+      });
+      emitProgress(options.progressCallbacks, {
+        externalId: options.externalId,
+        stage: "daemon-start",
+        status: "completed",
       });
     }
     return createSandboxHost(sandbox, options.hostId);

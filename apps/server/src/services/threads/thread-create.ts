@@ -7,7 +7,6 @@ import {
   deleteThread,
   findEnvironmentByHostPath,
   getHighWaterMarks,
-  updateHost,
   upsertHost,
 } from "@bb/db";
 import { applyProvisionedEnvironmentRecord } from "@bb/db/internal-lifecycle";
@@ -15,9 +14,9 @@ import type {
   Environment,
   GitHubRepoProjectSource,
   LocalPathProjectSource,
+  ProvisioningTranscriptEntry,
 } from "@bb/domain";
 import { hostDaemonCommandResultSchemaByType } from "@bb/host-daemon-contract";
-import type { SandboxHost } from "@bb/sandbox-host";
 import type { AppDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
 import {
@@ -25,9 +24,8 @@ import {
 } from "../hosts/command-wait.js";
 import { COMMAND_TIMEOUT_MS } from "../../constants.js";
 import { requireConnectedHostSession } from "../lib/entity-lookup.js";
-import { destroyHost, waitForHostSession } from "../hosts/host-lifecycle.js";
 import { requireReachablePublicServerUrl } from "../hosts/public-server-url.js";
-import { createSandboxBackendForId } from "../hosts/sandbox-backends.js";
+import { assertSandboxProvisioningConfig } from "../hosts/sandbox-backends.js";
 import { appendClientTurnEvent, appendProvisioningEvent, buildCwdBranchEntries } from "./thread-events.js";
 import { buildExecutionOptions } from "./thread-commands.js";
 import {
@@ -50,6 +48,10 @@ import {
   advanceEnvironmentProvisioning,
   requestEnvironmentProvision,
 } from "../environments/environment-provisioning.js";
+import {
+  buildDirectEnvironmentProvisionRequest,
+  buildSandboxHostEnvironmentProvisionRequest,
+} from "../environments/environment-provision-request.js";
 import { requestThreadStart } from "./thread-lifecycle.js";
 import {
   resolveStableThreadRequestEnvironment,
@@ -62,6 +64,7 @@ import {
 interface CreateThreadInEnvironmentArgs {
   environment: Environment;
   projectDefaults: Parameters<typeof buildExecutionOptions>[2]["projectDefaults"];
+  provisioningEntries?: ProvisioningTranscriptEntry[];
   request: ThreadCreateServiceRequest;
   threadStatus: "created" | "provisioning";
 }
@@ -78,13 +81,6 @@ interface CreateSandboxHostThreadArgs {
   projectDefaults: Parameters<typeof buildExecutionOptions>[2]["projectDefaults"];
   request: ThreadCreateServiceRequest;
   sandboxType: string;
-}
-
-interface CleanupFailedSandboxHostThreadArgs {
-  environmentId?: string;
-  hostId: string;
-  logger: Pick<AppDeps["logger"], "warn">;
-  threadId?: string;
 }
 
 async function createThreadInEnvironment(
@@ -130,7 +126,7 @@ async function createThreadInEnvironment(
         threadId: thread.id,
         environmentId: args.environment.id,
         status: "started",
-        entries: [
+        entries: args.provisioningEntries ?? [
           {
             type: "step",
             key: "provision",
@@ -180,29 +176,6 @@ async function createThreadInEnvironment(
   }
 
   return getThreadSafe(deps, thread.id);
-}
-
-async function cleanupFailedSandboxHostThread(
-  deps: Pick<AppDeps, "config" | "db" | "hub" | "logger" | "sandboxRegistry">,
-  args: CleanupFailedSandboxHostThreadArgs,
-): Promise<void> {
-  if (args.threadId) {
-    deleteThread(deps.db, deps.hub, args.threadId);
-  }
-  if (args.environmentId) {
-    deleteEnvironment(deps.db, deps.hub, args.environmentId);
-  }
-  try {
-    await destroyHost(deps, args.hostId);
-  } catch (destroyError) {
-    args.logger.warn(
-      {
-        err: destroyError,
-        hostId: args.hostId,
-      },
-      "Failed to destroy sandbox host after provisioning failure",
-    );
-  }
 }
 
 async function reuseEnvironmentByHostPath(
@@ -277,9 +250,11 @@ async function createSandboxHostThread(
   deps: Pick<AppDeps, "config" | "db" | "hub" | "logger" | "machineAuth" | "sandboxRegistry">,
   args: CreateSandboxHostThreadArgs,
 ) {
+  requireReachablePublicServerUrl(deps.config);
+  assertSandboxProvisioningConfig(args.sandboxType, deps.config);
+
   const hostId = createHostId();
   const hostName = `sandbox-${hostId.slice(-6)}`;
-  const sandboxBackend = createSandboxBackendForId(args.sandboxType);
 
   upsertHost(deps.db, deps.hub, {
     id: hostId,
@@ -287,29 +262,6 @@ async function createSandboxHostThread(
     provider: args.sandboxType,
     type: "ephemeral",
   });
-
-  let sandboxHost: SandboxHost;
-  try {
-    const enrollKey = await deps.machineAuth.issueHostEnrollKey({
-      hostId,
-      hostType: "ephemeral",
-    });
-    sandboxHost = await sandboxBackend.provisionHost({
-      config: deps.config,
-      enrollKey: enrollKey.key,
-      hostId,
-      hostName,
-      serverUrl: requireReachablePublicServerUrl(deps.config),
-    });
-  } catch (error) {
-    deleteHost(deps.db, deps.hub, hostId);
-    throw error;
-  }
-
-  updateHost(deps.db, deps.hub, hostId, {
-    externalId: sandboxHost.externalId,
-  });
-  deps.sandboxRegistry.set(hostId, sandboxHost);
 
   const environment = createEnvironment(deps.db, deps.hub, {
     hostId,
@@ -324,29 +276,23 @@ async function createSandboxHostThread(
     thread = await createThreadInEnvironment(deps, {
       environment,
       projectDefaults: args.projectDefaults,
+      provisioningEntries: [
+        {
+          type: "step",
+          key: "sandbox-host",
+          text: "Preparing sandbox host",
+          status: "started",
+        },
+      ],
       request: args.request,
       threadStatus: "provisioning",
     });
   } catch (error) {
-    await cleanupFailedSandboxHostThread(deps, {
-      environmentId: environment.id,
-      hostId,
-      logger: deps.logger,
-    });
+    deleteEnvironment(deps.db, deps.hub, environment.id);
+    deleteHost(deps.db, deps.hub, hostId);
     throw error;
   }
 
-  try {
-    await waitForHostSession(deps, hostId);
-  } catch (error) {
-    await cleanupFailedSandboxHostThread(deps, {
-      environmentId: environment.id,
-      hostId,
-      logger: deps.logger,
-      threadId: thread.id,
-    });
-    throw error;
-  }
   const provisionEventSequence = getHighWaterMarks(deps.db, [thread.id])[thread.id] ?? 0;
 
   const command = buildEnvironmentProvisionCommand({
@@ -363,7 +309,10 @@ async function createSandboxHostThread(
   requestEnvironmentProvision(deps, {
     environmentId: environment.id,
     kind: "provision",
-    command,
+    request: buildSandboxHostEnvironmentProvisionRequest({
+      command,
+      sandboxType: args.sandboxType,
+    }),
   });
   advanceEnvironmentProvisioning(deps, {
     environmentId: environment.id,
@@ -554,7 +503,7 @@ export async function createThreadFromRequest(
   requestEnvironmentProvision(deps, {
     environmentId: environment.id,
     kind: "provision",
-    command: provisionCommand,
+    request: buildDirectEnvironmentProvisionRequest(provisionCommand),
   });
   advanceEnvironmentProvisioning(deps, {
     environmentId: environment.id,
@@ -574,7 +523,10 @@ export async function createThreadFromRequest(
 }
 
 export async function ensureProjectSourceEnvironment(
-  deps: Pick<AppDeps, "db" | "hub">,
+  deps: Pick<
+    AppDeps,
+    "config" | "db" | "hub" | "machineAuth" | "sandboxRegistry"
+  >,
   args: {
     hostId: string;
     path: string;
@@ -605,7 +557,7 @@ export async function ensureProjectSourceEnvironment(
   requestEnvironmentProvision(deps, {
     environmentId: environment.id,
     kind: "provision",
-    command,
+    request: buildDirectEnvironmentProvisionRequest(command),
   });
   const commandId = advanceEnvironmentProvisioning(deps, {
     environmentId: environment.id,

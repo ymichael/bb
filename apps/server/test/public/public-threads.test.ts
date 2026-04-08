@@ -25,7 +25,8 @@ import {
   updateHost,
 } from "@bb/db";
 import { HOST_DAEMON_PROTOCOL_VERSION } from "@bb/host-daemon-contract";
-import { systemOperationEventDataSchema, threadSchema } from "@bb/domain";
+import { systemOperationEventDataSchema, systemProvisioningEventDataSchema, threadSchema } from "@bb/domain";
+import type { SandboxHostProgressCallbacks } from "@bb/sandbox-host";
 import { renderTemplate } from "@bb/templates";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -59,6 +60,7 @@ interface SandboxProvisionCall {
   enrollKey?: string;
   hostId: string;
   hostName: string;
+  progressCallbacks?: SandboxHostProgressCallbacks;
 }
 
 type AssertionFn = () => void;
@@ -1141,6 +1143,28 @@ describe("public thread routes", () => {
         suspend: vi.fn().mockResolvedValue(undefined),
       };
       provisionHostMock.mockImplementation(async (options: SandboxProvisionCall) => {
+        options.progressCallbacks?.onProgress?.({
+          stage: "host",
+          status: "started",
+        });
+        options.progressCallbacks?.onSandboxCreated?.({
+          externalId: "sandbox-external-123",
+        });
+        options.progressCallbacks?.onProgress?.({
+          externalId: "sandbox-external-123",
+          stage: "host",
+          status: "completed",
+        });
+        options.progressCallbacks?.onProgress?.({
+          externalId: "sandbox-external-123",
+          stage: "daemon-start",
+          status: "started",
+        });
+        options.progressCallbacks?.onProgress?.({
+          externalId: "sandbox-external-123",
+          stage: "daemon-start",
+          status: "completed",
+        });
         openSession(harness.db, harness.hub, {
           heartbeatIntervalMs: 10_000,
           hostId: options.hostId,
@@ -1190,17 +1214,20 @@ describe("public thread routes", () => {
         status: string;
       };
       expect(createdThread.status).toBe("provisioning");
-      expect(provisionHostMock).toHaveBeenCalledWith({
-        apiKey: "test-e2b-api-key",
-        daemonEnv: {
-          GITHUB_TOKEN: "test-github-pat",
-          OPENAI_API_KEY: "test-openai-key",
-        },
-        enrollKey: expect.stringMatching(/^bbde_/u),
-        hostId: expect.stringMatching(/^host_/u),
-        hostName: expect.stringMatching(/^sandbox-/u),
-        serverUrl: "https://bb.example.test",
-        template: "test-e2b-template",
+      await waitForAssertion(() => {
+        expect(provisionHostMock).toHaveBeenCalledWith({
+          apiKey: "test-e2b-api-key",
+          daemonEnv: {
+            GITHUB_TOKEN: "test-github-pat",
+            OPENAI_API_KEY: "test-openai-key",
+          },
+          enrollKey: expect.stringMatching(/^bbde_/u),
+          hostId: expect.stringMatching(/^host_/u),
+          hostName: expect.stringMatching(/^sandbox-/u),
+          progressCallbacks: expect.any(Object),
+          serverUrl: "https://bb.example.test",
+          template: "test-e2b-template",
+        });
       });
 
       const environment = getEnvironment(harness.db, createdThread.environmentId);
@@ -1232,6 +1259,24 @@ describe("public thread routes", () => {
         harness,
         ({ command }) => command.type === "environment.provision",
       );
+      const provisioningEvents = harness.db
+        .select({ data: events.data, type: events.type })
+        .from(events)
+        .where(eq(events.threadId, createdThread.id))
+        .all()
+        .filter((event) => event.type === "system/provisioning")
+        .map((event) => systemProvisioningEventDataSchema.parse(JSON.parse(event.data)));
+      expect(
+        provisioningEvents.flatMap((event) => event.entries.map((entry) => entry.text)),
+      ).toEqual(
+        expect.arrayContaining([
+          "Preparing sandbox host",
+          "Sandbox host ready",
+          "Starting sandbox daemon",
+          "Sandbox daemon started",
+          "Sandbox host connected",
+        ]),
+      );
       expect(queued.command).toMatchObject({
         environmentId: environment.id,
         sourcePath: "https://github.com/example/repo.git",
@@ -1244,24 +1289,35 @@ describe("public thread routes", () => {
     }
   });
 
-  it("does not sweep connecting sandbox hosts before the first session arrives", async () => {
+  it("returns sandbox-host threads before the first session arrives", async () => {
     const harness = await createTestAppHarness({
       githubPat: "test-github-pat",
     });
     try {
       let sandboxHostId: string | undefined;
       let sandboxHostName: string | undefined;
+      let resolveProvisionHost: ((value: {
+        destroy: ReturnType<typeof vi.fn>;
+        extendTimeout: ReturnType<typeof vi.fn>;
+        externalId: string;
+        hostId: string;
+        resume: ReturnType<typeof vi.fn>;
+        suspend: ReturnType<typeof vi.fn>;
+      }) => void) | null = null;
+      const provisionHostResult = new Promise<{
+        destroy: ReturnType<typeof vi.fn>;
+        extendTimeout: ReturnType<typeof vi.fn>;
+        externalId: string;
+        hostId: string;
+        resume: ReturnType<typeof vi.fn>;
+        suspend: ReturnType<typeof vi.fn>;
+      }>((resolve) => {
+        resolveProvisionHost = resolve;
+      });
       provisionHostMock.mockImplementation(async (options: SandboxProvisionCall) => {
         sandboxHostId = options.hostId;
         sandboxHostName = options.hostName;
-        return {
-          destroy: vi.fn().mockResolvedValue(undefined),
-          extendTimeout: vi.fn().mockResolvedValue(undefined),
-          externalId: "sandbox-external-connecting",
-          hostId: options.hostId,
-          resume: vi.fn().mockResolvedValue(undefined),
-          suspend: vi.fn().mockResolvedValue(undefined),
-        };
+        return provisionHostResult;
       });
 
       const { project } = createProject(harness.db, harness.hub, {
@@ -1272,7 +1328,7 @@ describe("public thread routes", () => {
         },
       });
 
-      const responsePromise = harness.app.request("/api/v1/threads", {
+      const response = await harness.app.request("/api/v1/threads", {
         method: "POST",
         headers: {
           "content-type": "application/json",
@@ -1289,6 +1345,8 @@ describe("public thread routes", () => {
           },
         }),
       });
+      expect(response.status).toBe(201);
+      const createdThread = threadSchema.parse(await readJson(response));
 
       await waitForAssertion(() => {
         if (!sandboxHostId) {
@@ -1296,18 +1354,7 @@ describe("public thread routes", () => {
         }
 
         const sandboxHost = getHost(harness.db, sandboxHostId);
-        expect(sandboxHost).toMatchObject({
-          externalId: "sandbox-external-connecting",
-          id: sandboxHostId,
-        });
-
-        const createdThreads = listThreads(harness.db, {
-          archived: false,
-          projectId: project.id,
-        });
-        expect(createdThreads).toHaveLength(1);
-
-        const createdThread = createdThreads[0];
+        expect(sandboxHost).toMatchObject({ id: sandboxHostId });
         expect(createdThread.status).toBe("provisioning");
         expect(createdThread.environmentId).toMatch(/^env_/u);
 
@@ -1324,7 +1371,19 @@ describe("public thread routes", () => {
       expect(sandboxHostId).toBeDefined();
       expect(getHost(harness.db, sandboxHostId!)).toMatchObject({
         destroyedAt: null,
+        externalId: null,
+      });
+
+      if (!resolveProvisionHost) {
+        throw new Error("Expected sandbox host provisioning to start");
+      }
+      resolveProvisionHost({
+        destroy: vi.fn().mockResolvedValue(undefined),
+        extendTimeout: vi.fn().mockResolvedValue(undefined),
         externalId: "sandbox-external-connecting",
+        hostId: sandboxHostId!,
+        resume: vi.fn().mockResolvedValue(undefined),
+        suspend: vi.fn().mockResolvedValue(undefined),
       });
 
       openSession(harness.db, harness.hub, {
@@ -1338,14 +1397,19 @@ describe("public thread routes", () => {
         protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
       });
 
-      const response = await responsePromise;
-      expect(response.status).toBe(201);
+      const queued = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "environment.provision"
+          && command.environmentId === createdThread.environmentId,
+      );
+      expect(queued.row.hostId).toBe(sandboxHostId);
     } finally {
       await harness.cleanup();
     }
   });
 
-  it("cleans up the sandbox host row when provisioning fails", async () => {
+  it("marks the thread errored when sandbox host provisioning fails", async () => {
     const harness = await createTestAppHarness({
       githubPat: "test-github-pat",
     });
@@ -1383,10 +1447,31 @@ describe("public thread routes", () => {
         }),
       });
 
-      expect(response.status).toBe(500);
-      expect(sandboxHostId).toMatch(/^host_/u);
-      expect(getHost(harness.db, sandboxHostId)).toBeNull();
-      expect(listHosts(harness.db)).toHaveLength(1);
+      expect(response.status).toBe(201);
+      const createdThread = threadSchema.parse(await readJson(response));
+
+      await waitForAssertion(() => {
+        expect(sandboxHostId).toMatch(/^host_/u);
+        expect(getThread(harness.db, createdThread.id)).toMatchObject({
+          status: "error",
+        });
+        expect(getHost(harness.db, sandboxHostId)).toMatchObject({
+          destroyedAt: expect.any(Number),
+        });
+      });
+
+      const storedEvents = harness.db
+        .select({ data: events.data, type: events.type })
+        .from(events)
+        .where(eq(events.threadId, createdThread.id))
+        .all();
+      const failureEvents = storedEvents
+        .filter((event) => event.type === "system/provisioning")
+        .map((event) => systemProvisioningEventDataSchema.parse(JSON.parse(event.data)));
+      expect(
+        failureEvents.flatMap((event) => event.entries.map((entry) => entry.text)),
+      ).toContain("sandbox bootstrap failed");
+      expect(listHosts(harness.db)).toHaveLength(2);
     } finally {
       await harness.cleanup();
     }

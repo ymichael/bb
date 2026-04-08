@@ -19,6 +19,10 @@ export type {
   SandboxFileOptions,
   SandboxHandle,
   SandboxHost,
+  SandboxHostProgressCallbacks,
+  SandboxHostProgressEvent,
+  SandboxHostProgressStage,
+  SandboxHostProgressStatus,
   SandboxLifecycleMode,
   StartBackgroundProcessOptions,
 } from "./types.js";

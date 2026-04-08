@@ -8,6 +8,7 @@ import {
 import type {
   ProvisionHostOptions,
   ResumeHostOptions,
+  SandboxHostProgressCallbacks,
 } from "@bb/sandbox-host";
 import { ApiError } from "../../errors.js";
 import type { ServerRuntimeConfig } from "../../types.js";
@@ -34,6 +35,7 @@ export interface SandboxBackendProvisionArgs {
   enrollKey: string;
   hostId: string;
   hostName: string;
+  progressCallbacks?: SandboxHostProgressCallbacks;
   serverUrl: string;
 }
 
@@ -42,6 +44,7 @@ export interface SandboxBackendResumeArgs {
   externalId: string;
   hostId: string;
   hostName: string;
+  progressCallbacks?: SandboxHostProgressCallbacks;
   serverUrl: string;
 }
 
@@ -111,6 +114,19 @@ function requireE2BProvisioningConfig(config: SandboxBackendConfig): void {
   }
 }
 
+export function assertSandboxProvisioningConfig(
+  sandboxType: string,
+  config: SandboxBackendConfig,
+): void {
+  switch (sandboxType) {
+    case "e2b":
+      requireE2BProvisioningConfig(config);
+      return;
+    default:
+      createSandboxBackendForId(sandboxType);
+  }
+}
+
 function buildProvisionHostOptions(
   args: SandboxBackendProvisionArgs,
 ): ProvisionHostOptions {
@@ -120,6 +136,7 @@ function buildProvisionHostOptions(
     enrollKey: args.enrollKey,
     hostId: args.hostId,
     hostName: args.hostName,
+    progressCallbacks: args.progressCallbacks,
     serverUrl: args.serverUrl,
     template: args.config.e2bTemplate === "" ? undefined : args.config.e2bTemplate,
   };
@@ -134,6 +151,7 @@ function buildResumeHostOptions(
     externalId: args.externalId,
     hostId: args.hostId,
     hostName: args.hostName,
+    progressCallbacks: args.progressCallbacks,
     serverUrl: args.serverUrl,
   };
 }

@@ -40,6 +40,31 @@ export interface SandboxHost {
   extendTimeout(timeoutMs: number): Promise<void>;
 }
 
+export const sandboxHostProgressStageValues = [
+  "host",
+  "daemon-start",
+] as const;
+export type SandboxHostProgressStage =
+  typeof sandboxHostProgressStageValues[number];
+
+export const sandboxHostProgressStatusValues = [
+  "started",
+  "completed",
+] as const;
+export type SandboxHostProgressStatus =
+  typeof sandboxHostProgressStatusValues[number];
+
+export interface SandboxHostProgressEvent {
+  externalId?: string;
+  stage: SandboxHostProgressStage;
+  status: SandboxHostProgressStatus;
+}
+
+export interface SandboxHostProgressCallbacks {
+  onProgress?(event: SandboxHostProgressEvent): void;
+  onSandboxCreated?(args: { externalId: string }): void;
+}
+
 export interface SandboxDaemonArtifacts {
   bbCli: string;
   claudeCodeBridge: string;
@@ -76,6 +101,7 @@ export interface ProvisionHostOptions {
   enrollKey: string;
   hostId: string;
   hostName: string;
+  progressCallbacks?: SandboxHostProgressCallbacks;
   serverUrl: string;
   template?: string;
   timeoutMs?: number;
@@ -88,6 +114,7 @@ export interface ResumeHostOptions {
   externalId: string;
   hostId: string;
   hostName: string;
+  progressCallbacks?: SandboxHostProgressCallbacks;
   serverUrl: string;
   timeoutMs?: number;
 }

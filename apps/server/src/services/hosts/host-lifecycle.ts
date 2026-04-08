@@ -4,14 +4,21 @@ import {
   isEphemeralHostPendingCleanup,
   updateHost,
 } from "@bb/db";
+import type { SandboxHostProgressCallbacks } from "@bb/sandbox-host";
 import type { AppDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
+import { requireReachablePublicServerUrl } from "./public-server-url.js";
+import { createSandboxBackendForId } from "./sandbox-backends.js";
 import { requireSandboxBackendForHost } from "./sandbox-backends.js";
 
 const DEFAULT_SESSION_WAIT_TIMEOUT_MS = 60_000;
 
 interface HostDestroyDeduper {
   run(hostId: string, destroy: () => Promise<void>): Promise<void>;
+}
+
+interface HostReadyDeduper {
+  run<TValue>(hostId: string, ensure: () => Promise<TValue>): Promise<TValue>;
 }
 
 export interface WaitForHostSessionOptions {
@@ -40,6 +47,29 @@ function createHostDestroyDeduper(): HostDestroyDeduper {
 }
 
 const hostDestroyDeduper = createHostDestroyDeduper();
+
+function createHostReadyDeduper(): HostReadyDeduper {
+  const pendingReadyPromises = new Map<string, Promise<unknown>>();
+
+  return {
+    run<TValue>(hostId: string, ensure: () => Promise<TValue>): Promise<TValue> {
+      const pendingReady = pendingReadyPromises.get(hostId);
+      if (pendingReady) {
+        return pendingReady as Promise<TValue>;
+      }
+
+      const readyPromise = ensure().finally(() => {
+        if (pendingReadyPromises.get(hostId) === readyPromise) {
+          pendingReadyPromises.delete(hostId);
+        }
+      });
+      pendingReadyPromises.set(hostId, readyPromise);
+      return readyPromise;
+    },
+  };
+}
+
+const hostReadyDeduper = createHostReadyDeduper();
 
 export async function waitForHostSession(
   deps: Pick<AppDeps, "db" | "hub">,
@@ -120,4 +150,70 @@ export async function destroyEphemeralHostIfReady(
 
   await destroyHost(deps, hostId);
   return true;
+}
+
+export async function ensureSandboxHostSessionReady(
+  deps: Pick<
+    AppDeps,
+    "config" | "db" | "hub" | "machineAuth" | "sandboxRegistry"
+  >,
+  args: {
+    hostId: string;
+    progressCallbacks?: SandboxHostProgressCallbacks;
+    sandboxType: string;
+  },
+) {
+  return hostReadyDeduper.run(args.hostId, async () => {
+    const host = getHost(deps.db, args.hostId);
+    if (!host || host.destroyedAt !== null) {
+      throw new ApiError(404, "host_not_found", "Host not found");
+    }
+
+    const cachedHost = deps.sandboxRegistry.get(args.hostId);
+    if (!cachedHost) {
+      const sandboxBackend = createSandboxBackendForId(args.sandboxType);
+      const serverUrl = requireReachablePublicServerUrl(deps.config);
+
+      const sandboxHost =
+        host.externalId
+          ? await sandboxBackend.resumeHost({
+              config: deps.config,
+              externalId: host.externalId,
+              hostId: host.id,
+              hostName: host.name,
+              progressCallbacks: args.progressCallbacks,
+              serverUrl,
+            })
+          : await sandboxBackend.provisionHost({
+              config: deps.config,
+              enrollKey: (
+                await deps.machineAuth.issueHostEnrollKey({
+                  hostId: host.id,
+                  hostType: "ephemeral",
+                })
+              ).key,
+              hostId: host.id,
+              hostName: host.name,
+              progressCallbacks: {
+                ...args.progressCallbacks,
+                onSandboxCreated: ({ externalId }) => {
+                  updateHost(deps.db, deps.hub, host.id, {
+                    externalId,
+                  });
+                  args.progressCallbacks?.onSandboxCreated?.({
+                    externalId,
+                  });
+                },
+              },
+              serverUrl,
+            });
+
+      updateHost(deps.db, deps.hub, host.id, {
+        externalId: sandboxHost.externalId,
+      });
+      deps.sandboxRegistry.set(host.id, sandboxHost);
+    }
+
+    await waitForHostSession(deps, host.id);
+  });
 }

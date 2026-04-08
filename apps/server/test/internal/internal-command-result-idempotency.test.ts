@@ -12,6 +12,7 @@ import {
   advanceEnvironmentProvisioning,
   requestEnvironmentProvision,
 } from "../../src/services/environments/environment-provisioning.js";
+import { buildDirectEnvironmentProvisionRequest } from "../../src/services/environments/environment-provision-request.js";
 import {
   requestThreadStart,
 } from "../../src/services/threads/thread-lifecycle.js";
@@ -241,13 +242,15 @@ describe("internal command result idempotency", () => {
       requestEnvironmentProvision(harness.deps, {
         environmentId: environment.id,
         kind: "provision",
-        command: buildEnvironmentProvisionCommand({
-          environmentId: environment.id,
-          hostId: host.id,
-          initiator: null,
-          workspaceProvisionType: "unmanaged",
-          path: environment.path ?? "/tmp/stale-provision",
-        }),
+        request: buildDirectEnvironmentProvisionRequest(
+          buildEnvironmentProvisionCommand({
+            environmentId: environment.id,
+            hostId: host.id,
+            initiator: null,
+            workspaceProvisionType: "unmanaged",
+            path: environment.path ?? "/tmp/stale-provision",
+          }),
+        ),
       });
       const originalCommandId = advanceEnvironmentProvisioning(harness.deps, {
         environmentId: environment.id,
@@ -267,13 +270,15 @@ describe("internal command result idempotency", () => {
       requestEnvironmentProvision(harness.deps, {
         environmentId: environment.id,
         kind: "provision",
-        command: buildEnvironmentProvisionCommand({
-          environmentId: environment.id,
-          hostId: host.id,
-          initiator: null,
-          workspaceProvisionType: "unmanaged",
-          path: environment.path ?? "/tmp/stale-provision",
-        }),
+        request: buildDirectEnvironmentProvisionRequest(
+          buildEnvironmentProvisionCommand({
+            environmentId: environment.id,
+            hostId: host.id,
+            initiator: null,
+            workspaceProvisionType: "unmanaged",
+            path: environment.path ?? "/tmp/stale-provision",
+          }),
+        ),
       });
       const requeuedCommandId = advanceEnvironmentProvisioning(harness.deps, {
         environmentId: environment.id,

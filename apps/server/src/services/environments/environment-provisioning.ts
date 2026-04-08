@@ -1,3 +1,4 @@
+import { and, eq, isNull } from "drizzle-orm";
 import {
   type EnvironmentOperationRow,
   getActiveSession,
@@ -5,7 +6,9 @@ import {
   getEnvironment,
   getEnvironmentOperation,
   getEnvironmentOperationByCommandId,
+  getHost,
   queueCommand,
+  threads,
 } from "@bb/db";
 import {
   markEnvironmentOperationRecordCompleted,
@@ -17,16 +20,18 @@ import {
 import type {
   Environment,
   EnvironmentOperationKind,
+  ProvisioningTranscriptEntry,
   Thread,
 } from "@bb/domain";
 import {
-  environmentProvisionCommandSchema,
   type HostDaemonCommand,
 } from "@bb/host-daemon-contract";
+import type { SandboxHostProgressEvent } from "@bb/sandbox-host";
 import type { AppDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
 import {
   appendProvisioningEvent,
+  appendSystemErrorEvent,
 } from "../threads/thread-events.js";
 import {
   buildEnvironmentProvisionCommand,
@@ -36,8 +41,19 @@ import {
   SETUP_TIMEOUT_MS,
   requireSourceForHost,
 } from "../threads/thread-create-helpers.js";
+import {
+  buildDirectEnvironmentProvisionRequest,
+  environmentProvisionRequestSchema,
+  normalizeEnvironmentProvisionRequest,
+  type EnvironmentProvisionRequest,
+  type SandboxHostEnvironmentProvisionRequest,
+} from "./environment-provision-request.js";
 import { requireConnectedHostSession } from "../lib/entity-lookup.js";
 import { parseJsonWithSchema } from "../lib/json-parsing.js";
+import {
+  destroyHost,
+  ensureSandboxHostSessionReady,
+} from "../hosts/host-lifecycle.js";
 import { tryTransition } from "../threads/thread-transitions.js";
 
 type EnvironmentProvisionOperationKind = Extract<
@@ -51,9 +67,9 @@ type EnvironmentProvisionCommand = Extract<
 >;
 
 export interface RequestEnvironmentProvisionArgs {
-  command: EnvironmentProvisionCommand;
   environmentId: string;
   kind: EnvironmentProvisionOperationKind;
+  request: EnvironmentProvisionRequest;
 }
 
 export interface AdvanceEnvironmentProvisioningArgs {
@@ -67,6 +83,132 @@ export interface EnvironmentProvisioningCommandMutationArgs {
 export interface FailEnvironmentProvisioningForCommandArgs
   extends EnvironmentProvisioningCommandMutationArgs {
   failureReason: string;
+}
+
+interface QueueEnvironmentProvisionCommandArgs {
+  command: EnvironmentProvisionCommand;
+  environment: Environment;
+  kind: EnvironmentProvisionOperationKind;
+}
+
+interface SandboxBootstrapDeduper {
+  run(
+    environmentId: string,
+    bootstrap: () => Promise<void>,
+  ): void;
+}
+
+function createSandboxBootstrapDeduper(): SandboxBootstrapDeduper {
+  const pendingBootstraps = new Map<string, Promise<void>>();
+
+  return {
+    run(environmentId, bootstrap) {
+      if (pendingBootstraps.has(environmentId)) {
+        return;
+      }
+
+      const pendingBootstrap = bootstrap().finally(() => {
+        if (pendingBootstraps.get(environmentId) === pendingBootstrap) {
+          pendingBootstraps.delete(environmentId);
+        }
+      });
+      pendingBootstraps.set(environmentId, pendingBootstrap);
+    },
+  };
+}
+
+const sandboxBootstrapDeduper = createSandboxBootstrapDeduper();
+
+function listLiveEnvironmentThreads(
+  deps: Pick<AppDeps, "db">,
+  environmentId: string,
+) {
+  return deps.db
+    .select()
+    .from(threads)
+    .where(
+      and(
+        eq(threads.environmentId, environmentId),
+        isNull(threads.deletedAt),
+      ),
+    )
+    .all();
+}
+
+function appendProvisioningEventToEnvironmentThreads(
+  deps: Pick<AppDeps, "db" | "hub">,
+  args: {
+    entries: ProvisioningTranscriptEntry[];
+    environmentId: string;
+    status: "completed" | "failed" | "in_progress" | "started";
+  },
+): void {
+  for (const thread of listLiveEnvironmentThreads(deps, args.environmentId)) {
+    appendProvisioningEvent(deps, {
+      entries: args.entries,
+      environmentId: args.environmentId,
+      status: args.status,
+      threadId: thread.id,
+    });
+  }
+}
+
+function sandboxHostProgressEntry(
+  event: SandboxHostProgressEvent,
+): ProvisioningTranscriptEntry {
+  const startedAt = Date.now();
+
+  switch (event.stage) {
+    case "host":
+      return {
+        type: "step",
+        key: "sandbox-host",
+        text:
+          event.status === "completed"
+            ? "Sandbox host ready"
+            : "Preparing sandbox host",
+        startedAt,
+        status: event.status,
+      };
+    case "daemon-start":
+      return {
+        type: "step",
+        key: "sandbox-daemon",
+        text:
+          event.status === "completed"
+            ? "Sandbox daemon started"
+            : "Starting sandbox daemon",
+        startedAt,
+        status: event.status,
+      };
+  }
+
+  throw new Error(`Unsupported sandbox host progress stage: ${String(event.stage)}`);
+}
+
+function queueEnvironmentProvisionCommand(
+  deps: Pick<AppDeps, "db" | "hub">,
+  args: QueueEnvironmentProvisionCommandArgs,
+): string | null {
+  const session = getActiveSession(deps.db, args.environment.hostId);
+  if (!session || session.leaseExpiresAt <= Date.now()) {
+    return null;
+  }
+
+  const queuedCommand = queueCommand(deps.db, deps.hub, {
+    hostId: args.environment.hostId,
+    sessionId: session.id,
+    type: args.command.type,
+    payload: JSON.stringify(args.command),
+  });
+
+  markEnvironmentOperationRecordQueued(deps.db, {
+    environmentId: args.environment.id,
+    kind: args.kind,
+    commandId: queuedCommand.id,
+  });
+
+  return queuedCommand.id;
 }
 
 function isActiveProvisionOperationState(
@@ -91,14 +233,16 @@ function toProvisioningLabel(
 function getActiveProvisionOperation(
   deps: Pick<AppDeps, "db">,
   environmentId: string,
-) {
+): (EnvironmentOperationRow & { kind: EnvironmentProvisionOperationKind }) | null {
   for (const kind of ["reprovision", "provision"] as const) {
     const operation = getEnvironmentOperation(deps.db, {
       environmentId,
       kind,
     });
     if (operation && isActiveProvisionOperationState(operation.state)) {
-      return operation;
+      return operation as EnvironmentOperationRow & {
+        kind: EnvironmentProvisionOperationKind;
+      };
     }
   }
 
@@ -202,6 +346,35 @@ export function failEnvironmentProvisioningForCommand(
   return true;
 }
 
+export function failEnvironmentProvisioning(
+  deps: Pick<AppDeps, "db" | "hub">,
+  args: { environmentId: string; failureReason: string },
+): boolean {
+  const operation = getActiveProvisionOperation(deps, args.environmentId);
+  if (!operation) {
+    return false;
+  }
+
+  markEnvironmentOperationRecordFailed(deps.db, {
+    environmentId: args.environmentId,
+    kind: operation.kind,
+    failureReason: args.failureReason,
+  });
+
+  const environment = getEnvironment(deps.db, args.environmentId);
+  if (
+    environment
+    && environment.status !== "destroyed"
+    && environment.status !== "error"
+  ) {
+    setEnvironmentStatus(deps.db, deps.hub, environment.id, {
+      status: "error",
+    });
+  }
+
+  return true;
+}
+
 export function requestEnvironmentProvision(
   deps: Pick<AppDeps, "db" | "hub">,
   args: RequestEnvironmentProvisionArgs,
@@ -209,7 +382,7 @@ export function requestEnvironmentProvision(
   upsertEnvironmentOperationRecord(deps.db, {
     environmentId: args.environmentId,
     kind: args.kind,
-    payload: JSON.stringify(args.command),
+    payload: JSON.stringify(args.request),
   });
 
   const environment = getEnvironment(deps.db, args.environmentId);
@@ -220,8 +393,111 @@ export function requestEnvironmentProvision(
   }
 }
 
+async function bootstrapSandboxProvisioning(
+  deps: Pick<
+    AppDeps,
+    "config" | "db" | "hub" | "machineAuth" | "sandboxRegistry"
+  >,
+  args: {
+    environment: Environment;
+    operationKind: EnvironmentProvisionOperationKind;
+    request: SandboxHostEnvironmentProvisionRequest;
+  },
+): Promise<void> {
+  appendProvisioningEventToEnvironmentThreads(deps, {
+    environmentId: args.environment.id,
+    status: "in_progress",
+    entries: [
+      {
+        type: "step",
+        key: "sandbox-connect",
+        text: "Waiting for sandbox host to connect",
+        startedAt: Date.now(),
+        status: "started",
+      },
+    ],
+  });
+
+  try {
+    await ensureSandboxHostSessionReady(deps, {
+      hostId: args.environment.hostId,
+      progressCallbacks: {
+        onProgress: (event) => {
+          appendProvisioningEventToEnvironmentThreads(deps, {
+            environmentId: args.environment.id,
+            status: "in_progress",
+            entries: [sandboxHostProgressEntry(event)],
+          });
+        },
+      },
+      sandboxType: args.request.sandboxType,
+    });
+
+    appendProvisioningEventToEnvironmentThreads(deps, {
+      environmentId: args.environment.id,
+      status: "in_progress",
+      entries: [
+        {
+          type: "step",
+          key: "sandbox-connect",
+          text: "Sandbox host connected",
+          startedAt: Date.now(),
+          status: "completed",
+        },
+      ],
+    });
+
+    queueEnvironmentProvisionCommand(deps, {
+      command: args.request.command,
+      environment: args.environment,
+      kind: args.operationKind,
+    });
+  } catch (error) {
+    const failureReason =
+      error instanceof Error ? error.message : String(error);
+
+    failEnvironmentProvisioning(deps, {
+      environmentId: args.environment.id,
+      failureReason,
+    });
+
+    appendProvisioningEventToEnvironmentThreads(deps, {
+      environmentId: args.environment.id,
+      status: "failed",
+      entries: [
+        {
+          type: "step",
+          key: "sandbox-host",
+          text: failureReason,
+          startedAt: Date.now(),
+          status: "failed",
+        },
+      ],
+    });
+
+    for (const thread of listLiveEnvironmentThreads(deps, args.environment.id)) {
+      appendSystemErrorEvent(deps, {
+        threadId: thread.id,
+        environmentId: args.environment.id,
+        code: "thread_provisioning_failed",
+        message: `Thread provisioning failed for project ${thread.projectId}`,
+        detail: failureReason,
+      });
+      tryTransition(deps.db, deps.hub, thread.id, "error");
+    }
+
+    const host = getHost(deps.db, args.environment.hostId);
+    if (host && host.destroyedAt === null) {
+      await destroyHost(deps, host.id).catch(() => undefined);
+    }
+  }
+}
+
 export function advanceEnvironmentProvisioning(
-  deps: Pick<AppDeps, "db" | "hub">,
+  deps: Pick<
+    AppDeps,
+    "config" | "db" | "hub" | "machineAuth" | "sandboxRegistry"
+  >,
   args: AdvanceEnvironmentProvisioningArgs,
 ): string | null {
   if (!args.environmentId) {
@@ -242,29 +518,29 @@ export function advanceEnvironmentProvisioning(
     return operation.commandId;
   }
 
-  const session = getActiveSession(deps.db, environment.hostId);
-  if (!session || session.leaseExpiresAt <= Date.now()) {
+  const request = normalizeEnvironmentProvisionRequest(
+    parseJsonWithSchema(
+      operation.payload,
+      environmentProvisionRequestSchema,
+    ),
+  );
+
+  if (request.mode === "sandbox-host") {
+    sandboxBootstrapDeduper.run(environment.id, async () => {
+      await bootstrapSandboxProvisioning(deps, {
+        environment,
+        operationKind: operation.kind,
+        request,
+      });
+    });
     return null;
   }
 
-  const command = parseJsonWithSchema(
-    operation.payload,
-    environmentProvisionCommandSchema,
-  );
-  const queuedCommand = queueCommand(deps.db, deps.hub, {
-    hostId: environment.hostId,
-    sessionId: session.id,
-    type: command.type,
-    payload: JSON.stringify(command),
-  });
-
-  markEnvironmentOperationRecordQueued(deps.db, {
-    environmentId: environment.id,
+  return queueEnvironmentProvisionCommand(deps, {
+    command: request.command,
+    environment,
     kind: operation.kind,
-    commandId: queuedCommand.id,
   });
-
-  return queuedCommand.id;
 }
 
 export const MANAGED_REPROVISION_QUEUED = "queued" as const;
@@ -343,10 +619,12 @@ export function queueManagedEnvironmentReprovision(
   requestEnvironmentProvision(deps, {
     environmentId: args.environment.id,
     kind: "reprovision",
-    command,
+    request: buildDirectEnvironmentProvisionRequest(command),
   });
-  advanceEnvironmentProvisioning(deps, {
-    environmentId: args.environment.id,
+  queueEnvironmentProvisionCommand(deps, {
+    command,
+    environment: args.environment,
+    kind: "reprovision",
   });
   return MANAGED_REPROVISION_QUEUED;
 }

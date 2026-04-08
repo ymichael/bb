@@ -98,7 +98,10 @@ export async function runProjectDeletionSweep(
 }
 
 export async function runEnvironmentProvisioningSweep(
-  deps: Pick<AppDeps, "db" | "hub" | "logger">,
+  deps: Pick<
+    AppDeps,
+    "config" | "db" | "hub" | "logger" | "machineAuth" | "sandboxRegistry"
+  >,
 ): Promise<void> {
   const seenEnvironmentIds = new Set<string>();
 
