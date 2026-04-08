@@ -10,6 +10,7 @@
 
 - Prefer maintainability and readability over speed. No one-off hacks — ask whether it would pass code review. We are never in a rush.
 - Reuse before duplicating. If a pattern exists N times, extract a shared component or utility so consistency is structural, not aspirational. When fixing a bug, check whether the same pattern is repeated elsewhere.
+- Leave the code better than you found it. When a change touches code with a weak abstraction, fix or improve it in the same change — don't add another caller to a pattern you wouldn't design today.
 - Separate concerns. When a concern is better handled by a well-known, battle-tested library, install and use it.
 - Prefer a single object argument over multiple positional arguments, especially when a function takes 3+ parameters of the same type.
 - No inline dynamic imports unless for genuine performance reasons. If it's working around a circular dependency, fix the dependency graph instead.
