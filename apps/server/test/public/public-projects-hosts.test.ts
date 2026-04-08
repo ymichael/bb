@@ -126,6 +126,54 @@ describe("public project and host routes", () => {
     }
   });
 
+  it("rejects relative local project paths at the API boundary", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, { id: "host-project-path-validation" });
+      const { project, source } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/project-path-validation",
+      });
+
+      const createResponse = await harness.app.request("/api/v1/projects", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          name: "Relative Path Project",
+          source: { type: "local_path", hostId: host.id, path: "relative/project" },
+        }),
+      });
+      expect(createResponse.status).toBe(400);
+      await expect(readJson(createResponse)).resolves.toMatchObject({
+        code: "invalid_request",
+        message: expect.stringContaining("Project path must be an absolute path"),
+      });
+
+      const updateResponse = await harness.app.request(
+        `/api/v1/projects/${project.id}/sources/${source.id}`,
+        {
+          method: "PATCH",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            type: "local_path",
+            path: "relative/path",
+          }),
+        },
+      );
+      expect(updateResponse.status).toBe(400);
+      await expect(readJson(updateResponse)).resolves.toMatchObject({
+        code: "invalid_request",
+        message: expect.stringContaining("Project path must be an absolute path"),
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("returns null when a project has no stored default execution options for a provider", async () => {
     const harness = await createTestAppHarness();
     try {

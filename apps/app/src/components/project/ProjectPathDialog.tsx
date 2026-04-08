@@ -1,5 +1,10 @@
 import { useEffect, useId, useState, type FormEvent } from "react"
 import { FolderOpen } from "lucide-react"
+import {
+  deriveProjectNameFromPath,
+  isAbsoluteProjectPath,
+  normalizeProjectPathInput,
+} from "@bb/domain"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -10,11 +15,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
-import {
-  deriveProjectNameFromPath,
-  isAbsoluteProjectPath,
-  normalizeProjectPathInput,
-} from "@/lib/projectPathInput"
 
 export type ProjectPathDialogTarget =
   | {

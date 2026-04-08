@@ -112,6 +112,12 @@ export type {
 } from "./project.js";
 
 export {
+  deriveProjectNameFromPath,
+  isAbsoluteProjectPath,
+  normalizeProjectPathInput,
+} from "./project-path.js";
+
+export {
   hostSchema,
   hostStatusSchema,
   hostStatusValues,

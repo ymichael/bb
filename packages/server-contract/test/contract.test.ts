@@ -269,12 +269,20 @@ describe("server-contract canonical schemas", () => {
       createProjectSourceRequestSchema.parse({
         hostId: "host_123",
         type: "local_path",
-        path: "/tmp/project",
+        path: " /tmp/project/ ",
       }),
     ).toMatchObject({
       type: "local_path",
       path: "/tmp/project",
     });
+
+    expect(() =>
+      createProjectSourceRequestSchema.parse({
+        hostId: "host_123",
+        type: "local_path",
+        path: "relative/project",
+      }),
+    ).toThrow("Project path must be an absolute path");
 
     expect(
       createProjectSourceRequestSchema.parse({
@@ -293,6 +301,23 @@ describe("server-contract canonical schemas", () => {
         repoUrl: "https://github.com/example/repo",
       }),
     ).toThrow();
+
+    expect(
+      contract.updateProjectSourceRequestSchema.parse({
+        type: "local_path",
+        path: " C:\\Users\\michael\\bb\\ ",
+      }),
+    ).toEqual({
+      type: "local_path",
+      path: "C:\\Users\\michael\\bb",
+    });
+
+    expect(() =>
+      contract.updateProjectSourceRequestSchema.parse({
+        type: "local_path",
+        path: "relative/path",
+      }),
+    ).toThrow("Project path must be an absolute path");
 
     expect(
       timelineToolDetailsResponseSchema.parse({ messages: [] }),

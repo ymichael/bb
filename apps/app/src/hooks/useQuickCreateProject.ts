@@ -1,9 +1,9 @@
 import { useCallback } from "react"
+import { deriveProjectNameFromPath } from "@bb/domain"
 import { useCreateProject } from "@/hooks/mutations/project-mutations"
 import { useDialogState } from "@/hooks/useDialogState"
 import { useHostDaemon } from "@/hooks/useHostDaemon"
 import type { ProjectPathDialogTarget } from "@/components/project/ProjectPathDialog"
-import { deriveProjectNameFromPath } from "@/lib/projectPathInput"
 
 export function useQuickCreateProject() {
   const { mutate, isPending } = useCreateProject()

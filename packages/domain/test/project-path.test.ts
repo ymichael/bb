@@ -3,9 +3,9 @@ import {
   deriveProjectNameFromPath,
   isAbsoluteProjectPath,
   normalizeProjectPathInput,
-} from "./projectPathInput"
+} from "../src/project-path.js"
 
-describe("projectPathInput", () => {
+describe("project-path", () => {
   const windowsProjectPath = "C:\\Users\\michael\\bb"
   const windowsProjectPathWithTrailingSeparator = "C:\\Users\\michael\\bb\\"
   const windowsRootPath = "C:\\"

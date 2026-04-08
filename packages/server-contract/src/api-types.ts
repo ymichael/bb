@@ -1,6 +1,8 @@
 import { z } from "zod";
 import {
+  isAbsoluteProjectPath,
   hostTypeSchema,
+  normalizeProjectPathInput,
   projectSchema,
   projectSourceSchema,
   promptInputSchema,
@@ -263,10 +265,20 @@ export const updateEnvironmentRequestSchema = z.object({
 });
 export type UpdateEnvironmentRequest = z.infer<typeof updateEnvironmentRequestSchema>;
 
+const localProjectPathRequestSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .transform(normalizeProjectPathInput)
+  .refine(
+    (path) => isAbsoluteProjectPath(path),
+    "Project path must be an absolute path",
+  );
+
 const createLocalPathProjectSourceRequestSchema = z.object({
   hostId: z.string().min(1),
   type: z.literal("local_path"),
-  path: z.string().min(1),
+  path: localProjectPathRequestSchema,
 }).strict();
 
 const createGitHubRepoProjectSourceRequestSchema = z.object({
@@ -468,7 +480,7 @@ export type UpdateProjectRequest = z.infer<typeof updateProjectRequestSchema>;
 
 const updateLocalPathProjectSourceRequestSchema = z.object({
   type: z.literal("local_path"),
-  path: z.string().min(1).optional(),
+  path: localProjectPathRequestSchema.optional(),
   isDefault: z.literal(true).optional(),
 }).strict();
 
