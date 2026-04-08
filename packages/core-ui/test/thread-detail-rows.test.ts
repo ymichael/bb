@@ -1308,6 +1308,28 @@ describe("buildTimelineRows provisioning operation collapsing", () => {
     expect(setupEntry?.status).toBe("completed");
     expect(rows[0]?.detail).toBeUndefined();
   });
+
+  it("shows completed when provisioning succeeds but thread later errors", () => {
+    // Regression: finalizeOperationMessage marks pending (in-progress)
+    // provisioning ops as error when the thread status is "error". The merge
+    // must still produce "completed" when the final provisioning event succeeded.
+    const rows = getOperationRows([
+      provisioningOperation(1, "Provisioning started", "error", undefined, {
+        transcript: [{ type: "step", key: "provision", text: "Waiting for environment...", status: "started" }],
+      }),
+      provisioningOperation(2, "Provisioning environment", "error", undefined, {
+        transcript: [{ type: "step", key: "git-clone", text: "git clone ...", status: "completed" }],
+      }),
+      provisioningOperation(3, "Provisioning ready", "completed", undefined, {
+        transcript: [{ type: "step", key: "branch", text: "Branch: main", status: "completed" }],
+      }),
+    ]);
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.opType).toBe("provisioning");
+    expect(rows[0]?.status).toBe("completed");
+    expect(rows[0]?.title).toBe("Provisioned environment");
+  });
 });
 
 describe("buildTimelineRows squash merge operation collapsing", () => {

@@ -164,10 +164,10 @@ export function mergeProvisioningOperations(messages: ViewMessage[]): ViewMessag
     }
 
     const mergedStatus =
-      active.some((message) => message.status === "error")
-        ? "error"
-        : last.status === "completed"
-          ? "completed"
+      last.status === "completed"
+        ? "completed"
+        : active.some((message) => message.status === "error")
+          ? "error"
           : active.some((message) => message.status === "interrupted")
             ? "interrupted"
             : "pending";
