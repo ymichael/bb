@@ -9,6 +9,10 @@
       "dependsOn": ["^build"],
       "outputs": ["dist/**"]
     },
+    "@bb/host-daemon#build": {
+      "dependsOn": ["bundle", "^build"],
+      "outputs": ["dist/**"]
+    },
     "template:build": {
       "dependsOn": ["build", "^build"],
       "cache": false,
