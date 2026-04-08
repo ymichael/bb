@@ -14,6 +14,7 @@ import { EmptyState } from "@/components/shared/EmptyState"
 import { ThreadArchiveConfirmationDialog } from "@/components/thread/ThreadArchiveConfirmationDialog"
 import { ThreadDeleteDialog } from "@/components/thread/ThreadDeleteDialog"
 import { ThreadRenameDialog } from "@/components/thread/ThreadRenameDialog"
+import { ProjectPathDialog } from "@/components/project/ProjectPathDialog"
 import {
   SidebarGroup,
   SidebarGroupContent,
@@ -119,7 +120,6 @@ export function ProjectList({
 
   const actions = useProjectListActions({
     localHostId,
-    pickFolder,
     projects,
     threads,
     onProjectRemoved: handleProjectRemoved,
@@ -235,6 +235,13 @@ export function ProjectList({
         pending={actions.isProjectDeletePending}
         onOpenChange={actions.projectDeleteDialog.onOpenChange}
         onDelete={actions.confirmDeleteProject}
+      />
+      <ProjectPathDialog
+        target={actions.projectPathDialog.target}
+        pending={actions.pathUpdateProjectId !== null}
+        pickFolder={pickFolder}
+        onOpenChange={actions.projectPathDialog.onOpenChange}
+        onSubmit={actions.submitProjectPath}
       />
       <ThreadRenameDialog
         target={actions.threadRenameDialog.target}

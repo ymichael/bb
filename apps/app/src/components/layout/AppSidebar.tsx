@@ -13,6 +13,7 @@ import {
 import { ProjectList } from "./ProjectList"
 import { useQuickCreateProject } from "@/hooks/useQuickCreateProject"
 import { setPreferredTheme, usePreferredTheme } from "@/hooks/useTheme"
+import { ProjectPathDialog } from "@/components/project/ProjectPathDialog"
 
 interface AppSidebarProps {
   onResizeMouseDown: (event: React.MouseEvent<HTMLDivElement>) => void
@@ -22,7 +23,14 @@ interface AppSidebarProps {
 export function AppSidebar({ onResizeMouseDown, isResizing }: AppSidebarProps) {
   const location = useLocation()
   const { isMobile, setOpenMobile } = useSidebar()
-  const { createFromPicker, isCreating, isAvailable: canCreateProject } = useQuickCreateProject()
+  const {
+    openCreateDialog,
+    pickFolder,
+    projectPathDialog,
+    submitProjectPath,
+    isCreating,
+    isAvailable: canCreateProject,
+  } = useQuickCreateProject()
   const theme = usePreferredTheme()
 
   const closeOnMobile = () => {
@@ -42,7 +50,7 @@ export function AppSidebar({ onResizeMouseDown, isResizing }: AppSidebarProps) {
       <Sidebar>
         <SidebarContent>
           <ProjectList
-            onNewProject={canCreateProject ? () => { void createFromPicker() } : undefined}
+            onNewProject={canCreateProject ? openCreateDialog : undefined}
             onProjectSelect={closeOnMobile}
             selectedProjectId={selectedProjectId}
             isCreatingProject={isCreating}
@@ -84,6 +92,13 @@ export function AppSidebar({ onResizeMouseDown, isResizing }: AppSidebarProps) {
           onMouseDown={onResizeMouseDown}
         />
       </Sidebar>
+      <ProjectPathDialog
+        target={projectPathDialog.target}
+        pending={isCreating}
+        pickFolder={pickFolder}
+        onOpenChange={projectPathDialog.onOpenChange}
+        onSubmit={submitProjectPath}
+      />
     </>
   )
 }

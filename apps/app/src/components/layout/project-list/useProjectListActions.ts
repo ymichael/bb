@@ -6,6 +6,7 @@ import { useDeleteProject, useUpdateProject } from "@/hooks/mutations/project-mu
 import { useArchiveThread, useDeleteThread, useMarkThreadRead, useMarkThreadUnread, useUnarchiveThread, useUpdateThread } from "@/hooks/mutations/thread-state-mutations"
 import { projectsQueryKey } from "@/hooks/queries/query-keys"
 import { useDialogState } from "@/hooks/useDialogState"
+import type { ProjectPathDialogTarget } from "@/components/project/ProjectPathDialog"
 import * as api from "@/lib/api"
 import { findLocalPathProjectSourceForHost } from "@bb/domain"
 import { getMutationErrorMessage } from "@/lib/mutation-errors"
@@ -19,7 +20,6 @@ import { getThreadReadToggleAction } from "./threadReadState"
 
 interface UseProjectListActionsParams {
   localHostId: string | null | undefined
-  pickFolder: (() => Promise<string | null>) | null
   projects: ProjectResponse[] | undefined
   threads: Thread[]
   onProjectRemoved: (projectId: string) => void
@@ -28,7 +28,6 @@ interface UseProjectListActionsParams {
 
 export function useProjectListActions({
   localHostId,
-  pickFolder,
   projects,
   threads,
   onProjectRemoved,
@@ -45,6 +44,7 @@ export function useProjectListActions({
   const queryClient = useQueryClient()
   const [pathUpdateProjectId, setPathUpdateProjectId] = useState<string | null>(null)
   const archiveConfirmationDialog = useDialogState<Thread>()
+  const projectPathDialog = useDialogState<ProjectPathDialogTarget>()
   const projectRenameDialog = useDialogState<ProjectRenameDialogTarget>()
   const projectDeleteDialog = useDialogState<ProjectDeleteDialogTarget>()
   const threadRenameDialog = useDialogState<ThreadRenameDialogTarget>()
@@ -83,32 +83,47 @@ export function useProjectListActions({
     )
   }, [projectRenameDialog.onClose, updateProject.mutate])
 
-  const upsertProjectSourcePath = useCallback(async (projectId: string) => {
-    if (!pickFolder || !localHostId) return
-
-    const selectedPath = await pickFolder()
-    if (!selectedPath) return
+  const openProjectPathDialog = useCallback((projectId: string) => {
+    if (!localHostId) return
 
     const project = projects?.find((candidate) => candidate.id === projectId)
     const existingSource = project?.sources
       ? findLocalPathProjectSourceForHost(project.sources, localHostId)
       : undefined
 
+    projectPathDialog.onOpen({
+      kind: "update",
+      projectId,
+      projectName: project?.name ?? "Project",
+      currentPath: existingSource?.path ?? "",
+    })
+  }, [localHostId, projectPathDialog, projects])
+
+  const submitProjectPath = useCallback(async (target: ProjectPathDialogTarget, nextPath: string) => {
+    if (!localHostId || target.kind !== "update") return
+
+    const project = projects?.find((candidate) => candidate.id === target.projectId)
+    const existingSource = project?.sources
+      ? findLocalPathProjectSourceForHost(project.sources, localHostId)
+      : undefined
+
+    const projectId = target.projectId
     setPathUpdateProjectId(projectId)
     try {
       if (existingSource) {
         await api.updateProjectSource(projectId, existingSource.id, {
           type: "local_path",
-          path: selectedPath,
+          path: nextPath,
         })
       } else {
         await api.addProjectSource(projectId, {
           hostId: localHostId,
           type: "local_path",
-          path: selectedPath,
+          path: nextPath,
         })
       }
       queryClient.invalidateQueries({ queryKey: projectsQueryKey() })
+      projectPathDialog.onClose()
     } catch (error) {
       toast.error(getMutationErrorMessage({
         error,
@@ -119,7 +134,7 @@ export function useProjectListActions({
         currentProjectId === projectId ? null : currentProjectId,
       )
     }
-  }, [localHostId, pickFolder, projects, queryClient])
+  }, [localHostId, projectPathDialog, projects, queryClient])
 
   const requestDeleteProject = useCallback((project: ProjectResponse) => {
     if (deleteProject.isPending) return
@@ -262,12 +277,14 @@ export function useProjectListActions({
     isProjectRenamePending: updateProject.isPending,
     isThreadRenamePending: updateThread.isPending,
     pathUpdateProjectId,
+    projectPathDialog,
     projectDeleteDialog,
     projectRenameDialog,
     requestDeleteProject,
     requestDeleteThread,
     requestRenameProject,
     requestRenameThread,
+    submitProjectPath,
     submitProjectRename,
     submitThreadRename,
     threadActionsDisabled:
@@ -281,6 +298,6 @@ export function useProjectListActions({
     threadRenameDialog,
     toggleThreadArchive,
     toggleThreadRead,
-    updateProjectPath: upsertProjectSourcePath,
+    updateProjectPath: openProjectPathDialog,
   }
 }

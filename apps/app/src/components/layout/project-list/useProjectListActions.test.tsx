@@ -146,7 +146,6 @@ describe("useProjectListActions", () => {
           localHostId: "host-1",
           onProjectRemoved,
           onThreadDeleted,
-          pickFolder: null,
           projects: [project],
           threads: [],
         }),
@@ -191,7 +190,6 @@ describe("useProjectListActions", () => {
           localHostId: "host-1",
           onProjectRemoved,
           onThreadDeleted,
-          pickFolder: null,
           projects: [makeProjectResponse()],
           threads,
         }),
@@ -232,7 +230,6 @@ describe("useProjectListActions", () => {
     });
     const onProjectRemoved = vi.fn();
     const onThreadDeleted = vi.fn();
-    const pickFolder = vi.fn(async () => "/next/path");
 
     vi.mocked(api.updateProjectSource).mockResolvedValue(
       makeLocalPathProjectSource({
@@ -249,15 +246,33 @@ describe("useProjectListActions", () => {
           localHostId: source.hostId,
           onProjectRemoved,
           onThreadDeleted,
-          pickFolder,
           projects: [project],
           threads: [],
         }),
       { wrapper },
     );
 
+    act(() => {
+      result.current.updateProjectPath(project.id);
+    });
+
+    expect(result.current.projectPathDialog.target).toEqual({
+      kind: "update",
+      projectId: project.id,
+      projectName: project.name,
+      currentPath: source.path,
+    });
+
     await act(async () => {
-      await result.current.updateProjectPath(project.id);
+      await result.current.submitProjectPath(
+        {
+          kind: "update",
+          projectId: project.id,
+          projectName: project.name,
+          currentPath: source.path,
+        },
+        "/next/path",
+      );
     });
 
     expect(api.updateProjectSource).toHaveBeenCalledWith(project.id, source.id, {
@@ -306,7 +321,6 @@ describe("useProjectListActions", () => {
           localHostId: "host-1",
           onProjectRemoved: vi.fn(),
           onThreadDeleted: vi.fn(),
-          pickFolder: null,
           projects: [],
           threads: [],
         }),
@@ -340,7 +354,6 @@ describe("useProjectListActions", () => {
           localHostId: "host-1",
           onProjectRemoved: vi.fn(),
           onThreadDeleted: vi.fn(),
-          pickFolder: null,
           projects: [project],
           threads: [],
         }),

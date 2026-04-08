@@ -46,8 +46,8 @@ interface ProjectRowProps {
   onToggleProjectCollapsed: (projectId: string) => void
   onToggleManagerCollapsed: (threadId: string) => void
   onRenameProject: (project: ProjectResponse) => void
-  onChangeProjectPath: (projectId: string) => Promise<void>
-  onRepairProjectPath: (projectId: string) => Promise<void>
+  onChangeProjectPath: (projectId: string) => void
+  onRepairProjectPath: (projectId: string) => void
   onDeleteProject: (project: ProjectResponse) => void
   onRenameThread: (thread: Thread) => void
   onToggleThreadArchive: (thread: Thread) => void

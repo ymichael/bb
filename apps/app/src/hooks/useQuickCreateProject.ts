@@ -1,31 +1,52 @@
 import { useCallback } from "react"
-import { toast } from "sonner"
 import { useCreateProject } from "@/hooks/mutations/project-mutations"
+import { useDialogState } from "@/hooks/useDialogState"
 import { useHostDaemon } from "@/hooks/useHostDaemon"
+import type { ProjectPathDialogTarget } from "@/components/project/ProjectPathDialog"
 import { deriveProjectNameFromPath } from "@/lib/projectPathInput"
 
 export function useQuickCreateProject() {
   const { mutate, isPending } = useCreateProject()
   const { localHostId, pickFolder } = useHostDaemon()
+  const projectPathDialog = useDialogState<ProjectPathDialogTarget>()
 
-  const createFromPicker = useCallback(async () => {
-    if (isPending || !pickFolder || !localHostId) return
-
-    const selectedPath = await pickFolder()
-    if (!selectedPath) return
-
-    const name = deriveProjectNameFromPath(selectedPath).trim()
-    if (!name) {
-      toast.error(
-        "Could not derive a project name from the selected folder."
-      )
+  const openCreateDialog = useCallback(() => {
+    if (isPending || !localHostId) {
       return
     }
 
-    mutate({ name, source: { type: "local_path", hostId: localHostId, path: selectedPath } })
-  }, [isPending, mutate, pickFolder, localHostId])
+    projectPathDialog.onOpen({ kind: "create" })
+  }, [isPending, localHostId, projectPathDialog])
 
-  const isAvailable = pickFolder != null && localHostId != null
+  const submitProjectPath = useCallback((target: ProjectPathDialogTarget, path: string) => {
+    if (isPending || target.kind !== "create" || !localHostId) return
 
-  return { createFromPicker, isCreating: isPending, isAvailable }
+    const name = deriveProjectNameFromPath(path).trim()
+    if (!name) {
+      return
+    }
+
+    mutate(
+      {
+        name,
+        source: { type: "local_path", hostId: localHostId, path },
+      },
+      {
+        onSuccess: () => {
+          projectPathDialog.onClose()
+        },
+      },
+    )
+  }, [isPending, localHostId, mutate, projectPathDialog])
+
+  const isAvailable = localHostId != null
+
+  return {
+    openCreateDialog,
+    pickFolder,
+    projectPathDialog,
+    submitProjectPath,
+    isCreating: isPending,
+    isAvailable,
+  }
 }
