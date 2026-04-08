@@ -137,6 +137,24 @@ describe("host-daemon command schemas", () => {
       path: "/tmp/bb-data/thread-storage/thread-123",
       limit: 100,
     });
+
+    expect(
+      hostDaemonCommandSchema.parse({
+        type: "host.sync_runtime_material",
+        version: "runtime-version-1",
+        env: {
+          GITHUB_TOKEN: "test-github-token",
+          OPENAI_API_KEY: "test-openai-key",
+        },
+      }),
+    ).toMatchObject({
+      type: "host.sync_runtime_material",
+      version: "runtime-version-1",
+      env: {
+        GITHUB_TOKEN: "test-github-token",
+        OPENAI_API_KEY: "test-openai-key",
+      },
+    });
   });
 
   it("rejects malformed environment.provision commands at parse time", () => {

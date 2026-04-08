@@ -11,6 +11,10 @@ const EXPIRED_COMMAND_ERROR_CODE = "command_expired";
 const EXPIRED_COMMAND_ERROR_MESSAGE = "Command expired after retry";
 
 type LifecycleFailureReport =
+  | Extract<
+    HostDaemonCommandResultReport,
+    { type: "host.sync_runtime_material" }
+  >
   | Extract<HostDaemonCommandResultReport, { type: "environment.destroy" }>
   | Extract<HostDaemonCommandResultReport, { type: "environment.provision" }>
   | Extract<HostDaemonCommandResultReport, { type: "thread.start" }>
@@ -52,6 +56,7 @@ export async function handleExpiredCommands(
     const completedAt = commandRow.completedAt ?? Date.now();
 
     switch (command.type) {
+      case "host.sync_runtime_material":
       case "environment.destroy":
       case "environment.provision":
       case "thread.start":

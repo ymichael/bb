@@ -30,6 +30,7 @@ import type { SandboxHostProgressCallbacks } from "@bb/sandbox-host";
 import { renderTemplate } from "@bb/templates";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  reportNextRuntimeMaterialSyncSuccess,
   reportQueuedCommandError,
   reportQueuedCommandSuccess,
   waitForQueuedCommand,
@@ -1112,6 +1113,13 @@ describe("public thread routes", () => {
 
       expect(response.status).toBe(201);
       const createdThread = threadSchema.parse(await readJson(response));
+      const sandboxEnvironment = getEnvironment(harness.db, createdThread.environmentId ?? "");
+      if (!sandboxEnvironment) {
+        throw new Error("Expected sandbox environment to exist");
+      }
+      await reportNextRuntimeMaterialSyncSuccess(harness, {
+        hostId: sandboxEnvironment.hostId,
+      });
 
       const queued = await waitForQueuedCommand(
         harness,
@@ -1216,10 +1224,7 @@ describe("public thread routes", () => {
       await waitForAssertion(() => {
         expect(provisionHostMock).toHaveBeenCalledWith({
           apiKey: "test-e2b-api-key",
-          daemonEnv: {
-            GITHUB_TOKEN: "test-github-pat",
-            OPENAI_API_KEY: "test-openai-key",
-          },
+          daemonEnv: {},
           enrollKey: expect.stringMatching(/^bbde_/u),
           hostId: expect.stringMatching(/^host_/u),
           hostName: expect.stringMatching(/^sandbox-/u),
@@ -1245,6 +1250,9 @@ describe("public thread routes", () => {
       if (!sandboxHost) {
         throw new Error("Expected sandbox host to exist");
       }
+      await reportNextRuntimeMaterialSyncSuccess(harness, {
+        hostId: sandboxHost.id,
+      });
       expect(sandboxHost).toMatchObject({
         externalId: "sandbox-external-123",
         provider: "e2b",
@@ -1395,6 +1403,9 @@ describe("public thread routes", () => {
         leaseTimeoutMs: 60_000,
         protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
       });
+      await reportNextRuntimeMaterialSyncSuccess(harness, {
+        hostId: sandboxHostId!,
+      });
 
       const queued = await waitForQueuedCommand(
         harness,
@@ -1517,6 +1528,9 @@ describe("public thread routes", () => {
         instanceId: "instance-sandbox-reuse",
         leaseTimeoutMs: 60_000,
         protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
+      });
+      await reportNextRuntimeMaterialSyncSuccess(harness, {
+        hostId: sandboxHostId,
       });
 
       const queued = await waitForQueuedCommand(

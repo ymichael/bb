@@ -18,9 +18,9 @@ import type {
   CreateThreadRequest,
 } from "@bb/server-contract";
 import type { HostDaemonCommand } from "@bb/host-daemon-contract";
-import type { AppDeps } from "../../types.js";
+import type { AppDeps, SandboxWorkSessionDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
-import { requireConnectedHostSession } from "../lib/entity-lookup.js";
+import { ensureHostSessionReadyForWork } from "../hosts/host-lifecycle.js";
 import { getLastProviderThreadId } from "./thread-events.js";
 import {
   resolveExecutionOptions,
@@ -222,7 +222,7 @@ export function queueTurnRunCommandInTransaction(
 }
 
 export async function queueTurnRunCommand(
-  deps: Pick<AppDeps, "db" | "hub">,
+  deps: SandboxWorkSessionDeps,
   args: {
     eventSequence: number;
     environment: ThreadRuntimeCommandEnvironment;
@@ -232,7 +232,9 @@ export async function queueTurnRunCommand(
     thread: Thread;
   },
 ): Promise<void> {
-  const session = requireConnectedHostSession(deps, args.environment.hostId);
+  const session = await ensureHostSessionReadyForWork(deps, {
+    hostId: args.environment.hostId,
+  });
   const command = await createTurnRunCommandPayload(deps, args);
   queueCommand(deps.db, deps.hub, {
     hostId: args.environment.hostId,
@@ -247,7 +249,7 @@ export async function queueTurnRunCommand(
 }
 
 export async function queueTurnSteerCommand(
-  deps: Pick<AppDeps, "db" | "hub">,
+  deps: SandboxWorkSessionDeps,
   args: {
     eventSequence: number;
     environment: ThreadRuntimeCommandEnvironment;
@@ -258,7 +260,9 @@ export async function queueTurnSteerCommand(
     thread: Thread;
   },
 ): Promise<void> {
-  const session = requireConnectedHostSession(deps, args.environment.hostId);
+  const session = await ensureHostSessionReadyForWork(deps, {
+    hostId: args.environment.hostId,
+  });
   const providerThreadId = requireProviderThreadId(
     args.providerThreadId ?? getLastProviderThreadId(deps, args.thread.id),
     args.thread.id,

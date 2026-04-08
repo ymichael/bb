@@ -4,11 +4,13 @@ import {
   events,
   getEnvironment,
   getHost,
+  getHostOperation,
   getThread,
   hostDaemonCommands,
   hostDaemonSessions,
   markThreadDeleted,
   markThreadStopRequested,
+  openSession,
   queueCommand,
   upsertHost,
 } from "@bb/db";
@@ -20,6 +22,11 @@ import { threadSchema } from "@bb/domain";
 import { describe, expect, it, vi } from "vitest";
 import { appendClientTurnEvent } from "../../src/services/threads/thread-events.js";
 import { finalizeStoppedThread } from "../../src/services/threads/thread-lifecycle.js";
+import {
+  advanceSandboxRuntimeMaterialSync,
+  completeSandboxRuntimeMaterialSyncForCommand,
+  requestSandboxRuntimeMaterialSync,
+} from "../../src/services/hosts/sandbox-runtime-material.js";
 import {
   internalAuthHeaders,
   waitForQueuedCommand,
@@ -40,6 +47,7 @@ import {
   seedThread,
 } from "../helpers/seed.js";
 import { createTestAppHarness } from "../helpers/test-app.js";
+import { updateHostLifecycleState } from "@bb/db/internal-lifecycle";
 
 describe("internal session routes", () => {
   it("opens sessions, replaces existing ones, and returns thread high-water marks", async () => {
@@ -227,6 +235,101 @@ describe("internal session routes", () => {
         externalId: "sandbox-existing",
         provider: "e2b",
       });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("clears suspended state and requeues runtime sync when an ephemeral host session reconnects", async () => {
+    const harness = await createTestAppHarness({
+      githubPat: "test-github-pat",
+      openAiApiKey: "test-openai-key",
+    });
+    try {
+      const host = upsertHost(harness.db, harness.hub, {
+        externalId: "sandbox-runtime-reconnect",
+        id: "host-runtime-reconnect",
+        name: "Sandbox Host",
+        provider: "e2b",
+        type: "ephemeral",
+      });
+      const initialSession = openSession(harness.db, harness.hub, {
+        heartbeatIntervalMs: 5_000,
+        hostId: host.id,
+        hostName: host.name,
+        hostType: host.type,
+        instanceId: "instance-before-reconnect",
+        leaseTimeoutMs: 30_000,
+        protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
+      });
+      const initialSnapshot = requestSandboxRuntimeMaterialSync(harness.deps, {
+        hostId: host.id,
+      });
+      const initialRuntimeSync = advanceSandboxRuntimeMaterialSync(harness.deps, {
+        hostId: host.id,
+      });
+      if (!initialRuntimeSync) {
+        throw new Error("Expected initial runtime sync command to be queued");
+      }
+      completeSandboxRuntimeMaterialSyncForCommand(harness.deps, {
+        appliedVersion: initialSnapshot.version,
+        commandId: initialRuntimeSync,
+        completedAt: 1_700_000_000_000,
+      });
+      updateHostLifecycleState(harness.db, {
+        hostId: host.id,
+        suspendedAt: 1_700_000_000_000,
+      });
+
+      const response = await harness.app.request("/internal/session/open", {
+        method: "POST",
+        headers: internalAuthHeaders(harness, {
+          hostId: host.id,
+          hostType: "ephemeral",
+        }),
+        body: JSON.stringify({
+          activeThreads: [],
+          dataDir: "/tmp/host-runtime-reconnect",
+          hostId: host.id,
+          instanceId: "instance-reconnected",
+          hostName: host.name,
+          hostType: "ephemeral",
+          protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
+        }),
+      });
+
+      expect(response.status).toBe(201);
+      expect(getHost(harness.db, host.id)).toMatchObject({
+        externalId: "sandbox-runtime-reconnect",
+        suspendedAt: null,
+      });
+
+      const runtimeSyncOperation = getHostOperation(harness.db, {
+        hostId: host.id,
+        kind: "sync_runtime_material",
+      });
+      expect(runtimeSyncOperation).toMatchObject({
+        state: "queued",
+      });
+
+      const requeuedRuntimeSync = await waitForQueuedCommandAfter(
+        harness,
+        harness.db
+          .select({
+            cursor: hostDaemonCommands.cursor,
+          })
+          .from(hostDaemonCommands)
+          .where(eq(hostDaemonCommands.id, initialRuntimeSync))
+          .get()?.cursor ?? 0,
+        ({ command, row }) =>
+          row.hostId === host.id && command.type === "host.sync_runtime_material",
+      );
+      expect(requeuedRuntimeSync.command).toMatchObject({
+        env: initialSnapshot.env,
+        type: "host.sync_runtime_material",
+        version: initialSnapshot.version,
+      });
+      expect(runtimeSyncOperation?.commandId).toBe(requeuedRuntimeSync.row.id);
     } finally {
       await harness.cleanup();
     }

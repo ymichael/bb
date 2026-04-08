@@ -3,10 +3,16 @@ export { typedRoutes } from "@bb/hono-typed-routes";
 export {
   HOST_AUTH_FILE_NAME,
   HOST_ID_FILE_NAME,
+  HOST_RUNTIME_MATERIAL_FILE_NAME,
   hostAuthStateSchema,
+  hostRuntimeMaterialEnvSchema,
+  hostRuntimeMaterialSnapshotSchema,
   normalizeServerUrl,
 } from "./local-state.js";
-export type { HostAuthState } from "./local-state.js";
+export type {
+  HostAuthState,
+  HostRuntimeMaterialSnapshot,
+} from "./local-state.js";
 
 export {
   createHostDaemonLocalClient,
@@ -36,6 +42,7 @@ export {
   HOST_DAEMON_PROTOCOL_VERSION,
   environmentDestroyCommandSchema,
   environmentProvisionCommandSchema,
+  hostSyncRuntimeMaterialCommandSchema,
   hostDaemonCommandEnvelopeSchema,
   hostDaemonCommandResultReportSchema,
   hostDaemonCommandResultSchemaByType,

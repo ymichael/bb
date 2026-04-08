@@ -5,7 +5,7 @@ import type {
   Thread,
   ThreadTurnInitiator,
 } from "@bb/domain";
-import type { AppDeps } from "../../types.js";
+import type { SandboxWorkSessionDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
 import { queueManagedEnvironmentReprovision } from "../environments/environment-provisioning.js";
 import { MANAGED_REPROVISION_QUEUED } from "../environments/environment-provisioning.js";
@@ -17,7 +17,7 @@ export interface ReadyThreadEnvironment extends Environment {
 }
 
 export interface QueueTurnDuringReprovisionArgs {
-  deps: Pick<AppDeps, "db" | "hub">;
+  deps: SandboxWorkSessionDeps;
   environment: Environment;
   execution: ResolvedThreadExecutionOptions;
   initiator: ThreadTurnInitiator;
@@ -40,9 +40,9 @@ export function requireReadyThreadEnvironment(
   };
 }
 
-export function queueTurnDuringReprovision(
+export async function queueTurnDuringReprovision(
   args: QueueTurnDuringReprovisionArgs,
-): boolean {
+): Promise<boolean> {
   if (args.environment.status === "ready" && args.environment.path) {
     return false;
   }
@@ -54,7 +54,7 @@ export function queueTurnDuringReprovision(
     throw new ApiError(409, "invalid_request", "Environment is not ready");
   }
 
-  const reprovisionResult = queueManagedEnvironmentReprovision(args.deps, {
+  const reprovisionResult = await queueManagedEnvironmentReprovision(args.deps, {
     environment: args.environment,
     thread: args.thread,
   });

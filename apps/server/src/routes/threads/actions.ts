@@ -122,7 +122,7 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
     );
 
     if (
-      queueTurnDuringReprovision({
+      await queueTurnDuringReprovision({
         deps,
         environment,
         execution,

@@ -20,6 +20,7 @@ export {
   markHostOperationRecordFailed,
   markHostOperationRecordFetched,
   markHostOperationRecordQueued,
+  updateHostOperationRecord,
   upsertHostOperationRecord,
 } from "./data/host-operations.js";
 export {

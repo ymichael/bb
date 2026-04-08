@@ -4,6 +4,7 @@ import {
   listThreadEnvironmentAssignmentsOnHost,
   openSession,
   upsertHost,
+  updateHostLifecycleState,
 } from "@bb/db";
 import {
   hostDaemonSessionOpenRequestSchema,
@@ -17,6 +18,7 @@ import { ApiError } from "../errors.js";
 import { listHostThreadIds } from "../services/lib/entity-lookup.js";
 import { assertAuthenticatedHostMatches, getAuthenticatedDaemon } from "./auth.js";
 import { reconcileSessionThreads } from "./reconciliation.js";
+import { advanceSandboxRuntimeMaterialSync, invalidateSandboxRuntimeMaterialAfterSessionOpen } from "../services/hosts/sandbox-runtime-material.js";
 
 export function registerInternalSessionRoutes(app: Hono, deps: AppDeps): void {
   const { post } = typedRoutes<HostDaemonInternalSchema>(app, {
@@ -46,6 +48,18 @@ export function registerInternalSessionRoutes(app: Hono, deps: AppDeps): void {
       heartbeatIntervalMs: HEARTBEAT_INTERVAL_MS,
       leaseTimeoutMs: LEASE_TIMEOUT_MS,
     });
+    updateHostLifecycleState(deps.db, {
+      hostId: daemon.hostId,
+      suspendedAt: null,
+    });
+    if (daemon.hostType === "ephemeral") {
+      invalidateSandboxRuntimeMaterialAfterSessionOpen(deps, {
+        hostId: daemon.hostId,
+      });
+      advanceSandboxRuntimeMaterialSync(deps, {
+        hostId: daemon.hostId,
+      });
+    }
 
     deps.logger.info(
       {

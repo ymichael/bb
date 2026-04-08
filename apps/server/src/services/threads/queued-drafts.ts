@@ -7,7 +7,7 @@ import {
   releaseDraftClaim,
 } from "@bb/db";
 import type { Thread, ThreadQueuedMessage } from "@bb/domain";
-import type { AppDeps } from "../../types.js";
+import type { AppDeps, SandboxWorkSessionDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
 import { toQueuedMessage } from "./drafts.js";
 import { requireThreadEnvironment } from "../lib/entity-lookup.js";
@@ -68,7 +68,7 @@ function claimDraftForSend(
 }
 
 async function sendClaimedDraft(
-  deps: Pick<AppDeps, "db" | "hub">,
+  deps: SandboxWorkSessionDeps,
   args: {
     draft: ClaimedDraft;
     threadId: string;
@@ -90,7 +90,7 @@ async function sendClaimedDraft(
   );
 
   if (
-    queueTurnDuringReprovision({
+    await queueTurnDuringReprovision({
       deps,
       environment,
       execution,
@@ -158,7 +158,7 @@ async function sendClaimedDraft(
 }
 
 export async function sendQueuedDraft(
-  deps: Pick<AppDeps, "db" | "hub">,
+  deps: SandboxWorkSessionDeps,
   args: SendQueuedDraftArgs,
 ): Promise<ThreadQueuedMessage> {
   const draft = claimDraftForSend(deps, args);
@@ -174,7 +174,7 @@ export async function sendQueuedDraft(
 }
 
 export async function sendNextQueuedDraftIfPresent(
-  deps: Pick<AppDeps, "db" | "hub">,
+  deps: SandboxWorkSessionDeps,
   args: { threadId: string },
 ): Promise<boolean> {
   const thread = getThread(deps.db, args.threadId);

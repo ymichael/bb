@@ -162,12 +162,14 @@ export {
   markHostOperationRecordFailed,
   markHostOperationRecordFetched,
   markHostOperationRecordQueued,
+  updateHostOperationRecord,
   upsertHostOperationRecord,
 } from "./host-operations.js";
 export type {
   GetHostOperationArgs,
   HostOperationRow,
   ListHostOperationsArgs,
+  UpdateHostOperationStateArgs,
   UpsertHostOperationInput,
 } from "./host-operations.js";
 

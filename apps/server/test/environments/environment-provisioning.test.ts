@@ -44,11 +44,11 @@ describe("environment reprovisioning", () => {
         environmentId: environment.id,
       });
 
-      const firstAttempt = queueManagedEnvironmentReprovision(harness.deps, {
+      const firstAttempt = await queueManagedEnvironmentReprovision(harness.deps, {
         environment,
         thread,
       });
-      const secondAttempt = queueManagedEnvironmentReprovision(harness.deps, {
+      const secondAttempt = await queueManagedEnvironmentReprovision(harness.deps, {
         environment,
         thread,
       });
@@ -95,7 +95,7 @@ describe("environment reprovisioning", () => {
 
       let thrownError: ApiError | null = null;
       try {
-        queueManagedEnvironmentReprovision(harness.deps, {
+        await queueManagedEnvironmentReprovision(harness.deps, {
           environment,
           thread,
         });

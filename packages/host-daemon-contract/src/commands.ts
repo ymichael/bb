@@ -15,6 +15,7 @@ import {
   workspaceStatusSchema,
 } from "@bb/domain";
 import { z } from "zod";
+import { hostRuntimeMaterialSnapshotSchema } from "./local-state.js";
 
 export const HOST_DAEMON_PROTOCOL_VERSION = 5 as const;
 
@@ -25,6 +26,7 @@ export const HOST_DAEMON_COMMAND_TYPES = [
   "thread.stop",
   "thread.rename",
   "thread.deleted",
+  "host.sync_runtime_material",
   "host.list_files",
   "host.read_file",
   "provider.list",
@@ -129,6 +131,15 @@ export const threadRenameCommandSchema = hostDaemonThreadTargetSchema.extend({
 export const threadDeletedCommandSchema = hostDaemonThreadTargetSchema.extend({
   type: z.literal("thread.deleted"),
 });
+
+/**
+ * Replace the daemon's managed runtime material snapshot with the exact
+ * authoritative snapshot from the server before new work is queued.
+ */
+export const hostSyncRuntimeMaterialCommandSchema =
+  hostRuntimeMaterialSnapshotSchema.extend({
+    type: z.literal("host.sync_runtime_material"),
+  });
 
 /**
  * Read a file from an absolute host path while enforcing that the resolved file
@@ -282,7 +293,11 @@ const hostDaemonNonProvisionCommandSchema = z.discriminatedUnion("type", [
   turnSteerCommandSchema,
   threadStopCommandSchema,
   threadRenameCommandSchema,
+<<<<<<< HEAD
   threadDeletedCommandSchema,
+=======
+  hostSyncRuntimeMaterialCommandSchema,
+>>>>>>> ff8d15f4 (Add sandbox runtime material sync)
   hostListFilesCommandSchema,
   hostReadFileCommandSchema,
   providerListCommandSchema,
@@ -324,7 +339,13 @@ export const hostDaemonCommandResultSchemaByType = {
   "turn.steer": z.object({}),
   "thread.stop": z.object({}),
   "thread.rename": z.object({}),
+<<<<<<< HEAD
   "thread.deleted": z.object({}),
+=======
+  "host.sync_runtime_material": z.object({
+    appliedVersion: z.string().min(1),
+  }),
+>>>>>>> ff8d15f4 (Add sandbox runtime material sync)
   "host.list_files": fileListResultSchema,
   "host.read_file": fileReadResultSchema,
   "provider.list": z.object({

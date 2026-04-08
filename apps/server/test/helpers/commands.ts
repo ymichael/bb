@@ -142,3 +142,39 @@ export async function reportQueuedCommandError(
     }),
   });
 }
+
+export async function reportNextRuntimeMaterialSyncSuccess(
+  harness: TestAppHarness,
+  args: {
+    hostId: string;
+    hostType?: HostType;
+    timeoutMs?: number;
+  },
+): Promise<QueuedCommand<Extract<HostDaemonCommand, { type: "host.sync_runtime_material" }>>> {
+  const queued = await waitForQueuedCommand(
+    harness,
+    ({ command, row }) =>
+      row.hostId === args.hostId && command.type === "host.sync_runtime_material",
+    args.timeoutMs,
+  );
+  if (queued.command.type !== "host.sync_runtime_material") {
+    throw new Error("Expected a host.sync_runtime_material command");
+  }
+
+  const response = await reportQueuedCommandSuccess(
+    harness,
+    queued,
+    {
+      appliedVersion: queued.command.version,
+    },
+    {
+      hostId: args.hostId,
+      hostType: args.hostType ?? "ephemeral",
+    },
+  );
+  if (!response.ok) {
+    throw new Error(`Expected runtime material sync success, got ${response.status}`);
+  }
+
+  return queued;
+}

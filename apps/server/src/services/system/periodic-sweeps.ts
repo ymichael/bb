@@ -125,7 +125,7 @@ export async function runEnvironmentProvisioningSweep(
         });
         continue;
       }
-      advanceEnvironmentProvisioning(deps, {
+      await advanceEnvironmentProvisioning(deps, {
         environmentId: environment.id,
       });
     } catch (error) {

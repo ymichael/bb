@@ -40,6 +40,11 @@ import {
   hasActiveEnvironmentProvisionOperationForCommand,
 } from "../services/environments/environment-provisioning.js";
 import { destroyEphemeralHostIfReady } from "../services/hosts/host-lifecycle.js";
+import {
+  completeSandboxRuntimeMaterialSyncForCommand,
+  failSandboxRuntimeMaterialSyncForCommand,
+  hasActiveSandboxRuntimeMaterialSyncOperationForCommand,
+} from "../services/hosts/sandbox-runtime-material.js";
 import { tryTransition } from "../services/threads/thread-transitions.js";
 
 function parseCommand(
@@ -398,12 +403,45 @@ function handleWorkspaceMutationResult(
   deps.hub.notifyEnvironment(command.environmentId, ["work-status-changed"]);
 }
 
+function handleSandboxRuntimeMaterialResult(
+  deps: Pick<AppDeps, "db">,
+  report: Extract<
+    HostDaemonCommandResultReport,
+    { type: "host.sync_runtime_material" }
+  >,
+  commandRow: typeof hostDaemonCommands.$inferSelect,
+): void {
+  if (!hasActiveSandboxRuntimeMaterialSyncOperationForCommand(deps, {
+    commandId: commandRow.id,
+  })) {
+    return;
+  }
+
+  if (!report.ok) {
+    failSandboxRuntimeMaterialSyncForCommand(deps, {
+      commandId: commandRow.id,
+      completedAt: report.completedAt,
+      failureReason: report.errorMessage,
+    });
+    return;
+  }
+
+  completeSandboxRuntimeMaterialSyncForCommand(deps, {
+    appliedVersion: report.result.appliedVersion,
+    commandId: commandRow.id,
+    completedAt: report.completedAt,
+  });
+}
+
 export async function handleCommandResultSideEffects(
   deps: Pick<AppDeps, "config" | "db" | "hub" | "logger" | "sandboxRegistry">,
   report: HostDaemonCommandResultReport,
   commandRow: typeof hostDaemonCommands.$inferSelect,
 ): Promise<void> {
   switch (report.type) {
+    case "host.sync_runtime_material":
+      handleSandboxRuntimeMaterialResult(deps, report, commandRow);
+      return;
     case "environment.provision":
       await handleProvisionCommandResult(deps, report, commandRow);
       return;

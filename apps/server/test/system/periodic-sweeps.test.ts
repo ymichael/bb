@@ -39,6 +39,7 @@ import {
 } from "../helpers/seed.js";
 import { createTestAppHarness } from "../helpers/test-app.js";
 import {
+  reportNextRuntimeMaterialSyncSuccess,
   waitForQueuedCommand,
   waitForQueuedCommandAfter,
 } from "../helpers/commands.js";
@@ -234,6 +235,7 @@ describe("periodic sweeps", () => {
       const host = upsertHost(harness.db, harness.hub, {
         id: "host-periodic-sandbox-bootstrap",
         name: "Periodic Sandbox Bootstrap Host",
+        provider: "e2b",
         type: "ephemeral",
       });
       const { project } = seedProjectWithSource(harness.deps, {
@@ -291,6 +293,9 @@ describe("periodic sweeps", () => {
         instanceId: "instance-periodic-sandbox-bootstrap",
         leaseTimeoutMs: 30_000,
         protocolVersion: 2,
+      });
+      await reportNextRuntimeMaterialSyncSuccess(harness, {
+        hostId: host.id,
       });
 
       const queued = await waitForQueuedCommand(

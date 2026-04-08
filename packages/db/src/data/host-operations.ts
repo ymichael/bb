@@ -96,6 +96,13 @@ function updateHostOperationStateRecord(
     .get() ?? null;
 }
 
+export function updateHostOperationRecord(
+  db: HostOperationWriteConnection,
+  args: UpdateHostOperationStateArgs,
+): HostOperationRow | null {
+  return updateHostOperationStateRecord(db, args);
+}
+
 const hostOperationStore: LifecycleOperationStore<
   HostOperationRow,
   GetHostOperationArgs,

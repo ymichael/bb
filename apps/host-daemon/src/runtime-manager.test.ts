@@ -47,6 +47,18 @@ type WatchThreadStorageRootImplementation = (
   args: WatchThreadStorageRootArgs,
 ) => StopWatchingPathChanges;
 
+function getProvisionWorkspacePath(args: ProvisionWorkspaceArgs): string {
+  switch (args.workspaceProvisionType) {
+    case "managed-clone":
+    case "managed-worktree":
+      return args.targetPath;
+    case "reconnect-managed-clone":
+    case "reconnect-managed-worktree":
+    case "unmanaged":
+      return args.path;
+  }
+}
+
 function createFakeWorkspace(
   path: string,
 ) {
@@ -240,6 +252,43 @@ describe("RuntimeManager", () => {
     );
   });
 
+  it("merges managed shell env into future runtime creation", async () => {
+    const provisionWorkspace = createProvisionWorkspaceMock("/tmp/env-1");
+    const createRuntime = vi.fn(() => createFakeRuntime());
+    const manager = new RuntimeManager({
+      provisionWorkspace,
+      createRuntime,
+      shellEnv: {
+        PATH: "/tmp/bb-bin:/usr/bin",
+      },
+    });
+
+    await manager.ensureEnvironment({
+      environmentId: "env-1",
+      workspacePath: "/tmp/env-1",
+    });
+
+    manager.replaceManagedShellEnv({
+      GITHUB_TOKEN: "test-github-token",
+      OPENAI_API_KEY: "test-openai-key",
+    });
+    await manager.ensureEnvironment({
+      environmentId: "env-2",
+      workspacePath: "/tmp/env-2",
+    });
+
+    expect(createRuntime).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        shellEnv: {
+          GITHUB_TOKEN: "test-github-token",
+          OPENAI_API_KEY: "test-openai-key",
+          PATH: "/tmp/bb-bin:/usr/bin",
+        },
+      }),
+    );
+  });
+
   it("reuses the existing runtime for subsequent requests", async () => {
     const provisionWorkspace = createProvisionWorkspaceMock("/tmp/env-1");
     const createRuntime = vi.fn(() => createFakeRuntime());
@@ -260,6 +309,46 @@ describe("RuntimeManager", () => {
     expect(second).toBe(first);
     expect(provisionWorkspace).toHaveBeenCalledTimes(1);
     expect(createRuntime).toHaveBeenCalledTimes(1);
+  });
+
+  it("evicts only idle environments and keeps their workspaces intact", async () => {
+    const runtimes: AgentRuntime[] = [];
+    const workspaces: HostWorkspace[] = [];
+    const createRuntime = vi.fn(() => {
+      const runtime = createFakeRuntime();
+      runtimes.push(runtime);
+      return runtime;
+    });
+    const provisionWorkspace = vi.fn(
+      async (...args: ProvisionWorkspaceMockArgs) => {
+        const workspace = createFakeWorkspace(getProvisionWorkspacePath(args[0]));
+        workspaces.push(workspace);
+        return workspace;
+      },
+    );
+    const manager = new RuntimeManager({
+      createRuntime,
+      provisionWorkspace,
+    });
+
+    await manager.ensureEnvironment({
+      environmentId: "env-idle",
+      workspacePath: "/tmp/env-idle",
+    });
+    await manager.ensureEnvironment({
+      environmentId: "env-active",
+      workspacePath: "/tmp/env-active",
+    });
+    manager.markThreadActive("env-active", "thr-active", "provider-thread-active");
+
+    await expect(manager.evictIdleEnvironments()).resolves.toEqual(["env-idle"]);
+
+    expect(manager.get("env-idle")).toBeUndefined();
+    expect(manager.get("env-active")).toBeDefined();
+    expect(runtimes[0]?.shutdown).toHaveBeenCalledTimes(1);
+    expect(runtimes[1]?.shutdown).not.toHaveBeenCalled();
+    expect(workspaces[0]?.destroy).not.toHaveBeenCalled();
+    expect(workspaces[1]?.destroy).not.toHaveBeenCalled();
   });
 
   it("shuts down the runtime and destroys the workspace", async () => {

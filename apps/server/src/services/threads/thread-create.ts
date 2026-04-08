@@ -24,11 +24,11 @@ import {
 } from "../hosts/command-wait.js";
 import { COMMAND_TIMEOUT_MS } from "../../constants.js";
 import {
-  requireConnectedHostSession,
   requireNonDestroyedHostWithStatus,
 } from "../lib/entity-lookup.js";
 import { requireReachablePublicServerUrl } from "../hosts/public-server-url.js";
 import { assertSandboxProvisioningConfig } from "../hosts/sandbox-backends.js";
+import { ensureHostSessionReadyForWork } from "../hosts/host-lifecycle.js";
 import { appendClientTurnEvent, appendProvisioningEvent, buildCwdBranchEntries } from "./thread-events.js";
 import { buildExecutionOptions } from "./thread-commands.js";
 import {
@@ -315,7 +315,7 @@ async function createSandboxHostThread(
       sandboxType: args.sandboxType,
     }),
   });
-  advanceEnvironmentProvisioning(deps, {
+  await advanceEnvironmentProvisioning(deps, {
     environmentId: environment.id,
   });
 
@@ -367,7 +367,6 @@ export async function createThreadFromRequest(
       });
     }
 
-    requireConnectedHostSession(deps, environment.hostId);
     if (environment.status === "ready") {
       if (!environment.path) {
         throw new ApiError(409, "invalid_request", "Environment is not ready");
@@ -388,7 +387,9 @@ export async function createThreadFromRequest(
     workspace.type === "unmanaged" ? null : resolvedEnvironment.localSource;
   const unmanagedPath =
     workspace.type === "unmanaged" ? resolvedEnvironment.unmanagedPath : null;
-  requireConnectedHostSession(deps, hostId);
+  await ensureHostSessionReadyForWork(deps, {
+    hostId,
+  });
 
   if (workspace.type === "unmanaged" && unmanagedPath === null) {
     throw new Error("Validated unmanaged host request is missing a workspace path");
@@ -507,7 +508,7 @@ export async function createThreadFromRequest(
     kind: "provision",
     request: buildDirectEnvironmentProvisionRequest(provisionCommand),
   });
-  advanceEnvironmentProvisioning(deps, {
+  await advanceEnvironmentProvisioning(deps, {
     environmentId: environment.id,
   });
   rememberProjectExecutionDefaultsForCreate(deps, {
@@ -548,7 +549,9 @@ export async function ensureProjectSourceEnvironment(
     status: "provisioning",
   });
 
-  requireConnectedHostSession(deps, args.hostId);
+  await ensureHostSessionReadyForWork(deps, {
+    hostId: args.hostId,
+  });
   const command = buildEnvironmentProvisionCommand({
     environmentId: environment.id,
     hostId: args.hostId,
@@ -561,7 +564,7 @@ export async function ensureProjectSourceEnvironment(
     kind: "provision",
     request: buildDirectEnvironmentProvisionRequest(command),
   });
-  const commandId = advanceEnvironmentProvisioning(deps, {
+  const commandId = await advanceEnvironmentProvisioning(deps, {
     environmentId: environment.id,
   });
   if (!commandId) {

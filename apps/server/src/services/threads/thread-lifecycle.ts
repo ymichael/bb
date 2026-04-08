@@ -28,7 +28,7 @@ import {
   threadStartCommandSchema,
   threadStopCommandSchema,
 } from "@bb/host-daemon-contract";
-import type { AppDeps } from "../../types.js";
+import type { AppDeps, SandboxWorkSessionDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
 import { advanceEnvironmentCleanup, requestEnvironmentCleanup } from "../environments/environment-cleanup.js";
 import { appendThreadInterruptedEvent } from "./thread-events.js";
@@ -42,7 +42,7 @@ import {
   type QueueThreadStartCommandArgs,
   type QueueThreadStopCommandArgs,
 } from "./thread-commands.js";
-import { requireConnectedHostSession } from "../lib/entity-lookup.js";
+import { ensureHostSessionReadyForWork } from "../hosts/host-lifecycle.js";
 import { parseJsonWithSchema } from "../lib/json-parsing.js";
 
 type QueueReadyThreadTurnCommandResult = "thread.start" | "turn.run";
@@ -298,10 +298,9 @@ export function failThreadStopForCommand(
 }
 
 export async function requestThreadStart(
-  deps: Pick<AppDeps, "db" | "hub">,
+  deps: SandboxWorkSessionDeps,
   args: QueueThreadStartCommandArgs,
 ): Promise<void> {
-  requireConnectedHostSession(deps, args.environment.hostId);
   const existingOperation = getThreadOperation(deps.db, {
     threadId: args.thread.id,
     kind: "start",
@@ -327,7 +326,7 @@ export async function requestThreadStart(
 }
 
 export async function advanceThreadStart(
-  deps: Pick<AppDeps, "db" | "hub">,
+  deps: SandboxWorkSessionDeps,
   args: AdvanceThreadOperationArgs,
 ): Promise<string | null> {
   const operation = getThreadOperation(deps.db, {
@@ -342,10 +341,9 @@ export async function advanceThreadStart(
     return operation.commandId;
   }
 
-  const session = getActiveSession(deps.db, args.hostId);
-  if (!session || session.leaseExpiresAt <= Date.now()) {
-    return null;
-  }
+  const session = await ensureHostSessionReadyForWork(deps, {
+    hostId: args.hostId,
+  });
 
   const command = parseJsonWithSchema(
     operation.payload,
@@ -366,7 +364,7 @@ export async function advanceThreadStart(
 }
 
 export async function queueReadyThreadTurnCommand(
-  deps: Pick<AppDeps, "db" | "hub">,
+  deps: SandboxWorkSessionDeps,
   args: QueueReadyThreadTurnCommandArgs,
 ): Promise<QueueReadyThreadTurnCommandResult> {
   const providerThreadId = getLastProviderThreadId(deps, args.thread.id);

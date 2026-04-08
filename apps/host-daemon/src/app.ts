@@ -16,6 +16,7 @@ import {
   type CreateReconnectingWebSocket,
 } from "./server-connection.js";
 import { ensureThreadStorageRoot } from "./thread-storage-root.js";
+import { writeRuntimeMaterialState } from "./runtime-material-state.js";
 import type { AgentRuntimeOptions } from "@bb/agent-runtime";
 import type { HostType, ToolCallRequest, ToolCallResponse } from "@bb/domain";
 import type { HostWatcher } from "@bb/host-watcher";
@@ -233,6 +234,8 @@ export async function createHostDaemonApp(
     reportResult: async (report) => {
       await serverClient.reportCommandResult(report);
     },
+    persistRuntimeMaterial: (snapshot) =>
+      writeRuntimeMaterialState(options.dataDir, snapshot),
   });
 
   const commandFetchLoop = createCommandFetchLoop({

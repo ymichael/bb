@@ -26,3 +26,12 @@ export interface AppDeps {
   machineAuth: MachineAuthService;
   sandboxRegistry: SandboxHostRegistry;
 }
+
+export type SandboxLifecycleDeps = Pick<
+  AppDeps,
+  "config" | "db" | "hub" | "machineAuth" | "sandboxRegistry"
+>;
+
+export type SandboxWorkSessionDeps =
+  & Pick<AppDeps, "db" | "hub">
+  & Partial<Pick<AppDeps, "config" | "machineAuth" | "sandboxRegistry">>;

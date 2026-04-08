@@ -1,10 +1,15 @@
-import { queueCommand } from "@bb/db";
+import { getHostOperation, queueCommand } from "@bb/db";
 import { describe, expect, it } from "vitest";
+import {
+  advanceSandboxRuntimeMaterialSync,
+  requestSandboxRuntimeMaterialSync,
+} from "../../src/services/hosts/sandbox-runtime-material.js";
 import { handleExpiredCommands } from "../../src/services/hosts/expired-commands.js";
 import { createTestAppHarness } from "../helpers/test-app.js";
 import {
   seedEnvironment,
   seedHost,
+  seedHostSession,
   seedProjectWithSource,
   seedThread,
 } from "../helpers/seed.js";
@@ -122,6 +127,51 @@ describe("expired commands", () => {
         errorMessage: "Command expired after retry",
         ok: false,
         type,
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("marks runtime material sync operations failed when their command expires", async () => {
+    const harness = await createTestAppHarness({
+      githubPat: "test-github-pat",
+      openAiApiKey: "test-openai-key",
+    });
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-expired-runtime-sync",
+        type: "ephemeral",
+      });
+      requestSandboxRuntimeMaterialSync(harness.deps, {
+        hostId: host.id,
+      });
+      const commandId = advanceSandboxRuntimeMaterialSync(harness.deps, {
+        hostId: host.id,
+      });
+      if (!commandId) {
+        throw new Error("Expected runtime sync command to be queued");
+      }
+
+      const resultPromise = harness.hub.waitForCommandResult(commandId, 1_000);
+      await handleExpiredCommands(harness.deps, {
+        commandIds: [commandId],
+      });
+
+      await expect(resultPromise).resolves.toMatchObject({
+        commandId,
+        errorCode: "command_expired",
+        errorMessage: "Command expired after retry",
+        ok: false,
+        type: "host.sync_runtime_material",
+      });
+      expect(getHostOperation(harness.db, {
+        hostId: host.id,
+        kind: "sync_runtime_material",
+      })).toMatchObject({
+        commandId,
+        failureReason: "Command expired after retry",
+        state: "failed",
       });
     } finally {
       await harness.cleanup();

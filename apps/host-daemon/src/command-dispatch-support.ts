@@ -11,6 +11,7 @@ import type {
 import type { BufferedEventInput } from "./event-buffer.js";
 import type {
   HostDaemonCommand,
+  HostRuntimeMaterialSnapshot,
   WorkspaceContext,
 } from "@bb/host-daemon-contract";
 import { RuntimeManager, type RuntimeEntry } from "./runtime-manager.js";
@@ -26,6 +27,9 @@ export interface EventSink {
 }
 
 export interface CommandDispatchOptions {
+  persistRuntimeMaterial: (
+    snapshot: HostRuntimeMaterialSnapshot,
+  ) => Promise<void>;
   runtimeManager: RuntimeManager;
   seedThreadHighWaterMark?: (args: {
     sequence: number;

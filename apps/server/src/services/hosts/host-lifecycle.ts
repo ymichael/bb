@@ -5,12 +5,14 @@ import {
   updateHost,
 } from "@bb/db";
 import type { SandboxHostProgressCallbacks } from "@bb/sandbox-host";
-import type { AppDeps } from "../../types.js";
+import type { AppDeps, SandboxLifecycleDeps, SandboxWorkSessionDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
 import { createAsyncDeduper } from "../lib/async-deduper.js";
+import { requireConnectedHostSession } from "../lib/entity-lookup.js";
 import { requireReachablePublicServerUrl } from "./public-server-url.js";
 import { createSandboxBackendForId } from "./sandbox-backends.js";
 import { requireSandboxBackendForHost } from "./sandbox-backends.js";
+import { ensureSandboxRuntimeMaterialSynced } from "./sandbox-runtime-material.js";
 
 const DEFAULT_SESSION_WAIT_TIMEOUT_MS = 60_000;
 const hostDestroyDeduper = createAsyncDeduper<string, void>();
@@ -165,14 +167,10 @@ export async function destroyEphemeralHostIfReady(
 }
 
 export async function ensureSandboxHostSessionReady(
-  deps: Pick<
-    AppDeps,
-    "config" | "db" | "hub" | "machineAuth" | "sandboxRegistry"
-  >,
+  deps: SandboxLifecycleDeps,
   args: {
     hostId: string;
     progressCallbacks?: SandboxHostProgressCallbacks;
-    sandboxType: string;
   },
 ) {
   const unregisterProgressCallbacks = registerPendingReadyProgressCallbacks(
@@ -187,10 +185,16 @@ export async function ensureSandboxHostSessionReady(
       if (!host || host.destroyedAt !== null) {
         throw new ApiError(404, "host_not_found", "Host not found");
       }
+      if (host.type !== "ephemeral") {
+        throw new ApiError(409, "invalid_request", "Host is not an ephemeral sandbox");
+      }
 
       const cachedHost = deps.sandboxRegistry.get(args.hostId);
       if (!cachedHost) {
-        const sandboxBackend = createSandboxBackendForId(args.sandboxType);
+        const sandboxBackend =
+          host.provider
+            ? createSandboxBackendForId(host.provider)
+            : requireSandboxBackendForHost(host);
         const serverUrl = requireReachablePublicServerUrl(deps.config);
 
         const sandboxHost =
@@ -234,8 +238,39 @@ export async function ensureSandboxHostSessionReady(
       }
 
       await waitForHostSession(deps, host.id);
+      await ensureSandboxRuntimeMaterialSynced(deps, {
+        hostId: host.id,
+      });
     });
   } finally {
     unregisterProgressCallbacks();
   }
+}
+
+function hasSandboxLifecycleDeps(
+  deps: SandboxWorkSessionDeps,
+): deps is SandboxLifecycleDeps {
+  return deps.config !== undefined
+    && deps.machineAuth !== undefined
+    && deps.sandboxRegistry !== undefined;
+}
+
+export async function ensureHostSessionReadyForWork(
+  deps: SandboxWorkSessionDeps,
+  args: { hostId: string },
+) {
+  const host = getHost(deps.db, args.hostId);
+  if (!host || host.destroyedAt !== null) {
+    throw new ApiError(404, "host_not_found", "Host not found");
+  }
+
+  if (host.type === "ephemeral") {
+    if (hasSandboxLifecycleDeps(deps)) {
+      await ensureSandboxHostSessionReady(deps, {
+        hostId: host.id,
+      });
+    }
+  }
+
+  return requireConnectedHostSession(deps, host.id);
 }

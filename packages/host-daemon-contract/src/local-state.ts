@@ -3,8 +3,17 @@ import { hostTypeSchema } from "@bb/domain";
 
 export const HOST_AUTH_FILE_NAME = "auth.json";
 export const HOST_ID_FILE_NAME = "host-id";
+export const HOST_RUNTIME_MATERIAL_FILE_NAME = "runtime-material.json";
 
 const nonEmptyTrimmedStringSchema = z.string().trim().min(1);
+export const hostRuntimeMaterialEnvSchema = z.record(
+  z.string().min(1),
+  z.string(),
+);
+export const hostRuntimeMaterialSnapshotSchema = z.object({
+  version: nonEmptyTrimmedStringSchema,
+  env: hostRuntimeMaterialEnvSchema,
+}).strict();
 
 export function normalizeServerUrl(serverUrl: string): string {
   const url = new URL(serverUrl);
@@ -23,3 +32,6 @@ export const hostAuthStateSchema = z.object({
 }).strict();
 
 export type HostAuthState = z.infer<typeof hostAuthStateSchema>;
+export type HostRuntimeMaterialSnapshot = z.infer<
+  typeof hostRuntimeMaterialSnapshotSchema
+>;

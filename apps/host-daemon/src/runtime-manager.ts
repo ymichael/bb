@@ -129,15 +129,18 @@ export class RuntimeManager {
   private readonly createRuntime;
   private readonly hostWatcher;
   private readonly provisionWorkspace;
+  private readonly baseShellEnv;
   private readonly entries = new Map<string, RuntimeEntry>();
   private readonly pendingEntries = new Map<string, Promise<RuntimeEntry>>();
   private readonly trackedThreadStorageTargets = new Map<string, ThreadStorageTarget>();
+  private managedShellEnv: NonNullable<AgentRuntimeOptions["shellEnv"]> = {};
   private stopWatchingThreadStorageRoot: () => void = STOP_WATCHING;
 
   constructor(private readonly options: RuntimeManagerOptions = {}) {
     this.createRuntime = options.createRuntime ?? createAgentRuntime;
     this.hostWatcher = options.hostWatcher;
     this.provisionWorkspace = options.provisionWorkspace ?? provisionWorkspace;
+    this.baseShellEnv = { ...(options.shellEnv ?? {}) };
   }
 
   private async createWorkspaceWatchState(
@@ -316,6 +319,19 @@ export class RuntimeManager {
     return activeThreads;
   }
 
+  getShellEnv(): NonNullable<AgentRuntimeOptions["shellEnv"]> {
+    return {
+      ...this.baseShellEnv,
+      ...this.managedShellEnv,
+    };
+  }
+
+  replaceManagedShellEnv(
+    shellEnv: NonNullable<AgentRuntimeOptions["shellEnv"]>,
+  ): void {
+    this.managedShellEnv = { ...shellEnv };
+  }
+
   replaceTrackedThreadStorageTargets(
     targets: readonly HostDaemonTrackedThreadTarget[],
   ): void {
@@ -376,6 +392,26 @@ export class RuntimeManager {
     this.stopWatchingThreadStorageIfNoTrackedThreads();
     await entry.runtime.shutdown();
     await entry.workspace.destroy();
+  }
+
+  async evictIdleEnvironments(): Promise<string[]> {
+    const evictedEnvironmentIds: string[] = [];
+
+    for (const entry of [...this.entries.values()]) {
+      const hasActiveThread = [...entry.threads.values()].some((thread) =>
+        thread.status === "active"
+      );
+      if (hasActiveThread) {
+        continue;
+      }
+
+      this.stopWatchingStatus(entry);
+      this.entries.delete(entry.environmentId);
+      await entry.runtime.shutdown();
+      evictedEnvironmentIds.push(entry.environmentId);
+    }
+
+    return evictedEnvironmentIds;
   }
 
   async shutdownAll(): Promise<void> {
@@ -441,7 +477,7 @@ export class RuntimeManager {
       runtime = this.createRuntime({
         workspacePath: workspace.path,
         adapterFactory: this.options.adapterFactory,
-        shellEnv: this.options.shellEnv,
+        shellEnv: this.getShellEnv(),
         bridgeBundleDir: this.options.bridgeBundleDir,
         onEvent: (event) => {
           if (event.type === "thread/identity") {

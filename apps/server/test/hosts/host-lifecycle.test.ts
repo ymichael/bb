@@ -10,6 +10,10 @@ import {
   ensureSandboxHostSessionReady,
   waitForHostSession,
 } from "../../src/services/hosts/host-lifecycle.js";
+import {
+  reportQueuedCommandSuccess,
+  waitForQueuedCommand,
+} from "../helpers/commands.js";
 import { createTestAppHarness } from "../helpers/test-app.js";
 
 const provisionHostMock = vi.fn();
@@ -351,6 +355,7 @@ describe("host lifecycle", () => {
       const host = upsertHost(harness.db, harness.hub, {
         id: "host-concurrent-ready",
         name: "Concurrent Ready Host",
+        provider: "e2b",
         type: "ephemeral",
       });
       const sandboxHost = createMockSandboxHost(
@@ -401,7 +406,6 @@ describe("host lifecycle", () => {
             firstProgressEvents.push(`created:${externalId}`);
           },
         },
-        sandboxType: "e2b",
       });
 
       await vi.advanceTimersByTimeAsync(15);
@@ -416,10 +420,26 @@ describe("host lifecycle", () => {
             secondProgressEvents.push(`created:${externalId}`);
           },
         },
-        sandboxType: "e2b",
       });
 
       await vi.advanceTimersByTimeAsync(100);
+      const queuedRuntimeSync = await waitForQueuedCommand(
+        harness,
+        ({ command, row }) =>
+          row.hostId === host.id && command.type === "host.sync_runtime_material",
+      );
+      const reportResponse = await reportQueuedCommandSuccess(
+        harness,
+        queuedRuntimeSync,
+        {
+          appliedVersion: queuedRuntimeSync.command.version,
+        },
+        {
+          hostId: host.id,
+          hostType: "ephemeral",
+        },
+      );
+      expect(reportResponse.status).toBe(200);
       await Promise.all([firstReady, secondReady]);
 
       expect(provisionHostMock).toHaveBeenCalledTimes(1);
@@ -437,6 +457,81 @@ describe("host lifecycle", () => {
       expect(getHost(harness.db, host.id)).toMatchObject({
         externalId: "sandbox-concurrent-ready",
       });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("waits for runtime material sync before reporting a sandbox host ready", async () => {
+    const harness = await createTestAppHarness({
+      anthropicApiKey: "test-anthropic-key",
+      githubPat: "test-github-pat",
+      openAiApiKey: "test-openai-key",
+    });
+    try {
+      const host = upsertHost(harness.db, harness.hub, {
+        id: "host-ready-runtime-sync",
+        name: "Runtime Sync Host",
+        provider: "e2b",
+        type: "ephemeral",
+      });
+      const sandboxHost = createMockSandboxHost(
+        host.id,
+        "sandbox-ready-runtime-sync",
+      );
+      provisionHostMock.mockResolvedValue(sandboxHost);
+
+      setTimeout(() => {
+        openSession(harness.db, harness.hub, {
+          heartbeatIntervalMs: 5_000,
+          hostId: host.id,
+          hostName: host.name,
+          hostType: host.type,
+          instanceId: "instance-runtime-sync",
+          leaseTimeoutMs: 30_000,
+          protocolVersion: 2,
+        });
+      }, 10);
+
+      let readyResolved = false;
+      const readyPromise = ensureSandboxHostSessionReady(harness.deps, {
+        hostId: host.id,
+      }).then(() => {
+        readyResolved = true;
+      });
+
+      await vi.advanceTimersByTimeAsync(20);
+      const queuedRuntimeSync = await waitForQueuedCommand(
+        harness,
+        ({ command, row }) =>
+          row.hostId === host.id && command.type === "host.sync_runtime_material",
+      );
+
+      expect(queuedRuntimeSync.command).toMatchObject({
+        env: {
+          ANTHROPIC_API_KEY: "test-anthropic-key",
+          GITHUB_TOKEN: "test-github-pat",
+          OPENAI_API_KEY: "test-openai-key",
+        },
+        type: "host.sync_runtime_material",
+      });
+      expect(readyResolved).toBe(false);
+
+      const reportResponse = await reportQueuedCommandSuccess(
+        harness,
+        queuedRuntimeSync,
+        {
+          appliedVersion: queuedRuntimeSync.command.version,
+        },
+        {
+          hostId: host.id,
+          hostType: "ephemeral",
+        },
+      );
+      expect(reportResponse.status).toBe(200);
+
+      await readyPromise;
+      expect(readyResolved).toBe(true);
     } finally {
       await harness.cleanup();
     }

@@ -26,6 +26,7 @@ import {
   prepareRuntimeShellEnv,
   resolveLocalBbExecutableDirectory,
 } from "./runtime-shell-env.js";
+import { readRuntimeMaterialState } from "./runtime-material-state.js";
 import type { CreateReconnectingWebSocket } from "./server-connection.js";
 
 export interface StartHostDaemonOptions {
@@ -140,6 +141,7 @@ export async function startHostDaemon(
       localApiPort:
         localApiConfig?.port ?? hostDaemonConfig.BB_HOST_DAEMON_PORT,
     });
+    const persistedRuntimeMaterial = await readRuntimeMaterialState(dataDir);
     app = await createHostDaemonApp({
       dataDir,
       serverUrl,
@@ -169,6 +171,9 @@ export async function startHostDaemon(
       fetchFn: options.fetchFn,
       createWebSocket: options.createWebSocket,
     });
+    if (persistedRuntimeMaterial) {
+      app.runtimeManager.replaceManagedShellEnv(persistedRuntimeMaterial.env);
+    }
     await app.daemon.start();
     return app.daemon;
   } catch (error) {

@@ -3,9 +3,9 @@ import type {
   HostDaemonCommand,
   HostDaemonCommandType,
 } from "@bb/host-daemon-contract";
-import type { AppDeps } from "../../types.js";
+import type { AppDeps, SandboxWorkSessionDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
-import { requireConnectedHostSession } from "../lib/entity-lookup.js";
+import { ensureHostSessionReadyForWork } from "./host-lifecycle.js";
 
 export interface CompletedCommandResult {
   commandId: string;
@@ -38,10 +38,12 @@ function isCompletedCommandResult(value: unknown): value is CompletedCommandResu
 }
 
 export async function queueCommandAndWait<TType extends HostDaemonCommandType>(
-  deps: Pick<AppDeps, "db" | "hub">,
+  deps: SandboxWorkSessionDeps,
   args: QueueCommandAndWaitArgs<TType>,
 ): Promise<unknown> {
-  const session = requireConnectedHostSession(deps, args.hostId);
+  const session = await ensureHostSessionReadyForWork(deps, {
+    hostId: args.hostId,
+  });
   const queuedCommand = queueCommand(deps.db, deps.hub, {
     hostId: args.hostId,
     sessionId: session.id,

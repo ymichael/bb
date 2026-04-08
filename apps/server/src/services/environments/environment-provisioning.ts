@@ -27,7 +27,7 @@ import {
   type HostDaemonCommand,
 } from "@bb/host-daemon-contract";
 import type { SandboxHostProgressEvent } from "@bb/sandbox-host";
-import type { AppDeps } from "../../types.js";
+import type { AppDeps, SandboxWorkSessionDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
 import {
   appendProvisioningEvent,
@@ -47,10 +47,10 @@ import {
   type SandboxHostEnvironmentProvisionRequest,
 } from "./environment-provision-request.js";
 import { createAsyncDeduper } from "../lib/async-deduper.js";
-import { requireConnectedHostSession } from "../lib/entity-lookup.js";
 import { parseJsonWithSchema } from "../lib/json-parsing.js";
 import {
   destroyHost,
+  ensureHostSessionReadyForWork,
   ensureSandboxHostSessionReady,
 } from "../hosts/host-lifecycle.js";
 import { advanceEnvironmentCleanup } from "./environment-cleanup.js";
@@ -426,7 +426,6 @@ async function bootstrapSandboxProvisioning(
           });
         },
       },
-      sandboxType: args.request.sandboxType,
     });
 
     appendProvisioningEventToEnvironmentThreads(deps, {
@@ -495,13 +494,13 @@ async function bootstrapSandboxProvisioning(
   }
 }
 
-export function advanceEnvironmentProvisioning(
+export async function advanceEnvironmentProvisioning(
   deps: Pick<
     AppDeps,
     "config" | "db" | "hub" | "machineAuth" | "sandboxRegistry"
   >,
   args: AdvanceEnvironmentProvisioningArgs,
-): string | null {
+): Promise<string | null> {
   if (!args.environmentId) {
     return null;
   }
@@ -539,6 +538,9 @@ export function advanceEnvironmentProvisioning(
     return null;
   }
 
+  await ensureHostSessionReadyForWork(deps, {
+    hostId: environment.hostId,
+  });
   return queueEnvironmentProvisionCommand(deps, {
     command: request.command,
     environment,
@@ -552,13 +554,13 @@ export type ManagedReprovisionResult =
   | typeof MANAGED_REPROVISION_QUEUED
   | typeof MANAGED_REPROVISION_IN_PROGRESS;
 
-export function queueManagedEnvironmentReprovision(
-  deps: Pick<AppDeps, "db" | "hub">,
+export async function queueManagedEnvironmentReprovision(
+  deps: SandboxWorkSessionDeps,
   args: {
     environment: Environment;
     thread: Thread;
   },
-): ManagedReprovisionResult {
+): Promise<ManagedReprovisionResult> {
   const provisionType = args.environment.workspaceProvisionType;
   if (!args.environment.managed || provisionType === "unmanaged") {
     throw new ApiError(
@@ -578,7 +580,9 @@ export function queueManagedEnvironmentReprovision(
     args.thread.projectId,
     args.environment.hostId,
   );
-  requireConnectedHostSession(deps, args.environment.hostId);
+  await ensureHostSessionReadyForWork(deps, {
+    hostId: args.environment.hostId,
+  });
 
   const targetPath =
     args.environment.path ??
