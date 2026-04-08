@@ -3975,6 +3975,7 @@ describe("toViewMessages replay coverage", () => {
     if (projected[0]?.kind === "assistant-text") {
       expect(projected[0].text).toBe("Visible manager update");
       expect(projected[0].turnId).toBe("turn-1");
+      expect(projected[0].isManagerUserMessage).toBe(true);
     }
   });
 

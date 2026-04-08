@@ -46,6 +46,8 @@ export interface ViewAssistantTextMessage extends ViewMessageBase {
   kind: "assistant-text";
   text: string;
   status: Extract<ViewMessageStatus, "streaming" | "completed">;
+  /** True when this message was delivered via the manager's `message_user` tool. */
+  isManagerUserMessage?: boolean;
 }
 
 export type ViewToolParsedIntent =
