@@ -58,4 +58,18 @@ describe("project attachments", () => {
       },
     );
   });
+
+  it("rejects attachment paths that resolve to the attachment directory itself", async () => {
+    const dataDir = await makeTempDir();
+
+    await expect(readAttachment(dataDir, "proj_test", ".")).rejects.toMatchObject(
+      {
+        status: 400,
+        body: expect.objectContaining({
+          code: "invalid_request",
+          message: "Attachment path must refer to a file inside the project directory",
+        }),
+      },
+    );
+  });
 });

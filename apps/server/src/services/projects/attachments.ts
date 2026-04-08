@@ -37,9 +37,17 @@ function resolveAttachmentPath(
   const resolvedPath = resolve(resolvedAttachmentDir, normalizedRelativePath);
   const relativePathFromDir = relative(resolvedAttachmentDir, resolvedPath);
 
+  if (relativePathFromDir === "") {
+    throw new ApiError(
+      400,
+      "invalid_request",
+      "Attachment path must refer to a file inside the project directory",
+    );
+  }
+
   if (
-    relativePathFromDir === "" ||
-    (!relativePathFromDir.startsWith("..") && !isAbsolute(relativePathFromDir))
+    !relativePathFromDir.startsWith("..") &&
+    !isAbsolute(relativePathFromDir)
   ) {
     return resolvedPath;
   }
