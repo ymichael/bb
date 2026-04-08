@@ -66,6 +66,18 @@ interface ProjectPathDialogContentProps {
   onSubmit: (target: ProjectPathDialogTarget, path: string) => void
 }
 
+interface NavigatorUserAgentData {
+  platform?: string
+}
+
+interface NavigatorWithUserAgentData extends Navigator {
+  userAgentData?: NavigatorUserAgentData
+}
+
+function getNavigatorPlatform(navigatorValue: NavigatorWithUserAgentData): string {
+  return navigatorValue.userAgentData?.platform ?? navigatorValue.platform
+}
+
 function ProjectPathDialogContent({
   target,
   pending,
@@ -81,7 +93,7 @@ function ProjectPathDialogContent({
   const showNativePickerButton = (
     pickFolder != null
     && typeof navigator !== "undefined"
-    && /Mac/i.test(navigator.platform)
+    && /Mac/i.test(getNavigatorPlatform(navigator))
   )
 
   useEffect(() => {

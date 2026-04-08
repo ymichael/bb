@@ -36,7 +36,9 @@ import { useThread } from "@/hooks/queries/thread-queries"
 import { useDialogState } from "@/hooks/useDialogState"
 import { getThreadDisplayTitle } from "@/lib/thread-title"
 import { HireManagerModal } from "@/components/HireManagerModal"
+import { ProjectPathDialog } from "@/components/project/ProjectPathDialog"
 import { createLocalStorageSyncStorage } from "@/lib/browser-storage"
+import type { QuickCreateProjectController } from "@/hooks/useQuickCreateProject"
 
 const SIDEBAR_WIDTH_KEY = "bb.sidebar.width"
 const SIDEBAR_MIN_WIDTH = 240
@@ -220,7 +222,12 @@ function AppHeader({
   )
 }
 
-export function AppLayout({ children }: { children: ReactNode }) {
+interface AppLayoutProps {
+  children: ReactNode
+  quickCreateProject: QuickCreateProjectController
+}
+
+export function AppLayout({ children, quickCreateProject }: AppLayoutProps) {
   const location = useLocation()
   const navigate = useNavigate()
   const { data: projects, isLoading: projectsLoading } = useProjects()
@@ -402,6 +409,10 @@ export function AppLayout({ children }: { children: ReactNode }) {
       <AppSidebar
         onResizeMouseDown={handleResizeMouseDown}
         isResizing={isSidebarResizing}
+        onNewProject={
+          quickCreateProject.isAvailable ? quickCreateProject.openCreateDialog : undefined
+        }
+        isCreatingProject={quickCreateProject.isCreating}
       />
       <SidebarInset>
         <div className="relative flex h-[100dvh] min-w-0 w-full flex-col">
@@ -429,6 +440,13 @@ export function AppLayout({ children }: { children: ReactNode }) {
         </div>
       </SidebarInset>
     </SidebarProvider>
+    <ProjectPathDialog
+      target={quickCreateProject.projectPathDialog.target}
+      pending={quickCreateProject.isCreating}
+      pickFolder={quickCreateProject.pickFolder}
+      onOpenChange={quickCreateProject.projectPathDialog.onOpenChange}
+      onSubmit={quickCreateProject.submitProjectPath}
+    />
     {hireManagerModal.target ? (
       <HireManagerModal
         projectId={hireManagerModal.target}

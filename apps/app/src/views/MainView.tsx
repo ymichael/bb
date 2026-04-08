@@ -2,19 +2,19 @@ import { Navigate } from "react-router-dom";
 import { useProjects } from "../hooks/queries/project-queries";
 import { Button } from "@/components/ui/button";
 import { PageShell } from "@/components/layout/PageShell";
-import { ProjectPathDialog } from "@/components/project/ProjectPathDialog";
-import { useQuickCreateProject } from "@/hooks/useQuickCreateProject";
 
-export function MainView() {
+interface MainViewProps {
+  canCreateProject: boolean;
+  isCreatingProject: boolean;
+  onNewProject: () => void;
+}
+
+export function MainView({
+  canCreateProject,
+  isCreatingProject,
+  onNewProject,
+}: MainViewProps) {
   const { data: projects, isLoading: projectsLoading } = useProjects();
-  const {
-    openCreateDialog,
-    pickFolder,
-    projectPathDialog,
-    submitProjectPath,
-    isCreating,
-    isAvailable: canCreateProject,
-  } = useQuickCreateProject();
   const hasProjects = (projects?.length ?? 0) > 0;
 
   if (projectsLoading) {
@@ -34,19 +34,12 @@ export function MainView() {
           </p>
           <Button
             onClick={() => {
-              openCreateDialog();
+              onNewProject();
             }}
-            disabled={isCreating || !canCreateProject}
+            disabled={isCreatingProject || !canCreateProject}
           >
-            {isCreating ? "Creating..." : !canCreateProject ? "No local daemon" : "New project"}
+            {isCreatingProject ? "Creating..." : !canCreateProject ? "No local daemon" : "New project"}
           </Button>
-          <ProjectPathDialog
-            target={projectPathDialog.target}
-            pending={isCreating}
-            pickFolder={pickFolder}
-            onOpenChange={projectPathDialog.onOpenChange}
-            onSubmit={submitProjectPath}
-          />
         </div>
       </PageShell>
     );

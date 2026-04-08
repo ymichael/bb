@@ -5,6 +5,23 @@ import { useDialogState } from "@/hooks/useDialogState"
 import { useHostDaemon } from "@/hooks/useHostDaemon"
 import type { ProjectPathDialogTarget } from "@/components/project/ProjectPathDialog"
 
+export type ProjectPathPicker = (() => Promise<string | null>) | null
+
+export interface QuickCreateProjectDialogState {
+  isOpen: boolean
+  onOpenChange: (open: boolean) => void
+  target: ProjectPathDialogTarget | null
+}
+
+export interface QuickCreateProjectController {
+  isAvailable: boolean
+  isCreating: boolean
+  openCreateDialog: () => void
+  pickFolder: ProjectPathPicker
+  projectPathDialog: QuickCreateProjectDialogState
+  submitProjectPath: (target: ProjectPathDialogTarget, path: string) => void
+}
+
 export function useQuickCreateProject() {
   const { mutate, isPending } = useCreateProject()
   const { localHostId, pickFolder } = useHostDaemon()

@@ -6,16 +6,27 @@ import { ProjectArchivedThreadsView } from "./views/ProjectArchivedThreadsView";
 import { AppSettingsView } from "./views/AppSettingsView";
 import { ProjectSettingsView } from "./views/ProjectSettingsView";
 import { ThreadDetailView } from "./views/ThreadDetailView";
+import { useQuickCreateProject } from "./hooks/useQuickCreateProject";
 import { useWebSocket } from "./hooks/useWebSocket";
 
 export function App() {
   // Connect WebSocket for real-time invalidation
   useWebSocket();
+  const quickCreateProject = useQuickCreateProject();
 
   return (
-    <AppLayout>
+    <AppLayout quickCreateProject={quickCreateProject}>
       <Routes>
-        <Route path="/" element={<MainView />} />
+        <Route
+          path="/"
+          element={
+            <MainView
+              canCreateProject={quickCreateProject.isAvailable}
+              isCreatingProject={quickCreateProject.isCreating}
+              onNewProject={quickCreateProject.openCreateDialog}
+            />
+          }
+        />
         <Route path="/settings" element={<AppSettingsView />} />
         <Route path="/projects/:projectId" element={<ProjectMainView />} />
         <Route

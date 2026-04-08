@@ -11,26 +11,23 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar"
 import { ProjectList } from "./ProjectList"
-import { useQuickCreateProject } from "@/hooks/useQuickCreateProject"
 import { setPreferredTheme, usePreferredTheme } from "@/hooks/useTheme"
-import { ProjectPathDialog } from "@/components/project/ProjectPathDialog"
 
 interface AppSidebarProps {
   onResizeMouseDown: (event: React.MouseEvent<HTMLDivElement>) => void
   isResizing: boolean
+  onNewProject?: () => void
+  isCreatingProject?: boolean
 }
 
-export function AppSidebar({ onResizeMouseDown, isResizing }: AppSidebarProps) {
+export function AppSidebar({
+  onResizeMouseDown,
+  isResizing,
+  onNewProject,
+  isCreatingProject = false,
+}: AppSidebarProps) {
   const location = useLocation()
   const { isMobile, setOpenMobile } = useSidebar()
-  const {
-    openCreateDialog,
-    pickFolder,
-    projectPathDialog,
-    submitProjectPath,
-    isCreating,
-    isAvailable: canCreateProject,
-  } = useQuickCreateProject()
   const theme = usePreferredTheme()
 
   const closeOnMobile = () => {
@@ -50,10 +47,10 @@ export function AppSidebar({ onResizeMouseDown, isResizing }: AppSidebarProps) {
       <Sidebar>
         <SidebarContent>
           <ProjectList
-            onNewProject={canCreateProject ? openCreateDialog : undefined}
+            onNewProject={onNewProject}
             onProjectSelect={closeOnMobile}
             selectedProjectId={selectedProjectId}
-            isCreatingProject={isCreating}
+            isCreatingProject={isCreatingProject}
           />
         </SidebarContent>
         <SidebarFooter>
@@ -92,13 +89,6 @@ export function AppSidebar({ onResizeMouseDown, isResizing }: AppSidebarProps) {
           onMouseDown={onResizeMouseDown}
         />
       </Sidebar>
-      <ProjectPathDialog
-        target={projectPathDialog.target}
-        pending={isCreating}
-        pickFolder={pickFolder}
-        onOpenChange={projectPathDialog.onOpenChange}
-        onSubmit={submitProjectPath}
-      />
     </>
   )
 }
