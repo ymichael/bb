@@ -132,9 +132,10 @@ export function ThreadTimelineRows({
     <>
       {threadDetailRows.map((entry, entryIndex) => {
         const isLastRow = entryIndex === threadDetailRows.length - 1;
-        const isActive = threadStatus === "active";
+        const isProvisioningOrActive =
+          threadStatus === "active" || threadStatus === "provisioning";
         const preferOngoingLabels =
-          isActive &&
+          isProvisioningOrActive &&
           isLastRow &&
           shouldPreferOngoingLabelsForRow(entry, latestActivityRowId);
         const isLastError =
@@ -142,7 +143,8 @@ export function ThreadTimelineRows({
           threadStatus === "error" &&
           entry.kind === "message" &&
           entry.message.kind === "error";
-        const shouldAutoExpand = (isLastRow && isActive) || isLastError;
+        const shouldAutoExpand =
+          (isLastRow && isProvisioningOrActive) || isLastError;
 
         return (
           <div key={entry.id} data-thread-row-id={entry.id} className="pt-2">
