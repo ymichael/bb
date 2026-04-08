@@ -17,7 +17,7 @@ interface ManagerHireCommandOptions {
   project?: string;
   name?: string;
   host?: string;
-  provider: string;
+  provider?: string;
   model?: string;
   reasoningLevel?: string;
 }
@@ -42,14 +42,17 @@ export function registerManagerCommands(program: Command, getUrl: () => string):
   manager
     .command("hire [projectId]")
     .description(
-      "Hire a new manager for a project; omitted execution flags inherit remembered manager defaults",
+      "Hire a new manager for a project; omitted provider and execution flags inherit remembered manager defaults",
     )
     .option("--project <id>", "Project ID (defaults to BB_PROJECT_ID)")
     .option("--name <name>", "Manager name")
-    .requiredOption("--provider <id>", "Provider ID for the manager (e.g. claude-code, codex)")
+    .option(
+      "--provider <id>",
+      "Provider ID for the manager. Omit to use the project's remembered manager provider choice",
+    )
     .option(
       "--model <model>",
-      "Model ID for the manager. Omit to use the project's remembered manager default for the selected provider",
+      "Model ID for the manager. Omit to use the project's remembered manager default for the resolved provider",
     )
     .option("--reasoning-level <level>", "Reasoning level (low, medium, high, xhigh)")
     .option("--host <id>", "Host ID (defaults to local host)")
@@ -78,7 +81,7 @@ export function registerManagerCommands(program: Command, getUrl: () => string):
           json: {
             origin: "cli",
             ...(opts.name ? { name: opts.name } : {}),
-            providerId: opts.provider,
+            ...(opts.provider ? { providerId: opts.provider } : {}),
             ...(opts.model ? { model: opts.model } : {}),
             environment: { type: "host", hostId },
             ...(reasoningLevel ? { reasoningLevel } : {}),

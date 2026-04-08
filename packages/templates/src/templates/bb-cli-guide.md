@@ -32,7 +32,7 @@ bb thread spawn --project <project-id> --environment <environment-id> --parent-t
 
 The `--parent-thread` flag makes the new thread a managed child of the specified manager.
 The `--environment` flag attaches the new thread to an existing environment (e.g., another thread's worktree). This is useful for pipeline workflows where a review thread needs to see a coding thread's files.
-The `--model` flag is optional. When omitted, the server uses the project's remembered execution defaults for the selected provider.
+The `--provider` and `--model` flags are optional. When omitted, the server uses the project's remembered provider choice and execution defaults for standard threads.
 Use `bb provider list` to discover valid providers and `bb provider models <provider-id>` to discover valid model IDs before spawning if you are unsure.
 
 Inspecting:
@@ -93,13 +93,13 @@ bb environment promote-status --project <project-id>  # Show the active primary-
 ## Managers
 
 ```
-bb manager hire <project-id> --provider <provider-id> [--model <model-id>]
+bb manager hire <project-id> [--provider <provider-id>] [--model <model-id>]
 bb manager list [projectId]            # List managers for a project
 bb manager status <manager-id>         # Show manager status and managed threads
 bb manager delete <manager-id>         # Delete a manager permanently
 ```
 
-The `--model` flag is optional. When omitted, the server uses the project's remembered manager defaults for the selected provider.
+The `--provider` and `--model` flags are optional. When omitted, the server uses the project's remembered manager provider choice and manager defaults.
 
 Use `bb thread` commands for other manager interactions:
 

@@ -588,7 +588,7 @@ describe("CLI command output contracts", () => {
     expect(collectLogLines(vi.mocked(console.log))).toContain("Manager hired: thread-manager-2");
   });
 
-  it("bb manager hire omits model when the user relies on remembered manager defaults", async () => {
+  it("bb manager hire omits provider and model when the user relies on remembered manager defaults", async () => {
     const post = vi.fn(async () => ({
       id: "thread-manager-3",
       projectId: "project-123",
@@ -619,8 +619,6 @@ describe("CLI command output contracts", () => {
         "project-123",
         "--name",
         "Manager",
-        "--provider",
-        "claude-code",
       ],
       (program) =>
         registerManagerCommands(program, () => "http://server"),
@@ -632,7 +630,6 @@ describe("CLI command output contracts", () => {
         environment: { type: "host", hostId: "host-test-001" },
         name: "Manager",
         origin: "cli",
-        providerId: "claude-code",
       },
     });
     expect(collectLogLines(vi.mocked(console.log))).toContain("Manager hired: thread-manager-3");
@@ -869,7 +866,7 @@ describe("CLI command output contracts", () => {
     );
   });
 
-  it("bb thread spawn omits model when the user relies on project defaults", async () => {
+  it("bb thread spawn omits provider and model when the user relies on project defaults", async () => {
     process.env.BB_PROJECT_ID = "proj-1";
     const thread: Thread = makeThread({
       id: "thread-1",
@@ -891,7 +888,7 @@ describe("CLI command output contracts", () => {
       },
     }));
 
-    await runCommand(["thread", "spawn", "--prompt", "hello", "--provider", "codex"], (program) =>
+    await runCommand(["thread", "spawn", "--prompt", "hello"], (program) =>
       registerThreadCommands(program, () => "http://server"),
     );
 
@@ -899,7 +896,6 @@ describe("CLI command output contracts", () => {
       json: {
         origin: "cli",
         projectId: "proj-1",
-        providerId: "codex",
         input: [{ type: "text", text: "hello" }],
         environment: { type: "host", hostId: "host-test-001", workspace: { type: "unmanaged", path: null } },
       },
@@ -1178,7 +1174,7 @@ describe("CLI command output contracts", () => {
     process.env.BB_PROJECT_ID = "proj-1";
     const post = vi.fn(async () => {
       throw new Error(
-        "HTTP 400: Model is required when project proj-1 has no stored execution defaults for provider codex and thread type standard",
+        "HTTP 400: Provider is required when project proj-1 has no stored execution defaults for thread type standard",
       );
     });
     createClientMock.mockReturnValue(asServerClient({
@@ -1192,13 +1188,13 @@ describe("CLI command output contracts", () => {
     }));
 
     await expect(
-      runCommand(["thread", "spawn", "--prompt", "hello", "--provider", "codex"], (program) =>
+      runCommand(["thread", "spawn", "--prompt", "hello"], (program) =>
         registerThreadCommands(program, () => "http://server"),
       ),
     ).rejects.toThrow("process.exit:1");
 
     expect(collectLogLines(vi.mocked(console.error))).toContain(
-      "Error: Failed to create thread: HTTP 400: Model is required when project proj-1 has no stored execution defaults for provider codex and thread type standard",
+      "Error: Failed to create thread: HTTP 400: Provider is required when project proj-1 has no stored execution defaults for thread type standard",
     );
   });
 
