@@ -11,7 +11,7 @@ export interface PortableSpawnRequest {
   stdio?: StdioOptions;
 }
 
-export interface PortableChildProcess extends ChildProcess {}
+export type PortableChildProcess = ChildProcess
 
 export interface PortablePipedSpawnRequest {
   command: string;
