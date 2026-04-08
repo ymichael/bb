@@ -5,6 +5,7 @@ import { z } from "zod";
  *  can return additional route-specific values without widening this enum. */
 export const domainErrorCodeSchema = z.enum([
   "invalid_request",
+  "awaiting_user_interaction",
   "thread_not_found",
   "project_not_found",
   "thread_archived",

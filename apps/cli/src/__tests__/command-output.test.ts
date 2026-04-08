@@ -1,6 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Command } from "commander";
-import { buildThreadEventRow, type Environment, type Thread } from "@bb/domain";
+import {
+  buildThreadEventRow,
+  type Environment,
+  type PendingInteraction,
+  type Thread,
+} from "@bb/domain";
 
 const readlineState = vi.hoisted(() => ({
   question: vi.fn(),
@@ -74,6 +79,38 @@ function makeEnvironment(
     status: "ready",
     createdAt: Date.now(),
     updatedAt: Date.now(),
+    ...overrides,
+  };
+}
+
+function makePendingInteraction(
+  overrides: Partial<PendingInteraction> & {
+    id: string;
+    providerId: string;
+    providerRequestId: string;
+    providerRequestMethod: string;
+    providerThreadId: string;
+    threadId: string;
+    turnId: string;
+  },
+): PendingInteraction {
+  return {
+    createdAt: Date.now(),
+    payload: {
+      kind: "command_approval",
+      itemId: "item-1",
+      approvalId: null,
+      reason: "Approve command",
+      command: "git push",
+      cwd: "/tmp/project",
+      commandActions: [],
+      requestedPermissions: null,
+      availableDecisions: ["accept", "accept_for_session", "decline", "cancel"],
+    },
+    resolution: null,
+    resolvedAt: null,
+    status: "pending",
+    statusReason: null,
     ...overrides,
   };
 }
@@ -2451,5 +2488,177 @@ describe("CLI JSON output contracts", () => {
     expect(JSON.parse(String(vi.mocked(console.log).mock.calls[0]?.[0]))).toEqual({
       output: "FINAL",
     });
+  });
+
+  it("bb thread interactions list renders the shared borderless table", async () => {
+    const listInteractions = vi.fn(async () => [
+      makePendingInteraction({
+        id: "int-1",
+        providerId: "codex",
+        providerRequestId: "request-1",
+        providerRequestMethod: "item/commandExecution/requestApproval",
+        providerThreadId: "provider-thread-1",
+        threadId: "thread-1",
+        turnId: "turn-1",
+      }),
+    ]);
+    createClientMock.mockReturnValue(asServerClient({
+      api: {
+        v1: {
+          threads: {
+            ":id": {
+              interactions: {
+                $get: listInteractions,
+              },
+            },
+          },
+        },
+      },
+    }));
+
+    await runCommand(["thread", "interactions", "list", "thread-1"], (program) =>
+      registerThreadCommands(program, () => "http://server"),
+    );
+
+    expect(listInteractions).toHaveBeenCalledWith({
+      param: { id: "thread-1" },
+    });
+    const lines = collectLogPayloads(vi.mocked(console.log));
+    expect(lines).toHaveLength(3);
+    expect(lines[0]).toBe("");
+    expect(lines[1]).toContain("ID");
+    expect(lines[1]).toContain("Kind");
+    expect(lines[1]).toContain("Status");
+    expect(lines[1]).toContain("Summary");
+    expect(lines[1]).toContain("int-1");
+    expect(lines[1]).toContain("command");
+    expect(lines[1]).toContain("pending");
+    expect(lines[1]).toContain("git push");
+    expect(lines[2]).toBe("");
+  });
+
+  it("bb thread interactions show prints interaction details", async () => {
+    process.env.BB_THREAD_ID = "thread-show-interaction";
+    const getInteraction = vi.fn(async () =>
+      makePendingInteraction({
+        id: "int-show",
+        providerId: "codex",
+        providerRequestId: "request-show",
+        providerRequestMethod: "item/commandExecution/requestApproval",
+        providerThreadId: "provider-thread-show",
+        threadId: "thread-show-interaction",
+        turnId: "turn-show",
+      }),
+    );
+    createClientMock.mockReturnValue(asServerClient({
+      api: {
+        v1: {
+          threads: {
+            ":id": {
+              interactions: {
+                ":interactionId": {
+                  $get: getInteraction,
+                },
+              },
+            },
+          },
+        },
+      },
+    }));
+
+    await runCommand(["thread", "interactions", "show", "int-show"], (program) =>
+      registerThreadCommands(program, () => "http://server"),
+    );
+
+    expect(getInteraction).toHaveBeenCalledWith({
+      param: {
+        id: "thread-show-interaction",
+        interactionId: "int-show",
+      },
+    });
+    expect(collectLogLines(vi.mocked(console.error))).toEqual([
+      "Thread thread-show-interaction (from BB_THREAD_ID)",
+    ]);
+    const lines = collectLogLines(vi.mocked(console.log));
+    expect(lines.slice(0, 4)).toEqual([
+      "Interaction: int-show",
+      "  Thread: thread-show-interaction",
+      "  Kind: command",
+      "  Status: pending",
+    ]);
+    expect(lines[4]).toMatch(/^  Created: /);
+    expect(lines.slice(5)).toEqual([
+      "  Command: git push",
+      "  Cwd: /tmp/project",
+      "  Prompt: Approve command",
+      "  Decisions: accept, accept_for_session, decline, cancel",
+    ]);
+  });
+
+  it("bb thread interactions approve resolves command approvals for the session", async () => {
+    const getInteraction = vi.fn(async () =>
+      makePendingInteraction({
+        id: "int-approve",
+        providerId: "codex",
+        providerRequestId: "request-approve",
+        providerRequestMethod: "item/commandExecution/requestApproval",
+        providerThreadId: "provider-thread-approve",
+        threadId: "thread-approve",
+        turnId: "turn-approve",
+      }),
+    );
+    const resolveInteraction = vi.fn(async () =>
+      makePendingInteraction({
+        id: "int-approve",
+        providerId: "codex",
+        providerRequestId: "request-approve",
+        providerRequestMethod: "item/commandExecution/requestApproval",
+        providerThreadId: "provider-thread-approve",
+        threadId: "thread-approve",
+        turnId: "turn-approve",
+        status: "resolved",
+        resolvedAt: Date.now(),
+        resolution: {
+          kind: "command_approval",
+          decision: "accept_for_session",
+        },
+      }),
+    );
+    createClientMock.mockReturnValue(asServerClient({
+      api: {
+        v1: {
+          threads: {
+            ":id": {
+              interactions: {
+                ":interactionId": {
+                  $get: getInteraction,
+                  resolve: {
+                    $post: resolveInteraction,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    }));
+
+    await runCommand(["thread", "interactions", "approve", "int-approve", "thread-approve"], (program) =>
+      registerThreadCommands(program, () => "http://server"),
+    );
+
+    expect(resolveInteraction).toHaveBeenCalledWith({
+      param: {
+        id: "thread-approve",
+        interactionId: "int-approve",
+      },
+      json: {
+        kind: "command_approval",
+        decision: "accept_for_session",
+      },
+    });
+    expect(collectLogLines(vi.mocked(console.log))).toEqual([
+      "Interaction int-approve approved for this session",
+    ]);
   });
 });

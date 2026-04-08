@@ -61,6 +61,7 @@ export interface AdapterOptions {
   serviceTier?: ServiceTier;
   reasoningLevel?: ReasoningLevel;
   sandboxMode?: SandboxMode;
+  approvalPolicy?: string;
   instructions?: string;
   envVars?: Record<string, string>;
 }

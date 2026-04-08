@@ -1,5 +1,6 @@
 import { Command } from "commander";
 import { registerActionsCommands } from "./actions.js";
+import { registerInteractionCommands } from "./interactions.js";
 import { registerListCommand } from "./list.js";
 import { registerShowCommand } from "./show.js";
 import { registerSpawnCommand } from "./spawn.js";
@@ -17,4 +18,5 @@ export function registerThreadCommands(
   registerListCommand(thread, getUrl);
   registerShowCommand(thread, getUrl);
   registerActionsCommands(thread, getUrl);
+  registerInteractionCommands(thread, getUrl);
 }

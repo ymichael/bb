@@ -59,6 +59,21 @@ function ensureThreadIsWritable(thread: Thread): void {
   }
 }
 
+function ensureThreadIsNotAwaitingUserInteraction(
+  deps: Pick<AppDeps, "pendingInteractions">,
+  threadId: string,
+): void {
+  if (!deps.pendingInteractions.hasPendingThreadInteraction(threadId)) {
+    return;
+  }
+
+  throw new ApiError(
+    409,
+    "awaiting_user_interaction",
+    "Thread is awaiting user interaction. Resolve the pending interaction before sending another prompt.",
+  );
+}
+
 function resolveSendMode(
   threadStatus: string,
   requestedMode: "auto" | "start" | "steer",
@@ -108,6 +123,7 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
   post("/threads/:id/send", sendMessageRequestSchema, async (context, payload) => {
     const { environment, thread } = requirePublicThreadEnvironment(deps.db, context.req.param("id"));
     ensureThreadIsWritable(thread);
+    ensureThreadIsNotAwaitingUserInteraction(deps, thread.id);
     const mode = resolveSendMode(thread.status, payload.mode);
     if (mode === "start") {
       ensureThreadCanQueueStartRequest(deps, thread);
@@ -210,6 +226,7 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
   post("/threads/:id/drafts/:draftId/send", sendDraftRequestSchema, async (context) => {
     const { thread } = requirePublicThreadEnvironment(deps.db, context.req.param("id"));
     ensureThreadIsWritable(thread);
+    ensureThreadIsNotAwaitingUserInteraction(deps, thread.id);
     const queuedMessage = await sendQueuedDraft(deps, {
       draftId: context.req.param("draftId"),
       threadId: context.req.param("id"),

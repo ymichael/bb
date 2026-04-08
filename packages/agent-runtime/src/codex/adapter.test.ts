@@ -83,6 +83,25 @@ describe("codex provider adapter", () => {
     });
   });
 
+  it("buildCommand thread/start passes through explicit approval policy", () => {
+    const adapter = createCodexProviderAdapter();
+    const cmd = adapter.buildCommand({
+      type: "thread/start",
+      threadId: "t1",
+      input: [{ type: "text", text: "hello" }],
+      options: {
+        approvalPolicy: "on-request",
+      },
+    });
+
+    expect(cmd).toMatchObject({
+      method: "thread/start",
+      params: {
+        approvalPolicy: "on-request",
+      },
+    });
+  });
+
   it("buildCommand thread/start passes through model, service tier, env vars, instructions, and dynamic tools", () => {
     const adapter = createCodexProviderAdapter();
     const cmd = adapter.buildCommand({
@@ -209,6 +228,26 @@ describe("codex provider adapter", () => {
         threadId: "codex-1",
         input: [{ type: "text", text: "do it" }],
         approvalPolicy: "never",
+      },
+    });
+  });
+
+  it("buildCommand turn/start passes through explicit approval policy", () => {
+    const adapter = createCodexProviderAdapter();
+    const cmd = adapter.buildCommand({
+      type: "turn/start",
+      threadId: "t1",
+      providerThreadId: "codex-1",
+      input: [{ type: "text", text: "do it" }],
+      options: {
+        approvalPolicy: "on-request",
+      },
+    });
+
+    expect(cmd).toMatchObject({
+      method: "turn/start",
+      params: {
+        approvalPolicy: "on-request",
       },
     });
   });

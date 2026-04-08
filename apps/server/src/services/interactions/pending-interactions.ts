@@ -149,6 +149,13 @@ export class PendingInteractionLifecycle {
     return listPendingInteractionsByThread(this.deps.db, { threadId }).map(toPendingInteraction);
   }
 
+  listPendingThreadInteractions(threadId: string): PendingInteraction[] {
+    return listPendingInteractionsByThread(this.deps.db, {
+      threadId,
+      statuses: ["pending"],
+    }).map(toPendingInteraction);
+  }
+
   getThreadInteraction(args: {
     interactionId: string;
     threadId: string;

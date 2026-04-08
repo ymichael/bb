@@ -2,6 +2,7 @@ import path from "node:path";
 import {
   getDefaultProjectSource,
   getProject,
+  getThread,
 } from "@bb/db";
 import type {
   DynamicTool,
@@ -145,6 +146,7 @@ export async function resolveExecutionOptions(
 ): Promise<ResolvedThreadExecutionOptions> {
   const lastExecution = getLastExecutionOptions(deps, args.threadId);
   const projectExecution = args.projectDefaults ?? null;
+  const thread = getThread(deps.db, args.threadId);
   const model =
     args.requestedExecution.model ??
     lastExecution?.model ??
@@ -156,6 +158,11 @@ export async function resolveExecutionOptions(
       `Thread ${args.threadId} has no stored execution model`,
     );
   }
+
+  const approvalPolicy =
+    args.requestedExecution.approvalPolicy ??
+    lastExecution?.approvalPolicy ??
+    (thread?.providerId === "codex" ? "on-request" : undefined);
 
   return {
     model,
@@ -174,6 +181,7 @@ export async function resolveExecutionOptions(
       lastExecution?.sandboxMode ??
       projectExecution?.sandboxMode ??
       DEFAULT_SANDBOX_MODE,
+    ...(approvalPolicy ? { approvalPolicy } : {}),
     source: args.requestedExecution.source,
   };
 }

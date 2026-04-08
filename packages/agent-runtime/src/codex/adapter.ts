@@ -34,6 +34,7 @@ import type { ToolRequestUserInputResponse } from "./generated/codex-app-server/
 import type { ThreadResumeParams } from "./generated/codex-app-server/schema/v2/ThreadResumeParams.js";
 import type { ThreadStartParams } from "./generated/codex-app-server/schema/v2/ThreadStartParams.js";
 import type { UserInput as CodexUserInput } from "./generated/codex-app-server/schema/v2/UserInput.js";
+import type { AskForApproval } from "./generated/codex-app-server/schema/v2/AskForApproval.js";
 import { parseModelsResponse } from "./models.js";
 import {
   buildShellEnvironmentPolicyConfig,
@@ -72,6 +73,22 @@ function toCodexContextWindowUsage(
     modelContextWindow,
     estimated: false,
   };
+}
+
+function toCodexApprovalPolicy(
+  policy: string | undefined,
+): AskForApproval | undefined {
+  switch (policy) {
+    case undefined:
+      return undefined;
+    case "never":
+    case "on-request":
+    case "on-failure":
+    case "untrusted":
+      return policy;
+    default:
+      return undefined;
+  }
 }
 
 export type CodexEvent = CodexServerNotification;
@@ -958,7 +975,8 @@ export function createCodexProviderAdapter(
         case "thread/start": {
           const dynamicTools = toCodexDynamicTools(command.dynamicTools);
           const params: ThreadStartParams = {
-            approvalPolicy: "never",
+            approvalPolicy:
+              toCodexApprovalPolicy(command.options?.approvalPolicy) ?? "never",
             sandbox: command.options?.sandboxMode ?? "danger-full-access",
             cwd: command.cwd,
             baseInstructions: command.options?.instructions ?? "",
@@ -979,7 +997,8 @@ export function createCodexProviderAdapter(
           const dynamicTools = toCodexDynamicTools(command.dynamicTools);
           const params: ThreadResumeParams = {
             threadId: command.providerThreadId ?? command.threadId,
-            approvalPolicy: "never",
+            approvalPolicy:
+              toCodexApprovalPolicy(command.options?.approvalPolicy) ?? "never",
             sandbox: command.options?.sandboxMode ?? "danger-full-access",
             cwd: command.cwd,
             baseInstructions: command.options?.instructions ?? "",
@@ -1002,7 +1021,8 @@ export function createCodexProviderAdapter(
             params: {
               threadId: command.providerThreadId ?? command.threadId,
               input: toCodexUserInput(command.input),
-              approvalPolicy: "never",
+              approvalPolicy:
+                toCodexApprovalPolicy(command.options?.approvalPolicy) ?? "never",
               sandboxPolicy: toSandboxPolicy(command.options?.sandboxMode),
               model: command.options?.model ?? undefined,
               serviceTier: toCodexServiceTier(command.options?.serviceTier),
