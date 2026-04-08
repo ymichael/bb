@@ -33,7 +33,7 @@ describe("pi bridge model list", () => {
       if (provider === "anthropic") {
         return [
           {
-            id: "claude-sonnet-4-20250514",
+            id: "claude-sonnet-4",
             input: ["text", "image"],
             name: "Claude Sonnet 4",
             provider: "anthropic",
@@ -55,8 +55,8 @@ describe("pi bridge model list", () => {
 
     await expect(listPiBridgeModels()).resolves.toEqual([
       {
-        id: "anthropic/claude-sonnet-4-20250514",
-        model: "anthropic/claude-sonnet-4-20250514",
+        id: "anthropic/claude-sonnet-4",
+        model: "anthropic/claude-sonnet-4",
         displayName: "Claude Sonnet 4",
         description: "Anthropic reasoning, multimodal model via Pi",
         supportedReasoningEfforts: [

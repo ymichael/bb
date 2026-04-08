@@ -823,7 +823,7 @@ describe("pi provider adapter", () => {
           case "anthropic":
             return [
               {
-                id: "claude-sonnet-4-20250514",
+                id: "claude-sonnet-4",
                 name: "Claude Sonnet 4",
                 provider: "anthropic",
                 reasoning: true,
@@ -859,11 +859,11 @@ describe("pi provider adapter", () => {
     });
 
     const ids = models.map((model) => model.id);
-    expect(ids).toContain("anthropic/claude-sonnet-4-20250514");
+    expect(ids).toContain("anthropic/claude-sonnet-4");
     expect(ids).toContain("openai/codex-mini");
     expect(ids).not.toContain("google/gemini-2.5-pro");
     expect(models.find((model) => model.isDefault)?.id).toBe(
-      "anthropic/claude-sonnet-4-20250514",
+      "anthropic/claude-sonnet-4",
     );
   });
 
