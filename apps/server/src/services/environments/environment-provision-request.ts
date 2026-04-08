@@ -18,7 +18,7 @@ export type SandboxHostEnvironmentProvisionRequest = z.infer<
   typeof sandboxHostEnvironmentProvisionRequestSchema
 >;
 
-export const wrappedEnvironmentProvisionRequestSchema = z.discriminatedUnion(
+export const environmentProvisionRequestSchema = z.discriminatedUnion(
   "mode",
   [
     directEnvironmentProvisionRequestSchema,
@@ -29,11 +29,6 @@ export const wrappedEnvironmentProvisionRequestSchema = z.discriminatedUnion(
 export type EnvironmentProvisionRequest =
   | DirectEnvironmentProvisionRequest
   | SandboxHostEnvironmentProvisionRequest;
-
-export const environmentProvisionRequestSchema = z.union([
-  environmentProvisionCommandSchema,
-  wrappedEnvironmentProvisionRequestSchema,
-]);
 
 export function buildDirectEnvironmentProvisionRequest(
   command: typeof environmentProvisionCommandSchema._type,
@@ -53,14 +48,4 @@ export function buildSandboxHostEnvironmentProvisionRequest(args: {
     sandboxType: args.sandboxType,
     command: args.command,
   };
-}
-
-export function normalizeEnvironmentProvisionRequest(
-  payload: z.infer<typeof environmentProvisionRequestSchema>,
-): EnvironmentProvisionRequest {
-  if ("type" in payload) {
-    return buildDirectEnvironmentProvisionRequest(payload);
-  }
-
-  return payload;
 }

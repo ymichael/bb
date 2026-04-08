@@ -7,69 +7,81 @@ import {
 import type { SandboxHostProgressCallbacks } from "@bb/sandbox-host";
 import type { AppDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
+import { createAsyncDeduper } from "../lib/async-deduper.js";
 import { requireReachablePublicServerUrl } from "./public-server-url.js";
 import { createSandboxBackendForId } from "./sandbox-backends.js";
 import { requireSandboxBackendForHost } from "./sandbox-backends.js";
 
 const DEFAULT_SESSION_WAIT_TIMEOUT_MS = 60_000;
-
-interface HostDestroyDeduper {
-  run(hostId: string, destroy: () => Promise<void>): Promise<void>;
-}
-
-interface HostReadyDeduper {
-  run<TValue>(hostId: string, ensure: () => Promise<TValue>): Promise<TValue>;
-}
+const hostDestroyDeduper = createAsyncDeduper<string, void>();
+const hostReadyDeduper = createAsyncDeduper<string, void>();
+const pendingReadyProgressCallbacks = new Map<
+  string,
+  Set<SandboxHostProgressCallbacks>
+>();
 
 export interface WaitForHostSessionOptions {
   timeoutMs?: number;
 }
 
-function createHostDestroyDeduper(): HostDestroyDeduper {
-  const pendingHostDestroys = new Map<string, Promise<void>>();
+function registerPendingReadyProgressCallbacks(
+  hostId: string,
+  progressCallbacks: SandboxHostProgressCallbacks | undefined,
+): () => void {
+  if (!progressCallbacks) {
+    return () => undefined;
+  }
 
-  return {
-    run(hostId: string, destroy: () => Promise<void>): Promise<void> {
-      const pendingDestroy = pendingHostDestroys.get(hostId);
-      if (pendingDestroy) {
-        return pendingDestroy;
-      }
+  let callbacksForHost = pendingReadyProgressCallbacks.get(hostId);
+  if (!callbacksForHost) {
+    callbacksForHost = new Set<SandboxHostProgressCallbacks>();
+    pendingReadyProgressCallbacks.set(hostId, callbacksForHost);
+  }
+  callbacksForHost.add(progressCallbacks);
 
-      const destroyPromise = destroy().finally(() => {
-        if (pendingHostDestroys.get(hostId) === destroyPromise) {
-          pendingHostDestroys.delete(hostId);
-        }
-      });
-      pendingHostDestroys.set(hostId, destroyPromise);
-      return destroyPromise;
-    },
+  return () => {
+    const registeredCallbacks = pendingReadyProgressCallbacks.get(hostId);
+    if (!registeredCallbacks) {
+      return;
+    }
+
+    registeredCallbacks.delete(progressCallbacks);
+    if (registeredCallbacks.size === 0) {
+      pendingReadyProgressCallbacks.delete(hostId);
+    }
   };
 }
 
-const hostDestroyDeduper = createHostDestroyDeduper();
+function notifyPendingReadyProgressCallbacks(
+  hostId: string,
+  notify: (callbacks: SandboxHostProgressCallbacks) => void,
+): void {
+  const callbacksForHost = pendingReadyProgressCallbacks.get(hostId);
+  if (!callbacksForHost) {
+    return;
+  }
 
-function createHostReadyDeduper(): HostReadyDeduper {
-  const pendingReadyPromises = new Map<string, Promise<unknown>>();
+  for (const callbacks of callbacksForHost) {
+    notify(callbacks);
+  }
+}
 
+function createPendingReadyProgressFanout(
+  hostId: string,
+): SandboxHostProgressCallbacks {
   return {
-    run<TValue>(hostId: string, ensure: () => Promise<TValue>): Promise<TValue> {
-      const pendingReady = pendingReadyPromises.get(hostId);
-      if (pendingReady) {
-        return pendingReady as Promise<TValue>;
-      }
-
-      const readyPromise = ensure().finally(() => {
-        if (pendingReadyPromises.get(hostId) === readyPromise) {
-          pendingReadyPromises.delete(hostId);
-        }
+    onProgress(event) {
+      notifyPendingReadyProgressCallbacks(hostId, (callbacks) => {
+        callbacks.onProgress?.(event);
       });
-      pendingReadyPromises.set(hostId, readyPromise);
-      return readyPromise;
+    },
+    onSandboxCreated(args) {
+      notifyPendingReadyProgressCallbacks(hostId, (callbacks) => {
+        callbacks.onSandboxCreated?.(args);
+      });
     },
   };
 }
-
-const hostReadyDeduper = createHostReadyDeduper();
 
 export async function waitForHostSession(
   deps: Pick<AppDeps, "db" | "hub">,
@@ -163,57 +175,67 @@ export async function ensureSandboxHostSessionReady(
     sandboxType: string;
   },
 ) {
-  return hostReadyDeduper.run(args.hostId, async () => {
-    const host = getHost(deps.db, args.hostId);
-    if (!host || host.destroyedAt !== null) {
-      throw new ApiError(404, "host_not_found", "Host not found");
-    }
+  const unregisterProgressCallbacks = registerPendingReadyProgressCallbacks(
+    args.hostId,
+    args.progressCallbacks,
+  );
+  const progressFanout = createPendingReadyProgressFanout(args.hostId);
 
-    const cachedHost = deps.sandboxRegistry.get(args.hostId);
-    if (!cachedHost) {
-      const sandboxBackend = createSandboxBackendForId(args.sandboxType);
-      const serverUrl = requireReachablePublicServerUrl(deps.config);
+  try {
+    await hostReadyDeduper.run(args.hostId, async () => {
+      const host = getHost(deps.db, args.hostId);
+      if (!host || host.destroyedAt !== null) {
+        throw new ApiError(404, "host_not_found", "Host not found");
+      }
 
-      const sandboxHost =
-        host.externalId
-          ? await sandboxBackend.resumeHost({
-              config: deps.config,
-              externalId: host.externalId,
-              hostId: host.id,
-              hostName: host.name,
-              progressCallbacks: args.progressCallbacks,
-              serverUrl,
-            })
-          : await sandboxBackend.provisionHost({
-              config: deps.config,
-              enrollKey: (
-                await deps.machineAuth.issueHostEnrollKey({
-                  hostId: host.id,
-                  hostType: "ephemeral",
-                })
-              ).key,
-              hostId: host.id,
-              hostName: host.name,
-              progressCallbacks: {
-                ...args.progressCallbacks,
-                onSandboxCreated: ({ externalId }) => {
-                  updateHost(deps.db, deps.hub, host.id, {
-                    externalId,
-                  });
-                  args.progressCallbacks?.onSandboxCreated?.({
-                    externalId,
-                  });
+      const cachedHost = deps.sandboxRegistry.get(args.hostId);
+      if (!cachedHost) {
+        const sandboxBackend = createSandboxBackendForId(args.sandboxType);
+        const serverUrl = requireReachablePublicServerUrl(deps.config);
+
+        const sandboxHost =
+          host.externalId
+            ? await sandboxBackend.resumeHost({
+                config: deps.config,
+                externalId: host.externalId,
+                hostId: host.id,
+                hostName: host.name,
+                progressCallbacks: progressFanout,
+                serverUrl,
+              })
+            : await sandboxBackend.provisionHost({
+                config: deps.config,
+                enrollKey: (
+                  await deps.machineAuth.issueHostEnrollKey({
+                    hostId: host.id,
+                    hostType: "ephemeral",
+                  })
+                ).key,
+                hostId: host.id,
+                hostName: host.name,
+                progressCallbacks: {
+                  ...progressFanout,
+                  onSandboxCreated: ({ externalId }) => {
+                    updateHost(deps.db, deps.hub, host.id, {
+                      externalId,
+                    });
+                    progressFanout.onSandboxCreated?.({
+                      externalId,
+                    });
+                  },
                 },
-              },
-              serverUrl,
-            });
+                serverUrl,
+              });
 
-      updateHost(deps.db, deps.hub, host.id, {
-        externalId: sandboxHost.externalId,
-      });
-      deps.sandboxRegistry.set(host.id, sandboxHost);
-    }
+        updateHost(deps.db, deps.hub, host.id, {
+          externalId: sandboxHost.externalId,
+        });
+        deps.sandboxRegistry.set(host.id, sandboxHost);
+      }
 
-    await waitForHostSession(deps, host.id);
-  });
+      await waitForHostSession(deps, host.id);
+    });
+  } finally {
+    unregisterProgressCallbacks();
+  }
 }

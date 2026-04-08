@@ -44,10 +44,10 @@ import {
 import {
   buildDirectEnvironmentProvisionRequest,
   environmentProvisionRequestSchema,
-  normalizeEnvironmentProvisionRequest,
   type EnvironmentProvisionRequest,
   type SandboxHostEnvironmentProvisionRequest,
 } from "./environment-provision-request.js";
+import { createAsyncDeduper } from "../lib/async-deduper.js";
 import { requireConnectedHostSession } from "../lib/entity-lookup.js";
 import { parseJsonWithSchema } from "../lib/json-parsing.js";
 import {
@@ -92,40 +92,18 @@ interface QueueEnvironmentProvisionCommandArgs {
   kind: EnvironmentProvisionOperationKind;
 }
 
-interface SandboxBootstrapDeduper {
-  run(
-    environmentId: string,
-    bootstrap: () => Promise<void>,
-  ): void;
-}
-
-function createSandboxBootstrapDeduper(): SandboxBootstrapDeduper {
-  const pendingBootstraps = new Map<string, Promise<void>>();
-
-  return {
-    run(environmentId, bootstrap) {
-      if (pendingBootstraps.has(environmentId)) {
-        return;
-      }
-
-      const pendingBootstrap = bootstrap().finally(() => {
-        if (pendingBootstraps.get(environmentId) === pendingBootstrap) {
-          pendingBootstraps.delete(environmentId);
-        }
-      });
-      pendingBootstraps.set(environmentId, pendingBootstrap);
-    },
-  };
-}
-
-const sandboxBootstrapDeduper = createSandboxBootstrapDeduper();
+type LiveEnvironmentThread = Pick<Thread, "id" | "projectId">;
+const sandboxBootstrapDeduper = createAsyncDeduper<string, void>();
 
 function listLiveEnvironmentThreads(
   deps: Pick<AppDeps, "db">,
   environmentId: string,
-) {
+): LiveEnvironmentThread[] {
   return deps.db
-    .select()
+    .select({
+      id: threads.id,
+      projectId: threads.projectId,
+    })
     .from(threads)
     .where(
       and(
@@ -142,9 +120,16 @@ function appendProvisioningEventToEnvironmentThreads(
     entries: ProvisioningTranscriptEntry[];
     environmentId: string;
     status: "completed" | "failed" | "in_progress" | "started";
+    threads?: LiveEnvironmentThread[];
   },
 ): void {
-  for (const thread of listLiveEnvironmentThreads(deps, args.environmentId)) {
+  const liveThreads =
+    args.threads
+    // Refresh the thread list for in-progress broadcasts so reuse threads that
+    // attach mid-provision receive subsequent transcript updates.
+    ?? listLiveEnvironmentThreads(deps, args.environmentId);
+
+  for (const thread of liveThreads) {
     appendProvisioningEvent(deps, {
       entries: args.entries,
       environmentId: args.environmentId,
@@ -152,6 +137,14 @@ function appendProvisioningEventToEnvironmentThreads(
       threadId: thread.id,
     });
   }
+}
+
+function assertNeverSandboxHostProgressStage(value: never): never {
+  throw new Error(`Unsupported sandbox host progress stage: ${String(value)}`);
+}
+
+function assertNeverWorkspaceProvisionType(value: never): never {
+  throw new Error(`Unsupported workspace provision type: ${String(value)}`);
 }
 
 function sandboxHostProgressEntry(
@@ -184,7 +177,7 @@ function sandboxHostProgressEntry(
       };
   }
 
-  throw new Error(`Unsupported sandbox host progress stage: ${String(event.stage)}`);
+  return assertNeverSandboxHostProgressStage(event.stage);
 }
 
 function queueEnvironmentProvisionCommand(
@@ -229,6 +222,8 @@ function toProvisioningLabel(
     case "managed-clone":
       return "Clone";
   }
+
+  return assertNeverWorkspaceProvisionType(workspaceProvisionType);
 }
 
 function getActiveProvisionOperation(
@@ -241,8 +236,9 @@ function getActiveProvisionOperation(
       kind,
     });
     if (operation && isActiveProvisionOperationState(operation.state)) {
-      return operation as EnvironmentOperationRow & {
-        kind: EnvironmentProvisionOperationKind;
+      return {
+        ...operation,
+        kind,
       };
     }
   }
@@ -456,6 +452,7 @@ async function bootstrapSandboxProvisioning(
   } catch (error) {
     const failureReason =
       error instanceof Error ? error.message : String(error);
+    const liveThreads = listLiveEnvironmentThreads(deps, args.environment.id);
 
     failEnvironmentProvisioning(deps, {
       environmentId: args.environment.id,
@@ -465,6 +462,7 @@ async function bootstrapSandboxProvisioning(
     appendProvisioningEventToEnvironmentThreads(deps, {
       environmentId: args.environment.id,
       status: "failed",
+      threads: liveThreads,
       entries: [
         {
           type: "step",
@@ -476,7 +474,7 @@ async function bootstrapSandboxProvisioning(
       ],
     });
 
-    for (const thread of listLiveEnvironmentThreads(deps, args.environment.id)) {
+    for (const thread of liveThreads) {
       appendSystemErrorEvent(deps, {
         threadId: thread.id,
         environmentId: args.environment.id,
@@ -523,15 +521,16 @@ export function advanceEnvironmentProvisioning(
     return operation.commandId;
   }
 
-  const request = normalizeEnvironmentProvisionRequest(
-    parseJsonWithSchema(
-      operation.payload,
-      environmentProvisionRequestSchema,
-    ),
+  const request = parseJsonWithSchema(
+    operation.payload,
+    environmentProvisionRequestSchema,
   );
 
   if (request.mode === "sandbox-host") {
-    sandboxBootstrapDeduper.run(environment.id, async () => {
+    // Sandbox bootstrap is intentionally fire-and-forget here: failures are
+    // handled inside bootstrapSandboxProvisioning so the request path and
+    // sweeps both converge on the same async lifecycle.
+    void sandboxBootstrapDeduper.run(environment.id, async () => {
       await bootstrapSandboxProvisioning(deps, {
         environment,
         operationKind: operation.kind,

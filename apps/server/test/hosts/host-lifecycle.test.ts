@@ -3,9 +3,11 @@ import {
   openSession,
   upsertHost,
 } from "@bb/db";
+import type { SandboxHostProgressCallbacks } from "@bb/sandbox-host";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   destroyHost,
+  ensureSandboxHostSessionReady,
   waitForHostSession,
 } from "../../src/services/hosts/host-lifecycle.js";
 import { createTestAppHarness } from "../helpers/test-app.js";
@@ -31,6 +33,11 @@ interface MockSandboxHost {
   hostId: string;
   resume: ReturnType<typeof vi.fn>;
   suspend: ReturnType<typeof vi.fn>;
+}
+
+interface ProvisionHostMockArgs {
+  hostId: string;
+  progressCallbacks?: SandboxHostProgressCallbacks;
 }
 
 function createMockSandboxHost(
@@ -330,6 +337,105 @@ describe("host lifecycle", () => {
       await Promise.all([firstDestroy, secondDestroy]);
       expect(getHost(harness.db, host.id)).toMatchObject({
         destroyedAt: expect.any(Number),
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("fans out sandbox host progress callbacks across concurrent ready calls", async () => {
+    const harness = await createTestAppHarness({
+      githubPat: "test-github-pat",
+    });
+    try {
+      const host = upsertHost(harness.db, harness.hub, {
+        id: "host-concurrent-ready",
+        name: "Concurrent Ready Host",
+        type: "ephemeral",
+      });
+      const sandboxHost = createMockSandboxHost(
+        host.id,
+        "sandbox-concurrent-ready",
+      );
+      const firstProgressEvents: string[] = [];
+      const secondProgressEvents: string[] = [];
+
+      provisionHostMock.mockImplementation(async (args: ProvisionHostMockArgs) => {
+        setTimeout(() => {
+          args.progressCallbacks?.onProgress?.({
+            stage: "host",
+            status: "started",
+          });
+        }, 10);
+        setTimeout(() => {
+          args.progressCallbacks?.onSandboxCreated?.({
+            externalId: sandboxHost.externalId,
+          });
+          args.progressCallbacks?.onProgress?.({
+            stage: "host",
+            status: "completed",
+          });
+        }, 20);
+        return sandboxHost;
+      });
+
+      setTimeout(() => {
+        openSession(harness.db, harness.hub, {
+          heartbeatIntervalMs: 5_000,
+          hostId: host.id,
+          hostName: host.name,
+          hostType: host.type,
+          instanceId: "instance-concurrent-ready",
+          leaseTimeoutMs: 30_000,
+          protocolVersion: 2,
+        });
+      }, 50);
+
+      const firstReady = ensureSandboxHostSessionReady(harness.deps, {
+        hostId: host.id,
+        progressCallbacks: {
+          onProgress: (event) => {
+            firstProgressEvents.push(`${event.stage}:${event.status}`);
+          },
+          onSandboxCreated: ({ externalId }) => {
+            firstProgressEvents.push(`created:${externalId}`);
+          },
+        },
+        sandboxType: "e2b",
+      });
+
+      await vi.advanceTimersByTimeAsync(15);
+
+      const secondReady = ensureSandboxHostSessionReady(harness.deps, {
+        hostId: host.id,
+        progressCallbacks: {
+          onProgress: (event) => {
+            secondProgressEvents.push(`${event.stage}:${event.status}`);
+          },
+          onSandboxCreated: ({ externalId }) => {
+            secondProgressEvents.push(`created:${externalId}`);
+          },
+        },
+        sandboxType: "e2b",
+      });
+
+      await vi.advanceTimersByTimeAsync(100);
+      await Promise.all([firstReady, secondReady]);
+
+      expect(provisionHostMock).toHaveBeenCalledTimes(1);
+      expect(firstProgressEvents).toEqual([
+        "host:started",
+        "created:sandbox-concurrent-ready",
+        "host:completed",
+      ]);
+      expect(secondProgressEvents).toEqual(
+        expect.arrayContaining([
+          "created:sandbox-concurrent-ready",
+          "host:completed",
+        ]),
+      );
+      expect(getHost(harness.db, host.id)).toMatchObject({
+        externalId: "sandbox-concurrent-ready",
       });
     } finally {
       await harness.cleanup();

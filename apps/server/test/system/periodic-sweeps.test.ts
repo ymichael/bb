@@ -1,5 +1,5 @@
+import { setTimeout as sleep } from "node:timers/promises";
 import { eq } from "drizzle-orm";
-import { describe, expect, it, vi } from "vitest";
 import {
   archiveThread,
   fetchCommands,
@@ -7,9 +7,12 @@ import {
   getHost,
   getThread,
   hostDaemonCommands,
+  openSession,
   transitionThreadStatus,
   upsertHost,
 } from "@bb/db";
+import type { SandboxHostProgressCallbacks } from "@bb/sandbox-host";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   upsertEnvironmentOperationRecord,
   upsertThreadOperationRecord,
@@ -21,6 +24,11 @@ import {
   runPeriodicSweeps,
   runThreadLifecycleSweep,
 } from "../../src/services/system/periodic-sweeps.js";
+import {
+  buildDirectEnvironmentProvisionRequest,
+  buildSandboxHostEnvironmentProvisionRequest,
+} from "../../src/services/environments/environment-provision-request.js";
+import { buildEnvironmentProvisionCommand } from "../../src/services/threads/thread-create-helpers.js";
 import { requestEnvironmentCleanup } from "../../src/services/environments/environment-cleanup.js";
 import { requestThreadStop } from "../../src/services/threads/thread-lifecycle.js";
 import {
@@ -35,9 +43,34 @@ import {
   waitForQueuedCommandAfter,
 } from "../helpers/commands.js";
 
+const provisionHostMock = vi.fn();
+const resumeHostMock = vi.fn();
+const resumeSandboxMock = vi.fn();
+type SandboxHostMockArgs = Array<object | string | undefined>;
+
+vi.mock("@bb/sandbox-host", () => ({
+  provisionHost: (...args: SandboxHostMockArgs) => provisionHostMock(...args),
+  resumeHost: (...args: SandboxHostMockArgs) => resumeHostMock(...args),
+  resumeSandbox: (...args: SandboxHostMockArgs) => resumeSandboxMock(...args),
+}));
+
 interface UnmanagedProvisionCommandArgs {
   environmentId: string;
   path: string;
+}
+
+interface MockSandboxHost {
+  destroy: ReturnType<typeof vi.fn>;
+  extendTimeout: ReturnType<typeof vi.fn>;
+  externalId: string;
+  hostId: string;
+  resume: ReturnType<typeof vi.fn>;
+  suspend: ReturnType<typeof vi.fn>;
+}
+
+interface ProvisionHostMockArgs {
+  hostId: string;
+  progressCallbacks?: SandboxHostProgressCallbacks;
 }
 
 interface ThreadStartCommandArgs {
@@ -86,7 +119,50 @@ function buildThreadStartCommand(
   };
 }
 
+function createMockSandboxHost(
+  hostId: string,
+  externalId = "sandbox-123",
+): MockSandboxHost {
+  return {
+    destroy: vi.fn().mockResolvedValue(undefined),
+    extendTimeout: vi.fn().mockResolvedValue(undefined),
+    externalId,
+    hostId,
+    resume: vi.fn().mockResolvedValue(undefined),
+    suspend: vi.fn().mockResolvedValue(undefined),
+  };
+}
+
+async function waitForAssertion(
+  assertion: () => void,
+  timeoutMs = 1_000,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  let lastError: unknown = null;
+
+  while (Date.now() < deadline) {
+    try {
+      assertion();
+      return;
+    } catch (error) {
+      lastError = error;
+    }
+
+    await sleep(10);
+  }
+
+  throw lastError instanceof Error
+    ? lastError
+    : new Error("Timed out waiting for assertion");
+}
+
 describe("periodic sweeps", () => {
+  beforeEach(() => {
+    provisionHostMock.mockReset();
+    resumeHostMock.mockReset();
+    resumeSandboxMock.mockReset();
+  });
+
   it("logs and continues when managed environment archive cleanup rejects", async () => {
     const harness = await createTestAppHarness();
     try {
@@ -145,6 +221,90 @@ describe("periodic sweeps", () => {
         }),
         "Managed environment archive cleanup sweep failed",
       );
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("does not restart sandbox bootstrap while a prior sweep is still waiting for the first session", async () => {
+    const harness = await createTestAppHarness({
+      githubPat: "test-github-pat",
+    });
+    try {
+      const host = upsertHost(harness.db, harness.hub, {
+        id: "host-periodic-sandbox-bootstrap",
+        name: "Periodic Sandbox Bootstrap Host",
+        type: "ephemeral",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/periodic-sandbox-bootstrap",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/periodic-sandbox-bootstrap",
+        status: "provisioning",
+      });
+
+      provisionHostMock.mockImplementation(async (args: ProvisionHostMockArgs) => {
+        args.progressCallbacks?.onSandboxCreated?.({
+          externalId: "sandbox-periodic-bootstrap",
+        });
+        return createMockSandboxHost(
+          args.hostId,
+          "sandbox-periodic-bootstrap",
+        );
+      });
+
+      upsertEnvironmentOperationRecord(harness.db, {
+        environmentId: environment.id,
+        kind: "provision",
+        payload: JSON.stringify(
+          buildSandboxHostEnvironmentProvisionRequest({
+            sandboxType: "e2b",
+            command: buildEnvironmentProvisionCommand({
+              environmentId: environment.id,
+              hostId: host.id,
+              initiator: null,
+              workspaceProvisionType: "unmanaged",
+              path: environment.path ?? "/tmp/periodic-sandbox-bootstrap",
+            }),
+          }),
+        ),
+      });
+
+      await runEnvironmentProvisioningSweep(harness.deps);
+      await waitForAssertion(() => {
+        expect(provisionHostMock).toHaveBeenCalledTimes(1);
+      });
+
+      await runEnvironmentProvisioningSweep(harness.deps);
+
+      expect(provisionHostMock).toHaveBeenCalledTimes(1);
+
+      openSession(harness.db, harness.hub, {
+        heartbeatIntervalMs: 5_000,
+        hostId: host.id,
+        hostName: host.name,
+        hostType: host.type,
+        instanceId: "instance-periodic-sandbox-bootstrap",
+        leaseTimeoutMs: 30_000,
+        protocolVersion: 2,
+      });
+
+      const queued = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "environment.provision"
+          && command.environmentId === environment.id,
+      );
+
+      expect(queued.command).toMatchObject({
+        environmentId: environment.id,
+        path: "/tmp/periodic-sandbox-bootstrap",
+        workspaceProvisionType: "unmanaged",
+      });
     } finally {
       await harness.cleanup();
     }
@@ -239,10 +399,12 @@ describe("periodic sweeps", () => {
         environmentId: environment.id,
         kind: "provision",
         payload: JSON.stringify(
-          buildUnmanagedProvisionCommand({
-            environmentId: environment.id,
-            path: "/tmp/periodic-provision",
-          }),
+          buildDirectEnvironmentProvisionRequest(
+            buildUnmanagedProvisionCommand({
+              environmentId: environment.id,
+              path: "/tmp/periodic-provision",
+            }),
+          ),
         ),
       });
 
@@ -341,10 +503,12 @@ describe("periodic sweeps", () => {
         environmentId: environment.id,
         kind: "provision",
         payload: JSON.stringify(
-          buildUnmanagedProvisionCommand({
-            environmentId: environment.id,
-            path: "/tmp/periodic-provision-expiry",
-          }),
+          buildDirectEnvironmentProvisionRequest(
+            buildUnmanagedProvisionCommand({
+              environmentId: environment.id,
+              path: "/tmp/periodic-provision-expiry",
+            }),
+          ),
         ),
       });
 
