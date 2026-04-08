@@ -8,7 +8,7 @@ import {
 } from "@bb/db";
 import type {
   AutomationAction,
-  CreateThreadRequest,
+  AutomationThreadRequest,
 } from "@bb/server-contract";
 import type { AppDeps } from "../../types.js";
 import {
@@ -43,7 +43,7 @@ function toDueAutomationCursor(automation: AutomationRow): DueAutomationCursor {
 
 function resolveAutomationHostId(
   deps: Pick<AppDeps, "db">,
-  threadRequest: Omit<CreateThreadRequest, "projectId">,
+  threadRequest: AutomationThreadRequest,
 ): string | null {
   switch (threadRequest.environment.type) {
     case "host":

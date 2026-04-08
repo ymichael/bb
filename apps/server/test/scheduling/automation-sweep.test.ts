@@ -3,9 +3,11 @@ import {
   createAutomation,
   deleteProjectSource,
   getAutomation,
+  getProjectExecutionDefaults,
   hostDaemonCommands,
   listProjectSources,
   threads,
+  upsertProjectExecutionDefaults,
 } from "@bb/db";
 import { describe, expect, it } from "vitest";
 import { sweepDueAutomations } from "../../src/services/scheduling/automation-sweep.js";
@@ -91,6 +93,73 @@ describe("automation sweep", () => {
       expect(updatedAutomation?.lastRunAt).toBeGreaterThanOrEqual(now);
       expect(updatedAutomation?.runCount).toBe(1);
       expect(updatedAutomation?.nextRunAt).toBeGreaterThan(now);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("does not overwrite project execution defaults when automation threads run", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-automation-defaults",
+      });
+      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/automation-defaults-environment",
+      });
+      const now = Date.now();
+
+      upsertProjectExecutionDefaults(harness.db, {
+        projectId: project.id,
+        providerId: "codex",
+        model: "gpt-5-mini",
+        reasoningLevel: "medium",
+        sandboxMode: "danger-full-access",
+        serviceTier: "default",
+        source: "client/thread/start",
+      });
+
+      createAutomation(harness.db, harness.hub, {
+        projectId: project.id,
+        name: "Automation defaults isolation",
+        enabled: true,
+        triggerType: "schedule",
+        triggerConfig: JSON.stringify(
+          createScheduleTrigger(createDailySchedule({ times: ["08:00"] })),
+        ),
+        action: JSON.stringify({
+          actionType: "scheduled-thread",
+          threadRequest: {
+            providerId: "codex",
+            model: "gpt-5",
+            input: [{ type: "text", text: "Run without mutating defaults" }],
+            environment: {
+              type: "reuse",
+              environmentId: environment.id,
+            },
+          },
+        }),
+        autoArchive: false,
+        nextRunAt: now - 1,
+      });
+
+      await sweepDueAutomations(harness.deps, { now });
+
+      expect(
+        getProjectExecutionDefaults(harness.db, {
+          projectId: project.id,
+          providerId: "codex",
+        }),
+      ).toEqual({
+        model: "gpt-5-mini",
+        reasoningLevel: "medium",
+        sandboxMode: "danger-full-access",
+        serviceTier: "default",
+        source: "client/thread/start",
+      });
     } finally {
       await harness.cleanup();
     }

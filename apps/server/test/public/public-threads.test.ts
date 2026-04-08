@@ -12,6 +12,7 @@ import {
   events,
   getDraft,
   getEnvironment,
+  getProjectExecutionDefaults,
   getHost,
   openSession,
   listHosts,
@@ -20,6 +21,7 @@ import {
   listEnvironments,
   listThreads,
   threads,
+  upsertProjectExecutionDefaults,
   updateHost,
 } from "@bb/db";
 import { HOST_DAEMON_PROTOCOL_VERSION } from "@bb/host-daemon-contract";
@@ -205,6 +207,177 @@ describe("public thread routes", () => {
         path: source.path,
         workspaceProvisionType: "unmanaged",
       });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("remembers resolved execution options after standard thread creation", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/thread-defaults-create",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/thread-defaults-create",
+      });
+
+      const response = await harness.app.request("/api/v1/threads", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          projectId: project.id,
+          providerId: "codex",
+          model: "gpt-5-mini",
+          serviceTier: "fast",
+          reasoningLevel: "high",
+          sandboxMode: "workspace-write",
+          input: [{ type: "text", text: "Create with explicit execution options" }],
+          environment: {
+            type: "reuse",
+            environmentId: environment.id,
+          },
+        }),
+      });
+
+      expect(response.status).toBe(201);
+      const createdThread = threadSchema.parse(await readJson(response));
+      const queuedStart = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "thread.start" &&
+          command.threadId === createdThread.id,
+      );
+      expect(queuedStart.command).toMatchObject({
+        options: {
+          model: "gpt-5-mini",
+          serviceTier: "fast",
+          reasoningLevel: "high",
+          sandboxMode: "workspace-write",
+          source: "client/thread/start",
+        },
+      });
+      expect(
+        getProjectExecutionDefaults(harness.db, {
+          projectId: project.id,
+          providerId: "codex",
+        }),
+      ).toEqual({
+        model: "gpt-5-mini",
+        serviceTier: "fast",
+        reasoningLevel: "high",
+        sandboxMode: "workspace-write",
+        source: "client/thread/start",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("inherits project defaults for matching providers when thread creation omits execution options", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/thread-defaults-inherit",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/thread-defaults-inherit",
+      });
+
+      upsertProjectExecutionDefaults(harness.db, {
+        projectId: project.id,
+        providerId: "codex",
+        model: "gpt-5",
+        serviceTier: "fast",
+        reasoningLevel: "high",
+        sandboxMode: "workspace-write",
+        source: "client/turn/requested",
+      });
+
+      const response = await harness.app.request("/api/v1/threads", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          projectId: project.id,
+          providerId: "codex",
+          input: [{ type: "text", text: "Create with inherited defaults" }],
+          environment: {
+            type: "reuse",
+            environmentId: environment.id,
+          },
+        }),
+      });
+
+      expect(response.status).toBe(201);
+      const createdThread = threadSchema.parse(await readJson(response));
+      const queuedStart = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "thread.start" &&
+          command.threadId === createdThread.id,
+      );
+      expect(queuedStart.command).toMatchObject({
+        options: {
+          model: "gpt-5",
+          serviceTier: "fast",
+          reasoningLevel: "high",
+          sandboxMode: "workspace-write",
+          source: "client/thread/start",
+        },
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("fails thread creation without a model when the project has no stored defaults for the provider", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/thread-defaults-missing",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/thread-defaults-missing",
+      });
+
+      const response = await harness.app.request("/api/v1/threads", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          projectId: project.id,
+          providerId: "codex",
+          input: [{ type: "text", text: "Create without defaults" }],
+          environment: {
+            type: "reuse",
+            environmentId: environment.id,
+          },
+        }),
+      });
+
+      expect(response.status).toBe(400);
+      await expect(readJson(response)).resolves.toMatchObject({
+        code: "invalid_request",
+        message: expect.stringContaining("has no stored execution defaults"),
+      });
+      expect(listThreads(harness.db, { projectId: project.id })).toHaveLength(0);
     } finally {
       await harness.cleanup();
     }
@@ -1503,6 +1676,82 @@ describe("public thread routes", () => {
           providerId: activeThread.providerId,
           providerThreadId: "provider-turn",
         },
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("updates project execution defaults after a standard thread send", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/thread-send-defaults",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/thread-send-defaults",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "idle",
+      });
+      seedThreadRuntimeState(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-send-defaults",
+        model: "gpt-5",
+      });
+
+      const response = await harness.app.request(
+        `/api/v1/threads/${thread.id}/send`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            mode: "auto",
+            input: [{ type: "text", text: "Use explicit send defaults" }],
+            model: "gpt-5-mini",
+            serviceTier: "fast",
+            reasoningLevel: "high",
+            sandboxMode: "workspace-write",
+          }),
+        },
+      );
+
+      expect(response.status).toBe(200);
+      const queuedRun = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "turn.run" &&
+          command.threadId === thread.id,
+      );
+      expect(queuedRun.command).toMatchObject({
+        options: {
+          model: "gpt-5-mini",
+          serviceTier: "fast",
+          reasoningLevel: "high",
+          sandboxMode: "workspace-write",
+          source: "client/turn/requested",
+        },
+      });
+      expect(
+        getProjectExecutionDefaults(harness.db, {
+          projectId: project.id,
+          providerId: thread.providerId,
+        }),
+      ).toEqual({
+        model: "gpt-5-mini",
+        serviceTier: "fast",
+        reasoningLevel: "high",
+        sandboxMode: "workspace-write",
+        source: "client/turn/requested",
       });
     } finally {
       await harness.cleanup();

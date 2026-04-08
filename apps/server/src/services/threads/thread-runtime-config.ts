@@ -1,6 +1,7 @@
 import path from "node:path";
 import {
   getDefaultProjectSource,
+  getProjectExecutionDefaults,
   getProject,
 } from "@bb/db";
 import type {
@@ -63,6 +64,8 @@ export interface ThreadRuntimeCommandEnvironment {
 }
 
 export interface ResolveExecutionOptionsArgs {
+  projectId?: string;
+  providerId?: string;
   requestedExecution: RequestedExecutionOptions;
   threadId: string;
 }
@@ -138,8 +141,25 @@ export async function resolveExecutionOptions(
   args: ResolveExecutionOptionsArgs,
 ): Promise<ResolvedThreadExecutionOptions> {
   const lastExecution = getLastExecutionOptions(deps, args.threadId);
-  const model = args.requestedExecution.model ?? lastExecution?.model;
+  const projectExecution =
+    args.projectId && args.providerId
+      ? getProjectExecutionDefaults(deps.db, {
+          projectId: args.projectId,
+          providerId: args.providerId,
+        })
+      : null;
+  const model =
+    args.requestedExecution.model ??
+    lastExecution?.model ??
+    projectExecution?.model;
   if (!model) {
+    if (args.projectId && args.providerId) {
+      throw new ApiError(
+        400,
+        "invalid_request",
+        `Model is required when project ${args.projectId} has no stored execution defaults for provider ${args.providerId}`,
+      );
+    }
     throw new ApiError(
       500,
       "internal_error",
@@ -152,14 +172,17 @@ export async function resolveExecutionOptions(
     serviceTier:
       args.requestedExecution.serviceTier ??
       lastExecution?.serviceTier ??
+      projectExecution?.serviceTier ??
       DEFAULT_SERVICE_TIER,
     reasoningLevel:
       args.requestedExecution.reasoningLevel ??
       lastExecution?.reasoningLevel ??
+      projectExecution?.reasoningLevel ??
       DEFAULT_REASONING_LEVEL,
     sandboxMode:
       args.requestedExecution.sandboxMode ??
       lastExecution?.sandboxMode ??
+      projectExecution?.sandboxMode ??
       DEFAULT_SANDBOX_MODE,
     source: args.requestedExecution.source,
   };

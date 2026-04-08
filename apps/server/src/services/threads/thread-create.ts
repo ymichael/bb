@@ -30,6 +30,7 @@ import { requireReachablePublicServerUrl } from "../hosts/public-server-url.js";
 import { createSandboxBackendForId } from "../hosts/sandbox-backends.js";
 import { appendClientTurnEvent, appendProvisioningEvent, buildCwdBranchEntries } from "./thread-events.js";
 import { buildExecutionOptions } from "./thread-commands.js";
+import { rememberProjectExecutionDefaultsForCreate } from "./project-execution-defaults.js";
 import { generateThreadTitle } from "./title-generation.js";
 import {
   buildManagedBranchName,
@@ -91,11 +92,14 @@ async function createThreadInEnvironment(
       status: args.threadStatus,
     },
   );
+  let execution: Awaited<ReturnType<typeof buildExecutionOptions>>;
   try {
-    const execution = await buildExecutionOptions(
+    execution = await buildExecutionOptions(
       deps,
       args.request,
       {
+        projectId: args.request.projectId,
+        providerId: args.request.providerId,
         threadId: thread.id,
       },
       "client/thread/start",
@@ -157,6 +161,10 @@ async function createThreadInEnvironment(
     deleteThread(deps.db, deps.hub, thread.id);
     throw error;
   }
+  rememberProjectExecutionDefaultsForCreate(deps, {
+    execution,
+    request: args.request,
+  });
 
   if (!args.request.title) {
     void generateThreadTitle(deps, {
@@ -438,6 +446,8 @@ export async function createThreadFromRequest(
     deps,
     request,
     {
+      projectId: request.projectId,
+      providerId: request.providerId,
       threadId: thread.id,
     },
     "client/thread/start",
@@ -522,6 +532,10 @@ export async function createThreadFromRequest(
   });
   advanceEnvironmentProvisioning(deps, {
     environmentId: environment.id,
+  });
+  rememberProjectExecutionDefaultsForCreate(deps, {
+    execution,
+    request,
   });
 
   if (!request.title) {

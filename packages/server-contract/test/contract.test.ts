@@ -48,6 +48,7 @@ const INTENTIONAL_OPTIONAL_SERVER_FIELDS: Record<string, string> = {
   "updateAutomationRequestSchema.trigger": "Automation PATCH requests omit trigger when leaving it unchanged.",
   "createManagerThreadRequestSchema.name": "Manager creation may omit a custom name and use the server-generated default.",
   "createManagerThreadRequestSchema.reasoningLevel": "Manager creation may omit reasoning level and use the server default.",
+  "createThreadRequestSchema.model": "Thread creation may omit model and inherit the project/provider default.",
   "createThreadRequestSchema.parentThreadId": "Root thread creation omits a parent thread id.",
   "createThreadRequestSchema.reasoningLevel": "Thread creation may omit reasoning level and use the server default.",
   "createThreadRequestSchema.sandboxMode": "Thread creation may omit sandbox mode and use the server default.",
@@ -176,7 +177,6 @@ describe("server-contract canonical schemas", () => {
       createThreadRequestSchema.parse({
         projectId: "proj_123",
         providerId: "codex",
-        model: "gpt-5",
         input: [{ type: "text", text: "Ship it" }],
         environment: {
           type: "host",
@@ -306,7 +306,6 @@ describe("server-contract canonical schemas", () => {
       createThreadRequestSchema.parse({
         projectId: "proj_123",
         providerId: "codex",
-        model: "gpt-5",
         input: [{ type: "text", text: "Ship it" }],
         environment: {
           type: "host",

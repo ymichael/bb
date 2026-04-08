@@ -80,7 +80,7 @@ export const createThreadRequestSchema = z.object({
   providerId: z.string().min(1),
   title: z.string().min(1).optional(),
   input: z.array(promptInputSchema).min(1),
-  model: z.string().min(1),
+  model: z.string().min(1).optional(),
   serviceTier: serviceTierSchema.optional(),
   reasoningLevel: reasoningLevelSchema.optional(),
   sandboxMode: sandboxModeSchema.optional(),
@@ -89,9 +89,20 @@ export const createThreadRequestSchema = z.object({
 });
 export type CreateThreadRequest = z.infer<typeof createThreadRequestSchema>;
 
-const automationThreadRequestSchema = createThreadRequestSchema.omit({
-  projectId: true,
+const automationThreadRequestSchema = z.object({
+  providerId: z.string().min(1),
+  title: z.string().min(1).optional(),
+  input: z.array(promptInputSchema).min(1),
+  model: z.string().min(1),
+  serviceTier: serviceTierSchema.optional(),
+  reasoningLevel: reasoningLevelSchema.optional(),
+  sandboxMode: sandboxModeSchema.optional(),
+  environment: environmentArgsSchema,
+  parentThreadId: z.string().min(1).optional(),
 });
+export type AutomationThreadRequest = z.infer<
+  typeof automationThreadRequestSchema
+>;
 
 export const automationNameSchema = z.string().min(1).max(AUTOMATION_NAME_MAX_LENGTH);
 export const scheduleCronSchema = z.string().min(1).max(SCHEDULE_CRON_MAX_LENGTH);

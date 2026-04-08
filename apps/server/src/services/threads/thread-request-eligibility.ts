@@ -9,7 +9,7 @@ import {
   type LocalPathProjectSource,
   type ProjectSource,
 } from "@bb/domain";
-import type { CreateThreadRequest } from "@bb/server-contract";
+import type { EnvironmentArgs } from "@bb/server-contract";
 import { ApiError } from "../../errors.js";
 import type { AppDeps } from "../../types.js";
 import {
@@ -17,7 +17,7 @@ import {
   requireNonDestroyedHostWithStatus,
 } from "../lib/entity-lookup.js";
 
-type ThreadRequestEnvironment = CreateThreadRequest["environment"];
+type ThreadRequestEnvironment = EnvironmentArgs;
 type HostThreadRequestEnvironment = Extract<
   ThreadRequestEnvironment,
   { type: "host" }

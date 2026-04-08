@@ -98,6 +98,7 @@ export type {
   ArchiveThreadRequest,
   Automation,
   AutomationAction,
+  AutomationThreadRequest,
   AutomationScheduleTrigger,
   AutomationValidation,
   CommitActionResponse,

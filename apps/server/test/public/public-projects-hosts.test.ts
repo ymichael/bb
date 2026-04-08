@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import {
+  getProjectExecutionDefaults,
   getProject,
   getThread,
   hostDaemonCommands,
@@ -175,6 +176,59 @@ describe("public project and host routes", () => {
         sandboxMode: "workspace-write",
         serviceTier: "fast",
         source: "client/turn/requested",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("does not overwrite project execution defaults when hiring a manager", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, { id: "host-manager-defaults" });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/manager-defaults",
+      });
+
+      upsertProjectExecutionDefaults(harness.db, {
+        projectId: project.id,
+        providerId: "codex",
+        model: "gpt-5-mini",
+        reasoningLevel: "medium",
+        sandboxMode: "danger-full-access",
+        serviceTier: "default",
+        source: "client/thread/start",
+      });
+
+      const response = await harness.app.request(
+        `/api/v1/projects/${project.id}/managers`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            providerId: "codex",
+            model: "gpt-5",
+            reasoningLevel: "high",
+            environment: { type: "host", hostId: host.id },
+          }),
+        },
+      );
+
+      expect(response.status).toBe(201);
+      expect(
+        getProjectExecutionDefaults(harness.db, {
+          projectId: project.id,
+          providerId: "codex",
+        }),
+      ).toEqual({
+        model: "gpt-5-mini",
+        reasoningLevel: "medium",
+        sandboxMode: "danger-full-access",
+        serviceTier: "default",
+        source: "client/thread/start",
       });
     } finally {
       await harness.cleanup();
