@@ -21,7 +21,7 @@
     "test:integration": "turbo run test:integration test:e2e",
     "test:e2e": "turbo run test:e2e",
     "bb": "node apps/cli/dist/index.js",
-    "bb:dev": "cross-env BB_SERVER_URL=http://localhost:3334 BB_HOST_DAEMON_PORT=3002 pnpm --filter @bb/server exec tsx ../cli/src/index.ts",
+    "bb:dev": "node scripts/run-bb-dev.mjs",
     "server": "pnpm --filter @bb/server start",
     "drizzle-studio": "pnpm --filter @bb/db db:studio"
   },
