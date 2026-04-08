@@ -250,6 +250,9 @@ importers:
       '@bb/logger':
         specifier: workspace:*
         version: link:../../packages/logger
+      '@bb/process-utils':
+        specifier: workspace:*
+        version: link:../../packages/process-utils
       '@bb/templates':
         specifier: workspace:*
         version: link:../../packages/templates
@@ -259,6 +262,9 @@ importers:
       mime-types:
         specifier: ^3.0.2
         version: 3.0.2
+      open:
+        specifier: ^10.2.0
+        version: 10.2.0
       p-debounce:
         specifier: ^5.1.0
         version: 5.1.0
@@ -405,6 +411,9 @@ importers:
       '@bb/domain':
         specifier: workspace:*
         version: link:../domain
+      '@bb/process-utils':
+        specifier: workspace:*
+        version: link:../process-utils
       '@mariozechner/pi-ai':
         specifier: ^0.58.3
         version: 0.58.3(ws@8.19.0)(zod@4.3.6)
@@ -629,6 +638,25 @@ importers:
       pino-pretty:
         specifier: ^13.0.0
         version: 13.1.3
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+
+  packages/process-utils:
+    dependencies:
+      cross-spawn:
+        specifier: ^7.0.6
+        version: 7.0.6
+    devDependencies:
+      '@bb/tsconfig':
+        specifier: workspace:*
+        version: link:../tsconfig
+      '@types/cross-spawn':
+        specifier: ^6.0.6
+        version: 6.0.6
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.19.10
       typescript:
         specifier: ^5.7.0
         version: 5.9.3
@@ -3430,6 +3458,9 @@ packages:
 
   '@types/chai@5.2.3':
     resolution: {integrity: sha512-Mw558oeA9fFbv65/y4mHtXDs9bPnFMZAL/jxdPFUpOHHIXX91mcgEHbS5Lahr+pwZFR8A7GQleRWeI6cGFC2UA==}
+
+  '@types/cross-spawn@6.0.6':
+    resolution: {integrity: sha512-fXRhhUkG4H3TQk5dBhQ7m/JDdSNHKwR2BBia62lhwEIq9xGiQKLxd6LymNhn47SjXhsUEPmxi+PKw2OkW4LLjA==}
 
   '@types/debug@4.1.12':
     resolution: {integrity: sha512-vIChWdVG3LG1SMxEvI/AK+FWJthlrqlTu7fbrlywTkkaONwk/UAGaULXRlf8vkzFBLVm0zkMdCquhL5aOjhXPQ==}
@@ -9334,6 +9365,10 @@ snapshots:
     dependencies:
       '@types/deep-eql': 4.0.2
       assertion-error: 2.0.1
+
+  '@types/cross-spawn@6.0.6':
+    dependencies:
+      '@types/node': 22.19.10
 
   '@types/debug@4.1.12':
     dependencies:

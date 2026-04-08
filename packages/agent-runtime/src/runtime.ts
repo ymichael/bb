@@ -1,4 +1,4 @@
-import { spawn, type ChildProcess } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
 import { createInterface } from "node:readline";
 import type {
   DynamicTool,
@@ -6,6 +6,7 @@ import type {
   ThreadExecutionOptions,
   ToolCallRequest,
 } from "@bb/domain";
+import { spawnPortableProcess } from "@bb/process-utils";
 import type { AgentRuntimeCaptureEntry } from "./capture-types.js";
 import type {
   AdapterOptions,
@@ -535,7 +536,9 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       ...options.env,
     };
 
-    const child = spawn(adapter.process.command, adapter.process.args, {
+    const child = spawnPortableProcess({
+      command: adapter.process.command,
+      args: adapter.process.args,
       cwd: options.workspacePath,
       env,
       stdio: ["pipe", "pipe", "pipe"],

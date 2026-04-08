@@ -1,9 +1,7 @@
 import fs from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { delimiter, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { AgentRuntimeOptions } from "@bb/agent-runtime";
-
-const EXECUTABLE_PERMISSION_MASK = 0o111;
 
 export interface ResolveLocalBbExecutableDirectoryOptions {
   cliPackageManifestPath?: string;
@@ -85,25 +83,12 @@ async function resolveCliEntryPath(
   return cliEntryPath;
 }
 
-async function isExecutable(cliEntryPath: string): Promise<boolean> {
-  const stats = await fs.stat(cliEntryPath);
-  return (
-    stats.isFile() && (stats.mode & EXECUTABLE_PERMISSION_MASK) !== 0
-  );
-}
-
 async function resolveBbExecutable(
   options: ResolveLocalBbExecutableDirectoryOptions = {},
 ): Promise<string> {
   const resolvedCliPackageManifestPath =
     options.cliPackageManifestPath ?? getDefaultCliPackageManifestPath();
   const cliEntryPath = await resolveCliEntryPath(resolvedCliPackageManifestPath);
-
-  if (!(await isExecutable(cliEntryPath))) {
-    throw new Error(
-      `Built bb CLI executable is not executable: ${cliEntryPath}. Rebuild @bb/cli before starting the host daemon.`,
-    );
-  }
 
   return dirname(cliEntryPath);
 }
@@ -113,7 +98,7 @@ function prependPath(
   inheritedPath?: string,
 ): string {
   return inheritedPath
-    ? `${executableDirectoryPath}:${inheritedPath}`
+    ? `${executableDirectoryPath}${delimiter}${inheritedPath}`
     : executableDirectoryPath;
 }
 

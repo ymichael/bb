@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import os from "node:os";
-import path from "node:path";
+import path, { delimiter } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   prepareRuntimeShellEnv,
@@ -95,7 +95,7 @@ describe("resolveLocalBbExecutableDirectory", () => {
     );
   });
 
-  it("fails clearly when the built CLI entry is not executable", async () => {
+  it("returns the built CLI executable directory even without executable bits", async () => {
     const { cliEntryPath, cliPackageManifestPath } = await createFakeCliPackage({
       executable: false,
     });
@@ -104,9 +104,7 @@ describe("resolveLocalBbExecutableDirectory", () => {
       resolveLocalBbExecutableDirectory({
         cliPackageManifestPath,
       }),
-    ).rejects.toThrow(
-      `Built bb CLI executable is not executable: ${cliEntryPath}. Rebuild @bb/cli before starting the host daemon.`,
-    );
+    ).resolves.toBe(path.dirname(cliEntryPath));
   });
 });
 
@@ -120,7 +118,7 @@ describe("prepareRuntimeShellEnv", () => {
         serverUrl: "http://127.0.0.1:3334",
       }),
     ).toEqual({
-      PATH: "/tmp/bb-bin:/usr/bin",
+      PATH: `/tmp/bb-bin${delimiter}/usr/bin`,
       BB_SERVER_URL: "http://127.0.0.1:3334",
       BB_HOST_DAEMON_PORT: "3002",
     });

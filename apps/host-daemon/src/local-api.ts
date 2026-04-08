@@ -1,4 +1,4 @@
-import { execFile, spawn } from "node:child_process";
+import { execFile } from "node:child_process";
 import fs from "node:fs/promises";
 import { promisify } from "node:util";
 import { serve } from "@hono/node-server";
@@ -13,6 +13,7 @@ import {
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { HTTPException } from "hono/http-exception";
+import open from "open";
 import type { HostDaemonLocalApiConfig } from "./local-api-config.js";
 
 const execFileAsync = promisify(execFile);
@@ -122,16 +123,9 @@ function defaultScheduleRestart(restart: () => void): void {
 }
 
 async function openLocalPath(path: string): Promise<void> {
-  const command =
-    process.platform === "darwin"
-      ? { file: "open", args: [path] }
-      : process.platform === "win32"
-        ? { file: "cmd", args: ["/c", "start", "", path] }
-        : { file: "xdg-open", args: [path] };
-
-  const child = spawn(command.file, command.args, {
-    detached: true,
-    stdio: "ignore",
+  const child = await open(path, {
+    background: true,
+    wait: false,
   });
   child.unref();
 }

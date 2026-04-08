@@ -1,4 +1,5 @@
-import { spawn, type ChildProcess } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
+import { spawnPortableProcess } from "@bb/process-utils";
 
 const DEV_SUPERVISOR_RESTART_ENV = "BB_DEV_SUPERVISOR_RESTART";
 const DEV_SUPERVISOR_RESTART_EXIT_CODE = 75;
@@ -44,7 +45,15 @@ export async function restartHostDaemon(
 
   const spawnProcess =
     options.spawnProcess ??
-    ((command, args, spawnOptions) => spawn(command, args, spawnOptions));
+    ((command, args, spawnOptions) =>
+      spawnPortableProcess({
+        command,
+        args,
+        cwd: spawnOptions.cwd,
+        detached: spawnOptions.detached,
+        env: spawnOptions.env,
+        stdio: spawnOptions.stdio,
+      }));
   const child = spawnProcess(argv[0], argv.slice(1), {
     cwd: options.cwd ?? process.cwd(),
     env,
