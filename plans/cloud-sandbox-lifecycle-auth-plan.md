@@ -89,6 +89,8 @@ Remaining QA gap: the smoke does not yet validate runtime material sync or cloud
 
 ## Recommended Architecture
 
+Milestone 1 should establish one durable server-owned path for ephemeral sandbox lifecycle and one durable server-to-daemon path for runtime material. Milestone 2 should layer user/project material and auth onto those shipped paths rather than introducing parallel bootstrap, sync, or lifecycle mechanisms.
+
 ## AGENTS.md Verification
 
 This plan has been checked against `AGENTS.md` and the implementation should preserve these constraints:
@@ -240,6 +242,11 @@ Implementation detail:
 - debounce by host ID in-memory so a high-volume event stream does not call E2B on every event
 - use a fixed horizon extension model, not additive drift
 
+Recommended Milestone 1 defaults:
+
+- activity-extension debounce window: `30_000` ms
+- extension horizon: reset sandbox timeout back to the default provider timeout window on each allowed extension
+
 ### Idle suspension
 
 Add a periodic idle sweep:
@@ -255,6 +262,10 @@ Suspend only when all of the following are true:
 - no thread on the host is `active` or `provisioning`
 - no pending/fetched command remains for the host
 - host has been inactive longer than the configured idle threshold
+
+Recommended Milestone 1 default:
+
+- idle suspend threshold: `300_000` ms
 
 Add backend support:
 
@@ -343,13 +354,12 @@ Recommended required fields:
 
 - `version`: deterministic content-hash or equivalent stable version string
 - `env`: full authoritative map of managed runtime environment variables
-- `files`: required array for future expansion; Milestone 1 sends an empty array
 
 Milestone 1 result payload should at least return:
 
 - `appliedVersion`
 
-This keeps the Milestone 1 contract compatible with Milestone 2 without introducing accepted-but-ignored fields.
+Milestone 2 can extend this command with explicit file material once file sync semantics exist end to end. Milestone 1 should not reserve placeholder fields that are not yet being exercised.
 
 ### Durable sync state and reconciliation
 
@@ -612,6 +622,8 @@ Add coverage for:
 - use of runtime material sync for existing server-scoped env material
 - runtime sync reconciliation after reconnect and expired command handling
 - runtime sync deduplication when multiple callers request sync for the same host
+
+Database-backed lifecycle tests must use in-memory SQLite via `createConnection(":memory:")` plus `migrate(db)`. Do not mock the database for Milestone 1 lifecycle or runtime-sync state tests.
 
 For Milestone 2, also add:
 
