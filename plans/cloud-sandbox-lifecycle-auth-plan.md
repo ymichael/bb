@@ -4,6 +4,13 @@
 
 Make ephemeral sandbox hosts safe and durable enough for real thread reuse by fixing lifecycle management, transporting the right runtime material into cloud sandboxes, and exposing the necessary controls in app and project settings.
 
+## Plan Status
+
+- Overall status: active
+- Milestone 1 status: planned
+- Milestone 2 status: planned
+- Retention rule: keep this file after Milestone 1 lands because Milestone 2 remains open; when Milestone 1 ships, update this file to mark Milestone 1 complete instead of deleting it. Delete the plan only after Milestone 2 is complete or the plan is superseded.
+
 ## Current Findings
 
 ### 1. Lifecycle support exists, but the server does not use it
@@ -82,6 +89,16 @@ Remaining QA gap: the smoke does not yet validate runtime material sync or cloud
 
 ## Recommended Architecture
 
+## AGENTS.md Verification
+
+This plan has been checked against `AGENTS.md` and the implementation should preserve these constraints:
+
+- Async lifecycle ownership: Milestone 1 uses server-owned lifecycle modules for ephemeral sandbox transitions and runtime material sync. It must not overload `hosts.status` with queue/progress meaning.
+- Contracts and boundaries: new internal command contracts should use explicit required fields. Defaults belong at the server boundary; the daemon receives fully resolved commands.
+- Server and daemon ownership: the server decides lifecycle policy, desired runtime material, merge order, and gating; the daemon only applies host-local state, writes files, and reports results.
+- Reuse discipline: existing environment/thread lifecycle patterns should be reused where they fit instead of hand-rolling ad hoc retry or reconciliation code in routes.
+- Validation: merge gates use Turbo `build`, `typecheck`, `test`, and `bundle` tasks plus live isolated E2B smoke coverage.
+
 ## Milestones
 
 ### Milestone 1: Lifecycle And Runtime Material Sync Plumbing
@@ -101,6 +118,14 @@ Explicitly in scope for Milestone 1:
 - daemon-side application of synced runtime env and version tracking
 - use of runtime material sync for the existing server-scoped material we already support today
 - lifecycle-safe ordering so thread and environment work waits for runtime sync when required
+- recovery semantics for reconnects, expired commands, repeated requests, and lost daemon results
+
+Milestone 1 merge bar:
+
+- no direct sandbox backend calls remain in thread/environment workflow code for ephemeral-host provision/resume/destroy paths
+- no runtime secrets remain coupled to bootstrap env for cloud sandboxes
+- runtime sync is durable and idempotent across reconnects
+- validation is strong enough that Milestone 1 can merge to `main` without Milestone 2
 
 Explicitly out of scope for Milestone 1:
 
@@ -131,6 +156,7 @@ Responsibilities:
 - `markSandboxActivity({ hostId, source, at })`
 - `extendSandboxLifeIfNeeded({ hostId })`
 - `ensureSandboxHostSession({ hostId })`
+- `ensureRuntimeMaterialSynced({ hostId })`
 - `maybeSuspendIdleSandbox({ hostId })`
 - `destroySandboxHost({ hostId })`
 - `destroySandboxHostIfReady({ hostId })`
@@ -156,6 +182,13 @@ Expected call-site changes:
 - `thread-create` should call `provisionSandboxHost(...)` instead of invoking `sandboxBackend.provisionHost(...)` and `waitForHostSession(...)` itself
 - cleanup/result handlers should call `destroySandboxHostIfReady(...)`
 - existing helpers in `host-lifecycle.ts` should either move into `sandbox-lifecycle.ts` or become thin wrappers over it
+
+Concurrency and idempotency requirements:
+
+- repeated `ensureSandboxHostSession(...)` calls for the same host should collapse onto one in-flight resume/wait path
+- repeated provision and destroy requests should be deduplicated per host ID
+- session-open reconciliation should clear `suspendedAt` for hosts that reconnect successfully
+- destroy must remain safe for already-destroyed hosts and hosts with no external sandbox ID
 
 ### Data model
 
@@ -183,6 +216,8 @@ Update host status derivation so ephemeral hosts surface:
 - `connected` when an active daemon session exists
 - `suspended` when `suspendedAt` is set and no active session exists
 - `disconnected` otherwise
+
+Milestone 1 should not add queue-state values to host status. Runtime sync and suspend intent/progress must be tracked explicitly in lifecycle state, not inferred from `status`.
 
 ## Phase 2: Extend On Real Activity, Then Suspend On Idle
 
@@ -238,10 +273,19 @@ Paths to update:
 - environment provisioning
 - command wait helpers that target ephemeral hosts
 
+Concrete call sites to replace or wrap:
+
+- `apps/server/src/services/threads/thread-create.ts`
+- `apps/server/src/services/threads/thread-lifecycle.ts`
+- `apps/server/src/services/environments/environment-provisioning.ts`
+- `apps/server/src/services/hosts/command-wait.ts`
+- `apps/server/src/services/threads/thread-storage.ts`
+- `apps/server/src/services/threads/thread-commands.ts`
+
 Behavior:
 
 - persistent hosts keep current behavior
-- ephemeral hosts resume the sandbox if needed, wait for the daemon session, then queue work
+- ephemeral hosts resume the sandbox if needed, wait for the daemon session, ensure runtime material is synced, then queue work
 
 This must land before idle suspension is enabled by default.
 
@@ -286,6 +330,78 @@ Milestone 1 should move the existing server-owned runtime material onto this pat
 That means the same material currently injected through `sandbox-daemon-env.ts` for cloud sandboxes should instead be delivered through `host.sync_runtime_material`, so bootstrap stays minimal and runtime state becomes refreshable/replayable after reconnect.
 
 Milestone 1 should not introduce user/project-specific env vars or provider auth files yet.
+
+### Command contract
+
+Add a dedicated daemon command for Milestone 1:
+
+- `type: "host.sync_runtime_material"`
+
+Milestone 1 command payload should be authoritative, not patch-based. The server should send the full managed runtime material snapshot for the host, and the daemon should replace its managed runtime material state with that exact snapshot.
+
+Recommended required fields:
+
+- `version`: deterministic content-hash or equivalent stable version string
+- `env`: full authoritative map of managed runtime environment variables
+- `files`: required array for future expansion; Milestone 1 sends an empty array
+
+Milestone 1 result payload should at least return:
+
+- `appliedVersion`
+
+This keeps the Milestone 1 contract compatible with Milestone 2 without introducing accepted-but-ignored fields.
+
+### Durable sync state and reconciliation
+
+Milestone 1 must define explicit durable runtime-sync state instead of inferring progress from websocket connectivity or host status.
+
+Recommended approach:
+
+- add a host-scoped lifecycle record for runtime sync, similar to existing environment/thread operation records
+- if a new table is cleaner, prefer a dedicated host operation table over overloading `hosts`
+
+Minimum state to persist:
+
+- desired runtime material version
+- last successfully applied runtime material version
+- last successful sync time
+- last sync failure reason, if any
+- queued command ID when a sync command is in flight
+
+Lifecycle rules:
+
+- repeated sync requests collapse to the latest desired version
+- if the desired version already matches the applied version, no command is queued
+- if a sync command expires or the daemon disconnects before reporting success, the lifecycle owner requeues it on the next advance/reconcile pass
+- session open should reconcile desired vs applied version and requeue sync when needed
+- new work should wait on `ensureRuntimeMaterialSynced(...)` only for the specific host being targeted
+
+### Daemon application model
+
+Milestone 1 daemon work should reuse the existing runtime shell env path rather than introduce a parallel environment source.
+
+Required daemon behavior:
+
+- add a handler for `host.sync_runtime_material` in `apps/host-daemon/src/command-dispatch.ts`
+- update daemon-owned managed runtime env state atomically from the authoritative snapshot
+- make that managed env available to future runtime creation and host-local shell tooling
+- persist the applied runtime material snapshot and version under `BB_DATA_DIR` with `0600` permissions so smoke tests and debugging can verify what was applied
+
+Milestone 1 does not need to live-mutate already-running provider child-process environments. Instead:
+
+- sync must complete before new thread/environment work is queued
+- if the daemon is holding idle cached runtimes, it should evict or recreate them after a version change so resumed work picks up the synced env
+- active in-flight work should not be interrupted solely to refresh Milestone 1 runtime material
+
+### Bootstrap cleanup
+
+Milestone 1 should narrow the bootstrap env path so it only carries daemon/bootstrap material:
+
+- `BB_HOST_ENROLL_KEY`
+- `BB_SERVER_URL`
+- bb host identity and daemon bootstrap paths
+
+The current server-scoped runtime secrets should stop flowing through `sandbox-daemon-env.ts` for cloud sandboxes once runtime sync is in place.
 
 ### Delivery model
 
@@ -407,6 +523,13 @@ Then extend it to cover:
 6. resume on follow-up work
 7. timeout extension during active event flow
 
+Milestone 1 smoke should verify more than command success:
+
+- the daemon acknowledges the expected runtime material version
+- the applied runtime material snapshot on disk contains the expected server-scoped keys
+- bootstrap-only env is sufficient for daemon startup before runtime sync runs
+- two concurrent smoke runs do not share server state, tunnel URLs, or lifecycle rows
+
 ## Phase 7B: Expand Live QA For Auth Material
 
 Add coverage for:
@@ -431,6 +554,8 @@ Recommended order:
 5. user/project secret storage plus auth material builders
 6. settings UI
 
+Milestone 1 should merge only after steps 1 through 4 are complete and validated. Milestone 2 should build on the shipped Milestone 1 path instead of reworking it.
+
 ## Milestone 1 Exit Criteria
 
 - Ephemeral sandbox host provision/resume/suspend/destroy flows are owned by `sandbox-lifecycle`.
@@ -441,7 +566,18 @@ Recommended order:
 - Runtime material sync exists as a first-class server-to-daemon path.
 - Existing server-scoped runtime material is delivered through runtime material sync instead of bootstrap env coupling.
 - Thread and environment work can wait for runtime material sync when needed.
+- Runtime sync recovers correctly from reconnects, expired commands, and repeated requests.
+- No bootstrap-only path is still relied on for `GITHUB_TOKEN`, `OPENAI_API_KEY`, or `ANTHROPIC_API_KEY` in cloud sandboxes.
 - The isolated live E2B smoke test passes end to end, including runtime material sync and parallel-run validation.
+
+## Milestone 1 Merge Checklist
+
+- `sandbox-lifecycle` owns ephemeral sandbox provider transitions and runtime-sync gating.
+- `host.sync_runtime_material` is implemented in contract, server, and daemon.
+- runtime sync uses explicit durable lifecycle state and does not overload host status.
+- existing server-scoped runtime material is removed from bootstrap coupling for cloud sandboxes.
+- idle suspend is enabled only after automatic resume and runtime sync gating are in place.
+- build, typecheck, test, bundle, and isolated live smoke verification all pass.
 
 ## Milestone 2 Exit Criteria
 
@@ -458,7 +594,11 @@ Recommended order:
 
 Run:
 
+- `pnpm exec turbo run build --filter=@bb/server --filter=@bb/host-daemon --filter=@bb/host-daemon-contract --filter=@bb/sandbox-host`
+- `pnpm exec turbo run typecheck --filter=@bb/server --filter=@bb/host-daemon --filter=@bb/host-daemon-contract --filter=@bb/sandbox-host`
 - `pnpm exec turbo run test --filter=@bb/sandbox-host`
+- `pnpm exec turbo run test --filter=@bb/host-daemon-contract`
+- `pnpm exec turbo run test --filter=@bb/host-daemon`
 - `pnpm exec turbo run test --filter=@bb/server`
 
 Add coverage for:
@@ -470,6 +610,8 @@ Add coverage for:
 - host status derivation including `suspended`
 - runtime material sync command success/failure handling
 - use of runtime material sync for existing server-scoped env material
+- runtime sync reconciliation after reconnect and expired command handling
+- runtime sync deduplication when multiple callers request sync for the same host
 
 For Milestone 2, also add:
 
@@ -486,8 +628,18 @@ Using the isolated real-server smoke script:
    - `pnpm exec turbo run bundle --filter=@bb/host-daemon`
 3. Run the smoke flow from `packages/sandbox-host` so `tsx` resolves:
    - `set -a; source /Users/michael/Projects/bb/.env; set +a; pnpm exec tsx ../../scripts/qa/e2b-smoke.mts > /tmp/bb-e2b-smoke.log 2>&1`
-4. Verify the log contains successful create, daemon bootstrap, pause, resume, and destroy steps.
-5. Run two copies in parallel and verify both pass with distinct local server ports and distinct public tunnel URLs.
+4. Verify the log contains successful create, daemon bootstrap, runtime sync, pause, resume, and destroy steps.
+5. Inspect the sandbox-applied runtime material snapshot and verify it contains the expected Milestone 1 keys and version.
+6. Run two copies in parallel and verify both pass with distinct local server ports and distinct public tunnel URLs.
+
+### Manual API / State Checks For Milestone 1
+
+Use direct server state inspection to confirm lifecycle behavior:
+
+1. Query the dev database and verify `hosts.suspendedAt` is set after idle suspension and cleared after resume.
+2. Query the relevant host runtime-sync lifecycle state and verify desired/applied versions match after successful sync.
+3. Confirm no pending/fetched runtime-sync command remains for the host after success.
+4. Confirm a resumed host can accept new thread/environment work without relying on a fresh bootstrap env injection.
 
 ### Live E2B For Milestone 2
 
@@ -504,3 +656,4 @@ Using the same isolated real-server harness:
 - Do not let the sandbox mutate durable auth state.
 - Do not rely on daemon heartbeats as proof of useful activity.
 - Do not enable suspend-by-idle until automatic resume is in place.
+- Keep this plan file after Milestone 1 lands and update the status section to mark Milestone 1 complete; Milestone 2 remains the reason the file stays in the repo.
