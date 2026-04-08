@@ -53,6 +53,12 @@ export interface SandboxBackendDestroyArgs {
   externalId: string;
 }
 
+export interface SandboxBackendExtendTimeoutArgs {
+  config: SandboxBackendConfig;
+  externalId: string;
+  timeoutMs: number;
+}
+
 export interface SandboxBackendHostRecord {
   id: string;
   name: string;
@@ -63,12 +69,14 @@ export interface SandboxBackendHostRecord {
 export interface SandboxBackend {
   getInfo(config: SandboxBackendInfoResolverConfig): SandboxBackendInfo;
   destroyHost(args: SandboxBackendDestroyArgs): Promise<void>;
+  extendHostTimeout(args: SandboxBackendExtendTimeoutArgs): Promise<void>;
   provisionHost(
     args: SandboxBackendProvisionArgs,
   ): ReturnType<typeof provisionSandboxHost>;
   resumeHost(
     args: SandboxBackendResumeArgs,
   ): ReturnType<typeof resumeSandboxHost>;
+  suspendHost(args: SandboxBackendDestroyArgs): Promise<void>;
 }
 
 const E2B_SANDBOX_BACKEND_INFO = {
@@ -169,12 +177,24 @@ const e2bSandboxBackend: SandboxBackend = {
     });
     await sandbox.kill();
   },
+  async extendHostTimeout(args) {
+    const sandbox = await resumeSandbox(args.externalId, {
+      apiKey: toOptionalString(args.config.e2bApiKey),
+    });
+    await sandbox.setTimeout(args.timeoutMs);
+  },
   provisionHost(args) {
     requireE2BProvisioningConfig(args.config);
     return provisionSandboxHost(buildProvisionHostOptions(args));
   },
   resumeHost(args) {
     return resumeSandboxHost(buildResumeHostOptions(args));
+  },
+  async suspendHost(args) {
+    const sandbox = await resumeSandbox(args.externalId, {
+      apiKey: toOptionalString(args.config.e2bApiKey),
+    });
+    await sandbox.pause();
   },
 };
 

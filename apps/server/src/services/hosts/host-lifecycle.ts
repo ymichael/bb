@@ -1,9 +1,13 @@
 import {
+  closeSession,
   getActiveSession,
   getHost,
   isEphemeralHostPendingCleanup,
+  sweepIdleEphemeralHostsEligibleForSuspend,
   updateHost,
+  updateHostLifecycleState,
 } from "@bb/db";
+import { DEFAULT_SANDBOX_TIMEOUT_MS } from "@bb/sandbox-host";
 import type { SandboxHostProgressCallbacks } from "@bb/sandbox-host";
 import type { AppDeps, SandboxLifecycleDeps, SandboxWorkSessionDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
@@ -15,8 +19,13 @@ import { requireSandboxBackendForHost } from "./sandbox-backends.js";
 import { ensureSandboxRuntimeMaterialSynced } from "./sandbox-runtime-material.js";
 
 const DEFAULT_SESSION_WAIT_TIMEOUT_MS = 60_000;
+export const DEFAULT_SANDBOX_ACTIVITY_EXTENSION_DEBOUNCE_MS = 30_000;
+export const DEFAULT_SANDBOX_IDLE_THRESHOLD_MS = 300_000;
 const hostDestroyDeduper = createAsyncDeduper<string, void>();
+const hostExtendDeduper = createAsyncDeduper<string, boolean>();
 const hostReadyDeduper = createAsyncDeduper<string, void>();
+const hostSuspendDeduper = createAsyncDeduper<string, boolean>();
+const nextSandboxTimeoutExtensionAt = new Map<string, number>();
 const pendingReadyProgressCallbacks = new Map<
   string,
   Set<SandboxHostProgressCallbacks>
@@ -24,6 +33,24 @@ const pendingReadyProgressCallbacks = new Map<
 
 export interface WaitForHostSessionOptions {
   timeoutMs?: number;
+}
+
+export interface SandboxActivityArgs {
+  at?: number;
+  hostId: string;
+  source: "command-result" | "commands" | "events" | "tool-call";
+}
+
+export interface ExtendSandboxLifeIfNeededArgs {
+  at?: number;
+  debounceWindowMs?: number;
+  hostId: string;
+}
+
+export interface MaybeSuspendIdleSandboxArgs {
+  hostId: string;
+  idleThresholdMs?: number;
+  now?: number;
 }
 
 function registerPendingReadyProgressCallbacks(
@@ -123,11 +150,13 @@ async function destroyHostInternal(
 ): Promise<void> {
   const hostRecord = getHost(deps.db, hostId);
   if (!hostRecord || hostRecord.destroyedAt !== null) {
+    nextSandboxTimeoutExtensionAt.delete(hostId);
     deps.sandboxRegistry.remove(hostId);
     return;
   }
 
   const destroyedAt = Date.now();
+  nextSandboxTimeoutExtensionAt.delete(hostId);
   const cached = deps.sandboxRegistry.get(hostId);
   if (cached) {
     await cached.destroy();
@@ -190,7 +219,13 @@ export async function ensureSandboxHostSessionReady(
       }
 
       const cachedHost = deps.sandboxRegistry.get(args.hostId);
-      if (!cachedHost) {
+      if (cachedHost && host.suspendedAt !== null) {
+        await cachedHost.resume();
+        updateHostLifecycleState(deps.db, {
+          hostId: host.id,
+          suspendedAt: null,
+        });
+      } else if (!cachedHost) {
         const sandboxBackend =
           host.provider
             ? createSandboxBackendForId(host.provider)
@@ -273,4 +308,145 @@ export async function ensureHostSessionReadyForWork(
   }
 
   return requireConnectedHostSession(deps, host.id);
+}
+
+export async function extendSandboxLifeIfNeeded(
+  deps: Pick<AppDeps, "config" | "db" | "sandboxRegistry">,
+  args: ExtendSandboxLifeIfNeededArgs,
+): Promise<boolean> {
+  const at = args.at ?? Date.now();
+  const host = getHost(deps.db, args.hostId);
+  if (
+    !host
+    || host.type !== "ephemeral"
+    || host.destroyedAt !== null
+    || host.externalId === null
+    || host.suspendedAt !== null
+  ) {
+    return false;
+  }
+
+  const debounceWindowMs =
+    args.debounceWindowMs ?? DEFAULT_SANDBOX_ACTIVITY_EXTENSION_DEBOUNCE_MS;
+  const nextAllowedAt = nextSandboxTimeoutExtensionAt.get(host.id) ?? 0;
+  if (at < nextAllowedAt) {
+    return false;
+  }
+  nextSandboxTimeoutExtensionAt.set(host.id, at + debounceWindowMs);
+
+  try {
+    return await hostExtendDeduper.run(host.id, async () => {
+      const cachedHost = deps.sandboxRegistry.get(host.id);
+      if (cachedHost) {
+        await cachedHost.extendTimeout(DEFAULT_SANDBOX_TIMEOUT_MS);
+        return true;
+      }
+
+      const externalId = host.externalId;
+      if (externalId === null) {
+        return false;
+      }
+      const sandboxBackend = requireSandboxBackendForHost(host);
+      await sandboxBackend.extendHostTimeout({
+        config: deps.config,
+        externalId,
+        timeoutMs: DEFAULT_SANDBOX_TIMEOUT_MS,
+      });
+      return true;
+    });
+  } catch (error) {
+    nextSandboxTimeoutExtensionAt.delete(host.id);
+    throw error;
+  }
+}
+
+export async function markSandboxActivity(
+  deps: Pick<AppDeps, "config" | "db" | "logger" | "sandboxRegistry">,
+  args: SandboxActivityArgs,
+): Promise<void> {
+  const at = args.at ?? Date.now();
+  const host = getHost(deps.db, args.hostId);
+  if (!host || host.type !== "ephemeral" || host.destroyedAt !== null) {
+    return;
+  }
+
+  updateHostLifecycleState(deps.db, {
+    hostId: host.id,
+    lastActivityAt: at,
+  });
+
+  try {
+    await extendSandboxLifeIfNeeded(deps, {
+      at,
+      hostId: host.id,
+    });
+  } catch (error) {
+    deps.logger.warn(
+      {
+        err: error,
+        hostId: host.id,
+        source: args.source,
+      },
+      "Failed to extend sandbox lifetime after activity",
+    );
+  }
+}
+
+export async function maybeSuspendIdleSandbox(
+  deps: Pick<AppDeps, "config" | "db" | "hub" | "logger" | "sandboxRegistry">,
+  args: MaybeSuspendIdleSandboxArgs,
+): Promise<boolean> {
+  const now = args.now ?? Date.now();
+  const idleThresholdMs =
+    args.idleThresholdMs ?? DEFAULT_SANDBOX_IDLE_THRESHOLD_MS;
+  const idleHosts = sweepIdleEphemeralHostsEligibleForSuspend(deps.db, {
+    hostId: args.hostId,
+    inactiveBefore: now - idleThresholdMs,
+  });
+  const host = idleHosts[0];
+  if (!host) {
+    return false;
+  }
+
+  return hostSuspendDeduper.run(host.id, async () => {
+    const refreshedHost = sweepIdleEphemeralHostsEligibleForSuspend(deps.db, {
+      hostId: host.id,
+      inactiveBefore: now - idleThresholdMs,
+    })[0];
+    const externalId = refreshedHost?.externalId ?? null;
+    if (!refreshedHost || externalId === null) {
+      return false;
+    }
+
+    const cachedHost = deps.sandboxRegistry.get(refreshedHost.id);
+    if (cachedHost) {
+      await cachedHost.suspend();
+    } else {
+      const sandboxBackend = requireSandboxBackendForHost(refreshedHost);
+      await sandboxBackend.suspendHost({
+        config: deps.config,
+        externalId,
+      });
+    }
+
+    nextSandboxTimeoutExtensionAt.delete(refreshedHost.id);
+    const activeSession = getActiveSession(deps.db, refreshedHost.id);
+    if (activeSession) {
+      closeSession(deps.db, deps.hub, activeSession.id, "suspended");
+    }
+    updateHostLifecycleState(deps.db, {
+      hostId: refreshedHost.id,
+      suspendedAt: now,
+    });
+    return true;
+  }).catch((error) => {
+    deps.logger.warn(
+      {
+        err: error,
+        hostId: host.id,
+      },
+      "Idle sandbox suspend failed",
+    );
+    return false;
+  });
 }

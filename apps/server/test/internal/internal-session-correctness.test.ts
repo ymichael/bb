@@ -2,6 +2,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { WebSocket } from "ws";
 import { eq } from "drizzle-orm";
 import {
+  getHost,
   getThread,
   hostDaemonSessions,
   listEvents,
@@ -218,6 +219,7 @@ describe("internal session correctness", () => {
         .where(eq(hostDaemonSessions.id, session.sessionId))
         .get()?.leaseExpiresAt;
       expect(updatedLease).toBeGreaterThan(initialLease ?? 0);
+      expect(getHost(server.db, "host-heartbeat")?.lastActivityAt).toBeNull();
       const closed = waitForClose(socket);
       socket.close();
       await closed;

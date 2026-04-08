@@ -7,6 +7,7 @@ import {
 import type { Hono } from "hono";
 import type { AppDeps } from "../types.js";
 import { ApiError } from "../errors.js";
+import { markSandboxActivity } from "../services/hosts/host-lifecycle.js";
 import { getAuthenticatedDaemon } from "./auth.js";
 import { handleCommandResult } from "./command-results.js";
 import { requireAuthorizedActiveSession } from "./session-state.js";
@@ -29,6 +30,11 @@ export function registerInternalCommandResultRoutes(
     if (!command || command.hostId !== session.hostId) {
       throw new ApiError(404, "command_not_found", "Command not found");
     }
+
+    await markSandboxActivity(deps, {
+      hostId: session.hostId,
+      source: "command-result",
+    });
     const updatedCommand = await handleCommandResult(deps, payload);
 
     if (!updatedCommand) {

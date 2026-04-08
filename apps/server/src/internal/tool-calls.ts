@@ -7,6 +7,7 @@ import type { Hono } from "hono";
 import { messageUserToolArgumentsSchema } from "@bb/domain";
 import type { AppDeps } from "../types.js";
 import { ApiError } from "../errors.js";
+import { markSandboxActivity } from "../services/hosts/host-lifecycle.js";
 import { parseValue } from "../services/lib/validation.js";
 import { appendThreadEvent } from "../services/threads/thread-events.js";
 import { requireThreadEnvironment } from "../services/lib/entity-lookup.js";
@@ -32,6 +33,11 @@ export function registerInternalToolCallRoutes(app: Hono, deps: AppDeps): void {
         "Thread does not belong to the session host",
       );
     }
+
+    await markSandboxActivity(deps, {
+      hostId: session.hostId,
+      source: "tool-call",
+    });
 
     if (payload.tool === "message_user") {
       const args = parseValue(payload.arguments ?? {}, messageUserToolArgumentsSchema);

@@ -138,8 +138,19 @@ describe("internal session routes", () => {
   it("fetches pending commands, marks them fetched, and long-polls to 204", async () => {
     const harness = await createTestAppHarness();
     try {
-      const { host, session } = seedHostSession(harness.deps, {
+      const host = upsertHost(harness.db, harness.hub, {
         id: "host-commands",
+        name: "Command Host",
+        type: "ephemeral",
+      });
+      const session = openSession(harness.db, harness.hub, {
+        heartbeatIntervalMs: 5_000,
+        hostId: host.id,
+        hostName: host.name,
+        hostType: host.type,
+        instanceId: "instance-host-commands",
+        leaseTimeoutMs: 30_000,
+        protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
       });
       const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
       const environment = seedEnvironment(harness.deps, {
@@ -187,6 +198,8 @@ describe("internal session routes", () => {
         .where(eq(hostDaemonCommands.id, command.id))
         .get();
       expect(fetched?.state).toBe("fetched");
+      const fetchedActivityAt = getHost(harness.db, host.id)?.lastActivityAt;
+      expect(fetchedActivityAt).toEqual(expect.any(Number));
 
       const timeoutResponse = await harness.app.request(
         `/internal/session/commands?sessionId=${session.id}&limit=100&waitMs=1`,
@@ -195,6 +208,61 @@ describe("internal session routes", () => {
         },
       );
       expect(timeoutResponse.status).toBe(204);
+      expect(getHost(harness.db, host.id)?.lastActivityAt).toBe(fetchedActivityAt);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("marks ephemeral hosts active when they report command results", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const host = upsertHost(harness.db, harness.hub, {
+        id: "host-command-result-activity",
+        name: "Command Result Host",
+        type: "ephemeral",
+      });
+      const session = openSession(harness.db, harness.hub, {
+        heartbeatIntervalMs: 5_000,
+        hostId: host.id,
+        hostName: host.name,
+        hostType: host.type,
+        instanceId: "instance-command-result-activity",
+        leaseTimeoutMs: 30_000,
+        protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
+      });
+      const command = queueCommand(harness.db, harness.hub, {
+        hostId: host.id,
+        sessionId: session.id,
+        type: "host.list_files",
+        payload: JSON.stringify({
+          type: "host.list_files",
+          path: "/tmp",
+          limit: 10,
+        }),
+      });
+
+      const response = await harness.app.request("/internal/session/command-result", {
+        method: "POST",
+        headers: internalAuthHeaders(harness, {
+          hostId: host.id,
+          hostType: "ephemeral",
+        }),
+        body: JSON.stringify({
+          sessionId: session.id,
+          commandId: command.id,
+          completedAt: Date.now(),
+          type: "host.list_files",
+          ok: true,
+          result: {
+            files: [],
+            truncated: false,
+          },
+        }),
+      });
+
+      expect(response.status).toBe(200);
+      expect(getHost(harness.db, host.id)?.lastActivityAt).toEqual(expect.any(Number));
     } finally {
       await harness.cleanup();
     }

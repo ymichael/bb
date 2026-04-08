@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { events, threads } from "@bb/db";
+import { events, getHost, openSession, threads, upsertHost } from "@bb/db";
 import { HOST_DAEMON_PROTOCOL_VERSION } from "@bb/host-daemon-contract";
 import { describe, expect, it } from "vitest";
 import { internalAuthHeaders } from "../helpers/commands.js";
@@ -141,6 +141,66 @@ describe("internal event and tool-call routes", () => {
     }
   });
 
+  it("marks ephemeral sandbox hosts active when they send event batches", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const host = upsertHost(harness.db, harness.hub, {
+        id: "host-event-activity",
+        name: "Event Activity Host",
+        type: "ephemeral",
+      });
+      const session = openSession(harness.db, harness.hub, {
+        heartbeatIntervalMs: 5_000,
+        hostId: host.id,
+        hostName: host.name,
+        hostType: host.type,
+        instanceId: "instance-event-activity",
+        leaseTimeoutMs: 30_000,
+        protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
+      });
+      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "active",
+      });
+
+      const response = await harness.app.request("/internal/session/events", {
+        method: "POST",
+        headers: internalAuthHeaders(harness, {
+          hostId: host.id,
+          hostType: "ephemeral",
+        }),
+        body: JSON.stringify({
+          sessionId: session.id,
+          events: [
+            {
+              environmentId: environment.id,
+              threadId: thread.id,
+              sequence: 1,
+              createdAt: Date.now(),
+              event: {
+                type: "turn/started",
+                threadId: thread.id,
+                providerThreadId: "provider-event-activity",
+                turnId: "turn-event-activity",
+              },
+            },
+          ],
+        }),
+      });
+
+      expect(response.status).toBe(200);
+      expect(getHost(harness.db, host.id)?.lastActivityAt).toEqual(expect.any(Number));
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("does not reactivate a thread when a started/completed batch is replayed", async () => {
     const harness = await createTestAppHarness();
     try {
@@ -223,7 +283,20 @@ describe("internal event and tool-call routes", () => {
   it("rejects unsupported tool calls", async () => {
     const harness = await createTestAppHarness();
     try {
-      const { host, session } = seedHostSession(harness.deps);
+      const host = upsertHost(harness.db, harness.hub, {
+        id: "host-tool-call-activity",
+        name: "Tool Call Host",
+        type: "ephemeral",
+      });
+      const session = openSession(harness.db, harness.hub, {
+        heartbeatIntervalMs: 5_000,
+        hostId: host.id,
+        hostName: host.name,
+        hostType: host.type,
+        instanceId: "instance-tool-call-activity",
+        leaseTimeoutMs: 30_000,
+        protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
+      });
       const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
@@ -254,6 +327,7 @@ describe("internal event and tool-call routes", () => {
         success: false,
         contentItems: [{ type: "inputText", text: "Unsupported tool: spawn_thread" }],
       });
+      expect(getHost(harness.db, host.id)?.lastActivityAt).toEqual(expect.any(Number));
 
       const childThreads = harness.db
         .select()

@@ -1,13 +1,18 @@
 import {
+  getActiveSession,
   getHost,
+  hostDaemonCommands,
   openSession,
   upsertHost,
 } from "@bb/db";
+import { updateHostLifecycleState } from "@bb/db/internal-lifecycle";
 import type { SandboxHostProgressCallbacks } from "@bb/sandbox-host";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   destroyHost,
   ensureSandboxHostSessionReady,
+  markSandboxActivity,
+  maybeSuspendIdleSandbox,
   waitForHostSession,
 } from "../../src/services/hosts/host-lifecycle.js";
 import {
@@ -25,6 +30,7 @@ type SandboxHostMockArgs = Array<object | string | undefined>;
 // Package-level tests cover the E2B mechanics directly; these tests focus on
 // server lifecycle policy and orchestration.
 vi.mock("@bb/sandbox-host", () => ({
+  DEFAULT_SANDBOX_TIMEOUT_MS: 15 * 60 * 1000,
   provisionHost: (...args: SandboxHostMockArgs) => provisionHostMock(...args),
   resumeHost: (...args: SandboxHostMockArgs) => resumeHostMock(...args),
   resumeSandbox: (...args: SandboxHostMockArgs) => resumeSandboxMock(...args),
@@ -457,6 +463,207 @@ describe("host lifecycle", () => {
       expect(getHost(harness.db, host.id)).toMatchObject({
         externalId: "sandbox-concurrent-ready",
       });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("extends sandbox lifetime on activity at most once per debounce window", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const host = upsertHost(harness.db, harness.hub, {
+        externalId: "sandbox-activity",
+        id: "host-activity",
+        name: "Activity Host",
+        provider: "e2b",
+        type: "ephemeral",
+      });
+      const sandboxHost = createMockSandboxHost(host.id, host.externalId ?? undefined);
+      harness.deps.sandboxRegistry.set(host.id, sandboxHost);
+
+      await markSandboxActivity(harness.deps, {
+        at: 1_000,
+        hostId: host.id,
+        source: "events",
+      });
+      await markSandboxActivity(harness.deps, {
+        at: 5_000,
+        hostId: host.id,
+        source: "command-result",
+      });
+      await markSandboxActivity(harness.deps, {
+        at: 35_000,
+        hostId: host.id,
+        source: "commands",
+      });
+
+      expect(getHost(harness.db, host.id)).toMatchObject({
+        lastActivityAt: 35_000,
+      });
+      expect(sandboxHost.extendTimeout).toHaveBeenCalledTimes(2);
+      expect(sandboxHost.extendTimeout).toHaveBeenNthCalledWith(1, 15 * 60 * 1000);
+      expect(sandboxHost.extendTimeout).toHaveBeenNthCalledWith(2, 15 * 60 * 1000);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("resumes cached suspended sandboxes before waiting for the daemon session", async () => {
+    const harness = await createTestAppHarness({
+      githubPat: "test-github-pat",
+    });
+    try {
+      const host = upsertHost(harness.db, harness.hub, {
+        externalId: "sandbox-suspended-cached",
+        id: "host-suspended-cached",
+        name: "Suspended Cached Host",
+        provider: "e2b",
+        type: "ephemeral",
+      });
+      const sandboxHost = createMockSandboxHost(host.id, host.externalId ?? undefined);
+      harness.deps.sandboxRegistry.set(host.id, sandboxHost);
+      updateHostLifecycleState(harness.db, {
+        hostId: host.id,
+        suspendedAt: 1_000,
+      });
+
+      setTimeout(() => {
+        openSession(harness.db, harness.hub, {
+          heartbeatIntervalMs: 5_000,
+          hostId: host.id,
+          hostName: host.name,
+          hostType: host.type,
+          instanceId: "instance-suspended-cached",
+          leaseTimeoutMs: 30_000,
+          protocolVersion: 2,
+        });
+      }, 10);
+
+      const readyPromise = ensureSandboxHostSessionReady(harness.deps, {
+        hostId: host.id,
+      });
+      await vi.advanceTimersByTimeAsync(20);
+      const queuedRuntimeSync = await waitForQueuedCommand(
+        harness,
+        ({ command, row }) =>
+          row.hostId === host.id && command.type === "host.sync_runtime_material",
+      );
+      const reportResponse = await reportQueuedCommandSuccess(
+        harness,
+        queuedRuntimeSync,
+        {
+          appliedVersion: queuedRuntimeSync.command.version,
+        },
+        {
+          hostId: host.id,
+          hostType: "ephemeral",
+        },
+      );
+      expect(reportResponse.status).toBe(200);
+
+      await readyPromise;
+
+      expect(sandboxHost.resume).toHaveBeenCalledTimes(1);
+      expect(getHost(harness.db, host.id)).toMatchObject({
+        suspendedAt: null,
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("suspends idle sandbox hosts when no work remains", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const host = upsertHost(harness.db, harness.hub, {
+        externalId: "sandbox-idle",
+        id: "host-idle",
+        name: "Idle Host",
+        provider: "e2b",
+        type: "ephemeral",
+      });
+      const sandboxHost = createMockSandboxHost(host.id, host.externalId ?? undefined);
+      harness.deps.sandboxRegistry.set(host.id, sandboxHost);
+      openSession(harness.db, harness.hub, {
+        heartbeatIntervalMs: 5_000,
+        hostId: host.id,
+        hostName: host.name,
+        hostType: host.type,
+        instanceId: "instance-idle",
+        leaseTimeoutMs: 30_000,
+        protocolVersion: 2,
+      });
+      updateHostLifecycleState(harness.db, {
+        hostId: host.id,
+        lastActivityAt: 1_000,
+      });
+
+      await expect(maybeSuspendIdleSandbox(harness.deps, {
+        hostId: host.id,
+        now: 400_000,
+      })).resolves.toBe(true);
+
+      expect(sandboxHost.suspend).toHaveBeenCalledTimes(1);
+      expect(getActiveSession(harness.db, host.id)).toBeNull();
+      expect(getHost(harness.db, host.id)).toMatchObject({
+        suspendedAt: 400_000,
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("does not suspend idle sandbox hosts while host commands are still queued", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const host = upsertHost(harness.db, harness.hub, {
+        externalId: "sandbox-idle-pending-command",
+        id: "host-idle-pending-command",
+        name: "Idle Pending Command Host",
+        provider: "e2b",
+        type: "ephemeral",
+      });
+      const sandboxHost = createMockSandboxHost(host.id, host.externalId ?? undefined);
+      harness.deps.sandboxRegistry.set(host.id, sandboxHost);
+      const session = openSession(harness.db, harness.hub, {
+        heartbeatIntervalMs: 5_000,
+        hostId: host.id,
+        hostName: host.name,
+        hostType: host.type,
+        instanceId: "instance-idle-pending-command",
+        leaseTimeoutMs: 30_000,
+        protocolVersion: 2,
+      });
+      updateHostLifecycleState(harness.db, {
+        hostId: host.id,
+        lastActivityAt: 1_000,
+      });
+      harness.db.insert(hostDaemonCommands).values({
+        id: "hcmd_idle_pending_command",
+        hostId: host.id,
+        sessionId: session.id,
+        cursor: 1,
+        type: "host.list_files",
+        payload: JSON.stringify({
+          type: "host.list_files",
+          limit: 10,
+          path: "/tmp",
+        }),
+        state: "pending",
+        retryCount: 0,
+        resultPayload: null,
+        createdAt: 1_500,
+        fetchedAt: null,
+        completedAt: null,
+      }).run();
+
+      await expect(maybeSuspendIdleSandbox(harness.deps, {
+        hostId: host.id,
+        now: 400_000,
+      })).resolves.toBe(false);
+
+      expect(sandboxHost.suspend).not.toHaveBeenCalled();
+      expect(getHost(harness.db, host.id)?.suspendedAt).toBeNull();
     } finally {
       await harness.cleanup();
     }

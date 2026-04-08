@@ -1,6 +1,7 @@
 import { setTimeout as sleep } from "node:timers/promises";
 import { eq } from "drizzle-orm";
 import {
+  getActiveSession,
   archiveThread,
   fetchCommands,
   getEnvironment,
@@ -14,12 +15,14 @@ import {
 import type { SandboxHostProgressCallbacks } from "@bb/sandbox-host";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  updateHostLifecycleState,
   upsertEnvironmentOperationRecord,
   upsertThreadOperationRecord,
 } from "@bb/db/internal-lifecycle";
 import {
   runEphemeralHostCleanupSweep,
   runEnvironmentProvisioningSweep,
+  runIdleSandboxSuspendSweep,
   runManagedEnvironmentArchiveCleanupSweep,
   runPeriodicSweeps,
   runThreadLifecycleSweep,
@@ -50,6 +53,7 @@ const resumeSandboxMock = vi.fn();
 type SandboxHostMockArgs = Array<object | string | undefined>;
 
 vi.mock("@bb/sandbox-host", () => ({
+  DEFAULT_SANDBOX_TIMEOUT_MS: 15 * 60 * 1000,
   provisionHost: (...args: SandboxHostMockArgs) => provisionHostMock(...args),
   resumeHost: (...args: SandboxHostMockArgs) => resumeHostMock(...args),
   resumeSandbox: (...args: SandboxHostMockArgs) => resumeSandboxMock(...args),
@@ -603,6 +607,42 @@ describe("periodic sweeps", () => {
         environmentId: environment.id,
         threadId: thread.id,
       });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("suspends idle ephemeral sandboxes during the idle suspend sweep", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const host = upsertHost(harness.db, harness.hub, {
+        externalId: "sandbox-periodic-idle",
+        id: "host-periodic-idle",
+        name: "Periodic Idle Host",
+        provider: "e2b",
+        type: "ephemeral",
+      });
+      const sandboxHost = createMockSandboxHost(host.id, host.externalId ?? undefined);
+      harness.deps.sandboxRegistry.set(host.id, sandboxHost);
+      openSession(harness.db, harness.hub, {
+        heartbeatIntervalMs: 5_000,
+        hostId: host.id,
+        hostName: host.name,
+        hostType: host.type,
+        instanceId: "instance-periodic-idle",
+        leaseTimeoutMs: 30_000,
+        protocolVersion: 2,
+      });
+      updateHostLifecycleState(harness.db, {
+        hostId: host.id,
+        lastActivityAt: 1_000,
+      });
+
+      await runIdleSandboxSuspendSweep(harness.deps);
+
+      expect(sandboxHost.suspend).toHaveBeenCalledTimes(1);
+      expect(getActiveSession(harness.db, host.id)).toBeNull();
+      expect(getHost(harness.db, host.id)?.suspendedAt).toEqual(expect.any(Number));
     } finally {
       await harness.cleanup();
     }

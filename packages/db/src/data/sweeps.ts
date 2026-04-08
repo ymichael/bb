@@ -1,7 +1,8 @@
-import { eq, and, sql, lt, ne, inArray, or } from "drizzle-orm";
+import { eq, and, isNull, sql, lt, ne, inArray, or } from "drizzle-orm";
 import type { DbConnection } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
 import {
+  hosts,
   hostDaemonCommands,
   hostDaemonSessions,
   threads,
@@ -206,6 +207,47 @@ export function sweepManagedEnvironments(db: DbConnection) {
 
 export function sweepEphemeralHostsPendingCleanup(db: DbConnection) {
   return listEphemeralHostsPendingCleanup(db);
+}
+
+export function sweepIdleEphemeralHostsEligibleForSuspend(
+  db: DbConnection,
+  args: {
+    hostId?: string;
+    inactiveBefore: number;
+  },
+) {
+  return db
+    .select()
+    .from(hosts)
+    .where(
+      and(
+        eq(hosts.type, "ephemeral"),
+        isNull(hosts.destroyedAt),
+        isNull(hosts.suspendedAt),
+        sql`${hosts.externalId} IS NOT NULL`,
+        sql`COALESCE(${hosts.lastActivityAt}, ${hosts.lastSeenAt}) <= ${args.inactiveBefore}`,
+        args.hostId ? eq(hosts.id, args.hostId) : undefined,
+        sql`EXISTS (
+          SELECT 1 FROM ${hostDaemonSessions}
+          WHERE ${hostDaemonSessions.hostId} = ${hosts.id}
+          AND ${hostDaemonSessions.status} = 'active'
+        )`,
+        sql`NOT EXISTS (
+          SELECT 1 FROM ${hostDaemonCommands}
+          WHERE ${hostDaemonCommands.hostId} = ${hosts.id}
+          AND ${hostDaemonCommands.state} IN ('pending', 'fetched')
+        )`,
+        sql`NOT EXISTS (
+          SELECT 1 FROM ${threads}
+          INNER JOIN ${environments}
+            ON ${threads.environmentId} = ${environments.id}
+          WHERE ${environments.hostId} = ${hosts.id}
+          AND ${threads.deletedAt} IS NULL
+          AND ${threads.status} IN ('active', 'provisioning')
+        )`,
+      ),
+    )
+    .all();
 }
 
 export function sweepDestroyingEnvironments(

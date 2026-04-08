@@ -273,6 +273,7 @@ export type { CreateDraftInput, DraftRow } from "./drafts.js";
 
 export {
   sweepEphemeralHostsPendingCleanup,
+  sweepIdleEphemeralHostsEligibleForSuspend,
   sweepExpiredCommands,
   sweepExpiredLeases,
   sweepDestroyingEnvironments,

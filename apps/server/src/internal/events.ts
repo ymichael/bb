@@ -23,6 +23,7 @@ import {
   isAgePrunableThreadEventType,
   maybePruneActiveThreadEventHistory,
 } from "../services/system/event-pruning.js";
+import { markSandboxActivity } from "../services/hosts/host-lifecycle.js";
 import {
   requestEnvironmentCleanup,
   wouldCleanupEnvironment,
@@ -498,6 +499,12 @@ export function registerInternalEventRoutes(app: Hono, deps: AppDeps): void {
       hostId: session.hostId,
       events: payload.events,
     });
+    if (payload.events.length > 0) {
+      await markSandboxActivity(deps, {
+        hostId: session.hostId,
+        source: "events",
+      });
+    }
 
     const insertResult = insertEvents(
       deps.db,

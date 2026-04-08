@@ -5,6 +5,7 @@ import {
   listEnvironmentOperations,
   listThreadOperations,
   sweepEphemeralHostsPendingCleanup,
+  sweepIdleEphemeralHostsEligibleForSuspend,
   sweepDestroyingEnvironments,
   sweepExpiredCommands,
   sweepExpiredLeases,
@@ -19,7 +20,11 @@ import {
   completeEnvironmentProvisioning,
 } from "../environments/environment-provisioning.js";
 import { handleExpiredCommands } from "../hosts/expired-commands.js";
-import { destroyHost } from "../hosts/host-lifecycle.js";
+import {
+  DEFAULT_SANDBOX_IDLE_THRESHOLD_MS,
+  destroyHost,
+  maybeSuspendIdleSandbox,
+} from "../hosts/host-lifecycle.js";
 import { sweepDueNudges } from "../scheduling/nudge-sweep.js";
 import {
   advanceProjectDeletion,
@@ -141,6 +146,28 @@ export async function runEnvironmentProvisioningSweep(
   }
 }
 
+export async function runIdleSandboxSuspendSweep(
+  deps: Pick<AppDeps, "config" | "db" | "hub" | "logger" | "sandboxRegistry">,
+): Promise<void> {
+  for (const host of sweepIdleEphemeralHostsEligibleForSuspend(deps.db, {
+    inactiveBefore: Date.now() - DEFAULT_SANDBOX_IDLE_THRESHOLD_MS,
+  })) {
+    try {
+      await maybeSuspendIdleSandbox(deps, {
+        hostId: host.id,
+      });
+    } catch (error) {
+      deps.logger.warn(
+        {
+          err: error,
+          hostId: host.id,
+        },
+        "Idle sandbox suspend sweep failed",
+      );
+    }
+  }
+}
+
 export async function runThreadLifecycleSweep(
   deps: Pick<AppDeps, "db" | "hub" | "logger">,
 ): Promise<void> {
@@ -233,6 +260,7 @@ export async function runPeriodicSweeps(
     await sweepDueNudges(deps);
     await runEnvironmentProvisioningSweep(deps);
     await runThreadLifecycleSweep(deps);
+    await runIdleSandboxSuspendSweep(deps);
     await runManagedEnvironmentArchiveCleanupSweep(
       deps,
       advanceEnvironmentCleanup,

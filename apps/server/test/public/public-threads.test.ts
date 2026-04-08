@@ -70,6 +70,7 @@ type AssertionFn = () => void;
 // Package-level tests cover the E2B mechanics directly; these tests focus on
 // server policy and request/response behavior.
 vi.mock("@bb/sandbox-host", () => ({
+  DEFAULT_SANDBOX_TIMEOUT_MS: 15 * 60 * 1000,
   provisionHost: (...args: SandboxHostMockArgs) => provisionHostMock(...args),
   resumeHost: (...args: SandboxHostMockArgs) => resumeHostMock(...args),
 }));
