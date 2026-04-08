@@ -113,7 +113,7 @@ describe("formatEnvironmentDisplay", () => {
         environment: makeEnvironment(),
         isLocalHost: false,
         hostType: "ephemeral",
-        sandboxProviderName: "E2B",
+        hostProvider: "e2b",
       });
       expect(result).toEqual({
         modeLabel: "E2B",
@@ -139,7 +139,7 @@ describe("formatEnvironmentDisplay", () => {
         environment: makeEnvironment({ isWorktree: true }),
         isLocalHost: false,
         hostType: "ephemeral",
-        sandboxProviderName: "E2B",
+        hostProvider: "e2b",
       });
       expect(result.mode).toBe("worktree");
       expect(result.modeLabel).toBe("E2B");

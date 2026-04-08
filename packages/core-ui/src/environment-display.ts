@@ -16,27 +16,34 @@ interface FormatEnvironmentDisplayArgs {
   isLocalHost: boolean;
   hostName?: string;
   hostType?: HostType;
-  /** Sandbox backend display name (e.g. "E2B"). Only relevant for ephemeral hosts. */
-  sandboxProviderName?: string;
+  /** Sandbox provider identifier from the host record (e.g. "e2b"). Used to derive the display name for ephemeral hosts. */
+  hostProvider?: string;
 }
 
 /**
  * Format an environment for display across app, CLI, and prompt labels.
  */
+const sandboxProviderDisplayNames: Record<string, string> = {
+  e2b: "E2B",
+};
+
 export function formatEnvironmentDisplay({
   environment,
   isLocalHost,
   hostName,
   hostType,
-  sandboxProviderName,
+  hostProvider,
 }: FormatEnvironmentDisplayArgs): EnvironmentDisplayInfo {
   const mode: EnvironmentDisplayInfo["mode"] = environment.isWorktree ? "worktree" : "direct";
 
   const modeLabel = mode === "worktree" ? "Worktree" : "Direct";
 
   if (hostType === "ephemeral") {
+    const providerLabel = hostProvider
+      ? (sandboxProviderDisplayNames[hostProvider] ?? hostProvider)
+      : "Cloud";
     return {
-      modeLabel: sandboxProviderName ?? "Cloud",
+      modeLabel: providerLabel,
       hostLabel: null,
       id: environment.id,
       location: "cloud",

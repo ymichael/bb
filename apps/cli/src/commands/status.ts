@@ -110,6 +110,7 @@ async function fetchEnvironmentInfo(args: {
         isLocalHost: isLocal,
         hostName: host?.name,
         hostType: host?.type,
+        hostProvider: host?.provider,
       }),
       hostId: env.hostId,
       hostName: host?.name ?? null,
