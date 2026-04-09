@@ -30,10 +30,7 @@ export async function listHostFiles(
     });
   } catch (error) {
     if (isFsErrorWithCode(error, "ENOENT")) {
-      throw new CommandDispatchError(
-        "ENOENT",
-        `Path does not exist: ${command.path}`,
-      );
+      return { files: [], truncated: false };
     }
     throw error;
   }

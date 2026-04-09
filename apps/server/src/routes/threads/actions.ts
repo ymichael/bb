@@ -44,9 +44,8 @@ import {
 } from "../../services/threads/thread-commands.js";
 import {
   ensureThreadCanQueueStartRequest,
-  hasActiveThreadStartOperation,
   queueReadyThreadTurnCommand,
-  requestThreadStop,
+  requestThreadStopIfNeeded,
 } from "../../services/threads/thread-lifecycle.js";
 import {
   appendClientTurnEvent,
@@ -80,27 +79,6 @@ function resolveSendMode(
     return "steer";
   }
   return "start";
-}
-
-function requestThreadStopIfNeeded(
-  deps: Pick<AppDeps, "db" | "hub">,
-  thread: Thread,
-  environment: {
-    hostId: string;
-    id: string;
-  },
-): void {
-  const startRequested = hasActiveThreadStartOperation(deps, thread.id);
-  if (thread.status !== "active" && !startRequested) {
-    return;
-  }
-
-  requestThreadStop(deps, {
-    environmentId: environment.id,
-    hostId: environment.hostId,
-    stopRequestedAt: thread.stopRequestedAt,
-    threadId: thread.id,
-  });
 }
 
 async function validateArchiveCleanupRequest(

@@ -1,3 +1,5 @@
+import fs from "node:fs/promises";
+import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { dispatchCommand } from "../../src/command-dispatch.js";
 import { RuntimeManager } from "../../src/runtime-manager.js";
@@ -34,7 +36,7 @@ describe("thread command dispatch", () => {
         instructions: "Be a helpful coding agent.",
         dynamicTools: [],
       },
-      { runtimeManager: harness.manager },
+      harness.dispatchOptions(),
     );
     const renameResult = await dispatchCommand(
       {
@@ -43,7 +45,7 @@ describe("thread command dispatch", () => {
         threadId: "thread-1",
         title: "Renamed",
       },
-      { runtimeManager: harness.manager },
+      harness.dispatchOptions(),
     );
     const stopResult = await dispatchCommand(
       {
@@ -51,7 +53,7 @@ describe("thread command dispatch", () => {
         environmentId: "env-1",
         threadId: "thread-1",
       },
-      { runtimeManager: harness.manager },
+      harness.dispatchOptions(),
     );
 
     expect(startResult).toEqual({ providerThreadId: "provider-thread-1" });
@@ -95,7 +97,7 @@ describe("thread command dispatch", () => {
           dynamicTools: [],
         },
       },
-      { runtimeManager: harness.manager },
+      harness.dispatchOptions(),
     );
     const steerResult = await dispatchCommand(
       {
@@ -120,7 +122,7 @@ describe("thread command dispatch", () => {
           dynamicTools: [],
         },
       },
-      { runtimeManager: harness.manager },
+      harness.dispatchOptions(),
     );
 
     expect(runResult).toEqual({});
@@ -155,7 +157,7 @@ describe("thread command dispatch", () => {
           dynamicTools: [],
         },
       },
-      { runtimeManager: harness.manager },
+      harness.dispatchOptions(),
     );
 
     expect(result).toEqual({});
@@ -223,7 +225,7 @@ describe("thread command dispatch", () => {
           dynamicTools: [],
         },
       },
-      { runtimeManager: manager },
+      { runtimeManager: manager, threadStorageRootPath: "/tmp/bb-test-thread-storage" },
     );
 
     expect(result).toEqual({});
@@ -239,7 +241,7 @@ describe("thread command dispatch", () => {
         type: "provider.list",
       },
       {
-        runtimeManager: harness.manager,
+        ...harness.dispatchOptions(),
         listProviders: () => [
           {
             id: "fake",
@@ -278,7 +280,7 @@ describe("thread command dispatch", () => {
         providerId: "fake",
       },
       {
-        runtimeManager: harness.manager,
+        ...harness.dispatchOptions(),
         listModels: async () => [
           {
             id: "model-1",
@@ -354,7 +356,7 @@ describe("thread command dispatch", () => {
           },
         ],
       },
-      { runtimeManager: harness.manager },
+      harness.dispatchOptions(),
     );
 
     expect(harness.runtimeState.startedDynamicTools).toEqual(
@@ -375,5 +377,172 @@ describe("thread command dispatch", () => {
     expect(harness.runtimeState.startedInstructions).toContain(
       threadStorage,
     );
+  });
+
+  it("creates threadStoragePath directory before starting the thread", async () => {
+    const tempDir = await makeTempDir("bb-thread-storage-start-");
+    const storagePath = path.join(tempDir, "thr_abc123");
+    const harness = createHarness();
+
+    await dispatchCommand(
+      {
+        type: "thread.start",
+        environmentId: "env-1",
+        threadId: "thread-1",
+        workspaceContext: { workspacePath: "/tmp/env-1", workspaceProvisionType: "unmanaged" },
+        projectId: "project-1",
+        providerId: "fake",
+        eventSequence: 1,
+        input: [{ type: "text", text: "hello" }],
+        options: {
+          model: "gpt-5",
+          serviceTier: "default",
+          reasoningLevel: "medium",
+          sandboxMode: "danger-full-access",
+        },
+        instructions: "test",
+        dynamicTools: [],
+        threadStoragePath: storagePath,
+      },
+      harness.dispatchOptions({ threadStorageRootPath: tempDir }),
+    );
+
+    const stat = await fs.stat(storagePath);
+    expect(stat.isDirectory()).toBe(true);
+  });
+
+  it("does not fail when threadStoragePath is omitted", async () => {
+    const harness = createHarness();
+
+    const result = await dispatchCommand(
+      {
+        type: "thread.start",
+        environmentId: "env-1",
+        threadId: "thread-1",
+        workspaceContext: { workspacePath: "/tmp/env-1", workspaceProvisionType: "unmanaged" },
+        projectId: "project-1",
+        providerId: "fake",
+        eventSequence: 1,
+        input: [{ type: "text", text: "hello" }],
+        options: {
+          model: "gpt-5",
+          serviceTier: "default",
+          reasoningLevel: "medium",
+          sandboxMode: "danger-full-access",
+        },
+        instructions: "test",
+        dynamicTools: [],
+      },
+      harness.dispatchOptions(),
+    );
+
+    expect(result).toEqual({ providerThreadId: "provider-thread-1" });
+  });
+
+  it("removes thread storage directory on thread.deleted", async () => {
+    const tempDir = await makeTempDir("bb-thread-storage-delete-");
+    const threadDir = path.join(tempDir, "thr_del123");
+    await fs.mkdir(threadDir);
+    await fs.writeFile(path.join(threadDir, "PREFERENCES.md"), "prefs");
+
+    const harness = createHarness();
+
+    const result = await dispatchCommand(
+      {
+        type: "thread.deleted",
+        environmentId: "env-1",
+        threadId: "thr_del123",
+      },
+      harness.dispatchOptions({ threadStorageRootPath: tempDir }),
+    );
+
+    expect(result).toEqual({});
+    await expect(fs.stat(threadDir)).rejects.toThrow();
+  });
+
+  it("succeeds on thread.deleted when directory does not exist", async () => {
+    const tempDir = await makeTempDir("bb-thread-storage-delete-noop-");
+    const harness = createHarness();
+
+    const result = await dispatchCommand(
+      {
+        type: "thread.deleted",
+        environmentId: "env-1",
+        threadId: "thr_missing",
+      },
+      harness.dispatchOptions({ threadStorageRootPath: tempDir }),
+    );
+
+    expect(result).toEqual({});
+  });
+
+  it("rejects thread.deleted when threadId escapes storage root", async () => {
+    const tempDir = await makeTempDir("bb-thread-storage-traversal-");
+    const harness = createHarness();
+
+    await expect(
+      dispatchCommand(
+        {
+          type: "thread.deleted",
+          environmentId: "env-1",
+          threadId: "../../etc",
+        },
+        harness.dispatchOptions({ threadStorageRootPath: tempDir }),
+      ),
+    ).rejects.toMatchObject({
+      code: "invalid_path",
+      message: expect.stringContaining("escapes"),
+    });
+  });
+
+  it("rejects thread.deleted when threadId resolves to the root itself", async () => {
+    const tempDir = await makeTempDir("bb-thread-storage-root-");
+    const harness = createHarness();
+
+    await expect(
+      dispatchCommand(
+        {
+          type: "thread.deleted",
+          environmentId: "env-1",
+          threadId: ".",
+        },
+        harness.dispatchOptions({ threadStorageRootPath: tempDir }),
+      ),
+    ).rejects.toMatchObject({
+      code: "invalid_path",
+    });
+  });
+
+  it("rejects thread.start when threadStoragePath escapes storage root", async () => {
+    const tempDir = await makeTempDir("bb-thread-storage-start-traversal-");
+    const harness = createHarness();
+
+    await expect(
+      dispatchCommand(
+        {
+          type: "thread.start",
+          environmentId: "env-1",
+          threadId: "thread-1",
+          workspaceContext: { workspacePath: "/tmp/env-1", workspaceProvisionType: "unmanaged" },
+          projectId: "project-1",
+          providerId: "fake",
+          eventSequence: 1,
+          input: [{ type: "text", text: "hello" }],
+          options: {
+            model: "gpt-5",
+            serviceTier: "default",
+            reasoningLevel: "medium",
+            sandboxMode: "danger-full-access",
+          },
+          instructions: "test",
+          dynamicTools: [],
+          threadStoragePath: "/tmp/evil-escape",
+        },
+        harness.dispatchOptions({ threadStorageRootPath: tempDir }),
+      ),
+    ).rejects.toMatchObject({
+      code: "invalid_path",
+      message: expect.stringContaining("escapes"),
+    });
   });
 });

@@ -1,6 +1,5 @@
 import { and, desc, eq, or } from "drizzle-orm";
 import {
-  deleteThread,
   events,
   getEnvironment,
   getHost,
@@ -34,7 +33,6 @@ import {
   completeEnvironmentDestroyForCommand,
   failEnvironmentDestroyForCommand,
   hasActiveEnvironmentDestroyOperationForCommand,
-  requestEnvironmentCleanup,
 } from "../services/environments/environment-cleanup.js";
 import {
   completeEnvironmentProvisioningForCommand,
@@ -117,14 +115,7 @@ async function handleProvisionCommandResult(
 
     for (const thread of boundThreads) {
       if (thread.deletedAt !== null) {
-        const environmentId = thread.environmentId;
-        deleteThread(deps.db, deps.hub, thread.id);
-        if (environmentId !== null) {
-          requestEnvironmentCleanup(deps, {
-            environmentId,
-            mode: "force",
-          });
-        }
+        await finalizeStoppedThread(deps, { threadId: thread.id });
         continue;
       }
 

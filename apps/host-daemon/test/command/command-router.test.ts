@@ -144,6 +144,7 @@ describe("CommandRouter", () => {
 
     const router = new CommandRouter({
       runtimeManager: manager,
+      threadStorageRootPath: "/tmp/bb-test-thread-storage",
       logger: createLogger(),
     });
     const handling = router.handleCommands([
@@ -204,6 +205,7 @@ describe("CommandRouter", () => {
 
     const router = new CommandRouter({
       runtimeManager: manager,
+      threadStorageRootPath: "/tmp/bb-test-thread-storage",
       logger: createLogger(),
     });
     const handling = router.handleCommands([
@@ -285,6 +287,7 @@ describe("CommandRouter", () => {
     const reported: string[] = [];
     const router = new CommandRouter({
       runtimeManager: manager,
+      threadStorageRootPath: "/tmp/bb-test-thread-storage",
       logger: createLogger(),
       reportResult: async (result) => {
         reported.push(result.commandId);
@@ -370,6 +373,7 @@ describe("CommandRouter", () => {
     const results: Array<{ commandId: string; completedAt: number; ok: boolean }> = [];
     const router = new CommandRouter({
       runtimeManager: manager,
+      threadStorageRootPath: "/tmp/bb-test-thread-storage",
       logger: createLogger(),
       now: () => nowValue,
       reportResult: async (result) => {
@@ -446,6 +450,7 @@ describe("CommandRouter", () => {
 
     const router = new CommandRouter({
       runtimeManager: manager,
+      threadStorageRootPath: "/tmp/bb-test-thread-storage",
       logger: createLogger(),
     });
     await router.handleCommands([
@@ -496,6 +501,7 @@ describe("CommandRouter", () => {
     const reported: string[] = [];
     const router = new CommandRouter({
       runtimeManager: manager,
+      threadStorageRootPath: "/tmp/bb-test-thread-storage",
       logger,
       reportResult: async (result) => {
         if (shouldFail) {

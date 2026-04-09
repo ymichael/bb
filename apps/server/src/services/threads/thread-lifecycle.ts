@@ -4,6 +4,7 @@ import {
   deleteThread,
   getActiveSession,
   getCommand,
+  getEnvironment,
   getThread,
   getThreadOperation,
   getThreadOperationByCommandId,
@@ -36,6 +37,7 @@ import { getLastProviderThreadId } from "./thread-events.js";
 import {
   buildThreadStartCommand,
   buildThreadStopCommand,
+  queueThreadDeletedCommand,
   queueTurnRunCommand,
   type QueueThreadStartCommandArgs,
   type QueueThreadStopCommandArgs,
@@ -426,6 +428,25 @@ export function requestThreadStop(
   });
 }
 
+export function requestThreadStopIfNeeded(
+  deps: Pick<AppDeps, "db" | "hub">,
+  thread: Pick<Thread, "id" | "status" | "stopRequestedAt">,
+  environment: {
+    hostId: string;
+    id: string;
+  },
+): void {
+  if (thread.status !== "active" && !hasActiveThreadStartOperation(deps, thread.id)) {
+    return;
+  }
+  requestThreadStop(deps, {
+    environmentId: environment.id,
+    hostId: environment.hostId,
+    stopRequestedAt: thread.stopRequestedAt,
+    threadId: thread.id,
+  });
+}
+
 function advanceThreadStop(
   deps: Pick<AppDeps, "db" | "hub">,
   args: AdvanceThreadOperationArgs,
@@ -496,11 +517,10 @@ export async function finalizeStoppedThread(
   if (stopCommandState === "fetched") {
     return false;
   }
-  if (
-    args.cancelPendingCommand !== false
-    && stopCommandState === "pending"
-    && stopOperation?.commandId
-  ) {
+  if (stopCommandState === "pending" && stopOperation?.commandId) {
+    if (args.cancelPendingCommand === false) {
+      return false;
+    }
     cancelCommand(deps.db, {
       commandId: stopOperation.commandId,
     });
@@ -533,6 +553,13 @@ export async function finalizeStoppedThread(
 
   if (finalizedThread.deletedAt !== null) {
     const environmentId = finalizedThread.environmentId;
+    const environment = environmentId ? getEnvironment(deps.db, environmentId) : null;
+    if (environment) {
+      queueThreadDeletedCommand(deps, {
+        environment: { hostId: environment.hostId, id: environment.id },
+        threadId: finalizedThread.id,
+      });
+    }
     deleteThread(deps.db, deps.hub, finalizedThread.id);
     requestEnvironmentCleanup(deps, {
       environmentId,

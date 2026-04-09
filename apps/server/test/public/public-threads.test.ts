@@ -2481,9 +2481,7 @@ describe("public thread routes", () => {
       });
 
       expect(response.status).toBe(200);
-      const deletedThread = getThread(harness.db, thread.id);
-      expect(deletedThread?.deletedAt).toBeTypeOf("number");
-      expect(deletedThread?.stopRequestedAt).toBeNull();
+      expect(getThread(harness.db, thread.id)).toBeNull();
       expect(listThreads(harness.db, { projectId: project.id })).toHaveLength(0);
       await expect(
         waitForQueuedCommand(
@@ -2521,7 +2519,7 @@ describe("public thread routes", () => {
       });
 
       expect(response.status).toBe(200);
-      expect(getThread(harness.db, thread.id)?.deletedAt).toBeTypeOf("number");
+      expect(getThread(harness.db, thread.id)).toBeNull();
       expect(getEnvironment(harness.db, environment.id)?.status).toBe("destroying");
 
       const destroyCommand = await waitForQueuedCommand(

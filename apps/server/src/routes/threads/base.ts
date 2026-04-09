@@ -1,6 +1,4 @@
 import {
-  deleteThread,
-  getActiveSession,
   listThreads,
   markThreadDeleted,
   updateThread,
@@ -30,8 +28,8 @@ import {
   queueThreadRenameCommand,
 } from "../../services/threads/thread-commands.js";
 import {
-  hasActiveThreadStartOperation,
-  requestThreadStop,
+  finalizeStoppedThread,
+  requestThreadStopIfNeeded,
 } from "../../services/threads/thread-lifecycle.js";
 import { appendThreadOwnershipChangeEvent } from "../../services/threads/thread-events.js";
 import { createThreadFromRequest } from "../../services/threads/thread-create.js";
@@ -165,35 +163,12 @@ export function registerThreadBaseRoutes(app: Hono, deps: AppDeps): void {
 
   del("/threads/:id", async (context) => {
     const { environment, thread } = requirePublicThreadEnvironment(deps.db, context.req.param("id"));
-    const connectedSession = getActiveSession(deps.db, environment.hostId);
-    const startRequested = hasActiveThreadStartOperation(deps, thread.id);
-    if (thread.status !== "active" && connectedSession && !startRequested) {
-      deleteThread(deps.db, deps.hub, thread.id);
-      requestEnvironmentCleanup(deps, {
-        environmentId: thread.environmentId,
-        mode: "force",
-      });
-      await advanceEnvironmentCleanup(deps, {
-        environmentId: thread.environmentId,
-      });
-      return context.json({ ok: true });
-    }
-
-    markThreadDeleted(deps.db, deps.hub, {
+    markThreadDeleted(deps.db, deps.hub, { threadId: thread.id });
+    requestThreadStopIfNeeded(deps, thread, environment);
+    await finalizeStoppedThread(deps, {
       threadId: thread.id,
+      cancelPendingCommand: false,
     });
-
-    if (thread.status === "active" || startRequested) {
-      requestThreadStop(deps, {
-        environmentId: environment.id,
-        hostId: environment.hostId,
-        stopRequestedAt: thread.stopRequestedAt,
-        threadId: thread.id,
-      });
-    }
-
-    // Active tombstones still block cleanup through the stop-pending guard in
-    // environment cleanup until stop finalization removes the runtime.
     requestEnvironmentCleanup(deps, {
       environmentId: thread.environmentId,
       mode: "force",

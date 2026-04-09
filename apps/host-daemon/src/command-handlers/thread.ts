@@ -1,11 +1,42 @@
+import fs from "node:fs/promises";
+import path from "node:path";
 import type { HostDaemonCommandResult } from "@bb/host-daemon-contract";
 import type { RuntimeEntry } from "../runtime-manager.js";
 import { CommandDispatchError, type CommandDispatchOptions, type CommandOf } from "../command-dispatch-support.js";
+
+function requireConfinedPath(rootPath: string, candidatePath: string): string {
+  const resolvedRoot = path.resolve(rootPath);
+  const resolved = path.resolve(candidatePath);
+  if (!resolved.startsWith(resolvedRoot + path.sep)) {
+    throw new CommandDispatchError(
+      "invalid_path",
+      "Thread storage path escapes the storage root",
+    );
+  }
+  return resolved;
+}
+
+function resolveThreadStorageDir(
+  threadStorageRootPath: string,
+  threadId: string,
+): string {
+  return requireConfinedPath(
+    threadStorageRootPath,
+    path.join(threadStorageRootPath, threadId),
+  );
+}
 
 export async function startThread(
   command: CommandOf<"thread.start">,
   options: CommandDispatchOptions,
 ): Promise<HostDaemonCommandResult<"thread.start">> {
+  if (command.threadStoragePath) {
+    const confined = requireConfinedPath(
+      options.threadStorageRootPath,
+      command.threadStoragePath,
+    );
+    await fs.mkdir(confined, { recursive: true });
+  }
   const entry = await options.runtimeManager.ensureEnvironment({
     environmentId: command.environmentId,
     workspacePath: command.workspaceContext.workspacePath,
@@ -70,4 +101,16 @@ export async function ensureThreadRuntime(
     );
   }
   return entry;
+}
+
+export async function handleThreadDeleted(
+  command: CommandOf<"thread.deleted">,
+  options: CommandDispatchOptions,
+): Promise<HostDaemonCommandResult<"thread.deleted">> {
+  const threadDir = resolveThreadStorageDir(
+    options.threadStorageRootPath,
+    command.threadId,
+  );
+  await fs.rm(threadDir, { recursive: true, force: true });
+  return {};
 }

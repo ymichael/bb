@@ -21,7 +21,7 @@ describe("workspace command dispatch", () => {
         workspaceContext: { workspacePath: "/tmp/env-1", workspaceProvisionType: "unmanaged" },
         mergeBaseBranch: "main",
       },
-      { runtimeManager: harness.manager },
+      harness.dispatchOptions(),
     );
     const diffResult = await dispatchCommand(
       {
@@ -30,7 +30,7 @@ describe("workspace command dispatch", () => {
         workspaceContext: { workspacePath: "/tmp/env-1", workspaceProvisionType: "unmanaged" },
         target: { type: "all", mergeBaseBranch: "main" },
       },
-      { runtimeManager: harness.manager },
+      harness.dispatchOptions(),
     );
     const commitResult = await dispatchCommand(
       {
@@ -39,7 +39,7 @@ describe("workspace command dispatch", () => {
         workspaceContext: { workspacePath: "/tmp/env-1", workspaceProvisionType: "unmanaged" },
         message: "Commit message",
       },
-      { runtimeManager: harness.manager },
+      harness.dispatchOptions(),
     );
     const squashResult = await dispatchCommand(
       {
@@ -49,7 +49,7 @@ describe("workspace command dispatch", () => {
         targetBranch: "main",
         commitMessage: "feat: squash merge",
       },
-      { runtimeManager: harness.manager },
+      harness.dispatchOptions(),
     );
     const promoteResult = await dispatchCommand(
       {
@@ -58,7 +58,7 @@ describe("workspace command dispatch", () => {
         workspaceContext: { workspacePath: "/tmp/env-1", workspaceProvisionType: "unmanaged" },
         primaryPath: "/tmp/primary",
       },
-      { runtimeManager: harness.manager },
+      harness.dispatchOptions(),
     );
     const demoteResult = await dispatchCommand(
       {
@@ -69,7 +69,7 @@ describe("workspace command dispatch", () => {
         defaultBranch: "main",
         envBranch: "feature",
       },
-      { runtimeManager: harness.manager },
+      harness.dispatchOptions(),
     );
 
     expect(statusResult.workspaceStatus?.workingTree.state).toBe("clean");
@@ -93,7 +93,7 @@ describe("workspace command dispatch", () => {
         environmentId: "env-rehydrate",
         workspaceContext: { workspacePath: "/tmp/env-rehydrate", workspaceProvisionType: "unmanaged" },
       },
-      { runtimeManager: harness.manager },
+      harness.dispatchOptions(),
     );
 
     expect(result.workspaceStatus?.workingTree.state).toBe("clean");
@@ -124,7 +124,7 @@ describe("workspace command dispatch", () => {
         workspaceContext: { workspacePath: tempDir, workspaceProvisionType: "unmanaged" },
         limit: 1000,
       },
-      { runtimeManager: harness.manager },
+      harness.dispatchOptions(),
     );
 
     const paths = result.files.map((f: { path: string }) => f.path).sort();
@@ -140,7 +140,7 @@ describe("workspace command dispatch", () => {
         query: "file-b",
         limit: 1000,
       },
-      { runtimeManager: harness.manager },
+      harness.dispatchOptions(),
     );
     expect(filtered.files).toHaveLength(1);
     expect(filtered.files[0].name).toBe("file-b.ts");
@@ -153,7 +153,7 @@ describe("workspace command dispatch", () => {
         workspaceContext: { workspacePath: tempDir, workspaceProvisionType: "unmanaged" },
         limit: 1,
       },
-      { runtimeManager: harness.manager },
+      harness.dispatchOptions(),
     );
     expect(limited.files).toHaveLength(1);
     expect(limited.truncated).toBe(true);
@@ -172,7 +172,7 @@ describe("workspace command dispatch", () => {
         path: tempDir,
         limit: 1000,
       },
-      { runtimeManager: harness.manager },
+      harness.dispatchOptions(),
     );
 
     const paths = result.files.map((file) => file.path).sort();
@@ -180,6 +180,24 @@ describe("workspace command dispatch", () => {
       "PREFERENCES.md",
       path.join("notes", "todo.md"),
     ]);
+    expect(result.truncated).toBe(false);
+  });
+
+  it("returns empty files for host.list_files when path does not exist", async () => {
+    const tempDir = await makeTempDir("bb-dispatch-host-list-missing-");
+    const missingPath = path.join(tempDir, "does-not-exist");
+
+    const harness = createHarness();
+    const result = await dispatchCommand(
+      {
+        type: "host.list_files",
+        path: missingPath,
+        limit: 1000,
+      },
+      harness.dispatchOptions(),
+    );
+
+    expect(result.files).toEqual([]);
     expect(result.truncated).toBe(false);
   });
 
@@ -200,7 +218,7 @@ describe("workspace command dispatch", () => {
           path: symlinkRoot,
           limit: 1000,
         },
-        { runtimeManager: harness.manager },
+        harness.dispatchOptions(),
       ),
     ).rejects.toMatchObject({
       code: "invalid_path",
@@ -220,7 +238,7 @@ describe("workspace command dispatch", () => {
         path: filePath,
         rootPath: tempDir,
       },
-      { runtimeManager: harness.manager },
+      harness.dispatchOptions(),
     );
 
     expect(result.path).toBe(filePath);
@@ -242,7 +260,7 @@ describe("workspace command dispatch", () => {
         path: imagePath,
         rootPath: tempDir,
       },
-      { runtimeManager: harness.manager },
+      harness.dispatchOptions(),
     );
 
     expect(result.path).toBe(imagePath);
@@ -262,7 +280,7 @@ describe("workspace command dispatch", () => {
           path: "PREFERENCES.md",
           rootPath: "/tmp",
         },
-        { runtimeManager: harness.manager },
+        harness.dispatchOptions(),
       ),
     ).rejects.toThrow("Path must be absolute");
   });
@@ -278,7 +296,7 @@ describe("workspace command dispatch", () => {
           path: path.join(tempDir, "missing.md"),
           rootPath: tempDir,
         },
-        { runtimeManager: harness.manager },
+        harness.dispatchOptions(),
       ),
     ).rejects.toMatchObject({
       code: "ENOENT",
@@ -304,7 +322,7 @@ describe("workspace command dispatch", () => {
           path: symlinkPath,
           rootPath: tempDir,
         },
-        { runtimeManager: harness.manager },
+        harness.dispatchOptions(),
       ),
     ).rejects.toMatchObject({
       code: "invalid_path",
@@ -330,7 +348,7 @@ describe("workspace command dispatch", () => {
           path: filePath,
           rootPath: symlinkRoot,
         },
-        { runtimeManager: harness.manager },
+        harness.dispatchOptions(),
       ),
     ).rejects.toMatchObject({
       code: "invalid_path",
@@ -352,7 +370,7 @@ describe("workspace command dispatch", () => {
           path: imagePath,
           rootPath: tempDir,
         },
-        { runtimeManager: harness.manager },
+        harness.dispatchOptions(),
       ),
     ).rejects.toMatchObject({
       code: "file_too_large",
@@ -374,7 +392,7 @@ describe("workspace command dispatch", () => {
           path: filePath,
           rootPath: tempDir,
         },
-        { runtimeManager: harness.manager },
+        harness.dispatchOptions(),
       ),
     ).rejects.toMatchObject({
       code: "file_too_large",
@@ -395,7 +413,7 @@ describe("workspace command dispatch", () => {
         path: filePath,
         rootPath: tempDir,
       },
-      { runtimeManager: harness.manager },
+      harness.dispatchOptions(),
     );
 
     expect(result.mimeType).toBe("image/svg+xml");
@@ -416,7 +434,7 @@ describe("workspace command dispatch", () => {
         path: filePath,
         rootPath: tempDir,
       },
-      { runtimeManager: harness.manager },
+      harness.dispatchOptions(),
     );
 
     expect(result.mimeType).toBe("text/plain");
@@ -437,7 +455,7 @@ describe("workspace command dispatch", () => {
         environmentId: "env-1",
         workspaceContext: { workspacePath: "/tmp/env-1", workspaceProvisionType: "unmanaged" },
       },
-      { runtimeManager: harness.manager },
+      harness.dispatchOptions(),
     );
 
     expect(result.branches).toEqual(["main"]);

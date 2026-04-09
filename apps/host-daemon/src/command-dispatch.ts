@@ -11,7 +11,7 @@ import {
 } from "./command-dispatch-support.js";
 import { provisionEnvironment } from "./command-handlers/environment.js";
 import { listHostFiles, readHostFile } from "./command-handlers/host-files.js";
-import { ensureThreadRuntime, startThread } from "./command-handlers/thread.js";
+import { ensureThreadRuntime, handleThreadDeleted, startThread } from "./command-handlers/thread.js";
 import { WorkspaceError } from "@bb/host-workspace";
 import { demoteWorkspace, promoteWorkspace, squashMerge } from "./command-handlers/workspace.js";
 import { listBranches, listWorkspaceFiles } from "./command-handlers/workspace-files.js";
@@ -96,6 +96,10 @@ export async function dispatchCommand<TCommand extends HostDaemonCommand>(
       });
       return {} as HostDaemonCommandResult<TCommand["type"]>;
     }
+    case "thread.deleted":
+      return handleThreadDeleted(command, options) as Promise<
+        HostDaemonCommandResult<TCommand["type"]>
+      >;
     case "host.list_files":
       return listHostFiles(command) as Promise<
         HostDaemonCommandResult<TCommand["type"]>

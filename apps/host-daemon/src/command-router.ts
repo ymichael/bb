@@ -18,6 +18,7 @@ export interface CommandRouterOptions {
   seedThreadHighWaterMark?: CommandDispatchOptions["seedThreadHighWaterMark"];
   eventSink?: CommandDispatchOptions["eventSink"];
   listModels?: CommandDispatchOptions["listModels"];
+  threadStorageRootPath: string;
   logger: Pick<HostDaemonLogger, "warn">;
   now?: () => number;
 }
@@ -124,6 +125,7 @@ export class CommandRouter {
         seedThreadHighWaterMark: this.options.seedThreadHighWaterMark,
         eventSink: this.options.eventSink,
         listModels: this.options.listModels,
+        threadStorageRootPath: this.options.threadStorageRootPath,
       });
       return {
         ...baseReport,
