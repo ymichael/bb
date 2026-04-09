@@ -9,8 +9,8 @@
     startup, and local-path + managed-workspace product flows
 - Windows:
   - native Windows is not a supported product path
-  - optional `windows-latest` CI preflight may remain as an early-warning signal
-    for script portability, but it is not a support gate
+  - Windows users are expected to run bb inside Ubuntu on WSL2 once Milestone 2
+    is complete
 - macOS persistent host:
   - remains supported as an existing product path
 - E2B sandboxes:
@@ -48,6 +48,8 @@
   - local project paths are Linux-style absolute paths from inside WSL2
   - repositories should live inside the WSL filesystem unless we explicitly
     expand support later
+  - native Windows drive-letter and UNC paths are outside the supported product
+    path
 
 ### Maintainer-only or best-effort surfaces
 
@@ -80,16 +82,15 @@ We are explicitly not adopting:
 
 ## Setup Hook Policy
 
-- The supported end state is a Node-based `.bb-env-setup.ts`.
-- `.bb-env-setup.sh` is a temporary Unix-only migration bridge when needed for
-  existing repositories.
-- `.bb-env-setup.sh` is not part of the supported WSL2 contract and is not part
-  of Milestone 1 or Milestone 2 exit criteria.
+- The supported setup hook is POSIX `.bb-env-setup.sh`.
+- The same shell-based hook contract is used across macOS, Linux, and WSL2.
+- `.bb-env-setup.ts` is not part of the supported contract and should be
+  removed from the product path to avoid parallel setup mechanisms.
 
 ## Line Ending Policy
 
 - The repository enforces LF checkout for supported text files via
   [.gitattributes](../.gitattributes).
 - Supported Linux and WSL2 flows must work with those repository rules applied.
-- Native Windows checkouts are best-effort only unless we later choose to
-  support a native Windows product path.
+- Native Windows checkouts are outside the support contract unless we later
+  choose to support a native Windows product path.

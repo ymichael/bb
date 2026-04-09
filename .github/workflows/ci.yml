@@ -13,15 +13,9 @@ concurrency:
 
 jobs:
   preflight:
-    name: Preflight (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
+    name: Preflight (ubuntu)
+    runs-on: ubuntu-latest
     timeout-minutes: 20
-    strategy:
-      fail-fast: false
-      matrix:
-        os:
-          - ubuntu-latest
-          - windows-latest
 
     steps:
       - name: Checkout repository

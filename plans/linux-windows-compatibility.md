@@ -1,4 +1,4 @@
-# Linux and Windows via WSL2 Compatibility Plan
+# Linux and WSL2 Compatibility Plan
 
 ## Goal
 
@@ -29,7 +29,6 @@ support is deferred unless we choose to take it on later.
 - native Windows PowerShell, CMD, and host-daemon runtime support
 - native Windows path, shim, and launcher integration outside WSL2
 - making E2B sandboxes themselves run on Windows
-- preserving shell-script setup hooks as the only setup mechanism
 - ad hoc Unix-only QA helpers that are not part of the supported product path
 
 ## Current Status
@@ -37,17 +36,17 @@ support is deferred unless we choose to take it on later.
 - Milestone 1 implementation is complete on this local branch:
   - Phase 1 decision record exists in [docs/platform-support.md](../docs/platform-support.md)
   - package/build portability, shared launch helpers, path validation, setup-hook
-    migration, and Linux app/runtime support changes are in the repo
+    changes, and Linux app/runtime support changes are in the repo
   - Linux text-input local-path creation/update is the supported cross-platform
     app fallback; native folder picking remains macOS-only
+- The current implementation still prefers `.bb-env-setup.ts` with a POSIX
+  `.bb-env-setup.sh` fallback. Under the new WSL2-only Windows direction, that
+  setup-hook contract should be simplified back to `.bb-env-setup.sh` only.
 - Recent local validation is green:
   - `pnpm exec turbo run typecheck --filter=@bb/app --filter=@bb/domain --filter=@bb/server-contract --filter=@bb/server`
   - `pnpm exec turbo run test --filter=@bb/app --filter=@bb/domain --filter=@bb/server-contract --filter=@bb/server`
 - The workflow now includes:
   - Ubuntu CI for supported Linux product-path validation
-  - Windows preflight (`install`, `build`, `typecheck`) as an optional
-    early-warning signal for script portability, not as a native Windows support
-    gate
   - Ubuntu lint/test
   - Ubuntu Linux smoke
 - This branch is currently ahead of `origin` with local follow-up commits, so the
@@ -55,6 +54,16 @@ support is deferred unless we choose to take it on later.
   GitHub Actions before we formally close the milestone checklist.
 
 ## Remaining Gaps
+
+### Setup-hook policy and implementation are now intentionally out of sync
+
+- The updated support direction is to standardize on `.bb-env-setup.sh` as the
+  only supported hook contract for macOS, Linux, and WSL2.
+- The current implementation in
+  [packages/host-workspace/src/provisioning.ts](../packages/host-workspace/src/provisioning.ts)
+  still prefers `.bb-env-setup.ts` and only falls back to `.bb-env-setup.sh`.
+- Milestone 2 should simplify that logic so the product and the code agree on a
+  single shell-based setup-hook path.
 
 ### WSL2 support still needs an explicit product contract
 
@@ -68,14 +77,18 @@ support is deferred unless we choose to take it on later.
   the WSL filesystem and defer Windows-mounted paths unless there is product
   demand.
 
-### Native Windows runtime work is no longer part of the active rollout
+### Native-Windows-only compatibility leftovers should be deleted, not preserved
 
-- The branch still contains optional `windows-latest` preflight coverage, but
-  native Windows launchers, `.cmd` shim handling, and Windows-specific provider
-  startup are no longer release blockers.
-- If we later want native Windows support, the deferred work is still the same:
-  launcher contract, shim-aware process launching, Windows path behavior, and
-  native host-daemon UX.
+- Native Windows CI checks, docs language, and product-path code should not stay
+  around as “maybe later” scaffolding if they are no longer part of the support
+  contract.
+- Milestone 2 should explicitly remove native-Windows-only compatibility paths
+  that do not help macOS, Linux, or WSL2:
+  - native Windows CI checks
+  - native Windows setup-hook support assumptions
+  - native Windows launcher or shim-oriented product-path logic
+  - native Windows path acceptance in app/server flows, unless retained solely
+    to reject unsupported input clearly
 
 ### Root scripts and maintainer tooling still have cleanup opportunities
 
@@ -100,7 +113,7 @@ support is deferred unless we choose to take it on later.
 
 ### CI only partially protects the new support contract
 
-- CI now covers Ubuntu + optional Windows preflight and Ubuntu smoke in
+- CI now covers Ubuntu preflight and Ubuntu smoke in
   [.github/workflows/ci.yml](../.github/workflows/ci.yml).
 - CI does not currently validate WSL2 directly, so Milestone 2 still needs a
   small manual WSL2 sign-off path and clearer support docs.
@@ -116,8 +129,7 @@ then locks the result in with final docs and validation.
 ### Milestone 1: Shared Foundation + Linux Support
 
 Deliver a supported Linux product path for persistent-host flows while landing
-the shared compatibility work that WSL2 support will depend on. Optional native
-Windows preflight can stay green during this milestone, but native Windows
+the shared compatibility work that WSL2 support will depend on. Native Windows
 runtime support is not part of the contract.
 
 #### Phase 1: Define the platform contract
@@ -125,7 +137,7 @@ runtime support is not part of the contract.
 1. Decide the official support matrix for the milestone boundary:
    - Linux persistent host: supported at Milestone 1 exit
    - Windows via WSL2 persistent host: supported at Milestone 2 exit
-   - native Windows install/build/typecheck: optional preflight during Milestone 1
+   - native Windows: unsupported product path
    - macOS persistent host: keep supported
    - E2B sandbox runtime: Linux-only unless explicitly expanded
 2. Document which features are expected to work on each OS at each milestone.
@@ -142,22 +154,20 @@ runtime support is not part of the contract.
    - adopt `rimraf` for portable recursive cleanup
    - adopt `open` for OS-specific file and URL opening
    - adopt `cross-spawn` for portability-sensitive subprocess launch, because
-     the current runtime code is already `spawn`-oriented and Windows command
-     shim resolution is the main gap we need to close
+     the current runtime code is already `spawn`-oriented and we want one
+     shared launch contract across macOS, Linux, and WSL2
    - do not adopt `shx`; use small Node scripts for file-copy and
      directory-creation script logic instead
    - avoid adding packages for path normalization or generic filesystem helpers
      where `node:path` and `fs/promises` already cover the need
 6. Decide and document the setup-hook migration policy:
-   - the supported end state is a Node-based `.bb-env-setup.ts`
-   - `.bb-env-setup.sh` may exist only as a short-lived Unix-only migration
-     bridge during rollout
-   - `.bb-env-setup.sh` is not part of the supported Windows contract or final
-     exit criteria
+   - the supported end state is POSIX `.bb-env-setup.sh`
+   - the hook contract is shared across macOS, Linux, and WSL2
+   - `.bb-env-setup.ts` is not part of the supported long-term contract
 7. Decide and document repository checkout policy:
    - add `.gitattributes` rules for predictable LF handling in supported source
      files, shell scripts, and setup hooks
-   - validate supported flows against a default Windows Git checkout
+   - validate supported flows against Linux and WSL Git checkouts
 
 **Validation**
 
@@ -165,8 +175,8 @@ runtime support is not part of the contract.
   - the milestone-based OS support matrix
   - maintainer-only or best-effort exclusions
   - the chosen package set and rationale
-  - the setup-hook end state and any temporary migration bridge
-  - the line-ending policy and any optional native Windows checkout expectations
+  - the setup-hook end state
+  - the line-ending policy and supported checkout expectations
 - Product documentation clearly distinguishes supported flows from maintainer
   tooling and best-effort surfaces
 
@@ -190,8 +200,8 @@ runtime support is not part of the contract.
      script or fixture will always be LF-terminated
 6. Remove assumptions that `pnpm`, `node`, or provider CLIs are launched through
    POSIX shell parsing.
-7. Add an automated Ubuntu CI path for install/build/typecheck, plus optional
-   `windows-latest` preflight when the extra signal is worth the cost.
+7. Add an automated Ubuntu CI path for install/build/typecheck and remove native
+   Windows CI checks so the workflow matches the support contract.
 8. Keep Turbo as the only supported task runner path.
 
 **Validation**
@@ -201,8 +211,6 @@ runtime support is not part of the contract.
 - `pnpm exec turbo run typecheck --filter=@bb/app --filter=@bb/server --filter=@bb/host-daemon --filter=@bb/host-workspace --filter=@bb/agent-runtime --filter=@bb/db`
 - `pnpm exec turbo run test --filter=@bb/server --filter=@bb/app`
 - Ubuntu CI is green for install, build, and typecheck
-- If `windows-latest` preflight remains enabled, it stays green as a non-blocking
-  portability signal
 - Attachment reads reject traversal correctly on both POSIX and Windows-style
   paths
 
@@ -213,18 +221,16 @@ runtime support is not part of the contract.
 2. Make Linux host-daemon and CLI launcher support use the new launch contract:
    - `bb` is available inside a thread runtime shell
    - runtime shell env uses `path.delimiter`
-   - no shared logic relies on Unix executable-bit checks that Windows will
-     later need to bypass
+   - no shared logic relies on shell-specific parsing or brittle launch wrappers
 3. Implement the setup-hook end state for supported Linux flows:
-   - provisioning prefers `.bb-env-setup.ts`
-   - any `.bb-env-setup.sh` bridge stays POSIX-only and explicitly temporary
+   - provisioning uses `.bb-env-setup.sh` as the supported hook contract
+   - `.bb-env-setup.ts` is removed from the supported path
 4. Complete Linux local project UX:
    - add Linux folder picking if practical
    - otherwise expose an app-side validated absolute-path text input
    - keep `open-path` working with graceful error handling
 5. Fix any remaining path/UI issues required for Linux local project flows.
-6. Add Linux smoke coverage and keep optional Windows preflight green if we
-   continue to run it.
+6. Add Linux smoke coverage in CI.
 
 **Validation**
 
@@ -232,7 +238,6 @@ runtime support is not part of the contract.
 - `pnpm exec turbo run test:smoke --filter=@bb/integration-tests`
 - CI:
   - Linux smoke is green on `ubuntu-latest`
-  - Optional Windows preflight remains green during Milestone 1 if retained
 - When a dedicated Linux desktop host or VM is not available, treat the
   GitHub-hosted Ubuntu smoke job as the Milestone 1 Linux sign-off path.
 - Recommended manual verification when a Linux desktop host or VM is available:
@@ -243,31 +248,28 @@ runtime support is not part of the contract.
   - provision managed clone/worktree on Linux
   - create a local-path project from the app on Linux
   - update an existing local-path source from the app on Linux
-  - confirm Linux smoke coverage is green and Windows preflight remains green
+  - confirm Linux smoke coverage is green
 
 **Milestone 1 Exit Criteria**
 
 - [x] A Phase 1 decision record documents the milestone-based OS support matrix,
-      minimal dependency set, setup-hook policy, and Windows line-ending
+      minimal dependency set, setup-hook policy, and supported checkout
       expectations
 - [ ] `pnpm install`, `pnpm exec turbo run build`, `pnpm exec turbo run typecheck`,
       and `pnpm exec turbo run test` succeed in Linux CI for the supported
       product path
-      Note: rerun GitHub Actions after pushing the latest local branch commits.
-- [ ] If retained, native Windows preflight CI is green for install, build, and
-      typecheck as a non-blocking portability signal
       Note: rerun GitHub Actions after pushing the latest local branch commits.
 - [x] Cross-platform maintenance uses a documented, minimal dependency set
       instead of package-by-package custom shell fixes
 - [x] Attachment containment is fixed and tested for both POSIX and Windows-style
       paths
 - [x] The repo enforces a line-ending policy that keeps supported flows working
-      on default Windows Git checkouts
+      on supported Linux and WSL checkouts
 - [x] Host daemon starts successfully on Linux for persistent-host flows
 - [x] Provider runtime startup works on Linux for at least one installed
       provider, and the launch path already uses the shared launch helper
-- [x] Managed environment setup no longer depends on `/bin/bash` for supported
-      Linux flows
+- [ ] Managed environment setup uses `.bb-env-setup.sh` as the only supported
+      hook contract for Linux flows
 - [x] App-based local project creation/update works on Linux through native
       folder picking or the supported text-input fallback
 - [x] Linux sign-off is automated in GitHub-hosted Ubuntu CI when a dedicated
@@ -300,7 +302,13 @@ supported product path.
    - managed clone/worktree provisioning works inside WSL2
    - app local-path creation/update works with Linux-style absolute paths from
      the WSL environment
-5. Capture any WSL-specific prerequisites or limitations that fall out of that
+5. Remove native-Windows-only compatibility leftovers that no longer serve the
+   supported environments:
+   - delete native Windows CI checks
+   - delete `.bb-env-setup.ts` support and tests from the product path
+   - delete native-Windows-only product-path code or tests unless they are kept
+     solely to reject unsupported input clearly
+6. Capture any WSL-specific prerequisites or limitations that fall out of that
    validation in the support docs.
 
 **Validation**
@@ -323,12 +331,12 @@ supported product path.
    - file-based restart requests
 3. Move Unix-specific QA helpers behind explicit Linux/macOS-only tooling if they
    are not part of the supported product path.
-4. Keep Ubuntu as the primary CI support gate and decide whether optional native
-   Windows preflight is worth keeping for early warning on script portability.
+4. Keep Ubuntu as the primary CI support gate and do not reintroduce native
+   Windows CI checks unless we explicitly revive native Windows support.
 5. Expand the earlier install/build/typecheck preflight into a support matrix
    that matches the actual contract:
    - `ubuntu-latest`
-    - `macos-latest` for host-local API coverage if cost is acceptable
+   - `macos-latest` for host-local API coverage if cost is acceptable
 6. Split jobs so failures are attributable:
    - install/build/typecheck
    - unit tests
@@ -360,7 +368,7 @@ supported product path.
 - Docs include:
   - supported OS matrix, including Windows via WSL2
   - startup instructions for Linux, macOS, and WSL2
-  - any explicitly unsupported flows
+  - any explicitly unsupported native Windows flows
 
 **Milestone 2 Exit Criteria**
 
@@ -371,13 +379,15 @@ supported product path.
 - [ ] Provider runtime startup works on Linux and WSL2 for at least one
       installed provider, and the launch path stays within the shared Linux/WSL
       contract
-- [ ] Managed environment setup no longer depends on `/bin/bash` for supported
-      flows, and WSL repository-location expectations are clearly documented
+- [ ] Managed environment setup uses `.bb-env-setup.sh` as the supported hook
+      contract on Linux and WSL2, and WSL repository-location expectations are
+      clearly documented
 - [ ] App-based local project creation/update works on Linux and WSL2 through
       native folder picking or the supported text-input fallback
 - [ ] CI includes the supported Linux/macOS coverage for build, typecheck,
-      tests, and smoke startup, with optional native Windows preflight only if
-      we still want the extra signal
+      tests, and smoke startup, with no required native Windows checks
+- [ ] Native-Windows-only compatibility leftovers that do not serve macOS,
+      Linux, or WSL2 have been deleted from the supported product path
 - [ ] README documents the supported OS matrix, WSL2 setup expectations, and
       any intentional exceptions
 
@@ -385,9 +395,10 @@ supported product path.
 
 ### Setup hook migration
 
-The supported end state is `.bb-env-setup.ts`. If a migration bridge is needed
-for existing repositories, keep `.bb-env-setup.sh` Unix-only, explicitly
-temporary, and out of the final WSL2 support contract and exit criteria.
+The supported end state is `.bb-env-setup.sh` across macOS, Linux, and WSL2.
+The current `.bb-env-setup.ts` preference should be removed so the code matches
+that contract. If we ever decide to pursue native Windows support later, we can
+revisit whether a shell-only setup contract is still the right tradeoff.
 
 ### Provider availability in WSL2
 
@@ -411,6 +422,8 @@ filesystem:
 - `.gitattributes` must enforce predictable line endings for supported source
   files and scripts
 - local project paths should be Linux-style absolute paths inside WSL2
+- native Windows drive-letter and UNC paths should be rejected clearly rather
+  than treated as supported product-path input
 - if `/mnt/c/...` paths remain unsupported, the docs should say that explicitly
 - if `/mnt/c/...` paths are allowed as best-effort, the docs should warn about
   the lack of full support guarantees
