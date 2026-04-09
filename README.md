@@ -169,6 +169,17 @@ All configuration is via environment variables, validated at startup with sensib
 
 Use `pnpm reset` or `pnpm reset:dev` to clear a data directory. These only remove bb-managed state, not provider credentials.
 
+Root commands such as `pnpm start`, `pnpm bb`, `pnpm bb:dev`, and `pnpm reset`
+are thin wrappers around `@bb/scripts`. Those wrappers force `NODE_ENV` to the
+intended mode (`production` or `development`) so ambient shell state does not
+silently retarget bb. If you set a concrete `BB_*` variable such as
+`BB_DATA_DIR`, `BB_SERVER_URL`, or `BB_HOST_DAEMON_PORT`, that explicit value
+still wins over the mode-selected default.
+
+Inside the product itself, `NODE_ENV` is only used to choose defaults. When one
+process needs to target a specific bb instance, it passes explicit `BB_*`
+addressing values instead.
+
 ## Further Reading
 
 - [Vision](docs/VISION.md)

@@ -29,6 +29,18 @@ Windows support means the Linux stack runs entirely inside WSL2:
 - provider runtime startup where the provider itself supports the host
   environment
 
+### Command ownership and mode selection
+
+- `@bb/config` is the only source of dev/prod defaults.
+- Repo-root commands such as `pnpm start`, `pnpm bb`, `pnpm bb:dev`, and
+  `pnpm reset` are thin wrappers around `@bb/scripts`.
+- Those wrappers set `NODE_ENV` explicitly so ambient shell state does not
+  change which bb instance they target.
+- Explicit `BB_*` values override the `NODE_ENV`-selected defaults.
+- Process-to-process handoff, such as daemon-injected CLI environment, must use
+  explicit `BB_*` values for the exact target instance instead of relying on
+  mode defaults.
+
 ### WSL2-specific expectations
 
 - Run `pnpm install`, `pnpm start`, `pnpm dev`, `pnpm bb:dev`, and host-daemon

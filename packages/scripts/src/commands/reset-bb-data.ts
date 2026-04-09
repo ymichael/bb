@@ -77,7 +77,7 @@ export function renderHelpText(): string {
   ${bold("bb reset")}
 
   ${dim("Usage")}
-    node scripts/reset-bb-data.mjs [--all] [--yes]
+    pnpm reset -- [--all] [--yes]
 
   ${dim("Options")}
     --all   Remove prod, dev, and dev daemon data directories
