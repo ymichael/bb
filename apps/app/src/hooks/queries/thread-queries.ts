@@ -6,6 +6,7 @@ import type {
 } from "@bb/domain";
 import type {
   ThreadDraftListResponse,
+  ThreadListResponse,
   ThreadPendingInteractionsResponse,
   ThreadTimelineResponse,
   TimelineToolDetailsResponse,
@@ -64,7 +65,7 @@ export function useThreads(
 ) {
   const { projectId, ...rest } = filters;
 
-  return useQuery<Thread[]>({
+  return useQuery<ThreadListResponse>({
     queryKey: threadListQueryKey(projectId ? { ...rest, projectId } : rest),
     queryFn: ({ signal }) =>
       api.listThreads(

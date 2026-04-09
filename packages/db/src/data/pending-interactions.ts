@@ -61,6 +61,10 @@ export interface InterruptPendingInteractionsForThreadIdsArgs {
   threadIds: readonly string[];
 }
 
+export interface ListPendingInteractionThreadIdsArgs {
+  threadIds: readonly string[];
+}
+
 function getPendingInteractionRecord(
   db: PendingInteractionReadConnection,
   id: string,
@@ -187,6 +191,27 @@ export function listPendingInteractionsByThread(
     .orderBy(desc(pendingInteractions.createdAt));
 
   return args.limit ? query.limit(args.limit).all() : query.all();
+}
+
+export function listPendingInteractionThreadIds(
+  db: PendingInteractionReadConnection,
+  args: ListPendingInteractionThreadIdsArgs,
+): string[] {
+  if (args.threadIds.length === 0) {
+    return [];
+  }
+
+  return db
+    .select({ threadId: pendingInteractions.threadId })
+    .from(pendingInteractions)
+    .where(
+      and(
+        inArray(pendingInteractions.threadId, [...args.threadIds]),
+        eq(pendingInteractions.status, "pending"),
+      ),
+    )
+    .all()
+    .map((row) => row.threadId);
 }
 
 export function listPendingInteractionsByStatus(

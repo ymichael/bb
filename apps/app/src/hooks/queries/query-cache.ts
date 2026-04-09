@@ -1,6 +1,7 @@
 import type { QueryClient, QueryKey } from "@tanstack/react-query";
 import type {
   Thread,
+  ThreadListEntry,
 } from "@bb/domain";
 import {
   ENVIRONMENT_GIT_DIFF_QUERY_KEY,
@@ -151,7 +152,7 @@ export function getCachedThreadListPlaceholder(
     return undefined;
   }
 
-  const threadLists = queryClient.getQueriesData<Thread[]>({
+  const threadLists = queryClient.getQueriesData<ThreadListEntry[]>({
     queryKey: threadsQueryKey(),
   });
   for (const [, threads] of threadLists) {
@@ -208,7 +209,7 @@ export function optimisticallyInsertThread(
   queryClient: QueryClient,
   thread: Thread,
 ): void {
-  const threadLists = queryClient.getQueriesData<Thread[]>({
+  const threadLists = queryClient.getQueriesData<ThreadListEntry[]>({
     queryKey: threadsQueryKey(),
   });
 
@@ -225,6 +226,12 @@ export function optimisticallyInsertThread(
       continue;
     }
 
-    queryClient.setQueryData<Thread[]>(queryKey, [thread, ...list]);
+    queryClient.setQueryData<ThreadListEntry[]>(
+      queryKey,
+      [{
+        ...thread,
+        hasPendingInteraction: false,
+      }, ...list],
+    );
   }
 }

@@ -1,8 +1,10 @@
 import {
+  listPendingInteractionThreadIds,
   listThreads,
   markThreadDeleted,
   updateThread,
 } from "@bb/db";
+import type { ThreadListEntry } from "@bb/domain";
 import {
   createThreadRequestSchema,
   threadListQuerySchema,
@@ -75,13 +77,23 @@ export function registerThreadBaseRoutes(app: Hono, deps: AppDeps): void {
   });
 
   get("/threads", threadListQuerySchema, (context, query) => {
-    return context.json(
-      listThreads(deps.db, {
-        projectId: query.projectId,
-        ...(query.type ? { type: query.type } : {}),
-        ...(query.parentThreadId ? { parentThreadId: query.parentThreadId } : {}),
-        archived: query.archived === undefined ? undefined : query.archived === "true",
+    const threads = listThreads(deps.db, {
+      projectId: query.projectId,
+      ...(query.type ? { type: query.type } : {}),
+      ...(query.parentThreadId ? { parentThreadId: query.parentThreadId } : {}),
+      archived: query.archived === undefined ? undefined : query.archived === "true",
+    });
+    const pendingThreadIds = new Set(
+      listPendingInteractionThreadIds(deps.db, {
+        threadIds: threads.map((thread) => thread.id),
       }),
+    );
+
+    return context.json(
+      threads.map<ThreadListEntry>((thread) => ({
+        ...thread,
+        hasPendingInteraction: pendingThreadIds.has(thread.id),
+      })),
     );
   });
 

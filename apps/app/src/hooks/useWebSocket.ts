@@ -100,6 +100,7 @@ function toThreadChangeFlags(changes: readonly ThreadChangeKind[]): ThreadChange
         break;
       case "interactions-changed":
         flags.interactionsChanged = true;
+        flags.listChanged = true;
         flags.threadChanged = true;
         flags.timelineChanged = true;
         break;

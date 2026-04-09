@@ -41,6 +41,7 @@ import type {
   SystemVoiceTranscriptionResponse,
   ThreadPendingInteractionsResponse,
   ThreadDraftListResponse,
+  ThreadListResponse,
   ThreadTimelineResponse,
   TimelineToolDetailsResponse,
   ResolvePendingInteractionRequest,
@@ -375,8 +376,8 @@ export interface ThreadListFilters {
 export async function listThreads(
   filters: ThreadListFilters,
   signal?: AbortSignal,
-): Promise<Thread[]> {
-  return request<Thread[]>(
+): Promise<ThreadListResponse> {
+  return request<ThreadListResponse>(
     apiClient.threads.$get({
       query: {
         projectId: filters.projectId,

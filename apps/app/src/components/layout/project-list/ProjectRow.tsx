@@ -2,6 +2,7 @@ import { useMemo } from "react"
 import {
   findLocalPathProjectSourceForHost,
   type Thread,
+  type ThreadListEntry,
 } from "@bb/domain"
 import type { ProjectResponse } from "@bb/server-contract"
 import {
@@ -29,7 +30,7 @@ import { ThreadRow } from "./ThreadRow"
 
 interface ProjectRowProps {
   project: ProjectResponse
-  projectThreads: Thread[]
+  projectThreads: ThreadListEntry[]
   threadsLoading: boolean
   localHostId: string | null | undefined
   selectedThreadId?: string
@@ -53,17 +54,17 @@ interface ProjectRowProps {
 }
 
 interface ProjectThreadGroups {
-  managerThreads: Thread[]
-  managedThreadsByManagerId: Map<string, Thread[]>
-  otherThreads: Thread[]
+  managerThreads: ThreadListEntry[]
+  managedThreadsByManagerId: Map<string, ThreadListEntry[]>
+  otherThreads: ThreadListEntry[]
 }
 
-function buildProjectThreadGroups(projectThreads: Thread[]): ProjectThreadGroups {
+function buildProjectThreadGroups(projectThreads: ThreadListEntry[]): ProjectThreadGroups {
   const managerThreads = projectThreads
     .filter((thread) => thread.type === "manager")
     .sort((a, b) => b.createdAt - a.createdAt)
   const managerThreadIds = new Set(managerThreads.map((thread) => thread.id))
-  const managedThreadsByManagerId = new Map<string, Thread[]>()
+  const managedThreadsByManagerId = new Map<string, ThreadListEntry[]>()
 
   for (const thread of projectThreads) {
     if (thread.type !== "standard" || !thread.parentThreadId) continue

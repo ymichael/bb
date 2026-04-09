@@ -232,6 +232,7 @@ export { isRecord } from "./type-guards.js";
 export {
   threadQueuedMessageSchema,
   threadSchema,
+  threadListEntrySchema,
   threadStatusSchema,
   threadStatusValues,
   threadTypeSchema,
@@ -248,6 +249,7 @@ export {
 } from "./thread.js";
 export type {
   Thread,
+  ThreadListEntry,
   ThreadQueuedMessage,
   ThreadStatus,
   ThreadType,

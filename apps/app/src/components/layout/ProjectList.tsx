@@ -4,6 +4,7 @@ import { useQueries } from "@tanstack/react-query"
 import {
   findLocalPathProjectSourceForHost,
   type Thread,
+  type ThreadListEntry,
 } from "@bb/domain"
 import { Folder, Plus } from "lucide-react"
 import { useLocation, useNavigate } from "react-router-dom"
@@ -131,7 +132,7 @@ export function ProjectList({
     [collapsedManagerIdList],
   )
   const threadsByProject = useMemo(() => {
-    const grouped = new Map<string, Thread[]>()
+    const grouped = new Map<string, ThreadListEntry[]>()
 
     for (const thread of threads) {
       const existing = grouped.get(thread.projectId)

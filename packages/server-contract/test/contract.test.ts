@@ -19,6 +19,7 @@ import {
   environmentActionRequestSchema,
   resolvePendingInteractionRequestSchema,
   sendMessageRequestSchema,
+  threadListResponseSchema,
   threadPendingInteractionsResponseSchema,
   timelineToolDetailsResponseSchema,
   updateEnvironmentRequestSchema,
@@ -258,6 +259,35 @@ describe("server-contract canonical schemas", () => {
     ).toMatchObject({
       mode: "auto",
     });
+
+    expect(
+      threadListResponseSchema.parse([
+        {
+          id: "thr_123",
+          projectId: "proj_123",
+          environmentId: null,
+          automationId: null,
+          providerId: "codex",
+          type: "standard",
+          title: "Pending thread",
+          titleFallback: "Pending thread",
+          status: "idle",
+          parentThreadId: null,
+          archivedAt: null,
+          stopRequestedAt: null,
+          deletedAt: null,
+          lastReadAt: null,
+          createdAt: 1,
+          updatedAt: 2,
+          hasPendingInteraction: true,
+        },
+      ]),
+    ).toMatchObject([
+      {
+        id: "thr_123",
+        hasPendingInteraction: true,
+      },
+    ]);
 
     expect(
       threadPendingInteractionsResponseSchema.parse([

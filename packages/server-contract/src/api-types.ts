@@ -13,6 +13,7 @@ import {
   sandboxBackendInfoSchema,
   sandboxModeSchema,
   serviceTierSchema,
+  threadListEntrySchema,
   threadTypeSchema,
   timelineRowSchema,
   threadQueuedMessageSchema,
@@ -244,6 +245,9 @@ export const sendDraftResponseSchema = z.object({
   queuedMessage: threadQueuedMessageSchema,
 });
 export type SendDraftResponse = z.infer<typeof sendDraftResponseSchema>;
+
+export const threadListResponseSchema = z.array(threadListEntrySchema);
+export type ThreadListResponse = z.infer<typeof threadListResponseSchema>;
 
 export const threadPendingInteractionsResponseSchema = z.array(
   pendingInteractionSchema,

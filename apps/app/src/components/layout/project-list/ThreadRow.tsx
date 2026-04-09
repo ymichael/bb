@@ -1,5 +1,5 @@
 import { useState } from "react"
-import type { Thread } from "@bb/domain"
+import type { Thread, ThreadListEntry } from "@bb/domain"
 import {
   ChevronDown,
   ChevronRight,
@@ -7,7 +7,6 @@ import {
   UserRound,
 } from "lucide-react"
 import { NavLink } from "react-router-dom"
-import { useThreadPendingInteractions } from "@/hooks/queries/thread-queries"
 import { ThreadActionsMenu } from "@/components/thread/ThreadActionsMenu"
 import { SidebarMenuBadge } from "@/components/ui/sidebar"
 import { isBusyThread, isUnreadDoneThread } from "@/lib/thread-activity"
@@ -31,7 +30,7 @@ export type ThreadRowOptions =
 
 interface ThreadRowProps {
   projectId: string
-  thread: Thread
+  thread: ThreadListEntry
   isActive: boolean
   isActionsDisabled: boolean
   onProjectSelect?: () => void
@@ -140,10 +139,7 @@ export function ThreadRow({
   options,
 }: ThreadRowProps) {
   const [isActionsOpen, setIsActionsOpen] = useState(false)
-  const { data: pendingInteractions = [] } = useThreadPendingInteractions(thread.id, {
-    enabled: thread.parentThreadId === null,
-  })
-  const hasPendingInteraction = thread.parentThreadId === null && pendingInteractions.length > 0
+  const hasPendingInteraction = thread.parentThreadId === null && thread.hasPendingInteraction
   const threadIsBusy = isBusyThread(thread) && !hasPendingInteraction
   const showUnreadBadge = !hasPendingInteraction && isUnreadDoneThread(thread)
   const threadTitle = getThreadDisplayTitle(thread)

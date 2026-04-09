@@ -120,3 +120,8 @@ export const threadSchema = z.object({
   updatedAt: z.number(),
 });
 export type Thread = z.infer<typeof threadSchema>;
+
+export const threadListEntrySchema = threadSchema.extend({
+  hasPendingInteraction: z.boolean(),
+});
+export type ThreadListEntry = z.infer<typeof threadListEntrySchema>;

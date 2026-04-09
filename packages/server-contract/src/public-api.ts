@@ -71,6 +71,7 @@ import type {
   ThreadEventWaitQuery,
   ThreadEventsQuery,
   ThreadListQuery,
+  ThreadListResponse,
   ThreadPendingInteractionsResponse,
   ThreadTimelineQuery,
   ThreadTimelineResponse,
@@ -225,7 +226,7 @@ export type PublicApiSchema = {
 
   "/threads": {
     /** List threads. Supports filters: projectId, type, parentThreadId, archived. */
-    $get: Endpoint<{ query?: ThreadListQuery }, Thread[]>;
+    $get: Endpoint<{ query?: ThreadListQuery }, ThreadListResponse>;
     /**
      * Create a thread with environment provisioning.
      *

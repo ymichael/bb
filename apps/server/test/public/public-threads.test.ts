@@ -5,6 +5,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { eq } from "drizzle-orm";
 import {
+  createPendingInteraction,
   createProject,
   createProjectSource,
   createEnvironment,
@@ -576,6 +577,56 @@ describe("public thread routes", () => {
           .where(eq(hostDaemonCommands.type, "environment.provision"))
           .all(),
       ).toHaveLength(0);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("includes hasPendingInteraction in thread list responses", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/thread-list-pending",
+      });
+      const firstThread = seedThread(harness.deps, {
+        projectId: project.id,
+        providerId: "codex",
+      });
+      const secondThread = seedThread(harness.deps, {
+        projectId: project.id,
+        providerId: "codex",
+      });
+
+      createPendingInteraction(harness.db, {
+        kind: "command_approval",
+        payload: "{}",
+        providerId: "codex",
+        providerRequestId: "request-1",
+        providerRequestMethod: "item/commandExecution/requestApproval",
+        providerThreadId: "provider-thread-1",
+        threadId: firstThread.id,
+        turnId: "turn_1",
+      });
+
+      const response = await harness.app.request(
+        `/api/v1/threads?projectId=${project.id}&archived=false`,
+      );
+
+      expect(response.status).toBe(200);
+      await expect(readJson(response)).resolves.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: secondThread.id,
+            hasPendingInteraction: false,
+          }),
+          expect.objectContaining({
+            id: firstThread.id,
+            hasPendingInteraction: true,
+          }),
+        ]),
+      );
     } finally {
       await harness.cleanup();
     }
