@@ -45,8 +45,9 @@ If you use Windows, run all `bb` commands inside WSL2, install Node.js, pnpm,
 Git, and your provider CLIs inside that WSL2 distro, and use Linux-style paths
 such as `/home/me/repo` or `/mnt/c/Users/me/repo`. Native Windows PowerShell,
 CMD, drive-letter paths, and UNC paths are not supported product paths. Repos
-inside the WSL filesystem are recommended; `/mnt/c/...` works, but it is slower
-and less reliable for file watching.
+inside the WSL filesystem are recommended; `/mnt/c/...` is intentionally
+supported so you can keep an existing Windows checkout, but it is slower and
+less reliable for file watching.
 
 ### Install and run
 

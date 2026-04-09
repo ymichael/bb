@@ -34,8 +34,9 @@ Windows support means the Linux stack runs entirely inside WSL2:
 - Run `pnpm install`, `pnpm start`, `pnpm dev`, `pnpm bb:dev`, and host-daemon
   commands from a WSL2 shell, not from native Windows terminals.
 - Repositories inside the WSL filesystem are recommended for best behavior.
-- `/mnt/c/...` mounted paths are supported because many WSL2 users keep their
-  repositories on Windows volumes, but they are a tradeoff:
+- `/mnt/c/...` mounted paths are deliberately supported so WSL2 users can keep
+  working with existing Windows checkouts instead of relocating every repo into
+  the WSL filesystem, but they are a tradeoff:
   slower filesystem I/O and weaker file-watching behavior than the WSL
   filesystem.
 - Native Windows drive-letter and UNC paths are rejected at the app/server

@@ -15,7 +15,7 @@ jobs:
   checks:
     name: Checks (ubuntu)
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
 
     steps:
       - name: Checkout repository
@@ -47,31 +47,6 @@ jobs:
 
       - name: Test
         run: pnpm exec turbo run test
-
-  linux-smoke:
-    name: Linux smoke (ubuntu)
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    needs: checks
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9.15.0
-          run_install: false
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
 
       - name: Smoke test
         run: pnpm exec turbo run test:smoke --filter=@bb/integration-tests
