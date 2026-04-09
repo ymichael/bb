@@ -4,7 +4,7 @@ import {
   DEFAULT_ENV_SETUP_SCRIPT_NAME,
   type ProvisioningTranscriptEntry,
 } from "@bb/domain";
-import { spawnPortablePipedProcess } from "@bb/process-utils";
+import { spawnPortableOutputProcess } from "@bb/process-utils";
 import { Workspace } from "./workspace.js";
 import { pathExists, runGit, WorkspaceError, type GitCommandResult } from "./git.js";
 
@@ -285,7 +285,7 @@ export async function runSetupScript(
   const startedAt = Date.now();
 
   const { timeoutMs } = args;
-  const child = spawnPortablePipedProcess({
+  const child = spawnPortableOutputProcess({
     command: command.command,
     args: command.args,
     cwd: args.workspacePath,

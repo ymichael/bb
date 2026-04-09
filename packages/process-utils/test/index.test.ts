@@ -1,7 +1,9 @@
 import { once } from "node:events";
 import { describe, expect, it } from "vitest";
 import {
+  assertPortableOutputProcess,
   assertPortablePipedProcess,
+  spawnPortableOutputProcess,
   spawnPortablePipedProcess,
   spawnPortableProcess,
 } from "../src/index.js";
@@ -46,6 +48,36 @@ describe("process utils", () => {
 
     expect(() => assertPortablePipedProcess(child)).toThrow(
       "Portable child process did not attach piped stdio",
+    );
+  });
+
+  it("spawns a process with stdin closed and output piped", async () => {
+    const child = spawnPortableOutputProcess({
+      command: process.execPath,
+      args: [
+        "-e",
+        'process.stdin.on("error", () => {}); process.stdin.on("end", () => process.stdout.write("closed")); process.stdin.resume();',
+      ],
+    });
+
+    const stdoutChunks: Buffer[] = [];
+    child.stdout.on("data", (chunk) => stdoutChunks.push(Buffer.from(chunk)));
+
+    const [exitCode] = await once(child, "exit");
+
+    expect(exitCode).toBe(0);
+    expect(child.stdin).toBeNull();
+    expect(Buffer.concat(stdoutChunks).toString("utf8")).toBe("closed");
+  });
+
+  it("rejects child processes that keep stdin open when output-only access is required", () => {
+    const child = spawnPortablePipedProcess({
+      command: process.execPath,
+      args: ["-e", ""],
+    });
+
+    expect(() => assertPortableOutputProcess(child)).toThrow(
+      "Portable child process did not attach output-only stdio",
     );
   });
 });

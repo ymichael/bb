@@ -200,6 +200,23 @@ describe("workspace provisioning", () => {
     ).rejects.toThrow(/timed out/u);
   });
 
+  it("closes setup script stdin so hooks do not block on input", async () => {
+    const workspacePath = await makeTempDir("bb-setup-stdin-closed-");
+    await fs.writeFile(
+      path.join(workspacePath, DEFAULT_ENV_SETUP_SCRIPT_NAME),
+      "if read line; then echo unexpected-input; else echo stdin-closed; fi\n",
+      "utf8",
+    );
+
+    const result = await runSetupScript({
+      workspacePath,
+      timeoutMs: 500,
+    });
+
+    expect(result.ran).toBe(true);
+    expect(result.output).toContain("stdin-closed");
+  });
+
   it("builds a bash command for the supported setup script", () => {
     expect(
       buildSetupScriptCommand({

@@ -27,6 +27,12 @@ export interface PortablePipedChildProcess extends PortableChildProcess {
   stderr: Readable;
 }
 
+export interface PortableOutputChildProcess extends PortableChildProcess {
+  stdin: null;
+  stdout: Readable;
+  stderr: Readable;
+}
+
 export function spawnPortableProcess(
   request: PortableSpawnRequest,
 ): PortableChildProcess {
@@ -46,6 +52,14 @@ export function assertPortablePipedProcess(
   }
 }
 
+export function assertPortableOutputProcess(
+  child: PortableChildProcess,
+): asserts child is PortableOutputChildProcess {
+  if (child.stdin || !child.stdout || !child.stderr) {
+    throw new Error("Portable child process did not attach output-only stdio");
+  }
+}
+
 export function spawnPortablePipedProcess(
   request: PortablePipedSpawnRequest,
 ): PortablePipedChildProcess {
@@ -54,5 +68,16 @@ export function spawnPortablePipedProcess(
     stdio: ["pipe", "pipe", "pipe"],
   });
   assertPortablePipedProcess(child);
+  return child;
+}
+
+export function spawnPortableOutputProcess(
+  request: PortablePipedSpawnRequest,
+): PortableOutputChildProcess {
+  const child = spawnPortableProcess({
+    ...request,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  assertPortableOutputProcess(child);
   return child;
 }
