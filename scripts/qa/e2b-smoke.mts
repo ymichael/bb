@@ -3,6 +3,21 @@ import path from "node:path";
 import { tmpdir } from "node:os";
 import { setTimeout as delay } from "node:timers/promises";
 import {
+  deleteSandboxProviderCredentialByProviderId,
+  upsertSandboxProviderCredential,
+} from "../../packages/db/src/index.ts";
+import type { DbConnection } from "../../packages/db/src/index.ts";
+import type {
+  ClaudeStoredCredential,
+  CodexStoredCredential,
+} from "../../apps/server/src/services/cloud-auth/provider-definitions.ts";
+import { createCloudAuthCrypto } from "../../apps/server/src/services/cloud-auth/crypto.ts";
+import { createCloudAuthService } from "../../apps/server/src/services/cloud-auth/service.ts";
+import { createSandboxEnvService } from "../../apps/server/src/services/sandbox-env/service.ts";
+import type { ServerRuntimeConfig } from "../../apps/server/src/types.ts";
+import { initDb } from "../../apps/server/src/db.ts";
+import { buildSandboxRuntimeMaterialSnapshot } from "../../apps/server/src/services/hosts/sandbox-runtime-material-snapshot.ts";
+import {
   HOST_AUTH_FILE_NAME,
   HOST_RUNTIME_MATERIAL_FILE_NAME,
   hostAuthStateSchema,
@@ -28,7 +43,6 @@ import {
   SANDBOX_DAEMON_HEALTH_PORT,
   SANDBOX_DAEMON_HEALTH_RESPONSE,
 } from "../../packages/sandbox-host/src/constants.ts";
-import { buildSandboxRuntimeMaterialSnapshot } from "../../apps/server/src/services/hosts/sandbox-runtime-material.ts";
 import {
   buildSandboxDaemonEnv,
   startSandboxDaemon,
@@ -76,10 +90,58 @@ interface StartRealDaemonOptions {
   serverUrl: string;
 }
 
+interface SmokeLogger {
+  error(): void;
+  info(): void;
+  warn(): void;
+}
+
+interface SmokeQaAuthFixture {
+  claude?: {
+    access: string;
+    expires: number;
+    refresh: string;
+  };
+  createdAt?: string;
+  "openai-codex"?: {
+    access: string;
+    accountId?: string;
+    expires: number;
+    refresh: string;
+  };
+}
+
+interface SmokeRuntimeMaterialContext {
+  cloudAuth: Awaited<ReturnType<typeof createCloudAuthService>>;
+  cloudAuthCrypto: Awaited<ReturnType<typeof createCloudAuthCrypto>>;
+  config: ServerRuntimeConfig;
+  db: DbConnection;
+  sandboxEnv: Awaited<ReturnType<typeof createSandboxEnvService>>;
+}
+
 const smokeThreadResponseSchema = threadSchema.pick({
   id: true,
   status: true,
 });
+const smokeLogger: SmokeLogger = {
+  error() {},
+  info() {},
+  warn() {},
+};
+const SMOKE_SANDBOX_ENV_NAME = "BB_SMOKE_SANDBOX_TOKEN";
+const SMOKE_SANDBOX_ENV_VALUE = "smoke-sandbox-token";
+const SMOKE_CLAUDE_PATH = "~/.claude/.credentials.json";
+const SMOKE_CODEX_PATH = "~/.codex/auth.json";
+const SMOKE_PI_AUTH_PATH = "~/.pi/agent/auth.json";
+const STALE_CODEX_ACCESS_TOKEN = "stale-codex-access-token";
+const CLAUDE_SCOPES = [
+  "org:create_api_key",
+  "user:profile",
+  "user:inference",
+  "user:sessions:claude_code",
+  "user:mcp_servers",
+  "user:file_upload",
+];
 
 function formatError(error: unknown): string {
   if (error instanceof Error) {
@@ -88,8 +150,85 @@ function formatError(error: unknown): string {
   return String(error);
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function parseQaAuthFixture(
+  value: unknown,
+): SmokeQaAuthFixture {
+  if (!isRecord(value)) {
+    throw new Error("Cloud auth fixture must be an object");
+  }
+
+  const claude = value.claude;
+  const codex = value["openai-codex"];
+  const createdAt = value.createdAt;
+
+  if (
+    claude !== undefined
+    && (
+      !isRecord(claude)
+      || typeof claude.access !== "string"
+      || typeof claude.refresh !== "string"
+      || typeof claude.expires !== "number"
+    )
+  ) {
+    throw new Error("Invalid Claude auth fixture");
+  }
+
+  if (
+    codex !== undefined
+    && (
+      !isRecord(codex)
+      || typeof codex.access !== "string"
+      || typeof codex.refresh !== "string"
+      || typeof codex.expires !== "number"
+      || (codex.accountId !== undefined && typeof codex.accountId !== "string")
+    )
+  ) {
+    throw new Error("Invalid OpenAI Codex auth fixture");
+  }
+
+  if (createdAt !== undefined && typeof createdAt !== "string") {
+    throw new Error("Invalid cloud auth fixture createdAt");
+  }
+
+  return {
+    ...(typeof createdAt === "string" ? { createdAt } : {}),
+    ...(claude && isRecord(claude)
+      ? {
+          claude: {
+            access: claude.access,
+            expires: claude.expires,
+            refresh: claude.refresh,
+          },
+        }
+      : {}),
+    ...(codex && isRecord(codex)
+      ? {
+          "openai-codex": {
+            access: codex.access,
+            ...(typeof codex.accountId === "string"
+              ? { accountId: codex.accountId }
+              : {}),
+            expires: codex.expires,
+            refresh: codex.refresh,
+          },
+        }
+      : {}),
+  };
+}
+
 function shellQuote(value: string): string {
   return `'${value.replaceAll("'", `'\"'\"'`)}'`;
+}
+
+function toSandboxShellPath(filePath: string): string {
+  if (filePath.startsWith("~/")) {
+    return `$HOME/${filePath.slice(2)}`;
+  }
+  return shellQuote(filePath);
 }
 
 function createSmokeHostIdentity(): SmokeHostIdentity {
@@ -252,7 +391,7 @@ async function waitForHostStatus(
 
 async function waitForPersistedRuntimeMaterial(
   sandbox: SmokeSandbox,
-  expectedSnapshot: ReturnType<typeof buildSandboxRuntimeMaterialSnapshot>,
+  expectedSnapshot: Awaited<ReturnType<typeof buildSandboxRuntimeMaterialSnapshot>>,
 ): Promise<void> {
   await waitForCommandSuccess(
     async () => {
@@ -273,9 +412,169 @@ async function waitForPersistedRuntimeMaterial(
           `Unexpected runtime material env: ${JSON.stringify(persistedSnapshot.env)}`,
         );
       }
+      if (JSON.stringify(persistedSnapshot.files) !== JSON.stringify(expectedSnapshot.files)) {
+        throw new Error(
+          `Unexpected runtime material files: ${JSON.stringify(persistedSnapshot.files)}`,
+        );
+      }
     },
     "persisted runtime material",
   );
+}
+
+async function assertSandboxFileContains(
+  sandbox: SmokeSandbox,
+  filePath: string,
+  expectedSubstring: string,
+): Promise<void> {
+  const result = await runSandboxCommand(
+    sandbox,
+    `cat ${toSandboxShellPath(filePath)}`,
+  );
+  if (!result.stdout.includes(expectedSubstring)) {
+    throw new Error(`Expected ${filePath} to contain ${expectedSubstring}`);
+  }
+}
+
+async function assertSandboxFileAbsent(
+  sandbox: SmokeSandbox,
+  filePath: string,
+): Promise<void> {
+  const result = await runSandboxCommand(
+    sandbox,
+    `test ! -f ${toSandboxShellPath(filePath)}`,
+  );
+  if (result.exitCode !== 0) {
+    throw new Error(`Expected ${filePath} to be absent`);
+  }
+}
+
+async function loadQaAuthFixture(): Promise<SmokeQaAuthFixture | null> {
+  const explicitPath = process.env.BB_CLOUD_AUTH_FIXTURE_PATH;
+  const defaultPath = "/tmp/bb-oauth-handshakes/credentials.json";
+  const candidatePaths = explicitPath ? [explicitPath] : [defaultPath];
+
+  for (const candidatePath of candidatePaths) {
+    try {
+      const raw = await fs.readFile(candidatePath, "utf8");
+      return parseQaAuthFixture(JSON.parse(raw));
+    } catch (error) {
+      if (
+        error instanceof Error
+        && "code" in error
+        && error.code === "ENOENT"
+      ) {
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  return null;
+}
+
+async function createSmokeRuntimeMaterialContext(
+  dataDir: string,
+  config: ServerRuntimeConfig,
+): Promise<SmokeRuntimeMaterialContext> {
+  const db = initDb(path.join(dataDir, "bb.db"));
+  const cloudAuth = await createCloudAuthService({
+    dataDir,
+    db,
+    logger: smokeLogger,
+  });
+  const cloudAuthCrypto = await createCloudAuthCrypto({ dataDir });
+  const sandboxEnv = await createSandboxEnvService({
+    dataDir,
+    db,
+    logger: smokeLogger,
+  });
+
+  return {
+    cloudAuth,
+    cloudAuthCrypto,
+    config,
+    db,
+    sandboxEnv,
+  };
+}
+
+async function seedSmokeCloudAuthFixture(
+  context: SmokeRuntimeMaterialContext,
+  fixture: SmokeQaAuthFixture | null,
+): Promise<void> {
+  if (fixture?.claude) {
+    const credential: ClaudeStoredCredential = {
+      accessToken: fixture.claude.access,
+      accountEmail: null,
+      accountId: null,
+      expiresAt: fixture.claude.expires,
+      providerId: "claude-code",
+      refreshToken: fixture.claude.refresh,
+      scopes: CLAUDE_SCOPES,
+      subscriptionType: null,
+    };
+    upsertSandboxProviderCredential(context.db, {
+      encryptedPayload: context.cloudAuthCrypto.encryptJson({
+        plaintext: JSON.stringify(credential),
+      }),
+      expiresAt: credential.expiresAt,
+      label: null,
+      lastErrorMessage: null,
+      lastRefreshedAt: Date.now(),
+      providerId: credential.providerId,
+    });
+  }
+
+  if (fixture?.["openai-codex"]) {
+    const credential: CodexStoredCredential = {
+      accessToken: fixture["openai-codex"].access,
+      accountId: fixture["openai-codex"].accountId ?? null,
+      expiresAt: fixture["openai-codex"].expires,
+      idToken: null,
+      providerId: "codex",
+      refreshToken: fixture["openai-codex"].refresh,
+    };
+    upsertSandboxProviderCredential(context.db, {
+      encryptedPayload: context.cloudAuthCrypto.encryptJson({
+        plaintext: JSON.stringify(credential),
+      }),
+      expiresAt: credential.expiresAt,
+      label: credential.accountId,
+      lastErrorMessage: null,
+      lastRefreshedAt: Date.now(),
+      providerId: credential.providerId,
+    });
+  }
+}
+
+async function expireSmokeCodexCredential(
+  context: SmokeRuntimeMaterialContext,
+  fixture: SmokeQaAuthFixture,
+): Promise<void> {
+  const codexFixture = fixture["openai-codex"];
+  if (!codexFixture) {
+    return;
+  }
+
+  const expiredCredential: CodexStoredCredential = {
+    accessToken: STALE_CODEX_ACCESS_TOKEN,
+    accountId: codexFixture.accountId ?? null,
+    expiresAt: Date.now() - 1_000,
+    idToken: null,
+    providerId: "codex",
+    refreshToken: codexFixture.refresh,
+  };
+  upsertSandboxProviderCredential(context.db, {
+    encryptedPayload: context.cloudAuthCrypto.encryptJson({
+      plaintext: JSON.stringify(expiredCredential),
+    }),
+    expiresAt: expiredCredential.expiresAt,
+    label: expiredCredential.accountId,
+    lastErrorMessage: null,
+    lastRefreshedAt: Date.now() - 60_000,
+    providerId: expiredCredential.providerId,
+  });
 }
 
 async function waitForExtendedSandboxTimeout(
@@ -365,16 +664,38 @@ async function main(): Promise<void> {
   const serverDataDir = path.join(tmpRoot, "server-data");
   const serverLogPath = path.join(logsDir, "server.log");
   const tunnelLogPath = path.join(logsDir, "tunnel.log");
+  const authFixture = await loadQaAuthFixture();
   const smokeAnthropicApiKey = process.env.ANTHROPIC_API_KEY ?? "";
   const smokeGithubPat = process.env.BB_GITHUB_PAT ?? "";
   const smokeOpenAiApiKey = process.env.OPENAI_API_KEY ?? "test-openai-key";
-  const expectedRuntimeSnapshot = buildSandboxRuntimeMaterialSnapshot({
+  const runtimeConfig: ServerRuntimeConfig = {
     anthropicApiKey: smokeAnthropicApiKey,
+    dataDir: serverDataDir,
+    e2bApiKey: process.env.E2B_API_KEY,
+    e2bTemplate: process.env.BB_E2B_TEMPLATE ?? "sandbox",
     githubPat: smokeGithubPat,
+    hostDaemonPort: 3_001,
+    inferenceModel: "gpt-5",
     openAiApiKey: smokeOpenAiApiKey,
-  });
+    publicUrl: "https://placeholder.example.test",
+    sandboxActivityExtensionDebounceMs: 30_000,
+    sandboxIdleThresholdMs: 60_000,
+  };
+  await fs.mkdir(serverDataDir, { recursive: true });
+  const runtimeMaterialContext = await createSmokeRuntimeMaterialContext(
+    serverDataDir,
+    runtimeConfig,
+  );
 
   await fs.mkdir(logsDir, { recursive: true });
+  await seedSmokeCloudAuthFixture(runtimeMaterialContext, authFixture);
+  await runtimeMaterialContext.sandboxEnv.upsertEnvVar({
+    name: SMOKE_SANDBOX_ENV_NAME,
+    value: SMOKE_SANDBOX_ENV_VALUE,
+  });
+  const expectedRuntimeSnapshot = await buildSandboxRuntimeMaterialSnapshot(
+    runtimeMaterialContext,
+  );
 
   const tunnel = await startQuickTunnel({
     logPath: tunnelLogPath,
@@ -460,6 +781,44 @@ async function main(): Promise<void> {
 
     console.log("Checking persisted runtime material");
     await waitForPersistedRuntimeMaterial(sandbox, expectedRuntimeSnapshot);
+    await assertSandboxFileContains(
+      sandbox,
+      SANDBOX_HOST_RUNTIME_MATERIAL_PATH,
+      SMOKE_SANDBOX_ENV_NAME,
+    );
+
+    if (authFixture?.claude) {
+      console.log("Checking Claude auth material");
+      await assertSandboxFileContains(
+        sandbox,
+        SMOKE_CLAUDE_PATH,
+        "\"refreshToken\": \"\"",
+      );
+      await assertSandboxFileContains(
+        sandbox,
+        SMOKE_PI_AUTH_PATH,
+        "\"anthropic\"",
+      );
+    }
+
+    if (authFixture?.["openai-codex"]) {
+      console.log("Checking Codex auth material");
+      await assertSandboxFileContains(
+        sandbox,
+        SMOKE_CODEX_PATH,
+        "\"refresh_token\": \"\"",
+      );
+      await assertSandboxFileContains(
+        sandbox,
+        SMOKE_PI_AUTH_PATH,
+        "\"openai-codex\"",
+      );
+      await assertSandboxFileContains(
+        sandbox,
+        SMOKE_PI_AUTH_PATH,
+        "\"refresh\": \"\"",
+      );
+    }
 
     console.log("Checking sandbox timeout extension after daemon activity");
     await waitForExtendedSandboxTimeout(sandbox);
@@ -491,6 +850,22 @@ async function main(): Promise<void> {
       throw new Error(`Expected paused sandbox after idle suspend, got ${pausedSandboxInfo.state}`);
     }
 
+    if (authFixture?.claude) {
+      console.log("Removing Claude credential before resume");
+      deleteSandboxProviderCredentialByProviderId(
+        runtimeMaterialContext.db,
+        "claude-code",
+      );
+    }
+    if (authFixture?.["openai-codex"]) {
+      console.log("Expiring Codex credential before resume");
+      await expireSmokeCodexCredential(runtimeMaterialContext, authFixture);
+    }
+    console.log("Removing custom sandbox env var before resume");
+    await runtimeMaterialContext.sandboxEnv.deleteEnvVar({
+      name: SMOKE_SANDBOX_ENV_NAME,
+    });
+
     console.log("Triggering server-driven resume with follow-up thread work");
     const createdThread = await createSmokeThread(localServerUrl, {
       hostId: smokeHost.hostId,
@@ -516,12 +891,58 @@ async function main(): Promise<void> {
     await waitForDaemonHealth(resumedSandbox);
 
     console.log("Checking runtime material after resume");
-    await waitForPersistedRuntimeMaterial(resumedSandbox, expectedRuntimeSnapshot);
+    const resumedRuntimeSnapshot = await buildSandboxRuntimeMaterialSnapshot(
+      runtimeMaterialContext,
+    );
+    await waitForPersistedRuntimeMaterial(resumedSandbox, resumedRuntimeSnapshot);
+    if (authFixture?.claude) {
+      await assertSandboxFileAbsent(resumedSandbox, SMOKE_CLAUDE_PATH);
+    }
+    if (authFixture?.["openai-codex"]) {
+      await assertSandboxFileContains(
+        resumedSandbox,
+        SMOKE_PI_AUTH_PATH,
+        "\"openai-codex\"",
+      );
+      const piAuthResult = await runSandboxCommand(
+        resumedSandbox,
+        `cat ${toSandboxShellPath(SMOKE_PI_AUTH_PATH)}`,
+      );
+      if (piAuthResult.stdout.includes("\"anthropic\"")) {
+        throw new Error("Pi auth file still contains the removed Claude credential");
+      }
+    } else {
+      await assertSandboxFileAbsent(resumedSandbox, SMOKE_PI_AUTH_PATH);
+    }
+    const resumedRuntimeMaterial = await runSandboxCommand(
+      resumedSandbox,
+      `cat ${shellQuote(SANDBOX_HOST_RUNTIME_MATERIAL_PATH)}`,
+    );
+    if (resumedRuntimeMaterial.stdout.includes(SMOKE_SANDBOX_ENV_NAME)) {
+      throw new Error("Runtime material still contains the removed sandbox env var");
+    }
+
+    if (authFixture?.["openai-codex"]) {
+      console.log("Checking refreshed Codex material after resume");
+      await assertSandboxFileContains(
+        resumedSandbox,
+        SMOKE_CODEX_PATH,
+        "\"refresh_token\": \"\"",
+      );
+      const codexResult = await runSandboxCommand(
+        resumedSandbox,
+        `cat ${toSandboxShellPath(SMOKE_CODEX_PATH)}`,
+      );
+      if (codexResult.stdout.includes(STALE_CODEX_ACCESS_TOKEN)) {
+        throw new Error("Codex auth file still contains the stale access token");
+      }
+    }
 
     console.log("Checking bundled bb CLI after server-driven resume");
     await assertBundledBbCli(resumedSandbox);
     completed = true;
   } finally {
+    await runtimeMaterialContext.cloudAuth.dispose().catch(() => undefined);
     console.log("Destroying sandbox");
     await activeSandbox?.kill().catch((error) => {
       console.error(`Failed to destroy sandbox: ${formatError(error)}`);

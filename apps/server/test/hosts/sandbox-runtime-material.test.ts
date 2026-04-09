@@ -440,4 +440,31 @@ describe("sandbox runtime material", () => {
       await harness.cleanup();
     }
   });
+
+  it("merges app sandbox env vars ahead of provider-specific env", async () => {
+    const harness = await createTestAppHarness({
+      openAiApiKey: "server-openai-key",
+    });
+
+    try {
+      await harness.deps.sandboxEnv.upsertEnvVar({
+        name: "OPENAI_API_KEY",
+        value: "custom-openai-key",
+      });
+      await harness.deps.sandboxEnv.upsertEnvVar({
+        name: "PI_API_TOKEN",
+        value: "pi-api-token",
+      });
+
+      const snapshot = await buildSandboxRuntimeMaterialSnapshot(harness.deps);
+
+      expect(snapshot.env).toEqual({
+        OPENAI_API_KEY: "custom-openai-key",
+        PI_API_TOKEN: "pi-api-token",
+      });
+      expect(snapshot.files).toEqual([]);
+    } finally {
+      await harness.cleanup();
+    }
+  });
 });

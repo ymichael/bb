@@ -535,6 +535,33 @@ export type CloudAuthAttemptResponse = z.infer<
   typeof cloudAuthAttemptResponseSchema
 >;
 
+export const sandboxEnvVarNameSchema = z
+  .string()
+  .min(1)
+  .max(128)
+  .regex(/^[A-Za-z_][A-Za-z0-9_]*$/);
+export type SandboxEnvVarName = z.infer<typeof sandboxEnvVarNameSchema>;
+
+export const sandboxEnvVarSchema = z.object({
+  name: sandboxEnvVarNameSchema,
+  createdAt: z.number(),
+  updatedAt: z.number(),
+}).strict();
+export type SandboxEnvVar = z.infer<typeof sandboxEnvVarSchema>;
+
+export const sandboxEnvVarsResponseSchema = z.object({
+  envVars: z.array(sandboxEnvVarSchema),
+}).strict();
+export type SandboxEnvVarsResponse = z.infer<typeof sandboxEnvVarsResponseSchema>;
+
+export const upsertSandboxEnvVarRequestSchema = z.object({
+  name: sandboxEnvVarNameSchema,
+  value: z.string().max(16_384),
+}).strict();
+export type UpsertSandboxEnvVarRequest = z.infer<
+  typeof upsertSandboxEnvVarRequestSchema
+>;
+
 export interface ProjectAttachmentUploadForm {
   [key: string]: string | Blob;
 }

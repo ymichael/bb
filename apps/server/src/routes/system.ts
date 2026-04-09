@@ -2,6 +2,8 @@ import { hostDaemonCommandResultSchemaByType } from "@bb/host-daemon-contract";
 import {
   cloudAuthProviderIdSchema,
   githubReposQuerySchema,
+  sandboxEnvVarNameSchema,
+  upsertSandboxEnvVarRequestSchema,
   systemModelsQuerySchema,
   systemProvidersQuerySchema,
   typedRoutes,
@@ -80,6 +82,22 @@ export function registerSystemRoutes(app: Hono, deps: AppDeps): void {
       context.req.param("providerId"),
     );
     await deps.cloudAuth.disconnectProvider({ providerId });
+    return context.json({ ok: true });
+  });
+
+  get("/system/sandbox-env-vars", async (context) =>
+    context.json({
+      envVars: await deps.sandboxEnv.listEnvVars(),
+    }),
+  );
+
+  post("/system/sandbox-env-vars", upsertSandboxEnvVarRequestSchema, async (context, payload) =>
+    context.json(await deps.sandboxEnv.upsertEnvVar(payload)),
+  );
+
+  del("/system/sandbox-env-vars/:name", async (context) => {
+    const name = sandboxEnvVarNameSchema.parse(context.req.param("name"));
+    await deps.sandboxEnv.deleteEnvVar({ name });
     return context.json({ ok: true });
   });
 

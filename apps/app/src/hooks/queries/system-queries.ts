@@ -1,14 +1,23 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import type { AvailableModel, Host, SandboxBackendInfo } from "@bb/domain";
-import type { GithubRepoInfo, SystemProviderInfo } from "@bb/server-contract";
+import type {
+  CloudAuthAttemptResponse,
+  CloudAuthSettingsResponse,
+  GithubRepoInfo,
+  SandboxEnvVarsResponse,
+  SystemProviderInfo,
+} from "@bb/server-contract";
 import * as api from "@/lib/api";
 import {
   availableModelsQueryKey,
+  cloudAuthAttemptQueryKey,
+  cloudAuthSettingsQueryKey,
   type HostQueryId,
   hostQueryKey,
   hostsQueryKey,
   githubReposQueryKey,
   sandboxBackendsQueryKey,
+  sandboxEnvVarsQueryKey,
   systemProvidersQueryKey,
 } from "./query-keys";
 
@@ -62,6 +71,38 @@ export function useSandboxBackends(enabled: boolean) {
     queryFn: () => api.listSandboxBackends(),
     enabled,
     staleTime: 60_000,
+  });
+}
+
+export function useCloudAuthSettings(enabled: boolean) {
+  return useQuery<CloudAuthSettingsResponse>({
+    queryKey: cloudAuthSettingsQueryKey(),
+    queryFn: () => api.getCloudAuthSettings(),
+    enabled,
+    staleTime: 5_000,
+  });
+}
+
+export function useCloudAuthAttempt(
+  attemptId: string | null,
+  enabled: boolean,
+) {
+  return useQuery<CloudAuthAttemptResponse>({
+    queryKey: cloudAuthAttemptQueryKey(attemptId),
+    queryFn: () => api.getCloudAuthAttempt(requireHostId(attemptId, "useCloudAuthAttempt")),
+    enabled: enabled && Boolean(attemptId),
+    refetchInterval: (query) =>
+      query.state.data?.status === "pending" ? 1_000 : false,
+    staleTime: 0,
+  });
+}
+
+export function useSandboxEnvVars(enabled: boolean) {
+  return useQuery<SandboxEnvVarsResponse>({
+    queryKey: sandboxEnvVarsQueryKey(),
+    queryFn: () => api.listSandboxEnvVars(),
+    enabled,
+    staleTime: 5_000,
   });
 }
 

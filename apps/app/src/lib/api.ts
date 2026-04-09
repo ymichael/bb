@@ -19,6 +19,10 @@ import type {
 } from "@bb/domain";
 import type {
   CreateManagerThreadRequest,
+  CloudAuthAttemptResponse,
+  CloudAuthConnectResponse,
+  CloudAuthProviderId,
+  CloudAuthSettingsResponse,
   GithubRepoInfo,
   CreateProjectSourceRequest,
   CreateProjectRequest,
@@ -31,6 +35,8 @@ import type {
   SendDraftResponse,
   SendMessageRequest,
   SystemProviderInfo,
+  SandboxEnvVar,
+  SandboxEnvVarsResponse,
   SystemVoiceTranscriptionResponse,
   ThreadDraftListResponse,
   ThreadTimelineResponse,
@@ -40,6 +46,7 @@ import type {
   UpdateThreadRequest,
   UpdateProjectSourceRequest,
   UploadedPromptAttachment,
+  UpsertSandboxEnvVarRequest,
   WorkspaceFileListResponse,
 } from "@bb/server-contract";
 import { apiClient, toRelativeUrl } from "./api-server";
@@ -641,6 +648,64 @@ export async function deleteHost(id: string): Promise<void> {
 
 export async function listSandboxBackends(): Promise<SandboxBackendInfo[]> {
   return request<SandboxBackendInfo[]>(apiClient.system["sandbox-backends"].$get());
+}
+
+export async function getCloudAuthSettings(): Promise<CloudAuthSettingsResponse> {
+  return request<CloudAuthSettingsResponse>(apiClient.system["cloud-auth"].$get());
+}
+
+export async function startCloudAuthConnection(
+  providerId: CloudAuthProviderId,
+): Promise<CloudAuthConnectResponse> {
+  return request<CloudAuthConnectResponse>(
+    apiClient.system["cloud-auth"][":providerId"].connect.$post({
+      param: { providerId },
+    }),
+  );
+}
+
+export async function getCloudAuthAttempt(
+  attemptId: string,
+): Promise<CloudAuthAttemptResponse> {
+  return request<CloudAuthAttemptResponse>(
+    apiClient.system["cloud-auth"].attempts[":attemptId"].$get({
+      param: { attemptId },
+    }),
+  );
+}
+
+export async function deleteCloudAuthProvider(
+  providerId: CloudAuthProviderId,
+): Promise<void> {
+  await requestVoid(
+    apiClient.system["cloud-auth"][":providerId"].$delete({
+      param: { providerId },
+    }),
+  );
+}
+
+export async function listSandboxEnvVars(): Promise<SandboxEnvVarsResponse> {
+  return request<SandboxEnvVarsResponse>(
+    apiClient.system["sandbox-env-vars"].$get(),
+  );
+}
+
+export async function upsertSandboxEnvVar(
+  requestBody: UpsertSandboxEnvVarRequest,
+): Promise<SandboxEnvVar> {
+  return request<SandboxEnvVar>(
+    apiClient.system["sandbox-env-vars"].$post({
+      json: requestBody,
+    }),
+  );
+}
+
+export async function deleteSandboxEnvVar(name: string): Promise<void> {
+  await requestVoid(
+    apiClient.system["sandbox-env-vars"][":name"].$delete({
+      param: { name },
+    }),
+  );
 }
 
 export async function listGithubRepos(q?: string): Promise<GithubRepoInfo[]> {

@@ -92,6 +92,7 @@ async function runAutomation(
     | "hub"
     | "logger"
     | "machineAuth"
+    | "sandboxEnv"
     | "sandboxRegistry"
   >,
   automation: AutomationRow,
@@ -175,6 +176,7 @@ export async function sweepDueAutomations(
     | "hub"
     | "logger"
     | "machineAuth"
+    | "sandboxEnv"
     | "sandboxRegistry"
   >,
   args: SweepDueAutomationsArgs = {},

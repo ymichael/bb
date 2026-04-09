@@ -10,6 +10,7 @@ import { createApp } from "../../src/server.js";
 import { createCloudAuthService } from "../../src/services/cloud-auth/service.js";
 import { createSandboxHostRegistry } from "../../src/services/hosts/sandbox-registry.js";
 import { createMachineAuthService } from "../../src/services/machine-auth.js";
+import { createSandboxEnvService } from "../../src/services/sandbox-env/service.js";
 import type { AppDeps, ServerRuntimeConfig } from "../../src/types.js";
 import type { NotificationHub } from "../../src/ws/hub.js";
 import { NotificationHub as NotificationHubImpl } from "../../src/ws/hub.js";
@@ -105,6 +106,11 @@ export async function createTestAppHarness(
     db,
     logger: testLogger,
   });
+  const sandboxEnv = await createSandboxEnvService({
+    dataDir,
+    db,
+    logger: testLogger,
+  });
   const config: ServerRuntimeConfig = {
     anthropicApiKey: "",
     dataDir,
@@ -126,6 +132,7 @@ export async function createTestAppHarness(
     hub,
     logger: testLogger,
     machineAuth: testMachineAuth,
+    sandboxEnv,
     sandboxRegistry,
   };
   const { app } = createApp(deps);

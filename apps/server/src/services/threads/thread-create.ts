@@ -71,6 +71,7 @@ type ThreadCreateDeps = Pick<
   | "hub"
   | "logger"
   | "machineAuth"
+  | "sandboxEnv"
   | "sandboxRegistry"
 >;
 
@@ -539,7 +540,13 @@ export async function createThreadFromRequest(
 export async function ensureProjectSourceEnvironment(
   deps: Pick<
     AppDeps,
-    "cloudAuth" | "config" | "db" | "hub" | "machineAuth" | "sandboxRegistry"
+    | "cloudAuth"
+    | "config"
+    | "db"
+    | "hub"
+    | "machineAuth"
+    | "sandboxEnv"
+    | "sandboxRegistry"
   >,
   args: {
     hostId: string;

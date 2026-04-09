@@ -55,6 +55,9 @@ import type {
   ThreadDraftListResponse,
   GithubRepoInfo,
   GithubReposQuery,
+  SandboxEnvVar,
+  SandboxEnvVarName,
+  SandboxEnvVarsResponse,
   SystemConfigResponse,
   SystemSandboxBackendInfo,
   SystemModelsQuery,
@@ -75,6 +78,7 @@ import type {
   UpdateProjectRequest,
   UpdateProjectSourceRequest,
   UpdateThreadRequest,
+  UpsertSandboxEnvVarRequest,
   UploadedPromptAttachment,
   WorkspaceFileListResponse,
 } from "./api-types.js";
@@ -351,6 +355,16 @@ export type PublicApiSchema = {
   "/system/cloud-auth/:providerId": {
     /** Removes the saved app-level cloud auth connection for the provider. */
     $delete: Endpoint<PathProviderId, { ok: true }>;
+  };
+  "/system/sandbox-env-vars": {
+    /** Returns metadata for app-level sandbox env vars without exposing plaintext values. */
+    $get: Endpoint<EmptyInput, SandboxEnvVarsResponse>;
+    /** Creates or updates an app-level sandbox env var. */
+    $post: Endpoint<{ json: UpsertSandboxEnvVarRequest }, SandboxEnvVar>;
+  };
+  "/system/sandbox-env-vars/:name": {
+    /** Deletes an app-level sandbox env var. */
+    $delete: Endpoint<{ param: { name: SandboxEnvVarName } }, { ok: true }>;
   };
   "/system/sandbox-backends": {
     /** List sandbox backends supported by the server. */

@@ -1,79 +1,21 @@
-import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
-import { z } from "zod";
-import { readOrCreateSecretFile } from "../lib/secret-file.js";
+import {
+  createEncryptedJsonCrypto,
+  type EncryptedJsonCrypto,
+} from "../lib/encrypted-json-crypto.js";
 
 const CLOUD_AUTH_SECRET_FILE_NAME = "cloud-auth-secret";
-const CIPHER_ALGORITHM = "aes-256-gcm";
-
-const encryptedPayloadEnvelopeSchema = z.object({
-  ciphertext: z.string().min(1),
-  iv: z.string().min(1),
-  tag: z.string().min(1),
-  version: z.literal(1),
-}).strict();
 
 interface CreateCloudAuthCryptoArgs {
   dataDir: string;
 }
 
-interface DecryptJsonArgs<TValue> {
-  payload: string;
-  schema: z.ZodType<TValue>;
-}
-
-interface EncryptJsonArgs {
-  plaintext: string;
-}
-
-export interface CloudAuthCrypto {
-  decryptJson<TValue>(args: DecryptJsonArgs<TValue>): TValue;
-  encryptJson(args: EncryptJsonArgs): string;
-}
+export type CloudAuthCrypto = EncryptedJsonCrypto;
 
 export async function createCloudAuthCrypto(
   args: CreateCloudAuthCryptoArgs,
 ): Promise<CloudAuthCrypto> {
-  const encodedSecret = await readOrCreateSecretFile({
-    bytes: 32,
+  return createEncryptedJsonCrypto({
     dataDir: args.dataDir,
     fileName: CLOUD_AUTH_SECRET_FILE_NAME,
   });
-  const secret = Buffer.from(encodedSecret, "base64");
-
-  if (secret.byteLength !== 32) {
-    throw new Error("Cloud auth secret must decode to 32 bytes");
-  }
-
-  return {
-    decryptJson({ payload, schema }) {
-      const envelope = encryptedPayloadEnvelopeSchema.parse(JSON.parse(payload));
-      const decipher = createDecipheriv(
-        CIPHER_ALGORITHM,
-        secret,
-        Buffer.from(envelope.iv, "base64"),
-      );
-      decipher.setAuthTag(Buffer.from(envelope.tag, "base64"));
-      const plaintext = Buffer.concat([
-        decipher.update(Buffer.from(envelope.ciphertext, "base64")),
-        decipher.final(),
-      ]).toString("utf8");
-      return schema.parse(JSON.parse(plaintext));
-    },
-    encryptJson({ plaintext }) {
-      const iv = randomBytes(12);
-      const cipher = createCipheriv(CIPHER_ALGORITHM, secret, iv);
-      const ciphertext = Buffer.concat([
-        cipher.update(plaintext, "utf8"),
-        cipher.final(),
-      ]);
-      const tag = cipher.getAuthTag();
-
-      return JSON.stringify({
-        ciphertext: ciphertext.toString("base64"),
-        iv: iv.toString("base64"),
-        tag: tag.toString("base64"),
-        version: 1,
-      });
-    },
-  };
 }

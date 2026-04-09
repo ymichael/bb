@@ -37,7 +37,7 @@ interface EnsureSandboxRuntimeMaterialSyncedArgs {
 }
 
 export async function requestSandboxRuntimeMaterialSync(
-  deps: Pick<AppDeps, "cloudAuth" | "config" | "db">,
+  deps: Pick<AppDeps, "cloudAuth" | "config" | "db" | "sandboxEnv">,
   args: { hostId: string },
 ): Promise<HostRuntimeMaterialSnapshot> {
   const host = getHost(deps.db, args.hostId);
@@ -145,7 +145,7 @@ export function advanceSandboxRuntimeMaterialSync(
 }
 
 export async function ensureSandboxRuntimeMaterialSynced(
-  deps: Pick<AppDeps, "cloudAuth" | "config" | "db" | "hub">,
+  deps: Pick<AppDeps, "cloudAuth" | "config" | "db" | "hub" | "sandboxEnv">,
   args: EnsureSandboxRuntimeMaterialSyncedArgs,
 ): Promise<HostRuntimeMaterialSnapshot> {
   const desiredSnapshot = await requestSandboxRuntimeMaterialSync(deps, {

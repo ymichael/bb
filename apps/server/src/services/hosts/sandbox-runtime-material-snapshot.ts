@@ -55,13 +55,15 @@ function buildSnapshotVersion(snapshot: HostRuntimeMaterialSnapshot): string {
 }
 
 export async function buildSandboxRuntimeMaterialSnapshot(
-  deps: Pick<AppDeps, "cloudAuth" | "config">,
+  deps: Pick<AppDeps, "cloudAuth" | "config" | "sandboxEnv">,
 ): Promise<HostRuntimeMaterialSnapshot> {
   const baseEnv = buildManagedRuntimeEnv(deps.config);
+  const customEnv = await deps.sandboxEnv.resolveRuntimeEnv();
   const cloudAuthRuntimeMaterial = await buildCloudAuthRuntimeMaterial(deps);
   const snapshot: HostRuntimeMaterialSnapshot = {
     env: {
       ...baseEnv,
+      ...customEnv,
       ...cloudAuthRuntimeMaterial.env,
     },
     files: cloudAuthRuntimeMaterial.files,
@@ -80,7 +82,7 @@ export function isEmptySandboxRuntimeMaterialSnapshot(
 }
 
 export async function readSandboxRuntimeMaterialSnapshotForVersion(
-  deps: Pick<AppDeps, "cloudAuth" | "config">,
+  deps: Pick<AppDeps, "cloudAuth" | "config" | "sandboxEnv">,
   args: { version: string },
 ): Promise<HostRuntimeMaterialSnapshot> {
   const desiredSnapshot = await buildSandboxRuntimeMaterialSnapshot(deps);

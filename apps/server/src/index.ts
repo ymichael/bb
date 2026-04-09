@@ -10,6 +10,7 @@ import { createApp } from "./server.js";
 import { createCloudAuthService } from "./services/cloud-auth/service.js";
 import { createSandboxHostRegistry } from "./services/hosts/sandbox-registry.js";
 import { createMachineAuthService } from "./services/machine-auth.js";
+import { createSandboxEnvService } from "./services/sandbox-env/service.js";
 import { runPeriodicSweeps } from "./services/system/periodic-sweeps.js";
 import type { ServerRuntimeConfig } from "./types.js";
 import { NotificationHub } from "./ws/hub.js";
@@ -54,6 +55,11 @@ async function main(): Promise<void> {
     db,
     logger,
   });
+  const sandboxEnv = await createSandboxEnvService({
+    dataDir: commonConfig.BB_DATA_DIR,
+    db,
+    logger,
+  });
 
   const { app, injectWebSocket } = createApp(
     {
@@ -63,6 +69,7 @@ async function main(): Promise<void> {
       hub,
       logger,
       machineAuth,
+      sandboxEnv,
       sandboxRegistry,
     },
     { staticDir },
@@ -76,6 +83,7 @@ async function main(): Promise<void> {
       hub,
       logger,
       machineAuth,
+      sandboxEnv,
       sandboxRegistry,
     });
   }, 10_000).unref();

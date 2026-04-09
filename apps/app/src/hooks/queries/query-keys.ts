@@ -18,6 +18,9 @@ export const THREAD_TIMELINE_QUERY_KEY = "threadTimeline";
 export const AVAILABLE_MODELS_QUERY_KEY = "availableModels";
 export const SYSTEM_PROVIDERS_QUERY_KEY = "systemProviders";
 export const SANDBOX_BACKENDS_QUERY_KEY = "sandboxBackends";
+export const CLOUD_AUTH_SETTINGS_QUERY_KEY = "cloudAuthSettings";
+export const CLOUD_AUTH_ATTEMPT_QUERY_KEY = "cloudAuthAttempt";
+export const SANDBOX_ENV_VARS_QUERY_KEY = "sandboxEnvVars";
 export const GITHUB_REPOS_QUERY_KEY = "githubRepos";
 export const STATUS_QUERY_KEY = "status";
 
@@ -110,6 +113,13 @@ export type AllAvailableModelsQueryKeyPrefix = readonly [
 ];
 export type SystemProvidersQueryKey = readonly [typeof SYSTEM_PROVIDERS_QUERY_KEY];
 export type SandboxBackendsQueryKey = readonly [typeof SANDBOX_BACKENDS_QUERY_KEY];
+export type CloudAuthSettingsQueryKey = readonly [typeof CLOUD_AUTH_SETTINGS_QUERY_KEY];
+export type CloudAuthAttemptId = string | null;
+export type CloudAuthAttemptQueryKey = readonly [
+  typeof CLOUD_AUTH_ATTEMPT_QUERY_KEY,
+  CloudAuthAttemptId,
+];
+export type SandboxEnvVarsQueryKey = readonly [typeof SANDBOX_ENV_VARS_QUERY_KEY];
 export type GithubReposQueryKey = readonly [typeof GITHUB_REPOS_QUERY_KEY, string];
 export type StatusQueryKey = readonly [typeof STATUS_QUERY_KEY];
 
@@ -270,6 +280,20 @@ export function systemProvidersQueryKey(): SystemProvidersQueryKey {
 
 export function sandboxBackendsQueryKey(): SandboxBackendsQueryKey {
   return [SANDBOX_BACKENDS_QUERY_KEY];
+}
+
+export function cloudAuthSettingsQueryKey(): CloudAuthSettingsQueryKey {
+  return [CLOUD_AUTH_SETTINGS_QUERY_KEY];
+}
+
+export function cloudAuthAttemptQueryKey(
+  attemptId: CloudAuthAttemptId,
+): CloudAuthAttemptQueryKey {
+  return [CLOUD_AUTH_ATTEMPT_QUERY_KEY, attemptId];
+}
+
+export function sandboxEnvVarsQueryKey(): SandboxEnvVarsQueryKey {
+  return [SANDBOX_ENV_VARS_QUERY_KEY];
 }
 
 export function githubReposQueryKey(q: string): GithubReposQueryKey {

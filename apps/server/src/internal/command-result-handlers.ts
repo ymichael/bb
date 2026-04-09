@@ -57,6 +57,7 @@ type CommandResultSideEffectsDeps = Pick<
   | "hub"
   | "logger"
   | "machineAuth"
+  | "sandboxEnv"
   | "sandboxRegistry"
 >;
 

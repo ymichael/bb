@@ -68,7 +68,13 @@ export async function runManagedEnvironmentArchiveCleanupSweep(
 export async function runEphemeralHostCleanupSweep(
   deps: Pick<
     AppDeps,
-    "cloudAuth" | "config" | "db" | "hub" | "logger" | "sandboxRegistry"
+    | "cloudAuth"
+    | "config"
+    | "db"
+    | "hub"
+    | "logger"
+    | "sandboxEnv"
+    | "sandboxRegistry"
   >,
   destroySandboxHost: DestroyHostFn,
 ): Promise<void> {
@@ -103,6 +109,7 @@ export async function runProjectDeletionSweep(
     | "hub"
     | "logger"
     | "machineAuth"
+    | "sandboxEnv"
     | "sandboxRegistry"
   >,
 ): Promise<void> {
@@ -130,6 +137,7 @@ export async function runEnvironmentProvisioningSweep(
     | "hub"
     | "logger"
     | "machineAuth"
+    | "sandboxEnv"
     | "sandboxRegistry"
   >,
 ): Promise<void> {
@@ -174,7 +182,13 @@ export async function runEnvironmentProvisioningSweep(
 export async function runIdleSandboxSuspendSweep(
   deps: Pick<
     AppDeps,
-    "cloudAuth" | "config" | "db" | "hub" | "logger" | "sandboxRegistry"
+    | "cloudAuth"
+    | "config"
+    | "db"
+    | "hub"
+    | "logger"
+    | "sandboxEnv"
+    | "sandboxRegistry"
   >,
 ): Promise<void> {
   for (const host of sweepIdleEphemeralHostsEligibleForSuspend(deps.db, {
@@ -277,6 +291,7 @@ export async function runPeriodicSweeps(
     | "hub"
     | "logger"
     | "machineAuth"
+    | "sandboxEnv"
     | "sandboxRegistry"
   >,
 ): Promise<void> {

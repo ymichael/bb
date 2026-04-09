@@ -112,7 +112,13 @@ export function requestProjectDeletion(
 export async function advanceProjectDeletion(
   deps: Pick<
     AppDeps,
-    "cloudAuth" | "config" | "db" | "hub" | "machineAuth" | "sandboxRegistry"
+    | "cloudAuth"
+    | "config"
+    | "db"
+    | "hub"
+    | "machineAuth"
+    | "sandboxEnv"
+    | "sandboxRegistry"
   >,
   args: ProjectDeletionArgs,
 ): Promise<boolean> {

@@ -3,6 +3,7 @@ import type { Logger } from "@bb/logger";
 import type { CloudAuthService } from "./services/cloud-auth/types.js";
 import type { SandboxHostRegistry } from "./services/hosts/sandbox-registry.js";
 import type { MachineAuthService } from "./services/machine-auth.js";
+import type { SandboxEnvService } from "./services/sandbox-env/types.js";
 import type { NotificationHub } from "./ws/hub.js";
 
 export type ServerLogger = Pick<Logger, "error" | "info" | "warn">;
@@ -28,12 +29,19 @@ export interface AppDeps {
   hub: NotificationHub;
   logger: ServerLogger;
   machineAuth: MachineAuthService;
+  sandboxEnv: SandboxEnvService;
   sandboxRegistry: SandboxHostRegistry;
 }
 
 export type SandboxLifecycleDeps = Pick<
   AppDeps,
-  "cloudAuth" | "config" | "db" | "hub" | "machineAuth" | "sandboxRegistry"
+  | "cloudAuth"
+  | "config"
+  | "db"
+  | "hub"
+  | "machineAuth"
+  | "sandboxEnv"
+  | "sandboxRegistry"
 >;
 
 /**

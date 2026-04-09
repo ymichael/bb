@@ -98,6 +98,17 @@ export const sandboxProviderCredentials = sqliteTable(
   ],
 );
 
+export const appSandboxEnvVars = sqliteTable(
+  "app_sandbox_env_vars",
+  {
+    name: text("name").primaryKey(),
+    encryptedValue: text("encrypted_value").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (table) => [index("app_sandbox_env_vars_updated_at_idx").on(table.updatedAt)],
+);
+
 export const hosts = sqliteTable(
   "hosts",
   {

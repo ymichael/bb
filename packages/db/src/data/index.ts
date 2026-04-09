@@ -67,6 +67,17 @@ export type {
 } from "./automations.js";
 
 export {
+  deleteAppSandboxEnvVar,
+  getAppSandboxEnvVar,
+  listAppSandboxEnvVars,
+  upsertAppSandboxEnvVar,
+} from "./app-sandbox-env-vars.js";
+export type {
+  AppSandboxEnvVarRecord,
+  UpsertAppSandboxEnvVarArgs,
+} from "./app-sandbox-env-vars.js";
+
+export {
   createThread,
   countLiveThreadsInEnvironment,
   getThread,
