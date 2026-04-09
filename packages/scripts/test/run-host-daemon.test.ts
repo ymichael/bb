@@ -9,7 +9,7 @@ import {
 import {
   maybeAddAutoJoinEnv,
   resolveDefaultDataDirName,
-} from "../../../../scripts/run-host-daemon.mjs";
+} from "../src/commands/run-host-daemon.js";
 
 const tempDirs: string[] = [];
 

@@ -281,6 +281,9 @@ importers:
         specifier: ^8.19.0
         version: 8.19.0
     devDependencies:
+      '@bb/scripts':
+        specifier: workspace:*
+        version: link:../../packages/scripts
       '@bb/test-helpers':
         specifier: workspace:*
         version: link:../../packages/test-helpers
@@ -378,6 +381,9 @@ importers:
       '@bb/provider-audit':
         specifier: workspace:*
         version: link:../../packages/provider-audit
+      '@bb/scripts':
+        specifier: workspace:*
+        version: link:../../packages/scripts
       '@bb/tsconfig':
         specifier: workspace:*
         version: link:../../packages/tsconfig
@@ -663,6 +669,9 @@ importers:
       typescript:
         specifier: ^5.7.0
         version: 5.9.3
+      vitest:
+        specifier: ^4.0.18
+        version: 4.1.1(@opentelemetry/api@1.9.1)(@types/node@22.19.10)(jsdom@29.0.1(@noble/hashes@2.0.1))(msw@2.12.14(@types/node@22.19.10)(typescript@5.9.3))(vite@7.3.1(@types/node@22.19.10)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)(yaml@2.8.2))
 
   packages/provider-audit:
     dependencies:
@@ -776,6 +785,37 @@ importers:
         version: 5.9.3
       vitest:
         specifier: ^4.1.1
+        version: 4.1.1(@opentelemetry/api@1.9.1)(@types/node@22.19.10)(jsdom@29.0.1(@noble/hashes@2.0.1))(msw@2.12.14(@types/node@22.19.10)(typescript@5.9.3))(vite@7.3.1(@types/node@22.19.10)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)(yaml@2.8.2))
+
+  packages/scripts:
+    dependencies:
+      '@bb/config':
+        specifier: workspace:*
+        version: link:../config
+      '@bb/host-daemon-contract':
+        specifier: workspace:*
+        version: link:../host-daemon-contract
+      '@bb/server-contract':
+        specifier: workspace:*
+        version: link:../server-contract
+      cross-spawn:
+        specifier: ^7.0.6
+        version: 7.0.6
+    devDependencies:
+      '@bb/tsconfig':
+        specifier: workspace:*
+        version: link:../tsconfig
+      '@types/cross-spawn':
+        specifier: ^6.0.6
+        version: 6.0.6
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.19.10
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+      vitest:
+        specifier: ^4.0.18
         version: 4.1.1(@opentelemetry/api@1.9.1)(@types/node@22.19.10)(jsdom@29.0.1(@noble/hashes@2.0.1))(msw@2.12.14(@types/node@22.19.10)(typescript@5.9.3))(vite@7.3.1(@types/node@22.19.10)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)(yaml@2.8.2))
 
   packages/server-contract:

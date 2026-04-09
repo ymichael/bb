@@ -1,0 +1,64 @@
+{
+  "name": "@bb/scripts",
+  "version": "0.0.1",
+  "type": "module",
+  "private": true,
+  "exports": {
+    "./lib/run-dev-supervisor": {
+      "import": "./dist/lib/run-dev-supervisor.js",
+      "types": "./dist/lib/run-dev-supervisor.d.ts"
+    },
+    "./request-dev-restart": {
+      "import": "./dist/commands/request-dev-restart.js",
+      "types": "./dist/commands/request-dev-restart.d.ts"
+    },
+    "./run-cli": {
+      "import": "./dist/commands/run-cli.js",
+      "types": "./dist/commands/run-cli.d.ts"
+    },
+    "./run-host-daemon": {
+      "import": "./dist/commands/run-host-daemon.js",
+      "types": "./dist/commands/run-host-daemon.d.ts"
+    },
+    "./start-bb": {
+      "import": "./dist/commands/start-bb.js",
+      "types": "./dist/commands/start-bb.d.ts"
+    },
+    "./start-host-daemon": {
+      "import": "./dist/commands/start-host-daemon.js",
+      "types": "./dist/commands/start-host-daemon.d.ts"
+    },
+    "./reset-bb-data": {
+      "import": "./dist/commands/reset-bb-data.js",
+      "types": "./dist/commands/reset-bb-data.d.ts"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "rimraf dist tsconfig.tsbuildinfo && tsc",
+    "clean": "rimraf dist tsconfig.tsbuildinfo",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --config vitest.config.ts",
+    "cli": "node dist/commands/run-cli.js",
+    "dev:host-daemon": "node dist/commands/run-host-daemon.js --auto-join",
+    "dev:restart": "node dist/commands/request-dev-restart.js both",
+    "dev:restart-host-daemon": "node dist/commands/request-dev-restart.js host-daemon",
+    "dev:restart-server": "node dist/commands/request-dev-restart.js server",
+    "reset": "node dist/commands/reset-bb-data.js",
+    "start": "node dist/commands/start-bb.js",
+    "start:host-daemon": "node dist/commands/start-host-daemon.js"
+  },
+  "dependencies": {
+    "@bb/config": "workspace:*",
+    "@bb/host-daemon-contract": "workspace:*",
+    "@bb/server-contract": "workspace:*",
+    "cross-spawn": "^7.0.6"
+  },
+  "devDependencies": {
+    "@bb/tsconfig": "workspace:*",
+    "@types/cross-spawn": "^6.0.6",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0",
+    "vitest": "^4.0.18"
+  }
+}
