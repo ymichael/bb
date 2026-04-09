@@ -1,20 +1,12 @@
 import { Navigate } from "react-router-dom";
 import { useProjects } from "../hooks/queries/project-queries";
+import { useQuickCreateProjectController } from "@/hooks/useQuickCreateProject";
 import { Button } from "@/components/ui/button";
 import { PageShell } from "@/components/layout/PageShell";
 
-interface MainViewProps {
-  canCreateProject: boolean;
-  isCreatingProject: boolean;
-  onNewProject: () => void;
-}
-
-export function MainView({
-  canCreateProject,
-  isCreatingProject,
-  onNewProject,
-}: MainViewProps) {
+export function MainView() {
   const { data: projects, isLoading: projectsLoading } = useProjects();
+  const quickCreateProject = useQuickCreateProjectController();
   const hasProjects = (projects?.length ?? 0) > 0;
 
   if (projectsLoading) {
@@ -34,11 +26,15 @@ export function MainView({
           </p>
           <Button
             onClick={() => {
-              onNewProject();
+              quickCreateProject.openCreateDialog();
             }}
-            disabled={isCreatingProject || !canCreateProject}
+            disabled={quickCreateProject.isCreating || !quickCreateProject.isAvailable}
           >
-            {isCreatingProject ? "Creating..." : !canCreateProject ? "No local daemon" : "New project"}
+            {quickCreateProject.isCreating
+              ? "Creating..."
+              : !quickCreateProject.isAvailable
+                ? "No local daemon"
+                : "New project"}
           </Button>
         </div>
       </PageShell>

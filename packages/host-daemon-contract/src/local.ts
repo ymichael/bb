@@ -33,6 +33,7 @@ export const statusResponseSchema = z.object({
   hostId: z.string().min(1),
   connected: z.boolean(),
   serverUrl: z.string(),
+  supportsNativeFolderPicker: z.boolean(),
 });
 export type StatusResponse = z.infer<typeof statusResponseSchema>;
 

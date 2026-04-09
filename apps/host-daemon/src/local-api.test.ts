@@ -54,6 +54,7 @@ describe("local API server", () => {
       hostId: "host-1",
       connected: true,
       serverUrl: "http://server.test",
+      supportsNativeFolderPicker: process.platform === "darwin",
     });
     const healthResponse = await client.health.$get();
     expect(await healthResponse.text()).toBe("ok");
@@ -74,9 +75,13 @@ describe("local API server", () => {
     });
     const client = createHostDaemonLocalClient(`http://localhost:${server.port}`);
 
+    const statusResponse = await client.status.$get();
     await client["open-path"].$post({ json: { path: "/tmp" } });
     const pickFolderResponse = await client["pick-folder"].$post({});
 
+    expect(await statusResponse.json()).toMatchObject({
+      supportsNativeFolderPicker: true,
+    });
     expect(openPath).toHaveBeenCalledWith("/tmp");
     expect(pickFolder).toHaveBeenCalledTimes(1);
     expect(await pickFolderResponse.json()).toEqual({ path: "/tmp/project" });

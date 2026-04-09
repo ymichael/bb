@@ -59,6 +59,8 @@ export async function startLocalApiServer(
       hostId: options.hostId,
       connected: options.getConnected(),
       serverUrl: options.serverUrl,
+      supportsNativeFolderPicker:
+        options.pickFolder != null || process.platform === "darwin",
     }),
   );
 

@@ -1,11 +1,19 @@
-import { useCallback } from "react"
+import {
+  createContext,
+  createElement,
+  useCallback,
+  useContext,
+  type ReactNode,
+} from "react"
 import { deriveProjectNameFromPath } from "@bb/domain"
 import { useCreateProject } from "@/hooks/mutations/project-mutations"
 import { useDialogState } from "@/hooks/useDialogState"
 import { useHostDaemon } from "@/hooks/useHostDaemon"
-import type { ProjectPathDialogTarget } from "@/components/project/ProjectPathDialog"
-
-export type ProjectPathPicker = (() => Promise<string | null>) | null
+import type {
+  ProjectPathDialogFolderPicker,
+  ProjectPathDialogSubmitHandler,
+  ProjectPathDialogTarget,
+} from "@/components/project/ProjectPathDialog"
 
 export interface QuickCreateProjectDialogState {
   isOpen: boolean
@@ -17,10 +25,12 @@ export interface QuickCreateProjectController {
   isAvailable: boolean
   isCreating: boolean
   openCreateDialog: () => void
-  pickFolder: ProjectPathPicker
+  pickFolder: ProjectPathDialogFolderPicker
   projectPathDialog: QuickCreateProjectDialogState
-  submitProjectPath: (target: ProjectPathDialogTarget, path: string) => void
+  submitProjectPath: ProjectPathDialogSubmitHandler
 }
+
+const quickCreateProjectContext = createContext<QuickCreateProjectController | null>(null)
 
 export function useQuickCreateProject() {
   const { mutate, isPending } = useCreateProject()
@@ -66,4 +76,28 @@ export function useQuickCreateProject() {
     isCreating: isPending,
     isAvailable,
   }
+}
+
+interface QuickCreateProjectProviderProps {
+  children: ReactNode
+}
+
+export function QuickCreateProjectProvider({
+  children,
+}: QuickCreateProjectProviderProps) {
+  const quickCreateProject = useQuickCreateProject()
+
+  return createElement(
+    quickCreateProjectContext.Provider,
+    { value: quickCreateProject },
+    children,
+  )
+}
+
+export function useQuickCreateProjectController(): QuickCreateProjectController {
+  const quickCreateProject = useContext(quickCreateProjectContext)
+  if (!quickCreateProject) {
+    throw new Error("QuickCreateProjectProvider is required")
+  }
+  return quickCreateProject
 }

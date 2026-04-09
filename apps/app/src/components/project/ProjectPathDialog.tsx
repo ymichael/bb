@@ -27,12 +27,18 @@ export type ProjectPathDialogTarget =
       currentPath: string
     }
 
+export type ProjectPathDialogFolderPicker = (() => Promise<string | null>) | null
+export type ProjectPathDialogSubmitHandler = (
+  target: ProjectPathDialogTarget,
+  path: string,
+) => Promise<void> | void
+
 interface ProjectPathDialogProps {
   target: ProjectPathDialogTarget | null
   pending?: boolean
-  pickFolder: (() => Promise<string | null>) | null
+  pickFolder: ProjectPathDialogFolderPicker
   onOpenChange: (open: boolean) => void
-  onSubmit: (target: ProjectPathDialogTarget, path: string) => void
+  onSubmit: ProjectPathDialogSubmitHandler
 }
 
 export function ProjectPathDialog({
@@ -62,20 +68,8 @@ export function ProjectPathDialog({
 interface ProjectPathDialogContentProps {
   target: ProjectPathDialogTarget
   pending: boolean
-  pickFolder: (() => Promise<string | null>) | null
-  onSubmit: (target: ProjectPathDialogTarget, path: string) => void
-}
-
-interface NavigatorUserAgentData {
-  platform?: string
-}
-
-interface NavigatorWithUserAgentData extends Navigator {
-  userAgentData?: NavigatorUserAgentData
-}
-
-function getNavigatorPlatform(navigatorValue: NavigatorWithUserAgentData): string {
-  return navigatorValue.userAgentData?.platform ?? navigatorValue.platform
+  pickFolder: ProjectPathDialogFolderPicker
+  onSubmit: ProjectPathDialogSubmitHandler
 }
 
 function ProjectPathDialogContent({
@@ -90,11 +84,7 @@ function ProjectPathDialogContent({
   )
   const [validationMessage, setValidationMessage] = useState<string | null>(null)
   const derivedProjectName = deriveProjectNameFromPath(pathValue)
-  const showNativePickerButton = (
-    pickFolder != null
-    && typeof navigator !== "undefined"
-    && /Mac/i.test(getNavigatorPlatform(navigator))
-  )
+  const showNativePickerButton = pickFolder != null
 
   useEffect(() => {
     if (validationMessage) {
@@ -118,7 +108,7 @@ function ProjectPathDialogContent({
       return
     }
 
-    onSubmit(target, normalizedPath)
+    void onSubmit(target, normalizedPath)
   }
 
   const handleChooseFolder = async () => {

@@ -9,12 +9,12 @@ import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
 import { useHostDaemon } from "./useHostDaemon";
 
 const {
-  fetchHostId,
+  fetchHostStatus,
   getSystemConfig,
   openPath,
   pickFolder,
 } = vi.hoisted(() => ({
-  fetchHostId: vi.fn(),
+  fetchHostStatus: vi.fn(),
   getSystemConfig: vi.fn(),
   openPath: vi.fn(),
   pickFolder: vi.fn(),
@@ -36,7 +36,7 @@ vi.mock("@/lib/api-host-daemon", async (importOriginal) => {
 
   return {
     ...actual,
-    fetchHostId,
+    fetchHostStatus,
     openPath,
     pickFolder,
   };
@@ -48,6 +48,7 @@ interface HostDaemonWrapperOptions {
   daemonPort: number | null;
   hosts?: Host[];
   localHostId: string | null;
+  supportsNativeFolderPicker?: boolean;
 }
 
 interface HostDaemonSnapshot {
@@ -55,6 +56,7 @@ interface HostDaemonSnapshot {
   localHost: Host | null;
   hasConnectedPersistentHost: boolean;
   hasDaemon: boolean;
+  supportsNativeFolderPicker: boolean;
   isLocalHost: (hostId: string | null | undefined) => boolean;
   openPath: ((path: string) => Promise<void>) | null;
   pickFolder: (() => Promise<string | null>) | null;
@@ -77,6 +79,7 @@ function createHostDaemonWrapper({
   daemonPort,
   hosts = [],
   localHostId,
+  supportsNativeFolderPicker = localHostId != null,
 }: HostDaemonWrapperOptions) {
   getSystemConfig.mockResolvedValue({
     json: async () => ({
@@ -85,7 +88,16 @@ function createHostDaemonWrapper({
     }),
     ok: true,
   });
-  fetchHostId.mockResolvedValue(localHostId);
+  fetchHostStatus.mockResolvedValue(
+    localHostId
+      ? {
+          hostId: localHostId,
+          connected: true,
+          serverUrl: "http://localhost:3334",
+          supportsNativeFolderPicker,
+        }
+      : null,
+  );
 
   const { queryClient, wrapper: baseWrapper } = createQueryClientTestHarness();
   queryClient.setQueryData(hostsQueryKey(), hosts);
@@ -122,6 +134,7 @@ function createHostDaemonProbe(useHostDaemon: () => HostDaemonSnapshot) {
         <div data-testid="host-name">{value.localHost?.name ?? "none"}</div>
         <div data-testid="has-daemon">{String(value.hasDaemon)}</div>
         <div data-testid="is-connected">{String(value.hasConnectedPersistentHost)}</div>
+        <div data-testid="supports-folder-picker">{String(value.supportsNativeFolderPicker)}</div>
         <div data-testid="is-local-host-1">{String(value.isLocalHost("host-1"))}</div>
         <div data-testid="is-local-host-2">{String(value.isLocalHost("host-2"))}</div>
         <button disabled={value.openPath == null} onClick={() => void value.openPath?.("/tmp/file.txt")}>
@@ -166,6 +179,7 @@ describe("useHostDaemon", () => {
     expect(screen.getByTestId("host-name").textContent).toBe(localHost.name);
     expect(screen.getByTestId("has-daemon").textContent).toBe("true");
     expect(screen.getByTestId("is-connected").textContent).toBe("true");
+    expect(screen.getByTestId("supports-folder-picker").textContent).toBe("true");
     expect(screen.getByTestId("is-local-host-1").textContent).toBe("true");
     expect(screen.getByTestId("is-local-host-2").textContent).toBe("false");
     expect(latestSnapshot.current?.localHost).toEqual(localHost);
@@ -198,11 +212,33 @@ describe("useHostDaemon", () => {
     expect(screen.getByTestId("host-name").textContent).toBe("none");
     expect(screen.getByTestId("has-daemon").textContent).toBe("false");
     expect(screen.getByTestId("is-connected").textContent).toBe("false");
+    expect(screen.getByTestId("supports-folder-picker").textContent).toBe("false");
     expect(screen.getByTestId("is-local-host-1").textContent).toBe("false");
     expect(screen.getByRole("button", { name: "open path" }).getAttribute("disabled")).not.toBeNull();
     expect(screen.getByRole("button", { name: "pick folder" }).getAttribute("disabled")).not.toBeNull();
     expect(latestSnapshot.current?.localHost).toBeNull();
     expect(latestSnapshot.current?.openPath).toBeNull();
+    expect(latestSnapshot.current?.pickFolder).toBeNull();
+  });
+
+  it("hides folder picking when the daemon does not advertise that capability", async () => {
+    const latestSnapshot: { current: HostDaemonSnapshot | null } = { current: null };
+    const { wrapper } = createHostDaemonWrapper({
+      daemonPort: 4123,
+      hosts: [makeHost()],
+      localHostId: "host-1",
+      supportsNativeFolderPicker: false,
+    });
+    const HostDaemonProbe = createHostDaemonProbe(useHostDaemon);
+
+    await act(async () => {
+      render(<HostDaemonProbe onSnapshot={(snapshot) => { latestSnapshot.current = snapshot; }} />, {
+        wrapper,
+      });
+    });
+
+    expect((await screen.findByTestId("supports-folder-picker")).textContent).toBe("false");
+    expect(screen.getByRole("button", { name: "pick folder" }).getAttribute("disabled")).not.toBeNull();
     expect(latestSnapshot.current?.pickFolder).toBeNull();
   });
 });

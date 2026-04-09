@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 const {
   changedCallbacks,
   connectedCallbacks,
-  fetchHostId,
+  fetchHostStatus,
   getSystemConfig,
 } = vi.hoisted(() => {
   interface ConnectedEvent {
@@ -29,7 +29,7 @@ const {
   return {
     changedCallbacks,
     connectedCallbacks,
-    fetchHostId: vi.fn(),
+    fetchHostStatus: vi.fn(),
     getSystemConfig: vi.fn(),
   };
 });
@@ -45,7 +45,7 @@ vi.mock("@/lib/api-server", () => ({
 }));
 
 vi.mock("@/lib/api-host-daemon", () => ({
-  fetchHostId,
+  fetchHostStatus,
 }));
 
 vi.mock("@/lib/ws", () => ({
@@ -134,7 +134,14 @@ describe("systemConfigAtom", () => {
 describe("localHostIdAtom", () => {
   it("re-probes when host status changes", async () => {
     mockSystemConfig();
-    fetchHostId.mockResolvedValueOnce("host-1").mockResolvedValueOnce(null);
+    fetchHostStatus
+      .mockResolvedValueOnce({
+        hostId: "host-1",
+        connected: true,
+        serverUrl: "http://localhost:3334",
+        supportsNativeFolderPicker: true,
+      })
+      .mockResolvedValueOnce(null);
 
     const { localHostIdAtom } = await import("./atoms");
     const store = getDefaultStore();
@@ -150,7 +157,7 @@ describe("localHostIdAtom", () => {
       });
 
       expect(await store.get(localHostIdAtom)).toBeNull();
-      expect(fetchHostId).toHaveBeenCalledTimes(2);
+      expect(fetchHostStatus).toHaveBeenCalledTimes(2);
     } finally {
       unsubscribe();
     }
@@ -158,7 +165,14 @@ describe("localHostIdAtom", () => {
 
   it("re-probes after websocket reconnects", async () => {
     mockSystemConfig();
-    fetchHostId.mockResolvedValueOnce(null).mockResolvedValue("host-1");
+    fetchHostStatus
+      .mockResolvedValueOnce(null)
+      .mockResolvedValue({
+        hostId: "host-1",
+        connected: true,
+        serverUrl: "http://localhost:3334",
+        supportsNativeFolderPicker: true,
+      });
 
     const { localHostIdAtom } = await import("./atoms");
     const store = getDefaultStore();

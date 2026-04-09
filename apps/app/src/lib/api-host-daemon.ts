@@ -1,7 +1,12 @@
-import { createHostDaemonLocalClient } from "@bb/host-daemon-contract";
+import {
+  createHostDaemonLocalClient,
+  type StatusResponse,
+} from "@bb/host-daemon-contract";
 
 let client: ReturnType<typeof createHostDaemonLocalClient> | null = null;
 let clientPort: number | null = null;
+
+export interface HostDaemonStatusSnapshot extends StatusResponse {}
 
 /**
  * Get or create the host daemon client.
@@ -19,17 +24,25 @@ export function getHostDaemonClient(port: number) {
  * Fetch the local host ID from the daemon.
  * Returns null if the daemon is unreachable.
  */
-export async function fetchHostId(port: number): Promise<string | null> {
+export async function fetchHostStatus(
+  port: number,
+): Promise<HostDaemonStatusSnapshot | null> {
   try {
     const daemon = getHostDaemonClient(port);
     const res = await daemon.status.$get();
     if (!res.ok) return null;
-    const body = await res.json();
-    if (!body.connected) return null;
-    return body.hostId;
+    return await res.json();
   } catch {
     return null;
   }
+}
+
+export async function fetchHostId(port: number): Promise<string | null> {
+  const status = await fetchHostStatus(port);
+  if (!status?.connected) {
+    return null;
+  }
+  return status.hostId;
 }
 
 /**

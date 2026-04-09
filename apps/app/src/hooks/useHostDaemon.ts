@@ -1,6 +1,6 @@
 import { useAtomValue } from "jotai";
 import { useCallback, useMemo } from "react";
-import { hostDaemonPortAtom, localHostIdAtom } from "@/lib/atoms";
+import { hostDaemonPortAtom, localHostIdAtom, localHostStatusAtom } from "@/lib/atoms";
 import { openPath as daemonOpenPath, pickFolder as daemonPickFolder } from "@/lib/api-host-daemon";
 import { useHosts } from "./queries/system-queries";
 
@@ -12,16 +12,20 @@ import { useHosts } from "./queries/system-queries";
  * - `localHost` — the full Host object for this machine, or null
  * - `hasConnectedPersistentHost` — whether the local host's status is "connected"
  * - `hasDaemon` — whether a daemon is reachable
+ * - `supportsNativeFolderPicker` — whether the daemon can open a native folder picker
  * - `isLocalHost(hostId)` — whether the given host matches this machine
  * - `openPath(path)` — open a path in the user's editor (null if no daemon)
  * - `pickFolder()` — open native folder picker (null if no daemon)
  */
 export function useHostDaemon() {
   const localHostId = useAtomValue(localHostIdAtom);
+  const localHostStatus = useAtomValue(localHostStatusAtom);
   const daemonPort = useAtomValue(hostDaemonPortAtom);
   const { data: hosts } = useHosts();
 
   const hasDaemon = localHostId != null;
+  const supportsNativeFolderPicker =
+    localHostStatus?.supportsNativeFolderPicker ?? false;
 
   const localHost = useMemo(() => {
     if (!localHostId || !hosts) return null;
@@ -55,10 +59,10 @@ export function useHostDaemon() {
   }, [localHostId, daemonPort]);
 
   const pickFolder = useMemo(() => {
-    if (!localHostId || !daemonPort) return null;
+    if (!localHostId || !daemonPort || !supportsNativeFolderPicker) return null;
     const port = daemonPort;
     return () => daemonPickFolder(port);
-  }, [localHostId, daemonPort]);
+  }, [localHostId, daemonPort, supportsNativeFolderPicker]);
 
   return {
     localHostId,
@@ -66,6 +70,7 @@ export function useHostDaemon() {
     connectedPersistentHost,
     hasConnectedPersistentHost,
     hasDaemon,
+    supportsNativeFolderPicker,
     isLocalHost,
     openPath,
     pickFolder,

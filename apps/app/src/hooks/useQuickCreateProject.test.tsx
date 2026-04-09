@@ -80,4 +80,96 @@ describe("useQuickCreateProject", () => {
     )
     expect(result.current.projectPathDialog.isOpen).toBe(false)
   })
+
+  it("does not open the create dialog when no local host is available", () => {
+    useCreateProject.mockReturnValue({
+      mutate: vi.fn(),
+      isPending: false,
+    })
+    useHostDaemon.mockReturnValue({
+      localHostId: null,
+      pickFolder: null,
+    })
+
+    const { result } = renderHook(() => useQuickCreateProject())
+
+    act(() => {
+      result.current.openCreateDialog()
+    })
+
+    expect(result.current.isAvailable).toBe(false)
+    expect(result.current.projectPathDialog.target).toBeNull()
+  })
+
+  it("does not open the create dialog while a project mutation is pending", () => {
+    useCreateProject.mockReturnValue({
+      mutate: vi.fn(),
+      isPending: true,
+    })
+    useHostDaemon.mockReturnValue({
+      localHostId: "host-1",
+      pickFolder: null,
+    })
+
+    const { result } = renderHook(() => useQuickCreateProject())
+
+    act(() => {
+      result.current.openCreateDialog()
+    })
+
+    expect(result.current.projectPathDialog.target).toBeNull()
+  })
+
+  it("ignores create submissions that do not produce a project name", () => {
+    const mutate = vi.fn()
+    useCreateProject.mockReturnValue({
+      mutate,
+      isPending: false,
+    })
+    useHostDaemon.mockReturnValue({
+      localHostId: "host-1",
+      pickFolder: null,
+    })
+
+    const { result } = renderHook(() => useQuickCreateProject())
+
+    act(() => {
+      result.current.openCreateDialog()
+    })
+
+    act(() => {
+      result.current.submitProjectPath({ kind: "create" }, "/")
+    })
+
+    expect(mutate).not.toHaveBeenCalled()
+    expect(result.current.projectPathDialog.isOpen).toBe(true)
+  })
+
+  it("ignores non-create submissions", () => {
+    const mutate = vi.fn()
+    useCreateProject.mockReturnValue({
+      mutate,
+      isPending: false,
+    })
+    useHostDaemon.mockReturnValue({
+      localHostId: "host-1",
+      pickFolder: null,
+    })
+
+    const { result } = renderHook(() => useQuickCreateProject())
+
+    act(() => {
+      result.current.submitProjectPath(
+        {
+          kind: "update",
+          projectId: "proj-1",
+          projectName: "Project One",
+          currentPath: "/srv/repos/project-one",
+        },
+        "/srv/repos/project-one",
+      )
+    })
+
+    expect(mutate).not.toHaveBeenCalled()
+  })
 })

@@ -11,21 +11,19 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar"
 import { ProjectList } from "./ProjectList"
+import { useQuickCreateProjectController } from "@/hooks/useQuickCreateProject"
 import { setPreferredTheme, usePreferredTheme } from "@/hooks/useTheme"
 
 interface AppSidebarProps {
   onResizeMouseDown: (event: React.MouseEvent<HTMLDivElement>) => void
   isResizing: boolean
-  onNewProject?: () => void
-  isCreatingProject?: boolean
 }
 
 export function AppSidebar({
   onResizeMouseDown,
   isResizing,
-  onNewProject,
-  isCreatingProject = false,
 }: AppSidebarProps) {
+  const quickCreateProject = useQuickCreateProjectController()
   const location = useLocation()
   const { isMobile, setOpenMobile } = useSidebar()
   const theme = usePreferredTheme()
@@ -47,10 +45,14 @@ export function AppSidebar({
       <Sidebar>
         <SidebarContent>
           <ProjectList
-            onNewProject={onNewProject}
+            onNewProject={
+              quickCreateProject.isAvailable
+                ? quickCreateProject.openCreateDialog
+                : undefined
+            }
             onProjectSelect={closeOnMobile}
             selectedProjectId={selectedProjectId}
-            isCreatingProject={isCreatingProject}
+            isCreatingProject={quickCreateProject.isCreating}
           />
         </SidebarContent>
         <SidebarFooter>

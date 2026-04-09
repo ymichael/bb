@@ -1,7 +1,8 @@
 import { atom } from "jotai";
+import type { HostDaemonStatusSnapshot } from "./api-host-daemon";
 import type { SystemConfigResponse } from "@bb/server-contract";
 import { apiClient } from "./api-server";
-import { fetchHostId } from "./api-host-daemon";
+import { fetchHostStatus } from "./api-host-daemon";
 import { wsManager } from "./ws";
 
 async function loadSystemConfig(): Promise<SystemConfigResponse> {
@@ -76,11 +77,20 @@ localHostIdRefreshTickAtom.onMount = (setRefreshTick) => {
 };
 
 /** The local machine's host ID, or null if no daemon is reachable. */
-export const localHostIdAtom = atom<Promise<string | null>>(async (get) => {
+export const localHostStatusAtom = atom<Promise<HostDaemonStatusSnapshot | null>>(async (get) => {
   get(localHostIdRefreshTickAtom);
   const config = await get(systemConfigAtom);
   if (!config.hostDaemonPort) return null;
-  return fetchHostId(config.hostDaemonPort);
+  return fetchHostStatus(config.hostDaemonPort);
+});
+
+/** The local machine's host ID, or null if no daemon is reachable. */
+export const localHostIdAtom = atom<Promise<string | null>>(async (get) => {
+  const localHostStatus = await get(localHostStatusAtom);
+  if (!localHostStatus?.connected) {
+    return null;
+  }
+  return localHostStatus.hostId;
 });
 
 // ---------------------------------------------------------------------------
