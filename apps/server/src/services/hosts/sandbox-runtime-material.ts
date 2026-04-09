@@ -29,17 +29,6 @@ import {
   isEmptySandboxRuntimeMaterialSnapshot,
 } from "./sandbox-runtime-material-snapshot.js";
 
-export {
-  buildSandboxRuntimeMaterialSnapshot,
-  readSandboxRuntimeMaterialSnapshotForVersion,
-} from "./sandbox-runtime-material-snapshot.js";
-export {
-  completeSandboxRuntimeMaterialSyncForCommand,
-  failSandboxRuntimeMaterialSyncForCommand,
-  hasActiveSandboxRuntimeMaterialSyncOperationForCommand,
-  reconcileSandboxRuntimeMaterialAfterSessionOpen,
-} from "./sandbox-runtime-material-operation.js";
-
 const DEFAULT_RUNTIME_MATERIAL_SYNC_TIMEOUT_MS = 60_000;
 
 interface EnsureSandboxRuntimeMaterialSyncedArgs {

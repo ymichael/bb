@@ -8,13 +8,15 @@ import {
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
-  advanceSandboxRuntimeMaterialSync,
-  buildSandboxRuntimeMaterialSnapshot,
-  completeSandboxRuntimeMaterialSyncForCommand,
   ensureSandboxRuntimeMaterialSynced,
-  failSandboxRuntimeMaterialSyncForCommand,
   requestSandboxRuntimeMaterialSync,
+  advanceSandboxRuntimeMaterialSync,
 } from "../../src/services/hosts/sandbox-runtime-material.js";
+import {
+  completeSandboxRuntimeMaterialSyncForCommand,
+  failSandboxRuntimeMaterialSyncForCommand,
+} from "../../src/services/hosts/sandbox-runtime-material-operation.js";
+import { buildSandboxRuntimeMaterialSnapshot } from "../../src/services/hosts/sandbox-runtime-material-snapshot.js";
 import {
   reportQueuedCommandSuccess,
   waitForQueuedCommand,

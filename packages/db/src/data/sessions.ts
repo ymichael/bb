@@ -139,6 +139,15 @@ export function getActiveSession(db: SessionReadConnection, hostId: string) {
   );
 }
 
+/**
+ * Returns the most recently updated active session row for the host without
+ * applying the lease-expiry filter.
+ *
+ * Use this only for reconciliation/diagnostic paths that need to distinguish
+ * "no active session exists" from "the latest active session record exists but
+ * its lease has already expired". For normal readiness checks, use
+ * `getActiveSession(...)` instead.
+ */
 export function getCurrentSession(
   db: SessionReadConnection,
   args: GetCurrentSessionArgs,

@@ -44,8 +44,10 @@ import {
   completeSandboxRuntimeMaterialSyncForCommand,
   failSandboxRuntimeMaterialSyncForCommand,
   hasActiveSandboxRuntimeMaterialSyncOperationForCommand,
-} from "../services/hosts/sandbox-runtime-material.js";
-import { tryTransition } from "../services/threads/thread-transitions.js";
+} from "../services/hosts/sandbox-runtime-material-operation.js";
+import {
+  tryTransition,
+} from "../services/threads/thread-transitions.js";
 
 function parseCommand(
   commandRow: typeof hostDaemonCommands.$inferSelect,

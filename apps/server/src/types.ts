@@ -34,6 +34,11 @@ export type SandboxLifecycleDeps = Pick<
   "config" | "db" | "hub" | "machineAuth" | "sandboxRegistry"
 >;
 
+/**
+ * Any server path that may queue work against a host session needs the full
+ * lifecycle deps, because an ephemeral sandbox may need server-owned
+ * resume/provision before work can be queued.
+ */
 export type SandboxWorkSessionDeps = SandboxLifecycleDeps;
 
 export type LoggedSandboxWorkSessionDeps =

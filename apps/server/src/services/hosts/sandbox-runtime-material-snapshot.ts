@@ -3,11 +3,18 @@ import type { HostRuntimeMaterialSnapshot } from "@bb/host-daemon-contract";
 import { ApiError } from "../../errors.js";
 import type { AppDeps, ServerRuntimeConfig } from "../../types.js";
 
+type SandboxRuntimeMaterialConfig = Pick<
+  ServerRuntimeConfig,
+  "anthropicApiKey" | "githubPat" | "openAiApiKey"
+>;
+
+const snapshotCache = new WeakMap<
+  SandboxRuntimeMaterialConfig,
+  HostRuntimeMaterialSnapshot
+>();
+
 function buildManagedRuntimeEnv(
-  config: Pick<
-    ServerRuntimeConfig,
-    "anthropicApiKey" | "githubPat" | "openAiApiKey"
-  >,
+  config: SandboxRuntimeMaterialConfig,
 ): Record<string, string> {
   const env: Record<string, string> = {};
 
@@ -36,16 +43,20 @@ function buildSnapshotVersion(env: Record<string, string>): string {
 }
 
 export function buildSandboxRuntimeMaterialSnapshot(
-  config: Pick<
-    ServerRuntimeConfig,
-    "anthropicApiKey" | "githubPat" | "openAiApiKey"
-  >,
+  config: SandboxRuntimeMaterialConfig,
 ): HostRuntimeMaterialSnapshot {
+  const cached = snapshotCache.get(config);
+  if (cached) {
+    return cached;
+  }
+
   const env = buildManagedRuntimeEnv(config);
-  return {
+  const snapshot = {
     env,
     version: buildSnapshotVersion(env),
   };
+  snapshotCache.set(config, snapshot);
+  return snapshot;
 }
 
 export function isEmptySandboxRuntimeMaterialSnapshot(

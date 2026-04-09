@@ -26,10 +26,10 @@ import { appendClientTurnEvent } from "../../src/services/threads/thread-events.
 import { finalizeStoppedThread } from "../../src/services/threads/thread-lifecycle.js";
 import {
   advanceSandboxRuntimeMaterialSync,
-  buildSandboxRuntimeMaterialSnapshot,
-  completeSandboxRuntimeMaterialSyncForCommand,
   requestSandboxRuntimeMaterialSync,
 } from "../../src/services/hosts/sandbox-runtime-material.js";
+import { completeSandboxRuntimeMaterialSyncForCommand } from "../../src/services/hosts/sandbox-runtime-material-operation.js";
+import { buildSandboxRuntimeMaterialSnapshot } from "../../src/services/hosts/sandbox-runtime-material-snapshot.js";
 import {
   internalAuthHeaders,
   waitForQueuedCommand,

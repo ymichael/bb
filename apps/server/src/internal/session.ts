@@ -22,10 +22,10 @@ import { assertAuthenticatedHostMatches, getAuthenticatedDaemon } from "./auth.j
 import { reconcileSessionThreads } from "./reconciliation.js";
 import {
   advanceSandboxRuntimeMaterialSync,
-  readSandboxRuntimeMaterialSnapshotForVersion,
-  reconcileSandboxRuntimeMaterialAfterSessionOpen,
   requestSandboxRuntimeMaterialSync,
 } from "../services/hosts/sandbox-runtime-material.js";
+import { reconcileSandboxRuntimeMaterialAfterSessionOpen } from "../services/hosts/sandbox-runtime-material-operation.js";
+import { readSandboxRuntimeMaterialSnapshotForVersion } from "../services/hosts/sandbox-runtime-material-snapshot.js";
 import { requireAuthorizedActiveSession } from "./session-state.js";
 
 export function registerInternalSessionRoutes(app: Hono, deps: AppDeps): void {
