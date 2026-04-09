@@ -136,6 +136,7 @@ export async function buildThreadStartCommand(
     options: args.execution,
     instructions: runtimeContext.instructions,
     dynamicTools: runtimeContext.dynamicTools,
+    threadStoragePath: runtimeContext.threadStoragePath,
   };
 }
 
@@ -329,6 +330,29 @@ export function queueThreadRenameCommand(
       environmentId: args.environment.id,
       threadId: args.threadId,
       title: args.title,
+    }),
+  });
+}
+
+export function queueThreadDeletedCommand(
+  deps: Pick<AppDeps, "db" | "hub">,
+  args: {
+    environment: {
+      hostId: string;
+      id: string;
+    };
+    threadId: string;
+  },
+): void {
+  const session = getActiveSession(deps.db, args.environment.hostId);
+  queueCommand(deps.db, deps.hub, {
+    hostId: args.environment.hostId,
+    sessionId: session?.id ?? null,
+    type: "thread.deleted",
+    payload: JSON.stringify({
+      type: "thread.deleted",
+      environmentId: args.environment.id,
+      threadId: args.threadId,
     }),
   });
 }

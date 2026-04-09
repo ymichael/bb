@@ -24,6 +24,7 @@ export const HOST_DAEMON_COMMAND_TYPES = [
   "turn.steer",
   "thread.stop",
   "thread.rename",
+  "thread.deleted",
   "host.list_files",
   "host.read_file",
   "provider.list",
@@ -95,6 +96,7 @@ export const threadStartCommandSchema = hostDaemonThreadTargetSchema.merge(
   type: z.literal("thread.start"),
   eventSequence: z.number().int().nonnegative(),
   input: z.array(promptInputSchema).min(1),
+  threadStoragePath: z.string().min(1).optional(),
 });
 
 /** Run a conversation turn with user input. Used for every message after the first. */
@@ -122,6 +124,10 @@ export const threadStopCommandSchema = hostDaemonThreadTargetSchema.extend({
 export const threadRenameCommandSchema = hostDaemonThreadTargetSchema.extend({
   type: z.literal("thread.rename"),
   title: z.string().min(1),
+});
+
+export const threadDeletedCommandSchema = hostDaemonThreadTargetSchema.extend({
+  type: z.literal("thread.deleted"),
 });
 
 /**
@@ -278,6 +284,7 @@ const hostDaemonNonProvisionCommandSchema = z.discriminatedUnion("type", [
   turnSteerCommandSchema,
   threadStopCommandSchema,
   threadRenameCommandSchema,
+  threadDeletedCommandSchema,
   hostListFilesCommandSchema,
   hostReadFileCommandSchema,
   providerListCommandSchema,
@@ -319,6 +326,7 @@ export const hostDaemonCommandResultSchemaByType = {
   "turn.steer": z.object({}),
   "thread.stop": z.object({}),
   "thread.rename": z.object({}),
+  "thread.deleted": z.object({}),
   "host.list_files": fileListResultSchema,
   "host.read_file": fileReadResultSchema,
   "provider.list": z.object({

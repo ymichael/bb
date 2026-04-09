@@ -34,6 +34,7 @@ export interface CommandDispatchOptions {
   eventSink?: EventSink;
   listModels?: (providerId: string) => Promise<AvailableModel[]>;
   listProviders?: () => ProviderInfo[];
+  threadStorageRootPath: string;
 }
 
 export class CommandDispatchError extends Error {

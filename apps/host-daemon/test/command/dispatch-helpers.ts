@@ -272,6 +272,13 @@ export function createHarness(args: {
     runtimeState,
     workspaceState,
     workspace,
+    /** Default dispatch options with threadStorageRootPath for tests. */
+    dispatchOptions(overrides: { threadStorageRootPath?: string } = {}) {
+      return {
+        runtimeManager: manager,
+        threadStorageRootPath: overrides.threadStorageRootPath ?? "/tmp/bb-test-thread-storage",
+      };
+    },
   };
 }
 

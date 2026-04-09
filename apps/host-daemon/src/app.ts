@@ -222,6 +222,7 @@ export async function createHostDaemonApp(
       defaultListModels(providerId, {
         bridgeBundleDir: options.bridgeBundleDir,
       }),
+    threadStorageRootPath,
     logger: options.logger,
     seedThreadHighWaterMark: ({ threadId, sequence }) =>
       eventBuffer.seed({ [threadId]: sequence }),

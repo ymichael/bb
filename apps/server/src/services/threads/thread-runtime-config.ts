@@ -89,6 +89,8 @@ export interface ResolvedThreadRuntimeCommandConfig {
   instructions: string;
   projectId: string;
   providerId: string;
+  /** Only set for manager threads. */
+  threadStoragePath?: string;
   workspacePath: string;
   workspaceProvisionType: WorkspaceProvisionType;
 }
@@ -224,6 +226,7 @@ export async function resolveThreadRuntimeCommandConfig(
     }),
     projectId: args.thread.projectId,
     providerId: args.thread.providerId,
+    threadStoragePath,
     workspacePath,
     workspaceProvisionType,
   };

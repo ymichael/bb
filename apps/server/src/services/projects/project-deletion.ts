@@ -1,7 +1,6 @@
 import { eq } from "drizzle-orm";
 import {
   deleteProject,
-  deleteThread,
   getProject,
   getProjectOperation,
   listEnvironments,
@@ -18,18 +17,13 @@ import {
   requestEnvironmentCleanup,
 } from "../environments/environment-cleanup.js";
 import {
-  hasActiveThreadStartOperation,
-  requestThreadStop,
+  finalizeStoppedThread,
+  requestThreadStopIfNeeded,
 } from "../threads/thread-lifecycle.js";
 
 export interface ProjectDeletionArgs {
   projectId: string;
 }
-
-type ProjectDeletionThreadRow = Pick<
-  typeof threads.$inferSelect,
-  "deletedAt" | "environmentId" | "id" | "projectId" | "status" | "stopRequestedAt"
->;
 
 function isProjectDeletionActive(
   deps: Pick<AppDeps, "db">,
@@ -41,29 +35,13 @@ function isProjectDeletionActive(
   }) !== null;
 }
 
-function shouldForceDeleteThread(
-  deps: Pick<AppDeps, "db">,
-  thread: ProjectDeletionThreadRow,
-  environment: Environment | null,
-): boolean {
-  if (hasActiveThreadStartOperation(deps, thread.id)) {
-    return false;
-  }
-
-  if (thread.status !== "active") {
-    return true;
-  }
-
-  return environment === null;
-}
-
-function advanceProjectThreadsForDeletion(
+async function advanceProjectThreadsForDeletion(
   deps: Pick<AppDeps, "db" | "hub">,
   args: {
     environmentsById: Map<string, Environment>;
     projectId: string;
   },
-): void {
+): Promise<void> {
   const projectThreads = deps.db
     .select({
       deletedAt: threads.deletedAt,
@@ -81,40 +59,17 @@ function advanceProjectThreadsForDeletion(
     const environment = thread.environmentId
       ? args.environmentsById.get(thread.environmentId) ?? null
       : null;
-    const startRequested = hasActiveThreadStartOperation(deps, thread.id);
 
-    if (thread.deletedAt !== null) {
-      if ((thread.status === "active" || startRequested) && environment !== null) {
-        requestThreadStop(deps, {
-          environmentId: environment.id,
-          hostId: environment.hostId,
-          stopRequestedAt: thread.stopRequestedAt,
-          threadId: thread.id,
-        });
-      }
-      continue;
+    if (thread.deletedAt === null) {
+      markThreadDeleted(deps.db, deps.hub, { threadId: thread.id });
     }
-
-    if (shouldForceDeleteThread(deps, thread, environment)) {
-      deleteThread(deps.db, deps.hub, thread.id);
-      continue;
+    if (environment) {
+      requestThreadStopIfNeeded(deps, thread, environment);
     }
-
-    if (environment === null) {
-      continue;
-    }
-
-    markThreadDeleted(deps.db, deps.hub, {
+    await finalizeStoppedThread(deps, {
       threadId: thread.id,
+      cancelPendingCommand: false,
     });
-    if (thread.status === "active" || startRequested) {
-      requestThreadStop(deps, {
-        environmentId: environment.id,
-        hostId: environment.hostId,
-        stopRequestedAt: thread.stopRequestedAt,
-        threadId: thread.id,
-      });
-    }
   }
 }
 
@@ -171,7 +126,7 @@ export async function advanceProjectDeletion(
     projectEnvironments.map((environment) => [environment.id, environment]),
   );
 
-  advanceProjectThreadsForDeletion(deps, {
+  await advanceProjectThreadsForDeletion(deps, {
     environmentsById,
     projectId: args.projectId,
   });

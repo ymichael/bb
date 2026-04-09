@@ -27,6 +27,7 @@ const INTENTIONAL_OPTIONAL_HOST_DAEMON_FIELDS: Record<string, string> = {
   "hostDaemonCommandSchema.options.seq": "Daemon command metadata may omit sequence when the command source does not assign one.",
   "hostDaemonCommandSchema.options.source": "Daemon command metadata may omit source when the command origin is not being tracked.",
   "hostDaemonCommandSchema.query": "host.list_files and workspace.list_files may omit a search string to list files without filtering.",
+  "hostDaemonCommandSchema.threadStoragePath": "thread.start may include a storage path for manager threads so the daemon creates the directory before the agent starts.",
 };
 
 describe("host-daemon command schemas", () => {
