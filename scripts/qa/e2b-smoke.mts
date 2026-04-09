@@ -306,36 +306,12 @@ async function enrichQaAuthFixture(
 
   let nextFixture: SmokeQaAuthFixture = fixture;
 
-  if (fixture.claude) {
-    try {
-      const refreshedClaudeCredential = await getCloudAuthProviderDefinition("claude-code").refreshCredential({
-        credential: {
-          accessToken: fixture.claude.access,
-          accountEmail: null,
-          accountId: null,
-          expiresAt: fixture.claude.expires,
-          providerId: "claude-code",
-          refreshToken: fixture.claude.refresh,
-          scopes: CLAUDE_SCOPES,
-          subscriptionType: null,
-        },
-      });
-
-      nextFixture = {
-        ...nextFixture,
-        claude: {
-          access: refreshedClaudeCredential.accessToken,
-          expires: refreshedClaudeCredential.expiresAt,
-          refresh: refreshedClaudeCredential.refreshToken,
-        },
-      };
-    } catch {
-      console.warn(
-        "Claude fixture refresh failed; skipping Claude-specific smoke coverage",
-      );
-      const { claude: _removedClaude, ...remainingFixture } = nextFixture;
-      nextFixture = remainingFixture;
-    }
+  if (fixture.claude && fixture.claude.expires <= Date.now()) {
+    console.warn(
+      "Claude fixture is expired; skipping Claude-specific smoke coverage",
+    );
+    const { claude: _removedClaude, ...remainingFixture } = nextFixture;
+    nextFixture = remainingFixture;
   }
 
   const codexFixture = nextFixture["openai-codex"];
