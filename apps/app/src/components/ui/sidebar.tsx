@@ -633,16 +633,14 @@ const SidebarMenuAction = React.forwardRef<
 SidebarMenuAction.displayName = "SidebarMenuAction"
 
 const SidebarMenuBadge = React.forwardRef<
-  HTMLDivElement,
-  React.ComponentProps<"div">
+  HTMLSpanElement,
+  React.ComponentProps<"span">
 >(({ className, ...props }, ref) => (
-  <div
+  <span
     ref={ref}
     data-sidebar="menu-badge"
     className={cn(
-      "absolute right-1 flex h-5 min-w-5 items-center justify-center rounded-md px-1 text-xs font-medium tabular-nums text-sidebar-foreground select-none pointer-events-none",
-      "peer-hover/menu-button:text-sidebar-accent-foreground peer-data-[active=true]/menu-button:text-sidebar-accent-foreground",
-      "group-data-[collapsible=icon]:hidden",
+      "inline-flex h-5 min-w-5 items-center justify-center rounded-md px-1 text-xs font-medium leading-none tabular-nums text-sidebar-foreground select-none pointer-events-none",
       className
     )}
     {...props}

@@ -8,6 +8,7 @@ import {
 } from "lucide-react"
 import { NavLink } from "react-router-dom"
 import { ThreadActionsMenu } from "@/components/thread/ThreadActionsMenu"
+import { SidebarMenuBadge } from "@/components/ui/sidebar"
 import { isBusyThread, isUnreadDoneThread } from "@/lib/thread-activity"
 import { getThreadDisplayTitle } from "@/lib/thread-title"
 import { cn } from "@/lib/utils"
@@ -41,12 +42,78 @@ interface ThreadRowProps {
   options: ThreadRowOptions
 }
 
-function ManagedThreadBranchGlyph() {
+interface ManagerChevronProps {
+  isCollapsed: boolean
+  isBusy: boolean
+  onToggle: () => void
+  threadTitle: string
+}
+
+function ManagerChevron({
+  isCollapsed,
+  isBusy,
+  onToggle,
+  threadTitle,
+}: ManagerChevronProps) {
   return (
-    <ChevronDown
-      aria-hidden="true"
-      className="size-4 shrink-0 rotate-45 text-sidebar-foreground/60"
-    />
+    <button
+      type="button"
+      aria-expanded={!isCollapsed}
+      aria-label={
+        isCollapsed ? `Expand ${threadTitle} threads` : `Collapse ${threadTitle} threads`
+      }
+      title={isCollapsed ? "Expand managed threads" : "Collapse managed threads"}
+      onClick={(event) => {
+        event.preventDefault()
+        event.stopPropagation()
+        onToggle()
+      }}
+      className="relative z-10 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/60 outline-none ring-sidebar-ring transition-colors hover:text-sidebar-foreground focus-visible:ring-2"
+    >
+      <span className="relative inline-flex size-4 items-center justify-center">
+        {isBusy ? (
+          <CircleDashed
+            className="absolute size-4 animate-spin opacity-100 transition-opacity duration-150 group-hover/thread-row:opacity-0"
+            aria-hidden
+          />
+        ) : null}
+        <ChevronRight
+          className={cn(
+            "absolute size-4 transition-all duration-150",
+            !isCollapsed && "rotate-90",
+            isBusy ? "opacity-0 group-hover/thread-row:opacity-100" : "opacity-100",
+          )}
+        />
+      </span>
+    </button>
+  )
+}
+
+interface ThreadLeadingGlyphProps {
+  isManagedChild: boolean
+  isBusy: boolean
+  showUnreadBadge: boolean
+}
+
+function ThreadLeadingGlyph({
+  isManagedChild,
+  isBusy,
+  showUnreadBadge,
+}: ThreadLeadingGlyphProps) {
+  return (
+    <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center text-sidebar-foreground/60">
+      {isManagedChild ? (
+        <ChevronDown aria-hidden="true" className="size-4 shrink-0 rotate-45" />
+      ) : isBusy ? (
+        <CircleDashed className="size-4 animate-spin" />
+      ) : showUnreadBadge ? (
+        <span
+          className="size-1.5 rounded-full bg-primary"
+          aria-label="Unread completed thread"
+          title="Unread completion"
+        />
+      ) : null}
+    </span>
   )
 }
 
@@ -74,11 +141,13 @@ export function ThreadRow({
   const managedChildCount = options.kind === "manager" ? options.managedChildCount : 0
   const managedChildBusyCount =
     options.kind === "manager" ? options.managedChildBusyCount : 0
+  const isManagerBusy = isManager && (threadIsBusy || managedChildBusyCount > 0)
 
   return (
     <div
       className={cn(
-        "group/thread-row relative flex h-8 w-full items-center gap-2 rounded-md pr-0 text-sm transition-colors",
+        "group/thread-row relative flex w-full items-center gap-2 rounded-md pr-0 text-sm transition-colors",
+        isManagedChild ? "h-7" : "h-8",
         isManagedChild ? "pl-6 text-sidebar-foreground/60" : "pl-2",
         isActive
           ? "bg-sidebar-border/80 text-sidebar-foreground"
@@ -93,53 +162,34 @@ export function ThreadRow({
         className="absolute inset-0 rounded-md outline-none ring-sidebar-ring focus-visible:ring-2"
       />
       {isManager && hasManagedChildren && onToggleManagerCollapsed ? (
-        <button
-          type="button"
-          aria-expanded={!isManagerCollapsed}
-          aria-label={
-            isManagerCollapsed
-              ? `Expand ${threadTitle} threads`
-              : `Collapse ${threadTitle} threads`
-          }
-          title={isManagerCollapsed ? "Expand managed threads" : "Collapse managed threads"}
-          onClick={(event) => {
-            event.preventDefault()
-            event.stopPropagation()
+        <ManagerChevron
+          isCollapsed={isManagerCollapsed}
+          isBusy={isManagerBusy}
+          onToggle={() => {
             onToggleManagerCollapsed(thread.id)
           }}
-          className="relative z-10 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/60 outline-none ring-sidebar-ring transition-colors hover:text-sidebar-foreground focus-visible:ring-2"
-        >
-          <ChevronRight
-            className={cn("size-4 transition-transform", !isManagerCollapsed && "rotate-90")}
-          />
-        </button>
+          threadTitle={threadTitle}
+        />
       ) : (
-        <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center text-sidebar-foreground/60">
-          {isManagedChild ? (
-            <ManagedThreadBranchGlyph />
-          ) : threadIsBusy ? (
-            <CircleDashed className="size-3.5 animate-spin" />
-          ) : showUnreadBadge ? (
-            <span
-              className="size-1.5 rounded-full bg-primary"
-              aria-label="Unread completed thread"
-              title="Unread completion"
-            />
-          ) : null}
-        </span>
+        <ThreadLeadingGlyph
+          isManagedChild={isManagedChild}
+          isBusy={threadIsBusy}
+          showUnreadBadge={showUnreadBadge}
+        />
       )}
       <span className="min-w-0 flex-1 truncate">{threadTitle}</span>
-      {isManager && isManagerCollapsed && managedChildCount > 0 ? (
-        <span className="flex shrink-0 items-center gap-1 pl-1">
-          {managedChildBusyCount > 0 ? (
-            <CircleDashed className="size-3 animate-spin text-sidebar-foreground/60" />
-          ) : null}
-          <span className="text-xs tabular-nums text-sidebar-foreground/50">
-            ({managedChildCount})
+      <span className="flex h-7 shrink-0 items-center justify-end">
+        {isManager && managedChildCount > 0 ? (
+          <span
+            className="inline-flex h-7 w-7 shrink-0 items-center justify-center"
+            aria-label={`${managedChildCount} managed thread${managedChildCount === 1 ? "" : "s"}`}
+            title={`${managedChildCount} managed thread${managedChildCount === 1 ? "" : "s"}`}
+          >
+            <SidebarMenuBadge className="rounded-full bg-sidebar-foreground/10 px-1.5 text-sidebar-foreground/80">
+              {managedChildCount}
+            </SidebarMenuBadge>
           </span>
-        </span>
-      ) : null}
-      <span className="flex h-7 shrink-0 items-center justify-end gap-1 pl-1">
+        ) : null}
         <span className="relative h-7 w-7 shrink-0">
           <span
             className={cn(
@@ -149,6 +199,8 @@ export function ThreadRow({
           >
             {isManager ? (
               <UserRound className="size-4 text-sidebar-foreground/70" aria-label="Manager" />
+            ) : isManagedChild && threadIsBusy ? (
+              <CircleDashed className="size-4 animate-spin text-sidebar-foreground/70" />
             ) : null}
           </span>
           <div

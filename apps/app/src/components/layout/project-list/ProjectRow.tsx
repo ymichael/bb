@@ -300,7 +300,7 @@ export function ProjectRow({
                     }}
                   />
                   {!isManagerCollapsed && managedChildren.length > 0 ? (
-                    <div className="space-y-1">
+                    <div className="space-y-0.5">
                       {managedChildren.map((childThread) => (
                         <ThreadRow
                           key={childThread.id}
