@@ -8,7 +8,6 @@
  */
 export const DEFAULTS = {
   dataDir: { prod: ".bb", dev: ".bb-dev", devHostDaemon: ".bb-dev-host-daemon" },
-  logFormat: { prod: "json", dev: "pretty" },
   logLevel: { prod: "info", dev: "debug" },
   secretToken: { dev: "dev-secret" },
   serverPort: { prod: 3000, dev: 3334 },

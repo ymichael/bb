@@ -9,8 +9,6 @@ export type { Logger };
 const LOG_DIR = join(commonConfig.BB_DATA_DIR, "logs");
 mkdirSync(LOG_DIR, { recursive: true });
 
-const LOG_FORMAT = commonConfig.BB_LOG_FORMAT;
-
 export type LoggerTransportMode = "stream" | "worker";
 
 export interface CreateLoggerOptions {
@@ -50,6 +48,12 @@ export function createLogger(options: CreateLoggerOptions): Logger {
     return pino(loggerOptions, destination);
   }
 
+  // Every worker-mode logger writes to two places: structured JSON to a
+  // rolling file (for grep/jq/log aggregation), and human-readable output
+  // to stdout (for `pnpm start`/`pnpm dev`, where the parent script
+  // forwards the child's stdout into the interactive terminal).
+  // `colorize` is left unset so pino-pretty auto-detects via
+  // `tty.isatty(1)` — TTYs get ANSI colors, pipes/files/journald stay clean.
   const targets: pino.TransportTargetOptions[] = [
     {
       target: "pino-roll",
@@ -61,21 +65,17 @@ export function createLogger(options: CreateLoggerOptions): Logger {
       },
       level: commonConfig.BB_LOG_LEVEL,
     },
-  ];
-
-  if (LOG_FORMAT === "pretty") {
-    targets.push({
+    {
       target: "pino-pretty",
       options: {
-        colorize: true,
         ignore: "pid,hostname,component",
         messageFormat: "[{component}] {msg}",
         singleLine: true,
         translateTime: "HH:mm:ss",
       },
       level: commonConfig.BB_LOG_LEVEL,
-    });
-  }
+    },
+  ];
 
   const transport = pino.transport({ targets });
 

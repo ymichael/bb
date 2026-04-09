@@ -21,7 +21,6 @@ describe("start-bb", () => {
     expect(context.serverUrl).toBe("http://127.0.0.1:3000");
     expect(context.daemonPort).toBe(3001);
     expect(context.dataDir).toBe(path.join(os.homedir(), ".bb"));
-    expect(context.sharedEnv.BB_LOG_FORMAT).toBe("json");
     expect(context.sharedEnv.NODE_ENV).toBe("production");
   });
 
@@ -34,7 +33,6 @@ describe("start-bb", () => {
     expect(context.serverUrl).toBe("http://127.0.0.1:3334");
     expect(context.daemonPort).toBe(3002);
     expect(context.dataDir).toBe(path.join(os.homedir(), ".bb-dev"));
-    expect(context.sharedEnv.BB_LOG_FORMAT).toBe("pretty");
     expect(context.sharedEnv.NODE_ENV).toBe("development");
   });
 
@@ -50,15 +48,5 @@ describe("start-bb", () => {
     expect(context.serverUrl).toBe("http://127.0.0.1:4444");
     expect(context.daemonPort).toBe(5555);
     expect(context.dataDir).toBe(path.join(os.homedir(), "custom-data"));
-  });
-
-  it("preserves an explicit BB_LOG_FORMAT override", async () => {
-    vi.stubEnv("NODE_ENV", "production");
-    vi.stubEnv("BB_LOG_FORMAT", "json");
-    const { resolveStartBbContext } = await importFreshStartBb();
-
-    const context = resolveStartBbContext();
-
-    expect(context.sharedEnv.BB_LOG_FORMAT).toBe("json");
   });
 });

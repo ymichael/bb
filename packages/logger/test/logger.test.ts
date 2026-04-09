@@ -1,7 +1,11 @@
+import { spawn } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
+
+const DIST_INDEX_PATH = fileURLToPath(new URL("../dist/index.js", import.meta.url));
 
 const tempDirs: string[] = [];
 
@@ -38,6 +42,53 @@ async function importFreshLoggerWithPinoTransportSpy() {
     ...loggerModule,
     transportSpy,
   };
+}
+
+interface SubprocessLoggerResult {
+  exitCode: number | null;
+  stderr: string;
+  stdout: string;
+}
+
+async function runLoggerInSubprocess(args: {
+  dataDir: string;
+  component: string;
+  message: string;
+}): Promise<SubprocessLoggerResult> {
+  const script = `
+    import { createLogger } from ${JSON.stringify(DIST_INDEX_PATH)};
+    const logger = createLogger({ component: ${JSON.stringify(args.component)} });
+    logger.info({ marker: ${JSON.stringify(args.message)} }, ${JSON.stringify(args.message)});
+    // Worker transport is async. Pino's flush callback only waits for the
+    // main-thread buffer, not the worker thread; a short settle window lets
+    // the worker drain to stdout/file before we exit.
+    setTimeout(() => process.exit(0), 250);
+  `;
+
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, ["--input-type=module", "-e", script], {
+      env: {
+        ...process.env,
+        BB_DATA_DIR: args.dataDir,
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    let stdout = "";
+    let stderr = "";
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (chunk: string) => {
+      stdout += chunk;
+    });
+    child.stderr.on("data", (chunk: string) => {
+      stderr += chunk;
+    });
+    child.once("error", reject);
+    child.once("close", (exitCode) => {
+      resolve({ exitCode, stderr, stdout });
+    });
+  });
 }
 
 async function waitFor(predicate: () => boolean, timeoutMs = 5_000): Promise<void> {
@@ -104,7 +155,6 @@ describe("createLogger", () => {
     const dataDir = createTempDir();
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("BB_DATA_DIR", dataDir);
-    vi.stubEnv("BB_LOG_FORMAT", "json");
 
     const { createLogger } = await importFreshLogger();
     const logger = createLogger({ component: "server" });
@@ -126,7 +176,6 @@ describe("createLogger", () => {
     const dataDir = createTempDir();
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("BB_DATA_DIR", dataDir);
-    vi.stubEnv("BB_LOG_FORMAT", "json");
 
     const { createLogger } = await importFreshLogger();
     const logger = createLogger({ component: "host-daemon" });
@@ -147,7 +196,6 @@ describe("createLogger", () => {
     const dataDir = createTempDir();
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("BB_DATA_DIR", dataDir);
-    vi.stubEnv("BB_LOG_FORMAT", "json");
 
     const { createLogger } = await importFreshLogger();
     const logger = createLogger({ component: "server" });
@@ -165,30 +213,36 @@ describe("createLogger", () => {
     expect(getComponentLogFiles(logDir, "server").length).toBeGreaterThan(1);
   });
 
-  it("configures pretty output in development without dropping file logs", async () => {
+  it("delivers log lines to both the file and the process stdout in worker mode", async () => {
     const dataDir = createTempDir();
-    vi.stubEnv("NODE_ENV", "development");
-    vi.stubEnv("BB_DATA_DIR", dataDir);
-    vi.stubEnv("BB_LOG_FORMAT", "pretty");
+    const logDir = path.join(dataDir, "logs");
+    const message = `stdout-behavior-${Date.now()}`;
 
-    const { createLogger, transportSpy } = await importFreshLoggerWithPinoTransportSpy();
-    createLogger({ component: "server" });
+    const result = await runLoggerInSubprocess({
+      component: "behavior-check",
+      dataDir,
+      message,
+    });
 
-    expect(transportSpy).toHaveBeenCalledWith(
-      expect.objectContaining({
-        targets: expect.arrayContaining([
-          expect.objectContaining({ target: "pino-roll" }),
-          expect.objectContaining({ target: "pino-pretty" }),
-        ]),
-      }),
-    );
+    expect(result.exitCode).toBe(0);
+    // Pretty output to stdout is the load-bearing half of the contract —
+    // the previous regression was silent dropping of this target.
+    expect(result.stdout).toContain(message);
+    // Structured JSON to the rolling file is the other half.
+    const entries = readComponentLogLines(logDir, "behavior-check");
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({
+      component: "behavior-check",
+      level: 30,
+      marker: message,
+      msg: message,
+    });
   });
 
   it("uses a direct file destination when stream mode is requested", async () => {
     const dataDir = createTempDir();
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("BB_DATA_DIR", dataDir);
-    vi.stubEnv("BB_LOG_FORMAT", "json");
 
     const { createLogger, transportSpy } =
       await importFreshLoggerWithPinoTransportSpy();
@@ -215,7 +269,6 @@ describe("createLogger", () => {
     const dataDir = createTempDir();
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("BB_DATA_DIR", dataDir);
-    vi.stubEnv("BB_LOG_FORMAT", "json");
 
     const { createLogger } = await importFreshLogger();
     const logger = createLogger({ component: "server" });

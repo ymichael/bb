@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "scripts:prepare": "pnpm exec turbo run build --filter=@bb/scripts --filter=@bb/cli --output-logs=none --log-prefix=none --summarize=false",
-    "dev": "dotenv -c development -- turbo run dev --ui tui --concurrency 20 --no-update-notifier",
+    "dev": "cross-env NODE_ENV=development dotenv -c development -- turbo run dev --ui tui --concurrency 20 --no-update-notifier",
     "dev:restart": "cross-env NODE_ENV=development pnpm run --silent scripts:prepare && cross-env NODE_ENV=development node packages/scripts/dist/commands/request-dev-restart.js both",
     "dev:restart-server": "cross-env NODE_ENV=development pnpm run --silent scripts:prepare && cross-env NODE_ENV=development node packages/scripts/dist/commands/request-dev-restart.js server",
     "dev:restart-host-daemon": "cross-env NODE_ENV=development pnpm run --silent scripts:prepare && cross-env NODE_ENV=development node packages/scripts/dist/commands/request-dev-restart.js host-daemon",

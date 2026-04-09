@@ -104,7 +104,6 @@ export async function main(): Promise<void> {
     cwd: repoRoot,
     env: {
       ...process.env,
-      BB_LOG_FORMAT: commonConfig.BB_LOG_FORMAT,
       NODE_ENV: resolveNodeEnvironment(mode),
     },
     stdio: ["ignore", "pipe", "inherit"],
