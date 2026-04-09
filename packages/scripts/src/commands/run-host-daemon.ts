@@ -9,6 +9,7 @@ import {
 import { createHostJoinResponseSchema } from "@bb/server-contract";
 import { resolveConfiguredDataDir } from "@bb/config/data-dir";
 import { DEFAULTS } from "@bb/config/defaults";
+import { hostDaemonEntrypointConfig } from "@bb/config/host-daemon-entrypoint";
 import { hostDaemonConfig } from "@bb/config/host-daemon";
 import {
   type HostMode,
@@ -18,9 +19,12 @@ import {
 import { waitForServerHealth } from "../lib/wait-for-server-health.js";
 
 export interface HostDaemonEnvironment extends NodeJS.ProcessEnv {
+  BB_BRIDGE_DIR?: string;
+  BB_CLI_DIR?: string;
   BB_DATA_DIR: string;
   BB_HOST_ENROLL_KEY?: string;
   BB_HOST_ID?: string;
+  BB_HOST_NAME?: string;
   BB_HOST_TYPE?: string;
   BB_SERVER_URL: string;
 }
@@ -52,8 +56,30 @@ function resolveDataDir(mode: HostMode, autoJoin: boolean): string {
 }
 
 function buildEnv(mode: HostMode, autoJoin: boolean): HostDaemonEnvironment {
+  const bootstrapEnv: Partial<HostDaemonEnvironment> = {
+    ...(hostDaemonEntrypointConfig.BB_BRIDGE_DIR
+      ? { BB_BRIDGE_DIR: hostDaemonEntrypointConfig.BB_BRIDGE_DIR }
+      : {}),
+    ...(hostDaemonEntrypointConfig.BB_CLI_DIR
+      ? { BB_CLI_DIR: hostDaemonEntrypointConfig.BB_CLI_DIR }
+      : {}),
+    ...(hostDaemonEntrypointConfig.BB_HOST_ENROLL_KEY
+      ? { BB_HOST_ENROLL_KEY: hostDaemonEntrypointConfig.BB_HOST_ENROLL_KEY }
+      : {}),
+    ...(hostDaemonEntrypointConfig.BB_HOST_ID
+      ? { BB_HOST_ID: hostDaemonEntrypointConfig.BB_HOST_ID }
+      : {}),
+    ...(hostDaemonEntrypointConfig.BB_HOST_NAME
+      ? { BB_HOST_NAME: hostDaemonEntrypointConfig.BB_HOST_NAME }
+      : {}),
+    ...(hostDaemonEntrypointConfig.BB_HOST_TYPE
+      ? { BB_HOST_TYPE: hostDaemonEntrypointConfig.BB_HOST_TYPE }
+      : {}),
+  };
+
   return {
     ...process.env,
+    ...bootstrapEnv,
     BB_DATA_DIR: resolveDataDir(mode, autoJoin),
     BB_SERVER_URL: hostDaemonConfig.BB_SERVER_URL,
     NODE_ENV: resolveNodeEnvironment(mode),

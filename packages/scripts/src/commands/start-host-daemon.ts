@@ -8,6 +8,7 @@ import {
   waitForHealth, build, createOutputBuffer,
 } from "../lib/script-helpers.js";
 import { commonConfig } from "@bb/config/common";
+import { hostDaemonEntrypointConfig } from "@bb/config/host-daemon-entrypoint";
 import { hostDaemonConfig } from "@bb/config/host-daemon";
 import { resolveNodeEnvironment, resolveScriptMode } from "../lib/script-config.js";
 
@@ -48,9 +49,8 @@ export function resolveStartHostDaemonContext(): StartHostDaemonContext {
 export function resolveEnrollmentRequirements(
   context: StartHostDaemonContext,
 ): EnrollmentRequirements {
-  const enrollKey = process.env.BB_HOST_ENROLL_KEY?.trim();
   return {
-    enrollKey: enrollKey && enrollKey.length > 0 ? enrollKey : undefined,
+    enrollKey: hostDaemonEntrypointConfig.BB_HOST_ENROLL_KEY,
     enrolled: existsSync(context.authFile),
   };
 }

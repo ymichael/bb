@@ -163,4 +163,60 @@ describe("consumer-specific config", () => {
 
     expect(devEnvConfig.DEV_CLOUDFLARED_TUNNEL_TOKEN).toBe("test-tunnel-token");
   });
+
+  it("parses optional host-daemon entrypoint env vars in one place", async () => {
+    vi.stubEnv("BB_CLI_DIR", " /tmp/bb-bin ");
+    vi.stubEnv("BB_BRIDGE_DIR", " /tmp/bridges ");
+    vi.stubEnv("BB_HOST_ENROLL_KEY", " enroll-token ");
+    vi.stubEnv("BB_HOST_ID", " host-123 ");
+    vi.stubEnv("BB_HOST_NAME", " sandbox-123 ");
+    vi.stubEnv("BB_HOST_TYPE", "ephemeral");
+
+    const { hostDaemonEntrypointConfig } =
+      await importFresh<typeof import("../src/host-daemon-entrypoint.js")>(
+        "../src/host-daemon-entrypoint.js",
+      );
+
+    expect(hostDaemonEntrypointConfig).toEqual({
+      BB_BRIDGE_DIR: "/tmp/bridges",
+      BB_CLI_DIR: "/tmp/bb-bin",
+      BB_HOST_ENROLL_KEY: "enroll-token",
+      BB_HOST_ID: "host-123",
+      BB_HOST_NAME: "sandbox-123",
+      BB_HOST_TYPE: "ephemeral",
+    });
+  });
+
+  it("drops empty optional host-daemon entrypoint env vars", async () => {
+    vi.stubEnv("BB_CLI_DIR", "   ");
+    vi.stubEnv("BB_BRIDGE_DIR", "");
+    vi.stubEnv("BB_HOST_ENROLL_KEY", " ");
+    vi.stubEnv("BB_HOST_ID", undefined);
+    vi.stubEnv("BB_HOST_NAME", "");
+    vi.stubEnv("BB_HOST_TYPE", "");
+
+    const { hostDaemonEntrypointConfig } =
+      await importFresh<typeof import("../src/host-daemon-entrypoint.js")>(
+        "../src/host-daemon-entrypoint.js",
+      );
+
+    expect(hostDaemonEntrypointConfig).toEqual({
+      BB_BRIDGE_DIR: undefined,
+      BB_CLI_DIR: undefined,
+      BB_HOST_ENROLL_KEY: undefined,
+      BB_HOST_ID: undefined,
+      BB_HOST_NAME: undefined,
+      BB_HOST_TYPE: undefined,
+    });
+  });
+
+  it("rejects invalid host-daemon entrypoint host types", async () => {
+    vi.stubEnv("BB_HOST_TYPE", "sandbox");
+
+    await expect(
+      importFresh<typeof import("../src/host-daemon-entrypoint.js")>(
+        "../src/host-daemon-entrypoint.js",
+      ),
+    ).rejects.toThrow('Invalid BB_HOST_TYPE "sandbox"');
+  });
 });

@@ -1,5 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { commonConfig, hostDaemonConfig } from "@bb/config/host-daemon";
+import {
+  commonConfig,
+  hostDaemonConfig,
+} from "@bb/config/host-daemon";
 import type { AgentRuntimeOptions } from "@bb/agent-runtime";
 import type { HostType, ToolCallRequest, ToolCallResponse } from "@bb/domain";
 import { createHostWatcher, type HostWatcher } from "@bb/host-watcher";
@@ -29,6 +32,8 @@ export interface StartHostDaemonOptions {
   dataDir?: string;
   serverUrl?: string;
   enrollKey?: string;
+  hostId?: string;
+  hostName?: string;
   bbExecutableDirectory?: string;
   bridgeBundleDir?: string;
   hostType?: HostType;
@@ -59,6 +64,8 @@ export async function startHostDaemon(
     const persistedAuth = await readHostAuthState(dataDir);
     const identity = await (options.loadIdentity ?? loadHostIdentity)({
       dataDir,
+      providedHostId: options.hostId,
+      providedHostName: options.hostName,
     });
     const instanceId = (options.createInstanceId ?? randomUUID)();
     const serverUrl = resolveServerUrl({

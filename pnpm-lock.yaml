@@ -448,6 +448,9 @@ importers:
 
   packages/config:
     dependencies:
+      '@bb/domain':
+        specifier: workspace:*
+        version: link:../domain
       envsafe:
         specifier: ^2.0.3
         version: 2.0.3

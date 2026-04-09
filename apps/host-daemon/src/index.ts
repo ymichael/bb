@@ -1,15 +1,18 @@
 import { fileURLToPath } from "node:url";
 export { startHostDaemon } from "./start-host-daemon.js";
 export type { StartHostDaemonOptions } from "./start-host-daemon.js";
+import { hostDaemonEntrypointConfig } from "@bb/config/host-daemon-entrypoint";
 import { startHostDaemon } from "./start-host-daemon.js";
-import { resolveHostDaemonEntrypointOptionsFromEnv } from "./startup-options.js";
 
 async function main(): Promise<void> {
-  const daemon = await startHostDaemon(
-    resolveHostDaemonEntrypointOptionsFromEnv({
-      env: process.env,
-    }),
-  );
+  const daemon = await startHostDaemon({
+    bbExecutableDirectory: hostDaemonEntrypointConfig.BB_CLI_DIR,
+    bridgeBundleDir: hostDaemonEntrypointConfig.BB_BRIDGE_DIR,
+    enrollKey: hostDaemonEntrypointConfig.BB_HOST_ENROLL_KEY,
+    hostId: hostDaemonEntrypointConfig.BB_HOST_ID,
+    hostName: hostDaemonEntrypointConfig.BB_HOST_NAME,
+    hostType: hostDaemonEntrypointConfig.BB_HOST_TYPE,
+  });
   await daemon.waitUntilStopped();
 }
 

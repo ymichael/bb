@@ -19,6 +19,10 @@
       "import": "./dist/host-daemon.js",
       "types": "./dist/host-daemon.d.ts"
     },
+    "./host-daemon-entrypoint": {
+      "import": "./dist/host-daemon-entrypoint.js",
+      "types": "./dist/host-daemon-entrypoint.d.ts"
+    },
     "./cli": {
       "import": "./dist/cli.js",
       "types": "./dist/cli.d.ts"
@@ -46,6 +50,7 @@
     "test": "vitest run --config vitest.config.ts"
   },
   "dependencies": {
+    "@bb/domain": "workspace:*",
     "envsafe": "^2.0.3"
   },
   "devDependencies": {

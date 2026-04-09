@@ -127,20 +127,18 @@ export async function loadHostIdentity(options: {
   providedHostId?: string;
   providedHostName?: string;
 }): Promise<HostIdentity> {
-  const providedHostId = options.providedHostId ?? process.env.BB_HOST_ID?.trim();
-  const providedHostName = options.providedHostName ?? process.env.BB_HOST_NAME?.trim();
   const [hostId, hostName] = await Promise.all([
-    providedHostId
+    options.providedHostId
       ? persistProvidedHostId({
         dataDir: options.dataDir,
-        hostId: providedHostId,
+        hostId: options.providedHostId,
       })
       : readOrCreateHostId({
         dataDir: options.dataDir,
         createId: options.createId,
       }),
-    providedHostName
-      ? Promise.resolve(providedHostName)
+    options.providedHostName
+      ? Promise.resolve(options.providedHostName)
       : detectHostName({
         platform: options.platform,
         execFile: options.execFile,

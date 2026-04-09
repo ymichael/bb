@@ -13,7 +13,6 @@ async function makeTempDir(prefix: string): Promise<string> {
 }
 
 afterEach(async () => {
-  vi.unstubAllEnvs();
   await Promise.all(
     tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })),
   );
@@ -49,11 +48,11 @@ describe("identity", () => {
 
   it("persists BB_HOST_ID when provided", async () => {
     const dataDir = await makeTempDir("bb-host-daemon-identity-env-");
-    vi.stubEnv("BB_HOST_ID", "host-provided");
 
     const identity = await loadHostIdentity({
       dataDir,
       fallbackHostName: () => "sandbox-host",
+      providedHostId: "host-provided",
     });
 
     expect(identity.hostId).toBe("host-provided");
@@ -66,12 +65,12 @@ describe("identity", () => {
   it("uses BB_HOST_NAME when provided instead of detecting a hostname", async () => {
     const dataDir = await makeTempDir("bb-host-daemon-identity-host-name-");
     const execFile = vi.fn();
-    vi.stubEnv("BB_HOST_NAME", "sandbox-abcdef");
 
     const identity = await loadHostIdentity({
       dataDir,
       execFile,
       fallbackHostName: () => "fallback-host",
+      providedHostName: "sandbox-abcdef",
     });
 
     expect(identity.hostName).toBe("sandbox-abcdef");
