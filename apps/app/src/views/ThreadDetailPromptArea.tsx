@@ -9,12 +9,18 @@ import type {
   WorkspaceStatus,
 } from "@bb/domain";
 import type { ThreadTimelineResponse } from "@bb/server-contract";
+import { ThreadPendingInteractionBanner } from "@/components/thread/ThreadPendingInteractionBanner";
 import { usePromptDraftStorage } from "@/hooks/usePromptDraftStorage";
 import { usePromptMentions } from "@/hooks/usePromptMentions";
 import { useThreadCreationOptions } from "@/hooks/useThreadCreationOptions";
 import { useUploadPromptAttachment } from "@/hooks/mutations/project-mutations";
 import { useCreateThreadDraft, useDeleteThreadDraft, useSendThreadDraft, useStopThread } from "@/hooks/mutations/thread-runtime-mutations";
-import { useThreadDefaultExecutionOptions, useThreadDrafts } from "@/hooks/queries/thread-queries";
+import {
+  getLatestPendingInteraction,
+  useThreadDefaultExecutionOptions,
+  useThreadDrafts,
+  useThreadPendingInteractions,
+} from "@/hooks/queries/thread-queries";
 import { getMutationErrorMessage } from "@/lib/mutation-errors";
 import { promptDraftToInput, type PromptDraftState } from "@/lib/prompt-draft";
 import { toast } from "sonner";
@@ -95,6 +101,7 @@ export function ThreadDetailPromptArea({
 }: ThreadDetailPromptAreaProps) {
   const { data: defaultExecutionOptions } = useThreadDefaultExecutionOptions(thread.id);
   const { data: queuedMessages = [] } = useThreadDrafts(thread.id);
+  const { data: pendingInteractions = [] } = useThreadPendingInteractions(thread.id);
   const createDraft = useCreateThreadDraft();
   const sendDraft = useSendThreadDraft();
   const deleteDraft = useDeleteThreadDraft();
@@ -156,6 +163,8 @@ export function ThreadDetailPromptArea({
   const isCreated = thread.status === "created";
   const isProvisioning = thread.status === "provisioning";
   const isRuntimeError = thread.status === "error";
+  const activePendingInteraction = getLatestPendingInteraction(pendingInteractions);
+  const hasPendingInteraction = activePendingInteraction !== null;
   const isQueueMutationPending =
     createDraft.isPending ||
     sendDraft.isPending ||
@@ -165,12 +174,14 @@ export function ThreadDetailPromptArea({
     pendingSubmittedFollowUp !== null ||
     isEnvironmentActionPending ||
     createDraft.isPending;
-  const canSendFollowUp = !isCreated && !isProvisioning;
+  const canSendFollowUp = !isCreated && !isProvisioning && !hasPendingInteraction;
   const promptPlaceholder =
     isCreated
       ? "Thread is being created..."
       : isProvisioning
       ? "Thread is provisioning..."
+      : hasPendingInteraction
+      ? "Resolve the pending interaction below before sending another message"
       : isRuntimeError
       ? "Retry by sending a follow-up message"
       : thread.status === "idle"
@@ -453,6 +464,14 @@ export function ThreadDetailPromptArea({
         supportsServiceTier,
         serviceTierSupportByProvider,
       }}
+      interactionBanner={
+        activePendingInteraction ? (
+          <ThreadPendingInteractionBanner
+            interaction={activePendingInteraction}
+            threadId={thread.id}
+          />
+        ) : undefined
+      }
       mentions={{
         mentionError: promptMentions.isError,
         mentionLoading: promptMentions.isLoading,
