@@ -12,8 +12,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  preflight:
-    name: Preflight (ubuntu)
+  checks:
+    name: Checks (ubuntu)
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -37,47 +37,22 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build
-        run: pnpm build
+        run: pnpm exec turbo run build
 
       - name: Typecheck
-        run: pnpm typecheck
-
-  checks:
-    name: Lint and test (ubuntu)
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    needs: preflight
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9.15.0
-          run_install: false
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm exec turbo run typecheck
 
       - name: Lint
-        run: pnpm lint
+        run: pnpm exec turbo run lint
 
       - name: Test
-        run: pnpm test
+        run: pnpm exec turbo run test
 
   linux-smoke:
     name: Linux smoke (ubuntu)
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    needs: preflight
+    needs: checks
 
     steps:
       - name: Checkout repository

@@ -19,9 +19,9 @@ Windows support means the Linux stack runs entirely inside WSL2:
 ### Supported product flows
 
 - `pnpm install`
-- `pnpm build`
-- `pnpm typecheck`
-- `pnpm test`
+- `pnpm exec turbo run build`
+- `pnpm exec turbo run typecheck`
+- `pnpm exec turbo run test`
 - app + server + host-daemon startup on supported persistent-host OSes
 - local-path project creation and update in the app
 - unmanaged environments
@@ -34,8 +34,10 @@ Windows support means the Linux stack runs entirely inside WSL2:
 - Run `pnpm install`, `pnpm start`, `pnpm dev`, `pnpm bb:dev`, and host-daemon
   commands from a WSL2 shell, not from native Windows terminals.
 - Repositories inside the WSL filesystem are recommended for best behavior.
-- Linux-style mounted paths such as `/mnt/c/...` are supported because they are
-  still WSL-visible Linux paths.
+- `/mnt/c/...` mounted paths are supported because many WSL2 users keep their
+  repositories on Windows volumes, but they are a tradeoff:
+  slower filesystem I/O and weaker file-watching behavior than the WSL
+  filesystem.
 - Native Windows drive-letter and UNC paths are rejected at the app/server
   boundary so unsupported input fails clearly.
 
@@ -84,8 +86,8 @@ We are explicitly not adopting:
 
 ## CI And Validation
 
-- GitHub Actions uses Ubuntu as the required support gate for preflight, lint,
-  test, and Linux smoke coverage.
+- GitHub Actions uses Ubuntu as the required support gate for build,
+  typecheck, lint, test, and Linux smoke coverage.
 - Native Windows CI is intentionally not required because Windows support uses
   the Linux runtime path inside WSL2 rather than a separate native Windows
   product path.
