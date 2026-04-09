@@ -35,6 +35,17 @@ bb runs from source and orchestrates coding agents you already have installed.
 
 If you already use one of these, bb will pick up your existing credentials. If you use all three, you can mix and match per task.
 
+### Supported host environments
+
+- macOS
+- Linux
+- Windows via Ubuntu on WSL2
+
+If you use Windows, run all `bb` commands inside WSL2, install Node.js, pnpm,
+Git, and your provider CLIs inside that WSL2 distro, and use Linux-style paths
+such as `/home/me/repo` or `/mnt/c/Users/me/repo`. Native Windows PowerShell,
+CMD, drive-letter paths, and UNC paths are not supported product paths.
+
 ### Install and run
 
 ```bash
@@ -43,6 +54,9 @@ pnpm start
 ```
 
 Then open: `http://localhost:3333`
+
+The full platform policy and checkout/path expectations live in
+[`docs/platform-support.md`](./docs/platform-support.md).
 
 ### Provider credentials
 
