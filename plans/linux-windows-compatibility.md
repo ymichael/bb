@@ -29,56 +29,60 @@ reduces maintenance versus homegrown OS-specific wrappers.
 - preserving shell-script setup hooks as the only setup mechanism
 - ad hoc Unix-only QA helpers that are not part of the supported product path
 
-## Current Blockers
+## Current Status
 
-### Packaging and dev scripts are not cross-platform
+- Milestone 1 implementation is complete on this local branch:
+  - Phase 1 decision record exists in [docs/platform-support.md](../docs/platform-support.md)
+  - package/build portability, shared launch helpers, path validation, setup-hook
+    migration, and Linux app/runtime support changes are in the repo
+  - Linux text-input local-path creation/update is the supported cross-platform
+    app fallback; native folder picking remains macOS-only
+- Recent local validation is green:
+  - `pnpm exec turbo run typecheck --filter=@bb/app --filter=@bb/domain --filter=@bb/server-contract --filter=@bb/server`
+  - `pnpm exec turbo run test --filter=@bb/app --filter=@bb/domain --filter=@bb/server-contract --filter=@bb/server`
+- The workflow now includes:
+  - Ubuntu + Windows preflight (`install`, `build`, `typecheck`)
+  - Ubuntu lint/test
+  - Ubuntu Linux smoke
+- This branch is currently ahead of `origin` with local follow-up commits, so the
+  Milestone 1 CI sign-off should be refreshed by pushing the branch and rerunning
+  GitHub Actions before we formally close the milestone checklist.
 
-- Root scripts rely on inline env assignment in
-  [package.json](../package.json).
-- Many package `build` / `clean` scripts rely on `rm -rf`, `mkdir -p`, and `cp`,
-  including [package.json](../package.json),
-  [apps/host-daemon/package.json](../apps/host-daemon/package.json),
-  and [packages/agent-runtime/package.json](../packages/agent-runtime/package.json).
-- We do not yet have a documented cross-platform dependency strategy, which
-  makes it too easy to fix each script or launcher ad hoc.
+## Remaining Gaps
 
-### Windows checkout and process contracts are not defined
+### Root scripts and maintainer tooling still have portability debt
 
-- The repo does not yet define a line-ending policy for supported source files,
-  scripts, or hooks in
-  [.gitattributes](../.gitattributes).
-- Portability-sensitive launch paths still rely on raw `child_process.spawn(...)`
-  in
-  [packages/agent-runtime/src/runtime.ts](../packages/agent-runtime/src/runtime.ts),
-  [apps/host-daemon/src/local-api.ts](../apps/host-daemon/src/local-api.ts),
-  and
-  [packages/host-workspace/src/provisioning.ts](../packages/host-workspace/src/provisioning.ts),
-  but the repo does not yet define how `.cmd`, `.bat`, and `.exe` launch
-  semantics should work on Windows.
+- Several root scripts still import built artifacts like
+  `packages/config/dist/defaults.js`, which keeps a build-order dependency in
+  repo-level tooling such as
+  [scripts/run-bb-dev.mjs](../scripts/run-bb-dev.mjs),
+  [scripts/run-host-daemon.mjs](../scripts/run-host-daemon.mjs),
+  [scripts/reset-bb-data.mjs](../scripts/reset-bb-data.mjs), and
+  [scripts/start-host-daemon.mjs](../scripts/start-host-daemon.mjs).
+- Some maintainer/dev scripts still use raw `spawn(...)` and Unix-oriented
+  signal handling, including
+  [scripts/run-host-daemon.mjs](../scripts/run-host-daemon.mjs),
+  [scripts/start-bb.mjs](../scripts/start-bb.mjs), and
+  [scripts/lib/run-dev-supervisor.mjs](../scripts/lib/run-dev-supervisor.mjs).
 
-### Host-daemon runtime assumes Unix launcher semantics
+### Windows runtime and launcher support is still incomplete
 
-- The local `bb` launcher is a POSIX shell script in
+- The local `bb` launcher is still a POSIX shell script in
   [apps/cli/bin/bb](../apps/cli/bin/bb).
-- The host daemon checks POSIX executable bits and prepends `PATH` with `:`
-  in [apps/host-daemon/src/runtime-shell-env.ts](../apps/host-daemon/src/runtime-shell-env.ts).
+- Milestone 1 moved runtime shell setup to built CLI entry discovery and
+  `path.delimiter`, but the final Windows launcher contract in the host-daemon
+  product path is still open.
+- Provider startup is not yet validated on Windows for a supported shim-based
+  install path.
 
-### Managed workspace setup is POSIX-only
+### Windows workspace and local app flows are not yet supported end to end
 
-- Setup hooks run via `/bin/bash` in
-  [packages/host-workspace/src/provisioning.ts](../packages/host-workspace/src/provisioning.ts).
-
-### Local host UX is incomplete off macOS
-
-- Folder picking is macOS-only in
+- Native folder picking remains macOS-only in
   [apps/host-daemon/src/local-api.ts](../apps/host-daemon/src/local-api.ts).
-
-### Windows path handling has correctness and security bugs
-
-- Attachment path containment uses a POSIX string-prefix check in
-  [apps/server/src/services/projects/attachments.ts](../apps/server/src/services/projects/attachments.ts).
-- Project-name derivation splits only on `/` in
-  [packages/domain/src/project-path.ts](../packages/domain/src/project-path.ts).
+- The supported fallback for Linux is the app-side absolute-path input, but
+  Windows runtime/workspace/local-project flows are still preflight-only.
+- Symlink behavior for managed clone/worktree repositories on Windows is still
+  undefined.
 
 ### Process management and test harnesses are Unix-heavy
 
@@ -87,10 +91,12 @@ reduces maintenance versus homegrown OS-specific wrappers.
 - Integration cleanup depends on `lsof` and `SIGKILL` in
   [tests/integration/global-setup.ts](../tests/integration/global-setup.ts).
 
-### CI does not protect compatibility
+### CI only partially protects compatibility
 
-- CI only runs on Ubuntu in
+- CI now covers Ubuntu + Windows preflight and Ubuntu smoke in
   [.github/workflows/ci.yml](../.github/workflows/ci.yml).
+- Full Windows test/smoke coverage and any macOS host-local API coverage remain
+  Milestone 2 work.
 
 ## Plan
 
@@ -232,28 +238,30 @@ Windows runtime support is not claimed until Milestone 2 exits.
 
 **Milestone 1 Exit Criteria**
 
-- [ ] A Phase 1 decision record documents the milestone-based OS support matrix,
+- [x] A Phase 1 decision record documents the milestone-based OS support matrix,
       minimal dependency set, setup-hook policy, and Windows line-ending
       expectations
 - [ ] `pnpm install`, `pnpm exec turbo run build`, `pnpm exec turbo run typecheck`,
       and `pnpm exec turbo run test` succeed in Linux CI for the supported
       product path
+      Note: rerun GitHub Actions after pushing the latest local branch commits.
 - [ ] Windows preflight CI is green for install, build, and typecheck, but
       Windows runtime flows are not yet claimed as supported
-- [ ] Cross-platform maintenance uses a documented, minimal dependency set
+      Note: rerun GitHub Actions after pushing the latest local branch commits.
+- [x] Cross-platform maintenance uses a documented, minimal dependency set
       instead of package-by-package custom shell fixes
-- [ ] Attachment containment is fixed and tested for both POSIX and Windows-style
+- [x] Attachment containment is fixed and tested for both POSIX and Windows-style
       paths
-- [ ] The repo enforces a line-ending policy that keeps supported flows working
+- [x] The repo enforces a line-ending policy that keeps supported flows working
       on default Windows Git checkouts
-- [ ] Host daemon starts successfully on Linux for persistent-host flows
-- [ ] Provider runtime startup works on Linux for at least one installed
+- [x] Host daemon starts successfully on Linux for persistent-host flows
+- [x] Provider runtime startup works on Linux for at least one installed
       provider, and the launch path already uses the shared launch helper
-- [ ] Managed environment setup no longer depends on `/bin/bash` for supported
+- [x] Managed environment setup no longer depends on `/bin/bash` for supported
       Linux flows
-- [ ] App-based local project creation/update works on Linux through native
+- [x] App-based local project creation/update works on Linux through native
       folder picking or the supported text-input fallback
-- [ ] Linux sign-off is automated in GitHub-hosted Ubuntu CI when a dedicated
+- [x] Linux sign-off is automated in GitHub-hosted Ubuntu CI when a dedicated
       Linux desktop host is not available, with manual desktop verification kept
       as a recommended follow-up rather than a Milestone 1 blocker
 
