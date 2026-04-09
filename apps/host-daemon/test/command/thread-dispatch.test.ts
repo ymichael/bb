@@ -362,21 +362,7 @@ describe("thread command dispatch", () => {
     expect(harness.runtimeState.startedDynamicTools).toEqual(
       [expect.objectContaining({ name: "message_user" })],
     );
-    expect(harness.runtimeState.startedInstructions).toContain(
-      "You are a manager for this project.",
-    );
-    expect(harness.runtimeState.startedInstructions).toContain(
-      "Prefer concise user updates.",
-    );
-    expect(harness.runtimeState.startedInstructions).toContain(
-      "Delegate implementation quickly.",
-    );
-    expect(harness.runtimeState.startedInstructions).toContain(
-      "Manager Project",
-    );
-    expect(harness.runtimeState.startedInstructions).toContain(
-      threadStorage,
-    );
+    expect(harness.runtimeState.startedInstructions).toBe(managerInstructions);
   });
 
   it("creates threadStoragePath directory before starting the thread", async () => {

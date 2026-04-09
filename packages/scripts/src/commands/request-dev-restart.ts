@@ -1,10 +1,10 @@
-import { readFile, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   createTurboBuildCommand,
   resolveSupervisorPidPath,
 } from "../lib/dev-restart-utils.js";
+import { readRunningPid } from "../lib/pid-file.js";
 import { runScriptProcess } from "../lib/process-helpers.js";
 
 type RestartTarget = "both" | "host-daemon" | "server";
@@ -43,36 +43,10 @@ export function parseTarget(value: string): RestartTarget {
 
 export async function readRunningSupervisorPid(serviceName: string): Promise<number> {
   const pidPath = resolveSupervisorPidPath(serviceName);
-  let pidText: string;
-
-  try {
-    pidText = await readFile(pidPath, "utf8");
-  } catch (error) {
-    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
-      throw new Error(`No running ${serviceName} dev supervisor found at ${pidPath}`);
-    }
-
-    throw error;
-  }
-
-  const pid = Number.parseInt(pidText.trim(), 10);
-  if (!Number.isInteger(pid) || pid <= 0) {
-    await rm(pidPath, { force: true });
-    throw new Error(`Invalid PID file for ${serviceName}: ${pidPath}`);
-  }
-
-  try {
-    process.kill(pid, 0);
-  } catch (error) {
-    if (error instanceof Error && "code" in error && error.code === "ESRCH") {
-      await rm(pidPath, { force: true });
-      throw new Error(`Stale PID file for ${serviceName}: ${pidPath}`);
-    }
-
-    throw error;
-  }
-
-  return pid;
+  return readRunningPid({
+    pidPath,
+    serviceName,
+  });
 }
 
 async function runBuild(filters: string[]): Promise<boolean> {

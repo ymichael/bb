@@ -9,13 +9,8 @@ export interface HostDaemonRuntimeEnvironment extends HostDaemonEntrypointConfig
 export function toHostDaemonProcessEnv(
   environment: HostDaemonRuntimeEnvironment,
 ): NodeJS.ProcessEnv {
-  const childEnv: NodeJS.ProcessEnv = { ...process.env };
-
-  for (const [key, value] of Object.entries(environment)) {
-    if (value !== undefined) {
-      childEnv[key] = value;
-    }
-  }
-
-  return childEnv;
+  return {
+    ...process.env,
+    ...environment,
+  };
 }

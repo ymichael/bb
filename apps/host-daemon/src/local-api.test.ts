@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createHostDaemonLocalClient } from "@bb/host-daemon-contract";
-import { startLocalApiServer, type LocalApiServer } from "./local-api.js";
+import {
+  resolveNativeFolderPicker,
+  startLocalApiServer,
+  type LocalApiServer,
+} from "./local-api.js";
 import type { HostDaemonLocalApiConfig } from "./local-api-config.js";
 
 async function waitFor(
@@ -37,6 +41,21 @@ describe("local API server", () => {
     server = null;
   });
 
+  it("resolves native folder picker support from one shared helper", () => {
+    const providedPicker = async () => "/tmp/project";
+
+    expect(resolveNativeFolderPicker({
+      pickFolder: providedPicker,
+      platform: "linux",
+    })).toBe(providedPicker);
+    expect(resolveNativeFolderPicker({
+      platform: "darwin",
+    })).not.toBeNull();
+    expect(resolveNativeFolderPicker({
+      platform: "linux",
+    })).toBeNull();
+  });
+
   it("serves host identity and status over localhost", async () => {
     server = await startLocalApiServer({
       hostId: "host-1",
@@ -54,7 +73,9 @@ describe("local API server", () => {
       hostId: "host-1",
       connected: true,
       serverUrl: "http://server.test",
-      supportsNativeFolderPicker: expect.any(Boolean),
+      supportsNativeFolderPicker: resolveNativeFolderPicker({
+        platform: process.platform,
+      }) !== null,
     });
     const healthResponse = await client.health.$get();
     expect(await healthResponse.text()).toBe("ok");
@@ -88,6 +109,10 @@ describe("local API server", () => {
   });
 
   it("returns 501 for folder picking when native picker support is unavailable", async () => {
+    if (process.platform === "darwin") {
+      return;
+    }
+
     server = await startLocalApiServer({
       hostId: "host-1",
       localApiConfig: createLocalApiConfig(),
@@ -100,10 +125,7 @@ describe("local API server", () => {
 
     const statusResponse = await client.status.$get();
     const status = await statusResponse.json();
-
-    if (status.supportsNativeFolderPicker) {
-      return;
-    }
+    expect(status.supportsNativeFolderPicker).toBe(false);
 
     const pickFolderResponse = await client["pick-folder"].$post({});
     expect(pickFolderResponse.status).toBe(501);

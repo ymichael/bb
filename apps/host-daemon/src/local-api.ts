@@ -36,10 +36,23 @@ export interface LocalApiServer {
   close(): Promise<void>;
 }
 
-function supportsNativeFolderPicker(
-  options: Pick<StartLocalApiServerOptions, "pickFolder">,
-): boolean {
-  return options.pickFolder != null || process.platform === "darwin";
+export type FolderPickerHandler = () => Promise<string | null>;
+
+export interface ResolveNativeFolderPickerOptions {
+  pickFolder?: FolderPickerHandler;
+  platform?: NodeJS.Platform;
+}
+
+export function resolveNativeFolderPicker(
+  options: ResolveNativeFolderPickerOptions,
+): FolderPickerHandler | null {
+  if (options.pickFolder) {
+    return options.pickFolder;
+  }
+
+  return (options.platform ?? process.platform) === "darwin"
+    ? pickLocalFolder
+    : null;
 }
 
 export async function startLocalApiServer(
@@ -59,14 +72,16 @@ export async function startLocalApiServer(
   });
 
   const { get, post } = typedRoutes<HostDaemonLocalSchema>(app);
-  const nativeFolderPickerSupported = supportsNativeFolderPicker(options);
+  const nativeFolderPicker = resolveNativeFolderPicker({
+    pickFolder: options.pickFolder,
+  });
 
   get("/status", (c) =>
     c.json({
       hostId: options.hostId,
       connected: options.getConnected(),
       serverUrl: options.serverUrl,
-      supportsNativeFolderPicker: nativeFolderPickerSupported,
+      supportsNativeFolderPicker: nativeFolderPicker !== null,
     }),
   );
 
@@ -80,12 +95,12 @@ export async function startLocalApiServer(
   });
 
   post("/pick-folder", async (c) => {
-    if (!nativeFolderPickerSupported) {
+    if (!nativeFolderPicker) {
       throw new HTTPException(501, {
         message: "Folder picker is only supported on macOS",
       });
     }
-    const path = await (options.pickFolder ?? pickLocalFolder)();
+    const path = await nativeFolderPicker();
     return c.json({ path });
   });
 

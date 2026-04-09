@@ -25,7 +25,8 @@ describe("buildThreadTimeline", () => {
   });
 
   for (const scenario of scenarios) {
-    it(`keeps the summary payload smaller than the full grouped payload for ${scenario.id}`, () => {
+    it(`compacts ${scenario.id} before serializing the summary payload`, () => {
+      expect(scenario.summaryEventCount).toBeLessThan(scenario.eventCount);
       expect(scenario.summaryBytes).toBeLessThan(scenario.fullBytes);
     });
   }

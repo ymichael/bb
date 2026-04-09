@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path, { delimiter } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   prepareRuntimeShellEnv,
   resolveLocalBbExecutableDirectory,
@@ -48,6 +48,7 @@ async function createFakeCliPackage(
 }
 
 afterEach(async () => {
+  vi.unstubAllEnvs();
   await Promise.all(
     tempDirs.splice(0).map((directoryPath) =>
       fs.rm(directoryPath, { recursive: true, force: true }),
@@ -108,6 +109,22 @@ describe("prepareRuntimeShellEnv", () => {
       }),
     ).toEqual({
       PATH: `/tmp/bb-bin${delimiter}/usr/bin`,
+      BB_SERVER_URL: "http://127.0.0.1:3334",
+      BB_HOST_DAEMON_PORT: "3002",
+    });
+  });
+
+  it("falls back to process.env.PATH when inheritedPath is omitted", () => {
+    vi.stubEnv("PATH", "/usr/local/bin:/usr/bin");
+
+    expect(
+      prepareRuntimeShellEnv({
+        bbExecutableDirectory: "/tmp/bb-bin",
+        localApiPort: 3002,
+        serverUrl: "http://127.0.0.1:3334",
+      }),
+    ).toEqual({
+      PATH: `/tmp/bb-bin${delimiter}/usr/local/bin:/usr/bin`,
       BB_SERVER_URL: "http://127.0.0.1:3334",
       BB_HOST_DAEMON_PORT: "3002",
     });

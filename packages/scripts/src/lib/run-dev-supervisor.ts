@@ -1,13 +1,14 @@
 import type { ChildProcess } from "node:child_process";
-import { rmSync } from "node:fs";
-import { mkdir, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
 import {
   createTurboBuildCommand,
   DEV_SUPERVISOR_RESTART_ENV,
   DEV_SUPERVISOR_RESTART_EXIT_CODE,
   resolveSupervisorPidPath,
 } from "./dev-restart-utils.js";
+import {
+  removePidFileSync,
+  writePidFile,
+} from "./pid-file.js";
 import {
   installTerminationSignalForwarding,
   killProcessIfRunning,
@@ -88,7 +89,7 @@ export async function runDevSupervisor(options: DevSupervisorOptions): Promise<v
   let restartRequested = false;
 
   const cleanupPidFile = () => {
-    rmSync(pidPath, { force: true });
+    removePidFileSync(pidPath);
   };
 
   process.on("exit", cleanupPidFile);
@@ -117,8 +118,10 @@ export async function runDevSupervisor(options: DevSupervisorOptions): Promise<v
     }
   });
 
-  await mkdir(dirname(pidPath), { recursive: true });
-  await writeFile(pidPath, `${process.pid}\n`, "utf8");
+  await writePidFile({
+    pid: process.pid,
+    pidPath,
+  });
 
   while (true) {
     activeChild = spawnChildProcess({
