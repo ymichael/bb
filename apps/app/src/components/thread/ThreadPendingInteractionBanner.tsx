@@ -9,6 +9,7 @@ import {
   type PendingInteractionPermissionGrantScope,
   type PendingInteractionRequestedPermissionProfile,
   type PendingInteractionUserInputQuestion,
+  formatPendingInteractionCommandApprovalDecision,
   getPendingInteractionCommandApprovalDecisionKind,
 } from "@bb/domain";
 import {
@@ -192,15 +193,18 @@ function hasExpandableDetails(interaction: PendingInteraction): boolean {
   switch (interaction.payload.kind) {
     case "command_approval":
       return (
+        interaction.payload.reason !== null ||
         interaction.payload.command !== null ||
         interaction.payload.cwd !== null ||
         interaction.payload.commandActions.length > 0 ||
-        interaction.payload.requestedPermissions !== null
+        interaction.payload.requestedPermissions !== null ||
+        interaction.payload.availableDecisions.some((decision) => typeof decision !== "string")
       );
     case "file_change_approval":
       return interaction.payload.grantRoot !== null || interaction.payload.reason !== null;
     case "permission_request":
       return (
+        interaction.payload.reason !== null ||
         interaction.payload.toolName !== null ||
         summarizeRequestedPermissions(interaction.payload.permissions).length > 0
       );
@@ -255,6 +259,9 @@ function buildUserInputResolution(
   interaction: PendingInteraction,
 ) {
   if (interaction.payload.kind !== "user_input_request") {
+    return null;
+  }
+  if (interaction.payload.questions.length === 0) {
     return null;
   }
 
@@ -425,6 +432,36 @@ function renderInteractionDetails(interaction: PendingInteraction): ReactNode {
               </div>
             </DetailRow>
           ) : null}
+          {interaction.payload.availableDecisions
+            .filter((decision) => typeof decision !== "string")
+            .map((decision) => (
+              <DetailRow
+                key={formatPendingInteractionCommandApprovalDecision(decision)}
+                label={
+                  decision.kind === "accept_with_exec_policy_amendment"
+                    ? "Exec policy amendment"
+                    : "Network policy amendment"
+                }
+                align="start"
+              >
+                {decision.kind === "accept_with_exec_policy_amendment" ? (
+                  <div className="space-y-1">
+                    {decision.execPolicyAmendment.map((amendment) => (
+                      <code
+                        key={amendment}
+                        className="block rounded bg-background/70 px-2 py-1 font-mono text-xs text-foreground"
+                      >
+                        {amendment}
+                      </code>
+                    ))}
+                  </div>
+                ) : (
+                  <code className="break-all font-mono text-xs text-foreground">
+                    {decision.networkPolicyAmendment.action} {decision.networkPolicyAmendment.host}
+                  </code>
+                )}
+              </DetailRow>
+            ))}
         </DetailCard>
       );
     case "file_change_approval":
@@ -504,6 +541,13 @@ function QuestionAnswerField({
   if (interaction.payload.kind !== "user_input_request") {
     return null;
   }
+  if (interaction.payload.questions.length === 0) {
+    return (
+      <div className="rounded-md border border-border/60 bg-background/45 px-3 py-2 text-sm text-muted-foreground">
+        This request did not include any questions.
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-3">
@@ -565,6 +609,12 @@ function QuestionAnswerField({
                             : [option.label];
                           onDraftStateChange({
                             ...draftState,
+                            customAnswersByQuestionId: {
+                              ...draftState.customAnswersByQuestionId,
+                              [question.id]: question.multiSelect
+                                ? customAnswer
+                                : "",
+                            },
                             selectedOptionsByQuestionId: {
                               ...draftState.selectedOptionsByQuestionId,
                               [question.id]: nextSelectedOptions,
@@ -604,6 +654,13 @@ function QuestionAnswerField({
                           ...draftState.customAnswersByQuestionId,
                           [question.id]: event.target.value,
                         },
+                        selectedOptionsByQuestionId: {
+                          ...draftState.selectedOptionsByQuestionId,
+                          [question.id]:
+                            question.multiSelect || question.options.length === 0
+                              ? selectedOptions
+                              : [],
+                        },
                       });
                     }}
                     className="min-h-[76px] bg-background/70"
@@ -620,6 +677,10 @@ function QuestionAnswerField({
                         customAnswersByQuestionId: {
                           ...draftState.customAnswersByQuestionId,
                           [question.id]: event.target.value,
+                        },
+                        selectedOptionsByQuestionId: {
+                          ...draftState.selectedOptionsByQuestionId,
+                          [question.id]: [],
                         },
                       });
                     }}
@@ -650,7 +711,7 @@ export function ThreadPendingInteractionBanner({
   useEffect(() => {
     setIsExpanded(interaction.payload.kind === "user_input_request");
     setUserInputDraftState(createInitialUserInputDraftState(interaction));
-  }, [interaction]);
+  }, [interaction.id]);
 
   const details = useMemo(
     () => renderInteractionDetails(interaction),

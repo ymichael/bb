@@ -66,6 +66,29 @@ function createCommandApprovalInteraction(): PendingInteraction {
   };
 }
 
+function createAmendmentCommandApprovalInteraction(): PendingInteraction {
+  return {
+    ...createPendingInteractionBase(),
+    providerRequestMethod: "item/commandExecution/requestApproval",
+    payload: {
+      kind: "command_approval",
+      itemId: "item_5",
+      approvalId: null,
+      reason: null,
+      command: null,
+      cwd: null,
+      commandActions: [],
+      requestedPermissions: null,
+      availableDecisions: [
+        {
+          kind: "accept_with_exec_policy_amendment",
+          execPolicyAmendment: ["allow workspace-write"],
+        },
+      ],
+    },
+  };
+}
+
 function createFileChangeInteraction(): PendingInteraction {
   return {
     ...createPendingInteractionBase(),
@@ -127,6 +150,17 @@ function createUserInputInteraction(): PendingInteraction {
           ],
         },
       ],
+    },
+  };
+}
+
+function createEmptyUserInputInteraction(): PendingInteraction {
+  return {
+    ...createPendingInteractionBase(),
+    payload: {
+      kind: "user_input_request",
+      itemId: "item_6",
+      questions: [],
     },
   };
 }
@@ -270,5 +304,96 @@ describe("ThreadPendingInteractionBanner", () => {
         },
       );
     });
+  });
+
+  it("preserves typed user-input answers when the interaction rerenders with the same id", async () => {
+    const initialInteraction = createUserInputInteraction();
+    const { rerender } = renderBanner({
+      interaction: initialInteraction,
+    });
+
+    const otherInput = screen.getByPlaceholderText("Other");
+    fireEvent.change(otherInput, {
+      target: {
+        value: "preview",
+      },
+    });
+
+    rerender(
+      <ThreadPendingInteractionBanner
+        interaction={{
+          ...createUserInputInteraction(),
+          id: initialInteraction.id,
+        }}
+        threadId={initialInteraction.threadId}
+      />,
+    );
+
+    expect(screen.getByDisplayValue("preview")).not.toBeNull();
+  });
+
+  it("clears single-select options when typing a custom answer", async () => {
+    vi.mocked(api.resolveThreadPendingInteraction).mockResolvedValue({
+      ...createUserInputInteraction(),
+      status: "resolved",
+      resolution: {
+        kind: "user_input_request",
+        answers: {
+          environment: ["preview"],
+        },
+      },
+      resolvedAt: 2,
+    });
+
+    renderBanner({
+      interaction: createUserInputInteraction(),
+    });
+
+    const prodOption = screen.getByRole("radio", { name: /prod/i });
+    fireEvent.click(prodOption);
+    fireEvent.change(screen.getByPlaceholderText("Other"), {
+      target: {
+        value: "preview",
+      },
+    });
+
+    expect(prodOption).toHaveProperty("checked", false);
+
+    fireEvent.click(screen.getByRole("button", { name: "Send answers" }));
+
+    await waitFor(() => {
+      expect(api.resolveThreadPendingInteraction).toHaveBeenCalledWith(
+        "thr_1",
+        "pi_1",
+        {
+          kind: "user_input_request",
+          answers: {
+            environment: ["preview"],
+          },
+        },
+      );
+    });
+  });
+
+  it("disables answer submission when the interaction contains no questions", () => {
+    renderBanner({
+      interaction: createEmptyUserInputInteraction(),
+    });
+
+    expect(screen.getByText("This request did not include any questions.")).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Send answers" })).toHaveProperty(
+      "disabled",
+      true,
+    );
+  });
+
+  it("shows amendment details for command approvals with amended decisions", () => {
+    renderBanner({
+      interaction: createAmendmentCommandApprovalInteraction(),
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Show interaction details" }));
+
+    expect(screen.getByText("allow workspace-write")).not.toBeNull();
   });
 });

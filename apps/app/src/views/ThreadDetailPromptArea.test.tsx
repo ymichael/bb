@@ -1,129 +1,34 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen } from "@testing-library/react";
-import type { Thread } from "@bb/domain";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import type {
+  AvailableModel,
+  PendingInteraction,
+  Thread,
+} from "@bb/domain";
+import type { SystemProviderInfo } from "@bb/server-contract";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import * as api from "@/lib/api";
+import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
 import { ThreadDetailPromptArea } from "./ThreadDetailPromptArea";
 
-vi.mock("@/components/thread/ThreadPendingInteractionBanner", () => ({
-  ThreadPendingInteractionBanner: ({
-    interaction,
-  }: {
-    interaction: { id: string };
-  }) => <div data-testid="thread-pending-interaction-banner">{interaction.id}</div>,
-}));
-
-vi.mock("@/hooks/queries/thread-queries", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/hooks/queries/thread-queries")>();
+vi.mock("@/lib/api", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/api")>();
 
   return {
     ...actual,
-    useThreadDefaultExecutionOptions: vi.fn(() => ({ data: null })),
-    useThreadDrafts: vi.fn(() => ({ data: [] })),
-    useThreadPendingInteractions: vi.fn(() => ({
-      data: [
-        {
-          id: "pi_1",
-          threadId: "thr_1",
-          turnId: "turn_1",
-          providerId: "codex",
-          providerThreadId: "provider-thread-1",
-          providerRequestId: "request-1",
-          providerRequestMethod: "item/tool/requestUserInput",
-          status: "pending",
-          payload: {
-            kind: "user_input_request",
-            itemId: "item_1",
-            questions: [],
-          },
-          resolution: null,
-          statusReason: null,
-          createdAt: 1,
-          resolvedAt: null,
-        },
-      ],
-    })),
+    getAvailableModels: vi.fn(),
+    getThreadDefaultExecutionOptions: vi.fn(),
+    listSystemProviders: vi.fn(),
+    listThreadDrafts: vi.fn(),
+    listThreadPendingInteractions: vi.fn(),
+    listThreads: vi.fn(),
   };
 });
 
-vi.mock("@/hooks/mutations/project-mutations", () => ({
-  useUploadPromptAttachment: vi.fn(() => ({
-    isPending: false,
-    mutateAsync: vi.fn(),
-  })),
-}));
+interface ProviderOverrides extends Partial<SystemProviderInfo> {}
 
-vi.mock("@/hooks/mutations/thread-runtime-mutations", () => ({
-  useCreateThreadDraft: vi.fn(() => ({
-    isPending: false,
-    mutateAsync: vi.fn(),
-  })),
-  useDeleteThreadDraft: vi.fn(() => ({
-    isPending: false,
-    mutateAsync: vi.fn(),
-  })),
-  useSendThreadDraft: vi.fn(() => ({
-    isPending: false,
-    mutateAsync: vi.fn(),
-  })),
-  useStopThread: vi.fn(() => ({
-    isPending: false,
-    mutate: vi.fn(),
-  })),
-}));
-
-vi.mock("@/hooks/usePromptDraftStorage", () => ({
-  usePromptDraftStorage: vi.fn(() => ({
-    text: "",
-    attachments: [],
-    addAttachment: vi.fn(),
-    removeAttachment: vi.fn(),
-    clearIfCurrentMatches: vi.fn(),
-    setText: vi.fn(),
-    setAttachments: vi.fn(),
-  })),
-}));
-
-vi.mock("@/hooks/usePromptMentions", () => ({
-  usePromptMentions: vi.fn(() => ({
-    isError: false,
-    isLoading: false,
-    suggestions: [],
-    setQuery: vi.fn(),
-    threadSuggestionMode: "managers",
-  })),
-}));
-
-vi.mock("@/hooks/useThreadCreationOptions", () => ({
-  useThreadCreationOptions: vi.fn(() => ({
-    selectedProviderId: "codex",
-    providerOptions: [],
-    hasMultipleProviders: false,
-    selectedProviderDisplayName: "Codex",
-    selectedModel: "gpt-5.4",
-    setSelectedModel: vi.fn(),
-    serviceTier: undefined,
-    setServiceTier: vi.fn(),
-    reasoningLevel: "medium",
-    setReasoningLevel: vi.fn(),
-    sandboxMode: "danger-full-access",
-    setSandboxMode: vi.fn(),
-    activeModel: null,
-    modelOptions: [],
-    reasoningOptions: [],
-    sandboxOptions: [],
-    supportsServiceTier: false,
-    serviceTierSupportByProvider: {},
-  })),
-}));
-
-vi.mock("./useThreadFollowUpTracking", () => ({
-  useThreadFollowUpTracking: vi.fn(() => ({
-    beginPendingFollowUp: vi.fn(),
-    clearPendingFollowUp: vi.fn(),
-    pendingSubmittedFollowUp: null,
-  })),
-}));
+interface ModelOverrides extends Partial<AvailableModel> {}
 
 function createThread(overrides: Partial<Thread> = {}): Thread {
   return {
@@ -147,13 +52,103 @@ function createThread(overrides: Partial<Thread> = {}): Thread {
   };
 }
 
+function createPendingInteraction(): PendingInteraction {
+  return {
+    id: "pi_1",
+    threadId: "thr_1",
+    turnId: "turn_1",
+    providerId: "codex",
+    providerThreadId: "provider-thread-1",
+    providerRequestId: "request-1",
+    providerRequestMethod: "item/tool/requestUserInput",
+    status: "pending",
+    payload: {
+      kind: "user_input_request",
+      itemId: "item_1",
+      questions: [
+        {
+          id: "environment",
+          header: "Environment",
+          question: "Which environment should I use?",
+          allowsOther: true,
+          isSecret: false,
+          multiSelect: false,
+          options: [
+            {
+              label: "prod",
+              description: "Use production",
+              preview: null,
+            },
+            {
+              label: "staging",
+              description: "Use staging",
+              preview: null,
+            },
+          ],
+        },
+      ],
+    },
+    resolution: null,
+    statusReason: null,
+    createdAt: 1,
+    resolvedAt: null,
+  };
+}
+
+function makeProvider(overrides: ProviderOverrides = {}): SystemProviderInfo {
+  return {
+    available: true,
+    capabilities: {
+      supportsRename: true,
+      supportsServiceTier: false,
+    },
+    displayName: "Codex",
+    id: "codex",
+    ...overrides,
+  };
+}
+
+function makeModel(overrides: ModelOverrides = {}): AvailableModel {
+  return {
+    defaultReasoningEffort: "medium",
+    description: "Model description",
+    displayName: "gpt-5.4",
+    id: "gpt-5.4",
+    isDefault: true,
+    model: "gpt-5.4",
+    supportedReasoningEfforts: [
+      {
+        description: "Low effort",
+        reasoningEffort: "low",
+      },
+      {
+        description: "Medium effort",
+        reasoningEffort: "medium",
+      },
+    ],
+    ...overrides,
+  };
+}
+
 afterEach(() => {
   cleanup();
+  localStorage.clear();
   vi.clearAllMocks();
 });
 
 describe("ThreadDetailPromptArea", () => {
-  it("shows the pending interaction banner and disables the normal follow-up prompt", () => {
+  it("shows the pending interaction banner and disables the normal follow-up prompt", async () => {
+    vi.mocked(api.getThreadDefaultExecutionOptions).mockResolvedValue(null);
+    vi.mocked(api.listThreadDrafts).mockResolvedValue([]);
+    vi.mocked(api.listThreadPendingInteractions).mockResolvedValue([
+      createPendingInteraction(),
+    ]);
+    vi.mocked(api.listSystemProviders).mockResolvedValue([makeProvider()]);
+    vi.mocked(api.getAvailableModels).mockResolvedValue([makeModel()]);
+    vi.mocked(api.listThreads).mockResolvedValue([]);
+
+    const { wrapper } = createQueryClientTestHarness();
+
     render(
       <ThreadDetailPromptArea
         canExpandPromptChangeList={false}
@@ -177,15 +172,34 @@ describe("ThreadDetailPromptArea", () => {
         thread={createThread()}
         threadDetailRows={[]}
       />,
+      { wrapper },
     );
 
-    expect(screen.getByTestId("thread-pending-interaction-banner").textContent).toContain("pi_1");
+    await waitFor(() => {
+      expect(api.listThreadPendingInteractions).toHaveBeenCalledWith(
+        "thr_1",
+        expect.anything(),
+      );
+    });
+
+    expect(await screen.findByText("User input")).not.toBeNull();
+
+    await waitFor(() => {
+      expect(
+        screen.getAllByText("Which environment should I use?").length,
+      ).toBeGreaterThan(0);
+    });
     expect(
-      screen.getByPlaceholderText(
+      await screen.findByPlaceholderText(
         "Resolve the pending interaction below before sending another message",
       ),
     ).not.toBeNull();
-    const submitButton = screen.getByTitle("Submit (Enter)");
-    expect(submitButton).toHaveProperty("disabled", true);
+
+    await waitFor(() => {
+      expect(screen.getByTitle("Submit (Enter)")).toHaveProperty(
+        "disabled",
+        true,
+      );
+    });
   });
 });
