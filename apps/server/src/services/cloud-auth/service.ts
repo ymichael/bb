@@ -15,18 +15,18 @@ import type {
 } from "@bb/server-contract";
 import { createAsyncDeduper } from "../lib/async-deduper.js";
 import { startOAuthCallbackServer, type OAuthCallbackServer } from "./callback-server.js";
-import { createCloudAuthCrypto } from "./crypto.js";
 import {
+  buildCloudAuthCredentialUpsert,
+  createCloudAuthCrypto,
+  deserializeCloudAuthCredential,
+  getCloudAuthConnectionLabel,
   getCloudAuthProviderDefinition,
   listCloudAuthProviderDefinitions,
+  refreshStoredCloudAuthCredential,
+  type CloudAuthResolvedCredential,
   type StoredCloudAuthCredential,
-} from "./provider-definitions.js";
-import {
-  buildSandboxProviderCredentialUpsert,
-  deserializeCloudAuthCredential,
-} from "./storage.js";
+} from "@bb/agent-provider-auth";
 import type {
-  CloudAuthResolvedCredential,
   CloudAuthService,
 } from "./types.js";
 import type { ServerLogger } from "../../types.js";
@@ -73,30 +73,6 @@ function getProviderDefinition<TProviderId extends CloudAuthProviderId>(
   providerId: TProviderId,
 ) {
   return getCloudAuthProviderDefinition(providerId);
-}
-
-function getConnectionLabel(
-  credential: StoredCloudAuthCredential,
-): string | null {
-  if (credential.providerId === "claude-code") {
-    return getProviderDefinition("claude-code").getConnectionLabel(credential);
-  }
-
-  return getProviderDefinition("codex").getConnectionLabel(credential);
-}
-
-async function refreshCredential(
-  credential: StoredCloudAuthCredential,
-): Promise<StoredCloudAuthCredential> {
-  if (credential.providerId === "claude-code") {
-    return getProviderDefinition("claude-code").refreshCredential({
-      credential,
-    });
-  }
-
-  return getProviderDefinition("codex").refreshCredential({
-    credential,
-  });
 }
 
 async function createAuthorizationFlow(
@@ -209,10 +185,10 @@ export async function createCloudAuthService(
   }
 
   async function persistCredential(persistArgs: PersistCredentialArgs): Promise<void> {
-    upsertSandboxProviderCredential(db, buildSandboxProviderCredentialUpsert({
+    upsertSandboxProviderCredential(db, buildCloudAuthCredentialUpsert({
       credential: persistArgs.credential,
       crypto,
-      label: getConnectionLabel(persistArgs.credential),
+      label: getCloudAuthConnectionLabel(persistArgs.credential),
       lastErrorMessage: persistArgs.lastErrorMessage,
       lastRefreshedAt: persistArgs.lastRefreshedAt,
       updatedAt: persistArgs.updatedAt,
@@ -303,7 +279,9 @@ export async function createCloudAuthService(
       }
 
       try {
-        const refreshedCredential = await refreshCredential(currentCredential);
+        const refreshedCredential = await refreshStoredCloudAuthCredential({
+          credential: currentCredential,
+        });
         const updatedAt = Date.now();
         await persistCredential({
           credential: refreshedCredential,

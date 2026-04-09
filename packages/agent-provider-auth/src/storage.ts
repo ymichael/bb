@@ -1,8 +1,5 @@
-import type {
-  SandboxProviderCredentialRecord,
-  UpsertSandboxProviderCredentialArgs,
-} from "@bb/db";
 import { z } from "zod";
+import { cloudAuthProviderIdSchema } from "@bb/agent-providers";
 import type { CloudAuthCrypto } from "./crypto.js";
 import type {
   ClaudeStoredCredential,
@@ -13,6 +10,10 @@ import {
   claudeSubscriptionTypeSchema,
   storedCloudAuthCredentialSchema,
 } from "./provider-definitions.js";
+import type {
+  BuildCloudAuthCredentialUpsertArgs,
+  PersistedCloudAuthCredentialRecord,
+} from "./types.js";
 
 const encryptedStringSchema = z.string();
 
@@ -45,16 +46,16 @@ export interface SerializedCloudAuthCredential {
 
 interface DeserializeCloudAuthCredentialArgs {
   crypto: CloudAuthCrypto;
-  record: SandboxProviderCredentialRecord;
-}
-
-export interface BuildSandboxProviderCredentialUpsertArgs {
-  credential: StoredCloudAuthCredential;
-  crypto: CloudAuthCrypto;
-  label: string | null;
-  lastErrorMessage: string | null;
-  lastRefreshedAt: number | null;
-  updatedAt: number;
+  record: Pick<
+    PersistedCloudAuthCredentialRecord,
+    "encryptedAccessToken"
+      | "encryptedIdToken"
+      | "encryptedMetadata"
+      | "encryptedRefreshToken"
+      | "expiresAt"
+  > & {
+    providerId: string;
+  };
 }
 
 function decryptStringValue(
@@ -71,7 +72,6 @@ function encryptStringValue(
   crypto: CloudAuthCrypto,
   value: string,
 ): string {
-  // The crypto helper encrypts JSON payloads, so raw strings are wrapped as JSON strings.
   return crypto.encryptJson({
     plaintext: JSON.stringify(value),
   });
@@ -166,7 +166,9 @@ export function serializeCloudAuthCredential(
 export function deserializeCloudAuthCredential(
   args: DeserializeCloudAuthCredentialArgs,
 ): StoredCloudAuthCredential {
-  switch (args.record.providerId) {
+  const providerId = cloudAuthProviderIdSchema.parse(args.record.providerId);
+
+  switch (providerId) {
     case "claude-code": {
       const metadata = decryptMetadataValue(
         args.crypto,
@@ -181,7 +183,7 @@ export function deserializeCloudAuthCredential(
         accountEmail: metadata.accountEmail,
         accountId: metadata.accountId,
         expiresAt: args.record.expiresAt,
-        providerId: "claude-code",
+        providerId,
         refreshToken: decryptStringValue(
           args.crypto,
           args.record.encryptedRefreshToken,
@@ -206,7 +208,7 @@ export function deserializeCloudAuthCredential(
         idToken: args.record.encryptedIdToken
           ? decryptStringValue(args.crypto, args.record.encryptedIdToken)
           : null,
-        providerId: "codex",
+        providerId,
         refreshToken: decryptStringValue(
           args.crypto,
           args.record.encryptedRefreshToken,
@@ -220,9 +222,9 @@ export function deserializeCloudAuthCredential(
   }
 }
 
-export function buildSandboxProviderCredentialUpsert(
-  args: BuildSandboxProviderCredentialUpsertArgs,
-): UpsertSandboxProviderCredentialArgs {
+export function buildCloudAuthCredentialUpsert(
+  args: BuildCloudAuthCredentialUpsertArgs,
+): PersistedCloudAuthCredentialRecord {
   const serialized = serializeCloudAuthCredential({
     credential: args.credential,
     crypto: args.crypto,

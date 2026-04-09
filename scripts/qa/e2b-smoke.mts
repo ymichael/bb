@@ -7,14 +7,14 @@ import {
   upsertSandboxProviderCredential,
 } from "../../packages/db/src/index.ts";
 import type { DbConnection } from "../../packages/db/src/index.ts";
-import type {
-  ClaudeStoredCredential,
-  CodexStoredCredential,
-} from "../../apps/server/src/services/cloud-auth/provider-definitions.ts";
-import { getCloudAuthProviderDefinition } from "../../apps/server/src/services/cloud-auth/provider-definitions.ts";
-import { createCloudAuthCrypto } from "../../apps/server/src/services/cloud-auth/crypto.ts";
+import {
+  buildCloudAuthCredentialUpsert,
+  createCloudAuthCrypto,
+  getCloudAuthProviderDefinition,
+  type ClaudeStoredCredential,
+  type CodexStoredCredential,
+} from "../../packages/agent-provider-auth/src/index.ts";
 import { createCloudAuthService } from "../../apps/server/src/services/cloud-auth/service.ts";
-import { buildSandboxProviderCredentialUpsert } from "../../apps/server/src/services/cloud-auth/storage.ts";
 import { createSandboxEnvService } from "../../apps/server/src/services/sandbox-env/service.ts";
 import type { ServerRuntimeConfig } from "../../apps/server/src/types.ts";
 import { initDb } from "../../apps/server/src/db.ts";
@@ -757,7 +757,7 @@ async function seedSmokeCloudAuthFixture(
     };
     upsertSandboxProviderCredential(
       context.db,
-      buildSandboxProviderCredentialUpsert({
+      buildCloudAuthCredentialUpsert({
         credential,
         crypto: context.cloudAuthCrypto,
         label: null,
@@ -779,7 +779,7 @@ async function seedSmokeCloudAuthFixture(
     };
     upsertSandboxProviderCredential(
       context.db,
-      buildSandboxProviderCredentialUpsert({
+      buildCloudAuthCredentialUpsert({
         credential,
         crypto: context.cloudAuthCrypto,
         label: credential.accountId,
@@ -810,7 +810,7 @@ async function expireSmokeCodexCredential(
   };
   upsertSandboxProviderCredential(
     context.db,
-    buildSandboxProviderCredentialUpsert({
+    buildCloudAuthCredentialUpsert({
       credential: expiredCredential,
       crypto: context.cloudAuthCrypto,
       label: expiredCredential.accountId,

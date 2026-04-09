@@ -1,7 +1,9 @@
 import { createHash, randomBytes } from "node:crypto";
 import { z } from "zod";
-import { getCloudAuthProvider } from "@bb/agent-providers";
-import type { CloudAuthProviderId } from "@bb/server-contract";
+import {
+  getCloudAuthProvider,
+  type CloudAuthProviderId,
+} from "@bb/agent-providers";
 
 const HTTP_TIMEOUT_MS = 30_000;
 const OPENAI_JWT_CLAIM_PATH = "https://api.openai.com/auth";
@@ -452,8 +454,6 @@ const codexProviderDefinition: CloudAuthProviderDefinition<CodexStoredCredential
     url.searchParams.set("state", state);
     url.searchParams.set("id_token_add_organizations", "true");
     url.searchParams.set("codex_cli_simplified_flow", "true");
-    // Use the working pi-mono originator value because it is the same OAuth app
-    // and has already been validated against the live provider flow.
     url.searchParams.set("originator", "pi");
 
     return {
@@ -545,4 +545,30 @@ export function getCloudAuthProviderDefinition<TProviderId extends CloudAuthProv
 
 export function listCloudAuthProviderDefinitions() {
   return Object.values(cloudAuthProviderDefinitions);
+}
+
+export function getCloudAuthConnectionLabel(
+  credential: StoredCloudAuthCredential,
+): string | null {
+  switch (credential.providerId) {
+    case "claude-code":
+      return claudeProviderDefinition.getConnectionLabel(credential);
+    case "codex":
+      return codexProviderDefinition.getConnectionLabel(credential);
+  }
+}
+
+export async function refreshStoredCloudAuthCredential(
+  args: RefreshCloudAuthCredentialArgs<StoredCloudAuthCredential>,
+): Promise<StoredCloudAuthCredential> {
+  switch (args.credential.providerId) {
+    case "claude-code":
+      return claudeProviderDefinition.refreshCredential({
+        credential: args.credential,
+      });
+    case "codex":
+      return codexProviderDefinition.refreshCredential({
+        credential: args.credential,
+      });
+  }
 }

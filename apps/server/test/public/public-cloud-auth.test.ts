@@ -1,4 +1,8 @@
 import {
+  buildCloudAuthCredentialUpsert,
+  createCloudAuthCrypto,
+} from "@bb/agent-provider-auth";
+import {
   getSandboxProviderCredentialByProviderId,
   upsertSandboxProviderCredential,
 } from "@bb/db";
@@ -10,8 +14,6 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { readJson } from "../helpers/json.js";
 import { createTestAppHarness } from "../helpers/test-app.js";
-import { createCloudAuthCrypto } from "../../src/services/cloud-auth/crypto.js";
-import { buildSandboxProviderCredentialUpsert } from "../../src/services/cloud-auth/storage.js";
 
 function createCodexAccessToken(accountId: string): string {
   const header = Buffer.from(JSON.stringify({ alg: "none", typ: "JWT" })).toString(
@@ -350,7 +352,7 @@ describe("public cloud auth routes", () => {
       });
       upsertSandboxProviderCredential(
         harness.db,
-        buildSandboxProviderCredentialUpsert({
+        buildCloudAuthCredentialUpsert({
           credential: {
             accessToken: createCodexAccessToken("bad-credential"),
             accountId: "bad-credential",
@@ -406,7 +408,7 @@ describe("public cloud auth routes", () => {
       });
       upsertSandboxProviderCredential(
         harness.db,
-        buildSandboxProviderCredentialUpsert({
+        buildCloudAuthCredentialUpsert({
           credential: {
             accessToken: createCodexAccessToken("acct_codex_old"),
             accountId: "acct_codex_old",

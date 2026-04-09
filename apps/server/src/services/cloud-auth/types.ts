@@ -1,21 +1,12 @@
 import type {
+  CloudAuthResolvedCredential,
+} from "@bb/agent-provider-auth";
+import type {
   CloudAuthAttemptResponse,
   CloudAuthConnectResponse,
   CloudAuthConnection,
   CloudAuthProviderId,
 } from "@bb/server-contract";
-import type { StoredCloudAuthCredential } from "./provider-definitions.js";
-
-export interface CloudAuthResolvedCredential<
-  TCredential extends StoredCloudAuthCredential = StoredCloudAuthCredential,
-> {
-  credential: TCredential;
-  label: string | null;
-  lastErrorMessage: string | null;
-  lastRefreshedAt: number | null;
-  providerId: TCredential["providerId"];
-  updatedAt: number;
-}
 
 export interface GetCloudAuthAttemptArgs {
   attemptId: string;

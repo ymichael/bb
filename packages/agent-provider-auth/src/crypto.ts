@@ -5,7 +5,7 @@ import {
 
 const CLOUD_AUTH_SECRET_FILE_NAME = "cloud-auth-secret";
 
-interface CreateCloudAuthCryptoArgs {
+export interface CreateCloudAuthCryptoArgs {
   dataDir: string;
 }
 

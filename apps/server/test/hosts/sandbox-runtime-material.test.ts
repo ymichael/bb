@@ -1,4 +1,9 @@
 import {
+  buildCloudAuthCredentialUpsert,
+  createCloudAuthCrypto,
+  type StoredCloudAuthCredential,
+} from "@bb/agent-provider-auth";
+import {
   getCommand,
   getHostOperation,
   hostDaemonSessions,
@@ -9,18 +14,11 @@ import {
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import type { TestAppHarness } from "../helpers/test-app.js";
-import { createCloudAuthCrypto } from "../../src/services/cloud-auth/crypto.js";
 import {
   ensureSandboxRuntimeMaterialSynced,
   requestSandboxRuntimeMaterialSync,
   advanceSandboxRuntimeMaterialSync,
 } from "../../src/services/hosts/sandbox-runtime-material.js";
-import type {
-  ClaudeStoredCredential,
-  CodexStoredCredential,
-  StoredCloudAuthCredential,
-} from "../../src/services/cloud-auth/provider-definitions.js";
-import { buildSandboxProviderCredentialUpsert } from "../../src/services/cloud-auth/storage.js";
 import {
   completeSandboxRuntimeMaterialSyncForCommand,
   failSandboxRuntimeMaterialSyncForCommand,
@@ -47,7 +45,7 @@ async function seedSandboxCredential(
   });
   upsertSandboxProviderCredential(
     args.harness.db,
-    buildSandboxProviderCredentialUpsert({
+    buildCloudAuthCredentialUpsert({
       credential: args.credential,
       crypto,
       label: null,
@@ -359,84 +357,6 @@ describe("sandbox runtime material", () => {
         },
         status: 500,
       });
-    } finally {
-      await harness.cleanup();
-    }
-  });
-
-  it("builds managed auth files for claude, codex, and pi without refresh tokens", async () => {
-    const harness = await createTestAppHarness();
-    const claudeCredential: ClaudeStoredCredential = {
-      accessToken: "claude-access-token",
-      accountEmail: "claude@example.test",
-      accountId: "acct_claude_test",
-      expiresAt: 1_800_000_000_000,
-      providerId: "claude-code",
-      refreshToken: "claude-refresh-token",
-      scopes: ["user:profile", "user:sessions:claude_code"],
-      subscriptionType: "max",
-    };
-    const codexCredential: CodexStoredCredential = {
-      accessToken: "codex-access-token",
-      accountId: "acct_codex_test",
-      expiresAt: 1_800_000_000_500,
-      idToken: "codex-id-token",
-      providerId: "codex",
-      refreshToken: "codex-refresh-token",
-    };
-
-    try {
-      await seedSandboxCredential({
-        credential: claudeCredential,
-        harness,
-        lastRefreshedAt: 1_700_000_000_000,
-        updatedAt: 1_700_000_000_000,
-      });
-      await seedSandboxCredential({
-        credential: codexCredential,
-        harness,
-        lastRefreshedAt: 1_700_000_100_000,
-        updatedAt: 1_700_000_100_000,
-      });
-
-      const snapshot = await buildSandboxRuntimeMaterialSnapshot(harness.deps);
-
-      expect(snapshot.env).toEqual({
-        OPENAI_API_KEY: "test-openai-key",
-        PI_CODING_AGENT_DIR: "~/.pi/agent",
-      });
-      expect(snapshot.files).toHaveLength(3);
-
-      const codexFile = snapshot.files.find((file) => file.path === "~/.codex/auth.json");
-      expect(codexFile).toMatchObject({
-        managedBy: "bb-runtime-material",
-        mode: 0o600,
-      });
-      expect(codexFile?.contents).toContain("\"refresh_token\": \"\"");
-      expect(codexFile?.contents).toContain("\"access_token\": \"codex-access-token\"");
-      expect(codexFile?.contents).toContain("\"account_id\": \"acct_codex_test\"");
-      expect(codexFile?.contents).toContain("\"id_token\": \"codex-id-token\"");
-
-      const claudeFile = snapshot.files.find(
-        (file) => file.path === "~/.claude/.credentials.json",
-      );
-      expect(claudeFile).toMatchObject({
-        managedBy: "bb-runtime-material",
-        mode: 0o600,
-      });
-      expect(claudeFile?.contents).toContain("\"refreshToken\": \"\"");
-      expect(claudeFile?.contents).toContain("\"accessToken\": \"claude-access-token\"");
-      expect(claudeFile?.contents).toContain("\"subscriptionType\": \"max\"");
-
-      const piFile = snapshot.files.find((file) => file.path === "~/.pi/agent/auth.json");
-      expect(piFile).toMatchObject({
-        managedBy: "bb-runtime-material",
-        mode: 0o600,
-      });
-      expect(piFile?.contents).toContain("\"anthropic\"");
-      expect(piFile?.contents).toContain("\"openai-codex\"");
-      expect(piFile?.contents).toContain("\"refresh\": \"\"");
-      expect(piFile?.contents).toContain("\"accountId\": \"acct_codex_test\"");
     } finally {
       await harness.cleanup();
     }

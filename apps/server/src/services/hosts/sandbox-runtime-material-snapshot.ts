@@ -1,8 +1,11 @@
 import { createHash } from "node:crypto";
 import type { HostRuntimeMaterialSnapshot } from "@bb/host-daemon-contract";
+import {
+  buildCloudAuthRuntimeMaterial,
+  type CloudAuthResolvedCredential,
+} from "@bb/agent-provider-auth";
 import { ApiError } from "../../errors.js";
 import type { AppDeps, ServerRuntimeConfig } from "../../types.js";
-import { buildCloudAuthRuntimeMaterial } from "../cloud-auth/runtime-material.js";
 
 type SandboxRuntimeMaterialConfig = Pick<
   ServerRuntimeConfig,
@@ -54,12 +57,26 @@ function buildSnapshotVersion(snapshot: HostRuntimeMaterialSnapshot): string {
   return createHash("sha256").update(stablePayload).digest("hex");
 }
 
+function isResolvedCloudAuthCredential(
+  credential: CloudAuthResolvedCredential | null,
+): credential is CloudAuthResolvedCredential {
+  return credential !== null;
+}
+
 export async function buildSandboxRuntimeMaterialSnapshot(
   deps: Pick<AppDeps, "cloudAuth" | "config" | "sandboxEnv">,
 ): Promise<HostRuntimeMaterialSnapshot> {
   const baseEnv = buildManagedRuntimeEnv(deps.config);
   const customEnv = await deps.sandboxEnv.resolveRuntimeEnv();
-  const cloudAuthRuntimeMaterial = await buildCloudAuthRuntimeMaterial(deps);
+  const credentials = (
+    await Promise.all([
+      deps.cloudAuth.getValidCredential({ providerId: "claude-code" }),
+      deps.cloudAuth.getValidCredential({ providerId: "codex" }),
+    ])
+  ).filter(isResolvedCloudAuthCredential);
+  const cloudAuthRuntimeMaterial = buildCloudAuthRuntimeMaterial({
+    credentials,
+  });
   const snapshot: HostRuntimeMaterialSnapshot = {
     env: {
       ...baseEnv,

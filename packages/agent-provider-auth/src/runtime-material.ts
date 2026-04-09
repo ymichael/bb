@@ -1,5 +1,4 @@
 import type { HostRuntimeMaterialManagedFile } from "@bb/host-daemon-contract";
-import type { AppDeps } from "../../types.js";
 import type {
   ClaudeStoredCredential,
   CodexStoredCredential,
@@ -13,9 +12,13 @@ const PI_AUTH_PATH = `${PI_AGENT_DIR}/auth.json`;
 const RUNTIME_MATERIAL_FILE_MODE = 0o600;
 const RUNTIME_MATERIAL_MANAGED_BY = "bb-runtime-material";
 
-interface BuildCloudAuthRuntimeMaterialResult {
+export interface BuildCloudAuthRuntimeMaterialResult {
   env: Record<string, string>;
   files: HostRuntimeMaterialManagedFile[];
+}
+
+interface BuildCloudAuthRuntimeMaterialArgs {
+  credentials: CloudAuthResolvedCredential[];
 }
 
 interface ClaudeCredentialsFile {
@@ -70,15 +73,15 @@ function buildManagedFile(args: {
 }
 
 function isClaudeResolvedCredential(
-  credential: CloudAuthResolvedCredential | null,
+  credential: CloudAuthResolvedCredential,
 ): credential is ClaudeResolvedCredential {
-  return credential?.providerId === "claude-code";
+  return credential.providerId === "claude-code";
 }
 
 function isCodexResolvedCredential(
-  credential: CloudAuthResolvedCredential | null,
+  credential: CloudAuthResolvedCredential,
 ): credential is CodexResolvedCredential {
-  return credential?.providerId === "codex";
+  return credential.providerId === "codex";
 }
 
 function buildClaudeCredentialsFile(
@@ -164,32 +167,26 @@ function buildPiAuthFile(args: {
   });
 }
 
-export async function buildCloudAuthRuntimeMaterial(
-  deps: Pick<AppDeps, "cloudAuth">,
-): Promise<BuildCloudAuthRuntimeMaterialResult> {
-  const [claudeCredential, codexCredential] = await Promise.all([
-    deps.cloudAuth.getValidCredential({ providerId: "claude-code" }),
-    deps.cloudAuth.getValidCredential({ providerId: "codex" }),
-  ]);
+export function buildCloudAuthRuntimeMaterial(
+  args: BuildCloudAuthRuntimeMaterialArgs,
+): BuildCloudAuthRuntimeMaterialResult {
+  const claudeCredential = args.credentials.find(isClaudeResolvedCredential) ?? null;
+  const codexCredential = args.credentials.find(isCodexResolvedCredential) ?? null;
 
   const files: HostRuntimeMaterialManagedFile[] = [];
   const env: Record<string, string> = {};
 
-  if (isClaudeResolvedCredential(claudeCredential)) {
+  if (claudeCredential) {
     files.push(buildClaudeCredentialsFile(claudeCredential));
   }
 
-  if (isCodexResolvedCredential(codexCredential)) {
+  if (codexCredential) {
     files.push(buildCodexAuthFile(codexCredential));
   }
 
   const piAuthFile = buildPiAuthFile({
-    claudeCredential: isClaudeResolvedCredential(claudeCredential)
-      ? claudeCredential
-      : null,
-    codexCredential: isCodexResolvedCredential(codexCredential)
-      ? codexCredential
-      : null,
+    claudeCredential,
+    codexCredential,
   });
   if (piAuthFile) {
     env.PI_CODING_AGENT_DIR = PI_AGENT_DIR;

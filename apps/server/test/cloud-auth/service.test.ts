@@ -1,11 +1,13 @@
 import {
+  buildCloudAuthCredentialUpsert,
+  createCloudAuthCrypto,
+  type CodexStoredCredential,
+} from "@bb/agent-provider-auth";
+import {
   getSandboxProviderCredentialByProviderId,
   upsertSandboxProviderCredential,
 } from "@bb/db";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createCloudAuthCrypto } from "../../src/services/cloud-auth/crypto.js";
-import type { CodexStoredCredential } from "../../src/services/cloud-auth/provider-definitions.js";
-import { buildSandboxProviderCredentialUpsert } from "../../src/services/cloud-auth/storage.js";
 import { createTestAppHarness } from "../helpers/test-app.js";
 
 function createCodexAccessToken(accountId: string): string {
@@ -57,7 +59,7 @@ async function seedCodexCredential(args: {
   };
   upsertSandboxProviderCredential(
     args.harness.db,
-    buildSandboxProviderCredentialUpsert({
+    buildCloudAuthCredentialUpsert({
       credential,
       crypto,
       label: args.accountId,

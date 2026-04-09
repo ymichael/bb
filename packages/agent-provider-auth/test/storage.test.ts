@@ -1,27 +1,19 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type {
-  SandboxProviderCredentialRecord,
-  UpsertSandboxProviderCredentialArgs,
-} from "@bb/db";
 import { afterEach, describe, expect, it } from "vitest";
-import { createCloudAuthCrypto } from "../../src/services/cloud-auth/crypto.js";
-import type {
-  ClaudeStoredCredential,
-  CodexStoredCredential,
-} from "../../src/services/cloud-auth/provider-definitions.js";
 import {
-  buildSandboxProviderCredentialUpsert,
+  buildCloudAuthCredentialUpsert,
+  createCloudAuthCrypto,
   deserializeCloudAuthCredential,
-} from "../../src/services/cloud-auth/storage.js";
+  type ClaudeStoredCredential,
+  type CodexStoredCredential,
+} from "../src/index.js";
 
 const tempDirs: string[] = [];
 
 interface BuildCredentialRecordArgs {
-  createdAt: number;
-  id: string;
-  upsert: UpsertSandboxProviderCredentialArgs;
+  upsert: ReturnType<typeof buildCloudAuthCredentialUpsert>;
 }
 
 async function makeTempDir(): Promise<string> {
@@ -32,21 +24,8 @@ async function makeTempDir(): Promise<string> {
 
 function buildCredentialRecord(
   args: BuildCredentialRecordArgs,
-): SandboxProviderCredentialRecord {
-  return {
-    createdAt: args.createdAt,
-    encryptedAccessToken: args.upsert.encryptedAccessToken,
-    encryptedIdToken: args.upsert.encryptedIdToken,
-    encryptedMetadata: args.upsert.encryptedMetadata,
-    encryptedRefreshToken: args.upsert.encryptedRefreshToken,
-    expiresAt: args.upsert.expiresAt,
-    id: args.id,
-    label: args.upsert.label,
-    lastErrorMessage: args.upsert.lastErrorMessage,
-    lastRefreshedAt: args.upsert.lastRefreshedAt,
-    providerId: args.upsert.providerId,
-    updatedAt: args.upsert.updatedAt,
-  };
+): ReturnType<typeof buildCloudAuthCredentialUpsert> {
+  return args.upsert;
 }
 
 afterEach(async () => {
@@ -73,7 +52,7 @@ describe("cloud auth storage", () => {
       subscriptionType: "max",
     };
 
-    const upsert = buildSandboxProviderCredentialUpsert({
+    const upsert = buildCloudAuthCredentialUpsert({
       credential,
       crypto,
       label: "claude@example.test",
@@ -89,8 +68,6 @@ describe("cloud auth storage", () => {
       deserializeCloudAuthCredential({
         crypto,
         record: buildCredentialRecord({
-          createdAt: 1_800_000_000_050,
-          id: "cred_claude",
           upsert,
         }),
       }),
@@ -110,7 +87,7 @@ describe("cloud auth storage", () => {
       refreshToken: "codex-refresh-token",
     };
 
-    const upsert = buildSandboxProviderCredentialUpsert({
+    const upsert = buildCloudAuthCredentialUpsert({
       credential,
       crypto,
       label: "codex@example.test",
@@ -126,8 +103,6 @@ describe("cloud auth storage", () => {
       deserializeCloudAuthCredential({
         crypto,
         record: buildCredentialRecord({
-          createdAt: 1_800_000_100_050,
-          id: "cred_codex",
           upsert,
         }),
       }),
