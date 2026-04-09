@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
   threadEventItemSchema,
@@ -27,9 +28,27 @@ interface FakeEventMessage {
 const DEFAULT_ADAPTER_ID = "fake";
 const DEFAULT_DISPLAY_NAME = "Fake Provider";
 
-export const fakeProviderScriptPath = fileURLToPath(
-  new URL("./fake-provider-script.cjs", import.meta.url),
-);
+function resolveFakeProviderScriptPath(): string {
+  const siblingCompiledPath = fileURLToPath(
+    new URL("./fake-provider-script.cjs", import.meta.url),
+  );
+  if (existsSync(siblingCompiledPath)) {
+    return siblingCompiledPath;
+  }
+
+  const builtPath = fileURLToPath(
+    new URL("../../dist/test/fake-provider-script.cjs", import.meta.url),
+  );
+  if (existsSync(builtPath)) {
+    return builtPath;
+  }
+
+  throw new Error(
+    "Missing fake provider script. Build @bb/agent-runtime before using createFakeAdapter().",
+  );
+}
+
+export const fakeProviderScriptPath = resolveFakeProviderScriptPath();
 
 function buildCommand(command: AdapterCommand): JsonRpcMessage | null {
   switch (command.type) {

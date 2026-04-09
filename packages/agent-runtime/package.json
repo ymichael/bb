@@ -16,7 +16,7 @@
   "types": "./dist/index.d.ts",
   "files": ["dist"],
   "scripts": {
-    "build": "tsc && node ../../scripts/copy-file.mjs src/test/fake-provider-script.cjs dist/test/fake-provider-script.cjs",
+    "build": "tsc",
     "clean": "rimraf dist tsconfig.tsbuildinfo",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --config vitest.config.ts",
