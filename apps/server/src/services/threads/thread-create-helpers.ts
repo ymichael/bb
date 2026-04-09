@@ -9,7 +9,6 @@ import type { HostDaemonCommand } from "@bb/host-daemon-contract";
 import type {
   LocalPathProjectSource,
 } from "@bb/domain";
-import { DEFAULT_ENV_SETUP_SCRIPT_NAME } from "@bb/domain";
 import type { AppDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
 import type { ThreadCreateServiceRequest } from "./thread-create-request.js";
@@ -85,7 +84,6 @@ export function requireProjectExists(
   return project;
 }
 
-export const SETUP_SCRIPT_NAME = DEFAULT_ENV_SETUP_SCRIPT_NAME;
 export const SETUP_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
 
 export function requireSourceForHost(

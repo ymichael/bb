@@ -204,6 +204,22 @@ describe("public project and host routes", () => {
         code: "invalid_request",
         message: expect.stringContaining("Native Windows paths are not supported"),
       });
+
+      const rootPathCreateResponse = await harness.app.request("/api/v1/projects", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          name: "Root Path Project",
+          source: { type: "local_path", hostId: host.id, path: "/" },
+        }),
+      });
+      expect(rootPathCreateResponse.status).toBe(400);
+      await expect(readJson(rootPathCreateResponse)).resolves.toMatchObject({
+        code: "invalid_request",
+        message: expect.stringContaining("filesystem root"),
+      });
     } finally {
       await harness.cleanup();
     }

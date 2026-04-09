@@ -16,9 +16,10 @@ function resolveBbDevEnv() {
 }
 
 async function main() {
+  const cliArgs = process.argv.slice(2);
   const child = crossSpawn(
     "pnpm",
-    ["--filter", "@bb/server", "exec", "tsx", "../cli/src/index.ts"],
+    ["--filter", "@bb/server", "exec", "tsx", "../cli/src/index.ts", ...cliArgs],
     {
       cwd: repoRoot,
       env: resolveBbDevEnv(),

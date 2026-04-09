@@ -95,7 +95,7 @@ describe("resolveLocalBbExecutableDirectory", () => {
     );
   });
 
-  it("returns the built CLI executable directory even without executable bits", async () => {
+  it("fails clearly when the built CLI entry is not executable", async () => {
     const { cliEntryPath, cliPackageManifestPath } = await createFakeCliPackage({
       executable: false,
     });
@@ -104,7 +104,9 @@ describe("resolveLocalBbExecutableDirectory", () => {
       resolveLocalBbExecutableDirectory({
         cliPackageManifestPath,
       }),
-    ).resolves.toBe(path.dirname(cliEntryPath));
+    ).rejects.toThrow(
+      `Resolved bb CLI entry is not executable: ${cliEntryPath}. Build @bb/cli before starting the host daemon.`,
+    );
   });
 });
 
