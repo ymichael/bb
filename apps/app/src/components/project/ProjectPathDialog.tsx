@@ -100,7 +100,7 @@ function ProjectPathDialogContent({
     if (validationMessage) {
       setValidationMessage(null)
     }
-  }, [pathValue, validationMessage])
+  }, [pathValue])
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()

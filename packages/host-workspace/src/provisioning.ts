@@ -175,9 +175,9 @@ export function buildSetupScriptCommand(
   }
 
   return {
-    command: "/bin/bash",
-    args: [args.scriptPath],
-    text: `/bin/bash ${DEFAULT_ENV_SETUP_SCRIPT_NAME}`,
+    command: "/usr/bin/env",
+    args: ["bash", args.scriptPath],
+    text: `/usr/bin/env bash ${DEFAULT_ENV_SETUP_SCRIPT_NAME}`,
   };
 }
 

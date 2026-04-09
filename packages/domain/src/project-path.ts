@@ -4,6 +4,8 @@ const WINDOWS_UNC_PATH_PATTERN = /^\\\\[^\\/]+(?:[\\/]+)[^\\/]+/u
 
 export const INVALID_PROJECT_PATH_MESSAGE =
   "Project path must be an absolute Linux or WSL path."
+export const PROJECT_PATH_ROOT_MESSAGE =
+  "Project path must point to a project directory, not the filesystem root."
 export const UNSUPPORTED_NATIVE_WINDOWS_PROJECT_PATH_MESSAGE =
   "Project path must use a Linux or WSL path like /home/me/repo or /mnt/c/Users/me/repo. Native Windows paths are not supported."
 
@@ -52,6 +54,9 @@ export function getProjectPathValidationMessage(path: string): string | null {
   }
   if (!isAbsoluteProjectPath(normalizedPath)) {
     return INVALID_PROJECT_PATH_MESSAGE
+  }
+  if (normalizedPath === "/") {
+    return PROJECT_PATH_ROOT_MESSAGE
   }
   return null
 }

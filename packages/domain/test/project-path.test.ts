@@ -6,6 +6,7 @@ import {
   isAbsoluteProjectPath,
   isNativeWindowsProjectPath,
   normalizeProjectPathInput,
+  PROJECT_PATH_ROOT_MESSAGE,
   UNSUPPORTED_NATIVE_WINDOWS_PROJECT_PATH_MESSAGE,
 } from "../src/project-path.js"
 
@@ -62,6 +63,7 @@ describe("project-path", () => {
   it("returns clear validation messages for unsupported path formats", () => {
     expect(getProjectPathValidationMessage("/srv/repos/bb")).toBeNull()
     expect(getProjectPathValidationMessage("/mnt/c/Users/michael/bb")).toBeNull()
+    expect(getProjectPathValidationMessage("/")).toBe(PROJECT_PATH_ROOT_MESSAGE)
     expect(getProjectPathValidationMessage("relative/path")).toBe(
       INVALID_PROJECT_PATH_MESSAGE,
     )

@@ -56,6 +56,10 @@ function getCliBinPathFromManifest(
   );
 }
 
+function hasExecutablePermission(mode: number): boolean {
+  return (mode & 0o111) !== 0;
+}
+
 async function resolveCliEntryPath(
   cliPackageManifestPath: string,
 ): Promise<string> {
@@ -70,6 +74,11 @@ async function resolveCliEntryPath(
     const stats = await fs.stat(cliEntryPath);
     if (!stats.isFile()) {
       throw new Error(`Resolved bb CLI entry is not a file: ${cliEntryPath}`);
+    }
+    if (process.platform !== "win32" && !hasExecutablePermission(stats.mode)) {
+      throw new Error(
+        `Resolved bb CLI entry is not executable: ${cliEntryPath}. Build @bb/cli before starting the host daemon.`,
+      );
     }
   } catch (error) {
     if (getErrorCode(error) === "ENOENT") {
