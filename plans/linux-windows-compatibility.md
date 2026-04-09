@@ -34,11 +34,11 @@ reduces maintenance versus homegrown OS-specific wrappers.
 ### Packaging and dev scripts are not cross-platform
 
 - Root scripts rely on inline env assignment in
-  [package.json](/Users/michael/.codex/worktrees/50a3/bb/package.json).
+  [package.json](../package.json).
 - Many package `build` / `clean` scripts rely on `rm -rf`, `mkdir -p`, and `cp`,
-  including [package.json](/Users/michael/.codex/worktrees/50a3/bb/package.json),
-  [apps/host-daemon/package.json](/Users/michael/.codex/worktrees/50a3/bb/apps/host-daemon/package.json),
-  and [packages/agent-runtime/package.json](/Users/michael/.codex/worktrees/50a3/bb/packages/agent-runtime/package.json).
+  including [package.json](../package.json),
+  [apps/host-daemon/package.json](../apps/host-daemon/package.json),
+  and [packages/agent-runtime/package.json](../packages/agent-runtime/package.json).
 - We do not yet have a documented cross-platform dependency strategy, which
   makes it too easy to fix each script or launcher ad hoc.
 
@@ -46,51 +46,51 @@ reduces maintenance versus homegrown OS-specific wrappers.
 
 - The repo does not yet define a line-ending policy for supported source files,
   scripts, or hooks in
-  [.gitattributes](/Users/michael/.codex/worktrees/50a3/bb/.gitattributes).
+  [.gitattributes](../.gitattributes).
 - Portability-sensitive launch paths still rely on raw `child_process.spawn(...)`
   in
-  [packages/agent-runtime/src/runtime.ts](/Users/michael/.codex/worktrees/50a3/bb/packages/agent-runtime/src/runtime.ts),
-  [apps/host-daemon/src/local-api.ts](/Users/michael/.codex/worktrees/50a3/bb/apps/host-daemon/src/local-api.ts),
+  [packages/agent-runtime/src/runtime.ts](../packages/agent-runtime/src/runtime.ts),
+  [apps/host-daemon/src/local-api.ts](../apps/host-daemon/src/local-api.ts),
   and
-  [packages/host-workspace/src/provisioning.ts](/Users/michael/.codex/worktrees/50a3/bb/packages/host-workspace/src/provisioning.ts),
+  [packages/host-workspace/src/provisioning.ts](../packages/host-workspace/src/provisioning.ts),
   but the repo does not yet define how `.cmd`, `.bat`, and `.exe` launch
   semantics should work on Windows.
 
 ### Host-daemon runtime assumes Unix launcher semantics
 
 - The local `bb` launcher is a POSIX shell script in
-  [apps/cli/bin/bb](/Users/michael/.codex/worktrees/50a3/bb/apps/cli/bin/bb).
+  [apps/cli/bin/bb](../apps/cli/bin/bb).
 - The host daemon checks POSIX executable bits and prepends `PATH` with `:`
-  in [apps/host-daemon/src/runtime-shell-env.ts](/Users/michael/.codex/worktrees/50a3/bb/apps/host-daemon/src/runtime-shell-env.ts).
+  in [apps/host-daemon/src/runtime-shell-env.ts](../apps/host-daemon/src/runtime-shell-env.ts).
 
 ### Managed workspace setup is POSIX-only
 
 - Setup hooks run via `/bin/bash` in
-  [packages/host-workspace/src/provisioning.ts](/Users/michael/.codex/worktrees/50a3/bb/packages/host-workspace/src/provisioning.ts).
+  [packages/host-workspace/src/provisioning.ts](../packages/host-workspace/src/provisioning.ts).
 
 ### Local host UX is incomplete off macOS
 
 - Folder picking is macOS-only in
-  [apps/host-daemon/src/local-api.ts](/Users/michael/.codex/worktrees/50a3/bb/apps/host-daemon/src/local-api.ts).
+  [apps/host-daemon/src/local-api.ts](../apps/host-daemon/src/local-api.ts).
 
 ### Windows path handling has correctness and security bugs
 
 - Attachment path containment uses a POSIX string-prefix check in
-  [apps/server/src/services/projects/attachments.ts](/Users/michael/.codex/worktrees/50a3/bb/apps/server/src/services/projects/attachments.ts).
+  [apps/server/src/services/projects/attachments.ts](../apps/server/src/services/projects/attachments.ts).
 - Project-name derivation splits only on `/` in
-  [apps/app/src/lib/projectPathInput.ts](/Users/michael/.codex/worktrees/50a3/bb/apps/app/src/lib/projectPathInput.ts).
+  [packages/domain/src/project-path.ts](../packages/domain/src/project-path.ts).
 
 ### Process management and test harnesses are Unix-heavy
 
 - Dev restart uses `SIGUSR1` in
-  [scripts/request-dev-restart.mjs](/Users/michael/.codex/worktrees/50a3/bb/scripts/request-dev-restart.mjs).
+  [scripts/request-dev-restart.mjs](../scripts/request-dev-restart.mjs).
 - Integration cleanup depends on `lsof` and `SIGKILL` in
-  [tests/integration/global-setup.ts](/Users/michael/.codex/worktrees/50a3/bb/tests/integration/global-setup.ts).
+  [tests/integration/global-setup.ts](../tests/integration/global-setup.ts).
 
 ### CI does not protect compatibility
 
 - CI only runs on Ubuntu in
-  [.github/workflows/ci.yml](/Users/michael/.codex/worktrees/50a3/bb/.github/workflows/ci.yml).
+  [.github/workflows/ci.yml](../.github/workflows/ci.yml).
 
 ## Plan
 

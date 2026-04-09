@@ -10,6 +10,7 @@ describe("project-path", () => {
   const windowsProjectPathWithTrailingSeparator = "C:\\Users\\michael\\bb\\"
   const windowsRootPath = "C:\\"
   const uncProjectPath = "\\\\server\\share\\bb"
+  const uncProjectPathWithTrailingSeparator = "\\\\server\\share\\bb\\"
 
   it("derives a project name from POSIX paths", () => {
     expect(deriveProjectNameFromPath("/srv/repos/bb")).toBe("bb")
@@ -19,6 +20,7 @@ describe("project-path", () => {
   it("derives a project name from Windows-style paths", () => {
     expect(deriveProjectNameFromPath(windowsProjectPath)).toBe("bb")
     expect(deriveProjectNameFromPath("C:/Users/michael/bb/")).toBe("bb")
+    expect(deriveProjectNameFromPath(uncProjectPath)).toBe("bb")
   })
 
   it("does not derive a project name from filesystem roots", () => {
@@ -38,6 +40,9 @@ describe("project-path", () => {
     expect(normalizeProjectPathInput("/srv/repos/bb/")).toBe("/srv/repos/bb")
     expect(normalizeProjectPathInput(windowsProjectPathWithTrailingSeparator)).toBe(
       windowsProjectPath,
+    )
+    expect(normalizeProjectPathInput(uncProjectPathWithTrailingSeparator)).toBe(
+      uncProjectPath,
     )
     expect(normalizeProjectPathInput("/")).toBe("/")
     expect(normalizeProjectPathInput(windowsRootPath)).toBe(windowsRootPath)

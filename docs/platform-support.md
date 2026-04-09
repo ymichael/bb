@@ -41,7 +41,7 @@
 
 ### Maintainer-only or best-effort surfaces
 
-- ad hoc Unix-only QA helpers under [`scripts/qa/`](/Users/michael/.codex/worktrees/50a3/bb/scripts/qa)
+- ad hoc Unix-only QA helpers under [`scripts/qa/`](../scripts/qa/)
 - dev restart internals that are not part of the shipped product path
 - sandbox execution on Windows
 
@@ -78,7 +78,6 @@ We are explicitly not adopting:
 ## Line Ending Policy
 
 - The repository enforces LF checkout for supported text files via
-  [.gitattributes](/Users/michael/.codex/worktrees/50a3/bb/.gitattributes).
+  [.gitattributes](../.gitattributes).
 - Supported Linux and Windows flows must work from a default Windows Git
   checkout with those repository rules applied.
-

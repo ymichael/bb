@@ -59,6 +59,20 @@ describe("project attachments", () => {
     );
   });
 
+  it("rejects absolute paths outside the project attachment directory", async () => {
+    const dataDir = await makeTempDir();
+
+    await expect(readAttachment(dataDir, "proj_test", "/etc/passwd")).rejects.toMatchObject(
+      {
+        status: 400,
+        body: expect.objectContaining({
+          code: "invalid_request",
+          message: "Attachment path escapes project directory",
+        }),
+      },
+    );
+  });
+
   it("rejects attachment paths that resolve to the attachment directory itself", async () => {
     const dataDir = await makeTempDir();
 
