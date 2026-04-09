@@ -293,11 +293,8 @@ const hostDaemonNonProvisionCommandSchema = z.discriminatedUnion("type", [
   turnSteerCommandSchema,
   threadStopCommandSchema,
   threadRenameCommandSchema,
-<<<<<<< HEAD
   threadDeletedCommandSchema,
-=======
   hostSyncRuntimeMaterialCommandSchema,
->>>>>>> ff8d15f4 (Add sandbox runtime material sync)
   hostListFilesCommandSchema,
   hostReadFileCommandSchema,
   providerListCommandSchema,
@@ -339,13 +336,10 @@ export const hostDaemonCommandResultSchemaByType = {
   "turn.steer": z.object({}),
   "thread.stop": z.object({}),
   "thread.rename": z.object({}),
-<<<<<<< HEAD
   "thread.deleted": z.object({}),
-=======
   "host.sync_runtime_material": z.object({
     appliedVersion: z.string().min(1),
   }),
->>>>>>> ff8d15f4 (Add sandbox runtime material sync)
   "host.list_files": fileListResultSchema,
   "host.read_file": fileReadResultSchema,
   "provider.list": z.object({

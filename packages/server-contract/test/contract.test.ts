@@ -173,6 +173,8 @@ describe("server-contract canonical schemas", () => {
     expect(
       createHostJoinRequestSchema.parse({}),
     ).toEqual({});
+
+    expect(
       createHostJoinRequestSchema.parse({
         hostType: "ephemeral",
         provider: "e2b",

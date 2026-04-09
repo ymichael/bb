@@ -2,7 +2,6 @@ import { z } from "zod";
 import { cloudAuthProviderIdSchema } from "@bb/agent-providers";
 import {
   getProjectPathValidationMessage,
-  hostTypeSchema,
   normalizeProjectPathInput,
   projectSchema,
   projectSourceSchema,
