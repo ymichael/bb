@@ -2,18 +2,24 @@ import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { serverConfig, commonConfig } from "../packages/config/dist/server.js";
 import {
   bold, cyan, dim, green, red, yellow,
   log, beginStep, endStep,
   waitForHealth, build, createOutputBuffer,
 } from "./lib/script-helpers.mjs";
+import {
+  DEFAULTS,
+  resolveDataDir,
+  resolveHostDaemonPort,
+  resolveNodeEnvironment,
+  resolveServerPort,
+} from "./lib/runtime-config.mjs";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, "..");
 
-const dataDir = commonConfig.BB_DATA_DIR;
-const serverPort = serverConfig.BB_SERVER_PORT;
+const dataDir = resolveDataDir({ defaultDirName: DEFAULTS.dataDir.prod });
+const serverPort = resolveServerPort({ mode: "prod" });
 const daemonLockFile = join(dataDir, "daemon.lock");
 const daemonLockDir = `${daemonLockFile}.lock`;
 const logDir = join(dataDir, "logs");
@@ -58,7 +64,7 @@ async function main() {
   const serverUrl = `http://127.0.0.1:${serverPort}`;
   const sharedEnv = {
     ...process.env,
-    NODE_ENV: "production",
+    NODE_ENV: resolveNodeEnvironment({ mode: "prod" }),
     BB_LOG_FORMAT: "pretty",
   };
 
@@ -113,7 +119,7 @@ async function main() {
     },
   });
 
-  const daemonUrl = `http://localhost:${sharedEnv.BB_HOST_DAEMON_PORT ?? 3001}`;
+  const daemonUrl = `http://localhost:${sharedEnv.BB_HOST_DAEMON_PORT ?? resolveHostDaemonPort({ mode: "prod" })}`;
 
   try {
     await waitForHealth(`${daemonUrl}/health`, daemonProcess);

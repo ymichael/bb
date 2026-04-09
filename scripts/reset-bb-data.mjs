@@ -2,15 +2,20 @@ import { existsSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, resolve } from "node:path";
 import readline from "node:readline/promises";
-import { DEFAULTS } from "../packages/config/dist/defaults.js";
 import {
   bold, cyan, dim, green, yellow,
   log, endStep,
 } from "./lib/script-helpers.mjs";
+import {
+  DEFAULTS,
+  resolveDataDir as resolveConfiguredDataDir,
+} from "./lib/runtime-config.mjs";
 
-const defaultDataDir = resolve(homedir(), DEFAULTS.dataDir.prod);
-const defaultDevDataDir = resolve(homedir(), DEFAULTS.dataDir.dev);
-const defaultDevDaemonDataDir = resolve(homedir(), `${DEFAULTS.dataDir.dev}-host-daemon`);
+const defaultDataDir = resolveConfiguredDataDir({ defaultDirName: DEFAULTS.dataDir.prod });
+const defaultDevDataDir = resolveConfiguredDataDir({ defaultDirName: DEFAULTS.dataDir.dev });
+const defaultDevDaemonDataDir = resolveConfiguredDataDir({
+  defaultDirName: `${DEFAULTS.dataDir.dev}-host-daemon`,
+});
 
 function resolveMode(argv) {
   const modeFlagIndex = argv.indexOf("--mode");
@@ -27,12 +32,6 @@ function resolveMode(argv) {
 }
 
 function resolveDataDir(mode) {
-  const preferred = process.env.BB_DATA_DIR?.trim();
-  if (preferred) {
-    return resolve(preferred.startsWith("~/")
-      ? resolve(homedir(), preferred.slice(2))
-      : preferred);
-  }
   return mode === "dev" ? defaultDevDataDir : defaultDataDir;
 }
 
