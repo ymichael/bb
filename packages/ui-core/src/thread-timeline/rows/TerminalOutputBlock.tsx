@@ -1,8 +1,8 @@
 import { useMemo, type CSSProperties } from "react";
 import { ansiToHtml } from "../ansi.js";
+import { ExpandableLine } from "./ExpandableLine.js";
 import {
   EVENT_DETAIL_MAX_HEIGHT_CLASS,
-  EVENT_LARGE_DETAIL_MAX_HEIGHT_CLASS,
   useStickyBottomAutoScroll,
 } from "./shared.js";
 
@@ -34,17 +34,18 @@ export function TerminalOutputBlock({
 
   return (
     <div
-      className={`${EVENT_LARGE_DETAIL_MAX_HEIGHT_CLASS} overflow-hidden rounded-lg border border-border bg-card ${className ?? ""}`.trim()}
+      className={`overflow-hidden rounded-lg border border-border bg-card ${className ?? ""}`.trim()}
     >
       <div className="px-4 py-3 font-mono ui-text-sm leading-tight text-foreground">
         {command ? (
-          <div
-            className="overflow-hidden whitespace-pre-wrap break-words leading-tight"
-            style={COMMAND_LINE_CLAMP_STYLE}
-            title={`$ ${command}`}
+          <ExpandableLine
+            fullText={`$ ${command}`}
+            collapsedClassName="overflow-hidden whitespace-pre-wrap break-words max-h-[2lh]"
+            collapsedStyle={COMMAND_LINE_CLAMP_STYLE}
+            expandedClassName={`whitespace-pre-wrap break-words ${EVENT_DETAIL_MAX_HEIGHT_CLASS} overflow-auto`}
           >
             $ {command}
-          </div>
+          </ExpandableLine>
         ) : null}
         <pre
           ref={outputRef}

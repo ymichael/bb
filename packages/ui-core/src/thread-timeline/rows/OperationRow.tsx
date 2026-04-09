@@ -8,6 +8,7 @@ import type {
   ViewThreadOperationStatus,
 } from "@bb/domain";
 import { cx } from "../../utils.js";
+import { ExpandableLine } from "./ExpandableLine.js";
 import {
   EVENT_DETAIL_MAX_HEIGHT_CLASS,
   ExpandableDetailScrollArea,
@@ -148,16 +149,29 @@ function OperationDetailLines({
   truncateLines?: boolean;
   maxHeightClassName?: string;
 }) {
-  const lineClassName = truncateLines
-    ? "truncate font-mono ui-text-sm text-foreground/80"
-    : "font-mono ui-text-sm text-foreground/80";
+  const baseLineClassName = "font-mono ui-text-sm text-foreground/80";
   return (
     <ExpandableDetailScrollArea className="mt-0.5 space-y-0.5" maxHeightClassName={maxHeightClassName}>
-      {lines.map((line, index) => (
-        <div key={`${line}:${index}`} className={lineClassName}>
-          {line}
-        </div>
-      ))}
+      {lines.map((line, index) => {
+        const key = `${line}:${index}`;
+        if (truncateLines) {
+          return (
+            <ExpandableLine
+              key={key}
+              fullText={line}
+              className={baseLineClassName}
+              collapsedClassName="truncate"
+            >
+              {line}
+            </ExpandableLine>
+          );
+        }
+        return (
+          <div key={key} className={baseLineClassName}>
+            {line}
+          </div>
+        );
+      })}
     </ExpandableDetailScrollArea>
   );
 }

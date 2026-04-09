@@ -7,6 +7,7 @@ import {
 import type { ViewToolExploringMessage } from "@bb/domain";
 import { ExpandablePanel } from "../../disclosure.js";
 import { useLatestInitialExpanded } from "../latestInitialExpanded.js";
+import { ExpandableLine } from "./ExpandableLine.js";
 import {
   ExpandableDetailScrollArea,
   EventTitle,
@@ -83,13 +84,14 @@ export function ToolExploringRow({
             className="mt-0.5 space-y-0.5"
           >
             {detailLines.map((line, index) => (
-              <div
+              <ExpandableLine
                 key={`${message.id}:${index}`}
-                className="min-w-0 truncate font-mono ui-text-sm text-foreground/80"
-                title={line}
+                fullText={line}
+                className="min-w-0 font-mono ui-text-sm text-foreground/80"
+                collapsedClassName="truncate"
               >
                 {line}
-              </div>
+              </ExpandableLine>
             ))}
           </ExpandableDetailScrollArea>
         </ExpandablePanel>
