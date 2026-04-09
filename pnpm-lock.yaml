@@ -810,16 +810,13 @@ importers:
       '@bb/server-contract':
         specifier: workspace:*
         version: link:../server-contract
-      cross-spawn:
-        specifier: ^7.0.6
-        version: 7.0.6
+      picocolors:
+        specifier: ^1.1.1
+        version: 1.1.1
     devDependencies:
       '@bb/tsconfig':
         specifier: workspace:*
         version: link:../tsconfig
-      '@types/cross-spawn':
-        specifier: ^6.0.6
-        version: 6.0.6
       '@types/node':
         specifier: ^22.0.0
         version: 22.19.10

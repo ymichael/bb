@@ -1,4 +1,3 @@
-import { spawn } from "node:child_process";
 import { access, readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -16,6 +15,7 @@ import {
   resolveNodeEnvironment,
   resolveScriptMode,
 } from "../lib/script-config.js";
+import { runScriptProcess } from "../lib/process-helpers.js";
 import { waitForServerHealth } from "../lib/wait-for-server-health.js";
 
 export interface HostDaemonEnvironment extends NodeJS.ProcessEnv {
@@ -186,21 +186,13 @@ export async function main(): Promise<void> {
   const mode = resolveMode();
   const autoJoin = shouldAutoJoin();
   const env = await maybeAddAutoJoinEnv(buildEnv(mode, autoJoin), autoJoin);
-  const child = spawn(process.execPath, ["apps/host-daemon/dist/index.js"], {
+  process.exitCode = await runScriptProcess({
+    args: ["apps/host-daemon/dist/index.js"],
+    command: process.execPath,
     cwd: repoRoot,
     env,
     stdio: "inherit",
   });
-
-  process.on("SIGINT", () => child.kill("SIGINT"));
-  process.on("SIGTERM", () => child.kill("SIGTERM"));
-
-  const exitCode = await new Promise<number>((resolvePromise) => {
-    child.once("exit", (code) => {
-      resolvePromise(code ?? 1);
-    });
-  });
-  process.exitCode = exitCode;
 }
 
 if (

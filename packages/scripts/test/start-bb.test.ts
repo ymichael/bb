@@ -49,4 +49,14 @@ describe("start-bb", () => {
     expect(context.daemonPort).toBe(5555);
     expect(context.dataDir).toBe(path.join(os.homedir(), "custom-data"));
   });
+
+  it("preserves an explicit BB_LOG_FORMAT override", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("BB_LOG_FORMAT", "json");
+    const { resolveStartBbContext } = await importFreshStartBb();
+
+    const context = resolveStartBbContext();
+
+    expect(context.sharedEnv.BB_LOG_FORMAT).toBe("json");
+  });
 });

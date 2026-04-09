@@ -1,14 +1,24 @@
-import { execSync } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import type { Readable } from "node:stream";
+import {
+  spawnPortableOutputProcess,
+  type PortableOutputChildProcess,
+} from "@bb/process-utils";
+import pc from "picocolors";
+import { createTurboBuildCommand } from "./dev-restart-utils.js";
+import {
+  toExitCode,
+  waitForProcessExit,
+} from "./process-helpers.js";
 
 type OutputChunk = Buffer | string;
 
 interface BuildArgs {
   dataDir: string;
   repoRoot: string;
-  turboFilter: string;
+  turboFilters: string[];
 }
 
 export interface OutputBuffer {
@@ -18,16 +28,12 @@ export interface OutputBuffer {
 
 type Formatter = (value: string) => string;
 
-function format(colorCode: string): Formatter {
-  return (value) => `\x1b[${colorCode}m${value}\x1b[0m`;
-}
-
-export const dim = format("2");
-export const bold = format("1");
-export const green = format("32");
-export const red = format("31");
-export const cyan = format("36");
-export const yellow = format("33");
+export const dim: Formatter = pc.dim;
+export const bold: Formatter = pc.bold;
+export const green: Formatter = pc.green;
+export const red: Formatter = pc.red;
+export const cyan: Formatter = pc.cyan;
+export const yellow: Formatter = pc.yellow;
 
 export function log(icon: string, msg: string): void {
   process.stdout.write(`  ${icon}  ${msg}\n`);
@@ -48,7 +54,10 @@ export async function waitForHealth(
 ): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() <= deadline) {
-    if (childProcess && childProcess.exitCode !== null) {
+    if (
+      childProcess &&
+      (childProcess.exitCode !== null || childProcess.signalCode !== null)
+    ) {
       throw new Error("Process exited before becoming healthy");
     }
     try {
@@ -64,55 +73,58 @@ export async function waitForHealth(
   throw new Error(`Timed out waiting for health at ${url}`);
 }
 
-function getExecOutput(error: unknown): string {
-  if (!error || typeof error !== "object") {
-    return "";
-  }
-
-  const outputParts: string[] = [];
-
-  if ("stdout" in error) {
-    const stdout = error.stdout;
-    if (typeof stdout === "string") {
-      outputParts.push(stdout);
-    } else if (stdout instanceof Buffer) {
-      outputParts.push(stdout.toString("utf8"));
-    }
-  }
-
-  if ("stderr" in error) {
-    const stderr = error.stderr;
-    if (typeof stderr === "string") {
-      outputParts.push(stderr);
-    } else if (stderr instanceof Buffer) {
-      outputParts.push(stderr.toString("utf8"));
-    }
-  }
-
-  return outputParts.join("\n");
+function toChunkString(chunk: OutputChunk): string {
+  return typeof chunk === "string" ? chunk : chunk.toString("utf8");
 }
 
-export function build(args: BuildArgs): boolean {
+function readStream(stream: Readable): Promise<string> {
+  return new Promise((resolvePromise, rejectPromise) => {
+    const chunks: OutputChunk[] = [];
+    stream.on("data", (chunk: OutputChunk) => {
+      chunks.push(chunk);
+    });
+    stream.once("error", rejectPromise);
+    stream.once("end", () => {
+      resolvePromise(chunks.map(toChunkString).join(""));
+    });
+  });
+}
+
+async function readProcessOutput(
+  child: PortableOutputChildProcess,
+): Promise<string> {
+  const [stdout, stderr] = await Promise.all([
+    readStream(child.stdout),
+    readStream(child.stderr),
+  ]);
+
+  return [stdout, stderr].filter((value) => value.length > 0).join("\n");
+}
+
+export async function build(args: BuildArgs): Promise<boolean> {
   const buildLogFile = join(args.dataDir, "build.log");
   beginStep("Building packages");
   const start = Date.now();
+  const buildCommand = createTurboBuildCommand(args.turboFilters);
+  const child = spawnPortableOutputProcess({
+    args: buildCommand.args,
+    command: buildCommand.command,
+    cwd: args.repoRoot,
+    env: process.env,
+  });
+  const outputPromise = readProcessOutput(child);
 
-  try {
-    execSync(`pnpm exec turbo run build ${args.turboFilter}`, {
-      cwd: args.repoRoot,
-      encoding: "utf8",
-      env: process.env,
-      maxBuffer: 10 * 1024 * 1024,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-  } catch (error) {
+  const result = await waitForProcessExit(child);
+  if (toExitCode(result) !== 0) {
+    const output = await outputPromise;
     mkdirSync(dirname(buildLogFile), { recursive: true });
-    writeFileSync(buildLogFile, getExecOutput(error), "utf8");
+    writeFileSync(buildLogFile, output, "utf8");
     endStep(red("✗"), `Build failed — see ${cyan(buildLogFile)}`);
     process.exitCode = 1;
     return false;
   }
 
+  await outputPromise;
   const elapsed = ((Date.now() - start) / 1000).toFixed(1);
   endStep(green("✓"), `Build succeeded ${dim(`(${elapsed}s)`)}`);
   return true;

@@ -1,4 +1,3 @@
-import { spawn } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
 import { rmSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -9,6 +8,13 @@ import {
   DEV_SUPERVISOR_RESTART_EXIT_CODE,
   resolveSupervisorPidPath,
 } from "./dev-restart-utils.js";
+import {
+  installTerminationSignalForwarding,
+  killProcessIfRunning,
+  runScriptProcess,
+  spawnScriptProcess,
+  waitForProcessExit,
+} from "./process-helpers.js";
 
 interface ChildExitResult {
   code: number;
@@ -46,7 +52,9 @@ function formatExit(code: number, signal: NodeJS.Signals | null): string {
 }
 
 function spawnChildProcess(args: SpawnChildArgs): ChildProcess {
-  return spawn(args.command, args.args, {
+  return spawnScriptProcess({
+    args: args.args,
+    command: args.command,
     cwd: args.cwd,
     env: {
       ...process.env,
@@ -58,43 +66,18 @@ function spawnChildProcess(args: SpawnChildArgs): ChildProcess {
 }
 
 function waitForChildExit(child: ChildProcess): Promise<ChildExitResult> {
-  return new Promise((resolvePromise) => {
-    child.once("error", () => {
-      resolvePromise({ code: 1, signal: null });
-    });
-
-    child.once("exit", (code, signal) => {
-      resolvePromise({
-        code: code ?? 1,
-        signal,
-      });
-    });
-  });
+  return waitForProcessExit(child);
 }
 
 async function runBuild(args: BuildArgs): Promise<boolean> {
   const buildCommand = createTurboBuildCommand(args.filters);
-  const child = spawn(buildCommand.command, buildCommand.args, {
+  const exitCode = await runScriptProcess({
+    args: buildCommand.args,
+    command: buildCommand.command,
     cwd: args.cwd,
     env: process.env,
     stdio: "inherit",
   });
-
-  const exitCode = await new Promise<number>((resolvePromise) => {
-    child.once("error", () => {
-      resolvePromise(1);
-    });
-
-    child.once("exit", (code, signal) => {
-      if (signal) {
-        resolvePromise(1);
-        return;
-      }
-
-      resolvePromise(code ?? 1);
-    });
-  });
-
   return exitCode === 0;
 }
 
@@ -118,12 +101,7 @@ export async function runDevSupervisor(options: DevSupervisorOptions): Promise<v
     }
   };
 
-  process.on("SIGINT", () => {
-    requestStop("SIGINT");
-  });
-  process.on("SIGTERM", () => {
-    requestStop("SIGTERM");
-  });
+  const removeSignalForwarding = installTerminationSignalForwarding(requestStop);
   process.on("SIGUSR1", () => {
     if (stopRequested || restartRequested) {
       return;
@@ -134,8 +112,8 @@ export async function runDevSupervisor(options: DevSupervisorOptions): Promise<v
       `[dev-supervisor:${options.serviceName}] Restart requested.\n`,
     );
 
-    if (activeChild && activeChild.exitCode === null && activeChild.signalCode === null) {
-      activeChild.kill("SIGTERM");
+    if (activeChild) {
+      killProcessIfRunning(activeChild, "SIGTERM");
     }
   });
 
@@ -155,6 +133,7 @@ export async function runDevSupervisor(options: DevSupervisorOptions): Promise<v
 
     if (stopRequested) {
       process.exitCode = 0;
+      removeSignalForwarding();
       return;
     }
 
@@ -185,6 +164,7 @@ export async function runDevSupervisor(options: DevSupervisorOptions): Promise<v
       `[dev-supervisor:${options.serviceName}] Child exited unexpectedly with ${formatExit(code, signal)}.\n`,
     );
     process.exitCode = code !== 0 ? code : 1;
+    removeSignalForwarding();
     return;
   }
 }

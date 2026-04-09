@@ -1,4 +1,3 @@
-import { spawn } from "node:child_process";
 import { readFile, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -6,6 +5,7 @@ import {
   createTurboBuildCommand,
   resolveSupervisorPidPath,
 } from "../lib/dev-restart-utils.js";
+import { runScriptProcess } from "../lib/process-helpers.js";
 
 type RestartTarget = "both" | "host-daemon" | "server";
 
@@ -77,27 +77,13 @@ export async function readRunningSupervisorPid(serviceName: string): Promise<num
 
 async function runBuild(filters: string[]): Promise<boolean> {
   const buildCommand = createTurboBuildCommand(filters);
-  const child = spawn(buildCommand.command, buildCommand.args, {
+  const exitCode = await runScriptProcess({
+    args: buildCommand.args,
+    command: buildCommand.command,
     cwd: process.cwd(),
     env: process.env,
     stdio: "inherit",
   });
-
-  const exitCode = await new Promise<number>((resolvePromise) => {
-    child.once("error", () => {
-      resolvePromise(1);
-    });
-
-    child.once("exit", (code, signal) => {
-      if (signal) {
-        resolvePromise(1);
-        return;
-      }
-
-      resolvePromise(code ?? 1);
-    });
-  });
-
   return exitCode === 0;
 }
 

@@ -53,11 +53,10 @@
     "@bb/host-daemon-contract": "workspace:*",
     "@bb/process-utils": "workspace:*",
     "@bb/server-contract": "workspace:*",
-    "cross-spawn": "^7.0.6"
+    "picocolors": "^1.1.1"
   },
   "devDependencies": {
     "@bb/tsconfig": "workspace:*",
-    "@types/cross-spawn": "^6.0.6",
     "@types/node": "^22.0.0",
     "typescript": "^5.7.0",
     "vitest": "^4.0.18"

@@ -1,4 +1,3 @@
-import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -10,6 +9,13 @@ import {
 import { commonConfig } from "@bb/config/common";
 import { hostDaemonEntrypointConfig } from "@bb/config/host-daemon-entrypoint";
 import { hostDaemonConfig } from "@bb/config/host-daemon";
+import {
+  installTerminationSignalForwarding,
+  killProcessIfRunning,
+  spawnScriptProcess,
+  toExitCode,
+  waitForProcessExit,
+} from "../lib/process-helpers.js";
 import { resolveNodeEnvironment, resolveScriptMode } from "../lib/script-config.js";
 
 interface StartHostDaemonContext {
@@ -62,11 +68,11 @@ export async function main(): Promise<void> {
 
   process.stdout.write(`\n  ${bold("bb host-daemon")}\n\n`);
 
-  if (!build({
+  if (!(await build({
     dataDir: context.dataDir,
     repoRoot,
-    turboFilter: "--filter=@bb/host-daemon --filter=@bb/cli",
-  })) {
+    turboFilters: ["@bb/host-daemon", "@bb/cli"],
+  }))) {
     return;
   }
 
@@ -92,11 +98,13 @@ export async function main(): Promise<void> {
   beginStep(enrollment.enrolled ? "Starting daemon" : "Enrolling and starting daemon");
 
   const outputBuffer = createOutputBuffer();
-  const daemonProcess = spawn(process.execPath, [runHostDaemonCommandPath], {
+  const daemonProcess = spawnScriptProcess({
+    args: [runHostDaemonCommandPath],
+    command: process.execPath,
     cwd: repoRoot,
     env: {
       ...process.env,
-      BB_LOG_FORMAT: "pretty",
+      BB_LOG_FORMAT: process.env.BB_LOG_FORMAT ?? "pretty",
       NODE_ENV: resolveNodeEnvironment(mode),
     },
     stdio: ["ignore", "pipe", "inherit"],
@@ -117,46 +125,42 @@ export async function main(): Promise<void> {
     shuttingDown = true;
     process.stdout.write("\n");
     log(dim("●"), "Shutting down");
-    daemonProcess.kill(signal);
+    killProcessIfRunning(daemonProcess, signal);
   };
 
-  process.on("SIGINT", () => shutdown("SIGINT"));
-  process.on("SIGTERM", () => shutdown("SIGTERM"));
+  const removeSignalForwarding = installTerminationSignalForwarding(shutdown);
 
   try {
-    await waitForHealth(`http://localhost:${context.daemonPort}/health`, daemonProcess);
-  } catch {
-    endStep(red("✗"), "Host daemon failed to start");
-    log(" ", dim(`lock: ${context.daemonLockDir}`));
-    log(" ", dim(`logs: ${context.logDir}/`));
+    try {
+      await waitForHealth(`http://localhost:${context.daemonPort}/health`, daemonProcess);
+    } catch {
+      endStep(red("✗"), "Host daemon failed to start");
+      log(" ", dim(`lock: ${context.daemonLockDir}`));
+      log(" ", dim(`logs: ${context.logDir}/`));
+      outputBuffer.flush();
+      process.exitCode = daemonProcess.exitCode ?? 1;
+      return;
+    }
+
+    endStep(green("✓"), "Host daemon running");
+
+    process.stdout.write("\n");
+    log(green("●"), bold("bb host-daemon is ready"));
+    process.stdout.write("\n");
+    log(" ", `${dim("server")}  ${cyan(context.serverUrl)}`);
+    log(" ", `${dim("port")}    ${context.daemonPort}`);
+    log(" ", `${dim("data")}    ${context.dataDir}`);
+    log(" ", `${dim("logs")}    ${context.logDir}/`);
+    log(" ", `${dim("lock")}    ${context.daemonLockFile}`);
+    log(" ", `${dim("auth")}    ${context.authFile}`);
+    process.stdout.write("\n");
+    log(" ", dim("Press Ctrl+C to stop"));
+
     outputBuffer.flush();
-    process.exitCode = daemonProcess.exitCode ?? 1;
-    return;
+    process.exitCode = toExitCode(await waitForProcessExit(daemonProcess));
+  } finally {
+    removeSignalForwarding();
   }
-
-  endStep(green("✓"), "Host daemon running");
-
-  process.stdout.write("\n");
-  log(green("●"), bold("bb host-daemon is ready"));
-  process.stdout.write("\n");
-  log(" ", `${dim("server")}  ${cyan(context.serverUrl)}`);
-  log(" ", `${dim("port")}    ${context.daemonPort}`);
-  log(" ", `${dim("data")}    ${context.dataDir}`);
-  log(" ", `${dim("logs")}    ${context.logDir}/`);
-  log(" ", `${dim("lock")}    ${context.daemonLockFile}`);
-  log(" ", `${dim("auth")}    ${context.authFile}`);
-  process.stdout.write("\n");
-  log(" ", dim("Press Ctrl+C to stop"));
-
-  outputBuffer.flush();
-
-  const exitCode = await new Promise<number>((resolvePromise) => {
-    daemonProcess.once("exit", (code) => {
-      resolvePromise(code ?? 1);
-    });
-  });
-
-  process.exitCode = exitCode;
 }
 
 if (

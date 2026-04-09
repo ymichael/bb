@@ -1,8 +1,8 @@
-import { spawn } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import type { PortableChildProcess } from "@bb/process-utils";
 import {
   bold, cyan, dim, green, red, yellow,
   log, beginStep, endStep,
@@ -11,6 +11,13 @@ import {
 import type { OutputBuffer } from "../lib/script-helpers.js";
 import { commonConfig } from "@bb/config/common";
 import { serverConfig } from "@bb/config/server";
+import {
+  installTerminationSignalForwarding,
+  killProcessIfRunning,
+  spawnScriptProcess,
+  toExitCode,
+  waitForProcessExit,
+} from "../lib/process-helpers.js";
 import { resolveNodeEnvironment, resolveScriptMode } from "../lib/script-config.js";
 
 interface StartBbContext {
@@ -53,14 +60,16 @@ export function resolveStartBbContext(): StartBbContext {
     serverUrl,
     sharedEnv: {
       ...process.env,
-      BB_LOG_FORMAT: "pretty",
+      BB_LOG_FORMAT: process.env.BB_LOG_FORMAT ?? "pretty",
       NODE_ENV: resolveNodeEnvironment(mode),
     },
   };
 }
 
-function spawnManagedProcess(args: ManagedSpawnArgs): ChildProcess {
-  const child = spawn(args.command, args.args, {
+function spawnManagedProcess(args: ManagedSpawnArgs): PortableChildProcess {
+  const child = spawnScriptProcess({
+    args: args.args,
+    command: args.command,
     cwd: repoRoot,
     env: args.env,
     stdio: ["ignore", "pipe", "inherit"],
@@ -80,11 +89,11 @@ export async function main(): Promise<void> {
 
   process.stdout.write(`\n  ${bold("bb")}\n\n`);
 
-  if (!build({
+  if (!(await build({
     dataDir: context.dataDir,
     repoRoot,
-    turboFilter: "--filter=@bb/app --filter=@bb/server --filter=@bb/host-daemon --filter=@bb/cli",
-  })) {
+    turboFilters: ["@bb/app", "@bb/server", "@bb/host-daemon", "@bb/cli"],
+  }))) {
     return;
   }
 
@@ -114,81 +123,85 @@ export async function main(): Promise<void> {
     shuttingDown = true;
     process.stdout.write("\n");
     log(dim("●"), "Shutting down");
-    if (daemonProcess && !daemonProcess.killed) {
-      daemonProcess.kill(signal);
+    if (daemonProcess) {
+      killProcessIfRunning(daemonProcess, signal);
     }
-    serverProcess.kill(signal);
+    killProcessIfRunning(serverProcess, signal);
   };
 
-  process.on("SIGINT", () => shutdown("SIGINT"));
-  process.on("SIGTERM", () => shutdown("SIGTERM"));
+  const removeSignalForwarding = installTerminationSignalForwarding(shutdown);
 
   try {
-    await waitForHealth(`${context.serverUrl}/health`, serverProcess);
-  } catch {
-    endStep(red("✗"), "Server failed to start (health check timed out)");
-    log(" ", dim(`Check logs: ${context.logDir}/`));
-    outputBuffer.flush();
-    shutdown("SIGTERM");
-    return;
-  }
+    try {
+      await waitForHealth(`${context.serverUrl}/health`, serverProcess);
+    } catch {
+      endStep(red("✗"), "Server failed to start (health check timed out)");
+      log(" ", dim(`Check logs: ${context.logDir}/`));
+      outputBuffer.flush();
+      shutdown("SIGTERM");
+      return;
+    }
 
-  endStep(green("✓"), `Server listening on ${cyan(context.serverUrl)}`);
+    endStep(green("✓"), `Server listening on ${cyan(context.serverUrl)}`);
 
-  beginStep("Starting host daemon");
+    beginStep("Starting host daemon");
 
-  daemonProcess = spawnManagedProcess({
-    args: [runHostDaemonCommandPath, "--auto-join"],
-    command: process.execPath,
-    env: {
-      ...context.sharedEnv,
-      BB_SERVER_URL: context.serverUrl,
-    },
-    outputBuffer,
-  });
-
-  try {
-    await waitForHealth(`http://localhost:${context.daemonPort}/health`, daemonProcess);
-  } catch {
-    endStep(red("✗"), "Host daemon failed to start");
-    log(" ", dim(`lock: ${context.daemonLockDir}`));
-    log(" ", dim(`logs: ${context.logDir}/`));
-    outputBuffer.flush();
-    shutdown("SIGTERM");
-    return;
-  }
-
-  endStep(green("✓"), "Host daemon running");
-
-  process.stdout.write("\n");
-  log(green("●"), bold("bb is ready"));
-  process.stdout.write("\n");
-  log(" ", `${dim("app")}     ${cyan(context.serverUrl)}`);
-  log(" ", `${dim("data")}    ${context.dataDir}`);
-  log(" ", `${dim("db")}      ${context.dbPath}`);
-  log(" ", `${dim("logs")}    ${context.logDir}/`);
-  log(" ", `${dim("lock")}    ${context.daemonLockFile}`);
-  process.stdout.write("\n");
-  log(" ", dim("Press Ctrl+C to stop"));
-
-  outputBuffer.flush();
-
-  const exitCode = await new Promise<number>((resolvePromise) => {
-    serverProcess.once("exit", (code, signal) => {
-      if (daemonProcess && !daemonProcess.killed) {
-        daemonProcess.kill(signal ?? "SIGTERM");
-      }
-      resolvePromise(code ?? 1);
+    daemonProcess = spawnManagedProcess({
+      args: [runHostDaemonCommandPath, "--auto-join"],
+      command: process.execPath,
+      env: {
+        ...context.sharedEnv,
+        BB_SERVER_URL: context.serverUrl,
+      },
+      outputBuffer,
     });
-    daemonProcess?.once("exit", (code, signal) => {
-      if (!serverProcess.killed) {
-        serverProcess.kill(signal ?? "SIGTERM");
-      }
-      resolvePromise(code ?? 1);
-    });
-  });
 
-  process.exitCode = exitCode;
+    try {
+      await waitForHealth(`http://localhost:${context.daemonPort}/health`, daemonProcess);
+    } catch {
+      endStep(red("✗"), "Host daemon failed to start");
+      log(" ", dim(`lock: ${context.daemonLockDir}`));
+      log(" ", dim(`logs: ${context.logDir}/`));
+      outputBuffer.flush();
+      shutdown("SIGTERM");
+      return;
+    }
+
+    endStep(green("✓"), "Host daemon running");
+
+    process.stdout.write("\n");
+    log(green("●"), bold("bb is ready"));
+    process.stdout.write("\n");
+    log(" ", `${dim("app")}     ${cyan(context.serverUrl)}`);
+    log(" ", `${dim("data")}    ${context.dataDir}`);
+    log(" ", `${dim("db")}      ${context.dbPath}`);
+    log(" ", `${dim("logs")}    ${context.logDir}/`);
+    log(" ", `${dim("lock")}    ${context.daemonLockFile}`);
+    process.stdout.write("\n");
+    log(" ", dim("Press Ctrl+C to stop"));
+
+    outputBuffer.flush();
+    const firstExit = await Promise.race([
+      waitForProcessExit(serverProcess).then((result) => ({
+        process: "server" as const,
+        result,
+      })),
+      waitForProcessExit(daemonProcess).then((result) => ({
+        process: "daemon" as const,
+        result,
+      })),
+    ]);
+
+    if (firstExit.process === "server") {
+      killProcessIfRunning(daemonProcess, firstExit.result.signal ?? "SIGTERM");
+    } else {
+      killProcessIfRunning(serverProcess, firstExit.result.signal ?? "SIGTERM");
+    }
+
+    process.exitCode = toExitCode(firstExit.result);
+  } finally {
+    removeSignalForwarding();
+  }
 }
 
 if (

@@ -1,6 +1,6 @@
-import crossSpawn from "cross-spawn";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { runScriptProcess } from "../lib/process-helpers.js";
 import { resolveScriptMode } from "../lib/script-config.js";
 
 interface CliExecution {
@@ -34,21 +34,13 @@ export function resolveCliExecution(cliArgs: string[] = process.argv.slice(2)): 
 
 export async function main(cliArgs: string[] = process.argv.slice(2)): Promise<void> {
   const execution = resolveCliExecution(cliArgs);
-  const child = crossSpawn(execution.command, execution.args, {
+  process.exitCode = await runScriptProcess({
+    args: execution.args,
+    command: execution.command,
     cwd: execution.cwd,
     env: execution.env,
     stdio: "inherit",
   });
-
-  process.on("SIGINT", () => child.kill("SIGINT"));
-  process.on("SIGTERM", () => child.kill("SIGTERM"));
-
-  const exitCode = await new Promise<number>((resolvePromise) => {
-    child.once("exit", (code: number | null) => {
-      resolvePromise(code ?? 1);
-    });
-  });
-  process.exitCode = exitCode;
 }
 
 if (
