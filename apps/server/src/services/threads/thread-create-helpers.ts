@@ -120,7 +120,6 @@ export type EnvironmentProvisionCommandArgs =
       sourcePath: string;
       targetPath: string;
       branchName: string;
-      setupScript: string;
       setupTimeoutMs: number;
     };
 
@@ -144,7 +143,6 @@ export function buildEnvironmentProvisionCommand(
           sourcePath: args.sourcePath,
           targetPath: args.targetPath,
           branchName: args.branchName,
-          setupScript: args.setupScript,
           setupTimeoutMs: args.setupTimeoutMs,
         }
   );

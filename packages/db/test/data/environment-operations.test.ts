@@ -83,7 +83,6 @@ describe("environment operations", () => {
         sourcePath: "/tmp/source",
         targetPath: "/tmp/target",
         branchName: "main",
-        setupScript: "setup.sh",
         setupTimeoutMs: 1000,
       }),
     });
@@ -169,7 +168,6 @@ describe("environment operations", () => {
         sourcePath: "/tmp/source",
         targetPath: "/tmp/target",
         branchName: "main",
-        setupScript: "setup.sh",
         setupTimeoutMs: 1000,
       }),
     });
@@ -184,7 +182,6 @@ describe("environment operations", () => {
         sourcePath: "/tmp/source",
         targetPath: "/tmp/target",
         branchName: "main",
-        setupScript: "setup.sh",
         setupTimeoutMs: 1000,
       }),
     });

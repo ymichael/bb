@@ -26,13 +26,12 @@ function normalizeProvisioningErrorDetail(detail: string): string {
   if (!normalized) return normalized;
   if (
     !normalized.startsWith(".bb-env-setup.sh failed:")
-    && !normalized.startsWith(".bb-env-setup.ts failed:")
   ) {
     return normalized;
   }
 
   normalized = normalized.replace(
-    /^(\.bb-env-setup\.(?:sh|ts) failed:)\s*•\s*/i,
+    /^(\.bb-env-setup\.sh failed:)\s*•\s*/i,
     "$1\n• ",
   );
   return normalized.replace(/\s+•\s+/g, "\n• ");

@@ -2,7 +2,6 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { DEFAULT_ENV_SETUP_SCRIPT_NAME } from "@bb/domain";
 import { Workspace } from "../src/workspace.js";
 import { createWorktree } from "../src/provisioning.js";
 import { promoteWorkspace, demoteWorkspace } from "../src/promote.js";
@@ -38,7 +37,6 @@ async function createPrimaryAndWorktree(): Promise<{
     sourcePath: primaryRepo,
     targetPath: worktreePath,
     branchName: "bb/env-test",
-    scriptName: DEFAULT_ENV_SETUP_SCRIPT_NAME,
     timeoutMs: 900000,
   });
   await fs.writeFile(path.join(worktreePath, "feature.txt"), "feature work\n", "utf8");

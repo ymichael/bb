@@ -2,7 +2,6 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import {
   DEFAULT_ENV_SETUP_SCRIPT_NAME,
-  LEGACY_POSIX_ENV_SETUP_SCRIPT_NAME,
   type ProvisioningTranscriptEntry,
 } from "@bb/domain";
 import { spawnPortablePipedProcess } from "@bb/process-utils";
@@ -16,8 +15,6 @@ export interface CreateWorkspaceArgs {
   sourcePath: string;
   targetPath: string;
   branchName: string;
-  /** Setup script filename. Controlled by the server. */
-  scriptName: string;
   /** Setup script timeout in ms. Controlled by the server. */
   timeoutMs: number;
   onProgress?: ProgressCallback;
@@ -25,7 +22,6 @@ export interface CreateWorkspaceArgs {
 
 export interface RunSetupScriptArgs {
   workspacePath: string;
-  scriptName: string;
   timeoutMs: number;
   onProgress?: ProgressCallback;
 }
@@ -37,25 +33,6 @@ export interface RemoveWorktreeArgs {
 
 const GITHUB_HOSTNAME = "github.com";
 const GITHUB_TOKEN_ENV_KEY = "GITHUB_TOKEN";
-const SETUP_SCRIPT_NODE_TRANSFORM_FLAG = "--experimental-transform-types";
-const SETUP_SCRIPT_NODE_TS_EXTENSIONS = new Set([
-  ".cts",
-  ".mts",
-  ".ts",
-]);
-const SETUP_SCRIPT_NODE_JS_EXTENSIONS = new Set([
-  ".cjs",
-  ".js",
-  ".mjs",
-]);
-const LEGACY_POSIX_SETUP_SCRIPT_WARNING =
-  `Legacy ${LEGACY_POSIX_ENV_SETUP_SCRIPT_NAME} support is temporary. ` +
-  `Migrate to ${DEFAULT_ENV_SETUP_SCRIPT_NAME}.`;
-
-interface ResolvedSetupScript {
-  scriptName: string;
-  scriptPath: string;
-}
 
 interface SetupScriptCommand {
   command: string;
@@ -65,7 +42,6 @@ interface SetupScriptCommand {
 
 interface BuildSetupScriptCommandArgs {
   platform: NodeJS.Platform;
-  scriptName: string;
   scriptPath: string;
 }
 
@@ -183,78 +159,26 @@ async function ensureWorkspaceParentDirectory(targetPath: string): Promise<void>
   await fs.mkdir(path.dirname(targetPath), { recursive: true });
 }
 
-async function resolveSetupScript(
-  args: RunSetupScriptArgs,
-): Promise<ResolvedSetupScript | null> {
-  const requestedScriptPath = path.join(args.workspacePath, args.scriptName);
-  if (await pathExists(requestedScriptPath)) {
-    return {
-      scriptName: args.scriptName,
-      scriptPath: requestedScriptPath,
-    };
-  }
-
-  if (
-    args.scriptName === DEFAULT_ENV_SETUP_SCRIPT_NAME
-    && process.platform !== "win32"
-  ) {
-    // TODO(platform): Remove this Unix-only fallback after repositories migrate
-    // to the supported .bb-env-setup.ts contract.
-    const legacyScriptPath = path.join(
-      args.workspacePath,
-      LEGACY_POSIX_ENV_SETUP_SCRIPT_NAME,
-    );
-    if (await pathExists(legacyScriptPath)) {
-      return {
-        scriptName: LEGACY_POSIX_ENV_SETUP_SCRIPT_NAME,
-        scriptPath: legacyScriptPath,
-      };
-    }
-  }
-
-  return null;
+async function resolveSetupScriptPath(workspacePath: string): Promise<string | null> {
+  const scriptPath = path.join(workspacePath, DEFAULT_ENV_SETUP_SCRIPT_NAME);
+  return (await pathExists(scriptPath)) ? scriptPath : null;
 }
 
 export function buildSetupScriptCommand(
   args: BuildSetupScriptCommandArgs,
 ): SetupScriptCommand {
-  const extension = path.extname(args.scriptName).toLowerCase();
-
-  if (SETUP_SCRIPT_NODE_TS_EXTENSIONS.has(extension)) {
-    return {
-      command: process.execPath,
-      args: [SETUP_SCRIPT_NODE_TRANSFORM_FLAG, args.scriptPath],
-      text: `node ${SETUP_SCRIPT_NODE_TRANSFORM_FLAG} ${args.scriptName}`,
-    };
+  if (args.platform === "win32") {
+    throw new WorkspaceError(
+      "setup_script_failed",
+      `POSIX shell setup scripts are not supported on Windows: ${DEFAULT_ENV_SETUP_SCRIPT_NAME}`,
+    );
   }
 
-  if (SETUP_SCRIPT_NODE_JS_EXTENSIONS.has(extension)) {
-    return {
-      command: process.execPath,
-      args: [args.scriptPath],
-      text: `node ${args.scriptName}`,
-    };
-  }
-
-  if (extension === ".sh") {
-    if (args.platform === "win32") {
-      throw new WorkspaceError(
-        "setup_script_failed",
-        `POSIX shell setup scripts are not supported on Windows: ${args.scriptName}`,
-      );
-    }
-
-    return {
-      command: "/bin/bash",
-      args: [args.scriptPath],
-      text: `/bin/bash ${args.scriptName}`,
-    };
-  }
-
-  throw new WorkspaceError(
-    "setup_script_failed",
-    `Unsupported setup script type: ${args.scriptName}`,
-  );
+  return {
+    command: "/bin/bash",
+    args: [args.scriptPath],
+    text: `/bin/bash ${DEFAULT_ENV_SETUP_SCRIPT_NAME}`,
+  };
 }
 
 export async function createWorktree(args: CreateWorkspaceArgs): Promise<{ path: string }> {
@@ -279,7 +203,6 @@ export async function createWorktree(args: CreateWorkspaceArgs): Promise<{ path:
     emitCwd({ onProgress: args.onProgress, keySuffix: "target", cwd: args.targetPath });
     await runSetupScript({
       workspacePath: args.targetPath,
-      scriptName: args.scriptName,
       timeoutMs: args.timeoutMs,
       onProgress: args.onProgress,
     });
@@ -330,7 +253,6 @@ export async function createClone(args: CreateWorkspaceArgs): Promise<{ path: st
 
     await runSetupScript({
       workspacePath: args.targetPath,
-      scriptName: args.scriptName,
       timeoutMs: args.timeoutMs,
       onProgress: args.onProgress,
     });
@@ -349,20 +271,16 @@ export async function createClone(args: CreateWorkspaceArgs): Promise<{ path: st
 export async function runSetupScript(
   args: RunSetupScriptArgs,
 ): Promise<{ ran: boolean; exitCode?: number; output?: string }> {
-  const resolvedScript = await resolveSetupScript(args);
-  if (!resolvedScript) {
+  const scriptPath = await resolveSetupScriptPath(args.workspacePath);
+  if (!scriptPath) {
     return { ran: false };
   }
 
   const command = buildSetupScriptCommand({
     platform: process.platform,
-    scriptName: resolvedScript.scriptName,
-    scriptPath: resolvedScript.scriptPath,
+    scriptPath,
   });
   const commandText = command.text;
-  if (resolvedScript.scriptName === LEGACY_POSIX_ENV_SETUP_SCRIPT_NAME) {
-    emitOutput(args.onProgress, "setup-legacy-warning", LEGACY_POSIX_SETUP_SCRIPT_WARNING);
-  }
   emitStep({ onProgress: args.onProgress, key: "setup", text: commandText, status: "started" });
   const startedAt = Date.now();
 
@@ -409,7 +327,7 @@ export async function runSetupScript(
       emitStep({ onProgress: args.onProgress, key: "setup", text: commandText, status: "failed", metadata: { durationMs } });
       throw new WorkspaceError(
         "setup_script_failed",
-        `Setup script timed out after ${timeoutMs}ms: ${resolvedScript.scriptPath}`,
+        `Setup script timed out after ${timeoutMs}ms: ${scriptPath}`,
       );
     }
 
@@ -417,7 +335,7 @@ export async function runSetupScript(
       emitStep({ onProgress: args.onProgress, key: "setup", text: commandText, status: "failed", metadata: { durationMs } });
       throw new WorkspaceError(
         "setup_script_failed",
-        `Setup script exited via signal ${result.signal}: ${resolvedScript.scriptPath}`,
+        `Setup script exited via signal ${result.signal}: ${scriptPath}`,
       );
     }
 
@@ -425,7 +343,7 @@ export async function runSetupScript(
       emitStep({ onProgress: args.onProgress, key: "setup", text: commandText, status: "failed", metadata: { durationMs } });
       throw new WorkspaceError(
         "setup_script_failed",
-        `Setup script failed with exit code ${result.exitCode}: ${resolvedScript.scriptPath}`,
+        `Setup script failed with exit code ${result.exitCode}: ${scriptPath}`,
       );
     }
 

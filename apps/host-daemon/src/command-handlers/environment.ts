@@ -135,7 +135,6 @@ export function toProvisionWorkspaceOptions(
         sourcePath: command.sourcePath,
         targetPath: command.targetPath,
         branchName: command.branchName,
-        scriptName: command.setupScript,
         timeoutMs: command.setupTimeoutMs,
         onProgress,
       };

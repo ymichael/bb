@@ -44,7 +44,6 @@ import {
   createThreadRecord,
   getThreadSafe,
   requireProjectExists,
-  SETUP_SCRIPT_NAME,
   SETUP_TIMEOUT_MS,
 } from "./thread-create-helpers.js";
 import {
@@ -306,7 +305,6 @@ async function createSandboxHostThread(
     sourcePath: args.cloneSource.repoUrl,
     targetPath: buildSandboxTargetPath(args.request.projectId, thread.id),
     workspaceProvisionType: "managed-clone",
-    setupScript: SETUP_SCRIPT_NAME,
     setupTimeoutMs: SETUP_TIMEOUT_MS,
   });
   requestEnvironmentProvision(deps, {
@@ -494,7 +492,6 @@ export async function createThreadFromRequest(
           thread.id,
         ),
         branchName: buildManagedBranchName(request, thread.id),
-        setupScript: SETUP_SCRIPT_NAME,
         setupTimeoutMs: SETUP_TIMEOUT_MS,
       });
       break;

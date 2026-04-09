@@ -37,7 +37,6 @@ import {
   buildEnvironmentProvisionCommand,
   buildManagedBranchNameFromSeed,
   buildManagedTargetPath,
-  SETUP_SCRIPT_NAME,
   SETUP_TIMEOUT_MS,
   requireSourceForHost,
 } from "../threads/thread-create-helpers.js";
@@ -616,7 +615,6 @@ export function queueManagedEnvironmentReprovision(
     sourcePath: source.path,
     targetPath,
     workspaceProvisionType: provisionType,
-    setupScript: SETUP_SCRIPT_NAME,
     setupTimeoutMs: SETUP_TIMEOUT_MS,
   });
 

@@ -70,7 +70,6 @@ export type {
 
 export {
   DEFAULT_ENV_SETUP_SCRIPT_NAME,
-  LEGACY_POSIX_ENV_SETUP_SCRIPT_NAME,
 } from "./setup-script.js";
 
 export {

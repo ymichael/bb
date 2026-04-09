@@ -16,7 +16,7 @@ import {
 } from "@bb/domain";
 import { z } from "zod";
 
-export const HOST_DAEMON_PROTOCOL_VERSION = 4 as const;
+export const HOST_DAEMON_PROTOCOL_VERSION = 5 as const;
 
 export const HOST_DAEMON_COMMAND_TYPES = [
   "thread.start",
@@ -183,8 +183,6 @@ const managedEnvironmentProvisionFieldsSchema = z.object({
   targetPath: z.string().min(1),
   /** Branch name */
   branchName: z.string().min(1),
-  /** Setup script filename to run after provisioning */
-  setupScript: z.string().min(1),
   /** Maximum time in ms to wait for the setup script */
   setupTimeoutMs: z.number().int().positive(),
 });

@@ -48,8 +48,6 @@ export interface ManagedWorkspaceBaseOpts extends ProvisionBase {
   targetPath: string;
   /** Branch name */
   branchName: string;
-  /** Setup script filename. Controlled by the server. */
-  scriptName: string;
   /** Setup script timeout in ms. Controlled by the server. */
   timeoutMs: number;
 }
@@ -307,7 +305,6 @@ async function provisionWorktree(
     sourcePath: opts.sourcePath,
     targetPath: opts.targetPath,
     branchName: opts.branchName,
-    scriptName: opts.scriptName,
     timeoutMs: opts.timeoutMs,
     onProgress: opts.onProgress,
   });
@@ -328,7 +325,6 @@ async function provisionClone(
     sourcePath: opts.sourcePath,
     targetPath: opts.targetPath,
     branchName: opts.branchName,
-    scriptName: opts.scriptName,
     timeoutMs: opts.timeoutMs,
     onProgress: opts.onProgress,
   });

@@ -1049,10 +1049,10 @@ describe("buildTimelineRows provisioning operation collapsing", () => {
         transcript: [{ type: "step", key: "provision", text: "Provisioning worktree", status: "started" }],
       }),
       provisioningOperation(2, "Provisioning environment", "pending", undefined, {
-        transcript: [{ type: "step", key: "setup", text: "running .bb-env-setup.ts", status: "started" }],
+        transcript: [{ type: "step", key: "setup", text: "running .bb-env-setup.sh", status: "started" }],
       }),
       provisioningOperation(3, "Provisioning environment", "pending", undefined, {
-        transcript: [{ type: "step", key: "setup", text: "ran .bb-env-setup.ts in 3s", status: "completed" }],
+        transcript: [{ type: "step", key: "setup", text: "ran .bb-env-setup.sh in 3s", status: "completed" }],
       }),
       provisioningOperation(4, "Provisioning ready", "completed", undefined, {
         transcript: [{ type: "step", key: "provision", text: "Provisioning worktree", status: "started" }],
@@ -1070,7 +1070,7 @@ describe("buildTimelineRows provisioning operation collapsing", () => {
     const setupEntry = rows[0]?.provisioning?.transcript?.find((e) => e.key === "setup");
     expect(setupEntry).toBeDefined();
     if (setupEntry?.type === "step") {
-      expect(setupEntry.text).toBe("ran .bb-env-setup.ts in 3s");
+      expect(setupEntry.text).toBe("ran .bb-env-setup.sh in 3s");
       expect(setupEntry.status).toBe("completed");
     }
     expect(rows[0]?.sourceSeqStart).toBe(1);
@@ -1291,10 +1291,10 @@ describe("buildTimelineRows provisioning operation collapsing", () => {
   it("collapses two provisioning updates into a single completed row", () => {
     const rows = getOperationRows([
       provisioningOperation(1, "Provisioning environment", "pending", undefined, {
-        transcript: [{ type: "step", key: "setup", text: "running .bb-env-setup.ts", status: "started" }],
+        transcript: [{ type: "step", key: "setup", text: "running .bb-env-setup.sh", status: "started" }],
       }),
       provisioningOperation(2, "Provisioning ready", "completed", undefined, {
-        transcript: [{ type: "step", key: "setup", text: "ran .bb-env-setup.ts in 3s", status: "completed" }],
+        transcript: [{ type: "step", key: "setup", text: "ran .bb-env-setup.sh in 3s", status: "completed" }],
       }),
     ]);
 
@@ -1304,7 +1304,7 @@ describe("buildTimelineRows provisioning operation collapsing", () => {
     expect(rows[0]?.sourceSeqStart).toBe(1);
     expect(rows[0]?.sourceSeqEnd).toBe(2);
     const setupEntry = rows[0]?.provisioning?.transcript?.find((e) => e.key === "setup");
-    expect(setupEntry?.text).toBe("ran .bb-env-setup.ts in 3s");
+    expect(setupEntry?.text).toBe("ran .bb-env-setup.sh in 3s");
     expect(setupEntry?.status).toBe("completed");
     expect(rows[0]?.detail).toBeUndefined();
   });

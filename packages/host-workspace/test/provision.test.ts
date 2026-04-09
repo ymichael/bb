@@ -102,7 +102,6 @@ describe("provisionWorkspace", () => {
         sourcePath: repoPath,
         targetPath,
         branchName: "bb/env-test",
-        scriptName: DEFAULT_ENV_SETUP_SCRIPT_NAME,
         timeoutMs: 900000,
       });
 
@@ -123,7 +122,6 @@ describe("provisionWorkspace", () => {
         sourcePath: repoPath,
         targetPath,
         branchName: "bb/env-destroy",
-        scriptName: DEFAULT_ENV_SETUP_SCRIPT_NAME,
         timeoutMs: 900000,
       });
 
@@ -137,17 +135,10 @@ describe("provisionWorkspace", () => {
       expect(worktrees.stdout).not.toContain(targetPath);
     });
 
-    it("runs setup script with custom scriptName", async () => {
-      const repoPath = await initRepo();
-      // Write a custom-named setup script
-      await fs.writeFile(
-        path.join(repoPath, "custom-setup.sh"),
-        "echo custom-setup-ran > setup-marker.txt\n",
-        "utf8",
-      );
-      await runGit(["add", "."], { cwd: repoPath });
-      await runGit(["commit", "-m", "Add custom setup script"], { cwd: repoPath });
-
+    it("runs the supported setup script after provisioning", async () => {
+      const repoPath = await initRepo({
+        setupScript: "echo worktree-setup-ran > setup-marker.txt\n",
+      });
       const parentDir = await makeTempDir("bb-provision-mwt-script-");
       const targetPath = path.join(parentDir, "env");
 
@@ -156,7 +147,6 @@ describe("provisionWorkspace", () => {
         sourcePath: repoPath,
         targetPath,
         branchName: "bb/env-script",
-        scriptName: "custom-setup.sh",
         timeoutMs: 900000,
       });
 
@@ -164,11 +154,11 @@ describe("provisionWorkspace", () => {
         path.join(ws.path, "setup-marker.txt"),
         "utf8",
       );
-      expect(marker.trim()).toBe("custom-setup-ran");
+      expect(marker.trim()).toBe("worktree-setup-ran");
     });
 
     it("rolls back on setup script failure", async () => {
-      const repoPath = await initRepo({ setupScript: 'throw new Error("failing");\n' });
+      const repoPath = await initRepo({ setupScript: "echo failing >&2\nexit 1\n" });
       const parentDir = await makeTempDir("bb-provision-mwt-fail-");
       const targetPath = path.join(parentDir, "env");
 
@@ -178,7 +168,6 @@ describe("provisionWorkspace", () => {
           sourcePath: repoPath,
           targetPath,
           branchName: "bb/env-fail",
-          scriptName: DEFAULT_ENV_SETUP_SCRIPT_NAME,
           timeoutMs: 900000,
         }),
       ).rejects.toThrow(/Setup script failed/u);
@@ -198,7 +187,6 @@ describe("provisionWorkspace", () => {
         sourcePath: repoPath,
         targetPath,
         branchName: "bb/clone-branch",
-        scriptName: DEFAULT_ENV_SETUP_SCRIPT_NAME,
         timeoutMs: 900000,
       });
 
@@ -219,7 +207,6 @@ describe("provisionWorkspace", () => {
         sourcePath: repoPath,
         targetPath,
         branchName: "bb/clone-destroy",
-        scriptName: DEFAULT_ENV_SETUP_SCRIPT_NAME,
         timeoutMs: 900000,
       });
 
@@ -228,16 +215,10 @@ describe("provisionWorkspace", () => {
       await expect(fs.stat(targetPath)).rejects.toThrow();
     });
 
-    it("runs setup script with custom scriptName and timeoutMs", async () => {
-      const repoPath = await initRepo();
-      await fs.writeFile(
-        path.join(repoPath, "my-setup.sh"),
-        "echo clone-setup > clone-marker.txt\n",
-        "utf8",
-      );
-      await runGit(["add", "."], { cwd: repoPath });
-      await runGit(["commit", "-m", "Add setup script"], { cwd: repoPath });
-
+    it("runs the supported setup script for managed clones", async () => {
+      const repoPath = await initRepo({
+        setupScript: "echo clone-setup > clone-marker.txt\n",
+      });
       const parentDir = await makeTempDir("bb-provision-mc-script-");
       const targetPath = path.join(parentDir, "clone");
 
@@ -246,7 +227,6 @@ describe("provisionWorkspace", () => {
         sourcePath: repoPath,
         targetPath,
         branchName: "bb/clone-script",
-        scriptName: "my-setup.sh",
         timeoutMs: 30_000,
       });
 
@@ -258,7 +238,7 @@ describe("provisionWorkspace", () => {
     });
 
     it("rolls back on setup script failure", async () => {
-      const repoPath = await initRepo({ setupScript: 'throw new Error("failing");\n' });
+      const repoPath = await initRepo({ setupScript: "echo failing >&2\nexit 1\n" });
       const parentDir = await makeTempDir("bb-provision-mc-fail-");
       const targetPath = path.join(parentDir, "clone");
 
@@ -268,7 +248,6 @@ describe("provisionWorkspace", () => {
           sourcePath: repoPath,
           targetPath,
           branchName: "bb/clone-fail",
-          scriptName: DEFAULT_ENV_SETUP_SCRIPT_NAME,
           timeoutMs: 900000,
         }),
       ).rejects.toThrow(/Setup script failed/u);
