@@ -4,6 +4,10 @@ import { fileURLToPath } from "node:url";
 const repoRoot = path.dirname(fileURLToPath(import.meta.url));
 
 export const workspaceTestAliases = {
+  "@bb/agent-providers": path.resolve(
+    repoRoot,
+    "packages/agent-providers/src/index.ts",
+  ),
   "@bb/agent-runtime/test": path.resolve(
     repoRoot,
     "packages/agent-runtime/src/test/index.ts",

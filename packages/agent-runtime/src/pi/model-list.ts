@@ -1,3 +1,4 @@
+import { resolvePiDefaultModelId } from "@bb/agent-providers";
 import type {
   AvailableModel,
   ModelReasoningEffort,
@@ -8,24 +9,6 @@ import {
   MEDIUM_REASONING_EFFORT,
   XHIGH_REASONING_EFFORT,
 } from "../shared/adapter-utils.js";
-
-/**
- * Best default model per provider. Subset of pi-mono's `defaultModelPerProvider`:
- * https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/src/core/model-resolver.ts
- */
-export const PI_DEFAULT_MODEL_PER_PROVIDER: Partial<Record<string, string>> = {
-  anthropic: "claude-opus-4-6",
-  openai: "gpt-5.4",
-  "openai-codex": "gpt-5.4",
-  "amazon-bedrock": "us.anthropic.claude-opus-4-6-v1",
-  google: "gemini-2.5-pro",
-  "google-gemini-cli": "gemini-2.5-pro",
-  "google-vertex": "gemini-3-pro-preview",
-  openrouter: "openai/gpt-5.1-codex",
-  "vercel-ai-gateway": "anthropic/claude-opus-4-6",
-  xai: "grok-4-fast-non-reasoning",
-  mistral: "devstral-medium-latest",
-};
 
 export interface PiCatalogModel {
   id: string;
@@ -122,7 +105,7 @@ function resolveDefaultPiModelId(models: AvailableModel[]): string | undefined {
   // Try the per-provider default for each provider represented in the list
   for (const model of models) {
     const provider = model.id.split("/")[0];
-    const defaultId = PI_DEFAULT_MODEL_PER_PROVIDER[provider];
+    const defaultId = resolvePiDefaultModelId(provider);
     if (defaultId && model.id === toCanonicalPiModelId(provider, defaultId)) {
       return model.id;
     }

@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { z } from "zod";
+import { getCloudAuthProvider } from "@bb/agent-providers";
 import type { CloudAuthProviderId } from "@bb/server-contract";
 
 const HTTP_TIMEOUT_MS = 30_000;
@@ -354,7 +355,7 @@ const claudeProviderDefinition: CloudAuthProviderDefinition<ClaudeStoredCredenti
       verifier,
     };
   },
-  displayName: "Claude Code",
+  displayName: getCloudAuthProvider("claude-code").displayName,
   async exchangeCode(args) {
     const response = await fetch("https://platform.claude.com/v1/oauth/token", {
       body: JSON.stringify({
@@ -461,7 +462,7 @@ const codexProviderDefinition: CloudAuthProviderDefinition<CodexStoredCredential
       verifier,
     };
   },
-  displayName: "Codex",
+  displayName: getCloudAuthProvider("codex").displayName,
   async exchangeCode(args) {
     const response = await fetch("https://auth.openai.com/oauth/token", {
       body: new URLSearchParams({

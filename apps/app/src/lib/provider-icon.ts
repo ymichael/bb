@@ -1,3 +1,4 @@
+import { getBuiltInAgentProviderInfo, isAgentProviderId } from "@bb/agent-providers"
 import type { ComponentType } from "react"
 import { ClaudeIcon } from "@/components/icons/ClaudeIcon"
 import { OpenAiIcon } from "@/components/icons/OpenAiIcon"
@@ -15,13 +16,26 @@ interface ProviderIconInfo {
 export function getProviderIconInfo(
   providerId: string,
 ): ProviderIconInfo | undefined {
+  const providerInfo = isAgentProviderId(providerId)
+    ? getBuiltInAgentProviderInfo(providerId)
+    : null
+
   switch (providerId) {
     case "codex":
-      return { icon: OpenAiIcon, ariaLabel: "Codex" }
+      return {
+        icon: OpenAiIcon,
+        ariaLabel: providerInfo?.displayName ?? "Codex",
+      }
     case "claude-code":
-      return { icon: ClaudeIcon, ariaLabel: "Claude Code" }
+      return {
+        icon: ClaudeIcon,
+        ariaLabel: providerInfo?.displayName ?? "Claude Code",
+      }
     case "pi":
-      return { icon: PiIcon, ariaLabel: "Pi" }
+      return {
+        icon: PiIcon,
+        ariaLabel: providerInfo?.displayName ?? "Pi",
+      }
     default:
       return undefined
   }

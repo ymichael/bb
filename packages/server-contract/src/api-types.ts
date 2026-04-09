@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { cloudAuthProviderIdSchema } from "@bb/agent-providers";
 import {
   getProjectPathValidationMessage,
   hostTypeSchema,
@@ -478,7 +479,7 @@ export const systemProvidersQuerySchema = z.object({
 }).partial();
 export type SystemProvidersQuery = z.infer<typeof systemProvidersQuerySchema>;
 
-export const cloudAuthProviderIdSchema = z.enum(["claude-code", "codex"]);
+export { cloudAuthProviderIdSchema };
 export type CloudAuthProviderId = z.infer<typeof cloudAuthProviderIdSchema>;
 
 export const cloudAuthConnectionStatusSchema = z.enum([

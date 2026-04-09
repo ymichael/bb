@@ -26,6 +26,7 @@
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.68",
     "@anthropic-ai/sdk": "^0.73.0",
+    "@bb/agent-providers": "workspace:*",
     "@bb/domain": "workspace:*",
     "@bb/process-utils": "workspace:*",
     "@mariozechner/pi-ai": "^0.58.3",

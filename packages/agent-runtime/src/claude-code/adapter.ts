@@ -8,6 +8,7 @@
  */
 
 import type { SDKResultMessage } from "@anthropic-ai/claude-agent-sdk";
+import { getBuiltInAgentProviderInfo } from "@bb/agent-providers";
 import { z } from "zod";
 import type {
   ProviderCapabilities,
@@ -342,9 +343,10 @@ interface ClaudeTurnState {
 export function createClaudeCodeProviderAdapter(
   opts?: CreateClaudeCodeProviderAdapterOptions,
 ): ProviderAdapter {
+  const providerInfo = getBuiltInAgentProviderInfo("claude-code");
   const capabilities: ProviderCapabilities = {
-    supportsRename: false,
-    supportsServiceTier: false,
+    supportsRename: providerInfo.capabilities.supportsRename,
+    supportsServiceTier: providerInfo.capabilities.supportsServiceTier,
   };
 
   const turnState = createProviderTurnStateRegistry<ClaudeTurnState>({
@@ -620,8 +622,8 @@ export function createClaudeCodeProviderAdapter(
   return {
     // -- Identity & launch -------------------------------------------------
 
-    id: "claude-code",
-    displayName: "Claude Code",
+    id: providerInfo.id,
+    displayName: providerInfo.displayName,
     capabilities,
     process: {
       command: opts?.processCommand ?? "node",

@@ -8,6 +8,7 @@
  */
 
 import { AuthStorage, ModelRegistry } from "@mariozechner/pi-coding-agent";
+import { getBuiltInAgentProviderInfo } from "@bb/agent-providers";
 import { z } from "zod";
 import type {
   AgentSessionEvent,
@@ -464,9 +465,10 @@ interface PiTurnState {
 export function createPiProviderAdapter(
   opts?: CreatePiProviderAdapterOptions,
 ): ProviderAdapter {
+  const providerInfo = getBuiltInAgentProviderInfo("pi");
   const capabilities: ProviderCapabilities = {
-    supportsRename: false,
-    supportsServiceTier: false,
+    supportsRename: providerInfo.capabilities.supportsRename,
+    supportsServiceTier: providerInfo.capabilities.supportsServiceTier,
   };
   const resolveModelContextWindow = opts?.resolveModelContextWindow
     ?? createPiModelContextWindowResolver();
@@ -731,8 +733,8 @@ export function createPiProviderAdapter(
   return {
     // -- Identity & launch -------------------------------------------------
 
-    id: "pi",
-    displayName: "Pi",
+    id: providerInfo.id,
+    displayName: providerInfo.displayName,
     capabilities,
     process: {
       command: opts?.processCommand ?? "node",

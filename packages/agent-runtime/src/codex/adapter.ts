@@ -8,6 +8,7 @@
  * Reference: https://github.com/openai/codex (codex-rs/app-server-protocol/)
  */
 
+import { getBuiltInAgentProviderInfo } from "@bb/agent-providers";
 import { z } from "zod";
 import type {
   PromptInput,
@@ -728,14 +729,15 @@ export interface CreateCodexProviderAdapterOptions {
 export function createCodexProviderAdapter(
   opts?: CreateCodexProviderAdapterOptions,
 ): ProviderAdapter {
+  const providerInfo = getBuiltInAgentProviderInfo("codex");
   const capabilities: ProviderCapabilities = {
-    supportsRename: true,
-    supportsServiceTier: true,
+    supportsRename: providerInfo.capabilities.supportsRename,
+    supportsServiceTier: providerInfo.capabilities.supportsServiceTier,
   };
 
   return {
-    id: "codex",
-    displayName: "Codex",
+    id: providerInfo.id,
+    displayName: providerInfo.displayName,
     capabilities,
     process: {
       command: opts?.processCommand ?? "codex",

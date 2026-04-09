@@ -2,7 +2,7 @@ import type {
   AvailableModel,
   DynamicTool,
   PromptInput,
-  ProviderCapabilities,
+  ProviderInfo as DomainProviderInfo,
   ThreadEvent,
   ThreadExecutionOptions,
   ToolCallRequest,
@@ -10,16 +10,7 @@ import type {
 } from "@bb/domain";
 import type { AgentRuntimeCaptureEntry } from "./capture-types.js";
 
-// ---------------------------------------------------------------------------
-// Discovery
-// ---------------------------------------------------------------------------
-
-export interface ProviderInfo {
-  id: string;
-  displayName: string;
-  capabilities: ProviderCapabilities;
-  available: boolean;
-}
+export type ProviderInfo = DomainProviderInfo;
 
 export type AgentRuntimeShellEnvironment = Record<string, string>;
 

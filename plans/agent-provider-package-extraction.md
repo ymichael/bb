@@ -4,7 +4,8 @@
 
 - Draft
 - Phase 0 complete
-- Phase 1 in progress
+- Phase 1 complete
+- Phase 2 in progress
 
 ## Goal
 

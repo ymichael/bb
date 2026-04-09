@@ -1,5 +1,5 @@
 {
-  "name": "@bb/server-contract",
+  "name": "@bb/agent-providers",
   "version": "0.0.1",
   "type": "module",
   "exports": {
@@ -12,21 +12,18 @@
   "types": "./dist/index.d.ts",
   "files": ["dist"],
   "scripts": {
-    "build": "rimraf dist tsconfig.tsbuildinfo && tsc",
-    "clean": "rimraf dist tsconfig.tsbuildinfo",
+    "build": "rm -rf dist tsconfig.tsbuildinfo && tsc",
+    "clean": "rm -rf dist tsconfig.tsbuildinfo",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --config vitest.config.ts"
   },
   "dependencies": {
-    "@bb/agent-providers": "workspace:*",
     "@bb/domain": "workspace:*",
-    "@bb/hono-typed-routes": "workspace:*",
-    "hono": "^4.7.0",
     "zod": "^3.24.0"
   },
   "devDependencies": {
-    "@bb/test-helpers": "workspace:*",
     "@bb/tsconfig": "workspace:*",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "vitest": "^4.1.1"
   }
 }

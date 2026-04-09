@@ -5,6 +5,11 @@
  * (codex, claude-code, pi).
  */
 
+import {
+  getBuiltInAgentProviderInfo,
+  isAgentProviderId,
+  listBuiltInAgentProviderInfos,
+} from "@bb/agent-providers";
 import { createClaudeCodeProviderAdapter } from "./claude-code/adapter.js";
 import { claudeCodeVisibilityMetadata } from "./claude-code/visibility.js";
 import { createCodexProviderAdapter } from "./codex/adapter.js";
@@ -33,39 +38,15 @@ interface BuiltInProviderDescriptor {
 const builtInProviders = [
   {
     createAdapter: () => createCodexProviderAdapter(),
-    info: {
-      id: "codex",
-      displayName: "Codex",
-      capabilities: {
-        supportsRename: true,
-        supportsServiceTier: true,
-      },
-      available: true,
-    },
+    info: getBuiltInAgentProviderInfo("codex"),
   },
   {
     createAdapter: (options) => createClaudeCodeProviderAdapter(options),
-    info: {
-      id: "claude-code",
-      displayName: "Claude Code",
-      capabilities: {
-        supportsRename: false,
-        supportsServiceTier: false,
-      },
-      available: true,
-    },
+    info: getBuiltInAgentProviderInfo("claude-code"),
   },
   {
     createAdapter: (options) => createPiProviderAdapter(options),
-    info: {
-      id: "pi",
-      displayName: "Pi",
-      capabilities: {
-        supportsRename: false,
-        supportsServiceTier: false,
-      },
-      available: true,
-    },
+    info: getBuiltInAgentProviderInfo("pi"),
   },
 ] satisfies BuiltInProviderDescriptor[];
 
@@ -92,6 +73,13 @@ export function createProviderForId(
   providerId: string,
   options?: ProviderAdapterFactoryOptions,
 ): ProviderAdapter {
+  if (!isAgentProviderId(providerId)) {
+    const allIds = builtInProviders.map((provider) => provider.info.id);
+    throw new Error(
+      `Unsupported provider "${providerId}". Available providers: ${allIds.join(", ")}.`,
+    );
+  }
+
   const descriptor = builtInProvidersById.get(providerId);
 
   if (!descriptor) {
@@ -123,8 +111,5 @@ export function getProviderVisibilityMetadata(
  * List info for all available built-in providers.
  */
 export function listAvailableProviderInfos(): ProviderInfo[] {
-  return builtInProviders.map(({ info }) => ({
-    ...info,
-    capabilities: { ...info.capabilities },
-  }));
+  return listBuiltInAgentProviderInfos();
 }
