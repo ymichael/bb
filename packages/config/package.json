@@ -27,9 +27,9 @@
       "import": "./dist/defaults.js",
       "types": "./dist/defaults.d.ts"
     },
-    "./runtime": {
-      "import": "./dist/runtime.mjs",
-      "types": "./dist/runtime.d.mts"
+    "./data-dir": {
+      "import": "./dist/data-dir.js",
+      "types": "./dist/data-dir.d.ts"
     },
     "./strings": {
       "import": "./dist/strings.js",

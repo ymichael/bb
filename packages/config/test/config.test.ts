@@ -24,6 +24,32 @@ describe("commonConfig", () => {
     expect(commonConfig.BB_DATA_DIR).toBe(path.join(os.homedir(), ".bb-dev"));
     expect(commonConfig.BB_LOG_LEVEL).toBe("debug");
   });
+
+  it("expands home-directory overrides for BB_DATA_DIR", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("BB_DATA_DIR", "~/custom-bb");
+
+    const { commonConfig } = await importFresh<typeof import("../src/common.js")>(
+      "../src/common.js",
+    );
+
+    expect(commonConfig.BB_DATA_DIR).toBe(path.join(os.homedir(), "custom-bb"));
+  });
+});
+
+describe("data-dir helpers", () => {
+  it("expands a bare home-directory override", async () => {
+    const { resolveConfiguredDataDir } = await importFresh<typeof import("../src/data-dir.js")>(
+      "../src/data-dir.js",
+    );
+
+    expect(resolveConfiguredDataDir({
+      defaultDirName: ".bb",
+      env: {
+        BB_DATA_DIR: "~",
+      },
+    })).toBe(os.homedir());
+  });
 });
 
 describe("consumer-specific config", () => {
@@ -136,45 +162,5 @@ describe("consumer-specific config", () => {
     );
 
     expect(devEnvConfig.DEV_CLOUDFLARED_TUNNEL_TOKEN).toBe("test-tunnel-token");
-  });
-});
-
-describe("runtime config helpers", () => {
-  it("selects mode-specific defaults from NODE_ENV", async () => {
-    vi.stubEnv("NODE_ENV", "development");
-    vi.stubEnv("BB_DATA_DIR", undefined);
-    vi.stubEnv("BB_SERVER_URL", undefined);
-    vi.stubEnv("BB_SERVER_PORT", undefined);
-    vi.stubEnv("BB_HOST_DAEMON_PORT", undefined);
-
-    const runtime = await importFresh<typeof import("../src/runtime.mjs")>(
-      "../src/runtime.mjs",
-    );
-
-    expect(runtime.resolveModeFromNodeEnvironment()).toBe("development");
-    expect(runtime.resolveDefaultDataDirName()).toBe(".bb-dev");
-    expect(runtime.resolveServerUrl()).toBe("http://localhost:3334");
-    expect(runtime.resolveServerPort()).toBe(3334);
-    expect(runtime.resolveHostDaemonPort()).toBe(3002);
-    expect(runtime.resolveNodeEnvironment()).toBe("development");
-  });
-
-  it("lets explicit BB_* values override mode-selected defaults", async () => {
-    vi.stubEnv("NODE_ENV", "production");
-    vi.stubEnv("BB_DATA_DIR", "~/custom-bb");
-    vi.stubEnv("BB_SERVER_URL", "https://server.example.test");
-    vi.stubEnv("BB_SERVER_PORT", "4444");
-    vi.stubEnv("BB_HOST_DAEMON_PORT", "4445");
-
-    const runtime = await importFresh<typeof import("../src/runtime.mjs")>(
-      "../src/runtime.mjs",
-    );
-
-    expect(runtime.resolveDataDir({ defaultDirName: ".bb" })).toBe(
-      path.join(os.homedir(), "custom-bb"),
-    );
-    expect(runtime.resolveServerUrl()).toBe("https://server.example.test");
-    expect(runtime.resolveServerPort()).toBe(4444);
-    expect(runtime.resolveHostDaemonPort()).toBe(4445);
   });
 });

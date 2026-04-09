@@ -7,13 +7,9 @@ import {
   log, beginStep, endStep,
   waitForHealth, build, createOutputBuffer,
 } from "../lib/script-helpers.js";
-import {
-  DEFAULTS,
-  resolveDataDir,
-  resolveHostDaemonPort,
-  resolveNodeEnvironment,
-  resolveServerUrl,
-} from "@bb/config/runtime";
+import { commonConfig } from "@bb/config/common";
+import { hostDaemonConfig } from "@bb/config/host-daemon";
+import { resolveNodeEnvironment, resolveScriptMode } from "../lib/script-config.js";
 
 interface StartHostDaemonContext {
   authFile: string;
@@ -25,27 +21,44 @@ interface StartHostDaemonContext {
   serverUrl: string;
 }
 
+interface EnrollmentRequirements {
+  enrollKey?: string;
+  enrolled: boolean;
+}
+
 const commandDir = dirname(fileURLToPath(import.meta.url));
 const packageRoot = resolve(commandDir, "..", "..");
 const repoRoot = resolve(packageRoot, "..", "..");
 const runHostDaemonCommandPath = fileURLToPath(new URL("./run-host-daemon.js", import.meta.url));
 
 export function resolveStartHostDaemonContext(): StartHostDaemonContext {
-  const dataDir = resolveDataDir({ defaultDirName: DEFAULTS.dataDir.prod });
+  const dataDir = commonConfig.BB_DATA_DIR;
 
   return {
     authFile: join(dataDir, "auth.json"),
     daemonLockDir: `${join(dataDir, "daemon.lock")}.lock`,
     daemonLockFile: join(dataDir, "daemon.lock"),
-    daemonPort: resolveHostDaemonPort(),
+    daemonPort: hostDaemonConfig.BB_HOST_DAEMON_PORT,
     dataDir,
     logDir: join(dataDir, "logs"),
-    serverUrl: resolveServerUrl(),
+    serverUrl: hostDaemonConfig.BB_SERVER_URL,
+  };
+}
+
+export function resolveEnrollmentRequirements(
+  context: StartHostDaemonContext,
+): EnrollmentRequirements {
+  const enrollKey = process.env.BB_HOST_ENROLL_KEY?.trim();
+  return {
+    enrollKey: enrollKey && enrollKey.length > 0 ? enrollKey : undefined,
+    enrolled: existsSync(context.authFile),
   };
 }
 
 export async function main(): Promise<void> {
+  const mode = resolveScriptMode();
   const context = resolveStartHostDaemonContext();
+  const enrollment = resolveEnrollmentRequirements(context);
 
   process.stdout.write(`\n  ${bold("bb host-daemon")}\n\n`);
 
@@ -64,23 +77,11 @@ export async function main(): Promise<void> {
     process.stdout.write("\n");
   }
 
-  const enrolled = existsSync(context.authFile);
-  if (!enrolled && !process.env.BB_SERVER_URL) {
-    endStep(red("✗"), "BB_SERVER_URL is required — set it to the URL of the bb server");
+  if (!enrollment.enrolled && !enrollment.enrollKey) {
+    endStep(red("✗"), `Not enrolled — set BB_HOST_ENROLL_KEY to join ${context.serverUrl}`);
     process.stdout.write("\n");
     log(" ", dim("Required env vars for first-time enrollment:"));
-    log(" ", dim("  BB_SERVER_URL          URL of the bb server"));
-    log(" ", dim("  BB_HOST_ENROLL_KEY     Enroll key from the server"));
-    log(" ", dim("  BB_HOST_ID             (optional) Preferred host ID"));
-    process.stdout.write("\n");
-    process.exitCode = 1;
-    return;
-  }
-  if (!enrolled && !process.env.BB_HOST_ENROLL_KEY) {
-    endStep(red("✗"), "Not enrolled — set BB_HOST_ENROLL_KEY to join a server");
-    process.stdout.write("\n");
-    log(" ", dim("Required env vars for first-time enrollment:"));
-    log(" ", dim("  BB_SERVER_URL          URL of the bb server"));
+    log(" ", dim("  BB_SERVER_URL          (optional) Override the default bb server URL"));
     log(" ", dim("  BB_HOST_ENROLL_KEY     Enroll key from the server"));
     log(" ", dim("  BB_HOST_ID             (optional) Preferred host ID"));
     process.stdout.write("\n");
@@ -88,7 +89,7 @@ export async function main(): Promise<void> {
     return;
   }
 
-  beginStep(enrolled ? "Starting daemon" : "Enrolling and starting daemon");
+  beginStep(enrollment.enrolled ? "Starting daemon" : "Enrolling and starting daemon");
 
   const outputBuffer = createOutputBuffer();
   const daemonProcess = spawn(process.execPath, [runHostDaemonCommandPath], {
@@ -96,7 +97,7 @@ export async function main(): Promise<void> {
     env: {
       ...process.env,
       BB_LOG_FORMAT: "pretty",
-      NODE_ENV: resolveNodeEnvironment(),
+      NODE_ENV: resolveNodeEnvironment(mode),
     },
     stdio: ["ignore", "pipe", "inherit"],
   });

@@ -2,6 +2,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  ensureSafeTargets,
   renderHelpText,
   resolveResetTargets,
 } from "../src/commands/reset-bb-data.js";
@@ -31,5 +32,17 @@ describe("reset-bb-data", () => {
     expect(resolveResetTargets(new Set())).toEqual([
       path.join(os.homedir(), "custom-bb"),
     ]);
+  });
+
+  it("rejects non-absolute targets", () => {
+    expect(() => ensureSafeTargets(["relative/path"])).toThrow(
+      "Refusing to remove non-absolute path: relative/path",
+    );
+  });
+
+  it("rejects unsafe targets like the homedir", () => {
+    expect(() => ensureSafeTargets([os.homedir()])).toThrow(
+      `Refusing to remove unsafe path: ${path.resolve(os.homedir())}`,
+    );
   });
 });

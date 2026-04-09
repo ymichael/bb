@@ -9,13 +9,9 @@ import {
   waitForHealth, build, createOutputBuffer,
 } from "../lib/script-helpers.js";
 import type { OutputBuffer } from "../lib/script-helpers.js";
-import {
-  DEFAULTS,
-  resolveDataDir,
-  resolveHostDaemonPort,
-  resolveNodeEnvironment,
-  resolveServerPort,
-} from "@bb/config/runtime";
+import { commonConfig } from "@bb/config/common";
+import { serverConfig } from "@bb/config/server";
+import { resolveNodeEnvironment, resolveScriptMode } from "../lib/script-config.js";
 
 interface StartBbContext {
   daemonLockDir: string;
@@ -41,9 +37,10 @@ const repoRoot = resolve(packageRoot, "..", "..");
 const runHostDaemonCommandPath = fileURLToPath(new URL("./run-host-daemon.js", import.meta.url));
 
 export function resolveStartBbContext(): StartBbContext {
-  const dataDir = resolveDataDir({ defaultDirName: DEFAULTS.dataDir.prod });
-  const serverPort = resolveServerPort();
-  const daemonPort = resolveHostDaemonPort();
+  const mode = resolveScriptMode();
+  const dataDir = commonConfig.BB_DATA_DIR;
+  const serverPort = serverConfig.BB_SERVER_PORT;
+  const daemonPort = serverConfig.BB_HOST_DAEMON_PORT;
   const serverUrl = `http://127.0.0.1:${serverPort}`;
 
   return {
@@ -57,7 +54,7 @@ export function resolveStartBbContext(): StartBbContext {
     sharedEnv: {
       ...process.env,
       BB_LOG_FORMAT: "pretty",
-      NODE_ENV: resolveNodeEnvironment(),
+      NODE_ENV: resolveNodeEnvironment(mode),
     },
   };
 }

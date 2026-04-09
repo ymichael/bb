@@ -7,16 +7,15 @@ import {
   HOST_ID_FILE_NAME,
 } from "@bb/host-daemon-contract";
 import { createHostJoinResponseSchema } from "@bb/server-contract";
+import { resolveConfiguredDataDir } from "@bb/config/data-dir";
+import { DEFAULTS } from "@bb/config/defaults";
+import { hostDaemonConfig } from "@bb/config/host-daemon";
 import {
-  DEFAULTS,
-  resolveDataDir as resolveConfiguredDataDir,
-  resolveModeFromNodeEnvironment,
+  type HostMode,
   resolveNodeEnvironment,
-  resolveServerUrl,
-} from "@bb/config/runtime";
+  resolveScriptMode,
+} from "../lib/script-config.js";
 import { waitForServerHealth } from "../lib/wait-for-server-health.js";
-
-type HostMode = "dev" | "prod";
 
 export interface HostDaemonEnvironment extends NodeJS.ProcessEnv {
   BB_DATA_DIR: string;
@@ -32,7 +31,7 @@ const repoRoot = resolve(packageRoot, "..", "..");
 const DEV_AUTO_JOIN_DATA_DIR_NAME = `${DEFAULTS.dataDir.dev}-host-daemon`;
 
 function resolveMode(): HostMode {
-  return resolveModeFromNodeEnvironment() === "development" ? "dev" : "prod";
+  return resolveScriptMode();
 }
 
 function shouldAutoJoin(): boolean {
@@ -56,8 +55,8 @@ function buildEnv(mode: HostMode, autoJoin: boolean): HostDaemonEnvironment {
   return {
     ...process.env,
     BB_DATA_DIR: resolveDataDir(mode, autoJoin),
-    BB_SERVER_URL: resolveServerUrl(),
-    NODE_ENV: resolveNodeEnvironment(),
+    BB_SERVER_URL: hostDaemonConfig.BB_SERVER_URL,
+    NODE_ENV: resolveNodeEnvironment(mode),
   };
 }
 

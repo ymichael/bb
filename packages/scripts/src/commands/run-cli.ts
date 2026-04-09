@@ -1,7 +1,7 @@
 import crossSpawn from "cross-spawn";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { resolveModeFromNodeEnvironment } from "@bb/config/runtime";
+import { resolveScriptMode } from "../lib/script-config.js";
 
 interface CliExecution {
   args: string[];
@@ -15,7 +15,7 @@ const packageRoot = resolve(commandDir, "..", "..");
 const repoRoot = resolve(packageRoot, "..", "..");
 
 export function resolveCliExecution(cliArgs: string[] = process.argv.slice(2)): CliExecution {
-  if (resolveModeFromNodeEnvironment() === "development") {
+  if (resolveScriptMode() === "dev") {
     return {
       args: ["--filter", "@bb/server", "exec", "tsx", "../cli/src/index.ts", ...cliArgs],
       command: "pnpm",

@@ -7,13 +7,12 @@ import {
   bold, cyan, dim, green, yellow,
   log, endStep,
 } from "../lib/script-helpers.js";
+import { resolveConfiguredDataDir } from "@bb/config/data-dir";
+import { DEFAULTS } from "@bb/config/defaults";
 import {
-  DEFAULTS,
-  resolveDataDir as resolveConfiguredDataDir,
-  resolveModeFromNodeEnvironment,
-} from "@bb/config/runtime";
-
-type HostMode = "dev" | "prod";
+  type HostMode,
+  resolveScriptMode,
+} from "../lib/script-config.js";
 
 interface NamedDataDirs {
   defaultDataDir: string;
@@ -22,7 +21,7 @@ interface NamedDataDirs {
 }
 
 function resolveMode(): HostMode {
-  return resolveModeFromNodeEnvironment() === "development" ? "dev" : "prod";
+  return resolveScriptMode();
 }
 
 function resolveNamedDataDirs(): NamedDataDirs {
@@ -60,7 +59,7 @@ export function resolveResetTargets(args: Set<string>): string[] {
   return [resolveResetDataDir(mode)];
 }
 
-function ensureSafeTargets(targets: string[]): void {
+export function ensureSafeTargets(targets: string[]): void {
   const home = resolve(homedir());
   for (const target of targets) {
     if (!isAbsolute(target)) {

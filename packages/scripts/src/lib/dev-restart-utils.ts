@@ -1,5 +1,6 @@
-import { homedir } from "node:os";
 import { join } from "node:path";
+import { resolveConfiguredDataDir } from "@bb/config/data-dir";
+import { DEFAULTS } from "@bb/config/defaults";
 
 interface TurboBuildCommand {
   args: string[];
@@ -34,7 +35,10 @@ export function createTurboBuildCommand(filters: string[]): TurboBuildCommand {
 }
 
 export function resolveDevDataDir(): string {
-  return process.env.BB_DATA_DIR ?? join(homedir(), ".bb-dev");
+  return resolveConfiguredDataDir({
+    defaultDirName: DEFAULTS.dataDir.dev,
+    env: process.env,
+  });
 }
 
 export function resolveSupervisorPidPath(serviceName: string): string {
