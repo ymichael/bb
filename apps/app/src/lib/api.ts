@@ -544,7 +544,7 @@ export async function getThreadTimeline(
       param: { id },
       query: {
         ...(includeToolGroupMessages ? { includeToolGroupMessages: "true" } : {}),
-        ...(includeAllEvents ? { includeManagerDebugView: "true" } : {}),
+        ...(includeAllEvents ? { showAllManagerEvents: "true" } : {}),
       },
     }),
   );
@@ -562,7 +562,7 @@ export async function getThreadTimelineToolDetails(
       query: {
         sourceSeqStart: String(sourceSeqStart),
         sourceSeqEnd: String(sourceSeqEnd),
-        ...(includeAllEvents ? { includeManagerDebugView: "true" } : {}),
+        ...(includeAllEvents ? { showAllManagerEvents: "true" } : {}),
       },
     }),
   );

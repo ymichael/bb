@@ -89,7 +89,7 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
   get("/threads/:id/timeline", threadTimelineQuerySchema, (context, query) =>
     context.json(
       buildThreadTimeline(deps.db, requirePublicThread(deps.db, context.req.param("id")), {
-        includeManagerDebugView: query.includeManagerDebugView === "true",
+        showAllManagerEvents: query.showAllManagerEvents === "true",
         includeToolGroupMessages: query.includeToolGroupMessages === "true",
       }),
     ),
@@ -103,7 +103,7 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
         {
           sourceSeqStart: parseOptionalInteger(query.sourceSeqStart, "sourceSeqStart") ?? 0,
           sourceSeqEnd: parseOptionalInteger(query.sourceSeqEnd, "sourceSeqEnd") ?? 0,
-          includeManagerDebugView: query.includeManagerDebugView === "true",
+          showAllManagerEvents: query.showAllManagerEvents === "true",
         },
       ),
     ),

@@ -110,13 +110,13 @@ export function buildThreadTimeline(
   db: DbConnection,
   thread: Thread,
   options: {
-    includeManagerDebugView?: boolean;
+    showAllManagerEvents?: boolean;
     includeToolGroupMessages?: boolean;
   },
 ): ThreadTimelineResponse {
   const rawEventRows = listRecentStoredEventRows(db, {
     threadId: thread.id,
-    ...(options.includeManagerDebugView === true
+    ...(options.showAllManagerEvents === true
       ? {}
       : { excludedTypes: TIMELINE_NOISE_EVENT_TYPES }),
   });
@@ -124,14 +124,13 @@ export function buildThreadTimeline(
   const allMessages = toViewMessages(
     eventRows.map((row) => toThreadEventWithMeta(row)),
     {
-      includeDebugRawEvents: options.includeManagerDebugView,
-      includeInternalSystemMessages: options.includeManagerDebugView,
+      includeInternalSystemMessages: options.showAllManagerEvents,
       threadStatus: thread.status,
       threadType: thread.type,
     },
   );
   const messages =
-    thread.type === "manager" && !options.includeManagerDebugView
+    thread.type === "manager" && !options.showAllManagerEvents
       ? filterManagerConversationMessages(allMessages)
       : allMessages;
   const tokenUsageRows = listTokenUsageRowsForContextWindowUsage(db, {
@@ -151,7 +150,7 @@ export function buildTimelineToolDetails(
   db: DbConnection,
   thread: Thread,
   options: {
-    includeManagerDebugView?: boolean;
+    showAllManagerEvents?: boolean;
     sourceSeqEnd: number;
     sourceSeqStart: number;
   },
@@ -166,8 +165,7 @@ export function buildTimelineToolDetails(
     messages: toViewMessages(
       eventRows.map((row) => toThreadEventWithMeta(row)),
       {
-        includeDebugRawEvents: options.includeManagerDebugView,
-        includeInternalSystemMessages: options.includeManagerDebugView,
+        includeInternalSystemMessages: options.showAllManagerEvents,
         threadStatus: thread.status,
         threadType: thread.type,
       },

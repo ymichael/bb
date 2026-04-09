@@ -411,7 +411,7 @@ export const threadListQuerySchema = z.object({
 export type ThreadListQuery = z.infer<typeof threadListQuerySchema>;
 
 export const threadTimelineQuerySchema = z.object({
-  includeManagerDebugView: z.enum(["true", "false"]),
+  showAllManagerEvents: z.enum(["true", "false"]),
   includeToolGroupMessages: z.enum(["true", "false"]),
 }).partial();
 export type ThreadTimelineQuery = z.infer<typeof threadTimelineQuerySchema>;
@@ -419,7 +419,7 @@ export type ThreadTimelineQuery = z.infer<typeof threadTimelineQuerySchema>;
 export const timelineToolDetailsQuerySchema = z.object({
   sourceSeqStart: z.string().regex(/^\d+$/),
   sourceSeqEnd: z.string().regex(/^\d+$/),
-  includeManagerDebugView: z.enum(["true", "false"]).optional(),
+  showAllManagerEvents: z.enum(["true", "false"]).optional(),
 });
 export type TimelineToolDetailsQuery = z.infer<
   typeof timelineToolDetailsQuerySchema
@@ -603,7 +603,7 @@ export const timelineToolDetailsRequestSchema = z.object({
   turnId: z.string(),
   sourceSeqStart: z.number(),
   sourceSeqEnd: z.number(),
-  includeManagerDebugView: z.boolean().optional(),
+  showAllManagerEvents: z.boolean().optional(),
 });
 export type TimelineToolDetailsRequest = z.infer<typeof timelineToolDetailsRequestSchema>;
 

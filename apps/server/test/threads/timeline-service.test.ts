@@ -356,9 +356,9 @@ describe("buildThreadTimeline", () => {
       expect(assistantRow.message.isManagerUserMessage).toBe(true);
     }
 
-    // Debug view — should show everything
+    // Show all events — should show everything
     const debugTimeline = buildThreadTimeline(harness.db, thread, {
-      includeManagerDebugView: true,
+      showAllManagerEvents: true,
     });
     expect(debugTimeline.rows.length).toBeGreaterThan(defaultTimeline.rows.length);
   });
