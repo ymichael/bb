@@ -126,7 +126,7 @@ describe("public project and host routes", () => {
     }
   });
 
-  it("rejects relative local project paths at the API boundary", async () => {
+  it("rejects unsupported local project paths at the API boundary", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps, { id: "host-project-path-validation" });
@@ -148,7 +148,7 @@ describe("public project and host routes", () => {
       expect(createResponse.status).toBe(400);
       await expect(readJson(createResponse)).resolves.toMatchObject({
         code: "invalid_request",
-        message: expect.stringContaining("Project path must be an absolute path"),
+        message: expect.stringContaining("Project path must be an absolute Linux or WSL path"),
       });
 
       const updateResponse = await harness.app.request(
@@ -167,7 +167,42 @@ describe("public project and host routes", () => {
       expect(updateResponse.status).toBe(400);
       await expect(readJson(updateResponse)).resolves.toMatchObject({
         code: "invalid_request",
-        message: expect.stringContaining("Project path must be an absolute path"),
+        message: expect.stringContaining("Project path must be an absolute Linux or WSL path"),
+      });
+
+      const nativeWindowsCreateResponse = await harness.app.request("/api/v1/projects", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          name: "Windows Path Project",
+          source: { type: "local_path", hostId: host.id, path: "C:\\Users\\michael\\bb" },
+        }),
+      });
+      expect(nativeWindowsCreateResponse.status).toBe(400);
+      await expect(readJson(nativeWindowsCreateResponse)).resolves.toMatchObject({
+        code: "invalid_request",
+        message: expect.stringContaining("Native Windows paths are not supported"),
+      });
+
+      const nativeWindowsUpdateResponse = await harness.app.request(
+        `/api/v1/projects/${project.id}/sources/${source.id}`,
+        {
+          method: "PATCH",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            type: "local_path",
+            path: "\\\\server\\share\\bb",
+          }),
+        },
+      );
+      expect(nativeWindowsUpdateResponse.status).toBe(400);
+      await expect(readJson(nativeWindowsUpdateResponse)).resolves.toMatchObject({
+        code: "invalid_request",
+        message: expect.stringContaining("Native Windows paths are not supported"),
       });
     } finally {
       await harness.cleanup();

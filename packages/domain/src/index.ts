@@ -112,8 +112,12 @@ export type {
 
 export {
   deriveProjectNameFromPath,
+  getProjectPathValidationMessage,
+  INVALID_PROJECT_PATH_MESSAGE,
   isAbsoluteProjectPath,
+  isNativeWindowsProjectPath,
   normalizeProjectPathInput,
+  UNSUPPORTED_NATIVE_WINDOWS_PROJECT_PATH_MESSAGE,
 } from "./project-path.js";
 
 export {

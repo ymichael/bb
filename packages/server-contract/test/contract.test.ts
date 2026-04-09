@@ -282,7 +282,7 @@ describe("server-contract canonical schemas", () => {
         type: "local_path",
         path: "relative/project",
       }),
-    ).toThrow("Project path must be an absolute path");
+    ).toThrow("Project path must be an absolute Linux or WSL path.");
 
     expect(
       createProjectSourceRequestSchema.parse({
@@ -302,22 +302,19 @@ describe("server-contract canonical schemas", () => {
       }),
     ).toThrow();
 
-    expect(
+    expect(() =>
       contract.updateProjectSourceRequestSchema.parse({
         type: "local_path",
         path: " C:\\Users\\michael\\bb\\ ",
       }),
-    ).toEqual({
-      type: "local_path",
-      path: "C:\\Users\\michael\\bb",
-    });
+    ).toThrow("Native Windows paths are not supported");
 
     expect(() =>
       contract.updateProjectSourceRequestSchema.parse({
         type: "local_path",
         path: "relative/path",
       }),
-    ).toThrow("Project path must be an absolute path");
+    ).toThrow("Project path must be an absolute Linux or WSL path.");
 
     expect(
       timelineToolDetailsResponseSchema.parse({ messages: [] }),

@@ -2,7 +2,7 @@ import { useEffect, useId, useState, type FormEvent } from "react"
 import { FolderOpen } from "lucide-react"
 import {
   deriveProjectNameFromPath,
-  isAbsoluteProjectPath,
+  getProjectPathValidationMessage,
   normalizeProjectPathInput,
 } from "@bb/domain"
 import { Button } from "@/components/ui/button"
@@ -107,8 +107,9 @@ function ProjectPathDialogContent({
     if (pending) return
 
     const normalizedPath = normalizeProjectPathInput(pathValue)
-    if (!isAbsoluteProjectPath(normalizedPath)) {
-      setValidationMessage("Project path must be an absolute path.")
+    const pathValidationMessage = getProjectPathValidationMessage(normalizedPath)
+    if (pathValidationMessage) {
+      setValidationMessage(pathValidationMessage)
       return
     }
 
@@ -135,8 +136,8 @@ function ProjectPathDialogContent({
           {target.kind === "create" ? "Create project" : "Update project path"}
         </DialogTitle>
         <DialogDescription>
-          Enter an absolute path to the project folder. You can also use the
-          native folder picker when it is available on this host.
+          Enter a Linux or WSL absolute path to the project folder. You can
+          also use the native folder picker when it is available on this host.
         </DialogDescription>
       </DialogHeader>
       <form className="space-y-4" onSubmit={handleSubmit}>

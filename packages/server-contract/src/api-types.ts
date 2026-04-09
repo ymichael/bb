@@ -1,6 +1,6 @@
 import { z } from "zod";
 import {
-  isAbsoluteProjectPath,
+  getProjectPathValidationMessage,
   hostTypeSchema,
   normalizeProjectPathInput,
   projectSchema,
@@ -270,10 +270,17 @@ const localProjectPathRequestSchema = z
   .trim()
   .min(1)
   .transform(normalizeProjectPathInput)
-  .refine(
-    (path) => isAbsoluteProjectPath(path),
-    "Project path must be an absolute path",
-  );
+  .superRefine((path, ctx) => {
+    const validationMessage = getProjectPathValidationMessage(path);
+    if (!validationMessage) {
+      return;
+    }
+
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: validationMessage,
+    });
+  });
 
 const createLocalPathProjectSourceRequestSchema = z.object({
   hostId: z.string().min(1),
