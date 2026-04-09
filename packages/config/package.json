@@ -36,7 +36,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "rimraf dist tsconfig.tsbuildinfo && tsc && node ../../scripts/copy-file.mjs src/defaults.shared.mjs dist/defaults.shared.mjs && node ../../scripts/copy-file.mjs src/defaults.shared.d.mts dist/defaults.shared.d.mts",
+    "build": "rimraf dist tsconfig.tsbuildinfo && tsc",
     "clean": "rimraf dist tsconfig.tsbuildinfo",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --config vitest.config.ts"

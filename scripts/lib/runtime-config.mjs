@@ -26,7 +26,7 @@ export function resolveServerPort(args) {
 }
 
 export function resolveHostDaemonPort(args) {
-  return String(process.env.BB_HOST_DAEMON_PORT ?? DEFAULTS.hostDaemonPort[args.mode]);
+  return Number(process.env.BB_HOST_DAEMON_PORT ?? DEFAULTS.hostDaemonPort[args.mode]);
 }
 
 export function resolveNodeEnvironment(args) {

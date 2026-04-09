@@ -13,7 +13,7 @@ function resolveBbDevEnv() {
   return {
     ...process.env,
     BB_SERVER_URL: resolveServerUrl({ mode: "dev" }),
-    BB_HOST_DAEMON_PORT: resolveHostDaemonPort({ mode: "dev" }),
+    BB_HOST_DAEMON_PORT: String(resolveHostDaemonPort({ mode: "dev" })),
   };
 }
 

@@ -20,14 +20,10 @@ describe("ProjectPathDialog", () => {
     })
     fireEvent.click(screen.getByRole("button", { name: "Create project" }))
 
-    expect(
-      screen.getByText("Project path must be an absolute Linux or WSL path."),
-    ).not.toBeNull()
+    screen.getByText("Project path must be an absolute Linux or WSL path.")
 
     await waitFor(() => {
-      expect(
-        screen.getByText("Project path must be an absolute Linux or WSL path."),
-      ).not.toBeNull()
+      screen.getByText("Project path must be an absolute Linux or WSL path.")
     })
 
     fireEvent.change(screen.getByLabelText("Project path"), {
@@ -62,7 +58,7 @@ describe("ProjectPathDialog", () => {
       />,
     )
 
-    expect(screen.getByRole("button", { name: "Choose folder" })).not.toBeNull()
+    screen.getByRole("button", { name: "Choose folder" })
   })
 
   it("normalizes picked folder paths before showing them", async () => {
@@ -80,7 +76,7 @@ describe("ProjectPathDialog", () => {
     fireEvent.click(screen.getByRole("button", { name: "Choose folder" }))
 
     await waitFor(() => {
-      expect(screen.getByDisplayValue("/srv/repos/demo")).not.toBeNull()
+      screen.getByDisplayValue("/srv/repos/demo")
     })
     expect(pickFolder).toHaveBeenCalledTimes(1)
   })

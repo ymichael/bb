@@ -20,6 +20,7 @@ const repoRoot = resolve(scriptDir, "..");
 
 const dataDir = resolveDataDir({ defaultDirName: DEFAULTS.dataDir.prod });
 const serverPort = resolveServerPort({ mode: "prod" });
+const daemonPort = resolveHostDaemonPort({ mode: "prod" });
 const daemonLockFile = join(dataDir, "daemon.lock");
 const daemonLockDir = `${daemonLockFile}.lock`;
 const logDir = join(dataDir, "logs");
@@ -119,7 +120,7 @@ async function main() {
     },
   });
 
-  const daemonUrl = `http://localhost:${sharedEnv.BB_HOST_DAEMON_PORT ?? resolveHostDaemonPort({ mode: "prod" })}`;
+  const daemonUrl = `http://localhost:${daemonPort}`;
 
   try {
     await waitForHealth(`${daemonUrl}/health`, daemonProcess);
