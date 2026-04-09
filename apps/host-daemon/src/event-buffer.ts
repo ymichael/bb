@@ -54,7 +54,7 @@ export function createEventBuffer(
   }
 
   let buffer: BufferedEvent[] = [];
-  let flushPromise: Promise<void> | null = null;
+  let flushPromise: Promise<boolean> | null = null;
   const flushAbortController = new AbortController();
   const debouncedFlush = pDebounce(
     async () => {
@@ -131,7 +131,11 @@ export function createEventBuffer(
 
   async function flush(): Promise<void> {
     if (flushPromise) {
-      return flushPromise;
+      const succeeded = await flushPromise;
+      if (succeeded && buffer.length > 0) {
+        await flush();
+      }
+      return;
     }
 
     if (buffer.length === 0) {
@@ -140,11 +144,13 @@ export function createEventBuffer(
 
     const batch = buffer.slice();
     flushPromise = (async () => {
+      let succeeded = false;
       try {
         const threadHighWaterMarks = await options.postEvents(batch);
         if (threadHighWaterMarks) {
           ack(threadHighWaterMarks);
         }
+        succeeded = true;
       } catch (error) {
         options.logger.warn(
           {
@@ -163,10 +169,14 @@ export function createEventBuffer(
             queueDebouncedFlush();
           }
         }
+        return succeeded;
       }
     })();
 
-    return flushPromise;
+    const succeeded = await flushPromise;
+    if (succeeded && buffer.length > 0) {
+      await flush();
+    }
   }
 
   function dispose(): void {

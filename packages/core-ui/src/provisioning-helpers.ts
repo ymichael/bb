@@ -164,7 +164,7 @@ export function mergeProvisioningOperations(messages: ViewMessage[]): ViewMessag
     }
 
     const mergedStatus =
-      last.status === "completed"
+      active.some((message) => message.status === "completed")
         ? "completed"
         : active.some((message) => message.status === "error")
           ? "error"

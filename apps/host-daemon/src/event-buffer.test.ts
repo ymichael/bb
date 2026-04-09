@@ -143,6 +143,44 @@ describe("event buffer", () => {
     expect(buffer.depth()).toBe(0);
   });
 
+  it("drains events buffered during an in-flight flush before resolving an explicit flush", async () => {
+    const firstFlush = createDeferred<Record<string, number> | void>();
+    const postEvents = vi
+      .fn<(_: unknown) => Promise<Record<string, number> | void>>()
+      .mockImplementationOnce(() => firstFlush.promise)
+      .mockResolvedValueOnce({ threadA: 2 });
+    const buffer = createEventBuffer({
+      logger: createLogger(),
+      postEvents,
+      flushAtCount: 1,
+      debounceMs: 1_000,
+    });
+
+    buffer.push({
+      environmentId: "env-1",
+      threadId: "threadA",
+      event: createEvent("threadA"),
+    });
+
+    await vi.waitFor(() => {
+      expect(postEvents).toHaveBeenCalledTimes(1);
+    });
+
+    const second = buffer.push({
+      environmentId: "env-1",
+      threadId: "threadA",
+      event: createEvent("threadA"),
+    });
+
+    const flushPromise = buffer.flush();
+    firstFlush.resolve({ threadA: 1 });
+    await flushPromise;
+
+    expect(postEvents).toHaveBeenCalledTimes(2);
+    expect(postEvents.mock.calls[1]?.[0]).toEqual([second]);
+    expect(buffer.depth()).toBe(0);
+  });
+
   it("drops the oldest events when the buffer exceeds the max size", async () => {
     const buffer = createEventBuffer({
       logger: createLogger(),

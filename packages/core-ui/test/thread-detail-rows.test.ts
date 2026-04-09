@@ -1330,6 +1330,22 @@ describe("buildTimelineRows provisioning operation collapsing", () => {
     expect(rows[0]?.status).toBe("completed");
     expect(rows[0]?.title).toBe("Provisioned environment");
   });
+
+  it("shows completed when a completed provisioning event is followed by stale interrupted updates", () => {
+    const rows = getOperationRows([
+      provisioningOperation(1, "Provisioning ready", "completed", undefined, {
+        transcript: [{ type: "step", key: "branch", text: "Branch: main", status: "completed" }],
+      }),
+      provisioningOperation(2, "Provisioning environment", "interrupted", undefined, {
+        transcript: [{ type: "output", key: "setup-out-1", text: "Done in 8.4s" }],
+      }),
+    ]);
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.opType).toBe("provisioning");
+    expect(rows[0]?.status).toBe("completed");
+    expect(rows[0]?.title).toBe("Provisioned environment");
+  });
 });
 
 describe("buildTimelineRows squash merge operation collapsing", () => {
