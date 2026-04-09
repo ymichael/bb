@@ -1,7 +1,6 @@
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runScriptProcess } from "../lib/process-helpers.js";
-import { resolveScriptMode } from "../lib/script-config.js";
 
 interface CliExecution {
   args: string[];
@@ -15,15 +14,6 @@ const packageRoot = resolve(commandDir, "..", "..");
 const repoRoot = resolve(packageRoot, "..", "..");
 
 export function resolveCliExecution(cliArgs: string[] = process.argv.slice(2)): CliExecution {
-  if (resolveScriptMode() === "dev") {
-    return {
-      args: ["--filter", "@bb/server", "exec", "tsx", "../cli/src/index.ts", ...cliArgs],
-      command: "pnpm",
-      cwd: repoRoot,
-      env: process.env,
-    };
-  }
-
   return {
     args: ["apps/cli/dist/index.js", ...cliArgs],
     command: process.execPath,

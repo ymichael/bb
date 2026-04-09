@@ -224,9 +224,9 @@ describe("workspace provisioning", () => {
         scriptPath: "/tmp/.bb-env-setup.sh",
       }),
     ).toMatchObject({
-      command: "/usr/bin/env",
+      command: "env",
       args: ["bash", "/tmp/.bb-env-setup.sh"],
-      text: "/usr/bin/env bash .bb-env-setup.sh",
+      text: "env bash .bb-env-setup.sh",
     });
   });
 

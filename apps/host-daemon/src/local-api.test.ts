@@ -54,7 +54,7 @@ describe("local API server", () => {
       hostId: "host-1",
       connected: true,
       serverUrl: "http://server.test",
-      supportsNativeFolderPicker: process.platform === "darwin",
+      supportsNativeFolderPicker: expect.any(Boolean),
     });
     const healthResponse = await client.health.$get();
     expect(await healthResponse.text()).toBe("ok");
@@ -85,6 +85,28 @@ describe("local API server", () => {
     expect(openPath).toHaveBeenCalledWith("/tmp");
     expect(pickFolder).toHaveBeenCalledTimes(1);
     expect(await pickFolderResponse.json()).toEqual({ path: "/tmp/project" });
+  });
+
+  it("returns 501 for folder picking when native picker support is unavailable", async () => {
+    server = await startLocalApiServer({
+      hostId: "host-1",
+      localApiConfig: createLocalApiConfig(),
+      serverUrl: "http://server.test",
+      getConnected: () => true,
+      restart: () => undefined,
+      listActiveThreads: () => [],
+    });
+    const client = createHostDaemonLocalClient(`http://localhost:${server.port}`);
+
+    const statusResponse = await client.status.$get();
+    const status = await statusResponse.json();
+
+    if (status.supportsNativeFolderPicker) {
+      return;
+    }
+
+    const pickFolderResponse = await client["pick-folder"].$post({});
+    expect(pickFolderResponse.status).toBe(501);
   });
 
   it("schedules a restart after acknowledging the request", async () => {

@@ -34,26 +34,27 @@ export function registerHostRoutes(app: Hono, deps: AppDeps): void {
 
   post("/hosts/join", createHostJoinRequestSchema, async (context, payload) => {
     const hostId = payload.hostId ?? createHostId();
+    const hostType = payload.hostType ?? "persistent";
     const existing = getHost(deps.db, hostId);
     assertMatchingExistingHostType({
       existingHost: existing,
-      requestedHostType: payload.hostType,
+      requestedHostType: hostType,
     });
     const hostName = existing?.name ?? resolvePendingHostName(hostId);
 
     upsertHost(deps.db, deps.hub, {
       id: hostId,
       name: hostName,
-      type: payload.hostType,
+      type: hostType,
     });
 
     const joinMaterial = await deps.machineAuth.issueHostEnrollKey({
       hostId,
-      hostType: payload.hostType,
+      hostType,
     });
     const joinCommand = deps.machineAuth.buildJoinCommand({
       hostId,
-      hostType: payload.hostType,
+      hostType,
       joinCode: joinMaterial.key,
       serverUrl: resolveJoinServerUrl(deps, context.req.url),
     });

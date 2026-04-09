@@ -33,6 +33,7 @@ const INTENTIONAL_OPTIONAL_SERVER_FIELDS: Record<string, string> = {
   "createAutomationRequestSchema.autoArchive": "Automation creation may omit autoArchive and use the server default.",
   "createAutomationRequestSchema.enabled": "Automation creation may omit enabled and use the server default.",
   "createHostJoinRequestSchema.hostId": "Host join initiation may omit hostId when the server should generate a new persistent host id.",
+  "createHostJoinRequestSchema.hostType": "Host join initiation may omit hostType and let the server choose the default persistent host policy.",
   "createDraftRequestSchema.model": "Queued drafts may inherit the thread's default model.",
   "createDraftRequestSchema.reasoningLevel": "Queued drafts may inherit the thread's default reasoning level.",
   "createDraftRequestSchema.sandboxMode": "Queued drafts may inherit the thread's default sandbox mode.",
@@ -168,6 +169,10 @@ describe("server-contract canonical schemas", () => {
     ).toMatchObject({
       hostType: "persistent",
     });
+
+    expect(
+      createHostJoinRequestSchema.parse({}),
+    ).toEqual({});
 
     expect(
       createHostJoinResponseSchema.parse({

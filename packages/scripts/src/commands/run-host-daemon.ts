@@ -5,11 +5,16 @@ import {
   HOST_AUTH_FILE_NAME,
   HOST_ID_FILE_NAME,
 } from "@bb/host-daemon-contract";
-import { createHostJoinResponseSchema } from "@bb/server-contract";
+import {
+  createHostJoinResponseSchema,
+  createPublicApiClient,
+} from "@bb/server-contract";
 import { resolveConfiguredDataDir } from "@bb/config/data-dir";
 import { DEFAULTS } from "@bb/config/defaults";
 import { hostDaemonEntrypointConfig } from "@bb/config/host-daemon-entrypoint";
 import { hostDaemonConfig } from "@bb/config/host-daemon";
+import type { HostDaemonRuntimeEnvironment } from "../lib/host-daemon-runtime.js";
+import { toHostDaemonProcessEnv } from "../lib/host-daemon-runtime.js";
 import {
   type HostMode,
   resolveNodeEnvironment,
@@ -17,30 +22,6 @@ import {
 } from "../lib/script-config.js";
 import { runScriptProcess } from "../lib/process-helpers.js";
 import { waitForServerHealth } from "../lib/wait-for-server-health.js";
-
-export interface HostDaemonEnvironment extends NodeJS.ProcessEnv {
-  BB_BRIDGE_DIR?: string;
-  BB_CLI_DIR?: string;
-  BB_DATA_DIR: string;
-  BB_HOST_ENROLL_KEY?: string;
-  BB_HOST_ID?: string;
-  BB_HOST_NAME?: string;
-  BB_HOST_TYPE?: string;
-  BB_SERVER_URL: string;
-}
-
-type BootstrapEnvKey =
-  | "BB_BRIDGE_DIR"
-  | "BB_CLI_DIR"
-  | "BB_HOST_ENROLL_KEY"
-  | "BB_HOST_ID"
-  | "BB_HOST_NAME"
-  | "BB_HOST_TYPE";
-
-interface BootstrapEnvEntry {
-  key: BootstrapEnvKey;
-  value?: string;
-}
 
 const commandDir = dirname(fileURLToPath(import.meta.url));
 const packageRoot = resolve(commandDir, "..", "..");
@@ -68,41 +49,12 @@ function resolveDataDir(mode: HostMode, autoJoin: boolean): string {
   });
 }
 
-function setBootstrapEnvValue(
-  env: Partial<HostDaemonEnvironment>,
-  entry: BootstrapEnvEntry,
-): void {
-  if (!entry.value) {
-    return;
-  }
-  env[entry.key] = entry.value;
-}
-
-function buildBootstrapEnv(): Partial<HostDaemonEnvironment> {
-  const env: Partial<HostDaemonEnvironment> = {};
-  const entries: BootstrapEnvEntry[] = [
-    { key: "BB_BRIDGE_DIR", value: hostDaemonEntrypointConfig.BB_BRIDGE_DIR },
-    { key: "BB_CLI_DIR", value: hostDaemonEntrypointConfig.BB_CLI_DIR },
-    { key: "BB_HOST_ENROLL_KEY", value: hostDaemonEntrypointConfig.BB_HOST_ENROLL_KEY },
-    { key: "BB_HOST_ID", value: hostDaemonEntrypointConfig.BB_HOST_ID },
-    { key: "BB_HOST_NAME", value: hostDaemonEntrypointConfig.BB_HOST_NAME },
-    {
-      key: "BB_HOST_TYPE",
-      value: hostDaemonEntrypointConfig.BB_HOST_TYPE,
-    },
-  ];
-
-  for (const entry of entries) {
-    setBootstrapEnvValue(env, entry);
-  }
-
-  return env;
-}
-
-function buildEnv(mode: HostMode, autoJoin: boolean): HostDaemonEnvironment {
+function buildEnv(
+  mode: HostMode,
+  autoJoin: boolean,
+): HostDaemonRuntimeEnvironment {
   return {
-    ...process.env,
-    ...buildBootstrapEnv(),
+    ...hostDaemonEntrypointConfig,
     BB_DATA_DIR: resolveDataDir(mode, autoJoin),
     BB_SERVER_URL: hostDaemonConfig.BB_SERVER_URL,
     NODE_ENV: resolveNodeEnvironment(mode),
@@ -134,9 +86,9 @@ async function readPersistedHostId(dataDir: string): Promise<string | null> {
 }
 
 export async function maybeAddAutoJoinEnv(
-  env: HostDaemonEnvironment,
+  env: HostDaemonRuntimeEnvironment,
   autoJoin: boolean,
-): Promise<HostDaemonEnvironment> {
+): Promise<HostDaemonRuntimeEnvironment> {
   if (!autoJoin || env.BB_HOST_ENROLL_KEY) {
     return env;
   }
@@ -149,15 +101,9 @@ export async function maybeAddAutoJoinEnv(
   const requestedHostId =
     env.BB_HOST_ID?.trim() || (await readPersistedHostId(env.BB_DATA_DIR));
 
-  const response = await fetch(new URL("/api/v1/hosts/join", env.BB_SERVER_URL), {
-    body: JSON.stringify({
-      ...(requestedHostId ? { hostId: requestedHostId } : {}),
-      hostType: "persistent",
-    }),
-    headers: {
-      "content-type": "application/json",
-    },
-    method: "POST",
+  const client = createPublicApiClient(env.BB_SERVER_URL);
+  const response = await client.hosts.join.$post({
+    json: requestedHostId ? { hostId: requestedHostId } : {},
   });
 
   if (response.status !== 201) {
@@ -178,7 +124,6 @@ export async function maybeAddAutoJoinEnv(
     ...env,
     BB_HOST_ENROLL_KEY: joinResponse.joinCode,
     BB_HOST_ID: joinResponse.hostId,
-    BB_HOST_TYPE: "persistent",
   };
 }
 
@@ -190,7 +135,7 @@ export async function main(): Promise<void> {
     args: ["apps/host-daemon/dist/index.js"],
     command: process.execPath,
     cwd: repoRoot,
-    env,
+    env: toHostDaemonProcessEnv(env),
     stdio: "inherit",
   });
 }

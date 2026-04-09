@@ -113,12 +113,12 @@ describe("run-host-daemon auto join", () => {
 
     expect(env.BB_HOST_ID).toBe(persistedHostId);
     expect(env.BB_HOST_ENROLL_KEY).toBe("bbde_test_join");
+    expect(env.BB_HOST_TYPE).toBeUndefined();
     expect(requests).toHaveLength(2);
     expect(requests[1]?.url).toBe("http://127.0.0.1:3334/api/v1/hosts/join");
     expect(requests[1]?.body).toBe(
       JSON.stringify({
         hostId: persistedHostId,
-        hostType: "persistent",
       }),
     );
   });
@@ -168,11 +168,8 @@ describe("run-host-daemon auto join", () => {
 
     expect(env.BB_HOST_ID).toBe("host_generated");
     expect(env.BB_HOST_ENROLL_KEY).toBe("bbde_generated_join");
-    expect(requests[1]?.body).toBe(
-      JSON.stringify({
-        hostType: "persistent",
-      }),
-    );
+    expect(env.BB_HOST_TYPE).toBeUndefined();
+    expect(requests[1]?.body).toBe(JSON.stringify({}));
   });
 
   it("surfaces join request failures", async () => {

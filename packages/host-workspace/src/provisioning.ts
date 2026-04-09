@@ -33,6 +33,10 @@ export interface RemoveWorktreeArgs {
 
 const GITHUB_HOSTNAME = "github.com";
 const GITHUB_TOKEN_ENV_KEY = "GITHUB_TOKEN";
+// Git credential helpers are shell snippets. This one keeps the token in-memory and
+// only answers `get` requests for HTTPS clones against GitHub.
+const GITHUB_TOKEN_CREDENTIAL_HELPER =
+  '!f() { if test "$1" = get; then echo username=x-access-token; echo password=$GITHUB_TOKEN; fi; }; f';
 
 interface SetupScriptCommand {
   command: string;
@@ -65,8 +69,7 @@ function buildGitHubCloneEnv(sourcePath: string): NodeJS.ProcessEnv | undefined 
   return {
     GIT_CONFIG_COUNT: "1",
     GIT_CONFIG_KEY_0: "credential.helper",
-    GIT_CONFIG_VALUE_0:
-      '!f() { if test "$1" = get; then echo username=x-access-token; echo password=$GITHUB_TOKEN; fi; }; f',
+    GIT_CONFIG_VALUE_0: GITHUB_TOKEN_CREDENTIAL_HELPER,
     GIT_TERMINAL_PROMPT: "0",
   };
 }
@@ -175,9 +178,9 @@ export function buildSetupScriptCommand(
   }
 
   return {
-    command: "/usr/bin/env",
+    command: "env",
     args: ["bash", args.scriptPath],
-    text: `/usr/bin/env bash ${DEFAULT_ENV_SETUP_SCRIPT_NAME}`,
+    text: `env bash ${DEFAULT_ENV_SETUP_SCRIPT_NAME}`,
   };
 }
 

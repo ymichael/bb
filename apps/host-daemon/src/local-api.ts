@@ -36,6 +36,12 @@ export interface LocalApiServer {
   close(): Promise<void>;
 }
 
+function supportsNativeFolderPicker(
+  options: Pick<StartLocalApiServerOptions, "pickFolder">,
+): boolean {
+  return options.pickFolder != null || process.platform === "darwin";
+}
+
 export async function startLocalApiServer(
   options: StartLocalApiServerOptions,
 ): Promise<LocalApiServer> {
@@ -53,14 +59,14 @@ export async function startLocalApiServer(
   });
 
   const { get, post } = typedRoutes<HostDaemonLocalSchema>(app);
+  const nativeFolderPickerSupported = supportsNativeFolderPicker(options);
 
   get("/status", (c) =>
     c.json({
       hostId: options.hostId,
       connected: options.getConnected(),
       serverUrl: options.serverUrl,
-      supportsNativeFolderPicker:
-        options.pickFolder != null || process.platform === "darwin",
+      supportsNativeFolderPicker: nativeFolderPickerSupported,
     }),
   );
 
@@ -74,6 +80,11 @@ export async function startLocalApiServer(
   });
 
   post("/pick-folder", async (c) => {
+    if (!nativeFolderPickerSupported) {
+      throw new HTTPException(501, {
+        message: "Folder picker is only supported on macOS",
+      });
+    }
     const path = await (options.pickFolder ?? pickLocalFolder)();
     return c.json({ path });
   });
@@ -133,12 +144,6 @@ async function openLocalPath(path: string): Promise<void> {
 }
 
 async function pickLocalFolder(): Promise<string | null> {
-  if (process.platform !== "darwin") {
-    throw new HTTPException(501, {
-      message: "Folder picker is only supported on macOS",
-    });
-  }
-
   let stdout: string;
   try {
     const result = await execFileAsync("osascript", [

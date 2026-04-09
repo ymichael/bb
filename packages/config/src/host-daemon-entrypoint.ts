@@ -12,7 +12,7 @@ export interface HostDaemonEntrypointConfig {
   BB_HOST_TYPE?: HostType;
 }
 
-function validateOptionalHostType(value: string): HostType | undefined {
+function parseOptionalHostType(value: string): HostType | undefined {
   const normalizedValue = toOptionalTrimmedString(value);
   if (!normalizedValue) {
     return undefined;
@@ -65,5 +65,5 @@ export const hostDaemonEntrypointConfig: HostDaemonEntrypointConfig = {
   BB_HOST_ENROLL_KEY: toOptionalTrimmedString(rawHostDaemonEntrypointConfig.BB_HOST_ENROLL_KEY),
   BB_HOST_ID: toOptionalTrimmedString(rawHostDaemonEntrypointConfig.BB_HOST_ID),
   BB_HOST_NAME: toOptionalTrimmedString(rawHostDaemonEntrypointConfig.BB_HOST_NAME),
-  BB_HOST_TYPE: validateOptionalHostType(rawHostDaemonEntrypointConfig.BB_HOST_TYPE),
+  BB_HOST_TYPE: parseOptionalHostType(rawHostDaemonEntrypointConfig.BB_HOST_TYPE),
 };

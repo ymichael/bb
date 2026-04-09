@@ -16,33 +16,21 @@ async function makeTempDir(prefix: string): Promise<string> {
 }
 
 interface FakeCliPackageOptions {
-  binPath?: string;
+  executablePath?: string;
   executable?: boolean;
   writeEntry?: boolean;
 }
 
 interface FakeCliPackage {
   cliEntryPath: string;
-  cliPackageManifestPath: string;
 }
 
 async function createFakeCliPackage(
   options: FakeCliPackageOptions = {},
 ): Promise<FakeCliPackage> {
   const cliPackageRoot = await makeTempDir("bb-cli-package-");
-  const cliPackageManifestPath = path.join(cliPackageRoot, "package.json");
-  const binPath = options.binPath ?? "./dist/bin/bb";
-  const cliEntryPath = path.resolve(cliPackageRoot, binPath);
-
-  await fs.writeFile(
-    cliPackageManifestPath,
-    JSON.stringify({
-      name: "@bb/cli",
-      bin: {
-        bb: binPath,
-      },
-    }),
-  );
+  const executablePath = options.executablePath ?? "./dist/bin/bb";
+  const cliEntryPath = path.resolve(cliPackageRoot, executablePath);
 
   if (options.writeEntry ?? true) {
     await fs.mkdir(path.dirname(cliEntryPath), { recursive: true });
@@ -56,7 +44,6 @@ async function createFakeCliPackage(
 
   return {
     cliEntryPath,
-    cliPackageManifestPath,
   };
 }
 
@@ -70,25 +57,25 @@ afterEach(async () => {
 
 describe("resolveLocalBbExecutableDirectory", () => {
   it("returns the built CLI executable directory", async () => {
-    const { cliEntryPath, cliPackageManifestPath } = await createFakeCliPackage({
+    const { cliEntryPath } = await createFakeCliPackage({
       executable: true,
     });
 
     await expect(
       resolveLocalBbExecutableDirectory({
-        cliPackageManifestPath,
+        cliExecutablePath: cliEntryPath,
       }),
     ).resolves.toBe(path.dirname(cliEntryPath));
   });
 
   it("fails clearly when the built CLI entry is missing", async () => {
-    const { cliEntryPath, cliPackageManifestPath } = await createFakeCliPackage({
+    const { cliEntryPath } = await createFakeCliPackage({
       writeEntry: false,
     });
 
     await expect(
       resolveLocalBbExecutableDirectory({
-        cliPackageManifestPath,
+        cliExecutablePath: cliEntryPath,
       }),
     ).rejects.toThrow(
       `Missing built bb CLI entry at ${cliEntryPath}. Build @bb/cli before starting the host daemon.`,
@@ -96,13 +83,13 @@ describe("resolveLocalBbExecutableDirectory", () => {
   });
 
   it("fails clearly when the built CLI entry is not executable", async () => {
-    const { cliEntryPath, cliPackageManifestPath } = await createFakeCliPackage({
+    const { cliEntryPath } = await createFakeCliPackage({
       executable: false,
     });
 
     await expect(
       resolveLocalBbExecutableDirectory({
-        cliPackageManifestPath,
+        cliExecutablePath: cliEntryPath,
       }),
     ).rejects.toThrow(
       `Resolved bb CLI entry is not executable: ${cliEntryPath}. Build @bb/cli before starting the host daemon.`,

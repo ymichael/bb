@@ -307,7 +307,7 @@ export type CreateProjectRequest = z.infer<typeof createProjectRequestSchema>;
 
 export const createHostJoinRequestSchema = z.object({
   hostId: z.string().min(1).optional(),
-  hostType: hostTypeSchema,
+  hostType: hostTypeSchema.optional(),
 }).strict();
 export type CreateHostJoinRequest = z.infer<typeof createHostJoinRequestSchema>;
 

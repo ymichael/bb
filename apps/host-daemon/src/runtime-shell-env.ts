@@ -1,10 +1,11 @@
+import { constants as fsConstants } from "node:fs";
 import fs from "node:fs/promises";
 import { delimiter, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { AgentRuntimeOptions } from "@bb/agent-runtime";
 
 export interface ResolveLocalBbExecutableDirectoryOptions {
-  cliPackageManifestPath?: string;
+  cliExecutablePath?: string;
 }
 
 export interface PrepareRuntimeShellEnvOptions {
@@ -14,8 +15,8 @@ export interface PrepareRuntimeShellEnvOptions {
   inheritedPath?: string;
 }
 
-function getDefaultCliPackageManifestPath(): string {
-  return fileURLToPath(new URL("../../cli/package.json", import.meta.url));
+function getDefaultCliExecutablePath(): string {
+  return fileURLToPath(new URL("../../cli/bin/bb", import.meta.url));
 }
 
 function getErrorCode(error: unknown): string | undefined {
@@ -30,55 +31,27 @@ function getErrorCode(error: unknown): string | undefined {
   return undefined;
 }
 
-function getCliBinPathFromManifest(
-  manifestText: string,
-  manifestPath: string,
-): string {
-  const parsed: unknown = JSON.parse(manifestText);
-  if (!parsed || typeof parsed !== "object") {
-    throw new Error(`Invalid CLI package manifest at ${manifestPath}`);
-  }
-
-  const binValue = Reflect.get(parsed, "bin");
-  if (typeof binValue === "string" && binValue.length > 0) {
-    return binValue;
-  }
-
-  if (binValue && typeof binValue === "object") {
-    const bbBinValue = Reflect.get(binValue, "bb");
-    if (typeof bbBinValue === "string" && bbBinValue.length > 0) {
-      return bbBinValue;
-    }
-  }
-
-  throw new Error(
-    `CLI package manifest at ${manifestPath} does not define a bb bin entry`,
-  );
-}
-
-function hasExecutablePermission(mode: number): boolean {
-  return (mode & 0o111) !== 0;
-}
-
 async function resolveCliEntryPath(
-  cliPackageManifestPath: string,
+  cliExecutablePath: string,
 ): Promise<string> {
-  const manifestText = await fs.readFile(cliPackageManifestPath, "utf8");
-  const cliBinPath = getCliBinPathFromManifest(
-    manifestText,
-    cliPackageManifestPath,
-  );
-  const cliEntryPath = resolve(dirname(cliPackageManifestPath), cliBinPath);
+  const cliEntryPath = resolve(cliExecutablePath);
 
   try {
     const stats = await fs.stat(cliEntryPath);
     if (!stats.isFile()) {
       throw new Error(`Resolved bb CLI entry is not a file: ${cliEntryPath}`);
     }
-    if (process.platform !== "win32" && !hasExecutablePermission(stats.mode)) {
-      throw new Error(
-        `Resolved bb CLI entry is not executable: ${cliEntryPath}. Build @bb/cli before starting the host daemon.`,
-      );
+    if (process.platform !== "win32") {
+      try {
+        await fs.access(cliEntryPath, fsConstants.X_OK);
+      } catch (error) {
+        if (getErrorCode(error) === "EACCES") {
+          throw new Error(
+            `Resolved bb CLI entry is not executable: ${cliEntryPath}. Build @bb/cli before starting the host daemon.`,
+          );
+        }
+        throw error;
+      }
     }
   } catch (error) {
     if (getErrorCode(error) === "ENOENT") {
@@ -95,9 +68,9 @@ async function resolveCliEntryPath(
 async function resolveBbExecutable(
   options: ResolveLocalBbExecutableDirectoryOptions = {},
 ): Promise<string> {
-  const resolvedCliPackageManifestPath =
-    options.cliPackageManifestPath ?? getDefaultCliPackageManifestPath();
-  const cliEntryPath = await resolveCliEntryPath(resolvedCliPackageManifestPath);
+  const resolvedCliExecutablePath =
+    options.cliExecutablePath ?? getDefaultCliExecutablePath();
+  const cliEntryPath = await resolveCliEntryPath(resolvedCliExecutablePath);
 
   return dirname(cliEntryPath);
 }
