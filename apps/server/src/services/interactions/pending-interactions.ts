@@ -29,7 +29,10 @@ import {
 } from "@bb/domain";
 import { ApiError } from "../../errors.js";
 import type { AppDeps } from "../../types.js";
-import { appendThreadEvent } from "../threads/thread-events.js";
+import {
+  appendThreadEvent,
+  getLastExecutionOptions,
+} from "../threads/thread-events.js";
 
 interface PendingInteractionWaiter {
   resolve: (outcome: PendingInteractionWaitOutcome) => void;
@@ -523,6 +526,12 @@ export class PendingInteractionLifecycle {
     return getActivePendingInteractionForThread(this.deps.db, threadId) !== null;
   }
 
+  private resolveQuestionPolicy(
+    threadId: string,
+  ): "allow" | "avoid" | "deny" {
+    return getLastExecutionOptions(this.deps, threadId)?.questionPolicy ?? "allow";
+  }
+
   registerPendingInteraction(
     interaction: PendingInteractionCreate,
   ): RegisterPendingInteractionResult {
@@ -537,6 +546,15 @@ export class PendingInteractionLifecycle {
       return {
         outcome: "rejected",
         reason: "Pending interactions are only supported on root threads",
+      };
+    }
+    if (
+      interaction.payload.kind === "user_input_request"
+      && this.resolveQuestionPolicy(interaction.threadId) === "deny"
+    ) {
+      return {
+        outcome: "rejected",
+        reason: "Thread question policy denies user-input requests",
       };
     }
 

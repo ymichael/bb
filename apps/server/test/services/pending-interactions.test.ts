@@ -8,6 +8,7 @@ import {
   seedHostSession,
   seedProjectWithSource,
   seedThread,
+  seedThreadRuntimeState,
 } from "../helpers/seed.js";
 import { createTestAppHarness } from "../helpers/test-app.js";
 
@@ -150,6 +151,62 @@ describe("pending interaction lifecycle", () => {
         outcome: "rejected",
         reason:
           "Provider request request-terminal-dedupe was already handled and cannot be reused",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("rejects user-input requests when the thread question policy is deny", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-pending-interaction-question-policy-deny",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+      });
+      seedThreadRuntimeState(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-thread-question-policy-deny",
+        questionPolicy: "deny",
+      });
+
+      expect(
+        harness.deps.pendingInteractions.registerPendingInteraction({
+          threadId: thread.id,
+          turnId: "turn-question-policy-deny",
+          providerId: "codex",
+          providerThreadId: "provider-thread-question-policy-deny",
+          providerRequestId: "request-question-policy-deny",
+          providerRequestMethod: "item/tool/requestUserInput",
+          payload: {
+            kind: "user_input_request",
+            itemId: "item-question-policy-deny",
+            questions: [
+              {
+                id: "environment",
+                header: "Env",
+                question: "Which environment?",
+                allowsOther: true,
+                isSecret: false,
+                options: [],
+              },
+            ],
+          },
+        }),
+      ).toEqual({
+        outcome: "rejected",
+        reason: "Thread question policy denies user-input requests",
       });
     } finally {
       await harness.cleanup();

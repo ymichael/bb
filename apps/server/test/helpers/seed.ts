@@ -15,6 +15,7 @@ import {
 import type {
   EnvironmentStatus,
   PromptInput,
+  QuestionPolicy,
   StoredThreadEventDataForType,
   ThreadEventItemType,
   ThreadEventType,
@@ -208,6 +209,7 @@ export function seedThreadRuntimeState(
     inputText?: string;
     model?: string;
     providerThreadId: string;
+    questionPolicy?: QuestionPolicy;
     reasoningLevel?: string;
     sandboxMode?: string;
     sequenceStart?: number;
@@ -243,6 +245,7 @@ export function seedThreadRuntimeState(
         serviceTier: args.serviceTier ?? "default",
         reasoningLevel: args.reasoningLevel ?? "medium",
         sandboxMode: args.sandboxMode ?? "danger-full-access",
+        questionPolicy: args.questionPolicy ?? "allow",
         source: "client/turn/requested",
       },
       initiator: "user",
