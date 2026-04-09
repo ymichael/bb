@@ -8,20 +8,23 @@
   - supported for install, build, typecheck, test, app/server/host-daemon
     startup, and local-path + managed-workspace product flows
 - Windows:
-  - preflight only for `pnpm install`, `pnpm build`, and `pnpm typecheck`
-  - runtime, workspace, and local project UX are not yet claimed as supported
+  - native Windows is not a supported product path
+  - optional `windows-latest` CI preflight may remain as an early-warning signal
+    for script portability, but it is not a support gate
 - macOS persistent host:
   - remains supported as an existing product path
 - E2B sandboxes:
   - Linux-only
 
-### Milestone 2: Windows Support + Final Hardening
+### Milestone 2: Windows via WSL2 Support + Final Hardening
 
 - Linux persistent host:
   - remains fully supported
-- Windows persistent host:
+- Windows via WSL2 persistent host:
+  - supported when all `bb` processes run inside Ubuntu on WSL2
   - supported for install, build, typecheck, test, app/server/host-daemon
-    startup, and local-path + managed-workspace product flows
+    startup, and local-path + managed-workspace product flows inside WSL2
+  - native Windows PowerShell and CMD execution remain unsupported
 - macOS persistent host:
   - remains supported
 
@@ -37,13 +40,21 @@
 - local-path project creation and update in the app
 - unmanaged environments
 - managed clone/worktree environments
-- provider runtime startup where the provider itself supports the host OS
+- provider runtime startup where the provider itself supports the host
+  environment
+- Windows support uses the Linux stack inside WSL2:
+  - all `bb` processes run inside WSL2
+  - provider CLIs are installed inside the supported WSL2 distro
+  - local project paths are Linux-style absolute paths from inside WSL2
+  - repositories should live inside the WSL filesystem unless we explicitly
+    expand support later
 
 ### Maintainer-only or best-effort surfaces
 
 - ad hoc Unix-only QA helpers under [`scripts/qa/`](../scripts/qa/)
 - dev restart internals that are not part of the shipped product path
 - sandbox execution on Windows
+- native Windows PowerShell, CMD, and host-daemon runtime flows
 
 ## Dependency Policy
 
@@ -72,12 +83,13 @@ We are explicitly not adopting:
 - The supported end state is a Node-based `.bb-env-setup.ts`.
 - `.bb-env-setup.sh` is a temporary Unix-only migration bridge when needed for
   existing repositories.
-- `.bb-env-setup.sh` is not part of the supported Windows contract and is not
-  part of Milestone 1 or Milestone 2 exit criteria.
+- `.bb-env-setup.sh` is not part of the supported WSL2 contract and is not part
+  of Milestone 1 or Milestone 2 exit criteria.
 
 ## Line Ending Policy
 
 - The repository enforces LF checkout for supported text files via
   [.gitattributes](../.gitattributes).
-- Supported Linux and Windows flows must work from a default Windows Git
-  checkout with those repository rules applied.
+- Supported Linux and WSL2 flows must work with those repository rules applied.
+- Native Windows checkouts are best-effort only unless we later choose to
+  support a native Windows product path.
