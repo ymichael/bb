@@ -8,6 +8,10 @@ export const workspaceTestAliases = {
     repoRoot,
     "packages/agent-providers/src/index.ts",
   ),
+  "@bb/secret-storage": path.resolve(
+    repoRoot,
+    "packages/secret-storage/src/index.ts",
+  ),
   "@bb/agent-runtime/test": path.resolve(
     repoRoot,
     "packages/agent-runtime/src/test/index.ts",

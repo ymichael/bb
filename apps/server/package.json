@@ -24,6 +24,7 @@
     "@bb/process-utils": "workspace:*",
     "@bb/sandbox-host": "workspace:*",
     "@bb/sandbox-image": "workspace:*",
+    "@bb/secret-storage": "workspace:*",
     "@bb/server-contract": "workspace:*",
     "@bb/templates": "workspace:*",
     "@better-auth/api-key": "^1.5.6",

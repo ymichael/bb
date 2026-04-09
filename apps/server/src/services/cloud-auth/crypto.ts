@@ -1,7 +1,7 @@
 import {
   createEncryptedJsonCrypto,
   type EncryptedJsonCrypto,
-} from "../lib/encrypted-json-crypto.js";
+} from "@bb/secret-storage";
 
 const CLOUD_AUTH_SECRET_FILE_NAME = "cloud-auth-secret";
 

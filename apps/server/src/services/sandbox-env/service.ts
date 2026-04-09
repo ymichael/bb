@@ -8,7 +8,7 @@ import { z } from "zod";
 import {
   createEncryptedJsonCrypto,
   type EncryptedJsonCrypto,
-} from "../lib/encrypted-json-crypto.js";
+} from "@bb/secret-storage";
 import type { ServerLogger } from "../../types.js";
 import type {
   SandboxEnvService,

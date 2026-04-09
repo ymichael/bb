@@ -12,8 +12,8 @@ import {
   normalizeServerUrl,
 } from "@bb/host-daemon-contract";
 import { hostTypeSchema, type HostType } from "@bb/domain";
+import { readOrCreateSecretFile } from "@bb/secret-storage";
 import { z } from "zod";
-import { readOrCreateSecretFile } from "./lib/secret-file.js";
 import type { ServerLogger } from "../types.js";
 
 const AUTH_SECRET_FILE_NAME = "auth-secret";

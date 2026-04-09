@@ -1,10 +1,9 @@
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { rm } from "node:fs/promises";
 import { afterEach, describe, expect, it } from "vitest";
 import { z } from "zod";
-import { createEncryptedJsonCrypto } from "../../src/services/lib/encrypted-json-crypto.js";
+import { createEncryptedJsonCrypto } from "../src/index.js";
 
 const tempDirs: string[] = [];
 
