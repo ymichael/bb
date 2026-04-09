@@ -38,6 +38,7 @@
     "zod": "^3.24.0"
   },
   "devDependencies": {
+    "@bb/scripts": "workspace:*",
     "@bb/provider-audit": "workspace:*",
     "@bb/tsconfig": "workspace:*",
     "@types/mime-types": "^3.0.1",

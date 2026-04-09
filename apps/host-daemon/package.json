@@ -41,6 +41,7 @@
     "ws": "^8.19.0"
   },
   "devDependencies": {
+    "@bb/scripts": "workspace:*",
     "@bb/test-helpers": "workspace:*",
     "@bb/tsconfig": "workspace:*",
     "@types/mime-types": "^3.0.1",

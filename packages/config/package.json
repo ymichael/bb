@@ -28,8 +28,8 @@
       "types": "./dist/defaults.d.ts"
     },
     "./runtime": {
-      "import": "./dist/runtime.js",
-      "types": "./dist/runtime.d.ts"
+      "import": "./dist/runtime.mjs",
+      "types": "./dist/runtime.d.mts"
     },
     "./strings": {
       "import": "./dist/strings.js",
