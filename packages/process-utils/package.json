@@ -14,7 +14,8 @@
   "scripts": {
     "build": "rimraf dist tsconfig.tsbuildinfo && tsc",
     "clean": "rimraf dist tsconfig.tsbuildinfo",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --config vitest.config.ts"
   },
   "dependencies": {
     "cross-spawn": "^7.0.6"
@@ -23,6 +24,7 @@
     "@bb/tsconfig": "workspace:*",
     "@types/cross-spawn": "^6.0.6",
     "@types/node": "^22.0.0",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "vitest": "^4.0.18"
   }
 }

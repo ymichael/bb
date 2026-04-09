@@ -1,14 +1,18 @@
 import { access, readFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
-import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { DEFAULTS } from "../packages/config/dist/defaults.js";
 import {
   HOST_AUTH_FILE_NAME,
   HOST_ID_FILE_NAME,
 } from "../packages/host-daemon-contract/dist/index.js";
 import { createHostJoinResponseSchema } from "../packages/server-contract/dist/index.js";
+import {
+  DEFAULTS,
+  resolveDataDir as resolveConfiguredDataDir,
+  resolveNodeEnvironment,
+  resolveServerUrl,
+} from "./lib/runtime-config.mjs";
 import { waitForServerHealth } from "./lib/wait-for-server-health.mjs";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
@@ -37,27 +41,17 @@ export function resolveDefaultDataDirName(mode, autoJoin) {
 }
 
 function resolveDataDir(mode, autoJoin) {
-  return (
-    process.env.BB_DATA_DIR ??
-    join(homedir(), resolveDefaultDataDirName(mode, autoJoin))
-  );
-}
-
-function resolveServerUrl(mode) {
-  return (
-    process.env.BB_SERVER_URL ??
-    (mode === "dev" ? DEFAULTS.serverUrl.dev : DEFAULTS.serverUrl.prod)
-  );
+  return resolveConfiguredDataDir({
+    defaultDirName: resolveDefaultDataDirName(mode, autoJoin),
+  });
 }
 
 function buildEnv(mode, autoJoin) {
   return {
     ...process.env,
     BB_DATA_DIR: resolveDataDir(mode, autoJoin),
-    BB_SERVER_URL: resolveServerUrl(mode),
-    NODE_ENV:
-      process.env.NODE_ENV ??
-      (mode === "dev" ? "development" : "production"),
+    BB_SERVER_URL: resolveServerUrl({ mode }),
+    NODE_ENV: resolveNodeEnvironment({ mode }),
   };
 }
 

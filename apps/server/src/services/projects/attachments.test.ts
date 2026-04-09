@@ -86,4 +86,18 @@ describe("project attachments", () => {
       },
     );
   });
+
+  it("treats percent-encoded traversal markers as literal file names", async () => {
+    const dataDir = await makeTempDir();
+
+    await expect(readAttachment(dataDir, "proj_test", "%2e%2e%2fsecret.txt")).rejects.toMatchObject(
+      {
+        status: 404,
+        body: expect.objectContaining({
+          code: "invalid_request",
+          message: "Attachment not found",
+        }),
+      },
+    );
+  });
 });

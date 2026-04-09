@@ -1,24 +1,25 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
-import { DEFAULTS } from "../packages/config/dist/defaults.js";
 import {
   bold, cyan, dim, green, red, yellow,
   log, beginStep, endStep,
   waitForHealth, build, createOutputBuffer,
 } from "./lib/script-helpers.mjs";
+import {
+  DEFAULTS,
+  resolveDataDir,
+  resolveHostDaemonPort,
+  resolveServerUrl,
+} from "./lib/runtime-config.mjs";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, "..");
 
-const dataDir =
-  process.env.BB_DATA_DIR ?? join(homedir(), DEFAULTS.dataDir.prod);
-const serverUrl =
-  process.env.BB_SERVER_URL ?? DEFAULTS.serverUrl.prod;
-const daemonPort =
-  process.env.BB_HOST_DAEMON_PORT ?? DEFAULTS.hostDaemonPort.prod;
+const dataDir = resolveDataDir({ defaultDirName: DEFAULTS.dataDir.prod });
+const serverUrl = resolveServerUrl({ mode: "prod" });
+const daemonPort = resolveHostDaemonPort({ mode: "prod" });
 const daemonLockFile = join(dataDir, "daemon.lock");
 const daemonLockDir = `${daemonLockFile}.lock`;
 const logDir = join(dataDir, "logs");

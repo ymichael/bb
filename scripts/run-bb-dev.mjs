@@ -1,7 +1,10 @@
 import crossSpawn from "cross-spawn";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { DEFAULTS } from "../packages/config/dist/defaults.js";
+import {
+  resolveHostDaemonPort,
+  resolveServerUrl,
+} from "./lib/runtime-config.mjs";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, "..");
@@ -9,9 +12,8 @@ const repoRoot = resolve(scriptDir, "..");
 function resolveBbDevEnv() {
   return {
     ...process.env,
-    BB_SERVER_URL: process.env.BB_SERVER_URL ?? DEFAULTS.serverUrl.dev,
-    BB_HOST_DAEMON_PORT:
-      process.env.BB_HOST_DAEMON_PORT ?? String(DEFAULTS.hostDaemonPort.dev),
+    BB_SERVER_URL: resolveServerUrl({ mode: "dev" }),
+    BB_HOST_DAEMON_PORT: resolveHostDaemonPort({ mode: "dev" }),
   };
 }
 
