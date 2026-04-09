@@ -10,7 +10,6 @@ import type { DbConnection } from "../../packages/db/src/index.ts";
 import {
   buildCloudAuthCredentialUpsert,
   createCloudAuthCrypto,
-  getCloudAuthProviderDefinition,
   type ClaudeStoredCredential,
   type CodexStoredCredential,
 } from "../../packages/agent-provider-auth/src/index.ts";
@@ -66,6 +65,12 @@ import {
   startQaServer,
   waitFor,
 } from "./shared.mjs";
+import {
+  buildQaAuthCoverageSummary,
+  loadQaAuthFixture,
+  renderQaAuthCoverageSummary,
+  type SmokeQaAuthFixture,
+} from "./e2b-smoke/fixture.ts";
 
 const SMOKE_TIMEOUT_MS = 5 * 60 * 1000;
 const INITIAL_SANDBOX_TIMEOUT_MS = 8 * 60 * 1000;
@@ -102,23 +107,6 @@ interface SmokeLogger {
   error(): void;
   info(): void;
   warn(): void;
-}
-
-interface SmokeQaAuthFixture {
-  codexRefreshCapable?: boolean;
-  claude?: {
-    access: string;
-    expires: number;
-    refresh: string;
-  };
-  createdAt?: string;
-  "openai-codex"?: {
-    access: string;
-    accountId?: string;
-    expires: number;
-    idToken?: string;
-    refresh: string;
-  };
 }
 
 interface SmokeRuntimeMaterialContext {
@@ -192,180 +180,6 @@ function formatError(error: unknown): string {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
-}
-
-function createCodexIdToken(email: string): string {
-  const header = Buffer.from(
-    JSON.stringify({ alg: "none", typ: "JWT" }),
-  ).toString("base64url");
-  const body = Buffer.from(
-    JSON.stringify({ email }),
-  ).toString("base64url");
-  return `${header}.${body}.signature`;
-}
-
-function decodeCodexEmailFromAccessToken(accessToken: string): string | null {
-  const parts = accessToken.split(".");
-  if (parts.length !== 3) {
-    return null;
-  }
-
-  try {
-    const payload = JSON.parse(
-      Buffer.from(parts[1] ?? "", "base64url").toString("utf8"),
-    );
-    if (!isRecord(payload)) {
-      return null;
-    }
-    const profile = payload["https://api.openai.com/profile"];
-    if (!isRecord(profile)) {
-      return null;
-    }
-    return typeof profile.email === "string" ? profile.email : null;
-  } catch {
-    return null;
-  }
-}
-
-function parseQaAuthFixture(
-  value: unknown,
-): SmokeQaAuthFixture {
-  if (!isRecord(value)) {
-    throw new Error("Cloud auth fixture must be an object");
-  }
-
-  const claude = value.claude;
-  const codex = value["openai-codex"];
-  const createdAt = value.createdAt;
-
-  if (
-    claude !== undefined
-    && (
-      !isRecord(claude)
-      || typeof claude.access !== "string"
-      || typeof claude.refresh !== "string"
-      || typeof claude.expires !== "number"
-    )
-  ) {
-    throw new Error("Invalid Claude auth fixture");
-  }
-
-  if (
-    codex !== undefined
-    && (
-      !isRecord(codex)
-      || typeof codex.access !== "string"
-      || typeof codex.refresh !== "string"
-      || typeof codex.expires !== "number"
-      || (codex.idToken !== undefined && typeof codex.idToken !== "string")
-      || (codex.accountId !== undefined && typeof codex.accountId !== "string")
-    )
-  ) {
-    throw new Error("Invalid OpenAI Codex auth fixture");
-  }
-
-  if (createdAt !== undefined && typeof createdAt !== "string") {
-    throw new Error("Invalid cloud auth fixture createdAt");
-  }
-
-  return {
-    ...(typeof createdAt === "string" ? { createdAt } : {}),
-    ...(claude && isRecord(claude)
-      ? {
-          claude: {
-            access: claude.access,
-            expires: claude.expires,
-            refresh: claude.refresh,
-          },
-        }
-      : {}),
-    ...(codex && isRecord(codex)
-      ? {
-          "openai-codex": {
-            access: codex.access,
-            ...(typeof codex.accountId === "string"
-              ? { accountId: codex.accountId }
-              : {}),
-            expires: codex.expires,
-            ...(typeof codex.idToken === "string"
-              ? { idToken: codex.idToken }
-              : {}),
-            refresh: codex.refresh,
-          },
-        }
-      : {}),
-  };
-}
-
-async function enrichQaAuthFixture(
-  fixture: SmokeQaAuthFixture | null,
-): Promise<SmokeQaAuthFixture | null> {
-  if (!fixture) {
-    return fixture;
-  }
-
-  let nextFixture: SmokeQaAuthFixture = fixture;
-
-  if (fixture.claude && fixture.claude.expires <= Date.now()) {
-    console.warn(
-      "Claude fixture is expired; skipping Claude-specific smoke coverage",
-    );
-    const { claude: _removedClaude, ...remainingFixture } = nextFixture;
-    nextFixture = remainingFixture;
-  }
-
-  const codexFixture = nextFixture["openai-codex"];
-  if (!codexFixture) {
-    return nextFixture;
-  }
-
-  try {
-    const refreshedCredential = await getCloudAuthProviderDefinition("codex").refreshCredential({
-      credential: {
-        accessToken: codexFixture.access,
-        accountId: codexFixture.accountId ?? null,
-        expiresAt: codexFixture.expires,
-        idToken: null,
-        providerId: "codex",
-        refreshToken: codexFixture.refresh,
-      },
-    });
-
-    if (!refreshedCredential.idToken) {
-      throw new Error("Codex credential refresh did not return an idToken");
-    }
-
-    return {
-      ...nextFixture,
-      codexRefreshCapable: true,
-      "openai-codex": {
-        access: refreshedCredential.accessToken,
-        ...(refreshedCredential.accountId
-          ? { accountId: refreshedCredential.accountId }
-          : {}),
-        expires: refreshedCredential.expiresAt,
-        idToken: refreshedCredential.idToken,
-        refresh: refreshedCredential.refreshToken,
-      },
-    };
-  } catch (error) {
-    const email = decodeCodexEmailFromAccessToken(codexFixture.access);
-    if (!email) {
-      throw error;
-    }
-
-    console.warn(
-      "Codex fixture refresh failed; synthesizing idToken from access token claims for smoke validation",
-    );
-    return {
-      ...nextFixture,
-      codexRefreshCapable: false,
-      "openai-codex": {
-        ...codexFixture,
-        idToken: codexFixture.idToken ?? createCodexIdToken(email),
-      },
-    };
-  }
 }
 
 function shellQuote(value: string): string {
@@ -758,30 +572,6 @@ async function assertSandboxFileAbsent(
   }
 }
 
-async function loadQaAuthFixture(): Promise<SmokeQaAuthFixture | null> {
-  const explicitPath = process.env.BB_CLOUD_AUTH_FIXTURE_PATH;
-  const defaultPath = "/tmp/bb-oauth-handshakes/credentials.json";
-  const candidatePaths = explicitPath ? [explicitPath] : [defaultPath];
-
-  for (const candidatePath of candidatePaths) {
-    try {
-      const raw = await fs.readFile(candidatePath, "utf8");
-      return enrichQaAuthFixture(parseQaAuthFixture(JSON.parse(raw)));
-    } catch (error) {
-      if (
-        error instanceof Error
-        && "code" in error
-        && error.code === "ENOENT"
-      ) {
-        continue;
-      }
-      throw error;
-    }
-  }
-
-  return null;
-}
-
 async function createSmokeRuntimeMaterialContext(
   dataDir: string,
   config: ServerRuntimeConfig,
@@ -1029,7 +819,9 @@ async function main(): Promise<void> {
   const serverDataDir = path.join(tmpRoot, "server-data");
   const serverLogPath = path.join(logsDir, "server.log");
   const tunnelLogPath = path.join(logsDir, "tunnel.log");
-  const authFixture = await loadQaAuthFixture();
+  const loadedAuthFixture = await loadQaAuthFixture();
+  const authCoverageSummary = buildQaAuthCoverageSummary(loadedAuthFixture);
+  const authFixture = loadedAuthFixture.fixture;
   const smokeGithubPat = process.env.BB_GITHUB_PAT ?? "";
   const runtimeConfig: ServerRuntimeConfig = {
     anthropicApiKey: "",
@@ -1049,6 +841,21 @@ async function main(): Promise<void> {
     serverDataDir,
     runtimeConfig,
   );
+
+  for (const notice of loadedAuthFixture.notices) {
+    console.warn(`Auth fixture notice: ${notice}`);
+  }
+  for (const line of renderQaAuthCoverageSummary(authCoverageSummary)) {
+    console.log(line);
+  }
+  if (
+    process.env.BB_E2B_SMOKE_REQUIRE_FULL_AUTH === "1"
+    && !authCoverageSummary.hasFullSubscriptionCoverage
+  ) {
+    throw new Error(
+      "BB_E2B_SMOKE_REQUIRE_FULL_AUTH=1 but the local cloud-auth fixture is missing Claude or Codex subscription coverage. Acquire the missing credentials with the commands printed above, then rerun the smoke.",
+    );
+  }
 
   await fs.mkdir(logsDir, { recursive: true });
   await seedSmokeCloudAuthFixture(runtimeMaterialContext, authFixture);
