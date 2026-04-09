@@ -67,6 +67,7 @@ export interface SandboxHostProgressCallbacks {
 
 export interface SandboxDaemonArtifacts {
   bbCli: string;
+  claudeCodeCli: string;
   claudeCodeBridge: string;
   daemon: string;
   piPackageManifest: string;

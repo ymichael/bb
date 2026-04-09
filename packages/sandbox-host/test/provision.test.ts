@@ -7,6 +7,7 @@ import {
   SANDBOX_BB_EXECUTABLE_DIR,
   SANDBOX_BB_EXECUTABLE_PATH,
   SANDBOX_BRIDGE_DIR,
+  SANDBOX_CLAUDE_CODE_CLI_PATH,
   SANDBOX_CLAUDE_CODE_BRIDGE_PATH,
   SANDBOX_DAEMON_HEALTH_RESPONSE,
   SANDBOX_DAEMON_PATH,
@@ -19,6 +20,7 @@ import {
 
 const testDaemonArtifacts = {
   bbCli: "#!/usr/bin/env node\nconsole.log('bb');\n",
+  claudeCodeCli: "console.log('claude cli');",
   claudeCodeBridge: "console.log('claude bridge');",
   daemon: "console.log('daemon');",
   piPackageManifest: JSON.stringify({
@@ -146,18 +148,24 @@ describe("sandbox host provisioning", () => {
     );
     expect(sandbox.files.write).toHaveBeenNthCalledWith(
       3,
+      SANDBOX_CLAUDE_CODE_CLI_PATH,
+      testDaemonArtifacts.claudeCodeCli,
+      {},
+    );
+    expect(sandbox.files.write).toHaveBeenNthCalledWith(
+      4,
       SANDBOX_CLAUDE_CODE_BRIDGE_PATH,
       testDaemonArtifacts.claudeCodeBridge,
       {},
     );
     expect(sandbox.files.write).toHaveBeenNthCalledWith(
-      4,
+      5,
       SANDBOX_PI_BRIDGE_PATH,
       testDaemonArtifacts.piBridge,
       {},
     );
     expect(sandbox.files.write).toHaveBeenNthCalledWith(
-      5,
+      6,
       SANDBOX_PI_PACKAGE_MANIFEST_PATH,
       testDaemonArtifacts.piPackageManifest,
       {},
@@ -277,7 +285,7 @@ describe("sandbox host provisioning", () => {
     await vi.runAllTimersAsync();
     await provisioning;
 
-    expect(sandbox.files.write).toHaveBeenCalledTimes(6);
+    expect(sandbox.files.write).toHaveBeenCalledTimes(7);
   });
 
   it("destroys the sandbox if daemon health never becomes ready", async () => {
@@ -368,18 +376,24 @@ describe("sandbox host provisioning", () => {
     );
     expect(sandbox.files.write).toHaveBeenNthCalledWith(
       3,
+      SANDBOX_CLAUDE_CODE_CLI_PATH,
+      testDaemonArtifacts.claudeCodeCli,
+      {},
+    );
+    expect(sandbox.files.write).toHaveBeenNthCalledWith(
+      4,
       SANDBOX_CLAUDE_CODE_BRIDGE_PATH,
       testDaemonArtifacts.claudeCodeBridge,
       {},
     );
     expect(sandbox.files.write).toHaveBeenNthCalledWith(
-      4,
+      5,
       SANDBOX_PI_BRIDGE_PATH,
       testDaemonArtifacts.piBridge,
       {},
     );
     expect(sandbox.files.write).toHaveBeenNthCalledWith(
-      5,
+      6,
       SANDBOX_PI_PACKAGE_MANIFEST_PATH,
       testDaemonArtifacts.piPackageManifest,
       {},

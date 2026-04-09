@@ -37,6 +37,18 @@ function resolveHostDaemonDistPath(fileName: string): string {
   return resolve(resolveWorkspaceRoot(), "apps", "host-daemon", "dist", fileName);
 }
 
+function resolveClaudeCodeCliPath(): string {
+  return resolve(
+    resolveWorkspaceRoot(),
+    "packages",
+    "agent-runtime",
+    "node_modules",
+    "@anthropic-ai",
+    "claude-agent-sdk",
+    "cli.js",
+  );
+}
+
 function resolvePiPackageManifestPath(): string {
   return resolve(
     resolveWorkspaceRoot(),
@@ -71,6 +83,10 @@ export async function loadSandboxDaemonArtifacts(): Promise<SandboxDaemonArtifac
         localPath: resolveHostDaemonDistPath("bb"),
       }),
       readBundleArtifact({
+        label: "claude-code cli",
+        localPath: resolveClaudeCodeCliPath(),
+      }),
+      readBundleArtifact({
         label: "daemon",
         localPath: resolveHostDaemonDistPath("daemon-bundle.mjs"),
       }),
@@ -87,8 +103,16 @@ export async function loadSandboxDaemonArtifacts(): Promise<SandboxDaemonArtifac
         localPath: resolvePiPackageManifestPath(),
       }),
     ])
-      .then(([bbCli, daemon, claudeCodeBridge, piBridge, piPackageManifest]) => ({
+      .then(([
         bbCli,
+        claudeCodeCli,
+        daemon,
+        claudeCodeBridge,
+        piBridge,
+        piPackageManifest,
+      ]) => ({
+        bbCli,
+        claudeCodeCli,
         claudeCodeBridge,
         daemon,
         piPackageManifest,

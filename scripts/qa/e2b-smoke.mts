@@ -11,6 +11,7 @@ import type {
   ClaudeStoredCredential,
   CodexStoredCredential,
 } from "../../apps/server/src/services/cloud-auth/provider-definitions.ts";
+import { getCloudAuthProviderDefinition } from "../../apps/server/src/services/cloud-auth/provider-definitions.ts";
 import { createCloudAuthCrypto } from "../../apps/server/src/services/cloud-auth/crypto.ts";
 import { createCloudAuthService } from "../../apps/server/src/services/cloud-auth/service.ts";
 import { createSandboxEnvService } from "../../apps/server/src/services/sandbox-env/service.ts";
@@ -28,7 +29,12 @@ import {
   createHostJoinResponseSchema,
   projectResponseSchema,
 } from "../../packages/server-contract/src/index.ts";
-import { threadSchema } from "../../packages/domain/src/index.ts";
+import {
+  availableModelSchema,
+  threadSchema,
+  type AvailableModel,
+  type ThreadStatus,
+} from "../../packages/domain/src/index.ts";
 import {
   createSandbox,
   resumeSandbox,
@@ -107,6 +113,7 @@ interface SmokeQaAuthFixture {
     access: string;
     accountId?: string;
     expires: number;
+    idToken?: string;
     refresh: string;
   };
 }
@@ -119,8 +126,17 @@ interface SmokeRuntimeMaterialContext {
   sandboxEnv: Awaited<ReturnType<typeof createSandboxEnvService>>;
 }
 
+interface SmokeThreadSummary {
+  environmentId: string | null;
+  id: string;
+  providerId: string;
+  status: ThreadStatus;
+}
+
 const smokeThreadResponseSchema = threadSchema.pick({
+  environmentId: true,
   id: true,
+  providerId: true,
   status: true,
 });
 const smokeLogger: SmokeLogger = {
@@ -142,6 +158,19 @@ const CLAUDE_SCOPES = [
   "user:mcp_servers",
   "user:file_upload",
 ];
+const SMOKE_THREAD_TIMEOUT_MS = 4 * 60 * 1000;
+const SMOKE_PROVIDER_OUTPUT_TOKENS = {
+  claude: "SMOKE_CLAUDE_OK",
+  codexInitial: "SMOKE_CODEX_INITIAL_OK",
+  codexResume: "SMOKE_CODEX_RESUME_OK",
+  piInitial: "SMOKE_PI_INITIAL_OK",
+  piResume: "SMOKE_PI_RESUME_OK",
+} as const;
+const SMOKE_PROVIDER_WORKSPACES = {
+  claude: "/tmp/bb-smoke-claude",
+  codex: "/tmp/bb-smoke-codex",
+  pi: "/tmp/bb-smoke-pi",
+} as const;
 
 function formatError(error: unknown): string {
   if (error instanceof Error) {
@@ -184,6 +213,7 @@ function parseQaAuthFixture(
       || typeof codex.access !== "string"
       || typeof codex.refresh !== "string"
       || typeof codex.expires !== "number"
+      || (codex.idToken !== undefined && typeof codex.idToken !== "string")
       || (codex.accountId !== undefined && typeof codex.accountId !== "string")
     )
   ) {
@@ -213,10 +243,50 @@ function parseQaAuthFixture(
               ? { accountId: codex.accountId }
               : {}),
             expires: codex.expires,
+            ...(typeof codex.idToken === "string"
+              ? { idToken: codex.idToken }
+              : {}),
             refresh: codex.refresh,
           },
         }
       : {}),
+  };
+}
+
+async function enrichQaAuthFixture(
+  fixture: SmokeQaAuthFixture | null,
+): Promise<SmokeQaAuthFixture | null> {
+  const codexFixture = fixture?.["openai-codex"];
+  if (!fixture || !codexFixture || codexFixture.idToken) {
+    return fixture;
+  }
+
+  const refreshedCredential = await getCloudAuthProviderDefinition("codex").refreshCredential({
+    credential: {
+      accessToken: codexFixture.access,
+      accountId: codexFixture.accountId ?? null,
+      expiresAt: codexFixture.expires,
+      idToken: null,
+      providerId: "codex",
+      refreshToken: codexFixture.refresh,
+    },
+  });
+
+  if (!refreshedCredential.idToken) {
+    throw new Error("Codex credential refresh did not return an idToken");
+  }
+
+  return {
+    ...fixture,
+    "openai-codex": {
+      access: refreshedCredential.accessToken,
+      ...(refreshedCredential.accountId
+        ? { accountId: refreshedCredential.accountId }
+        : {}),
+      expires: refreshedCredential.expiresAt,
+      idToken: refreshedCredential.idToken,
+      refresh: refreshedCredential.refreshToken,
+    },
   };
 }
 
@@ -235,6 +305,72 @@ function createSmokeHostIdentity(): SmokeHostIdentity {
   return {
     hostId: "host_e2b_smoke",
     hostName: "e2b-smoke",
+  };
+}
+
+function parseAvailableModels(value: unknown) {
+  if (!Array.isArray(value)) {
+    throw new Error("Expected system models response to be an array");
+  }
+  return value.map((item) => availableModelSchema.parse(item));
+}
+
+function parseThreadOutputResponse(value: unknown): { output: string | null } {
+  if (!isRecord(value)) {
+    throw new Error("Thread output response must be an object");
+  }
+  const output = value.output;
+  if (output !== null && typeof output !== "string") {
+    throw new Error("Thread output response output must be a string or null");
+  }
+  return {
+    output: output ?? null,
+  };
+}
+
+function choosePreferredModel(
+  providerId: string,
+  models: AvailableModel[],
+  preferredPrefixes: string[],
+): AvailableModel {
+  for (const prefix of preferredPrefixes) {
+    const preferred = models.find((model) => model.model.startsWith(prefix));
+    if (preferred) {
+      return preferred;
+    }
+  }
+
+  const defaultModel = models.find((model) => model.isDefault);
+  if (defaultModel) {
+    return defaultModel;
+  }
+
+  const firstModel = models[0];
+  if (firstModel) {
+    return firstModel;
+  }
+
+  throw new Error(`No models available for provider ${providerId}`);
+}
+
+function buildHostWorkspaceEnvironment(
+  hostId: string,
+  workspacePath: string,
+) {
+  return {
+    type: "host" as const,
+    hostId,
+    workspace: {
+      type: "unmanaged" as const,
+      path: workspacePath,
+    },
+  };
+}
+
+function buildReuseEnvironment(environmentId: string) {
+  return {
+    type: "reuse" as const,
+    environmentId,
   };
 }
 
@@ -389,6 +525,74 @@ async function waitForHostStatus(
   );
 }
 
+async function fetchProviderModels(
+  localServerUrl: string,
+  args: {
+    hostId: string;
+    providerId: string;
+  },
+) {
+  const modelsUrl = new URL("/api/v1/system/models", localServerUrl);
+  modelsUrl.searchParams.set("hostId", args.hostId);
+  modelsUrl.searchParams.set("providerId", args.providerId);
+
+  const response = await fetch(modelsUrl);
+  if (!response.ok) {
+    throw new Error(
+      `Failed to list models for ${args.providerId}: ${response.status} ${await response.text()}`,
+    );
+  }
+
+  return parseAvailableModels(await response.json());
+}
+
+async function waitForThreadIdle(
+  localServerUrl: string,
+  threadId: string,
+): Promise<SmokeThreadSummary> {
+  return waitFor(
+    async () => {
+      const response = await fetch(`${localServerUrl}/api/v1/threads/${threadId}`);
+      if (!response.ok) {
+        throw new Error(
+          `Failed to load thread ${threadId}: ${response.status} ${await response.text()}`,
+        );
+      }
+
+      const thread = smokeThreadResponseSchema.parse(await response.json());
+      if (thread.status === "idle") {
+        return thread;
+      }
+      if (thread.status === "error") {
+        const output = await fetchThreadOutput(localServerUrl, threadId);
+        throw new Error(
+          `Thread ${threadId} for provider ${thread.providerId} failed with output: ${output.output ?? "(no output)"}`,
+        );
+      }
+
+      return null;
+    },
+    {
+      timeoutMs: SMOKE_THREAD_TIMEOUT_MS,
+      intervalMs: 1_000,
+      description: `thread ${threadId} to reach idle`,
+    },
+  );
+}
+
+async function fetchThreadOutput(
+  localServerUrl: string,
+  threadId: string,
+): Promise<{ output: string | null }> {
+  const response = await fetch(`${localServerUrl}/api/v1/threads/${threadId}/output`);
+  if (!response.ok) {
+    throw new Error(
+      `Failed to fetch thread ${threadId} output: ${response.status} ${await response.text()}`,
+    );
+  }
+  return parseThreadOutputResponse(await response.json());
+}
+
 async function waitForPersistedRuntimeMaterial(
   sandbox: SmokeSandbox,
   expectedSnapshot: Awaited<ReturnType<typeof buildSandboxRuntimeMaterialSnapshot>>,
@@ -457,7 +661,7 @@ async function loadQaAuthFixture(): Promise<SmokeQaAuthFixture | null> {
   for (const candidatePath of candidatePaths) {
     try {
       const raw = await fs.readFile(candidatePath, "utf8");
-      return parseQaAuthFixture(JSON.parse(raw));
+      return enrichQaAuthFixture(parseQaAuthFixture(JSON.parse(raw)));
     } catch (error) {
       if (
         error instanceof Error
@@ -531,7 +735,7 @@ async function seedSmokeCloudAuthFixture(
       accessToken: fixture["openai-codex"].access,
       accountId: fixture["openai-codex"].accountId ?? null,
       expiresAt: fixture["openai-codex"].expires,
-      idToken: null,
+      idToken: fixture["openai-codex"].idToken ?? null,
       providerId: "codex",
       refreshToken: fixture["openai-codex"].refresh,
     };
@@ -561,7 +765,7 @@ async function expireSmokeCodexCredential(
     accessToken: STALE_CODEX_ACCESS_TOKEN,
     accountId: codexFixture.accountId ?? null,
     expiresAt: Date.now() - 1_000,
-    idToken: null,
+    idToken: codexFixture.idToken ?? null,
     providerId: "codex",
     refreshToken: codexFixture.refresh,
   };
@@ -595,12 +799,29 @@ async function waitForExtendedSandboxTimeout(
 async function createSmokeThread(
   localServerUrl: string,
   args: {
-    hostId: string;
+    environment:
+      | {
+          type: "host";
+          hostId: string;
+          workspace: {
+            path: string;
+            type: "unmanaged";
+          };
+        }
+      | {
+          environmentId: string;
+          type: "reuse";
+        };
+    model: string;
     projectId: string;
+    providerId: string;
+    prompt: string;
   },
 ): Promise<{
+  environmentId: string | null;
   id: string;
-  status: string;
+  providerId: string;
+  status: ThreadStatus;
 }> {
   const response = await fetch(`${localServerUrl}/api/v1/threads`, {
     method: "POST",
@@ -608,18 +829,12 @@ async function createSmokeThread(
       "content-type": "application/json",
     },
     body: JSON.stringify({
+      origin: "app",
       projectId: args.projectId,
-      providerId: "codex",
-      model: "gpt-5",
-      input: [{ type: "text", text: "Resume the sandbox for smoke validation" }],
-      environment: {
-        type: "host",
-        hostId: args.hostId,
-        workspace: {
-          type: "unmanaged",
-          path: "/tmp",
-        },
-      },
+      providerId: args.providerId,
+      model: args.model,
+      input: [{ type: "text", text: args.prompt }],
+      environment: args.environment,
     }),
   });
   if (!response.ok) {
@@ -628,6 +843,48 @@ async function createSmokeThread(
     );
   }
   return smokeThreadResponseSchema.parse(await response.json());
+}
+
+async function runSmokeProviderTurn(
+  localServerUrl: string,
+  args: {
+    environment:
+      | {
+          type: "host";
+          hostId: string;
+          workspace: {
+            path: string;
+            type: "unmanaged";
+          };
+        }
+      | {
+          environmentId: string;
+          type: "reuse";
+        };
+    expectedToken: string;
+    model: string;
+    projectId: string;
+    providerId: string;
+  },
+): Promise<SmokeThreadSummary> {
+  const thread = await createSmokeThread(localServerUrl, {
+    environment: args.environment,
+    model: args.model,
+    projectId: args.projectId,
+    prompt: `Reply with exactly ${args.expectedToken} and no other text.`,
+    providerId: args.providerId,
+  });
+
+  const finishedThread = await waitForThreadIdle(localServerUrl, thread.id);
+  const output = await fetchThreadOutput(localServerUrl, finishedThread.id);
+
+  if (!output.output?.includes(args.expectedToken)) {
+    throw new Error(
+      `Unexpected output for provider ${args.providerId}: ${output.output ?? "(no output)"}`,
+    );
+  }
+
+  return finishedThread;
 }
 
 async function startRealDaemon(
@@ -665,18 +922,16 @@ async function main(): Promise<void> {
   const serverLogPath = path.join(logsDir, "server.log");
   const tunnelLogPath = path.join(logsDir, "tunnel.log");
   const authFixture = await loadQaAuthFixture();
-  const smokeAnthropicApiKey = process.env.ANTHROPIC_API_KEY ?? "";
   const smokeGithubPat = process.env.BB_GITHUB_PAT ?? "";
-  const smokeOpenAiApiKey = process.env.OPENAI_API_KEY ?? "test-openai-key";
   const runtimeConfig: ServerRuntimeConfig = {
-    anthropicApiKey: smokeAnthropicApiKey,
+    anthropicApiKey: "",
     dataDir: serverDataDir,
     e2bApiKey: process.env.E2B_API_KEY,
     e2bTemplate: process.env.BB_E2B_TEMPLATE ?? "sandbox",
     githubPat: smokeGithubPat,
     hostDaemonPort: 3_001,
     inferenceModel: "gpt-5",
-    openAiApiKey: smokeOpenAiApiKey,
+    openAiApiKey: "",
     publicUrl: "https://placeholder.example.test",
     sandboxActivityExtensionDebounceMs: 30_000,
     sandboxIdleThresholdMs: 60_000,
@@ -705,8 +960,9 @@ async function main(): Promise<void> {
   const qaServer = await startQaServer({
     dataDir: serverDataDir,
     env: {
+      ANTHROPIC_API_KEY: "",
       BB_SANDBOX_IDLE_THRESHOLD_MS: "60000",
-      OPENAI_API_KEY: smokeOpenAiApiKey,
+      OPENAI_API_KEY: "",
     },
     logPath: serverLogPath,
     port: serverPort,
@@ -715,6 +971,8 @@ async function main(): Promise<void> {
   const localServerUrl = qaServer.serverUrl;
   let activeSandbox: SmokeSandbox | null = null;
   let completed = false;
+  let codexEnvironmentId: string | null = null;
+  let piEnvironmentId: string | null = null;
 
   try {
     console.log(`Started quick tunnel at ${publicUrl}`);
@@ -773,6 +1031,17 @@ async function main(): Promise<void> {
     console.log("Waiting for real server to mark the host connected");
     await waitForConnectedSmokeHost(localServerUrl, smokeHost.hostId);
 
+    console.log("Preparing provider workspaces");
+    await runSandboxCommand(
+      sandbox,
+      [
+        "mkdir -p",
+        shellQuote(SMOKE_PROVIDER_WORKSPACES.codex),
+        shellQuote(SMOKE_PROVIDER_WORKSPACES.claude),
+        shellQuote(SMOKE_PROVIDER_WORKSPACES.pi),
+      ].join(" "),
+    );
+
     console.log("Checking persisted daemon auth");
     await waitForPersistedHostAuth(sandbox, {
       hostId: smokeHost.hostId,
@@ -810,6 +1079,11 @@ async function main(): Promise<void> {
       );
       await assertSandboxFileContains(
         sandbox,
+        SMOKE_CODEX_PATH,
+        "\"id_token\":",
+      );
+      await assertSandboxFileContains(
+        sandbox,
         SMOKE_PI_AUTH_PATH,
         "\"openai-codex\"",
       );
@@ -843,6 +1117,78 @@ async function main(): Promise<void> {
       },
     }));
 
+    console.log("Resolving provider models from the connected sandbox");
+    const [codexModels, claudeModels, piModels] = await Promise.all([
+      fetchProviderModels(localServerUrl, {
+        hostId: smokeHost.hostId,
+        providerId: "codex",
+      }),
+      fetchProviderModels(localServerUrl, {
+        hostId: smokeHost.hostId,
+        providerId: "claude-code",
+      }),
+      fetchProviderModels(localServerUrl, {
+        hostId: smokeHost.hostId,
+        providerId: "pi",
+      }),
+    ]);
+    const codexModel = choosePreferredModel("codex", codexModels, []);
+    const claudeModel = choosePreferredModel("claude-code", claudeModels, []);
+    const initialPiModel = choosePreferredModel("pi", piModels, [
+      "openai-codex/",
+      "anthropic/",
+    ]);
+    const resumedPiModel = choosePreferredModel("pi", piModels, [
+      "openai-codex/",
+    ]);
+
+    console.log(`Running live Codex thread with model ${codexModel.model}`);
+    const codexThread = await runSmokeProviderTurn(localServerUrl, {
+      environment: buildHostWorkspaceEnvironment(
+        smokeHost.hostId,
+        SMOKE_PROVIDER_WORKSPACES.codex,
+      ),
+      expectedToken: SMOKE_PROVIDER_OUTPUT_TOKENS.codexInitial,
+      model: codexModel.model,
+      projectId: project.id,
+      providerId: "codex",
+    });
+    codexEnvironmentId = codexThread.environmentId;
+    if (!codexEnvironmentId) {
+      throw new Error("Expected the initial Codex thread to create an environment");
+    }
+
+    console.log(`Running live Claude thread with model ${claudeModel.model}`);
+    const claudeThread = await runSmokeProviderTurn(localServerUrl, {
+      environment: buildHostWorkspaceEnvironment(
+        smokeHost.hostId,
+        SMOKE_PROVIDER_WORKSPACES.claude,
+      ),
+      expectedToken: SMOKE_PROVIDER_OUTPUT_TOKENS.claude,
+      model: claudeModel.model,
+      projectId: project.id,
+      providerId: "claude-code",
+    });
+    if (!claudeThread.environmentId) {
+      throw new Error("Expected the initial Claude thread to create an environment");
+    }
+
+    console.log(`Running live Pi thread with model ${initialPiModel.model}`);
+    const initialPiThread = await runSmokeProviderTurn(localServerUrl, {
+      environment: buildHostWorkspaceEnvironment(
+        smokeHost.hostId,
+        SMOKE_PROVIDER_WORKSPACES.pi,
+      ),
+      expectedToken: SMOKE_PROVIDER_OUTPUT_TOKENS.piInitial,
+      model: initialPiModel.model,
+      projectId: project.id,
+      providerId: "pi",
+    });
+    piEnvironmentId = initialPiThread.environmentId;
+    if (!piEnvironmentId) {
+      throw new Error("Expected the initial Pi thread to create an environment");
+    }
+
     console.log("Waiting for server-driven idle suspension");
     await waitForHostStatus(localServerUrl, smokeHost.hostId, "suspended", 120_000);
     const pausedSandboxInfo = await sandbox.getInfo();
@@ -867,11 +1213,20 @@ async function main(): Promise<void> {
     });
 
     console.log("Triggering server-driven resume with follow-up thread work");
+    if (!codexEnvironmentId) {
+      throw new Error("Expected a reusable Codex environment ID before resume");
+    }
     const createdThread = await createSmokeThread(localServerUrl, {
-      hostId: smokeHost.hostId,
+      environment: buildReuseEnvironment(codexEnvironmentId),
+      model: codexModel.model,
       projectId: project.id,
+      prompt: `Reply with exactly ${SMOKE_PROVIDER_OUTPUT_TOKENS.codexResume} and no other text.`,
+      providerId: "codex",
     });
-    if (createdThread.status !== "provisioning") {
+    if (
+      createdThread.status !== "created"
+      && createdThread.status !== "provisioning"
+    ) {
       throw new Error(`Unexpected resumed thread status: ${createdThread.status}`);
     }
 
@@ -929,6 +1284,11 @@ async function main(): Promise<void> {
         SMOKE_CODEX_PATH,
         "\"refresh_token\": \"\"",
       );
+      await assertSandboxFileContains(
+        resumedSandbox,
+        SMOKE_CODEX_PATH,
+        "\"id_token\":",
+      );
       const codexResult = await runSandboxCommand(
         resumedSandbox,
         `cat ${toSandboxShellPath(SMOKE_CODEX_PATH)}`,
@@ -936,6 +1296,29 @@ async function main(): Promise<void> {
       if (codexResult.stdout.includes(STALE_CODEX_ACCESS_TOKEN)) {
         throw new Error("Codex auth file still contains the stale access token");
       }
+    }
+
+    console.log("Waiting for resumed Codex thread output");
+    await waitForThreadIdle(localServerUrl, createdThread.id);
+    const resumedCodexOutput = await fetchThreadOutput(localServerUrl, createdThread.id);
+    if (!resumedCodexOutput.output?.includes(SMOKE_PROVIDER_OUTPUT_TOKENS.codexResume)) {
+      throw new Error(
+        `Unexpected resumed Codex output: ${resumedCodexOutput.output ?? "(no output)"}`,
+      );
+    }
+
+    if (authFixture?.["openai-codex"]) {
+      console.log(`Running live Pi thread after resume with model ${resumedPiModel.model}`);
+      if (!piEnvironmentId) {
+        throw new Error("Expected a reusable Pi environment ID before resume");
+      }
+      await runSmokeProviderTurn(localServerUrl, {
+        environment: buildReuseEnvironment(piEnvironmentId),
+        expectedToken: SMOKE_PROVIDER_OUTPUT_TOKENS.piResume,
+        model: resumedPiModel.model,
+        projectId: project.id,
+        providerId: "pi",
+      });
     }
 
     console.log("Checking bundled bb CLI after server-driven resume");

@@ -9,6 +9,7 @@ export const DEFAULT_SANDBOX_TIMEOUT_MS = 15 * 60 * 1000;
 export const SANDBOX_BB_EXECUTABLE_DIR = "/tmp";
 export const SANDBOX_BB_EXECUTABLE_PATH = "/tmp/bb";
 export const SANDBOX_BRIDGE_DIR = "/tmp";
+export const SANDBOX_CLAUDE_CODE_CLI_PATH = "/tmp/cli.js";
 export const SANDBOX_CLAUDE_CODE_BRIDGE_PATH = "/tmp/bb-claude-code-bridge.mjs";
 export const SANDBOX_DATA_DIR = "/tmp/bb-data";
 export const SANDBOX_PI_PACKAGE_DIR = "/tmp/bb-pi-package";

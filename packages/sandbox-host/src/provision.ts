@@ -9,6 +9,7 @@ import {
   SANDBOX_BB_EXECUTABLE_DIR,
   SANDBOX_BB_EXECUTABLE_PATH,
   SANDBOX_BRIDGE_DIR,
+  SANDBOX_CLAUDE_CODE_CLI_PATH,
   SANDBOX_CLAUDE_CODE_BRIDGE_PATH,
   SANDBOX_DAEMON_HEALTH_PATH,
   SANDBOX_DAEMON_HEALTH_PORT,
@@ -209,6 +210,10 @@ async function startDaemonProcess(
     {
       content: options.daemonArtifacts.daemon,
       path: SANDBOX_DAEMON_PATH,
+    },
+    {
+      content: options.daemonArtifacts.claudeCodeCli,
+      path: SANDBOX_CLAUDE_CODE_CLI_PATH,
     },
     {
       content: options.daemonArtifacts.claudeCodeBridge,
