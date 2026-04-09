@@ -1,3 +1,7 @@
+import {
+  readRuntimeMaterialState,
+  writeRuntimeMaterialState,
+} from "@bb/host-runtime-material";
 import { CommandRouter } from "./command-router.js";
 import { createDaemon, type HostDaemon } from "./daemon.js";
 import { createEventBuffer, type EventBuffer } from "./event-buffer.js";
@@ -16,10 +20,6 @@ import {
   type CreateReconnectingWebSocket,
 } from "./server-connection.js";
 import { ensureThreadStorageRoot } from "./thread-storage-root.js";
-import {
-  readRuntimeMaterialState,
-  writeRuntimeMaterialState,
-} from "./runtime-material-state.js";
 import type { AgentRuntimeOptions } from "@bb/agent-runtime";
 import type { HostType, ToolCallRequest, ToolCallResponse } from "@bb/domain";
 import type { HostWatcher } from "@bb/host-watcher";

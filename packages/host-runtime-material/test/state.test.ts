@@ -6,7 +6,7 @@ import { HOST_RUNTIME_MATERIAL_FILE_NAME } from "@bb/host-daemon-contract";
 import {
   readRuntimeMaterialState,
   writeRuntimeMaterialState,
-} from "./runtime-material-state.js";
+} from "../src/index.js";
 
 const tempDirs: string[] = [];
 

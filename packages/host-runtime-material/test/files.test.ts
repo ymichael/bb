@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   replaceManagedRuntimeFiles,
   resolveRuntimeMaterialEnv,
-} from "./runtime-material-files.js";
+} from "../src/index.js";
 
 const tempDirs: string[] = [];
 

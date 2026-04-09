@@ -2,14 +2,14 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { AgentRuntime } from "@bb/agent-runtime";
+import {
+  readRuntimeMaterialState,
+  writeRuntimeMaterialState,
+} from "@bb/host-runtime-material";
 import type { HostWorkspace } from "@bb/host-workspace";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CommandRouter } from "../../src/command-router.js";
 import { RuntimeManager } from "../../src/runtime-manager.js";
-import {
-  readRuntimeMaterialState,
-  writeRuntimeMaterialState,
-} from "../../src/runtime-material-state.js";
 
 const tempDirs: string[] = [];
 

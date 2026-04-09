@@ -13,6 +13,7 @@ import {
   hostDaemonCommandResultSchemaByType,
   type HostRuntimeMaterialSnapshot,
 } from "@bb/host-daemon-contract";
+import { isEmptyHostRuntimeMaterialSnapshot } from "@bb/host-runtime-material";
 import { ApiError } from "../../errors.js";
 import type { AppDeps } from "../../types.js";
 import { waitForQueuedCommandResult } from "./command-wait.js";
@@ -26,7 +27,6 @@ import {
 } from "./sandbox-runtime-material-operation.js";
 import {
   buildSandboxRuntimeMaterialSnapshot,
-  isEmptySandboxRuntimeMaterialSnapshot,
 } from "./sandbox-runtime-material-snapshot.js";
 
 const DEFAULT_RUNTIME_MATERIAL_SYNC_TIMEOUT_MS = 60_000;
@@ -64,7 +64,7 @@ export async function requestSandboxRuntimeMaterialSync(
 
   if (
     existingOperation === null
-    && isEmptySandboxRuntimeMaterialSnapshot(desiredSnapshot)
+    && isEmptyHostRuntimeMaterialSnapshot(desiredSnapshot)
   ) {
     return desiredSnapshot;
   }

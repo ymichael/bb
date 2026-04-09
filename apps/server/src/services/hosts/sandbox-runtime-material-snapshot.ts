@@ -1,9 +1,12 @@
-import { createHash } from "node:crypto";
 import type { HostRuntimeMaterialSnapshot } from "@bb/host-daemon-contract";
 import {
   buildCloudAuthRuntimeMaterial,
   type CloudAuthResolvedCredential,
 } from "@bb/agent-provider-auth";
+import {
+  createHostRuntimeMaterialSnapshot,
+  isEmptyHostRuntimeMaterialSnapshot,
+} from "@bb/host-runtime-material";
 import { ApiError } from "../../errors.js";
 import type { AppDeps, ServerRuntimeConfig } from "../../types.js";
 
@@ -30,33 +33,6 @@ function buildManagedRuntimeEnv(
   return env;
 }
 
-function toStableEnvEntries(
-  env: Record<string, string>,
-): Array<readonly [string, string]> {
-  return Object.entries(env).sort(([left], [right]) => left.localeCompare(right));
-}
-
-function toStableFiles(
-  snapshot: Pick<HostRuntimeMaterialSnapshot, "files">,
-) {
-  return snapshot.files
-    .map((file) => ({
-      contents: file.contents,
-      managedBy: file.managedBy,
-      mode: file.mode,
-      path: file.path,
-    }))
-    .sort((left, right) => left.path.localeCompare(right.path));
-}
-
-function buildSnapshotVersion(snapshot: HostRuntimeMaterialSnapshot): string {
-  const stablePayload = JSON.stringify({
-    env: toStableEnvEntries(snapshot.env),
-    files: toStableFiles(snapshot),
-  });
-  return createHash("sha256").update(stablePayload).digest("hex");
-}
-
 function isResolvedCloudAuthCredential(
   credential: CloudAuthResolvedCredential | null,
 ): credential is CloudAuthResolvedCredential {
@@ -77,25 +53,20 @@ export async function buildSandboxRuntimeMaterialSnapshot(
   const cloudAuthRuntimeMaterial = buildCloudAuthRuntimeMaterial({
     credentials,
   });
-  const snapshot: HostRuntimeMaterialSnapshot = {
+  return createHostRuntimeMaterialSnapshot({
     env: {
       ...baseEnv,
       ...customEnv,
       ...cloudAuthRuntimeMaterial.env,
     },
     files: cloudAuthRuntimeMaterial.files,
-    version: "",
-  };
-  return {
-    ...snapshot,
-    version: buildSnapshotVersion(snapshot),
-  };
+  });
 }
 
 export function isEmptySandboxRuntimeMaterialSnapshot(
   snapshot: HostRuntimeMaterialSnapshot,
 ): boolean {
-  return Object.keys(snapshot.env).length === 0 && snapshot.files.length === 0;
+  return isEmptyHostRuntimeMaterialSnapshot(snapshot);
 }
 
 export async function readSandboxRuntimeMaterialSnapshotForVersion(

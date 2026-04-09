@@ -21,6 +21,7 @@
     "@bb/db": "workspace:*",
     "@bb/domain": "workspace:*",
     "@bb/host-daemon-contract": "workspace:*",
+    "@bb/host-runtime-material": "workspace:*",
     "@bb/logger": "workspace:*",
     "@bb/process-utils": "workspace:*",
     "@bb/sandbox-host": "workspace:*",

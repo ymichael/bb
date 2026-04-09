@@ -1,9 +1,9 @@
 import type { HostDaemonCommandResult } from "@bb/host-daemon-contract";
-import type { CommandDispatchOptions, CommandOf } from "../command-dispatch-support.js";
 import {
   replaceManagedRuntimeFiles,
   resolveRuntimeMaterialEnv,
-} from "../runtime-material-files.js";
+} from "@bb/host-runtime-material";
+import type { CommandDispatchOptions, CommandOf } from "../command-dispatch-support.js";
 
 export async function syncRuntimeMaterial(
   command: CommandOf<"host.sync_runtime_material">,

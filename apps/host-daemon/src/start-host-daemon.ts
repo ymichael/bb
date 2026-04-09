@@ -5,6 +5,10 @@ import {
 } from "@bb/config/host-daemon";
 import type { AgentRuntimeOptions } from "@bb/agent-runtime";
 import type { HostType, ToolCallRequest, ToolCallResponse } from "@bb/domain";
+import {
+  readRuntimeMaterialState,
+  resolveRuntimeMaterialEnv,
+} from "@bb/host-runtime-material";
 import { createHostWatcher, type HostWatcher } from "@bb/host-watcher";
 import { createLogger } from "@bb/logger";
 import { createHostDaemonApp } from "./app.js";
@@ -26,8 +30,6 @@ import {
   prepareRuntimeShellEnv,
   resolveLocalBbExecutableDirectory,
 } from "./runtime-shell-env.js";
-import { resolveRuntimeMaterialEnv } from "./runtime-material-files.js";
-import { readRuntimeMaterialState } from "./runtime-material-state.js";
 import type { CreateReconnectingWebSocket } from "./server-connection.js";
 
 export interface StartHostDaemonOptions {
