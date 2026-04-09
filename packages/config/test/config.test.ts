@@ -88,7 +88,7 @@ describe("consumer-specific config", () => {
     ).rejects.toThrow(/BB_SERVER_URL/u);
   });
 
-  it("uses production defaults for the CLI even in development mode", async () => {
+  it("uses development defaults for the CLI in development mode", async () => {
     vi.stubEnv("NODE_ENV", "development");
     vi.stubEnv("BB_SERVER_URL", undefined);
     vi.stubEnv("BB_HOST_DAEMON_PORT", undefined);
@@ -97,8 +97,21 @@ describe("consumer-specific config", () => {
       "../src/cli.js",
     );
 
-    expect(cliConfig.BB_SERVER_URL).toBe("http://localhost:3000");
-    expect(cliConfig.BB_HOST_DAEMON_PORT).toBe(3001);
+    expect(cliConfig.BB_SERVER_URL).toBe("http://localhost:3334");
+    expect(cliConfig.BB_HOST_DAEMON_PORT).toBe(3002);
+  });
+
+  it("lets explicit CLI env overrides win over NODE_ENV-selected defaults", async () => {
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("BB_SERVER_URL", "http://localhost:9999");
+    vi.stubEnv("BB_HOST_DAEMON_PORT", "3999");
+
+    const { cliConfig } = await importFresh<typeof import("../src/cli.js")>(
+      "../src/cli.js",
+    );
+
+    expect(cliConfig.BB_SERVER_URL).toBe("http://localhost:9999");
+    expect(cliConfig.BB_HOST_DAEMON_PORT).toBe(3999);
   });
 
   it("allows BB_PUBLIC_URL to be omitted in production server config", async () => {
@@ -123,5 +136,45 @@ describe("consumer-specific config", () => {
     );
 
     expect(devEnvConfig.DEV_CLOUDFLARED_TUNNEL_TOKEN).toBe("test-tunnel-token");
+  });
+});
+
+describe("runtime config helpers", () => {
+  it("selects mode-specific defaults from NODE_ENV", async () => {
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("BB_DATA_DIR", undefined);
+    vi.stubEnv("BB_SERVER_URL", undefined);
+    vi.stubEnv("BB_SERVER_PORT", undefined);
+    vi.stubEnv("BB_HOST_DAEMON_PORT", undefined);
+
+    const runtime = await importFresh<typeof import("../src/runtime.mjs")>(
+      "../src/runtime.mjs",
+    );
+
+    expect(runtime.resolveModeFromNodeEnvironment()).toBe("development");
+    expect(runtime.resolveDefaultDataDirName()).toBe(".bb-dev");
+    expect(runtime.resolveServerUrl()).toBe("http://localhost:3334");
+    expect(runtime.resolveServerPort()).toBe(3334);
+    expect(runtime.resolveHostDaemonPort()).toBe(3002);
+    expect(runtime.resolveNodeEnvironment()).toBe("development");
+  });
+
+  it("lets explicit BB_* values override mode-selected defaults", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("BB_DATA_DIR", "~/custom-bb");
+    vi.stubEnv("BB_SERVER_URL", "https://server.example.test");
+    vi.stubEnv("BB_SERVER_PORT", "4444");
+    vi.stubEnv("BB_HOST_DAEMON_PORT", "4445");
+
+    const runtime = await importFresh<typeof import("../src/runtime.mjs")>(
+      "../src/runtime.mjs",
+    );
+
+    expect(runtime.resolveDataDir({ defaultDirName: ".bb" })).toBe(
+      path.join(os.homedir(), "custom-bb"),
+    );
+    expect(runtime.resolveServerUrl()).toBe("https://server.example.test");
+    expect(runtime.resolveServerPort()).toBe(4444);
+    expect(runtime.resolveHostDaemonPort()).toBe(4445);
   });
 });

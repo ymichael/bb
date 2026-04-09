@@ -9,6 +9,7 @@ import {
 import {
   DEFAULTS,
   resolveDataDir as resolveConfiguredDataDir,
+  resolveModeFromNodeEnvironment,
 } from "./lib/runtime-config.mjs";
 
 const defaultDataDir = resolveConfiguredDataDir({ defaultDirName: DEFAULTS.dataDir.prod });
@@ -17,18 +18,8 @@ const defaultDevDaemonDataDir = resolveConfiguredDataDir({
   defaultDirName: `${DEFAULTS.dataDir.dev}-host-daemon`,
 });
 
-function resolveMode(argv) {
-  const modeFlagIndex = argv.indexOf("--mode");
-  if (modeFlagIndex === -1) {
-    return "prod";
-  }
-
-  const modeValue = argv[modeFlagIndex + 1];
-  if (modeValue === "prod" || modeValue === "dev") {
-    return modeValue;
-  }
-
-  throw new Error('Expected "--mode prod" or "--mode dev"');
+function resolveMode() {
+  return resolveModeFromNodeEnvironment() === "development" ? "dev" : "prod";
 }
 
 function resolveDataDir(mode) {
@@ -80,24 +71,23 @@ async function confirmReset(targets) {
 async function main() {
   const argv = process.argv.slice(2);
   const args = new Set(argv);
-  const mode = resolveMode(argv);
+  const mode = resolveMode();
 
   if (args.has("--help") || args.has("-h")) {
     process.stdout.write(`
   ${bold("bb reset")}
 
   ${dim("Usage")}
-    node scripts/reset-bb-data.mjs [--mode prod|dev] [--all] [--yes]
+    node scripts/reset-bb-data.mjs [--all] [--yes]
 
   ${dim("Options")}
-    --mode  Select the default data directory for single-directory resets (${dim("prod")} or ${dim("dev")})
     --all   Remove prod, dev, and dev daemon data directories
     --yes   Skip the interactive confirmation prompt
 
   ${dim("Notes")}
     Removes bb-managed state directories (${dim("~/.bb")}, ${dim("~/.bb-dev")}, ${dim("~/.bb-dev-host-daemon")}).
     Does not touch provider auth/config managed by other tools.
-    Respects BB_DATA_DIR for single-directory resets and lets BB_DATA_DIR override --mode.
+    Respects BB_DATA_DIR for single-directory resets.
 \n`);
     return;
   }

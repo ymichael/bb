@@ -10,6 +10,7 @@ import { createHostJoinResponseSchema } from "../packages/server-contract/dist/i
 import {
   DEFAULTS,
   resolveDataDir as resolveConfiguredDataDir,
+  resolveModeFromNodeEnvironment,
   resolveNodeEnvironment,
   resolveServerUrl,
 } from "./lib/runtime-config.mjs";
@@ -20,13 +21,7 @@ const repoRoot = resolve(scriptDir, "..");
 const DEV_AUTO_JOIN_DATA_DIR_NAME = `${DEFAULTS.dataDir.dev}-host-daemon`;
 
 function resolveMode() {
-  const modeFlagIndex = process.argv.indexOf("--mode");
-  const modeValue =
-    modeFlagIndex >= 0 ? process.argv[modeFlagIndex + 1] : undefined;
-  if (modeValue === "dev" || modeValue === "prod") {
-    return modeValue;
-  }
-  throw new Error('Expected "--mode dev" or "--mode prod"');
+  return resolveModeFromNodeEnvironment() === "development" ? "dev" : "prod";
 }
 
 function shouldAutoJoin() {
@@ -50,8 +45,8 @@ function buildEnv(mode, autoJoin) {
   return {
     ...process.env,
     BB_DATA_DIR: resolveDataDir(mode, autoJoin),
-    BB_SERVER_URL: resolveServerUrl({ mode }),
-    NODE_ENV: resolveNodeEnvironment({ mode }),
+    BB_SERVER_URL: resolveServerUrl(),
+    NODE_ENV: resolveNodeEnvironment(),
   };
 }
 

@@ -19,8 +19,8 @@ const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, "..");
 
 const dataDir = resolveDataDir({ defaultDirName: DEFAULTS.dataDir.prod });
-const serverPort = resolveServerPort({ mode: "prod" });
-const daemonPort = resolveHostDaemonPort({ mode: "prod" });
+const serverPort = resolveServerPort();
+const daemonPort = resolveHostDaemonPort();
 const daemonLockFile = join(dataDir, "daemon.lock");
 const daemonLockDir = `${daemonLockFile}.lock`;
 const logDir = join(dataDir, "logs");
@@ -65,7 +65,7 @@ async function main() {
   const serverUrl = `http://127.0.0.1:${serverPort}`;
   const sharedEnv = {
     ...process.env,
-    NODE_ENV: resolveNodeEnvironment({ mode: "prod" }),
+    NODE_ENV: resolveNodeEnvironment(),
     BB_LOG_FORMAT: "pretty",
   };
 
@@ -113,7 +113,7 @@ async function main() {
 
   daemonProcess = spawnManagedProcess({
     command: process.execPath,
-    args: ["scripts/run-host-daemon.mjs", "--mode", "prod", "--auto-join"],
+    args: ["scripts/run-host-daemon.mjs", "--auto-join"],
     env: {
       ...sharedEnv,
       BB_SERVER_URL: serverUrl,

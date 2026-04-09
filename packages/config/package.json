@@ -27,6 +27,10 @@
       "import": "./dist/defaults.js",
       "types": "./dist/defaults.d.ts"
     },
+    "./runtime": {
+      "import": "./dist/runtime.js",
+      "types": "./dist/runtime.d.ts"
+    },
     "./strings": {
       "import": "./dist/strings.js",
       "types": "./dist/strings.d.ts"
