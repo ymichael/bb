@@ -110,6 +110,18 @@ export interface HasPendingThreadShutdownInEnvironmentArgs {
   environmentId: string;
 }
 
+export interface TransitionThreadsToErrorArgs {
+  now?: number;
+  threadIds: readonly string[];
+}
+
+const THREAD_STATUSES_ALLOWING_ERROR: ThreadStatus[] = [
+  "created",
+  "provisioning",
+  "idle",
+  "active",
+];
+
 export function listThreads(
   db: DbConnection,
   options: ListThreadsOptions,
@@ -404,4 +416,37 @@ export function transitionThreadStatus(
 
   notifier.notifyThread(id, ["status-changed"]);
   return updated!;
+}
+
+export function transitionThreadsToError(
+  db: DbConnection,
+  notifier: DbNotifier,
+  args: TransitionThreadsToErrorArgs,
+): string[] {
+  if (args.threadIds.length === 0) {
+    return [];
+  }
+
+  const now = args.now ?? Date.now();
+  const updatedThreads = db.update(threads)
+    .set({
+      status: "error",
+      updatedAt: now,
+    })
+    .where(
+      and(
+        inArray(threads.id, [...args.threadIds]),
+        inArray(threads.status, THREAD_STATUSES_ALLOWING_ERROR),
+        isNull(threads.deletedAt),
+        isNull(threads.stopRequestedAt),
+      ),
+    )
+    .returning({ id: threads.id })
+    .all();
+
+  for (const thread of updatedThreads) {
+    notifier.notifyThread(thread.id, ["status-changed"]);
+  }
+
+  return updatedThreads.map((thread) => thread.id);
 }

@@ -7,7 +7,7 @@ import {
   getDefaultProjectSource,
   getProjectSourceByHost,
   getProjectSourceForProject,
-  listProjects,
+  listPublicProjects,
   listProjectSourcesByProjectIds,
   listThreads,
   updateProject,
@@ -43,15 +43,13 @@ import { queueCommandAndWait } from "../services/hosts/command-wait.js";
 import { parseOptionalInteger } from "../services/lib/validation.js";
 import {
   advanceProjectDeletion,
-  listProjectsPendingDeletion,
   requestProjectDeletion,
 } from "../services/projects/project-deletion.js";
 
 function buildProjectResponses(deps: AppDeps, projectId?: string): ProjectResponse[] {
-  const deletingProjectIds = new Set(listProjectsPendingDeletion(deps));
   const projects = projectId
     ? [requirePublicProject(deps.db, projectId)]
-    : listProjects(deps.db).filter((project) => !deletingProjectIds.has(project.id));
+    : listPublicProjects(deps.db);
   if (projects.length === 0) {
     return [];
   }

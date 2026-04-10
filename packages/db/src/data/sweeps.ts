@@ -9,12 +9,12 @@ import {
   environments,
 } from "../schema.js";
 import { listEphemeralHostsPendingCleanup } from "./hosts.js";
-import { getThread, transitionThreadStatus } from "./threads.js";
+import { transitionThreadsToError } from "./threads.js";
 
 /** Standard command TTL: 60 seconds */
 const STANDARD_COMMAND_TTL_MS = 60_000;
 
-/** Provision command TTL: 5 minutes */
+/** Provision command TTL: 20 minutes */
 const PROVISION_COMMAND_TTL_MS = 20 * 60_000;
 
 /** Destroyed environments are hard-deleted after 7 days. */
@@ -34,8 +34,8 @@ export function sweepExpiredCommands(
   now?: number,
 ) {
   const currentTime = now ?? Date.now();
-  let requeued = 0;
-  let errored = 0;
+  const requeuedCommandIds: string[] = [];
+  const threadsToError = new Set<string>();
   const erroredCommandIds: string[] = [];
 
   // Find fetched commands that have exceeded their type-specific TTL
@@ -55,60 +55,64 @@ export function sweepExpiredCommands(
     .all();
 
   for (const cmd of fetchedCommands) {
-
     if (cmd.retryCount === 0) {
-      // Re-queue: set back to pending with retryCount=1
-      db.update(hostDaemonCommands)
-        .set({
-          state: "pending",
-          fetchedAt: null,
-          retryCount: 1,
-        })
-        .where(eq(hostDaemonCommands.id, cmd.id))
-        .run();
-      requeued++;
-    } else {
-      // Error the command
-      db.update(hostDaemonCommands)
-        .set({
-          state: "error",
-          completedAt: currentTime,
-          resultPayload: JSON.stringify({
-            error: "Command expired after retry",
-          }),
-        })
-        .where(eq(hostDaemonCommands.id, cmd.id))
-        .run();
-      errored++;
-      erroredCommandIds.push(cmd.id);
+      requeuedCommandIds.push(cmd.id);
+      continue;
+    }
 
-      // Try to extract threadId from payload and error the thread
-      try {
-        const payload = JSON.parse(cmd.payload);
-        if (payload.threadId) {
-          const thread = getThread(db, payload.threadId);
-          if (!thread || thread.deletedAt !== null || thread.stopRequestedAt !== null) {
-            continue;
-          }
-          try {
-            transitionThreadStatus(db, notifier, payload.threadId, "error");
-          } catch {
-            // Invalid transition (e.g., thread already in error or in created state) — skip
-          }
-        }
-      } catch {
-        // payload may not contain threadId, that's fine
+    erroredCommandIds.push(cmd.id);
+
+    // Try to extract threadId from payload and error the thread
+    try {
+      const payload = JSON.parse(cmd.payload);
+      if (typeof payload.threadId === "string") {
+        threadsToError.add(payload.threadId);
       }
+    } catch {
+      // payload may not contain threadId, that's fine
     }
   }
 
-  return { requeued, errored, erroredCommandIds };
+  if (requeuedCommandIds.length > 0) {
+    db.update(hostDaemonCommands)
+      .set({
+        state: "pending",
+        fetchedAt: null,
+        retryCount: 1,
+      })
+      .where(inArray(hostDaemonCommands.id, requeuedCommandIds))
+      .run();
+  }
+
+  if (erroredCommandIds.length > 0) {
+    db.update(hostDaemonCommands)
+      .set({
+        state: "error",
+        completedAt: currentTime,
+        resultPayload: JSON.stringify({
+          error: "Command expired after retry",
+        }),
+      })
+      .where(inArray(hostDaemonCommands.id, erroredCommandIds))
+      .run();
+
+    transitionThreadsToError(db, notifier, {
+      now: currentTime,
+      threadIds: [...threadsToError],
+    });
+  }
+
+  return {
+    requeued: requeuedCommandIds.length,
+    errored: erroredCommandIds.length,
+    erroredCommandIds,
+  };
 }
 
 /**
  * Sweep expired leases: sessions past lease timeout.
  * - Close the session (status="closed", closeReason="expired")
- * - Error all active/idle threads on that host
+ * - Error all active/provisioning threads on that host
  *
  * Returns { sessionsClosed: number; threadsErrored: number }
  */
@@ -118,8 +122,6 @@ export function sweepExpiredLeases(
   now?: number,
 ) {
   const currentTime = now ?? Date.now();
-  let sessionsClosed = 0;
-  let threadsErrored = 0;
 
   // Find active sessions past their lease
   const expiredSessions = db
@@ -133,48 +135,52 @@ export function sweepExpiredLeases(
     )
     .all();
 
-  for (const session of expiredSessions) {
-    // Close the session
-    db.update(hostDaemonSessions)
-      .set({
-        status: "closed",
-        closedAt: currentTime,
-        closeReason: "expired",
-        updatedAt: currentTime,
-      })
-      .where(eq(hostDaemonSessions.id, session.id))
-      .run();
-    sessionsClosed++;
-
-    notifier.notifyHost(session.hostId, ["host-disconnected"]);
-
-    // Find active/provisioning threads on environments belonging to this host.
-    // Idle threads are excluded — they have no in-flight work to interrupt.
-    const activeThreads = db
-      .select({ id: threads.id })
-      .from(threads)
-      .innerJoin(environments, eq(threads.environmentId, environments.id))
-      .where(
-        and(
-          eq(environments.hostId, session.hostId),
-          inArray(threads.status, ["active", "provisioning"]),
-          sql`${threads.deletedAt} IS NULL`,
-          sql`${threads.stopRequestedAt} IS NULL`,
-        ),
-      )
-      .all();
-
-    for (const thread of activeThreads) {
-      try {
-        transitionThreadStatus(db, notifier, thread.id, "error");
-        threadsErrored++;
-      } catch {
-        // Invalid transition — skip
-      }
-    }
+  if (expiredSessions.length === 0) {
+    return { sessionsClosed: 0, threadsErrored: 0 };
   }
 
-  return { sessionsClosed, threadsErrored };
+  db.update(hostDaemonSessions)
+    .set({
+      status: "closed",
+      closedAt: currentTime,
+      closeReason: "expired",
+      updatedAt: currentTime,
+    })
+    .where(inArray(hostDaemonSessions.id, expiredSessions.map((session) => session.id)))
+    .run();
+
+  for (const session of expiredSessions) {
+    notifier.notifyHost(session.hostId, ["host-disconnected"]);
+  }
+
+  const expiredHostIds = [...new Set(expiredSessions.map((session) => session.hostId))];
+
+  // Find active/provisioning threads on environments belonging to expired hosts.
+  // Idle threads are excluded — they have no in-flight work to interrupt.
+  const activeThreadIds = db
+    .select({ id: threads.id })
+    .from(threads)
+    .innerJoin(environments, eq(threads.environmentId, environments.id))
+    .where(
+      and(
+        inArray(environments.hostId, expiredHostIds),
+        inArray(threads.status, ["active", "provisioning"]),
+        isNull(threads.deletedAt),
+        isNull(threads.stopRequestedAt),
+      ),
+    )
+    .all()
+    .map((thread) => thread.id);
+
+  const erroredThreadIds = transitionThreadsToError(db, notifier, {
+    now: currentTime,
+    threadIds: activeThreadIds,
+  });
+
+  return {
+    sessionsClosed: expiredSessions.length,
+    threadsErrored: erroredThreadIds.length,
+  };
 }
 
 /**

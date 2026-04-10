@@ -1,7 +1,7 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import type { DbConnection } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
-import { projects, projectSources } from "../schema.js";
+import { projects, projectOperations, projectSources } from "../schema.js";
 import { createProjectId, createProjectSourceId } from "../ids.js";
 import {
   toProjectSource,
@@ -75,6 +75,20 @@ export function getProject(db: DbConnection, id: string) {
 
 export function listProjects(db: DbConnection) {
   return db.select().from(projects).all();
+}
+
+export function listPublicProjects(db: DbConnection) {
+  return db
+    .select()
+    .from(projects)
+    .where(
+      sql`NOT EXISTS (
+        SELECT 1 FROM ${projectOperations}
+        WHERE ${projectOperations.projectId} = ${projects.id}
+        AND ${projectOperations.kind} = 'delete'
+      )`,
+    )
+    .all();
 }
 
 export interface UpdateProjectInput {

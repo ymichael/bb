@@ -38,29 +38,20 @@ export function openSession(
   const now = Date.now();
   const id = createHostDaemonSessionId();
 
-  // Close any existing active sessions for this host
-  const existingSessions = db
-    .select()
-    .from(hostDaemonSessions)
+  db.update(hostDaemonSessions)
+    .set({
+      status: "closed",
+      closedAt: now,
+      closeReason: "replaced",
+      updatedAt: now,
+    })
     .where(
       and(
         eq(hostDaemonSessions.hostId, input.hostId),
         eq(hostDaemonSessions.status, "active"),
       ),
     )
-    .all();
-
-  for (const session of existingSessions) {
-    db.update(hostDaemonSessions)
-      .set({
-        status: "closed",
-        closedAt: now,
-        closeReason: "replaced",
-        updatedAt: now,
-      })
-      .where(eq(hostDaemonSessions.id, session.id))
-      .run();
-  }
+    .run();
 
   const leaseExpiresAt = now + input.leaseTimeoutMs;
 

@@ -2,6 +2,7 @@ export {
   createProject,
   getProject,
   listProjects,
+  listPublicProjects,
   updateProject,
   deleteProject,
 } from "./projects.js";
