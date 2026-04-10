@@ -1,4 +1,5 @@
 import { type ComponentProps, type ReactNode } from "react";
+import { cn } from "@/lib/utils";
 import { HostStatusBadge } from "@/components/HostStatusIndicator";
 import { Check, ChevronDown, ChevronRight, Copy, X } from "lucide-react";
 import { Link } from "react-router-dom";
@@ -329,7 +330,7 @@ function ThreadMetadataContent({
             className="flex min-w-0 items-baseline gap-2 whitespace-nowrap"
             title={`${threadGitStatusDisplay.label} ${threadGitStatusDisplay.summary}`}
           >
-            <span className={`shrink-0 font-medium ${threadGitStatusLabelClass}`}>
+            <span className={cn("shrink-0 font-medium", threadGitStatusLabelClass)}>
               {threadGitStatusDisplay.label}
             </span>
             <span className="min-w-0 truncate text-muted-foreground">

@@ -25,7 +25,9 @@
   "dependencies": {
     "@bb/core-ui": "workspace:*",
     "@bb/domain": "workspace:*",
+    "clsx": "^2.1.1",
     "@pierre/diffs": "^1.0.11",
+    "tailwind-merge": "^3.4.0",
     "ansi-to-html": "^0.7.2",
     "lucide-react": "^0.563.0",
     "react-markdown": "^10.1.0",

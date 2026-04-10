@@ -1018,6 +1018,9 @@ importers:
       ansi-to-html:
         specifier: ^0.7.2
         version: 0.7.2
+      clsx:
+        specifier: ^2.1.1
+        version: 2.1.1
       lucide-react:
         specifier: ^0.563.0
         version: 0.563.0(react@19.2.4)
@@ -1030,6 +1033,9 @@ importers:
       remark-gfm:
         specifier: ^4.0.1
         version: 4.0.1
+      tailwind-merge:
+        specifier: ^3.4.0
+        version: 3.4.0
     devDependencies:
       '@bb/tsconfig':
         specifier: workspace:*

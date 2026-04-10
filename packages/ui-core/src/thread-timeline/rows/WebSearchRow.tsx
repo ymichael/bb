@@ -1,4 +1,5 @@
 import type { ViewWebSearchMessage } from "@bb/domain";
+import { cn } from "../../cn.js";
 import { COLLAPSIBLE_HEADER_STATIC_TONE_CLASS } from "../../disclosure.js";
 import { EventTitle } from "./shared.js";
 
@@ -22,7 +23,7 @@ export function WebSearchRow({
     <div className="group w-full" style={{ overflowAnchor: "none" }}>
       <div className="mr-auto w-full">
         <div className="rounded-md px-2 py-1 text-sm text-muted-foreground">
-          <div className={`py-0.5 ${COLLAPSIBLE_HEADER_STATIC_TONE_CLASS}`}>
+          <div className={cn("py-0.5", COLLAPSIBLE_HEADER_STATIC_TONE_CLASS)}>
             {summary}
           </div>
         </div>

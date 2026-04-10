@@ -1,4 +1,5 @@
 import { useMemo, type CSSProperties } from "react";
+import { cn } from "../../cn.js";
 import { ansiToHtml } from "../ansi.js";
 import { ExpandableLine } from "./ExpandableLine.js";
 import {
@@ -34,7 +35,7 @@ export function TerminalOutputBlock({
 
   return (
     <div
-      className={`overflow-hidden rounded-lg border border-border bg-card ${className ?? ""}`.trim()}
+      className={cn("overflow-hidden rounded-lg border border-border bg-card", className)}
     >
       <div className="px-4 py-3 font-mono ui-text-sm leading-tight text-foreground">
         {command ? (
@@ -42,7 +43,7 @@ export function TerminalOutputBlock({
             fullText={`$ ${command}`}
             collapsedClassName="overflow-hidden whitespace-pre-wrap break-words max-h-[2lh]"
             collapsedStyle={COMMAND_LINE_CLAMP_STYLE}
-            expandedClassName={`whitespace-pre-wrap break-words ${EVENT_DETAIL_MAX_HEIGHT_CLASS} overflow-auto`}
+            expandedClassName={cn("whitespace-pre-wrap break-words overflow-auto", EVENT_DETAIL_MAX_HEIGHT_CLASS)}
           >
             $ {command}
           </ExpandableLine>
@@ -50,7 +51,7 @@ export function TerminalOutputBlock({
         <pre
           ref={outputRef}
           onScroll={handleOutputScroll}
-          className={`${command ? "mt-1.5 " : ""}${maxHeightClassName} overflow-auto whitespace-pre leading-tight text-muted-foreground`}
+          className={cn(command && "mt-1.5", maxHeightClassName, "overflow-auto whitespace-pre leading-tight text-muted-foreground")}
           dangerouslySetInnerHTML={{ __html: renderedOutput }}
         >
         </pre>

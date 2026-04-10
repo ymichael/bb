@@ -35,6 +35,7 @@ import { useProjects } from "@/hooks/queries/project-queries"
 import { useThread } from "@/hooks/queries/thread-queries"
 import { useDialogState } from "@/hooks/useDialogState"
 import { getThreadDisplayTitle } from "@/lib/thread-title"
+import { cn } from "@/lib/utils"
 import { HireManagerModal } from "@/components/HireManagerModal"
 import { ProjectPathDialog } from "@/components/project/ProjectPathDialog"
 import { createLocalStorageSyncStorage } from "@/lib/browser-storage"
@@ -111,7 +112,7 @@ function AppHeader({
 
   return (
     <header
-      className={`relative h-12 shrink-0 px-4${isProjectMainView ? "" : " border-b border-border"}`}
+      className={cn("relative h-12 shrink-0 px-4", !isProjectMainView && "border-b border-border")}
     >
       <div className="flex h-full items-center">
         <SidebarTrigger className="h-5 w-5 shrink-0 rounded-md p-0" />

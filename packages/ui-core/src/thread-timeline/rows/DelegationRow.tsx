@@ -1,4 +1,5 @@
 import { useMemo, type ReactNode } from "react";
+import { cn } from "../../cn.js";
 import {
   buildTimelineRows,
   buildToolGroupSummaryParts,
@@ -142,7 +143,7 @@ export function DelegationRow({
           )}
           onToggle={onToggle}
         >
-          <div className={`overflow-auto rounded-md border border-border/60 bg-background/40 ${EVENT_LARGE_DETAIL_MAX_HEIGHT_CLASS}`}>
+          <div className={cn("overflow-auto rounded-md border border-border/60 bg-background/40", EVENT_LARGE_DETAIL_MAX_HEIGHT_CLASS)}>
             {nestedRows.map((row, index) => {
               const isLastRow = index === nestedRows.length - 1 && !message.output;
               const shouldAutoExpand = isLastRow && isWorking;

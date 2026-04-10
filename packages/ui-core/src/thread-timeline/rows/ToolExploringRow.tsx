@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { cn } from "../../cn.js";
 import {
   buildExploringDetailLines,
   formatExploringCountsLabel,
@@ -59,7 +60,7 @@ export function ToolExploringRow({
       <div className="group w-full" style={{ overflowAnchor: "none" }}>
         <div className="mr-auto w-full">
           <div className="rounded-md px-2 py-1 text-sm text-muted-foreground">
-            <div className={`py-0.5 ${getStaticEventToneClass()}`}>
+            <div className={cn("py-0.5", getStaticEventToneClass())}>
               {summaryContent}
             </div>
           </div>
