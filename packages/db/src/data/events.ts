@@ -249,7 +249,7 @@ export interface ListRecentStoredEventRowsArgs {
   threadId: string;
 }
 
-export interface ListTokenUsageRowsForContextWindowUsageArgs {
+export interface ListContextWindowUsageRowsArgs {
   threadId: string;
 }
 
@@ -265,6 +265,11 @@ export interface PruneThreadEventsBeforeSequenceArgs {
   sequenceCutoff: number;
   threadId: string;
   types: readonly ThreadEventType[];
+}
+
+export interface PruneContextWindowUsageEventsBeforeSequenceArgs {
+  sequenceCutoff: number;
+  threadId: string;
 }
 
 export interface PruneTokenUsageEventsBeforeSequenceArgs {
@@ -376,9 +381,13 @@ export function listRecentStoredEventRows(
     .all();
 }
 
-export function listTokenUsageRowsForContextWindowUsage(
+function listLatestRowsForContextWindowUsage(
   db: DbConnection,
-  args: ListTokenUsageRowsForContextWindowUsageArgs,
+  args: {
+    contextWindowJsonPath: string;
+    eventType: "thread/contextWindowUsage/updated" | "thread/tokenUsage/updated";
+    threadId: string;
+  },
 ): StoredEventRow[] {
   const latestRow = db
     .select(storedEventRowFields)
@@ -386,7 +395,7 @@ export function listTokenUsageRowsForContextWindowUsage(
     .where(
       and(
         eq(events.threadId, args.threadId),
-        eq(events.type, "thread/tokenUsage/updated"),
+        eq(events.type, args.eventType),
       ),
     )
     .orderBy(desc(events.sequence))
@@ -403,8 +412,8 @@ export function listTokenUsageRowsForContextWindowUsage(
     .where(
       and(
         eq(events.threadId, args.threadId),
-        eq(events.type, "thread/tokenUsage/updated"),
-        sql`json_extract(${events.data}, '$.tokenUsage.modelContextWindow') IS NOT NULL`,
+        eq(events.type, args.eventType),
+        sql`json_extract(${events.data}, ${args.contextWindowJsonPath}) IS NOT NULL`,
       ),
     )
     .orderBy(desc(events.sequence))
@@ -416,6 +425,17 @@ export function listTokenUsageRowsForContextWindowUsage(
   }
 
   return [latestContextRow, latestRow];
+}
+
+export function listContextWindowUsageRows(
+  db: DbConnection,
+  args: ListContextWindowUsageRowsArgs,
+): StoredEventRow[] {
+  return listLatestRowsForContextWindowUsage(db, {
+    threadId: args.threadId,
+    eventType: "thread/contextWindowUsage/updated",
+    contextWindowJsonPath: "$.contextWindowUsage.modelContextWindow",
+  });
 }
 
 export function getLatestThreadOutputEventRow(
@@ -566,9 +586,14 @@ export function pruneThreadEventsBeforeSequence(
   return result.changes;
 }
 
-export function pruneTokenUsageEventsBeforeSequence(
+function pruneLatestRowsForContextWindowUsageBeforeSequence(
   db: DbConnection,
-  args: PruneTokenUsageEventsBeforeSequenceArgs,
+  args: {
+    contextWindowJsonPath: string;
+    eventType: "thread/contextWindowUsage/updated" | "thread/tokenUsage/updated";
+    sequenceCutoff: number;
+    threadId: string;
+  },
 ): number {
   if (args.sequenceCutoff <= 0) {
     return 0;
@@ -579,13 +604,13 @@ export function pruneTokenUsageEventsBeforeSequence(
   const result = db.run(
     sql`DELETE FROM events
         WHERE ${events.threadId} = ${args.threadId}
-          AND ${events.type} = 'thread/tokenUsage/updated'
+          AND ${events.type} = ${args.eventType}
           AND ${events.sequence} <= ${args.sequenceCutoff}
           AND ${events.id} NOT IN (
             SELECT latest.id
             FROM events latest
             WHERE latest.thread_id = ${args.threadId}
-              AND latest.type = 'thread/tokenUsage/updated'
+              AND latest.type = ${args.eventType}
             ORDER BY latest.sequence DESC
             LIMIT 1
           )
@@ -593,14 +618,38 @@ export function pruneTokenUsageEventsBeforeSequence(
             SELECT latest_context.id
             FROM events latest_context
             WHERE latest_context.thread_id = ${args.threadId}
-              AND latest_context.type = 'thread/tokenUsage/updated'
-              AND json_extract(latest_context.data, '$.tokenUsage.modelContextWindow') IS NOT NULL
+              AND latest_context.type = ${args.eventType}
+              AND json_extract(latest_context.data, ${args.contextWindowJsonPath}) IS NOT NULL
             ORDER BY latest_context.sequence DESC
             LIMIT 1
           )`,
   );
 
   return result.changes;
+}
+
+export function pruneContextWindowUsageEventsBeforeSequence(
+  db: DbConnection,
+  args: PruneContextWindowUsageEventsBeforeSequenceArgs,
+): number {
+  return pruneLatestRowsForContextWindowUsageBeforeSequence(db, {
+    threadId: args.threadId,
+    sequenceCutoff: args.sequenceCutoff,
+    eventType: "thread/contextWindowUsage/updated",
+    contextWindowJsonPath: "$.contextWindowUsage.modelContextWindow",
+  });
+}
+
+export function pruneTokenUsageEventsBeforeSequence(
+  db: DbConnection,
+  args: PruneTokenUsageEventsBeforeSequenceArgs,
+): number {
+  return pruneLatestRowsForContextWindowUsageBeforeSequence(db, {
+    threadId: args.threadId,
+    sequenceCutoff: args.sequenceCutoff,
+    eventType: "thread/tokenUsage/updated",
+    contextWindowJsonPath: "$.tokenUsage.modelContextWindow",
+  });
 }
 
 export function pruneResolvedAgentMessageDeltas(

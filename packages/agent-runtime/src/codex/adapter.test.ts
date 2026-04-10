@@ -1040,6 +1040,16 @@ describe("codex provider adapter", () => {
         }),
       }),
     );
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "thread/contextWindowUsage/updated",
+        contextWindowUsage: {
+          usedTokens: 50,
+          modelContextWindow: 128000,
+          estimated: false,
+        },
+      }),
+    );
   });
 
   // -- translateEvent: plan/diff -------------------------------------------

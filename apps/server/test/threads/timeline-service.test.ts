@@ -92,24 +92,12 @@ describe("buildThreadTimeline", () => {
       providerThreadId: "provider-thread-1",
       turnId: "turn-1",
       sequence: 1003,
-      type: "thread/tokenUsage/updated",
+      type: "thread/contextWindowUsage/updated",
       data: {
-        tokenUsage: {
-          total: {
-            totalTokens: 84,
-            inputTokens: 42,
-            cachedInputTokens: 0,
-            outputTokens: 42,
-            reasoningOutputTokens: 0,
-          },
-          last: {
-            totalTokens: 42,
-            inputTokens: 0,
-            cachedInputTokens: 0,
-            outputTokens: 42,
-            reasoningOutputTokens: 0,
-          },
+        contextWindowUsage: {
+          usedTokens: 42,
           modelContextWindow: 200_000,
+          estimated: false,
         },
       },
     });
@@ -128,12 +116,13 @@ describe("buildThreadTimeline", () => {
       },
     });
     expect(timeline.contextWindowUsage).toEqual({
-      totalTokens: 42,
+      usedTokens: 42,
       modelContextWindow: 200_000,
+      estimated: false,
     });
   });
 
-  it("keeps the last non-null modelContextWindow when the newest token-usage row omits it", async () => {
+  it("keeps the last non-null modelContextWindow when the newest context-usage row omits it", async () => {
     const harness = await createTestAppHarness();
     harnesses.push(harness);
 
@@ -156,24 +145,12 @@ describe("buildThreadTimeline", () => {
       providerThreadId: "provider-thread-1",
       turnId: "turn-1",
       sequence: 1,
-      type: "thread/tokenUsage/updated",
+      type: "thread/contextWindowUsage/updated",
       data: {
-        tokenUsage: {
-          total: {
-            totalTokens: 120,
-            inputTokens: 80,
-            cachedInputTokens: 0,
-            outputTokens: 40,
-            reasoningOutputTokens: 0,
-          },
-          last: {
-            totalTokens: 120,
-            inputTokens: 80,
-            cachedInputTokens: 0,
-            outputTokens: 40,
-            reasoningOutputTokens: 0,
-          },
+        contextWindowUsage: {
+          usedTokens: 120,
           modelContextWindow: 200_000,
+          estimated: false,
         },
       },
     });
@@ -183,24 +160,12 @@ describe("buildThreadTimeline", () => {
       providerThreadId: "provider-thread-1",
       turnId: "turn-2",
       sequence: 2,
-      type: "thread/tokenUsage/updated",
+      type: "thread/contextWindowUsage/updated",
       data: {
-        tokenUsage: {
-          total: {
-            totalTokens: 180,
-            inputTokens: 110,
-            cachedInputTokens: 0,
-            outputTokens: 70,
-            reasoningOutputTokens: 0,
-          },
-          last: {
-            totalTokens: 60,
-            inputTokens: 30,
-            cachedInputTokens: 0,
-            outputTokens: 30,
-            reasoningOutputTokens: 0,
-          },
+        contextWindowUsage: {
+          usedTokens: 60,
           modelContextWindow: null,
+          estimated: true,
         },
       },
     });
@@ -208,8 +173,9 @@ describe("buildThreadTimeline", () => {
     const timeline = buildThreadTimeline(harness.db, thread, {});
 
     expect(timeline.contextWindowUsage).toEqual({
-      totalTokens: 60,
+      usedTokens: 60,
       modelContextWindow: 200_000,
+      estimated: true,
     });
   });
 

@@ -12,7 +12,10 @@ import {
   jsonRpcEnvelopeSchema,
   type BridgeToolCallRequest,
 } from "../../shared/bridge-tool-calls.js";
-import type { AgentSessionEvent } from "@mariozechner/pi-coding-agent";
+import type {
+  AgentSessionEvent,
+  ContextUsage,
+} from "@mariozechner/pi-coding-agent";
 import type { ImageContent } from "@mariozechner/pi-ai";
 import { PiSdkSession, type PiSdkSessionOptions } from "./sdk-session.js";
 import {
@@ -127,6 +130,12 @@ interface BridgeEventNotification {
   params: Record<string, unknown>;
 }
 
+interface ContextWindowUsagePayload {
+  estimated: boolean;
+  modelContextWindow: number | null;
+  usedTokens: number | null;
+}
+
 interface PendingToolCall {
   resolve: (value: { content: string; isError?: boolean }) => void;
 }
@@ -151,6 +160,45 @@ function sendError(id: string | number, code: number, message: string): void {
   send({ jsonrpc: "2.0", id, error: { code, message } });
 }
 
+function toContextWindowUsagePayload(
+  contextUsage: ContextUsage | undefined,
+): ContextWindowUsagePayload | null {
+  if (!contextUsage) {
+    return null;
+  }
+
+  return {
+    usedTokens: contextUsage.tokens ?? null,
+    modelContextWindow: contextUsage.contextWindow > 0
+      ? contextUsage.contextWindow
+      : null,
+    estimated: true,
+  };
+}
+
+function emitContextWindowUsage(threadId: string): void {
+  const threadSession = sessions.get(threadId);
+  if (!threadSession) {
+    return;
+  }
+
+  const contextWindowUsage = toContextWindowUsagePayload(
+    threadSession.session.getContextUsage(),
+  );
+  if (!contextWindowUsage) {
+    return;
+  }
+
+  send({
+    jsonrpc: "2.0",
+    method: "thread/contextWindowUsage/updated",
+    params: {
+      threadId,
+      contextWindowUsage,
+    },
+  });
+}
+
 function createOnPiEvent(threadId: string): (event: AgentSessionEvent) => void {
   return (event: AgentSessionEvent) => {
     if (!sessions.has(threadId)) return;
@@ -159,6 +207,9 @@ function createOnPiEvent(threadId: string): (event: AgentSessionEvent) => void {
       method: "sdk/message",
       params: { threadId, message: event },
     });
+    if (event.type === "agent_end") {
+      emitContextWindowUsage(threadId);
+    }
   };
 }
 

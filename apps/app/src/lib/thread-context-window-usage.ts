@@ -12,7 +12,7 @@ export const extractThreadContextWindowUsage = extractThreadContextWindowUsageFr
 
 export function calculateContextWindowUsagePercent(usage: ThreadContextWindowUsage): number {
   if (usage.modelContextWindow <= 0) return 0;
-  const ratio = usage.totalTokens / usage.modelContextWindow;
+  const ratio = usage.usedTokens / usage.modelContextWindow;
   const clampedRatio = Math.min(Math.max(ratio, 0), 1);
   return Math.round(clampedRatio * 100);
 }

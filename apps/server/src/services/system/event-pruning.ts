@@ -1,6 +1,7 @@
 import {
   getThread,
   getLatestThreadSequence,
+  pruneContextWindowUsageEventsBeforeSequence,
   pruneResolvedAgentMessageDeltas,
   pruneTokenUsageEventsBeforeSequence,
   pruneThreadEventsBeforeSequence,
@@ -40,6 +41,7 @@ export const ACTIVE_THREAD_EVENT_PRUNE_MIN_SEQUENCE_DELTA = 250;
 export const ACTIVE_THREAD_EVENT_PRUNE_MIN_INTERVAL_MS = 30_000;
 
 export const AGE_PRUNABLE_THREAD_EVENT_TYPES: readonly ThreadEventType[] = [
+  "thread/contextWindowUsage/updated",
   "thread/tokenUsage/updated",
   "turn/diff/updated",
 ] as const;
@@ -75,6 +77,10 @@ export function pruneThreadEventHistory(
   const keepRecent = KEEP_RECENT_BY_MODE[args.mode];
   const sequenceCutoff = Math.max(0, latestSequence - keepRecent);
   const removedAgePrunableEvents =
+    pruneContextWindowUsageEventsBeforeSequence(deps.db, {
+      threadId: args.threadId,
+      sequenceCutoff,
+    }) +
     pruneTokenUsageEventsBeforeSequence(deps.db, {
       threadId: args.threadId,
       sequenceCutoff,

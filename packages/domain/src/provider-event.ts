@@ -79,6 +79,15 @@ export type ThreadEventTokenUsageBreakdown = z.infer<
   typeof threadEventTokenUsageBreakdownSchema
 >;
 
+export const threadEventContextWindowUsageSchema = z.object({
+  usedTokens: z.number().nullable(),
+  modelContextWindow: z.number().nullable(),
+  estimated: z.boolean(),
+});
+export type ThreadEventContextWindowUsage = z.infer<
+  typeof threadEventContextWindowUsageSchema
+>;
+
 export const threadEventTokenUsageSchema = z.object({
   total: threadEventTokenUsageBreakdownSchema,
   last: threadEventTokenUsageBreakdownSchema,
@@ -322,6 +331,13 @@ export const providerEventSchema = z.discriminatedUnion("type", [
     providerThreadId: z.string(),
     turnId: z.string(),
     tokenUsage: threadEventTokenUsageSchema,
+  }),
+  z.object({
+    type: z.literal("thread/contextWindowUsage/updated"),
+    threadId: z.string(),
+    providerThreadId: z.string(),
+    turnId: z.string(),
+    contextWindowUsage: threadEventContextWindowUsageSchema,
   }),
   z.object({
     type: z.literal("turn/plan/updated"),

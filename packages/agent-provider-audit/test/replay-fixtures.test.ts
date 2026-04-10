@@ -173,7 +173,7 @@ describe("@bb/agent-provider-audit fixture replay", () => {
     expect(contextWindowSnapshots).toMatchSnapshot();
   });
 
-  it("replayed Pi fixtures expose non-null context-window usage", () => {
+  it("replayed Pi fixtures preserve model context-window metadata even without bridge-side usage samples", () => {
     const piSnapshots = checkedInReplay.fixtures
       .filter(({ fixture }) => fixture.providerId === "pi")
       .map(({ fixture, bundle }) =>
@@ -185,7 +185,7 @@ describe("@bb/agent-provider-audit fixture replay", () => {
 
     expect(piSnapshots.length).toBeGreaterThan(0);
     for (const snapshot of piSnapshots) {
-      expect(snapshot.contextWindowUsage).not.toBeNull();
+      expect(snapshot.contextWindowUsage).toBeNull();
       expect(snapshot.tokenUsageSummary.nonNullModelContextWindowCount).toBeGreaterThan(0);
       expect(snapshot.tokenUsageSummary.distinctModelContextWindows.length).toBeGreaterThan(0);
     }

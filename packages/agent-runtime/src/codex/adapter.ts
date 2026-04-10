@@ -16,6 +16,7 @@ import type {
   SandboxMode,
   ServiceTier,
   ThreadEvent,
+  ThreadEventContextWindowUsage,
   ThreadEventItem,
   ThreadEventItemStatus,
   ThreadEventTurnStatus,
@@ -51,6 +52,21 @@ import { codexVisibilityMetadata } from "./visibility.js";
 
 function assertNever(value: never, message?: string): never {
   throw new Error(message ?? `Unexpected value: ${String(value)}`);
+}
+
+interface CodexLastTokenUsage {
+  totalTokens: number;
+}
+
+function toCodexContextWindowUsage(
+  lastTokenUsage: CodexLastTokenUsage,
+  modelContextWindow: number | null,
+): ThreadEventContextWindowUsage {
+  return {
+    usedTokens: lastTokenUsage.totalTokens,
+    modelContextWindow,
+    estimated: false,
+  };
 }
 
 export type CodexEvent = CodexServerNotification;
@@ -1026,6 +1042,15 @@ export function createCodexProviderAdapter(
               },
               modelContextWindow: handledEvent.params.tokenUsage.modelContextWindow,
             },
+          }, {
+            type: "thread/contextWindowUsage/updated",
+            threadId: handledEvent.params.threadId,
+            providerThreadId: handledEvent.params.threadId,
+            turnId: handledEvent.params.turnId,
+            contextWindowUsage: toCodexContextWindowUsage(
+              handledEvent.params.tokenUsage.last,
+              handledEvent.params.tokenUsage.modelContextWindow,
+            ),
           }];
         case "turn/plan/updated":
           return [{

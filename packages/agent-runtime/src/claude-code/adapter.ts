@@ -13,6 +13,7 @@ import { z } from "zod";
 import type {
   ProviderCapabilities,
   ThreadEvent,
+  ThreadEventContextWindowUsage,
   ThreadEventItem,
   ThreadEventTokenUsage,
   ThreadEventTokenUsageBreakdown,
@@ -340,6 +341,14 @@ interface ClaudeTurnState {
   toolItemsByCallId: Map<string, ThreadEventItem>;
 }
 
+interface ClaudeContextWindowUsageArgs {
+  message: ClaudeResultMessage | SDKResultMessage;
+  selectedModel: string | undefined;
+}
+
+const DEFAULT_CLAUDE_CONTEXT_WINDOW = 200_000;
+const LARGE_CLAUDE_CONTEXT_WINDOW = 1_000_000;
+
 export function createClaudeCodeProviderAdapter(
   opts?: CreateClaudeCodeProviderAdapterOptions,
 ): ProviderAdapter {
@@ -359,6 +368,7 @@ export function createClaudeCodeProviderAdapter(
         toolItemsByCallId: new Map(),
       }),
   });
+  const selectedModelByThreadId = new Map<string, string>();
 
   function translateClaudeEvent(
     event: unknown,
@@ -574,7 +584,20 @@ export function createClaudeCodeProviderAdapter(
           const resultErrorText = message.is_error && "result" in message && typeof message.result === "string"
             ? message.result
             : null;
+          const contextWindowUsage = extractClaudeContextWindowUsage({
+            message,
+            selectedModel: selectedModelByThreadId.get(stateKey),
+          });
           const tokenUsage = extractTokenUsage(message, state.cumulativeTokens);
+          if (contextWindowUsage) {
+            events.push({
+              type: "thread/contextWindowUsage/updated",
+              threadId,
+              providerThreadId: "",
+              turnId: state.currentTurnId,
+              contextWindowUsage,
+            });
+          }
           if (tokenUsage) {
             events.push({
               type: "thread/tokenUsage/updated",
@@ -653,6 +676,9 @@ export function createClaudeCodeProviderAdapter(
           };
         case "thread/start": {
           const baseInstructions = command.options?.instructions ?? "";
+          if (command.options?.model) {
+            selectedModelByThreadId.set(command.threadId, command.options.model);
+          }
           const config = buildClaudeCodeConfig(command.options?.envVars);
           const finalConfig: Record<string, unknown> = config ? { ...config } : {};
           if (command.options?.reasoningLevel) {
@@ -679,6 +705,9 @@ export function createClaudeCodeProviderAdapter(
         }
         case "thread/resume": {
           const baseInstructions = command.options?.instructions ?? "";
+          if (command.options?.model) {
+            selectedModelByThreadId.set(command.threadId, command.options.model);
+          }
           const resumeConfig = buildClaudeCodeConfig(command.options?.envVars);
           const finalResumeConfig: Record<string, unknown> = resumeConfig ? { ...resumeConfig } : {};
           if (command.options?.reasoningLevel) {
@@ -705,6 +734,9 @@ export function createClaudeCodeProviderAdapter(
           };
         }
         case "turn/start":
+          if (command.options?.model) {
+            selectedModelByThreadId.set(command.threadId, command.options.model);
+          }
           return {
             jsonrpc: "2.0",
             method: "turn/start",
@@ -1001,6 +1033,29 @@ function extractTokenUsage(
   };
 }
 
+function extractClaudeContextWindowUsage(
+  args: ClaudeContextWindowUsageArgs,
+): ThreadEventContextWindowUsage | undefined {
+  const parsedUsage = sdkUsageSchema.safeParse(args.message.usage);
+  const usedTokens = parsedUsage.success
+    ? toClaudeCurrentContextTokens(parsedUsage.data)
+    : null;
+  const parsedModelUsage = claudeModelUsageSchema.safeParse(args.message.modelUsage);
+  const modelContextWindow = parsedModelUsage.success
+    ? extractModelContextWindow(parsedModelUsage.data)
+    : resolveClaudeContextWindowFallback(args.selectedModel);
+
+  if (usedTokens === null && modelContextWindow === null) {
+    return undefined;
+  }
+
+  return {
+    usedTokens,
+    modelContextWindow,
+    estimated: true,
+  };
+}
+
 function toTokenUsageBreakdown(
   usage: z.infer<typeof sdkUsageSchema>,
 ): ThreadEventTokenUsageBreakdown {
@@ -1019,6 +1074,16 @@ function toTokenUsageBreakdown(
   };
 }
 
+function toClaudeCurrentContextTokens(
+  usage: z.infer<typeof sdkUsageSchema>,
+): number | null {
+  return (
+    toNonNegativeNumber(usage.input_tokens) +
+    toNonNegativeNumber(usage.cache_read_input_tokens) +
+    toNonNegativeNumber(usage.cache_creation_input_tokens)
+  );
+}
+
 function extractModelContextWindow(
   modelUsage: Record<string, { contextWindow: number }> | undefined,
 ): number | null {
@@ -1034,4 +1099,16 @@ function extractModelContextWindow(
   }
 
   return largestContextWindow;
+}
+
+function resolveClaudeContextWindowFallback(
+  selectedModel: string | undefined,
+): number | null {
+  if (!selectedModel) {
+    return DEFAULT_CLAUDE_CONTEXT_WINDOW;
+  }
+
+  return selectedModel.includes("[1m]")
+    ? LARGE_CLAUDE_CONTEXT_WINDOW
+    : DEFAULT_CLAUDE_CONTEXT_WINDOW;
 }

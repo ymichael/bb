@@ -267,6 +267,19 @@ This plan is complete only when all of the following are true:
   `thread/resume`
 - internal runtime/adapter plumbing now treats `managerMode` as an explicit
   boolean after the runtime boundary instead of an optional field
+- the context-window meter now consumes a dedicated
+  `thread/contextWindowUsage/updated` event instead of
+  `thread/tokenUsage/updated`
+- token-usage accounting remains on `thread/tokenUsage/updated` for all
+  providers and is no longer the meter numerator
+- Codex now emits a non-estimated current-state context-window event directly
+  from its native token-usage signal
+- Claude now emits an estimated Claude Code-compatible current-state meter using
+  `input + cache_creation + cache_read`, excluding output tokens
+- Pi now emits an estimated current-state meter from bridge-side
+  `getContextUsage()` instead of assistant usage totals
+- server timeline projection, pruning, UI helpers, and provider-audit replay now
+  consume the dedicated context-window event contract
 
 ## Validation
 
@@ -320,3 +333,20 @@ This plan is complete only when all of the following are true:
   completed with output `OK`
 - live standalone QA confirmed a Claude manager thread started, idled, resumed
   on follow-up, and returned `READY`
+- `pnpm exec turbo run typecheck test --filter=@bb/agent-runtime --filter=@bb/app --filter=@bb/server --filter=@bb/db --filter=@bb/core-ui --filter=@bb/server-contract --filter=@bb/domain --filter=@bb/provider-audit`
+  passed for the context-usage slice after refreshing the provider-audit
+  snapshots
+- live standalone QA confirmed a fresh Codex thread emitted:
+  - `thread/tokenUsage/updated.last.totalTokens = 9102`
+  - `thread/contextWindowUsage/updated.usedTokens = 9102`
+  - timeline `contextWindowUsage = { estimated: false, modelContextWindow: 258400, usedTokens: 9102 }`
+- live standalone QA confirmed a fresh Claude thread emitted:
+  - `thread/tokenUsage/updated.last = { inputTokens: 3, cachedInputTokens: 15051, outputTokens: 7, totalTokens: 15061 }`
+  - `thread/contextWindowUsage/updated = { estimated: true, modelContextWindow: 1000000, usedTokens: 15054 }`
+  - this verifies the Claude meter excludes output tokens and matches Claude
+    Code’s current-state semantics
+- live standalone QA confirmed a fresh Pi thread emitted:
+  - `thread/tokenUsage/updated.last.totalTokens = 0`
+  - `thread/contextWindowUsage/updated = { estimated: true, modelContextWindow: 200000, usedTokens: 7 }`
+  - timeline `contextWindowUsage` used the Pi bridge signal rather than the
+    zeroed token-usage row

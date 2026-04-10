@@ -25,8 +25,8 @@ describe("/timeline performance", () => {
       scenario.loadSummaryStoredRows();
     });
 
-    bench(`load token usage rows ${scenario.id}`, () => {
-      scenario.loadTokenUsageRows();
+    bench(`load context window usage rows ${scenario.id}`, () => {
+      scenario.loadContextWindowUsageRows();
     });
 
     bench(`compact summary stored rows ${scenario.id}`, () => {

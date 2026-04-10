@@ -7,8 +7,8 @@ import {
   createThread,
   deriveStoredEventItemFields,
   insertEvents,
+  listContextWindowUsageRows,
   listRecentStoredEventRows,
-  listTokenUsageRowsForContextWindowUsage,
   migrate,
   noopNotifier,
   type StoredEventRow,
@@ -44,7 +44,7 @@ export interface TimelineBenchmarkScenario {
   buildSummary: () => ReturnType<typeof buildThreadTimeline>;
   buildAndSerializeSummary: () => string;
   loadSummaryStoredRows: () => StoredEventRow[];
-  loadTokenUsageRows: () => StoredEventRow[];
+  loadContextWindowUsageRows: () => StoredEventRow[];
   compactSummaryStoredRows: () => StoredEventRow[];
   decodeSummaryEvents: () => ThreadEventWithMeta[];
   projectSummaryMessages: () => ViewMessage[];
@@ -166,8 +166,8 @@ function createTimelineBenchmarkScenario(
       excludedTypes: TIMELINE_NOISE_EVENT_TYPES,
     });
   const compactSummaryStoredRows = () => compactSummaryStoredEventRows(storedEventRows);
-  const loadTokenUsageRows = () =>
-    listTokenUsageRowsForContextWindowUsage(db, {
+  const loadContextWindowUsageRows = () =>
+    listContextWindowUsageRows(db, {
       threadId: thread.id,
     });
   const decodeSummaryEvents = () =>
@@ -200,7 +200,7 @@ function createTimelineBenchmarkScenario(
     buildSummary,
     buildAndSerializeSummary,
     loadSummaryStoredRows,
-    loadTokenUsageRows,
+    loadContextWindowUsageRows,
     compactSummaryStoredRows,
     decodeSummaryEvents,
     projectSummaryMessages,

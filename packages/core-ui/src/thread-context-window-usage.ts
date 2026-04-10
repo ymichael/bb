@@ -5,13 +5,15 @@ import {
 } from "@bb/domain";
 
 interface ThreadContextWindowSignal {
-  totalTokens?: number;
-  modelContextWindow?: number;
+  estimated: boolean;
+  modelContextWindow: number | null;
+  usedTokens: number | null;
 }
 
 interface ContextWindowUsage {
-  totalTokens: number;
+  estimated: boolean;
   modelContextWindow: number;
+  usedTokens: number;
 }
 
 function toNonNegativeNumber(value: unknown): number | undefined {
@@ -22,16 +24,18 @@ function toNonNegativeNumber(value: unknown): number | undefined {
 }
 
 function decodeContextWindowSignal(event: ThreadEventRow): ThreadContextWindowSignal | null {
-  if (isThreadEventRowOfType(event, "thread/tokenUsage/updated")) {
-    const tokenUsage = event.data.tokenUsage;
-    const totalTokens = toNonNegativeNumber(tokenUsage.last.totalTokens);
-    const modelContextWindow = toPositiveNumber(tokenUsage.modelContextWindow);
-    if (totalTokens === undefined && modelContextWindow === undefined) {
-      return null;
-    }
+  if (isThreadEventRowOfType(event, "thread/contextWindowUsage/updated")) {
+    const contextWindowUsage = event.data.contextWindowUsage;
     return {
-      totalTokens,
-      modelContextWindow,
+      usedTokens:
+        contextWindowUsage.usedTokens === null
+          ? null
+          : (toNonNegativeNumber(contextWindowUsage.usedTokens) ?? null),
+      modelContextWindow:
+        contextWindowUsage.modelContextWindow === null
+          ? null
+          : (toPositiveNumber(contextWindowUsage.modelContextWindow) ?? null),
+      estimated: contextWindowUsage.estimated,
     };
   }
   return null;
@@ -40,35 +44,44 @@ function decodeContextWindowSignal(event: ThreadEventRow): ThreadContextWindowSi
 export function extractThreadContextWindowUsage(
   events: readonly ThreadEventRow[],
 ): ContextWindowUsage | null {
-  let totalTokens: number | undefined;
+  let estimated: boolean | undefined;
   let modelContextWindow: number | undefined;
+  let usedTokens: number | undefined;
+  let usageIsUnknown = false;
 
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const signal = decodeContextWindowSignal(events[index]);
     if (!signal) continue;
 
-    if (totalTokens === undefined && signal.totalTokens !== undefined) {
-      totalTokens = signal.totalTokens;
+    if (usedTokens === undefined && !usageIsUnknown) {
+      if (signal.usedTokens === null) {
+        usageIsUnknown = true;
+        estimated = signal.estimated;
+      } else {
+        usedTokens = signal.usedTokens;
+        estimated = signal.estimated;
+      }
     }
 
     if (
       modelContextWindow === undefined &&
-      signal.modelContextWindow !== undefined
+      signal.modelContextWindow !== null
     ) {
       modelContextWindow = signal.modelContextWindow;
     }
 
-    if (totalTokens !== undefined && modelContextWindow !== undefined) {
+    if ((usedTokens !== undefined || usageIsUnknown) && modelContextWindow !== undefined) {
       break;
     }
   }
 
-  if (modelContextWindow === undefined) {
+  if (usedTokens === undefined || modelContextWindow === undefined) {
     return null;
   }
 
   return {
-    totalTokens: totalTokens ?? 0,
+    estimated: estimated ?? false,
     modelContextWindow,
+    usedTokens,
   };
 }

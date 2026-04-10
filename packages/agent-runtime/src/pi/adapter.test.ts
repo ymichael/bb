@@ -787,6 +787,42 @@ describe("pi provider adapter", () => {
     expect(secondTokenUsage?.tokenUsage.modelContextWindow).toBe(123_456);
   });
 
+  it("translateEvent maps bridge context-window usage updates into the meter event", () => {
+    const adapter = createPiProviderAdapter();
+
+    adapter.translateEvent(loadFixture("agent-start.json"), {
+      threadId: "bb-thread-1",
+    });
+    adapter.translateEvent(loadFixture("agent-end-with-message.json"), {
+      threadId: "bb-thread-1",
+    });
+
+    const events = adapter.translateEvent({
+      jsonrpc: "2.0",
+      method: "thread/contextWindowUsage/updated",
+      params: {
+        threadId: "bb-thread-1",
+        contextWindowUsage: {
+          usedTokens: 54321,
+          modelContextWindow: 123456,
+          estimated: true,
+        },
+      },
+    });
+
+    expect(events).toContainEqual({
+      type: "thread/contextWindowUsage/updated",
+      threadId: "bb-thread-1",
+      providerThreadId: "bb-thread-1",
+      turnId: "turn-1",
+      contextWindowUsage: {
+        usedTokens: 54321,
+        modelContextWindow: 123456,
+        estimated: true,
+      },
+    });
+  });
+
   it("translateEvent clears stale tool state when a turn ends without tool results", () => {
     const adapter = createPiProviderAdapter();
 

@@ -11,9 +11,9 @@ import type {
   TimelineToolDetailsResponse,
 } from "@bb/server-contract";
 import {
+  listContextWindowUsageRows,
   listRecentStoredEventRows,
   listStoredEventRowsInRange,
-  listTokenUsageRowsForContextWindowUsage,
 } from "@bb/db";
 import type { DbConnection, StoredEventRow } from "@bb/db";
 import {
@@ -133,7 +133,7 @@ export function buildThreadTimeline(
     thread.type === "manager" && !options.showAllManagerEvents
       ? filterManagerConversationMessages(allMessages)
       : allMessages;
-  const tokenUsageRows = listTokenUsageRowsForContextWindowUsage(db, {
+  const contextWindowUsageRows = listContextWindowUsageRows(db, {
     threadId: thread.id,
   });
 
@@ -142,7 +142,9 @@ export function buildThreadTimeline(
       includeToolGroupMessages: options.includeToolGroupMessages ?? false,
     }),
     contextWindowUsage:
-      extractThreadContextWindowUsage(tokenUsageRows.map((row) => parseStoredEventRow(row))) ?? undefined,
+      extractThreadContextWindowUsage(
+        contextWindowUsageRows.map((row) => parseStoredEventRow(row)),
+      ) ?? undefined,
   };
 }
 

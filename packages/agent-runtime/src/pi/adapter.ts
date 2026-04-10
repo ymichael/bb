@@ -16,6 +16,7 @@ import type {
 import type {
   ProviderCapabilities,
   ThreadEvent,
+  ThreadEventContextWindowUsage,
   ThreadEventItem,
   ThreadEventTokenUsage,
   ThreadEventTokenUsageBreakdown,
@@ -50,6 +51,7 @@ import {
   errorEnvelopeSchema,
   jsonRpcEnvelopeSchema,
   sdkMessageEnvelopeSchema,
+  threadContextWindowUsageEnvelopeSchema,
   threadIdentityEnvelopeSchema,
 } from "../shared/json-rpc-envelope.js";
 import type {
@@ -73,6 +75,12 @@ export type PiEvent = AgentSessionEvent;
 interface PiUnhandledEventArgs {
   rawEvent: JsonRpcMessage;
   parentToolCallId?: string;
+}
+
+interface PiBridgeContextWindowUsage {
+  estimated: boolean;
+  modelContextWindow: number | null;
+  usedTokens: number | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -112,6 +120,26 @@ function buildUnexpectedPiSdkEvent(
         : {}),
     }),
   ];
+}
+
+function normalizePiContextWindowUsage(
+  usage: PiBridgeContextWindowUsage,
+): ThreadEventContextWindowUsage {
+  return {
+    usedTokens:
+      typeof usage.usedTokens === "number" &&
+        Number.isFinite(usage.usedTokens) &&
+        usage.usedTokens >= 0
+        ? usage.usedTokens
+        : null,
+    modelContextWindow:
+      typeof usage.modelContextWindow === "number" &&
+        Number.isFinite(usage.modelContextWindow) &&
+        usage.modelContextWindow > 0
+        ? usage.modelContextWindow
+        : null,
+    estimated: usage.estimated,
+  };
 }
 
 interface PiContextWindowModel {
@@ -514,6 +542,26 @@ export function createPiProviderAdapter(
       return providerThreadId
         ? [{ type: "thread/identity", threadId, providerThreadId }]
         : [];
+    }
+
+    const contextWindowUsageEnvelope =
+      threadContextWindowUsageEnvelopeSchema.safeParse(event);
+    if (contextWindowUsageEnvelope.success) {
+      const { threadId = "", contextWindowUsage } =
+        contextWindowUsageEnvelope.data.params;
+      const state = turnState.getOrCreate({ threadId });
+      const turnId =
+        state.currentTurnId ??
+        (state.counter > 0 ? `turn-${state.counter}` : "");
+      return [{
+        type: "thread/contextWindowUsage/updated",
+        threadId,
+        providerThreadId: threadId,
+        turnId,
+        contextWindowUsage: normalizePiContextWindowUsage(
+          contextWindowUsage,
+        ),
+      }];
     }
 
     const errorEnvelope = errorEnvelopeSchema.safeParse(event);

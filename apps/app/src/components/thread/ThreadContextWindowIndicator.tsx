@@ -33,8 +33,9 @@ export function ThreadContextWindowIndicator({
       ? "text-amber-500/75"
       : "text-muted-foreground/60";
 
-  const usedTokensLabel = formatCompactTokenCount(usage.totalTokens);
+  const usedTokensLabel = formatCompactTokenCount(usage.usedTokens);
   const windowTokensLabel = formatCompactTokenCount(usage.modelContextWindow);
+  const title = usage.estimated ? "Estimated context window usage" : "Context window usage";
 
   return (
     <Popover
@@ -50,7 +51,7 @@ export function ThreadContextWindowIndicator({
             className,
           )}
           aria-label={`Context window ${usedPercent}% used`}
-          title="Context window usage"
+          title={title}
         >
           <span
             className={cn(
@@ -77,7 +78,9 @@ export function ThreadContextWindowIndicator({
         className="w-auto max-w-[240px] border-border/80 bg-popover/95 px-3 py-2 text-sm shadow-lg backdrop-blur-sm"
       >
         <div className="space-y-1.5">
-          <p className="text-muted-foreground">Context window:</p>
+          <p className="text-muted-foreground">
+            {usage.estimated ? "Estimated context window:" : "Context window:"}
+          </p>
           <p className="font-medium">{usedPercent}% used ({leftPercent}% left)</p>
           <p className="font-medium">{usedTokensLabel} / {windowTokensLabel} tokens used</p>
         </div>

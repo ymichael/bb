@@ -1514,6 +1514,16 @@ describe("claude-code provider adapter", () => {
     );
     expect(events).toContainEqual(
       expect.objectContaining({
+        type: "thread/contextWindowUsage/updated",
+        contextWindowUsage: {
+          usedTokens: 15_432,
+          modelContextWindow: 200000,
+          estimated: true,
+        },
+      }),
+    );
+    expect(events).toContainEqual(
+      expect.objectContaining({
         type: "turn/completed",
         turnId: "turn-1",
         status: "completed",
@@ -1552,6 +1562,55 @@ describe("claude-code provider adapter", () => {
       cachedInputTokens: 14024,
     });
     expect(secondTokenUsage?.tokenUsage.last).toEqual(firstTokenUsage?.tokenUsage.last);
+  });
+
+  it("falls back to a model-based context window when Claude omits modelUsage.contextWindow", () => {
+    const adapter = createClaudeCodeProviderAdapter();
+
+    adapter.buildCommand({
+      type: "thread/start",
+      threadId: "bb-thread-1",
+      input: [{ type: "text", text: "hello" }],
+      managerMode: false,
+      options: {
+        model: "claude-opus-4-6[1m]",
+      },
+    });
+    adapter.translateEvent(loadFixture("assistant-text.json"), {
+      threadId: "bb-thread-1",
+    });
+
+    const events = adapter.translateEvent({
+      type: "result",
+      subtype: "success",
+      duration_ms: 1,
+      duration_api_ms: 1,
+      is_error: false,
+      num_turns: 1,
+      result: "ok",
+      stop_reason: "end_turn",
+      total_cost_usd: 0,
+      usage: {
+        input_tokens: 100,
+        output_tokens: 20,
+        cache_creation_input_tokens: 30,
+        cache_read_input_tokens: 40,
+      },
+      session_id: "session-1",
+    }, {
+      threadId: "bb-thread-1",
+    });
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "thread/contextWindowUsage/updated",
+        contextWindowUsage: {
+          usedTokens: 170,
+          modelContextWindow: 1_000_000,
+          estimated: true,
+        },
+      }),
+    );
   });
 
   it("fixture: user-tool-result produces commandExecution completed", () => {

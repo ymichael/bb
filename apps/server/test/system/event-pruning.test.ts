@@ -28,6 +28,12 @@ interface CreateTokenUsageDataArgs {
   totalTokens: number;
 }
 
+interface CreateContextWindowUsageDataArgs {
+  estimated?: boolean;
+  modelContextWindow: number | null;
+  usedTokens: number | null;
+}
+
 function createTokenUsageData(args: CreateTokenUsageDataArgs): Record<string, unknown> {
   return {
     tokenUsage: {
@@ -46,6 +52,18 @@ function createTokenUsageData(args: CreateTokenUsageDataArgs): Record<string, un
         reasoningOutputTokens: 0,
       },
       modelContextWindow: args.modelContextWindow,
+    },
+  };
+}
+
+function createContextWindowUsageData(
+  args: CreateContextWindowUsageDataArgs,
+): Record<string, unknown> {
+  return {
+    contextWindowUsage: {
+      usedTokens: args.usedTokens,
+      modelContextWindow: args.modelContextWindow,
+      estimated: args.estimated ?? false,
     },
   };
 }
@@ -186,7 +204,7 @@ describe("thread event pruning", () => {
     }
   });
 
-  it("preserves context window usage when idle pruning removes old token-usage rows", async () => {
+  it("preserves context window usage when idle pruning removes old context-usage rows", async () => {
     const harness = await createTestAppHarness();
     try {
       const host = seedHost(harness.deps);
@@ -208,12 +226,13 @@ describe("thread event pruning", () => {
           providerThreadId: "provider-thread-1",
           sequence,
           turnId: `turn-${sequence}`,
-          type: "thread/tokenUsage/updated",
+          type: "thread/contextWindowUsage/updated",
           itemId: null,
           itemKind: null,
-          data: createTokenUsageData({
-            totalTokens: sequence,
+          data: createContextWindowUsageData({
+            usedTokens: sequence,
             modelContextWindow: sequence === 1 ? 200_000 : null,
+            estimated: sequence !== 1,
           }),
         });
       }
@@ -228,12 +247,13 @@ describe("thread event pruning", () => {
       expect(
         listEventSequencesForType(harness, {
           threadId: thread.id,
-          type: "thread/tokenUsage/updated",
+          type: "thread/contextWindowUsage/updated",
         }).slice(0, 3),
       ).toEqual([1, 6, 7]);
       expect(timeline.contextWindowUsage).toEqual({
-        totalTokens: 305,
+        usedTokens: 305,
         modelContextWindow: 200_000,
+        estimated: true,
       });
     } finally {
       await harness.cleanup();

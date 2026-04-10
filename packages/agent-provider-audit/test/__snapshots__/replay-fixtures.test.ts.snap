@@ -4,7 +4,7 @@ exports[`@bb/agent-provider-audit fixture replay > exports shared React story da
 [
   {
     "id": "excalidraw/claude-code/collab-startup-explanation",
-    "latestActivityRowId": "provider-audit-claude-code-collab-startup-explanation-20260327T075458Z-1549:error:12",
+    "latestActivityRowId": "provider-audit-claude-code-collab-startup-explanation-20260327T075458Z-1549:error:14",
     "timelineRowCount": 6,
     "viewMessageCount": 6,
   },
@@ -150,7 +150,7 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
       "  Provider error - API Error: 529 {"type":"error","error":{"type":"overloaded_error","message":"Overloaded. https://docs.claude.com/en/api/errors"},"request_id":"req_011CZTEWYZGkHjeP8JDFyYyK"}",
     ],
     "timelineRowCount": 6,
-    "translatedThreadEventCount": 11,
+    "translatedThreadEventCount": 13,
     "unexpectedUntranslatedRawEventCount": 0,
     "viewMessageCount": 6,
     "viewMessageKinds": {
@@ -304,7 +304,7 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
       "| \`packages/excalidraw/locales/en.json\` | Changed \`labels.eyeDropper\` from "Pick color from canvas" to "Pick color from screen". Added \`labels.eyeDropperCanvasOnly\` as "Pick color from canvas". |",
     ],
     "timelineRowCount": 8,
-    "translatedThreadEventCount": 374,
+    "translatedThreadEventCount": 377,
     "unexpectedUntranslatedRawEventCount": 0,
     "viewMessageCount": 80,
     "viewMessageKinds": {
@@ -365,7 +365,7 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
       "The last test is the direct regression check: the old code would have produced \`left = 1920 + 20 = 1940\` for a pointer at \`x = 1920\` on a 1920-wide viewport — clearly off-screen. The test asserts \`left + PREVIEW_SIZE ≤ viewportWidth − PREVIEW_MARGIN\` for every edge position, which the old code would fail on all right/bottom positions.",
     ],
     "timelineRowCount": 6,
-    "translatedThreadEventCount": 215,
+    "translatedThreadEventCount": 217,
     "unexpectedUntranslatedRawEventCount": 0,
     "viewMessageCount": 26,
     "viewMessageKinds": {
@@ -428,7 +428,7 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
       "- Clicking the entry calls \`onMagicframeToolSelect\` exactly once",
     ],
     "timelineRowCount": 5,
-    "translatedThreadEventCount": 390,
+    "translatedThreadEventCount": 392,
     "unexpectedUntranslatedRawEventCount": 0,
     "viewMessageCount": 62,
     "viewMessageKinds": {
@@ -503,7 +503,7 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
       "When \`findIndex\` returns \`-1\`, the expression \`visibleIndex >= 0\` is \`false\`, so it falls back to \`0\`. Since there is 1 match, \`focusIndex = 0\`, which correctly focuses the first (and only) match.",
     ],
     "timelineRowCount": 5,
-    "translatedThreadEventCount": 182,
+    "translatedThreadEventCount": 184,
     "unexpectedUntranslatedRawEventCount": 0,
     "viewMessageCount": 21,
     "viewMessageKinds": {
@@ -550,7 +550,7 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
       "Ran \`npx vitest run packages/excalidraw/tests/search.test.tsx\` — all 8 tests passed (5 existing + 3 new), confirming the result summary, empty state, and existing keyboard navigation all work correctly.",
     ],
     "timelineRowCount": 5,
-    "translatedThreadEventCount": 171,
+    "translatedThreadEventCount": 173,
     "unexpectedUntranslatedRawEventCount": 0,
     "viewMessageCount": 20,
     "viewMessageKinds": {
@@ -793,7 +793,7 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
       "**The invariant to maintain:** Never change the signatures of the callback props that \`TextToDiagram.tsx\` passes down (\`onGenerate\`, \`onInsertMessage\`, \`onRetry\`, etc.), and never touch the \`canvasRef\` that \`useMermaidRenderer\` writes into.",
     ],
     "timelineRowCount": 6,
-    "translatedThreadEventCount": 457,
+    "translatedThreadEventCount": 459,
     "unexpectedUntranslatedRawEventCount": 0,
     "viewMessageCount": 9,
     "viewMessageKinds": {
@@ -1014,7 +1014,7 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
       "So: **best completion hook = \`initializeRoom()\`; best outer lifecycle hook = \`startCollaboration()\`**. If you want, I can sketch the exact probe points.",
     ],
     "timelineRowCount": 5,
-    "translatedThreadEventCount": 3482,
+    "translatedThreadEventCount": 3516,
     "unexpectedUntranslatedRawEventCount": 0,
     "viewMessageCount": 9,
     "viewMessageKinds": {
@@ -1090,7 +1090,7 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
       "So the new tests directly encode the bug: if someone reintroduced the old fixed-offset logic, at least the edge-flip and clamp tests would fail immediately.",
     ],
     "timelineRowCount": 5,
-    "translatedThreadEventCount": 918,
+    "translatedThreadEventCount": 940,
     "unexpectedUntranslatedRawEventCount": 0,
     "viewMessageCount": 26,
     "viewMessageKinds": {
@@ -1152,7 +1152,7 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
       "- The vitest run passed, with existing React key warnings unrelated to this change.",
     ],
     "timelineRowCount": 5,
-    "translatedThreadEventCount": 904,
+    "translatedThreadEventCount": 945,
     "unexpectedUntranslatedRawEventCount": 0,
     "viewMessageCount": 33,
     "viewMessageKinds": {
@@ -1212,7 +1212,7 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
       "- before the fix, the remaining match is offscreen, so old code would leave focus empty instead of resetting to the first result.",
     ],
     "timelineRowCount": 5,
-    "translatedThreadEventCount": 636,
+    "translatedThreadEventCount": 662,
     "unexpectedUntranslatedRawEventCount": 0,
     "viewMessageCount": 20,
     "viewMessageKinds": {
@@ -1273,7 +1273,7 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
       "- 6 tests passed",
     ],
     "timelineRowCount": 5,
-    "translatedThreadEventCount": 562,
+    "translatedThreadEventCount": 586,
     "unexpectedUntranslatedRawEventCount": 0,
     "viewMessageCount": 21,
     "viewMessageKinds": {
@@ -1341,7 +1341,7 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
       "- None. I did not use web browsing or external docs for this change.",
     ],
     "timelineRowCount": 5,
-    "translatedThreadEventCount": 1034,
+    "translatedThreadEventCount": 1094,
     "unexpectedUntranslatedRawEventCount": 0,
     "viewMessageCount": 35,
     "viewMessageKinds": {
@@ -1526,7 +1526,7 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
       "So: **best answer = use \`TTDDialog\`’s render props first; if that’s not enough, limit edits to \`Chat/*\` + panel components and leave the hooks/common scene pipeline alone.**",
     ],
     "timelineRowCount": 5,
-    "translatedThreadEventCount": 3045,
+    "translatedThreadEventCount": 3081,
     "unexpectedUntranslatedRawEventCount": 0,
     "viewMessageCount": 11,
     "viewMessageKinds": {
@@ -2399,8 +2399,9 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots parsed context-wind
   },
   {
     "contextWindowUsage": {
+      "estimated": true,
       "modelContextWindow": 1000000,
-      "totalTokens": 61504,
+      "usedTokens": 60763,
     },
     "fixture": "excalidraw/claude-code/eyedropper-browser-compat",
     "tokenUsageSummary": {
@@ -2413,8 +2414,9 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots parsed context-wind
   },
   {
     "contextWindowUsage": {
+      "estimated": true,
       "modelContextWindow": 1000000,
-      "totalTokens": 338649,
+      "usedTokens": 332992,
     },
     "fixture": "excalidraw/claude-code/eyedropper-preview-bugfix",
     "tokenUsageSummary": {
@@ -2427,8 +2429,9 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots parsed context-wind
   },
   {
     "contextWindowUsage": {
+      "estimated": true,
       "modelContextWindow": 1000000,
-      "totalTokens": 46414,
+      "usedTokens": 46175,
     },
     "fixture": "excalidraw/claude-code/magicframe-feature",
     "tokenUsageSummary": {
@@ -2441,8 +2444,9 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots parsed context-wind
   },
   {
     "contextWindowUsage": {
+      "estimated": true,
       "modelContextWindow": 1000000,
-      "totalTokens": 31924,
+      "usedTokens": 31175,
     },
     "fixture": "excalidraw/claude-code/search-bugfix",
     "tokenUsageSummary": {
@@ -2455,8 +2459,9 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots parsed context-wind
   },
   {
     "contextWindowUsage": {
+      "estimated": true,
       "modelContextWindow": 1000000,
-      "totalTokens": 31011,
+      "usedTokens": 30716,
     },
     "fixture": "excalidraw/claude-code/search-feature",
     "tokenUsageSummary": {
@@ -2469,8 +2474,9 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots parsed context-wind
   },
   {
     "contextWindowUsage": {
+      "estimated": true,
       "modelContextWindow": 1000000,
-      "totalTokens": 89890,
+      "usedTokens": 87429,
     },
     "fixture": "excalidraw/claude-code/ttd-explanation",
     "tokenUsageSummary": {
@@ -2483,8 +2489,9 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots parsed context-wind
   },
   {
     "contextWindowUsage": {
+      "estimated": false,
       "modelContextWindow": 258400,
-      "totalTokens": 91403,
+      "usedTokens": 91403,
     },
     "fixture": "excalidraw/codex/collab-startup-explanation",
     "tokenUsageSummary": {
@@ -2497,8 +2504,9 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots parsed context-wind
   },
   {
     "contextWindowUsage": {
+      "estimated": false,
       "modelContextWindow": 258400,
-      "totalTokens": 53122,
+      "usedTokens": 53122,
     },
     "fixture": "excalidraw/codex/eyedropper-preview-bugfix",
     "tokenUsageSummary": {
@@ -2511,8 +2519,9 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots parsed context-wind
   },
   {
     "contextWindowUsage": {
+      "estimated": false,
       "modelContextWindow": 258400,
-      "totalTokens": 124919,
+      "usedTokens": 124919,
     },
     "fixture": "excalidraw/codex/magicframe-feature",
     "tokenUsageSummary": {
@@ -2525,8 +2534,9 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots parsed context-wind
   },
   {
     "contextWindowUsage": {
+      "estimated": false,
       "modelContextWindow": 258400,
-      "totalTokens": 44973,
+      "usedTokens": 44973,
     },
     "fixture": "excalidraw/codex/search-bugfix",
     "tokenUsageSummary": {
@@ -2539,8 +2549,9 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots parsed context-wind
   },
   {
     "contextWindowUsage": {
+      "estimated": false,
       "modelContextWindow": 258400,
-      "totalTokens": 55623,
+      "usedTokens": 55623,
     },
     "fixture": "excalidraw/codex/search-feature",
     "tokenUsageSummary": {
@@ -2553,8 +2564,9 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots parsed context-wind
   },
   {
     "contextWindowUsage": {
+      "estimated": false,
       "modelContextWindow": 258400,
-      "totalTokens": 80064,
+      "usedTokens": 80064,
     },
     "fixture": "excalidraw/codex/share-web-compat",
     "tokenUsageSummary": {
@@ -2567,8 +2579,9 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots parsed context-wind
   },
   {
     "contextWindowUsage": {
+      "estimated": false,
       "modelContextWindow": 258400,
-      "totalTokens": 78074,
+      "usedTokens": 78074,
     },
     "fixture": "excalidraw/codex/ttd-explanation",
     "tokenUsageSummary": {
@@ -2580,10 +2593,7 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots parsed context-wind
     },
   },
   {
-    "contextWindowUsage": {
-      "modelContextWindow": 1000000,
-      "totalTokens": 42341,
-    },
+    "contextWindowUsage": null,
     "fixture": "excalidraw/pi/collab-startup-explanation",
     "tokenUsageSummary": {
       "distinctModelContextWindows": [
@@ -2594,10 +2604,7 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots parsed context-wind
     },
   },
   {
-    "contextWindowUsage": {
-      "modelContextWindow": 1000000,
-      "totalTokens": 35859,
-    },
+    "contextWindowUsage": null,
     "fixture": "excalidraw/pi/command-palette-map",
     "tokenUsageSummary": {
       "distinctModelContextWindows": [
@@ -2608,10 +2615,7 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots parsed context-wind
     },
   },
   {
-    "contextWindowUsage": {
-      "modelContextWindow": 1000000,
-      "totalTokens": 12485,
-    },
+    "contextWindowUsage": null,
     "fixture": "excalidraw/pi/eyedropper-preview-bugfix",
     "tokenUsageSummary": {
       "distinctModelContextWindows": [
@@ -2622,10 +2626,7 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots parsed context-wind
     },
   },
   {
-    "contextWindowUsage": {
-      "modelContextWindow": 1000000,
-      "totalTokens": 0,
-    },
+    "contextWindowUsage": null,
     "fixture": "excalidraw/pi/magicframe-feature",
     "tokenUsageSummary": {
       "distinctModelContextWindows": [
@@ -2636,10 +2637,7 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots parsed context-wind
     },
   },
   {
-    "contextWindowUsage": {
-      "modelContextWindow": 1000000,
-      "totalTokens": 57938,
-    },
+    "contextWindowUsage": null,
     "fixture": "excalidraw/pi/search-bugfix",
     "tokenUsageSummary": {
       "distinctModelContextWindows": [
@@ -2650,10 +2648,7 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots parsed context-wind
     },
   },
   {
-    "contextWindowUsage": {
-      "modelContextWindow": 1000000,
-      "totalTokens": 48823,
-    },
+    "contextWindowUsage": null,
     "fixture": "excalidraw/pi/search-feature",
     "tokenUsageSummary": {
       "distinctModelContextWindows": [
@@ -2664,10 +2659,7 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots parsed context-wind
     },
   },
   {
-    "contextWindowUsage": {
-      "modelContextWindow": 1000000,
-      "totalTokens": 32867,
-    },
+    "contextWindowUsage": null,
     "fixture": "excalidraw/pi/ttd-explanation",
     "tokenUsageSummary": {
       "distinctModelContextWindows": [
@@ -13082,6 +13074,18 @@ exports[`@bb/agent-provider-audit fixture replay > summarizes raw-event and tool
             "excalidraw/claude-code/search-feature",
             "excalidraw/claude-code/ttd-explanation",
           ],
+          "type": "thread/contextWindowUsage/updated",
+        },
+        {
+          "fixtureIds": [
+            "excalidraw/claude-code/collab-startup-explanation",
+            "excalidraw/claude-code/eyedropper-browser-compat",
+            "excalidraw/claude-code/eyedropper-preview-bugfix",
+            "excalidraw/claude-code/magicframe-feature",
+            "excalidraw/claude-code/search-bugfix",
+            "excalidraw/claude-code/search-feature",
+            "excalidraw/claude-code/ttd-explanation",
+          ],
           "type": "thread/identity",
         },
         {
@@ -13413,6 +13417,18 @@ exports[`@bb/agent-provider-audit fixture replay > summarizes raw-event and tool
             "excalidraw/codex/ttd-explanation",
           ],
           "type": "item/started",
+        },
+        {
+          "fixtureIds": [
+            "excalidraw/codex/collab-startup-explanation",
+            "excalidraw/codex/eyedropper-preview-bugfix",
+            "excalidraw/codex/magicframe-feature",
+            "excalidraw/codex/search-bugfix",
+            "excalidraw/codex/search-feature",
+            "excalidraw/codex/share-web-compat",
+            "excalidraw/codex/ttd-explanation",
+          ],
+          "type": "thread/contextWindowUsage/updated",
         },
         {
           "fixtureIds": [

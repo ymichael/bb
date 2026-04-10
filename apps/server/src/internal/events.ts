@@ -181,6 +181,7 @@ function resolveProviderIdentifiers(
     case "item/plan/delta":
     case "item/mcpToolCall/progress":
     case "item/toolCall/progress":
+    case "thread/contextWindowUsage/updated":
     case "thread/tokenUsage/updated":
     case "turn/plan/updated":
     case "turn/diff/updated":

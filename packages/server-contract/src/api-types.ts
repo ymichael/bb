@@ -27,8 +27,9 @@ export const SCHEDULE_NAME_MAX_LENGTH = 200;
 export const SCHEDULE_TIMEZONE_MAX_LENGTH = 100;
 
 export const threadContextWindowUsageSchema = z.object({
-  totalTokens: z.number(),
+  usedTokens: z.number(),
   modelContextWindow: z.number(),
+  estimated: z.boolean(),
 });
 export type ThreadContextWindowUsage = z.infer<typeof threadContextWindowUsageSchema>;
 

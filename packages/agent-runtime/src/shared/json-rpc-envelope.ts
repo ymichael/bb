@@ -27,6 +27,19 @@ export const threadIdentityEnvelopeSchema = z.object({
   }).passthrough(),
 }).passthrough();
 
+export const threadContextWindowUsageEnvelopeSchema = z.object({
+  jsonrpc: z.literal("2.0"),
+  method: z.literal("thread/contextWindowUsage/updated"),
+  params: z.object({
+    threadId: z.string().optional(),
+    contextWindowUsage: z.object({
+      usedTokens: z.number().nullable(),
+      modelContextWindow: z.number().nullable(),
+      estimated: z.boolean(),
+    }),
+  }).passthrough(),
+}).passthrough();
+
 export const errorEnvelopeSchema = z.object({
   jsonrpc: z.literal("2.0"),
   method: z.literal("error"),
@@ -38,4 +51,7 @@ export const errorEnvelopeSchema = z.object({
 export type JsonRpcEnvelope = z.infer<typeof jsonRpcEnvelopeSchema>;
 export type SdkMessageEnvelope = z.infer<typeof sdkMessageEnvelopeSchema>;
 export type ThreadIdentityEnvelope = z.infer<typeof threadIdentityEnvelopeSchema>;
+export type ThreadContextWindowUsageEnvelope = z.infer<
+  typeof threadContextWindowUsageEnvelopeSchema
+>;
 export type ErrorEnvelope = z.infer<typeof errorEnvelopeSchema>;

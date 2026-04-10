@@ -14,12 +14,13 @@ import {
   getLatestThreadOutputEventRow,
   getLatestThreadSequence,
   insertEvents,
+  listContextWindowUsageRows,
   listCompletedTurnsByThreadIds,
   listEvents,
   listRecentStoredEventRows,
   listStoredEventRows,
   listStoredEventRowsInRange,
-  listTokenUsageRowsForContextWindowUsage,
+  pruneContextWindowUsageEventsBeforeSequence,
   pruneTokenUsageEventsBeforeSequence,
   pruneResolvedAgentMessageDeltas,
   pruneThreadEventsBeforeSequence,
@@ -50,6 +51,12 @@ interface CreateTokenUsageDataArgs {
   totalTokens: number;
 }
 
+interface CreateContextWindowUsageDataArgs {
+  estimated?: boolean;
+  modelContextWindow: number | null;
+  usedTokens: number | null;
+}
+
 function createTokenUsageData(args: CreateTokenUsageDataArgs): string {
   return JSON.stringify({
     tokenUsage: {
@@ -68,6 +75,18 @@ function createTokenUsageData(args: CreateTokenUsageDataArgs): string {
         reasoningOutputTokens: 0,
       },
       modelContextWindow: args.modelContextWindow,
+    },
+  });
+}
+
+function createContextWindowUsageData(
+  args: CreateContextWindowUsageDataArgs,
+): string {
+  return JSON.stringify({
+    contextWindowUsage: {
+      usedTokens: args.usedTokens,
+      modelContextWindow: args.modelContextWindow,
+      estimated: args.estimated ?? false,
     },
   });
 }
@@ -325,21 +344,21 @@ describe("events", () => {
       {
         threadId: thread.id,
         sequence: 2,
-        type: "thread/tokenUsage/updated",
+        type: "thread/contextWindowUsage/updated",
         ...emptyItemFields,
-        data: createTokenUsageData({
+        data: createContextWindowUsageData({
           modelContextWindow: 16_000,
-          totalTokens: 100,
+          usedTokens: 100,
         }),
       },
       {
         threadId: thread.id,
         sequence: 3,
-        type: "thread/tokenUsage/updated",
+        type: "thread/contextWindowUsage/updated",
         ...emptyItemFields,
-        data: createTokenUsageData({
+        data: createContextWindowUsageData({
           modelContextWindow: null,
-          totalTokens: 200,
+          usedTokens: 200,
         }),
       },
     ]);
@@ -355,7 +374,7 @@ describe("events", () => {
       threadId: thread.id,
     }).map((row) => row.sequence)).toEqual([2, 3]);
 
-    expect(listTokenUsageRowsForContextWindowUsage(db, {
+    expect(listContextWindowUsageRows(db, {
       threadId: thread.id,
     }).map((row) => row.sequence)).toEqual([2, 3]);
   });
@@ -578,6 +597,61 @@ describe("events", () => {
     ]);
 
     const removed = pruneTokenUsageEventsBeforeSequence(db, {
+      threadId: thread.id,
+      sequenceCutoff: 4,
+    });
+
+    expect(removed).toBe(2);
+    expect(listEvents(db, { threadId: thread.id }).map((event) => event.sequence)).toEqual([1, 4]);
+  });
+
+  it("prunes context-window rows before a sequence cutoff but keeps the latest usage row and latest context row", () => {
+    const { db, thread } = setup();
+
+    insertEvents(db, noopNotifier, [
+      {
+        threadId: thread.id,
+        sequence: 1,
+        type: "thread/contextWindowUsage/updated",
+        ...emptyItemFields,
+        data: createContextWindowUsageData({
+          usedTokens: 10,
+          modelContextWindow: 200_000,
+        }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 2,
+        type: "thread/contextWindowUsage/updated",
+        ...emptyItemFields,
+        data: createContextWindowUsageData({
+          usedTokens: 20,
+          modelContextWindow: null,
+        }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 3,
+        type: "thread/contextWindowUsage/updated",
+        ...emptyItemFields,
+        data: createContextWindowUsageData({
+          usedTokens: 30,
+          modelContextWindow: null,
+        }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 4,
+        type: "thread/contextWindowUsage/updated",
+        ...emptyItemFields,
+        data: createContextWindowUsageData({
+          usedTokens: 40,
+          modelContextWindow: null,
+        }),
+      },
+    ]);
+
+    const removed = pruneContextWindowUsageEventsBeforeSequence(db, {
       threadId: thread.id,
       sequenceCutoff: 4,
     });

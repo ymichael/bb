@@ -1,6 +1,6 @@
 import {
   buildThreadEventRow,
-  type ThreadEventTokenUsage,
+  type ThreadEventContextWindowUsage,
   type ThreadEventRow,
 } from "@bb/domain";
 import { describe, expect, it } from "vitest";
@@ -10,21 +10,13 @@ import {
   formatCompactTokenCount,
 } from "./thread-context-window-usage";
 
-const EMPTY_TOKEN_BREAKDOWN = {
-  totalTokens: 0,
-  inputTokens: 0,
-  cachedInputTokens: 0,
-  outputTokens: 0,
-  reasoningOutputTokens: 0,
-};
-
 function buildProviderEvent({
+  contextWindowUsage,
   seq,
-  tokenUsage,
   turnId,
 }: {
+  contextWindowUsage: ThreadEventContextWindowUsage;
   seq: number;
-  tokenUsage: ThreadEventTokenUsage;
   turnId: string;
 }): ThreadEventRow {
   return buildThreadEventRow({
@@ -33,79 +25,68 @@ function buildProviderEvent({
     seq,
     createdAt: seq,
     event: {
-      type: "thread/tokenUsage/updated",
+      type: "thread/contextWindowUsage/updated",
       threadId: "thread-1",
       providerThreadId: "provider-thread",
       turnId,
-      tokenUsage,
+      contextWindowUsage,
     },
   });
 }
 
 describe("thread context window usage helpers", () => {
-  it("extracts usage from the latest thread/tokenUsage/updated event", () => {
+  it("extracts usage from the latest thread/contextWindowUsage/updated event", () => {
     const usage = extractThreadContextWindowUsage([
       buildProviderEvent({
         seq: 1,
         turnId: "turn-1",
-        tokenUsage: {
-          total: {
-            ...EMPTY_TOKEN_BREAKDOWN,
-            totalTokens: 50000,
-          },
-          last: {
-            ...EMPTY_TOKEN_BREAKDOWN,
-            totalTokens: 9000,
-          },
+        contextWindowUsage: {
+          usedTokens: 9000,
           modelContextWindow: 258400,
+          estimated: false,
         },
       }),
       buildProviderEvent({
         seq: 2,
         turnId: "turn-2",
-        tokenUsage: {
-          total: {
-            ...EMPTY_TOKEN_BREAKDOWN,
-            totalTokens: 62000,
-          },
-          last: {
-            ...EMPTY_TOKEN_BREAKDOWN,
-            totalTokens: 32000,
-          },
+        contextWindowUsage: {
+          usedTokens: 32000,
           modelContextWindow: 258400,
+          estimated: true,
         },
       }),
     ]);
 
     expect(usage).toEqual({
-      totalTokens: 32000,
+      usedTokens: 32000,
       modelContextWindow: 258400,
+      estimated: true,
     });
   });
 
-  it("uses the last token usage for context sizing", () => {
+  it("keeps the latest explicit unknown usage from reusing older used tokens", () => {
     const usage = extractThreadContextWindowUsage([
       buildProviderEvent({
         seq: 1,
-        turnId: "turn-9",
-        tokenUsage: {
-          total: {
-            ...EMPTY_TOKEN_BREAKDOWN,
-            totalTokens: 9000000,
-          },
-          last: {
-            ...EMPTY_TOKEN_BREAKDOWN,
-            totalTokens: 120000,
-          },
+        turnId: "turn-1",
+        contextWindowUsage: {
+          usedTokens: 120000,
           modelContextWindow: 258400,
+          estimated: false,
+        },
+      }),
+      buildProviderEvent({
+        seq: 2,
+        turnId: "turn-2",
+        contextWindowUsage: {
+          usedTokens: null,
+          modelContextWindow: 258400,
+          estimated: true,
         },
       }),
     ]);
 
-    expect(usage).toEqual({
-      totalTokens: 120000,
-      modelContextWindow: 258400,
-    });
+    expect(usage).toBeNull();
   });
 
   it("returns null when context window data is unavailable", () => {
@@ -113,16 +94,10 @@ describe("thread context window usage helpers", () => {
       buildProviderEvent({
         seq: 1,
         turnId: "turn-1",
-        tokenUsage: {
-          total: {
-            ...EMPTY_TOKEN_BREAKDOWN,
-            totalTokens: 1000,
-          },
-          last: {
-            ...EMPTY_TOKEN_BREAKDOWN,
-            totalTokens: 1000,
-          },
+        contextWindowUsage: {
+          usedTokens: 1000,
           modelContextWindow: null,
+          estimated: false,
         },
       }),
     ]);
@@ -134,8 +109,9 @@ describe("thread context window usage helpers", () => {
     expect(formatCompactTokenCount(258400)).toBe("258k");
     expect(formatCompactTokenCount(999)).toBe("999");
     expect(calculateContextWindowUsagePercent({
-      totalTokens: 32000,
+      usedTokens: 32000,
       modelContextWindow: 258400,
+      estimated: false,
     })).toBe(12);
   });
 });
