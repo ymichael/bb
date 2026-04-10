@@ -69,12 +69,13 @@ describe("buildSpawnEnvironment", () => {
     });
   });
 
-  it("returns e2b sandbox for --new-environment e2b", () => {
-    const result = buildSpawnEnvironment({
-      newEnvironmentKind: "e2b",
-      hostId: null,
-    });
-    expect(result).toEqual({ type: "sandbox-host", sandboxType: "e2b" });
+  it("throws for bare e2b without sandbox/ prefix", () => {
+    expect(() =>
+      buildSpawnEnvironment({
+        newEnvironmentKind: "e2b",
+        hostId: null,
+      }),
+    ).toThrow("Unknown environment kind 'e2b'");
   });
 
   it("returns managed-worktree for --new-environment worktree with host", () => {
@@ -93,6 +94,41 @@ describe("buildSpawnEnvironment", () => {
     expect(() =>
       buildSpawnEnvironment({ newEnvironmentKind: "worktree", hostId: null }),
     ).toThrow("Cannot reach local host daemon");
+  });
+
+  it("returns sandbox for --new-environment sandbox/e2b", () => {
+    const result = buildSpawnEnvironment({
+      newEnvironmentKind: "sandbox/e2b",
+      hostId: null,
+    });
+    expect(result).toEqual({ type: "sandbox-host", sandboxType: "e2b" });
+  });
+
+  it("returns sandbox for any sandbox/ prefix", () => {
+    const result = buildSpawnEnvironment({
+      newEnvironmentKind: "sandbox/daytona",
+      hostId: null,
+    });
+    expect(result).toEqual({ type: "sandbox-host", sandboxType: "daytona" });
+  });
+
+  it("throws for sandbox/ with no type", () => {
+    expect(() =>
+      buildSpawnEnvironment({
+        newEnvironmentKind: "sandbox/",
+        hostId: HOST_ID,
+      }),
+    ).toThrow("Missing sandbox type after 'sandbox/'");
+  });
+
+  it("throws when combining --host with sandbox environment", () => {
+    expect(() =>
+      buildSpawnEnvironment({
+        newEnvironmentKind: "sandbox/e2b",
+        hostId: HOST_ID,
+        explicitHost: true,
+      }),
+    ).toThrow("Cannot combine --host with sandbox environments");
   });
 
   it("throws for unknown --new-environment kind", () => {
@@ -151,7 +187,7 @@ describe("buildSpawnEnvironment", () => {
 
   it("trims whitespace from environment values", () => {
     const result = buildSpawnEnvironment({
-      newEnvironmentKind: "  e2b  ",
+      newEnvironmentKind: "  sandbox/e2b  ",
       hostId: null,
     });
     expect(result).toEqual({ type: "sandbox-host", sandboxType: "e2b" });

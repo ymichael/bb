@@ -44,6 +44,42 @@ export function registerEnvironmentCommands(
     .description("Inspect and operate on first-class environments");
 
   environment
+    .command("show <id>")
+    .description("Show environment details")
+    .option("--json", "Print machine-readable JSON output")
+    .action(action(async (id: string, opts: { json?: boolean }) => {
+      const client = createClient(getUrl());
+      const env = await unwrap<Environment>(
+        client.api.v1.environments[":id"].$get({
+          param: { id },
+        }),
+      );
+      if (outputJson(opts, env)) return;
+      console.log(`Environment: ${env.id}`);
+      console.log(`  Project: ${env.projectId}`);
+      console.log(`  Host: ${env.hostId}`);
+      console.log(`  Status: ${env.status}`);
+      if (env.path) {
+        console.log(`  Path: ${env.path}`);
+      }
+      console.log(`  Managed: ${env.managed}`);
+      console.log(`  Provision type: ${env.workspaceProvisionType}`);
+      if (env.branchName) {
+        console.log(`  Branch: ${env.branchName}`);
+      }
+      if (env.defaultBranch) {
+        console.log(`  Default branch: ${env.defaultBranch}`);
+      }
+      if (env.mergeBaseBranch) {
+        console.log(`  Merge base: ${env.mergeBaseBranch}`);
+      }
+      console.log(`  Git repo: ${env.isGitRepo}`);
+      console.log(`  Worktree: ${env.isWorktree}`);
+      console.log(`  Created: ${new Date(env.createdAt).toLocaleString()}`);
+      console.log(`  Updated: ${new Date(env.updatedAt).toLocaleString()}`);
+    }));
+
+  environment
     .command("update <id>")
     .description("Update environment metadata")
     .option("--merge-base-branch <branch>", "Set the merge-base branch override")

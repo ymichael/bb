@@ -220,6 +220,7 @@ export async function resolveThreadRuntimeCommandConfig(
     dynamicTools: MANAGER_DYNAMIC_TOOLS,
     instructionMode: "replace",
     instructions: renderTemplate("managerAgentInstructions", {
+      hostId: args.environment.hostId,
       localTimezone: resolveLocalTimezone(),
       managerPreferencesContent,
       managerThreadId: args.thread.id,

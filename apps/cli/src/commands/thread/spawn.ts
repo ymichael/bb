@@ -33,6 +33,7 @@ interface ThreadSpawnCommandOptions {
   title?: string;
   serviceTier?: string;
   sandboxMode?: string;
+  host?: string;
   contextParentThread?: boolean;
 }
 
@@ -51,6 +52,7 @@ export function buildSpawnEnvironment(args: {
   environmentValue?: string;
   newEnvironmentKind?: string;
   hostId: string | null;
+  explicitHost?: boolean;
 }): EnvironmentArgs {
   const environmentValue = args.environmentValue?.trim();
   const newEnvironmentKind = args.newEnvironmentKind?.trim();
@@ -59,8 +61,15 @@ export function buildSpawnEnvironment(args: {
     throw new Error("Cannot combine --environment with --new-environment.");
   }
   if (newEnvironmentKind) {
-    if (newEnvironmentKind === "e2b") {
-      return { type: "sandbox-host", sandboxType: "e2b" };
+    if (newEnvironmentKind.startsWith("sandbox/")) {
+      const sandboxType = newEnvironmentKind.slice("sandbox/".length);
+      if (!sandboxType) {
+        throw new Error("Missing sandbox type after 'sandbox/'. Example: sandbox/e2b.");
+      }
+      if (args.explicitHost) {
+        throw new Error("Cannot combine --host with sandbox environments. Sandbox environments provision their own hosts.");
+      }
+      return { type: "sandbox-host", sandboxType };
     }
     if (newEnvironmentKind === "worktree") {
       return {
@@ -70,7 +79,7 @@ export function buildSpawnEnvironment(args: {
       };
     }
     throw new Error(
-      `Unknown environment kind '${newEnvironmentKind}'. Supported: worktree, e2b.`,
+      `Unknown environment kind '${newEnvironmentKind}'. Supported: worktree, sandbox/<type>.`,
     );
   }
   if (!environmentValue) {
@@ -111,7 +120,7 @@ export function registerSpawnCommand(
     )
     .option(
       "--new-environment <kind>",
-      "Create a new managed environment of the given kind (for example worktree or docker)",
+      "Create a new managed environment of the given kind (worktree, sandbox/e2b)",
     )
     .option(
       "--parent-thread <id>",
@@ -130,11 +139,12 @@ export function registerSpawnCommand(
       "Reasoning level: low, medium, high, xhigh",
     )
     .option("--title <title>", "Thread title")
-    .option("--service-tier <tier>", "Service tier: fast or flex")
+    .option("--service-tier <tier>", "Service tier: fast or default")
     .option(
       "--sandbox-mode <mode>",
       "Sandbox mode: read-only, workspace-write, or danger-full-access",
     )
+    .option("--host <id>", "Host ID (defaults to local host)")
     .option(
       "--no-context-parent-thread",
       "Do not default parent thread context to BB_THREAD_ID",
@@ -149,11 +159,15 @@ export function registerSpawnCommand(
 
       const projectId = requireProjectId(opts.project);
       const environmentValue = resolveEnvironmentId(opts.environment);
-      const localHostId = await fetchLocalHostId();
+      let hostId: string | null = opts.host ?? null;
+      if (!hostId) {
+        hostId = await fetchLocalHostId();
+      }
       const environment = buildSpawnEnvironment({
         environmentValue,
         newEnvironmentKind: opts.newEnvironment,
-        hostId: localHostId,
+        hostId,
+        explicitHost: !!opts.host,
       });
       const reasoningLevel = parseReasoningLevel(opts.reasoningLevel);
       const serviceTier = parseServiceTier(opts.serviceTier);

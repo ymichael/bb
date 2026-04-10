@@ -1823,7 +1823,7 @@ describe("CLI JSON output contracts", () => {
     );
 
     expect(JSON.parse(String(vi.mocked(console.log).mock.calls[0]?.[0]))).toEqual(
-      { thread },
+      { thread, environment: null },
     );
   });
 

@@ -56,6 +56,7 @@ interface ThreadStatusPayload {
 }
 
 interface ThreadShowJsonPayload extends ThreadStatusPayload {
+  environment: Environment | null;
   workStatus?: WorkspaceStatus | null;
   gitDiff?: ThreadGitDiffResponse;
   mergeBaseBranches?: string[];
@@ -215,7 +216,10 @@ export function registerShowCommand(
         : null;
 
       if (opts.json) {
-        const jsonPayload: ThreadShowJsonPayload = { ...statusPayload };
+        const jsonPayload: ThreadShowJsonPayload = {
+          ...statusPayload,
+          environment: await getEnvironment(),
+        };
         if (fetchedWorkStatus !== undefined) {
           jsonPayload.workStatus = fetchedWorkStatus.available
             ? fetchedWorkStatus.status

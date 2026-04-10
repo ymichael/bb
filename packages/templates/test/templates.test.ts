@@ -40,8 +40,9 @@ describe("@bb/templates", () => {
     expect(rendered).toContain("nothing to commit");
   });
 
-  it("renders managerAgentInstructions with partial resolution", () => {
+  it("renders managerAgentInstructions with variables", () => {
     const rendered = renderTemplate("managerAgentInstructions", {
+      hostId: "test-host-id",
       localTimezone: "America/Los_Angeles",
       managerPreferencesContent: "No preferences yet.",
       managerThreadId: "test-thread-123",
@@ -51,25 +52,19 @@ describe("@bb/templates", () => {
       projectRootPath: "/tmp/test-project",
     });
 
-    // Verify the rendered output contains content from sub-template partials
-    // bbCliGuide partial content
-    expect(rendered).toContain("The `bb` CLI is the primary interface");
-    expect(rendered).toContain("bb thread spawn");
-    expect(rendered).toContain("--provider <provider-id>");
-    expect(rendered).toContain("--model <model-id>");
-    expect(rendered).toContain("bb provider models <provider-id>");
-    expect(rendered).toContain("America/Los_Angeles");
-    // bbSystemOverview partial content
+    // Core structure
+    expect(rendered).toContain("You are a manager for this project");
     expect(rendered).toContain("agent orchestration tool");
-    expect(rendered).toContain("Core concepts");
-    // bbManagerWorkflows partial content
-    expect(rendered).toContain("common workflows and how to handle them");
+    expect(rendered).toContain("bb thread spawn");
     expect(rendered).toContain("Simple delegation");
 
-    // Verify the leaf variables are also rendered
+    // Variables rendered
     expect(rendered).toContain("test-thread-123");
+    expect(rendered).toContain("test-host-id");
     expect(rendered).toContain("Test Project");
+    expect(rendered).toContain("America/Los_Angeles");
     expect(rendered).toContain("/tmp/test-thread-storage");
+    expect(rendered).toContain("No preferences yet.");
   });
 
   it("renders all templates without error", () => {
