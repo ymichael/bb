@@ -43,6 +43,10 @@ import {
   createProviderTurnStateRegistry,
 } from "../shared/turn-state.js";
 import {
+  getOrCreateScopedItemId,
+  resolveCompletedScopedItemId,
+} from "../shared/scoped-item-ids.js";
+import {
   buildUnhandledProviderEvents,
   createUnhandledProviderEvent,
 } from "../shared/provider-unhandled-event.js";
@@ -150,6 +154,9 @@ const piContextWindowModelSchema = z.object({
 
 const piContextWindowModelsSchema = z.array(piContextWindowModelSchema);
 
+// Keep Pi's SDK-level turn_start/turn_end outside the translated event union
+// until replay proves they represent bb turn boundaries rather than internal
+// provider subturns.
 const piEventTypeSchema = z.object({
   type: z.enum([
     "agent_end",
@@ -212,6 +219,8 @@ const piMessageUpdateEventSchema = z.object({
   type: z.literal("message_update"),
   assistantMessageEvent: z.object({
     type: z.string(),
+    content: z.string().optional(),
+    contentIndex: z.number().optional(),
     delta: z.string().optional(),
   }).passthrough(),
 }).passthrough();
@@ -491,6 +500,8 @@ interface PiTurnState {
   currentTurnId: string | undefined;
   cumulativeTokens: ThreadEventTokenUsageBreakdown;
   openAssistantMessageIdsByScope: Map<string, string>;
+  openReasoningItemIdsByScope: Map<string, string>;
+  reasoningItemCounter: number;
   toolItemsByCallId: Map<string, ThreadEventItem>;
 }
 
@@ -508,6 +519,41 @@ function buildPiCompactionItemId(turnId: string): string {
     : "pi-compaction";
 }
 
+function createPiReasoningItemId(
+  state: PiTurnState,
+): string {
+  state.reasoningItemCounter += 1;
+  return `pi-reasoning-${state.reasoningItemCounter}`;
+}
+
+interface PiReasoningItemIdArgs {
+  contentIndex: number;
+  parentToolCallId?: string;
+  state: PiTurnState;
+}
+
+function getOrCreatePiReasoningItemId(
+  args: PiReasoningItemIdArgs,
+): string {
+  return getOrCreateScopedItemId({
+    createItemId: () => createPiReasoningItemId(args.state),
+    openItemIdsByScope: args.state.openReasoningItemIdsByScope,
+    parentToolCallId: args.parentToolCallId,
+    scopeId: String(args.contentIndex),
+  });
+}
+
+function resolveCompletedPiReasoningItemId(
+  args: PiReasoningItemIdArgs,
+): string {
+  return resolveCompletedScopedItemId({
+    createItemId: () => createPiReasoningItemId(args.state),
+    openItemIdsByScope: args.state.openReasoningItemIdsByScope,
+    parentToolCallId: args.parentToolCallId,
+    scopeId: String(args.contentIndex),
+  });
+}
+
 export function createPiProviderAdapter(
   opts?: CreatePiProviderAdapterOptions,
 ): ProviderAdapter {
@@ -521,13 +567,15 @@ export function createPiProviderAdapter(
 
   const turnState = createProviderTurnStateRegistry<PiTurnState>({
     createState: () => ({
-        assistantMessageCounter: 0,
-        counter: 0,
-        currentTurnId: undefined,
-        cumulativeTokens: { totalTokens: 0, inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, reasoningOutputTokens: 0 },
-        openAssistantMessageIdsByScope: new Map(),
-        toolItemsByCallId: new Map(),
-      }),
+      assistantMessageCounter: 0,
+      counter: 0,
+      currentTurnId: undefined,
+      cumulativeTokens: { totalTokens: 0, inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, reasoningOutputTokens: 0 },
+      openAssistantMessageIdsByScope: new Map(),
+      openReasoningItemIdsByScope: new Map(),
+      reasoningItemCounter: 0,
+      toolItemsByCallId: new Map(),
+    }),
   });
 
   function translatePiEvent(
@@ -731,6 +779,49 @@ export function createPiProviderAdapter(
               turnId: state.currentTurnId,
               itemId,
               delta,
+            });
+          }
+        }
+        if (assistantEvent.type === "thinking_delta" && state.currentTurnId) {
+          const delta = assistantEvent.delta;
+          if (delta) {
+            const itemId = getOrCreatePiReasoningItemId({
+              state,
+              parentToolCallId: context?.parentToolCallId,
+              contentIndex: assistantEvent.contentIndex ?? 0,
+            });
+            events.push({
+              type: "item/reasoning/textDelta",
+              threadId,
+              providerThreadId: "",
+              turnId: state.currentTurnId,
+              itemId,
+              delta,
+              ...(context?.parentToolCallId
+                ? { parentToolCallId: context.parentToolCallId }
+                : {}),
+            });
+          }
+        }
+        if (assistantEvent.type === "thinking_end" && state.currentTurnId) {
+          const content = assistantEvent.content;
+          if (content) {
+            const itemId = resolveCompletedPiReasoningItemId({
+              state,
+              parentToolCallId: context?.parentToolCallId,
+              contentIndex: assistantEvent.contentIndex ?? 0,
+            });
+            events.push({
+              type: "item/completed",
+              threadId,
+              providerThreadId: "",
+              turnId: state.currentTurnId,
+              item: withParentToolCallId({
+                type: "reasoning",
+                id: itemId,
+                summary: [],
+                content: [content],
+              }, context?.parentToolCallId),
             });
           }
         }

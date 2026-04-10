@@ -27,6 +27,7 @@ function createTurnState(): TestTurnState {
     currentTurnId: undefined,
     cumulativeTokens: createTokenUsage(),
     openAssistantMessageIdsByScope: new Map(),
+    openReasoningItemIdsByScope: new Map(),
     toolItemsByCallId: new Map(),
   };
 }
@@ -73,6 +74,7 @@ describe("turn-state", () => {
       threadId: "thread-1",
     });
     state.openAssistantMessageIdsByScope.set("root", "assistant-1");
+    state.openReasoningItemIdsByScope.set("root:0", "reasoning-1");
     state.toolItemsByCallId.set("tool-1", {
       type: "commandExecution",
       id: "tool-1",
@@ -95,6 +97,7 @@ describe("turn-state", () => {
     expect(firstTurnId).toBe("turn-1");
     expect(secondTurnId).toBe("turn-2");
     expect(state.openAssistantMessageIdsByScope.size).toBe(0);
+    expect(state.openReasoningItemIdsByScope.size).toBe(0);
     expect(state.toolItemsByCallId.size).toBe(0);
     expect(events.map((event) => event.type)).toEqual([
       "turn/started",

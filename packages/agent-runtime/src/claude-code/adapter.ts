@@ -40,6 +40,10 @@ import {
   createProviderTurnStateRegistry,
 } from "../shared/turn-state.js";
 import {
+  getOrCreateScopedItemId,
+  resolveCompletedScopedItemId,
+} from "../shared/scoped-item-ids.js";
+import {
   buildUnhandledProviderEvents,
   createUnhandledProviderEvent,
 } from "../shared/provider-unhandled-event.js";
@@ -338,6 +342,8 @@ interface ClaudeTurnState {
   currentTurnId: string | undefined;
   cumulativeTokens: ThreadEventTokenUsageBreakdown;
   openAssistantMessageIdsByScope: Map<string, string>;
+  openReasoningItemIdsByScope: Map<string, string>;
+  reasoningItemCounter: number;
   selectedModelContextWindow: number | null;
   toolItemsByCallId: Map<string, ThreadEventItem>;
 }
@@ -361,14 +367,16 @@ export function createClaudeCodeProviderAdapter(
 
   const turnState = createProviderTurnStateRegistry<ClaudeTurnState>({
     createState: () => ({
-        assistantMessageCounter: 0,
-        counter: 0,
-        currentTurnId: undefined,
-        cumulativeTokens: { totalTokens: 0, inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, reasoningOutputTokens: 0 },
-        openAssistantMessageIdsByScope: new Map(),
-        selectedModelContextWindow: null,
-        toolItemsByCallId: new Map(),
-      }),
+      assistantMessageCounter: 0,
+      counter: 0,
+      currentTurnId: undefined,
+      cumulativeTokens: { totalTokens: 0, inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, reasoningOutputTokens: 0 },
+      openAssistantMessageIdsByScope: new Map(),
+      openReasoningItemIdsByScope: new Map(),
+      reasoningItemCounter: 0,
+      selectedModelContextWindow: null,
+      toolItemsByCallId: new Map(),
+    }),
   });
 
   function setClaudeModelContextWindowHint(
@@ -512,6 +520,27 @@ export function createClaudeCodeProviderAdapter(
         });
         const assistantMessageId = getNestedMessageId(message.message);
 
+        const thinkingBlocks = extractThinkingBlocks(message);
+        for (const thinkingBlock of thinkingBlocks) {
+          const itemId = resolveCompletedClaudeReasoningItemId({
+            state,
+            parentToolCallId,
+            contentIndex: thinkingBlock.contentIndex,
+          });
+          events.push({
+            type: "item/completed",
+            threadId,
+            providerThreadId: "",
+            turnId,
+            item: withParentToolCallId({
+              type: "reasoning",
+              id: itemId,
+              summary: [],
+              content: [thinkingBlock.text],
+            }, parentToolCallId),
+          });
+        }
+
         const text = extractAssistantText(message);
         if (text) {
           const itemId = turnState.resolveCompletedAssistantMessageId({
@@ -560,8 +589,31 @@ export function createClaudeCodeProviderAdapter(
           return buildUnexpectedClaudeSdkEvent({ event, context });
         }
         const message = parsedMessage.data;
-        const delta = extractStreamTextDelta(message);
-        if (delta) {
+        const reasoningDelta = extractStreamThinkingDelta(message);
+        if (reasoningDelta) {
+          const turnId = turnState.ensureTurnStarted({
+            events,
+            state,
+            threadId,
+          });
+          const itemId = getOrCreateClaudeReasoningItemId({
+            state,
+            parentToolCallId,
+            contentIndex: reasoningDelta.contentIndex,
+          });
+          events.push({
+            type: "item/reasoning/textDelta",
+            threadId,
+            providerThreadId: "",
+            turnId,
+            itemId,
+            delta: reasoningDelta.delta,
+            ...(parentToolCallId ? { parentToolCallId } : {}),
+          });
+        }
+
+        const textDelta = extractStreamTextDelta(message);
+        if (textDelta) {
           const turnId = turnState.ensureTurnStarted({
             events,
             state,
@@ -578,7 +630,7 @@ export function createClaudeCodeProviderAdapter(
             providerThreadId: "",
             turnId,
             itemId,
-            delta,
+            delta: textDelta.delta,
             ...(parentToolCallId ? { parentToolCallId } : {}),
           });
         }
@@ -868,6 +920,11 @@ const toolResultBlockSchema = z.object({
   is_error: z.boolean().optional(),
 });
 
+const thinkingBlockSchema = z.object({
+  type: z.literal("thinking"),
+  thinking: z.string(),
+}).passthrough();
+
 const messageContentSchema = z.object({
   content: z.array(z.object({ type: z.string() }).passthrough()).optional(),
 }).passthrough();
@@ -885,12 +942,20 @@ const claudeModelUsageSchema = z.record(z.string(), z.object({
 
 const contentBlockDeltaSchema = z.object({
   type: z.literal("content_block_delta"),
-  delta: z.object({ type: z.literal("text_delta"), text: z.string() }).passthrough(),
+  index: z.number(),
+  delta: z.union([
+    z.object({ type: z.literal("text_delta"), text: z.string() }).passthrough(),
+    z.object({ type: z.literal("thinking_delta"), thinking: z.string() }).passthrough(),
+  ]),
 }).passthrough();
 
 const contentBlockStartSchema = z.object({
   type: z.literal("content_block_start"),
-  content_block: z.object({ type: z.literal("text"), text: z.string() }).passthrough(),
+  index: z.number(),
+  content_block: z.union([
+    z.object({ type: z.literal("text"), text: z.string() }).passthrough(),
+    z.object({ type: z.literal("thinking"), thinking: z.string() }).passthrough(),
+  ]),
 }).passthrough();
 
 const streamEventSchema = z.union([contentBlockDeltaSchema, contentBlockStartSchema]);
@@ -957,6 +1022,16 @@ interface ClaudeToolUseBlockData {
   name: string;
 }
 
+interface ClaudeReasoningBlockData {
+  contentIndex: number;
+  text: string;
+}
+
+interface ClaudeStreamDelta {
+  contentIndex: number;
+  delta: string;
+}
+
 interface ClaudeToolResultBlockData {
   content: unknown;
   isError: boolean;
@@ -964,12 +1039,16 @@ interface ClaudeToolResultBlockData {
   toolUseId: string;
 }
 
+interface ParseClaudeMessageContentArgs {
+  message: unknown;
+}
+
 // ---------------------------------------------------------------------------
 // SDK message extraction helpers
 // ---------------------------------------------------------------------------
 
 function parseMessageContent(
-  message: { message: unknown },
+  message: ParseClaudeMessageContentArgs,
 ): ClaudeMessageContentBlock[] {
   const parsed = messageContentSchema.safeParse(message.message);
   return parsed.success ? (parsed.data.content ?? []) : [];
@@ -981,6 +1060,41 @@ function buildClaudeCompactionItemId(
   return turnId.length > 0
     ? `claude-compaction-${turnId}`
     : "claude-compaction";
+}
+
+function createClaudeReasoningItemId(
+  state: ClaudeTurnState,
+): string {
+  state.reasoningItemCounter += 1;
+  return `claude-reasoning-${state.reasoningItemCounter}`;
+}
+
+interface ClaudeReasoningItemIdArgs {
+  contentIndex: number;
+  parentToolCallId?: string;
+  state: ClaudeTurnState;
+}
+
+function getOrCreateClaudeReasoningItemId(
+  args: ClaudeReasoningItemIdArgs,
+): string {
+  return getOrCreateScopedItemId({
+    createItemId: () => createClaudeReasoningItemId(args.state),
+    openItemIdsByScope: args.state.openReasoningItemIdsByScope,
+    parentToolCallId: args.parentToolCallId,
+    scopeId: String(args.contentIndex),
+  });
+}
+
+function resolveCompletedClaudeReasoningItemId(
+  args: ClaudeReasoningItemIdArgs,
+): string {
+  return resolveCompletedScopedItemId({
+    createItemId: () => createClaudeReasoningItemId(args.state),
+    openItemIdsByScope: args.state.openReasoningItemIdsByScope,
+    parentToolCallId: args.parentToolCallId,
+    scopeId: String(args.contentIndex),
+  });
 }
 
 interface ClaudeUnexpectedSdkEventArgs {
@@ -1047,14 +1161,64 @@ function extractToolUses(
 
 function extractStreamTextDelta(
   message: ClaudeStreamEventMessage,
-): string | undefined {
+): ClaudeStreamDelta | undefined {
   const parsed = streamEventSchema.safeParse(message.event);
   if (!parsed.success) return undefined;
 
   if (parsed.data.type === "content_block_delta") {
-    return parsed.data.delta.text.length > 0 ? parsed.data.delta.text : undefined;
+    if (parsed.data.delta.type !== "text_delta") {
+      return undefined;
+    }
+    return parsed.data.delta.text.length > 0
+      ? { contentIndex: parsed.data.index, delta: parsed.data.delta.text }
+      : undefined;
   }
-  return parsed.data.content_block.text.length > 0 ? parsed.data.content_block.text : undefined;
+  if (parsed.data.content_block.type !== "text") {
+    return undefined;
+  }
+  return parsed.data.content_block.text.length > 0
+    ? { contentIndex: parsed.data.index, delta: parsed.data.content_block.text }
+    : undefined;
+}
+
+function extractStreamThinkingDelta(
+  message: ClaudeStreamEventMessage,
+): ClaudeStreamDelta | undefined {
+  const parsed = streamEventSchema.safeParse(message.event);
+  if (!parsed.success) return undefined;
+
+  if (parsed.data.type === "content_block_delta") {
+    if (parsed.data.delta.type !== "thinking_delta") {
+      return undefined;
+    }
+    return parsed.data.delta.thinking.length > 0
+      ? { contentIndex: parsed.data.index, delta: parsed.data.delta.thinking }
+      : undefined;
+  }
+  if (parsed.data.content_block.type !== "thinking") {
+    return undefined;
+  }
+  return parsed.data.content_block.thinking.length > 0
+    ? { contentIndex: parsed.data.index, delta: parsed.data.content_block.thinking }
+    : undefined;
+}
+
+function extractThinkingBlocks(
+  message: ClaudeAssistantMessage,
+): ClaudeReasoningBlockData[] {
+  const thinkingBlocks: ClaudeReasoningBlockData[] = [];
+  const content = parseMessageContent(message);
+  for (const [contentIndex, block] of content.entries()) {
+    const thinkingBlock = thinkingBlockSchema.safeParse(block);
+    if (!thinkingBlock.success || thinkingBlock.data.thinking.length === 0) {
+      continue;
+    }
+    thinkingBlocks.push({
+      contentIndex,
+      text: thinkingBlock.data.thinking,
+    });
+  }
+  return thinkingBlocks;
 }
 
 function extractToolResults(

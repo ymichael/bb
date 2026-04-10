@@ -9,6 +9,7 @@ import {
   getRawSdkMessage,
   getRecordProperty,
   getStringProperty,
+  isRecord,
 } from "../shared/provider-visibility-helpers.js";
 
 const PI_WELL_KNOWN_TOOL_NAMES = [
@@ -53,6 +54,43 @@ function toPiRawEventKind(event: JsonRpcMessage): string {
   return type ? `sdk/${type}` : "sdk/unknown";
 }
 
+function hasPiThinkingStartContent(message: JsonRpcMessage): boolean {
+  const rawMessage = getRawSdkMessage(message);
+  if (!rawMessage) {
+    return false;
+  }
+  const assistantMessage = getRecordProperty(rawMessage, "message");
+  const content = assistantMessage?.["content"];
+  if (!Array.isArray(content)) {
+    return false;
+  }
+  for (const block of content) {
+    if (!isRecord(block) || getStringProperty(block, "type") !== "thinking") {
+      continue;
+    }
+    const thinking = getStringProperty(block, "thinking");
+    if (thinking && thinking.length > 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function hasPiAssistantMessageEventText(
+  event: JsonRpcMessage,
+  key: string,
+): boolean {
+  const rawMessage = getRawSdkMessage(event);
+  if (!rawMessage) {
+    return false;
+  }
+  const assistantMessageEvent = getRecordProperty(rawMessage, "assistantMessageEvent");
+  const value = assistantMessageEvent
+    ? getStringProperty(assistantMessageEvent, key)
+    : undefined;
+  return typeof value === "string" && value.length > 0;
+}
+
 function toPiRawEventDescription(event: JsonRpcMessage): ProviderRawEventDescription {
   const kind = toPiRawEventKind(event);
 
@@ -70,9 +108,36 @@ function toPiRawEventDescription(event: JsonRpcMessage): ProviderRawEventDescrip
     return { kind, coverage: "normalized" };
   }
 
+  if (kind === "sdk/message_update:thinking_start") {
+    return {
+      kind,
+      coverage: hasPiThinkingStartContent(event) ? "normalized" : "noise",
+    };
+  }
+
+  if (kind === "sdk/message_update:thinking_delta") {
+    return {
+      kind,
+      coverage: hasPiAssistantMessageEventText(event, "delta")
+        ? "normalized"
+        : "noise",
+    };
+  }
+
+  if (kind === "sdk/message_update:thinking_end") {
+    return {
+      kind,
+      coverage: hasPiAssistantMessageEventText(event, "content")
+        ? "normalized"
+        : "noise",
+    };
+  }
+
   if (
     kind === "sdk/auto_retry_start" ||
     kind === "sdk/auto_retry_end" ||
+    // Fixture replay shows turn_start/turn_end are internal subturn markers
+    // relative to agent_start/agent_end, so bb still treats them as noise.
     kind === "sdk/turn_start" ||
     kind === "sdk/message_start:user" ||
     kind === "sdk/message_end:user" ||
@@ -81,9 +146,6 @@ function toPiRawEventDescription(event: JsonRpcMessage): ProviderRawEventDescrip
     kind === "sdk/message_end:toolResult" ||
     kind === "sdk/message_update:text_start" ||
     kind === "sdk/message_update:text_end" ||
-    kind === "sdk/message_update:thinking_start" ||
-    kind === "sdk/message_update:thinking_delta" ||
-    kind === "sdk/message_update:thinking_end" ||
     kind === "sdk/message_update:toolcall_start" ||
     kind === "sdk/message_update:toolcall_delta" ||
     kind === "sdk/message_update:toolcall_end" ||

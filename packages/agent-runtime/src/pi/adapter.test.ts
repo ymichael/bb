@@ -251,6 +251,17 @@ describe("pi provider adapter", () => {
     );
   });
 
+  it("translateEvent keeps turn_start as internal noise while agent_start owns the bb turn", () => {
+    const adapter = createPiProviderAdapter();
+    adapter.translateEvent(loadFixture("agent-start.json"));
+
+    const events = adapter.translateEvent({
+      type: "turn_start",
+    } as AgentSessionEvent);
+
+    expect(events).toEqual([]);
+  });
+
   it("translateEvent agent_end emits agentMessage + turn/completed", () => {
     const adapter = createPiProviderAdapter();
     // Start a turn first
@@ -412,6 +423,45 @@ describe("pi provider adapter", () => {
     if (completedId?.type === "item/completed" && completedId.item.type === "agentMessage") {
       expect(completedId.item.id).toBe(postItemId);
     }
+  });
+
+  it("translateEvent streams and finalizes Pi thinking with a stable reasoning id", () => {
+    const adapter = createPiProviderAdapter();
+    adapter.translateEvent(loadFixture("agent-start.json"));
+
+    const deltaEvents = adapter.translateEvent({
+      type: "message_update",
+      assistantMessageEvent: {
+        type: "thinking_delta",
+        contentIndex: 0,
+        delta: "Thinking through the edit.",
+      },
+    } as AgentSessionEvent);
+    const reasoningDelta = deltaEvents.find(
+      (event): event is Extract<(typeof deltaEvents)[number], { type: "item/reasoning/textDelta" }> =>
+        event.type === "item/reasoning/textDelta",
+    );
+
+    const completedEvents = adapter.translateEvent({
+      type: "message_update",
+      assistantMessageEvent: {
+        type: "thinking_end",
+        contentIndex: 0,
+        content: "Thinking through the edit.",
+      },
+    } as AgentSessionEvent);
+
+    expect(reasoningDelta?.itemId).toMatch(/^pi-reasoning-/);
+    expect(completedEvents).toContainEqual(
+      expect.objectContaining({
+        type: "item/completed",
+        item: expect.objectContaining({
+          type: "reasoning",
+          id: reasoningDelta?.itemId,
+          content: ["Thinking through the edit."],
+        }),
+      }),
+    );
   });
 
   // -- translateEvent: tool calls ------------------------------------------
