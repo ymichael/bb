@@ -3,6 +3,10 @@ import type {
   ThreadEventItem,
   ThreadEventTokenUsageBreakdown,
 } from "@bb/domain";
+import {
+  getOrCreateScopedItemId,
+  resolveCompletedScopedItemId,
+} from "./scoped-item-ids.js";
 
 const DEFAULT_PROVIDER_TURN_STATE_MAX_ENTRIES = 256;
 
@@ -12,6 +16,7 @@ export interface ProviderTurnState {
   currentTurnId: string | undefined;
   cumulativeTokens: ThreadEventTokenUsageBreakdown;
   openAssistantMessageIdsByScope: Map<string, string>;
+  openReasoningItemIdsByScope: Map<string, string>;
   toolItemsByCallId: Map<string, ThreadEventItem>;
 }
 
@@ -71,6 +76,7 @@ export function createProviderTurnStateRegistry<TState extends ProviderTurnState
 
   function clearTransientTurnState(state: TState): void {
     state.openAssistantMessageIdsByScope.clear();
+    state.openReasoningItemIdsByScope.clear();
     state.toolItemsByCallId.clear();
   }
 
@@ -99,10 +105,6 @@ export function createProviderTurnStateRegistry<TState extends ProviderTurnState
         return;
       }
     }
-  }
-
-  function toAssistantScopeKey(parentToolCallId: string | undefined): string {
-    return parentToolCallId ?? "root";
   }
 
   function createAssistantMessageId(args: GetOrCreateAssistantMessageIdArgs<TState>): string {
@@ -148,26 +150,22 @@ export function createProviderTurnStateRegistry<TState extends ProviderTurnState
     },
 
     getOrCreateAssistantMessageId(args) {
-      const scopeKey = toAssistantScopeKey(args.parentToolCallId);
-      const existing = args.state.openAssistantMessageIdsByScope.get(scopeKey);
-      if (existing) {
-        return existing;
-      }
-
-      const itemId = createAssistantMessageId(args);
-      args.state.openAssistantMessageIdsByScope.set(scopeKey, itemId);
-      return itemId;
+      return getOrCreateScopedItemId({
+        createItemId: () => createAssistantMessageId(args),
+        openItemIdsByScope: args.state.openAssistantMessageIdsByScope,
+        parentToolCallId: args.parentToolCallId,
+        scopeId: "assistant",
+      });
     },
 
     resolveCompletedAssistantMessageId(args) {
-      const scopeKey = toAssistantScopeKey(args.parentToolCallId);
-      const existing = args.state.openAssistantMessageIdsByScope.get(scopeKey);
-      if (existing) {
-        args.state.openAssistantMessageIdsByScope.delete(scopeKey);
-        return existing;
-      }
-
-      return args.providerMessageId ?? createAssistantMessageId(args);
+      return resolveCompletedScopedItemId({
+        createItemId: () => createAssistantMessageId(args),
+        openItemIdsByScope: args.state.openAssistantMessageIdsByScope,
+        parentToolCallId: args.parentToolCallId,
+        providerItemId: args.providerMessageId,
+        scopeId: "assistant",
+      });
     },
   };
 }

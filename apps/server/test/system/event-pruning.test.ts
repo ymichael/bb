@@ -148,7 +148,7 @@ function seedResolvedAssistantMessage(
 }
 
 describe("thread event pruning", () => {
-  it("prunes idle-thread noise rows and resolved assistant deltas", async () => {
+  it("prunes idle-thread noise rows and resolved item deltas", async () => {
     const harness = await createTestAppHarness();
     try {
       const host = seedHost(harness.deps);
@@ -184,7 +184,7 @@ describe("thread event pruning", () => {
         latestSequence: 309,
         sequenceCutoff: 9,
         removedAgePrunableEvents: 9,
-        removedResolvedAgentMessageDeltas: 2,
+        removedResolvedItemDeltas: 2,
         totalRemoved: 11,
       });
       expect(

@@ -22,7 +22,7 @@ import {
   listStoredEventRowsInRange,
   pruneContextWindowUsageEventsBeforeSequence,
   pruneTokenUsageEventsBeforeSequence,
-  pruneResolvedAgentMessageDeltas,
+  pruneResolvedItemDeltas,
   pruneThreadEventsBeforeSequence,
 } from "../../src/data/events.js";
 import { createProject } from "../../src/data/projects.js";
@@ -704,7 +704,7 @@ describe("events", () => {
       },
     ]);
 
-    const removed = pruneResolvedAgentMessageDeltas(db, {
+    const removed = pruneResolvedItemDeltas(db, {
       threadId: thread.id,
     });
 
@@ -734,7 +734,98 @@ describe("events", () => {
       },
     ]);
 
-    const removed = pruneResolvedAgentMessageDeltas(db, {
+    const removed = pruneResolvedItemDeltas(db, {
+      threadId: thread.id,
+    });
+
+    expect(removed).toBe(0);
+    expect(listEvents(db, { threadId: thread.id }).map((event) => event.sequence)).toEqual([1, 2]);
+  });
+
+  it("prunes resolved reasoning deltas but preserves the first delta row per stream type", () => {
+    const { db, thread } = setup();
+
+    insertEvents(db, noopNotifier, [
+      {
+        threadId: thread.id,
+        sequence: 1,
+        type: "item/reasoning/textDelta",
+        itemId: "reasoning-1",
+        itemKind: null,
+        data: JSON.stringify({ itemId: "reasoning-1", delta: "raw " }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 2,
+        type: "item/reasoning/textDelta",
+        itemId: "reasoning-1",
+        itemKind: null,
+        data: JSON.stringify({ itemId: "reasoning-1", delta: "content" }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 3,
+        type: "item/reasoning/summaryTextDelta",
+        itemId: "reasoning-1",
+        itemKind: null,
+        data: JSON.stringify({ itemId: "reasoning-1", delta: "summary " }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 4,
+        type: "item/reasoning/summaryTextDelta",
+        itemId: "reasoning-1",
+        itemKind: null,
+        data: JSON.stringify({ itemId: "reasoning-1", delta: "content" }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 5,
+        type: "item/completed",
+        itemId: "reasoning-1",
+        itemKind: "reasoning",
+        data: JSON.stringify({
+          item: {
+            id: "reasoning-1",
+            type: "reasoning",
+            content: ["raw content"],
+            summary: ["summary content"],
+          },
+        }),
+      },
+    ]);
+
+    const removed = pruneResolvedItemDeltas(db, {
+      threadId: thread.id,
+    });
+
+    expect(removed).toBe(2);
+    expect(listEvents(db, { threadId: thread.id }).map((event) => event.sequence)).toEqual([1, 3, 5]);
+  });
+
+  it("keeps unresolved reasoning deltas", () => {
+    const { db, thread } = setup();
+
+    insertEvents(db, noopNotifier, [
+      {
+        threadId: thread.id,
+        sequence: 1,
+        type: "item/reasoning/textDelta",
+        itemId: "reasoning-1",
+        itemKind: null,
+        data: JSON.stringify({ itemId: "reasoning-1", delta: "raw " }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 2,
+        type: "item/reasoning/textDelta",
+        itemId: "reasoning-1",
+        itemKind: null,
+        data: JSON.stringify({ itemId: "reasoning-1", delta: "content" }),
+      },
+    ]);
+
+    const removed = pruneResolvedItemDeltas(db, {
       threadId: thread.id,
     });
 

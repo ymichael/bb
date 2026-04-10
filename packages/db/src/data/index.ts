@@ -242,7 +242,7 @@ export {
   listStoredEventRowsInRange,
   pruneContextWindowUsageEventsBeforeSequence,
   pruneTokenUsageEventsBeforeSequence,
-  pruneResolvedAgentMessageDeltas,
+  pruneResolvedItemDeltas,
   pruneThreadEventsBeforeSequence,
 } from "./events.js";
 export type {
@@ -254,7 +254,7 @@ export type {
   ListEventsOptions,
   PruneContextWindowUsageEventsBeforeSequenceArgs,
   PruneTokenUsageEventsBeforeSequenceArgs,
-  PruneResolvedAgentMessageDeltasArgs,
+  PruneResolvedItemDeltasArgs,
   PruneThreadEventsBeforeSequenceArgs,
   StoredEventRow,
   StoredTurnRequestEventRow,

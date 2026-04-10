@@ -238,10 +238,17 @@ export type {
 
 
 export {
+  jsonValueSchema,
+} from "./json-value.js";
+export type {
+  JsonValue,
+} from "./json-value.js";
+
+export {
   providerEventSchema,
   providerEventTypeSchema,
   providerEventTypeValues,
-  providerUnhandledDetailEntrySchema,
+  providerRawEventSchema,
   systemEventSchema,
   threadEventFileChangeKindSchema,
   threadEventFileChangeSchema,
@@ -260,8 +267,8 @@ export {
   threadEventWarningCategorySchema,
 } from "./provider-event.js";
 export type {
-  ProviderUnhandledDetailEntry,
   ProviderUnhandledEvent,
+  ProviderRawEvent,
   ProviderEvent,
   ProviderEventType,
   SystemEvent,

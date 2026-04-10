@@ -716,6 +716,9 @@ describe("claude-code provider adapter", () => {
         providerThreadId: "bb-thread-1",
         providerId: "claude-code",
         rawType: "sdk/custom_event",
+        rawEvent: expect.objectContaining({
+          method: "sdk/message",
+        }),
       }),
     ]);
   });
@@ -739,6 +742,9 @@ describe("claude-code provider adapter", () => {
         type: "provider/unhandled",
         providerId: "claude-code",
         rawType: "sdk/result",
+        rawEvent: expect.objectContaining({
+          method: "sdk/message",
+        }),
       }),
     ]);
   });
@@ -1053,6 +1059,7 @@ describe("claude-code provider adapter", () => {
       type: "stream_event",
       event: {
         type: "content_block_delta",
+        index: 0,
         delta: { type: "text_delta", text: "streaming..." },
       },
       session_id: "sess-1",
@@ -1074,6 +1081,7 @@ describe("claude-code provider adapter", () => {
       type: "stream_event",
       event: {
         type: "content_block_delta",
+        index: 0,
         delta: { type: "text_delta", text: "PONG" },
       },
       session_id: "sess-1",
@@ -1113,6 +1121,7 @@ describe("claude-code provider adapter", () => {
       type: "stream_event",
       event: {
         type: "content_block_delta",
+        index: 0,
         delta: { type: "text_delta", text: "PONG" },
       },
       session_id: "sess-1",
@@ -1130,6 +1139,51 @@ describe("claude-code provider adapter", () => {
         itemId: expect.stringMatching(/^claude-assistant-/),
         turnId: "turn-1",
         delta: "PONG",
+      }),
+    );
+  });
+
+  it("translateEvent streams thinking and finalizes it on the assistant message", () => {
+    const adapter = createClaudeCodeProviderAdapter();
+
+    const deltaEvents = adapter.translateEvent({
+      type: "stream_event",
+      event: {
+        type: "content_block_delta",
+        index: 0,
+        delta: {
+          type: "thinking_delta",
+          thinking: "Let me inspect this first.",
+        },
+      },
+      session_id: "sess-1",
+    });
+    const reasoningDelta = deltaEvents.find(
+      (event): event is Extract<(typeof deltaEvents)[number], { type: "item/reasoning/textDelta" }> =>
+        event.type === "item/reasoning/textDelta",
+    );
+
+    const assistantEvents = adapter.translateEvent({
+      type: "assistant",
+      message: {
+        role: "assistant",
+        content: [{
+          type: "thinking",
+          thinking: "Let me inspect this first.",
+        }],
+      },
+      session_id: "sess-1",
+    });
+
+    expect(reasoningDelta?.itemId).toMatch(/^claude-reasoning-/);
+    expect(assistantEvents).toContainEqual(
+      expect.objectContaining({
+        type: "item/completed",
+        item: expect.objectContaining({
+          type: "reasoning",
+          id: reasoningDelta?.itemId,
+          content: ["Let me inspect this first."],
+        }),
       }),
     );
   });

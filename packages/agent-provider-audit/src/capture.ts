@@ -649,7 +649,8 @@ function buildRawEventKindSummaries(
   const countsByKindAndClassification = new Map<string, ProviderAuditRawEventKindSummary>();
 
   for (const entry of rawProviderEvents) {
-    const description = visibility.describeRawEvent(entry.rawEvent);
+    const parsedRawEvent = visibility.parseRawEvent(entry.rawEvent);
+    const description = visibility.describeParsedRawEvent(parsedRawEvent);
     const mapKey = `${description.coverage}:${description.kind}`;
     const existing = countsByKindAndClassification.get(mapKey);
     if (existing) {
@@ -698,7 +699,8 @@ function buildUntranslatedRawProviderEvents(
   return rawProviderEvents
     .filter((entry) => !translatedCountByRawCaptureId.has(entry.captureId))
     .map((entry) => {
-      const description = visibility.describeRawEvent(entry.rawEvent);
+      const parsedRawEvent = visibility.parseRawEvent(entry.rawEvent);
+      const description = visibility.describeParsedRawEvent(parsedRawEvent);
       return {
         captureId: entry.captureId,
         method: entry.rawEvent.method,
@@ -723,7 +725,8 @@ function buildObservedToolCalls(
   const countsByToolKey = new Map<string, ProviderAuditObservedToolCallSummary>();
 
   for (const entry of rawProviderEvents) {
-    const observedToolCalls = visibility.extractObservedToolCalls(entry.rawEvent);
+    const parsedRawEvent = visibility.parseRawEvent(entry.rawEvent);
+    const observedToolCalls = visibility.extractObservedToolCallsFromParsed(parsedRawEvent);
     for (const observedToolCall of observedToolCalls) {
       const existing = countsByToolKey.get(observedToolCall.key);
       if (existing) {

@@ -2,7 +2,7 @@ import {
   getThread,
   getLatestThreadSequence,
   pruneContextWindowUsageEventsBeforeSequence,
-  pruneResolvedAgentMessageDeltas,
+  pruneResolvedItemDeltas,
   pruneTokenUsageEventsBeforeSequence,
   pruneThreadEventsBeforeSequence,
 } from "@bb/db";
@@ -19,7 +19,7 @@ export interface PruneThreadEventHistoryArgs {
 export interface ThreadEventPruningResult {
   latestSequence: number;
   removedAgePrunableEvents: number;
-  removedResolvedAgentMessageDeltas: number;
+  removedResolvedItemDeltas: number;
   sequenceCutoff: number;
   totalRemoved: number;
 }
@@ -90,7 +90,7 @@ export function pruneThreadEventHistory(
       sequenceCutoff,
       types: GENERIC_AGE_PRUNABLE_THREAD_EVENT_TYPES,
     });
-  const removedResolvedAgentMessageDeltas = pruneResolvedAgentMessageDeltas(
+  const removedResolvedItemDeltas = pruneResolvedItemDeltas(
     deps.db,
     {
       threadId: args.threadId,
@@ -100,10 +100,10 @@ export function pruneThreadEventHistory(
   return {
     latestSequence,
     removedAgePrunableEvents,
-    removedResolvedAgentMessageDeltas,
+    removedResolvedItemDeltas,
     sequenceCutoff,
     totalRemoved:
-      removedAgePrunableEvents + removedResolvedAgentMessageDeltas,
+      removedAgePrunableEvents + removedResolvedItemDeltas,
   };
 }
 

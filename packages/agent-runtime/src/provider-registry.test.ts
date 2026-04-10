@@ -188,4 +188,63 @@ describe("provider registry", () => {
     }
   });
 
+  it("classifies shared handled non-sdk envelopes as normalized", () => {
+    const claude = getProviderVisibilityMetadata("claude-code");
+    const pi = getProviderVisibilityMetadata("pi");
+
+    expect(claude.describeRawEvent({
+      jsonrpc: "2.0",
+      method: "thread/contextWindowUsage/updated",
+      params: {
+        threadId: "t1",
+        contextWindowUsage: {
+          usedTokens: 12,
+          modelContextWindow: 100,
+          estimated: false,
+        },
+      },
+    })).toEqual({
+      kind: "thread/contextWindowUsage/updated",
+      coverage: "normalized",
+    });
+
+    expect(pi.describeRawEvent({
+      jsonrpc: "2.0",
+      method: "thread/contextWindowUsage/updated",
+      params: {
+        threadId: "t1",
+        contextWindowUsage: {
+          usedTokens: 12,
+          modelContextWindow: 100,
+          estimated: false,
+        },
+      },
+    })).toEqual({
+      kind: "thread/contextWindowUsage/updated",
+      coverage: "normalized",
+    });
+
+    expect(claude.describeRawEvent({
+      jsonrpc: "2.0",
+      method: "error",
+      params: {
+        message: "provider failed",
+      },
+    })).toEqual({
+      kind: "error",
+      coverage: "normalized",
+    });
+
+    expect(pi.describeRawEvent({
+      jsonrpc: "2.0",
+      method: "error",
+      params: {
+        message: "provider failed",
+      },
+    })).toEqual({
+      kind: "error",
+      coverage: "normalized",
+    });
+  });
+
 });

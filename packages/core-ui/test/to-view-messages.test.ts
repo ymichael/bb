@@ -2313,11 +2313,17 @@ describe("toViewMessages replay coverage", () => {
           providerThreadId: "provider-thread-1",
           providerId: "codex",
           rawType: "item/tool/requestUserInput",
+          rawEvent: {
+            jsonrpc: "2.0",
+            method: "item/tool/requestUserInput",
+            params: {
+              threadId: "thread-1",
+              turnId: "turn-1",
+              message: "Tool is waiting for input",
+              tool: "prompt_user",
+            },
+          },
           turnId: "turn-1",
-          detailEntries: [
-            { label: "message", value: "Tool is waiting for input" },
-            { label: "tool", value: "prompt_user" },
-          ],
         },
         createdAt: 1,
       },
@@ -2330,9 +2336,9 @@ describe("toViewMessages replay coverage", () => {
     expect(op).toBeDefined();
     expect(op?.opType).toBe("provider-unhandled");
     expect(op?.title).toBe("Unhandled Codex event");
-    expect(op?.detail).toContain("Tool is waiting for input");
     expect(op?.detail).toContain("Raw event: item/tool/requestUserInput");
-    expect(op?.detail).toContain("tool: prompt_user");
+    expect(op?.detail).toContain("\"message\": \"Tool is waiting for input\"");
+    expect(op?.detail).toContain("\"tool\": \"prompt_user\"");
   });
 
   it("projects shared tool progress onto the active tool call", () => {

@@ -9,6 +9,7 @@ import {
   systemThreadTitleUpdatedEventDataSchema,
   turnRequestEventDataSchema,
 } from "./thread-events.js";
+import { jsonValueSchema } from "./json-value.js";
 
 export const threadEventItemStatusSchema = z.enum([
   "pending",
@@ -104,13 +105,13 @@ export type ThreadEventWarningCategory = z.infer<
   typeof threadEventWarningCategorySchema
 >;
 
-export const providerUnhandledDetailEntrySchema = z.object({
-  label: z.string(),
-  value: z.string(),
+export const providerRawEventSchema = z.object({
+  jsonrpc: z.literal("2.0"),
+  id: z.union([z.string(), z.number()]).optional(),
+  method: z.string(),
+  params: jsonValueSchema.optional(),
 });
-export type ProviderUnhandledDetailEntry = z.infer<
-  typeof providerUnhandledDetailEntrySchema
->;
+export type ProviderRawEvent = z.infer<typeof providerRawEventSchema>;
 
 export const providerUnhandledEventSchema = z.object({
   type: z.literal("provider/unhandled"),
@@ -118,9 +119,9 @@ export const providerUnhandledEventSchema = z.object({
   providerThreadId: z.string(),
   providerId: z.string(),
   rawType: z.string(),
+  rawEvent: providerRawEventSchema,
   turnId: z.string().optional(),
   parentToolCallId: z.string().optional(),
-  detailEntries: z.array(providerUnhandledDetailEntrySchema).optional(),
 });
 export type ProviderUnhandledEvent = z.infer<typeof providerUnhandledEventSchema>;
 
