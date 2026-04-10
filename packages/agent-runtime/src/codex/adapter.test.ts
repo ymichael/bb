@@ -1381,6 +1381,27 @@ describe("codex provider adapter", () => {
     });
   });
 
+  it("decodeInteractiveRequest rejects empty command approval decisions", () => {
+    const adapter = createCodexProviderAdapter();
+    expect(
+      adapter.decodeInteractiveRequest?.({
+        jsonrpc: "2.0",
+        id: 8,
+        method: "item/commandExecution/requestApproval",
+        params: {
+          threadId: "t1",
+          turnId: "turn-1",
+          itemId: "item-1",
+          reason: "Needs approval",
+          command: "git push",
+          cwd: "/tmp/project",
+          commandActions: [],
+          availableDecisions: [],
+        },
+      }),
+    ).toBeNull();
+  });
+
   it("decodeInteractiveRequest preserves macOS permission bundles in command approvals", () => {
     const adapter = createCodexProviderAdapter();
     expect(

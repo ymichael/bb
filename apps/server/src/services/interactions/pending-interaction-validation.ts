@@ -72,6 +72,10 @@ function validateCommandApprovalResolution(
   );
 }
 
+function hasEmptyAnswer(answers: string[]): boolean {
+  return answers.some((answer) => answer.trim().length === 0);
+}
+
 function validateUserInputResolution(
   interaction: PendingInteraction,
   resolution: PendingInteractionResolution,
@@ -118,6 +122,13 @@ function validateUserInputResolution(
         400,
         "invalid_request",
         `Question '${questionId}' requires at least one answer`,
+      );
+    }
+    if (hasEmptyAnswer(answers)) {
+      throw new ApiError(
+        400,
+        "invalid_request",
+        `Question '${questionId}' cannot include empty answers`,
       );
     }
     if (!question.multiSelect && answers.length > 1) {

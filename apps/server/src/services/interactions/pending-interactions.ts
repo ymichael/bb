@@ -91,9 +91,24 @@ interface CreateLifecycleDeps {
   hub: AppDeps["hub"];
 }
 
+function buildResolveConflictError(interaction: PendingInteraction): ApiError {
+  return new ApiError(
+    409,
+    "invalid_request",
+    `Pending interaction ${interaction.id} is already ${interaction.status}`,
+  );
+}
+
 function getUnsupportedPendingInteractionReason(
   interaction: PendingInteractionCreate,
 ): string | null {
+  if (
+    interaction.payload.kind === "command_approval"
+    && interaction.payload.availableDecisions.length === 0
+  ) {
+    return "Command approvals must include at least one available decision";
+  }
+
   if (
     interaction.payload.kind === "permission_request"
     && interaction.payload.permissions.macos !== null
@@ -405,7 +420,11 @@ export class PendingInteractionLifecycle {
       interactionId: args.interactionId,
     });
     if (current.status !== "pending") {
-      return current;
+      if (current.status === "resolved") {
+        return current;
+      }
+
+      throw buildResolveConflictError(current);
     }
     validatePendingInteractionResolution(current, args.resolution);
 
@@ -414,10 +433,15 @@ export class PendingInteractionLifecycle {
       resolution: JSON.stringify(args.resolution),
     });
     if (!updated) {
-      return this.getThreadInteraction({
+      const latest = this.getThreadInteraction({
         threadId: args.threadId,
         interactionId: args.interactionId,
       });
+      if (latest.status === "resolved") {
+        return latest;
+      }
+
+      throw buildResolveConflictError(latest);
     }
 
     const interaction = toPendingInteraction(updated);

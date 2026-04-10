@@ -1010,9 +1010,16 @@ export function createClaudeCodeProviderAdapter(
             );
           }
 
+          const updatedPermissions = buildClaudePermissionUpdates({
+            permissions: args.resolution.permissions,
+            scope: args.resolution.scope,
+            toolName: args.request.payload.toolName,
+          });
+
           if (
             args.resolution.permissions.network === null
             && args.resolution.permissions.fileSystem === null
+            && updatedPermissions === undefined
           ) {
             return {
               kind: "permission_request",
@@ -1020,12 +1027,6 @@ export function createClaudeCodeProviderAdapter(
               message: "Permission request denied",
             };
           }
-
-          const updatedPermissions = buildClaudePermissionUpdates({
-            permissions: args.resolution.permissions,
-            scope: args.resolution.scope,
-            toolName: args.request.payload.toolName,
-          });
 
           return {
             kind: "permission_request",

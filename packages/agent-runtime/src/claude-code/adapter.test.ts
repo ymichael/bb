@@ -520,6 +520,52 @@ describe("claude-code provider adapter", () => {
     });
   });
 
+  it("builds Claude permission approval responses for addRules-only session grants", () => {
+    const adapter = createClaudeCodeProviderAdapter();
+
+    expect(
+      adapter.buildInteractiveResponse?.({
+        request: {
+          requestId: "req-4b",
+          method: CLAUDE_PERMISSION_REQUEST_APPROVAL_METHOD,
+          threadId: "thr_1",
+          providerThreadId: "claude-session-1",
+          turnId: "",
+          payload: {
+            kind: "permission_request",
+            itemId: "toolu_3b",
+            toolName: "Bash",
+            reason: "Needs approval",
+            permissions: {
+              network: null,
+              fileSystem: null,
+              macos: null,
+            },
+          },
+        },
+        resolution: {
+          kind: "permission_request",
+          permissions: {
+            network: null,
+            fileSystem: null,
+          },
+          scope: "session",
+        },
+      }),
+    ).toEqual({
+      kind: "permission_request",
+      behavior: "allow",
+      updatedPermissions: [
+        {
+          type: "addRules",
+          rules: [{ toolName: "Bash" }],
+          behavior: "allow",
+          destination: "session",
+        },
+      ],
+    });
+  });
+
   it("builds Claude AskUserQuestion responses keyed by question text", () => {
     const adapter = createClaudeCodeProviderAdapter();
 

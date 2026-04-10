@@ -276,6 +276,112 @@ describe("pending interaction lifecycle", () => {
     }
   });
 
+  it("rejects command approvals with no available decisions", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-pending-interaction-empty-decisions",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+      });
+
+      expect(
+        harness.deps.pendingInteractions.registerPendingInteraction({
+          threadId: thread.id,
+          turnId: "turn-empty-decisions",
+          providerId: "codex",
+          providerThreadId: "provider-thread-empty-decisions",
+          providerRequestId: "request-empty-decisions",
+          payload: {
+            kind: "command_approval",
+            itemId: "item-empty-decisions",
+            reason: "Needs approval",
+            command: "git push",
+            cwd: "/tmp/project",
+            commandActions: [],
+            requestedPermissions: null,
+            availableDecisions: [],
+          },
+        }),
+      ).toEqual({
+        outcome: "rejected",
+        reason: "Command approvals must include at least one available decision",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("rejects resolving interrupted interactions", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-pending-interaction-resolve-interrupted",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+      });
+
+      const created = harness.deps.pendingInteractions.registerPendingInteraction({
+        threadId: thread.id,
+        turnId: "turn-resolve-interrupted",
+        providerId: "codex",
+        providerThreadId: "provider-thread-resolve-interrupted",
+        providerRequestId: "request-resolve-interrupted",
+        payload: {
+          kind: "command_approval",
+          itemId: "item-resolve-interrupted",
+          reason: "Needs approval",
+          command: "git push",
+          cwd: "/tmp/project",
+          commandActions: [],
+          requestedPermissions: null,
+          availableDecisions: ["accept", "accept_for_session", "decline", "cancel"],
+        },
+      });
+      if (created.outcome === "rejected") {
+        throw new Error(`Expected interaction registration to succeed: ${created.reason}`);
+      }
+
+      harness.deps.pendingInteractions.interruptPendingInteraction({
+        interactionId: created.interaction.id,
+        reason: "Provider exited",
+      });
+
+      expect(() =>
+        harness.deps.pendingInteractions.resolvePendingInteraction({
+          threadId: thread.id,
+          interactionId: created.interaction.id,
+          resolution: {
+            kind: "command_approval",
+            decision: "accept",
+          },
+        })
+      ).toThrowError(
+        `Pending interaction ${created.interaction.id} is already interrupted`,
+      );
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("rejects standalone macOS permission requests", async () => {
     const harness = await createTestAppHarness();
     try {

@@ -1082,6 +1082,9 @@ function parseCodexAvailableDecisions(
   if (!decisions) {
     return ["accept", "accept_for_session", "decline", "cancel"];
   }
+  if (decisions.length === 0) {
+    return null;
+  }
 
   return decisions.map(fromCodexCommandApprovalDecision);
 }

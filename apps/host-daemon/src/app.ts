@@ -32,6 +32,7 @@ const COMMAND_FETCH_RETRY_DELAY_MS = 2_000;
 const ENVIRONMENT_CHANGE_REPORT_DEBOUNCE_MS = 150;
 const ENVIRONMENT_CHANGE_REPORT_RETRY_DELAY_MS = 1_000;
 const ENVIRONMENT_CHANGE_REPORT_MAX_RETRY_DELAY_MS = 30_000;
+const INTERACTIVE_INTERRUPT_RETRY_DELAY_MS = 1_000;
 
 export function createCommandFetchLoop<Command>(
   args: {
@@ -136,6 +137,7 @@ export async function createHostDaemonApp(
     PendingInteractiveInterruptRequest
   >();
   let flushPendingInteractiveInterruptsPromise: Promise<void> | null = null;
+  let interactiveInterruptRetryTimeout: ReturnType<typeof setTimeout> | null = null;
 
   const serverClient = createServerClient({
     serverUrl: options.serverUrl,
@@ -168,11 +170,35 @@ export async function createHostDaemonApp(
     ].join("|");
   }
 
+  function clearInteractiveInterruptRetry(): void {
+    if (interactiveInterruptRetryTimeout !== null) {
+      clearTimeout(interactiveInterruptRetryTimeout);
+      interactiveInterruptRetryTimeout = null;
+    }
+  }
+
+  function scheduleInteractiveInterruptRetry(): void {
+    if (
+      interactiveInterruptRetryTimeout !== null
+      || sessionState.value === null
+      || pendingInteractiveInterrupts.size === 0
+    ) {
+      return;
+    }
+
+    interactiveInterruptRetryTimeout = setTimeout(() => {
+      interactiveInterruptRetryTimeout = null;
+      void flushPendingInteractiveInterrupts();
+    }, INTERACTIVE_INTERRUPT_RETRY_DELAY_MS);
+  }
+
   async function flushPendingInteractiveInterrupts(): Promise<void> {
     if (flushPendingInteractiveInterruptsPromise) {
       await flushPendingInteractiveInterruptsPromise;
       return;
     }
+
+    clearInteractiveInterruptRetry();
 
     flushPendingInteractiveInterruptsPromise = (async () => {
       while (sessionState.value !== null) {
@@ -194,6 +220,7 @@ export async function createHostDaemonApp(
             },
             "Failed to flush pending interactive interrupt request",
           );
+          scheduleInteractiveInterruptRetry();
           return;
         }
       }
@@ -381,6 +408,9 @@ export async function createHostDaemonApp(
     },
     setSession: (session) => {
       sessionState.value = session?.sessionId ?? null;
+      if (session === null) {
+        clearInteractiveInterruptRetry();
+      }
     },
   });
 

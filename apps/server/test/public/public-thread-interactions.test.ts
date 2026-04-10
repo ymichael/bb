@@ -240,6 +240,30 @@ describe("public thread interaction routes", () => {
         message: "Pending interaction resolution kind does not match the interaction payload",
       });
 
+      harness.deps.pendingInteractions.interruptPendingInteraction({
+        interactionId: commandApproval.interaction.id,
+        reason: "Provider exited",
+      });
+
+      const interruptedResolution = await harness.app.request(
+        `/api/v1/threads/${thread.id}/interactions/${commandApproval.interaction.id}/resolve`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            kind: "command_approval",
+            decision: "accept",
+          }),
+        },
+      );
+      expect(interruptedResolution.status).toBe(409);
+      await expect(readJson(interruptedResolution)).resolves.toEqual({
+        code: "invalid_request",
+        message: `Pending interaction ${commandApproval.interaction.id} is already interrupted`,
+      });
+
       const userInput = harness.deps.pendingInteractions.registerPendingInteraction({
         threadId: secondThread.id,
         turnId: "turn-invalid-user-input-resolution",
@@ -340,6 +364,28 @@ describe("public thread interaction routes", () => {
       await expect(readJson(emptyAnswerResponse)).resolves.toEqual({
         code: "invalid_request",
         message: "Question 'ticket' requires at least one answer",
+      });
+
+      const blankAnswerResponse = await harness.app.request(
+        `/api/v1/threads/${secondThread.id}/interactions/${userInput.interaction.id}/resolve`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            kind: "user_input_request",
+            answers: {
+              environment: [""],
+              ticket: ["OPS-123"],
+            },
+          }),
+        },
+      );
+      expect(blankAnswerResponse.status).toBe(400);
+      await expect(readJson(blankAnswerResponse)).resolves.toEqual({
+        code: "invalid_request",
+        message: "Question 'environment' cannot include empty answers",
       });
 
       const multiAnswerResponse = await harness.app.request(
