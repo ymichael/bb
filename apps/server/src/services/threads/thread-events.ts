@@ -140,11 +140,20 @@ export function parseStoredTurnRequestEvent(
     );
   }
 
-  const event = parseStoredThreadEvent({
-    data: eventData,
-    threadId: row.threadId,
-    type: row.type,
-  });
+  let event;
+  try {
+    event = parseStoredThreadEvent({
+      data: eventData,
+      threadId: row.threadId,
+      type: row.type,
+    });
+  } catch {
+    throw new ApiError(
+      500,
+      "internal_error",
+      `Stored ${row.type} event #${row.sequence} for thread ${row.threadId} is malformed`,
+    );
+  }
 
   switch (event.type) {
     case "client/thread/start":

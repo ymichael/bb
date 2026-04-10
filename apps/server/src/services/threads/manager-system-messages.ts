@@ -4,7 +4,7 @@ import type {
   ResolvedThreadExecutionOptions,
   Thread,
 } from "@bb/domain";
-import type { SandboxWorkSessionDeps } from "../../types.js";
+import type { PendingInteractionWorkSessionDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
 import { requireThreadEnvironment } from "../lib/entity-lookup.js";
 import { buildExecutionOptions, queueTurnSteerCommand } from "./thread-commands.js";
@@ -39,7 +39,7 @@ function buildSystemInput(messageText: string): PromptInput[] {
 }
 
 async function queueReadyManagerSystemMessage(
-  deps: SandboxWorkSessionDeps,
+  deps: PendingInteractionWorkSessionDeps,
   args: QueueReadyManagerSystemMessageArgs,
 ): Promise<void> {
   const eventSequence = appendClientTurnEvent(deps, {
@@ -93,7 +93,7 @@ async function queueReadyManagerSystemMessage(
 }
 
 export async function queueManagerSystemMessage(
-  deps: SandboxWorkSessionDeps,
+  deps: PendingInteractionWorkSessionDeps,
   args: QueueManagerSystemMessageArgs,
 ): Promise<boolean> {
   const managerThread = getThread(deps.db, args.managerThreadId);

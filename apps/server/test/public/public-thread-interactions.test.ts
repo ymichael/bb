@@ -434,6 +434,7 @@ describe("public thread interaction routes", () => {
           permissions: {
             network: { enabled: true },
             fileSystem: null,
+            macos: null,
           },
         },
       });
@@ -490,6 +491,7 @@ describe("public thread interaction routes", () => {
               read: ["/tmp/project/README.md"],
               write: [],
             },
+            macos: null,
           },
         },
       });

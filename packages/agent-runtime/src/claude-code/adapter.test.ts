@@ -82,7 +82,6 @@ describe("claude-code provider adapter", () => {
     });
     expect(cmd?.params).toMatchObject({
       threadId: "bb-thread-1",
-      cwd: "/tmp/worktree",
       permissionMode: "default",
       questionPolicy: "allow",
       cwd: "/tmp/worktree",

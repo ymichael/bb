@@ -120,6 +120,7 @@ function buildThreadStartCommand(
       serviceTier: "default" as const,
       reasoningLevel: "medium" as const,
       sandboxMode: "danger-full-access" as const,
+      questionPolicy: "allow" as const,
     },
     instructions: "You are a helpful assistant.",
     dynamicTools: [],

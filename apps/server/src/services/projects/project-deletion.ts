@@ -10,7 +10,7 @@ import {
 } from "@bb/db";
 import { upsertProjectOperationRecord } from "@bb/db/internal-lifecycle";
 import type { Environment } from "@bb/domain";
-import type { AppDeps, SandboxLifecycleDeps } from "../../types.js";
+import type { AppDeps, PendingInteractionWorkSessionDeps } from "../../types.js";
 import { deleteProjectAttachments } from "./attachments.js";
 import {
   advanceEnvironmentCleanup,
@@ -36,7 +36,7 @@ function isProjectDeletionActive(
 }
 
 async function advanceProjectThreadsForDeletion(
-  deps: SandboxLifecycleDeps,
+  deps: PendingInteractionWorkSessionDeps,
   args: {
     environmentsById: Map<string, Environment>;
     projectId: string;
@@ -110,7 +110,7 @@ export function requestProjectDeletion(
 }
 
 export async function advanceProjectDeletion(
-  deps: SandboxLifecycleDeps,
+  deps: PendingInteractionWorkSessionDeps,
   args: ProjectDeletionArgs,
 ): Promise<boolean> {
   if (!isProjectDeletionActive(deps, args.projectId)) {

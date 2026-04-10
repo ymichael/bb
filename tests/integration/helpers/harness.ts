@@ -191,6 +191,7 @@ async function startIntegrationServer(
 
   const db = initDb(":memory:");
   const hub = new NotificationHub();
+  const hostLifecycle = createHostLifecycleService();
   const pendingInteractions = new PendingInteractionLifecycle({
     db,
     hub,
@@ -221,7 +222,6 @@ async function startIntegrationServer(
     db,
     logger: testLogger,
   });
-  const hostLifecycle = createHostLifecycleService();
   const sandboxEnv = await createSandboxEnvService({
     dataDir: serverDataDir,
     db,

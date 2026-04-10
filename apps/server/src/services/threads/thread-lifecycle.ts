@@ -28,7 +28,11 @@ import {
   threadStartCommandSchema,
   threadStopCommandSchema,
 } from "@bb/host-daemon-contract";
-import type { AppDeps, SandboxWorkSessionDeps } from "../../types.js";
+import type {
+  AppDeps,
+  PendingInteractionWorkSessionDeps,
+  SandboxWorkSessionDeps,
+} from "../../types.js";
 import { ApiError } from "../../errors.js";
 import { advanceEnvironmentCleanup, requestEnvironmentCleanup } from "../environments/environment-cleanup.js";
 import { appendThreadInterruptedEvent } from "./thread-events.js";
@@ -481,7 +485,7 @@ function advanceThreadStop(
 }
 
 export async function finalizeStoppedThread(
-  deps: SandboxWorkSessionDeps,
+  deps: PendingInteractionWorkSessionDeps,
   args: FinalizeStoppedThreadArgs,
 ): Promise<boolean> {
   const currentThread = getThread(deps.db, args.threadId);

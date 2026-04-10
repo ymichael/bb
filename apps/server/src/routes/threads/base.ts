@@ -14,7 +14,10 @@ import {
 } from "@bb/server-contract";
 import { renderTemplate } from "@bb/templates";
 import type { Hono } from "hono";
-import type { AppDeps, LoggedSandboxWorkSessionDeps } from "../../types.js";
+import type {
+  AppDeps,
+  LoggedPendingInteractionWorkSessionDeps,
+} from "../../types.js";
 import { ApiError } from "../../errors.js";
 import {
   advanceEnvironmentCleanup,
@@ -45,7 +48,7 @@ function formatThreadLabelForManager(thread: {
 }
 
 async function queueManagerSystemMessageBestEffort(
-  deps: LoggedSandboxWorkSessionDeps,
+  deps: LoggedPendingInteractionWorkSessionDeps,
   args: {
     managedThreadId: string;
     managerThreadId: string;

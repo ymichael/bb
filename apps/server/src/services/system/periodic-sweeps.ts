@@ -13,7 +13,11 @@ import {
   sweepManagedEnvironments,
 } from "@bb/db";
 import { activeLifecycleOperationStates } from "@bb/domain";
-import type { AppDeps, LoggedSandboxWorkSessionDeps } from "../../types.js";
+import type {
+  AppDeps,
+  LoggedPendingInteractionWorkSessionDeps,
+  LoggedSandboxWorkSessionDeps,
+} from "../../types.js";
 import { sweepDueAutomations } from "../scheduling/automation-sweep.js";
 import { advanceEnvironmentCleanup } from "../environments/environment-cleanup.js";
 import {
@@ -216,7 +220,7 @@ export async function runIdleSandboxSuspendSweep(
 }
 
 export async function runThreadLifecycleSweep(
-  deps: LoggedSandboxWorkSessionDeps,
+  deps: LoggedPendingInteractionWorkSessionDeps,
 ): Promise<void> {
   for (const operation of listThreadOperations(deps.db, {
     kinds: ["start"],

@@ -18,7 +18,10 @@ import {
 import { renderTemplate } from "@bb/templates";
 import type { Hono } from "hono";
 import { ApiError } from "../errors.js";
-import type { AppDeps, LoggedSandboxWorkSessionDeps } from "../types.js";
+import type {
+  AppDeps,
+  LoggedPendingInteractionWorkSessionDeps,
+} from "../types.js";
 import {
   isAgePrunableThreadEventType,
   maybePruneActiveThreadEventHistory,
@@ -128,7 +131,7 @@ function renderManagedThreadTurnStatusMessage(
 }
 
 async function queueManagedThreadTurnNotificationBestEffort(
-  deps: LoggedSandboxWorkSessionDeps,
+  deps: LoggedPendingInteractionWorkSessionDeps,
   args: QueueManagedThreadTurnNotificationArgs,
 ): Promise<void> {
   try {
@@ -243,11 +246,7 @@ async function archiveCompletedAutomationThreadIfNeeded(
 }
 
 async function applyEventEffects(
-<<<<<<< HEAD
-  deps: LoggedSandboxWorkSessionDeps,
-=======
-  deps: Pick<AppDeps, "db" | "hub" | "logger" | "pendingInteractions">,
->>>>>>> 903f1f78 (Validate interaction resolutions and guard manager turns)
+  deps: LoggedPendingInteractionWorkSessionDeps,
   events: HostDaemonEventEnvelope[],
 ): Promise<void> {
   for (const entry of events) {

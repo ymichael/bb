@@ -45,7 +45,6 @@ export type SandboxLifecycleDeps = Pick<
   | "hostLifecycle"
   | "hub"
   | "machineAuth"
-  | "pendingInteractions"
   | "sandboxEnv"
   | "sandboxRegistry"
 >;
@@ -59,4 +58,12 @@ export type SandboxWorkSessionDeps = SandboxLifecycleDeps;
 
 export type LoggedSandboxWorkSessionDeps =
   & SandboxWorkSessionDeps
+  & Pick<AppDeps, "logger">;
+
+export type PendingInteractionWorkSessionDeps =
+  & SandboxWorkSessionDeps
+  & Pick<AppDeps, "pendingInteractions">;
+
+export type LoggedPendingInteractionWorkSessionDeps =
+  & PendingInteractionWorkSessionDeps
   & Pick<AppDeps, "logger">;

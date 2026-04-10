@@ -144,6 +144,7 @@ describe("public thread data routes", () => {
             model: "gpt-4o-mini",
             reasoningLevel: "medium",
             sandboxMode: "danger-full-access",
+            questionPolicy: "allow",
             serviceTier: "fast",
             source: "client/turn/requested",
           },
@@ -199,9 +200,11 @@ describe("public thread data routes", () => {
       );
       expect(defaultsResponse.status).toBe(200);
       await expect(readJson(defaultsResponse)).resolves.toEqual({
+        approvalPolicy: "on-request",
         model: "gpt-4o-mini",
         reasoningLevel: "medium",
         sandboxMode: "danger-full-access",
+        questionPolicy: "allow",
         serviceTier: "fast",
         source: "client/turn/requested",
       });
@@ -352,6 +355,7 @@ describe("public thread data routes", () => {
             model: "gpt-5",
             reasoningLevel: "medium",
             sandboxMode: "danger-full-access",
+            questionPolicy: "allow",
             serviceTier: "default",
             source: "client/thread/start",
           },
@@ -375,6 +379,7 @@ describe("public thread data routes", () => {
             model: "gpt-5-mini",
             reasoningLevel: "high",
             sandboxMode: "read-only",
+            questionPolicy: "allow",
             serviceTier: "fast",
             source: "client/turn/requested",
           },
@@ -392,9 +397,11 @@ describe("public thread data routes", () => {
       );
       expect(defaultsResponse.status).toBe(200);
       await expect(readJson(defaultsResponse)).resolves.toEqual({
+        approvalPolicy: "on-request",
         model: "gpt-5-mini",
         reasoningLevel: "high",
         sandboxMode: "read-only",
+        questionPolicy: "allow",
         serviceTier: "fast",
         source: "client/turn/requested",
       });
@@ -430,6 +437,7 @@ describe("public thread data routes", () => {
             serviceTier: "default",
             reasoningLevel: "medium",
             sandboxMode: "danger-full-access",
+            questionPolicy: "allow",
             source: "client/turn/requested",
           },
           initiator: "user",
@@ -540,6 +548,7 @@ describe("public thread data routes", () => {
             serviceTier: "default",
             reasoningLevel: "medium",
             sandboxMode: "danger-full-access",
+            questionPolicy: "allow",
             source: "client/turn/requested",
           },
           initiator: "user",
