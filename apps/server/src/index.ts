@@ -115,6 +115,7 @@ async function main(): Promise<void> {
     shutdownPromise = (async () => {
       clearInterval(sweepInterval);
       await cloudAuth.dispose();
+      hostLifecycle.dispose();
       await new Promise<void>((resolve, reject) => {
         server.close((error) => {
           if (error) {

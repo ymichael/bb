@@ -80,14 +80,10 @@ export function deleteAppSandboxEnvVar(
   db: DbConnection,
   name: string,
 ): boolean {
-  const existing = getAppSandboxEnvVar(db, name);
-  if (!existing) {
-    return false;
-  }
-
-  db
+  const deleted = db
     .delete(appSandboxEnvVars)
     .where(eq(appSandboxEnvVars.name, name))
-    .run();
-  return true;
+    .returning({ name: appSandboxEnvVars.name })
+    .get();
+  return deleted !== undefined;
 }

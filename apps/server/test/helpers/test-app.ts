@@ -148,6 +148,7 @@ export async function createTestAppHarness(
     hub,
     async cleanup(): Promise<void> {
       await cloudAuth.dispose();
+      hostLifecycle.dispose();
       await rm(dataDir, { recursive: true, force: true });
     },
   };
