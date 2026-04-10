@@ -147,6 +147,8 @@ describe("public cloud auth routes", () => {
         "/api/v1/system/cloud-auth/codex/connect",
         {
           method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ appOrigin: "http://localhost:5173" }),
         },
       );
 
@@ -233,6 +235,8 @@ describe("public cloud auth routes", () => {
         "/api/v1/system/cloud-auth/codex/connect",
         {
           method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ appOrigin: "http://localhost:5173" }),
         },
       );
 
@@ -321,6 +325,8 @@ describe("public cloud auth routes", () => {
         "/api/v1/system/cloud-auth/claude-code/connect",
         {
           method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ appOrigin: "http://localhost:5173" }),
         },
       );
 
@@ -475,6 +481,8 @@ describe("public cloud auth routes", () => {
         "/api/v1/system/cloud-auth/codex/connect",
         {
           method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ appOrigin: "http://localhost:5173" }),
         },
       );
       expect(startResponse.status).toBe(201);
@@ -628,6 +636,8 @@ describe("public cloud auth routes", () => {
         "/api/v1/system/cloud-auth/claude-code/connect",
         {
           method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ appOrigin: "http://localhost:5173" }),
         },
       );
 

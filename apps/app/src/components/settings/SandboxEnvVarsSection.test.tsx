@@ -3,10 +3,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { SandboxEnvVar } from "@bb/server-contract";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  SandboxEnvVarsSection,
-  type SandboxEnvVarFormState,
-} from "./SandboxEnvVarsSection";
+import { SandboxEnvVarsSection } from "./SandboxEnvVarsSection";
 
 function makeEnvVar(overrides: Partial<SandboxEnvVar> = {}): SandboxEnvVar {
   return {
@@ -18,26 +15,16 @@ function makeEnvVar(overrides: Partial<SandboxEnvVar> = {}): SandboxEnvVar {
 }
 
 function renderSection(args?: {
-  deletePending?: boolean;
   envVars?: SandboxEnvVar[];
-  form?: SandboxEnvVarFormState;
   isLoading?: boolean;
-  onDelete?: (name: string) => void;
-  onNameChange?: (name: string) => void;
-  onSave?: () => void;
-  onValueChange?: (value: string) => void;
+  onSave?: (toUpsert: { name: string; value: string }[], toDelete: string[]) => void;
   savePending?: boolean;
 }) {
   return render(
     <SandboxEnvVarsSection
-      deletePending={args?.deletePending ?? false}
       envVars={args?.envVars ?? []}
-      form={args?.form ?? { name: "", value: "" }}
       isLoading={args?.isLoading ?? false}
-      onDelete={args?.onDelete ?? (() => undefined)}
-      onNameChange={args?.onNameChange ?? (() => undefined)}
       onSave={args?.onSave ?? (() => undefined)}
-      onValueChange={args?.onValueChange ?? (() => undefined)}
       savePending={args?.savePending ?? false}
     />,
   );
@@ -49,70 +36,70 @@ afterEach(() => {
 });
 
 describe("SandboxEnvVarsSection", () => {
-  it("renders saved env vars and wires delete actions", () => {
-    const onDelete = vi.fn();
-
+  it("renders saved env vars with remove buttons", () => {
     renderSection({
       envVars: [makeEnvVar()],
-      onDelete,
     });
 
-    expect(screen.getByText("OPENAI_API_KEY")).not.toBeNull();
-    expect(
-      screen.getByText(/These encrypted values are injected into cloud sandboxes/),
-    ).not.toBeNull();
-
-    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
-
-    expect(onDelete).toHaveBeenCalledWith("OPENAI_API_KEY");
+    expect(screen.getByDisplayValue("OPENAI_API_KEY")).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Remove" })).not.toBeNull();
   });
 
-  it("shows client-side validation errors for invalid env var names", () => {
-    renderSection({
-      form: {
-        name: "1 invalid name",
-        value: "secret",
-      },
-    });
+  it("shows validation error for invalid env var names in new rows", () => {
+    renderSection();
+
+    fireEvent.click(screen.getByRole("button", { name: "Add environment variable" }));
+
+    const nameInputs = screen.getAllByLabelText("Environment variable name");
+    fireEvent.change(nameInputs[0], { target: { value: "1 invalid name" } });
 
     expect(
       screen.getByText(
-        "Use letters, numbers, and underscores, and do not start with a number.",
+        "Use letters, numbers, and underscores. Must not start with a number.",
       ),
-    ).not.toBeNull();
-    expect(
-      screen.getByRole("button", { name: "Save" }),
-    ).not.toBeNull();
-    expect(
-      screen.getByRole("button", { name: "Save" }).getAttribute("disabled"),
     ).not.toBeNull();
   });
 
-  it("allows saving valid env vars and forwards field updates", () => {
-    const onNameChange = vi.fn();
-    const onValueChange = vi.fn();
+  it("shows save button when there are unsaved changes", () => {
+    renderSection();
+
+    // No save button initially
+    expect(screen.queryByRole("button", { name: "Save changes" })).toBeNull();
+
+    // Add a row and fill it in
+    fireEvent.click(screen.getByRole("button", { name: "Add environment variable" }));
+    const nameInputs = screen.getAllByLabelText("Environment variable name");
+    const valueInputs = screen.getAllByLabelText("Environment variable value");
+    fireEvent.change(nameInputs[0], { target: { value: "MY_VAR" } });
+    fireEvent.change(valueInputs[0], { target: { value: "my-value" } });
+
+    // Save button should appear
+    expect(screen.getByRole("button", { name: "Save changes" })).not.toBeNull();
+  });
+
+  it("calls onSave with upserts and deletes", () => {
     const onSave = vi.fn();
 
     renderSection({
-      form: {
-        name: "OPENAI_API_KEY",
-        value: "secret",
-      },
-      onNameChange,
+      envVars: [makeEnvVar()],
       onSave,
-      onValueChange,
     });
 
-    fireEvent.change(screen.getByLabelText("Sandbox env var name"), {
-      target: { value: "ANTHROPIC_API_KEY" },
-    });
-    fireEvent.change(screen.getByLabelText("Sandbox env var value"), {
-      target: { value: "next-secret" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    // Remove existing var
+    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
 
-    expect(onNameChange).toHaveBeenCalledWith("ANTHROPIC_API_KEY");
-    expect(onValueChange).toHaveBeenCalledWith("next-secret");
-    expect(onSave).toHaveBeenCalledTimes(1);
+    // Add a new var
+    fireEvent.click(screen.getByRole("button", { name: "Add environment variable" }));
+    const nameInputs = screen.getAllByLabelText("Environment variable name");
+    const valueInputs = screen.getAllByLabelText("Environment variable value");
+    fireEvent.change(nameInputs[0], { target: { value: "NEW_VAR" } });
+    fireEvent.change(valueInputs[0], { target: { value: "new-value" } });
+
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    expect(onSave).toHaveBeenCalledWith(
+      [{ name: "NEW_VAR", value: "new-value" }],
+      ["OPENAI_API_KEY"],
+    );
   });
 });

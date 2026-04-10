@@ -104,6 +104,7 @@ export {
   scheduleCronSchema,
   scheduleNameSchema,
   scheduleTimezoneSchema,
+  cloudAuthConnectRequestSchema,
   uploadedPromptAttachmentSchema,
   workspaceFileSchema,
 } from "./api-types.js";
@@ -116,6 +117,7 @@ export type {
   AutomationValidation,
   CloudAuthAttemptResponse,
   CloudAuthAttemptStatus,
+  CloudAuthConnectRequest,
   CloudAuthConnectResponse,
   CloudAuthConnection,
   CloudAuthConnectionStatus,

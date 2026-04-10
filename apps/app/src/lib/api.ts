@@ -660,6 +660,7 @@ export async function startCloudAuthConnection(
   return request<CloudAuthConnectResponse>(
     apiClient.system["cloud-auth"][":providerId"].connect.$post({
       param: { providerId },
+      json: { appOrigin: window.location.origin },
     }),
   );
 }

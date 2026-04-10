@@ -1,32 +1,21 @@
-import { timeAgo } from "@bb/core-ui";
 import type { CloudAuthProviderId } from "@bb/agent-providers";
 import type {
   CloudAuthConnection,
 } from "@bb/server-contract";
-import { Badge } from "@/components/ui/badge";
+import { StatusPill, type StatusPillVariant } from "@bb/ui-core";
 import { Button } from "@/components/ui/button";
-import { SettingsSection } from "@/components/settings/SettingsSection";
+import { SettingsCard } from "@/components/settings/SettingsCard";
+import { SettingsRowList } from "@/components/settings/SettingsRow";
+import { CONNECTED_DOT_CLASS } from "@/components/settings/constants";
 
-const CLOUD_AUTH_STATUS_DISPLAY = {
-  connected: {
-    badgeVariant: "default",
-    label: "Connected",
-  },
-  invalid: {
-    badgeVariant: "destructive",
-    label: "Needs attention",
-  },
-  missing: {
-    badgeVariant: "outline",
-    label: "Not connected",
-  },
-} satisfies Record<
+const CLOUD_AUTH_STATUS_DISPLAY: Record<
   CloudAuthConnection["status"],
-  {
-    badgeVariant: "default" | "destructive" | "outline";
-    label: string;
-  }
->;
+  { pillVariant: StatusPillVariant; label: string }
+> = {
+  connected: { pillVariant: "emphasis", label: "Connected" },
+  invalid: { pillVariant: "destructive", label: "Needs attention" },
+  missing: { pillVariant: "outline", label: "Not connected" },
+};
 
 type CloudAuthNoticeMap = Partial<Record<CloudAuthProviderId, string>>;
 
@@ -36,6 +25,7 @@ interface CloudAuthRowProps {
   connectPending: boolean;
   disconnectPending: boolean;
   notice: string | null;
+  onCancel(): void;
   onConnect(providerId: CloudAuthProviderId): void;
   onDisconnect(providerId: CloudAuthProviderId): void;
 }
@@ -46,59 +36,68 @@ function CloudAuthRow({
   connectPending,
   disconnectPending,
   notice,
+  onCancel,
   onConnect,
   onDisconnect,
 }: CloudAuthRowProps) {
-  const connectedTime = connection.lastRefreshedAt ?? connection.connectedAt;
   const isPendingAttempt = activeAttemptProviderId === connection.providerId;
-  const canDisconnect = connection.status !== "missing";
-  const statusDisplay = CLOUD_AUTH_STATUS_DISPLAY[connection.status];
+  const isConnected = connection.status === "connected";
 
   return (
-    <div className="flex flex-col gap-3 py-3 first:pt-0 last:pb-0 sm:flex-row sm:items-start sm:justify-between">
-      <div className="min-w-0 flex-1 space-y-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <p className="text-sm font-semibold">{connection.displayName}</p>
-          <Badge variant={statusDisplay.badgeVariant}>
-            {statusDisplay.label}
-          </Badge>
+    <div className="py-1.5 first:pt-0 last:pb-0">
+      <div className="flex items-center gap-3 text-sm">
+        <span className="min-w-0 truncate">
+          {connection.displayName}
+          {connection.label ? (
+            <span className="ml-1.5 text-xs text-muted-foreground">{connection.label}</span>
+          ) : null}
+        </span>
+        {isConnected ? (
+          <span className={CONNECTED_DOT_CLASS} title="Connected" />
+        ) : isPendingAttempt ? (
+          <StatusPill variant="secondary">Connecting…</StatusPill>
+        ) : (
+          <StatusPill variant={CLOUD_AUTH_STATUS_DISPLAY[connection.status].pillVariant}>
+            {CLOUD_AUTH_STATUS_DISPLAY[connection.status].label}
+          </StatusPill>
+        )}
+        <span className="flex-1" />
+        <div className="flex shrink-0 gap-1.5">
+          {isPendingAttempt ? (
+            <Button
+              size="sm"
+              variant="destructive"
+              onClick={onCancel}
+            >
+              Cancel
+            </Button>
+          ) : connection.status === "missing" ? (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={connectPending || disconnectPending}
+              onClick={() => onConnect(connection.providerId)}
+            >
+              Connect
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={connectPending || disconnectPending}
+              onClick={() => onDisconnect(connection.providerId)}
+            >
+              Disconnect
+            </Button>
+          )}
         </div>
-        <p className="text-xs text-muted-foreground">
-          {connection.label ?? "No account connected"}
-          {connectedTime ? ` · Updated ${timeAgo(connectedTime)}` : ""}
-        </p>
-        {connection.errorMessage ? (
-          <p className="text-xs text-destructive">{connection.errorMessage}</p>
-        ) : null}
-        {isPendingAttempt ? (
-          <p className="text-xs text-muted-foreground">
-            Waiting for browser sign-in to finish…
-          </p>
-        ) : null}
-        {notice ? (
-          <p className="text-xs text-muted-foreground">{notice}</p>
-        ) : null}
       </div>
-      <div className="flex shrink-0 gap-2">
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={connectPending || disconnectPending}
-          onClick={() => onConnect(connection.providerId)}
-        >
-          {connection.status === "missing" ? "Connect" : "Reconnect"}
-        </Button>
-        {canDisconnect ? (
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={connectPending || disconnectPending}
-            onClick={() => onDisconnect(connection.providerId)}
-          >
-            Disconnect
-          </Button>
-        ) : null}
-      </div>
+      {connection.errorMessage ? (
+        <p className="text-xs text-destructive">{connection.errorMessage}</p>
+      ) : null}
+      {notice ? (
+        <p className="text-xs text-muted-foreground">{notice}</p>
+      ) : null}
     </div>
   );
 }
@@ -110,6 +109,7 @@ interface CloudAuthSettingsSectionProps {
   disconnectPending: boolean;
   isLoading: boolean;
   notices: CloudAuthNoticeMap;
+  onCancel(): void;
   onConnect(providerId: CloudAuthProviderId): void;
   onDisconnect(providerId: CloudAuthProviderId): void;
 }
@@ -121,15 +121,19 @@ export function CloudAuthSettingsSection({
   disconnectPending,
   isLoading,
   notices,
+  onCancel,
   onConnect,
   onDisconnect,
 }: CloudAuthSettingsSectionProps) {
   return (
-    <SettingsSection title="Cloud Auth">
+    <SettingsCard
+      title="Agent Credentials"
+      description="Connect your subscriptions to power agents running in the cloud."
+    >
       {isLoading ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
       ) : (
-        <div className="divide-y divide-border">
+        <SettingsRowList>
           {connections.map((connection) => (
             <CloudAuthRow
               key={connection.providerId}
@@ -138,12 +142,13 @@ export function CloudAuthSettingsSection({
               connectPending={connectPending}
               disconnectPending={disconnectPending}
               notice={notices[connection.providerId] ?? null}
+              onCancel={onCancel}
               onConnect={onConnect}
               onDisconnect={onDisconnect}
             />
           ))}
-        </div>
+        </SettingsRowList>
       )}
-    </SettingsSection>
+    </SettingsCard>
   );
 }

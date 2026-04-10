@@ -514,6 +514,13 @@ export type CloudAuthSettingsResponse = z.infer<
   typeof cloudAuthSettingsResponseSchema
 >;
 
+export const cloudAuthConnectRequestSchema = z.object({
+  appOrigin: z.string().url(),
+}).strict();
+export type CloudAuthConnectRequest = z.infer<
+  typeof cloudAuthConnectRequestSchema
+>;
+
 export const cloudAuthConnectResponseSchema = z.object({
   attemptId: z.string().min(1),
   authorizationUrl: z.string().url(),

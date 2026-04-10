@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { PageShell } from "@/components/layout/PageShell";
 import { SettingsSection } from "@/components/settings/SettingsSection";
+import { SettingsRow, SettingsRowList } from "@/components/settings/SettingsRow";
 import { useHostDaemon } from "@/hooks/useHostDaemon";
 import { useProjects } from "@/hooks/queries/project-queries";
 import { projectsQueryKey } from "@/hooks/queries/query-keys";
@@ -171,12 +172,9 @@ export function ProjectSettingsView() {
             </div>
           ) : (
             <div>
-              <div className="divide-y divide-border">
+              <SettingsRowList>
                 {sources.map((source) => (
-                  <div
-                    key={source.id}
-                    className="flex items-center gap-3 py-2 text-sm first:pt-0 last:pb-0"
-                  >
+                  <SettingsRow key={source.id}>
                     {isLocalPathProjectSource(source) ? (
                       <Monitor className="size-4 shrink-0 text-muted-foreground" />
                     ) : (
@@ -220,9 +218,9 @@ export function ProjectSettingsView() {
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
-                  </div>
+                  </SettingsRow>
                 ))}
-              </div>
+              </SettingsRowList>
               {addSourceButtons}
             </div>
           )}

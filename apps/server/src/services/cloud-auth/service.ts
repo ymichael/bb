@@ -378,6 +378,7 @@ export async function createCloudAuthService(
 
   async function startConnection(
     providerId: CloudAuthProviderId,
+    appOrigin: string,
   ): Promise<CloudAuthConnectResponse> {
     const previousAttemptId = pendingAttemptIdsByProvider.get(providerId);
     if (previousAttemptId) {
@@ -393,6 +394,7 @@ export async function createCloudAuthService(
     const flow = await providerDefinition.createAuthorizationFlow();
     const callback = providerDefinition.callback;
     const callbackServer = await startOAuthCallbackServer({
+      appOrigin,
       errorTitle: callback.errorTitle,
       expectedState: flow.state,
       listenHost: callback.listenHost,
@@ -553,8 +555,8 @@ export async function createCloudAuthService(
     async listConnections() {
       return listConnections();
     },
-    async startConnection({ providerId }) {
-      return startConnection(providerId);
+    async startConnection({ appOrigin, providerId }) {
+      return startConnection(providerId, appOrigin);
     },
   };
 }

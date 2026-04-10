@@ -13,6 +13,7 @@ export interface GetCloudAuthAttemptArgs {
 }
 
 export interface StartCloudAuthConnectionArgs {
+  appOrigin: string;
   providerId: CloudAuthProviderId;
 }
 

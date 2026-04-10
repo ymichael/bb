@@ -29,9 +29,10 @@ async function reservePort(): Promise<number> {
 }
 
 describe("OAuth callback server", () => {
-  it("accepts the matching callback and resolves the waiter", async () => {
+  it("accepts the matching callback and redirects to the app", async () => {
     const port = await reservePort();
     const server = await startOAuthCallbackServer({
+      appOrigin: "http://localhost:5173",
       errorTitle: "OAuth failed",
       expectedState: "expected-state",
       listenHost: "127.0.0.1",
@@ -43,10 +44,13 @@ describe("OAuth callback server", () => {
     try {
       const response = await fetch(
         `http://127.0.0.1:${port}/callback?code=test-code&state=expected-state`,
+        { redirect: "manual" },
       );
 
-      expect(response.status).toBe(200);
-      await expect(response.text()).resolves.toContain("OAuth completed");
+      expect(response.status).toBe(302);
+      const location = response.headers.get("location") ?? "";
+      expect(location).toContain("status=success");
+      expect(location).toContain("OAuth+completed");
       await expect(server.waitForCode()).resolves.toEqual({
         code: "test-code",
         state: "expected-state",
@@ -56,9 +60,10 @@ describe("OAuth callback server", () => {
     }
   });
 
-  it("escapes reflected provider errors in the callback HTML", async () => {
+  it("safely encodes reflected provider errors in the redirect URL", async () => {
     const port = await reservePort();
     const server = await startOAuthCallbackServer({
+      appOrigin: "http://localhost:5173",
       errorTitle: "OAuth failed",
       expectedState: "expected-state",
       listenHost: "127.0.0.1",
@@ -70,12 +75,14 @@ describe("OAuth callback server", () => {
     try {
       const response = await fetch(
         `http://127.0.0.1:${port}/callback?error=${encodeURIComponent("<script>alert(1)</script>")}`,
+        { redirect: "manual" },
       );
 
-      expect(response.status).toBe(400);
-      const html = await response.text();
-      expect(html).toContain("&lt;script&gt;alert(1)&lt;/script&gt;");
-      expect(html).not.toContain("<script>alert(1)</script>");
+      expect(response.status).toBe(302);
+      const location = response.headers.get("location") ?? "";
+      expect(location).toContain("status=error");
+      // The error value is URL-encoded, not raw HTML
+      expect(location).not.toContain("<script>");
 
       server.cancelWait();
       await expect(server.waitForCode()).resolves.toBeNull();
@@ -84,9 +91,10 @@ describe("OAuth callback server", () => {
     }
   });
 
-  it("returns helpful errors for wrong paths, missing params, and state mismatches", async () => {
+  it("redirects with errors for wrong paths, missing params, and state mismatches", async () => {
     const port = await reservePort();
     const server = await startOAuthCallbackServer({
+      appOrigin: "http://localhost:5173",
       errorTitle: "OAuth failed",
       expectedState: "expected-state",
       listenHost: "127.0.0.1",
@@ -96,23 +104,28 @@ describe("OAuth callback server", () => {
     });
 
     try {
-      const wrongPath = await fetch(`http://127.0.0.1:${port}/wrong-path`);
-      expect(wrongPath.status).toBe(404);
-      await expect(wrongPath.text()).resolves.toContain("Callback not found");
+      const wrongPath = await fetch(`http://127.0.0.1:${port}/wrong-path`, {
+        redirect: "manual",
+      });
+      expect(wrongPath.status).toBe(302);
+      const wrongPathLocation = wrongPath.headers.get("location") ?? "";
+      expect(wrongPathLocation).toContain("status=error");
+      expect(wrongPathLocation).toContain("Callback+not+found");
 
-      const missingParams = await fetch(`http://127.0.0.1:${port}/callback`);
-      expect(missingParams.status).toBe(400);
-      await expect(missingParams.text()).resolves.toContain(
-        "missing the expected authorization code or state",
-      );
+      const missingParams = await fetch(`http://127.0.0.1:${port}/callback`, {
+        redirect: "manual",
+      });
+      expect(missingParams.status).toBe(302);
+      const missingLocation = missingParams.headers.get("location") ?? "";
+      expect(missingLocation).toContain("status=error");
 
       const mismatchedState = await fetch(
         `http://127.0.0.1:${port}/callback?code=test-code&state=wrong-state`,
+        { redirect: "manual" },
       );
-      expect(mismatchedState.status).toBe(400);
-      await expect(mismatchedState.text()).resolves.toContain(
-        "does not match the active connection attempt",
-      );
+      expect(mismatchedState.status).toBe(302);
+      const mismatchLocation = mismatchedState.headers.get("location") ?? "";
+      expect(mismatchLocation).toContain("status=error");
 
       server.cancelWait();
       await expect(server.waitForCode()).resolves.toBeNull();

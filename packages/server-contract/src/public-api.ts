@@ -26,6 +26,7 @@ import type {
   ArchiveThreadRequest,
   Automation,
   CloudAuthAttemptResponse,
+  CloudAuthConnectRequest,
   CloudAuthConnectResponse,
   CloudAuthSettingsResponse,
   CreateAutomationRequest,
@@ -346,7 +347,7 @@ export type PublicApiSchema = {
      * Starts an app-level OAuth flow for the requested provider and returns the
      * authorization URL the UI should open in a browser.
      */
-    $post: Endpoint<PathProviderId, CloudAuthConnectResponse, 201>;
+    $post: Endpoint<PathProviderId & { json: CloudAuthConnectRequest }, CloudAuthConnectResponse, 201>;
   };
   "/system/cloud-auth/attempts/:attemptId": {
     /** Returns the status of a previously started cloud auth connection attempt. */

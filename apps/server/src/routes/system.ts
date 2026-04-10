@@ -1,6 +1,7 @@
 import { cloudAuthProviderIdSchema } from "@bb/agent-providers";
 import { hostDaemonCommandResultSchemaByType } from "@bb/host-daemon-contract";
 import {
+  cloudAuthConnectRequestSchema,
   githubReposQuerySchema,
   sandboxEnvVarNameSchema,
   upsertSandboxEnvVarRequestSchema,
@@ -58,12 +59,21 @@ export function registerSystemRoutes(app: Hono, deps: AppDeps): void {
     }),
   );
 
-  post("/system/cloud-auth/:providerId/connect", async (context) => {
+  post("/system/cloud-auth/:providerId/connect", cloudAuthConnectRequestSchema, async (context, { appOrigin }) => {
     const providerId = cloudAuthProviderIdSchema.parse(
       context.req.param("providerId"),
     );
+    const parsed = new URL(appOrigin);
+    if (parsed.hostname !== "localhost" && parsed.hostname !== "127.0.0.1") {
+      const allowedPublicOrigin = deps.config.publicUrl
+        ? new URL(deps.config.publicUrl).origin
+        : null;
+      if (parsed.origin !== allowedPublicOrigin) {
+        throw new ApiError(400, "invalid_app_origin", "The provided app origin is not allowed.");
+      }
+    }
     return context.json(
-      await deps.cloudAuth.startConnection({ providerId }),
+      await deps.cloudAuth.startConnection({ appOrigin, providerId }),
       201,
     );
   });

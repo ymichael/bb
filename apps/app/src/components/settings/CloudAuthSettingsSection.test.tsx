@@ -55,23 +55,24 @@ describe("CloudAuthSettingsSection", () => {
           codex: "Connection saved.",
           "claude-code": "Connection removed. The next sandbox sync will delete its auth material.",
         }}
+        onCancel={() => undefined}
         onConnect={() => undefined}
         onDisconnect={() => undefined}
       />,
     );
 
-    expect(screen.getByText("Connected")).not.toBeNull();
-    expect(screen.getByText("Needs attention")).not.toBeNull();
+    expect(screen.getByTitle("Connected")).not.toBeNull();
+    // Pending attempt overrides status pill to "Connecting…"
+    expect(screen.getByText("Connecting…")).not.toBeNull();
     expect(screen.getByText("Connection saved.")).not.toBeNull();
-    expect(
-      screen.getByText("Waiting for browser sign-in to finish…"),
-    ).not.toBeNull();
     expect(screen.getByText("Refresh required")).not.toBeNull();
     expect(
       screen.getByText(
         "Connection removed. The next sandbox sync will delete its auth material.",
       ),
     ).not.toBeNull();
+    // Pending attempt row shows Cancel button
+    expect(screen.getByRole("button", { name: "Cancel" })).not.toBeNull();
   });
 
   it("wires connect and disconnect actions and hides disconnect for missing providers", () => {
@@ -97,18 +98,19 @@ describe("CloudAuthSettingsSection", () => {
         disconnectPending={false}
         isLoading={false}
         notices={{}}
+        onCancel={() => undefined}
         onConnect={onConnect}
         onDisconnect={onDisconnect}
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Reconnect" }));
     fireEvent.click(screen.getByRole("button", { name: "Disconnect" }));
     fireEvent.click(screen.getByRole("button", { name: "Connect" }));
 
-    expect(onConnect).toHaveBeenCalledWith("codex");
-    expect(onConnect).toHaveBeenCalledWith("claude-code");
     expect(onDisconnect).toHaveBeenCalledWith("codex");
+    expect(onConnect).toHaveBeenCalledWith("claude-code");
+    // Connected providers show Disconnect, missing providers show Connect
     expect(screen.getAllByRole("button", { name: "Disconnect" })).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: "Connect" })).toHaveLength(1);
   });
 });
