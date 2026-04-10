@@ -17,6 +17,8 @@ function buildModelProbeOptions(): Options {
 }
 
 export async function listClaudeCodeBridgeModels(): Promise<AvailableModel[]> {
+  // Claude exposes the live model catalog on session initialization, so we
+  // open a zero-turn probe session and read only initializationResult().
   const session = query({
     prompt: ".",
     options: buildModelProbeOptions(),

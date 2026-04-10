@@ -338,12 +338,13 @@ interface ClaudeTurnState {
   currentTurnId: string | undefined;
   cumulativeTokens: ThreadEventTokenUsageBreakdown;
   openAssistantMessageIdsByScope: Map<string, string>;
+  selectedModelContextWindow: number | null;
   toolItemsByCallId: Map<string, ThreadEventItem>;
 }
 
 interface ClaudeContextWindowUsageArgs {
+  fallbackModelContextWindow: number | null;
   message: ClaudeResultMessage | SDKResultMessage;
-  selectedModel: string | undefined;
 }
 
 const DEFAULT_CLAUDE_CONTEXT_WINDOW = 200_000;
@@ -365,10 +366,18 @@ export function createClaudeCodeProviderAdapter(
         currentTurnId: undefined,
         cumulativeTokens: { totalTokens: 0, inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, reasoningOutputTokens: 0 },
         openAssistantMessageIdsByScope: new Map(),
+        selectedModelContextWindow: null,
         toolItemsByCallId: new Map(),
       }),
   });
-  const selectedModelByThreadId = new Map<string, string>();
+
+  function setClaudeModelContextWindowHint(
+    threadId: string,
+    model: string,
+  ): void {
+    const state = turnState.getOrCreate({ threadId });
+    state.selectedModelContextWindow = resolveClaudeModelContextWindowHint(model);
+  }
 
   function translateClaudeEvent(
     event: unknown,
@@ -615,9 +624,15 @@ export function createClaudeCodeProviderAdapter(
             ? message.result
             : null;
           const contextWindowUsage = extractClaudeContextWindowUsage({
+            fallbackModelContextWindow: state.selectedModelContextWindow,
             message,
-            selectedModel: selectedModelByThreadId.get(stateKey),
           });
+          if (
+            contextWindowUsage !== undefined &&
+            contextWindowUsage.modelContextWindow !== null
+          ) {
+            state.selectedModelContextWindow = contextWindowUsage.modelContextWindow;
+          }
           const tokenUsage = extractTokenUsage(message, state.cumulativeTokens);
           if (contextWindowUsage) {
             events.push({
@@ -707,7 +722,10 @@ export function createClaudeCodeProviderAdapter(
         case "thread/start": {
           const baseInstructions = command.options?.instructions ?? "";
           if (command.options?.model) {
-            selectedModelByThreadId.set(command.threadId, command.options.model);
+            setClaudeModelContextWindowHint(
+              command.threadId,
+              command.options.model,
+            );
           }
           const config = buildClaudeCodeConfig(command.options?.envVars);
           const finalConfig: Record<string, unknown> = config ? { ...config } : {};
@@ -736,7 +754,10 @@ export function createClaudeCodeProviderAdapter(
         case "thread/resume": {
           const baseInstructions = command.options?.instructions ?? "";
           if (command.options?.model) {
-            selectedModelByThreadId.set(command.threadId, command.options.model);
+            setClaudeModelContextWindowHint(
+              command.threadId,
+              command.options.model,
+            );
           }
           const resumeConfig = buildClaudeCodeConfig(command.options?.envVars);
           const finalResumeConfig: Record<string, unknown> = resumeConfig ? { ...resumeConfig } : {};
@@ -765,7 +786,10 @@ export function createClaudeCodeProviderAdapter(
         }
         case "turn/start":
           if (command.options?.model) {
-            selectedModelByThreadId.set(command.threadId, command.options.model);
+            setClaudeModelContextWindowHint(
+              command.threadId,
+              command.options.model,
+            );
           }
           return {
             jsonrpc: "2.0",
@@ -1100,7 +1124,7 @@ function extractClaudeContextWindowUsage(
   const parsedModelUsage = claudeModelUsageSchema.safeParse(args.message.modelUsage);
   const modelContextWindow = parsedModelUsage.success
     ? extractModelContextWindow(parsedModelUsage.data)
-    : resolveClaudeContextWindowFallback(args.selectedModel);
+    : args.fallbackModelContextWindow;
 
   if (usedTokens === null && modelContextWindow === null) {
     return undefined;
@@ -1158,14 +1182,17 @@ function extractModelContextWindow(
   return largestContextWindow;
 }
 
-function resolveClaudeContextWindowFallback(
-  selectedModel: string | undefined,
+function resolveClaudeModelContextWindowHint(
+  selectedModel: string,
 ): number | null {
-  if (!selectedModel) {
-    return DEFAULT_CLAUDE_CONTEXT_WINDOW;
+  // The Claude SDK probe does not expose structured context-window metadata on
+  // ModelInfo, so the selected model identifier is the only fallback hint
+  // available when a result omits modelUsage.contextWindow.
+  if (selectedModel.endsWith("[1m]")) {
+    return LARGE_CLAUDE_CONTEXT_WINDOW;
   }
-
-  return selectedModel.includes("[1m]")
-    ? LARGE_CLAUDE_CONTEXT_WINDOW
-    : DEFAULT_CLAUDE_CONTEXT_WINDOW;
+  if (selectedModel === "default") {
+    return null;
+  }
+  return DEFAULT_CLAUDE_CONTEXT_WINDOW;
 }

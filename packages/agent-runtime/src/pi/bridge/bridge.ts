@@ -13,6 +13,9 @@ import {
   type BridgeToolCallRequest,
 } from "../../shared/bridge-tool-calls.js";
 import type {
+  ThreadEventContextWindowUsage,
+} from "@bb/domain";
+import type {
   AgentSessionEvent,
   ContextUsage,
 } from "@mariozechner/pi-coding-agent";
@@ -130,12 +133,6 @@ interface BridgeEventNotification {
   params: Record<string, unknown>;
 }
 
-interface ContextWindowUsagePayload {
-  estimated: boolean;
-  modelContextWindow: number | null;
-  usedTokens: number | null;
-}
-
 interface PendingToolCall {
   resolve: (value: { content: string; isError?: boolean }) => void;
 }
@@ -162,7 +159,7 @@ function sendError(id: string | number, code: number, message: string): void {
 
 function toContextWindowUsagePayload(
   contextUsage: ContextUsage | undefined,
-): ContextWindowUsagePayload | null {
+): ThreadEventContextWindowUsage | null {
   if (!contextUsage) {
     return null;
   }

@@ -77,12 +77,6 @@ interface PiUnhandledEventArgs {
   parentToolCallId?: string;
 }
 
-interface PiBridgeContextWindowUsage {
-  estimated: boolean;
-  modelContextWindow: number | null;
-  usedTokens: number | null;
-}
-
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
@@ -123,7 +117,7 @@ function buildUnexpectedPiSdkEvent(
 }
 
 function normalizePiContextWindowUsage(
-  usage: PiBridgeContextWindowUsage,
+  usage: ThreadEventContextWindowUsage,
 ): ThreadEventContextWindowUsage {
   return {
     usedTokens:
