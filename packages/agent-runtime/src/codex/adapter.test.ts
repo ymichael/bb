@@ -90,6 +90,7 @@ describe("codex provider adapter", () => {
       cwd: "/tmp/worktree",
       threadId: "t1",
       input: [{ type: "text", text: "hello" }],
+      instructionMode: "append",
       options: {
         approvalPolicy: "on-request",
       },
@@ -110,6 +111,7 @@ describe("codex provider adapter", () => {
       cwd: "/tmp/worktree",
       threadId: "bb-thread-1",
       input: [{ type: "text", text: "hello" }],
+      instructionMode: "append",
       options: {
         questionPolicy: "avoid",
       },
@@ -132,6 +134,7 @@ describe("codex provider adapter", () => {
       cwd: "/tmp/worktree",
       threadId: "bb-thread-1",
       input: [{ type: "text", text: "hello" }],
+      instructionMode: "append",
       options: {
         questionPolicy: "deny",
       },

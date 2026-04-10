@@ -65,6 +65,7 @@ import {
 // ---------------------------------------------------------------------------
 
 const bridgeInstructionModeSchema = z.enum(instructionModeValues);
+const claudeQuestionPolicySchema = z.enum(questionPolicySchema.options);
 
 const claudeCodeCommandSchema = z.discriminatedUnion("method", [
   z.object({
@@ -84,7 +85,7 @@ const claudeCodeCommandSchema = z.discriminatedUnion("method", [
       cwd: z.string(),
       baseInstructions: z.string(),
       permissionMode: claudePermissionModeSchema,
-      questionPolicy: questionPolicySchema,
+      questionPolicy: claudeQuestionPolicySchema,
       config: z.record(z.string(), z.unknown()).optional(),
       model: z.string().optional(),
       instructionMode: bridgeInstructionModeSchema,
@@ -103,7 +104,7 @@ const claudeCodeCommandSchema = z.discriminatedUnion("method", [
       providerThreadId: z.string().nullable(),
       baseInstructions: z.string().optional(),
       permissionMode: claudePermissionModeSchema,
-      questionPolicy: questionPolicySchema,
+      questionPolicy: claudeQuestionPolicySchema,
       config: z.record(z.string(), z.unknown()).optional(),
       model: z.string().optional(),
       instructionMode: bridgeInstructionModeSchema,

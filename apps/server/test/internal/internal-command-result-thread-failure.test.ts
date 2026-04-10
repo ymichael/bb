@@ -55,6 +55,7 @@ describe("thread command failure side effects", () => {
             serviceTier: "default",
             reasoningLevel: "medium",
             sandboxMode: "danger-full-access",
+            approvalPolicy: "on-request",
             questionPolicy: "allow",
           },
           instructions: "You are a helpful assistant.",
@@ -128,6 +129,7 @@ describe("thread command failure side effects", () => {
             serviceTier: "default",
             reasoningLevel: "medium",
             sandboxMode: "danger-full-access",
+            approvalPolicy: "on-request",
             questionPolicy: "allow",
           },
           resumeContext: {
@@ -203,6 +205,7 @@ describe("thread command failure side effects", () => {
             serviceTier: "default",
             reasoningLevel: "medium",
             sandboxMode: "danger-full-access",
+            approvalPolicy: "on-request",
             questionPolicy: "allow",
           },
           instructions: "You are a helpful assistant.",
