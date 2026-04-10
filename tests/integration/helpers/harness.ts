@@ -20,6 +20,10 @@ import { createApp } from "../../../apps/server/src/server.js";
 import { createCloudAuthService } from "../../../apps/server/src/services/cloud-auth/service.js";
 import { createHostLifecycleService } from "../../../apps/server/src/services/hosts/host-lifecycle-service.js";
 import { createSandboxHostRegistry } from "../../../apps/server/src/services/hosts/sandbox-registry.js";
+import {
+  DEFAULT_SANDBOX_PENDING_INTERACTION_EXPIRY_MS,
+  PendingInteractionLifecycle,
+} from "../../../apps/server/src/services/interactions/pending-interactions.js";
 import { createMachineAuthService } from "../../../apps/server/src/services/machine-auth.js";
 import { createSandboxEnvService } from "../../../apps/server/src/services/sandbox-env/service.js";
 import type { ServerRuntimeConfig } from "../../../apps/server/src/types.js";
@@ -187,6 +191,11 @@ async function startIntegrationServer(
 
   const db = initDb(":memory:");
   const hub = new NotificationHub();
+  const pendingInteractions = new PendingInteractionLifecycle({
+    db,
+    hub,
+    sandboxInteractionExpiryMs: DEFAULT_SANDBOX_PENDING_INTERACTION_EXPIRY_MS,
+  });
   const sandboxRegistry = createSandboxHostRegistry();
   const config: ServerRuntimeConfig = {
     anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? "",
@@ -227,6 +236,7 @@ async function startIntegrationServer(
     logger: testLogger,
     machineAuth,
     sandboxEnv,
+    pendingInteractions,
     sandboxRegistry,
   });
 
