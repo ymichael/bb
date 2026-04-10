@@ -11,17 +11,32 @@ import { inferenceComplete } from "../ai/inference.js";
 import { queueThreadRenameCommand } from "./thread-commands.js";
 import { appendThreadTitleUpdatedEvent } from "./thread-events.js";
 
-export function deriveTitleFallback(input: PromptInput[]): string | null {
-  const text = input
+const MIN_TITLE_GENERATION_WORDS = 5;
+
+function cleanPromptText(input: PromptInput[]): string {
+  return input
     .filter((part) => part.type === "text")
     .map((part) => part.text.trim())
     .join(" ")
     .replace(/\s+/gu, " ")
     .trim();
+}
+
+export function deriveTitleFallback(input: PromptInput[]): string | null {
+  const text = cleanPromptText(input);
   if (text.length === 0) {
     return null;
   }
   return text.length <= 80 ? text : `${text.slice(0, 77)}...`;
+}
+
+export function shouldGenerateThreadTitle(input: PromptInput[]): boolean {
+  const text = cleanPromptText(input);
+  if (text.length === 0) {
+    return false;
+  }
+
+  return text.split(/\s+/u).length >= MIN_TITLE_GENERATION_WORDS;
 }
 
 const titleSchema = Type.Object({
@@ -37,6 +52,9 @@ export async function generateThreadTitle(
 ): Promise<void> {
   const fallback = deriveTitleFallback(args.input);
   if (!fallback) {
+    return;
+  }
+  if (!shouldGenerateThreadTitle(args.input)) {
     return;
   }
 
