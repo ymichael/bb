@@ -130,52 +130,53 @@ export function createEventBuffer(
   }
 
   async function flush(): Promise<void> {
-    if (flushPromise) {
-      const succeeded = await flushPromise;
-      if (succeeded && buffer.length > 0) {
-        await flush();
-      }
-      return;
-    }
-
-    if (buffer.length === 0) {
-      return;
-    }
-
-    const batch = buffer.slice();
-    flushPromise = (async () => {
-      let succeeded = false;
-      try {
-        const threadHighWaterMarks = await options.postEvents(batch);
-        if (threadHighWaterMarks) {
-          ack(threadHighWaterMarks);
+    while (true) {
+      if (flushPromise) {
+        const succeeded = await flushPromise;
+        if (!succeeded || buffer.length === 0) {
+          return;
         }
-        succeeded = true;
-      } catch (error) {
-        options.logger.warn(
-          {
-            err: error,
-            bufferDepth: batch.length,
-          },
-          "event flush failed, will retry",
-        );
-        queueDebouncedFlush();
-      } finally {
-        flushPromise = null;
-        if (buffer.length > 0) {
-          if (buffer.length >= flushAtCount) {
-            void flush();
-          } else {
-            queueDebouncedFlush();
+        continue;
+      }
+
+      if (buffer.length === 0) {
+        return;
+      }
+
+      const batch = buffer.slice();
+      flushPromise = (async (): Promise<boolean> => {
+        let succeeded = false;
+        try {
+          const threadHighWaterMarks = await options.postEvents(batch);
+          if (threadHighWaterMarks) {
+            ack(threadHighWaterMarks);
           }
+          succeeded = true;
+        } catch (error) {
+          options.logger.warn(
+            {
+              err: error,
+              bufferDepth: batch.length,
+            },
+            "event flush failed, will retry",
+          );
+        } finally {
+          flushPromise = null;
         }
         return succeeded;
-      }
-    })();
+      })();
 
-    const succeeded = await flushPromise;
-    if (succeeded && buffer.length > 0) {
-      await flush();
+      const succeeded = await flushPromise;
+      if (!succeeded) {
+        if (buffer.length > 0) {
+          queueDebouncedFlush();
+        }
+        return;
+      }
+
+      if (buffer.length === 0) {
+        return;
+      }
     }
   }
 
