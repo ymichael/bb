@@ -3,6 +3,10 @@ import {
   ChevronDown,
 } from "lucide-react";
 import {
+  formatPendingInteractionKindLabel,
+  formatPendingInteractionSummary,
+} from "@bb/core-ui";
+import {
   type PendingInteraction,
   type PendingInteractionCommandApprovalDecision,
 } from "@bb/domain";
@@ -15,8 +19,6 @@ import { cn } from "@/lib/utils";
 import {
   buildPermissionDecisionButtons,
   describeCommandDecision,
-  formatInteractionChipLabel,
-  formatInteractionSummary,
   hasExpandableDetails,
   type FileChangeDecisionAction,
   type PermissionDecisionButtonConfig,
@@ -158,9 +160,17 @@ export function ThreadPendingInteractionBanner({
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-center gap-2">
-            <StatusPill variant="outline">{formatInteractionChipLabel(interaction)}</StatusPill>
+            <StatusPill variant="outline">
+              {formatPendingInteractionKindLabel({
+                kind: interaction.payload.kind,
+                surface: "app",
+              })}
+            </StatusPill>
             <span className="truncate text-sm text-foreground">
-              {formatInteractionSummary(interaction)}
+              {formatPendingInteractionSummary({
+                interaction,
+                surface: "app",
+              })}
             </span>
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">

@@ -3,6 +3,16 @@ export { assertNever } from "./assert-never.js";
 export { formatEnvironmentDisplay } from "./environment-display.js";
 export type { EnvironmentDisplayInfo } from "./environment-display.js";
 
+export {
+  formatPendingInteractionKindLabel,
+  formatPendingInteractionSummary,
+} from "./pending-interaction-presentation.js";
+export type {
+  FormatPendingInteractionKindLabelArgs,
+  FormatPendingInteractionSummaryArgs,
+  PendingInteractionPresentationSurface,
+} from "./pending-interaction-presentation.js";
+
 export { formatTimelineAsText } from "./format-timeline-text.js";
 export type {
   FormatTimelineOptions,

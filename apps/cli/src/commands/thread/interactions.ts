@@ -1,5 +1,9 @@
 import { Command } from "commander";
 import {
+  formatPendingInteractionKindLabel,
+  formatPendingInteractionSummary,
+} from "@bb/core-ui";
+import {
   formatPendingInteractionCommandApprovalDecision,
   formatPendingInteractionCommandApprovalResolutionOutcome,
   formatPendingInteractionFileChangeApprovalResolutionOutcome,
@@ -54,31 +58,10 @@ function parsePermissionGrantScope(
 }
 
 function formatInteractionKind(kind: PendingInteraction["payload"]["kind"]): string {
-  switch (kind) {
-    case "command_approval":
-      return "command";
-    case "file_change_approval":
-      return "file-change";
-    case "permission_request":
-      return "permission";
-    case "user_input_request":
-      return "question";
-  }
-}
-
-function formatInteractionSummary(interaction: PendingInteraction): string {
-  switch (interaction.payload.kind) {
-    case "command_approval":
-      return interaction.payload.command ?? interaction.payload.reason ?? "(no command provided)";
-    case "file_change_approval":
-      return interaction.payload.reason ?? interaction.payload.grantRoot ?? "File changes pending approval";
-    case "permission_request":
-      return interaction.payload.reason
-        ?? interaction.payload.toolName
-        ?? "Permission request";
-    case "user_input_request":
-      return `${interaction.payload.questions.length} question(s)`;
-  }
+  return formatPendingInteractionKindLabel({
+    kind,
+    surface: "cli",
+  });
 }
 
 function printRequestedPermissions(
@@ -474,7 +457,10 @@ export function registerInteractionCommands(
           interaction.id,
           formatInteractionKind(interaction.payload.kind),
           interaction.status,
-          formatInteractionSummary(interaction),
+          formatPendingInteractionSummary({
+            interaction,
+            surface: "cli",
+          }),
         ]),
       );
       console.log("");

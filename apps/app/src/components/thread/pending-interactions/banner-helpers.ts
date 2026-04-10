@@ -71,44 +71,6 @@ export function describeCommandDecision(
   }
 }
 
-export function formatInteractionChipLabel(interaction: PendingInteraction): string {
-  switch (interaction.payload.kind) {
-    case "command_approval":
-      return "Command approval";
-    case "file_change_approval":
-      return "File changes";
-    case "permission_request":
-      return "Permission request";
-    case "user_input_request":
-      return "User input";
-  }
-}
-
-export function formatInteractionSummary(interaction: PendingInteraction): string {
-  switch (interaction.payload.kind) {
-    case "command_approval":
-      return interaction.payload.reason ?? interaction.payload.command ?? "Review requested command";
-    case "file_change_approval":
-      return interaction.payload.reason ?? "Allow file changes for this thread";
-    case "permission_request": {
-      const requestedPermissionSummary = summarizePendingInteractionRequestedPermissions(
-        interaction.payload.permissions,
-      );
-      if (interaction.payload.reason) {
-        return interaction.payload.reason;
-      }
-      if (requestedPermissionSummary.length > 0) {
-        return requestedPermissionSummary.join(" . ");
-      }
-      return "Review requested permissions";
-    }
-    case "user_input_request":
-      return interaction.payload.questions.length === 1
-        ? interaction.payload.questions[0].question
-        : `${interaction.payload.questions.length} questions need answers`;
-  }
-}
-
 export function hasExpandableDetails(interaction: PendingInteraction): boolean {
   switch (interaction.payload.kind) {
     case "command_approval":
