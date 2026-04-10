@@ -68,6 +68,7 @@ describe("codex provider adapter", () => {
     const adapter = createCodexProviderAdapter();
     const cmd = adapter.buildCommand({
       type: "thread/start",
+      cwd: "/tmp/worktree",
       threadId: "t1",
       input: [{ type: "text", text: "hello" }],
     });
@@ -76,6 +77,7 @@ describe("codex provider adapter", () => {
       params: {
         approvalPolicy: "never",
         sandbox: "danger-full-access",
+        cwd: "/tmp/worktree",
       },
     });
   });
@@ -84,6 +86,7 @@ describe("codex provider adapter", () => {
     const adapter = createCodexProviderAdapter();
     const cmd = adapter.buildCommand({
       type: "thread/start",
+      cwd: "/tmp/worktree",
       threadId: "bb-thread-1",
       input: [{ type: "text", text: "hello" }],
       options: {
@@ -148,12 +151,16 @@ describe("codex provider adapter", () => {
     const adapter = createCodexProviderAdapter();
     const cmd = adapter.buildCommand({
       type: "thread/resume",
+      cwd: "/tmp/worktree",
       threadId: "bb-t1",
       providerThreadId: "codex-uuid-1",
     });
     expect(cmd).toMatchObject({
       method: "thread/resume",
-      params: { threadId: "codex-uuid-1" },
+      params: {
+        threadId: "codex-uuid-1",
+        cwd: "/tmp/worktree",
+      },
     });
   });
 
@@ -161,12 +168,16 @@ describe("codex provider adapter", () => {
     const adapter = createCodexProviderAdapter();
     const cmd = adapter.buildCommand({
       type: "thread/resume",
+      cwd: "/tmp/worktree",
       threadId: "bb-t1",
       providerThreadId: undefined,
     });
     expect(cmd).toMatchObject({
       method: "thread/resume",
-      params: { threadId: "bb-t1" },
+      params: {
+        threadId: "bb-t1",
+        cwd: "/tmp/worktree",
+      },
     });
   });
 

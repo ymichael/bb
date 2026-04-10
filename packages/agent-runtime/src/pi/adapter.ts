@@ -777,6 +777,7 @@ export function createPiProviderAdapter(
             method: "thread/start",
             params: {
               threadId: command.threadId,
+              cwd: command.cwd,
               baseInstructions,
               ...(Object.keys(finalConfig).length > 0 ? { config: finalConfig } : {}),
               ...(command.options?.model ? { model: command.options.model } : {}),
@@ -802,6 +803,7 @@ export function createPiProviderAdapter(
             method: "thread/resume",
             params: {
               threadId,
+              cwd: command.cwd,
               baseInstructions,
               ...(Object.keys(finalConfig).length > 0 ? { config: finalConfig } : {}),
               ...(command.options?.model ? { model: command.options.model } : {}),

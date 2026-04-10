@@ -106,6 +106,7 @@ interface ThreadRuntimeConfig {
   projectId?: string;
   providerId: string;
   resumePath?: string;
+  workspacePath: string;
 }
 
 interface ThreadShellEnvironmentArgs {
@@ -250,6 +251,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     const command = proc.adapter.buildCommand({
       type: "thread/resume",
       threadId: args.threadId,
+      cwd: currentConfig.workspacePath,
       providerThreadId: threadToProviderThread.get(args.threadId),
       options: toAdapterOptions(nextOptions, nextInstructions, envVars),
       resumePath: currentConfig.resumePath,
@@ -700,6 +702,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         options: execOpts,
         projectId,
         providerId: pid,
+        workspacePath: options.workspacePath,
       });
 
       const envVars = buildThreadShellEnvironment({
@@ -712,6 +715,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       const cmd = proc.adapter.buildCommand({
         type: "thread/start",
         threadId,
+        cwd: options.workspacePath,
         options: toAdapterOptions(execOpts, instructions, envVars),
         dynamicTools,
       });
@@ -788,6 +792,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         projectId,
         providerId: pid,
         resumePath,
+        workspacePath: options.workspacePath,
       });
 
       if (providerThreadId) {
@@ -806,6 +811,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       const cmd = proc.adapter.buildCommand({
         type: "thread/resume",
         threadId,
+        cwd: options.workspacePath,
         providerThreadId:
           providerThreadId ?? threadToProviderThread.get(threadId),
         options: toAdapterOptions(execOpts, instructions, envVars),

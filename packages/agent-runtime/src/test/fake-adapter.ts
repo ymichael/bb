@@ -61,6 +61,7 @@ function buildCommand(command: AdapterCommand): JsonRpcMessage | null {
         jsonrpc: "2.0",
         method: "thread/start",
         params: {
+          cwd: command.cwd,
           dynamicTools: command.dynamicTools,
           input: command.input,
           options: command.options,
@@ -72,6 +73,7 @@ function buildCommand(command: AdapterCommand): JsonRpcMessage | null {
         jsonrpc: "2.0",
         method: "thread/resume",
         params: {
+          cwd: command.cwd,
           dynamicTools: command.dynamicTools,
           options: command.options,
           providerThreadId: command.providerThreadId,
