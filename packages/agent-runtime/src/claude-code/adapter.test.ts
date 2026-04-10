@@ -399,6 +399,30 @@ describe("claude-code provider adapter", () => {
     });
   });
 
+  it("returns null for malformed Claude permission approval payloads", () => {
+    const adapter = createClaudeCodeProviderAdapter();
+
+    expect(
+      adapter.decodeInteractiveRequest?.({
+        jsonrpc: "2.0",
+        id: "req-2b",
+        method: CLAUDE_PERMISSION_REQUEST_APPROVAL_METHOD,
+        params: {
+          threadId: "thr_1",
+          providerThreadId: "claude-session-1",
+          turnId: "",
+          itemId: "toolu_1",
+          toolName: "WebFetch",
+          reason: "Needs approval",
+          permissions: {
+            network: { enabled: "yes" },
+            fileSystem: null,
+          },
+        },
+      }),
+    ).toBeNull();
+  });
+
   it("decodes Claude AskUserQuestion requests into pending interactions", () => {
     const adapter = createClaudeCodeProviderAdapter();
 

@@ -1448,6 +1448,92 @@ describe("codex provider adapter", () => {
     });
   });
 
+  it("decodeInteractiveRequest preserves macOS automation none in command approvals", () => {
+    const adapter = createCodexProviderAdapter();
+    expect(
+      adapter.decodeInteractiveRequest?.({
+        jsonrpc: "2.0",
+        id: 81,
+        method: "item/commandExecution/requestApproval",
+        params: {
+          threadId: "t1",
+          turnId: "turn-1",
+          itemId: "item-1",
+          approvalId: null,
+          reason: "Needs approval",
+          command: "open -a Finder",
+          cwd: "/tmp/project",
+          commandActions: [],
+          additionalPermissions: {
+            network: null,
+            fileSystem: null,
+            macos: {
+              preferences: "none",
+              automations: "none",
+              launchServices: false,
+              accessibility: false,
+              calendar: false,
+              reminders: false,
+              contacts: "none",
+            },
+          },
+          availableDecisions: ["accept", "decline", "cancel"],
+        },
+      }),
+    ).toMatchObject({
+      payload: {
+        requestedPermissions: {
+          macos: {
+            automations: "none",
+          },
+        },
+      },
+    });
+  });
+
+  it("decodeInteractiveRequest preserves macOS automation all in command approvals", () => {
+    const adapter = createCodexProviderAdapter();
+    expect(
+      adapter.decodeInteractiveRequest?.({
+        jsonrpc: "2.0",
+        id: 82,
+        method: "item/commandExecution/requestApproval",
+        params: {
+          threadId: "t1",
+          turnId: "turn-1",
+          itemId: "item-1",
+          approvalId: null,
+          reason: "Needs approval",
+          command: "open -a Finder",
+          cwd: "/tmp/project",
+          commandActions: [],
+          additionalPermissions: {
+            network: null,
+            fileSystem: null,
+            macos: {
+              preferences: "none",
+              automations: "all",
+              launchServices: false,
+              accessibility: false,
+              calendar: false,
+              reminders: false,
+              contacts: "none",
+            },
+          },
+          availableDecisions: ["accept", "decline", "cancel"],
+        },
+      }),
+    ).toMatchObject({
+      payload: {
+        requestedPermissions: {
+          macos: {
+            automations: "all",
+          },
+        },
+      },
+    });
+  });
+
   it("decodeInteractiveRequest keeps amendment approval decisions in command approvals", () => {
     const adapter = createCodexProviderAdapter();
     expect(

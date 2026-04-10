@@ -43,6 +43,8 @@ export {
   isPendingInteractionCommandApprovalPositiveDecision,
   normalizePendingInteractionQuestionOption,
   normalizePendingInteractionRequestedPermissionProfile,
+  summarizePendingInteractionRequestedMacOsPermissions,
+  summarizePendingInteractionRequestedPermissions,
   pendingInteractionCommandActionSchema,
   pendingInteractionCommandApprovalSimpleDecisionSchema,
   pendingInteractionCommandApprovalDecisionSchema,

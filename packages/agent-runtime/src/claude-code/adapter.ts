@@ -69,7 +69,7 @@ import {
   CLAUDE_TOOL_REQUEST_USER_INPUT_METHOD,
   claudePermissionRequestApprovalParamsSchema,
   claudeToolRequestUserInputParamsSchema,
-  normalizeClaudeRequestedPermissionProfile,
+  parseClaudeRequestedPermissionProfile,
   toClaudePermissionMode,
   toClaudeUserInputUpdatedInput,
   toPendingInteractionUserQuestions,
@@ -952,6 +952,12 @@ export function createClaudeCodeProviderAdapter(
           if (!parsed.success) {
             return null;
           }
+          const permissions = parseClaudeRequestedPermissionProfile(
+            parsed.data.permissions,
+          );
+          if (permissions === null) {
+            return null;
+          }
 
           return {
             requestId: request.id,
@@ -964,9 +970,7 @@ export function createClaudeCodeProviderAdapter(
               itemId: parsed.data.itemId,
               reason: parsed.data.reason,
               toolName: parsed.data.toolName,
-              permissions: normalizeClaudeRequestedPermissionProfile({
-                permissions: parsed.data.permissions,
-              }),
+              permissions,
             },
           };
         }

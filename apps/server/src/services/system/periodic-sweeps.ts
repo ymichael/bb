@@ -111,6 +111,7 @@ export async function runProjectDeletionSweep(
     | "hub"
     | "logger"
     | "machineAuth"
+    | "pendingInteractions"
     | "sandboxEnv"
     | "sandboxRegistry"
   >,
@@ -296,6 +297,7 @@ export async function runPeriodicSweeps(
     | "hub"
     | "logger"
     | "machineAuth"
+    | "pendingInteractions"
     | "sandboxEnv"
     | "sandboxRegistry"
   >,

@@ -3,13 +3,13 @@ import {
   formatPendingInteractionCommandApprovalDecision,
   formatPendingInteractionCommandApprovalResolutionOutcome,
   formatPendingInteractionFileChangeApprovalResolutionOutcome,
-  type PendingInteractionMacOsPermissions,
   formatPendingInteractionPermissionResolutionOutcome,
   isPendingInteractionCommandApprovalPositiveDecision,
   PendingInteraction,
   type PendingInteractionRequestedPermissionProfile,
   pendingInteractionPermissionGrantScopeSchema,
   PendingInteractionResolution,
+  summarizePendingInteractionRequestedPermissions,
 } from "@bb/domain";
 import { action } from "../../action.js";
 import { createClient, unwrap } from "../../client.js";
@@ -81,79 +81,10 @@ function formatInteractionSummary(interaction: PendingInteraction): string {
   }
 }
 
-function summarizeMacOsPermissions(
-  permissions: PendingInteractionMacOsPermissions | null,
-): string[] {
-  if (permissions === null) {
-    return [];
-  }
-
-  const summaries: string[] = [];
-  if (permissions.accessibility) {
-    summaries.push("macOS accessibility");
-  }
-  if (permissions.launchServices) {
-    summaries.push("macOS launch services");
-  }
-  if (permissions.calendar) {
-    summaries.push("macOS calendar");
-  }
-  if (permissions.reminders) {
-    summaries.push("macOS reminders");
-  }
-  if (permissions.preferences !== "none") {
-    summaries.push(`macOS preferences (${permissions.preferences.replace("_", " ")})`);
-  }
-  if (permissions.contacts !== "none") {
-    summaries.push(`macOS contacts (${permissions.contacts.replace("_", " ")})`);
-  }
-  if (permissions.automations === "all") {
-    summaries.push("macOS automation (all apps)");
-  } else if (
-    permissions.automations !== "none"
-    && permissions.automations.bundleIds.length > 0
-  ) {
-    summaries.push(
-      permissions.automations.bundleIds.length === 1
-        ? "macOS automation (1 app)"
-        : `macOS automation (${permissions.automations.bundleIds.length} apps)`,
-    );
-  }
-
-  return summaries;
-}
-
-function summarizeRequestedPermissions(
-  permissions: PendingInteractionRequestedPermissionProfile,
-): string[] {
-  const summaries: string[] = [];
-  if (permissions.network?.enabled === true) {
-    summaries.push("Network access");
-  }
-  if (permissions.fileSystem) {
-    if (permissions.fileSystem.read.length > 0) {
-      summaries.push(
-        permissions.fileSystem.read.length === 1
-          ? "Read 1 path"
-          : `Read ${permissions.fileSystem.read.length} paths`,
-      );
-    }
-    if (permissions.fileSystem.write.length > 0) {
-      summaries.push(
-        permissions.fileSystem.write.length === 1
-          ? "Write 1 path"
-          : `Write ${permissions.fileSystem.write.length} paths`,
-      );
-    }
-  }
-
-  return [...summaries, ...summarizeMacOsPermissions(permissions.macos)];
-}
-
 function printRequestedPermissions(
   permissions: PendingInteractionRequestedPermissionProfile,
 ): void {
-  const summaries = summarizeRequestedPermissions(permissions);
+  const summaries = summarizePendingInteractionRequestedPermissions(permissions);
   if (summaries.length === 0) {
     return;
   }

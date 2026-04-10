@@ -327,6 +327,7 @@ const codexAdditionalMacOsPermissionsSchema = z.object({
   reminders: z.boolean(),
   contacts: codexMacOsContactsPermissionSchema,
 });
+type CodexMacOsPermissions = z.infer<typeof codexAdditionalMacOsPermissionsSchema>;
 
 const codexAdditionalPermissionsSchema = z.object({
   network: codexNetworkPermissionsSchema.nullable(),
@@ -983,14 +984,9 @@ function toPendingInteractionPermissionProfile(
       "macos" in permissions && permissions.macos
         ? {
             preferences: permissions.macos.preferences,
-            automations:
-              permissions.macos.automations === "none"
-                ? "none"
-                : permissions.macos.automations === "all"
-                  ? "all"
-                  : {
-                      bundleIds: permissions.macos.automations.bundle_ids,
-                    },
+            automations: toPendingInteractionMacOsAutomationPermission(
+              permissions.macos.automations,
+            ),
             launchServices: permissions.macos.launchServices,
             accessibility: permissions.macos.accessibility,
             calendar: permissions.macos.calendar,
@@ -999,6 +995,18 @@ function toPendingInteractionPermissionProfile(
           }
         : null,
   });
+}
+
+function toPendingInteractionMacOsAutomationPermission(
+  automations: CodexMacOsPermissions["automations"],
+): "none" | "all" | { bundleIds: string[] } {
+  if (automations === "none" || automations === "all") {
+    return automations;
+  }
+
+  return {
+    bundleIds: automations.bundle_ids,
+  };
 }
 
 function toCodexGrantedPermissionProfile(

@@ -1,11 +1,11 @@
 import {
-  type PendingInteractionMacOsPermissions,
   type PendingInteraction,
   type PendingInteractionCommandApprovalDecision,
   type PendingInteractionGrantedPermissionProfile,
   type PendingInteractionPermissionGrantScope,
   type PendingInteractionRequestedPermissionProfile,
   getPendingInteractionCommandApprovalDecisionKind,
+  summarizePendingInteractionRequestedPermissions,
 } from "@bb/domain";
 
 export interface UserInputDraftState {
@@ -91,7 +91,7 @@ export function formatInteractionSummary(interaction: PendingInteraction): strin
     case "file_change_approval":
       return interaction.payload.reason ?? "Allow file changes for this thread";
     case "permission_request": {
-      const requestedPermissionSummary = summarizeRequestedPermissions(
+      const requestedPermissionSummary = summarizePendingInteractionRequestedPermissions(
         interaction.payload.permissions,
       );
       if (interaction.payload.reason) {
@@ -107,75 +107,6 @@ export function formatInteractionSummary(interaction: PendingInteraction): strin
         ? interaction.payload.questions[0].question
         : `${interaction.payload.questions.length} questions need answers`;
   }
-}
-
-export function summarizeRequestedPermissions(
-  permissions: PendingInteractionRequestedPermissionProfile,
-): string[] {
-  const summaries: string[] = [];
-  if (permissions.network?.enabled === true) {
-    summaries.push("Network access");
-  }
-  if (permissions.fileSystem) {
-    if (permissions.fileSystem.read.length > 0) {
-      summaries.push(
-        permissions.fileSystem.read.length === 1
-          ? "Read 1 path"
-          : `Read ${permissions.fileSystem.read.length} paths`,
-      );
-    }
-    if (permissions.fileSystem.write.length > 0) {
-      summaries.push(
-        permissions.fileSystem.write.length === 1
-          ? "Write 1 path"
-          : `Write ${permissions.fileSystem.write.length} paths`,
-      );
-    }
-  }
-  summaries.push(...summarizeRequestedMacOsPermissions(permissions.macos));
-  return summaries;
-}
-
-export function summarizeRequestedMacOsPermissions(
-  permissions: PendingInteractionMacOsPermissions | null,
-): string[] {
-  if (permissions === null) {
-    return [];
-  }
-
-  const summaries: string[] = [];
-  if (permissions.accessibility) {
-    summaries.push("macOS accessibility");
-  }
-  if (permissions.launchServices) {
-    summaries.push("macOS launch services");
-  }
-  if (permissions.calendar) {
-    summaries.push("macOS calendar");
-  }
-  if (permissions.reminders) {
-    summaries.push("macOS reminders");
-  }
-  if (permissions.preferences !== "none") {
-    summaries.push(`macOS preferences (${permissions.preferences.replace("_", " ")})`);
-  }
-  if (permissions.contacts !== "none") {
-    summaries.push(`macOS contacts (${permissions.contacts.replace("_", " ")})`);
-  }
-  if (permissions.automations === "all") {
-    summaries.push("macOS automation (all apps)");
-  } else if (
-    permissions.automations !== "none"
-    && permissions.automations.bundleIds.length > 0
-  ) {
-    summaries.push(
-      permissions.automations.bundleIds.length === 1
-        ? "macOS automation (1 app)"
-        : `macOS automation (${permissions.automations.bundleIds.length} apps)`,
-    );
-  }
-
-  return summaries;
 }
 
 export function hasExpandableDetails(interaction: PendingInteraction): boolean {
@@ -195,7 +126,9 @@ export function hasExpandableDetails(interaction: PendingInteraction): boolean {
       return (
         interaction.payload.reason !== null ||
         interaction.payload.toolName !== null ||
-        summarizeRequestedPermissions(interaction.payload.permissions).length > 0
+        summarizePendingInteractionRequestedPermissions(
+          interaction.payload.permissions,
+        ).length > 0
       );
     case "user_input_request":
       return true;

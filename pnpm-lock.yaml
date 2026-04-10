@@ -1079,6 +1079,9 @@ importers:
       '@bb/logger':
         specifier: workspace:*
         version: link:../../packages/logger
+      '@bb/process-utils':
+        specifier: workspace:*
+        version: link:../../packages/process-utils
       '@bb/server':
         specifier: workspace:*
         version: link:../../apps/server

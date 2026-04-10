@@ -2,15 +2,13 @@ import { type ReactNode } from "react";
 import {
   type PendingInteraction,
   formatPendingInteractionCommandApprovalDecision,
+  summarizePendingInteractionRequestedMacOsPermissions,
+  summarizePendingInteractionRequestedPermissions,
 } from "@bb/domain";
 import {
   DetailCard,
   DetailRow,
 } from "@bb/ui-core";
-import {
-  summarizeRequestedMacOsPermissions,
-  summarizeRequestedPermissions,
-} from "./banner-helpers";
 
 interface PermissionPathListProps {
   label: string;
@@ -72,7 +70,7 @@ export function renderPendingInteractionDetails(
           {interaction.payload.requestedPermissions ? (
             <DetailRow label="Permissions" align="start">
               <div className="space-y-1">
-                {summarizeRequestedPermissions(
+                {summarizePendingInteractionRequestedPermissions(
                   interaction.payload.requestedPermissions,
                 ).map((summary) => (
                   <div key={summary}>{summary}</div>
@@ -150,7 +148,7 @@ export function renderPendingInteractionDetails(
           {interaction.payload.permissions.macos !== null ? (
             <DetailRow label="macOS" align="start">
               <div className="space-y-1">
-                {summarizeRequestedMacOsPermissions(
+                {summarizePendingInteractionRequestedMacOsPermissions(
                   interaction.payload.permissions.macos,
                 ).map((summary) => (
                   <div key={summary}>{summary}</div>

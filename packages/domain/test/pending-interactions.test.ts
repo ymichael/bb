@@ -9,9 +9,11 @@ import {
   hasPendingInteractionGrantedPermissions,
   normalizePendingInteractionQuestionOption,
   normalizePendingInteractionRequestedPermissionProfile,
+  pendingInteractionMacOsPermissionsSchema,
   pendingInteractionCreateSchema,
   pendingInteractionResolutionSchema,
   pendingInteractionSchema,
+  summarizePendingInteractionRequestedPermissions,
 } from "../src/index.js";
 
 describe("pending interaction schemas", () => {
@@ -240,6 +242,99 @@ describe("pending interaction schemas", () => {
         contacts: "read_only",
       },
     });
+  });
+
+  it("keeps explicit macOS nulls and automation literals during normalization", () => {
+    expect(
+      normalizePendingInteractionRequestedPermissionProfile({
+        network: null,
+        fileSystem: null,
+        macos: null,
+      }),
+    ).toEqual({
+      network: null,
+      fileSystem: null,
+      macos: null,
+    });
+
+    expect(
+      normalizePendingInteractionRequestedPermissionProfile({
+        network: null,
+        fileSystem: null,
+        macos: {
+          preferences: null,
+          automations: "none",
+          launchServices: null,
+          accessibility: null,
+          calendar: null,
+          reminders: null,
+          contacts: null,
+        },
+      }).macos,
+    ).toMatchObject({
+      automations: "none",
+    });
+
+    expect(
+      normalizePendingInteractionRequestedPermissionProfile({
+        network: null,
+        fileSystem: null,
+        macos: {
+          preferences: null,
+          automations: "all",
+          launchServices: null,
+          accessibility: null,
+          calendar: null,
+          reminders: null,
+          contacts: null,
+        },
+      }).macos,
+    ).toMatchObject({
+      automations: "all",
+    });
+  });
+
+  it("rejects invalid macOS automation permission values", () => {
+    expect(() =>
+      pendingInteractionMacOsPermissionsSchema.parse({
+        preferences: "none",
+        automations: "invalid",
+        launchServices: false,
+        accessibility: false,
+        calendar: false,
+        reminders: false,
+        contacts: "none",
+      }),
+    ).toThrow();
+  });
+
+  it("summarizes requested permissions consistently", () => {
+    expect(
+      summarizePendingInteractionRequestedPermissions({
+        network: { enabled: true },
+        fileSystem: {
+          read: ["/tmp/read-a", "/tmp/read-b"],
+          write: ["/tmp/write-a"],
+        },
+        macos: {
+          preferences: "read_only",
+          automations: "all",
+          launchServices: true,
+          accessibility: false,
+          calendar: false,
+          reminders: true,
+          contacts: "none",
+        },
+      }),
+    ).toEqual([
+      "Network access",
+      "Read 2 paths",
+      "Write 1 path",
+      "macOS launch services",
+      "macOS reminders",
+      "macOS preferences (read only)",
+      "macOS automation (all apps)",
+    ]);
   });
 
   it("formats approval outcomes and timeline messages consistently", () => {

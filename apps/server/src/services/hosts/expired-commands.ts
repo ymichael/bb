@@ -29,6 +29,7 @@ type ExpiredCommandDeps = Pick<
   | "hub"
   | "logger"
   | "machineAuth"
+  | "pendingInteractions"
   | "sandboxEnv"
   | "sandboxRegistry"
 >;

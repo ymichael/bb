@@ -115,7 +115,7 @@ export interface ResolvedThreadRuntimeCommandConfig {
 function resolveDefaultApprovalPolicy(
   thread: Thread | null,
 ): ApprovalPolicy {
-  if (thread?.parentThreadId !== null) {
+  if (thread && thread.parentThreadId !== null) {
     return "never";
   }
 

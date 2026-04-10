@@ -136,8 +136,25 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
+function mockMatchMedia(): void {
+  Object.defineProperty(window, "matchMedia", {
+    writable: true,
+    value: vi.fn().mockImplementation((query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })),
+  });
+}
+
 describe("ThreadDetailPromptArea", () => {
   it("shows the pending interaction banner and disables the normal follow-up prompt", async () => {
+    mockMatchMedia();
     vi.mocked(api.getThreadDefaultExecutionOptions).mockResolvedValue(null);
     vi.mocked(api.listThreadDrafts).mockResolvedValue([]);
     vi.mocked(api.listThreadPendingInteractions).mockResolvedValue([

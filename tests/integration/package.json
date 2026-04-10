@@ -18,6 +18,7 @@
     "@bb/host-daemon": "workspace:*",
     "@bb/host-daemon-contract": "workspace:*",
     "@bb/logger": "workspace:*",
+    "@bb/process-utils": "workspace:*",
     "@bb/server": "workspace:*",
     "@bb/server-contract": "workspace:*",
     "@hono/node-server": "^1.19.11",

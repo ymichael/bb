@@ -196,6 +196,78 @@ export function normalizePendingInteractionRequestedPermissionProfile(
   });
 }
 
+export function summarizePendingInteractionRequestedMacOsPermissions(
+  permissions: PendingInteractionMacOsPermissions | null,
+): string[] {
+  if (permissions === null) {
+    return [];
+  }
+
+  const summaries: string[] = [];
+  if (permissions.accessibility) {
+    summaries.push("macOS accessibility");
+  }
+  if (permissions.launchServices) {
+    summaries.push("macOS launch services");
+  }
+  if (permissions.calendar) {
+    summaries.push("macOS calendar");
+  }
+  if (permissions.reminders) {
+    summaries.push("macOS reminders");
+  }
+  if (permissions.preferences !== "none") {
+    summaries.push(`macOS preferences (${permissions.preferences.replace("_", " ")})`);
+  }
+  if (permissions.contacts !== "none") {
+    summaries.push(`macOS contacts (${permissions.contacts.replace("_", " ")})`);
+  }
+  if (permissions.automations === "all") {
+    summaries.push("macOS automation (all apps)");
+  } else if (
+    permissions.automations !== "none"
+    && permissions.automations.bundleIds.length > 0
+  ) {
+    summaries.push(
+      permissions.automations.bundleIds.length === 1
+        ? "macOS automation (1 app)"
+        : `macOS automation (${permissions.automations.bundleIds.length} apps)`,
+    );
+  }
+
+  return summaries;
+}
+
+export function summarizePendingInteractionRequestedPermissions(
+  permissions: PendingInteractionRequestedPermissionProfile,
+): string[] {
+  const summaries: string[] = [];
+  if (permissions.network?.enabled === true) {
+    summaries.push("Network access");
+  }
+  if (permissions.fileSystem) {
+    if (permissions.fileSystem.read.length > 0) {
+      summaries.push(
+        permissions.fileSystem.read.length === 1
+          ? "Read 1 path"
+          : `Read ${permissions.fileSystem.read.length} paths`,
+      );
+    }
+    if (permissions.fileSystem.write.length > 0) {
+      summaries.push(
+        permissions.fileSystem.write.length === 1
+          ? "Write 1 path"
+          : `Write ${permissions.fileSystem.write.length} paths`,
+      );
+    }
+  }
+
+  return [
+    ...summaries,
+    ...summarizePendingInteractionRequestedMacOsPermissions(permissions.macos),
+  ];
+}
+
 export const pendingInteractionGrantedPermissionProfileSchema = z.object({
   network: pendingInteractionNetworkPermissionsSchema.nullable(),
   fileSystem: pendingInteractionFileSystemPermissionsSchema.nullable(),
