@@ -75,6 +75,7 @@ describe("expired commands", () => {
         },
         instructions: "instructions",
         dynamicTools: [],
+        instructionMode: "append" as const,
       }),
     },
     {

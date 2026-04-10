@@ -71,7 +71,7 @@ describe("codex provider adapter", () => {
       cwd: "/tmp/worktree",
       threadId: "t1",
       input: [{ type: "text", text: "hello" }],
-      managerMode: false,
+      instructionMode: "append",
     });
     expect(cmd).toMatchObject({
       method: "thread/start",
@@ -90,7 +90,7 @@ describe("codex provider adapter", () => {
       cwd: "/tmp/worktree",
       threadId: "bb-thread-1",
       input: [{ type: "text", text: "hello" }],
-      managerMode: false,
+      instructionMode: "append",
       options: {
         model: "gpt-5.4",
         serviceTier: "fast",
@@ -156,7 +156,7 @@ describe("codex provider adapter", () => {
       cwd: "/tmp/worktree",
       threadId: "bb-t1",
       providerThreadId: "codex-uuid-1",
-      managerMode: false,
+      instructionMode: "append",
     });
     expect(cmd).toMatchObject({
       method: "thread/resume",
@@ -174,7 +174,7 @@ describe("codex provider adapter", () => {
       cwd: "/tmp/worktree",
       threadId: "bb-t1",
       providerThreadId: undefined,
-      managerMode: false,
+      instructionMode: "append",
     });
     expect(cmd).toMatchObject({
       method: "thread/resume",

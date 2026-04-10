@@ -6,6 +6,17 @@ export type ReasoningLevel = z.infer<typeof reasoningLevelSchema>;
 export const serviceTierSchema = z.enum(["fast", "default"]);
 export type ServiceTier = z.infer<typeof serviceTierSchema>;
 
+/**
+ * Controls how a provider should incorporate server-owned instructions into its
+ * system prompt.
+ *
+ * - `append`: keep the provider's preset system prompt and append instructions.
+ * - `replace`: use the provided instructions as the full system prompt.
+ */
+export const instructionModeValues = ["append", "replace"] as const;
+export const instructionModeSchema = z.enum(instructionModeValues);
+export type InstructionMode = z.infer<typeof instructionModeSchema>;
+
 export const sandboxModeSchema = z.enum([
   "read-only",
   "workspace-write",

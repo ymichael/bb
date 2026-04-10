@@ -70,6 +70,7 @@ function createStandardThreadStartCommand(args: {
     },
     instructions: "Be a helpful coding agent.",
     dynamicTools: [],
+    instructionMode: "append" as const,
   };
 }
 
@@ -102,6 +103,7 @@ function createTurnRunCommand(args: {
       providerThreadId: args.providerThreadId,
       instructions: "Be a helpful coding agent.",
       dynamicTools: [],
+      instructionMode: "append" as const,
     },
   };
 }

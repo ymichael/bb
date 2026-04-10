@@ -5,6 +5,7 @@ import {
 } from "@bb/db";
 import type {
   DynamicTool,
+  InstructionMode,
   ProjectExecutionDefaults,
   ReasoningLevel,
   ResolvedThreadExecutionOptions,
@@ -86,8 +87,8 @@ export interface ResolveThreadRuntimeCommandConfigArgs {
 
 export interface ResolvedThreadRuntimeCommandConfig {
   dynamicTools: DynamicTool[];
+  instructionMode: InstructionMode;
   instructions: string;
-  managerMode: boolean;
   projectId: string;
   providerId: string;
   /** Only set for manager threads. */
@@ -195,8 +196,8 @@ export async function resolveThreadRuntimeCommandConfig(
   if (args.thread.type !== "manager") {
     return {
       dynamicTools: [],
+      instructionMode: "append",
       instructions: STANDARD_AGENT_INSTRUCTIONS,
-      managerMode: false,
       projectId: args.thread.projectId,
       providerId: args.thread.providerId,
       workspacePath,
@@ -217,6 +218,7 @@ export async function resolveThreadRuntimeCommandConfig(
 
   return {
     dynamicTools: MANAGER_DYNAMIC_TOOLS,
+    instructionMode: "replace",
     instructions: renderTemplate("managerAgentInstructions", {
       localTimezone: resolveLocalTimezone(),
       managerPreferencesContent,
@@ -226,7 +228,6 @@ export async function resolveThreadRuntimeCommandConfig(
       projectName: project.name,
       projectRootPath,
     }),
-    managerMode: true,
     projectId: args.thread.projectId,
     providerId: args.thread.providerId,
     threadStoragePath,

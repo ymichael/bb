@@ -1,4 +1,6 @@
 export {
+  instructionModeValues,
+  instructionModeSchema,
   reasoningLevelSchema,
   sandboxModeSchema,
   serviceTierSchema,
@@ -9,6 +11,7 @@ export {
   resolvedThreadExecutionOptionsSchema,
 } from "./shared-types.js";
 export type {
+  InstructionMode,
   ProjectExecutionDefaults,
   PromptInput,
   ReasoningLevel,

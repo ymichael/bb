@@ -58,6 +58,7 @@ describe("thread command failure side effects", () => {
           },
           instructions: "You are a helpful assistant.",
           dynamicTools: [],
+          instructionMode: "append",
         }),
       });
 
@@ -137,6 +138,7 @@ describe("thread command failure side effects", () => {
             providerThreadId: "provider-thread-1",
             instructions: "You are a helpful assistant.",
             dynamicTools: [],
+            instructionMode: "append",
           },
         }),
       });
@@ -202,6 +204,7 @@ describe("thread command failure side effects", () => {
           },
           instructions: "You are a helpful assistant.",
           dynamicTools: [],
+          instructionMode: "append",
         }),
       });
 

@@ -333,6 +333,7 @@ describe("nudge sweep", () => {
               providerThreadId: "provider-manager-thread",
               instructions: "manager instructions",
               dynamicTools: [],
+              instructionMode: "append",
             },
           }),
           state: "pending",

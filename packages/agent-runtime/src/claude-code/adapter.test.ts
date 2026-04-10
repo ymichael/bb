@@ -74,7 +74,7 @@ describe("claude-code provider adapter", () => {
       cwd: "/tmp/worktree",
       threadId: "bb-thread-1",
       input: [{ type: "text", text: "hello" }],
-      managerMode: false,
+      instructionMode: "append",
     });
     expect(cmd?.params).toMatchObject({
       threadId: "bb-thread-1",
@@ -89,7 +89,7 @@ describe("claude-code provider adapter", () => {
       cwd: "/tmp/worktree",
       threadId: "bb-thread-1",
       input: [{ type: "text", text: "hello" }],
-      managerMode: false,
+      instructionMode: "append",
       options: {
         model: "claude-sonnet-4-5",
         instructions: "Focus on the failing tests first.",
@@ -153,7 +153,7 @@ describe("claude-code provider adapter", () => {
       cwd: "/tmp/worktree",
       threadId: "bb-thread-1",
       providerThreadId: "claude-session-1",
-      managerMode: false,
+      instructionMode: "append",
     });
     expect(cmd?.params).toMatchObject({
       cwd: "/tmp/worktree",
@@ -188,7 +188,7 @@ describe("claude-code provider adapter", () => {
       cwd: "/tmp/worktree",
       threadId: "bb-thread-1",
       providerThreadId: undefined,
-      managerMode: false,
+      instructionMode: "append",
     });
     expect(cmd?.params).toMatchObject({
       threadId: "bb-thread-1",
@@ -203,7 +203,7 @@ describe("claude-code provider adapter", () => {
       cwd: "/tmp/worktree",
       threadId: "bb-thread-1",
       providerThreadId: "claude-session-1",
-      managerMode: false,
+      instructionMode: "append",
       options: {
         model: "claude-sonnet-4-5",
         instructions: "Reopen the thread and continue carefully.",
@@ -1626,7 +1626,7 @@ describe("claude-code provider adapter", () => {
       type: "thread/start",
       threadId: "bb-thread-1",
       input: [{ type: "text", text: "hello" }],
-      managerMode: false,
+      instructionMode: "append",
       options: {
         model: "claude-opus-4-6[1m]",
       },
@@ -1715,7 +1715,7 @@ describe("claude-code provider adapter", () => {
       type: "thread/start",
       threadId: "bb-thread-default",
       input: [{ type: "text", text: "hello" }],
-      managerMode: false,
+      instructionMode: "append",
       options: {
         model: "default",
       },

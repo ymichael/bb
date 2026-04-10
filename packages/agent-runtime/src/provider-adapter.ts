@@ -1,6 +1,7 @@
 import type {
   AvailableModel,
   DynamicTool,
+  InstructionMode,
   PromptInput,
   ProviderCapabilities,
   ReasoningLevel,
@@ -62,7 +63,7 @@ export type AdapterCommand =
       input?: PromptInput[];
       options?: AdapterOptions;
       dynamicTools?: DynamicTool[];
-      managerMode: boolean;
+      instructionMode: InstructionMode;
     }
   | {
       type: "thread/resume";
@@ -72,7 +73,7 @@ export type AdapterCommand =
       options?: AdapterOptions;
       resumePath?: string;
       dynamicTools?: DynamicTool[];
-      managerMode: boolean;
+      instructionMode: InstructionMode;
     }
   | {
       type: "turn/start";

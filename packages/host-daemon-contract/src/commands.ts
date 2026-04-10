@@ -2,6 +2,7 @@ import {
   availableModelSchema,
   discoveredWorkspacePropertiesSchema,
   dynamicToolSchema,
+  instructionModeSchema,
   promptInputSchema,
   threadExecutionOptionsSchema,
   threadGitDiffResponseSchema,
@@ -17,7 +18,7 @@ import {
 import { z } from "zod";
 import { hostRuntimeMaterialSnapshotSchema } from "./local-state.js";
 
-export const HOST_DAEMON_PROTOCOL_VERSION = 5 as const;
+export const HOST_DAEMON_PROTOCOL_VERSION = 6 as const;
 
 export const HOST_DAEMON_COMMAND_TYPES = [
   "thread.start",
@@ -73,7 +74,7 @@ const hostDaemonThreadRuntimeContextSchema = z.object({
   options: hostDaemonExecutionOptionsSchema,
   instructions: z.string().min(1),
   dynamicTools: z.array(dynamicToolSchema),
-  managerMode: z.boolean().default(false),
+  instructionMode: instructionModeSchema,
 });
 
 const hostDaemonExistingThreadRuntimeContextSchema =

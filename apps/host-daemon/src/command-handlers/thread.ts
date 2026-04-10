@@ -54,7 +54,7 @@ export async function startThread(
     options: command.options,
     instructions: command.instructions,
     dynamicTools: command.dynamicTools,
-    managerMode: command.managerMode,
+    instructionMode: command.instructionMode,
   });
   options.runtimeManager.markThreadActive(
     command.environmentId,
@@ -97,7 +97,7 @@ export async function ensureThreadRuntime(
       instructions: resumeContext.instructions,
       resumePath: resumeContext.workspaceContext.workspacePath,
       dynamicTools: resumeContext.dynamicTools,
-      managerMode: resumeContext.managerMode,
+      instructionMode: resumeContext.instructionMode,
     });
     options.runtimeManager.markThreadActive(
       command.environmentId,

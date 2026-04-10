@@ -2,6 +2,7 @@ import type { ChildProcess } from "node:child_process";
 import { createInterface } from "node:readline";
 import type {
   DynamicTool,
+  InstructionMode,
   ThreadEvent,
   ThreadExecutionOptions,
   ToolCallRequest,
@@ -101,8 +102,8 @@ interface ProviderProcess {
 interface ThreadRuntimeConfig {
   dynamicTools?: DynamicTool[];
   environmentId: string;
+  instructionMode: InstructionMode;
   instructions?: string;
-  managerMode: boolean;
   options?: ThreadExecutionOptions;
   projectId?: string;
   providerId: string;
@@ -257,7 +258,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       options: toAdapterOptions(nextOptions, nextInstructions, envVars),
       resumePath: currentConfig.resumePath,
       dynamicTools: currentConfig.dynamicTools,
-      managerMode: currentConfig.managerMode,
+      instructionMode: currentConfig.instructionMode,
     });
 
     if (command) {
@@ -689,7 +690,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       options: execOpts,
       instructions,
       dynamicTools,
-      managerMode = false,
+      instructionMode = "append",
     }) {
       const pid = providerId ?? "codex";
       await runtime.ensureProvider({ providerId: pid });
@@ -701,8 +702,8 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       setThreadRuntimeConfig(threadId, {
         dynamicTools,
         environmentId,
+        instructionMode,
         instructions,
-        managerMode,
         options: execOpts,
         projectId,
         providerId: pid,
@@ -722,7 +723,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         cwd: options.workspacePath,
         options: toAdapterOptions(execOpts, instructions, envVars),
         dynamicTools,
-        managerMode,
+        instructionMode,
       });
 
       if (!cmd) {
@@ -782,7 +783,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       instructions,
       resumePath,
       dynamicTools,
-      managerMode = false,
+      instructionMode = "append",
     }) {
       const pid = providerId ?? resolveProviderForThread(threadId);
       await runtime.ensureProvider({ providerId: pid });
@@ -793,8 +794,8 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       setThreadRuntimeConfig(threadId, {
         dynamicTools,
         environmentId,
+        instructionMode,
         instructions,
-        managerMode,
         options: execOpts,
         projectId,
         providerId: pid,
@@ -824,7 +825,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         options: toAdapterOptions(execOpts, instructions, envVars),
         resumePath,
         dynamicTools,
-        managerMode,
+        instructionMode,
       });
 
       if (!cmd) {

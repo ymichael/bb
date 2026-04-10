@@ -1,6 +1,7 @@
 import type {
   AvailableModel,
   DynamicTool,
+  InstructionMode,
   PromptInput,
   ProviderInfo as DomainProviderInfo,
   ThreadEvent,
@@ -80,7 +81,7 @@ export interface AgentRuntime {
     options?: ThreadExecutionOptions;
     instructions?: string;
     dynamicTools?: DynamicTool[];
-    managerMode?: boolean;
+    instructionMode?: InstructionMode;
   }): Promise<{ providerThreadId: string }>;
 
   resumeThread(args: {
@@ -93,7 +94,7 @@ export interface AgentRuntime {
     instructions?: string;
     resumePath?: string;
     dynamicTools?: DynamicTool[];
-    managerMode?: boolean;
+    instructionMode?: InstructionMode;
   }): Promise<{ providerThreadId: string }>;
 
   runTurn(args: {

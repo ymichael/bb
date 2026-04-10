@@ -122,6 +122,7 @@ function buildThreadStartCommand(
     },
     instructions: "You are a helpful assistant.",
     dynamicTools: [],
+    instructionMode: "append" as const,
   };
 }
 

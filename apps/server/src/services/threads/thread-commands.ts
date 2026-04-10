@@ -136,7 +136,7 @@ export async function buildThreadStartCommand(
     options: args.execution,
     instructions: runtimeContext.instructions,
     dynamicTools: runtimeContext.dynamicTools,
-    managerMode: runtimeContext.managerMode,
+    instructionMode: runtimeContext.instructionMode,
     threadStoragePath: runtimeContext.threadStoragePath,
   };
 }
@@ -160,7 +160,7 @@ function buildPreparedTurnRunCommandPayload(
       providerThreadId: args.providerThreadId,
       instructions: args.runtimeContext.instructions,
       dynamicTools: args.runtimeContext.dynamicTools,
-      managerMode: args.runtimeContext.managerMode,
+      instructionMode: args.runtimeContext.instructionMode,
     },
   };
 }
@@ -295,6 +295,7 @@ export async function queueTurnSteerCommand(
         providerThreadId,
         instructions: runtimeContext.instructions,
         dynamicTools: runtimeContext.dynamicTools,
+        instructionMode: runtimeContext.instructionMode,
       },
     }),
   });
