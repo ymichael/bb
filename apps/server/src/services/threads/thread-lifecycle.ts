@@ -547,6 +547,10 @@ export async function finalizeStoppedThread(
   }
 
   if (finalizedThread.deletedAt === null) {
+    deps.pendingInteractions.interruptPendingInteractionsForThreadIds({
+      threadIds: [finalizedThread.id],
+      reason: "Thread stopped by user request",
+    });
     appendThreadInterruptedEvent(deps, {
       threadId: finalizedThread.id,
       message: "Thread stopped by user request",

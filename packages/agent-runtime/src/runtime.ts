@@ -1,7 +1,6 @@
 import type { ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { createInterface } from "node:readline";
-import { isRecord } from "@bb/domain";
 import type {
   DynamicTool,
   InstructionMode,
@@ -31,6 +30,10 @@ import type {
 interface PendingRequest {
   resolve: (result: unknown) => void;
   reject: (error: Error) => void;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 function isJsonRpcId(value: unknown): value is string | number {

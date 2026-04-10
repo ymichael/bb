@@ -36,6 +36,8 @@ export interface ListPendingInteractionsArgs {
 }
 
 export interface ListPendingInteractionsByStatusArgs {
+  limit?: number;
+  offset?: number;
   statuses: readonly PendingInteractionStatus[];
 }
 
@@ -64,6 +66,8 @@ export interface InterruptPendingInteractionsForThreadIdsArgs {
 export interface ListPendingInteractionThreadIdsArgs {
   threadIds: readonly string[];
 }
+
+const SQLITE_IN_CLAUSE_BATCH_SIZE = 900;
 
 function getPendingInteractionRecord(
   db: PendingInteractionReadConnection,
@@ -201,29 +205,54 @@ export function listPendingInteractionThreadIds(
     return [];
   }
 
-  return db
-    .select({ threadId: pendingInteractions.threadId })
-    .from(pendingInteractions)
-    .where(
-      and(
-        inArray(pendingInteractions.threadId, [...args.threadIds]),
-        eq(pendingInteractions.status, "pending"),
-      ),
-    )
-    .all()
-    .map((row) => row.threadId);
+  const pendingThreadIds = new Set<string>();
+  for (
+    let offset = 0;
+    offset < args.threadIds.length;
+    offset += SQLITE_IN_CLAUSE_BATCH_SIZE
+  ) {
+    const threadIdsBatch = args.threadIds.slice(
+      offset,
+      offset + SQLITE_IN_CLAUSE_BATCH_SIZE,
+    );
+    const rows = db
+      .select({ threadId: pendingInteractions.threadId })
+      .from(pendingInteractions)
+      .where(
+        and(
+          inArray(pendingInteractions.threadId, threadIdsBatch),
+          eq(pendingInteractions.status, "pending"),
+        ),
+      )
+      .all();
+    for (const row of rows) {
+      pendingThreadIds.add(row.threadId);
+    }
+  }
+
+  return [...pendingThreadIds];
 }
 
 export function listPendingInteractionsByStatus(
   db: PendingInteractionReadConnection,
   args: ListPendingInteractionsByStatusArgs,
 ): PendingInteractionRow[] {
-  return db
+  const query = db
     .select()
     .from(pendingInteractions)
     .where(inArray(pendingInteractions.status, [...args.statuses]))
-    .orderBy(desc(pendingInteractions.createdAt))
-    .all();
+    .orderBy(desc(pendingInteractions.createdAt));
+
+  if (args.limit === undefined) {
+    return query.all();
+  }
+
+  const limitedQuery =
+    args.offset !== undefined
+      ? query.limit(args.limit).offset(args.offset)
+      : query.limit(args.limit);
+
+  return limitedQuery.all();
 }
 
 export function setPendingInteractionResolved(

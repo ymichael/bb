@@ -1436,6 +1436,69 @@ describe("internal session routes", () => {
     }
   });
 
+  it("interrupts pending interactions when a thread stop is finalized", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-finalize-stop-interaction",
+      });
+      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "active",
+      });
+      markThreadStopRequested(harness.db, harness.hub, {
+        threadId: thread.id,
+      });
+
+      const interaction = harness.deps.pendingInteractions.registerPendingInteraction({
+        threadId: thread.id,
+        turnId: "turn-stop-interaction",
+        providerId: "codex",
+        providerThreadId: "provider-thread-stop-interaction",
+        providerRequestId: "request-stop-interaction",
+        providerRequestMethod: "item/commandExecution/requestApproval",
+        payload: {
+          kind: "command_approval",
+          itemId: "item-stop-interaction",
+          approvalId: null,
+          reason: "Approve command",
+          command: "git push",
+          cwd: "/tmp/project",
+          commandActions: [],
+          requestedPermissions: null,
+          availableDecisions: ["accept", "accept_for_session", "decline", "cancel"],
+        },
+      });
+      if (interaction.outcome === "rejected") {
+        throw new Error(`Expected interaction registration to succeed: ${interaction.reason}`);
+      }
+
+      expect(
+        await finalizeStoppedThread(harness.deps, {
+          threadId: thread.id,
+        }),
+      ).toBe(true);
+
+      expect(
+        harness.deps.pendingInteractions.getThreadInteraction({
+          threadId: thread.id,
+          interactionId: interaction.interaction.id,
+        }),
+      ).toMatchObject({
+        status: "interrupted",
+        statusReason: "Thread stopped by user request",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("hard-deletes deleted provisioning tombstones on reconnect", async () => {
     const harness = await createTestAppHarness();
     try {

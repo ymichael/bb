@@ -155,13 +155,13 @@ export interface PendingInteractionPermissionMacOsInput {
 function normalizePendingInteractionMacOsAutomationPermission(
   input: PendingInteractionPermissionMacOsAutomationInput | null | undefined,
 ): PendingInteractionMacOsAutomationPermission {
-  if (input === "none" || input === "all") {
-    return input;
+  if (input == null || input === "none" || input === "all") {
+    return input ?? "none";
   }
 
   return {
     kind: "bundle_ids",
-    bundleIds: input?.bundleIds ?? [],
+    bundleIds: input.bundleIds ?? [],
   };
 }
 

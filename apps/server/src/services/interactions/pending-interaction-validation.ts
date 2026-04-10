@@ -1,5 +1,6 @@
 import {
   formatPendingInteractionCommandApprovalDecision,
+  type PendingInteractionFileChangeApprovalDecision,
   type PendingInteraction,
   type PendingInteractionCommandApprovalDecision,
   type PendingInteractionResolution,
@@ -106,15 +107,53 @@ function validateUserInputResolution(
   }
 
   for (const [questionId, answers] of Object.entries(resolution.answers)) {
-    if (answers.length > 0) {
+    const question = questions.get(questionId);
+    if (!question) {
       continue;
     }
-    throw new ApiError(
-      400,
-      "invalid_request",
-      `Question '${questionId}' requires at least one answer`,
-    );
+    if (answers.length === 0) {
+      throw new ApiError(
+        400,
+        "invalid_request",
+        `Question '${questionId}' requires at least one answer`,
+      );
+    }
+    if (!question.multiSelect && answers.length > 1) {
+      throw new ApiError(
+        400,
+        "invalid_request",
+        `Question '${questionId}' accepts only one answer`,
+      );
+    }
   }
+}
+
+function validateFileChangeApprovalResolution(
+  interaction: PendingInteraction,
+  resolution: PendingInteractionResolution,
+): void {
+  if (
+    interaction.payload.kind !== "file_change_approval"
+    || resolution.kind !== "file_change_approval"
+  ) {
+    return;
+  }
+
+  const allowedDecisions = new Set<PendingInteractionFileChangeApprovalDecision>([
+    "accept",
+    "accept_for_session",
+    "decline",
+    "cancel",
+  ]);
+  if (allowedDecisions.has(resolution.decision)) {
+    return;
+  }
+
+  throw new ApiError(
+    400,
+    "invalid_request",
+    `File-change approval decision '${resolution.decision}' is invalid`,
+  );
 }
 
 function validatePermissionRequestResolution(
@@ -180,6 +219,7 @@ export function validatePendingInteractionResolution(
   }
 
   validateCommandApprovalResolution(interaction, resolution);
+  validateFileChangeApprovalResolution(interaction, resolution);
   validatePermissionRequestResolution(interaction, resolution);
   validateUserInputResolution(interaction, resolution);
 }

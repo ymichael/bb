@@ -2,12 +2,13 @@ import { z } from "zod";
 import {
   approvalPolicySchema,
   questionPolicySchema,
+  resolvedThreadExecutionOptionsSchema,
 } from "./shared-types.js";
-import { isRecord } from "./type-guards.js";
 import {
   threadEventSchema,
   threadEventTypeSchema,
 } from "./provider-event.js";
+import { turnRequestEventDataSchema } from "./thread-events.js";
 import type { ThreadEvent, ThreadEventType } from "./provider-event.js";
 
 type ThreadEventByType = {
@@ -82,39 +83,19 @@ const storedTurnRequestTypeSet = new Set<ThreadEventType>([
   "client/turn/start",
 ]);
 
-function normalizeStoredThreadEventArgs(
+const storedTurnRequestExecutionSchema = resolvedThreadExecutionOptionsSchema.extend({
+  approvalPolicy: approvalPolicySchema.optional().default("on-request"),
+  questionPolicy: questionPolicySchema.optional().default("allow"),
+});
+
+const storedTurnRequestEventDataSchema = turnRequestEventDataSchema.extend({
+  execution: storedTurnRequestExecutionSchema,
+});
+
+function parseStoredTurnRequestEventData(
   args: StoredThreadEventParseArgs,
-): StoredThreadEventParseArgs {
-  if (!storedTurnRequestTypeSet.has(args.type)) {
-    return args;
-  }
-
-  const execution = args.data.execution;
-  if (!isRecord(execution)) {
-    return args;
-  }
-
-  const parsedQuestionPolicy = questionPolicySchema.safeParse(
-    execution.questionPolicy,
-  );
-  const parsedApprovalPolicy = approvalPolicySchema.safeParse(
-    execution.approvalPolicy,
-  );
-  if (parsedQuestionPolicy.success && parsedApprovalPolicy.success) {
-    return args;
-  }
-
-  return {
-    ...args,
-    data: {
-      ...args.data,
-      execution: {
-        ...execution,
-        approvalPolicy: parsedApprovalPolicy.success ? execution.approvalPolicy : "on-request",
-        questionPolicy: parsedQuestionPolicy.success ? execution.questionPolicy : "allow",
-      },
-    },
-  };
+): StoredThreadEventParseArgs["data"] {
+  return storedTurnRequestEventDataSchema.parse(args.data);
 }
 
 function toStoredThreadEventData<TEvent extends ThreadEvent>(
@@ -127,15 +108,18 @@ function toStoredThreadEventData<TEvent extends ThreadEvent>(
 export function parseStoredThreadEvent(
   args: StoredThreadEventParseArgs,
 ): ThreadEvent {
-  const normalizedArgs = normalizeStoredThreadEventArgs(args);
+  const eventData = storedTurnRequestTypeSet.has(args.type)
+    ? parseStoredTurnRequestEventData(args)
+    : args.data;
+
   return threadEventSchema.parse({
-    ...normalizedArgs.data,
-    ...(normalizedArgs.providerThreadId != null
-      ? { providerThreadId: normalizedArgs.providerThreadId }
+    ...eventData,
+    ...(args.providerThreadId != null
+      ? { providerThreadId: args.providerThreadId }
       : {}),
-    ...(normalizedArgs.turnId != null ? { turnId: normalizedArgs.turnId } : {}),
-    threadId: normalizedArgs.threadId,
-    type: normalizedArgs.type,
+    ...(args.turnId != null ? { turnId: args.turnId } : {}),
+    threadId: args.threadId,
+    type: args.type,
   });
 }
 

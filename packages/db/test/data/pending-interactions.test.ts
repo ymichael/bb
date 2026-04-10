@@ -10,6 +10,7 @@ import {
   getActivePendingInteractionForThread,
   getPendingInteractionByProviderRequest,
   interruptPendingInteractionsForThreads,
+  listPendingInteractionThreadIds,
   listPendingInteractionsByStatus,
   listPendingInteractionsByThread,
   setPendingInteractionExpired,
@@ -275,5 +276,54 @@ describe("pending interactions", () => {
       statusReason: "Rejected by policy",
     });
     expect(listPendingInteractionsByStatus(db, { statuses: ["pending"] })).toHaveLength(0);
+  });
+
+  it("chunks pending-thread lookups to stay under SQLite variable limits", () => {
+    const { db, thread } = setup();
+    const manyThreads = [thread];
+    for (let index = 0; index < 1_050; index += 1) {
+      manyThreads.push(
+        createThread(db, noopNotifier, {
+          projectId: thread.projectId,
+          environmentId: thread.environmentId,
+          providerId: "codex",
+        }),
+      );
+    }
+
+    const pendingThreadIds = [manyThreads[0], manyThreads[1_000]]
+      .filter((currentThread) => currentThread !== undefined)
+      .map((currentThread) => currentThread.id);
+
+    for (const [index, threadId] of pendingThreadIds.entries()) {
+      createPendingInteraction(db, {
+        threadId,
+        turnId: `turn-batched-${index}`,
+        providerId: "codex",
+        providerThreadId: `provider-thread-batched-${index}`,
+        providerRequestId: `request-batched-${index}`,
+        providerRequestMethod: "item/commandExecution/requestApproval",
+        kind: "command_approval",
+        payload: JSON.stringify({
+          kind: "command_approval",
+          itemId: `item-batched-${index}`,
+          approvalId: null,
+          reason: null,
+          command: "git push",
+          cwd: "/tmp/project",
+          commandActions: [],
+          requestedPermissions: null,
+          availableDecisions: ["accept", "decline", "cancel"],
+        }),
+      });
+    }
+
+    expect(
+      new Set(
+        listPendingInteractionThreadIds(db, {
+          threadIds: manyThreads.map((currentThread) => currentThread.id),
+        }),
+      ),
+    ).toEqual(new Set(pendingThreadIds));
   });
 });

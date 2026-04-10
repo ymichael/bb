@@ -85,6 +85,15 @@ describe("public thread interaction routes", () => {
         status: "pending",
       });
 
+      const invalidInteractionIdResponse = await harness.app.request(
+        `/api/v1/threads/${thread.id}/interactions/not-an-interaction-id`,
+      );
+      expect(invalidInteractionIdResponse.status).toBe(400);
+      await expect(readJson(invalidInteractionIdResponse)).resolves.toEqual({
+        code: "invalid_request",
+        message: "Invalid pending interaction id",
+      });
+
       const wrongThreadResponse = await harness.app.request(
         `/api/v1/threads/${otherThread.id}/interactions/${registered.interaction.id}`,
       );
@@ -139,6 +148,12 @@ describe("public thread interaction routes", () => {
           decision: "accept_for_session",
         },
       });
+
+      const postResolveListResponse = await harness.app.request(
+        `/api/v1/threads/${thread.id}/interactions`,
+      );
+      expect(postResolveListResponse.status).toBe(200);
+      await expect(readJson(postResolveListResponse)).resolves.toEqual([]);
     } finally {
       await harness.cleanup();
     }
@@ -332,6 +347,28 @@ describe("public thread interaction routes", () => {
       await expect(readJson(emptyAnswerResponse)).resolves.toEqual({
         code: "invalid_request",
         message: "Question 'ticket' requires at least one answer",
+      });
+
+      const multiAnswerResponse = await harness.app.request(
+        `/api/v1/threads/${secondThread.id}/interactions/${userInput.interaction.id}/resolve`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            kind: "user_input_request",
+            answers: {
+              environment: ["staging", "prod"],
+              ticket: ["OPS-123"],
+            },
+          }),
+        },
+      );
+      expect(multiAnswerResponse.status).toBe(400);
+      await expect(readJson(multiAnswerResponse)).resolves.toEqual({
+        code: "invalid_request",
+        message: "Question 'environment' accepts only one answer",
       });
     } finally {
       await harness.cleanup();

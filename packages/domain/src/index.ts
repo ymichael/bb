@@ -240,8 +240,6 @@ export type {
   HostType,
 } from "./host.js";
 
-export { isRecord } from "./type-guards.js";
-
 export {
   threadQueuedMessageSchema,
   threadSchema,

@@ -288,6 +288,62 @@ describe("pending interaction lifecycle", () => {
     }
   });
 
+  it("allows user-input requests when the thread question policy is avoid", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-pending-interaction-question-policy-avoid",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+      });
+      seedThreadRuntimeState(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-thread-question-policy-avoid",
+        questionPolicy: "avoid",
+      });
+
+      expect(
+        harness.deps.pendingInteractions.registerPendingInteraction({
+          threadId: thread.id,
+          turnId: "turn-question-policy-avoid",
+          providerId: "codex",
+          providerThreadId: "provider-thread-question-policy-avoid",
+          providerRequestId: "request-question-policy-avoid",
+          providerRequestMethod: "item/tool/requestUserInput",
+          payload: {
+            kind: "user_input_request",
+            itemId: "item-question-policy-avoid",
+            questions: [
+              {
+                id: "environment",
+                header: "Env",
+                question: "Which environment?",
+                allowsOther: true,
+                isSecret: false,
+                multiSelect: false,
+                options: [],
+              },
+            ],
+          },
+        }),
+      ).toMatchObject({
+        outcome: "created",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("expires pending waits that are never resolved", async () => {
     const harness = await createTestAppHarness();
     try {

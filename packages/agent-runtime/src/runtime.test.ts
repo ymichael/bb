@@ -2,10 +2,7 @@ import { readFileSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  isRecord,
-  type ThreadEvent,
-} from "@bb/domain";
+import type { ThreadEvent } from "@bb/domain";
 import {
   createFakeAdapter as createSharedFakeAdapter,
   fakeProviderScriptPath,
@@ -26,6 +23,10 @@ import { parseAvailableModelList } from "./shared/available-models.js";
 
 function wait(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 async function waitForCondition(

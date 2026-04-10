@@ -292,6 +292,42 @@ describe("pending interaction schemas", () => {
     ).toMatchObject({
       automations: "all",
     });
+
+    expect(
+      normalizePendingInteractionRequestedPermissionProfile({
+        network: null,
+        fileSystem: null,
+        macos: {
+          preferences: null,
+          automations: null,
+          launchServices: null,
+          accessibility: null,
+          calendar: null,
+          reminders: null,
+          contacts: null,
+        },
+      }).macos,
+    ).toMatchObject({
+      automations: "none",
+    });
+
+    expect(
+      normalizePendingInteractionRequestedPermissionProfile({
+        network: null,
+        fileSystem: null,
+        macos: {
+          preferences: null,
+          automations: undefined,
+          launchServices: null,
+          accessibility: null,
+          calendar: null,
+          reminders: null,
+          contacts: null,
+        },
+      }).macos,
+    ).toMatchObject({
+      automations: "none",
+    });
   });
 
   it("rejects invalid macOS automation permission values", () => {

@@ -1,3 +1,4 @@
+import { z } from "zod";
 import {
   appendStoredThreadEvent,
   appendStoredThreadEventInTransaction,
@@ -52,9 +53,7 @@ export interface AppendSystemErrorEventArgs {
   threadId: string;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
+const storedEventPayloadSchema = z.record(z.unknown());
 
 function buildClientTurnEventData(
   args: ClientTurnEventArgs,
@@ -132,7 +131,8 @@ export function parseStoredTurnRequestEvent(
     );
   }
 
-  if (!isRecord(eventData)) {
+  const parsedEventData = storedEventPayloadSchema.safeParse(eventData);
+  if (!parsedEventData.success) {
     throw new ApiError(
       500,
       "internal_error",
@@ -143,7 +143,7 @@ export function parseStoredTurnRequestEvent(
   let event;
   try {
     event = parseStoredThreadEvent({
-      data: eventData,
+      data: parsedEventData.data,
       threadId: row.threadId,
       type: row.type,
     });

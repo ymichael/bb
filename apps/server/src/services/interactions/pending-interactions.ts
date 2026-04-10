@@ -27,6 +27,7 @@ import { toPendingInteraction } from "./pending-interaction-serialization.js";
 import { validatePendingInteractionResolution } from "./pending-interaction-validation.js";
 
 interface PendingInteractionWaiter {
+  settled: boolean;
   resolve: (outcome: PendingInteractionWaitOutcome) => void;
 }
 
@@ -91,6 +92,7 @@ interface CreateLifecycleDeps {
 }
 
 export const DEFAULT_SANDBOX_PENDING_INTERACTION_EXPIRY_MS = 10 * 60 * 1000;
+const PENDING_INTERACTION_HYDRATE_BATCH_SIZE = 200;
 
 type PendingInteractionTimeoutHandle = ReturnType<typeof setTimeout>;
 
@@ -322,7 +324,12 @@ export class PendingInteractionLifecycle {
     return new Promise<PendingInteractionWaitOutcome>((resolve) => {
       let abortHandler: (() => void) | null = null;
       const waiter: PendingInteractionWaiter = {
+        settled: false,
         resolve: (outcome) => {
+          if (waiter.settled) {
+            return;
+          }
+          waiter.settled = true;
           if (args.signal && abortHandler) {
             args.signal.removeEventListener("abort", abortHandler);
           }
@@ -471,12 +478,22 @@ export class PendingInteractionLifecycle {
   }
 
   private hydratePendingInteractions(): void {
-    const pendingInteractions = listPendingInteractionsByStatus(this.deps.db, {
-      statuses: ["pending"],
-    }).map(toPendingInteraction);
+    let offset = 0;
+    while (true) {
+      const pendingInteractions = listPendingInteractionsByStatus(this.deps.db, {
+        statuses: ["pending"],
+        limit: PENDING_INTERACTION_HYDRATE_BATCH_SIZE,
+        offset,
+      }).map(toPendingInteraction);
 
-    for (const interaction of pendingInteractions) {
-      this.scheduleInteractionExpiry(interaction);
+      for (const interaction of pendingInteractions) {
+        this.scheduleInteractionExpiry(interaction);
+      }
+
+      if (pendingInteractions.length < PENDING_INTERACTION_HYDRATE_BATCH_SIZE) {
+        return;
+      }
+      offset += PENDING_INTERACTION_HYDRATE_BATCH_SIZE;
     }
   }
 
@@ -577,7 +594,7 @@ export class PendingInteractionLifecycle {
       return;
     }
 
-    for (const waiter of waiters) {
+    for (const waiter of [...waiters]) {
       waiter.resolve(outcome);
     }
     this.waiters.delete(interaction.id);
