@@ -1,3 +1,4 @@
+import { createServer } from "node:net";
 import {
   buildCloudAuthCredentialUpsert,
   createCloudAuthCrypto,
@@ -41,6 +42,36 @@ function createCodexIdToken(email: string): string {
   return `${header}.${body}.signature`;
 }
 
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((innerResolve, innerReject) => {
+    resolve = innerResolve;
+    reject = innerReject;
+  });
+  return { promise, reject, resolve };
+}
+
+async function isCallbackPortAvailable(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const server = createServer();
+    server.unref();
+    server.once("error", (error) => {
+      const errorCode =
+        error instanceof Error && "code" in error ? error.code : undefined;
+      resolve(errorCode !== "EADDRINUSE");
+    });
+    server.listen(port, "127.0.0.1", () => {
+      server.close(() => resolve(true));
+    });
+  });
+}
+
+const codexCallbackPortAvailable = await isCallbackPortAvailable(1455);
+const claudeCallbackPortAvailable = await isCallbackPortAvailable(53692);
+const itIfCodexCallbackPortAvailable = codexCallbackPortAvailable ? it : it.skip;
+const itIfClaudeCallbackPortAvailable = claudeCallbackPortAvailable ? it : it.skip;
+
 describe("public cloud auth routes", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -83,7 +114,7 @@ describe("public cloud auth routes", () => {
     }
   });
 
-  it("starts and completes a codex OAuth connection", async () => {
+  itIfCodexCallbackPortAvailable("starts and completes a codex OAuth connection", async () => {
     const nativeFetch = globalThis.fetch;
     vi.stubGlobal("fetch", vi.fn<typeof fetch>(async (input, init) => {
       const url = typeof input === "string" ? input : input.toString();
@@ -169,7 +200,7 @@ describe("public cloud auth routes", () => {
     }
   });
 
-  it("sanitizes codex exchange errors before returning attempt status", async () => {
+  itIfCodexCallbackPortAvailable("sanitizes codex exchange errors before returning attempt status", async () => {
     const nativeFetch = globalThis.fetch;
     vi.stubGlobal("fetch", vi.fn<typeof fetch>(async (input, init) => {
       const url = typeof input === "string" ? input : input.toString();
@@ -235,7 +266,7 @@ describe("public cloud auth routes", () => {
     }
   });
 
-  it("starts and completes a claude OAuth connection", async () => {
+  itIfClaudeCallbackPortAvailable("starts and completes a claude OAuth connection", async () => {
     const nativeFetch = globalThis.fetch;
     vi.stubGlobal("fetch", vi.fn<typeof fetch>(async (input, init) => {
       const url = typeof input === "string" ? input : input.toString();
@@ -399,6 +430,117 @@ describe("public cloud auth routes", () => {
     }
   });
 
+  it("allows cloud auth CORS from the app origin and blocks other origins", async () => {
+    const harness = await createTestAppHarness();
+
+    try {
+      const allowedResponse = await harness.app.request("/api/v1/system/cloud-auth", {
+        headers: {
+          origin: "http://localhost:5173",
+        },
+      });
+      expect(allowedResponse.headers.get("access-control-allow-origin")).toBe(
+        "http://localhost:5173",
+      );
+
+      const blockedResponse = await harness.app.request("/api/v1/system/cloud-auth", {
+        headers: {
+          origin: "https://evil.example",
+        },
+      });
+      expect(blockedResponse.headers.get("access-control-allow-origin")).toBeNull();
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  itIfCodexCallbackPortAvailable("does not persist a credential after the connection attempt is cancelled", async () => {
+    const nativeFetch = globalThis.fetch;
+    const tokenExchange = createDeferred<Response>();
+    vi.stubGlobal("fetch", vi.fn<typeof fetch>(async (input, init) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.startsWith("http://127.0.0.1:1455/")) {
+        return nativeFetch(input, init);
+      }
+      if (url === "https://auth.openai.com/oauth/token") {
+        return tokenExchange.promise;
+      }
+      throw new Error(`Unexpected fetch URL: ${url}`);
+    }));
+
+    const harness = await createTestAppHarness();
+
+    try {
+      const startResponse = await harness.app.request(
+        "/api/v1/system/cloud-auth/codex/connect",
+        {
+          method: "POST",
+        },
+      );
+      expect(startResponse.status).toBe(201);
+      const startBody = cloudAuthConnectResponseSchema.parse(
+        await readJson(startResponse),
+      );
+      const authUrl = new URL(startBody.authorizationUrl);
+
+      await nativeFetch(
+        `http://127.0.0.1:1455/auth/callback?code=test-code&state=${encodeURIComponent(authUrl.searchParams.get("state") ?? "")}`,
+      );
+
+      await vi.waitFor(() => {
+        expect(vi.mocked(fetch)).toHaveBeenCalledWith(
+          "https://auth.openai.com/oauth/token",
+          expect.anything(),
+        );
+      });
+
+      const disconnectResponse = await harness.app.request(
+        "/api/v1/system/cloud-auth/codex",
+        {
+          method: "DELETE",
+        },
+      );
+      expect(disconnectResponse.status).toBe(200);
+
+      tokenExchange.resolve(
+        new Response(
+          JSON.stringify({
+            access_token: createCodexAccessToken("acct_codex_cancelled"),
+            expires_in: 3600,
+            id_token: createCodexIdToken("cancelled@example.test"),
+            refresh_token: "refresh-token-cancelled",
+          }),
+          {
+            headers: {
+              "content-type": "application/json",
+            },
+            status: 200,
+          },
+        ),
+      );
+
+      await vi.waitFor(async () => {
+        const attemptResponse = await harness.app.request(
+          `/api/v1/system/cloud-auth/attempts/${startBody.attemptId}`,
+        );
+        expect(attemptResponse.status).toBe(200);
+        const attemptBody = cloudAuthAttemptResponseSchema.parse(
+          await readJson(attemptResponse),
+        );
+        expect(attemptBody).toEqual({
+          attemptId: startBody.attemptId,
+          errorMessage: "Canceled by credential removal",
+          providerId: "codex",
+          status: "expired",
+        });
+      });
+
+      expect(getSandboxProviderCredentialByProviderId(harness.db, "codex")).toBeNull();
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("returns the persisted codex label without decrypting credentials", async () => {
     const harness = await createTestAppHarness();
 
@@ -445,7 +587,7 @@ describe("public cloud auth routes", () => {
     }
   });
 
-  it("sanitizes malformed claude profile responses", async () => {
+  itIfClaudeCallbackPortAvailable("sanitizes malformed claude profile responses", async () => {
     const nativeFetch = globalThis.fetch;
     vi.stubGlobal("fetch", vi.fn<typeof fetch>(async (input, init) => {
       const url = typeof input === "string" ? input : input.toString();

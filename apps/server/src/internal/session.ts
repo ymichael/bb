@@ -4,7 +4,6 @@ import {
   listThreadEnvironmentAssignmentsOnHost,
   openSession,
   upsertHost,
-  updateHostLifecycleState,
 } from "@bb/db";
 import {
   hostDaemonRuntimeMaterialQuerySchema,
@@ -24,6 +23,7 @@ import {
   advanceSandboxRuntimeMaterialSync,
   requestSandboxRuntimeMaterialSync,
 } from "../services/hosts/sandbox-runtime-material.js";
+import { markHostSessionOpened } from "../services/hosts/host-lifecycle.js";
 import { reconcileSandboxRuntimeMaterialAfterSessionOpen } from "../services/hosts/sandbox-runtime-material-operation.js";
 import { readSandboxRuntimeMaterialSnapshotForVersion } from "../services/hosts/sandbox-runtime-material-snapshot.js";
 import { requireAuthorizedActiveSession } from "./session-state.js";
@@ -56,9 +56,8 @@ export function registerInternalSessionRoutes(app: Hono, deps: AppDeps): void {
       heartbeatIntervalMs: HEARTBEAT_INTERVAL_MS,
       leaseTimeoutMs: LEASE_TIMEOUT_MS,
     });
-    updateHostLifecycleState(deps.db, {
+    await markHostSessionOpened(deps, {
       hostId: daemon.hostId,
-      suspendedAt: null,
     });
     if (daemon.hostType === "ephemeral") {
       // A replaced session can strand a fetched runtime-sync command on the

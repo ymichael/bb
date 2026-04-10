@@ -1,7 +1,3 @@
-import type {
-  SandboxProviderCredentialRecord,
-  UpsertSandboxProviderCredentialArgs,
-} from "@bb/db";
 import { z } from "zod";
 import { cloudAuthProviderIdSchema } from "@bb/agent-providers";
 import type { CloudAuthCrypto } from "./crypto.js";
@@ -16,6 +12,8 @@ import {
 } from "./provider-definitions.js";
 import type {
   BuildCloudAuthCredentialUpsertArgs,
+  EncryptedCloudAuthCredentialRecord,
+  EncryptedCloudAuthCredentialUpsert,
 } from "./types.js";
 
 const encryptedStringSchema = z.string();
@@ -49,16 +47,7 @@ interface SerializedCloudAuthCredential {
 
 interface DeserializeCloudAuthCredentialArgs {
   crypto: CloudAuthCrypto;
-  record: Pick<
-    SandboxProviderCredentialRecord,
-    "encryptedAccessToken"
-      | "encryptedIdToken"
-      | "encryptedMetadata"
-      | "encryptedRefreshToken"
-      | "expiresAt"
-  > & {
-    providerId: string;
-  };
+  record: EncryptedCloudAuthCredentialRecord;
 }
 
 function decryptStringValue(
@@ -227,7 +216,7 @@ export function deserializeCloudAuthCredential(
 
 export function buildCloudAuthCredentialUpsert(
   args: BuildCloudAuthCredentialUpsertArgs,
-): UpsertSandboxProviderCredentialArgs {
+): EncryptedCloudAuthCredentialUpsert {
   const serialized = serializeCloudAuthCredential({
     credential: args.credential,
     crypto: args.crypto,

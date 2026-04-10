@@ -208,29 +208,15 @@
     {
       "idx": 29,
       "version": "6",
-      "when": 1775717400000,
-      "tag": "0029_scrub_runtime_material_commands",
-      "breakpoints": true
-    },
-    {
-      "idx": 30,
-      "version": "6",
       "when": 1775718600000,
       "tag": "0030_app_cloud_auth",
       "breakpoints": true
     },
     {
-      "idx": 31,
+      "idx": 30,
       "version": "6",
       "when": 1775720400000,
       "tag": "0031_app_sandbox_env_vars",
-      "breakpoints": true
-    },
-    {
-      "idx": 32,
-      "version": "6",
-      "when": 1775722200000,
-      "tag": "0032_cloud_auth_token_columns",
       "breakpoints": true
     }
   ]

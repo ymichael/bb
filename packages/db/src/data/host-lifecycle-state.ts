@@ -2,10 +2,13 @@ import { and, eq, isNull } from "drizzle-orm";
 import type { DbConnection } from "../connection.js";
 import { hosts } from "../schema.js";
 
-export interface UpdateHostLifecycleStateInput {
+export interface MarkHostSuspendedInput {
   hostId: string;
-  lastActivityAt?: number;
-  suspendedAt?: number | null;
+  suspendedAt: number;
+}
+
+export interface MarkHostResumedInput {
+  hostId: string;
 }
 
 export interface MarkEphemeralHostActivityInput {
@@ -13,19 +16,29 @@ export interface MarkEphemeralHostActivityInput {
   lastActivityAt: number;
 }
 
-export function updateHostLifecycleState(
+export function markHostSuspended(
   db: DbConnection,
-  input: UpdateHostLifecycleStateInput,
+  input: MarkHostSuspendedInput,
 ) {
   return db
     .update(hosts)
     .set({
-      ...(input.lastActivityAt !== undefined
-        ? { lastActivityAt: input.lastActivityAt }
-        : {}),
-      ...(input.suspendedAt !== undefined
-        ? { suspendedAt: input.suspendedAt }
-        : {}),
+      suspendedAt: input.suspendedAt,
+      updatedAt: Date.now(),
+    })
+    .where(eq(hosts.id, input.hostId))
+    .returning()
+    .get() ?? null;
+}
+
+export function markHostResumed(
+  db: DbConnection,
+  input: MarkHostResumedInput,
+) {
+  return db
+    .update(hosts)
+    .set({
+      suspendedAt: null,
       updatedAt: Date.now(),
     })
     .where(eq(hosts.id, input.hostId))

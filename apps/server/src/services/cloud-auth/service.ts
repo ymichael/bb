@@ -34,6 +34,8 @@ import type { ServerLogger } from "../../types.js";
 const ATTEMPT_RETENTION_MS = 10 * 60_000;
 const ATTEMPT_TIMEOUT_MS = 10 * 60_000;
 const REFRESH_SKEW_MS = 5 * 60_000;
+const DECRYPT_FAILURE_MESSAGE = "Failed to decrypt stored credential";
+const MAX_ERROR_MESSAGE_LENGTH = 256;
 
 interface CreateCloudAuthServiceArgs {
   dataDir: string;
@@ -66,6 +68,14 @@ interface UpdateCredentialErrorStateArgs {
   whenRecordUpdatedAt: number;
 }
 
+function sanitizeCloudAuthErrorMessage(message: string): string {
+  const sanitized = message.replaceAll(/[\u0000-\u001f\u007f]/gu, " ").trim();
+  if (sanitized.length <= MAX_ERROR_MESSAGE_LENGTH) {
+    return sanitized;
+  }
+  return `${sanitized.slice(0, MAX_ERROR_MESSAGE_LENGTH - 3)}...`;
+}
+
 function buildResolvedCredential(
   record: SandboxProviderCredentialRecord,
   credential: StoredCloudAuthCredential,
@@ -85,7 +95,7 @@ export async function createCloudAuthService(
 ): Promise<CloudAuthService> {
   const { dataDir, db, logger } = args;
   const crypto = await createCloudAuthCrypto({ dataDir });
-  const refreshDeduper = createAsyncDeduper<
+  const credentialResolutionDeduper = createAsyncDeduper<
     CloudAuthProviderId,
     CloudAuthResolvedCredential | null
   >();
@@ -126,10 +136,10 @@ export async function createCloudAuthService(
 
   async function closeAttemptCallbackServer(attemptId: string): Promise<void> {
     const attemptState = attemptsById.get(attemptId);
-    const callbackServer = attemptState?.callbackServer;
-    if (!callbackServer) {
+    if (!attemptState || attemptState.callbackServer === null) {
       return;
     }
+    const callbackServer = attemptState.callbackServer;
     attemptState.callbackServer = null;
     await callbackServer.close().catch(() => undefined);
   }
@@ -147,7 +157,10 @@ export async function createCloudAuthService(
     clearAttemptTimers(attemptState);
     attemptState.attempt = {
       ...attemptState.attempt,
-      errorMessage: args.errorMessage,
+      errorMessage:
+        args.errorMessage === null
+          ? null
+          : sanitizeCloudAuthErrorMessage(args.errorMessage),
       status: args.status,
     };
 
@@ -209,7 +222,9 @@ export async function createCloudAuthService(
   ): void {
     logger.warn(
       {
-        err: error,
+        errorMessage:
+          error instanceof Error ? error.message : "Unknown decrypt failure",
+        errorName: error instanceof Error ? error.name : "Error",
         providerId,
       },
       "Failed to decrypt sandbox provider credential",
@@ -224,6 +239,9 @@ export async function createCloudAuthService(
       return null;
     }
     if (currentRecord.updatedAt !== updateArgs.whenRecordUpdatedAt) {
+      return currentRecord;
+    }
+    if (currentRecord.lastErrorMessage === updateArgs.errorMessage) {
       return currentRecord;
     }
 
@@ -244,7 +262,7 @@ export async function createCloudAuthService(
     } catch (error) {
       logDecryptFailure(resolveArgs.providerId, error);
       updateCredentialErrorState({
-        errorMessage: "Failed to decrypt stored credential",
+        errorMessage: DECRYPT_FAILURE_MESSAGE,
         providerId: resolveArgs.providerId,
         updatedAt: Date.now(),
         whenRecordUpdatedAt: resolveArgs.record.updatedAt,
@@ -286,35 +304,7 @@ export async function createCloudAuthService(
   async function getValidCredential(
     providerId: CloudAuthProviderId,
   ): Promise<CloudAuthResolvedCredential | null> {
-    const record = getCredentialRecord(providerId);
-    if (!record) {
-      return null;
-    }
-
-    const resolvedCredential = resolveCredentialRecord({
-      providerId,
-      record,
-    });
-    if (!resolvedCredential) {
-      return null;
-    }
-    const credential = resolvedCredential.credential;
-
-    if (credential.expiresAt > Date.now() + REFRESH_SKEW_MS) {
-      if (record.lastErrorMessage) {
-        const updatedAt = Date.now();
-        return persistCredentialIfCurrent({
-          credential,
-          lastRefreshedAt: record.lastRefreshedAt,
-          providerId,
-          updatedAt,
-          whenRecordUpdatedAt: record.updatedAt,
-        });
-      }
-      return resolvedCredential;
-    }
-
-    return refreshDeduper.run(providerId, async () => {
+    return credentialResolutionDeduper.run(providerId, async () => {
       const currentRecord = getCredentialRecord(providerId);
       if (!currentRecord) {
         return null;
@@ -329,6 +319,16 @@ export async function createCloudAuthService(
       }
       const currentCredential = currentResolvedCredential.credential;
       if (currentCredential.expiresAt > Date.now() + REFRESH_SKEW_MS) {
+        if (currentRecord.lastErrorMessage) {
+          const updatedAt = Date.now();
+          return persistCredentialIfCurrent({
+            credential: currentCredential,
+            lastRefreshedAt: currentRecord.lastRefreshedAt,
+            providerId,
+            updatedAt,
+            whenRecordUpdatedAt: currentRecord.updatedAt,
+          });
+        }
         return currentResolvedCredential;
       }
 
@@ -350,7 +350,9 @@ export async function createCloudAuthService(
         return persistedCredential;
       } catch (error) {
         updateCredentialErrorState({
-          errorMessage: error instanceof Error ? error.message : "Credential refresh failed",
+          errorMessage: sanitizeCloudAuthErrorMessage(
+            error instanceof Error ? error.message : "Credential refresh failed",
+          ),
           providerId,
           updatedAt: Date.now(),
           whenRecordUpdatedAt: currentRecord.updatedAt,
@@ -443,6 +445,10 @@ export async function createCloudAuthService(
           state: callbackPayload.state,
           verifier: flow.verifier,
         });
+        const persistedAttempt = attemptsById.get(attemptId);
+        if (!persistedAttempt || persistedAttempt.attempt.status !== "pending") {
+          return;
+        }
         const updatedAt = Date.now();
         await persistCredential({
           credential,
@@ -466,7 +472,9 @@ export async function createCloudAuthService(
         finalizeAttempt({
           attemptId,
           errorMessage:
-            error instanceof Error ? error.message : "Cloud auth exchange failed",
+            sanitizeCloudAuthErrorMessage(
+              error instanceof Error ? error.message : "Cloud auth exchange failed",
+            ),
           status: "failed",
         });
       })
@@ -525,7 +533,11 @@ export async function createCloudAuthService(
       return deleteSandboxProviderCredentialByProviderId(db, providerId);
     },
     async dispose() {
-      for (const [attemptId, attemptState] of attemptsById) {
+      for (const attemptId of [...attemptsById.keys()]) {
+        const attemptState = attemptsById.get(attemptId);
+        if (!attemptState) {
+          continue;
+        }
         clearAttemptTimers(attemptState);
         await closeAttemptCallbackServer(attemptId);
         attemptsById.delete(attemptId);

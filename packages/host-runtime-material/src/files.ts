@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -5,6 +6,7 @@ import type {
   HostRuntimeMaterialManagedFile,
   HostRuntimeMaterialSnapshot,
 } from "@bb/host-daemon-contract";
+import type { HostRuntimeMaterialState } from "./state.js";
 
 function expandRuntimeMaterialPath(rawPath: string): string {
   if (!rawPath.startsWith("~/")) {
@@ -12,9 +14,18 @@ function expandRuntimeMaterialPath(rawPath: string): string {
       `Managed runtime material file paths must be home-relative: ${rawPath}`,
     );
   }
+  const relativePath = rawPath.slice(2);
+  const hasUnsafeSegment = relativePath
+    .split("/")
+    .some((segment) => segment === "" || segment === "." || segment === "..");
+  if (hasUnsafeSegment) {
+    throw new Error(
+      `Managed runtime material file path escapes the home directory: ${rawPath}`,
+    );
+  }
 
   const homeDir = path.resolve(os.homedir());
-  const resolvedPath = path.resolve(homeDir, rawPath.slice(2));
+  const resolvedPath = path.resolve(homeDir, relativePath);
   const relativeToHome = path.relative(homeDir, resolvedPath);
   if (
     relativeToHome.startsWith("..")
@@ -28,11 +39,18 @@ function expandRuntimeMaterialPath(rawPath: string): string {
   return resolvedPath;
 }
 
+type ManagedFileSetSource = {
+  files: Array<Pick<HostRuntimeMaterialManagedFile, "managedBy" | "path">>;
+};
+
 function resolveManagedFiles(
-  snapshot: HostRuntimeMaterialSnapshot | null,
-): Map<string, HostRuntimeMaterialManagedFile> {
-  const files = new Map<string, HostRuntimeMaterialManagedFile>();
-  for (const file of snapshot?.files ?? []) {
+  source: ManagedFileSetSource | null,
+): Map<string, Pick<HostRuntimeMaterialManagedFile, "managedBy" | "path">> {
+  const files = new Map<
+    string,
+    Pick<HostRuntimeMaterialManagedFile, "managedBy" | "path">
+  >();
+  for (const file of source?.files ?? []) {
     files.set(expandRuntimeMaterialPath(file.path), file);
   }
   return files;
@@ -42,8 +60,9 @@ async function writeManagedFile(file: HostRuntimeMaterialManagedFile): Promise<v
   const destinationPath = expandRuntimeMaterialPath(file.path);
   await fs.mkdir(path.dirname(destinationPath), {
     recursive: true,
+    mode: 0o700,
   });
-  const temporaryPath = `${destinationPath}.${process.pid}.${Date.now()}.tmp`;
+  const temporaryPath = `${destinationPath}.${process.pid}.${Date.now()}.${randomBytes(4).toString("hex")}.tmp`;
   try {
     await fs.writeFile(temporaryPath, file.contents, {
       encoding: "utf8",
@@ -60,9 +79,9 @@ async function writeManagedFile(file: HostRuntimeMaterialManagedFile): Promise<v
 
 export async function replaceManagedRuntimeFiles(args: {
   nextSnapshot: HostRuntimeMaterialSnapshot;
-  previousSnapshot: HostRuntimeMaterialSnapshot | null;
+  previousState: HostRuntimeMaterialState | null;
 }): Promise<void> {
-  const previousFiles = resolveManagedFiles(args.previousSnapshot);
+  const previousFiles = resolveManagedFiles(args.previousState);
   const nextFiles = resolveManagedFiles(args.nextSnapshot);
 
   await Promise.all(

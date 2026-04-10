@@ -29,19 +29,13 @@ describe("runtime material state", () => {
     await expect(readRuntimeMaterialState(dataDir)).resolves.toBeNull();
   });
 
-  it("writes a runtime material snapshot with 0600 permissions and reads it back", async () => {
+  it("writes runtime material state metadata with secure permissions and reads it back", async () => {
     const dataDir = await makeTempDir("bb-host-daemon-runtime-material-");
 
     await writeRuntimeMaterialState(dataDir, {
-      env: {
-        GITHUB_TOKEN: "test-github-token",
-        OPENAI_API_KEY: "test-openai-key",
-      },
       files: [
         {
-          contents: "{\"token\":\"value\"}\n",
           managedBy: "bb-runtime-material",
-          mode: 0o600,
           path: "~/.codex/auth.json",
         },
       ],
@@ -49,15 +43,9 @@ describe("runtime material state", () => {
     });
 
     await expect(readRuntimeMaterialState(dataDir)).resolves.toEqual({
-      env: {
-        GITHUB_TOKEN: "test-github-token",
-        OPENAI_API_KEY: "test-openai-key",
-      },
       files: [
         {
-          contents: "{\"token\":\"value\"}\n",
           managedBy: "bb-runtime-material",
-          mode: 0o600,
           path: "~/.codex/auth.json",
         },
       ],
@@ -67,5 +55,8 @@ describe("runtime material state", () => {
     const snapshotPath = path.join(dataDir, HOST_RUNTIME_MATERIAL_FILE_NAME);
     const stats = await fs.stat(snapshotPath);
     expect(stats.mode & 0o777).toBe(0o600);
+
+    const dataDirStats = await fs.stat(dataDir);
+    expect(dataDirStats.mode & 0o777).toBe(0o700);
   });
 });

@@ -108,6 +108,7 @@ function buildClaudeCredentialsFile(
     claudeAiOauth: {
       accessToken: resolved.credential.accessToken,
       expiresAt: resolved.credential.expiresAt,
+      // Sandboxes receive access-only snapshots; only the server refreshes.
       refreshToken: "",
       scopes: resolved.credential.scopes,
       subscriptionType: resolved.credential.subscriptionType,
@@ -127,7 +128,7 @@ function buildCodexAuthFile(
     OPENAI_API_KEY: null,
     auth_mode: "chatgpt",
     last_refresh: new Date(
-      resolved.lastRefreshedAt ?? resolved.updatedAt,
+      resolved.lastRefreshedAt ?? resolved.credential.expiresAt,
     ).toISOString(),
     tokens: {
       access_token: resolved.credential.accessToken,
@@ -137,6 +138,7 @@ function buildCodexAuthFile(
       ...(resolved.credential.idToken
         ? { id_token: resolved.credential.idToken }
         : {}),
+      // Sandboxes receive access-only snapshots; only the server refreshes.
       refresh_token: "",
     },
   };
@@ -168,6 +170,7 @@ function appendClaudePiCredential(
   accumulator.piAuthFile.anthropic = {
     access: credential.credential.accessToken,
     expires: credential.credential.expiresAt,
+    // Pi receives access-only snapshots; only the server refreshes.
     refresh: "",
     type: "oauth",
   };
@@ -184,6 +187,7 @@ function appendCodexPiCredential(
       ? { accountId: credential.credential.accountId }
       : {}),
     expires: credential.credential.expiresAt,
+    // Pi receives access-only snapshots; only the server refreshes.
     refresh: "",
     type: "oauth",
   };

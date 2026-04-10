@@ -78,6 +78,18 @@ const codexTokenResponseSchema = z
   })
   .passthrough();
 
+const providerErrorBodySchema = z
+  .object({
+    error: z.union([
+      z.string(),
+      z.object({
+        code: z.string().optional(),
+        type: z.string().optional(),
+      }).passthrough(),
+    ]).optional(),
+  })
+  .passthrough();
+
 export const claudeSubscriptionTypeSchema = z
   .enum(["enterprise", "max", "pro", "team"])
   .nullable();
@@ -170,44 +182,33 @@ function createPkceChallenge(verifier: string): string {
   return createHash("sha256").update(verifier).digest("base64url");
 }
 
-function readStringField(value: unknown, key: string): string | null {
-  if (typeof value !== "object" || value === null) {
-    return null;
-  }
-  const candidate = Reflect.get(value, key);
-  return typeof candidate === "string" ? candidate : null;
-}
-
-function readObjectField(value: unknown, key: string): object | null {
-  if (typeof value !== "object" || value === null) {
-    return null;
-  }
-  const candidate = Reflect.get(value, key);
-  return typeof candidate === "object" && candidate !== null ? candidate : null;
-}
-
 function extractProviderErrorCode(raw: string): string | null {
+  let parsedJson: unknown;
   try {
-    const parsed = JSON.parse(raw);
-    const directError = readStringField(parsed, "error");
-    if (directError && SAFE_PROVIDER_ERROR_CODE_PATTERN.test(directError)) {
-      return directError;
-    }
-
-    const nestedError = readObjectField(parsed, "error");
-    const nestedCode = readStringField(nestedError, "code");
-    if (nestedCode && SAFE_PROVIDER_ERROR_CODE_PATTERN.test(nestedCode)) {
-      return nestedCode;
-    }
-
-    const nestedType = readStringField(nestedError, "type");
-    if (nestedType && SAFE_PROVIDER_ERROR_CODE_PATTERN.test(nestedType)) {
-      return nestedType;
-    }
+    parsedJson = JSON.parse(raw);
   } catch {
     return null;
   }
 
+  const parsed = providerErrorBodySchema.safeParse(parsedJson);
+  if (!parsed.success) {
+    return null;
+  }
+
+  const errorField = parsed.data.error;
+  if (typeof errorField === "string") {
+    return SAFE_PROVIDER_ERROR_CODE_PATTERN.test(errorField) ? errorField : null;
+  }
+  if (!errorField) {
+    return null;
+  }
+
+  const candidates = [errorField.code, errorField.type];
+  for (const candidate of candidates) {
+    if (candidate && SAFE_PROVIDER_ERROR_CODE_PATTERN.test(candidate)) {
+      return candidate;
+    }
+  }
   return null;
 }
 
@@ -544,6 +545,21 @@ export function getCloudAuthProviderDefinition<TProviderId extends CloudAuthProv
   return cloudAuthProviderDefinitions[providerId];
 }
 
+function matchStoredCloudAuthCredential<TResult>(
+  args: {
+    credential: StoredCloudAuthCredential;
+    onClaude(credential: ClaudeStoredCredential): TResult;
+    onCodex(credential: CodexStoredCredential): TResult;
+  },
+): TResult {
+  switch (args.credential.providerId) {
+    case "claude-code":
+      return args.onClaude(args.credential);
+    case "codex":
+      return args.onCodex(args.credential);
+  }
+}
+
 export function listCloudAuthProviderDefinitions() {
   return listCloudAuthProviders().map((provider) =>
     cloudAuthProviderDefinitions[provider.id]
@@ -553,25 +569,31 @@ export function listCloudAuthProviderDefinitions() {
 export function getCloudAuthConnectionLabel(
   credential: StoredCloudAuthCredential,
 ): string | null {
-  switch (credential.providerId) {
-    case "claude-code":
-      return claudeProviderDefinition.getConnectionLabel(credential);
-    case "codex":
-      return codexProviderDefinition.getConnectionLabel(credential);
-  }
+  return matchStoredCloudAuthCredential({
+    credential,
+    onClaude: (claudeCredential) =>
+      getCloudAuthProviderDefinition("claude-code").getConnectionLabel(
+        claudeCredential,
+      ),
+    onCodex: (codexCredential) =>
+      getCloudAuthProviderDefinition("codex").getConnectionLabel(
+        codexCredential,
+      ),
+  });
 }
 
 export async function refreshStoredCloudAuthCredential(
   args: RefreshCloudAuthCredentialArgs<StoredCloudAuthCredential>,
 ): Promise<StoredCloudAuthCredential> {
-  switch (args.credential.providerId) {
-    case "claude-code":
-      return claudeProviderDefinition.refreshCredential({
-        credential: args.credential,
-      });
-    case "codex":
-      return codexProviderDefinition.refreshCredential({
-        credential: args.credential,
-      });
-  }
+  return matchStoredCloudAuthCredential<Promise<StoredCloudAuthCredential>>({
+    credential: args.credential,
+    onClaude: (credential) =>
+      getCloudAuthProviderDefinition("claude-code").refreshCredential({
+        credential,
+      }),
+    onCodex: (credential) =>
+      getCloudAuthProviderDefinition("codex").refreshCredential({
+        credential,
+      }),
+  });
 }

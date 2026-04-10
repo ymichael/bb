@@ -173,24 +173,27 @@ export {
   markHostOperationRecordFailed,
   markHostOperationRecordFetched,
   markHostOperationRecordQueued,
-  updateHostOperationRecord,
+  resetHostOperationRecordToRequested,
   upsertHostOperationRecord,
 } from "./host-operations.js";
 export type {
   GetHostOperationArgs,
   HostOperationRow,
   ListHostOperationsArgs,
+  ResetHostOperationToRequestedArgs,
   UpdateHostOperationStateArgs,
   UpsertHostOperationInput,
 } from "./host-operations.js";
 
 export {
+  markHostResumed,
+  markHostSuspended,
   markEphemeralHostActivity,
-  updateHostLifecycleState,
 } from "./host-lifecycle-state.js";
 export type {
   MarkEphemeralHostActivityInput,
-  UpdateHostLifecycleStateInput,
+  MarkHostResumedInput,
+  MarkHostSuspendedInput,
 } from "./host-lifecycle-state.js";
 
 export {

@@ -6,8 +6,8 @@ import {
   getThread,
   hostDaemonCommands,
   hostDaemonSessions,
+  markHostSuspended,
   upsertProjectExecutionDefaults,
-  updateHostLifecycleState,
   updateHost,
 } from "@bb/db";
 import { hostDaemonCommandSchema } from "@bb/host-daemon-contract";
@@ -725,11 +725,11 @@ describe("public project and host routes", () => {
         })
         .where(eq(hostDaemonSessions.id, expired.session.id))
         .run();
-      updateHostLifecycleState(harness.db, {
+      markHostSuspended(harness.db, {
         hostId: suspended.id,
         suspendedAt: Date.now(),
       });
-      updateHostLifecycleState(harness.db, {
+      markHostSuspended(harness.db, {
         hostId: suspendedEphemeral.id,
         suspendedAt: Date.now(),
       });

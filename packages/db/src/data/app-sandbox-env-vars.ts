@@ -54,13 +54,11 @@ export function upsertAppSandboxEnvVar(
   args: UpsertAppSandboxEnvVarArgs,
 ): AppSandboxEnvVarRecord {
   const now = new Date(args.updatedAt ?? Date.now());
-  const existing = getAppSandboxEnvVar(db, args.name);
-  const createdAt = existing ? new Date(existing.createdAt) : now;
 
   const row = db
     .insert(appSandboxEnvVars)
     .values({
-      createdAt,
+      createdAt: now,
       encryptedValue: args.encryptedValue,
       name: args.name,
       updatedAt: now,

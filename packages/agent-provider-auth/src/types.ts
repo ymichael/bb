@@ -20,3 +20,21 @@ export interface BuildCloudAuthCredentialUpsertArgs {
   lastRefreshedAt: number | null;
   updatedAt: number;
 }
+
+export interface EncryptedCloudAuthCredentialRecord {
+  encryptedAccessToken: string;
+  encryptedRefreshToken: string;
+  encryptedIdToken: string | null;
+  encryptedMetadata: string;
+  expiresAt: number;
+  providerId: string;
+}
+
+export interface EncryptedCloudAuthCredentialUpsert
+  extends EncryptedCloudAuthCredentialRecord
+{
+  label: string | null;
+  lastErrorMessage: string | null;
+  lastRefreshedAt: number | null;
+  updatedAt: number;
+}

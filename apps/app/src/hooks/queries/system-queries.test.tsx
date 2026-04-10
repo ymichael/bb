@@ -3,26 +3,20 @@
 import { cleanup, renderHook, waitFor } from "@testing-library/react";
 import type { Host } from "@bb/domain";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import * as api from "@/lib/api";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
+import { installFetchRoutes, jsonResponse } from "@/test/http-test-utils";
+import {
+  cloudAuthAttemptQueryKey,
+  cloudAuthSettingsQueryKey,
+  hostQueryKey,
+  sandboxEnvVarsQueryKey,
+} from "./query-keys";
 import {
   useCloudAuthAttempt,
   useCloudAuthSettings,
   useHost,
   useSandboxEnvVars,
 } from "./system-queries";
-
-vi.mock("@/lib/api", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/api")>();
-
-  return {
-    ...actual,
-    getCloudAuthAttempt: vi.fn(),
-    getCloudAuthSettings: vi.fn(),
-    getHost: vi.fn(),
-    listSandboxEnvVars: vi.fn(),
-  };
-});
 
 function makeHost(overrides: Partial<Host> = {}): Host {
   return {
@@ -39,21 +33,30 @@ function makeHost(overrides: Partial<Host> = {}): Host {
 
 afterEach(() => {
   cleanup();
-  vi.clearAllMocks();
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 describe("useHost", () => {
-  it("fetches a single host by id", async () => {
-    vi.mocked(api.getHost).mockResolvedValue(makeHost());
+  it("fetches a single host by id and caches it under the host query key", async () => {
+    const fetchMock = installFetchRoutes([
+      {
+        pathname: "/api/v1/hosts/host-1",
+        handler: async () => jsonResponse(makeHost()),
+      },
+    ]);
 
-    const { wrapper } = createQueryClientTestHarness();
+    const { queryClient, wrapper } = createQueryClientTestHarness();
     const { result } = renderHook(() => useHost("host-1"), { wrapper });
 
     await waitFor(() => {
       expect(result.current.data?.id).toBe("host-1");
     });
 
-    expect(api.getHost).toHaveBeenCalledWith("host-1");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(queryClient.getQueryData(hostQueryKey("host-1"))).toEqual(
+      makeHost(),
+    );
   });
 
   it("stays disabled without a host id", () => {
@@ -61,32 +64,21 @@ describe("useHost", () => {
     const { result } = renderHook(() => useHost(undefined), { wrapper });
 
     expect(result.current.fetchStatus).toBe("idle");
-    expect(api.getHost).not.toHaveBeenCalled();
   });
 });
 
 describe("cloud auth system queries", () => {
-  it("fetches cloud auth settings when enabled", async () => {
-    vi.mocked(api.getCloudAuthSettings).mockResolvedValue({
-      connections: [],
-    });
+  it("fetches cloud auth settings from the real API path and reuses the cache", async () => {
+    const fetchMock = installFetchRoutes([
+      {
+        pathname: "/api/v1/system/cloud-auth",
+        handler: async () => jsonResponse({
+          connections: [],
+        }),
+      },
+    ]);
 
-    const { wrapper } = createQueryClientTestHarness();
-    const { result } = renderHook(() => useCloudAuthSettings(true), { wrapper });
-
-    await waitFor(() => {
-      expect(result.current.data).toEqual({ connections: [] });
-    });
-
-    expect(api.getCloudAuthSettings).toHaveBeenCalledTimes(1);
-  });
-
-  it("reuses the cloud auth settings cache for repeated subscribers", async () => {
-    vi.mocked(api.getCloudAuthSettings).mockResolvedValue({
-      connections: [],
-    });
-
-    const { wrapper } = createQueryClientTestHarness();
+    const { queryClient, wrapper } = createQueryClientTestHarness();
     const first = renderHook(() => useCloudAuthSettings(true), { wrapper });
 
     await waitFor(() => {
@@ -99,18 +91,26 @@ describe("cloud auth system queries", () => {
       expect(second.result.current.data).toEqual({ connections: [] });
     });
 
-    expect(api.getCloudAuthSettings).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(queryClient.getQueryData(cloudAuthSettingsQueryKey())).toEqual({
+      connections: [],
+    });
   });
 
-  it("fetches cloud auth attempt status only when an attempt id is present", async () => {
-    vi.mocked(api.getCloudAuthAttempt).mockResolvedValue({
-      attemptId: "attempt-1",
-      errorMessage: null,
-      providerId: "codex",
-      status: "completed",
-    });
+  it("fetches cloud auth attempt status from the attempt endpoint and stores it under the attempt key", async () => {
+    const fetchMock = installFetchRoutes([
+      {
+        pathname: "/api/v1/system/cloud-auth/attempts/attempt-1",
+        handler: async () => jsonResponse({
+          attemptId: "attempt-1",
+          errorMessage: null,
+          providerId: "codex",
+          status: "completed",
+        }),
+      },
+    ]);
 
-    const { wrapper } = createQueryClientTestHarness();
+    const { queryClient, wrapper } = createQueryClientTestHarness();
     const { result } = renderHook(
       () => useCloudAuthAttempt("attempt-1", true),
       { wrapper },
@@ -120,7 +120,13 @@ describe("cloud auth system queries", () => {
       expect(result.current.data?.status).toBe("completed");
     });
 
-    expect(api.getCloudAuthAttempt).toHaveBeenCalledWith("attempt-1");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(queryClient.getQueryData(cloudAuthAttemptQueryKey("attempt-1"))).toEqual({
+      attemptId: "attempt-1",
+      errorMessage: null,
+      providerId: "codex",
+      status: "completed",
+    });
   });
 
   it("stays disabled for cloud auth attempt queries without an attempt id", () => {
@@ -131,11 +137,50 @@ describe("cloud auth system queries", () => {
     );
 
     expect(result.current.fetchStatus).toBe("idle");
-    expect(api.getCloudAuthAttempt).not.toHaveBeenCalled();
   });
 
-  it("fetches sandbox env vars when enabled", async () => {
-    vi.mocked(api.listSandboxEnvVars).mockResolvedValue({
+  it("keeps sandbox env var queries distinct from cloud auth queries", async () => {
+    const fetchMock = installFetchRoutes([
+      {
+        pathname: "/api/v1/system/cloud-auth",
+        handler: async () => jsonResponse({
+          connections: [],
+        }),
+      },
+      {
+        pathname: "/api/v1/system/sandbox-env-vars",
+        handler: async () => jsonResponse({
+          envVars: [
+            {
+              createdAt: 1,
+              name: "OPENAI_API_KEY",
+              updatedAt: 2,
+            },
+          ],
+        }),
+      },
+    ]);
+
+    const { queryClient, wrapper } = createQueryClientTestHarness();
+    const cloudAuth = renderHook(() => useCloudAuthSettings(true), { wrapper });
+    const sandboxEnv = renderHook(() => useSandboxEnvVars(true), { wrapper });
+
+    await waitFor(() => {
+      expect(cloudAuth.result.current.data).toEqual({ connections: [] });
+      expect(sandboxEnv.result.current.data?.envVars).toEqual([
+        {
+          createdAt: 1,
+          name: "OPENAI_API_KEY",
+          updatedAt: 2,
+        },
+      ]);
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(queryClient.getQueryData(cloudAuthSettingsQueryKey())).toEqual({
+      connections: [],
+    });
+    expect(queryClient.getQueryData(sandboxEnvVarsQueryKey())).toEqual({
       envVars: [
         {
           createdAt: 1,
@@ -144,35 +189,5 @@ describe("cloud auth system queries", () => {
         },
       ],
     });
-
-    const { wrapper } = createQueryClientTestHarness();
-    const { result } = renderHook(() => useSandboxEnvVars(true), { wrapper });
-
-    await waitFor(() => {
-      expect(result.current.data?.envVars).toHaveLength(1);
-    });
-
-    expect(api.listSandboxEnvVars).toHaveBeenCalledTimes(1);
-  });
-
-  it("keeps sandbox env var queries distinct from cloud auth queries", async () => {
-    vi.mocked(api.getCloudAuthSettings).mockResolvedValue({
-      connections: [],
-    });
-    vi.mocked(api.listSandboxEnvVars).mockResolvedValue({
-      envVars: [],
-    });
-
-    const { wrapper } = createQueryClientTestHarness();
-    const cloudAuth = renderHook(() => useCloudAuthSettings(true), { wrapper });
-    const sandboxEnv = renderHook(() => useSandboxEnvVars(true), { wrapper });
-
-    await waitFor(() => {
-      expect(cloudAuth.result.current.data).toEqual({ connections: [] });
-      expect(sandboxEnv.result.current.data).toEqual({ envVars: [] });
-    });
-
-    expect(api.getCloudAuthSettings).toHaveBeenCalledTimes(1);
-    expect(api.listSandboxEnvVars).toHaveBeenCalledTimes(1);
   });
 });

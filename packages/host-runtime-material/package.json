@@ -18,7 +18,8 @@
     "test": "vitest run --config vitest.config.ts"
   },
   "dependencies": {
-    "@bb/host-daemon-contract": "workspace:*"
+    "@bb/host-daemon-contract": "workspace:*",
+    "zod": "^3.24.0"
   },
   "devDependencies": {
     "@bb/tsconfig": "workspace:*",

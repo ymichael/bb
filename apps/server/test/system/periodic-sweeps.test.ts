@@ -9,6 +9,7 @@ import {
   getHost,
   getThread,
   hostDaemonCommands,
+  markEphemeralHostActivity,
   openSession,
   transitionThreadStatus,
   upsertHost,
@@ -16,7 +17,6 @@ import {
 import type { SandboxHostProgressCallbacks } from "@bb/sandbox-host";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  updateHostLifecycleState,
   upsertEnvironmentOperationRecord,
   upsertThreadOperationRecord,
 } from "@bb/db/internal-lifecycle";
@@ -670,7 +670,7 @@ describe("periodic sweeps", () => {
         leaseTimeoutMs: 30_000,
         protocolVersion: 2,
       });
-      updateHostLifecycleState(harness.db, {
+      markEphemeralHostActivity(harness.db, {
         hostId: host.id,
         lastActivityAt: 1_000,
       });
@@ -706,7 +706,7 @@ describe("periodic sweeps", () => {
         leaseTimeoutMs: 30_000,
         protocolVersion: 2,
       });
-      updateHostLifecycleState(harness.db, {
+      markEphemeralHostActivity(harness.db, {
         hostId: host.id,
         lastActivityAt: Date.now(),
       });

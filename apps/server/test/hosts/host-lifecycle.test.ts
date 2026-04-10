@@ -2,10 +2,13 @@ import {
   getActiveSession,
   getHost,
   hostDaemonCommands,
+  markEphemeralHostActivity,
   openSession,
   upsertHost,
 } from "@bb/db";
-import { updateHostLifecycleState } from "@bb/db/internal-lifecycle";
+import {
+  markHostSuspended,
+} from "@bb/db/internal-lifecycle";
 import type { SandboxHostProgressCallbacks } from "@bb/sandbox-host";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -13,7 +16,6 @@ import {
   ensureSandboxHostSessionReady,
   markSandboxActivity,
   maybeSuspendIdleSandbox,
-  resetHostLifecycleStateForTests,
   waitForHostSession,
 } from "../../src/services/hosts/host-lifecycle.js";
 import {
@@ -74,7 +76,6 @@ describe("host lifecycle", () => {
   });
 
   afterEach(() => {
-    resetHostLifecycleStateForTests();
     vi.useRealTimers();
   });
 
@@ -558,7 +559,7 @@ describe("host lifecycle", () => {
         host.externalId ?? undefined,
       );
       resumeHostMock.mockResolvedValue(resumedSandboxHost);
-      updateHostLifecycleState(harness.db, {
+      markHostSuspended(harness.db, {
         hostId: host.id,
         suspendedAt: 1_000,
       });
@@ -638,7 +639,7 @@ describe("host lifecycle", () => {
         leaseTimeoutMs: 30_000,
         protocolVersion: 2,
       });
-      updateHostLifecycleState(harness.db, {
+      markEphemeralHostActivity(harness.db, {
         hostId: host.id,
         lastActivityAt: 1_000,
       });
@@ -679,7 +680,7 @@ describe("host lifecycle", () => {
         leaseTimeoutMs: 30_000,
         protocolVersion: 2,
       });
-      updateHostLifecycleState(harness.db, {
+      markEphemeralHostActivity(harness.db, {
         hostId: host.id,
         lastActivityAt: 1_000,
       });

@@ -46,6 +46,23 @@ export interface UpdateHostOperationStateArgs {
   state: LifecycleOperationState;
 }
 
+export interface ResetHostOperationToRequestedArgs {
+  allowedCurrentStates?: readonly LifecycleOperationState[];
+  hostId: string;
+  kind: HostOperationKind;
+  payload: string;
+}
+
+export interface MarkHostOperationRecordCompletedWithPayloadArgs {
+  allowedCurrentStates?: readonly LifecycleOperationState[];
+  commandId: string | null;
+  completedAt: number;
+  hostId: string;
+  kind: HostOperationKind;
+  payload: string;
+  queuedAt: number | null;
+}
+
 export interface ListHostOperationsArgs {
   hostIds?: string[];
   kinds?: HostOperationKind[];
@@ -94,13 +111,6 @@ function updateHostOperationStateRecord(
     )
     .returning()
     .get() ?? null;
-}
-
-export function updateHostOperationRecord(
-  db: HostOperationWriteConnection,
-  args: UpdateHostOperationStateArgs,
-): HostOperationRow | null {
-  return updateHostOperationStateRecord(db, args);
 }
 
 const hostOperationStore: LifecycleOperationStore<
@@ -193,6 +203,40 @@ export function upsertHostOperationRecord(
   input: UpsertHostOperationInput,
 ): HostOperationRow {
   return upsertLifecycleOperationRecord(db, hostOperationStore, input);
+}
+
+export function resetHostOperationRecordToRequested(
+  db: HostOperationWriteConnection,
+  args: ResetHostOperationToRequestedArgs,
+): HostOperationRow | null {
+  return updateHostOperationStateRecord(db, {
+    hostId: args.hostId,
+    kind: args.kind,
+    allowedCurrentStates: args.allowedCurrentStates,
+    commandId: null,
+    completedAt: null,
+    failureReason: null,
+    payload: args.payload,
+    queuedAt: null,
+    state: "requested",
+  });
+}
+
+export function markHostOperationRecordCompletedWithPayload(
+  db: HostOperationWriteConnection,
+  args: MarkHostOperationRecordCompletedWithPayloadArgs,
+): HostOperationRow | null {
+  return updateHostOperationStateRecord(db, {
+    hostId: args.hostId,
+    kind: args.kind,
+    allowedCurrentStates: args.allowedCurrentStates,
+    commandId: args.commandId,
+    completedAt: args.completedAt,
+    failureReason: null,
+    payload: args.payload,
+    queuedAt: args.queuedAt,
+    state: "completed",
+  });
 }
 
 export function markHostOperationRecordQueued(

@@ -16,15 +16,17 @@ export {
 } from "./data/environment-operations.js";
 export {
   cancelHostOperationRecord,
+  markHostOperationRecordCompletedWithPayload,
   markHostOperationRecordCompleted,
   markHostOperationRecordFailed,
   markHostOperationRecordFetched,
   markHostOperationRecordQueued,
-  updateHostOperationRecord,
+  resetHostOperationRecordToRequested,
   upsertHostOperationRecord,
 } from "./data/host-operations.js";
 export {
-  updateHostLifecycleState,
+  markHostResumed,
+  markHostSuspended,
 } from "./data/host-lifecycle-state.js";
 export {
   cancelProjectOperationRecord,

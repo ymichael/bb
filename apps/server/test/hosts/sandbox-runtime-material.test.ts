@@ -3,6 +3,7 @@ import {
   createCloudAuthCrypto,
   type StoredCloudAuthCredential,
 } from "@bb/agent-provider-auth";
+import { buildHostRuntimeMaterialState, replaceManagedRuntimeFiles } from "@bb/host-runtime-material";
 import {
   getCommand,
   getHostOperation,
@@ -11,8 +12,11 @@ import {
   upsertSandboxProviderCredential,
   upsertHost,
 } from "@bb/db";
+import fs from "node:fs/promises";
+import os from "node:os";
 import { eq } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import path from "node:path";
 import type { TestAppHarness } from "../helpers/test-app.js";
 import {
   ensureSandboxRuntimeMaterialSynced,
@@ -389,6 +393,39 @@ describe("sandbox runtime material", () => {
     }
   });
 
+  it("lets cloud auth runtime env override custom sandbox env vars", async () => {
+    const harness = await createTestAppHarness();
+
+    try {
+      await seedSandboxCredential({
+        credential: {
+          accessToken: "codex-access-token",
+          accountId: "acct_codex_test",
+          expiresAt: 1_900_000_100_000,
+          idToken: "codex-id-token",
+          providerId: "codex",
+          refreshToken: "codex-refresh-token",
+        },
+        harness,
+        lastRefreshedAt: 1_800_000_100_000,
+        updatedAt: 1_800_000_100_100,
+      });
+      await harness.deps.sandboxEnv.upsertEnvVar({
+        name: "PI_CODING_AGENT_DIR",
+        value: "/tmp/custom-pi",
+      });
+
+      const snapshot = await buildSandboxRuntimeMaterialSnapshot(harness.deps);
+
+      expect(snapshot.env).toEqual({
+        OPENAI_API_KEY: "test-openai-key",
+        PI_CODING_AGENT_DIR: "~/.pi/agent",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("builds managed auth files from encrypted stored credentials", async () => {
     const harness = await createTestAppHarness();
 
@@ -448,6 +485,68 @@ describe("sandbox runtime material", () => {
       expect(piFile?.contents).toContain("\"openai-codex\"");
       expect(piFile?.contents).toContain("\"refresh\": \"\"");
     } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("removes disconnected managed auth files from future runtime syncs", async () => {
+    const harness = await createTestAppHarness();
+    const dataDir = await fs.mkdtemp(
+      path.join(os.tmpdir(), "bb-runtime-material-disconnect-"),
+    );
+    const homeDir = await fs.mkdtemp(
+      path.join(os.tmpdir(), "bb-runtime-material-home-"),
+    );
+
+    try {
+      await seedSandboxCredential({
+        credential: {
+          accessToken: "codex-access-token",
+          accountId: "acct_codex_test",
+          expiresAt: 1_900_000_100_000,
+          idToken: "codex-id-token",
+          providerId: "codex",
+          refreshToken: "codex-refresh-token",
+        },
+        harness,
+        lastRefreshedAt: 1_800_000_100_000,
+        updatedAt: 1_800_000_100_100,
+      });
+
+      const initialSnapshot = await buildSandboxRuntimeMaterialSnapshot(harness.deps);
+      const homedirMock = vi.spyOn(os, "homedir").mockReturnValue(homeDir);
+      try {
+        await replaceManagedRuntimeFiles({
+          nextSnapshot: initialSnapshot,
+          previousState: null,
+        });
+        await expect(
+          fs.readFile(path.join(homeDir, ".codex", "auth.json"), "utf8"),
+        ).resolves.toContain("\"access_token\": \"codex-access-token\"");
+
+        await harness.deps.cloudAuth.disconnectProvider({
+          providerId: "codex",
+        });
+
+        const nextSnapshot = await buildSandboxRuntimeMaterialSnapshot(harness.deps);
+        expect(nextSnapshot.files).toEqual([]);
+
+        await replaceManagedRuntimeFiles({
+          nextSnapshot,
+          previousState: buildHostRuntimeMaterialState(initialSnapshot),
+        });
+      } finally {
+        homedirMock.mockRestore();
+      }
+
+      await expect(
+        fs.readFile(path.join(homeDir, ".codex", "auth.json"), "utf8"),
+      ).rejects.toMatchObject({
+        code: "ENOENT",
+      });
+    } finally {
+      await fs.rm(dataDir, { force: true, recursive: true });
+      await fs.rm(homeDir, { force: true, recursive: true });
       await harness.cleanup();
     }
   });

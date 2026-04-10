@@ -22,7 +22,6 @@ import {
   HOST_AUTH_FILE_NAME,
   HOST_RUNTIME_MATERIAL_FILE_NAME,
   hostAuthStateSchema,
-  hostRuntimeMaterialSnapshotSchema,
   normalizeServerUrl,
 } from "../../packages/host-daemon-contract/src/index.ts";
 import {
@@ -41,6 +40,10 @@ import {
   runSandboxCommand,
   writeSandboxFile,
 } from "../../packages/sandbox-host/src/index.ts";
+import {
+  buildHostRuntimeMaterialState,
+  hostRuntimeMaterialStateSchema,
+} from "../../packages/host-runtime-material/src/index.ts";
 import { PI_DEFAULT_MODEL_PER_PROVIDER } from "../../packages/agent-providers/src/index.ts";
 import { loadSandboxDaemonArtifacts } from "../../packages/sandbox-host/src/daemon-artifacts.ts";
 import {
@@ -516,28 +519,24 @@ async function waitForPersistedRuntimeMaterial(
   sandbox: SmokeSandbox,
   expectedSnapshot: Awaited<ReturnType<typeof buildSandboxRuntimeMaterialSnapshot>>,
 ): Promise<void> {
+  const expectedState = buildHostRuntimeMaterialState(expectedSnapshot);
   await waitForCommandSuccess(
     async () => {
       const result = await runSandboxCommand(
         sandbox,
         `cat ${shellQuote(SANDBOX_HOST_RUNTIME_MATERIAL_PATH)}`,
       );
-      const persistedSnapshot = hostRuntimeMaterialSnapshotSchema.parse(
+      const persistedState = hostRuntimeMaterialStateSchema.parse(
         JSON.parse(result.stdout),
       );
-      if (persistedSnapshot.version !== expectedSnapshot.version) {
+      if (persistedState.version !== expectedState.version) {
         throw new Error(
-          `Unexpected runtime material version: ${persistedSnapshot.version}`,
+          `Unexpected runtime material version: ${persistedState.version}`,
         );
       }
-      if (JSON.stringify(persistedSnapshot.env) !== JSON.stringify(expectedSnapshot.env)) {
+      if (JSON.stringify(persistedState.files) !== JSON.stringify(expectedState.files)) {
         throw new Error(
-          `Unexpected runtime material env: ${JSON.stringify(persistedSnapshot.env)}`,
-        );
-      }
-      if (JSON.stringify(persistedSnapshot.files) !== JSON.stringify(expectedSnapshot.files)) {
-        throw new Error(
-          `Unexpected runtime material files: ${JSON.stringify(persistedSnapshot.files)}`,
+          `Unexpected runtime material files: ${JSON.stringify(persistedState.files)}`,
         );
       }
     },
@@ -556,6 +555,20 @@ async function assertSandboxFileContains(
   );
   if (!result.stdout.includes(expectedSubstring)) {
     throw new Error(`Expected ${filePath} to contain ${expectedSubstring}`);
+  }
+}
+
+async function assertSandboxFileOmits(
+  sandbox: SmokeSandbox,
+  filePath: string,
+  unexpectedSubstring: string,
+): Promise<void> {
+  const result = await runSandboxCommand(
+    sandbox,
+    `cat ${toSandboxShellPath(filePath)}`,
+  );
+  if (result.stdout.includes(unexpectedSubstring)) {
+    throw new Error(`Expected ${filePath} to omit ${unexpectedSubstring}`);
   }
 }
 
@@ -967,7 +980,7 @@ async function main(): Promise<void> {
 
     console.log("Checking persisted runtime material");
     await waitForPersistedRuntimeMaterial(sandbox, expectedRuntimeSnapshot);
-    await assertSandboxFileContains(
+    await assertSandboxFileOmits(
       sandbox,
       SANDBOX_HOST_RUNTIME_MATERIAL_PATH,
       SMOKE_SANDBOX_ENV_NAME,

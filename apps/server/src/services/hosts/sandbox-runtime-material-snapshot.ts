@@ -6,7 +6,6 @@ import {
 } from "@bb/agent-provider-auth";
 import {
   createHostRuntimeMaterialSnapshot,
-  isEmptyHostRuntimeMaterialSnapshot,
 } from "@bb/host-runtime-material";
 import { ApiError } from "../../errors.js";
 import type { AppDeps, ServerRuntimeConfig } from "../../types.js";
@@ -63,12 +62,6 @@ export async function buildSandboxRuntimeMaterialSnapshot(
     },
     files: cloudAuthRuntimeMaterial.files,
   });
-}
-
-export function isEmptySandboxRuntimeMaterialSnapshot(
-  snapshot: HostRuntimeMaterialSnapshot,
-): boolean {
-  return isEmptyHostRuntimeMaterialSnapshot(snapshot);
 }
 
 export async function readSandboxRuntimeMaterialSnapshotForVersion(

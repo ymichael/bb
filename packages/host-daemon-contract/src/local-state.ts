@@ -6,7 +6,18 @@ export const HOST_ID_FILE_NAME = "host-id";
 export const HOST_RUNTIME_MATERIAL_FILE_NAME = "runtime-material.json";
 
 const nonEmptyTrimmedStringSchema = z.string().trim().min(1);
-const homeRelativePathSchema = z.string().trim().regex(/^~\/.+/u);
+const homeRelativePathSchema = z
+  .string()
+  .trim()
+  .regex(/^~\/.+/u)
+  .refine(
+    (value) =>
+      !value
+        .slice(2)
+        .split("/")
+        .some((segment) => segment === "" || segment === "." || segment === ".."),
+    "Managed runtime material file paths must stay within the home directory",
+  );
 export const hostRuntimeMaterialEnvSchema = z.record(
   z.string().min(1),
   z.string(),

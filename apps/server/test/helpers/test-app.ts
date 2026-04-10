@@ -8,6 +8,7 @@ import type { HostType } from "@bb/domain";
 import { initDb } from "../../src/db.js";
 import { createApp } from "../../src/server.js";
 import { createCloudAuthService } from "../../src/services/cloud-auth/service.js";
+import { createHostLifecycleService } from "../../src/services/hosts/host-lifecycle-service.js";
 import { createSandboxHostRegistry } from "../../src/services/hosts/sandbox-registry.js";
 import { createMachineAuthService } from "../../src/services/machine-auth.js";
 import { createSandboxEnvService } from "../../src/services/sandbox-env/service.js";
@@ -81,6 +82,7 @@ export async function createTestAppHarness(
   const dataDir = await mkdtemp(join(tmpdir(), "bb-server-test-"));
   const db = initDb(":memory:");
   const hub = new NotificationHubImpl();
+  const hostLifecycle = createHostLifecycleService();
   const sandboxRegistry = createSandboxHostRegistry();
   const machineAuth = await createMachineAuthService({
     dataDir,
@@ -129,6 +131,7 @@ export async function createTestAppHarness(
     cloudAuth,
     config,
     db,
+    hostLifecycle,
     hub,
     logger: testLogger,
     machineAuth: testMachineAuth,

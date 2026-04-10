@@ -216,6 +216,49 @@ describe("public thread routes", () => {
     }
   });
 
+  it("rejects sandbox thread creation when BB_PUBLIC_URL is not https", async () => {
+    const harness = await createTestAppHarness({
+      githubPat: "test-github-pat",
+      publicUrl: "http://bb.example.test",
+    });
+    try {
+      const { project } = createProject(harness.db, harness.hub, {
+        name: "Insecure Public URL Project",
+        source: {
+          repoUrl: "https://github.com/example/repo.git",
+          type: "github_repo",
+        },
+      });
+
+      const response = await harness.app.request("/api/v1/threads", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          projectId: project.id,
+          providerId: "codex",
+          type: "standard",
+          model: "gpt-5",
+          input: [{ type: "text", text: "Start a sandbox thread" }],
+          environment: {
+            type: "sandbox-host",
+            sandboxType: "e2b",
+          },
+        }),
+      });
+
+      expect(response.status).toBe(409);
+      await expect(readJson(response)).resolves.toMatchObject({
+        code: "invalid_request",
+        message: "Sandbox provisioning requires BB_PUBLIC_URL to use https",
+      });
+      expect(provisionHostMock).not.toHaveBeenCalled();
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("remembers resolved execution options after standard thread creation", async () => {
     const harness = await createTestAppHarness();
     try {

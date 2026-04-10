@@ -1,6 +1,7 @@
 import type { DbConnection } from "@bb/db";
 import type { Logger } from "@bb/logger";
 import type { CloudAuthService } from "./services/cloud-auth/types.js";
+import type { HostLifecycleService } from "./services/hosts/host-lifecycle-service.js";
 import type { SandboxHostRegistry } from "./services/hosts/sandbox-registry.js";
 import type { MachineAuthService } from "./services/machine-auth.js";
 import type { SandboxEnvService } from "./services/sandbox-env/types.js";
@@ -26,6 +27,7 @@ export interface AppDeps {
   cloudAuth: CloudAuthService;
   config: ServerRuntimeConfig;
   db: DbConnection;
+  hostLifecycle: HostLifecycleService;
   hub: NotificationHub;
   logger: ServerLogger;
   machineAuth: MachineAuthService;
@@ -38,6 +40,7 @@ export type SandboxLifecycleDeps = Pick<
   | "cloudAuth"
   | "config"
   | "db"
+  | "hostLifecycle"
   | "hub"
   | "machineAuth"
   | "sandboxEnv"

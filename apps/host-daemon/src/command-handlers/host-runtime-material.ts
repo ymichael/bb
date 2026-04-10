@@ -1,5 +1,6 @@
 import type { HostDaemonCommandResult } from "@bb/host-daemon-contract";
 import {
+  buildHostRuntimeMaterialState,
   replaceManagedRuntimeFiles,
   resolveRuntimeMaterialEnv,
 } from "@bb/host-runtime-material";
@@ -13,13 +14,13 @@ export async function syncRuntimeMaterial(
   const snapshot = await options.fetchRuntimeMaterial(command.version);
   await replaceManagedRuntimeFiles({
     nextSnapshot: snapshot,
-    previousSnapshot,
+    previousState: previousSnapshot,
   });
   options.runtimeManager.replaceManagedShellEnv(
     resolveRuntimeMaterialEnv(snapshot.env),
   );
   await options.runtimeManager.evictIdleEnvironments();
-  await options.persistRuntimeMaterial(snapshot);
+  await options.persistRuntimeMaterial(buildHostRuntimeMaterialState(snapshot));
   return {
     appliedVersion: snapshot.version,
   };

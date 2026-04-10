@@ -8,6 +8,7 @@ import { createLogger } from "@bb/logger";
 import { initDb } from "./db.js";
 import { createApp } from "./server.js";
 import { createCloudAuthService } from "./services/cloud-auth/service.js";
+import { createHostLifecycleService } from "./services/hosts/host-lifecycle-service.js";
 import { createSandboxHostRegistry } from "./services/hosts/sandbox-registry.js";
 import { createMachineAuthService } from "./services/machine-auth.js";
 import { createSandboxEnvService } from "./services/sandbox-env/service.js";
@@ -19,6 +20,7 @@ async function main(): Promise<void> {
   const logger = createLogger({ component: "server" });
   const db = initDb(serverConfig.BB_DATABASE_URL);
   const hub = new NotificationHub();
+  const hostLifecycle = createHostLifecycleService();
   const sandboxRegistry = createSandboxHostRegistry();
   const publicUrl = toOptionalString(serverConfig.BB_PUBLIC_URL);
 
@@ -66,6 +68,7 @@ async function main(): Promise<void> {
       cloudAuth,
       config: runtimeConfig,
       db,
+      hostLifecycle,
       hub,
       logger,
       machineAuth,
@@ -74,19 +77,6 @@ async function main(): Promise<void> {
     },
     { staticDir },
   );
-
-  setInterval(() => {
-    void runPeriodicSweeps({
-      cloudAuth,
-      config: runtimeConfig,
-      db,
-      hub,
-      logger,
-      machineAuth,
-      sandboxEnv,
-      sandboxRegistry,
-    });
-  }, 10_000).unref();
 
   const server = serve({
     port: serverConfig.BB_SERVER_PORT,
@@ -101,6 +91,49 @@ async function main(): Promise<void> {
     },
     "Server listening",
   );
+
+  const sweepInterval = setInterval(() => {
+    void runPeriodicSweeps({
+      cloudAuth,
+      config: runtimeConfig,
+      db,
+      hostLifecycle,
+      hub,
+      logger,
+      machineAuth,
+      sandboxEnv,
+      sandboxRegistry,
+    });
+  }, 10_000);
+  sweepInterval.unref();
+
+  let shutdownPromise: Promise<void> | null = null;
+  const runShutdown = (): Promise<void> => {
+    if (shutdownPromise) {
+      return shutdownPromise;
+    }
+    shutdownPromise = (async () => {
+      clearInterval(sweepInterval);
+      await cloudAuth.dispose();
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+          resolve();
+        });
+      });
+    })();
+    return shutdownPromise;
+  };
+
+  process.once("SIGINT", () => {
+    void runShutdown().finally(() => process.exit(0));
+  });
+  process.once("SIGTERM", () => {
+    void runShutdown().finally(() => process.exit(0));
+  });
 }
 
 void main().catch((error) => {

@@ -56,11 +56,37 @@ interface CreateAppOptions {
   staticDir?: string;
 }
 
+const LOCAL_APP_ORIGINS = [
+  "http://127.0.0.1:3000",
+  "http://127.0.0.1:3334",
+  "http://127.0.0.1:5173",
+  "http://localhost:3000",
+  "http://localhost:3334",
+  "http://localhost:5173",
+] as const;
+
+function buildAllowedCorsOrigins(deps: AppDeps): Set<string> {
+  const allowedOrigins = new Set<string>(LOCAL_APP_ORIGINS);
+  if (deps.config.publicUrl) {
+    allowedOrigins.add(new URL(deps.config.publicUrl).origin);
+  }
+  return allowedOrigins;
+}
+
 export function createApp(deps: AppDeps, options?: CreateAppOptions): ServerApp {
   const app = new Hono();
   const { injectWebSocket, upgradeWebSocket } = createNodeWebSocket({ app });
+  const allowedCorsOrigins = buildAllowedCorsOrigins(deps);
 
-  app.use("*", cors());
+  app.use("*", cors({
+    origin: (origin, context) => {
+      const requestOrigin = new URL(context.req.url).origin;
+      if (origin === requestOrigin || allowedCorsOrigins.has(origin)) {
+        return origin;
+      }
+      return null;
+    },
+  }));
   app.onError((error) => errorToResponse(error));
   app.get("/health", (context) => context.json({ ok: true }));
   app.use("/internal/*", async (context, next) => {

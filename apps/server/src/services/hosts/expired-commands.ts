@@ -25,6 +25,7 @@ type ExpiredCommandDeps = Pick<
   | "cloudAuth"
   | "config"
   | "db"
+  | "hostLifecycle"
   | "hub"
   | "logger"
   | "machineAuth"

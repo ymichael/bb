@@ -86,28 +86,17 @@ const CLOUD_AUTH_PROVIDER_CATALOG = [
   CLAUDE_CLOUD_AUTH_PROVIDER,
 ] as const;
 
-const CLOUD_AUTH_PROVIDER_ID_VALUES = [
-  CODEX_CLOUD_AUTH_PROVIDER.id,
-  CLAUDE_CLOUD_AUTH_PROVIDER.id,
-] as const;
+const CLOUD_AUTH_PROVIDER_ID_VALUES = CLOUD_AUTH_PROVIDER_CATALOG.map(
+  (provider) => provider.id,
+) as [
+  (typeof CLOUD_AUTH_PROVIDER_CATALOG)[number]["id"],
+  ...(typeof CLOUD_AUTH_PROVIDER_CATALOG)[number]["id"][],
+];
 
-export const cloudAuthProviderIdSchema = z.enum(CLOUD_AUTH_PROVIDER_ID_VALUES);
+export const cloudAuthProviderIdSchema = z.enum(
+  CLOUD_AUTH_PROVIDER_ID_VALUES,
+);
 export type CloudAuthProviderId = z.infer<typeof cloudAuthProviderIdSchema>;
-
-function assertCloudAuthProviderCatalogConsistency(): void {
-  const catalogIds = CLOUD_AUTH_PROVIDER_CATALOG.map((provider) => provider.id);
-  const schemaIds = [...CLOUD_AUTH_PROVIDER_ID_VALUES];
-  if (
-    catalogIds.length !== schemaIds.length
-    || catalogIds.some((id, index) => id !== schemaIds[index])
-  ) {
-    throw new Error(
-      "Cloud auth provider catalog and provider id schema must stay in sync.",
-    );
-  }
-}
-
-assertCloudAuthProviderCatalogConsistency();
 
 const BUILT_IN_AGENT_PROVIDER_CATALOG: BuiltInAgentProviderCatalogEntry[] = [
   {

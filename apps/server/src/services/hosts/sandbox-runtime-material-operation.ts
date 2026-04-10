@@ -5,7 +5,8 @@ import {
 } from "@bb/db";
 import {
   markHostOperationRecordFailed,
-  updateHostOperationRecord,
+  markHostOperationRecordCompletedWithPayload,
+  resetHostOperationRecordToRequested,
 } from "@bb/db/internal-lifecycle";
 import {
   activeLifecycleOperationStates,
@@ -100,15 +101,10 @@ export function resetRuntimeMaterialOperationToRequested(
     payload: SandboxRuntimeMaterialOperationPayload;
   },
 ): void {
-  updateHostOperationRecord(deps.db, {
+  resetHostOperationRecordToRequested(deps.db, {
     hostId: args.hostId,
     kind: SANDBOX_RUNTIME_MATERIAL_OPERATION_KIND,
-    commandId: null,
-    completedAt: null,
-    failureReason: null,
     payload: JSON.stringify(args.payload),
-    queuedAt: null,
-    state: "requested",
   });
 }
 
@@ -134,19 +130,17 @@ export function completeSandboxRuntimeMaterialSyncForCommand(
   }
 
   const payload = parseRuntimeMaterialOperationPayload(operation.payload);
-  return updateHostOperationRecord(deps.db, {
+  return markHostOperationRecordCompletedWithPayload(deps.db, {
     hostId: operation.hostId,
     kind: SANDBOX_RUNTIME_MATERIAL_OPERATION_KIND,
     allowedCurrentStates: activeLifecycleOperationStates,
     commandId: operation.commandId,
     completedAt: args.completedAt ?? Date.now(),
-    failureReason: null,
     payload: JSON.stringify({
       ...payload,
       appliedVersion: args.appliedVersion,
     }),
     queuedAt: operation.queuedAt,
-    state: "completed",
   }) !== null;
 }
 
@@ -194,14 +188,10 @@ export function reconcileSandboxRuntimeMaterialAfterSessionOpen(
     return false;
   }
 
-  return updateHostOperationRecord(deps.db, {
+  return resetHostOperationRecordToRequested(deps.db, {
     hostId: args.hostId,
     kind: SANDBOX_RUNTIME_MATERIAL_OPERATION_KIND,
-    commandId: null,
-    completedAt: null,
-    failureReason: null,
+    allowedCurrentStates: ["completed", "failed", "cancelled", "fetched", "queued"],
     payload: JSON.stringify(payload),
-    queuedAt: null,
-    state: "requested",
   }) !== null;
 }

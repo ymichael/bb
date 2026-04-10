@@ -3,18 +3,18 @@ import {
   getActiveSession,
   getHost,
   isEphemeralHostPendingCleanup,
+  markHostResumed,
   markEphemeralHostActivity,
+  markHostSuspended,
   sweepIdleEphemeralHostsEligibleForSuspend,
   updateHost,
-  updateHostLifecycleState,
 } from "@bb/db";
 import { DEFAULT_SANDBOX_TIMEOUT_MS } from "@bb/sandbox-host";
 import type { SandboxHostProgressCallbacks } from "@bb/sandbox-host";
 import type { AppDeps, SandboxLifecycleDeps, SandboxWorkSessionDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
-import { createAsyncDeduper } from "../lib/async-deduper.js";
-import { createAsyncLane } from "../lib/async-lane.js";
 import { requireConnectedHostSession } from "../lib/entity-lookup.js";
+import type { HostLifecycleService } from "./host-lifecycle-service.js";
 import { requireReachablePublicServerUrl } from "./public-server-url.js";
 import { createSandboxBackendForId } from "./sandbox-backends.js";
 import { requireSandboxBackendForHost } from "./sandbox-backends.js";
@@ -23,31 +23,14 @@ import { ensureSandboxRuntimeMaterialSynced } from "./sandbox-runtime-material.j
 const DEFAULT_SESSION_WAIT_TIMEOUT_MS = 60_000;
 export const DEFAULT_SANDBOX_ACTIVITY_EXTENSION_DEBOUNCE_MS = 30_000;
 export const DEFAULT_SANDBOX_IDLE_THRESHOLD_MS = 300_000;
-const hostDestroyDeduper = createAsyncDeduper<string, void>();
-const hostExtendDeduper = createAsyncDeduper<string, boolean>();
-const hostReadyDeduper = createAsyncDeduper<string, void>();
-const hostSuspendDeduper = createAsyncDeduper<string, boolean>();
-const hostLifecycleLane = createAsyncLane<string>();
-const nextSandboxTimeoutExtensionAt = new Map<string, number>();
-const pendingReadyProgressCallbacks = new Map<
-  string,
-  Set<SandboxHostProgressCallbacks>
->();
 
-export function resetHostLifecycleStateForTests(): void {
-  hostDestroyDeduper.clear();
-  hostExtendDeduper.clear();
-  hostReadyDeduper.clear();
-  hostSuspendDeduper.clear();
-  hostLifecycleLane.clear();
-  nextSandboxTimeoutExtensionAt.clear();
-  pendingReadyProgressCallbacks.clear();
-}
-
-function pruneExpiredSandboxTimeoutExtensionEntries(now: number): void {
-  for (const [hostId, nextAllowedAt] of nextSandboxTimeoutExtensionAt) {
+function pruneExpiredSandboxTimeoutExtensionEntries(
+  state: HostLifecycleService,
+  now: number,
+): void {
+  for (const [hostId, nextAllowedAt] of state.nextSandboxTimeoutExtensionAt) {
     if (nextAllowedAt <= now) {
-      nextSandboxTimeoutExtensionAt.delete(hostId);
+      state.nextSandboxTimeoutExtensionAt.delete(hostId);
     }
   }
 }
@@ -75,6 +58,7 @@ export interface MaybeSuspendIdleSandboxArgs {
 }
 
 function registerPendingReadyProgressCallbacks(
+  state: HostLifecycleService,
   hostId: string,
   progressCallbacks: SandboxHostProgressCallbacks | undefined,
 ): () => void {
@@ -82,31 +66,32 @@ function registerPendingReadyProgressCallbacks(
     return () => undefined;
   }
 
-  let callbacksForHost = pendingReadyProgressCallbacks.get(hostId);
+  let callbacksForHost = state.pendingReadyProgressCallbacks.get(hostId);
   if (!callbacksForHost) {
     callbacksForHost = new Set<SandboxHostProgressCallbacks>();
-    pendingReadyProgressCallbacks.set(hostId, callbacksForHost);
+    state.pendingReadyProgressCallbacks.set(hostId, callbacksForHost);
   }
   callbacksForHost.add(progressCallbacks);
 
   return () => {
-    const registeredCallbacks = pendingReadyProgressCallbacks.get(hostId);
+    const registeredCallbacks = state.pendingReadyProgressCallbacks.get(hostId);
     if (!registeredCallbacks) {
       return;
     }
 
     registeredCallbacks.delete(progressCallbacks);
     if (registeredCallbacks.size === 0) {
-      pendingReadyProgressCallbacks.delete(hostId);
+      state.pendingReadyProgressCallbacks.delete(hostId);
     }
   };
 }
 
 function notifyPendingReadyProgressCallbacks(
+  state: HostLifecycleService,
   hostId: string,
   notify: (callbacks: SandboxHostProgressCallbacks) => void,
 ): void {
-  const callbacksForHost = pendingReadyProgressCallbacks.get(hostId);
+  const callbacksForHost = state.pendingReadyProgressCallbacks.get(hostId);
   if (!callbacksForHost) {
     return;
   }
@@ -117,27 +102,21 @@ function notifyPendingReadyProgressCallbacks(
 }
 
 function createPendingReadyProgressFanout(
+  state: HostLifecycleService,
   hostId: string,
 ): SandboxHostProgressCallbacks {
   return {
     onProgress(event) {
-      notifyPendingReadyProgressCallbacks(hostId, (callbacks) => {
+      notifyPendingReadyProgressCallbacks(state, hostId, (callbacks) => {
         callbacks.onProgress?.(event);
       });
     },
     onSandboxCreated(args) {
-      notifyPendingReadyProgressCallbacks(hostId, (callbacks) => {
+      notifyPendingReadyProgressCallbacks(state, hostId, (callbacks) => {
         callbacks.onSandboxCreated?.(args);
       });
     },
   };
-}
-
-async function runInHostLifecycleLane<TValue>(
-  hostId: string,
-  task: () => Promise<TValue>,
-): Promise<TValue> {
-  return hostLifecycleLane.run(hostId, task);
 }
 
 export async function waitForHostSession(
@@ -166,28 +145,33 @@ export async function waitForHostSession(
 }
 
 export async function destroyHost(
-  deps: Pick<AppDeps, "config" | "db" | "hub" | "sandboxRegistry">,
+  deps: Pick<AppDeps, "config" | "db" | "hostLifecycle" | "hub" | "sandboxRegistry">,
   hostId: string,
 ): Promise<void> {
-  return hostDestroyDeduper.run(
+  const state = deps.hostLifecycle;
+  return state.hostDestroyDeduper.run(
     hostId,
-    async () => runInHostLifecycleLane(hostId, async () => destroyHostInternal(deps, hostId)),
+    async () =>
+      state.hostLifecycleLane.run(hostId, async () =>
+        destroyHostInternal(deps, state, hostId)
+      ),
   );
 }
 
 async function destroyHostInternal(
-  deps: Pick<AppDeps, "config" | "db" | "hub" | "sandboxRegistry">,
+  deps: Pick<AppDeps, "config" | "db" | "hostLifecycle" | "hub" | "sandboxRegistry">,
+  state: HostLifecycleService,
   hostId: string,
 ): Promise<void> {
   const hostRecord = getHost(deps.db, hostId);
   if (!hostRecord || hostRecord.destroyedAt !== null) {
-    nextSandboxTimeoutExtensionAt.delete(hostId);
+    state.nextSandboxTimeoutExtensionAt.delete(hostId);
     deps.sandboxRegistry.remove(hostId);
     return;
   }
 
   const destroyedAt = Date.now();
-  nextSandboxTimeoutExtensionAt.delete(hostId);
+  state.nextSandboxTimeoutExtensionAt.delete(hostId);
   const cached = deps.sandboxRegistry.get(hostId);
   if (cached) {
     await cached.destroy();
@@ -215,7 +199,7 @@ async function destroyHostInternal(
 }
 
 export async function destroyEphemeralHostIfReady(
-  deps: Pick<AppDeps, "config" | "db" | "hub" | "sandboxRegistry">,
+  deps: Pick<AppDeps, "config" | "db" | "hostLifecycle" | "hub" | "sandboxRegistry">,
   hostId: string,
 ): Promise<boolean> {
   if (!isEphemeralHostPendingCleanup(deps.db, hostId)) {
@@ -233,15 +217,17 @@ export async function ensureSandboxHostSessionReady(
     progressCallbacks?: SandboxHostProgressCallbacks;
   },
 ) {
+  const state = deps.hostLifecycle;
   const unregisterProgressCallbacks = registerPendingReadyProgressCallbacks(
+    state,
     args.hostId,
     args.progressCallbacks,
   );
-  const progressFanout = createPendingReadyProgressFanout(args.hostId);
+  const progressFanout = createPendingReadyProgressFanout(state, args.hostId);
 
   try {
-    await hostReadyDeduper.run(args.hostId, async () =>
-      runInHostLifecycleLane(args.hostId, async () => {
+    await state.hostReadyDeduper.run(args.hostId, async () =>
+      state.hostLifecycleLane.run(args.hostId, async () => {
         const host = getHost(deps.db, args.hostId);
         if (!host || host.destroyedAt !== null) {
           throw new ApiError(404, "host_not_found", "Host not found");
@@ -282,9 +268,8 @@ export async function ensureSandboxHostSessionReady(
             });
             deps.sandboxRegistry.set(host.id, resumedHost);
           }
-          updateHostLifecycleState(deps.db, {
+          markHostResumed(deps.db, {
             hostId: host.id,
-            suspendedAt: null,
           });
         } else if (!cachedHost) {
           const sandboxHost =
@@ -357,22 +342,23 @@ export async function ensureHostSessionReadyForWork(
 }
 
 export async function extendSandboxLifeIfNeeded(
-  deps: Pick<AppDeps, "config" | "db" | "sandboxRegistry">,
+  deps: Pick<AppDeps, "config" | "db" | "hostLifecycle" | "sandboxRegistry">,
   args: ExtendSandboxLifeIfNeededArgs,
 ): Promise<boolean> {
+  const state = deps.hostLifecycle;
   const at = args.at ?? Date.now();
-  pruneExpiredSandboxTimeoutExtensionEntries(at);
+  pruneExpiredSandboxTimeoutExtensionEntries(state, at);
   const debounceWindowMs =
     args.debounceWindowMs ?? deps.config.sandboxActivityExtensionDebounceMs;
-  const nextAllowedAt = nextSandboxTimeoutExtensionAt.get(args.hostId) ?? 0;
+  const nextAllowedAt = state.nextSandboxTimeoutExtensionAt.get(args.hostId) ?? 0;
   if (at < nextAllowedAt) {
     return false;
   }
-  nextSandboxTimeoutExtensionAt.set(args.hostId, at + debounceWindowMs);
+  state.nextSandboxTimeoutExtensionAt.set(args.hostId, at + debounceWindowMs);
 
   try {
-    return await hostExtendDeduper.run(args.hostId, async () =>
-      runInHostLifecycleLane(args.hostId, async () => {
+    return await state.hostExtendDeduper.run(args.hostId, async () =>
+      state.hostLifecycleLane.run(args.hostId, async () => {
         const host = getHost(deps.db, args.hostId);
         if (
           !host
@@ -400,13 +386,13 @@ export async function extendSandboxLifeIfNeeded(
       }),
     );
   } catch (error) {
-    nextSandboxTimeoutExtensionAt.delete(args.hostId);
+    state.nextSandboxTimeoutExtensionAt.delete(args.hostId);
     throw error;
   }
 }
 
 export async function markSandboxActivity(
-  deps: Pick<AppDeps, "config" | "db" | "logger" | "sandboxRegistry">,
+  deps: Pick<AppDeps, "config" | "db" | "hostLifecycle" | "logger" | "sandboxRegistry">,
   args: SandboxActivityArgs,
 ): Promise<void> {
   const at = args.at ?? Date.now();
@@ -436,9 +422,10 @@ export async function markSandboxActivity(
 }
 
 export async function maybeSuspendIdleSandbox(
-  deps: Pick<AppDeps, "config" | "db" | "hub" | "logger" | "sandboxRegistry">,
+  deps: Pick<AppDeps, "config" | "db" | "hostLifecycle" | "hub" | "logger" | "sandboxRegistry">,
   args: MaybeSuspendIdleSandboxArgs,
 ): Promise<boolean> {
+  const state = deps.hostLifecycle;
   const now = args.now ?? Date.now();
   const idleThresholdMs =
     args.idleThresholdMs ?? deps.config.sandboxIdleThresholdMs;
@@ -451,8 +438,8 @@ export async function maybeSuspendIdleSandbox(
     return false;
   }
 
-  return hostSuspendDeduper.run(host.id, async () =>
-    runInHostLifecycleLane(host.id, async () => {
+  return state.hostSuspendDeduper.run(host.id, async () =>
+    state.hostLifecycleLane.run(host.id, async () => {
       const refreshedHost = sweepIdleEphemeralHostsEligibleForSuspend(deps.db, {
         hostId: host.id,
         inactiveBefore: now - idleThresholdMs,
@@ -473,12 +460,12 @@ export async function maybeSuspendIdleSandbox(
         });
       }
 
-      nextSandboxTimeoutExtensionAt.delete(refreshedHost.id);
+      state.nextSandboxTimeoutExtensionAt.delete(refreshedHost.id);
       const activeSession = getActiveSession(deps.db, refreshedHost.id);
       if (activeSession) {
         closeSession(deps.db, deps.hub, activeSession.id, "suspended");
       }
-      updateHostLifecycleState(deps.db, {
+      markHostSuspended(deps.db, {
         hostId: refreshedHost.id,
         suspendedAt: now,
       });
@@ -493,5 +480,17 @@ export async function maybeSuspendIdleSandbox(
       "Idle sandbox suspend failed",
     );
     return false;
+  });
+}
+
+export async function markHostSessionOpened(
+  deps: Pick<AppDeps, "db" | "hostLifecycle">,
+  args: { hostId: string },
+): Promise<void> {
+  const state = deps.hostLifecycle;
+  await state.hostLifecycleLane.run(args.hostId, async () => {
+    markHostResumed(deps.db, {
+      hostId: args.hostId,
+    });
   });
 }

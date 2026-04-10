@@ -9,5 +9,8 @@ export {
 } from "./snapshot.js";
 export {
   readRuntimeMaterialState,
+  buildHostRuntimeMaterialState,
+  hostRuntimeMaterialStateSchema,
   writeRuntimeMaterialState,
 } from "./state.js";
+export type { HostRuntimeMaterialState } from "./state.js";

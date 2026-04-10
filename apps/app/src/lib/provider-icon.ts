@@ -19,22 +19,25 @@ export function getProviderIconInfo(
   const providerInfo = isAgentProviderId(providerId)
     ? getBuiltInAgentProviderInfo(providerId)
     : null
+  if (!providerInfo) {
+    return undefined
+  }
 
   switch (providerId) {
     case "codex":
       return {
         icon: OpenAiIcon,
-        ariaLabel: providerInfo?.displayName ?? "Codex",
+        ariaLabel: providerInfo.displayName,
       }
     case "claude-code":
       return {
         icon: ClaudeIcon,
-        ariaLabel: providerInfo?.displayName ?? "Claude Code",
+        ariaLabel: providerInfo.displayName,
       }
     case "pi":
       return {
         icon: PiIcon,
-        ariaLabel: providerInfo?.displayName ?? "Pi",
+        ariaLabel: providerInfo.displayName,
       }
     default:
       return undefined

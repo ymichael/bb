@@ -54,6 +54,7 @@ export type CommandResultSideEffectsDeps = Pick<
   | "cloudAuth"
   | "config"
   | "db"
+  | "hostLifecycle"
   | "hub"
   | "logger"
   | "machineAuth"
@@ -254,7 +255,10 @@ async function handleProvisionCommandResult(
 }
 
 async function handleEnvironmentDestroyResult(
-  deps: Pick<AppDeps, "config" | "db" | "hub" | "logger" | "sandboxRegistry">,
+  deps: Pick<
+    AppDeps,
+    "config" | "db" | "hostLifecycle" | "hub" | "logger" | "sandboxRegistry"
+  >,
   report: Extract<HostDaemonCommandResultReport, { type: "environment.destroy" }>,
   commandRow: typeof hostDaemonCommands.$inferSelect,
 ): Promise<void> {

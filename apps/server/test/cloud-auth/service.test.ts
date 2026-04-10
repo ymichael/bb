@@ -1,6 +1,7 @@
 import {
   buildCloudAuthCredentialUpsert,
   createCloudAuthCrypto,
+  type ClaudeStoredCredential,
   type CodexStoredCredential,
 } from "@bb/agent-provider-auth";
 import {
@@ -64,6 +65,44 @@ async function seedCodexCredential(args: {
       credential,
       crypto,
       label: args.accountId,
+      lastErrorMessage: args.lastErrorMessage,
+      lastRefreshedAt: args.lastRefreshedAt,
+      updatedAt: Date.now(),
+    }),
+  );
+}
+
+async function seedClaudeCredential(args: {
+  accessToken: string;
+  accountEmail: string | null;
+  accountId: string | null;
+  expiresAt: number;
+  harness: Awaited<ReturnType<typeof createTestAppHarness>>;
+  lastErrorMessage: string | null;
+  lastRefreshedAt: number | null;
+  refreshToken: string;
+  scopes: string[];
+  subscriptionType: ClaudeStoredCredential["subscriptionType"];
+}): Promise<void> {
+  const crypto = await createCloudAuthCrypto({
+    dataDir: args.harness.config.dataDir,
+  });
+  const credential: ClaudeStoredCredential = {
+    accessToken: args.accessToken,
+    accountEmail: args.accountEmail,
+    accountId: args.accountId,
+    expiresAt: args.expiresAt,
+    providerId: "claude-code",
+    refreshToken: args.refreshToken,
+    scopes: args.scopes,
+    subscriptionType: args.subscriptionType,
+  };
+  upsertSandboxProviderCredential(
+    args.harness.db,
+    buildCloudAuthCredentialUpsert({
+      credential,
+      crypto,
+      label: args.accountEmail,
       lastErrorMessage: args.lastErrorMessage,
       lastRefreshedAt: args.lastRefreshedAt,
       updatedAt: Date.now(),
@@ -269,6 +308,109 @@ describe("cloud auth service refresh behavior", () => {
         }),
       );
       expect(JSON.stringify(connections)).not.toContain(leakedValue);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("does not rewrite already-quarantined decrypt failures on subsequent reads", async () => {
+    const harness = await createTestAppHarness();
+
+    try {
+      const crypto = await createCloudAuthCrypto({
+        dataDir: harness.config.dataDir,
+      });
+      upsertSandboxProviderCredential(harness.db, {
+        encryptedAccessToken: crypto.encryptJson({
+          plaintext: JSON.stringify(createCodexAccessToken("acct_decrypt_repeat")),
+        }),
+        encryptedRefreshToken: crypto.encryptJson({
+          plaintext: JSON.stringify("refresh-token-repeat"),
+        }),
+        encryptedIdToken: null,
+        encryptedMetadata: crypto.encryptJson({
+          plaintext: JSON.stringify({
+            accountId: 123,
+          }),
+        }),
+        expiresAt: Date.now() + 15 * 60_000,
+        label: "codex@example.test",
+        lastErrorMessage: null,
+        lastRefreshedAt: null,
+        providerId: "codex",
+        updatedAt: Date.now(),
+      });
+
+      await expect(
+        harness.deps.cloudAuth.getValidCredential({
+          providerId: "codex",
+        }),
+      ).resolves.toBeNull();
+      const firstRecord = getSandboxProviderCredentialByProviderId(harness.db, "codex");
+      const firstUpdatedAt = firstRecord?.updatedAt ?? null;
+
+      await expect(
+        harness.deps.cloudAuth.getValidCredential({
+          providerId: "codex",
+        }),
+      ).resolves.toBeNull();
+      const secondRecord = getSandboxProviderCredentialByProviderId(harness.db, "codex");
+
+      expect(secondRecord?.lastErrorMessage).toBe("Failed to decrypt stored credential");
+      expect(secondRecord?.updatedAt).toBe(firstUpdatedAt);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("stores sanitized Claude refresh failures and keeps the existing credential usable", async () => {
+    const harness = await createTestAppHarness();
+
+    try {
+      await seedClaudeCredential({
+        accessToken: "claude-access-before",
+        accountEmail: "claude@example.test",
+        accountId: "acct_claude_failure",
+        expiresAt: Date.now() - 1_000,
+        harness,
+        lastErrorMessage: null,
+        lastRefreshedAt: Date.now() - 60_000,
+        refreshToken: "claude-refresh-failure",
+        scopes: ["user:profile"],
+        subscriptionType: "max",
+      });
+
+      vi.stubGlobal("fetch", vi.fn<typeof fetch>(async (input) => {
+        const url = typeof input === "string" ? input : input.toString();
+        if (url !== "https://platform.claude.com/v1/oauth/token") {
+          throw new Error(`Unexpected fetch URL: ${url}`);
+        }
+        return new Response(
+          JSON.stringify({
+            error: "invalid_grant",
+          }),
+          {
+            headers: {
+              "content-type": "application/json",
+            },
+            status: 401,
+          },
+        );
+      }));
+
+      const resolved = await harness.deps.cloudAuth.getValidCredential({
+        providerId: "claude-code",
+      });
+
+      expect(resolved?.credential.accountId).toBe("acct_claude_failure");
+
+      const record = getSandboxProviderCredentialByProviderId(
+        harness.db,
+        "claude-code",
+      );
+      expect(record?.lastErrorMessage).toBe(
+        "Claude OAuth refresh failed with 401 (invalid_grant)",
+      );
     } finally {
       await harness.cleanup();
     }

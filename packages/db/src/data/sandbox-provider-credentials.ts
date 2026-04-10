@@ -78,14 +78,11 @@ export function upsertSandboxProviderCredential(
   args: UpsertSandboxProviderCredentialArgs,
 ): SandboxProviderCredentialRecord {
   const now = new Date(args.updatedAt);
-  const existing = getSandboxProviderCredentialByProviderId(db, args.providerId);
-  const credentialId = existing?.id ?? createSandboxProviderCredentialId();
-  const createdAt = existing ? new Date(existing.createdAt) : now;
 
   const row = db
     .insert(sandboxProviderCredentials)
     .values({
-      id: credentialId,
+      id: createSandboxProviderCredentialId(),
       providerId: args.providerId,
       encryptedAccessToken: args.encryptedAccessToken,
       encryptedRefreshToken: args.encryptedRefreshToken,
@@ -96,7 +93,7 @@ export function upsertSandboxProviderCredential(
       lastRefreshedAt:
         args.lastRefreshedAt === null ? null : new Date(args.lastRefreshedAt),
       lastErrorMessage: args.lastErrorMessage,
-      createdAt,
+      createdAt: now,
       updatedAt: now,
     })
     .onConflictDoUpdate({
@@ -126,14 +123,10 @@ export function deleteSandboxProviderCredentialByProviderId(
   db: DbConnection,
   providerId: string,
 ): boolean {
-  const existing = getSandboxProviderCredentialByProviderId(db, providerId);
-  if (!existing) {
-    return false;
-  }
-
-  db
+  const deleted = db
     .delete(sandboxProviderCredentials)
     .where(eq(sandboxProviderCredentials.providerId, providerId))
-    .run();
-  return true;
+    .returning({ id: sandboxProviderCredentials.id })
+    .get();
+  return deleted !== undefined;
 }

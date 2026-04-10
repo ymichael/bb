@@ -25,6 +25,9 @@ function normalizeHostname(hostname: string): string {
 
 function isReachablePublicServerUrl(publicUrl: string): boolean {
   const parsedUrl = new URL(publicUrl);
+  if (parsedUrl.protocol !== "https:") {
+    return false;
+  }
   const normalizedHostname = normalizeHostname(parsedUrl.hostname);
   const ipVersion = isIP(normalizedHostname);
 
@@ -54,6 +57,13 @@ export function requireReachablePublicServerUrl(
       501,
       "not_configured",
       "Sandbox provisioning requires BB_PUBLIC_URL to be configured",
+    );
+  }
+  if (new URL(config.publicUrl).protocol !== "https:") {
+    throw new ApiError(
+      409,
+      "invalid_request",
+      "Sandbox provisioning requires BB_PUBLIC_URL to use https",
     );
   }
   if (!isReachablePublicServerUrl(config.publicUrl)) {

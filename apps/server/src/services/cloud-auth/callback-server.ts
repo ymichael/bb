@@ -56,6 +56,7 @@ function renderHtml(args: { body: string; title: string }): string {
 }
 
 function closeServer(server: Server): Promise<void> {
+  server.closeIdleConnections?.();
   return new Promise((resolve, reject) => {
     server.close((error) => {
       if (error) {

@@ -33,32 +33,30 @@ type ProviderFactory = (
 interface BuiltInProviderDescriptor {
   createAdapter: ProviderFactory;
   info: ProviderInfo;
+  visibility: ProviderVisibilityMetadata;
 }
 
 const builtInProviders = [
   {
     createAdapter: () => createCodexProviderAdapter(),
     info: getBuiltInAgentProviderInfo("codex"),
+    visibility: codexVisibilityMetadata,
   },
   {
     createAdapter: (options) => createClaudeCodeProviderAdapter(options),
     info: getBuiltInAgentProviderInfo("claude-code"),
+    visibility: claudeCodeVisibilityMetadata,
   },
   {
     createAdapter: (options) => createPiProviderAdapter(options),
     info: getBuiltInAgentProviderInfo("pi"),
+    visibility: piVisibilityMetadata,
   },
 ] satisfies BuiltInProviderDescriptor[];
 
 const builtInProvidersById = new Map(
   builtInProviders.map((descriptor) => [descriptor.info.id, descriptor]),
 );
-
-const builtInVisibility = new Map<string, ProviderVisibilityMetadata>([
-  ["codex", codexVisibilityMetadata],
-  ["claude-code", claudeCodeVisibilityMetadata],
-  ["pi", piVisibilityMetadata],
-]);
 
 // ---------------------------------------------------------------------------
 // Lookup
@@ -95,10 +93,17 @@ export function createProviderForId(
 export function getProviderVisibilityMetadata(
   providerId: string,
 ): ProviderVisibilityMetadata {
-  const metadata = builtInVisibility.get(providerId);
+  if (!isAgentProviderId(providerId)) {
+    const allIds = builtInProviders.map((provider) => provider.info.id);
+    throw new Error(
+      `Unsupported provider "${providerId}". Available providers: ${allIds.join(", ")}.`,
+    );
+  }
+
+  const metadata = builtInProvidersById.get(providerId)?.visibility;
 
   if (!metadata) {
-    const allIds = [...builtInVisibility.keys()];
+    const allIds = builtInProviders.map((provider) => provider.info.id);
     throw new Error(
       `Unsupported provider "${providerId}". Available providers: ${allIds.join(", ")}.`,
     );

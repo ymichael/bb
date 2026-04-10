@@ -12,7 +12,10 @@ import {
   updateHost,
   upsertHost,
 } from "../../src/data/hosts.js";
-import { updateHostLifecycleState } from "../../src/data/host-lifecycle-state.js";
+import {
+  markEphemeralHostActivity,
+  markHostSuspended,
+} from "../../src/data/host-lifecycle-state.js";
 
 function setup() {
   const db = createConnection(":memory:");
@@ -239,12 +242,20 @@ describe("hosts", () => {
       type: "ephemeral",
     });
 
-    const updated = updateHostLifecycleState(db, {
+    const withActivity = markEphemeralHostActivity(db, {
       hostId: host.id,
       lastActivityAt: 123,
+    });
+    const updated = markHostSuspended(db, {
+      hostId: host.id,
       suspendedAt: 456,
     });
 
+    expect(withActivity).toMatchObject({
+      id: host.id,
+      lastActivityAt: 123,
+      suspendedAt: null,
+    });
     expect(updated).toMatchObject({
       id: host.id,
       lastActivityAt: 123,

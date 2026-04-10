@@ -28,15 +28,14 @@ describe("runtime material files", () => {
     vi.spyOn(os, "homedir").mockReturnValue(rootDir);
     const previousPath = path.join(rootDir, ".claude", "credentials.json");
     const nextPath = path.join(rootDir, ".codex", "auth.json");
+    await fs.mkdir(path.dirname(previousPath), { recursive: true });
+    await fs.writeFile(previousPath, "{\"old\":true}\n", "utf8");
 
     await replaceManagedRuntimeFiles({
-      previousSnapshot: {
-        env: {},
+      previousState: {
         files: [
           {
-            contents: "{\"old\":true}\n",
             managedBy: "bb-runtime-material",
-            mode: 0o600,
             path: "~/.claude/credentials.json",
           },
         ],
@@ -70,10 +69,16 @@ describe("runtime material files", () => {
 
     await expect(
       replaceManagedRuntimeFiles({
-        previousSnapshot: null,
+        previousState: null,
         nextSnapshot: {
           env: {},
           files: [
+            {
+              contents: "leak\n",
+              managedBy: "bb-runtime-material",
+              mode: 0o600,
+              path: "~/./.ssh/authorized_keys",
+            },
             {
               contents: "leak\n",
               managedBy: "bb-runtime-material",

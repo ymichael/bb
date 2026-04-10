@@ -11,6 +11,7 @@ import {
   markHostOperationRecordFailed,
   markHostOperationRecordFetched,
   markHostOperationRecordQueued,
+  resetHostOperationRecordToRequested,
   upsertHostOperationRecord,
 } from "../../src/data/host-operations.js";
 import { upsertHost } from "../../src/data/hosts.js";
@@ -201,6 +202,87 @@ describe("host operations", () => {
       }),
     ).toMatchObject({
       commandId: firstCommand.id,
+      state: "completed",
+    });
+  });
+
+  it("does not move completed host operations back to fetched", () => {
+    const { db, host } = setup();
+    const command = queueCommand(db, noopNotifier, {
+      hostId: host.id,
+      type: "provider.list",
+      payload: JSON.stringify({ type: "provider.list" }),
+    });
+
+    upsertHostOperationRecord(db, {
+      hostId: host.id,
+      kind: "sync_runtime_material",
+      payload: JSON.stringify({ version: 1 }),
+    });
+    markHostOperationRecordQueued(db, {
+      hostId: host.id,
+      kind: "sync_runtime_material",
+      commandId: command.id,
+    });
+    markHostOperationRecordCompleted(db, {
+      hostId: host.id,
+      kind: "sync_runtime_material",
+    });
+
+    const regressed = markHostOperationRecordFetched(db, {
+      hostId: host.id,
+      kind: "sync_runtime_material",
+    });
+
+    expect(regressed).toBeNull();
+    expect(
+      getHostOperation(db, {
+        hostId: host.id,
+        kind: "sync_runtime_material",
+      }),
+    ).toMatchObject({
+      state: "completed",
+    });
+  });
+
+  it("only resets host operations to requested from allowed states", () => {
+    const { db, host } = setup();
+    const command = queueCommand(db, noopNotifier, {
+      hostId: host.id,
+      type: "provider.list",
+      payload: JSON.stringify({ type: "provider.list" }),
+    });
+
+    upsertHostOperationRecord(db, {
+      hostId: host.id,
+      kind: "sync_runtime_material",
+      payload: JSON.stringify({ version: 1 }),
+    });
+    markHostOperationRecordQueued(db, {
+      hostId: host.id,
+      kind: "sync_runtime_material",
+      commandId: command.id,
+    });
+    markHostOperationRecordCompleted(db, {
+      hostId: host.id,
+      kind: "sync_runtime_material",
+    });
+
+    const rejectedReset = resetHostOperationRecordToRequested(db, {
+      allowedCurrentStates: ["queued", "fetched"],
+      hostId: host.id,
+      kind: "sync_runtime_material",
+      payload: JSON.stringify({ version: 2 }),
+    });
+
+    expect(rejectedReset).toBeNull();
+    expect(
+      getHostOperation(db, {
+        hostId: host.id,
+        kind: "sync_runtime_material",
+      }),
+    ).toMatchObject({
+      payload: JSON.stringify({ version: 1 }),
       state: "completed",
     });
   });

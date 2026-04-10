@@ -8,6 +8,7 @@ import {
   getThread,
   hostDaemonCommands,
   hostDaemonSessions,
+  markHostSuspended,
   markThreadDeleted,
   markThreadStopRequested,
   openSession,
@@ -50,7 +51,6 @@ import {
   seedThread,
 } from "../helpers/seed.js";
 import { createTestAppHarness } from "../helpers/test-app.js";
-import { updateHostLifecycleState } from "@bb/db/internal-lifecycle";
 
 describe("internal session routes", () => {
   it("opens sessions, replaces existing ones, and returns thread high-water marks", async () => {
@@ -340,7 +340,7 @@ describe("internal session routes", () => {
         commandId: initialRuntimeSync,
         completedAt: 1_700_000_000_000,
       });
-      updateHostLifecycleState(harness.db, {
+      markHostSuspended(harness.db, {
         hostId: host.id,
         suspendedAt: 1_700_000_000_000,
       });

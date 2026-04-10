@@ -148,76 +148,6 @@ describe("CommandRouter", () => {
     );
   });
 
-  it("fetches and persists runtime material before reporting success", async () => {
-    const manager = new RuntimeManager({
-      provisionWorkspace: vi.fn(async () => createFakeWorkspace("/tmp/env-1")),
-      createRuntime: vi.fn(() => createFakeRuntime()),
-    });
-    const fetchRuntimeMaterial = vi.fn(async () => ({
-      env: {
-        OPENAI_API_KEY: "test-openai-key",
-      },
-      files: [
-        {
-          contents: "{}\n",
-          managedBy: "bb-runtime-material",
-          mode: 0o600,
-          path: "~/.codex/auth.json",
-        },
-      ],
-      version: "runtime-version-1",
-    }));
-    const readPersistedRuntimeMaterial = vi.fn(async () => null);
-    const persistRuntimeMaterial = vi.fn(async () => undefined);
-    const reportResult = vi.fn(async () => undefined);
-    const router = new CommandRouter({
-      fetchRuntimeMaterial,
-      readPersistedRuntimeMaterial,
-      persistRuntimeMaterial,
-      reportResult,
-      runtimeManager: manager,
-      logger: createLogger(),
-    });
-
-    await router.handleCommands([
-      {
-        id: "runtime-sync",
-        cursor: 1,
-        command: {
-          type: "host.sync_runtime_material",
-          version: "runtime-version-1",
-        },
-      },
-    ]);
-
-    expect(fetchRuntimeMaterial).toHaveBeenCalledWith("runtime-version-1");
-    expect(readPersistedRuntimeMaterial).toHaveBeenCalledTimes(1);
-    expect(persistRuntimeMaterial).toHaveBeenCalledWith({
-      env: {
-        OPENAI_API_KEY: "test-openai-key",
-      },
-      files: [
-        {
-          contents: "{}\n",
-          managedBy: "bb-runtime-material",
-          mode: 0o600,
-          path: "~/.codex/auth.json",
-        },
-      ],
-      version: "runtime-version-1",
-    });
-    expect(reportResult).toHaveBeenCalledWith(
-      expect.objectContaining({
-        commandId: "runtime-sync",
-        ok: true,
-        result: {
-          appliedVersion: "runtime-version-1",
-        },
-        type: "host.sync_runtime_material",
-      }),
-    );
-  });
-
   it("applies runtime material with real state persistence and evicts idle environments", async () => {
     const dataDir = await makeTempDir("bb-command-router-state-");
     const homeDir = await makeTempDir("bb-command-router-home-");
@@ -274,7 +204,15 @@ describe("CommandRouter", () => {
 
     expect(manager.get("env-1")).toBeUndefined();
     expect(runtime.shutdown).toHaveBeenCalledTimes(1);
-    await expect(readRuntimeMaterialState(dataDir)).resolves.toEqual(snapshot);
+    await expect(readRuntimeMaterialState(dataDir)).resolves.toEqual({
+      files: [
+        {
+          managedBy: "bb-runtime-material",
+          path: "~/.codex/auth.json",
+        },
+      ],
+      version: "runtime-version-1",
+    });
     await expect(
       fs.readFile(path.join(homeDir, ".codex", "auth.json"), "utf8"),
     ).resolves.toBe("{}\n");
@@ -284,6 +222,74 @@ describe("CommandRouter", () => {
         ok: true,
       }),
     );
+  });
+
+  it("serializes host runtime material commands", async () => {
+    const manager = new RuntimeManager({
+      provisionWorkspace: vi.fn(async () => createFakeWorkspace("/tmp/env-1")),
+      createRuntime: vi.fn(() => createFakeRuntime()),
+    });
+    const firstFetch = createDeferred<{
+      env: Record<string, string>;
+      files: Array<{
+        contents: string;
+        managedBy: "bb-runtime-material";
+        mode: 0o600;
+        path: string;
+      }>;
+      version: string;
+    }>();
+    const fetchRuntimeMaterial = vi
+      .fn()
+      .mockReturnValueOnce(firstFetch.promise)
+      .mockResolvedValueOnce({
+        env: {},
+        files: [],
+        version: "runtime-version-2",
+      });
+    const router = new CommandRouter({
+      fetchRuntimeMaterial,
+      readPersistedRuntimeMaterial: vi.fn(async () => null),
+      persistRuntimeMaterial: vi.fn(async () => undefined),
+      runtimeManager: manager,
+      logger: createLogger(),
+    });
+
+    const handling = router.handleCommands([
+      {
+        id: "runtime-sync-1",
+        cursor: 1,
+        command: {
+          type: "host.sync_runtime_material",
+          version: "runtime-version-1",
+        },
+      },
+      {
+        id: "runtime-sync-2",
+        cursor: 2,
+        command: {
+          type: "host.sync_runtime_material",
+          version: "runtime-version-2",
+        },
+      },
+    ]);
+
+    await vi.waitFor(() => {
+      expect(fetchRuntimeMaterial).toHaveBeenCalledTimes(1);
+    });
+    expect(fetchRuntimeMaterial).not.toHaveBeenCalledWith("runtime-version-2");
+
+    firstFetch.resolve({
+      env: {},
+      files: [],
+      version: "runtime-version-1",
+    });
+
+    await vi.waitFor(() => {
+      expect(fetchRuntimeMaterial).toHaveBeenCalledWith("runtime-version-2");
+    });
+
+    await handling;
   });
 
   it("serializes workspace commands per environment", async () => {

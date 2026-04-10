@@ -3,12 +3,12 @@ import {
   createManagerThreadNudge,
   getManagerThreadNudge,
   hostDaemonCommands,
+  markHostSuspended,
   openSession,
   threads,
   upsertHost,
   updateManagerThreadNudge,
 } from "@bb/db";
-import { updateHostLifecycleState } from "@bb/db/internal-lifecycle";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { sweepDueNudges } from "../../src/services/scheduling/nudge-sweep.js";
 import { appendClientTurnEvent } from "../../src/services/threads/thread-events.js";
@@ -196,7 +196,7 @@ describe("nudge sweep", () => {
         host.externalId ?? undefined,
       );
       resumeHostMock.mockResolvedValue(resumedSandboxHost);
-      updateHostLifecycleState(harness.db, {
+      markHostSuspended(harness.db, {
         hostId: host.id,
         suspendedAt: 1_000,
       });

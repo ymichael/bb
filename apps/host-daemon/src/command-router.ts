@@ -31,6 +31,7 @@ export class CommandRouter {
   private readonly logger;
   private readonly now;
   private readonly environmentLanes = new Map<string, Promise<unknown>>();
+  private hostRuntimeMaterialLane: Promise<unknown> = Promise.resolve();
   private readonly pendingResults: CommandResultReport[] = [];
   private reportingPromise: Promise<void> = Promise.resolve();
 
@@ -51,6 +52,12 @@ export class CommandRouter {
   ): Promise<void> {
     let task: Promise<CommandResultReport>;
     if (
+      envelope.command.type === "host.sync_runtime_material"
+    ) {
+      task = this.runInHostRuntimeMaterialLane(
+        () => this.executeCommand(envelope),
+      );
+    } else if (
       this.requiresWorkspaceLane(envelope.command.type) &&
       "environmentId" in envelope.command
     ) {
@@ -85,6 +92,17 @@ export class CommandRouter {
         );
       });
     await this.reportingPromise;
+  }
+
+  private runInHostRuntimeMaterialLane<T>(
+    work: () => Promise<T>,
+  ): Promise<T> {
+    const next = this.hostRuntimeMaterialLane.catch(() => undefined).then(work);
+    this.hostRuntimeMaterialLane = next.then(
+      () => undefined,
+      () => undefined,
+    );
+    return next;
   }
 
   private async drainPending(): Promise<void> {

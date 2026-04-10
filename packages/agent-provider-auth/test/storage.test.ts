@@ -12,20 +12,10 @@ import {
 
 const tempDirs: string[] = [];
 
-interface BuildCredentialRecordArgs {
-  upsert: ReturnType<typeof buildCloudAuthCredentialUpsert>;
-}
-
 async function makeTempDir(): Promise<string> {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "bb-cloud-auth-storage-"));
   tempDirs.push(tempDir);
   return tempDir;
-}
-
-function buildCredentialRecord(
-  args: BuildCredentialRecordArgs,
-): ReturnType<typeof buildCloudAuthCredentialUpsert> {
-  return args.upsert;
 }
 
 afterEach(async () => {
@@ -67,9 +57,7 @@ describe("cloud auth storage", () => {
     expect(
       deserializeCloudAuthCredential({
         crypto,
-        record: buildCredentialRecord({
-          upsert,
-        }),
+        record: upsert,
       }),
     ).toEqual(credential);
   });
@@ -102,9 +90,7 @@ describe("cloud auth storage", () => {
     expect(
       deserializeCloudAuthCredential({
         crypto,
-        record: buildCredentialRecord({
-          upsert,
-        }),
+        record: upsert,
       }),
     ).toEqual(credential);
   });

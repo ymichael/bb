@@ -14,6 +14,7 @@ import type {
   HostRuntimeMaterialSnapshot,
   WorkspaceContext,
 } from "@bb/host-daemon-contract";
+import type { HostRuntimeMaterialState } from "@bb/host-runtime-material";
 import { RuntimeManager, type RuntimeEntry } from "./runtime-manager.js";
 
 export type CommandOf<TType extends HostDaemonCommand["type"]> = Extract<
@@ -30,9 +31,9 @@ export interface CommandDispatchOptions {
   fetchRuntimeMaterial: (
     version: string,
   ) => Promise<HostRuntimeMaterialSnapshot>;
-  readPersistedRuntimeMaterial: () => Promise<HostRuntimeMaterialSnapshot | null>;
+  readPersistedRuntimeMaterial: () => Promise<HostRuntimeMaterialState | null>;
   persistRuntimeMaterial: (
-    snapshot: HostRuntimeMaterialSnapshot,
+    state: HostRuntimeMaterialState,
   ) => Promise<void>;
   runtimeManager: RuntimeManager;
   seedThreadHighWaterMark?: (args: {
