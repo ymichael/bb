@@ -17,23 +17,27 @@ describe("bridge", () => {
     const options = buildSessionOptions(
       {
         baseInstructions: "You are a manager.",
+        cwd: "/tmp/worktree",
         managerMode: true,
       },
       {},
     );
 
     expect(options.tools).toEqual(["Bash", "Read", "Grep", "Glob", "LS"]);
+    expect(options.cwd).toBe("/tmp/worktree");
   });
 
   it("leaves standard sessions on the default Claude tool preset", () => {
     const options = buildSessionOptions(
       {
         baseInstructions: "You are a coder.",
+        cwd: "/tmp/worktree",
       },
       {},
     );
 
     expect(options.tools).toBeUndefined();
+    expect(options.cwd).toBe("/tmp/worktree");
   });
 
   it("returns the bridge-owned Claude model list", () => {

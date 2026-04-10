@@ -337,6 +337,7 @@ describe("createAgentRuntime", () => {
       BB_THREAD_ID: "t1",
       BB_ENVIRONMENT_ID: "env-1",
     });
+    expect(threadStart.cwd).toBe(tmpDir);
 
     await runtime.shutdown();
   });
@@ -389,6 +390,7 @@ describe("createAgentRuntime", () => {
       BB_THREAD_ID: "t1",
       BB_ENVIRONMENT_ID: "env-1",
     });
+    expect(reconfigureCommand.cwd).toBe(tmpDir);
 
     await runtime.shutdown();
   });

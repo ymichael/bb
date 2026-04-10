@@ -11,10 +11,10 @@
  * Run with: pnpm test:integration
  */
 
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { ThreadEvent, ToolCallRequest, ToolCallResponse } from "@bb/domain";
 import { createAgentRuntime } from "./runtime.js";
@@ -73,6 +73,20 @@ function getStreamedText(events: ThreadEvent[]): string {
     }
   }
   return chunks.join("");
+}
+
+function getCompletedCommandOutputs(events: ThreadEvent[]): string {
+  const outputs: string[] = [];
+  for (const event of events) {
+    if (
+      event.type === "item/completed"
+      && event.item.type === "commandExecution"
+      && event.item.aggregatedOutput
+    ) {
+      outputs.push(event.item.aggregatedOutput);
+    }
+  }
+  return outputs.join("\n");
 }
 
 function newThreadId(): string {
@@ -180,6 +194,66 @@ for (const providerId of providers) {
         cleanup(ctx);
       }
     });
+
+    if (providerId === "claude-code") {
+      it("starts turns in the workspace cwd and still allows cd outside it", async () => {
+        const ctx = createTestRuntime(providerId);
+        const workspaceMarkerName = `workspace-marker-${randomUUID()}.txt`;
+        const parentMarkerName = `parent-marker-${randomUUID()}.txt`;
+        const workspaceToken = `WORKSPACE_${randomUUID()}`;
+        const parentToken = `PARENT_${randomUUID()}`;
+        const parentDir = dirname(ctx.tmpDir);
+        const parentMarkerPath = join(parentDir, parentMarkerName);
+
+        writeFileSync(join(ctx.tmpDir, workspaceMarkerName), workspaceToken, "utf8");
+        writeFileSync(parentMarkerPath, parentToken, "utf8");
+
+        try {
+          const threadId = newThreadId();
+          await ctx.runtime.startThread({
+            environmentId: "env-1",
+            threadId,
+            projectId: "test-project",
+            providerId,
+            options: { sandboxMode: "danger-full-access" },
+            instructions:
+              "When the user asks you to execute exact shell commands, use the Bash tool exactly as requested and preserve the command output.",
+          });
+
+          await ctx.runtime.runTurn({
+            threadId,
+            input: [{
+              type: "text",
+              text:
+                `Use the Bash tool exactly twice. First run \`pwd && cat ${workspaceMarkerName}\`. `
+                + `Then run \`cd .. && pwd && cat ${parentMarkerName}\`. `
+                + "Do not use absolute paths. After both commands, reply with exactly DONE.",
+            }],
+          });
+
+          await waitForCondition(() => {
+            const outputs = getCompletedCommandOutputs(ctx.events);
+            return (
+              outputs.includes(workspaceToken)
+              && outputs.includes(parentToken)
+            );
+          }, {
+            timeoutMs: 45_000,
+            label: "workspace and parent command outputs",
+          });
+
+          const outputs = getCompletedCommandOutputs(ctx.events);
+          expect(outputs).toContain(ctx.tmpDir);
+          expect(outputs).toContain(parentDir);
+          expect(outputs).toContain(workspaceToken);
+          expect(outputs).toContain(parentToken);
+        } finally {
+          await ctx.runtime.shutdown();
+          rmSync(parentMarkerPath, { force: true });
+          cleanup(ctx);
+        }
+      }, 45_000);
+    }
 
     // 3. Handles a follow-up turn in the same session
     it("handles a follow-up turn in the same session", async () => {

@@ -71,10 +71,14 @@ describe("claude-code provider adapter", () => {
     const adapter = createClaudeCodeProviderAdapter();
     const cmd = adapter.buildCommand({
       type: "thread/start",
+      cwd: "/tmp/worktree",
       threadId: "bb-thread-1",
       input: [{ type: "text", text: "hello" }],
     });
-    expect(cmd?.params).toMatchObject({ threadId: "bb-thread-1" });
+    expect(cmd?.params).toMatchObject({
+      threadId: "bb-thread-1",
+      cwd: "/tmp/worktree",
+    });
   });
 
   it("buildCommand thread/start passes through model, env vars, instructions, reasoning level, and dynamic tools", () => {
@@ -143,10 +147,12 @@ describe("claude-code provider adapter", () => {
     const adapter = createClaudeCodeProviderAdapter();
     const cmd = adapter.buildCommand({
       type: "thread/resume",
+      cwd: "/tmp/worktree",
       threadId: "bb-thread-1",
       providerThreadId: "claude-session-1",
     });
     expect(cmd?.params).toMatchObject({
+      cwd: "/tmp/worktree",
       threadId: "bb-thread-1",
       providerThreadId: "claude-session-1",
     });

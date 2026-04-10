@@ -52,12 +52,16 @@ describe("pi provider adapter", () => {
     const adapter = createPiProviderAdapter();
     const cmd = adapter.buildCommand({
       type: "thread/start",
+      cwd: "/tmp/worktree",
       threadId: "t1",
       input: [{ type: "text", text: "hello" }],
     });
     expect(cmd).toMatchObject({
       method: "thread/start",
-      params: { threadId: "t1" },
+      params: {
+        threadId: "t1",
+        cwd: "/tmp/worktree",
+      },
     });
     expect((cmd as { params: { baseInstructions?: string } }).params.baseInstructions).toBeDefined();
   });
@@ -127,12 +131,16 @@ describe("pi provider adapter", () => {
     const adapter = createPiProviderAdapter();
     const cmd = adapter.buildCommand({
       type: "thread/resume",
+      cwd: "/tmp/worktree",
       threadId: "bb-t1",
       providerThreadId: "pi-session-1",
     });
     expect(cmd).toMatchObject({
       method: "thread/resume",
-      params: { threadId: "pi-session-1" },
+      params: {
+        threadId: "pi-session-1",
+        cwd: "/tmp/worktree",
+      },
     });
   });
 
