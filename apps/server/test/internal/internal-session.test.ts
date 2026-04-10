@@ -1,3 +1,4 @@
+import { setTimeout as sleep } from "node:timers/promises";
 import { and, eq } from "drizzle-orm";
 import {
   createEnvironment,
@@ -25,6 +26,7 @@ import { threadSchema } from "@bb/domain";
 import { describe, expect, it, vi } from "vitest";
 import { appendClientTurnEvent } from "../../src/services/threads/thread-events.js";
 import { finalizeStoppedThread } from "../../src/services/threads/thread-lifecycle.js";
+import { ensureSandboxHostSessionReady } from "../../src/services/hosts/host-lifecycle.js";
 import {
   advanceSandboxRuntimeMaterialSync,
   requestSandboxRuntimeMaterialSync,
@@ -33,6 +35,7 @@ import { completeSandboxRuntimeMaterialSyncForCommand } from "../../src/services
 import { buildSandboxRuntimeMaterialSnapshot } from "../../src/services/hosts/sandbox-runtime-material-snapshot.js";
 import {
   internalAuthHeaders,
+  reportQueuedCommandSuccess,
   waitForQueuedCommand,
   waitForQueuedCommandAfter,
 } from "../helpers/commands.js";
@@ -126,6 +129,98 @@ describe("internal session routes", () => {
         .where(eq(hostDaemonSessions.id, body.sessionId))
         .get();
       expect(current?.dataDir).toBe("/tmp/host-open-data");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("returns session-open responses before runtime material sync finishes on resumed sandboxes", async () => {
+    const harness = await createTestAppHarness({
+      githubPat: "test-github-pat",
+    });
+    try {
+      const host = upsertHost(harness.db, harness.hub, {
+        id: "host-session-open-resume",
+        name: "Session Resume Host",
+        provider: "e2b",
+        type: "ephemeral",
+      });
+      harness.deps.sandboxRegistry.set(host.id, {
+        destroy: async () => undefined,
+        extendTimeout: async () => undefined,
+        externalId: "sandbox-session-open-resume",
+        hostId: host.id,
+        resume: async () => undefined,
+        suspend: async () => undefined,
+      });
+      markHostSuspended(harness.db, {
+        hostId: host.id,
+        suspendedAt: 1_000,
+      });
+
+      let readyResolved = false;
+      const readyPromise = ensureSandboxHostSessionReady(harness.deps, {
+        hostId: host.id,
+      }).then(() => {
+        readyResolved = true;
+      });
+
+      await Promise.resolve();
+
+      const responsePromise = harness.app.request("/internal/session/open", {
+        method: "POST",
+        headers: internalAuthHeaders(harness, {
+          hostId: host.id,
+          hostType: "ephemeral",
+        }),
+        body: JSON.stringify({
+          hostId: host.id,
+          instanceId: "instance-session-open-resume",
+          hostName: host.name,
+          hostType: "ephemeral",
+          dataDir: "/tmp/session-open-resume",
+          protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
+          activeThreads: [],
+        }),
+      });
+
+      const queuedRuntimeSync = await waitForQueuedCommand(
+        harness,
+        ({ command, row }) =>
+          row.hostId === host.id
+          && command.type === "host.sync_runtime_material",
+      );
+      const response = await Promise.race([
+        responsePromise,
+        sleep(500).then(() => null),
+      ]);
+      expect(response).not.toBeNull();
+      if (!response) {
+        throw new Error("Expected session.open to return before runtime sync completed");
+      }
+      expect(response.status).toBe(201);
+      expect(readyResolved).toBe(false);
+
+      const body = hostDaemonSessionOpenResponseSchema.parse(
+        await readJson(response),
+      );
+      expect(queuedRuntimeSync.row.sessionId).toBe(body.sessionId);
+
+      const reportResponse = await reportQueuedCommandSuccess(
+        harness,
+        queuedRuntimeSync,
+        {
+          appliedVersion: queuedRuntimeSync.command.version,
+        },
+        {
+          hostId: host.id,
+          hostType: "ephemeral",
+        },
+      );
+      expect(reportResponse.status).toBe(200);
+
+      await readyPromise;
+      expect(readyResolved).toBe(true);
     } finally {
       await harness.cleanup();
     }

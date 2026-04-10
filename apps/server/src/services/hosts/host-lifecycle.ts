@@ -226,8 +226,8 @@ export async function ensureSandboxHostSessionReady(
   const progressFanout = createPendingReadyProgressFanout(state, args.hostId);
 
   try {
-    await state.hostReadyDeduper.run(args.hostId, async () =>
-      state.hostLifecycleLane.run(args.hostId, async () => {
+    await state.hostReadyDeduper.run(args.hostId, async () => {
+      await state.hostLifecycleLane.run(args.hostId, async () => {
         const host = getHost(deps.db, args.hostId);
         if (!host || host.destroyedAt !== null) {
           throw new ApiError(404, "host_not_found", "Host not found");
@@ -311,13 +311,13 @@ export async function ensureSandboxHostSessionReady(
           });
           deps.sandboxRegistry.set(host.id, sandboxHost);
         }
+      });
 
-        await waitForHostSession(deps, host.id);
-        await ensureSandboxRuntimeMaterialSynced(deps, {
-          hostId: host.id,
-        });
-      }),
-    );
+      await waitForHostSession(deps, args.hostId);
+      await ensureSandboxRuntimeMaterialSynced(deps, {
+        hostId: args.hostId,
+      });
+    });
   } finally {
     unregisterProgressCallbacks();
   }
