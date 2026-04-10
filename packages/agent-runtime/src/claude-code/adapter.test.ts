@@ -716,6 +716,9 @@ describe("claude-code provider adapter", () => {
         providerThreadId: "bb-thread-1",
         providerId: "claude-code",
         rawType: "sdk/custom_event",
+        rawEvent: expect.objectContaining({
+          method: "sdk/message",
+        }),
       }),
     ]);
   });
@@ -739,6 +742,9 @@ describe("claude-code provider adapter", () => {
         type: "provider/unhandled",
         providerId: "claude-code",
         rawType: "sdk/result",
+        rawEvent: expect.objectContaining({
+          method: "sdk/message",
+        }),
       }),
     ]);
   });

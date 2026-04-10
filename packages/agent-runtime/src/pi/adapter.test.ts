@@ -513,6 +513,9 @@ describe("pi provider adapter", () => {
         type: "provider/unhandled",
         providerId: "pi",
         rawType: "sdk/agent_end",
+        rawEvent: expect.objectContaining({
+          method: "sdk/message",
+        }),
       }),
     ]);
   });
@@ -768,6 +771,9 @@ describe("pi provider adapter", () => {
         type: "provider/unhandled",
         providerId: "pi",
         rawType: "sdk/tool_execution_start",
+        rawEvent: expect.objectContaining({
+          method: "sdk/message",
+        }),
       }),
     );
   });

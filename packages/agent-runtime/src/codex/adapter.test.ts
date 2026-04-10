@@ -534,7 +534,14 @@ describe("codex provider adapter", () => {
         rawType: "item/started",
         threadId: "t1",
         turnId: "turn-1",
-        detailEntries: [{ label: "item", value: "imageView" }],
+        rawEvent: expect.objectContaining({
+          method: "item/started",
+          params: expect.objectContaining({
+            item: expect.objectContaining({
+              type: "imageView",
+            }),
+          }),
+        }),
       }),
     );
   });
