@@ -22,6 +22,9 @@ import { toPositiveNumber } from "@bb/domain";
 import {
   decodeNormalizedProviderToolCallRequest,
 } from "../shared/provider-tool-call-contract.js";
+import {
+  normalizePendingInteractionRequestedPermissionProfile,
+} from "../shared/pending-interaction-normalization.js";
 import { resolveBridgePath } from "../shared/bridge-path.js";
 import {
   bashArgsSchema,
@@ -69,7 +72,6 @@ import {
   CLAUDE_TOOL_REQUEST_USER_INPUT_METHOD,
   claudePermissionRequestApprovalParamsSchema,
   claudeToolRequestUserInputParamsSchema,
-  parseClaudeRequestedPermissionProfile,
   toClaudePermissionMode,
   toClaudeUserInputUpdatedInput,
   toPendingInteractionUserQuestions,
@@ -952,12 +954,9 @@ export function createClaudeCodeProviderAdapter(
           if (!parsed.success) {
             return null;
           }
-          const permissions = parseClaudeRequestedPermissionProfile(
+          const permissions = normalizePendingInteractionRequestedPermissionProfile(
             parsed.data.permissions,
           );
-          if (permissions === null) {
-            return null;
-          }
 
           return {
             requestId: request.id,

@@ -145,17 +145,6 @@ export type ClaudeRequestedPermissionProfileInput = z.infer<
   typeof claudeRequestedPermissionProfileInputSchema
 >;
 
-export function parseClaudeRequestedPermissionProfile(
-  permissions: unknown,
-): PendingInteractionRequestedPermissionProfile | null {
-  const parsed = claudeRequestedPermissionProfileInputSchema.safeParse(permissions);
-  if (!parsed.success) {
-    return null;
-  }
-
-  return normalizePendingInteractionRequestedPermissionProfile(parsed.data);
-}
-
 export interface ClaudePermissionRequestProfileArgs {
   blockedPath: string | undefined;
   suggestions: ClaudePermissionUpdate[] | undefined;
@@ -274,7 +263,7 @@ export const claudePermissionRequestApprovalParamsSchema = z.object({
   itemId: z.string(),
   toolName: z.string(),
   reason: z.string().nullable(),
-  permissions: z.unknown(),
+  permissions: claudeRequestedPermissionProfileInputSchema,
 });
 export type ClaudePermissionRequestApprovalParams = z.infer<
   typeof claudePermissionRequestApprovalParamsSchema
