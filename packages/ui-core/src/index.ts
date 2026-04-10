@@ -13,12 +13,7 @@ export {
   PromptComposerShell,
   type PromptComposerShellProps,
 } from "./prompt-composer.js";
-export {
-  ContextPanel,
-  ContextPanelCard,
-  type ContextPanelProps,
-  type ContextPanelCardProps,
-} from "./context-panel.js";
+export { LocalhostBadge } from "./localhost-badge.js";
 export {
   DetailCard,
   DetailRow,
@@ -52,11 +47,7 @@ export {
 } from "./scroll.js";
 export {
   EventCodeBlock,
-  EventMetaItem,
-  EventMetaList,
   type EventCodeBlockProps,
-  type EventMetaItemProps,
-  type EventMetaListProps,
 } from "./event-content.js";
 export { ConversationEntry } from "./thread-timeline/ConversationEntry.js";
 export { ThreadTimelineRows } from "./thread-timeline/ThreadTimelineRows.js";

@@ -1,5 +1,6 @@
 import { Check, ChevronDown, Monitor } from "lucide-react";
 import type { Host } from "@bb/domain";
+import { LocalhostBadge } from "@bb/ui-core";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -53,11 +54,7 @@ export function HostPicker({
           <span className={PROMPT_OPTION_CONTENT_CLASS_NAME}>
             <Monitor className="size-3.5 shrink-0" />
             <span className="truncate">{label}</span>
-            {isLocal ? (
-              <span className="shrink-0 rounded-full bg-primary/10 px-1.5 py-px text-[10px] font-medium text-primary">
-                localhost
-              </span>
-            ) : null}
+            {isLocal ? <LocalhostBadge /> : null}
             {selectedHost ? (
               <HostStatusBadge connected={isConnected} />
             ) : null}
@@ -76,11 +73,7 @@ export function HostPicker({
               <span className="flex min-w-0 items-center gap-2 text-xs">
                 <Monitor className="size-3.5 shrink-0" />
                 <span className="truncate">{host.name}</span>
-                {isLocalHost(host.id) ? (
-                  <span className="shrink-0 rounded-full bg-primary/10 px-1.5 py-px text-[10px] font-medium text-primary">
-                    localhost
-                  </span>
-                ) : null}
+                {isLocalHost(host.id) ? <LocalhostBadge /> : null}
                 <HostStatusBadge connected={host.status === "connected"} />
               </span>
               <Check

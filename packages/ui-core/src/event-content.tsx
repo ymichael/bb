@@ -1,58 +1,6 @@
 import type { ReactNode } from "react";
 import { cx } from "./utils.js";
 
-const EVENT_META_GRID_CLASS =
-  "grid grid-cols-[92px_minmax(0,1fr)] gap-2 text-sm sm:grid-cols-[124px_minmax(0,1fr)]";
-
-export interface EventMetaListProps {
-  children: ReactNode;
-  className?: string;
-}
-
-export function EventMetaList({ children, className }: EventMetaListProps) {
-  return (
-    <dl
-      className={cx(
-        "rounded-md border border-border/60 bg-background/50 px-2 py-1",
-        className,
-      )}
-    >
-      {children}
-    </dl>
-  );
-}
-
-export interface EventMetaItemProps {
-  label: ReactNode;
-  children: ReactNode;
-  className?: string;
-  labelClassName?: string;
-  valueClassName?: string;
-  align?: "start" | "center";
-}
-
-export function EventMetaItem({
-  label,
-  children,
-  className,
-  labelClassName,
-  valueClassName,
-  align = "center",
-}: EventMetaItemProps) {
-  return (
-    <div
-      className={cx(
-        EVENT_META_GRID_CLASS,
-        align === "center" ? "items-center py-1" : "py-1",
-        className,
-      )}
-    >
-      <dt className={cx("text-xs text-muted-foreground", labelClassName)}>{label}</dt>
-      <dd className={cx("min-w-0", valueClassName)}>{children}</dd>
-    </div>
-  );
-}
-
 export interface EventCodeBlockProps {
   children: ReactNode;
   className?: string;

@@ -3,6 +3,7 @@ import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Check, ChevronDown, Cloud, Monitor } from "lucide-react";
 import type { Host, ProjectSource, SandboxBackendInfo } from "@bb/domain";
+import { LocalhostBadge } from "@bb/ui-core";
 import { findLocalPathProjectSourceForHost, isGitHubRepoProjectSource } from "@bb/domain";
 import { Button } from "@/components/ui/button";
 import {
@@ -233,13 +234,9 @@ function HostSectionGroup({
 
   return (
     <DropdownMenuGroup>
-        <DropdownMenuLabel className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+        <DropdownMenuLabel className="flex items-center gap-1.5 ui-text-xs text-muted-foreground">
           <span className="truncate">{section.host.name}</span>
-          {section.isLocal ? (
-            <span className="rounded-full bg-primary/10 px-1.5 py-px text-[10px] font-medium text-primary">
-              localhost
-            </span>
-          ) : null}
+          {section.isLocal ? <LocalhostBadge /> : null}
           {section.isConnected ? <HostStatusDot /> : null}
         </DropdownMenuLabel>
         {enabled ? (
@@ -285,7 +282,7 @@ function SandboxSection({ backends, hasGitHubSource, projectId, value, onChange 
 
   return (
     <DropdownMenuGroup>
-      <DropdownMenuLabel className="text-[11px] text-muted-foreground">
+      <DropdownMenuLabel className="ui-text-xs text-muted-foreground">
         Cloud
       </DropdownMenuLabel>
       {hasGitHubSource ? (

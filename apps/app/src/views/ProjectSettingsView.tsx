@@ -270,7 +270,7 @@ export function ProjectSettingsView() {
                   >
                     <span className="min-w-0 flex-1 truncate">{repo.fullName}</span>
                     {repo.private && (
-                      <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
+                      <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 ui-text-xs text-muted-foreground">
                         Private
                       </span>
                     )}

@@ -16,7 +16,7 @@ import { ArchiveTimestampAction } from "@/components/shared/ArchiveTimestampActi
 import { MergeBaseBranchPicker } from "@/components/thread/MergeBaseBranchPicker";
 import { ThreadSecondaryPanel } from "./ThreadSecondaryPanel";
 import { ThreadTimelinePane } from "./ThreadTimelinePane";
-import { DetailCard, DetailRow } from "@bb/ui-core";
+import { DetailCard, DetailRow, LocalhostBadge } from "@bb/ui-core";
 import type { Thread } from "@bb/domain";
 import type { WorkspaceFile } from "@bb/server-contract";
 import type { FilePreview } from "@/lib/file-preview";
@@ -264,11 +264,7 @@ function ThreadMetadataContent({
         >
           <span className="flex items-center gap-1.5">
             <span className="truncate">{threadHostName}</span>
-            {threadHostIsLocal ? (
-              <span className="shrink-0 rounded-full bg-primary/10 px-1.5 py-px text-[10px] font-medium text-primary">
-                localhost
-              </span>
-            ) : null}
+            {threadHostIsLocal ? <LocalhostBadge /> : null}
             {threadHostConnected !== undefined ? (
               <HostStatusBadge connected={threadHostConnected} />
             ) : null}
