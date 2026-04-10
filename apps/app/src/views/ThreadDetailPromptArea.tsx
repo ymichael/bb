@@ -176,13 +176,6 @@ export function ThreadDetailPromptArea({
       : thread.status === "idle"
       ? "Ask for follow-up changes"
       : "Send a message to this thread...";
-  const provisioningStatusLabel =
-    isCreated
-      ? "Created..."
-      : isProvisioning
-      ? "Provisioning..."
-      : undefined;
-
   const sendFollowUpInput = useCallback(
     async ({
       input,
@@ -431,7 +424,6 @@ export function ThreadDetailPromptArea({
         onSubmit: handleSend,
         processingQueuedMessageId,
         promptPlaceholder,
-        provisioningStatusLabel,
         threadId: thread.id,
         threadStatus: thread.status,
       }}

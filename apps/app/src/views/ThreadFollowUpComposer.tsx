@@ -26,13 +26,11 @@ import {
   MergeBaseBranchPicker,
 } from "@/components/thread/MergeBaseBranchPicker";
 import { ThreadContextWindowIndicator } from "@/components/thread/ThreadContextWindowIndicator";
-import { PromptComposerShell } from "@bb/ui-core";
 import { cn } from "@/lib/utils";
 import {
   countQueuedMessageAttachments,
   formatQueuedFollowUpPreview,
 } from "./threadQueuedMessages";
-import { ConversationStatusIndicator } from "@/components/messages/ConversationStatusIndicator";
 
 function QueuedFollowUpList({
   queuedMessages,
@@ -177,7 +175,6 @@ export interface ComposerCoreProps {
   onSubmit: () => void;
   processingQueuedMessageId: string | null;
   promptPlaceholder: string;
-  provisioningStatusLabel?: string;
   threadId: string;
   threadStatus: string;
 }
@@ -260,13 +257,7 @@ export function ThreadFollowUpComposer({
 
   return (
     <div ref={composer.composerRef}>
-      <PromptComposerShell
-        statusLabel={
-          composer.provisioningStatusLabel ? (
-            <ConversationStatusIndicator label={composer.provisioningStatusLabel} />
-          ) : undefined
-        }
-      >
+      <div className="space-y-2">
         <ScrollToBottomButton
           visible={queue.showScrollToBottom}
           onClick={queue.onScrollToBottom}
@@ -456,7 +447,7 @@ export function ThreadFollowUpComposer({
             ) : null}
           </div>
         ) : null}
-      </PromptComposerShell>
+      </div>
     </div>
   );
 }

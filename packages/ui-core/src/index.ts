@@ -9,10 +9,6 @@ export {
   type ConversationTimelineProps,
   type ConversationEmptyStateProps,
 } from "./conversation.js";
-export {
-  PromptComposerShell,
-  type PromptComposerShellProps,
-} from "./prompt-composer.js";
 export { LocalhostBadge } from "./localhost-badge.js";
 export {
   DetailCard,
