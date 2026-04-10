@@ -23,7 +23,6 @@ export type ThreadType = z.infer<typeof threadTypeSchema>;
 export const workspaceStateValues = [
   "clean",
   "untracked",
-  "deleted",
   "dirty_uncommitted",
   "committed_unmerged",
   "dirty_and_committed_unmerged",

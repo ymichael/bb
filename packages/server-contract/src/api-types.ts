@@ -780,7 +780,7 @@ export const githubReposQuerySchema = z.object({
 export type GithubReposQuery = z.infer<typeof githubReposQuerySchema>;
 
 export const environmentStatusResponseSchema = z.object({
-  workspace: workspaceStatusSchema.nullable(),  // null if daemon unreachable or non-git env
+  workspace: workspaceStatusSchema.nullable(), // null for non-git environments
 });
 
 export const uploadedPromptAttachmentSchema = z.object({

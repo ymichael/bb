@@ -76,7 +76,7 @@ describe("resolveEnvironmentWorkStatusPlaceholder", () => {
   });
 
   it("drops previous data when switching to a different thread", () => {
-    const previousStatus = makeStatus("deleted");
+    const previousStatus = makeStatus("dirty_uncommitted");
 
     expect(
       resolveEnvironmentWorkStatusPlaceholder(

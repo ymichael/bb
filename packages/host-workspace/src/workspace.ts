@@ -124,15 +124,11 @@ function resolveWorkspaceFileStatusKind(args: {
 
 function resolveWorkspaceState(args: {
   hasCommittedChanges: boolean;
-  hasDeleted: boolean;
   hasTrackedChanges: boolean;
   hasUntracked: boolean;
 }): WorkspaceStatus["workingTree"]["state"] {
   if (!args.hasTrackedChanges && !args.hasUntracked && !args.hasCommittedChanges) {
     return "clean";
-  }
-  if (args.hasDeleted && !args.hasCommittedChanges) {
-    return "deleted";
   }
   if ((args.hasTrackedChanges || args.hasUntracked) && args.hasCommittedChanges) {
     return "dirty_and_committed_unmerged";
@@ -162,6 +158,7 @@ function parseNonEmptyLines(output: string): string[] {
 function isMissingHeadRevisionError(stderr: string): boolean {
   return (
     stderr.includes("ambiguous argument 'HEAD'") ||
+    stderr.includes("bad revision 'HEAD'") ||
     stderr.includes("unknown revision or path not in the working tree") ||
     stderr.includes("Needed a single revision")
   );
@@ -224,6 +221,24 @@ function formatShortstat(args: {
   return `${parts.join(", ")}\n`;
 }
 
+async function readHeadNumstat(workspacePath: string): Promise<string> {
+  const result = await runGit(["diff", "--numstat", "HEAD", "--"], {
+    cwd: workspacePath,
+    allowFailure: true,
+  });
+  if (result.exitCode === 0) {
+    return result.stdout;
+  }
+  if (isMissingHeadRevisionError(result.stderr)) {
+    return "";
+  }
+  const detail = result.stderr.trim();
+  throw new WorkspaceError(
+    "git_command_failed",
+    `git diff --numstat HEAD -- failed${detail ? `: ${detail}` : ""}`,
+  );
+}
+
 export class Workspace {
   readonly path: string;
 
@@ -252,18 +267,15 @@ export class Workspace {
         ["status", "--porcelain=v1", "--branch", "--untracked-files=all"],
         { cwd: this.path },
       ),
-      runGit(["diff", "--numstat", "HEAD", "--"], { cwd: this.path }),
+      readHeadNumstat(this.path),
       this.currentBranch,
       readDefaultBranch(this.path),
     ]);
 
     const entries = parsePorcelainEntries(statusOutput.stdout);
-    const workingTreeSummary = summarizeNumstat(diffOutput.stdout);
+    const workingTreeSummary = summarizeNumstat(diffOutput);
     const hasUntracked = entries.some((entry) => entry.status === "??");
     const hasTrackedChanges = entries.some((entry) => entry.status !== "??");
-    const hasDeleted = entries.some(
-      (entry) => entry.indexStatus === "D" || entry.worktreeStatus === "D",
-    );
     const hasDirtyEntries = entries.length > 0;
     const mergeBaseData = mergeBaseBranch
       ? await this.readMergeBaseStatus(mergeBaseBranch)
@@ -271,7 +283,6 @@ export class Workspace {
     const hasCommittedChanges = mergeBaseData?.hasCommittedUnmergedChanges ?? false;
     const state = resolveWorkspaceState({
       hasCommittedChanges,
-      hasDeleted,
       hasTrackedChanges,
       hasUntracked,
     });

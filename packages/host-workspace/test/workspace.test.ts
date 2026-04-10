@@ -64,6 +64,22 @@ describe("Workspace", () => {
     expect(mixedStatus.workingTree.changedFiles).toBe(2);
   });
 
+  it("reports deleted tracked files as dirty file changes", async () => {
+    const repoPath = await initRepo();
+    const workspace = new Workspace(repoPath);
+
+    await fs.rm(path.join(repoPath, "README.md"));
+
+    const status = await workspace.getStatus();
+    expect(status.workingTree.state).toBe("dirty_uncommitted");
+    expect(status.workingTree.files).toEqual([
+      {
+        path: "README.md",
+        status: "D",
+      },
+    ]);
+  });
+
   it("changes the local state fingerprint when local checkout state changes", async () => {
     const repoPath = await initRepo();
     const workspace = new Workspace(repoPath);
@@ -107,6 +123,7 @@ describe("Workspace", () => {
     expect(localOnlyStatus.workingTree.state).toBe("clean");
 
     const status = await workspace.getStatus({ mergeBaseBranch: "main" });
+    expect(status.workingTree.state).toBe("committed_unmerged");
     expect(status.branch.currentBranch).toBe("feature");
     expect(status.branch.defaultBranch).toBe("main");
     expect(status.mergeBase).toMatchObject({
@@ -143,6 +160,45 @@ describe("Workspace", () => {
       aheadCount: 1,
       behindCount: 0,
     });
+  });
+
+  it("reports branches that are only behind their merge base as clean", async () => {
+    const repoPath = await initRepo();
+    await runGit(["checkout", "-b", "feature"], { cwd: repoPath });
+    await runGit(["checkout", "main"], { cwd: repoPath });
+    await fs.writeFile(path.join(repoPath, "README.md"), "main update\n", "utf8");
+    await runGit(["add", "README.md"], { cwd: repoPath });
+    await runGit(["commit", "-m", "Main update"], { cwd: repoPath });
+    await runGit(["checkout", "feature"], { cwd: repoPath });
+
+    const workspace = new Workspace(repoPath);
+    const status = await workspace.getStatus({ mergeBaseBranch: "main" });
+
+    expect(status.workingTree.state).toBe("clean");
+    expect(status.mergeBase).toMatchObject({
+      mergeBaseBranch: "main",
+      hasCommittedUnmergedChanges: false,
+      aheadCount: 0,
+      behindCount: 1,
+    });
+  });
+
+  it("reports status for git repositories with no commits yet", async () => {
+    const repoPath = await makeTempDir("bb-workspace-unborn-repo-");
+    await runGit(["init", "-b", "main"], { cwd: repoPath });
+    await fs.writeFile(path.join(repoPath, "notes.txt"), "untracked pending\n", "utf8");
+
+    const workspace = new Workspace(repoPath);
+    const status = await workspace.getStatus();
+
+    expect(status.workingTree.state).toBe("untracked");
+    expect(status.branch.currentBranch).toBe("main");
+    expect(status.workingTree.files).toEqual([
+      {
+        path: "notes.txt",
+        status: "??",
+      },
+    ]);
   });
 
   it("returns diff content for each supported target", async () => {

@@ -13,8 +13,7 @@ interface ThreadGitStatusDisplay {
     | "Behind"
     | "Diverged"
     | "Dirty"
-    | "Untracked"
-    | "Deleted";
+    | "Untracked";
   summary: string;
 }
 
@@ -106,12 +105,10 @@ export function getGitStatusDisplay(
     case "untracked":
       return {
         label: "Untracked",
-        summary: "Workspace has untracked files.",
-      };
-    case "deleted":
-      return {
-        label: "Deleted",
-        summary: "Workspace deleted.",
+        summary: joinStatusSummary([
+          workspaceSummary ?? "Untracked files",
+          comparisonSummary,
+        ]),
       };
     case "dirty_uncommitted":
       return {
@@ -172,9 +169,10 @@ export function workspaceStatusDescription(
       return "No local changes or unmerged commits.";
     }
     case "untracked":
+      if ((status.mergeBase?.behindCount ?? 0) > 0) {
+        return "Workspace has untracked files, and this branch is behind its merge base.";
+      }
       return "Workspace has untracked files that have not been committed yet.";
-    case "deleted":
-      return "This workspace no longer exists on disk.";
     case "dirty_uncommitted":
       return "You have local changes that have not been committed yet.";
     case "committed_unmerged":
@@ -194,4 +192,3 @@ export function workspaceStatusDescription(
       return assertNever(status.workingTree.state);
   }
 }
-

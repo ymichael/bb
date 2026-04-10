@@ -457,11 +457,9 @@ export function ThreadDetailView() {
       showBranchComparison: showBranchComparisonUi,
     },
   );
-  const threadGitStatusLabelClass = workspaceWorkingTree?.state === "deleted"
-    ? "text-destructive"
-    : workspaceWorkingTree?.state === "untracked"
-      ? "text-muted-foreground"
-      : "text-foreground";
+  const threadGitStatusLabelClass = workspaceWorkingTree?.state === "untracked"
+    ? "text-muted-foreground"
+    : "text-foreground";
   const showThreadChangedFiles = canUseGitUi && Boolean(
     workspaceStatus &&
       workspaceWorkingTree?.state !== "clean" &&

@@ -5,14 +5,29 @@ import {
   workspaceStatusDescription,
 } from "./workspace-status";
 
-function makeStatus(state: WorkspaceStatus["workingTree"]["state"]): WorkspaceStatus {
+interface MakeStatusOptions {
+  aheadCount?: number;
+  behindCount?: number;
+  changedFiles?: number;
+  deletions?: number;
+  insertions?: number;
+  state: WorkspaceStatus["workingTree"]["state"];
+}
+
+function makeStatus(options: MakeStatusOptions): WorkspaceStatus {
+  const aheadCount = options.aheadCount ?? 0;
+  const behindCount = options.behindCount ?? 0;
+  const hasUncommittedChanges =
+    options.state === "untracked" ||
+    options.state === "dirty_uncommitted" ||
+    options.state === "dirty_and_committed_unmerged";
   return {
     workingTree: {
-      hasUncommittedChanges: false,
-      state,
-      changedFiles: 0,
-      insertions: 0,
-      deletions: 0,
+      hasUncommittedChanges,
+      state: options.state,
+      changedFiles: options.changedFiles ?? 0,
+      insertions: options.insertions ?? 0,
+      deletions: options.deletions ?? 0,
       files: [],
     },
     branch: {
@@ -22,9 +37,9 @@ function makeStatus(state: WorkspaceStatus["workingTree"]["state"]): WorkspaceSt
     mergeBase: {
       mergeBaseBranch: "main",
       baseRef: "origin/main",
-      aheadCount: 0,
-      behindCount: 0,
-      hasCommittedUnmergedChanges: false,
+      aheadCount,
+      behindCount,
+      hasCommittedUnmergedChanges: aheadCount > 0,
       commits: [],
     },
   };
@@ -32,51 +47,67 @@ function makeStatus(state: WorkspaceStatus["workingTree"]["state"]): WorkspaceSt
 
 describe("workspace-status", () => {
   it("shows untracked label and copy for workspaces with only untracked files", () => {
-    expect(workspaceStatusDescription(makeStatus("untracked"))).toBe(
+    expect(workspaceStatusDescription(makeStatus({ state: "untracked" }))).toBe(
       "Workspace has untracked files that have not been committed yet.",
     );
-    expect(getGitStatusDisplay(makeStatus("untracked"))).toEqual({
+    expect(getGitStatusDisplay(makeStatus({ changedFiles: 1, state: "untracked" }))).toEqual({
       label: "Untracked",
-      summary: "Workspace has untracked files.",
+      summary: "1 file",
     });
   });
 
   it("describes dirty workspaces with a short explanation", () => {
-    expect(workspaceStatusDescription(makeStatus("dirty_uncommitted"))).toBe(
+    expect(workspaceStatusDescription(makeStatus({ state: "dirty_uncommitted" }))).toBe(
       "You have local changes that have not been committed yet.",
     );
   });
 
   it("describes synchronized clean workspaces as having no local changes", () => {
-    expect(workspaceStatusDescription(makeStatus("clean"))).toBe(
+    expect(workspaceStatusDescription(makeStatus({ state: "clean" }))).toBe(
       "No local changes or unmerged commits.",
     );
   });
 
   it("describes clean branches that are behind their merge base", () => {
     expect(
-      workspaceStatusDescription({
-        ...makeStatus("clean"),
-        mergeBase: {
-          ...makeStatus("clean").mergeBase!,
-          behindCount: 2,
-        },
-      }),
+      workspaceStatusDescription(makeStatus({ behindCount: 2, state: "clean" })),
     ).toBe(
       "No local file changes, but this branch is behind its merge base.",
     );
   });
 
+  it("includes branch comparison in untracked status summaries", () => {
+    expect(
+      workspaceStatusDescription(makeStatus({
+        behindCount: 2,
+        changedFiles: 1,
+        state: "untracked",
+      })),
+    ).toBe(
+      "Workspace has untracked files, and this branch is behind its merge base.",
+    );
+    expect(
+      getGitStatusDisplay(
+        makeStatus({
+          behindCount: 2,
+          changedFiles: 1,
+          state: "untracked",
+        }),
+        {
+          mergeBaseBranch: "main",
+          showBranchComparison: true,
+        },
+      ),
+    ).toEqual({
+      label: "Untracked",
+      summary: "1 file • 2 behind main",
+    });
+  });
+
   it("reports behind branches as an explicit git status display", () => {
     expect(
       getGitStatusDisplay(
-        {
-          ...makeStatus("clean"),
-          mergeBase: {
-            ...makeStatus("clean").mergeBase!,
-            behindCount: 3,
-          },
-        },
+        makeStatus({ behindCount: 3, state: "clean" }),
         {
           mergeBaseBranch: "main",
           showBranchComparison: true,
@@ -91,14 +122,11 @@ describe("workspace-status", () => {
   it("reports diverged branches as an explicit git status display", () => {
     expect(
       getGitStatusDisplay(
-        {
-          ...makeStatus("clean"),
-          mergeBase: {
-            ...makeStatus("clean").mergeBase!,
-            aheadCount: 2,
-            behindCount: 1,
-          },
-        },
+        makeStatus({
+          aheadCount: 2,
+          behindCount: 1,
+          state: "committed_unmerged",
+        }),
         {
           mergeBaseBranch: "main",
           showBranchComparison: true,
@@ -113,14 +141,7 @@ describe("workspace-status", () => {
   it("reports ahead branches as an explicit git status display", () => {
     expect(
       getGitStatusDisplay(
-        {
-          ...makeStatus("committed_unmerged"),
-          mergeBase: {
-            ...makeStatus("committed_unmerged").mergeBase!,
-            aheadCount: 2,
-            hasCommittedUnmergedChanges: true,
-          },
-        },
+        makeStatus({ aheadCount: 2, state: "committed_unmerged" }),
         {
           mergeBaseBranch: "main",
           showBranchComparison: true,
@@ -134,18 +155,48 @@ describe("workspace-status", () => {
 
   it("reports dirty work with a change summary", () => {
     expect(
-      getGitStatusDisplay({
-        ...makeStatus("dirty_uncommitted"),
-        workingTree: {
-          ...makeStatus("dirty_uncommitted").workingTree,
+      getGitStatusDisplay(
+        makeStatus({
           changedFiles: 3,
-          insertions: 8,
           deletions: 2,
-        },
-      }),
+          insertions: 8,
+          state: "dirty_uncommitted",
+        }),
+      ),
     ).toEqual({
       label: "Dirty",
       summary: "3 files, +8 -2",
     });
+  });
+
+  it("reports dirty committed work with file and branch summaries", () => {
+    expect(
+      getGitStatusDisplay(
+        makeStatus({
+          aheadCount: 2,
+          changedFiles: 3,
+          deletions: 2,
+          insertions: 8,
+          state: "dirty_and_committed_unmerged",
+        }),
+        {
+          mergeBaseBranch: "main",
+          showBranchComparison: true,
+        },
+      ),
+    ).toEqual({
+      label: "Dirty",
+      summary: "3 files, +8 -2 • 2 ahead of main",
+    });
+  });
+
+  it("reports unavailable workspace status explicitly", () => {
+    expect(getGitStatusDisplay(undefined)).toEqual({
+      label: "Unknown",
+      summary: "Workspace status unavailable.",
+    });
+    expect(workspaceStatusDescription(undefined)).toBe(
+      "Workspace status is unavailable.",
+    );
   });
 });

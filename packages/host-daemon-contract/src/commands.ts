@@ -18,7 +18,7 @@ import {
 import { z } from "zod";
 import { hostRuntimeMaterialSnapshotSchema } from "./local-state.js";
 
-export const HOST_DAEMON_PROTOCOL_VERSION = 6 as const;
+export const HOST_DAEMON_PROTOCOL_VERSION = 7 as const;
 
 export const HOST_DAEMON_COMMAND_TYPES = [
   "thread.start",
