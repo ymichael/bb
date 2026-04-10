@@ -80,6 +80,7 @@ export interface AgentRuntime {
     options?: ThreadExecutionOptions;
     instructions?: string;
     dynamicTools?: DynamicTool[];
+    managerMode?: boolean;
   }): Promise<{ providerThreadId: string }>;
 
   resumeThread(args: {
@@ -92,6 +93,7 @@ export interface AgentRuntime {
     instructions?: string;
     resumePath?: string;
     dynamicTools?: DynamicTool[];
+    managerMode?: boolean;
   }): Promise<{ providerThreadId: string }>;
 
   runTurn(args: {

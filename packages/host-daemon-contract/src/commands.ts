@@ -73,6 +73,7 @@ const hostDaemonThreadRuntimeContextSchema = z.object({
   options: hostDaemonExecutionOptionsSchema,
   instructions: z.string().min(1),
   dynamicTools: z.array(dynamicToolSchema),
+  managerMode: z.boolean().default(false),
 });
 
 const hostDaemonExistingThreadRuntimeContextSchema =

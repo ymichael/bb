@@ -55,6 +55,7 @@ describe("pi provider adapter", () => {
       cwd: "/tmp/worktree",
       threadId: "t1",
       input: [{ type: "text", text: "hello" }],
+      managerMode: false,
     });
     expect(cmd).toMatchObject({
       method: "thread/start",
@@ -73,6 +74,7 @@ describe("pi provider adapter", () => {
       cwd: "/tmp/worktree",
       threadId: "bb-thread-1",
       input: [{ type: "text", text: "hello" }],
+      managerMode: false,
       options: {
         model: "anthropic/claude-sonnet-4-20250514",
         instructions: "Focus on the failing tests first.",
@@ -135,6 +137,7 @@ describe("pi provider adapter", () => {
       cwd: "/tmp/worktree",
       threadId: "bb-t1",
       providerThreadId: "pi-session-1",
+      managerMode: false,
     });
     expect(cmd).toMatchObject({
       method: "thread/resume",

@@ -87,6 +87,7 @@ export interface ResolveThreadRuntimeCommandConfigArgs {
 export interface ResolvedThreadRuntimeCommandConfig {
   dynamicTools: DynamicTool[];
   instructions: string;
+  managerMode: boolean;
   projectId: string;
   providerId: string;
   /** Only set for manager threads. */
@@ -195,6 +196,7 @@ export async function resolveThreadRuntimeCommandConfig(
     return {
       dynamicTools: [],
       instructions: STANDARD_AGENT_INSTRUCTIONS,
+      managerMode: false,
       projectId: args.thread.projectId,
       providerId: args.thread.providerId,
       workspacePath,
@@ -224,6 +226,7 @@ export async function resolveThreadRuntimeCommandConfig(
       projectName: project.name,
       projectRootPath,
     }),
+    managerMode: true,
     projectId: args.thread.projectId,
     providerId: args.thread.providerId,
     threadStoragePath,

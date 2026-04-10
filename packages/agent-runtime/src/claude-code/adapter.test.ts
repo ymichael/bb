@@ -74,6 +74,7 @@ describe("claude-code provider adapter", () => {
       cwd: "/tmp/worktree",
       threadId: "bb-thread-1",
       input: [{ type: "text", text: "hello" }],
+      managerMode: false,
     });
     expect(cmd?.params).toMatchObject({
       threadId: "bb-thread-1",
@@ -88,6 +89,7 @@ describe("claude-code provider adapter", () => {
       cwd: "/tmp/worktree",
       threadId: "bb-thread-1",
       input: [{ type: "text", text: "hello" }],
+      managerMode: false,
       options: {
         model: "claude-sonnet-4-5",
         instructions: "Focus on the failing tests first.",
@@ -151,6 +153,7 @@ describe("claude-code provider adapter", () => {
       cwd: "/tmp/worktree",
       threadId: "bb-thread-1",
       providerThreadId: "claude-session-1",
+      managerMode: false,
     });
     expect(cmd?.params).toMatchObject({
       cwd: "/tmp/worktree",
@@ -185,6 +188,7 @@ describe("claude-code provider adapter", () => {
       cwd: "/tmp/worktree",
       threadId: "bb-thread-1",
       providerThreadId: undefined,
+      managerMode: false,
     });
     expect(cmd?.params).toMatchObject({
       threadId: "bb-thread-1",
@@ -199,6 +203,7 @@ describe("claude-code provider adapter", () => {
       cwd: "/tmp/worktree",
       threadId: "bb-thread-1",
       providerThreadId: "claude-session-1",
+      managerMode: false,
       options: {
         model: "claude-sonnet-4-5",
         instructions: "Reopen the thread and continue carefully.",

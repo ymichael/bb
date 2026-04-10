@@ -17,6 +17,11 @@
 
 import { createInterface } from "node:readline";
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import type { Options } from "@anthropic-ai/claude-agent-sdk";
+import {
+  instructionModeValues,
+  type InstructionMode,
+} from "@bb/domain";
 import { z } from "zod";
 import {
   decodeBridgeJsonRpcResponse,
@@ -37,6 +42,8 @@ import {
 // Command schema — defines what JSON-RPC requests this bridge accepts
 // ---------------------------------------------------------------------------
 
+const bridgeInstructionModeSchema = z.enum(instructionModeValues);
+
 const claudeCodeCommandSchema = z.discriminatedUnion("method", [
   z.object({
     method: z.literal("initialize"),
@@ -56,7 +63,7 @@ const claudeCodeCommandSchema = z.discriminatedUnion("method", [
       baseInstructions: z.string(),
       config: z.record(z.string(), z.unknown()).optional(),
       model: z.string().optional(),
-      managerMode: z.boolean().optional(),
+      instructionMode: bridgeInstructionModeSchema,
       dynamicTools: z.array(z.object({
         name: z.string(),
         description: z.string(),
@@ -73,6 +80,7 @@ const claudeCodeCommandSchema = z.discriminatedUnion("method", [
       baseInstructions: z.string().optional(),
       config: z.record(z.string(), z.unknown()).optional(),
       model: z.string().optional(),
+      instructionMode: bridgeInstructionModeSchema,
       dynamicTools: z.array(z.object({
         name: z.string(),
         description: z.string(),
@@ -153,15 +161,15 @@ interface ThreadSession {
   providerThreadId?: string;
 }
 
+interface BuildSessionOptionsParams {
+  baseInstructions?: string;
+  cwd: string;
+  instructionMode: InstructionMode;
+  model?: string;
+}
+
 const sessions = new Map<string, ThreadSession>();
 let toolCallRequestIdCounter = 0;
-const MANAGER_BUILTIN_TOOLS = [
-  "Bash",
-  "Read",
-  "Grep",
-  "Glob",
-  "LS",
-] as const;
 
 function send(msg: JsonRpcResponse | SdkMessageNotification | BridgeEventNotification | BridgeToolCallRequest): void {
   process.stdout.write(JSON.stringify(msg) + "\n");
@@ -270,34 +278,42 @@ function buildSessionEnv(envOverrides: Record<string, string>): NodeJS.ProcessEn
 }
 
 export function buildSessionOptions(
-  params: {
-    baseInstructions?: string;
-    cwd: string;
-    model?: string;
-    managerMode?: boolean;
-  },
+  params: BuildSessionOptionsParams,
   env: NodeJS.ProcessEnv,
 ): SdkSessionOptions {
-  const systemPrompt = params.baseInstructions ?? "You are a helpful coding assistant.";
+  const systemPrompt: Exclude<Options["systemPrompt"], undefined> =
+    params.instructionMode === "replace"
+      ? (params.baseInstructions ?? "You are a helpful coding assistant.")
+      : {
+          type: "preset",
+          preset: "claude_code",
+          ...(params.baseInstructions && params.baseInstructions.length > 0
+            ? { append: params.baseInstructions }
+            : {}),
+        };
   const model = params.model;
-  const managerMode = params.managerMode === true;
 
   return {
     cwd: params.cwd,
     systemPrompt,
     model,
     env,
-    ...(managerMode ? { tools: [...MANAGER_BUILTIN_TOOLS] } : {}),
   };
 }
 
-function handleRequest(request: ClaudeCodeCommand & { id: string | number }): void {
+function requireInstructionMode(value: unknown): InstructionMode {
+  return bridgeInstructionModeSchema.parse(value);
+}
+
+async function handleRequest(
+  request: ClaudeCodeCommand & { id: string | number },
+): Promise<void> {
   switch (request.method) {
     case "initialize":
       sendResult(request.id, { ok: true });
       break;
     case "model/list":
-      sendResult(request.id, listClaudeCodeBridgeModels());
+      sendResult(request.id, await listClaudeCodeBridgeModels());
       break;
     case "thread/start":
       handleThreadStart(request.id, request.params);
@@ -337,7 +353,12 @@ function handleThreadStart(
 
   const envOverrides = extractEnvOverrides(params.config);
   const sessionEnv = buildSessionEnv(envOverrides);
-  const sessionOptions = buildSessionOptions(params, sessionEnv);
+  const sessionOptions = buildSessionOptions({
+    baseInstructions: params.baseInstructions,
+    cwd: params.cwd,
+    instructionMode: requireInstructionMode(params.instructionMode),
+    model: params.model,
+  }, sessionEnv);
   if (params.dynamicTools && params.dynamicTools.length > 0) {
     const mcpServer = buildBridgeMcpServer(
       params.dynamicTools,
@@ -386,7 +407,12 @@ function handleThreadResume(
 
   const envOverrides = extractEnvOverrides(params.config);
   const sessionEnv = buildSessionEnv(envOverrides);
-  const sessionOptions = buildSessionOptions(params, sessionEnv);
+  const sessionOptions = buildSessionOptions({
+    baseInstructions: params.baseInstructions,
+    cwd: params.cwd,
+    instructionMode: requireInstructionMode(params.instructionMode),
+    model: params.model,
+  }, sessionEnv);
   const threadIdRef = { current: threadId };
   if (params.dynamicTools && params.dynamicTools.length > 0) {
     const mcpServer = buildBridgeMcpServer(
@@ -507,7 +533,10 @@ function handleLine(line: string): void {
 
   const request = decodeClaudeCodeJsonRpcRequest(parsed);
   if (!request) return;
-  handleRequest(request);
+  void handleRequest(request).catch((error: unknown) => {
+    const message = error instanceof Error ? error.message : String(error);
+    sendError(request.id, -32000, message);
+  });
 }
 
 // Main entry point

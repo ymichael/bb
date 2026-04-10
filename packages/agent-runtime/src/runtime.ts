@@ -102,6 +102,7 @@ interface ThreadRuntimeConfig {
   dynamicTools?: DynamicTool[];
   environmentId: string;
   instructions?: string;
+  managerMode: boolean;
   options?: ThreadExecutionOptions;
   projectId?: string;
   providerId: string;
@@ -256,6 +257,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       options: toAdapterOptions(nextOptions, nextInstructions, envVars),
       resumePath: currentConfig.resumePath,
       dynamicTools: currentConfig.dynamicTools,
+      managerMode: currentConfig.managerMode,
     });
 
     if (command) {
@@ -687,6 +689,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       options: execOpts,
       instructions,
       dynamicTools,
+      managerMode = false,
     }) {
       const pid = providerId ?? "codex";
       await runtime.ensureProvider({ providerId: pid });
@@ -699,6 +702,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         dynamicTools,
         environmentId,
         instructions,
+        managerMode,
         options: execOpts,
         projectId,
         providerId: pid,
@@ -718,6 +722,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         cwd: options.workspacePath,
         options: toAdapterOptions(execOpts, instructions, envVars),
         dynamicTools,
+        managerMode,
       });
 
       if (!cmd) {
@@ -777,6 +782,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       instructions,
       resumePath,
       dynamicTools,
+      managerMode = false,
     }) {
       const pid = providerId ?? resolveProviderForThread(threadId);
       await runtime.ensureProvider({ providerId: pid });
@@ -788,6 +794,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         dynamicTools,
         environmentId,
         instructions,
+        managerMode,
         options: execOpts,
         projectId,
         providerId: pid,
@@ -817,6 +824,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         options: toAdapterOptions(execOpts, instructions, envVars),
         resumePath,
         dynamicTools,
+        managerMode,
       });
 
       if (!cmd) {

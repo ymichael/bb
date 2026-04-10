@@ -62,6 +62,7 @@ export type AdapterCommand =
       input?: PromptInput[];
       options?: AdapterOptions;
       dynamicTools?: DynamicTool[];
+      managerMode: boolean;
     }
   | {
       type: "thread/resume";
@@ -71,6 +72,7 @@ export type AdapterCommand =
       options?: AdapterOptions;
       resumePath?: string;
       dynamicTools?: DynamicTool[];
+      managerMode: boolean;
     }
   | {
       type: "turn/start";

@@ -223,6 +223,7 @@ describe("host-daemon command schemas", () => {
         },
         instructions: "Be concise.",
         dynamicTools: [],
+        managerMode: false,
         eventSequence: 0,
         input: [{ type: "text", text: "hello" }],
       }),
@@ -250,6 +251,7 @@ describe("host-daemon command schemas", () => {
           providerThreadId: "prov_123",
           instructions: "Be concise.",
           dynamicTools: [],
+          managerMode: false,
         },
       }),
     ).toThrow();
@@ -280,6 +282,7 @@ describe("host-daemon command schemas", () => {
             inputSchema: { type: "object" },
           },
         ],
+        managerMode: true,
       }),
     ).toMatchObject({
       type: "thread.start",
@@ -328,6 +331,7 @@ describe("host-daemon command schemas", () => {
           providerThreadId: "provider_123",
           instructions: "Be a helpful coding agent.",
           dynamicTools: [],
+          managerMode: false,
         },
       }),
     ).toMatchObject({
@@ -359,6 +363,7 @@ describe("host-daemon command schemas", () => {
           providerThreadId: "provider_123",
           instructions: "Be a helpful coding agent.",
           dynamicTools: [],
+          managerMode: false,
         },
       }),
     ).toMatchObject({

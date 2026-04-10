@@ -136,6 +136,7 @@ export async function buildThreadStartCommand(
     options: args.execution,
     instructions: runtimeContext.instructions,
     dynamicTools: runtimeContext.dynamicTools,
+    managerMode: runtimeContext.managerMode,
     threadStoragePath: runtimeContext.threadStoragePath,
   };
 }
@@ -159,6 +160,7 @@ function buildPreparedTurnRunCommandPayload(
       providerThreadId: args.providerThreadId,
       instructions: args.runtimeContext.instructions,
       dynamicTools: args.runtimeContext.dynamicTools,
+      managerMode: args.runtimeContext.managerMode,
     },
   };
 }

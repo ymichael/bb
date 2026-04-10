@@ -9,7 +9,7 @@ import {
 
 export interface SdkSessionOptions {
   cwd: string;
-  systemPrompt: string;
+  systemPrompt: Exclude<Options["systemPrompt"], undefined>;
   model?: string;
   permissionMode?: string;
   mcpServers?: Record<string, McpSdkServerConfigWithInstance>;
