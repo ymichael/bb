@@ -118,9 +118,27 @@ export type ClaudePermissionUpdate = z.infer<
 >;
 
 const claudeRequestedPermissionProfileInputSchema = z.object({
-  network: z.unknown().nullable(),
-  fileSystem: z.unknown().nullable(),
-  macos: z.unknown().nullable().optional(),
+  network: z.custom<
+    PendingInteractionRequestedPermissionProfile["network"] | undefined
+  >((value) =>
+    value === undefined
+    || value === null
+    || pendingInteractionNetworkPermissionsSchema.safeParse(value).success
+  ).transform((value) => value ?? null),
+  fileSystem: z.custom<
+    PendingInteractionRequestedPermissionProfile["fileSystem"] | undefined
+  >((value) =>
+    value === undefined
+    || value === null
+    || pendingInteractionFileSystemPermissionsSchema.safeParse(value).success
+  ).transform((value) => value ?? null),
+  macos: z.custom<
+    PendingInteractionRequestedPermissionProfile["macos"] | undefined
+  >((value) =>
+    value === undefined
+    || value === null
+    || pendingInteractionMacOsPermissionsSchema.safeParse(value).success
+  ).transform((value) => value ?? null),
 });
 export type ClaudeRequestedPermissionProfileInput = z.infer<
   typeof claudeRequestedPermissionProfileInputSchema
@@ -134,32 +152,7 @@ export function parseClaudeRequestedPermissionProfile(
     return null;
   }
 
-  const network = parsed.data.network === null
-    ? null
-    : pendingInteractionNetworkPermissionsSchema.safeParse(parsed.data.network);
-  if (network !== null && !network.success) {
-    return null;
-  }
-
-  const fileSystem = parsed.data.fileSystem === null
-    ? null
-    : pendingInteractionFileSystemPermissionsSchema.safeParse(parsed.data.fileSystem);
-  if (fileSystem !== null && !fileSystem.success) {
-    return null;
-  }
-
-  const macos = parsed.data.macos == null
-    ? null
-    : pendingInteractionMacOsPermissionsSchema.safeParse(parsed.data.macos);
-  if (macos !== null && !macos.success) {
-    return null;
-  }
-
-  return normalizePendingInteractionRequestedPermissionProfile({
-    network: network === null ? null : network.data,
-    fileSystem: fileSystem === null ? null : fileSystem.data,
-    macos: macos === null ? null : macos.data,
-  });
+  return normalizePendingInteractionRequestedPermissionProfile(parsed.data);
 }
 
 export interface ClaudePermissionRequestProfileArgs {
@@ -174,6 +167,7 @@ const CLAUDE_FILE_PERMISSION_KIND_BY_TOOL_NAME = new Map<
   string,
   ClaudeFilePermissionKind
 >([
+  // Keep this in sync with Claude's file-touching built-in tool names.
   ["Read", "read"],
   ["Grep", "read"],
   ["Glob", "read"],

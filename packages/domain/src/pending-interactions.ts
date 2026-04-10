@@ -118,82 +118,91 @@ export type PendingInteractionRequestedPermissionProfile = z.infer<
   typeof pendingInteractionRequestedPermissionProfileSchema
 >;
 
-export interface PendingInteractionPermissionProfileInput {
-  network: PendingInteractionPermissionNetworkInput | null | undefined;
-  fileSystem: PendingInteractionPermissionFileSystemInput | null | undefined;
-  macos: PendingInteractionPermissionMacOsInput | null | undefined;
-}
+const pendingInteractionPermissionNetworkInputSchema = z.object({
+  enabled: z.boolean().nullable().optional(),
+}).transform((value) => ({
+  enabled: value.enabled ?? null,
+}));
+export type PendingInteractionPermissionNetworkInput = z.input<
+  typeof pendingInteractionPermissionNetworkInputSchema
+>;
 
-export interface PendingInteractionPermissionNetworkInput {
-  enabled: boolean | null | undefined;
-}
+const pendingInteractionPermissionFileSystemInputSchema = z.object({
+  read: z.array(z.string()).nullable().optional(),
+  write: z.array(z.string()).nullable().optional(),
+}).transform((value) => ({
+  read: value.read ?? [],
+  write: value.write ?? [],
+}));
+export type PendingInteractionPermissionFileSystemInput = z.input<
+  typeof pendingInteractionPermissionFileSystemInputSchema
+>;
 
-export interface PendingInteractionPermissionFileSystemInput {
-  read: string[] | null | undefined;
-  write: string[] | null | undefined;
-}
+const pendingInteractionPermissionMacOsBundleIdsInputSchema = z.object({
+  bundleIds: z.array(z.string()).nullable().optional(),
+}).transform((value) => ({
+  kind: "bundle_ids" as const,
+  bundleIds: value.bundleIds ?? [],
+}));
+export type PendingInteractionPermissionMacOsBundleIdsInput = z.input<
+  typeof pendingInteractionPermissionMacOsBundleIdsInputSchema
+>;
 
-export interface PendingInteractionPermissionMacOsBundleIdsInput {
-  bundleIds: string[] | null | undefined;
-}
-
-export type PendingInteractionPermissionMacOsAutomationInput =
-  | "none"
-  | "all"
-  | PendingInteractionPermissionMacOsBundleIdsInput;
-
-export interface PendingInteractionPermissionMacOsInput {
-  preferences: PendingInteractionMacOsPreferencesPermission | null | undefined;
-  automations: PendingInteractionPermissionMacOsAutomationInput | null | undefined;
-  launchServices: boolean | null | undefined;
-  accessibility: boolean | null | undefined;
-  calendar: boolean | null | undefined;
-  reminders: boolean | null | undefined;
-  contacts: PendingInteractionMacOsContactsPermission | null | undefined;
-}
-
-function normalizePendingInteractionMacOsAutomationPermission(
-  input: PendingInteractionPermissionMacOsAutomationInput | null | undefined,
-): PendingInteractionMacOsAutomationPermission {
-  if (input == null || input === "none" || input === "all") {
-    return input ?? "none";
+const pendingInteractionPermissionMacOsAutomationInputSchema = z.union([
+  z.literal("none"),
+  z.literal("all"),
+  pendingInteractionPermissionMacOsBundleIdsInputSchema,
+  z.null(),
+  z.undefined(),
+]).transform((value): PendingInteractionMacOsAutomationPermission => {
+  if (value == null || value === "none" || value === "all") {
+    return value ?? "none";
   }
 
-  return {
-    kind: "bundle_ids",
-    bundleIds: input.bundleIds ?? [],
-  };
-}
+  return value;
+});
+export type PendingInteractionPermissionMacOsAutomationInput = z.input<
+  typeof pendingInteractionPermissionMacOsAutomationInputSchema
+>;
+
+const pendingInteractionPermissionMacOsInputSchema = z.object({
+  preferences: pendingInteractionMacOsPreferencesPermissionSchema.nullable().optional(),
+  automations: pendingInteractionPermissionMacOsAutomationInputSchema.optional(),
+  launchServices: z.boolean().nullable().optional(),
+  accessibility: z.boolean().nullable().optional(),
+  calendar: z.boolean().nullable().optional(),
+  reminders: z.boolean().nullable().optional(),
+  contacts: pendingInteractionMacOsContactsPermissionSchema.nullable().optional(),
+}).transform((value) => ({
+  preferences: value.preferences ?? "none",
+  automations: value.automations ?? "none",
+  launchServices: value.launchServices ?? false,
+  accessibility: value.accessibility ?? false,
+  calendar: value.calendar ?? false,
+  reminders: value.reminders ?? false,
+  contacts: value.contacts ?? "none",
+})).pipe(pendingInteractionMacOsPermissionsSchema);
+export type PendingInteractionPermissionMacOsInput = z.input<
+  typeof pendingInteractionPermissionMacOsInputSchema
+>;
+
+const pendingInteractionRequestedPermissionProfileInputSchema = z.object({
+  network: pendingInteractionPermissionNetworkInputSchema.nullable().optional(),
+  fileSystem: pendingInteractionPermissionFileSystemInputSchema.nullable().optional(),
+  macos: pendingInteractionPermissionMacOsInputSchema.nullable().optional(),
+}).transform((value) => ({
+  network: value.network ?? null,
+  fileSystem: value.fileSystem ?? null,
+  macos: value.macos ?? null,
+})).pipe(pendingInteractionRequestedPermissionProfileSchema);
+export type PendingInteractionPermissionProfileInput = z.input<
+  typeof pendingInteractionRequestedPermissionProfileInputSchema
+>;
 
 export function normalizePendingInteractionRequestedPermissionProfile(
   input: PendingInteractionPermissionProfileInput,
 ): PendingInteractionRequestedPermissionProfile {
-  return pendingInteractionRequestedPermissionProfileSchema.parse({
-    network: input.network
-      ? {
-          enabled: input.network.enabled ?? null,
-        }
-      : null,
-    fileSystem: input.fileSystem
-      ? {
-          read: input.fileSystem.read ?? [],
-          write: input.fileSystem.write ?? [],
-        }
-      : null,
-    macos: input.macos
-      ? {
-          preferences: input.macos.preferences ?? "none",
-          automations: normalizePendingInteractionMacOsAutomationPermission(
-            input.macos.automations,
-          ),
-          launchServices: input.macos.launchServices ?? false,
-          accessibility: input.macos.accessibility ?? false,
-          calendar: input.macos.calendar ?? false,
-          reminders: input.macos.reminders ?? false,
-          contacts: input.macos.contacts ?? "none",
-        }
-      : null,
-  });
+  return pendingInteractionRequestedPermissionProfileInputSchema.parse(input);
 }
 
 export function summarizePendingInteractionRequestedMacOsPermissions(
@@ -490,12 +499,6 @@ export function formatPendingInteractionPermissionResolutionMessage(
   return `Permissions ${formatPendingInteractionPermissionResolutionOutcome(args)}`;
 }
 
-export interface PendingInteractionQuestionOptionInput {
-  label: string;
-  description: string;
-  preview: string | null | undefined;
-}
-
 export const pendingInteractionQuestionOptionSchema = z.object({
   label: z.string(),
   description: z.string(),
@@ -505,14 +508,23 @@ export type PendingInteractionQuestionOption = z.infer<
   typeof pendingInteractionQuestionOptionSchema
 >;
 
+const pendingInteractionQuestionOptionInputSchema = z.object({
+  label: z.string(),
+  description: z.string(),
+  preview: z.string().nullable().optional(),
+}).transform((value) => ({
+  label: value.label,
+  description: value.description,
+  preview: value.preview ?? null,
+})).pipe(pendingInteractionQuestionOptionSchema);
+export type PendingInteractionQuestionOptionInput = z.input<
+  typeof pendingInteractionQuestionOptionInputSchema
+>;
+
 export function normalizePendingInteractionQuestionOption(
   input: PendingInteractionQuestionOptionInput,
 ): PendingInteractionQuestionOption {
-  return pendingInteractionQuestionOptionSchema.parse({
-    label: input.label,
-    description: input.description,
-    preview: input.preview ?? null,
-  });
+  return pendingInteractionQuestionOptionInputSchema.parse(input);
 }
 
 export function toOptionalPendingInteractionQuestionOptionPreview(
