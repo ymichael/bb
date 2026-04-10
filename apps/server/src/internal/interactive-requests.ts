@@ -83,20 +83,31 @@ export function registerInternalInteractiveRequestRoutes(
         sessionId: payload.sessionId,
       });
 
+      const interruptibleThreadIds: string[] = [];
       for (const threadId of payload.threadIds) {
-        const { environment } = requireThreadEnvironment(deps.db, threadId);
-        if (environment.hostId !== session.hostId) {
+        let environmentHostId: string;
+        try {
+          const { environment } = requireThreadEnvironment(deps.db, threadId);
+          environmentHostId = environment.hostId;
+        } catch (error) {
+          if (error instanceof ApiError && error.status === 404) {
+            continue;
+          }
+          throw error;
+        }
+        if (environmentHostId !== session.hostId) {
           throw new ApiError(
             403,
             "invalid_request",
             "Thread does not belong to the session host",
           );
         }
+        interruptibleThreadIds.push(threadId);
       }
 
       const interrupted = deps.pendingInteractions.interruptPendingInteractionsForThreads({
         providerId: payload.providerId,
-        threadIds: payload.threadIds,
+        threadIds: interruptibleThreadIds,
         reason: payload.reason,
       });
 

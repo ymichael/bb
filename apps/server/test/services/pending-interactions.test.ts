@@ -150,6 +150,73 @@ describe("pending interaction lifecycle", () => {
     }
   });
 
+  it("resolves waiters when an interaction reaches a terminal state", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-pending-interaction-wait-resolve",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+      });
+
+      const created = harness.deps.pendingInteractions.registerPendingInteraction({
+        threadId: thread.id,
+        turnId: "turn-wait-resolve",
+        providerId: "codex",
+        providerThreadId: "provider-thread-wait-resolve",
+        providerRequestId: "request-wait-resolve",
+        payload: {
+          kind: "command_approval",
+          itemId: "item-wait-resolve",
+          reason: "Needs approval",
+          command: "git push",
+          cwd: "/tmp/project",
+          commandActions: [],
+          requestedPermissions: null,
+          availableDecisions: ["accept", "accept_for_session", "decline", "cancel"],
+        },
+      });
+      if (created.outcome === "rejected") {
+        throw new Error(`Expected interaction registration to succeed: ${created.reason}`);
+      }
+
+      const outcomePromise = harness.deps.pendingInteractions.waitForTerminalState({
+        interactionId: created.interaction.id,
+      });
+      harness.deps.pendingInteractions.resolvePendingInteraction({
+        threadId: thread.id,
+        interactionId: created.interaction.id,
+        resolution: {
+          kind: "command_approval",
+          decision: "accept",
+        },
+      });
+
+      await expect(outcomePromise).resolves.toMatchObject({
+        outcome: "resolved",
+        interaction: expect.objectContaining({
+          id: created.interaction.id,
+          status: "resolved",
+          resolution: {
+            kind: "command_approval",
+            decision: "accept",
+          },
+        }),
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("rejects a second active interaction on the same thread", async () => {
     const harness = await createTestAppHarness();
     try {
@@ -318,61 +385,6 @@ describe("pending interaction lifecycle", () => {
     }
   });
 
-  it("rejects standalone macOS permission requests", async () => {
-    const harness = await createTestAppHarness();
-    try {
-      const { host } = seedHostSession(harness.deps, {
-        id: "host-pending-interaction-macos-permissions",
-      });
-      const { project } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
-      });
-      const environment = seedEnvironment(harness.deps, {
-        hostId: host.id,
-        projectId: project.id,
-      });
-      const thread = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: environment.id,
-      });
-
-      expect(
-        harness.deps.pendingInteractions.registerPendingInteraction({
-          threadId: thread.id,
-          turnId: "turn-macos-permissions",
-          providerId: "codex",
-          providerThreadId: "provider-thread-macos-permissions",
-          providerRequestId: "request-macos-permissions",
-          payload: {
-            kind: "permission_request",
-            itemId: "item-macos-permissions",
-            reason: "Need macOS automation access",
-            toolName: "Bash",
-            permissions: {
-              network: null,
-              fileSystem: null,
-              macos: {
-                preferences: "none",
-                automations: "all",
-                launchServices: false,
-                accessibility: false,
-                calendar: false,
-                reminders: false,
-                contacts: "none",
-              },
-            },
-          },
-        }),
-      ).toEqual({
-        outcome: "rejected",
-        reason:
-          "Pending interactions do not yet support standalone macOS permission requests",
-      });
-    } finally {
-      await harness.cleanup();
-    }
-  });
-
   it("expires pending waits that are never resolved", async () => {
     const harness = await createTestAppHarness();
     try {
@@ -431,6 +443,73 @@ describe("pending interaction lifecycle", () => {
           status: "expired",
           statusReason: "Pending interaction expired while waiting for a user response",
         }),
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("hydrates pending interactions on ephemeral hosts and expires them after restart", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const originalLifecycle = new PendingInteractionLifecycle({
+        db: harness.db,
+        hub: harness.hub,
+        sandboxInteractionExpiryMs: 60_000,
+      });
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-pending-interaction-hydrate-expiry",
+        type: "ephemeral",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+      });
+
+      const created = originalLifecycle.registerPendingInteraction({
+        threadId: thread.id,
+        turnId: "turn-hydrate-expiry",
+        providerId: "codex",
+        providerThreadId: "provider-thread-hydrate-expiry",
+        providerRequestId: "request-hydrate-expiry",
+        payload: {
+          kind: "command_approval",
+          itemId: "item-hydrate-expiry",
+          reason: "Needs approval",
+          command: "git push",
+          cwd: "/tmp/project",
+          commandActions: [],
+          requestedPermissions: null,
+          availableDecisions: ["accept", "accept_for_session", "decline", "cancel"],
+        },
+      });
+      if (created.outcome === "rejected") {
+        throw new Error(`Expected interaction registration to succeed: ${created.reason}`);
+      }
+
+      const restartedLifecycle = new PendingInteractionLifecycle({
+        db: harness.db,
+        hub: harness.hub,
+        sandboxInteractionExpiryMs: 20,
+      });
+      await sleep(50);
+
+      expect(
+        restartedLifecycle.getThreadInteraction({
+          threadId: thread.id,
+          interactionId: created.interaction.id,
+        }),
+      ).toMatchObject({
+        id: created.interaction.id,
+        status: "expired",
+        statusReason: "Pending interaction expired while waiting for a user response",
       });
     } finally {
       await harness.cleanup();

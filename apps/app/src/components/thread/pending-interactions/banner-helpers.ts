@@ -6,9 +6,8 @@ import {
 import {
   type PendingInteraction,
   type PendingInteractionCommandApprovalDecision,
-  type PendingInteractionGrantedPermissionProfile,
-  type PendingInteractionPermissionGrantScope,
-  type PendingInteractionRequestedPermissionProfile,
+  type PendingInteractionGrantablePermissionProfile,
+  type PermissionRequestPendingInteractionResolution,
 } from "@bb/domain";
 
 export type FileChangeDecisionAction = "accept_for_session" | "decline" | "cancel";
@@ -21,8 +20,7 @@ export interface CommandDecisionButtonConfig {
 
 export interface PermissionDecisionButtonConfig {
   label: string;
-  permissions: PendingInteractionGrantedPermissionProfile;
-  scope: PendingInteractionPermissionGrantScope;
+  resolution: PermissionRequestPendingInteractionResolution;
   variant: "default" | "outline";
 }
 
@@ -94,29 +92,36 @@ export function hasExpandableDetails(interaction: PendingInteraction): boolean {
 }
 
 export function buildPermissionDecisionButtons(
-  permissions: PendingInteractionRequestedPermissionProfile,
+  permissions: PendingInteractionGrantablePermissionProfile,
 ): PermissionDecisionButtonConfig[] {
   const grantedPermissions = toGrantedPendingInteractionPermissions(permissions);
   return [
     {
       label: "Allow for turn",
-      permissions: grantedPermissions,
-      scope: "turn",
+      resolution: {
+        kind: "permission_request",
+        decision: "allow",
+        permissions: grantedPermissions,
+        scope: "turn",
+      },
       variant: "default",
     },
     {
       label: "Allow for session",
-      permissions: grantedPermissions,
-      scope: "session",
+      resolution: {
+        kind: "permission_request",
+        decision: "allow",
+        permissions: grantedPermissions,
+        scope: "session",
+      },
       variant: "default",
     },
     {
       label: "Deny",
-      permissions: {
-        network: null,
-        fileSystem: null,
+      resolution: {
+        kind: "permission_request",
+        decision: "deny",
       },
-      scope: "turn",
       variant: "outline",
     },
   ];

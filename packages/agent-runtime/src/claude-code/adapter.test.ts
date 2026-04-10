@@ -388,7 +388,6 @@ describe("claude-code provider adapter", () => {
         permissions: {
           network: { enabled: true },
           fileSystem: null,
-          macos: null,
         },
       },
     });
@@ -437,12 +436,12 @@ describe("claude-code provider adapter", () => {
             permissions: {
               network: { enabled: true },
               fileSystem: null,
-              macos: null,
             },
           },
         },
         resolution: {
           kind: "permission_request",
+          decision: "allow",
           permissions: {
             network: { enabled: true },
             fileSystem: null,
@@ -483,12 +482,12 @@ describe("claude-code provider adapter", () => {
             permissions: {
               network: null,
               fileSystem: null,
-              macos: null,
             },
           },
         },
         resolution: {
           kind: "permission_request",
+          decision: "allow",
           permissions: {
             network: null,
             fileSystem: null,
@@ -507,6 +506,44 @@ describe("claude-code provider adapter", () => {
           destination: "session",
         },
       ],
+    });
+  });
+
+  it("keeps turn-scoped Claude permission approvals as allow responses", () => {
+    const adapter = createClaudeCodeProviderAdapter();
+
+    expect(
+      adapter.buildInteractiveResponse?.({
+        request: {
+          requestId: "req-4c",
+          method: CLAUDE_PERMISSION_REQUEST_APPROVAL_METHOD,
+          threadId: "thr_1",
+          providerThreadId: "claude-session-1",
+          turnId: "",
+          payload: {
+            kind: "permission_request",
+            itemId: "toolu_3c",
+            toolName: "Bash",
+            reason: "Needs approval",
+            permissions: {
+              network: null,
+              fileSystem: null,
+            },
+          },
+        },
+        resolution: {
+          kind: "permission_request",
+          decision: "allow",
+          permissions: {
+            network: null,
+            fileSystem: null,
+          },
+          scope: "turn",
+        },
+      }),
+    ).toEqual({
+      kind: "permission_request",
+      behavior: "allow",
     });
   });
 

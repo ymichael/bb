@@ -1,11 +1,16 @@
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, getTableColumns, inArray } from "drizzle-orm";
 import type {
   PendingInteractionKind,
   PendingInteractionStatus,
 } from "@bb/domain";
 import type { DbConnection, DbTransaction } from "../connection.js";
 import { createPendingInteractionId } from "../ids.js";
-import { pendingInteractions } from "../schema.js";
+import {
+  environments,
+  hosts,
+  pendingInteractions,
+  threads,
+} from "../schema.js";
 
 type PendingInteractionWriteConnection = DbConnection | DbTransaction;
 type PendingInteractionReadConnection = DbConnection | DbTransaction;
@@ -245,6 +250,36 @@ export function listPendingInteractionsByStatus(
     .select()
     .from(pendingInteractions)
     .where(inArray(pendingInteractions.status, [...args.statuses]))
+    .orderBy(desc(pendingInteractions.createdAt));
+
+  if (args.limit === undefined) {
+    return query.all();
+  }
+
+  const limitedQuery =
+    args.offset !== undefined
+      ? query.limit(args.limit).offset(args.offset)
+      : query.limit(args.limit);
+
+  return limitedQuery.all();
+}
+
+export function listPendingInteractionsOnEphemeralHosts(
+  db: PendingInteractionReadConnection,
+  args: Omit<ListPendingInteractionsByStatusArgs, "statuses">,
+): PendingInteractionRow[] {
+  const query = db
+    .select(getTableColumns(pendingInteractions))
+    .from(pendingInteractions)
+    .innerJoin(threads, eq(threads.id, pendingInteractions.threadId))
+    .innerJoin(environments, eq(environments.id, threads.environmentId))
+    .innerJoin(hosts, eq(hosts.id, environments.hostId))
+    .where(
+      and(
+        eq(pendingInteractions.status, "pending"),
+        eq(hosts.type, "ephemeral"),
+      ),
+    )
     .orderBy(desc(pendingInteractions.createdAt));
 
   if (args.limit === undefined) {

@@ -20,6 +20,7 @@ import type {
   PendingInteractionCommandAction,
   PendingInteractionFileChangeApprovalDecision,
   PendingInteractionGrantedPermissionProfile,
+  PendingInteractionGrantablePermissionProfile,
   PendingInteractionRequestedPermissionProfile,
   PendingInteractionCommandApprovalDecision,
   PendingInteractionCommandApprovalSimpleDecision,
@@ -966,6 +967,16 @@ function toPendingInteractionPermissionProfile(
   });
 }
 
+function toPendingInteractionGrantablePermissionProfile(
+  permissions: CodexRequestedPermissionProfile,
+): PendingInteractionGrantablePermissionProfile {
+  const normalized = toPendingInteractionPermissionProfile(permissions);
+  return {
+    network: normalized.network,
+    fileSystem: normalized.fileSystem,
+  };
+}
+
 function toCodexGrantedPermissionProfile(
   args: PendingInteractionGrantedPermissionProfile,
 ): CodexGrantedPermissionProfile {
@@ -1520,7 +1531,9 @@ export function createCodexProviderAdapter(
               itemId: parsed.data.itemId,
               reason: parsed.data.reason,
               toolName: null,
-              permissions: toPendingInteractionPermissionProfile(parsed.data.permissions),
+              permissions: toPendingInteractionGrantablePermissionProfile(
+                parsed.data.permissions,
+              ),
             },
           };
         }
@@ -1555,6 +1568,13 @@ export function createCodexProviderAdapter(
         case "permission_request": {
           if (args.resolution.kind !== "permission_request") {
             throw new Error("Interactive response kind mismatch for permission request");
+          }
+          if (args.resolution.decision === "deny") {
+            const response: PermissionsRequestApprovalResponse = {
+              permissions: {},
+              scope: "turn",
+            };
+            return response;
           }
           const response: PermissionsRequestApprovalResponse = {
             permissions: toCodexGrantedPermissionProfile(args.resolution.permissions),

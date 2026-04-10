@@ -3086,7 +3086,6 @@ describe("CLI JSON output contracts", () => {
               read: ["/tmp/project/README.md"],
               write: ["/tmp/project/notes.md"],
             },
-            macos: null,
           },
         },
       }),
@@ -3110,13 +3109,13 @@ describe("CLI JSON output contracts", () => {
               read: ["/tmp/project/README.md"],
               write: ["/tmp/project/notes.md"],
             },
-            macos: null,
           },
         },
         status: "resolved",
         resolvedAt: Date.now(),
         resolution: {
           kind: "permission_request",
+          decision: "allow",
           permissions: {
             network: { enabled: true },
             fileSystem: {
@@ -3165,6 +3164,7 @@ describe("CLI JSON output contracts", () => {
       },
       json: {
         kind: "permission_request",
+        decision: "allow",
         permissions: {
           network: { enabled: true },
           fileSystem: {
@@ -3197,7 +3197,6 @@ describe("CLI JSON output contracts", () => {
           permissions: {
             network: { enabled: true },
             fileSystem: null,
-            macos: null,
           },
         },
       }),
@@ -3218,18 +3217,13 @@ describe("CLI JSON output contracts", () => {
           permissions: {
             network: { enabled: true },
             fileSystem: null,
-            macos: null,
           },
         },
         status: "resolved",
         resolvedAt: Date.now(),
         resolution: {
           kind: "permission_request",
-          permissions: {
-            network: null,
-            fileSystem: null,
-          },
-          scope: "turn",
+          decision: "deny",
         },
       }),
     );
@@ -3264,11 +3258,7 @@ describe("CLI JSON output contracts", () => {
       },
       json: {
         kind: "permission_request",
-        permissions: {
-          network: null,
-          fileSystem: null,
-        },
-        scope: "turn",
+        decision: "deny",
       },
     });
     expect(collectLogLines(vi.mocked(console.log))).toEqual([

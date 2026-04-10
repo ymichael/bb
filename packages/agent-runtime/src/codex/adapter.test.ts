@@ -1647,7 +1647,6 @@ describe("codex provider adapter", () => {
             read: ["/tmp/project/README.md"],
             write: [],
           },
-          macos: null,
         },
       },
     });
@@ -1773,12 +1772,12 @@ describe("codex provider adapter", () => {
                 read: ["/tmp/project/README.md"],
                 write: [],
               },
-              macos: null,
             },
           },
         },
         resolution: {
           kind: "permission_request",
+          decision: "allow",
           permissions: {
             network: { enabled: true },
             fileSystem: {

@@ -59,10 +59,9 @@ export function formatPendingInteractionLifecycleMessage(
             interaction.resolution.decision,
           );
         case "permission_request":
-          return formatPendingInteractionPermissionResolutionMessage({
-            permissions: interaction.resolution.permissions,
-            scope: interaction.resolution.scope,
-          });
+          return formatPendingInteractionPermissionResolutionMessage(
+            interaction.resolution,
+          );
       }
       const exhaustiveResolution: never = interaction.resolution;
       throw new Error(

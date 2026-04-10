@@ -78,7 +78,6 @@ describe("pending interaction presentation", () => {
           read: ["/tmp/a", "/tmp/b"],
           write: [],
         },
-        macos: null,
       },
     });
 

@@ -1,8 +1,10 @@
 import type {
   PendingInteractionCommandApprovalDecision,
   PendingInteractionFileChangeApprovalDecision,
+  PendingInteractionGrantablePermissionProfile,
   PendingInteractionGrantedPermissionProfile,
   PendingInteractionMacOsPermissions,
+  PermissionRequestPendingInteractionResolution,
   PendingInteractionRequestedPermissionProfile,
 } from "@bb/domain";
 
@@ -14,10 +16,11 @@ export type PendingInteractionCommandApprovalDecisionKind =
   | "accept_with_exec_policy_amendment"
   | "apply_network_policy_amendment";
 
-export interface PendingInteractionPermissionResolutionSummaryArgs {
-  permissions: PendingInteractionGrantedPermissionProfile;
-  scope: "turn" | "session";
-}
+export type PendingInteractionPermissionResolutionSummaryArgs =
+  PermissionRequestPendingInteractionResolution;
+type PendingInteractionPermissionSummaryProfile =
+  | PendingInteractionGrantablePermissionProfile
+  | PendingInteractionRequestedPermissionProfile;
 
 export function summarizePendingInteractionRequestedMacOsPermissions(
   permissions: PendingInteractionMacOsPermissions | null,
@@ -62,7 +65,7 @@ export function summarizePendingInteractionRequestedMacOsPermissions(
 }
 
 export function summarizePendingInteractionRequestedPermissions(
-  permissions: PendingInteractionRequestedPermissionProfile,
+  permissions: PendingInteractionPermissionSummaryProfile,
 ): string[] {
   const summaries: string[] = [];
   if (permissions.network?.enabled === true) {
@@ -87,12 +90,14 @@ export function summarizePendingInteractionRequestedPermissions(
 
   return [
     ...summaries,
-    ...summarizePendingInteractionRequestedMacOsPermissions(permissions.macos),
+    ...summarizePendingInteractionRequestedMacOsPermissions(
+      "macos" in permissions ? permissions.macos : null,
+    ),
   ];
 }
 
 export function toGrantedPendingInteractionPermissions(
-  permissions: PendingInteractionRequestedPermissionProfile,
+  permissions: PendingInteractionPermissionSummaryProfile,
 ): PendingInteractionGrantedPermissionProfile {
   return {
     network: permissions.network?.enabled === true
@@ -215,6 +220,10 @@ function hasPendingInteractionGrantedPermissions(
 export function formatPendingInteractionPermissionResolutionOutcome(
   args: PendingInteractionPermissionResolutionSummaryArgs,
 ): string {
+  if (args.decision === "deny") {
+    return "denied";
+  }
+
   if (!hasPendingInteractionGrantedPermissions(args.permissions)) {
     return "denied";
   }
@@ -230,6 +239,10 @@ export function formatPendingInteractionPermissionResolutionOutcome(
 export function formatPendingInteractionPermissionResolutionMessage(
   args: PendingInteractionPermissionResolutionSummaryArgs,
 ): string {
+  if (args.decision === "deny") {
+    return "Permission request denied";
+  }
+
   if (!hasPendingInteractionGrantedPermissions(args.permissions)) {
     return "Permission request denied";
   }

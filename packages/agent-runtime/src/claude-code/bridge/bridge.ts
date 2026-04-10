@@ -330,6 +330,32 @@ function findSessionByPendingInteractiveRequest(
   return undefined;
 }
 
+function resolvePendingInteractiveRequests(
+  threadSession: ThreadSession,
+  message: string,
+): void {
+  for (const [requestId, pending] of threadSession.pendingInteractiveRequests) {
+    threadSession.pendingInteractiveRequests.delete(requestId);
+    pending.resolve({
+      behavior: "deny",
+      interrupt: true,
+      message,
+      toolUseID: pending.itemId,
+    });
+  }
+}
+
+function stopThreadSession(threadId: string, message: string): void {
+  const threadSession = sessions.get(threadId);
+  if (!threadSession) {
+    return;
+  }
+
+  resolvePendingInteractiveRequests(threadSession, message);
+  threadSession.session.stop();
+  sessions.delete(threadId);
+}
+
 function extractEnvOverrides(config: Record<string, unknown> | undefined): Record<string, string> {
   const envOverrides: Record<string, string> = {};
   if (config) {
@@ -616,8 +642,10 @@ function handleThreadStart(
 
   const existing = sessions.get(threadIdRef.current);
   if (existing) {
-    existing.session.stop();
-    sessions.delete(threadIdRef.current);
+    stopThreadSession(
+      threadIdRef.current,
+      "Thread session replaced while awaiting permission approval",
+    );
   }
 
   const envOverrides = extractEnvOverrides(params.config);
@@ -672,8 +700,10 @@ function handleThreadResume(
 
   const existing = sessions.get(threadId);
   if (existing) {
-    existing.session.stop();
-    sessions.delete(threadId);
+    stopThreadSession(
+      threadId,
+      "Thread session replaced while awaiting permission approval",
+    );
   }
 
   const envOverrides = extractEnvOverrides(params.config);
@@ -754,8 +784,10 @@ function handleThreadStop(
 ): void {
   const threadSession = sessions.get(params.threadId);
   if (threadSession) {
-    threadSession.session.stop();
-    sessions.delete(params.threadId);
+    stopThreadSession(
+      params.threadId,
+      "Thread stopped while awaiting permission approval",
+    );
   }
   sendResult(id, { ok: true });
 }
@@ -846,9 +878,11 @@ function handleLine(line: string): void {
 const rl = createInterface({ input: process.stdin, terminal: false });
 rl.on("line", handleLine);
 rl.on("close", () => {
-  for (const threadSession of sessions.values()) {
-    threadSession.session.stop();
+  for (const threadId of [...sessions.keys()]) {
+    stopThreadSession(
+      threadId,
+      "Bridge closed while awaiting permission approval",
+    );
   }
-  sessions.clear();
   process.exit(0);
 });

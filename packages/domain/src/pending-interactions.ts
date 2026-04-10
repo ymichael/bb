@@ -116,10 +116,16 @@ export type PendingInteractionRequestedPermissionProfile = z.infer<
   typeof pendingInteractionRequestedPermissionProfileSchema
 >;
 
-const pendingInteractionGrantedPermissionProfileSchema = z.object({
+export const pendingInteractionGrantablePermissionProfileSchema = z.object({
   network: pendingInteractionNetworkPermissionsSchema.nullable(),
   fileSystem: pendingInteractionFileSystemPermissionsSchema.nullable(),
-});
+}).strict();
+export type PendingInteractionGrantablePermissionProfile = z.infer<
+  typeof pendingInteractionGrantablePermissionProfileSchema
+>;
+
+const pendingInteractionGrantedPermissionProfileSchema =
+  pendingInteractionGrantablePermissionProfileSchema;
 export type PendingInteractionGrantedPermissionProfile = z.infer<
   typeof pendingInteractionGrantedPermissionProfileSchema
 >;
@@ -198,6 +204,14 @@ export type PendingInteractionPermissionGrantScope = z.infer<
   typeof pendingInteractionPermissionGrantScopeSchema
 >;
 
+const pendingInteractionPermissionDecisionSchema = z.enum([
+  "allow",
+  "deny",
+]);
+export type PendingInteractionPermissionDecision = z.infer<
+  typeof pendingInteractionPermissionDecisionSchema
+>;
+
 export const commandApprovalPendingInteractionPayloadSchema = z.object({
   kind: z.literal("command_approval"),
   itemId: z.string().min(1),
@@ -227,7 +241,7 @@ export const permissionRequestPendingInteractionPayloadSchema = z.object({
   itemId: z.string().min(1),
   reason: z.string().nullable(),
   toolName: z.string().nullable(),
-  permissions: pendingInteractionRequestedPermissionProfileSchema,
+  permissions: pendingInteractionGrantablePermissionProfileSchema,
 });
 export type PermissionRequestPendingInteractionPayload = z.infer<
   typeof permissionRequestPendingInteractionPayloadSchema
@@ -258,16 +272,24 @@ export type FileChangeApprovalPendingInteractionResolution = z.infer<
   typeof fileChangeApprovalPendingInteractionResolutionSchema
 >;
 
-export const permissionRequestPendingInteractionResolutionSchema = z.object({
-  kind: z.literal("permission_request"),
-  permissions: pendingInteractionGrantedPermissionProfileSchema,
-  scope: pendingInteractionPermissionGrantScopeSchema,
-});
+export const permissionRequestPendingInteractionResolutionSchema =
+  z.discriminatedUnion("decision", [
+    z.object({
+      kind: z.literal("permission_request"),
+      decision: z.literal("allow"),
+      permissions: pendingInteractionGrantedPermissionProfileSchema,
+      scope: pendingInteractionPermissionGrantScopeSchema,
+    }),
+    z.object({
+      kind: z.literal("permission_request"),
+      decision: z.literal("deny"),
+    }),
+  ]);
 export type PermissionRequestPendingInteractionResolution = z.infer<
   typeof permissionRequestPendingInteractionResolutionSchema
 >;
 
-export const pendingInteractionResolutionSchema = z.discriminatedUnion("kind", [
+export const pendingInteractionResolutionSchema = z.union([
   commandApprovalPendingInteractionResolutionSchema,
   fileChangeApprovalPendingInteractionResolutionSchema,
   permissionRequestPendingInteractionResolutionSchema,

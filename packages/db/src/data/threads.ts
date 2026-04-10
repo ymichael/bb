@@ -1,8 +1,18 @@
-import { and, count, desc, eq, inArray, isNotNull, isNull, ne } from "drizzle-orm";
+import {
+  and,
+  count,
+  desc,
+  eq,
+  getTableColumns,
+  inArray,
+  isNotNull,
+  isNull,
+  ne,
+} from "drizzle-orm";
 import type { ThreadChangeKind, ThreadStatus, ThreadType } from "@bb/domain";
 import type { DbConnection } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
-import { environments, threads } from "../schema.js";
+import { environments, pendingInteractions, threads } from "../schema.js";
 import { createThreadId } from "../ids.js";
 
 /**
@@ -69,6 +79,12 @@ export interface ListThreadsOptions {
   type?: ThreadType;
 }
 
+type ThreadRow = typeof threads.$inferSelect;
+
+export interface ThreadWithPendingInteractionState extends ThreadRow {
+  hasPendingInteraction: boolean;
+}
+
 export interface CountLiveThreadsInEnvironmentArgs {
   environmentId: string;
   excludeThreadId?: string;
@@ -122,11 +138,8 @@ const THREAD_STATUSES_ALLOWING_ERROR: ThreadStatus[] = [
   "active",
 ];
 
-export function listThreads(
-  db: DbConnection,
-  options: ListThreadsOptions,
-) {
-  const filters = [
+function buildListThreadsFilters(options: ListThreadsOptions) {
+  return [
     eq(threads.projectId, options.projectId),
     isNull(threads.deletedAt),
     options.type ? eq(threads.type, options.type) : undefined,
@@ -139,13 +152,46 @@ export function listThreads(
         ? isNull(threads.archivedAt)
         : undefined,
   ].filter((value) => value !== undefined);
+}
 
+export function listThreads(
+  db: DbConnection,
+  options: ListThreadsOptions,
+) {
   return db
     .select()
     .from(threads)
-    .where(and(...filters))
+    .where(and(...buildListThreadsFilters(options)))
     .orderBy(desc(threads.createdAt))
     .all();
+}
+
+export function listThreadsWithPendingInteractionState(
+  db: DbConnection,
+  options: ListThreadsOptions,
+): ThreadWithPendingInteractionState[] {
+  const rows = db
+    .select({
+      ...getTableColumns(threads),
+      pendingInteractionCount: count(pendingInteractions.id),
+    })
+    .from(threads)
+    .leftJoin(
+      pendingInteractions,
+      and(
+        eq(pendingInteractions.threadId, threads.id),
+        eq(pendingInteractions.status, "pending"),
+      ),
+    )
+    .where(and(...buildListThreadsFilters(options)))
+    .groupBy(threads.id)
+    .orderBy(desc(threads.createdAt))
+    .all();
+
+  return rows.map(({ pendingInteractionCount, ...thread }) => ({
+    ...thread,
+    hasPendingInteraction: pendingInteractionCount > 0,
+  }));
 }
 
 export function countLiveThreadsInEnvironment(

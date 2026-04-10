@@ -246,6 +246,7 @@ async function createApprovalResolution(
     case "permission_request":
       return {
         kind: "permission_request",
+        decision: "allow",
         permissions: {
           network: request.payload.permissions.network,
           fileSystem: request.payload.permissions.fileSystem,
@@ -876,6 +877,7 @@ describe.concurrent("interactive request scenarios", () => {
 
         return {
           kind: "permission_request",
+          decision: "allow",
           permissions: request.payload.permissions,
           scope: "turn",
         };

@@ -12,6 +12,7 @@ import {
 } from "@bb/core-ui";
 import {
   PendingInteraction,
+  type PendingInteractionGrantablePermissionProfile,
   type PendingInteractionRequestedPermissionProfile,
   pendingInteractionPermissionGrantScopeSchema,
   PendingInteractionResolution,
@@ -34,6 +35,10 @@ interface ThreadInteractionTargetOptions {
 interface ThreadInteractionGrantOptions extends ThreadInteractionTargetOptions {
   scope?: string;
 }
+
+type PrintablePermissionProfile =
+  | PendingInteractionGrantablePermissionProfile
+  | PendingInteractionRequestedPermissionProfile;
 
 function parsePermissionGrantScope(
   value: string | undefined,
@@ -58,7 +63,7 @@ function formatInteractionKind(kind: PendingInteraction["payload"]["kind"]): str
 }
 
 function printRequestedPermissions(
-  permissions: PendingInteractionRequestedPermissionProfile,
+  permissions: PrintablePermissionProfile,
 ): void {
   const summaries = summarizePendingInteractionRequestedPermissions(permissions);
   if (summaries.length === 0) {
@@ -136,7 +141,10 @@ function printInteraction(interaction: PendingInteraction): void {
         console.log(`  Decision: ${interaction.resolution.decision}`);
         break;
       case "permission_request":
-        console.log(`  Scope: ${interaction.resolution.scope}`);
+        console.log(`  Decision: ${interaction.resolution.decision}`);
+        if (interaction.resolution.decision === "allow") {
+          console.log(`  Scope: ${interaction.resolution.scope}`);
+        }
         break;
     }
   }
@@ -272,11 +280,7 @@ function buildBinaryResolution(
       }
       return {
         kind: "permission_request",
-        permissions: {
-          network: null,
-          fileSystem: null,
-        },
-        scope: "turn",
+        decision: "deny",
       };
   }
 }
@@ -293,6 +297,7 @@ function buildPermissionGrantResolution(
 
   return {
     kind: "permission_request",
+    decision: "allow",
     permissions: toGrantedPendingInteractionPermissions(interaction.payload.permissions),
     scope,
   };
@@ -311,10 +316,7 @@ function formatBinaryResolutionMessage(
         resolution.decision,
       );
     case "permission_request":
-      return formatPendingInteractionPermissionResolutionOutcome({
-        permissions: resolution.permissions,
-        scope: resolution.scope,
-      });
+      return formatPendingInteractionPermissionResolutionOutcome(resolution);
   }
 
   const exhaustiveResolution: never = resolution;

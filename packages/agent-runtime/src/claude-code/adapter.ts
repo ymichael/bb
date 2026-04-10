@@ -22,9 +22,6 @@ import { toPositiveNumber } from "@bb/domain";
 import {
   decodeNormalizedProviderToolCallRequest,
 } from "../shared/provider-tool-call-contract.js";
-import {
-  normalizePendingInteractionRequestedPermissionProfile,
-} from "../shared/pending-interaction-normalization.js";
 import { resolveBridgePath } from "../shared/bridge-path.js";
 import {
   bashArgsSchema,
@@ -949,10 +946,6 @@ export function createClaudeCodeProviderAdapter(
           if (!parsed.success) {
             return null;
           }
-          const permissions = normalizePendingInteractionRequestedPermissionProfile(
-            parsed.data.permissions,
-          );
-
           return {
             requestId: request.id,
             method: request.method,
@@ -964,7 +957,7 @@ export function createClaudeCodeProviderAdapter(
               itemId: parsed.data.itemId,
               reason: parsed.data.reason,
               toolName: parsed.data.toolName,
-              permissions,
+              permissions: parsed.data.permissions,
             },
           };
         }
@@ -981,24 +974,19 @@ export function createClaudeCodeProviderAdapter(
               "Interactive response kind mismatch for permission request",
             );
           }
-
-          const updatedPermissions = buildClaudePermissionUpdates({
-            permissions: args.resolution.permissions,
-            scope: args.resolution.scope,
-            toolName: args.request.payload.toolName,
-          });
-
-          if (
-            args.resolution.permissions.network === null
-            && args.resolution.permissions.fileSystem === null
-            && updatedPermissions === undefined
-          ) {
+          if (args.resolution.decision === "deny") {
             return {
               kind: "permission_request",
               behavior: "deny",
               message: "Permission request denied",
             };
           }
+
+          const updatedPermissions = buildClaudePermissionUpdates({
+            permissions: args.resolution.permissions,
+            scope: args.resolution.scope,
+            toolName: args.request.payload.toolName,
+          });
 
           return {
             kind: "permission_request",

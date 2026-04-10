@@ -1,16 +1,10 @@
 import { z } from "zod";
-import {
-  pendingInteractionFileSystemPermissionsSchema,
-  pendingInteractionMacOsPermissionsSchema,
-  pendingInteractionNetworkPermissionsSchema,
-} from "@bb/domain";
 import type {
   PendingInteractionGrantedPermissionProfile,
+  PendingInteractionGrantablePermissionProfile,
   PendingInteractionPermissionGrantScope,
-  PendingInteractionRequestedPermissionProfile,
   PermissionMode,
 } from "@bb/domain";
-import { normalizePendingInteractionRequestedPermissionProfile } from "../shared/pending-interaction-normalization.js";
 
 export const CLAUDE_PERMISSION_REQUEST_APPROVAL_METHOD =
   "item/permissions/requestApproval";
@@ -61,29 +55,22 @@ export type ClaudePermissionUpdate = z.infer<
   typeof claudePermissionUpdateSchema
 >;
 
-const claudeRequestedPermissionProfileInputSchema = z.object({
-  network: z.custom<
-    PendingInteractionRequestedPermissionProfile["network"] | undefined
-  >((value) =>
-    value === undefined
-    || value === null
-    || pendingInteractionNetworkPermissionsSchema.safeParse(value).success
-  ).transform((value) => value ?? null),
-  fileSystem: z.custom<
-    PendingInteractionRequestedPermissionProfile["fileSystem"] | undefined
-  >((value) =>
-    value === undefined
-    || value === null
-    || pendingInteractionFileSystemPermissionsSchema.safeParse(value).success
-  ).transform((value) => value ?? null),
-  macos: z.custom<
-    PendingInteractionRequestedPermissionProfile["macos"] | undefined
-  >((value) =>
-    value === undefined
-    || value === null
-    || pendingInteractionMacOsPermissionsSchema.safeParse(value).success
-  ).transform((value) => value ?? null),
+const claudeNetworkPermissionsInputSchema = z.object({
+  enabled: z.boolean().nullable(),
 });
+
+const claudeFileSystemPermissionsInputSchema = z.object({
+  read: z.array(z.string()),
+  write: z.array(z.string()),
+});
+
+const claudeRequestedPermissionProfileInputSchema = z.object({
+  network: claudeNetworkPermissionsInputSchema.nullable().optional(),
+  fileSystem: claudeFileSystemPermissionsInputSchema.nullable().optional(),
+}).transform((value): PendingInteractionGrantablePermissionProfile => ({
+  network: value.network ?? null,
+  fileSystem: value.fileSystem ?? null,
+}));
 interface ClaudePermissionRequestProfileArgs {
   blockedPath: string | undefined;
   suggestions: ClaudePermissionUpdate[] | undefined;
@@ -128,7 +115,7 @@ function getSuggestedDirectories(
 
 export function toPendingInteractionPermissionProfile(
   args: ClaudePermissionRequestProfileArgs,
-): PendingInteractionRequestedPermissionProfile {
+): PendingInteractionGrantablePermissionProfile {
   const hasRuleSuggestion = (args.suggestions ?? []).some(
     (suggestion) => suggestion.type === "addRules",
   );
@@ -168,11 +155,10 @@ export function toPendingInteractionPermissionProfile(
       ? { enabled: true }
       : null;
 
-  return normalizePendingInteractionRequestedPermissionProfile({
+  return {
     network,
     fileSystem,
-    macos: null,
-  });
+  };
 }
 
 interface ShouldRequestClaudePermissionApprovalArgs {

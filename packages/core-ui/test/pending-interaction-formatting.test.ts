@@ -60,15 +60,14 @@ describe("pending interaction formatting", () => {
     );
     expect(
       formatPendingInteractionPermissionResolutionOutcome({
-        permissions: {
-          network: null,
-          fileSystem: null,
-        },
-        scope: "turn",
+        kind: "permission_request",
+        decision: "deny",
       }),
     ).toBe("denied");
     expect(
       formatPendingInteractionPermissionResolutionMessage({
+        kind: "permission_request",
+        decision: "allow",
         permissions: {
           network: { enabled: true },
           fileSystem: null,

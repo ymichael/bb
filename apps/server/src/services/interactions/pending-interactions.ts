@@ -9,10 +9,11 @@ import {
   interruptPendingInteractionsForThreadIds,
   interruptPendingInteractionsForThreads,
   listPendingInteractionsByThread,
-  listPendingInteractionsByStatus,
+  listPendingInteractionsOnEphemeralHosts,
   setPendingInteractionExpired,
   setPendingInteractionInterrupted,
   setPendingInteractionResolved,
+  type PendingInteractionRow,
 } from "@bb/db";
 import {
   type PendingInteraction,
@@ -21,7 +22,7 @@ import {
 } from "@bb/domain";
 import { ApiError } from "../../errors.js";
 import type { AppDeps } from "../../types.js";
-import { appendPendingInteractionTimelineEvent } from "./pending-interaction-formatting.js";
+import { appendPendingInteractionTimelineEvent } from "./pending-interaction-timeline.js";
 import { toPendingInteraction } from "./pending-interaction-serialization.js";
 import { validatePendingInteractionResolution } from "./pending-interaction-validation.js";
 
@@ -98,6 +99,13 @@ function buildResolveConflictError(interaction: PendingInteraction): ApiError {
   );
 }
 
+function pendingInteractionResolutionEquals(
+  left: PendingInteraction["resolution"],
+  right: PendingInteraction["resolution"],
+): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
 function getUnsupportedPendingInteractionReason(
   interaction: PendingInteractionCreate,
 ): string | null {
@@ -106,13 +114,6 @@ function getUnsupportedPendingInteractionReason(
     && interaction.payload.availableDecisions.length === 0
   ) {
     return "Command approvals must include at least one available decision";
-  }
-
-  if (
-    interaction.payload.kind === "permission_request"
-    && interaction.payload.permissions.macos !== null
-  ) {
-    return "Pending interactions do not yet support standalone macOS permission requests";
   }
 
   return null;
@@ -397,7 +398,10 @@ export class PendingInteractionLifecycle {
       interactionId: args.interactionId,
     });
     if (current.status !== "pending") {
-      if (current.status === "resolved") {
+      if (
+        current.status === "resolved"
+        && pendingInteractionResolutionEquals(current.resolution, args.resolution)
+      ) {
         return current;
       }
 
@@ -414,7 +418,10 @@ export class PendingInteractionLifecycle {
         threadId: args.threadId,
         interactionId: args.interactionId,
       });
-      if (latest.status === "resolved") {
+      if (
+        latest.status === "resolved"
+        && pendingInteractionResolutionEquals(latest.resolution, args.resolution)
+      ) {
         return latest;
       }
 
@@ -445,32 +452,34 @@ export class PendingInteractionLifecycle {
   interruptPendingInteractionsForThreads(
     args: InterruptPendingInteractionsForThreadsLifecycleArgs,
   ): PendingInteraction[] {
-    const updated = interruptPendingInteractionsForThreads(this.deps.db, {
-      providerId: args.providerId,
-      threadIds: args.threadIds,
-      statusReason: args.reason,
-    }).map(toPendingInteraction);
-
-    for (const interaction of updated) {
-      this.finishInteraction(interaction);
-    }
-
-    return updated;
+    return this.finishInterruptedRows(
+      interruptPendingInteractionsForThreads(this.deps.db, {
+        providerId: args.providerId,
+        threadIds: args.threadIds,
+        statusReason: args.reason,
+      }),
+    );
   }
 
   interruptPendingInteractionsForThreadIds(
     args: InterruptPendingInteractionsForThreadIdsLifecycleArgs,
   ): PendingInteraction[] {
-    const updated = interruptPendingInteractionsForThreadIds(this.deps.db, {
-      threadIds: args.threadIds,
-      statusReason: args.reason,
-    }).map(toPendingInteraction);
+    return this.finishInterruptedRows(
+      interruptPendingInteractionsForThreadIds(this.deps.db, {
+        threadIds: args.threadIds,
+        statusReason: args.reason,
+      }),
+    );
+  }
 
-    for (const interaction of updated) {
+  private finishInterruptedRows(
+    rows: PendingInteractionRow[],
+  ): PendingInteraction[] {
+    const interactions = rows.map(toPendingInteraction);
+    for (const interaction of interactions) {
       this.finishInteraction(interaction);
     }
-
-    return updated;
+    return interactions;
   }
 
   private requireInteraction(interactionId: string): PendingInteraction {
@@ -500,8 +509,7 @@ export class PendingInteractionLifecycle {
   private hydratePendingInteractions(): void {
     let offset = 0;
     while (true) {
-      const pendingInteractions = listPendingInteractionsByStatus(this.deps.db, {
-        statuses: ["pending"],
+      const pendingInteractions = listPendingInteractionsOnEphemeralHosts(this.deps.db, {
         limit: PENDING_INTERACTION_HYDRATE_BATCH_SIZE,
         offset,
       }).map(toPendingInteraction);

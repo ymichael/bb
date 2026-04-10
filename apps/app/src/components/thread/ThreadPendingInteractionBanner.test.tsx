@@ -110,7 +110,6 @@ function createPermissionRequestInteraction(): PendingInteraction {
           read: ["/tmp/project/package.json"],
           write: ["/tmp/project/package.json"],
         },
-        macos: null,
       },
     },
   };
@@ -186,6 +185,7 @@ describe("ThreadPendingInteractionBanner", () => {
       status: "resolved",
       resolution: {
         kind: "permission_request",
+        decision: "allow",
         permissions: {
           network: null,
           fileSystem: {
@@ -210,6 +210,7 @@ describe("ThreadPendingInteractionBanner", () => {
         "pi_1",
         {
           kind: "permission_request",
+          decision: "allow",
           permissions: {
             network: null,
             fileSystem: {
@@ -221,6 +222,33 @@ describe("ThreadPendingInteractionBanner", () => {
         },
       );
     });
+  });
+
+  it("disables actions while resolving and surfaces resolution failures", async () => {
+    let rejectResolution: (error: Error) => void = () => {};
+    vi.mocked(api.resolveThreadPendingInteraction).mockReturnValue(
+      new Promise((_, reject) => {
+        rejectResolution = reject;
+      }),
+    );
+
+    renderBanner({
+      interaction: createCommandApprovalInteraction(),
+    });
+
+    const approveButton = screen.getByRole("button", { name: "Approve" });
+    fireEvent.click(approveButton);
+
+    await waitFor(() => {
+      expect(approveButton.hasAttribute("disabled")).toBe(true);
+    });
+
+    rejectResolution(new Error("Resolution rejected"));
+
+    await waitFor(() => {
+      expect(screen.getByText("Resolution rejected")).not.toBeNull();
+    });
+    expect(approveButton.hasAttribute("disabled")).toBe(false);
   });
 
   it("shows amendment details for command approvals with amended decisions", () => {

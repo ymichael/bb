@@ -8,7 +8,6 @@ import {
 } from "@bb/ui-core";
 import {
   formatPendingInteractionCommandApprovalDecision,
-  summarizePendingInteractionRequestedMacOsPermissions,
   summarizePendingInteractionRequestedPermissions,
 } from "@bb/core-ui";
 
@@ -145,17 +144,6 @@ export function renderPendingInteractionDetails(
           {interaction.payload.permissions.network?.enabled === true ? (
             <DetailRow label="Network">
               <span>Enabled</span>
-            </DetailRow>
-          ) : null}
-          {interaction.payload.permissions.macos !== null ? (
-            <DetailRow label="macOS" align="start">
-              <div className="space-y-1">
-                {summarizePendingInteractionRequestedMacOsPermissions(
-                  interaction.payload.permissions.macos,
-                ).map((summary) => (
-                  <div key={summary}>{summary}</div>
-                ))}
-              </div>
             </DetailRow>
           ) : null}
           {interaction.payload.permissions.fileSystem ? (

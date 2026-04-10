@@ -1,4 +1,5 @@
 import { setTimeout as sleep } from "node:timers/promises";
+import { deleteThread } from "@bb/db";
 import { describe, expect, it } from "vitest";
 import {
   internalAuthHeaders,
@@ -188,6 +189,90 @@ describe("internal interactive request lifecycle", () => {
     }
   });
 
+  it("skips deleted threads in interrupt batches and still interrupts live threads", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-interaction-interrupt-deleted-skip",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const liveThread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+      });
+      const deletedThread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+      });
+      deleteThread(harness.db, harness.hub, deletedThread.id);
+
+      const responsePromise = harness.app.request("/internal/session/interactive-request", {
+        method: "POST",
+        headers: internalAuthHeaders(harness),
+        body: JSON.stringify({
+          sessionId: session.id,
+          interaction: {
+            threadId: liveThread.id,
+            turnId: "turn-interrupt-live",
+            providerId: "codex",
+            providerThreadId: "provider-thread-interrupt-live",
+            providerRequestId: "request-interrupt-live",
+            payload: {
+              kind: "command_approval",
+              itemId: "item-interrupt-live",
+              reason: "Needs approval",
+              command: "git push",
+              cwd: "/tmp/project",
+              commandActions: [],
+              requestedPermissions: null,
+              availableDecisions: ["accept", "accept_for_session", "decline", "cancel"],
+            },
+          },
+        }),
+      });
+
+      const interactionId = await waitForPendingInteractionId({
+        harness,
+        threadId: liveThread.id,
+      });
+
+      const interruptResponse = await harness.app.request(
+        "/internal/session/interactive-request/interrupt",
+        {
+          method: "POST",
+          headers: internalAuthHeaders(harness),
+          body: JSON.stringify({
+            sessionId: session.id,
+            providerId: "codex",
+            threadIds: [deletedThread.id, liveThread.id],
+            reason: "Provider exited",
+          }),
+        },
+      );
+
+      expect(interruptResponse.status).toBe(200);
+      await expect(readJson(interruptResponse)).resolves.toEqual({
+        ok: true,
+        interactionIds: [interactionId],
+      });
+
+      const response = await responsePromise;
+      expect(response.status).toBe(200);
+      await expect(readJson(response)).resolves.toEqual({
+        outcome: "interrupted",
+        reason: "Provider exited",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("interrupts pending interactive requests before deleting threads", async () => {
     const harness = await createTestAppHarness();
     try {
@@ -305,7 +390,6 @@ describe("internal interactive request lifecycle", () => {
               permissions: {
                 network: { enabled: true },
                 fileSystem: null,
-                macos: null,
               },
             },
           },
@@ -321,6 +405,7 @@ describe("internal interactive request lifecycle", () => {
         interactionId,
         resolution: {
           kind: "permission_request",
+          decision: "allow",
           permissions: {
             network: { enabled: true },
             fileSystem: null,
@@ -340,6 +425,7 @@ describe("internal interactive request lifecycle", () => {
         outcome: "resolved",
         resolution: {
           kind: "permission_request",
+          decision: "allow",
           permissions: {
             network: { enabled: true },
             fileSystem: null,

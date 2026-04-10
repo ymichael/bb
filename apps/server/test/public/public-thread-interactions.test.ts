@@ -147,6 +147,25 @@ describe("public thread interaction routes", () => {
         },
       });
 
+      const conflictingResolveResponse = await harness.app.request(
+        `/api/v1/threads/${thread.id}/interactions/${registered.interaction.id}/resolve`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            kind: "command_approval",
+            decision: "decline",
+          }),
+        },
+      );
+      expect(conflictingResolveResponse.status).toBe(409);
+      await expect(readJson(conflictingResolveResponse)).resolves.toEqual({
+        code: "invalid_request",
+        message: `Pending interaction ${registered.interaction.id} is already resolved`,
+      });
+
       const postResolveListResponse = await harness.app.request(
         `/api/v1/threads/${thread.id}/interactions`,
       );
@@ -258,6 +277,25 @@ describe("public thread interaction routes", () => {
         message: `Pending interaction ${commandApproval.interaction.id} is already interrupted`,
       });
 
+      const malformedBodyResponse = await harness.app.request(
+        `/api/v1/threads/${thread.id}/interactions/${commandApproval.interaction.id}/resolve`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            kind: "permission_request",
+            decision: "allow",
+          }),
+        },
+      );
+      expect(malformedBodyResponse.status).toBe(400);
+      await expect(readJson(malformedBodyResponse)).resolves.toEqual({
+        code: "invalid_request",
+        message: "Invalid input",
+      });
+
     } finally {
       await harness.cleanup();
     }
@@ -298,7 +336,6 @@ describe("public thread interaction routes", () => {
               read: ["/tmp/project/README.md"],
               write: ["/tmp/project/notes.md"],
             },
-            macos: null,
           },
         },
       });
@@ -315,6 +352,7 @@ describe("public thread interaction routes", () => {
           },
           body: JSON.stringify({
             kind: "permission_request",
+            decision: "allow",
             permissions: {
               network: { enabled: true },
               fileSystem: {
@@ -332,6 +370,7 @@ describe("public thread interaction routes", () => {
         status: "resolved",
         resolution: {
           kind: "permission_request",
+          decision: "allow",
           permissions: {
             network: { enabled: true },
             fileSystem: {
@@ -357,7 +396,6 @@ describe("public thread interaction routes", () => {
           permissions: {
             network: { enabled: true },
             fileSystem: null,
-            macos: null,
           },
         },
       });
@@ -374,11 +412,7 @@ describe("public thread interaction routes", () => {
           },
           body: JSON.stringify({
             kind: "permission_request",
-            permissions: {
-              network: null,
-              fileSystem: null,
-            },
-            scope: "turn",
+            decision: "deny",
           }),
         },
       );
@@ -388,11 +422,7 @@ describe("public thread interaction routes", () => {
         status: "resolved",
         resolution: {
           kind: "permission_request",
-          permissions: {
-            network: null,
-            fileSystem: null,
-          },
-          scope: "turn",
+          decision: "deny",
         },
       });
 
@@ -413,7 +443,6 @@ describe("public thread interaction routes", () => {
               read: ["/tmp/project/README.md"],
               write: [],
             },
-            macos: null,
           },
         },
       });
@@ -430,6 +459,7 @@ describe("public thread interaction routes", () => {
           },
           body: JSON.stringify({
             kind: "permission_request",
+            decision: "allow",
             permissions: {
               network: { enabled: true },
               fileSystem: {

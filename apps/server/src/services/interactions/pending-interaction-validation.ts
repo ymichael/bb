@@ -110,6 +110,9 @@ function validatePermissionRequestResolution(
   ) {
     return;
   }
+  if (resolution.decision === "deny") {
+    return;
+  }
 
   if (resolution.permissions.network !== null) {
     if (

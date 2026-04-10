@@ -11,6 +11,7 @@ import {
   getEnvironmentBranchListInvalidationQueryKeys,
   getEnvironmentRecordInvalidationQueryKeys,
   getEnvironmentWorkspaceStateInvalidationQueryKeys,
+  updateCachedThreadListPendingInteractionState,
 } from "./queries/query-cache";
 import {
   allAvailableModelsQueryKeyPrefix,
@@ -31,6 +32,7 @@ import {
   threadTimelineQueryKeyPrefix,
   threadsQueryKey,
 } from "./queries/query-keys";
+import * as api from "../lib/api";
 
 const INVALIDATION_DEBOUNCE_MS = 250;
 // Keep realtime thread updates responsive while still coalescing bursts.
@@ -100,7 +102,6 @@ function toThreadChangeFlags(changes: readonly ThreadChangeKind[]): ThreadChange
         break;
       case "interactions-changed":
         flags.interactionsChanged = true;
-        flags.listChanged = true;
         flags.threadChanged = true;
         flags.timelineChanged = true;
         break;
@@ -352,6 +353,19 @@ export function useWebSocket(): void {
         if (flags.interactionsChanged) {
           queryClient.invalidateQueries({
             queryKey: threadPendingInteractionsQueryKey(id),
+          });
+          void queryClient.fetchQuery({
+            queryKey: threadPendingInteractionsQueryKey(id),
+            queryFn: ({ signal }) =>
+              api.listThreadPendingInteractions(id, signal),
+          }).then((interactions) => {
+            updateCachedThreadListPendingInteractionState(
+              queryClient,
+              id,
+              interactions.length > 0,
+            );
+          }).catch(() => {
+            queryClient.invalidateQueries({ queryKey: threadsQueryKey() });
           });
         }
         if (flags.timelineChanged) {

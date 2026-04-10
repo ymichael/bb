@@ -1180,6 +1180,146 @@ rl.on("line", (line) => {
     await runtime.shutdown();
   });
 
+  it("sends JSON-RPC error back when onInteractiveRequest throws", async () => {
+    const interactiveScriptPath = join(tmpDir, "interactive-error-provider.cjs");
+    writeFileSync(
+      interactiveScriptPath,
+      `
+const readline = require("node:readline");
+const threads = new Map();
+const pendingInteractive = new Map();
+let nextThreadId = 1;
+let nextRequestId = 1;
+
+function send(message) {
+  process.stdout.write(JSON.stringify(message) + "\\n");
+}
+
+function completeTurn(providerThreadId, turnId, text) {
+  send({
+    jsonrpc: "2.0",
+    method: "item/completed",
+    params: {
+      threadId: providerThreadId,
+      turnId,
+      item: { type: "agentMessage", id: "msg-" + turnId, text },
+    },
+  });
+  send({
+    jsonrpc: "2.0",
+    method: "turn/completed",
+    params: {
+      threadId: providerThreadId,
+      turnId,
+      status: "completed",
+      providerThreadId,
+    },
+  });
+}
+
+const rl = readline.createInterface({ input: process.stdin });
+rl.on("line", (line) => {
+  const message = JSON.parse(line);
+
+  if (message.id !== undefined && !message.method) {
+    const pending = pendingInteractive.get(message.id);
+    if (!pending) {
+      return;
+    }
+    pendingInteractive.delete(message.id);
+    completeTurn(
+      pending.providerThreadId,
+      pending.turnId,
+      message.error ? message.error.message : "missing error",
+    );
+    return;
+  }
+
+  if (message.method === "initialize" || message.method === "model/list") {
+    send({ jsonrpc: "2.0", id: message.id, result: message.method === "model/list" ? [] : {} });
+    return;
+  }
+
+  if (message.method === "thread/start") {
+    const threadId = message.params.threadId;
+    const providerThreadId = "prov-" + String(nextThreadId++);
+    threads.set(threadId, { providerThreadId, turnCount: 0 });
+    send({ jsonrpc: "2.0", id: message.id, result: { providerThreadId } });
+    send({ jsonrpc: "2.0", method: "thread/identity", params: { threadId, providerThreadId } });
+    return;
+  }
+
+  if (message.method === "turn/start") {
+    const threadId = message.params.threadId;
+    const providerThreadId = message.params.providerThreadId || threadId;
+    const thread = threads.get(threadId);
+    thread.turnCount += 1;
+    const turnId = "turn-" + String(thread.turnCount);
+    send({
+      jsonrpc: "2.0",
+      method: "turn/started",
+      params: { threadId: providerThreadId, turnId, providerThreadId },
+    });
+    send({ jsonrpc: "2.0", id: message.id, result: { ok: true } });
+    const requestId = nextRequestId++;
+    pendingInteractive.set(requestId, { providerThreadId, turnId });
+    send({
+      jsonrpc: "2.0",
+      id: requestId,
+      method: "request_interaction",
+      params: {
+        threadId: providerThreadId,
+        turnId,
+        itemId: "item-error",
+        kind: "command_approval",
+        command: "git push",
+        cwd: "/tmp/project",
+        reason: "Needs approval",
+      },
+    });
+  }
+});
+`,
+      "utf8",
+    );
+
+    const events: ThreadEvent[] = [];
+    const runtime = createAgentRuntime({
+      workspacePath: tmpDir,
+      onEvent: (event) => events.push(event),
+      onToolCall: async () => ({
+        contentItems: [{ type: "inputText", text: "ok" }],
+        success: true,
+      }),
+      onInteractiveRequest: async () => {
+        throw new Error("Interaction failed");
+      },
+      adapterFactory: () => createInteractiveRequestAdapter(interactiveScriptPath),
+    });
+
+    await runtime.startThread({
+      environmentId: "env-1",
+      threadId: "t1",
+      projectId: "p1",
+      providerId: "fake",
+    });
+    await runtime.runTurn({
+      threadId: "t1",
+      input: [{ type: "text", text: "trigger interactive request failure" }],
+    });
+    await waitForCondition(
+      () =>
+        events.some(
+          (event) =>
+            event.type === "item/completed"
+            && event.item.type === "agentMessage"
+            && event.item.text === "Interaction failed",
+        ),
+    );
+
+    await runtime.shutdown();
+  });
+
   it("responds to unsupported interactive requests with a JSON-RPC error instead of dropping them", async () => {
     const unsupportedScriptPath = join(tmpDir, "unsupported-interactive-provider.cjs");
     writeFileSync(
@@ -1348,7 +1488,12 @@ rl.on("line", (line) => {
     });
     await waitForCondition(
       () =>
-        captures.some((entry) => entry.kind === "tool-call-result"),
+        captures.some((entry) => entry.kind === "tool-call-result")
+        && captures.some(
+          (entry) =>
+            entry.kind === "raw-provider-event"
+            && entry.rawEvent.method === "turn/completed",
+        ),
     );
     await runtime.shutdown();
 

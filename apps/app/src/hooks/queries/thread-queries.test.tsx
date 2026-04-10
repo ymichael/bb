@@ -33,7 +33,6 @@ function createPendingInteraction(): PendingInteraction {
       permissions: {
         network: { enabled: true },
         fileSystem: null,
-        macos: null,
       },
     },
     resolution: null,

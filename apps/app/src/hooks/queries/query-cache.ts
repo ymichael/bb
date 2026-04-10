@@ -235,3 +235,28 @@ export function optimisticallyInsertThread(
     );
   }
 }
+
+export function updateCachedThreadListPendingInteractionState(
+  queryClient: QueryClient,
+  threadId: string,
+  hasPendingInteraction: boolean,
+): void {
+  const threadLists = queryClient.getQueriesData<ThreadListEntry[]>({
+    queryKey: threadsQueryKey(),
+  });
+
+  for (const [queryKey, list] of threadLists) {
+    if (!list?.some((thread) => thread.id === threadId)) {
+      continue;
+    }
+
+    queryClient.setQueryData<ThreadListEntry[]>(
+      queryKey,
+      list.map((thread) =>
+        thread.id === threadId
+          ? { ...thread, hasPendingInteraction }
+          : thread
+      ),
+    );
+  }
+}

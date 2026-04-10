@@ -113,7 +113,7 @@ export function ThreadPendingInteractionBanner({
         kind: "command_approval",
         decision,
       },
-    });
+    }).catch(() => {});
   };
 
   const handleFileChangeDecision = (decision: FileChangeDecisionAction) => {
@@ -124,19 +124,15 @@ export function ThreadPendingInteractionBanner({
         kind: "file_change_approval",
         decision,
       },
-    });
+    }).catch(() => {});
   };
 
   const handlePermissionDecision = (decision: PermissionDecisionButtonConfig) => {
     void resolvePendingInteraction.mutateAsync({
       threadId,
       interactionId: interaction.id,
-      resolution: {
-        kind: "permission_request",
-        permissions: decision.permissions,
-        scope: decision.scope,
-      },
-    });
+      resolution: decision.resolution,
+    }).catch(() => {});
   };
 
   return (

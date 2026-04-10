@@ -87,6 +87,7 @@ export {
   listStopRequestedThreads,
   listThreadEnvironmentAssignmentsOnHost,
   listThreads,
+  listThreadsWithPendingInteractionState,
   updateThread,
   deleteThread,
   archiveThread,
@@ -106,6 +107,7 @@ export type {
   MarkThreadDeletedArgs,
   MarkThreadStopRequestedArgs,
   ThreadEnvironmentAssignmentRow,
+  ThreadWithPendingInteractionState,
   UpdateThreadInput,
 } from "./threads.js";
 
@@ -286,6 +288,7 @@ export {
   interruptPendingInteractionsForThreads,
   listPendingInteractionThreadIds,
   listPendingInteractionsByThread,
+  listPendingInteractionsOnEphemeralHosts,
   listPendingInteractionsByStatus,
   setPendingInteractionExpired,
   setPendingInteractionInterrupted,
