@@ -9,7 +9,6 @@
 
 import type { SDKResultMessage } from "@anthropic-ai/claude-agent-sdk";
 import { getBuiltInAgentProviderInfo } from "@bb/agent-providers";
-import { z } from "zod";
 import type {
   ProviderCapabilities,
   ThreadEvent,
@@ -69,6 +68,33 @@ import {
   claudePermissionRequestApprovalParamsSchema,
   toClaudePermissionMode,
 } from "./interactive-contract.js";
+import {
+  claudeAssistantMessageSchema,
+  claudeCompactBoundarySystemMessageSchema,
+  claudeFileEditArgsSchema,
+  claudeModelUsageSchema,
+  claudeResultMessageSchema,
+  claudeSdkMessageTypeSchema,
+  claudeStatusSystemMessageSchema,
+  claudeStreamEventMessageSchema,
+  claudeSystemMessageSchema,
+  claudeUserMessageSchema,
+  claudeWebSearchArgsSchema,
+  messageContentSchema,
+  messageIdSchema,
+  sdkUsageSchema,
+  streamEventSchema,
+  thinkingBlockSchema,
+  toolResultBlockSchema,
+  toolUseBlockSchema,
+  type ClaudeAssistantMessage,
+  type ClaudeFileEditArgs,
+  type ClaudeMessageContentBlock,
+  type ClaudeResultMessage,
+  type ClaudeSdkUsage,
+  type ClaudeStreamEventMessage,
+  type ClaudeUserMessage,
+} from "./schemas.js";
 import { claudeCodeVisibilityMetadata } from "./visibility.js";
 
 // ---------------------------------------------------------------------------
@@ -87,29 +113,11 @@ function getNestedParentToolUseId(message: unknown): string | undefined {
     : undefined;
 }
 
-const messageIdSchema = z.object({
-  id: z.string(),
-});
-
 function getNestedMessageId(message: unknown): string | undefined {
   const parsed = messageIdSchema.safeParse(message);
   return parsed.success ? parsed.data.id : undefined;
 }
 
-const claudeFileEditArgsSchema = z.object({
-  file_path: z.string().optional(),
-  path: z.string().optional(),
-  old_string: z.string().optional(),
-  new_string: z.string().optional(),
-  content: z.string().optional(),
-}).passthrough();
-
-const claudeWebSearchArgsSchema = z.object({
-  query: z.string().optional(),
-  url: z.string().optional(),
-}).passthrough();
-
-type ClaudeFileEditArgs = z.infer<typeof claudeFileEditArgsSchema>;
 type ClaudePendingFileChangeItem = Extract<ThreadEventItem, { type: "fileChange" }>;
 
 interface ClaudeToolUseTranslationInput {
@@ -1007,119 +1015,8 @@ export function createClaudeCodeProviderAdapter(
 }
 
 // ---------------------------------------------------------------------------
-// SDK message parsing — Zod schemas for opaque SDK types
+// SDK message extraction helpers
 // ---------------------------------------------------------------------------
-
-const toolUseBlockSchema = z.object({
-  type: z.literal("tool_use"),
-  id: z.string(),
-  name: z.string(),
-  input: z.unknown(),
-});
-
-const toolResultBlockSchema = z.object({
-  type: z.literal("tool_result"),
-  tool_use_id: z.string(),
-  tool_name: z.string().optional(),
-  content: z.unknown(),
-  is_error: z.boolean().optional(),
-});
-
-const thinkingBlockSchema = z.object({
-  type: z.literal("thinking"),
-  thinking: z.string(),
-}).passthrough();
-
-const messageContentSchema = z.object({
-  content: z.array(z.object({ type: z.string() }).passthrough()).optional(),
-}).passthrough();
-
-const sdkUsageSchema = z.object({
-  input_tokens: z.number().optional(),
-  output_tokens: z.number().optional(),
-  cache_read_input_tokens: z.number().optional(),
-  cache_creation_input_tokens: z.number().optional(),
-}).passthrough();
-
-const claudeModelUsageSchema = z.record(z.string(), z.object({
-  contextWindow: z.number(),
-}).passthrough());
-
-const contentBlockDeltaSchema = z.object({
-  type: z.literal("content_block_delta"),
-  index: z.number(),
-  delta: z.union([
-    z.object({ type: z.literal("text_delta"), text: z.string() }).passthrough(),
-    z.object({ type: z.literal("thinking_delta"), thinking: z.string() }).passthrough(),
-  ]),
-}).passthrough();
-
-const contentBlockStartSchema = z.object({
-  type: z.literal("content_block_start"),
-  index: z.number(),
-  content_block: z.union([
-    z.object({ type: z.literal("text"), text: z.string() }).passthrough(),
-    z.object({ type: z.literal("thinking"), thinking: z.string() }).passthrough(),
-  ]),
-}).passthrough();
-
-const streamEventSchema = z.union([contentBlockDeltaSchema, contentBlockStartSchema]);
-
-const claudeSdkMessageTypeSchema = z.object({
-  type: z.enum([
-    "assistant",
-    "rate_limit_event",
-    "result",
-    "stream_event",
-    "system",
-    "user",
-  ]),
-}).passthrough();
-
-const claudeSystemMessageSchema = z.object({
-  type: z.literal("system"),
-}).passthrough();
-
-const claudeStatusSystemMessageSchema = claudeSystemMessageSchema.extend({
-  subtype: z.literal("status"),
-  status: z.string().nullable().optional(),
-}).passthrough();
-
-const claudeCompactBoundarySystemMessageSchema = claudeSystemMessageSchema.extend({
-  subtype: z.literal("compact_boundary"),
-}).passthrough();
-
-const claudeAssistantMessageSchema = z.object({
-  type: z.literal("assistant"),
-  message: z.unknown(),
-}).passthrough();
-
-const claudeStreamEventMessageSchema = z.object({
-  type: z.literal("stream_event"),
-  event: z.unknown(),
-}).passthrough();
-
-const claudeUserMessageSchema = z.object({
-  type: z.literal("user"),
-  message: z.unknown(),
-}).passthrough();
-
-const claudeResultMessageSchema = z.object({
-  type: z.literal("result"),
-  subtype: z.string(),
-  is_error: z.boolean().optional(),
-  result: z.unknown().optional(),
-  usage: z.unknown().optional(),
-  modelUsage: z.unknown().optional(),
-}).passthrough();
-
-type ClaudeAssistantMessage = z.infer<typeof claudeAssistantMessageSchema>;
-type ClaudeResultMessage = z.infer<typeof claudeResultMessageSchema>;
-type ClaudeStreamEventMessage = z.infer<typeof claudeStreamEventMessageSchema>;
-type ClaudeUserMessage = z.infer<typeof claudeUserMessageSchema>;
-type ClaudeMessageContentBlock = NonNullable<z.infer<
-  typeof messageContentSchema
->["content"]>[number];
 
 interface ClaudeToolUseBlockData {
   id: string;
@@ -1147,10 +1044,6 @@ interface ClaudeToolResultBlockData {
 interface ParseClaudeMessageContentArgs {
   message: unknown;
 }
-
-// ---------------------------------------------------------------------------
-// SDK message extraction helpers
-// ---------------------------------------------------------------------------
 
 function parseMessageContent(
   message: ParseClaudeMessageContentArgs,
@@ -1419,7 +1312,7 @@ function extractClaudeRequestContextTokens(
 }
 
 function toTokenUsageBreakdown(
-  usage: z.infer<typeof sdkUsageSchema>,
+  usage: ClaudeSdkUsage,
 ): ThreadEventTokenUsageBreakdown {
   const inputTokens = toNonNegativeNumber(usage.input_tokens);
   const outputTokens = toNonNegativeNumber(usage.output_tokens);
@@ -1437,7 +1330,7 @@ function toTokenUsageBreakdown(
 }
 
 function toClaudeCurrentContextTokens(
-  usage: z.infer<typeof sdkUsageSchema>,
+  usage: ClaudeSdkUsage,
 ): number | null {
   return (
     toNonNegativeNumber(usage.input_tokens) +

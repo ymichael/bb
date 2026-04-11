@@ -184,6 +184,37 @@ interface ThreadShellEnvironmentArgs {
   threadId: string;
 }
 
+interface RuntimeParsedMessageArgs {
+  parsed: Record<string, unknown>;
+  proc: ProviderProcess;
+}
+
+interface RuntimeJsonRpcResponseArgs extends RuntimeParsedMessageArgs {
+  parsedId: string | number;
+}
+
+interface RuntimeProviderRequestArgs {
+  line: string;
+  parsedId: string | number;
+  parsedMethod: string;
+  proc: ProviderProcess;
+  rawRequest: JsonRpcMessage;
+}
+
+interface RuntimeProviderNotificationArgs extends RuntimeParsedMessageArgs {
+  line: string;
+  notificationMethod: string;
+}
+
+interface EmitTranslatedEventsArgs {
+  events: ThreadEvent[];
+  proc: ProviderProcess;
+  providerId: string;
+  rawCaptureId?: string;
+  rawMethod?: string;
+  sourceThreadId?: string;
+}
+
 function buildThreadShellEnvironment(
   args: ThreadShellEnvironmentArgs & {
     baseShellEnv: AgentRuntimeShellEnvironment | undefined;
@@ -422,11 +453,336 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     });
   }
 
+  function handleJsonRpcResponse(args: RuntimeJsonRpcResponseArgs): void {
+    const pending = args.proc.pending.get(args.parsedId);
+    if (!pending) {
+      return;
+    }
+
+    args.proc.pending.delete(args.parsedId);
+    if (args.parsed.error) {
+      const err = isRecord(args.parsed.error) ? args.parsed.error : null;
+      pending.reject(
+        new Error(
+          typeof err?.message === "string"
+            ? err.message
+            : JSON.stringify(args.parsed.error),
+        ),
+      );
+      return;
+    }
+
+    pending.resolve(args.parsed.result);
+  }
+
+  function handleToolCallProviderRequest(
+    args: RuntimeProviderRequestArgs,
+  ): boolean {
+    const providerId = args.proc.adapter.id;
+    const toolCallReq = args.proc.adapter.decodeToolCallRequest(args.rawRequest);
+    if (!toolCallReq) {
+      return false;
+    }
+
+    const resolvedThreadId = resolveBbThreadIdForProcess(
+      args.proc,
+      toolCallReq.providerThreadId,
+    );
+    if (!resolvedThreadId) {
+      sendJsonRpcError(
+        args.proc.child,
+        args.parsedId,
+        `Unable to resolve BB thread id for tool call on provider thread "${toolCallReq.providerThreadId}"`,
+      );
+      return true;
+    }
+    if (
+      toolCallReq.threadId
+      && toolCallReq.threadId !== resolvedThreadId
+    ) {
+      sendJsonRpcError(
+        args.proc.child,
+        args.parsedId,
+        `Tool call thread hint "${toolCallReq.threadId}" did not match resolved BB thread "${resolvedThreadId}" for provider thread "${toolCallReq.providerThreadId}"`,
+      );
+      return true;
+    }
+
+    const scopedToolCallReq: ToolCallRequest = {
+      requestId: toolCallReq.requestId,
+      threadId: resolvedThreadId,
+      providerThreadId: toolCallReq.providerThreadId,
+      turnId: toolCallReq.turnId,
+      callId: toolCallReq.callId,
+      tool: toolCallReq.tool,
+      ...(toolCallReq.arguments !== undefined ? { arguments: toolCallReq.arguments } : {}),
+    };
+    const captureId = createCaptureId();
+    emitCapture({
+      kind: "tool-call-request",
+      captureId,
+      capturedAt: Date.now(),
+      providerId,
+      rawLine: args.line,
+      rawRequest: args.rawRequest,
+      request: scopedToolCallReq,
+    });
+    void options.onToolCall(scopedToolCallReq).then((response) => {
+      emitCapture({
+        kind: "tool-call-result",
+        capturedAt: Date.now(),
+        providerId,
+        requestCaptureId: captureId,
+        requestId: scopedToolCallReq.requestId,
+        success: true,
+        response,
+      });
+      sendJsonRpcResult(args.proc.child, args.parsedId, response);
+    }).catch((err) => {
+      emitCapture({
+        kind: "tool-call-result",
+        capturedAt: Date.now(),
+        providerId,
+        requestCaptureId: captureId,
+        requestId: scopedToolCallReq.requestId,
+        success: false,
+        errorMessage: err instanceof Error ? err.message : String(err),
+      });
+      sendJsonRpcError(
+        args.proc.child,
+        args.parsedId,
+        err instanceof Error ? err.message : String(err),
+      );
+    });
+    return true;
+  }
+
+  function handleInteractiveProviderRequest(
+    args: RuntimeProviderRequestArgs,
+  ): boolean {
+    const providerId = args.proc.adapter.id;
+    const interactiveReq = args.proc.adapter.decodeInteractiveRequest?.(
+      args.rawRequest,
+    );
+    if (!interactiveReq) {
+      return false;
+    }
+
+    const resolvedThreadId = resolveBbThreadIdForProcess(
+      args.proc,
+      interactiveReq.providerThreadId,
+    );
+    if (!resolvedThreadId) {
+      sendJsonRpcError(
+        args.proc.child,
+        args.parsedId,
+        `Unable to resolve BB thread id for interactive request on provider thread "${interactiveReq.providerThreadId}"`,
+      );
+      return true;
+    }
+    if (
+      interactiveReq.threadId
+      && interactiveReq.threadId !== resolvedThreadId
+    ) {
+      sendJsonRpcError(
+        args.proc.child,
+        args.parsedId,
+        `Interactive request thread hint "${interactiveReq.threadId}" did not match resolved BB thread "${resolvedThreadId}" for provider thread "${interactiveReq.providerThreadId}"`,
+      );
+      return true;
+    }
+    if (!options.onInteractiveRequest) {
+      sendJsonRpcError(
+        args.proc.child,
+        args.parsedId,
+        `Interactive provider request "${interactiveReq.method}" is not supported`,
+      );
+      return true;
+    }
+    if (!args.proc.adapter.buildInteractiveResponse) {
+      sendJsonRpcError(
+        args.proc.child,
+        args.parsedId,
+        `Provider "${providerId}" cannot encode interactive response for "${interactiveReq.method}"`,
+      );
+      return true;
+    }
+    const buildInteractiveResponse = args.proc.adapter.buildInteractiveResponse;
+
+    const scopedInteractiveReq: PendingInteractionCreate = {
+      threadId: resolvedThreadId,
+      turnId: interactiveReq.turnId,
+      providerId,
+      providerThreadId: interactiveReq.providerThreadId,
+      providerRequestId: scopeProviderRequestId(
+        args.proc.interactiveRequestScope,
+        interactiveReq.requestId,
+      ),
+      payload: interactiveReq.payload,
+    };
+    const captureId = createCaptureId();
+    emitCapture({
+      kind: "interactive-request",
+      captureId,
+      capturedAt: Date.now(),
+      providerId,
+      rawLine: args.line,
+      rawRequest: args.rawRequest,
+      request: scopedInteractiveReq,
+    });
+    void options.onInteractiveRequest(scopedInteractiveReq).then((resolution) => {
+      emitCapture({
+        kind: "interactive-result",
+        capturedAt: Date.now(),
+        providerId,
+        requestCaptureId: captureId,
+        requestId: scopedInteractiveReq.providerRequestId,
+        success: true,
+        resolution,
+      });
+      sendJsonRpcResult(
+        args.proc.child,
+        args.parsedId,
+        buildInteractiveResponse({
+          request: interactiveReq,
+          resolution,
+        }),
+      );
+    }).catch((err) => {
+      emitCapture({
+        kind: "interactive-result",
+        capturedAt: Date.now(),
+        providerId,
+        requestCaptureId: captureId,
+        requestId: scopedInteractiveReq.providerRequestId,
+        success: false,
+        errorMessage: err instanceof Error ? err.message : String(err),
+      });
+      sendJsonRpcError(
+        args.proc.child,
+        args.parsedId,
+        err instanceof Error ? err.message : String(err),
+      );
+    });
+    return true;
+  }
+
+  function handleProviderRequest(args: RuntimeProviderRequestArgs): void {
+    if (handleToolCallProviderRequest(args)) {
+      return;
+    }
+    if (handleInteractiveProviderRequest(args)) {
+      return;
+    }
+
+    sendJsonRpcError(
+      args.proc.child,
+      args.parsedId,
+      `Unsupported provider request "${args.parsedMethod}"`,
+      -32601,
+    );
+  }
+
+  function emitTranslatedEvents(args: EmitTranslatedEventsArgs): void {
+    for (const event of args.events) {
+      if (event.type !== "thread/identity" || !event.providerThreadId) {
+        continue;
+      }
+
+      if (args.proc.threadIds.has(event.threadId)) {
+        recordProviderThreadIdentity(args.proc, event.threadId, event.providerThreadId);
+        continue;
+      }
+
+      if (args.proc.pendingIdentity.length > 0) {
+        const bbThreadId = args.proc.pendingIdentity.shift();
+        if (bbThreadId) {
+          recordProviderThreadIdentity(args.proc, bbThreadId, event.providerThreadId);
+        }
+      }
+    }
+
+    for (const event of args.events) {
+      let resolvedBbThreadId: string | undefined;
+      if (args.sourceThreadId && args.proc.threadIds.has(args.sourceThreadId)) {
+        resolvedBbThreadId = args.sourceThreadId;
+      } else if (event.threadId && args.proc.threadIds.has(event.threadId)) {
+        resolvedBbThreadId = event.threadId;
+      } else {
+        const lookupId = args.sourceThreadId || event.threadId;
+        if (lookupId) {
+          for (const [bbId, provId] of threadToProviderThread) {
+            if (provId === lookupId && args.proc.threadIds.has(bbId)) {
+              resolvedBbThreadId = bbId;
+              break;
+            }
+          }
+        }
+      }
+      if (!resolvedBbThreadId && args.proc.threadIds.size === 1) {
+        resolvedBbThreadId = [...args.proc.threadIds][0];
+      }
+
+      if (!resolvedBbThreadId) {
+        options.onStderr?.(
+          `Dropping unscoped provider event ${event.type}; no bb thread could be resolved`,
+        );
+        continue;
+      }
+
+      const stampedEvent = stampThreadEventScope({
+        event,
+        providerThreadId: threadToProviderThread.get(resolvedBbThreadId),
+        threadId: resolvedBbThreadId,
+      });
+
+      emitCapture({
+        kind: "translated-thread-event",
+        capturedAt: Date.now(),
+        providerId: args.providerId,
+        rawCaptureId: args.rawCaptureId,
+        rawMethod: args.rawMethod,
+        event: stampedEvent,
+      });
+      options.onEvent(stampedEvent);
+    }
+  }
+
+  function handleProviderNotification(
+    args: RuntimeProviderNotificationArgs,
+  ): void {
+    const params = isRecord(args.parsed.params) ? args.parsed.params : undefined;
+    const sourceThreadId = typeof params?.threadId === "string" ? params.threadId : undefined;
+    const rawCaptureId = createCaptureId();
+    const rawEvent: JsonRpcMessage = {
+      jsonrpc: "2.0",
+      method: args.notificationMethod,
+      ...(Object.hasOwn(args.parsed, "params") ? { params: args.parsed.params } : {}),
+    };
+    const providerId = args.proc.adapter.id;
+    emitCapture({
+      kind: "raw-provider-event",
+      captureId: rawCaptureId,
+      capturedAt: Date.now(),
+      providerId,
+      rawLine: args.line,
+      rawEvent,
+      sourceThreadId,
+    });
+    emitTranslatedEvents({
+      events: args.proc.adapter.translateEvent(args.parsed, { threadId: sourceThreadId }),
+      proc: args.proc,
+      providerId,
+      sourceThreadId,
+      rawCaptureId,
+      rawMethod: rawEvent.method,
+    });
+  }
+
   function handleStdoutLine(
     line: string,
     proc: ProviderProcess,
   ): void {
-    const providerId = proc.adapter.id;
     let parsed: unknown;
     try {
       parsed = JSON.parse(line);
@@ -444,22 +800,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     // JSON-RPC response (has id, has result or error, no method)
     const parsedId = parsed.id;
     if (isJsonRpcId(parsedId) && !parsed.method) {
-      const pending = proc.pending.get(parsedId);
-      if (pending) {
-        proc.pending.delete(parsedId);
-        if (parsed.error) {
-          const err = isRecord(parsed.error) ? parsed.error : null;
-          pending.reject(
-            new Error(
-              typeof err?.message === "string"
-                ? err.message
-                : JSON.stringify(parsed.error),
-            ),
-          );
-        } else {
-          pending.resolve(parsed.result);
-        }
-      }
+      handleJsonRpcResponse({ parsed, parsedId, proc });
       return;
     }
 
@@ -472,271 +813,14 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         method: parsedMethod,
         ...(Object.hasOwn(parsed, "params") ? { params: parsed.params } : {}),
       };
-      const toolCallReq = proc.adapter.decodeToolCallRequest(
-        rawRequest,
-      );
-      if (toolCallReq) {
-        const resolvedThreadId = resolveBbThreadIdForProcess(
-          proc,
-          toolCallReq.providerThreadId,
-        );
-        if (!resolvedThreadId) {
-          sendJsonRpcError(
-            proc.child,
-            parsedId,
-            `Unable to resolve BB thread id for tool call on provider thread "${toolCallReq.providerThreadId}"`,
-          );
-          return;
-        }
-        if (
-          toolCallReq.threadId
-          && toolCallReq.threadId !== resolvedThreadId
-        ) {
-          sendJsonRpcError(
-            proc.child,
-            parsedId,
-            `Tool call thread hint "${toolCallReq.threadId}" did not match resolved BB thread "${resolvedThreadId}" for provider thread "${toolCallReq.providerThreadId}"`,
-          );
-          return;
-        }
-        const scopedToolCallReq: ToolCallRequest = {
-          requestId: toolCallReq.requestId,
-          threadId: resolvedThreadId,
-          providerThreadId: toolCallReq.providerThreadId,
-          turnId: toolCallReq.turnId,
-          callId: toolCallReq.callId,
-          tool: toolCallReq.tool,
-          ...(toolCallReq.arguments !== undefined ? { arguments: toolCallReq.arguments } : {}),
-        };
-        const captureId = createCaptureId();
-        emitCapture({
-          kind: "tool-call-request",
-          captureId,
-          capturedAt: Date.now(),
-          providerId,
-          rawLine: line,
-          rawRequest,
-          request: scopedToolCallReq,
-        });
-        void options.onToolCall(scopedToolCallReq).then((response) => {
-          emitCapture({
-            kind: "tool-call-result",
-            capturedAt: Date.now(),
-            providerId,
-            requestCaptureId: captureId,
-            requestId: scopedToolCallReq.requestId,
-            success: true,
-            response,
-          });
-          sendJsonRpcResult(proc.child, parsedId, response);
-        }).catch((err) => {
-          emitCapture({
-            kind: "tool-call-result",
-            capturedAt: Date.now(),
-            providerId,
-            requestCaptureId: captureId,
-            requestId: scopedToolCallReq.requestId,
-            success: false,
-            errorMessage: err instanceof Error ? err.message : String(err),
-          });
-          sendJsonRpcError(
-            proc.child,
-            parsedId,
-            err instanceof Error ? err.message : String(err),
-          );
-        });
-        return;
-      }
-
-      const interactiveReq = proc.adapter.decodeInteractiveRequest?.(
-        rawRequest,
-      );
-      if (interactiveReq) {
-        const resolvedThreadId = resolveBbThreadIdForProcess(
-          proc,
-          interactiveReq.providerThreadId,
-        );
-        if (!resolvedThreadId) {
-          sendJsonRpcError(
-            proc.child,
-            parsedId,
-            `Unable to resolve BB thread id for interactive request on provider thread "${interactiveReq.providerThreadId}"`,
-          );
-          return;
-        }
-        if (
-          interactiveReq.threadId
-          && interactiveReq.threadId !== resolvedThreadId
-        ) {
-          sendJsonRpcError(
-            proc.child,
-            parsedId,
-            `Interactive request thread hint "${interactiveReq.threadId}" did not match resolved BB thread "${resolvedThreadId}" for provider thread "${interactiveReq.providerThreadId}"`,
-          );
-          return;
-        }
-        if (!options.onInteractiveRequest) {
-          sendJsonRpcError(
-            proc.child,
-            parsedId,
-            `Interactive provider request "${interactiveReq.method}" is not supported`,
-          );
-          return;
-        }
-        if (!proc.adapter.buildInteractiveResponse) {
-          sendJsonRpcError(
-            proc.child,
-            parsedId,
-            `Provider "${providerId}" cannot encode interactive response for "${interactiveReq.method}"`,
-          );
-          return;
-        }
-        const buildInteractiveResponse = proc.adapter.buildInteractiveResponse;
-
-        const scopedInteractiveReq: PendingInteractionCreate = {
-          threadId: resolvedThreadId,
-          turnId: interactiveReq.turnId,
-          providerId,
-          providerThreadId: interactiveReq.providerThreadId,
-          providerRequestId: scopeProviderRequestId(
-            proc.interactiveRequestScope,
-            interactiveReq.requestId,
-          ),
-          payload: interactiveReq.payload,
-        };
-        const captureId = createCaptureId();
-        emitCapture({
-          kind: "interactive-request",
-          captureId,
-          capturedAt: Date.now(),
-          providerId,
-          rawLine: line,
-          rawRequest,
-          request: scopedInteractiveReq,
-        });
-        void options.onInteractiveRequest(scopedInteractiveReq).then((resolution) => {
-          emitCapture({
-            kind: "interactive-result",
-            capturedAt: Date.now(),
-            providerId,
-            requestCaptureId: captureId,
-            requestId: scopedInteractiveReq.providerRequestId,
-            success: true,
-            resolution,
-          });
-          sendJsonRpcResult(
-            proc.child,
-            parsedId,
-            buildInteractiveResponse({
-              request: interactiveReq,
-              resolution,
-            }),
-          );
-        }).catch((err) => {
-          emitCapture({
-            kind: "interactive-result",
-            capturedAt: Date.now(),
-            providerId,
-            requestCaptureId: captureId,
-            requestId: scopedInteractiveReq.providerRequestId,
-            success: false,
-            errorMessage: err instanceof Error ? err.message : String(err),
-          });
-          sendJsonRpcError(
-            proc.child,
-            parsedId,
-            err instanceof Error ? err.message : String(err),
-          );
-        });
-        return;
-      }
-      sendJsonRpcError(
-        proc.child,
+      handleProviderRequest({
+        line,
         parsedId,
-        `Unsupported provider request "${parsedMethod}"`,
-        -32601,
-      );
+        parsedMethod,
+        proc,
+        rawRequest,
+      });
       return;
-    }
-
-    // Helper: emit translated events and intercept thread/identity to update
-    // the providerThreadId mapping (used by codex, which emits identity via
-    // thread/started notification translated to a ThreadEvent).
-    function emitTranslatedEvents(
-      events: ThreadEvent[],
-      sourceThreadId?: string,
-      rawCaptureId?: string,
-      rawMethod?: string,
-    ): void {
-      for (const event of events) {
-        if (event.type !== "thread/identity" || !event.providerThreadId) {
-          continue;
-        }
-
-        if (proc.threadIds.has(event.threadId)) {
-          recordProviderThreadIdentity(proc, event.threadId, event.providerThreadId);
-          continue;
-        }
-
-        if (proc.pendingIdentity.length > 0) {
-          const bbThreadId = proc.pendingIdentity.shift()!;
-          recordProviderThreadIdentity(proc, bbThreadId, event.providerThreadId);
-        }
-      }
-
-      for (const event of events) {
-        // Stamp every event with the bb threadId and providerThreadId.
-        // The adapter may set threadId to "" or the provider's internal ID.
-        // The runtime resolves the correct bb threadId using its mappings.
-        // Resolve bb threadId:
-        // 1. If sourceThreadId (from JSON-RPC params) is a bb threadId, use it
-        // 2. If the event's threadId is a bb threadId, use it
-        // 3. If the event's threadId is a providerThreadId, reverse-map it
-        // 4. If only one thread on this process, use it
-        let resolvedBbThreadId: string | undefined;
-        if (sourceThreadId && proc.threadIds.has(sourceThreadId)) {
-          resolvedBbThreadId = sourceThreadId;
-        } else if (event.threadId && proc.threadIds.has(event.threadId)) {
-          resolvedBbThreadId = event.threadId;
-        } else {
-          // Reverse-map: event.threadId or sourceThreadId might be a provider ID
-          const lookupId = sourceThreadId || event.threadId;
-          if (lookupId) {
-            for (const [bbId, provId] of threadToProviderThread) {
-              if (provId === lookupId && proc.threadIds.has(bbId)) {
-                resolvedBbThreadId = bbId;
-                break;
-              }
-            }
-          }
-        }
-        if (!resolvedBbThreadId && proc.threadIds.size === 1) {
-          resolvedBbThreadId = [...proc.threadIds][0];
-        }
-
-        if (!resolvedBbThreadId) {
-          options.onStderr?.(
-            `Dropping unscoped provider event ${event.type}; no bb thread could be resolved`,
-          );
-          continue;
-        }
-
-        const stampedEvent = stampThreadEventScope({
-          event,
-          providerThreadId: threadToProviderThread.get(resolvedBbThreadId),
-          threadId: resolvedBbThreadId,
-        });
-
-        emitCapture({
-          kind: "translated-thread-event",
-          capturedAt: Date.now(),
-          providerId,
-          rawCaptureId,
-          rawMethod,
-          event: stampedEvent,
-        });
-        options.onEvent(stampedEvent);
-      }
     }
 
     // JSON-RPC notification (no id, has method) — provider event.
@@ -746,31 +830,12 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     // SDK messages in sdk/message envelopes, etc.).
     const notificationMethod = parsed.method;
     if (typeof notificationMethod === "string") {
-      // Extract source threadId from the notification params if available.
-      // Bridges include threadId in params; codex notifications may not.
-      const params = isRecord(parsed.params) ? parsed.params : undefined;
-      const sourceThreadId = typeof params?.threadId === "string" ? params.threadId : undefined;
-      const rawCaptureId = createCaptureId();
-      const rawEvent: JsonRpcMessage = {
-        jsonrpc: "2.0",
-        method: notificationMethod,
-        ...(Object.hasOwn(parsed, "params") ? { params: parsed.params } : {}),
-      };
-      emitCapture({
-        kind: "raw-provider-event",
-        captureId: rawCaptureId,
-        capturedAt: Date.now(),
-        providerId,
-        rawLine: line,
-        rawEvent,
-        sourceThreadId,
+      handleProviderNotification({
+        line,
+        notificationMethod,
+        parsed,
+        proc,
       });
-      emitTranslatedEvents(
-        proc.adapter.translateEvent(parsed, { threadId: sourceThreadId }),
-        sourceThreadId,
-        rawCaptureId,
-        rawEvent.method,
-      );
     }
   }
 
