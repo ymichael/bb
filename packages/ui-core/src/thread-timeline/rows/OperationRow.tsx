@@ -1,4 +1,4 @@
-import { type ReactNode } from "react";
+import { type ReactNode, type Ref, type UIEvent } from "react";
 import { durationToCompactString } from "@bb/core-ui";
 import { ExpandablePanel } from "../../disclosure.js";
 import { EventCodeBlock } from "../../event-content.js";
@@ -15,6 +15,7 @@ import {
   EventTitle,
   getEventHeaderToneClass,
   getStaticEventToneClass,
+  useStickyBottomAutoScroll,
 } from "./shared.js";
 import { useLatestInitialExpanded } from "../latestInitialExpanded.js";
 
@@ -144,14 +145,18 @@ function OperationDetailLines({
   lines,
   truncateLines = false,
   maxHeightClassName = EVENT_DETAIL_MAX_HEIGHT_CLASS,
+  scrollRef,
+  onScroll,
 }: {
   lines: string[];
   truncateLines?: boolean;
   maxHeightClassName?: string;
+  scrollRef?: Ref<HTMLDivElement>;
+  onScroll?: (event: UIEvent<HTMLDivElement>) => void;
 }) {
   const baseLineClassName = "font-mono ui-text-sm text-foreground/80";
   return (
-    <ExpandableDetailScrollArea className="mt-0.5 space-y-0.5" maxHeightClassName={maxHeightClassName}>
+    <ExpandableDetailScrollArea className="mt-0.5 space-y-0.5" maxHeightClassName={maxHeightClassName} scrollRef={scrollRef} onScroll={onScroll}>
       {lines.map((line, index) => {
         const key = `${line}:${index}`;
         if (truncateLines) {
@@ -378,6 +383,11 @@ export function OperationRow({
   initialExpanded?: boolean;
 }) {
   const { isExpanded, onToggle } = useLatestInitialExpanded(initialExpanded);
+  const { elementRef: provisioningScrollRef, handleScroll: handleProvisioningScroll } =
+    useStickyBottomAutoScroll<HTMLDivElement>({
+      isExpanded,
+      scrollDep: message.opType === "provisioning" ? message.provisioning?.transcript : undefined,
+    });
   const tone = getOperationTone(message);
   if (message.opType === "plan-updated") {
     const detailLines = splitNonEmptyLines(message.detail);
@@ -417,7 +427,7 @@ export function OperationRow({
         tone={tone}
       >
         <div className="mt-0.5 space-y-2">
-          <OperationDetailLines lines={lines} truncateLines />
+          <OperationDetailLines lines={lines} truncateLines scrollRef={provisioningScrollRef} onScroll={handleProvisioningScroll} />
           {additionalDetailLines.length > 0 ? (
             <OperationDetailLines lines={additionalDetailLines} />
           ) : null}
