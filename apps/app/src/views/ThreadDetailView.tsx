@@ -30,7 +30,7 @@ import { ThreadArchiveConfirmationDialog } from "@/components/thread/ThreadArchi
 import { ThreadDeleteDialog } from "@/components/thread/ThreadDeleteDialog";
 import { ThreadActionsMenu } from "@/components/thread/ThreadActionsMenu";
 import { formatEnvironmentDisplay } from "@bb/core-ui";
-import { Cloud, Monitor } from "lucide-react";
+import { Container, Monitor } from "lucide-react";
 import { findLatestActivityRowId } from "@bb/ui-core";
 import type { Thread } from "@bb/domain";
 import { useDialogState } from "@/hooks/useDialogState";
@@ -415,7 +415,7 @@ export function ThreadDetailView() {
         hostProvider: environmentHost?.provider,
       })
     : undefined;
-  const threadEnvironmentIcon = threadEnvironmentDisplay?.location === "cloud" ? Cloud : Monitor;
+  const threadEnvironmentIcon = threadEnvironmentDisplay?.location === "cloud" ? Container : Monitor;
   const promptBannerSummary = workspaceStatus
     ? showBranchComparisonUi
       ? formatChangeSummary(workspaceStatus.workingTree)

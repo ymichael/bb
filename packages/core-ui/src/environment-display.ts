@@ -39,9 +39,10 @@ export function formatEnvironmentDisplay({
   const modeLabel = mode === "worktree" ? "Worktree" : "Direct";
 
   if (hostType === "ephemeral") {
-    const providerLabel = hostProvider
+    const providerName = hostProvider
       ? (sandboxProviderDisplayNames[hostProvider] ?? hostProvider)
-      : "Cloud";
+      : undefined;
+    const providerLabel = providerName ? `${providerName} Sandbox` : "Sandbox";
     return {
       modeLabel: providerLabel,
       hostLabel: null,

@@ -116,7 +116,7 @@ describe("formatEnvironmentDisplay", () => {
         hostProvider: "e2b",
       });
       expect(result).toEqual({
-        modeLabel: "E2B",
+        modeLabel: "E2B Sandbox",
         hostLabel: null,
         id: "env_test",
         location: "cloud",
@@ -124,13 +124,13 @@ describe("formatEnvironmentDisplay", () => {
       });
     });
 
-    it("falls back to 'Cloud' when provider name is missing", () => {
+    it("falls back to 'Sandbox' when provider name is missing", () => {
       const result = formatEnvironmentDisplay({
         environment: makeEnvironment(),
         isLocalHost: false,
         hostType: "ephemeral",
       });
-      expect(result.modeLabel).toBe("Cloud");
+      expect(result.modeLabel).toBe("Sandbox");
       expect(result.location).toBe("cloud");
     });
 
@@ -142,7 +142,7 @@ describe("formatEnvironmentDisplay", () => {
         hostProvider: "e2b",
       });
       expect(result.mode).toBe("worktree");
-      expect(result.modeLabel).toBe("E2B");
+      expect(result.modeLabel).toBe("E2B Sandbox");
     });
   });
 });

@@ -214,7 +214,7 @@ export function SandboxEnvVarsSection({
   return (
     <SettingsCard
       title="Environment Variables"
-      description="These variables are encrypted and provided to agents running in the cloud."
+      description="These variables are encrypted and provided to agents running in a sandbox."
     >
       <div className="space-y-3">
         {isLoading ? (

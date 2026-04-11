@@ -26,7 +26,7 @@ export function HostOfflinePill({ className }: HostOfflinePillProps) {
   return (
     <span
       className={cn(
-        "shrink-0 rounded-full bg-amber-400/15 px-1.5 py-px ui-text-2xs font-medium text-amber-500",
+        "shrink-0 rounded-full bg-muted px-1.5 py-px ui-text-2xs font-medium text-muted-foreground",
         className,
       )}
     >

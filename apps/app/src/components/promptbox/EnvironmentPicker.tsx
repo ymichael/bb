@@ -1,7 +1,7 @@
 import { useAtomValue } from "jotai";
 import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Check, ChevronDown, Cloud, Monitor } from "lucide-react";
+import { Check, ChevronDown, Container, Monitor } from "lucide-react";
 import type { Host, ProjectSource, SandboxBackendInfo } from "@bb/domain";
 import { LocalhostBadge } from "@bb/ui-core";
 import { findLocalPathProjectSourceForHost, isGitHubRepoProjectSource } from "@bb/domain";
@@ -152,7 +152,7 @@ export function EnvironmentPicker({
       return { modeLabel, hostLabel: host?.name ?? "Unknown", icon: Monitor, hostConnected };
     }
     const backend = sandboxBackends.find((b) => b.id === parsed.backendId);
-    return { modeLabel: backend?.displayName ?? "Cloud", icon: Cloud };
+    return { modeLabel: backend?.displayName ?? "Sandbox", icon: Container };
   }, [value, hosts, sandboxBackends]);
 
   return (
@@ -283,7 +283,7 @@ function SandboxSection({ backends, hasGitHubSource, projectId, value, onChange 
   return (
     <DropdownMenuGroup>
       <DropdownMenuLabel className="ui-text-xs text-muted-foreground">
-        Cloud
+        Sandbox
       </DropdownMenuLabel>
       {hasGitHubSource ? (
         backends

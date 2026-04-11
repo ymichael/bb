@@ -862,7 +862,7 @@ describe("CLI command output contracts", () => {
       param: { id: "host-ephemeral" },
     });
     expect(collectLogLines(vi.mocked(console.log))).toContain(
-      "  Environment: Cloud (env-1)",
+      "  Environment: Sandbox (env-1)",
     );
   });
 

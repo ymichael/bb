@@ -128,7 +128,7 @@ export function CloudAuthSettingsSection({
   return (
     <SettingsCard
       title="Agent Credentials"
-      description="Connect your subscriptions to power agents running in the cloud."
+      description="Connect your subscriptions to power agents running in a sandbox."
     >
       {isLoading ? (
         <p className="text-sm text-muted-foreground">Loading…</p>

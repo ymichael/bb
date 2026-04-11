@@ -295,7 +295,7 @@ export function AppSettingsView() {
 
         {sandboxHostSupported ? (
           <section className="space-y-3">
-            <h2 className="text-sm font-semibold">Cloud Hosts</h2>
+            <h2 className="text-sm font-semibold">Sandbox Hosts</h2>
             <CloudAuthSettingsSection
                 activeAttemptProviderId={activeCloudAuthAttempt?.providerId ?? null}
                 connectPending={startCloudAuthConnection.isPending}
