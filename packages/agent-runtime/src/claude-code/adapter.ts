@@ -70,6 +70,7 @@ import {
 } from "./interactive-contract.js";
 import {
   claudeAssistantMessageSchema,
+  claudeAssistantUsageMessageSchema,
   claudeCompactBoundarySystemMessageSchema,
   claudeFileEditArgsSchema,
   claudeModelUsageSchema,
@@ -1295,10 +1296,6 @@ function extractClaudeContextWindowUsage(
     estimated: true,
   };
 }
-
-const claudeAssistantUsageMessageSchema = z.object({
-  usage: sdkUsageSchema.optional(),
-}).passthrough();
 
 function extractClaudeRequestContextTokens(
   message: ClaudeAssistantMessage,

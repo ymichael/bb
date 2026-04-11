@@ -18,7 +18,8 @@ declare module "ws" {
     static readonly OPEN: number;
     readonly readyState: number;
     send(data: string | Buffer): void;
-    close(): void;
+    close(code?: number, reason?: string): void;
+    terminate(): void;
     on(event: "open", listener: () => void): this;
     on(event: "message", listener: (data: RawData) => void): this;
     on(event: "close", listener: () => void): this;
@@ -27,6 +28,7 @@ declare module "ws" {
   }
 
   export class WebSocketServer extends EventEmitter {
+    clients: Set<WebSocket>;
     constructor(options?: { noServer?: boolean });
     handleUpgrade(
       request: IncomingMessage,

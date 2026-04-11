@@ -111,6 +111,10 @@ export const claudeAssistantMessageSchema = z.object({
 }).passthrough();
 export type ClaudeAssistantMessage = z.infer<typeof claudeAssistantMessageSchema>;
 
+export const claudeAssistantUsageMessageSchema = z.object({
+  usage: sdkUsageSchema.optional(),
+}).passthrough();
+
 export const claudeStreamEventMessageSchema = z.object({
   type: z.literal("stream_event"),
   event: z.unknown(),

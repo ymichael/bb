@@ -2431,7 +2431,7 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots parsed context-wind
     "contextWindowUsage": {
       "estimated": true,
       "modelContextWindow": 1000000,
-      "usedTokens": 332992,
+      "usedTokens": 27440,
     },
     "fixture": "excalidraw/claude-code/eyedropper-preview-bugfix",
     "tokenUsageSummary": {
@@ -2491,7 +2491,7 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots parsed context-wind
     "contextWindowUsage": {
       "estimated": true,
       "modelContextWindow": 1000000,
-      "usedTokens": 87429,
+      "usedTokens": 35548,
     },
     "fixture": "excalidraw/claude-code/ttd-explanation",
     "tokenUsageSummary": {
