@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { PanelRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { SplitButton } from "@/components/ui/split-button";
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { StatusPill } from "@bb/ui-core";
@@ -22,7 +23,7 @@ interface ThreadDetailHeaderProps {
   isThreadGitActionPending: boolean;
   onOpenThreadGitAction: (target: ThreadGitActionDialogTarget) => void;
   onToggleSecondaryPanel: () => void;
-  threadHeaderGitAction: ThreadHeaderGitAction | null;
+  threadHeaderGitActions: ThreadHeaderGitAction[];
   threadTitle: string;
 }
 
@@ -34,9 +35,11 @@ export function ThreadDetailHeader({
   isThreadGitActionPending,
   onOpenThreadGitAction,
   onToggleSecondaryPanel,
-  threadHeaderGitAction,
+  threadHeaderGitActions,
   threadTitle,
 }: ThreadDetailHeaderProps) {
+  const [primaryAction, ...secondaryActions] = threadHeaderGitActions;
+
   return (
     <header className="shrink-0 border-b border-border/80 bg-background/95 px-4 backdrop-blur-sm">
       <div className="flex h-12 items-center gap-3">
@@ -50,18 +53,31 @@ export function ThreadDetailHeader({
           ) : null}
         </div>
         <div className="flex shrink-0 items-center gap-1">
-          {threadHeaderGitAction ? (
+          {primaryAction && secondaryActions.length > 0 ? (
+            <SplitButton
+              variant="outline"
+              size="sm"
+              disabled={isThreadGitActionPending}
+              className={THREAD_HEADER_ACTION_BUTTON_CLASS}
+              primaryAction={{
+                label: primaryAction.label,
+                onSelect: () => onOpenThreadGitAction(primaryAction.target),
+              }}
+              secondaryActions={secondaryActions.map((action) => ({
+                label: action.label,
+                onSelect: () => onOpenThreadGitAction(action.target),
+              }))}
+            />
+          ) : primaryAction ? (
             <Button
               type="button"
               variant="outline"
               size="sm"
               disabled={isThreadGitActionPending}
               className={THREAD_HEADER_ACTION_BUTTON_CLASS}
-              onClick={() => {
-                onOpenThreadGitAction(threadHeaderGitAction.target);
-              }}
+              onClick={() => onOpenThreadGitAction(primaryAction.target)}
             >
-              {threadHeaderGitAction.label}
+              {primaryAction.label}
             </Button>
           ) : null}
           {actionsMenu}

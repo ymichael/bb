@@ -558,7 +558,7 @@ export function ThreadDetailView() {
       isThreadGitActionPending={gitActions.isThreadGitActionPending}
       onOpenThreadGitAction={gitActions.threadGitActionDialog.onOpen}
       onToggleSecondaryPanel={toggleThreadSecondaryPanel}
-      threadHeaderGitAction={gitActions.threadHeaderGitAction}
+      threadHeaderGitActions={gitActions.threadHeaderGitActions}
       threadTitle={threadTitle}
     />
   );

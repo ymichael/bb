@@ -159,40 +159,38 @@ export function useThreadGitActions({
   const isArchivedThread = thread?.archivedAt != null;
   const isDirectThreadEnvironment = environment?.managed === false;
 
-  const threadHeaderGitAction = useMemo<ThreadHeaderGitAction | null>(() => {
+  const threadHeaderGitActions = useMemo<ThreadHeaderGitAction[]>(() => {
     if (!thread || !canUseGitUi || !workspaceStatus || isArchivedThread) {
-      return null;
+      return [];
     }
+
+    const actions: ThreadHeaderGitAction[] = [];
+
+    const hasUncommitted = workspaceWorkingTree?.hasUncommittedChanges === true;
+    const hasUnmerged = workspaceMergeBase?.hasCommittedUnmergedChanges === true;
 
     if (isDirectThreadEnvironment) {
-      if (!workspaceWorkingTree?.hasUncommittedChanges) {
-        return null;
+      if (hasUncommitted) {
+        actions.push({ target: { kind: "commit" }, label: "Commit" });
       }
-
-      return {
-        target: { kind: "commit" },
-        label: "Commit",
-      };
+      return actions;
     }
 
-    if (
-      environment?.managed &&
-      (
-        workspaceMergeBase?.hasCommittedUnmergedChanges ||
-        workspaceWorkingTree?.hasUncommittedChanges
-      )
-    ) {
-      return {
-        target: {
-          kind: workspaceWorkingTree?.hasUncommittedChanges
-            ? "commit_and_squash_merge"
-            : "squash_merge",
-        },
-        label: "Squash merge",
-      };
+    if (environment?.managed) {
+      if (hasUncommitted) {
+        actions.push({ target: { kind: "commit" }, label: "Commit" });
+      }
+      if (hasUncommitted || hasUnmerged) {
+        actions.push({
+          target: {
+            kind: hasUncommitted ? "commit_and_squash_merge" : "squash_merge",
+          },
+          label: "Squash merge",
+        });
+      }
     }
 
-    return null;
+    return actions;
   }, [
     canUseGitUi,
     environment?.managed,
@@ -262,6 +260,6 @@ export function useThreadGitActions({
     handleSquashMergeThread,
     isThreadGitActionPending: requestEnvironmentAction.isPending,
     threadGitActionDialog,
-    threadHeaderGitAction,
+    threadHeaderGitActions,
   };
 }

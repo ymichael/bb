@@ -159,12 +159,12 @@ describe("useThreadGitActions", () => {
       }),
     );
 
-    expect(result.current.threadHeaderGitAction).toEqual({
-      label: "Commit",
-      target: {
-        kind: "commit",
+    expect(result.current.threadHeaderGitActions).toEqual([
+      {
+        label: "Commit",
+        target: { kind: "commit" },
       },
-    });
+    ]);
   });
 
   it("shows squash merge for managed environments with committed changes", () => {
@@ -183,12 +183,40 @@ describe("useThreadGitActions", () => {
       }),
     );
 
-    expect(result.current.threadHeaderGitAction).toEqual({
-      label: "Squash merge",
-      target: {
-        kind: "squash_merge",
+    expect(result.current.threadHeaderGitActions).toEqual([
+      {
+        label: "Squash merge",
+        target: { kind: "squash_merge" },
       },
-    });
+    ]);
+  });
+
+  it("shows commit and squash merge for managed environments with uncommitted changes", () => {
+    const { result } = renderHook(() =>
+      useThreadGitActions({
+        environment: makeEnvironment({
+          managed: true,
+        }),
+        requestEnvironmentAction: createRequestEnvironmentActionMutation(),
+        sendMessage: createSendMessageMutation(),
+        thread: makeThread(),
+        workspaceStatus: makeWorkspaceStatus({
+          hasCommittedUnmergedChanges: true,
+          hasUncommittedChanges: true,
+        }),
+      }),
+    );
+
+    expect(result.current.threadHeaderGitActions).toEqual([
+      {
+        label: "Commit",
+        target: { kind: "commit" },
+      },
+      {
+        label: "Squash merge",
+        target: { kind: "commit_and_squash_merge" },
+      },
+    ]);
   });
 
   it("forwards commit requests to the environment mutation", async () => {
