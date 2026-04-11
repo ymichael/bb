@@ -20,14 +20,14 @@ export function buildManagedBranchNameFromSeed(
   _seed: string,
   threadId: string,
 ): string {
-  return `bb/${threadId.slice(0, 12)}`;
+  return `bb/${threadId}`;
 }
 
 export function buildManagedBranchName(
   _request: ThreadCreateServiceRequest,
   threadId: string,
 ): string {
-  return `bb/${threadId.slice(0, 12)}`;
+  return `bb/${threadId}`;
 }
 
 function isRemoteSourcePath(sourcePath: string): boolean {
