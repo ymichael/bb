@@ -1,4 +1,3 @@
-import type { ModelInfo } from "@anthropic-ai/claude-agent-sdk";
 import type {
   AvailableModel,
   ModelReasoningEffort,
@@ -10,17 +9,11 @@ import {
   XHIGH_REASONING_EFFORT,
 } from "../shared/adapter-utils.js";
 
-type ClaudeSdkModelInfo = Pick<
-  ModelInfo,
-  "value"
->;
-
 type ClaudeCodeCatalogEntry = {
   id: string;
   model: string;
   displayName: string;
   description: string;
-  requiresOneMillionContext: boolean;
   supportedReasoningEfforts: readonly ModelReasoningEffort[];
   defaultReasoningEffort: AvailableModel["defaultReasoningEffort"];
 };
@@ -48,7 +41,6 @@ const CLAUDE_CODE_CATALOG: readonly ClaudeCodeCatalogEntry[] = [
     model: "opus[1m]",
     displayName: "Opus 4.6 (1M)",
     description: "Opus 4.6 with 1M context for complex long coding sessions",
-    requiresOneMillionContext: true,
     supportedReasoningEfforts: OPUS_REASONING_EFFORTS,
     defaultReasoningEffort: "medium",
   },
@@ -57,7 +49,6 @@ const CLAUDE_CODE_CATALOG: readonly ClaudeCodeCatalogEntry[] = [
     model: "opus",
     displayName: "Opus 4.6",
     description: "Opus 4.6 for complex coding tasks",
-    requiresOneMillionContext: false,
     supportedReasoningEfforts: OPUS_REASONING_EFFORTS,
     defaultReasoningEffort: "medium",
   },
@@ -66,7 +57,6 @@ const CLAUDE_CODE_CATALOG: readonly ClaudeCodeCatalogEntry[] = [
     model: "sonnet[1m]",
     displayName: "Sonnet 4.6 (1M)",
     description: "Sonnet 4.6 with 1M context for long coding sessions",
-    requiresOneMillionContext: true,
     supportedReasoningEfforts: SONNET_REASONING_EFFORTS,
     defaultReasoningEffort: "medium",
   },
@@ -75,7 +65,6 @@ const CLAUDE_CODE_CATALOG: readonly ClaudeCodeCatalogEntry[] = [
     model: "sonnet",
     displayName: "Sonnet 4.6",
     description: "Sonnet 4.6 for everyday coding tasks",
-    requiresOneMillionContext: false,
     supportedReasoningEfforts: SONNET_REASONING_EFFORTS,
     defaultReasoningEffort: "medium",
   },
@@ -84,7 +73,6 @@ const CLAUDE_CODE_CATALOG: readonly ClaudeCodeCatalogEntry[] = [
     model: "haiku",
     displayName: "Haiku 4.5",
     description: "Haiku 4.5 for quick answers",
-    requiresOneMillionContext: false,
     supportedReasoningEfforts: HAIKU_REASONING_EFFORTS,
     defaultReasoningEffort: "low",
   },
@@ -112,23 +100,12 @@ function buildCatalogModel(
   };
 }
 
-export function buildClaudeCodeAvailableModels(
-  modelInfos: readonly ClaudeSdkModelInfo[],
-): AvailableModel[] {
-  const hasOneMillionContext = modelInfos.some((modelInfo) =>
-    modelInfo.value.endsWith("[1m]"),
-  );
-  const models = CLAUDE_CODE_CATALOG
-    .filter((entry) =>
-      !entry.requiresOneMillionContext || hasOneMillionContext,
-    )
-    .map(buildCatalogModel);
-
+function markDefaultModel(models: AvailableModel[]): AvailableModel[] {
   return models.map((model, index) =>
     index === 0 ? { ...model, isDefault: true } : model,
   );
 }
 
-export function listFallbackClaudeCodeModels(): AvailableModel[] {
-  return buildClaudeCodeAvailableModels([]);
+export function listClaudeCodeModels(): AvailableModel[] {
+  return markDefaultModel(CLAUDE_CODE_CATALOG.map(buildCatalogModel));
 }

@@ -100,7 +100,7 @@ describe("bridge", () => {
     expect(options.systemPrompt).toBe("You are a manager.");
   });
 
-  it("returns the curated Claude model list from the SDK 1M signal", async () => {
+  it("returns the static Claude model list with 1M aliases", async () => {
     await expect(listClaudeCodeBridgeModels()).resolves.toEqual([
       expect.objectContaining({
         id: "opus[1m]",
@@ -133,5 +133,6 @@ describe("bridge", () => {
         isDefault: false,
       }),
     ]);
+    expect(queryMock).not.toHaveBeenCalled();
   });
 });
