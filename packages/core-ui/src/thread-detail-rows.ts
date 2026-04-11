@@ -309,30 +309,47 @@ interface IndexedTurnMessage {
   message: ViewMessage;
 }
 
+interface IndexedTurnMessageGroup {
+  messages: IndexedTurnMessage[];
+  turnId: string;
+}
+
 interface CollapsedTurnGroup {
   messages: ViewMessage[];
   turnId: string;
 }
 
-function collectMessagesByTurn(messages: ViewMessage[]): Map<string, IndexedTurnMessage[]> {
-  const messagesByTurnId = new Map<string, IndexedTurnMessage[]>();
+function collectMessagesByTurnSegment(messages: ViewMessage[]): IndexedTurnMessageGroup[] {
+  const groups: IndexedTurnMessageGroup[] = [];
+  const activeGroupsByTurnId = new Map<string, IndexedTurnMessageGroup>();
 
   for (const [index, message] of messages.entries()) {
-    if (!message.turnId) {
+    if (message.kind === "user") {
+      activeGroupsByTurnId.clear();
+      continue;
+    }
+
+    const turnId = message.turnId;
+    if (!turnId) {
       continue;
     }
 
     const indexedMessage = { index, message };
-    const existing = messagesByTurnId.get(message.turnId);
+    const existing = activeGroupsByTurnId.get(turnId);
     if (existing) {
-      existing.push(indexedMessage);
+      existing.messages.push(indexedMessage);
       continue;
     }
 
-    messagesByTurnId.set(message.turnId, [indexedMessage]);
+    const group: IndexedTurnMessageGroup = {
+      messages: [indexedMessage],
+      turnId,
+    };
+    activeGroupsByTurnId.set(turnId, group);
+    groups.push(group);
   }
 
-  return messagesByTurnId;
+  return groups;
 }
 
 function isTerminalMessage(message: ViewMessage): boolean {
@@ -373,7 +390,7 @@ export function buildTimelineRows(
   const collapsedByFirstIndex = new Map<number, CollapsedTurnGroup>();
   const collapsedMessageIndices = new Set<number>();
 
-  for (const [turnId, turnMessages] of collectMessagesByTurn(mergedMessages)) {
+  for (const { messages: turnMessages, turnId } of collectMessagesByTurnSegment(mergedMessages)) {
     const terminalIndex = collapseAll ? null : findLastTerminalIndex(turnMessages);
     const groupedTurnMessages = turnMessages.filter(({ index, message }) => {
       if (isUngroupableMessage(message)) return false;

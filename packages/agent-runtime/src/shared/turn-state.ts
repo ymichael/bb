@@ -9,6 +9,7 @@ import {
 } from "./scoped-item-ids.js";
 
 const DEFAULT_PROVIDER_TURN_STATE_MAX_ENTRIES = 256;
+const DEFAULT_PROVIDER_TURN_ID_PREFIX = "turn-";
 
 export interface ProviderTurnState {
   assistantMessageCounter: number;
@@ -23,11 +24,13 @@ export interface ProviderTurnState {
 export interface CreateProviderTurnStateRegistryOptions<TState extends ProviderTurnState> {
   createState: () => TState;
   maxEntries?: number;
+  turnIdPrefix?: string;
 }
 
 export interface ProviderTurnStateRegistry<TState extends ProviderTurnState> {
   ensureTurnStarted(args: EnsureProviderTurnStartedArgs<TState>): string;
   finishTurn(args: FinishProviderTurnArgs<TState>): void;
+  getCurrentOrLastTurnId(args: GetCurrentOrLastProviderTurnIdArgs<TState>): string;
   getOrCreate(args: GetProviderTurnStateArgs): TState;
   getOrCreateAssistantMessageId(args: GetOrCreateAssistantMessageIdArgs<TState>): string;
   resolveCompletedAssistantMessageId(
@@ -48,6 +51,10 @@ export interface FinishProviderTurnArgs<TState extends ProviderTurnState> {
 
 export interface GetProviderTurnStateArgs {
   threadId: string;
+}
+
+export interface GetCurrentOrLastProviderTurnIdArgs<TState extends ProviderTurnState> {
+  state: TState;
 }
 
 export interface GetOrCreateAssistantMessageIdArgs<TState extends ProviderTurnState> {
@@ -73,6 +80,11 @@ export function createProviderTurnStateRegistry<TState extends ProviderTurnState
   const entries = new Map<string, ProviderTurnStateRegistryEntry<TState>>();
   const maxEntries =
     options.maxEntries ?? DEFAULT_PROVIDER_TURN_STATE_MAX_ENTRIES;
+  const turnIdPrefix = options.turnIdPrefix ?? DEFAULT_PROVIDER_TURN_ID_PREFIX;
+
+  function createTurnId(counter: number): string {
+    return `${turnIdPrefix}${counter}`;
+  }
 
   function clearTransientTurnState(state: TState): void {
     state.openAssistantMessageIdsByScope.clear();
@@ -117,7 +129,7 @@ export function createProviderTurnStateRegistry<TState extends ProviderTurnState
       if (!args.state.currentTurnId) {
         clearTransientTurnState(args.state);
         args.state.counter += 1;
-        args.state.currentTurnId = `turn-${args.state.counter}`;
+        args.state.currentTurnId = createTurnId(args.state.counter);
         args.events.push({
           type: "turn/started",
           threadId: args.threadId,
@@ -133,6 +145,14 @@ export function createProviderTurnStateRegistry<TState extends ProviderTurnState
       args.state.currentTurnId = undefined;
       touchEntry({ threadId: args.threadId });
       pruneInactiveEntries();
+    },
+
+    getCurrentOrLastTurnId(args) {
+      return args.state.currentTurnId ?? (
+        args.state.counter > 0
+          ? createTurnId(args.state.counter)
+          : ""
+      );
     },
 
     getOrCreate(args) {

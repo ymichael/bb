@@ -689,6 +689,93 @@ describe("buildTimelineRows primary-checkout (operation) collapsing", () => {
     expect(toolGroups[1]?.turnId).toBe("turn-2");
   });
 
+  it("does not group a reused turn id across a later user message", () => {
+    const rows = buildTimelineRows([
+      {
+        kind: "user",
+        id: "user-1",
+        threadId: "thread-1",
+        sourceSeqStart: 1,
+        sourceSeqEnd: 1,
+        createdAt: 1,
+        text: "First prompt",
+      },
+      {
+        kind: "tool-call",
+        id: "tool-1",
+        threadId: "thread-1",
+        sourceSeqStart: 2,
+        sourceSeqEnd: 2,
+        createdAt: 2,
+        turnId: "turn-1",
+        toolName: "exec_command",
+        callId: "call-1",
+        command: "pnpm exec turbo run test --filter=@bb/core-ui",
+        status: "completed",
+      },
+      {
+        kind: "assistant-text",
+        id: "assistant-1",
+        threadId: "thread-1",
+        sourceSeqStart: 3,
+        sourceSeqEnd: 3,
+        createdAt: 3,
+        turnId: "turn-1",
+        text: "First answer.",
+        status: "completed",
+      },
+      {
+        kind: "user",
+        id: "user-2",
+        threadId: "thread-1",
+        sourceSeqStart: 4,
+        sourceSeqEnd: 4,
+        createdAt: 4,
+        text: "Second prompt after a resumed provider session",
+      },
+      {
+        kind: "tool-call",
+        id: "tool-2",
+        threadId: "thread-1",
+        sourceSeqStart: 5,
+        sourceSeqEnd: 5,
+        createdAt: 5,
+        turnId: "turn-1",
+        toolName: "exec_command",
+        callId: "call-2",
+        command: "pnpm exec turbo run build --filter=@bb/core-ui",
+        status: "completed",
+      },
+      {
+        kind: "assistant-text",
+        id: "assistant-2",
+        threadId: "thread-1",
+        sourceSeqStart: 6,
+        sourceSeqEnd: 6,
+        createdAt: 6,
+        turnId: "turn-1",
+        text: "Second answer.",
+        status: "completed",
+      },
+    ]);
+
+    expect(rows.map((row) => row.kind)).toEqual([
+      "message",
+      "tool-group",
+      "message",
+      "message",
+      "tool-group",
+      "message",
+    ]);
+    const toolGroups = rows.filter((row): row is Extract<TimelineRow, { kind: "tool-group" }> =>
+      row.kind === "tool-group");
+    expect(toolGroups).toHaveLength(2);
+    expect(toolGroups[0]?.sourceSeqStart).toBe(2);
+    expect(toolGroups[0]?.sourceSeqEnd).toBe(2);
+    expect(toolGroups[1]?.sourceSeqStart).toBe(5);
+    expect(toolGroups[1]?.sourceSeqEnd).toBe(5);
+  });
+
   it("does not collapse a turn that has only one tool message and no terminal", () => {
     const rows = buildTimelineRows([
       {

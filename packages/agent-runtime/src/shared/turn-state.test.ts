@@ -105,6 +105,38 @@ describe("turn-state", () => {
     ]);
   });
 
+  it("uses the configured turn id prefix for current and completed turns", () => {
+    const registry = createProviderTurnStateRegistry({
+      createState: createTurnState,
+      turnIdPrefix: "turn_runtime_",
+    });
+    const state = registry.getOrCreate({ threadId: "thread-1" });
+    const events: ThreadEvent[] = [];
+
+    expect(registry.getCurrentOrLastTurnId({ state })).toBe("");
+
+    const firstTurnId = registry.ensureTurnStarted({
+      events,
+      state,
+      threadId: "thread-1",
+    });
+    expect(firstTurnId).toBe("turn_runtime_1");
+    expect(registry.getCurrentOrLastTurnId({ state })).toBe("turn_runtime_1");
+
+    registry.finishTurn({
+      state,
+      threadId: "thread-1",
+    });
+    expect(registry.getCurrentOrLastTurnId({ state })).toBe("turn_runtime_1");
+
+    const secondTurnId = registry.ensureTurnStarted({
+      events,
+      state,
+      threadId: "thread-1",
+    });
+    expect(secondTurnId).toBe("turn_runtime_2");
+  });
+
   it("evicts only inactive thread state when the registry exceeds capacity", () => {
     const registry = createProviderTurnStateRegistry({
       createState: createTurnState,

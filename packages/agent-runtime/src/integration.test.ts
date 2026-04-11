@@ -55,6 +55,44 @@ function turnCompletedCount(events: ThreadEvent[]): number {
   return events.filter((e) => e.type === "turn/completed").length;
 }
 
+function collectTurnIds(events: ThreadEvent[]): Set<string> {
+  const turnIds = new Set<string>();
+  for (const event of events) {
+    if ("turnId" in event && event.turnId) {
+      turnIds.add(event.turnId);
+    }
+  }
+  return turnIds;
+}
+
+interface RuntimeRestartTurnIdAssertionArgs {
+  firstEvents: ThreadEvent[];
+  providerId: string;
+  secondEvents: ThreadEvent[];
+}
+
+function providerUsesRuntimeTurnIds(providerId: string): boolean {
+  return providerId === "claude-code" || providerId === "pi";
+}
+
+function expectNoSharedRuntimeTurnIds(
+  args: RuntimeRestartTurnIdAssertionArgs,
+): void {
+  if (!providerUsesRuntimeTurnIds(args.providerId)) {
+    return;
+  }
+
+  const firstTurnIds = collectTurnIds(args.firstEvents);
+  const secondTurnIds = collectTurnIds(args.secondEvents);
+  const sharedTurnIds = Array.from(firstTurnIds).filter((turnId) =>
+    secondTurnIds.has(turnId),
+  );
+
+  expect(firstTurnIds.size).toBeGreaterThan(0);
+  expect(secondTurnIds.size).toBeGreaterThan(0);
+  expect(sharedTurnIds).toEqual([]);
+}
+
 function getAgentText(events: ThreadEvent[]): string {
   const texts: string[] = [];
   for (const e of events) {
@@ -501,6 +539,7 @@ for (const providerId of providers) {
       const ctx1 = createTestRuntime(providerId);
       let providerThreadId: string | undefined;
       let resumePath: string | undefined;
+      let firstRuntimeEvents: ThreadEvent[] = [];
       const firstThreadId = newThreadId();
 
       try {
@@ -523,6 +562,7 @@ for (const providerId of providers) {
           timeoutMs: 30_000,
           label: "first session turn/completed",
         });
+        firstRuntimeEvents = [...ctx1.events];
 
         // Capture providerThreadId from thread/identity event if the response
         // didn't include one (claude-code sends it asynchronously).
@@ -582,6 +622,11 @@ for (const providerId of providers) {
         }
 
         if (resumed) {
+          expectNoSharedRuntimeTurnIds({
+            firstEvents: firstRuntimeEvents,
+            providerId,
+            secondEvents: ctx2.events,
+          });
           const text = getAgentText(ctx2.events) || getStreamedText(ctx2.events);
           expect(text.toUpperCase()).toContain("STRAWBERRY");
         } else {
@@ -608,6 +653,11 @@ for (const providerId of providers) {
             await waitForCondition(() => hasTurnCompleted(ctx3.events), {
               timeoutMs: 30_000,
               label: "fallback turn/completed",
+            });
+            expectNoSharedRuntimeTurnIds({
+              firstEvents: firstRuntimeEvents,
+              providerId,
+              secondEvents: ctx3.events,
             });
 
             const text = getAgentText(ctx3.events) || getStreamedText(ctx3.events);

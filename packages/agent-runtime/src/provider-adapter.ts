@@ -28,6 +28,7 @@ export interface ProviderTranslationContext {
 
 export interface ProviderAdapterFactoryOptions {
   bridgeBundleDir?: string;
+  turnIdPrefix?: string;
 }
 
 export interface DecodedToolCallRequest {

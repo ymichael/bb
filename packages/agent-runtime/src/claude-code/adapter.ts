@@ -335,6 +335,8 @@ export interface CreateClaudeCodeProviderAdapterOptions {
   bridgeBundleDir?: string;
   /** Extra environment variables for the bridge process. */
   launchEnv?: Record<string, string>;
+  /** Prefix for bb-owned turn ids emitted by this adapter instance. */
+  turnIdPrefix?: string;
 }
 
 interface ClaudeTurnState {
@@ -381,6 +383,7 @@ export function createClaudeCodeProviderAdapter(
       selectedModelContextWindow: null,
       toolItemsByCallId: new Map(),
     }),
+    turnIdPrefix: opts?.turnIdPrefix,
   });
 
   function setClaudeModelContextWindowHint(

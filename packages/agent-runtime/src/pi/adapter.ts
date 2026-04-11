@@ -492,6 +492,8 @@ export interface CreatePiProviderAdapterOptions {
   launchEnv?: Record<string, string>;
   /** Override context-window resolution. Used by unit tests to avoid real catalogs. */
   resolveModelContextWindow?: PiModelContextWindowResolver;
+  /** Prefix for bb-owned turn ids emitted by this adapter instance. */
+  turnIdPrefix?: string;
 }
 
 interface PiTurnState {
@@ -503,14 +505,6 @@ interface PiTurnState {
   openReasoningItemIdsByScope: Map<string, string>;
   reasoningItemCounter: number;
   toolItemsByCallId: Map<string, ThreadEventItem>;
-}
-
-function resolvePiCompactionTurnId(state: PiTurnState): string {
-  return state.currentTurnId ?? (
-    state.counter > 0
-      ? `turn-${state.counter}`
-      : ""
-  );
 }
 
 function buildPiCompactionItemId(turnId: string): string {
@@ -576,6 +570,7 @@ export function createPiProviderAdapter(
       reasoningItemCounter: 0,
       toolItemsByCallId: new Map(),
     }),
+    turnIdPrefix: opts?.turnIdPrefix,
   });
 
   function translatePiEvent(
@@ -616,9 +611,7 @@ export function createPiProviderAdapter(
       const { threadId = "", contextWindowUsage } =
         contextWindowUsageEnvelope.data.params;
       const state = turnState.getOrCreate({ threadId });
-      const turnId =
-        state.currentTurnId ??
-        (state.counter > 0 ? `turn-${state.counter}` : "");
+      const turnId = turnState.getCurrentOrLastTurnId({ state });
       return [{
         type: "thread/contextWindowUsage/updated",
         threadId,
@@ -682,7 +675,7 @@ export function createPiProviderAdapter(
         if (!piAutoCompactionStartEventSchema.safeParse(event).success) {
           return buildUnexpectedPiSdkEvent(event, context);
         }
-        const turnId = resolvePiCompactionTurnId(state);
+        const turnId = turnState.getCurrentOrLastTurnId({ state });
         events.push({
           type: "item/started",
           threadId,

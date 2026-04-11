@@ -38,6 +38,8 @@ interface BuiltInProviderDescriptor {
 
 const builtInProviders = [
   {
+    // Codex app-server events already carry Codex-owned turn ids; the
+    // runtime-generated prefix is only for adapters that synthesize bb turn ids.
     createAdapter: () => createCodexProviderAdapter(),
     info: getBuiltInAgentProviderInfo("codex"),
     visibility: codexVisibilityMetadata,

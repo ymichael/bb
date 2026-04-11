@@ -38,6 +38,36 @@ describe("provider registry", () => {
     expect(piProvider.process.args[0]).toBe("/tmp/bb-pi-bridge.mjs");
   });
 
+  it("passes the configured turn id prefix to bundled providers", () => {
+    const claudeProvider = createProviderForId("claude-code", {
+      turnIdPrefix: "turn_runtime_",
+    });
+    const piProvider = createProviderForId("pi", {
+      turnIdPrefix: "turn_runtime_",
+    });
+
+    const claudeEvents = claudeProvider.translateEvent({
+      type: "assistant",
+      message: {},
+    });
+    const piEvents = piProvider.translateEvent({
+      type: "agent_start",
+    });
+
+    expect(claudeEvents).toContainEqual({
+      type: "turn/started",
+      threadId: "",
+      providerThreadId: "",
+      turnId: "turn_runtime_1",
+    });
+    expect(piEvents).toContainEqual({
+      type: "turn/started",
+      threadId: "",
+      providerThreadId: "",
+      turnId: "turn_runtime_1",
+    });
+  });
+
   it("creates pi provider with expected process config", () => {
     const provider = createProviderForId("pi");
     expect(provider.id).toBe("pi");
