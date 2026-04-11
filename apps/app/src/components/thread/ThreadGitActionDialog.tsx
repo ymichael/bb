@@ -1,4 +1,5 @@
 import { useMemo, useState, type FormEvent } from "react";
+import { Loader2 } from "lucide-react";
 import { assertNever } from "@bb/core-ui";
 import type { PromptInput, ThreadType, WorkspaceStatus } from "@bb/domain";
 import { DetailCard, DetailRow } from "@bb/ui-core";
@@ -327,7 +328,8 @@ function ThreadGitActionDialogContent({
             type="submit"
             disabled={pending || (dialogCopy.showMergeBase && !selectedMergeBaseBranch)}
           >
-            {pending ? "Starting..." : dialogCopy.submitLabel}
+            {pending ? <Loader2 className="size-4 animate-spin" /> : null}
+            {dialogCopy.submitLabel}
           </Button>
         </DialogFooter>
       </form>
