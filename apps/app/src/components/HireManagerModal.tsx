@@ -239,8 +239,8 @@ export function HireManagerModal({
                 }}
               />
             </DetailRow>
-            {modelOptions.length > 0 ? (
-              <DetailRow label="Model" valueClassName="min-w-0" className="py-1">
+            <DetailRow label="Model" valueClassName="min-w-0" className="py-1">
+              {modelOptions.length > 0 ? (
                 <div className="flex min-w-0 flex-wrap items-center">
                   <PromptProviderModelPicker
                     className="text-foreground"
@@ -266,8 +266,10 @@ export function HireManagerModal({
                     />
                   ) : null}
                 </div>
-              </DetailRow>
-            ) : null}
+              ) : (
+                <span className="text-muted-foreground text-sm">Loading models…</span>
+              )}
+            </DetailRow>
             <DetailRow label="Host" valueClassName="min-w-0" className="py-1">
               <HostPicker
                 hosts={hosts}
