@@ -1,5 +1,22 @@
 import { describe, expect, it } from "vitest";
-import { buildManagedTargetPath } from "../../src/services/threads/thread-create-helpers.js";
+import {
+  buildManagedBranchName,
+  buildManagedTargetPath,
+} from "../../src/services/threads/thread-create-helpers.js";
+
+describe("buildManagedBranchName", () => {
+  it("uses the full thread ID", () => {
+    expect(buildManagedBranchName("thr_abc123def456")).toBe(
+      "bb/thr_abc123def456",
+    );
+  });
+
+  it("produces unique names for threads with shared prefixes", () => {
+    const a = buildManagedBranchName("thr_abc123def456");
+    const b = buildManagedBranchName("thr_abc123xyz789");
+    expect(a).not.toBe(b);
+  });
+});
 
 describe("buildManagedTargetPath", () => {
   it("keeps managed workspaces next to local sources", () => {

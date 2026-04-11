@@ -311,7 +311,7 @@ async function createSandboxHostThread(
   const provisionEventSequence = getHighWaterMarks(deps.db, [thread.id])[thread.id] ?? 0;
 
   const command = buildEnvironmentProvisionCommand({
-    branchName: buildManagedBranchName(args.request, thread.id),
+    branchName: buildManagedBranchName(thread.id),
     environmentId: environment.id,
     hostId,
     initiator: { threadId: thread.id, eventSequence: provisionEventSequence },
@@ -505,7 +505,7 @@ export async function createThreadFromRequest(
           request.projectId,
           thread.id,
         ),
-        branchName: buildManagedBranchName(request, thread.id),
+        branchName: buildManagedBranchName(thread.id),
         setupTimeoutMs: SETUP_TIMEOUT_MS,
       });
       break;

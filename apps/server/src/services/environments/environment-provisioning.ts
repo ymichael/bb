@@ -35,7 +35,7 @@ import {
 } from "../threads/thread-events.js";
 import {
   buildEnvironmentProvisionCommand,
-  buildManagedBranchNameFromSeed,
+  buildManagedBranchName,
   buildManagedTargetPath,
   SETUP_TIMEOUT_MS,
   requireSourceForHost,
@@ -603,10 +603,7 @@ export async function queueManagedEnvironmentReprovision(
     buildManagedTargetPath(source.path, args.thread.projectId, args.thread.id);
   const branchName =
     args.environment.branchName ??
-    buildManagedBranchNameFromSeed(
-      args.thread.title ?? args.thread.titleFallback ?? args.thread.id,
-      args.thread.id,
-    );
+    buildManagedBranchName(args.thread.id);
 
   if (args.thread.status === "idle") {
     tryTransition(deps.db, deps.hub, args.thread.id, "provisioning");

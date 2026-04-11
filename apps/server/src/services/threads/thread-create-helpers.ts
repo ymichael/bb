@@ -16,17 +16,7 @@ import { deriveTitleFallback } from "./title-generation.js";
 
 const REMOTE_WORKSPACE_ROOT = "/tmp/bb-managed-workspaces";
 
-export function buildManagedBranchNameFromSeed(
-  _seed: string,
-  threadId: string,
-): string {
-  return `bb/${threadId}`;
-}
-
-export function buildManagedBranchName(
-  _request: ThreadCreateServiceRequest,
-  threadId: string,
-): string {
+export function buildManagedBranchName(threadId: string): string {
   return `bb/${threadId}`;
 }
 

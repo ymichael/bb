@@ -96,8 +96,8 @@ describe("public thread lifecycle regressions", () => {
         throw new Error("Thread creation response shape was invalid");
       }
 
-      expect(firstProvision.command.branchName).toContain(firstThread.id.slice(0, 8));
-      expect(secondProvision.command.branchName).toContain(secondThread.id.slice(0, 8));
+      expect(firstProvision.command.branchName).toBe(`bb/${firstThread.id}`);
+      expect(secondProvision.command.branchName).toBe(`bb/${secondThread.id}`);
       expect(firstProvision.command.branchName).not.toBe(secondProvision.command.branchName);
     } finally {
       await harness.cleanup();
