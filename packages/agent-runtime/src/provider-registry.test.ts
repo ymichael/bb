@@ -93,7 +93,7 @@ describe("provider registry", () => {
         capabilities: {
           supportsRename: true,
           supportsServiceTier: true,
-          supportedPermissionModes: ["readonly", "workspace-write", "full"],
+          supportedPermissionModes: ["full", "workspace-write", "readonly"],
         },
         available: true,
       },
@@ -103,7 +103,7 @@ describe("provider registry", () => {
         capabilities: {
           supportsRename: false,
           supportsServiceTier: false,
-          supportedPermissionModes: ["readonly", "workspace-write", "full"],
+          supportedPermissionModes: ["full", "workspace-write", "readonly"],
         },
         available: true,
       },

@@ -44,7 +44,7 @@ describe("claude-code provider adapter", () => {
     expect(adapter.capabilities).toEqual({
       supportsRename: false,
       supportsServiceTier: false,
-      supportedPermissionModes: ["readonly", "workspace-write", "full"],
+      supportedPermissionModes: ["full", "workspace-write", "readonly"],
     });
   });
 

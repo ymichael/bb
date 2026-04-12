@@ -26,13 +26,32 @@ interface ProviderOverrides extends Partial<SystemProviderInfo> {}
 
 interface ModelOverrides extends Partial<AvailableModel> {}
 
+const PERMISSION_MODE_OPTIONS = [
+  {
+    value: "full",
+    label: "Full",
+    description: "No permission prompts. The agent can use full provider permissions.",
+    tone: "warning",
+  },
+  {
+    value: "workspace-write",
+    label: "Workspace Write",
+    description: "Can edit and run safely inside the workspace. Asks before leaving that boundary.",
+  },
+  {
+    value: "readonly",
+    label: "Readonly",
+    description: "Can inspect files. Asks before edits, shell commands, network, or other changes.",
+  },
+] as const;
+
 function makeProvider(overrides: ProviderOverrides = {}): SystemProviderInfo {
   return {
     available: true,
     capabilities: {
       supportsRename: true,
       supportsServiceTier: false,
-      supportedPermissionModes: ["readonly", "workspace-write", "full"],
+      supportedPermissionModes: ["full", "workspace-write", "readonly"],
     },
     displayName: "Codex",
     id: "codex",
@@ -91,7 +110,7 @@ describe("useThreadCreationOptions", () => {
         capabilities: {
           supportsRename: true,
           supportsServiceTier: false,
-          supportedPermissionModes: ["readonly", "workspace-write", "full"],
+          supportedPermissionModes: ["full", "workspace-write", "readonly"],
         },
         displayName: "Codex",
         id: "codex",
@@ -132,8 +151,52 @@ describe("useThreadCreationOptions", () => {
 
     expect(result.current.selectedModel).toBe("gpt-5.4");
     expect(result.current.reasoningLevel).toBe("low");
+    expect(result.current.permissionMode).toBe("full");
+    expect(result.current.permissionModeOptions).toEqual(PERMISSION_MODE_OPTIONS);
     expect(result.current.serviceTier).toBeUndefined();
     expect(result.current.supportsServiceTier).toBe(false);
+  });
+
+  it("filters permission modes by provider capabilities and falls back to full", async () => {
+    const projectId = "project-pi";
+    localStorage.setItem(getProjectScopedStorageKey("bb.promptbox.permission-mode", projectId), "readonly");
+
+    vi.mocked(api.listSystemProviders).mockResolvedValue([
+      makeProvider({
+        capabilities: {
+          supportsRename: false,
+          supportsServiceTier: false,
+          supportedPermissionModes: ["full"],
+        },
+        displayName: "Pi",
+        id: "pi",
+      }),
+    ]);
+    vi.mocked(api.getAvailableModels).mockResolvedValue([
+      makeModel({
+        displayName: "pi",
+        id: "pi",
+        model: "pi",
+      }),
+    ]);
+
+    const { wrapper } = createQueryClientTestHarness();
+    const { result } = renderHook(
+      () =>
+        useThreadCreationOptions({
+          projectId,
+          scope: "new-thread",
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => {
+      expect(result.current.selectedProviderId).toBe("pi");
+    });
+
+    expect(result.current.permissionMode).toBe("full");
+    expect(result.current.supportsPermissionModeSelection).toBe(false);
+    expect(result.current.permissionModeOptions).toEqual([PERMISSION_MODE_OPTIONS[0]]);
   });
 
   it("persists new-thread selections to project-scoped local storage", async () => {
@@ -144,7 +207,7 @@ describe("useThreadCreationOptions", () => {
         capabilities: {
           supportsRename: true,
           supportsServiceTier: true,
-          supportedPermissionModes: ["readonly", "workspace-write", "full"],
+          supportedPermissionModes: ["full", "workspace-write", "readonly"],
         },
         id: "codex",
       }),

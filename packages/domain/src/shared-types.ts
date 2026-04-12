@@ -17,7 +17,7 @@ export const instructionModeValues = ["append", "replace"] as const;
 export const instructionModeSchema = z.enum(instructionModeValues);
 export type InstructionMode = z.infer<typeof instructionModeSchema>;
 
-export const permissionModeValues = ["readonly", "workspace-write", "full"] as const;
+export const permissionModeValues = ["full", "workspace-write", "readonly"] as const;
 export const permissionModeSchema = z.enum(permissionModeValues);
 export type PermissionMode = z.infer<typeof permissionModeSchema>;
 

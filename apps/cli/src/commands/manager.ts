@@ -11,7 +11,10 @@ import {
   printContextLabel,
   requireProjectIdWithLabel,
 } from "./helpers.js";
-import { parsePermissionMode } from "./thread/helpers.js";
+import {
+  MANAGED_PERMISSION_MODE_HELP,
+  parsePermissionMode,
+} from "./thread/helpers.js";
 
 interface ManagerHireCommandOptions {
   json?: boolean;
@@ -57,7 +60,7 @@ export function registerManagerCommands(program: Command, getUrl: () => string):
       "Model ID for the manager. Omit to use the project's remembered manager default for the resolved provider",
     )
     .option("--reasoning-level <level>", "Reasoning level (low, medium, high, xhigh)")
-    .option("--permission-mode <mode>", "Permission mode (readonly, workspace-write, or full)")
+    .option("--permission-mode <mode>", MANAGED_PERMISSION_MODE_HELP)
     .option("--host <id>", "Host ID (defaults to local host)")
     .option("--json", "Print machine-readable JSON output")
     .action(action(async (

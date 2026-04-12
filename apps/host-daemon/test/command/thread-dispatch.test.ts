@@ -259,7 +259,7 @@ describe("thread command dispatch", () => {
             capabilities: {
               supportsRename: false,
               supportsServiceTier: false,
-              supportedPermissionModes: ["readonly", "workspace-write", "full"],
+              supportedPermissionModes: ["full", "workspace-write", "readonly"],
             },
             available: true,
           },
@@ -275,7 +275,7 @@ describe("thread command dispatch", () => {
           capabilities: {
             supportsRename: false,
             supportsServiceTier: false,
-            supportedPermissionModes: ["readonly", "workspace-write", "full"],
+            supportedPermissionModes: ["full", "workspace-write", "readonly"],
           },
           available: true,
         },

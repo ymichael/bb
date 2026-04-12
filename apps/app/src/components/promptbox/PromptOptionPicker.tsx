@@ -24,6 +24,7 @@ const PROMPT_OPTION_WARNING_ICON_CLASS_NAME =
 export interface PromptOption<T extends string> {
   value: T
   label: string
+  description?: string
   tone?: "default" | "warning"
   icon?: ComponentType<{ className?: string }>
 }
@@ -85,6 +86,9 @@ export function PromptOptionPicker<T extends string>({
   const selectedIsWarning = selectedOption?.tone === "warning"
   const SelectedIcon = selectedOption?.icon
   const selectedLabel = selectedOption?.label ?? value
+  const selectedTitle = selectedOption?.description
+    ? `${label}: ${selectedLabel} - ${selectedOption.description}`
+    : `${label}: ${selectedLabel}`
 
   return (
     <DropdownMenu>
@@ -94,7 +98,7 @@ export function PromptOptionPicker<T extends string>({
           variant="ghost"
           size="sm"
           aria-label={label}
-          title={`${label}: ${selectedLabel}`}
+          title={selectedTitle}
           className={cn(
             PROMPT_OPTION_BASE_CLASS_NAME,
             PROMPT_OPTION_INTERACTIVE_CLASS_NAME,
@@ -117,25 +121,32 @@ export function PromptOptionPicker<T extends string>({
           />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="min-w-44 max-w-80">
+      <DropdownMenuContent align="start" className="min-w-52 max-w-96">
         {options.map((option) => {
           const OptionIcon = option.icon
           return (
             <DropdownMenuItem
               key={option.value}
               onSelect={() => onChange(option.value)}
-              className="flex items-center justify-between gap-3"
+              className="flex items-start justify-between gap-3"
             >
               <span
                 className={cn(
-                  "flex min-w-0 items-center gap-2",
+                  "flex min-w-0 items-start gap-2",
                   option.tone === "warning" &&
                     "text-amber-700 dark:text-amber-300"
                 )}
               >
-                {OptionIcon ? <OptionIcon className="size-4 shrink-0" /> : null}
-                <span className="truncate" title={option.label}>
-                  {option.label}
+                {OptionIcon ? <OptionIcon className="mt-0.5 size-4 shrink-0" /> : null}
+                <span className="min-w-0">
+                  <span className="block truncate" title={option.label}>
+                    {option.label}
+                  </span>
+                  {option.description ? (
+                    <span className="mt-0.5 block text-xs leading-snug text-muted-foreground">
+                      {option.description}
+                    </span>
+                  ) : null}
                 </span>
               </span>
               <Check

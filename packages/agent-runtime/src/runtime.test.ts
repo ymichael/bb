@@ -172,7 +172,7 @@ describe("createAgentRuntime", () => {
       capabilities: {
         supportsRename: false,
         supportsServiceTier: false,
-        supportedPermissionModes: ["readonly", "workspace-write", "full"],
+        supportedPermissionModes: ["full", "workspace-write", "readonly"],
       },
       process: {
         command: "node",
@@ -274,7 +274,7 @@ describe("createAgentRuntime", () => {
       capabilities: {
         supportsRename: false,
         supportsServiceTier: false,
-        supportedPermissionModes: ["readonly", "workspace-write", "full"],
+        supportedPermissionModes: ["full", "workspace-write", "readonly"],
       },
       process: {
         command: "node",

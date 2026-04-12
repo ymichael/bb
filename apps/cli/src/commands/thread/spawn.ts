@@ -16,6 +16,7 @@ import {
 } from "../helpers.js";
 import {
   parsePermissionMode,
+  PERMISSION_MODE_HELP,
   parseServiceTier,
   statusText,
 } from "./helpers.js";
@@ -140,7 +141,7 @@ export function registerSpawnCommand(
     )
     .option("--title <title>", "Thread title")
     .option("--service-tier <tier>", "Service tier: fast or flex")
-    .option("--permission-mode <mode>", "Permission mode: readonly, workspace-write, or full")
+    .option("--permission-mode <mode>", PERMISSION_MODE_HELP)
     .option("--host <id>", "Host ID (defaults to local host)")
     .option(
       "--no-context-parent-thread",

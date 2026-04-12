@@ -11,6 +11,7 @@ import {
   parsePermissionMode,
   DEFAULT_THREAD_WAIT_TIMEOUT_SECONDS,
   DEFAULT_THREAD_WAIT_POLL_INTERVAL_MS,
+  PERMISSION_MODE_HELP,
 } from "../commands/thread/helpers.js";
 
 describe("looksLikePath", () => {
@@ -282,7 +283,13 @@ describe("parsePermissionMode", () => {
 
   it("throws for invalid mode", () => {
     expect(() => parsePermissionMode("readwrite")).toThrow(
-      "Invalid permission mode",
+      "Invalid permission mode 'readwrite'. Expected full, workspace-write, or readonly.",
+    );
+  });
+
+  it("exposes user-facing help in product terms", () => {
+    expect(PERMISSION_MODE_HELP).toBe(
+      "Permission mode: full, workspace-write, or readonly",
     );
   });
 });

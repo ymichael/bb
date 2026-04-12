@@ -34,18 +34,28 @@ const REASONING_LABELS: Record<ReasoningLevel, string> = {
 };
 
 const PERMISSION_MODE_OPTIONS: PromptOption<PermissionMode>[] = [
-  { value: "readonly", label: "Readonly" },
-  { value: "workspace-write", label: "Workspace Write" },
   {
     value: "full",
     label: "Full",
+    description: "No permission prompts. The agent can use full provider permissions.",
     tone: "warning",
+  },
+  {
+    value: "workspace-write",
+    label: "Workspace Write",
+    description: "Can edit and run safely inside the workspace. Asks before leaving that boundary.",
+  },
+  {
+    value: "readonly",
+    label: "Readonly",
+    description: "Can inspect files. Asks before edits, shell commands, network, or other changes.",
   },
 ];
 
 interface PromptOption<T extends string> {
   value: T;
   label: string;
+  description?: string;
   tone?: "default" | "warning";
   icon?: ComponentType<{ className?: string }>;
 }
@@ -83,6 +93,11 @@ interface UpdateThreadPromptSelectionsArgs {
   currentSelections: ThreadPromptSelections;
   field: ThreadPromptField;
   value: ThreadPromptSelections[ThreadPromptField];
+}
+
+interface ResolvePermissionModeSelectionArgs {
+  rawPermissionMode: PermissionMode;
+  supportedPermissionModes: readonly PermissionMode[];
 }
 
 function isReasoningLevel(value: unknown): value is ReasoningLevel {
@@ -221,6 +236,19 @@ function updateThreadPromptSelections({
     ...currentSelections,
     [field]: value,
   };
+}
+
+function resolvePermissionModeSelection({
+  rawPermissionMode,
+  supportedPermissionModes,
+}: ResolvePermissionModeSelectionArgs): PermissionMode {
+  if (supportedPermissionModes.includes(rawPermissionMode)) {
+    return rawPermissionMode;
+  }
+  if (supportedPermissionModes.includes("full")) {
+    return "full";
+  }
+  return supportedPermissionModes[0] ?? "full";
 }
 
 export function formatModelLabel(value: string, providerId?: string): string {
@@ -432,9 +460,10 @@ export function useThreadCreationOptions(options?: UsePromptModelReasoningOption
     return activeModel?.defaultReasoningEffort ?? reasoningOptions[0].value;
   }, [activeModel, rawReasoningLevel, reasoningOptions]);
 
-  const permissionMode = supportedPermissionModes.includes(rawPermissionMode)
-    ? rawPermissionMode
-    : supportedPermissionModes[0] ?? "full";
+  const permissionMode = resolvePermissionModeSelection({
+    rawPermissionMode,
+    supportedPermissionModes,
+  });
   const environmentSelectionValue = rawEnvironmentSelectionValue;
 
   useEffect(() => {

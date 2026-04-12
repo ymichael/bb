@@ -30,7 +30,7 @@ describe("codex provider adapter", () => {
     expect(adapter.capabilities).toEqual({
       supportsRename: true,
       supportsServiceTier: true,
-      supportedPermissionModes: ["readonly", "workspace-write", "full"],
+      supportedPermissionModes: ["full", "workspace-write", "readonly"],
     });
   });
 

@@ -42,13 +42,13 @@ type PiDefaultModelPerProvider = Partial<Record<string, string>>;
 const CODEX_CAPABILITIES: ProviderCapabilities = {
   supportsRename: true,
   supportsServiceTier: true,
-  supportedPermissionModes: ["readonly", "workspace-write", "full"],
+  supportedPermissionModes: ["full", "workspace-write", "readonly"],
 };
 
 const CLAUDE_CAPABILITIES: ProviderCapabilities = {
   supportsRename: false,
   supportsServiceTier: false,
-  supportedPermissionModes: ["readonly", "workspace-write", "full"],
+  supportedPermissionModes: ["full", "workspace-write", "readonly"],
 };
 
 const PI_CAPABILITIES: ProviderCapabilities = {

@@ -994,6 +994,47 @@ describe("CLI command output contracts", () => {
     });
   });
 
+  it("bb thread spawn help lists product permission modes", async () => {
+    const program = new Command();
+    const writeOut = vi.fn();
+    program.exitOverride();
+    program.configureOutput({
+      writeOut,
+      writeErr: vi.fn(),
+    });
+    registerThreadCommands(program, () => "http://server");
+
+    await expect(
+      program.parseAsync(["node", "bb", "thread", "spawn", "--help"]),
+    ).rejects.toMatchObject({ code: "commander.helpDisplayed" });
+
+    const helpOutput = writeOut.mock.calls.map((args) => String(args[0] ?? "")).join("");
+    expect(helpOutput).toContain("--permission-mode <mode>");
+    expect(helpOutput).toMatch(/Permission mode: full, workspace-write, or\s+readonly/);
+  });
+
+  it("bb thread spawn reports invalid permission mode choices", async () => {
+    process.env.BB_PROJECT_ID = "proj-1";
+
+    await expect(
+      runCommand(
+        [
+          "thread",
+          "spawn",
+          "--prompt",
+          "hello",
+          "--permission-mode",
+          "unsafe",
+        ],
+        (program) => registerThreadCommands(program, () => "http://server"),
+      ),
+    ).rejects.toThrow("process.exit:1");
+
+    expect(console.error).toHaveBeenCalledWith(
+      "Error: Invalid permission mode 'unsafe'. Expected full, workspace-write, or readonly.",
+    );
+  });
+
   it("bb thread list supports parent-thread filtering", async () => {
     const list = vi.fn(async () => []);
     createClientMock.mockReturnValue(asServerClient({
