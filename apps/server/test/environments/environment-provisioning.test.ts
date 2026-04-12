@@ -17,6 +17,7 @@ import {
   seedProjectWithSource,
   seedThread,
 } from "../helpers/seed.js";
+import { waitForQueuedCommand } from "../helpers/commands.js";
 import { createTestAppHarness } from "../helpers/test-app.js";
 
 describe("environment reprovisioning", () => {
@@ -56,6 +57,14 @@ describe("environment reprovisioning", () => {
       expect(firstAttempt).toBe(MANAGED_REPROVISION_QUEUED);
       expect(secondAttempt).toBe(MANAGED_REPROVISION_IN_PROGRESS);
       expect(getEnvironment(harness.db, environment.id)?.status).toBe("provisioning");
+      const queued = await waitForQueuedCommand(
+        harness,
+        ({ command }) => command.type === "environment.provision",
+      );
+      if (queued.command.type !== "environment.provision") {
+        throw new Error("Expected environment.provision command");
+      }
+      expect(queued.command.branchName).toBe(`bb/${thread.id}`);
       expect(
         harness.db
           .select()
@@ -65,6 +74,48 @@ describe("environment reprovisioning", () => {
           )
           .all(),
       ).toHaveLength(1);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("preserves the stored branch name during managed reprovision", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-reprovision-branch",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/reprovision-branch-project",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/reprovision-branch-target",
+        status: "error",
+        managed: true,
+        workspaceProvisionType: "managed-worktree",
+        branchName: "bb/existing-readable-branch",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+      });
+
+      await queueManagedEnvironmentReprovision(harness.deps, {
+        environment,
+        thread,
+      });
+
+      const queued = await waitForQueuedCommand(
+        harness,
+        ({ command }) => command.type === "environment.provision",
+      );
+      if (queued.command.type !== "environment.provision") {
+        throw new Error("Expected environment.provision command");
+      }
+      expect(queued.command.branchName).toBe("bb/existing-readable-branch");
     } finally {
       await harness.cleanup();
     }
