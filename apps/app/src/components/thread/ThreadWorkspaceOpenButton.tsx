@@ -1,17 +1,10 @@
 import { useCallback, useState } from "react";
-import { Check, ChevronDown, Code2, FolderOpen, Terminal, Wrench } from "lucide-react";
+import { Check, Code2, FolderOpen, Terminal, Wrench } from "lucide-react";
 import type {
   WorkspaceOpenTarget,
   WorkspaceOpenTargetId,
 } from "@bb/host-daemon-contract";
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { cn } from "@/lib/utils";
+import { SplitButton, type SplitButtonAction } from "@/components/ui/split-button";
 import {
   resolvePreferredWorkspaceOpenTarget,
   useWorkspaceOpenTargetPreference,
@@ -85,52 +78,37 @@ export function ThreadWorkspaceOpenButton({
     return null;
   }
 
+  const primaryAction: SplitButtonAction = {
+    label: `Open workspace in ${selectedTarget.label}`,
+    onSelect: () => {
+      void openTarget(selectedTarget, false);
+    },
+    content: <WorkspaceOpenTargetIcon target={selectedTarget} />,
+  };
+  const secondaryActions: SplitButtonAction[] = targets.map((target) => ({
+    label: target.label,
+    onSelect: () => {
+      void openTarget(target, true);
+    },
+    content: (
+      <>
+        <WorkspaceOpenTargetIcon target={target} />
+        <span className="min-w-0 flex-1">{target.label}</span>
+        {target.id === selectedTarget.id ? <Check className="size-3.5" /> : null}
+      </>
+    ),
+  }));
+
   return (
-    <div className="inline-flex items-center">
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        disabled={isPending}
-        className={cn(WORKSPACE_OPEN_BUTTON_CLASS, "rounded-r-none border-r-0 px-2")}
-        aria-label={`Open workspace in ${selectedTarget.label}`}
-        title={`Open workspace in ${selectedTarget.label}`}
-        onClick={() => {
-          void openTarget(selectedTarget, false);
-        }}
-      >
-        <WorkspaceOpenTargetIcon target={selectedTarget} />
-      </Button>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={isPending}
-            className={cn(WORKSPACE_OPEN_BUTTON_CLASS, "rounded-l-none px-1")}
-            aria-label="Choose workspace open target"
-            title="Choose workspace open target"
-          >
-            <ChevronDown className="size-3" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" sideOffset={2} mobileTitle="Open Workspace">
-          {targets.map((target) => (
-            <DropdownMenuItem
-              key={target.id}
-              onSelect={() => {
-                void openTarget(target, true);
-              }}
-            >
-              <WorkspaceOpenTargetIcon target={target} />
-              <span className="min-w-0 flex-1">{target.label}</span>
-              {target.id === selectedTarget.id ? <Check className="size-3.5" /> : null}
-            </DropdownMenuItem>
-          ))}
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </div>
+    <SplitButton
+      variant="outline"
+      size="sm"
+      disabled={isPending}
+      className={WORKSPACE_OPEN_BUTTON_CLASS}
+      primaryAction={primaryAction}
+      secondaryActions={secondaryActions}
+      triggerLabel="Choose workspace open target"
+      mobileTitle="Open Workspace"
+    />
   );
 }
-
