@@ -895,8 +895,8 @@ describe.concurrent("cross-provider and multi-thread scenarios", () => {
   }, 45_000);
 });
 
-describe.sequential("interactive request scenarios", () => {
-  it("routes Claude permission requests through onInteractiveRequest", async () => {
+describe("interactive request scenarios", () => {
+  it.concurrent("routes Claude permission requests through onInteractiveRequest", async () => {
     const hostsPath = "/etc/hosts";
     const expectedLine = getFirstNonEmptyLine(hostsPath);
     const ctx = createTestRuntime("claude-code", {
@@ -958,7 +958,7 @@ describe.sequential("interactive request scenarios", () => {
     }
   }, 60_000);
 
-  it("allows Claude workspace-write Write tool mutations without interactive requests", async () => {
+  it.concurrent("allows Claude workspace-write Write tool mutations without interactive requests", async () => {
     const ctx = createTestRuntime("claude-code");
     const fileName = createTempFileName("claude-workspace-write-tool");
     const filePath = join(ctx.tmpDir, fileName);
@@ -1001,7 +1001,7 @@ describe.sequential("interactive request scenarios", () => {
     }
   }, 75_000);
 
-  it("allows Claude workspace-write sandboxed Bash workspace writes without interactive requests", async () => {
+  it.concurrent("allows Claude workspace-write sandboxed Bash workspace writes without interactive requests", async () => {
     const ctx = createTestRuntime("claude-code");
     const fileName = createTempFileName("claude-workspace-write-bash");
     const filePath = join(ctx.tmpDir, fileName);
@@ -1043,7 +1043,7 @@ describe.sequential("interactive request scenarios", () => {
     }
   }, 75_000);
 
-  it("blocks Claude workspace-write outside-workspace Bash without interactive requests when escalation is deny", async () => {
+  it.concurrent("blocks Claude workspace-write outside-workspace Bash without interactive requests when escalation is deny", async () => {
     const ctx = createTestRuntime("claude-code");
     const outsideDir = mkdtempSync(join(tmpdir(), "bb-claude-outside-"));
     const filePath = join(outsideDir, createTempFileName("claude-outside-bash-denied"));
@@ -1086,7 +1086,7 @@ describe.sequential("interactive request scenarios", () => {
     }
   }, 75_000);
 
-  it("allows Codex workspace-write workspace writes without interactive requests", async () => {
+  it.concurrent("allows Codex workspace-write workspace writes without interactive requests", async () => {
     const ctx = createTestRuntime("codex");
     const fileName = createTempFileName("codex-workspace-write");
     const filePath = join(ctx.tmpDir, fileName);
@@ -1134,7 +1134,7 @@ describe.sequential("interactive request scenarios", () => {
     }
   }, 75_000);
 
-  it("routes Codex workspace-write outside-workspace writes through onInteractiveRequest", async () => {
+  it.concurrent("routes Codex workspace-write outside-workspace writes through onInteractiveRequest", async () => {
     const ctx = createTestRuntime("codex", {
       onInteractiveRequest: createApprovalResolution,
     });
@@ -1193,7 +1193,7 @@ describe.sequential("interactive request scenarios", () => {
     }
   }, 75_000);
 
-  it("routes Codex readonly workspace writes through onInteractiveRequest when escalation is ask", async () => {
+  it.concurrent("routes Codex readonly workspace writes through onInteractiveRequest when escalation is ask", async () => {
     const ctx = createTestRuntime("codex", {
       onInteractiveRequest: createApprovalResolution,
     });
@@ -1245,7 +1245,7 @@ describe.sequential("interactive request scenarios", () => {
     }
   }, 75_000);
 
-  it("blocks Codex readonly workspace writes without interactive requests when escalation is deny", async () => {
+  it.concurrent("blocks Codex readonly workspace writes without interactive requests when escalation is deny", async () => {
     const ctx = createTestRuntime("codex");
     const fileName = createTempFileName("codex-readonly-denied");
     const filePath = join(ctx.tmpDir, fileName);
@@ -1287,7 +1287,7 @@ describe.sequential("interactive request scenarios", () => {
     }
   }, 75_000);
 
-  it("routes Claude readonly Bash mutations through onInteractiveRequest when escalation is ask", async () => {
+  it.concurrent("routes Claude readonly Bash mutations through onInteractiveRequest when escalation is ask", async () => {
     const ctx = createTestRuntime("claude-code", {
       onInteractiveRequest: createApprovalResolution,
     });
@@ -1337,7 +1337,7 @@ describe.sequential("interactive request scenarios", () => {
     }
   }, 75_000);
 
-  it("routes Claude readonly Write tool mutations through onInteractiveRequest when escalation is ask", async () => {
+  it.concurrent("routes Claude readonly Write tool mutations through onInteractiveRequest when escalation is ask", async () => {
     const ctx = createTestRuntime("claude-code", {
       onInteractiveRequest: createApprovalResolution,
     });
@@ -1388,7 +1388,7 @@ describe.sequential("interactive request scenarios", () => {
     }
   }, 75_000);
 
-  it("blocks Claude readonly Bash mutations without interactive requests when escalation is deny", async () => {
+  it.concurrent("blocks Claude readonly Bash mutations without interactive requests when escalation is deny", async () => {
     const ctx = createTestRuntime("claude-code");
     const fileName = createTempFileName("claude-readonly-denied");
     const filePath = join(ctx.tmpDir, fileName);
@@ -1430,7 +1430,7 @@ describe.sequential("interactive request scenarios", () => {
     }
   }, 75_000);
 
-  it("keeps Pi limited to full permission mode", () => {
+  it.concurrent("keeps Pi limited to full permission mode", () => {
     const piProvider = listAvailableProviderInfos().find((provider) =>
       provider.id === "pi",
     );

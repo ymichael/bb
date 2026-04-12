@@ -35,6 +35,7 @@ export default defineConfig({
     exclude: ["dist/**", "node_modules/**"],
     testTimeout: 45_000,
     hookTimeout: 10_000,
+    maxConcurrency: 16,
     env: dotEnv,
   },
 });
