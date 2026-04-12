@@ -97,11 +97,11 @@ export const templateDefinitions = [
   },
   {
     "id": "generateThreadMetadata",
-    "body": "You create concise titles for coding tasks.\nCall the `result` tool with:\n- title: short, clear, 3-7 words, Title Case\n\nTask:\n{{cleanedPrompt}}",
+    "body": "You create concise titles for coding tasks.\nCall the `result` tool with:\n- title: short, clear, 3-7 words, Title Case\n- branchSlug: short, lowercase kebab-case, git-branch-safe\n\nTask:\n{{cleanedPrompt}}",
     "fileName": "generate-thread-metadata.md",
     "kind": "prompt",
     "title": "Thread Metadata Generator",
-    "summary": "Prompt for deriving a short thread title from the user's task prompt.",
+    "summary": "Prompt for deriving short thread metadata from the user's task prompt.",
     "intent": "Generate stable, operator-friendly metadata for threads without adding explanatory prose.",
     "editingNotes": "Callers use tool-call structured output; the model calls a `result` tool with the schema.",
     "variables": {
