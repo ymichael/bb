@@ -86,6 +86,20 @@ describe("workspace open targets", () => {
     }
   });
 
+  it("discovers Antigravity with the current bundle id", async () => {
+    const execFile: ExecFileHandler = async (_file, args) => ({
+      stdout: args.join(" ").includes("com.google.antigravity")
+        ? "/Applications/Antigravity.app\n"
+        : "",
+    });
+
+    const targets = await listWorkspaceOpenTargetsWithRuntime(createRuntime({
+      execFile,
+    }));
+
+    expect(targets.map((target) => target.id)).toContain("antigravity");
+  });
+
   it("opens the workspace with an argument separator before the path", async () => {
     const workspacePath = await mkdtemp(path.join(tmpdir(), "bb-workspace-"));
     const calls: ExecFileCall[] = [];

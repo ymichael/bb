@@ -36,6 +36,7 @@ import { findLatestActivityRowId } from "@bb/ui-core";
 import type { Thread } from "@bb/domain";
 import { useDialogState } from "@/hooks/useDialogState";
 import { useHostDaemon } from "@/hooks/useHostDaemon";
+import { useWorkspaceOpenTargets } from "@/hooks/useWorkspaceOpenTargets";
 import { useHost } from "@/hooks/queries/system-queries";
 import { usePreferredTheme } from "@/hooks/useTheme";
 import { useStoredShowAllEvents } from "@/lib/show-all-events-preference";
@@ -197,9 +198,15 @@ export function ThreadDetailView() {
   const {
     isLocalHost,
     openPath,
-    openWorkspace,
-    workspaceOpenTargets,
   } = useHostDaemon();
+  const threadEnvironmentIsLocal = environment ? isLocalHost(environment.hostId) : false;
+  const { openWorkspace, workspaceOpenTargets } = useWorkspaceOpenTargets({
+    enabled: Boolean(
+      environment &&
+        threadEnvironmentIsLocal &&
+        environment.status === "ready",
+    ),
+  });
   const { data: environmentHost } = useHost(environment?.hostId);
   const isReasoningBlockActive = false;
   const isThreadTimelinePending = timelineLoading && threadDetailRows.length === 0;
@@ -413,7 +420,6 @@ export function ThreadDetailView() {
     !managerThreads.some((manager) => manager.id === thread.id);
   const canTakeOverThread =
     thread.type === "standard" && Boolean(thread.parentThreadId);
-  const threadEnvironmentIsLocal = environment ? isLocalHost(environment.hostId) : false;
   const threadEnvironmentDisplay = environment
     ? formatEnvironmentDisplay({
         environment,

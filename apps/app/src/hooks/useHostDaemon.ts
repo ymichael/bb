@@ -1,15 +1,12 @@
 import { useAtomValue } from "jotai";
 import { useCallback, useMemo } from "react";
-import type { OpenWorkspaceRequest } from "@bb/host-daemon-contract";
 import {
   hostDaemonPortAtom,
   localHostIdAtom,
   localHostStatusAtom,
-  localWorkspaceOpenTargetsAtom,
 } from "@/lib/atoms";
 import {
   openPath as daemonOpenPath,
-  openWorkspace as daemonOpenWorkspace,
   pickFolder as daemonPickFolder,
 } from "@/lib/api-host-daemon";
 import { useHosts } from "./queries/system-queries";
@@ -23,16 +20,13 @@ import { useHosts } from "./queries/system-queries";
  * - `hasConnectedPersistentHost` — whether the local host's status is "connected"
  * - `hasDaemon` — whether a daemon is reachable
  * - `supportsNativeFolderPicker` — whether the daemon can open a native folder picker
- * - `workspaceOpenTargets` — local apps that can open a workspace path
  * - `isLocalHost(hostId)` — whether the given host matches this machine
  * - `openPath(path)` — open a path in the user's editor (null if no daemon)
- * - `openWorkspace(request)` — open a workspace path in a selected local app
  * - `pickFolder()` — open native folder picker (null if no daemon)
  */
 export function useHostDaemon() {
   const localHostId = useAtomValue(localHostIdAtom);
   const localHostStatus = useAtomValue(localHostStatusAtom);
-  const workspaceOpenTargets = useAtomValue(localWorkspaceOpenTargetsAtom);
   const daemonPort = useAtomValue(hostDaemonPortAtom);
   const { data: hosts } = useHosts();
 
@@ -72,12 +66,6 @@ export function useHostDaemon() {
     return (path: string) => daemonOpenPath(port, path);
   }, [localHostId, daemonPort]);
 
-  const openWorkspace = useMemo(() => {
-    if (!localHostId || !daemonPort || workspaceOpenTargets.length === 0) return null;
-    const port = daemonPort;
-    return (request: OpenWorkspaceRequest) => daemonOpenWorkspace(port, request);
-  }, [localHostId, daemonPort, workspaceOpenTargets.length]);
-
   const pickFolder = useMemo(() => {
     if (!localHostId || !daemonPort || !supportsNativeFolderPicker) return null;
     const port = daemonPort;
@@ -92,10 +80,8 @@ export function useHostDaemon() {
     hasDaemon,
     supportsNativeFolderPicker,
     platform,
-    workspaceOpenTargets,
     isLocalHost,
     openPath,
-    openWorkspace,
     pickFolder,
   };
 }

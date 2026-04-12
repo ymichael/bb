@@ -119,7 +119,7 @@ const WORKSPACE_OPEN_TARGET_DEFINITIONS: WorkspaceOpenTargetDefinition[] = [
     kind: "editor",
     macos: {
       appName: "Antigravity",
-      bundleIds: ["com.googlelabs.antigravity"],
+      bundleIds: ["com.google.antigravity", "com.googlelabs.antigravity"],
       builtIn: false,
     },
   },
