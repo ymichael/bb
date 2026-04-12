@@ -5,10 +5,12 @@ import { serve } from "@hono/node-server";
 import {
   healthResponseSchema,
   openRequestSchema,
+  pathsExistRequestSchema,
   restartRequestSchema,
   typedRoutes,
   type HostDaemonActiveThread,
   type HostDaemonLocalSchema,
+  type HostPlatform,
 } from "@bb/host-daemon-contract";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
@@ -55,6 +57,18 @@ export function resolveNativeFolderPicker(
     : null;
 }
 
+export function resolveHostPlatform(
+  nodePlatform: NodeJS.Platform = process.platform,
+  env: NodeJS.ProcessEnv = process.env,
+): HostPlatform {
+  if (nodePlatform === "darwin") return "darwin";
+  if (nodePlatform === "linux") {
+    const isWsl = env.WSL_DISTRO_NAME != null || env.WSL_INTEROP != null;
+    return isWsl ? "wsl" : "linux";
+  }
+  return "unknown";
+}
+
 export async function startLocalApiServer(
   options: StartLocalApiServerOptions,
 ): Promise<LocalApiServer> {
@@ -75,6 +89,7 @@ export async function startLocalApiServer(
   const nativeFolderPicker = resolveNativeFolderPicker({
     pickFolder: options.pickFolder,
   });
+  const platform = resolveHostPlatform();
 
   get("/status", (c) =>
     c.json({
@@ -82,16 +97,24 @@ export async function startLocalApiServer(
       connected: options.getConnected(),
       serverUrl: options.serverUrl,
       supportsNativeFolderPicker: nativeFolderPicker !== null,
+      platform,
     }),
   );
 
   post("/open-path", openRequestSchema, async (c, payload) => {
     const stat = await fs.stat(payload.path).catch(() => null);
     if (!stat) {
-      throw new HTTPException(400, { message: `Path does not exist: ${payload.path}` });
+      throw new HTTPException(400, { message: "Path does not exist" });
     }
     await (options.openPath ?? openLocalPath)(payload.path);
     return c.json({});
+  });
+
+  post("/paths/exist", pathsExistRequestSchema, async (c, payload) => {
+    const entries = await Promise.all(
+      payload.paths.map(async (path) => [path, await pathExists(path)] as const),
+    );
+    return c.json({ existence: Object.fromEntries(entries) });
   });
 
   post("/pick-folder", async (c) => {
@@ -150,6 +173,21 @@ function defaultScheduleRestart(restart: () => void): void {
   setTimeout(restart, 0);
 }
 
+async function pathExists(path: string): Promise<boolean> {
+  try {
+    await fs.stat(path);
+    return true;
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === "ENOENT" || code === "ENOTDIR") {
+      return false;
+    }
+    // Permission denied / loops / etc. — we can't tell, but the entry exists
+    // enough to error on, so don't claim it's missing.
+    return true;
+  }
+}
+
 async function openLocalPath(path: string): Promise<void> {
   const child = await open(path, {
     background: true,
@@ -163,7 +201,7 @@ async function pickLocalFolder(): Promise<string | null> {
   try {
     const result = await execFileAsync("osascript", [
       "-e",
-      'try\nPOSIX path of (choose folder with prompt "Choose a folder for bb")\non error number -128\nreturn ""\nend try',
+      'try\nPOSIX path of (choose folder with prompt "Choose a project folder")\non error number -128\nreturn ""\nend try',
     ]);
     stdout = result.stdout;
   } catch (error) {

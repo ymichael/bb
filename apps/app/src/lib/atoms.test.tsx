@@ -23,6 +23,7 @@ interface SystemConfigRouteState {
     hostId: string
     serverUrl: string
     supportsNativeFolderPicker: boolean
+    platform: "darwin" | "linux" | "wsl"
   } | null>
 }
 
@@ -148,6 +149,7 @@ describe("atoms", () => {
           hostId: "host-1",
           serverUrl: "http://localhost:3334",
           supportsNativeFolderPicker: true,
+          platform: "darwin",
         },
         null,
       ],

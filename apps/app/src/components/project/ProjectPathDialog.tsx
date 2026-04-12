@@ -1,10 +1,10 @@
 import { useEffect, useId, useState, type FormEvent } from "react"
-import { FolderOpen } from "lucide-react"
 import {
   deriveProjectNameFromPath,
   getProjectPathValidationMessage,
   normalizeProjectPathInput,
 } from "@bb/domain"
+import type { HostPlatform } from "@bb/host-daemon-contract"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -26,8 +26,12 @@ export type ProjectPathDialogTarget =
       projectName: string
       currentPath: string
     }
+  | {
+      kind: "add-source"
+      projectId: string
+      projectName: string
+    }
 
-export type ProjectPathDialogFolderPicker = (() => Promise<string | null>) | null
 export type ProjectPathDialogSubmitHandler = (
   target: ProjectPathDialogTarget,
   path: string,
@@ -36,7 +40,7 @@ export type ProjectPathDialogSubmitHandler = (
 interface ProjectPathDialogProps {
   target: ProjectPathDialogTarget | null
   pending?: boolean
-  pickFolder: ProjectPathDialogFolderPicker
+  platform: HostPlatform | null
   onOpenChange: (open: boolean) => void
   onSubmit: ProjectPathDialogSubmitHandler
 }
@@ -44,7 +48,7 @@ interface ProjectPathDialogProps {
 export function ProjectPathDialog({
   target,
   pending = false,
-  pickFolder,
+  platform,
   onOpenChange,
   onSubmit,
 }: ProjectPathDialogProps) {
@@ -56,7 +60,7 @@ export function ProjectPathDialog({
             key={target.kind === "create" ? "create" : target.projectId}
             target={target}
             pending={pending}
-            pickFolder={pickFolder}
+            platform={platform}
             onSubmit={onSubmit}
           />
         ) : null}
@@ -68,14 +72,56 @@ export function ProjectPathDialog({
 interface ProjectPathDialogContentProps {
   target: ProjectPathDialogTarget
   pending: boolean
-  pickFolder: ProjectPathDialogFolderPicker
+  platform: HostPlatform | null
   onSubmit: ProjectPathDialogSubmitHandler
+}
+
+interface PlatformCopy {
+  description: string
+  placeholder: string
+}
+
+function getDialogTitle(kind: ProjectPathDialogTarget["kind"]): string {
+  switch (kind) {
+    case "create":
+      return "Create project"
+    case "update":
+      return "Update project path"
+    case "add-source":
+      return "Add project source"
+  }
+}
+
+function getDialogSubmitLabel(kind: ProjectPathDialogTarget["kind"]): string {
+  switch (kind) {
+    case "create":
+      return "Create project"
+    case "update":
+      return "Save path"
+    case "add-source":
+      return "Add source"
+  }
+}
+
+function getPlatformCopy(platform: HostPlatform | null): PlatformCopy {
+  const placeholder = "/path/to/project"
+  if (platform === "wsl") {
+    return {
+      description:
+        "Enter an absolute path to the project folder. Use /mnt/c/... to point at a Windows checkout.",
+      placeholder,
+    }
+  }
+  return {
+    description: "Enter an absolute path to the project folder.",
+    placeholder,
+  }
 }
 
 function ProjectPathDialogContent({
   target,
   pending,
-  pickFolder,
+  platform,
   onSubmit,
 }: ProjectPathDialogContentProps) {
   const inputId = useId()
@@ -84,7 +130,11 @@ function ProjectPathDialogContent({
   )
   const [validationMessage, setValidationMessage] = useState<string | null>(null)
   const derivedProjectName = deriveProjectNameFromPath(pathValue)
-  const showNativePickerButton = pickFolder != null
+  const copy = getPlatformCopy(platform)
+  const placeholder =
+    target.kind === "update"
+      ? target.currentPath || copy.placeholder
+      : copy.placeholder
 
   useEffect(() => {
     if (validationMessage) {
@@ -111,24 +161,11 @@ function ProjectPathDialogContent({
     void onSubmit(target, normalizedPath)
   }
 
-  const handleChooseFolder = async () => {
-    if (pending || !pickFolder) return
-
-    const selectedPath = await pickFolder()
-    if (!selectedPath) return
-    setPathValue(normalizeProjectPathInput(selectedPath))
-  }
-
   return (
     <>
       <DialogHeader>
-        <DialogTitle>
-          {target.kind === "create" ? "Create project" : "Update project path"}
-        </DialogTitle>
-        <DialogDescription>
-          Enter a Linux or WSL absolute path to the project folder. You can
-          also use the native folder picker when it is available on this host.
-        </DialogDescription>
+        <DialogTitle>{getDialogTitle(target.kind)}</DialogTitle>
+        <DialogDescription>{copy.description}</DialogDescription>
       </DialogHeader>
       <form className="space-y-4" onSubmit={handleSubmit}>
         <div className="space-y-2">
@@ -138,7 +175,7 @@ function ProjectPathDialogContent({
             value={pathValue}
             autoFocus
             disabled={pending}
-            placeholder={target.kind === "create" ? "/srv/repos/bb" : target.currentPath || "/srv/repos/bb"}
+            placeholder={placeholder}
             onChange={(event) => {
               setPathValue(event.target.value)
             }}
@@ -152,24 +189,9 @@ function ProjectPathDialogContent({
             <p className="text-sm text-destructive">{validationMessage}</p>
           ) : null}
         </div>
-        <DialogFooter className="sm:justify-between">
-          <div>
-            {showNativePickerButton ? (
-              <Button
-                type="button"
-                variant="outline"
-                disabled={pending}
-                onClick={() => {
-                  void handleChooseFolder()
-                }}
-              >
-                <FolderOpen />
-                Choose folder
-              </Button>
-            ) : null}
-          </div>
+        <DialogFooter>
           <Button type="submit" disabled={pending}>
-            {target.kind === "create" ? "Create project" : "Save path"}
+            {getDialogSubmitLabel(target.kind)}
           </Button>
         </DialogFooter>
       </form>

@@ -69,6 +69,7 @@ function installQuickCreateFetchRoutes(
             hostId: "host-1",
             serverUrl: "http://localhost:3334",
             supportsNativeFolderPicker: false,
+            platform: "linux",
           })
           : new Response(null, { status: 503 }),
     },

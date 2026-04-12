@@ -149,7 +149,7 @@ describe("public project and host routes", () => {
       expect(createResponse.status).toBe(400);
       await expect(readJson(createResponse)).resolves.toMatchObject({
         code: "invalid_request",
-        message: expect.stringContaining("Project path must be an absolute Linux or WSL path"),
+        message: expect.stringContaining("Project path must be an absolute path"),
       });
 
       const updateResponse = await harness.app.request(
@@ -168,7 +168,7 @@ describe("public project and host routes", () => {
       expect(updateResponse.status).toBe(400);
       await expect(readJson(updateResponse)).resolves.toMatchObject({
         code: "invalid_request",
-        message: expect.stringContaining("Project path must be an absolute Linux or WSL path"),
+        message: expect.stringContaining("Project path must be an absolute path"),
       });
 
       const nativeWindowsCreateResponse = await harness.app.request("/api/v1/projects", {

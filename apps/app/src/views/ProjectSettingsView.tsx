@@ -1,14 +1,14 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useAtomValue } from "jotai";
 import { useDebounceValue } from "usehooks-ts";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Monitor, MoreHorizontal } from "lucide-react";
-import { GitHubIcon } from "@/components/icons/GitHubIcon";
+import { Loader2 } from "lucide-react";
 import {
   findLocalPathProjectSourceForHost,
   isGitHubRepoProjectSource,
   isLocalPathProjectSource,
+  type LocalPathProjectSource,
   type ProjectSource,
 } from "@bb/domain";
 import { Button } from "@/components/ui/button";
@@ -21,16 +21,20 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { PageShell } from "@/components/layout/PageShell";
+import { ProjectPathDialog } from "@/components/project/ProjectPathDialog";
 import { SettingsSection } from "@/components/settings/SettingsSection";
-import { SettingsRow, SettingsRowList } from "@/components/settings/SettingsRow";
-import { useHostDaemon } from "@/hooks/useHostDaemon";
+import { SettingsRowList } from "@/components/settings/SettingsRow";
+import { ProjectSourceRow } from "@/views/project-settings/ProjectSourceRow";
+import {
+  useAddLocalProjectSource,
+  useUpdateLocalProjectSource,
+} from "@/hooks/mutations/project-mutations";
+import {
+  isLocalPathMissing,
+  useLocalPathExistence,
+} from "@/hooks/queries/host-path-queries";
+import { useLocalPathPicker, type LocalPathSubmitParams } from "@/hooks/useLocalPathPicker";
 import { useProjects } from "@/hooks/queries/project-queries";
 import { projectsQueryKey } from "@/hooks/queries/query-keys";
 import { useGithubRepos, useHosts } from "@/hooks/queries/system-queries";
@@ -49,7 +53,6 @@ export function ProjectSettingsView() {
   const { data: projects, isLoading } = useProjects();
   const { data: hosts = [] } = useHosts();
   const queryClient = useQueryClient();
-  const { localHostId, pickFolder } = useHostDaemon();
   const githubConnected = useAtomValue(githubConnectedAtom);
 
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; label: string } | null>(null);
@@ -70,21 +73,8 @@ export function ProjectSettingsView() {
     },
   });
 
-  const addSource = useMutation({
-    mutationFn: async () => {
-      if (!pickFolder || !localHostId || !projectId) return;
-      const selectedPath = await pickFolder();
-      if (!selectedPath) return;
-      await api.addProjectSource(projectId, {
-        type: "local_path",
-        hostId: localHostId,
-        path: selectedPath,
-      });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: projectsQueryKey() });
-    },
-  });
+  const addLocalSource = useAddLocalProjectSource();
+  const updateLocalSource = useUpdateLocalProjectSource();
 
   const addGitHubSource = useMutation({
     mutationFn: async (repoUrl: string) => {
@@ -127,15 +117,73 @@ export function ProjectSettingsView() {
   const hostNameById = useMemo(() => new Map(hosts.map((h) => [h.id, h.name])), [hosts]);
   const hasGitHubSource = sources.some(isGitHubRepoProjectSource);
 
-  const canAddLocalSource =
-    localHostId != null &&
-    pickFolder != null &&
-    !findLocalPathProjectSourceForHost(sources, localHostId);
-  const canAddGitHubSource = githubConnected && !hasGitHubSource;
+  const projectName = project?.name ?? "";
+  const localSourcePickerPending =
+    addLocalSource.isPending || updateLocalSource.isPending;
+  const localSourceSubmit = useCallback(
+    ({ path, hostId, target, closeDialog }: LocalPathSubmitParams) => {
+      if (!projectId) return;
+      if (target.kind === "add-source") {
+        addLocalSource.mutate(
+          { projectId, path, hostId },
+          { onSuccess: closeDialog },
+        );
+      } else if (target.kind === "update") {
+        const source = sources.find(
+          (candidate): candidate is LocalPathProjectSource =>
+            isLocalPathProjectSource(candidate) && candidate.hostId === hostId,
+        );
+        if (!source) return;
+        updateLocalSource.mutate(
+          { projectId, sourceId: source.id, path },
+          { onSuccess: closeDialog },
+        );
+      }
+    },
+    [addLocalSource, projectId, sources, updateLocalSource],
+  );
+  const localSourcePicker = useLocalPathPicker({
+    isPending: localSourcePickerPending,
+    submit: localSourceSubmit,
+  });
+  const openAddLocalSourcePicker = useCallback(() => {
+    if (!projectId) return;
+    localSourcePicker.openPicker({
+      kind: "add-source",
+      projectId,
+      projectName,
+    });
+  }, [localSourcePicker, projectId, projectName]);
+  const openEditLocalSourcePicker = useCallback(
+    (source: LocalPathProjectSource) => {
+      if (!projectId) return;
+      localSourcePicker.openPicker({
+        kind: "update",
+        projectId,
+        projectName,
+        currentPath: source.path,
+      });
+    },
+    [localSourcePicker, projectId, projectName],
+  );
+  const localHostId = localSourcePicker.localHostId;
 
-  const addSourceButtons = (canAddLocalSource || canAddGitHubSource) ? (
+  const localhostSourcePaths = useMemo(() => {
+    if (!localHostId) return [] as string[];
+    return sources
+      .filter((source): source is LocalPathProjectSource =>
+        isLocalPathProjectSource(source) && source.hostId === localHostId)
+      .map((source) => source.path);
+  }, [localHostId, sources]);
+  const pathExistence = useLocalPathExistence(localhostSourcePaths);
+
+  const showAddLocalSourceButton =
+    localHostId != null && !findLocalPathProjectSourceForHost(sources, localHostId);
+  const showAddGitHubSourceButton = githubConnected && !hasGitHubSource;
+
+  const addSourceButtons = (showAddLocalSourceButton || showAddGitHubSourceButton) ? (
     <div className="mt-2 flex gap-2">
-      {canAddGitHubSource && (
+      {showAddGitHubSourceButton && (
         <Button
           size="sm"
           variant="outline"
@@ -144,12 +192,12 @@ export function ProjectSettingsView() {
           Connect GitHub repo
         </Button>
       )}
-      {canAddLocalSource && (
+      {showAddLocalSourceButton && (
         <Button
           size="sm"
           variant="outline"
-          disabled={addSource.isPending}
-          onClick={() => addSource.mutate()}
+          disabled={addLocalSource.isPending}
+          onClick={openAddLocalSourcePicker}
         >
           Add local path
         </Button>
@@ -173,53 +221,35 @@ export function ProjectSettingsView() {
           ) : (
             <div>
               <SettingsRowList>
-                {sources.map((source) => (
-                  <SettingsRow key={source.id}>
-                    {isLocalPathProjectSource(source) ? (
-                      <Monitor className="size-4 shrink-0 text-muted-foreground" />
-                    ) : (
-                      <GitHubIcon className="size-4 shrink-0" />
-                    )}
-                    <span className="min-w-0 flex-1 truncate">
-                      {isLocalPathProjectSource(source) ? (
-                        <>
-                          {source.path}
-                          <span className="ml-1.5 text-xs text-muted-foreground">
-                            {hostNameById.get(source.hostId) ?? source.hostId}
-                          </span>
-                        </>
-                      ) : (
-                        source.repoUrl
-                      )}
-                    </span>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 shrink-0 data-[state=open]:bg-accent data-[state=open]:text-accent-foreground"
-                          aria-label="Source actions"
-                        >
-                          <MoreHorizontal className="size-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-40">
-                        <DropdownMenuItem
-                          className="text-destructive focus:text-destructive"
-                          disabled={sources.length <= 1}
-                          onSelect={() =>
-                            setDeleteTarget({
-                              id: source.id,
-                              label: sourceLabel(source, hostNameById),
-                            })
-                          }
-                        >
-                          Remove
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </SettingsRow>
-                ))}
+                {sources.map((source) => {
+                  const isLocalhostSource =
+                    isLocalPathProjectSource(source) &&
+                    localHostId != null &&
+                    source.hostId === localHostId;
+                  const isInvalid =
+                    isLocalhostSource && isLocalPathMissing(pathExistence, source.path);
+                  const hostName = isLocalPathProjectSource(source)
+                    ? hostNameById.get(source.hostId) ?? source.hostId
+                    : "";
+                  return (
+                    <ProjectSourceRow
+                      key={source.id}
+                      source={source}
+                      isLocalhostSource={isLocalhostSource}
+                      isLocalPathInvalid={isInvalid}
+                      hostName={hostName}
+                      isEditPending={localSourcePickerPending}
+                      isOnlySource={sources.length <= 1}
+                      onEditLocalPath={openEditLocalSourcePicker}
+                      onRemove={(target) =>
+                        setDeleteTarget({
+                          id: target.id,
+                          label: sourceLabel(target, hostNameById),
+                        })
+                      }
+                    />
+                  );
+                })}
               </SettingsRowList>
               {addSourceButtons}
             </div>
@@ -227,6 +257,14 @@ export function ProjectSettingsView() {
         </SettingsSection>
 
       </div>
+
+      <ProjectPathDialog
+        target={localSourcePicker.projectPathDialog.target}
+        pending={localSourcePickerPending}
+        platform={localSourcePicker.platform}
+        onOpenChange={localSourcePicker.projectPathDialog.onOpenChange}
+        onSubmit={localSourcePicker.submitProjectPath}
+      />
 
       <Dialog open={repoPickerOpen} onOpenChange={(open) => {
         setRepoPickerOpen(open);

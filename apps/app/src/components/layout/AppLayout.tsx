@@ -432,7 +432,7 @@ export function AppLayout({ children }: AppLayoutProps) {
     <ProjectPathDialog
       target={quickCreateProject.projectPathDialog.target}
       pending={quickCreateProject.isCreating}
-      pickFolder={quickCreateProject.pickFolder}
+      platform={quickCreateProject.platform}
       onOpenChange={quickCreateProject.projectPathDialog.onOpenChange}
       onSubmit={quickCreateProject.submitProjectPath}
     />

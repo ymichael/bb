@@ -29,11 +29,31 @@ export const pickFolderResponseSchema = z.object({
 });
 export type PickFolderResponse = z.infer<typeof pickFolderResponseSchema>;
 
+export const PATHS_EXIST_MAX_PATHS = 200;
+
+export const pathsExistRequestSchema = z.object({
+  paths: z
+    .array(z.string().min(1))
+    .min(1)
+    .max(PATHS_EXIST_MAX_PATHS)
+    .transform((paths) => Array.from(new Set(paths))),
+});
+export type PathsExistRequest = z.infer<typeof pathsExistRequestSchema>;
+
+export const pathsExistResponseSchema = z.object({
+  existence: z.record(z.string(), z.boolean()),
+});
+export type PathsExistResponse = z.infer<typeof pathsExistResponseSchema>;
+
+export const hostPlatformSchema = z.enum(["darwin", "linux", "wsl", "unknown"]);
+export type HostPlatform = z.infer<typeof hostPlatformSchema>;
+
 export const statusResponseSchema = z.object({
   hostId: z.string().min(1),
   connected: z.boolean(),
   serverUrl: z.string(),
   supportsNativeFolderPicker: z.boolean(),
+  platform: hostPlatformSchema,
 });
 export type StatusResponse = z.infer<typeof statusResponseSchema>;
 
@@ -53,6 +73,9 @@ export type HostDaemonLocalSchema = {
   };
   "/pick-folder": {
     $post: Endpoint<EmptyInput, PickFolderResponse>;
+  };
+  "/paths/exist": {
+    $post: Endpoint<{ json: PathsExistRequest }, PathsExistResponse>;
   };
   "/status": {
     $get: Endpoint<EmptyInput, StatusResponse>;

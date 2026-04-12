@@ -34,6 +34,7 @@ interface HostDaemonSnapshot {
   openPath: ((path: string) => Promise<void>) | null
   pickFolder: (() => Promise<string | null>) | null
   supportsNativeFolderPicker: boolean
+  platform: "darwin" | "linux" | "wsl" | "unknown" | null
 }
 
 interface HostDaemonModules {
@@ -183,6 +184,7 @@ describe("useHostDaemon", () => {
         hostId: "host-1",
         serverUrl: "http://localhost:3334",
         supportsNativeFolderPicker: true,
+        platform: "darwin",
       },
       hostDaemonPort: 4123,
       hosts: [makeHost()],
@@ -260,6 +262,7 @@ describe("useHostDaemon", () => {
         hostId: "host-1",
         serverUrl: "http://localhost:3334",
         supportsNativeFolderPicker: false,
+        platform: "linux",
       },
       hostDaemonPort: 4123,
       hosts: [makeHost()],
@@ -287,6 +290,7 @@ describe("useHostDaemon", () => {
       hostId: "host-1",
       serverUrl: "http://localhost:3334",
       supportsNativeFolderPicker: true,
+      platform: "linux",
     }
     socket.open()
 

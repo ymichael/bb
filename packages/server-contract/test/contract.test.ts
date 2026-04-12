@@ -306,7 +306,7 @@ describe("server-contract canonical schemas", () => {
         type: "local_path",
         path: "relative/project",
       }),
-    ).toThrow("Project path must be an absolute Linux or WSL path.");
+    ).toThrow("Project path must be an absolute path.");
 
     expect(
       createProjectSourceRequestSchema.parse({
@@ -338,7 +338,7 @@ describe("server-contract canonical schemas", () => {
         type: "local_path",
         path: "relative/path",
       }),
-    ).toThrow("Project path must be an absolute Linux or WSL path.");
+    ).toThrow("Project path must be an absolute path.");
 
     expect(
       timelineToolDetailsResponseSchema.parse({ messages: [] }),

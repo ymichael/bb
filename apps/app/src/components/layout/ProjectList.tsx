@@ -1,13 +1,25 @@
 import { useCallback, useMemo } from "react"
 import { useAtom } from "jotai"
 import { useQueries } from "@tanstack/react-query"
-import type { Thread } from "@bb/domain"
+import {
+  findLocalPathProjectSourceForHost,
+  type Thread,
+} from "@bb/domain"
 import { Folder, Plus } from "lucide-react"
 import { useLocation, useNavigate } from "react-router-dom"
 import { atomWithStorage } from "jotai/utils"
+import { useAddLocalProjectSource } from "@/hooks/mutations/project-mutations"
 import { useProjects } from "@/hooks/queries/project-queries"
+import {
+  isLocalPathMissing,
+  useLocalPathExistence,
+} from "@/hooks/queries/host-path-queries"
 import { threadListQueryKey } from "@/hooks/queries/query-keys"
 import { useHostDaemon } from "@/hooks/useHostDaemon"
+import {
+  useLocalPathPicker,
+  type LocalPathSubmitParams,
+} from "@/hooks/useLocalPathPicker"
 import * as api from "@/lib/api"
 import { createJsonLocalStorage } from "@/lib/browser-storage"
 import { EmptyState } from "@/components/shared/EmptyState"
@@ -71,9 +83,42 @@ export function ProjectList({
       threadsLoading: results.some((result) => result.isLoading),
     }),
   })
-  const { localHostId, pickFolder } = useHostDaemon()
+  const { localHostId } = useHostDaemon()
   const location = useLocation()
   const navigate = useNavigate()
+
+  const localPaths = useMemo(() => {
+    if (!localHostId || !projects) return []
+    return projects
+      .map((project) => findLocalPathProjectSourceForHost(project.sources, localHostId)?.path)
+      .filter((path): path is string => typeof path === "string")
+  }, [localHostId, projects])
+  const pathExistence = useLocalPathExistence(localPaths)
+
+  const addLocalSource = useAddLocalProjectSource()
+  const addLocalSourceSubmit = useCallback(
+    ({ path, hostId, target, closeDialog }: LocalPathSubmitParams) => {
+      if (target.kind !== "add-source") return
+      addLocalSource.mutate(
+        { projectId: target.projectId, path, hostId },
+        { onSuccess: closeDialog },
+      )
+    },
+    [addLocalSource],
+  )
+  const addLocalSourcePicker = useLocalPathPicker({
+    isPending: addLocalSource.isPending,
+    submit: addLocalSourceSubmit,
+  })
+  const openAddLocalPath = useCallback((projectId: string) => {
+    const project = projects?.find((candidate) => candidate.id === projectId)
+    if (!project) return
+    addLocalSourcePicker.openPicker({
+      kind: "add-source",
+      projectId,
+      projectName: project.name,
+    })
+  }, [addLocalSourcePicker, projects])
   const [collapsedProjectIdList, setCollapsedProjectIdList] = useAtom(collapsedProjectIdsAtom)
   const [collapsedManagerIdList, setCollapsedManagerIdList] = useAtom(collapsedManagerIdsAtom)
   const selectedThreadId = location.pathname.match(/^\/projects\/[^/]+\/threads\/([^/]+)/)?.[1]
@@ -119,8 +164,6 @@ export function ProjectList({
   }, [navigate, selectedThreadId])
 
   const actions = useProjectListActions({
-    localHostId,
-    projects,
     threads,
     onProjectRemoved: handleProjectRemoved,
     onThreadDeleted: handleThreadDeleted,
@@ -177,34 +220,39 @@ export function ProjectList({
               <SidebarMenuSkeleton />
             </>
           ) : projects && projects.length > 0 ? (
-            projects.map((project) => (
-              <ProjectRow
-                key={project.id}
-                project={project}
-                projectThreads={threadsByProject.get(project.id) ?? []}
-                threadsLoading={threadsLoading}
-                localHostId={localHostId}
-                selectedThreadId={selectedThreadId}
-                isActive={selectedProjectId === project.id && !selectedThreadId}
-                isCollapsed={collapsedProjectIds.has(project.id)}
-                collapsedManagerIds={collapsedManagerIds}
-                isProjectRenamePending={actions.isProjectRenamePending}
-                isProjectDeletePending={actions.isProjectDeletePending}
-                isPathUpdating={actions.pathUpdateProjectId === project.id}
-                areThreadActionsDisabled={actions.threadActionsDisabled}
-                onProjectSelect={onProjectSelect}
-                onToggleProjectCollapsed={toggleProjectCollapsed}
-                onToggleManagerCollapsed={toggleManagerCollapsed}
-                onRenameProject={actions.requestRenameProject}
-                onChangeProjectPath={actions.updateProjectPath}
-                onRepairProjectPath={actions.updateProjectPath}
-                onDeleteProject={actions.requestDeleteProject}
-                onRenameThread={actions.requestRenameThread}
-                onToggleThreadArchive={actions.toggleThreadArchive}
-                onDeleteThread={actions.requestDeleteThread}
-                onToggleThreadRead={actions.toggleThreadRead}
-              />
-            ))
+            projects.map((project) => {
+              const localSourcePath = localHostId
+                ? findLocalPathProjectSourceForHost(project.sources, localHostId)?.path
+                : undefined
+              const isLocalPathInvalid = isLocalPathMissing(pathExistence, localSourcePath)
+              return (
+                <ProjectRow
+                  key={project.id}
+                  project={project}
+                  projectThreads={threadsByProject.get(project.id) ?? []}
+                  threadsLoading={threadsLoading}
+                  localHostId={localHostId}
+                  selectedThreadId={selectedThreadId}
+                  isActive={selectedProjectId === project.id && !selectedThreadId}
+                  isCollapsed={collapsedProjectIds.has(project.id)}
+                  collapsedManagerIds={collapsedManagerIds}
+                  isProjectRenamePending={actions.isProjectRenamePending}
+                  isProjectDeletePending={actions.isProjectDeletePending}
+                  isLocalPathInvalid={isLocalPathInvalid}
+                  areThreadActionsDisabled={actions.threadActionsDisabled}
+                  onProjectSelect={onProjectSelect}
+                  onToggleProjectCollapsed={toggleProjectCollapsed}
+                  onToggleManagerCollapsed={toggleManagerCollapsed}
+                  onRenameProject={actions.requestRenameProject}
+                  onAddLocalPath={openAddLocalPath}
+                  onDeleteProject={actions.requestDeleteProject}
+                  onRenameThread={actions.requestRenameThread}
+                  onToggleThreadArchive={actions.toggleThreadArchive}
+                  onDeleteThread={actions.requestDeleteThread}
+                  onToggleThreadRead={actions.toggleThreadRead}
+                />
+              )
+            })
           ) : (
             <SidebarMenuItem>
               <EmptyState
@@ -237,11 +285,11 @@ export function ProjectList({
         onDelete={actions.confirmDeleteProject}
       />
       <ProjectPathDialog
-        target={actions.projectPathDialog.target}
-        pending={actions.pathUpdateProjectId !== null}
-        pickFolder={pickFolder}
-        onOpenChange={actions.projectPathDialog.onOpenChange}
-        onSubmit={actions.submitProjectPath}
+        target={addLocalSourcePicker.projectPathDialog.target}
+        pending={addLocalSource.isPending}
+        platform={addLocalSourcePicker.platform}
+        onOpenChange={addLocalSourcePicker.projectPathDialog.onOpenChange}
+        onSubmit={addLocalSourcePicker.submitProjectPath}
       />
       <ThreadRenameDialog
         target={actions.threadRenameDialog.target}

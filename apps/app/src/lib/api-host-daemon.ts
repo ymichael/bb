@@ -56,11 +56,32 @@ export async function openPath(port: number, path: string): Promise<void> {
 /**
  * Open a native folder picker dialog via the host daemon.
  * Returns the selected path, or null if cancelled.
+ * Returns null if the daemon rejects the request (e.g. the host has no
+ * native picker support).
  */
 export async function pickFolder(port: number): Promise<string | null> {
   const daemon = getHostDaemonClient(port);
   const res = await daemon["pick-folder"].$post({});
   if (!res.ok) return null;
-  const body = (await res.json()) as { path: string | null };
+  const body = await res.json();
   return body.path;
+}
+
+/**
+ * Probe the daemon for the existence of each path. Throws if the daemon is
+ * unreachable or returns an error so React Query callers can surface
+ * `isError` instead of silently treating "unknown" as "exists".
+ */
+export async function checkPathsExist(
+  port: number,
+  paths: string[],
+): Promise<Record<string, boolean>> {
+  if (paths.length === 0) return {};
+  const daemon = getHostDaemonClient(port);
+  const res = await daemon.paths.exist.$post({ json: { paths } });
+  if (!res.ok) {
+    throw new Error(`Path existence check failed: HTTP ${res.status}`);
+  }
+  const body = await res.json();
+  return body.existence;
 }

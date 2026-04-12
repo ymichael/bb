@@ -2,14 +2,17 @@ import {
   createContext,
   useCallback,
   useContext,
+  useMemo,
   type ReactNode,
 } from "react"
 import { deriveProjectNameFromPath } from "@bb/domain"
+import type { HostPlatform } from "@bb/host-daemon-contract"
 import { useCreateProject } from "@/hooks/mutations/project-mutations"
-import { useDialogState } from "@/hooks/useDialogState"
-import { useHostDaemon } from "@/hooks/useHostDaemon"
+import {
+  useLocalPathPicker,
+  type LocalPathSubmitParams,
+} from "@/hooks/useLocalPathPicker"
 import type {
-  ProjectPathDialogFolderPicker,
   ProjectPathDialogSubmitHandler,
   ProjectPathDialogTarget,
 } from "@/components/project/ProjectPathDialog"
@@ -24,57 +27,53 @@ export interface QuickCreateProjectController {
   isAvailable: boolean
   isCreating: boolean
   openCreateDialog: () => void
-  pickFolder: ProjectPathDialogFolderPicker
+  platform: HostPlatform | null
   projectPathDialog: QuickCreateProjectDialogState
   submitProjectPath: ProjectPathDialogSubmitHandler
 }
 
 const quickCreateProjectContext = createContext<QuickCreateProjectController | null>(null)
 
-export function useQuickCreateProject() {
+export function useQuickCreateProject(): QuickCreateProjectController {
   const { mutate, isPending } = useCreateProject()
-  const { localHostId, pickFolder } = useHostDaemon()
-  const projectPathDialog = useDialogState<ProjectPathDialogTarget>()
+
+  const submit = useCallback(
+    ({ path, hostId, target, closeDialog }: LocalPathSubmitParams) => {
+      if (target.kind !== "create") return
+      const name = deriveProjectNameFromPath(path).trim()
+      if (!name) return
+
+      mutate(
+        {
+          name,
+          source: { type: "local_path", hostId, path },
+        },
+        { onSuccess: closeDialog },
+      )
+    },
+    [mutate],
+  )
+
+  const controller = useLocalPathPicker({
+    isPending,
+    submit,
+  })
 
   const openCreateDialog = useCallback(() => {
-    if (isPending || !localHostId) {
-      return
-    }
+    controller.openPicker({ kind: "create" })
+  }, [controller])
 
-    projectPathDialog.onOpen({ kind: "create" })
-  }, [isPending, localHostId, projectPathDialog])
-
-  const submitProjectPath = useCallback((target: ProjectPathDialogTarget, path: string) => {
-    if (isPending || target.kind !== "create" || !localHostId) return
-
-    const name = deriveProjectNameFromPath(path).trim()
-    if (!name) {
-      return
-    }
-
-    mutate(
-      {
-        name,
-        source: { type: "local_path", hostId: localHostId, path },
-      },
-      {
-        onSuccess: () => {
-          projectPathDialog.onClose()
-        },
-      },
-    )
-  }, [isPending, localHostId, mutate, projectPathDialog])
-
-  const isAvailable = localHostId != null
-
-  return {
-    openCreateDialog,
-    pickFolder,
-    projectPathDialog,
-    submitProjectPath,
-    isCreating: isPending,
-    isAvailable,
-  }
+  return useMemo(
+    () => ({
+      isAvailable: controller.isAvailable,
+      isCreating: isPending,
+      openCreateDialog,
+      platform: controller.platform,
+      projectPathDialog: controller.projectPathDialog,
+      submitProjectPath: controller.submitProjectPath,
+    }),
+    [controller, isPending, openCreateDialog],
+  )
 }
 
 interface QuickCreateProjectProviderProps {

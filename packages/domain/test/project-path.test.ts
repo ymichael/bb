@@ -67,11 +67,17 @@ describe("project-path", () => {
     expect(getProjectPathValidationMessage("relative/path")).toBe(
       INVALID_PROJECT_PATH_MESSAGE,
     )
+    expect(INVALID_PROJECT_PATH_MESSAGE).toBe(
+      "Project path must be an absolute path.",
+    )
     expect(getProjectPathValidationMessage(windowsProjectPath)).toBe(
       UNSUPPORTED_NATIVE_WINDOWS_PROJECT_PATH_MESSAGE,
     )
     expect(getProjectPathValidationMessage(uncProjectPath)).toBe(
       UNSUPPORTED_NATIVE_WINDOWS_PROJECT_PATH_MESSAGE,
+    )
+    expect(UNSUPPORTED_NATIVE_WINDOWS_PROJECT_PATH_MESSAGE).toBe(
+      "Native Windows paths are not supported. Use a POSIX path like /home/me/repo or /mnt/c/Users/me/repo.",
     )
   })
 })

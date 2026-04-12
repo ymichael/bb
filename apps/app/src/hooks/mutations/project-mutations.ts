@@ -11,12 +11,25 @@ import {
   optimisticallyInsertThread,
 } from "../queries/query-cache";
 import {
+  localPathExistenceQueryKeyPrefix,
   projectFilesQueryKeyPrefix,
   projectsQueryKey,
   statusQueryKey,
   threadQueryKey,
   threadsQueryKey,
 } from "../queries/query-keys";
+
+interface AddLocalProjectSourceRequest {
+  projectId: string;
+  hostId: string;
+  path: string;
+}
+
+interface UpdateLocalProjectSourceRequest {
+  projectId: string;
+  sourceId: string;
+  path: string;
+}
 
 interface HireProjectManagerRequest {
   projectId: string;
@@ -115,6 +128,38 @@ export function useDeleteProject() {
       queryClient.invalidateQueries({ queryKey: projectsQueryKey() });
       queryClient.invalidateQueries({ queryKey: threadsQueryKey() });
       queryClient.invalidateQueries({ queryKey: statusQueryKey() });
+    },
+  });
+}
+
+export function useAddLocalProjectSource() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    meta: {
+      errorMessage: "Failed to add local source.",
+    },
+    mutationFn: ({ projectId, hostId, path }: AddLocalProjectSourceRequest) =>
+      api.addProjectSource(projectId, { type: "local_path", hostId, path }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: projectsQueryKey() });
+      queryClient.invalidateQueries({ queryKey: localPathExistenceQueryKeyPrefix() });
+    },
+  });
+}
+
+export function useUpdateLocalProjectSource() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    meta: {
+      errorMessage: "Failed to update local source.",
+    },
+    mutationFn: ({ projectId, sourceId, path }: UpdateLocalProjectSourceRequest) =>
+      api.updateProjectSource(projectId, sourceId, { type: "local_path", path }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: projectsQueryKey() });
+      queryClient.invalidateQueries({ queryKey: localPathExistenceQueryKeyPrefix() });
     },
   });
 }

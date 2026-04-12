@@ -23,6 +23,7 @@ export const CLOUD_AUTH_ATTEMPT_QUERY_KEY = "cloudAuthAttempt";
 export const SANDBOX_ENV_VARS_QUERY_KEY = "sandboxEnvVars";
 export const GITHUB_REPOS_QUERY_KEY = "githubRepos";
 export const STATUS_QUERY_KEY = "status";
+export const LOCAL_PATH_EXISTENCE_QUERY_KEY = "localPathExistence";
 
 export interface ThreadListQueryFilters {
   projectId?: string;
@@ -122,6 +123,14 @@ export type CloudAuthAttemptQueryKey = readonly [
 export type SandboxEnvVarsQueryKey = readonly [typeof SANDBOX_ENV_VARS_QUERY_KEY];
 export type GithubReposQueryKey = readonly [typeof GITHUB_REPOS_QUERY_KEY, string];
 export type StatusQueryKey = readonly [typeof STATUS_QUERY_KEY];
+export type LocalPathExistenceQueryKey = readonly [
+  typeof LOCAL_PATH_EXISTENCE_QUERY_KEY,
+  string,
+  readonly string[],
+];
+export type LocalPathExistenceQueryKeyPrefix = readonly [
+  typeof LOCAL_PATH_EXISTENCE_QUERY_KEY,
+];
 
 export function hostsQueryKey(): HostsQueryKey {
   return [HOSTS_QUERY_KEY];
@@ -302,4 +311,15 @@ export function githubReposQueryKey(q: string): GithubReposQueryKey {
 
 export function statusQueryKey(): StatusQueryKey {
   return [STATUS_QUERY_KEY];
+}
+
+export function localPathExistenceQueryKey(
+  hostId: string,
+  paths: readonly string[],
+): LocalPathExistenceQueryKey {
+  return [LOCAL_PATH_EXISTENCE_QUERY_KEY, hostId, paths];
+}
+
+export function localPathExistenceQueryKeyPrefix(): LocalPathExistenceQueryKeyPrefix {
+  return [LOCAL_PATH_EXISTENCE_QUERY_KEY];
 }

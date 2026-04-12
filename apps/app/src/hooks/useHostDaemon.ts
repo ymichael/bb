@@ -26,6 +26,7 @@ export function useHostDaemon() {
   const hasDaemon = localHostId != null;
   const supportsNativeFolderPicker =
     localHostStatus?.supportsNativeFolderPicker ?? false;
+  const platform = localHostStatus?.platform ?? null;
 
   const localHost = useMemo(() => {
     if (!localHostId || !hosts) return null;
@@ -71,6 +72,7 @@ export function useHostDaemon() {
     hasConnectedPersistentHost,
     hasDaemon,
     supportsNativeFolderPicker,
+    platform,
     isLocalHost,
     openPath,
     pickFolder,

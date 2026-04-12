@@ -7,14 +7,12 @@ import type { ProjectResponse } from "@bb/server-contract"
 import {
   AlertTriangle,
   ChevronRight,
-  CircleDashed,
   Folder,
   FolderOpen,
+  FolderPlus,
   MoreHorizontal,
   PencilLine,
-  SquarePen,
   Trash2,
-  Wrench,
 } from "lucide-react"
 import { NavLink } from "react-router-dom"
 import { EmptyState } from "@/components/shared/EmptyState"
@@ -40,14 +38,13 @@ interface ProjectRowProps {
   collapsedManagerIds: Set<string>
   isProjectRenamePending: boolean
   isProjectDeletePending: boolean
-  isPathUpdating: boolean
+  isLocalPathInvalid: boolean
   areThreadActionsDisabled: boolean
   onProjectSelect?: () => void
   onToggleProjectCollapsed: (projectId: string) => void
   onToggleManagerCollapsed: (threadId: string) => void
   onRenameProject: (project: ProjectResponse) => void
-  onChangeProjectPath: (projectId: string) => void
-  onRepairProjectPath: (projectId: string) => void
+  onAddLocalPath: (projectId: string) => void
   onDeleteProject: (project: ProjectResponse) => void
   onRenameThread: (thread: Thread) => void
   onToggleThreadArchive: (thread: Thread) => void
@@ -111,14 +108,13 @@ export function ProjectRow({
   collapsedManagerIds,
   isProjectRenamePending,
   isProjectDeletePending,
-  isPathUpdating,
+  isLocalPathInvalid,
   areThreadActionsDisabled,
   onProjectSelect,
   onToggleProjectCollapsed,
   onToggleManagerCollapsed,
   onRenameProject,
-  onChangeProjectPath,
-  onRepairProjectPath,
+  onAddLocalPath,
   onDeleteProject,
   onRenameThread,
   onToggleThreadArchive,
@@ -132,20 +128,18 @@ export function ProjectRow({
   const localSource = localHostId
     ? findLocalPathProjectSourceForHost(project.sources, localHostId)
     : undefined
-  const isProjectPathMissing = localHostId != null && !localSource
+  const showAddLocalPathMenuItem = localHostId != null && !localSource
   const isProjectActionsDisabled =
-    isProjectRenamePending || isProjectDeletePending || isPathUpdating
+    isProjectRenamePending || isProjectDeletePending
 
   return (
     <SidebarMenuItem className="space-y-1">
       <div
         className={cn(
           "group/project-row relative flex h-8 w-full items-center rounded-md text-sm transition-colors",
-          isProjectPathMissing
-            ? "border border-destructive/30 bg-destructive/10 text-destructive hover:bg-destructive/15"
-            : isActive
-              ? "bg-sidebar-border/80 text-sidebar-foreground"
-              : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+          isActive
+            ? "bg-sidebar-border/80 text-sidebar-foreground"
+            : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
         )}
         title={project.name}
       >
@@ -178,31 +172,22 @@ export function ProjectRow({
             )}
           </span>
         </button>
-        <span className="pointer-events-none relative z-10 flex min-w-0 flex-1 items-center">
-          <span className="min-w-0 flex-1 truncate text-left">{project.name}</span>
-          {isProjectPathMissing ? (
-            <AlertTriangle className="ml-1 size-3.5 shrink-0 text-destructive" aria-hidden />
-          ) : null}
+        <span className="pointer-events-none relative z-10 min-w-0 flex-1 truncate text-left">
+          {project.name}
         </span>
-        {isProjectPathMissing ? (
-          <button
-            type="button"
-            title="Project folder is missing. Choose a new folder."
-            aria-label="Repair project path"
-            className="relative z-10 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-destructive outline-none ring-sidebar-ring transition-colors hover:bg-destructive/10 hover:text-destructive focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-60"
-            disabled={isProjectActionsDisabled}
+        {isLocalPathInvalid ? (
+          <NavLink
+            to={`/projects/${project.id}/settings`}
             onClick={(event) => {
-              event.preventDefault()
               event.stopPropagation()
-              void onRepairProjectPath(project.id)
+              onProjectSelect?.()
             }}
+            title="Project folder not found. Open project settings to fix."
+            aria-label="Project folder not found"
+            className="relative z-10 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-destructive outline-none ring-sidebar-ring transition-colors hover:bg-destructive/10 hover:text-destructive focus-visible:ring-2"
           >
-            {isPathUpdating ? (
-              <CircleDashed className="size-4 animate-spin" />
-            ) : (
-              <Wrench className="size-4" />
-            )}
-          </button>
+            <AlertTriangle className="size-4" />
+          </NavLink>
         ) : null}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -229,16 +214,18 @@ export function ProjectRow({
               <PencilLine className="size-4" />
               Rename
             </DropdownMenuItem>
-            <DropdownMenuItem
-              disabled={isProjectActionsDisabled}
-              onSelect={(event) => {
-                event.preventDefault()
-                void onChangeProjectPath(project.id)
-              }}
-            >
-              <Wrench className="size-4" />
-              Change path
-            </DropdownMenuItem>
+            {showAddLocalPathMenuItem ? (
+              <DropdownMenuItem
+                disabled={isProjectActionsDisabled}
+                onSelect={(event) => {
+                  event.preventDefault()
+                  onAddLocalPath(project.id)
+                }}
+              >
+                <FolderPlus className="size-4" />
+                Add local path
+              </DropdownMenuItem>
+            ) : null}
             <DropdownMenuItem
               className="text-destructive focus:text-destructive"
               disabled={isProjectActionsDisabled}
@@ -252,19 +239,6 @@ export function ProjectRow({
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-        <NavLink
-          to={`/projects/${project.id}`}
-          state={{ focusPrompt: true }}
-          onClick={(event) => {
-            event.stopPropagation()
-            onProjectSelect?.()
-          }}
-          title={`Open ${project.name}`}
-          aria-label={`Open ${project.name}`}
-          className="relative z-10 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/70 outline-none ring-sidebar-ring transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground focus-visible:ring-2"
-        >
-          <SquarePen className="size-4" />
-        </NavLink>
       </div>
 
       {!isCollapsed ? (

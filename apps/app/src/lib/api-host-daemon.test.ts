@@ -35,6 +35,7 @@ describe("api-host-daemon", () => {
           hostId: "host_1",
           serverUrl: "http://localhost:3334",
           supportsNativeFolderPicker: true,
+          platform: "darwin",
         }),
       },
     ])
@@ -46,6 +47,7 @@ describe("api-host-daemon", () => {
       hostId: "host_1",
       serverUrl: "http://localhost:3334",
       supportsNativeFolderPicker: true,
+      platform: "darwin",
     })
   })
 
@@ -73,6 +75,46 @@ describe("api-host-daemon", () => {
     await expect(fetchHostStatus(3002)).resolves.toBeNull()
   })
 
+  it("returns the existence map for each path", async () => {
+    installFetchRoutes([
+      {
+        method: "POST",
+        pathname: "/paths/exist",
+        port: 3002,
+        handler: async () => jsonResponse({
+          existence: { "/a": true, "/b": false },
+        }),
+      },
+    ])
+
+    const { checkPathsExist } = await importFreshApiHostDaemon()
+
+    await expect(checkPathsExist(3002, ["/a", "/b"])).resolves.toEqual({
+      "/a": true,
+      "/b": false,
+    })
+  })
+
+  it("short-circuits checkPathsExist when no paths are requested", async () => {
+    const { checkPathsExist } = await importFreshApiHostDaemon()
+    await expect(checkPathsExist(3002, [])).resolves.toEqual({})
+  })
+
+  it("throws when checkPathsExist hits an error response", async () => {
+    installFetchRoutes([
+      {
+        method: "POST",
+        pathname: "/paths/exist",
+        port: 3002,
+        handler: async () => new Response(null, { status: 500 }),
+      },
+    ])
+
+    const { checkPathsExist } = await importFreshApiHostDaemon()
+
+    await expect(checkPathsExist(3002, ["/a"])).rejects.toThrow(/Path existence check failed/)
+  })
+
   it("returns hostId only when the daemon reports a connected host", async () => {
     installFetchRoutes([
       {
@@ -83,6 +125,7 @@ describe("api-host-daemon", () => {
           hostId: "host_1",
           serverUrl: "http://localhost:3334",
           supportsNativeFolderPicker: false,
+          platform: "linux",
         }),
       },
     ])

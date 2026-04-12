@@ -13,7 +13,7 @@ describe("ProjectPathDialog", () => {
     render(
       <ProjectPathDialog
         target={{ kind: "create" }}
-        pickFolder={null}
+        platform="linux"
         onOpenChange={() => {}}
         onSubmit={() => {}}
       />,
@@ -25,7 +25,7 @@ describe("ProjectPathDialog", () => {
     fireEvent.click(screen.getByRole("button", { name: "Create project" }))
 
     expect(
-      screen.getByText("Project path must be an absolute Linux or WSL path."),
+      screen.getByText("Project path must be an absolute path."),
     ).toBeTruthy()
 
     fireEvent.change(screen.getByLabelText("Project path"), {
@@ -34,60 +34,16 @@ describe("ProjectPathDialog", () => {
 
     await waitFor(() => {
       expect(
-        screen.queryByText("Project path must be an absolute Linux or WSL path."),
+        screen.queryByText("Project path must be an absolute path."),
       ).toBeNull()
     })
-  })
-
-  it("shows the native folder picker button only when the host supports it", () => {
-    const { rerender } = render(
-      <ProjectPathDialog
-        target={{ kind: "create" }}
-        pickFolder={null}
-        onOpenChange={() => {}}
-        onSubmit={() => {}}
-      />,
-    )
-
-    expect(screen.queryByRole("button", { name: "Choose folder" })).toBeNull()
-
-    rerender(
-      <ProjectPathDialog
-        target={{ kind: "create" }}
-        pickFolder={async () => "/srv/repos/demo"}
-        onOpenChange={() => {}}
-        onSubmit={() => {}}
-      />,
-    )
-
-    screen.getByRole("button", { name: "Choose folder" })
-  })
-
-  it("normalizes picked folder paths before showing them", async () => {
-    const pickFolder = vi.fn(async () => "/srv/repos/demo/")
-
-    render(
-      <ProjectPathDialog
-        target={{ kind: "create" }}
-        pickFolder={pickFolder}
-        onOpenChange={() => {}}
-        onSubmit={() => {}}
-      />,
-    )
-
-    fireEvent.click(screen.getByRole("button", { name: "Choose folder" }))
-
-    await waitFor(() => {
-      screen.getByDisplayValue("/srv/repos/demo")
-    })
-    expect(pickFolder).toHaveBeenCalledTimes(1)
   })
 
   it("shows the filesystem root validation message for create mode", () => {
     render(
       <ProjectPathDialog
         target={{ kind: "create" }}
-        pickFolder={null}
+        platform="linux"
         onOpenChange={() => {}}
         onSubmit={() => {}}
       />,
@@ -114,7 +70,7 @@ describe("ProjectPathDialog", () => {
           projectId: "proj-1",
           projectName: "Demo",
         }}
-        pickFolder={null}
+        platform="linux"
         onOpenChange={() => {}}
         onSubmit={onSubmit}
       />,
@@ -133,5 +89,18 @@ describe("ProjectPathDialog", () => {
         projectName: "Demo",
       }, "/srv/repos/demo-updated")
     })
+  })
+
+  it("uses the WSL hint copy when platform is wsl", () => {
+    render(
+      <ProjectPathDialog
+        target={{ kind: "create" }}
+        platform="wsl"
+        onOpenChange={() => {}}
+        onSubmit={() => {}}
+      />,
+    )
+
+    expect(screen.getByText(/\/mnt\/c\/\.\.\./)).toBeTruthy()
   })
 })

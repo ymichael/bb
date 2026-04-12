@@ -1,16 +1,11 @@
 // @vitest-environment jsdom
 
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
-import type {
-  LocalPathProjectSource,
-  Project,
-  Thread,
-} from "@bb/domain";
+import type { Project, Thread } from "@bb/domain";
 import type { ProjectResponse } from "@bb/server-contract";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as api from "@/lib/api";
 import { HttpError } from "@/lib/api";
-import { projectsQueryKey } from "@/hooks/queries/query-keys";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
 import { toast } from "sonner";
 import { useProjectListActions } from "./useProjectListActions";
@@ -20,7 +15,6 @@ vi.mock("@/lib/api", async (importOriginal) => {
 
   return {
     ...actual,
-    addProjectSource: vi.fn(),
     archiveThread: vi.fn(),
     deleteProject: vi.fn(),
     deleteThread: vi.fn(),
@@ -28,7 +22,6 @@ vi.mock("@/lib/api", async (importOriginal) => {
     markThreadUnread: vi.fn(),
     unarchiveThread: vi.fn(),
     updateProject: vi.fn(),
-    updateProjectSource: vi.fn(),
     updateThread: vi.fn(),
   };
 });
@@ -44,8 +37,6 @@ interface ThreadOverrides extends Partial<Thread> {}
 interface ProjectOverrides extends Partial<Project> {}
 
 interface ProjectResponseOverrides extends Partial<ProjectResponse> {}
-
-interface LocalPathProjectSourceOverrides extends Partial<LocalPathProjectSource> {}
 
 interface ThreadListHookProps {
   threads: Thread[];
@@ -78,22 +69,6 @@ function makeProject(overrides: ProjectOverrides = {}): Project {
     createdAt: 1,
     id: "project-1",
     name: "Project One",
-    updatedAt: 1,
-    ...overrides,
-  };
-}
-
-function makeLocalPathProjectSource(
-  overrides: LocalPathProjectSourceOverrides = {},
-): LocalPathProjectSource {
-  return {
-    createdAt: 1,
-    hostId: "host-1",
-    id: "source-1",
-    isDefault: true,
-    path: "/existing/path",
-    projectId: "project-1",
-    type: "local_path",
     updatedAt: 1,
     ...overrides,
   };
@@ -143,10 +118,8 @@ describe("useProjectListActions", () => {
     const { result } = renderHook(
       () =>
         useProjectListActions({
-          localHostId: "host-1",
           onProjectRemoved,
           onThreadDeleted,
-          projects: [project],
           threads: [],
         }),
       { wrapper },
@@ -187,10 +160,8 @@ describe("useProjectListActions", () => {
     const { result, rerender } = renderHook(
       ({ threads }: ThreadListHookProps) =>
         useProjectListActions({
-          localHostId: "host-1",
           onProjectRemoved,
           onThreadDeleted,
-          projects: [makeProjectResponse()],
           threads,
         }),
       {
@@ -223,72 +194,6 @@ describe("useProjectListActions", () => {
     });
   });
 
-  it("updates an existing local path project source and invalidates projects", async () => {
-    const source = makeLocalPathProjectSource();
-    const project = makeProjectResponse({
-      sources: [source],
-    });
-    const onProjectRemoved = vi.fn();
-    const onThreadDeleted = vi.fn();
-
-    vi.mocked(api.updateProjectSource).mockResolvedValue(
-      makeLocalPathProjectSource({
-        path: "/next/path",
-      }),
-    );
-
-    const { queryClient, wrapper } = createQueryClientTestHarness();
-    const invalidateQueriesSpy = vi.spyOn(queryClient, "invalidateQueries");
-
-    const { result } = renderHook(
-      () =>
-        useProjectListActions({
-          localHostId: source.hostId,
-          onProjectRemoved,
-          onThreadDeleted,
-          projects: [project],
-          threads: [],
-        }),
-      { wrapper },
-    );
-
-    act(() => {
-      result.current.updateProjectPath(project.id);
-    });
-
-    expect(result.current.projectPathDialog.target).toEqual({
-      kind: "update",
-      projectId: project.id,
-      projectName: project.name,
-      currentPath: source.path,
-    });
-
-    await act(async () => {
-      await result.current.submitProjectPath(
-        {
-          kind: "update",
-          projectId: project.id,
-          projectName: project.name,
-          currentPath: source.path,
-        },
-        "/next/path",
-      );
-    });
-
-    expect(api.updateProjectSource).toHaveBeenCalledWith(project.id, source.id, {
-      path: "/next/path",
-      type: "local_path",
-    });
-
-    await waitFor(() => {
-      expect(invalidateQueriesSpy).toHaveBeenCalledWith({
-        queryKey: projectsQueryKey(),
-      });
-    });
-
-    expect(result.current.pathUpdateProjectId).toBeNull();
-  });
-
   it("marks threads read or unread based on whether the latest update has been seen", async () => {
     const unreadThread = makeThread({
       id: "thread-unread",
@@ -318,10 +223,8 @@ describe("useProjectListActions", () => {
     const { result } = renderHook(
       () =>
         useProjectListActions({
-          localHostId: "host-1",
           onProjectRemoved: vi.fn(),
           onThreadDeleted: vi.fn(),
-          projects: [],
           threads: [],
         }),
       { wrapper },
@@ -351,10 +254,8 @@ describe("useProjectListActions", () => {
     const { result } = renderHook(
       () =>
         useProjectListActions({
-          localHostId: "host-1",
           onProjectRemoved: vi.fn(),
           onThreadDeleted: vi.fn(),
-          projects: [project],
           threads: [],
         }),
       { wrapper },
