@@ -1,8 +1,6 @@
-import { createProject, getEnvironment, openSession } from "@bb/db";
 import { threadSchema } from "@bb/domain";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  reportNextRuntimeMaterialSyncSuccess,
   waitForQueuedCommand,
 } from "../helpers/commands.js";
 import { readJson } from "../helpers/json.js";
@@ -16,12 +14,6 @@ import { generateThreadMetadata } from "../../src/services/threads/title-generat
 const piAiMocks = vi.hoisted(() => ({
   complete: vi.fn(),
   getModel: vi.fn(),
-  validateToolCall: vi.fn(),
-}));
-
-const sandboxHostMocks = vi.hoisted(() => ({
-  provisionHost: vi.fn(),
-  resumeHost: vi.fn(),
 }));
 
 interface MockThreadMetadata {
@@ -29,51 +21,33 @@ interface MockThreadMetadata {
   title?: string;
 }
 
-interface SandboxProvisionCall {
-  hostId: string;
-  hostName: string;
-}
-
-type SandboxHostMockArgs = Array<object | string | undefined>;
-
 vi.mock("@mariozechner/pi-ai", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@mariozechner/pi-ai")>();
   return {
     ...actual,
     complete: piAiMocks.complete,
     getModel: piAiMocks.getModel,
-    validateToolCall: piAiMocks.validateToolCall,
   };
 });
-
-vi.mock("@bb/sandbox-host", () => ({
-  DEFAULT_SANDBOX_TIMEOUT_MS: 15 * 60 * 1000,
-  provisionHost: (...args: SandboxHostMockArgs) =>
-    sandboxHostMocks.provisionHost(...args),
-  resumeHost: (...args: SandboxHostMockArgs) =>
-    sandboxHostMocks.resumeHost(...args),
-}));
 
 function mockThreadMetadata(metadata: MockThreadMetadata): void {
   piAiMocks.getModel.mockReturnValue({ provider: "test" });
   piAiMocks.complete.mockResolvedValue({
     content: [
       {
+        arguments: metadata,
+        id: "tool_result",
         name: "result",
         type: "toolCall",
       },
     ],
   });
-  piAiMocks.validateToolCall.mockReturnValue(metadata);
 }
 
 describe("generated managed branch names", () => {
   beforeEach(() => {
     piAiMocks.complete.mockReset();
     piAiMocks.getModel.mockReset();
-    piAiMocks.validateToolCall.mockReset();
-    sandboxHostMocks.provisionHost.mockReset();
-    sandboxHostMocks.resumeHost.mockReset();
   });
 
   it("uses generated branch slugs for managed worktree provisioning", async () => {
@@ -126,6 +100,62 @@ describe("generated managed branch names", () => {
       expect(queued.command.branchName).toBe(
         `bb/improve-branch-names-${thread.id}`,
       );
+      expect(piAiMocks.complete).toHaveBeenCalledTimes(1);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("uses generated branch slugs without retrying title inference when no title is returned", async () => {
+    mockThreadMetadata({
+      branchSlug: "Slug Only Branch",
+    });
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-generated-branch-slug-only",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/generated-branch-slug-only-project",
+      });
+
+      const response = await harness.app.request("/api/v1/threads", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          projectId: project.id,
+          providerId: "codex",
+          model: "gpt-5",
+          input: [
+            {
+              type: "text",
+              text: "Improve branch names using slug only metadata path",
+            },
+          ],
+          environment: {
+            type: "host",
+            hostId: host.id,
+            workspace: { type: "managed-worktree" },
+          },
+        }),
+      });
+
+      expect(response.status).toBe(201);
+      const thread = threadSchema.parse(await readJson(response));
+      expect(thread.title).toBeNull();
+
+      const queued = await waitForQueuedCommand(
+        harness,
+        ({ command }) => command.type === "environment.provision",
+      );
+      if (queued.command.type !== "environment.provision") {
+        throw new Error("Expected environment.provision command");
+      }
+      expect(queued.command.branchName).toBe(
+        `bb/slug-only-branch-${thread.id}`,
+      );
+      expect(piAiMocks.complete).toHaveBeenCalledTimes(1);
     } finally {
       await harness.cleanup();
     }
@@ -177,6 +207,7 @@ describe("generated managed branch names", () => {
       }
       expect(queued.command.branchName).toBe(`bb/${thread.id}`);
       expect(piAiMocks.getModel).not.toHaveBeenCalled();
+      expect(piAiMocks.complete).not.toHaveBeenCalled();
     } finally {
       await harness.cleanup();
     }
@@ -229,6 +260,7 @@ describe("generated managed branch names", () => {
         throw new Error("Expected environment.provision command");
       }
       expect(queued.command.branchName).toBe(`bb/${thread.id}`);
+      expect(piAiMocks.complete).toHaveBeenCalledTimes(1);
     } finally {
       await harness.cleanup();
     }
@@ -251,88 +283,7 @@ describe("generated managed branch names", () => {
           timeoutMs: 1,
         }),
       ).resolves.toBeNull();
-    } finally {
-      await harness.cleanup();
-    }
-  });
-
-  it("uses generated branch slugs for sandbox-host provisioning", async () => {
-    mockThreadMetadata({
-      branchSlug: "Sandbox Branch",
-      title: "Sandbox Branch",
-    });
-    const harness = await createTestAppHarness({
-      githubPat: "test-github-pat",
-    });
-    try {
-      sandboxHostMocks.provisionHost.mockImplementation(
-        async (options: SandboxProvisionCall) => {
-          openSession(harness.db, harness.hub, {
-            heartbeatIntervalMs: 10_000,
-            hostId: options.hostId,
-            hostName: options.hostName,
-            hostType: "ephemeral",
-            instanceId: "instance-generated-branch-sandbox",
-            leaseTimeoutMs: 60_000,
-            protocolVersion: 2,
-          });
-          return {
-            destroy: vi.fn().mockResolvedValue(undefined),
-            extendTimeout: vi.fn().mockResolvedValue(undefined),
-            externalId: "sandbox-generated-branch",
-            hostId: options.hostId,
-            resume: vi.fn().mockResolvedValue(undefined),
-            suspend: vi.fn().mockResolvedValue(undefined),
-          };
-        },
-      );
-      const { project } = createProject(harness.db, harness.hub, {
-        name: "Sandbox Generated Branch Project",
-        source: {
-          repoUrl: "https://github.com/example/generated-branch.git",
-          type: "github_repo",
-        },
-      });
-
-      const response = await harness.app.request("/api/v1/threads", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          projectId: project.id,
-          providerId: "codex",
-          model: "gpt-5",
-          input: [
-            {
-              type: "text",
-              text: "Improve sandbox generated branch naming behavior",
-            },
-          ],
-          environment: {
-            type: "sandbox-host",
-            sandboxType: "e2b",
-          },
-        }),
-      });
-
-      expect(response.status).toBe(201);
-      const thread = threadSchema.parse(await readJson(response));
-      const environment = getEnvironment(harness.db, thread.environmentId ?? "");
-      if (!environment) {
-        throw new Error("Expected sandbox environment to exist");
-      }
-      await reportNextRuntimeMaterialSyncSuccess(harness, {
-        hostId: environment.hostId,
-      });
-      const queued = await waitForQueuedCommand(
-        harness,
-        ({ command }) => command.type === "environment.provision",
-      );
-      if (queued.command.type !== "environment.provision") {
-        throw new Error("Expected environment.provision command");
-      }
-      expect(queued.command.branchName).toBe(
-        `bb/sandbox-branch-${thread.id}`,
-      );
+      expect(piAiMocks.complete).toHaveBeenCalledTimes(1);
     } finally {
       await harness.cleanup();
     }
