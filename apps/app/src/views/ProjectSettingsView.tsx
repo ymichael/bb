@@ -197,7 +197,7 @@ export function ProjectSettingsView() {
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-7 w-7 shrink-0"
+                          className="h-7 w-7 shrink-0 data-[state=open]:bg-accent data-[state=open]:text-accent-foreground"
                           aria-label="Source actions"
                         >
                           <MoreHorizontal className="size-4" />

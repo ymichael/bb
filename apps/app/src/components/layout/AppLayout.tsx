@@ -197,7 +197,7 @@ function AppHeader({
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8"
+                className="h-8 w-8 data-[state=open]:bg-accent data-[state=open]:text-accent-foreground"
                 aria-label="Project menu"
               >
                 <MoreHorizontal className="size-4" />
