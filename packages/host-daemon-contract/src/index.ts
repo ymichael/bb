@@ -25,6 +25,7 @@ export {
   DEFAULT_HOST_DAEMON_LOCAL_HEALTH_VALUE,
   healthResponseSchema,
   hostPlatformSchema,
+  openWorkspaceRequestSchema,
   openRequestSchema,
   PATHS_EXIST_MAX_PATHS,
   pathsExistRequestSchema,
@@ -32,18 +33,29 @@ export {
   pickFolderResponseSchema,
   restartRequestSchema,
   statusResponseSchema,
+  workspaceOpenTargetIdSchema,
+  workspaceOpenTargetIdValues,
+  workspaceOpenTargetKindSchema,
+  workspaceOpenTargetKindValues,
+  workspaceOpenTargetSchema,
+  workspaceOpenTargetsResponseSchema,
 } from "./local.js";
 export type {
   HealthResponse,
   HostDaemonLocalRoutes,
   HostDaemonLocalSchema,
   HostPlatform,
+  OpenWorkspaceRequest,
   OpenRequest,
   PathsExistRequest,
   PathsExistResponse,
   PickFolderResponse,
   RestartRequest,
   StatusResponse,
+  WorkspaceOpenTarget,
+  WorkspaceOpenTargetId,
+  WorkspaceOpenTargetKind,
+  WorkspaceOpenTargetsResponse,
 } from "./local.js";
 
 export {

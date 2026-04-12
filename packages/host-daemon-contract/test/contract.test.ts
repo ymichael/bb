@@ -30,6 +30,90 @@ const INTENTIONAL_OPTIONAL_HOST_DAEMON_FIELDS: Record<string, string> = {
   "hostDaemonCommandSchema.threadStoragePath": "thread.start may include a storage path for manager threads so the daemon creates the directory before the agent starts.",
 };
 
+describe("host-daemon local schemas", () => {
+  it("parses workspace open target routes", () => {
+    expect(
+      contract.workspaceOpenTargetSchema.parse({
+        id: "vscode",
+        label: "VS Code",
+        kind: "editor",
+      }),
+    ).toEqual({
+      id: "vscode",
+      label: "VS Code",
+      kind: "editor",
+    });
+
+    expect(
+      contract.workspaceOpenTargetsResponseSchema.parse({
+        targets: [
+          {
+            id: "finder",
+            label: "Finder",
+            kind: "file-manager",
+          },
+          {
+            id: "terminal",
+            label: "Terminal",
+            kind: "terminal",
+          },
+        ],
+      }),
+    ).toEqual({
+      targets: [
+        {
+          id: "finder",
+          label: "Finder",
+          kind: "file-manager",
+        },
+        {
+          id: "terminal",
+          label: "Terminal",
+          kind: "terminal",
+        },
+      ],
+    });
+
+    expect(
+      contract.openWorkspaceRequestSchema.parse({
+        path: "/tmp/workspace",
+        targetId: "zed",
+      }),
+    ).toEqual({
+      path: "/tmp/workspace",
+      targetId: "zed",
+    });
+  });
+
+  it("rejects malformed workspace open payloads", () => {
+    expect(() =>
+      contract.workspaceOpenTargetSchema.parse({
+        id: "unknown-editor",
+        label: "Unknown",
+        kind: "editor",
+      }),
+    ).toThrow();
+
+    expect(() =>
+      contract.workspaceOpenTargetsResponseSchema.parse({
+        targets: [
+          {
+            id: "vscode",
+            label: "",
+            kind: "editor",
+          },
+        ],
+      }),
+    ).toThrow();
+
+    expect(() =>
+      contract.openWorkspaceRequestSchema.parse({
+        path: "/tmp/workspace",
+      }),
+    ).toThrow();
+  });
+});
+
 describe("host-daemon command schemas", () => {
   it("parses valid workspace and provisioning commands", () => {
     expect(
