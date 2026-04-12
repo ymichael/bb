@@ -140,7 +140,7 @@ export function registerSpawnCommand(
     )
     .option("--title <title>", "Thread title")
     .option("--service-tier <tier>", "Service tier: fast or flex")
-    .option("--permission-mode <mode>", "Permission mode: limited or full")
+    .option("--permission-mode <mode>", "Permission mode: readonly, workspace-write, or full")
     .option("--host <id>", "Host ID (defaults to local host)")
     .option(
       "--no-context-parent-thread",

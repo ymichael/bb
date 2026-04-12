@@ -18,6 +18,7 @@ import {
   requireReadyThreadEnvironment,
   type ReadyThreadEnvironment,
 } from "./thread-turn-dispatch.js";
+import { resolvePermissionEscalation } from "./thread-runtime-config.js";
 import { tryTransition } from "./thread-transitions.js";
 
 const MANAGER_SYSTEM_MESSAGE_SOURCE = "tell";
@@ -52,6 +53,10 @@ async function queueReadyManagerSystemMessage(
     requestMethod: "turn/start",
     source: MANAGER_SYSTEM_MESSAGE_SOURCE,
   });
+  const permissionEscalation = resolvePermissionEscalation({
+    thread: args.thread,
+    initiator: "system",
+  });
 
   if (args.thread.status === "active") {
     const expectedTurnId = getLastTurnId(deps, args.thread.id);
@@ -63,6 +68,7 @@ async function queueReadyManagerSystemMessage(
       input: args.input,
       eventSequence,
       execution: args.execution,
+      permissionEscalation,
       expectedTurnId,
       environment: {
         id: args.environment.id,
@@ -80,6 +86,7 @@ async function queueReadyManagerSystemMessage(
     input: args.input,
     eventSequence,
     execution: args.execution,
+    permissionEscalation,
     environment: {
       id: args.environment.id,
       hostId: args.environment.hostId,

@@ -4,10 +4,13 @@ import type {
   InstructionMode,
   PendingInteractionCreate,
   PendingInteractionResolution,
+  PermissionEscalation,
+  PermissionMode,
   PromptInput,
   ProviderInfo as DomainProviderInfo,
+  ReasoningLevel,
+  ServiceTier,
   ThreadEvent,
-  ThreadExecutionOptions,
   ToolCallRequest,
   ToolCallResponse,
 } from "@bb/domain";
@@ -16,6 +19,14 @@ import type { AgentRuntimeCaptureEntry } from "./capture-types.js";
 export type ProviderInfo = DomainProviderInfo;
 
 export type AgentRuntimeShellEnvironment = Record<string, string>;
+
+export interface AgentRuntimeExecutionOptions {
+  model?: string;
+  serviceTier?: ServiceTier;
+  reasoningLevel?: ReasoningLevel;
+  permissionMode?: PermissionMode;
+  permissionEscalation?: PermissionEscalation;
+}
 
 // ---------------------------------------------------------------------------
 // Runtime options
@@ -86,7 +97,7 @@ export interface AgentRuntime {
     projectId: string;
     providerId?: string;
     input?: PromptInput[];
-    options?: ThreadExecutionOptions;
+    options?: AgentRuntimeExecutionOptions;
     instructions?: string;
     dynamicTools?: DynamicTool[];
     instructionMode?: InstructionMode;
@@ -98,7 +109,7 @@ export interface AgentRuntime {
     projectId?: string;
     providerThreadId?: string;
     providerId?: string;
-    options?: ThreadExecutionOptions;
+    options?: AgentRuntimeExecutionOptions;
     instructions?: string;
     resumePath?: string;
     dynamicTools?: DynamicTool[];
@@ -108,7 +119,7 @@ export interface AgentRuntime {
   runTurn(args: {
     threadId: string;
     input: PromptInput[];
-    options?: ThreadExecutionOptions;
+    options?: AgentRuntimeExecutionOptions;
     instructions?: string;
   }): Promise<void>;
 
@@ -116,7 +127,7 @@ export interface AgentRuntime {
     threadId: string;
     expectedTurnId: string;
     input: PromptInput[];
-    options?: ThreadExecutionOptions;
+    options?: AgentRuntimeExecutionOptions;
     instructions?: string;
   }): Promise<void>;
 

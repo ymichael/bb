@@ -51,6 +51,7 @@ import {
   appendClientTurnEvent,
   getLastTurnId,
 } from "../../services/threads/thread-events.js";
+import { resolvePermissionEscalation } from "../../services/threads/thread-runtime-config.js";
 import { tryTransition } from "../../services/threads/thread-transitions.js";
 
 function ensureThreadIsWritable(thread: Thread): void {
@@ -136,6 +137,10 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
       },
       "client/turn/requested",
     );
+    const permissionEscalation = resolvePermissionEscalation({
+      thread,
+      initiator: "user",
+    });
 
     if (
       await queueTurnDuringReprovision({
@@ -168,6 +173,7 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
         input: payload.input,
         eventSequence,
         execution,
+        permissionEscalation,
         environment: {
           id: readyEnvironment.id,
           hostId: readyEnvironment.hostId,
@@ -188,6 +194,7 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
         input: payload.input,
         eventSequence,
         execution,
+        permissionEscalation,
         expectedTurnId,
         environment: {
           id: readyEnvironment.id,

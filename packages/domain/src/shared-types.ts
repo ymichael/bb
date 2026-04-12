@@ -17,8 +17,11 @@ export const instructionModeValues = ["append", "replace"] as const;
 export const instructionModeSchema = z.enum(instructionModeValues);
 export type InstructionMode = z.infer<typeof instructionModeSchema>;
 
-export const permissionModeSchema = z.enum(["limited", "full"]);
+export const permissionModeSchema = z.enum(["readonly", "workspace-write", "full"]);
 export type PermissionMode = z.infer<typeof permissionModeSchema>;
+
+export const permissionEscalationSchema = z.enum(["ask", "deny"]);
+export type PermissionEscalation = z.infer<typeof permissionEscalationSchema>;
 
 export const promptInputSchema = z.discriminatedUnion("type", [
   z.object({
@@ -72,6 +75,17 @@ export const resolvedThreadExecutionOptionsSchema =
   });
 export type ResolvedThreadExecutionOptions = z.infer<
   typeof resolvedThreadExecutionOptionsSchema
+>;
+
+export const runtimeThreadExecutionOptionsSchema = z.object({
+  model: z.string().min(1),
+  serviceTier: serviceTierSchema,
+  reasoningLevel: reasoningLevelSchema,
+  permissionMode: permissionModeSchema,
+  permissionEscalation: permissionEscalationSchema,
+});
+export type RuntimeThreadExecutionOptions = z.infer<
+  typeof runtimeThreadExecutionOptionsSchema
 >;
 
 export const projectExecutionDefaultsSchema = z.object({

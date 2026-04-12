@@ -164,6 +164,7 @@ describe("internal command result idempotency", () => {
           serviceTier: "default",
           source: "client/thread/start",
         },
+        permissionEscalation: "ask",
         projectId: project.id,
         providerId: thread.providerId,
       });
@@ -194,6 +195,7 @@ describe("internal command result idempotency", () => {
           serviceTier: "default",
           source: "client/thread/start",
         },
+        permissionEscalation: "ask",
         projectId: project.id,
         providerId: thread.providerId,
       });

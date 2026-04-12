@@ -28,7 +28,9 @@ export function toClaudePermissionMode(
   switch (args.permissionMode ?? "full") {
     case "full":
       return "bypassPermissions";
-    case "limited":
+    case "workspace-write":
+      return "acceptEdits";
+    case "readonly":
       return "default";
   }
 }

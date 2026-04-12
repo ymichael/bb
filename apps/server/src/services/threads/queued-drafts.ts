@@ -27,6 +27,7 @@ import {
   appendClientTurnEvent,
   getLastTurnId,
 } from "./thread-events.js";
+import { resolvePermissionEscalation } from "./thread-runtime-config.js";
 import { tryTransition } from "./thread-transitions.js";
 
 interface SendQueuedDraftArgs {
@@ -88,6 +89,10 @@ async function sendClaimedDraft(
     },
     "client/turn/requested",
   );
+  const permissionEscalation = resolvePermissionEscalation({
+    thread,
+    initiator: "user",
+  });
 
   if (
     await queueTurnDuringReprovision({
@@ -123,6 +128,7 @@ async function sendClaimedDraft(
       input: queuedMessage.content,
       eventSequence,
       execution,
+      permissionEscalation,
       environment: {
         id: readyEnvironment.id,
         hostId: readyEnvironment.hostId,
@@ -143,6 +149,7 @@ async function sendClaimedDraft(
       input: queuedMessage.content,
       eventSequence,
       execution,
+      permissionEscalation,
       expectedTurnId,
       environment: {
         id: readyEnvironment.id,

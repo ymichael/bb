@@ -30,7 +30,7 @@ describe("codex provider adapter", () => {
     expect(adapter.capabilities).toEqual({
       supportsRename: true,
       supportsServiceTier: true,
-      supportedPermissionModes: ["limited", "full"],
+      supportedPermissionModes: ["readonly", "workspace-write", "full"],
     });
   });
 
@@ -84,7 +84,7 @@ describe("codex provider adapter", () => {
     });
   });
 
-  it("buildCommand thread/start maps limited permissions to on-request approvals", () => {
+  it("buildCommand thread/start maps workspace-write permissions to on-request approvals", () => {
     const adapter = createCodexProviderAdapter();
     const cmd = adapter.buildCommand({
       type: "thread/start",
@@ -93,7 +93,7 @@ describe("codex provider adapter", () => {
       input: [{ type: "text", text: "hello" }],
       instructionMode: "append",
       options: {
-        permissionMode: "limited",
+        permissionMode: "workspace-write",
       },
     });
 
@@ -256,7 +256,7 @@ describe("codex provider adapter", () => {
     });
   });
 
-  it("buildCommand turn/start maps limited permissions to on-request approvals", () => {
+  it("buildCommand turn/start maps workspace-write permissions to on-request approvals", () => {
     const adapter = createCodexProviderAdapter();
     const cmd = adapter.buildCommand({
       type: "turn/start",
@@ -264,7 +264,7 @@ describe("codex provider adapter", () => {
       providerThreadId: "codex-1",
       input: [{ type: "text", text: "do it" }],
       options: {
-        permissionMode: "limited",
+        permissionMode: "workspace-write",
       },
     });
 
@@ -276,14 +276,14 @@ describe("codex provider adapter", () => {
     });
   });
 
-  it("buildCommand turn/start maps limited permissions to workspace-write sandbox policy", () => {
+  it("buildCommand turn/start maps workspace-write permissions to workspace-write sandbox policy", () => {
     const adapter = createCodexProviderAdapter();
     const cmd = adapter.buildCommand({
       type: "turn/start",
       threadId: "t1",
       providerThreadId: "codex-1",
       input: [{ type: "text", text: "edit it" }],
-      options: { permissionMode: "limited" },
+      options: { permissionMode: "workspace-write" },
     });
     expect(cmd).toMatchObject({
       method: "turn/start",

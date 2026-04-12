@@ -10,7 +10,9 @@ import type {
 import type {
   PromptInput,
   ProjectExecutionDefaults,
+  PermissionEscalation,
   ResolvedThreadExecutionOptions,
+  RuntimeThreadExecutionOptions,
   Thread,
   WorkspaceProvisionType,
 } from "@bb/domain";
@@ -51,6 +53,7 @@ export interface QueueThreadStartCommandArgs {
     workspaceProvisionType: WorkspaceProvisionType;
   };
   execution: ResolvedThreadExecutionOptions;
+  permissionEscalation: PermissionEscalation;
   input: PromptInput[];
   projectId: string;
   providerId: string;
@@ -61,6 +64,7 @@ export interface TurnRunCommandPayloadArgs {
   environmentId: string;
   eventSequence: number;
   execution: ResolvedThreadExecutionOptions;
+  permissionEscalation: PermissionEscalation;
   input: PromptInput[];
   providerThreadId: string;
   runtimeContext: ResolvedThreadRuntimeCommandConfig;
@@ -70,6 +74,7 @@ export interface TurnRunCommandPayloadArgs {
 export interface PrepareTurnRunCommandPayloadArgs {
   environment: ThreadRuntimeCommandEnvironment;
   execution: ResolvedThreadExecutionOptions;
+  permissionEscalation: PermissionEscalation;
   input: PromptInput[];
   providerThreadId?: string;
   thread: Thread;
@@ -89,6 +94,19 @@ export type PreparedTurnRunCommandPayload = Omit<
   "eventSequence"
 >;
 type PreparedTurnRunCommandBuildArgs = Omit<TurnRunCommandPayloadArgs, "eventSequence">;
+
+function toRuntimeExecutionOptions(args: {
+  execution: ResolvedThreadExecutionOptions;
+  permissionEscalation: PermissionEscalation;
+}): RuntimeThreadExecutionOptions {
+  return {
+    model: args.execution.model,
+    serviceTier: args.execution.serviceTier,
+    reasoningLevel: args.execution.reasoningLevel,
+    permissionMode: args.execution.permissionMode,
+    permissionEscalation: args.permissionEscalation,
+  };
+}
 
 export async function buildExecutionOptions(
   deps: Pick<AppDeps, "db" | "hub">,
@@ -133,7 +151,7 @@ export async function buildThreadStartCommand(
     providerId: args.providerId,
     eventSequence: args.eventSequence,
     input: args.input,
-    options: args.execution,
+    options: toRuntimeExecutionOptions(args),
     instructions: runtimeContext.instructions,
     dynamicTools: runtimeContext.dynamicTools,
     instructionMode: runtimeContext.instructionMode,
@@ -149,7 +167,7 @@ function buildPreparedTurnRunCommandPayload(
     environmentId: args.environmentId,
     threadId: args.threadId,
     input: args.input,
-    options: args.execution,
+    options: toRuntimeExecutionOptions(args),
     resumeContext: {
       workspaceContext: {
         workspacePath: args.runtimeContext.workspacePath,
@@ -189,6 +207,7 @@ export async function prepareTurnRunCommandPayload(
   return buildPreparedTurnRunCommandPayload({
     environmentId: args.environment.id,
     execution: args.execution,
+    permissionEscalation: args.permissionEscalation,
     input: args.input,
     providerThreadId,
     runtimeContext,
@@ -229,6 +248,7 @@ export async function queueTurnRunCommand(
     eventSequence: number;
     environment: ThreadRuntimeCommandEnvironment;
     execution: ResolvedThreadExecutionOptions;
+    permissionEscalation: PermissionEscalation;
     input: PromptInput[];
     providerThreadId?: string;
     thread: Thread;
@@ -256,6 +276,7 @@ export async function queueTurnSteerCommand(
     eventSequence: number;
     environment: ThreadRuntimeCommandEnvironment;
     execution: ResolvedThreadExecutionOptions;
+    permissionEscalation: PermissionEscalation;
     expectedTurnId: string;
     input: PromptInput[];
     providerThreadId?: string;
@@ -284,7 +305,7 @@ export async function queueTurnSteerCommand(
       eventSequence: args.eventSequence,
       expectedTurnId: args.expectedTurnId,
       input: args.input,
-      options: args.execution,
+      options: toRuntimeExecutionOptions(args),
       resumeContext: {
         workspaceContext: {
           workspacePath: runtimeContext.workspacePath,

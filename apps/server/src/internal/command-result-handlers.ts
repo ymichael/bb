@@ -48,6 +48,7 @@ import {
 import {
   tryTransition,
 } from "../services/threads/thread-transitions.js";
+import { resolvePermissionEscalation } from "../services/threads/thread-runtime-config.js";
 
 export type CommandResultSideEffectsDeps = Pick<
   AppDeps,
@@ -205,6 +206,10 @@ async function handleProvisionCommandResult(
         eventSequence: completedEventSequence,
         input: parsedStartEvent.input,
         execution: parsedStartEvent.execution,
+        permissionEscalation: resolvePermissionEscalation({
+          thread,
+          initiator: parsedStartEvent.initiator ?? "user",
+        }),
         projectId: thread.projectId,
         providerId: thread.providerId,
       });

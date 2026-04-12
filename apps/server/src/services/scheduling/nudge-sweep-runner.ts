@@ -23,6 +23,7 @@ import {
   type PreparedTurnRunCommandPayload,
   queueTurnRunCommandInTransaction,
 } from "../threads/thread-commands.js";
+import { resolvePermissionEscalation } from "../threads/thread-runtime-config.js";
 import { ensureHostSessionReadyForWork } from "../hosts/host-lifecycle.js";
 import {
   computeNextScheduledTimeForExpressionSet,
@@ -298,6 +299,10 @@ async function prepareDueNudge(
         workspaceProvisionType: environment.workspaceProvisionType,
       },
       execution,
+      permissionEscalation: resolvePermissionEscalation({
+        thread,
+        initiator: "system",
+      }),
       input,
       providerThreadId,
       thread,

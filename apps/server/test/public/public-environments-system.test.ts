@@ -978,7 +978,7 @@ describe("public environment and system routes", () => {
             capabilities: {
               supportsRename: true,
               supportsServiceTier: true,
-              supportedPermissionModes: ["limited", "full"],
+              supportedPermissionModes: ["readonly", "workspace-write", "full"],
             },
             available: true,
           },
@@ -993,7 +993,7 @@ describe("public environment and system routes", () => {
           capabilities: {
             supportsRename: true,
             supportsServiceTier: true,
-            supportedPermissionModes: ["limited", "full"],
+            supportedPermissionModes: ["readonly", "workspace-write", "full"],
           },
           available: true,
         },
@@ -1045,7 +1045,7 @@ describe("public environment and system routes", () => {
               capabilities: {
                 supportsRename: true,
                 supportsServiceTier: true,
-                supportedPermissionModes: ["limited", "full"],
+                supportedPermissionModes: ["readonly", "workspace-write", "full"],
               },
               available: true,
             },
@@ -1113,7 +1113,7 @@ describe("public environment and system routes", () => {
               capabilities: {
                 supportsRename: true,
                 supportsServiceTier: true,
-                supportedPermissionModes: ["limited", "full"],
+                supportedPermissionModes: ["readonly", "workspace-write", "full"],
               },
               available: true,
             },

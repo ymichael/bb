@@ -261,7 +261,7 @@ describe("public project and host routes", () => {
         threadType: "standard",
         model: "gpt-5",
         reasoningLevel: "high",
-        permissionMode: "limited",
+        permissionMode: "workspace-write",
         serviceTier: "fast",
       });
 
@@ -274,7 +274,7 @@ describe("public project and host routes", () => {
         providerId: "codex",
         model: "gpt-5",
         reasoningLevel: "high",
-        permissionMode: "limited",
+        permissionMode: "workspace-write",
         serviceTier: "fast",
       });
     } finally {
@@ -306,7 +306,7 @@ describe("public project and host routes", () => {
         threadType: "manager",
         model: "gpt-5-mini",
         reasoningLevel: "high",
-        permissionMode: "limited",
+        permissionMode: "workspace-write",
         serviceTier: "fast",
       });
 
@@ -319,7 +319,7 @@ describe("public project and host routes", () => {
         providerId: "codex",
         model: "gpt-5-mini",
         reasoningLevel: "high",
-        permissionMode: "limited",
+        permissionMode: "workspace-write",
         serviceTier: "fast",
       });
     } finally {
@@ -408,7 +408,7 @@ describe("public project and host routes", () => {
         threadType: "manager",
         model: "gpt-5",
         reasoningLevel: "high",
-        permissionMode: "limited",
+        permissionMode: "workspace-write",
         serviceTier: "fast",
       });
 
@@ -436,7 +436,7 @@ describe("public project and host routes", () => {
         providerId: "codex",
         model: "gpt-5",
         reasoningLevel: "high",
-        permissionMode: "limited",
+        permissionMode: "workspace-write",
         serviceTier: "fast",
       });
     } finally {

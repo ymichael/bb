@@ -32,6 +32,7 @@ describe("thread command dispatch", () => {
           serviceTier: "default",
           reasoningLevel: "medium",
           permissionMode: "full",
+          permissionEscalation: "ask",
         },
         instructions: "Be a helpful coding agent.",
         dynamicTools: [],
@@ -88,6 +89,7 @@ describe("thread command dispatch", () => {
           serviceTier: "default",
           reasoningLevel: "medium",
           permissionMode: "full",
+          permissionEscalation: "ask",
         },
         resumeContext: {
           workspaceContext: { workspacePath: "/tmp/env-1", workspaceProvisionType: "unmanaged" },
@@ -114,6 +116,7 @@ describe("thread command dispatch", () => {
           serviceTier: "default",
           reasoningLevel: "medium",
           permissionMode: "full",
+          permissionEscalation: "ask",
         },
         resumeContext: {
           workspaceContext: { workspacePath: "/tmp/env-1", workspaceProvisionType: "unmanaged" },
@@ -150,6 +153,7 @@ describe("thread command dispatch", () => {
           serviceTier: "default",
           reasoningLevel: "medium",
           permissionMode: "full",
+          permissionEscalation: "ask",
         },
         resumeContext: {
           workspaceContext: { workspacePath: "/tmp/env-lazy", workspaceProvisionType: "unmanaged" },
@@ -219,6 +223,7 @@ describe("thread command dispatch", () => {
           serviceTier: "default",
           reasoningLevel: "medium",
           permissionMode: "full",
+          permissionEscalation: "ask",
         },
         resumeContext: {
           workspaceContext: { workspacePath: "/tmp/env-exit", workspaceProvisionType: "unmanaged" },
@@ -254,7 +259,7 @@ describe("thread command dispatch", () => {
             capabilities: {
               supportsRename: false,
               supportsServiceTier: false,
-              supportedPermissionModes: ["limited", "full"],
+              supportedPermissionModes: ["readonly", "workspace-write", "full"],
             },
             available: true,
           },
@@ -270,7 +275,7 @@ describe("thread command dispatch", () => {
           capabilities: {
             supportsRename: false,
             supportsServiceTier: false,
-            supportedPermissionModes: ["limited", "full"],
+            supportedPermissionModes: ["readonly", "workspace-write", "full"],
           },
           available: true,
         },
@@ -343,6 +348,7 @@ describe("thread command dispatch", () => {
           serviceTier: "default",
           reasoningLevel: "medium",
           permissionMode: "full",
+          permissionEscalation: "ask",
         },
         instructions: managerInstructions,
         dynamicTools: [
@@ -393,6 +399,7 @@ describe("thread command dispatch", () => {
           serviceTier: "default",
           reasoningLevel: "medium",
           permissionMode: "full",
+          permissionEscalation: "ask",
         },
         instructions: "test",
         dynamicTools: [],
@@ -424,6 +431,7 @@ describe("thread command dispatch", () => {
           serviceTier: "default",
           reasoningLevel: "medium",
           permissionMode: "full",
+          permissionEscalation: "ask",
         },
         instructions: "test",
         dynamicTools: [],
@@ -529,6 +537,7 @@ describe("thread command dispatch", () => {
             serviceTier: "default",
             reasoningLevel: "medium",
             permissionMode: "full",
+          permissionEscalation: "ask",
           },
           instructions: "test",
           dynamicTools: [],

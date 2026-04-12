@@ -6,7 +6,6 @@ import type {
   InstructionMode,
   PendingInteractionCreate,
   ThreadEvent,
-  ThreadExecutionOptions,
   ToolCallRequest,
 } from "@bb/domain";
 import { spawnPortablePipedProcess } from "@bb/process-utils";
@@ -20,6 +19,7 @@ import type {
 import { createProviderForId } from "./provider-registry.js";
 import type {
   AgentRuntime,
+  AgentRuntimeExecutionOptions,
   AgentRuntimeOptions,
   AgentRuntimeShellEnvironment,
 } from "./types.js";
@@ -99,7 +99,7 @@ function createAdapterTurnIdPrefix(): string {
 }
 
 function toAdapterOptions(
-  execOpts: ThreadExecutionOptions | undefined,
+  execOpts: AgentRuntimeExecutionOptions | undefined,
   instructions: string | undefined,
   envVars: Record<string, string>,
 ): AdapterOptions | undefined {
@@ -109,6 +109,7 @@ function toAdapterOptions(
     serviceTier: execOpts?.serviceTier,
     reasoningLevel: execOpts?.reasoningLevel,
     permissionMode: execOpts?.permissionMode,
+    permissionEscalation: execOpts?.permissionEscalation,
     instructions,
     envVars,
   };
@@ -171,7 +172,7 @@ interface ThreadRuntimeConfig {
   environmentId: string;
   instructionMode: InstructionMode;
   instructions?: string;
-  options?: ThreadExecutionOptions;
+  options?: AgentRuntimeExecutionOptions;
   projectId?: string;
   providerId: string;
   resumePath?: string;
@@ -325,14 +326,15 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
   }
 
   function sameExecutionSettings(
-    left: ThreadExecutionOptions | undefined,
-    right: ThreadExecutionOptions | undefined,
+    left: AgentRuntimeExecutionOptions | undefined,
+    right: AgentRuntimeExecutionOptions | undefined,
   ): boolean {
     return (
       left?.model === right?.model &&
       left?.serviceTier === right?.serviceTier &&
       left?.reasoningLevel === right?.reasoningLevel &&
-      left?.permissionMode === right?.permissionMode
+      left?.permissionMode === right?.permissionMode &&
+      left?.permissionEscalation === right?.permissionEscalation
     );
   }
 
@@ -394,7 +396,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
 
   async function reconfigureThreadIfNeeded(args: {
     instructions: string | undefined;
-    options: ThreadExecutionOptions | undefined;
+    options: AgentRuntimeExecutionOptions | undefined;
     threadId: string;
   }): Promise<void> {
     const currentConfig = threadRuntimeConfigs.get(args.threadId);

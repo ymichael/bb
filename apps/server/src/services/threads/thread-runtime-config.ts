@@ -11,6 +11,7 @@ import {
 import type {
   DynamicTool,
   InstructionMode,
+  PermissionEscalation,
   PermissionMode,
   ProjectExecutionDefaults,
   ReasoningLevel,
@@ -19,6 +20,7 @@ import type {
   Thread,
   ThreadExecutionOptions,
   ThreadExecutionSource,
+  ThreadTurnInitiator,
   WorkspaceProvisionType,
 } from "@bb/domain";
 import { hostDaemonCommandResultSchemaByType } from "@bb/host-daemon-contract";
@@ -88,6 +90,11 @@ export interface ResolveThreadRuntimeCommandConfigArgs {
    * creation time. Preferences are read on subsequent turns.
    */
   isThreadCreation?: boolean;
+}
+
+export interface ResolvePermissionEscalationArgs {
+  initiator: ThreadTurnInitiator;
+  thread: Thread;
 }
 
 export interface ResolvedThreadRuntimeCommandConfig {
@@ -162,6 +169,20 @@ function validateProviderPermissionMode(
     "invalid_request",
     `Provider ${providerId} only supports ${provider.capabilities.supportedPermissionModes.join(", ")} permission mode.`,
   );
+}
+
+export function resolvePermissionEscalation(
+  args: ResolvePermissionEscalationArgs,
+): PermissionEscalation {
+  if (
+    args.initiator === "system"
+    || args.thread.parentThreadId !== null
+    || args.thread.type === "manager"
+  ) {
+    return "deny";
+  }
+
+  return "ask";
 }
 
 export async function resolveExecutionOptions(

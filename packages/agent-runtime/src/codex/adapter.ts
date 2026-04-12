@@ -101,7 +101,7 @@ interface CodexPermissionSettings {
   sandboxPolicy: SandboxPolicy;
 }
 
-function toLimitedCodexSandboxPolicy(): SandboxPolicy {
+function toWorkspaceWriteCodexSandboxPolicy(): SandboxPolicy {
   return {
     type: "workspaceWrite",
     writableRoots: [],
@@ -112,15 +112,36 @@ function toLimitedCodexSandboxPolicy(): SandboxPolicy {
   };
 }
 
+function toReadonlyCodexSandboxPolicy(): SandboxPolicy {
+  return {
+    type: "readOnly",
+    access: { type: "fullAccess" },
+    networkAccess: false,
+  };
+}
+
+function toEscalationApprovalPolicy(
+  escalation: AdapterOptions["permissionEscalation"],
+): AskForApproval {
+  return escalation === "deny" ? "never" : "on-request";
+}
+
 function toCodexPermissionSettings(
   mode: AdapterOptions["permissionMode"],
+  escalation: AdapterOptions["permissionEscalation"],
 ): CodexPermissionSettings {
   switch (mode ?? "full") {
-    case "limited":
+    case "readonly":
       return {
-        approvalPolicy: "on-request",
+        approvalPolicy: toEscalationApprovalPolicy(escalation),
+        sandbox: "read-only",
+        sandboxPolicy: toReadonlyCodexSandboxPolicy(),
+      };
+    case "workspace-write":
+      return {
+        approvalPolicy: toEscalationApprovalPolicy(escalation),
         sandbox: "workspace-write",
-        sandboxPolicy: toLimitedCodexSandboxPolicy(),
+        sandboxPolicy: toWorkspaceWriteCodexSandboxPolicy(),
       };
     case "full":
       return {
@@ -472,6 +493,7 @@ export function createCodexProviderAdapter(
           const dynamicTools = toCodexDynamicTools(command.dynamicTools);
           const permissionSettings = toCodexPermissionSettings(
             command.options?.permissionMode,
+            command.options?.permissionEscalation,
           );
           const params: ThreadStartParams = {
             approvalPolicy: permissionSettings.approvalPolicy,
@@ -495,6 +517,7 @@ export function createCodexProviderAdapter(
           const dynamicTools = toCodexDynamicTools(command.dynamicTools);
           const permissionSettings = toCodexPermissionSettings(
             command.options?.permissionMode,
+            command.options?.permissionEscalation,
           );
           const params: ThreadResumeParams = {
             threadId: command.providerThreadId ?? command.threadId,
@@ -517,6 +540,7 @@ export function createCodexProviderAdapter(
         case "turn/start": {
           const permissionSettings = toCodexPermissionSettings(
             command.options?.permissionMode,
+            command.options?.permissionEscalation,
           );
           return {
             jsonrpc: "2.0",

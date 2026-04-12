@@ -215,7 +215,7 @@ export function registerActionsCommands(
       "--reasoning-level <level>",
       "Reasoning level: low, medium, high, xhigh",
     )
-    .option("--permission-mode <mode>", "Permission mode: limited or full")
+    .option("--permission-mode <mode>", "Permission mode: readonly, workspace-write, or full")
     .option("--mode <mode>", "Message mode (e.g. steer)")
     .action(action(
       async (

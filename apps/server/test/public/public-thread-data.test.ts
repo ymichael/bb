@@ -374,7 +374,7 @@ describe("public thread data routes", () => {
           execution: {
             model: "gpt-5-mini",
             reasoningLevel: "high",
-            permissionMode: "limited",
+            permissionMode: "workspace-write",
             serviceTier: "fast",
             source: "client/turn/requested",
           },
@@ -394,7 +394,7 @@ describe("public thread data routes", () => {
       await expect(readJson(defaultsResponse)).resolves.toEqual({
         model: "gpt-5-mini",
         reasoningLevel: "high",
-        permissionMode: "limited",
+        permissionMode: "workspace-write",
         serviceTier: "fast",
         source: "client/turn/requested",
       });

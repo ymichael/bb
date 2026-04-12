@@ -8,8 +8,8 @@ describe("HireManagerModal helpers", () => {
   it("prefers claude-code when available", () => {
     expect(
       resolvePreferredManagerProviderId([
-        { id: "openai", displayName: "OpenAI", capabilities: { supportsRename: true, supportsServiceTier: true, supportedPermissionModes: ["limited", "full"] }, available: true },
-        { id: "claude-code", displayName: "Claude Code", capabilities: { supportsRename: true, supportsServiceTier: true, supportedPermissionModes: ["limited", "full"] }, available: true },
+        { id: "openai", displayName: "OpenAI", capabilities: { supportsRename: true, supportsServiceTier: true, supportedPermissionModes: ["readonly", "workspace-write", "full"] }, available: true },
+        { id: "claude-code", displayName: "Claude Code", capabilities: { supportsRename: true, supportsServiceTier: true, supportedPermissionModes: ["readonly", "workspace-write", "full"] }, available: true },
         { id: "pi", displayName: "Pi", capabilities: { supportsRename: true, supportsServiceTier: true, supportedPermissionModes: ["full"] }, available: true },
       ]),
     ).toBe("claude-code");
@@ -18,7 +18,7 @@ describe("HireManagerModal helpers", () => {
   it("falls back to the first provider when claude-code is unavailable", () => {
     expect(
       resolvePreferredManagerProviderId([
-        { id: "openai", displayName: "OpenAI", capabilities: { supportsRename: true, supportsServiceTier: true, supportedPermissionModes: ["limited", "full"] }, available: true },
+        { id: "openai", displayName: "OpenAI", capabilities: { supportsRename: true, supportsServiceTier: true, supportedPermissionModes: ["readonly", "workspace-write", "full"] }, available: true },
         { id: "pi", displayName: "Pi", capabilities: { supportsRename: true, supportsServiceTier: true, supportedPermissionModes: ["full"] }, available: true },
       ]),
     ).toBe("openai");

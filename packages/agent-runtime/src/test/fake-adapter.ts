@@ -230,7 +230,7 @@ export function createFakeAdapter(
     capabilities: {
       supportsRename: true,
       supportsServiceTier: false,
-      supportedPermissionModes: ["limited", "full"],
+      supportedPermissionModes: ["readonly", "workspace-write", "full"],
     },
     decodeToolCallRequest,
     displayName: options.displayName ?? DEFAULT_DISPLAY_NAME,

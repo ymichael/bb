@@ -19,7 +19,7 @@ export const DEFAULT_THREAD_WAIT_TIMEOUT_SECONDS = 30;
 export const DEFAULT_THREAD_WAIT_POLL_INTERVAL_MS = 250;
 
 const SERVICE_TIERS: ServiceTier[] = ["fast", "default"];
-const PERMISSION_MODES: PermissionMode[] = ["limited", "full"];
+const PERMISSION_MODES: PermissionMode[] = ["readonly", "workspace-write", "full"];
 
 export function statusText(status: ThreadStatus): string {
   switch (status) {

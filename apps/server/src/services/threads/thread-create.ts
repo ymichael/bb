@@ -59,6 +59,7 @@ import {
   buildSandboxHostEnvironmentProvisionRequest,
 } from "../environments/environment-provision-request.js";
 import { requestThreadStart } from "./thread-lifecycle.js";
+import { resolvePermissionEscalation } from "./thread-runtime-config.js";
 import {
   resolveStableThreadRequestEnvironment,
 } from "./thread-request-eligibility.js";
@@ -326,6 +327,10 @@ async function startQueuedThreadIfNeeded(
     input: args.request.input,
     eventSequence: args.eventSequence,
     execution: args.execution,
+    permissionEscalation: resolvePermissionEscalation({
+      thread: args.thread,
+      initiator: args.request.type === "manager" ? "system" : "user",
+    }),
     projectId: args.thread.projectId,
     providerId: args.thread.providerId,
   });

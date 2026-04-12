@@ -44,7 +44,7 @@ describe("claude-code provider adapter", () => {
     expect(adapter.capabilities).toEqual({
       supportsRename: false,
       supportsServiceTier: false,
-      supportedPermissionModes: ["limited", "full"],
+      supportedPermissionModes: ["readonly", "workspace-write", "full"],
     });
   });
 
@@ -97,7 +97,7 @@ describe("claude-code provider adapter", () => {
       instructionMode: "append",
       options: {
         model: "claude-sonnet-4-5",
-        permissionMode: "limited",
+        permissionMode: "workspace-write",
         instructions: "Focus on the failing tests first.",
         reasoningLevel: "high",
         envVars: {
@@ -123,7 +123,7 @@ describe("claude-code provider adapter", () => {
       params: {
         threadId: "bb-thread-1",
         model: "claude-sonnet-4-5",
-        permissionMode: "default",
+        permissionMode: "acceptEdits",
         baseInstructions: expect.stringContaining("Focus on the failing tests first."),
         dynamicTools: [{
           name: "bb_test_ping",

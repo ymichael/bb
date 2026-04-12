@@ -84,7 +84,7 @@ function makeProvider(overrides: ProviderOverrides = {}): SystemProviderInfo {
     capabilities: {
       supportsRename: true,
       supportsServiceTier: false,
-      supportedPermissionModes: ["limited", "full"],
+      supportedPermissionModes: ["readonly", "workspace-write", "full"],
     },
     displayName: "Codex",
     id: "codex",

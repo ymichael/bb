@@ -4,13 +4,10 @@ import {
   dynamicToolSchema,
   instructionModeSchema,
   promptInputSchema,
-  permissionModeSchema,
-  threadExecutionOptionsSchema,
   threadGitDiffResponseSchema,
   workspaceProvisionTypeSchema,
   providerInfoSchema,
-  reasoningLevelSchema,
-  serviceTierSchema,
+  runtimeThreadExecutionOptionsSchema,
   provisioningTranscriptEntrySchema,
   workspaceDiffTargetSchema,
   workspaceStatusSchema,
@@ -46,12 +43,7 @@ export const HOST_DAEMON_COMMAND_TYPES = [
 export const hostDaemonCommandTypeSchema = z.enum(HOST_DAEMON_COMMAND_TYPES);
 export type HostDaemonCommandType = z.infer<typeof hostDaemonCommandTypeSchema>;
 
-export const hostDaemonExecutionOptionsSchema = threadExecutionOptionsSchema.extend({
-  model: z.string().min(1),
-  serviceTier: serviceTierSchema,
-  reasoningLevel: reasoningLevelSchema,
-  permissionMode: permissionModeSchema,
-});
+export const hostDaemonExecutionOptionsSchema = runtimeThreadExecutionOptionsSchema;
 export type HostDaemonExecutionOptions = z.infer<
   typeof hostDaemonExecutionOptionsSchema
 >;

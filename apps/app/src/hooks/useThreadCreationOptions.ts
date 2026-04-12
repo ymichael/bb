@@ -34,7 +34,8 @@ const REASONING_LABELS: Record<ReasoningLevel, string> = {
 };
 
 const PERMISSION_MODE_OPTIONS: PromptOption<PermissionMode>[] = [
-  { value: "limited", label: "Limited" },
+  { value: "readonly", label: "Readonly" },
+  { value: "workspace-write", label: "Workspace Write" },
   {
     value: "full",
     label: "Full",
@@ -89,7 +90,7 @@ function isReasoningLevel(value: unknown): value is ReasoningLevel {
 }
 
 function isPermissionMode(value: unknown): value is PermissionMode {
-  return value === "limited" || value === "full";
+  return value === "readonly" || value === "workspace-write" || value === "full";
 }
 
 function isServiceTier(value: unknown): value is ServiceTier {

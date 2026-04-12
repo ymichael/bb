@@ -32,7 +32,7 @@ function makeProvider(overrides: ProviderOverrides = {}): SystemProviderInfo {
     capabilities: {
       supportsRename: true,
       supportsServiceTier: false,
-      supportedPermissionModes: ["limited", "full"],
+      supportedPermissionModes: ["readonly", "workspace-write", "full"],
     },
     displayName: "Codex",
     id: "codex",
@@ -91,7 +91,7 @@ describe("useThreadCreationOptions", () => {
         capabilities: {
           supportsRename: true,
           supportsServiceTier: false,
-          supportedPermissionModes: ["limited", "full"],
+          supportedPermissionModes: ["readonly", "workspace-write", "full"],
         },
         displayName: "Codex",
         id: "codex",
@@ -144,7 +144,7 @@ describe("useThreadCreationOptions", () => {
         capabilities: {
           supportsRename: true,
           supportsServiceTier: true,
-          supportedPermissionModes: ["limited", "full"],
+          supportedPermissionModes: ["readonly", "workspace-write", "full"],
         },
         id: "codex",
       }),
@@ -190,7 +190,7 @@ describe("useThreadCreationOptions", () => {
     act(() => {
       result.current.setSelectedModel("gpt-5.4-mini");
       result.current.setReasoningLevel("high");
-      result.current.setPermissionMode("limited");
+      result.current.setPermissionMode("workspace-write");
       result.current.setServiceTier("fast");
       result.current.setEnvironmentSelectionValue("worktree");
     });
@@ -203,7 +203,7 @@ describe("useThreadCreationOptions", () => {
     expect(localStorage.getItem(getProjectScopedStorageKey("bb.promptbox.reasoning", projectId)))
       .toBe("high");
     expect(localStorage.getItem(getProjectScopedStorageKey("bb.promptbox.permission-mode", projectId)))
-      .toBe("limited");
+      .toBe("workspace-write");
     expect(localStorage.getItem(getProjectScopedStorageKey("bb.promptbox.service-tier", projectId)))
       .toBe("fast");
     expect(localStorage.getItem(getProjectScopedStorageKey("bb.promptbox.environment", projectId)))

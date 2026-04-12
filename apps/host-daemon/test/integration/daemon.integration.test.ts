@@ -67,6 +67,7 @@ function createStandardThreadStartCommand(args: {
       serviceTier: "default" as const,
       reasoningLevel: "medium" as const,
       permissionMode: "full" as const,
+      permissionEscalation: "ask" as const,
     },
     instructions: "Be a helpful coding agent.",
     dynamicTools: [],
@@ -95,6 +96,7 @@ function createTurnRunCommand(args: {
       serviceTier: "default" as const,
       reasoningLevel: "medium" as const,
       permissionMode: "full" as const,
+      permissionEscalation: "ask" as const,
     },
     resumeContext: {
       workspaceContext: { workspacePath: args.workspacePath, workspaceProvisionType: "unmanaged" as const },

@@ -84,7 +84,7 @@ describe("project-execution-defaults", () => {
       threadType: "standard",
       model: "gpt-5-mini",
       reasoningLevel: "high",
-      permissionMode: "limited",
+      permissionMode: "workspace-write",
       serviceTier: "fast",
     });
 
@@ -97,7 +97,7 @@ describe("project-execution-defaults", () => {
       providerId: "codex",
       model: "gpt-5-mini",
       reasoningLevel: "high",
-      permissionMode: "limited",
+      permissionMode: "workspace-write",
       serviceTier: "fast",
     });
   });
@@ -120,7 +120,7 @@ describe("project-execution-defaults", () => {
       threadType: "manager",
       model: "gpt-5-mini",
       reasoningLevel: "high",
-      permissionMode: "limited",
+      permissionMode: "workspace-write",
       serviceTier: "fast",
     });
     upsertProjectExecutionDefaults(db, {
@@ -129,7 +129,7 @@ describe("project-execution-defaults", () => {
       threadType: "standard",
       model: "claude-opus-4-1",
       reasoningLevel: "high",
-      permissionMode: "limited",
+      permissionMode: "workspace-write",
       serviceTier: "fast",
     });
 

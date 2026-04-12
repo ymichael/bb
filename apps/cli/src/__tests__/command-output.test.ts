@@ -974,7 +974,7 @@ describe("CLI command output contracts", () => {
         "--service-tier",
         "fast",
         "--permission-mode",
-        "limited",
+        "workspace-write",
       ],
       (program) => registerThreadCommands(program, () => "http://server"),
     );
@@ -986,7 +986,7 @@ describe("CLI command output contracts", () => {
         providerId: "codex",
         model: "gpt-5",
         reasoningLevel: "high",
-        permissionMode: "limited",
+        permissionMode: "workspace-write",
         serviceTier: "fast",
         input: [{ type: "text", text: "hello" }],
         environment: { type: "host", hostId: "host-test-001", workspace: { type: "unmanaged", path: null } },

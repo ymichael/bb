@@ -4,6 +4,7 @@ import type {
   InstructionMode,
   PendingInteractionPayload,
   PendingInteractionResolution,
+  PermissionEscalation,
   PermissionMode,
   PromptInput,
   ProviderCapabilities,
@@ -69,6 +70,7 @@ export interface AdapterOptions {
   serviceTier?: ServiceTier;
   reasoningLevel?: ReasoningLevel;
   permissionMode?: PermissionMode;
+  permissionEscalation?: PermissionEscalation;
   instructions?: string;
   envVars?: Record<string, string>;
 }

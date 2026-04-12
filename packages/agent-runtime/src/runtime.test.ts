@@ -172,7 +172,7 @@ describe("createAgentRuntime", () => {
       capabilities: {
         supportsRename: false,
         supportsServiceTier: false,
-        supportedPermissionModes: ["limited", "full"],
+        supportedPermissionModes: ["readonly", "workspace-write", "full"],
       },
       process: {
         command: "node",
@@ -274,7 +274,7 @@ describe("createAgentRuntime", () => {
       capabilities: {
         supportsRename: false,
         supportsServiceTier: false,
-        supportedPermissionModes: ["limited", "full"],
+        supportedPermissionModes: ["readonly", "workspace-write", "full"],
       },
       process: {
         command: "node",
@@ -547,7 +547,7 @@ describe("createAgentRuntime", () => {
       projectId: "p1",
       providerId: "fake",
       options: {
-        permissionMode: "limited",
+        permissionMode: "workspace-write",
       },
     });
 
@@ -566,7 +566,7 @@ describe("createAgentRuntime", () => {
     if (!threadStart || threadStart.type !== "thread/start") {
       throw new Error("Expected thread/start command");
     }
-    expect(threadStart.options?.permissionMode).toBe("limited");
+    expect(threadStart.options?.permissionMode).toBe("workspace-write");
 
     const reconfigureCommand = findLastRecordedCommand(
       recordedCommands,

@@ -54,11 +54,11 @@ describe("thread runtime config", () => {
     }
   });
 
-  it("honors requested limited permission mode when the provider supports it", async () => {
+  it("honors requested workspace-write permission mode when the provider supports it", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps, {
-        id: "host-runtime-permission-mode-limited",
+        id: "host-runtime-permission-mode-workspace-write",
       });
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -76,12 +76,12 @@ describe("thread runtime config", () => {
         threadId: thread.id,
         requestedExecution: {
           model: "gpt-5",
-          permissionMode: "limited",
+          permissionMode: "workspace-write",
           source: "client/turn/requested",
         },
       });
 
-      expect(execution.permissionMode).toBe("limited");
+      expect(execution.permissionMode).toBe("workspace-write");
     } finally {
       await harness.cleanup();
     }
@@ -111,7 +111,7 @@ describe("thread runtime config", () => {
           threadId: thread.id,
           requestedExecution: {
             model: "openai/codex-mini",
-            permissionMode: "limited",
+            permissionMode: "workspace-write",
             source: "client/turn/requested",
           },
         }),

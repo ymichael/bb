@@ -892,7 +892,7 @@ describe.concurrent("interactive request scenarios", () => {
         projectId: "test-project",
         providerId: "claude-code",
         options: {
-          permissionMode: "limited",
+          permissionMode: "workspace-write",
         },
         instructions:
           "Use the Read tool when the user explicitly asks for it. Do not substitute Bash.",

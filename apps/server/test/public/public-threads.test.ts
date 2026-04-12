@@ -287,7 +287,7 @@ describe("public thread routes", () => {
           model: "gpt-5-mini",
           serviceTier: "fast",
           reasoningLevel: "high",
-          permissionMode: "limited",
+          permissionMode: "workspace-write",
           input: [{ type: "text", text: "Create with explicit execution options" }],
           environment: {
             type: "reuse",
@@ -309,8 +309,8 @@ describe("public thread routes", () => {
           model: "gpt-5-mini",
           serviceTier: "fast",
           reasoningLevel: "high",
-          permissionMode: "limited",
-          source: "client/thread/start",
+          permissionMode: "workspace-write",
+          permissionEscalation: "ask",
         },
       });
       expect(
@@ -323,7 +323,7 @@ describe("public thread routes", () => {
         model: "gpt-5-mini",
         serviceTier: "fast",
         reasoningLevel: "high",
-        permissionMode: "limited",
+        permissionMode: "workspace-write",
       });
     } finally {
       await harness.cleanup();
@@ -356,7 +356,7 @@ describe("public thread routes", () => {
           model: "gpt-5-mini",
           serviceTier: "fast",
           reasoningLevel: "high",
-          permissionMode: "limited",
+          permissionMode: "workspace-write",
           input: [{ type: "text", text: "Create without mutating project defaults" }],
           environment: {
             type: "reuse",
@@ -398,7 +398,7 @@ describe("public thread routes", () => {
         model: "gpt-5",
         serviceTier: "fast",
         reasoningLevel: "high",
-        permissionMode: "limited",
+        permissionMode: "workspace-write",
       });
 
       const response = await harness.app.request("/api/v1/threads", {
@@ -430,8 +430,8 @@ describe("public thread routes", () => {
           model: "gpt-5",
           serviceTier: "fast",
           reasoningLevel: "high",
-          permissionMode: "limited",
-          source: "client/thread/start",
+          permissionMode: "workspace-write",
+          permissionEscalation: "ask",
         },
       });
     } finally {
@@ -460,7 +460,7 @@ describe("public thread routes", () => {
         model: "gpt-5",
         serviceTier: "fast",
         reasoningLevel: "high",
-        permissionMode: "limited",
+        permissionMode: "workspace-write",
       });
 
       const response = await harness.app.request("/api/v1/threads", {
@@ -951,7 +951,7 @@ describe("public thread routes", () => {
           serviceTier: "default",
           reasoningLevel: "medium",
           permissionMode: "full",
-          source: "client/thread/start",
+          permissionEscalation: "ask",
         },
       });
       expect(getThread(harness.db, createdThread.id)).toMatchObject({
@@ -2143,7 +2143,7 @@ describe("public thread routes", () => {
           serviceTier: "default",
           reasoningLevel: "medium",
           permissionMode: "full",
-          source: "client/turn/requested",
+          permissionEscalation: "ask",
         },
         resumeContext: {
           workspaceContext: { workspacePath: environment.path, workspaceProvisionType: "unmanaged" },
@@ -2181,7 +2181,7 @@ describe("public thread routes", () => {
           serviceTier: "default",
           reasoningLevel: "medium",
           permissionMode: "full",
-          source: "client/turn/requested",
+          permissionEscalation: "ask",
         },
         resumeContext: {
           workspaceContext: { workspacePath: environment.path, workspaceProvisionType: "unmanaged" },
@@ -2242,7 +2242,7 @@ describe("public thread routes", () => {
             model: "gpt-5-mini",
             serviceTier: "fast",
             reasoningLevel: "high",
-            permissionMode: "limited",
+            permissionMode: "workspace-write",
           }),
         },
       );
@@ -2259,8 +2259,8 @@ describe("public thread routes", () => {
           model: "gpt-5-mini",
           serviceTier: "fast",
           reasoningLevel: "high",
-          permissionMode: "limited",
-          source: "client/turn/requested",
+          permissionMode: "workspace-write",
+          permissionEscalation: "ask",
         },
       });
       expect(
@@ -3314,7 +3314,7 @@ describe("public thread routes", () => {
         serviceTier: "default",
         reasoningLevel: "medium",
         permissionMode: "full",
-        source: "client/thread/start",
+        permissionEscalation: "deny",
       });
       expect(managerStartCommand.command.dynamicTools).toEqual(
         [expect.objectContaining({ name: "message_user" })],
@@ -3444,7 +3444,7 @@ describe("public thread routes", () => {
           serviceTier: "default",
           reasoningLevel: "medium",
           permissionMode: "full",
-          source: "client/turn/requested",
+          permissionEscalation: "deny",
         },
         resumeContext: {
           providerId: managerThread.providerId,
@@ -3545,7 +3545,7 @@ describe("public thread routes", () => {
           serviceTier: "default",
           reasoningLevel: "medium",
           permissionMode: "full",
-          source: "client/turn/requested",
+          permissionEscalation: "deny",
         },
         resumeContext: {
           providerId: managerThread.providerId,

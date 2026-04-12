@@ -268,8 +268,12 @@ describe("parsePermissionMode", () => {
     expect(parsePermissionMode(undefined)).toBeUndefined();
   });
 
-  it("returns 'limited' for 'limited'", () => {
-    expect(parsePermissionMode("limited")).toBe("limited");
+  it("returns 'workspace-write' for 'workspace-write'", () => {
+    expect(parsePermissionMode("workspace-write")).toBe("workspace-write");
+  });
+
+  it("returns 'readonly' for 'readonly'", () => {
+    expect(parsePermissionMode("readonly")).toBe("readonly");
   });
 
   it("returns 'full' for 'full'", () => {

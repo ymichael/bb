@@ -20,6 +20,7 @@ import {
 import {
   isActiveLifecycleOperationState,
   type PromptInput,
+  type PermissionEscalation,
   type ResolvedThreadExecutionOptions,
   type Thread,
   type WorkspaceProvisionType,
@@ -65,6 +66,7 @@ export interface QueueReadyThreadTurnCommandArgs {
   };
   eventSequence: number;
   execution: ResolvedThreadExecutionOptions;
+  permissionEscalation: PermissionEscalation;
   input: PromptInput[];
   thread: Thread;
 }
@@ -378,6 +380,7 @@ export async function queueReadyThreadTurnCommand(
       input: args.input,
       eventSequence: args.eventSequence,
       execution: args.execution,
+      permissionEscalation: args.permissionEscalation,
       environment: args.environment,
       providerThreadId,
     });
@@ -390,6 +393,7 @@ export async function queueReadyThreadTurnCommand(
     input: args.input,
     eventSequence: args.eventSequence,
     execution: args.execution,
+    permissionEscalation: args.permissionEscalation,
     projectId: args.thread.projectId,
     providerId: args.thread.providerId,
   });
