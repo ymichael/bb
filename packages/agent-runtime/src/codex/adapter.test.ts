@@ -129,6 +129,29 @@ describe("codex provider adapter", () => {
     });
   });
 
+  it("buildCommand thread/start ignores escalation in full permission mode", () => {
+    const adapter = createCodexProviderAdapter();
+    const cmd = adapter.buildCommand({
+      type: "thread/start",
+      cwd: "/tmp/worktree",
+      threadId: "t1",
+      input: [{ type: "text", text: "hello" }],
+      instructionMode: "append",
+      options: {
+        permissionEscalation: "deny",
+        permissionMode: "full",
+      },
+    });
+
+    expect(cmd).toMatchObject({
+      method: "thread/start",
+      params: {
+        approvalPolicy: "never",
+        sandbox: "danger-full-access",
+      },
+    });
+  });
+
   it("buildCommand thread/start disables provider user-input requests", () => {
     const adapter = createCodexProviderAdapter();
     const cmd = adapter.buildCommand({

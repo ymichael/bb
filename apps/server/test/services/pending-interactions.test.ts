@@ -150,6 +150,140 @@ describe("pending interaction lifecycle", () => {
     }
   });
 
+  it("rejects interactions from providers that do not own the thread", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-pending-interaction-provider-mismatch",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        providerId: "codex",
+      });
+
+      expect(
+        harness.deps.pendingInteractions.registerPendingInteraction({
+          threadId: thread.id,
+          turnId: "turn-provider-mismatch",
+          providerId: "claude-code",
+          providerThreadId: "provider-thread-provider-mismatch",
+          providerRequestId: "request-provider-mismatch",
+          payload: {
+            kind: "command_approval",
+            itemId: "item-provider-mismatch",
+            reason: "Needs approval",
+            command: "git push",
+            cwd: "/tmp/project",
+            commandActions: [],
+            requestedPermissions: null,
+            availableDecisions: ["accept", "decline", "cancel"],
+          },
+        }),
+      ).toEqual({
+        outcome: "rejected",
+        reason:
+          `Thread ${thread.id} belongs to provider codex, not claude-code`,
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("treats reordered permission grants as idempotent resolution retries", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-pending-interaction-idempotent-permissions",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+      });
+
+      const created = harness.deps.pendingInteractions.registerPendingInteraction({
+        threadId: thread.id,
+        turnId: "turn-idempotent-permissions",
+        providerId: "codex",
+        providerThreadId: "provider-thread-idempotent-permissions",
+        providerRequestId: "request-idempotent-permissions",
+        payload: {
+          kind: "permission_request",
+          itemId: "item-idempotent-permissions",
+          reason: "Needs workspace access",
+          toolName: "Bash",
+          permissions: {
+            network: null,
+            fileSystem: {
+              read: ["/tmp/project/a", "/tmp/project/b"],
+              write: ["/tmp/project/c", "/tmp/project/d"],
+            },
+          },
+        },
+      });
+      if (created.outcome === "rejected") {
+        throw new Error(`Expected interaction registration to succeed: ${created.reason}`);
+      }
+
+      const firstResolution = harness.deps.pendingInteractions.resolvePendingInteraction({
+        threadId: thread.id,
+        interactionId: created.interaction.id,
+        resolution: {
+          kind: "permission_request",
+          decision: "allow",
+          permissions: {
+            network: null,
+            fileSystem: {
+              read: ["/tmp/project/a", "/tmp/project/b"],
+              write: ["/tmp/project/c", "/tmp/project/d"],
+            },
+          },
+          scope: "turn",
+        },
+      });
+      expect(firstResolution.status).toBe("resolved");
+
+      const retryResolution = harness.deps.pendingInteractions.resolvePendingInteraction({
+        threadId: thread.id,
+        interactionId: created.interaction.id,
+        resolution: {
+          kind: "permission_request",
+          decision: "allow",
+          permissions: {
+            network: null,
+            fileSystem: {
+              read: ["/tmp/project/b", "/tmp/project/a"],
+              write: ["/tmp/project/d", "/tmp/project/c"],
+            },
+          },
+          scope: "turn",
+        },
+      });
+
+      expect(retryResolution).toMatchObject({
+        id: created.interaction.id,
+        status: "resolved",
+        resolution: firstResolution.resolution,
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("resolves waiters when an interaction reaches a terminal state", async () => {
     const harness = await createTestAppHarness();
     try {

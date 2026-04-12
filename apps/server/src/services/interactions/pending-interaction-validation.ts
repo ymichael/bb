@@ -5,6 +5,7 @@ import {
   type PendingInteraction,
   type PendingInteractionCommandApprovalDecision,
   type PendingInteractionFileChangeApprovalDecision,
+  type PendingInteractionGrantedPermissionProfile,
   type PendingInteractionResolution,
 } from "@bb/domain";
 import { ApiError } from "../../errors.js";
@@ -44,6 +45,71 @@ function commandApprovalDecisionEquals(
   }
 
   return false;
+}
+
+function stringSetEquals(left: readonly string[], right: readonly string[]): boolean {
+  const leftSet = new Set(left);
+  const rightSet = new Set(right);
+  if (leftSet.size !== rightSet.size) {
+    return false;
+  }
+
+  return [...leftSet].every((value) => rightSet.has(value));
+}
+
+function permissionProfileEquals(
+  left: PendingInteractionGrantedPermissionProfile,
+  right: PendingInteractionGrantedPermissionProfile,
+): boolean {
+  if (left.network?.enabled !== right.network?.enabled) {
+    return false;
+  }
+
+  if (left.fileSystem === null || right.fileSystem === null) {
+    return left.fileSystem === right.fileSystem;
+  }
+
+  return (
+    stringSetEquals(left.fileSystem.read, right.fileSystem.read)
+    && stringSetEquals(left.fileSystem.write, right.fileSystem.write)
+  );
+}
+
+export function pendingInteractionResolutionEquals(
+  left: PendingInteraction["resolution"],
+  right: PendingInteraction["resolution"],
+): boolean {
+  if (left === null || right === null) {
+    return left === right;
+  }
+
+  if (left.kind !== right.kind) {
+    return false;
+  }
+
+  switch (left.kind) {
+    case "command_approval":
+      return (
+        right.kind === "command_approval"
+        && commandApprovalDecisionEquals(left.decision, right.decision)
+      );
+    case "file_change_approval":
+      return (
+        right.kind === "file_change_approval"
+        && left.decision === right.decision
+      );
+    case "permission_request":
+      if (right.kind !== "permission_request" || left.decision !== right.decision) {
+        return false;
+      }
+      if (left.decision === "deny" || right.decision === "deny") {
+        return left.decision === right.decision;
+      }
+      return (
+        left.scope === right.scope
+        && permissionProfileEquals(left.permissions, right.permissions)
+      );
+  }
 }
 
 function validateCommandApprovalResolution(

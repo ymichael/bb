@@ -9,7 +9,9 @@
  */
 
 import { getBuiltInAgentProviderInfo } from "@bb/agent-providers";
+import { jsonValueSchema } from "@bb/domain";
 import type {
+  PermissionEscalation,
   PromptInput,
   ProviderCapabilities,
   ServiceTier,
@@ -41,6 +43,7 @@ import {
 import {
   decodeNativeProviderToolCallRequest,
 } from "../shared/provider-tool-call-contract.js";
+import { resolveAdapterPermissionPolicy } from "../shared/permission-policy.js";
 import { createUnhandledProviderEvent } from "../shared/provider-unhandled-event.js";
 import type {
   AdapterCommand,
@@ -121,25 +124,29 @@ function toReadonlyCodexSandboxPolicy(): SandboxPolicy {
 }
 
 function toEscalationApprovalPolicy(
-  escalation: AdapterOptions["permissionEscalation"],
+  escalation: PermissionEscalation,
 ): AskForApproval {
   return escalation === "deny" ? "never" : "on-request";
 }
 
 function toCodexPermissionSettings(
-  mode: AdapterOptions["permissionMode"],
-  escalation: AdapterOptions["permissionEscalation"],
+  options: AdapterOptions | undefined,
 ): CodexPermissionSettings {
-  switch (mode ?? "full") {
+  const permissionPolicy = resolveAdapterPermissionPolicy(options);
+  switch (permissionPolicy.permissionMode) {
     case "readonly":
       return {
-        approvalPolicy: toEscalationApprovalPolicy(escalation),
+        approvalPolicy: toEscalationApprovalPolicy(
+          permissionPolicy.permissionEscalation,
+        ),
         sandbox: "read-only",
         sandboxPolicy: toReadonlyCodexSandboxPolicy(),
       };
     case "workspace-write":
       return {
-        approvalPolicy: toEscalationApprovalPolicy(escalation),
+        approvalPolicy: toEscalationApprovalPolicy(
+          permissionPolicy.permissionEscalation,
+        ),
         sandbox: "workspace-write",
         sandboxPolicy: toWorkspaceWriteCodexSandboxPolicy(),
       };
@@ -241,7 +248,7 @@ function toCodexDynamicTools(
   return dynamicTools?.map((tool) => ({
     name: tool.name,
     description: tool.description,
-    inputSchema: JSON.parse(JSON.stringify(tool.inputSchema)),
+    inputSchema: jsonValueSchema.parse(tool.inputSchema),
   }));
 }
 
@@ -491,10 +498,7 @@ export function createCodexProviderAdapter(
           };
         case "thread/start": {
           const dynamicTools = toCodexDynamicTools(command.dynamicTools);
-          const permissionSettings = toCodexPermissionSettings(
-            command.options?.permissionMode,
-            command.options?.permissionEscalation,
-          );
+          const permissionSettings = toCodexPermissionSettings(command.options);
           const params: ThreadStartParams = {
             approvalPolicy: permissionSettings.approvalPolicy,
             sandbox: permissionSettings.sandbox,
@@ -515,10 +519,7 @@ export function createCodexProviderAdapter(
         }
         case "thread/resume": {
           const dynamicTools = toCodexDynamicTools(command.dynamicTools);
-          const permissionSettings = toCodexPermissionSettings(
-            command.options?.permissionMode,
-            command.options?.permissionEscalation,
-          );
+          const permissionSettings = toCodexPermissionSettings(command.options);
           const params: ThreadResumeParams = {
             threadId: command.providerThreadId ?? command.threadId,
             approvalPolicy: permissionSettings.approvalPolicy,
@@ -538,10 +539,7 @@ export function createCodexProviderAdapter(
           };
         }
         case "turn/start": {
-          const permissionSettings = toCodexPermissionSettings(
-            command.options?.permissionMode,
-            command.options?.permissionEscalation,
-          );
+          const permissionSettings = toCodexPermissionSettings(command.options);
           return {
             jsonrpc: "2.0",
             method: "turn/start",

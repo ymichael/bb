@@ -25,6 +25,10 @@ import type {
   AgentRuntimeOptions,
   AgentRuntimeShellEnvironment,
 } from "./types.js";
+import {
+  resolveAdapterPermissionPolicy,
+  shouldAutoDenyInteractiveRequest,
+} from "./shared/permission-policy.js";
 
 // ---------------------------------------------------------------------------
 // JSON-RPC helpers
@@ -106,12 +110,21 @@ function toAdapterOptions(
   envVars: Record<string, string>,
 ): AdapterOptions | undefined {
   if (!execOpts && !instructions && Object.keys(envVars).length === 0) return undefined;
+  const permissionPolicy = execOpts
+    ? resolveAdapterPermissionPolicy(execOpts)
+    : null;
   return {
     model: execOpts?.model,
     serviceTier: execOpts?.serviceTier,
     reasoningLevel: execOpts?.reasoningLevel,
-    permissionMode: execOpts?.permissionMode,
-    permissionEscalation: execOpts?.permissionEscalation,
+    ...(permissionPolicy
+      ? {
+          permissionMode: permissionPolicy.permissionMode,
+          ...(permissionPolicy.permissionEscalation === null
+            ? {}
+            : { permissionEscalation: permissionPolicy.permissionEscalation }),
+        }
+      : {}),
     instructions,
     envVars,
   };
@@ -353,12 +366,14 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     left: AgentRuntimeExecutionOptions | undefined,
     right: AgentRuntimeExecutionOptions | undefined,
   ): boolean {
+    const leftPolicy = resolveAdapterPermissionPolicy(left);
+    const rightPolicy = resolveAdapterPermissionPolicy(right);
     return (
       left?.model === right?.model &&
       left?.serviceTier === right?.serviceTier &&
       left?.reasoningLevel === right?.reasoningLevel &&
-      left?.permissionMode === right?.permissionMode &&
-      left?.permissionEscalation === right?.permissionEscalation
+      leftPolicy.permissionMode === rightPolicy.permissionMode &&
+      leftPolicy.permissionEscalation === rightPolicy.permissionEscalation
     );
   }
 
@@ -650,7 +665,9 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     });
     const threadConfig = threadRuntimeConfigs.get(resolvedThreadId);
     if (
-      threadConfig?.options?.permissionEscalation === "deny"
+      // Managed/non-interactive contexts use deny escalation so providers get a
+      // deterministic denial instead of waiting for a UI that will never answer.
+      shouldAutoDenyInteractiveRequest(threadConfig?.options ?? {})
       || !options.onInteractiveRequest
     ) {
       const resolution = buildDeniedInteractiveResolution(interactiveReq.payload);

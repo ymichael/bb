@@ -639,6 +639,66 @@ rl.on("line", (line) => {
     await runtime.shutdown();
   });
 
+  it("reconfigures permission policy before starting a turn when options change", async () => {
+    const recordedCommands: AdapterCommand[] = [];
+    const runtime = createAgentRuntime({
+      workspacePath: tmpDir,
+      onEvent: () => undefined,
+      onToolCall: async () => ({
+        contentItems: [{ type: "inputText", text: "ok" }],
+        success: true,
+      }),
+      adapterFactory: () =>
+        createRecordingAdapter({ recordedCommands, scriptPath }),
+    });
+
+    await runtime.startThread({
+      environmentId: "env-1",
+      threadId: "t1",
+      projectId: "p1",
+      providerId: "fake",
+      options: {
+        permissionEscalation: "ask",
+        permissionMode: "workspace-write",
+      },
+    });
+
+    await runtime.runTurn({
+      threadId: "t1",
+      input: [{ type: "text", text: "follow up" }],
+      options: {
+        permissionEscalation: "deny",
+        permissionMode: "readonly",
+      },
+    });
+
+    const resumeIndex = recordedCommands.findIndex(
+      (command) => command.type === "thread/resume",
+    );
+    const turnStartIndex = recordedCommands.findIndex(
+      (command) => command.type === "turn/start",
+    );
+    expect(resumeIndex).toBeGreaterThan(-1);
+    expect(turnStartIndex).toBeGreaterThan(-1);
+    expect(resumeIndex).toBeLessThan(turnStartIndex);
+
+    const resumeCommand = recordedCommands[resumeIndex];
+    if (!resumeCommand || resumeCommand.type !== "thread/resume") {
+      throw new Error("Expected thread/resume command");
+    }
+    expect(resumeCommand.options?.permissionMode).toBe("readonly");
+    expect(resumeCommand.options?.permissionEscalation).toBe("deny");
+
+    const turnStartCommand = recordedCommands[turnStartIndex];
+    if (!turnStartCommand || turnStartCommand.type !== "turn/start") {
+      throw new Error("Expected turn/start command");
+    }
+    expect(turnStartCommand.options?.permissionMode).toBe("readonly");
+    expect(turnStartCommand.options?.permissionEscalation).toBe("deny");
+
+    await runtime.shutdown();
+  });
+
   it("runs a turn and receives turn/started + turn/completed events", async () => {
     const events: ThreadEvent[] = [];
     const runtime = createAgentRuntime({

@@ -35,6 +35,7 @@ import {
   jsonRpcEnvelopeSchema,
   type BridgeToolCallRequest,
 } from "../../shared/bridge-tool-calls.js";
+import { shouldAutoDenyInteractiveRequest } from "../../shared/permission-policy.js";
 import { SdkSession, type SdkSessionOptions } from "./sdk-session.js";
 import { listClaudeCodeBridgeModels } from "./model-list.js";
 import {
@@ -61,7 +62,12 @@ import {
 // ---------------------------------------------------------------------------
 
 const bridgeInstructionModeSchema = z.enum(instructionModeValues);
-const bridgePermissionEscalationSchema = z.enum(permissionEscalationValues);
+const bridgePermissionEscalationSchema =
+  z.enum(permissionEscalationValues).nullable();
+const promptTextInputSchema = z.object({
+  type: z.literal("text"),
+  text: z.string(),
+});
 
 const claudeCodeCommandSchema = z.discriminatedUnion("method", [
   z.object({
@@ -200,7 +206,7 @@ interface ThreadSession {
   session: SdkSession;
   pendingToolCalls: Map<string | number, PendingToolCall>;
   pendingInteractiveRequests: Map<string | number, PendingInteractiveRequest>;
-  permissionEscalation: PermissionEscalation;
+  permissionEscalation: PermissionEscalation | null;
   permissionMode: ClaudePermissionMode;
   providerThreadId?: string;
 }
@@ -228,7 +234,7 @@ interface BuildSessionOptionsArgs {
   cwd: string;
   instructionMode: InstructionMode;
   model?: string;
-  permissionEscalation: PermissionEscalation;
+  permissionEscalation: PermissionEscalation | null;
   permissionMode: ClaudePermissionMode;
 }
 
@@ -633,7 +639,7 @@ function createCanUseTool(
     }
 
     if (
-      threadSession.permissionEscalation === "deny"
+      shouldAutoDenyInteractiveRequest(threadSession)
       || threadSession.permissionMode === "dontAsk"
     ) {
       const policyMessage = threadSession.permissionMode === "acceptEdits"
@@ -890,10 +896,9 @@ function extractInputText(input: unknown): string | undefined {
 
   const chunks: string[] = [];
   for (const item of input) {
-    if (!item || typeof item !== "object") continue;
-    const typed = item as { type?: string; text?: string };
-    if (typed.type === "text" && typeof typed.text === "string") {
-      chunks.push(typed.text);
+    const parsed = promptTextInputSchema.safeParse(item);
+    if (parsed.success) {
+      chunks.push(parsed.data.text);
     }
   }
 

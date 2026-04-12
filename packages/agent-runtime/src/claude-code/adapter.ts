@@ -17,10 +17,11 @@ import type {
   ThreadEventTokenUsage,
   ThreadEventTokenUsageBreakdown,
 } from "@bb/domain";
-import { toPositiveNumber } from "@bb/domain";
+import { jsonValueSchema, toPositiveNumber } from "@bb/domain";
 import {
   decodeNormalizedProviderToolCallRequest,
 } from "../shared/provider-tool-call-contract.js";
+import { resolveAdapterPermissionPolicy } from "../shared/permission-policy.js";
 import { resolveBridgePath } from "../shared/bridge-path.js";
 import {
   bashArgsSchema,
@@ -825,8 +826,9 @@ export function createClaudeCodeProviderAdapter(
           const dynamicTools = command.dynamicTools?.map((t) => ({
             name: t.name,
             description: t.description,
-            inputSchema: JSON.parse(JSON.stringify(t.inputSchema)),
+            inputSchema: jsonValueSchema.parse(t.inputSchema),
           }));
+          const permissionPolicy = resolveAdapterPermissionPolicy(command.options);
           return {
             jsonrpc: "2.0",
             method: "thread/start",
@@ -835,11 +837,8 @@ export function createClaudeCodeProviderAdapter(
               threadId: command.threadId,
               cwd: command.cwd,
               instructionMode: command.instructionMode,
-              permissionMode: toClaudePermissionMode({
-                permissionMode: command.options?.permissionMode,
-                permissionEscalation: command.options?.permissionEscalation,
-              }),
-              permissionEscalation: command.options?.permissionEscalation ?? "ask",
+              permissionMode: toClaudePermissionMode(permissionPolicy),
+              permissionEscalation: permissionPolicy.permissionEscalation,
               ...(Object.keys(finalConfig).length > 0 ? { config: finalConfig } : {}),
               ...(command.options?.model ? { model: command.options.model } : {}),
               ...(dynamicTools && dynamicTools.length > 0 ? { dynamicTools } : {}),
@@ -862,8 +861,9 @@ export function createClaudeCodeProviderAdapter(
           const dynamicTools = command.dynamicTools?.map((t) => ({
             name: t.name,
             description: t.description,
-            inputSchema: JSON.parse(JSON.stringify(t.inputSchema)),
+            inputSchema: jsonValueSchema.parse(t.inputSchema),
           }));
+          const permissionPolicy = resolveAdapterPermissionPolicy(command.options);
           return {
             jsonrpc: "2.0",
             method: "thread/resume",
@@ -873,11 +873,8 @@ export function createClaudeCodeProviderAdapter(
               cwd: command.cwd,
               providerThreadId: command.providerThreadId ?? null,
               instructionMode: command.instructionMode,
-              permissionMode: toClaudePermissionMode({
-                permissionMode: command.options?.permissionMode,
-                permissionEscalation: command.options?.permissionEscalation,
-              }),
-              permissionEscalation: command.options?.permissionEscalation ?? "ask",
+              permissionMode: toClaudePermissionMode(permissionPolicy),
+              permissionEscalation: permissionPolicy.permissionEscalation,
               ...(Object.keys(finalResumeConfig).length > 0 ? { config: finalResumeConfig } : {}),
               ...(command.options?.model ? { model: command.options.model } : {}),
               ...(dynamicTools && dynamicTools.length > 0 ? { dynamicTools } : {}),

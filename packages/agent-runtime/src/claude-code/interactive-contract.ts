@@ -3,9 +3,10 @@ import type {
   PendingInteractionGrantedPermissionProfile,
   PendingInteractionGrantablePermissionProfile,
   PendingInteractionPermissionGrantScope,
-  PermissionEscalation,
-  PermissionMode,
 } from "@bb/domain";
+import type {
+  ResolvedAdapterPermissionPolicy,
+} from "../shared/permission-policy.js";
 
 export const CLAUDE_PERMISSION_REQUEST_APPROVAL_METHOD =
   "item/permissions/requestApproval";
@@ -19,21 +20,16 @@ export const claudePermissionModeSchema = z.enum([
 ]);
 export type ClaudePermissionMode = z.infer<typeof claudePermissionModeSchema>;
 
-interface ToClaudePermissionModeArgs {
-  permissionEscalation: PermissionEscalation | undefined;
-  permissionMode: PermissionMode | undefined;
-}
-
 export function toClaudePermissionMode(
-  args: ToClaudePermissionModeArgs,
+  policy: ResolvedAdapterPermissionPolicy,
 ): ClaudePermissionMode {
-  switch (args.permissionMode ?? "full") {
+  switch (policy.permissionMode) {
     case "full":
       return "bypassPermissions";
     case "workspace-write":
       return "acceptEdits";
     case "readonly":
-      return args.permissionEscalation === "deny" ? "dontAsk" : "default";
+      return policy.permissionEscalation === "deny" ? "dontAsk" : "default";
   }
 }
 

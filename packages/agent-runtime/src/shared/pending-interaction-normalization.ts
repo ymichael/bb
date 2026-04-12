@@ -4,6 +4,8 @@ import {
   type PendingInteractionRequestedPermissionProfile,
 } from "@bb/domain";
 
+// Providers inconsistently omit fields or send null for the same "not present"
+// wire value. Normalize that external input before validating the domain shape.
 const nullToUndefined = (value: unknown): unknown =>
   value === null ? undefined : value;
 

@@ -24,7 +24,10 @@ import { ApiError } from "../../errors.js";
 import type { AppDeps } from "../../types.js";
 import { appendPendingInteractionTimelineEvent } from "./pending-interaction-timeline.js";
 import { toPendingInteraction } from "./pending-interaction-serialization.js";
-import { validatePendingInteractionResolution } from "./pending-interaction-validation.js";
+import {
+  pendingInteractionResolutionEquals,
+  validatePendingInteractionResolution,
+} from "./pending-interaction-validation.js";
 
 interface PendingInteractionWaiter {
   settled: boolean;
@@ -97,13 +100,6 @@ function buildResolveConflictError(interaction: PendingInteraction): ApiError {
     "invalid_request",
     `Pending interaction ${interaction.id} is already ${interaction.status}`,
   );
-}
-
-function pendingInteractionResolutionEquals(
-  left: PendingInteraction["resolution"],
-  right: PendingInteraction["resolution"],
-): boolean {
-  return JSON.stringify(left) === JSON.stringify(right);
 }
 
 function getUnsupportedPendingInteractionReason(
@@ -250,6 +246,13 @@ export class PendingInteractionLifecycle {
       return {
         outcome: "rejected",
         reason: "Thread does not exist",
+      };
+    }
+    if (thread.providerId !== interaction.providerId) {
+      return {
+        outcome: "rejected",
+        reason:
+          `Thread ${interaction.threadId} belongs to provider ${thread.providerId}, not ${interaction.providerId}`,
       };
     }
     const unsupportedReason = getUnsupportedPendingInteractionReason(interaction);
@@ -515,7 +518,10 @@ export class PendingInteractionLifecycle {
       }).map(toPendingInteraction);
 
       for (const interaction of pendingInteractions) {
-        this.scheduleInteractionExpiry(interaction);
+        this.scheduleInteractionExpiryWithMs(
+          interaction,
+          this.sandboxInteractionExpiryMs,
+        );
       }
 
       if (pendingInteractions.length < PENDING_INTERACTION_HYDRATE_BATCH_SIZE) {
@@ -547,14 +553,21 @@ export class PendingInteractionLifecycle {
   }
 
   private scheduleInteractionExpiry(interaction: PendingInteraction): void {
-    this.clearExpiryTimer(interaction.id);
-
-    if (interaction.status !== "pending") {
+    const interactionExpiryMs = this.resolveInteractionExpiryMs(interaction);
+    if (interactionExpiryMs === null) {
       return;
     }
 
-    const interactionExpiryMs = this.resolveInteractionExpiryMs(interaction);
-    if (interactionExpiryMs === null) {
+    this.scheduleInteractionExpiryWithMs(interaction, interactionExpiryMs);
+  }
+
+  private scheduleInteractionExpiryWithMs(
+    interaction: PendingInteraction,
+    interactionExpiryMs: number,
+  ): void {
+    this.clearExpiryTimer(interaction.id);
+
+    if (interaction.status !== "pending") {
       return;
     }
 

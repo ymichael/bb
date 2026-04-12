@@ -83,7 +83,7 @@ describe("claude-code provider adapter", () => {
     expect(cmd?.params).toMatchObject({
       threadId: "bb-thread-1",
       permissionMode: "bypassPermissions",
-      permissionEscalation: "ask",
+      permissionEscalation: null,
       cwd: "/tmp/worktree",
     });
   });
@@ -169,7 +169,7 @@ describe("claude-code provider adapter", () => {
       threadId: "bb-thread-1",
       providerThreadId: "claude-session-1",
       permissionMode: "bypassPermissions",
-      permissionEscalation: "ask",
+      permissionEscalation: null,
     });
   });
 
@@ -189,6 +189,25 @@ describe("claude-code provider adapter", () => {
     expect(cmd?.params).toMatchObject({
       permissionMode: "dontAsk",
       permissionEscalation: "deny",
+    });
+  });
+
+  it("buildCommand thread/start ignores escalation in full permission mode", () => {
+    const adapter = createClaudeCodeProviderAdapter();
+    const cmd = adapter.buildCommand({
+      type: "thread/start",
+      cwd: "/tmp/worktree",
+      threadId: "bb-thread-1",
+      input: [{ type: "text", text: "hello" }],
+      instructionMode: "append",
+      options: {
+        permissionEscalation: "deny",
+        permissionMode: "full",
+      },
+    });
+    expect(cmd?.params).toMatchObject({
+      permissionMode: "bypassPermissions",
+      permissionEscalation: null,
     });
   });
 
@@ -223,6 +242,25 @@ describe("claude-code provider adapter", () => {
     expect(cmd?.params).toMatchObject({
       threadId: "bb-thread-1",
       providerThreadId: null,
+    });
+  });
+
+  it("buildCommand thread/resume maps updated permission policy", () => {
+    const adapter = createClaudeCodeProviderAdapter();
+    const cmd = adapter.buildCommand({
+      type: "thread/resume",
+      cwd: "/tmp/worktree",
+      threadId: "bb-thread-1",
+      providerThreadId: "claude-session-1",
+      instructionMode: "append",
+      options: {
+        permissionEscalation: "deny",
+        permissionMode: "readonly",
+      },
+    });
+    expect(cmd?.params).toMatchObject({
+      permissionEscalation: "deny",
+      permissionMode: "dontAsk",
     });
   });
 
