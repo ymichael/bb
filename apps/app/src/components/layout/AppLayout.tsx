@@ -99,14 +99,8 @@ function AppHeader({
   const { isMobile, open, openMobile } = useSidebar()
   const isSidebarCollapsed = isMobile ? !openMobile : !open
   const showProjectMenuButton = isProjectMainView && isSidebarCollapsed
-  const showProjectNameInHeader = !isProjectMainView || isSidebarCollapsed
-  const collapsedProjectLabel =
-    isSidebarCollapsed && isProjectMainView && projectId
-      ? (projectName ?? projectId)
-      : undefined
-  const headerBreadcrumbs = collapsedProjectLabel
-    ? [{ label: "Projects" }, { label: collapsedProjectLabel }]
-    : (showProjectNameInHeader ? meta.breadcrumbs : undefined)
+  const showProjectNameInHeader = !isProjectMainView
+  const headerBreadcrumbs = showProjectNameInHeader ? meta.breadcrumbs : undefined
   const headerTitle =
     headerBreadcrumbs ? undefined : (showProjectNameInHeader ? meta.title : undefined)
 
@@ -281,7 +275,6 @@ export function AppLayout({ children }: AppLayoutProps) {
           title: "",
           subtitle: undefined,
           breadcrumbs: [
-            { label: "Projects" },
             {
               label: projectLabel ?? projectId,
               to: `/projects/${projectId}`,
@@ -294,7 +287,6 @@ export function AppLayout({ children }: AppLayoutProps) {
           title: "",
           subtitle: undefined,
           breadcrumbs: [
-            { label: "Projects" },
             {
               label: projectLabel ?? projectId,
               to: `/projects/${projectId}`,
