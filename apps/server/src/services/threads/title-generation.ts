@@ -15,7 +15,13 @@ const MIN_TITLE_GENERATION_WORDS = 5;
 const MAX_BRANCH_SLUG_LENGTH = 48;
 
 type ThreadMetadataGenerationDeps = Pick<AppDeps, "config" | "logger">;
+type ThreadTitleApplyDeps = Pick<AppDeps, "db" | "hub">;
 type ThreadTitleGenerationDeps = Pick<AppDeps, "config" | "db" | "hub" | "logger">;
+
+export interface ApplyGeneratedThreadTitleArgs {
+  threadId: string;
+  title: string;
+}
 
 export interface ThreadMetadataGenerationArgs {
   input: PromptInput[];
@@ -136,6 +142,32 @@ export async function generateThreadMetadata(
   }
 }
 
+export function applyGeneratedThreadTitle(
+  deps: ThreadTitleApplyDeps,
+  args: ApplyGeneratedThreadTitleArgs,
+): boolean {
+  const title = args.title.trim();
+  if (title.length === 0) {
+    return false;
+  }
+
+  const currentThread = getThread(deps.db, args.threadId);
+  if (!currentThread || currentThread.title) {
+    return false;
+  }
+
+  updateThread(deps.db, deps.hub, args.threadId, {
+    title,
+  });
+  appendThreadTitleUpdatedEvent(deps, {
+    threadId: args.threadId,
+    previousTitle: currentThread.title,
+    nextTitle: title,
+  });
+
+  return true;
+}
+
 export async function generateThreadTitle(
   deps: ThreadTitleGenerationDeps,
   args: ThreadTitleGenerationArgs,
@@ -151,19 +183,12 @@ export async function generateThreadTitle(
   }
 
   try {
-    const currentThread = getThread(deps.db, args.threadId);
-    if (!currentThread || currentThread.title) {
+    if (!applyGeneratedThreadTitle(deps, {
+      threadId: args.threadId,
+      title: metadata.title,
+    })) {
       return;
     }
-
-    updateThread(deps.db, deps.hub, args.threadId, {
-      title: metadata.title,
-    });
-    appendThreadTitleUpdatedEvent(deps, {
-      threadId: args.threadId,
-      previousTitle: currentThread.title,
-      nextTitle: metadata.title,
-    });
 
     const titledThread = getThread(deps.db, args.threadId);
     const environment =
