@@ -991,6 +991,65 @@ describe.sequential("interactive request scenarios", () => {
     }
   }, 75_000);
 
+  it("routes Codex workspace-write outside-workspace writes through onInteractiveRequest", async () => {
+    const ctx = createTestRuntime("codex", {
+      onInteractiveRequest: createApprovalResolution,
+    });
+    const outsideDir = mkdtempSync(join(process.cwd(), ".bb-codex-outside-"));
+    const filePath = join(outsideDir, createTempFileName("codex-outside-write"));
+    const token = createToken("CODEX_WORKSPACE_WRITE_ESCALATED");
+
+    try {
+      const threadId = newThreadId();
+      await ctx.runtime.startThread({
+        environmentId: "env-1",
+        threadId,
+        projectId: "test-project",
+        providerId: "codex",
+        options: {
+          permissionEscalation: "ask",
+          permissionMode: "workspace-write",
+        },
+        instructions:
+          "When the user asks you to run an exact shell command, run that shell command exactly once. If approval is needed, request it. Then report DONE.",
+      });
+
+      await ctx.runtime.runTurn({
+        threadId,
+        options: {
+          permissionEscalation: "ask",
+          permissionMode: "workspace-write",
+        },
+        input: [{
+          type: "text",
+          text:
+            `Run this exact shell command: printf '${token}' > '${filePath}'. `
+            + "If it is denied or blocked, report the exact error. Otherwise reply DONE.",
+        }],
+      });
+
+      await waitForCondition(() => ctx.interactiveRequests.length >= 1, {
+        timeoutMs: 45_000,
+        label: "Codex workspace-write outside-workspace approval",
+      });
+      await waitForCondition(() => hasTurnCompleted(ctx.events), {
+        timeoutMs: 45_000,
+        label: "Codex workspace-write outside-workspace turn/completed",
+      });
+
+      expect(ctx.interactiveRequests.some((request) =>
+        request.payload.kind === "command_approval"
+        || request.payload.kind === "permission_request"
+        || request.payload.kind === "file_change_approval",
+      )).toBe(true);
+      expect(readFileSync(filePath, "utf8")).toBe(token);
+    } finally {
+      await ctx.runtime.shutdown();
+      rmSync(outsideDir, { recursive: true, force: true });
+      cleanup(ctx);
+    }
+  }, 75_000);
+
   it("routes Codex readonly workspace writes through onInteractiveRequest when escalation is ask", async () => {
     const ctx = createTestRuntime("codex", {
       onInteractiveRequest: createApprovalResolution,
