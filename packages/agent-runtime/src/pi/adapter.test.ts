@@ -7,6 +7,7 @@ import {
   createPiProviderAdapter,
 } from "./adapter.js";
 import { buildPiAvailableModels } from "./model-list.js";
+import type { AdapterOptions } from "../provider-adapter.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FIXTURES = resolve(__dirname, "../__fixtures__/pi");
@@ -14,6 +15,11 @@ const FIXTURES = resolve(__dirname, "../__fixtures__/pi");
 function loadFixture(name: string): AgentSessionEvent {
   return JSON.parse(readFileSync(resolve(FIXTURES, name), "utf8")) as AgentSessionEvent;
 }
+
+const fullAdapterOptions = {
+  permissionMode: "full",
+  permissionEscalation: null,
+} satisfies AdapterOptions;
 
 describe("pi provider adapter", () => {
   // -- Identity & capabilities ---------------------------------------------
@@ -57,6 +63,7 @@ describe("pi provider adapter", () => {
       threadId: "t1",
       input: [{ type: "text", text: "hello" }],
       instructionMode: "append",
+      options: fullAdapterOptions,
     });
     expect(cmd).toMatchObject({
       method: "thread/start",
@@ -77,6 +84,7 @@ describe("pi provider adapter", () => {
       input: [{ type: "text", text: "hello" }],
       instructionMode: "append",
       options: {
+        ...fullAdapterOptions,
         model: "anthropic/claude-sonnet-4-20250514",
         instructions: "Focus on the failing tests first.",
         reasoningLevel: "high",
@@ -139,6 +147,7 @@ describe("pi provider adapter", () => {
       threadId: "bb-t1",
       providerThreadId: "pi-session-1",
       instructionMode: "append",
+      options: fullAdapterOptions,
     });
     expect(cmd).toMatchObject({
       method: "thread/resume",
@@ -166,6 +175,7 @@ describe("pi provider adapter", () => {
       threadId: "t1",
       providerThreadId: "pi-1",
       input: [{ type: "text", text: "do it" }],
+      options: fullAdapterOptions,
     });
     expect(cmd).toMatchObject({
       method: "turn/start",
@@ -181,6 +191,7 @@ describe("pi provider adapter", () => {
       providerThreadId: "pi-1",
       expectedTurnId: "turn-1",
       input: [{ type: "text", text: "steer" }],
+      options: fullAdapterOptions,
     });
     expect(cmd).toMatchObject({
       method: "turn/steer",

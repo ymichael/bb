@@ -18,6 +18,7 @@ import {
   buildThreadEventRow,
 } from "@bb/domain";
 import type { ThreadEventRow, ToolCallRequest, ToolCallResponse } from "@bb/domain";
+import type { RuntimeThreadExecutionOptions } from "@bb/domain";
 import type {
   ProviderAuditBundle,
   ProviderAuditClientRequest,
@@ -47,12 +48,7 @@ interface BuildExecutionOptionsArgs {
   execution?: ProviderAuditScenarioExecutionOptions;
 }
 
-interface ProviderAuditResolvedExecutionOptions {
-  model: string;
-  permissionMode: NonNullable<ProviderAuditScenarioExecutionOptions["permissionMode"]>;
-  serviceTier: NonNullable<ProviderAuditScenarioExecutionOptions["serviceTier"]>;
-  reasoningLevel: NonNullable<ProviderAuditScenarioExecutionOptions["reasoningLevel"]>;
-}
+type ProviderAuditResolvedExecutionOptions = RuntimeThreadExecutionOptions;
 
 const BUILT_IN_SCENARIOS: Record<string, ProviderAuditScenario> = {
   "excalidraw-ttd-explanation": {
@@ -539,11 +535,23 @@ function prepareScenarioWorkspace(args: {
 function buildExecutionOptions(
   args: BuildExecutionOptionsArgs,
 ): ProviderAuditResolvedExecutionOptions {
-  return {
+  const base = {
     model: args.model ?? "provider-default",
-    permissionMode: args.execution?.permissionMode ?? "full",
     serviceTier: args.execution?.serviceTier ?? "fast",
     reasoningLevel: args.execution?.reasoningLevel ?? "medium",
+  };
+  const permissionMode = args.execution?.permissionMode ?? "full";
+  if (permissionMode === "full") {
+    return {
+      ...base,
+      permissionMode,
+      permissionEscalation: null,
+    };
+  }
+  return {
+    ...base,
+    permissionMode,
+    permissionEscalation: "ask",
   };
 }
 

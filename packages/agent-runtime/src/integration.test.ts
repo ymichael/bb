@@ -26,11 +26,21 @@ import type {
 import type { AgentRuntimeCaptureEntry } from "./capture-types.js";
 import { listAvailableProviderInfos } from "./provider-registry.js";
 import { createAgentRuntime } from "./runtime.js";
-import type { AgentRuntime } from "./types.js";
+import type { AgentRuntime, AgentRuntimeExecutionOptions } from "./types.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+const fullRuntimeOptions = {
+  permissionMode: "full",
+  permissionEscalation: null,
+} satisfies AgentRuntimeExecutionOptions;
+
+const workspaceWriteAskRuntimeOptions = {
+  permissionMode: "workspace-write",
+  permissionEscalation: "ask",
+} satisfies AgentRuntimeExecutionOptions;
 
 function waitForCondition(
   predicate: () => boolean,
@@ -322,6 +332,7 @@ for (const providerId of providers) {
           providerId,
           options: {
             permissionMode: "full",
+            permissionEscalation: null,
             ...(model ? { model } : {}),
           },
         });
@@ -330,6 +341,7 @@ for (const providerId of providers) {
           threadId,
           options: {
             permissionMode: "full",
+            permissionEscalation: null,
             ...(model ? { model } : {}),
           },
           input: [{ type: "text", text: "Reply with exactly: PONG" }],
@@ -376,6 +388,7 @@ for (const providerId of providers) {
           providerId,
           options: {
             permissionMode: "full",
+            permissionEscalation: null,
             ...(model ? { model } : {}),
           },
           instructions:
@@ -386,6 +399,7 @@ for (const providerId of providers) {
           threadId,
           options: {
             permissionMode: "full",
+            permissionEscalation: null,
             ...(model ? { model } : {}),
           },
           input: [{
@@ -437,13 +451,14 @@ for (const providerId of providers) {
           threadId,
           projectId: "test-project",
           providerId,
-          options: { permissionMode: "full" },
+          options: fullRuntimeOptions,
         });
 
         // Turn 1
         await ctx.runtime.runTurn({
           threadId,
           input: [{ type: "text", text: "Say hello in one word." }],
+          options: fullRuntimeOptions,
         });
 
         await waitForCondition(() => turnCompletedCount(ctx.events) >= 1, {
@@ -455,6 +470,7 @@ for (const providerId of providers) {
         await ctx.runtime.runTurn({
           threadId,
           input: [{ type: "text", text: "Now say goodbye in one word." }],
+          options: fullRuntimeOptions,
         });
 
         await waitForCondition(() => turnCompletedCount(ctx.events) >= 2, {
@@ -482,15 +498,14 @@ for (const providerId of providers) {
           threadId,
           projectId: "test-project",
           providerId,
-          options: {
-            permissionMode: "full",
-          },
+          options: fullRuntimeOptions,
           instructions: "IMPORTANT: End every single response with exactly [TEST_TAG]. Never omit this tag.",
         });
 
         await ctx.runtime.runTurn({
           threadId,
           input: [{ type: "text", text: "What is 2+2?" }],
+          options: fullRuntimeOptions,
         });
 
         await waitForCondition(() => hasTurnCompleted(ctx.events), {
@@ -516,13 +531,14 @@ for (const providerId of providers) {
           threadId,
           projectId: "test-project",
           providerId,
-          options: { permissionMode: "full" },
+          options: fullRuntimeOptions,
         });
 
         // Good turn 1
         await ctx.runtime.runTurn({
           threadId,
           input: [{ type: "text", text: "Say hello in one word." }],
+          options: fullRuntimeOptions,
         });
 
         await waitForCondition(() => hasTurnCompleted(ctx.events), {
@@ -537,6 +553,7 @@ for (const providerId of providers) {
           await ctx.runtime.runTurn({
             threadId: badThreadId,
             input: [{ type: "text", text: "This should fail." }],
+            options: fullRuntimeOptions,
           });
         } catch {
           badRequestFailed = true;
@@ -547,6 +564,7 @@ for (const providerId of providers) {
         await ctx.runtime.runTurn({
           threadId,
           input: [{ type: "text", text: "Say goodbye in one word." }],
+          options: fullRuntimeOptions,
         });
 
         await waitForCondition(() => turnCompletedCount(ctx.events) >= 2, {
@@ -587,7 +605,7 @@ for (const providerId of providers) {
           threadId,
           projectId: "test-project",
           providerId,
-          options: { permissionMode: "full" },
+          options: fullRuntimeOptions,
           dynamicTools: [
             {
               name: "bb_test_ping",
@@ -608,6 +626,7 @@ for (const providerId of providers) {
               text: "Call the bb_test_ping tool right now and report what it returns.",
             },
           ],
+          options: fullRuntimeOptions,
         });
 
         await waitForCondition(() => toolCalled, {
@@ -642,7 +661,7 @@ for (const providerId of providers) {
           threadId: firstThreadId,
           projectId: "test-project",
           providerId,
-          options: { permissionMode: "full" },
+          options: fullRuntimeOptions,
         });
 
         providerThreadId = startResult.providerThreadId || undefined;
@@ -650,6 +669,7 @@ for (const providerId of providers) {
         await ctx1.runtime.runTurn({
           threadId: firstThreadId,
           input: [{ type: "text", text: "Remember the secret word STRAWBERRY. Just confirm you will remember it." }],
+          options: fullRuntimeOptions,
         });
 
         await waitForCondition(() => hasTurnCompleted(ctx1.events), {
@@ -694,11 +714,13 @@ for (const providerId of providers) {
           providerThreadId,
           providerId,
           resumePath,
+          options: fullRuntimeOptions,
         });
 
         await ctx2.runtime.runTurn({
           threadId,
           input: [{ type: "text", text: "What was the secret word I told you to remember? Reply with just the word." }],
+          options: fullRuntimeOptions,
         });
 
         // Wait for a turn to complete. Use a shorter initial timeout so we can
@@ -736,12 +758,13 @@ for (const providerId of providers) {
               threadId: fallbackThreadId,
               projectId: "test-project",
               providerId,
-              options: { permissionMode: "full" },
+              options: fullRuntimeOptions,
             });
 
             await ctx3.runtime.runTurn({
               threadId: fallbackThreadId,
               input: [{ type: "text", text: "Reply with exactly: LIFECYCLE_OK" }],
+              options: fullRuntimeOptions,
             });
 
             await waitForCondition(() => hasTurnCompleted(ctx3.events), {
@@ -788,7 +811,7 @@ describe.concurrent("cross-provider and multi-thread scenarios", () => {
           threadId: threadA,
           projectId: "test-project",
           providerId: "codex",
-          options: { permissionMode: "full" },
+          options: fullRuntimeOptions,
         });
 
         await ctx.runtime.startThread({
@@ -796,7 +819,7 @@ describe.concurrent("cross-provider and multi-thread scenarios", () => {
           threadId: threadB,
           projectId: "test-project",
           providerId: "codex",
-          options: { permissionMode: "full" },
+          options: fullRuntimeOptions,
         });
 
         // Run turns concurrently
@@ -804,10 +827,12 @@ describe.concurrent("cross-provider and multi-thread scenarios", () => {
           ctx.runtime.runTurn({
             threadId: threadA,
             input: [{ type: "text", text: "Reply with exactly: THREAD_A_OK" }],
+            options: fullRuntimeOptions,
           }),
           ctx.runtime.runTurn({
             threadId: threadB,
             input: [{ type: "text", text: "Reply with exactly: THREAD_B_OK" }],
+            options: fullRuntimeOptions,
           }),
         ]);
 
@@ -839,7 +864,7 @@ describe.concurrent("cross-provider and multi-thread scenarios", () => {
           threadId: codexThread,
           projectId: "test-project",
           providerId: "codex",
-          options: { permissionMode: "full" },
+          options: fullRuntimeOptions,
         });
 
         await ctx.runtime.startThread({
@@ -847,7 +872,7 @@ describe.concurrent("cross-provider and multi-thread scenarios", () => {
           threadId: claudeThread,
           projectId: "test-project",
           providerId: "claude-code",
-          options: { permissionMode: "full" },
+          options: fullRuntimeOptions,
         });
 
         // Run turns concurrently on both providers
@@ -855,10 +880,12 @@ describe.concurrent("cross-provider and multi-thread scenarios", () => {
           ctx.runtime.runTurn({
             threadId: codexThread,
             input: [{ type: "text", text: "Reply with exactly: CODEX_OK" }],
+            options: fullRuntimeOptions,
           }),
           ctx.runtime.runTurn({
             threadId: claudeThread,
             input: [{ type: "text", text: "Reply with exactly: CLAUDE_OK" }],
+            options: fullRuntimeOptions,
           }),
         ]);
 
@@ -905,9 +932,7 @@ describe.sequential("interactive request scenarios", () => {
         threadId,
         projectId: "test-project",
         providerId: "claude-code",
-        options: {
-          permissionMode: "workspace-write",
-        },
+        options: workspaceWriteAskRuntimeOptions,
         instructions:
           "Use the Read tool when the user explicitly asks for it. Do not substitute Bash.",
       });
@@ -921,6 +946,7 @@ describe.sequential("interactive request scenarios", () => {
               "Use the Read tool to read /etc/hosts, then reply with exactly the first non-empty line from the file and nothing else.",
           },
         ],
+        options: workspaceWriteAskRuntimeOptions,
       });
 
       await waitForCondition(() => ctx.interactiveRequests.length >= 1, {
@@ -1309,7 +1335,7 @@ describe.sequential("interactive request scenarios", () => {
         threadId: firstThreadId,
         projectId: "test-project",
         providerId,
-        options: { permissionMode: "full" },
+        options: fullRuntimeOptions,
         dynamicTools,
       });
 
@@ -1318,6 +1344,7 @@ describe.sequential("interactive request scenarios", () => {
       await ctx1.runtime.runTurn({
         threadId: firstThreadId,
         input: [{ type: "text", text: "Call the bb_test_ping tool right now." }],
+        options: fullRuntimeOptions,
       });
 
       await waitForCondition(() => toolCalledInRuntime1, {
@@ -1366,11 +1393,13 @@ describe.sequential("interactive request scenarios", () => {
         providerThreadId,
         providerId,
         dynamicTools,
+        options: fullRuntimeOptions,
       });
 
       await ctx2.runtime.runTurn({
         threadId,
         input: [{ type: "text", text: "Call the bb_test_ping tool again right now." }],
+        options: fullRuntimeOptions,
       });
 
       await waitForCondition(() => toolCalledInRuntime2, {
@@ -1400,7 +1429,7 @@ describe.sequential("interactive request scenarios", () => {
         threadId: firstThreadId,
         projectId: "test-project",
         providerId,
-        options: { permissionMode: "full" },
+        options: fullRuntimeOptions,
       });
 
       providerThreadId = startResult.providerThreadId || undefined;
@@ -1408,6 +1437,7 @@ describe.sequential("interactive request scenarios", () => {
       await ctx1.runtime.runTurn({
         threadId: firstThreadId,
         input: [{ type: "text", text: "Remember the word STRAWBERRY. Just confirm you will remember it." }],
+        options: fullRuntimeOptions,
       });
 
       await waitForCondition(() => hasTurnCompleted(ctx1.events), {
@@ -1436,11 +1466,13 @@ describe.sequential("interactive request scenarios", () => {
         threadId,
         providerThreadId,
         providerId,
+        options: fullRuntimeOptions,
       });
 
       await ctx2.runtime.runTurn({
         threadId,
         input: [{ type: "text", text: "What was the word I asked you to remember? Reply with just the word." }],
+        options: fullRuntimeOptions,
       });
 
       await waitForCondition(() => hasTurnCompleted(ctx2.events), {
@@ -1496,7 +1528,7 @@ describe.sequential("interactive request scenarios", () => {
         threadId: firstThreadId,
         projectId: "test-project",
         providerId,
-        options: { permissionMode: "full" },
+        options: fullRuntimeOptions,
         dynamicTools,
       });
 
@@ -1510,6 +1542,7 @@ describe.sequential("interactive request scenarios", () => {
             text: "Remember the word BANANA. Also call the bb_test_ping tool right now.",
           },
         ],
+        options: fullRuntimeOptions,
       });
 
       await waitForCondition(() => toolCalledInRuntime1 && hasTurnCompleted(ctx1.events), {
@@ -1553,6 +1586,7 @@ describe.sequential("interactive request scenarios", () => {
         providerThreadId,
         providerId,
         dynamicTools,
+        options: fullRuntimeOptions,
       });
 
       await ctx2.runtime.runTurn({
@@ -1563,6 +1597,7 @@ describe.sequential("interactive request scenarios", () => {
             text: "What did I ask you to remember? Also call the bb_test_ping tool right now.",
           },
         ],
+        options: fullRuntimeOptions,
       });
 
       await waitForCondition(() => toolCalledInRuntime2 && hasTurnCompleted(ctx2.events), {
@@ -1595,14 +1630,14 @@ describe.sequential("interactive request scenarios", () => {
           threadId: codexThreadId1,
           projectId: "test-project",
           providerId: "codex",
-          options: { permissionMode: "full" },
+          options: fullRuntimeOptions,
         }),
         ctx1.runtime.startThread({
           environmentId: "env-1",
           threadId: claudeThreadId1,
           projectId: "test-project",
           providerId: "claude-code",
-          options: { permissionMode: "full" },
+          options: fullRuntimeOptions,
         }),
       ]);
 
@@ -1614,10 +1649,12 @@ describe.sequential("interactive request scenarios", () => {
         ctx1.runtime.runTurn({
           threadId: codexThreadId1,
           input: [{ type: "text", text: "Remember the fruit APPLE. Just confirm you will remember it." }],
+          options: fullRuntimeOptions,
         }),
         ctx1.runtime.runTurn({
           threadId: claudeThreadId1,
           input: [{ type: "text", text: "Remember the fruit ORANGE. Just confirm you will remember it." }],
+          options: fullRuntimeOptions,
         }),
       ]);
 
@@ -1661,12 +1698,14 @@ describe.sequential("interactive request scenarios", () => {
           threadId: codexThreadId2,
           providerThreadId: codexProviderThreadId,
           providerId: "codex",
+          options: fullRuntimeOptions,
         }),
         ctx2.runtime.resumeThread({
           environmentId: "env-1",
           threadId: claudeThreadId2,
           providerThreadId: claudeProviderThreadId,
           providerId: "claude-code",
+          options: fullRuntimeOptions,
         }),
       ]);
 
@@ -1674,10 +1713,12 @@ describe.sequential("interactive request scenarios", () => {
         ctx2.runtime.runTurn({
           threadId: codexThreadId2,
           input: [{ type: "text", text: "What fruit did I ask you to remember? Reply with just the fruit name." }],
+          options: fullRuntimeOptions,
         }),
         ctx2.runtime.runTurn({
           threadId: claudeThreadId2,
           input: [{ type: "text", text: "What fruit did I ask you to remember? Reply with just the fruit name." }],
+          options: fullRuntimeOptions,
         }),
       ]);
 

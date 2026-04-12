@@ -297,7 +297,7 @@ describe("host-daemon command schemas", () => {
           serviceTier: "default",
           reasoningLevel: "medium",
           permissionMode: "full",
-          permissionEscalation: "ask",
+          permissionEscalation: null,
         },
         instructions: "Be concise.",
         dynamicTools: [],
@@ -318,7 +318,7 @@ describe("host-daemon command schemas", () => {
           serviceTier: "default",
           reasoningLevel: "medium",
           permissionMode: "full",
-          permissionEscalation: "ask",
+          permissionEscalation: null,
         },
         resumeContext: {
           workspaceContext: {
@@ -352,7 +352,7 @@ describe("host-daemon command schemas", () => {
           serviceTier: "default",
           reasoningLevel: "medium",
           permissionMode: "full",
-          permissionEscalation: "ask",
+          permissionEscalation: null,
         },
         instructions: "Be a helpful manager.",
         dynamicTools: [
@@ -407,7 +407,7 @@ describe("host-daemon command schemas", () => {
           serviceTier: "default",
           reasoningLevel: "medium",
           permissionMode: "full",
-          permissionEscalation: "ask",
+          permissionEscalation: null,
         },
         resumeContext: {
           workspaceContext: { workspacePath: "/tmp/workspace", workspaceProvisionType: "unmanaged" },
@@ -440,7 +440,7 @@ describe("host-daemon command schemas", () => {
           serviceTier: "default",
           reasoningLevel: "medium",
           permissionMode: "full",
-          permissionEscalation: "ask",
+          permissionEscalation: null,
         },
         resumeContext: {
           workspaceContext: { workspacePath: "/tmp/workspace", workspaceProvisionType: "unmanaged" },
@@ -469,7 +469,7 @@ describe("host-daemon command schemas", () => {
           serviceTier: "default",
           reasoningLevel: "medium",
           permissionMode: "full",
-          permissionEscalation: "ask",
+          permissionEscalation: null,
         },
         resumeContext: {
           workspaceContext: { workspacePath: "/tmp/workspace", workspaceProvisionType: "unmanaged" },
@@ -499,7 +499,7 @@ describe("host-daemon command schemas", () => {
           serviceTier: "default",
           reasoningLevel: "medium",
           permissionMode: "full",
-          permissionEscalation: "ask",
+          permissionEscalation: null,
         },
         instructions: "Be concise.",
         dynamicTools: [],

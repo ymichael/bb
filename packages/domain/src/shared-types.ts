@@ -79,13 +79,35 @@ export type ResolvedThreadExecutionOptions = z.infer<
   typeof resolvedThreadExecutionOptionsSchema
 >;
 
-export const runtimeThreadExecutionOptionsSchema = z.object({
+export const runtimePermissionPolicySchema = z.discriminatedUnion(
+  "permissionMode",
+  [
+    z.object({
+      permissionMode: z.literal("full"),
+      permissionEscalation: z.null(),
+    }),
+    z.object({
+      permissionMode: z.literal("workspace-write"),
+      permissionEscalation: permissionEscalationSchema,
+    }),
+    z.object({
+      permissionMode: z.literal("readonly"),
+      permissionEscalation: permissionEscalationSchema,
+    }),
+  ],
+);
+export type RuntimePermissionPolicy = z.infer<
+  typeof runtimePermissionPolicySchema
+>;
+
+const runtimeThreadExecutionBaseOptionsSchema = z.object({
   model: z.string().min(1),
   serviceTier: serviceTierSchema,
   reasoningLevel: reasoningLevelSchema,
-  permissionMode: permissionModeSchema,
-  permissionEscalation: permissionEscalationSchema,
 });
+
+export const runtimeThreadExecutionOptionsSchema =
+  runtimeThreadExecutionBaseOptionsSchema.and(runtimePermissionPolicySchema);
 export type RuntimeThreadExecutionOptions = z.infer<
   typeof runtimeThreadExecutionOptionsSchema
 >;

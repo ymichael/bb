@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createCodexProviderAdapter } from "./adapter.js";
 import type { CodexEvent } from "./adapter.js";
+import type { AdapterOptions } from "../provider-adapter.js";
 
 // ---------------------------------------------------------------------------
 // Helpers to build typed CodexEvent fixtures
@@ -17,6 +18,16 @@ function codexEvent<M extends CodexEvent["method"]>(
     params,
   };
 }
+
+const fullAdapterOptions = {
+  permissionMode: "full",
+  permissionEscalation: null,
+} satisfies AdapterOptions;
+
+const workspaceWriteAskAdapterOptions = {
+  permissionMode: "workspace-write",
+  permissionEscalation: "ask",
+} satisfies AdapterOptions;
 
 describe("codex provider adapter", () => {
   beforeEach(() => {
@@ -73,6 +84,7 @@ describe("codex provider adapter", () => {
       threadId: "t1",
       input: [{ type: "text", text: "hello" }],
       instructionMode: "append",
+      options: fullAdapterOptions,
     });
     expect(cmd).toMatchObject({
       method: "thread/start",
@@ -92,9 +104,7 @@ describe("codex provider adapter", () => {
       threadId: "t1",
       input: [{ type: "text", text: "hello" }],
       instructionMode: "append",
-      options: {
-        permissionMode: "workspace-write",
-      },
+      options: workspaceWriteAskAdapterOptions,
     });
 
     expect(cmd).toMatchObject({
@@ -138,8 +148,8 @@ describe("codex provider adapter", () => {
       input: [{ type: "text", text: "hello" }],
       instructionMode: "append",
       options: {
-        permissionEscalation: "deny",
         permissionMode: "full",
+        permissionEscalation: null,
       },
     });
 
@@ -160,6 +170,7 @@ describe("codex provider adapter", () => {
       threadId: "bb-thread-1",
       input: [{ type: "text", text: "hello" }],
       instructionMode: "append",
+      options: fullAdapterOptions,
     });
 
     expect(cmd).toMatchObject({
@@ -181,6 +192,7 @@ describe("codex provider adapter", () => {
       input: [{ type: "text", text: "hello" }],
       instructionMode: "append",
       options: {
+        ...fullAdapterOptions,
         model: "gpt-5.4",
         serviceTier: "fast",
         instructions: "Focus on the failing tests first.",
@@ -246,6 +258,7 @@ describe("codex provider adapter", () => {
       threadId: "bb-t1",
       providerThreadId: "codex-uuid-1",
       instructionMode: "append",
+      options: fullAdapterOptions,
     });
     expect(cmd).toMatchObject({
       method: "thread/resume",
@@ -264,6 +277,7 @@ describe("codex provider adapter", () => {
       threadId: "bb-t1",
       providerThreadId: undefined,
       instructionMode: "append",
+      options: fullAdapterOptions,
     });
     expect(cmd).toMatchObject({
       method: "thread/resume",
@@ -291,6 +305,7 @@ describe("codex provider adapter", () => {
       threadId: "t1",
       providerThreadId: "codex-1",
       input: [{ type: "text", text: "do it" }],
+      options: fullAdapterOptions,
     });
     expect(cmd).toMatchObject({
       method: "turn/start",
@@ -309,9 +324,7 @@ describe("codex provider adapter", () => {
       threadId: "t1",
       providerThreadId: "codex-1",
       input: [{ type: "text", text: "do it" }],
-      options: {
-        permissionMode: "workspace-write",
-      },
+      options: workspaceWriteAskAdapterOptions,
     });
 
     expect(cmd).toMatchObject({
@@ -329,7 +342,7 @@ describe("codex provider adapter", () => {
       threadId: "t1",
       providerThreadId: "codex-1",
       input: [{ type: "text", text: "edit it" }],
-      options: { permissionMode: "workspace-write" },
+      options: workspaceWriteAskAdapterOptions,
     });
     expect(cmd).toMatchObject({
       method: "turn/start",
@@ -396,6 +409,7 @@ describe("codex provider adapter", () => {
       providerThreadId: "codex-1",
       expectedTurnId: "turn-3",
       input: [{ type: "text", text: "steer it" }],
+      options: fullAdapterOptions,
     });
     expect(cmd).toMatchObject({
       method: "turn/steer",

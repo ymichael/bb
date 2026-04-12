@@ -4,11 +4,10 @@ import type {
   InstructionMode,
   PendingInteractionPayload,
   PendingInteractionResolution,
-  PermissionEscalation,
-  PermissionMode,
   PromptInput,
   ProviderCapabilities,
   ReasoningLevel,
+  RuntimePermissionPolicy,
   ServiceTier,
   ThreadEvent,
 } from "@bb/domain";
@@ -65,15 +64,13 @@ export interface DecodedInteractiveRequest {
 // AdapterCommand — what the runtime asks the adapter to build
 // ---------------------------------------------------------------------------
 
-export interface AdapterOptions {
+export type AdapterOptions = {
   model?: string;
   serviceTier?: ServiceTier;
   reasoningLevel?: ReasoningLevel;
-  permissionMode?: PermissionMode;
-  permissionEscalation?: PermissionEscalation;
   instructions?: string;
   envVars?: Record<string, string>;
-}
+} & RuntimePermissionPolicy;
 
 export type AdapterCommand =
   | { type: "initialize" }
@@ -83,7 +80,7 @@ export type AdapterCommand =
       threadId: string;
       cwd: string;
       input?: PromptInput[];
-      options?: AdapterOptions;
+      options: AdapterOptions;
       dynamicTools?: DynamicTool[];
       instructionMode: InstructionMode;
     }
@@ -92,7 +89,7 @@ export type AdapterCommand =
       threadId: string;
       cwd: string;
       providerThreadId?: string;
-      options?: AdapterOptions;
+      options: AdapterOptions;
       resumePath?: string;
       dynamicTools?: DynamicTool[];
       instructionMode: InstructionMode;
@@ -102,7 +99,7 @@ export type AdapterCommand =
       threadId: string;
       providerThreadId?: string;
       input: PromptInput[];
-      options?: AdapterOptions;
+      options: AdapterOptions;
     }
   | {
       type: "turn/steer";
@@ -110,7 +107,7 @@ export type AdapterCommand =
       providerThreadId?: string;
       expectedTurnId: string;
       input: PromptInput[];
-      options?: AdapterOptions;
+      options: AdapterOptions;
     }
   | { type: "thread/stop"; threadId: string }
   | {

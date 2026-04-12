@@ -55,7 +55,7 @@ describe.sequential("fake provider offline queue recovery integration", () => {
           model: `${thread.providerId}-model`,
           reasoningLevel: "medium",
           permissionMode: "full",
-          permissionEscalation: "ask",
+          permissionEscalation: null,
           serviceTier: "default",
         },
         eventSequence: eventsBefore.length + 1,

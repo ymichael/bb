@@ -8,6 +8,7 @@ import {
 import {
   CLAUDE_PERMISSION_REQUEST_APPROVAL_METHOD,
 } from "./interactive-contract.js";
+import type { AdapterOptions } from "../provider-adapter.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FIXTURES = resolve(__dirname, "../__fixtures__/claude-code");
@@ -15,6 +16,11 @@ const FIXTURES = resolve(__dirname, "../__fixtures__/claude-code");
 function loadFixture(name: string): unknown {
   return JSON.parse(readFileSync(resolve(FIXTURES, name), "utf8"));
 }
+
+const fullAdapterOptions = {
+  permissionMode: "full",
+  permissionEscalation: null,
+} satisfies AdapterOptions;
 
 describe("claude-code provider adapter", () => {
   // -- Identity & capabilities ---------------------------------------------
@@ -79,6 +85,7 @@ describe("claude-code provider adapter", () => {
       threadId: "bb-thread-1",
       input: [{ type: "text", text: "hello" }],
       instructionMode: "append",
+      options: fullAdapterOptions,
     });
     expect(cmd?.params).toMatchObject({
       threadId: "bb-thread-1",
@@ -97,6 +104,7 @@ describe("claude-code provider adapter", () => {
       input: [{ type: "text", text: "hello" }],
       instructionMode: "append",
       options: {
+        permissionEscalation: "ask",
         model: "claude-sonnet-4-5",
         permissionMode: "workspace-write",
         instructions: "Focus on the failing tests first.",
@@ -163,6 +171,7 @@ describe("claude-code provider adapter", () => {
       threadId: "bb-thread-1",
       providerThreadId: "claude-session-1",
       instructionMode: "append",
+      options: fullAdapterOptions,
     });
     expect(cmd?.params).toMatchObject({
       cwd: "/tmp/worktree",
@@ -201,8 +210,8 @@ describe("claude-code provider adapter", () => {
       input: [{ type: "text", text: "hello" }],
       instructionMode: "append",
       options: {
-        permissionEscalation: "deny",
         permissionMode: "full",
+        permissionEscalation: null,
       },
     });
     expect(cmd?.params).toMatchObject({
@@ -238,6 +247,7 @@ describe("claude-code provider adapter", () => {
       threadId: "bb-thread-1",
       providerThreadId: undefined,
       instructionMode: "append",
+      options: fullAdapterOptions,
     });
     expect(cmd?.params).toMatchObject({
       threadId: "bb-thread-1",
@@ -273,6 +283,7 @@ describe("claude-code provider adapter", () => {
       providerThreadId: "claude-session-1",
       instructionMode: "append",
       options: {
+        ...fullAdapterOptions,
         model: "claude-sonnet-4-5",
         instructions: "Reopen the thread and continue carefully.",
         reasoningLevel: "high",
@@ -336,6 +347,7 @@ describe("claude-code provider adapter", () => {
       threadId: "bb-thread-1",
       providerThreadId: "claude-session-1",
       input: [{ type: "text", text: "follow up" }],
+      options: fullAdapterOptions,
     });
     expect(cmd?.params).toMatchObject({
       threadId: "bb-thread-1",
@@ -351,6 +363,7 @@ describe("claude-code provider adapter", () => {
       providerThreadId: "claude-session-1",
       expectedTurnId: "turn-1",
       input: [{ type: "text", text: "steer" }],
+      options: fullAdapterOptions,
     });
     expect(cmd?.params).toMatchObject({
       threadId: "bb-thread-1",
@@ -2077,6 +2090,7 @@ describe("claude-code provider adapter", () => {
       input: [{ type: "text", text: "hello" }],
       instructionMode: "append",
       options: {
+        ...fullAdapterOptions,
         model: "claude-opus-4-6[1m]",
       },
     });
@@ -2167,6 +2181,7 @@ describe("claude-code provider adapter", () => {
       input: [{ type: "text", text: "hello" }],
       instructionMode: "append",
       options: {
+        ...fullAdapterOptions,
         model: "default",
       },
     });

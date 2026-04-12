@@ -421,7 +421,7 @@ describe("internal event side effects", () => {
           serviceTier: "default",
           reasoningLevel: "medium",
           permissionMode: "full",
-          permissionEscalation: "deny",
+          permissionEscalation: null,
         },
         resumeContext: {
           providerId: managerThread.providerId,
@@ -612,7 +612,7 @@ describe("internal event side effects", () => {
           serviceTier: "default",
           reasoningLevel: "medium",
           permissionMode: "full",
-          permissionEscalation: "deny",
+          permissionEscalation: null,
         },
         resumeContext: {
           providerId: managerThread.providerId,
@@ -729,7 +729,7 @@ describe("internal event side effects", () => {
           serviceTier: "default",
           reasoningLevel: "medium",
           permissionMode: "full",
-          permissionEscalation: "deny",
+          permissionEscalation: null,
         },
         resumeContext: {
           providerId: managerThread.providerId,

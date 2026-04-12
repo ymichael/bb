@@ -130,7 +130,7 @@ function toEscalationApprovalPolicy(
 }
 
 function toCodexPermissionSettings(
-  options: AdapterOptions | undefined,
+  options: AdapterOptions,
 ): CodexPermissionSettings {
   const permissionPolicy = resolveAdapterPermissionPolicy(options);
   switch (permissionPolicy.permissionMode) {

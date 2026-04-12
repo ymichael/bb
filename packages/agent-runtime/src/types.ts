@@ -4,11 +4,10 @@ import type {
   InstructionMode,
   PendingInteractionCreate,
   PendingInteractionResolution,
-  PermissionEscalation,
-  PermissionMode,
   PromptInput,
   ProviderInfo as DomainProviderInfo,
   ReasoningLevel,
+  RuntimePermissionPolicy,
   ServiceTier,
   ThreadEvent,
   ToolCallRequest,
@@ -20,13 +19,11 @@ export type ProviderInfo = DomainProviderInfo;
 
 export type AgentRuntimeShellEnvironment = Record<string, string>;
 
-export interface AgentRuntimeExecutionOptions {
+export type AgentRuntimeExecutionOptions = {
   model?: string;
   serviceTier?: ServiceTier;
   reasoningLevel?: ReasoningLevel;
-  permissionMode?: PermissionMode;
-  permissionEscalation?: PermissionEscalation;
-}
+} & RuntimePermissionPolicy;
 
 // ---------------------------------------------------------------------------
 // Runtime options
@@ -97,7 +94,7 @@ export interface AgentRuntime {
     projectId: string;
     providerId?: string;
     input?: PromptInput[];
-    options?: AgentRuntimeExecutionOptions;
+    options: AgentRuntimeExecutionOptions;
     instructions?: string;
     dynamicTools?: DynamicTool[];
     instructionMode?: InstructionMode;
@@ -109,7 +106,7 @@ export interface AgentRuntime {
     projectId?: string;
     providerThreadId?: string;
     providerId?: string;
-    options?: AgentRuntimeExecutionOptions;
+    options: AgentRuntimeExecutionOptions;
     instructions?: string;
     resumePath?: string;
     dynamicTools?: DynamicTool[];
@@ -119,7 +116,7 @@ export interface AgentRuntime {
   runTurn(args: {
     threadId: string;
     input: PromptInput[];
-    options?: AgentRuntimeExecutionOptions;
+    options: AgentRuntimeExecutionOptions;
     instructions?: string;
   }): Promise<void>;
 
@@ -127,7 +124,7 @@ export interface AgentRuntime {
     threadId: string;
     expectedTurnId: string;
     input: PromptInput[];
-    options?: AgentRuntimeExecutionOptions;
+    options: AgentRuntimeExecutionOptions;
     instructions?: string;
   }): Promise<void>;
 

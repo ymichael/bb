@@ -132,7 +132,7 @@ function createStandardRuntimeCommandContext(args: {
       serviceTier: "default" as const,
       reasoningLevel: "medium" as const,
       permissionMode: "full" as const,
-      permissionEscalation: "ask" as const,
+      permissionEscalation: null,
     },
     instructions: "Be a helpful coding agent.",
     dynamicTools: [],
@@ -393,7 +393,7 @@ describe("CommandRouter", () => {
             serviceTier: "default" as const,
             reasoningLevel: "medium" as const,
             permissionMode: "full" as const,
-      permissionEscalation: "ask" as const,
+      permissionEscalation: null,
           },
           resumeContext: {
             workspaceContext: { workspacePath: "/tmp/env-1", workspaceProvisionType: "unmanaged" as const },
@@ -420,7 +420,7 @@ describe("CommandRouter", () => {
             serviceTier: "default" as const,
             reasoningLevel: "medium" as const,
             permissionMode: "full" as const,
-      permissionEscalation: "ask" as const,
+      permissionEscalation: null,
           },
           resumeContext: {
             workspaceContext: { workspacePath: "/tmp/env-1", workspaceProvisionType: "unmanaged" as const },

@@ -951,7 +951,7 @@ describe("public thread routes", () => {
           serviceTier: "default",
           reasoningLevel: "medium",
           permissionMode: "full",
-          permissionEscalation: "ask",
+          permissionEscalation: null,
         },
       });
       expect(getThread(harness.db, createdThread.id)).toMatchObject({
@@ -2143,7 +2143,7 @@ describe("public thread routes", () => {
           serviceTier: "default",
           reasoningLevel: "medium",
           permissionMode: "full",
-          permissionEscalation: "ask",
+          permissionEscalation: null,
         },
         resumeContext: {
           workspaceContext: { workspacePath: environment.path, workspaceProvisionType: "unmanaged" },
@@ -2181,7 +2181,7 @@ describe("public thread routes", () => {
           serviceTier: "default",
           reasoningLevel: "medium",
           permissionMode: "full",
-          permissionEscalation: "ask",
+          permissionEscalation: null,
         },
         resumeContext: {
           workspaceContext: { workspacePath: environment.path, workspaceProvisionType: "unmanaged" },
@@ -3314,7 +3314,7 @@ describe("public thread routes", () => {
         serviceTier: "default",
         reasoningLevel: "medium",
         permissionMode: "full",
-        permissionEscalation: "deny",
+        permissionEscalation: null,
       });
       expect(managerStartCommand.command.dynamicTools).toEqual(
         [expect.objectContaining({ name: "message_user" })],
@@ -3444,7 +3444,7 @@ describe("public thread routes", () => {
           serviceTier: "default",
           reasoningLevel: "medium",
           permissionMode: "full",
-          permissionEscalation: "deny",
+          permissionEscalation: null,
         },
         resumeContext: {
           providerId: managerThread.providerId,
@@ -3545,7 +3545,7 @@ describe("public thread routes", () => {
           serviceTier: "default",
           reasoningLevel: "medium",
           permissionMode: "full",
-          permissionEscalation: "deny",
+          permissionEscalation: null,
         },
         resumeContext: {
           providerId: managerThread.providerId,

@@ -70,7 +70,7 @@ describe("expired commands", () => {
           model: "gpt-5",
           reasoningLevel: "medium" as const,
           permissionMode: "full" as const,
-          permissionEscalation: "ask" as const,
+          permissionEscalation: null,
           serviceTier: "default" as const,
         },
         instructions: "instructions",

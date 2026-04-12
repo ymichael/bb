@@ -99,10 +99,20 @@ function toRuntimeExecutionOptions(args: {
   execution: ResolvedThreadExecutionOptions;
   permissionEscalation: PermissionEscalation;
 }): RuntimeThreadExecutionOptions {
-  return {
+  const base = {
     model: args.execution.model,
     serviceTier: args.execution.serviceTier,
     reasoningLevel: args.execution.reasoningLevel,
+  };
+  if (args.execution.permissionMode === "full") {
+    return {
+      ...base,
+      permissionMode: args.execution.permissionMode,
+      permissionEscalation: null,
+    };
+  }
+  return {
+    ...base,
     permissionMode: args.execution.permissionMode,
     permissionEscalation: args.permissionEscalation,
   };

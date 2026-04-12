@@ -16,6 +16,7 @@ import type {
 } from "./provider-adapter.js";
 import { createAgentRuntime } from "./runtime.js";
 import { parseAvailableModelList } from "./shared/available-models.js";
+import type { AgentRuntimeExecutionOptions } from "./types.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -24,6 +25,11 @@ import { parseAvailableModelList } from "./shared/available-models.js";
 function wait(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
+
+const fullRuntimeOptions = {
+  permissionMode: "full",
+  permissionEscalation: null,
+} satisfies AgentRuntimeExecutionOptions;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -373,6 +379,7 @@ describe("createAgentRuntime", () => {
       threadId: "t1",
       projectId: "p1",
       providerId: "fake",
+      options: fullRuntimeOptions,
     });
 
     expect(providerThreadId).toBe("prov-1");
@@ -426,6 +433,7 @@ rl.on("line", (line) => {
       threadId: "t1",
       projectId: "p1",
       providerId: "fake",
+      options: fullRuntimeOptions,
     });
 
     expect(providerThreadId).toBe("prov-thread-fallback");
@@ -457,6 +465,7 @@ rl.on("line", (line) => {
       threadId: "t1",
       projectId: "p1",
       providerId: "fake",
+      options: fullRuntimeOptions,
     });
 
     const threadStart = recordedCommands.find(
@@ -503,12 +512,14 @@ rl.on("line", (line) => {
       projectId: "p1",
       providerId: "fake",
       instructions: "Initial instructions",
+      options: fullRuntimeOptions,
     });
 
     await runtime.runTurn({
       threadId: "t1",
       input: [{ type: "text", text: "follow up" }],
       instructions: "Updated instructions",
+      options: fullRuntimeOptions,
     });
 
     const reconfigureCommand = findLastRecordedCommand(
@@ -556,6 +567,7 @@ rl.on("line", (line) => {
       projectId: "p1",
       providerThreadId: "prov-1",
       providerId: "fake",
+      options: fullRuntimeOptions,
     });
 
     const resumeCommand = findLastRecordedCommand(
@@ -599,15 +611,14 @@ rl.on("line", (line) => {
       providerId: "fake",
       options: {
         permissionMode: "workspace-write",
+        permissionEscalation: "ask",
       },
     });
 
     await runtime.runTurn({
       threadId: "t1",
       input: [{ type: "text", text: "follow up" }],
-      options: {
-        permissionMode: "full",
-      },
+      options: fullRuntimeOptions,
     });
 
     const threadStart = recordedCommands.find(
@@ -716,8 +727,9 @@ rl.on("line", (line) => {
       threadId: "t1",
       projectId: "p1",
       providerId: "fake",
+      options: fullRuntimeOptions,
     });
-    await runtime.runTurn({ threadId: "t1", input: [{ type: "text", text: "hello" }] });
+    await runtime.runTurn({ threadId: "t1", input: [{ type: "text", text: "hello" }], options: fullRuntimeOptions });
     await wait(100);
 
     expect(events.some((e) => e.type === "turn/started")).toBe(true);
@@ -743,6 +755,7 @@ rl.on("line", (line) => {
       projectId: "p1",
       providerId: "fake",
       input: [{ type: "text", text: "hello from start" }],
+      options: fullRuntimeOptions,
     });
     await wait(100);
 
@@ -769,6 +782,7 @@ rl.on("line", (line) => {
       threadId: "t1",
       projectId: "p1",
       providerId: "fake",
+      options: fullRuntimeOptions,
     });
     await wait(100);
 
@@ -779,6 +793,7 @@ rl.on("line", (line) => {
     await runtime.runTurn({
       threadId: "t1",
       input: [{ type: "text", text: "hello after start" }],
+      options: fullRuntimeOptions,
     });
     await wait(100);
 
@@ -804,12 +819,13 @@ rl.on("line", (line) => {
       threadId: "t1",
       providerThreadId: "old-prov-123",
       providerId: "fake",
+      options: fullRuntimeOptions,
     });
 
     expect(providerThreadId).toBe("old-prov-123");
 
     // Should be able to run a turn on the resumed thread
-    await runtime.runTurn({ threadId: "t1", input: [{ type: "text", text: "after resume" }] });
+    await runtime.runTurn({ threadId: "t1", input: [{ type: "text", text: "after resume" }], options: fullRuntimeOptions });
     await wait(100);
     expect(events.some((e) => e.type === "turn/completed")).toBe(true);
     await runtime.shutdown();
@@ -831,6 +847,7 @@ rl.on("line", (line) => {
       threadId: "t1",
       projectId: "p1",
       providerId: "fake",
+      options: fullRuntimeOptions,
     });
     await runtime.renameThread({ threadId: "t1", title: "New Title" });
     await runtime.shutdown();
@@ -852,6 +869,7 @@ rl.on("line", (line) => {
       threadId: "t1",
       projectId: "p1",
       providerId: "fake",
+      options: fullRuntimeOptions,
     });
     await runtime.stopThread({ threadId: "t1" });
     await runtime.shutdown();
@@ -873,11 +891,13 @@ rl.on("line", (line) => {
       threadId: "t1",
       projectId: "p1",
       providerId: "fake",
+      options: fullRuntimeOptions,
     });
     await runtime.steerTurn({
       threadId: "t1",
       expectedTurnId: "turn-1",
       input: [{ type: "text", text: "steer input" }],
+      options: fullRuntimeOptions,
     });
     await runtime.shutdown();
   });
@@ -906,7 +926,7 @@ rl.on("line", (line) => {
       threadId: "t1",
       projectId: "p1",
       providerId: "fake",
-      options: { model: "fake-model" },
+      options: { ...fullRuntimeOptions, model: "fake-model" },
       instructions: "Initial instructions",
     });
     builtCommands.length = 0;
@@ -914,7 +934,7 @@ rl.on("line", (line) => {
     await runtime.runTurn({
       threadId: "t1",
       input: [{ type: "text", text: "use a different setup" }],
-      options: { model: "fake-model-2" },
+      options: { ...fullRuntimeOptions, model: "fake-model-2" },
       instructions: "Updated instructions",
     });
 
@@ -960,7 +980,7 @@ rl.on("line", (line) => {
       threadId: "t1",
       projectId: "p1",
       providerId: "fake",
-      options: { model: "fake-model" },
+      options: { ...fullRuntimeOptions, model: "fake-model" },
       instructions: "Initial instructions",
     });
     builtCommands.length = 0;
@@ -969,7 +989,7 @@ rl.on("line", (line) => {
       threadId: "t1",
       expectedTurnId: "turn-1",
       input: [{ type: "text", text: "apply a new setup now" }],
-      options: { model: "fake-model-2" },
+      options: { ...fullRuntimeOptions, model: "fake-model-2" },
       instructions: "Updated instructions",
     });
 
@@ -1037,10 +1057,12 @@ rl.on("line", (line) => {
       threadId: "t1",
       projectId: "p1",
       providerId: "fake",
+      options: fullRuntimeOptions,
     });
     await runtime.runTurn({
       threadId: "t1",
       input: [{ type: "text", text: "call_tool:my_test_tool" }],
+      options: fullRuntimeOptions,
     });
     await waitForCondition(
       () =>
@@ -1078,10 +1100,12 @@ rl.on("line", (line) => {
       threadId: "t1",
       projectId: "p1",
       providerId: "fake",
+      options: fullRuntimeOptions,
     });
     await runtime.runTurn({
       threadId: "t1",
       input: [{ type: "text", text: "call_tool:my_test_tool" }],
+      options: fullRuntimeOptions,
     });
     await waitForCondition(
       () => events.some((event) => event.type === "turn/completed"),
@@ -1107,11 +1131,13 @@ rl.on("line", (line) => {
       threadId: "t1",
       projectId: "p1",
       providerId: "fake",
+      options: fullRuntimeOptions,
     });
     // This should not throw — the error is caught and sent as JSON-RPC error
     await runtime.runTurn({
       threadId: "t1",
       input: [{ type: "text", text: "call_tool:failing_tool" }],
+      options: fullRuntimeOptions,
     });
     await waitForCondition(
       () => events.some((event) => event.type === "turn/completed"),
@@ -1256,10 +1282,12 @@ rl.on("line", (line) => {
       threadId: "t1",
       projectId: "p1",
       providerId: "fake",
+      options: fullRuntimeOptions,
     });
     await runtime.runTurn({
       threadId: "t1",
       input: [{ type: "text", text: "trigger interactive request" }],
+      options: fullRuntimeOptions,
     });
     await waitForCondition(
       () =>
@@ -1559,10 +1587,12 @@ rl.on("line", (line) => {
       threadId: "t1",
       projectId: "p1",
       providerId: "fake",
+      options: fullRuntimeOptions,
     });
     await runtime.runTurn({
       threadId: "t1",
       input: [{ type: "text", text: "trigger interactive request failure" }],
+      options: fullRuntimeOptions,
     });
     await waitForCondition(
       () =>
@@ -1693,10 +1723,12 @@ rl.on("line", (line) => {
       threadId: "t1",
       projectId: "p1",
       providerId: "fake",
+      options: fullRuntimeOptions,
     });
     await runtime.runTurn({
       threadId: "t1",
       input: [{ type: "text", text: "trigger unsupported interactive request" }],
+      options: fullRuntimeOptions,
     });
     await waitForCondition(
       () =>
@@ -1738,10 +1770,12 @@ rl.on("line", (line) => {
       threadId: "t1",
       projectId: "p1",
       providerId: "fake",
+      options: fullRuntimeOptions,
     });
     await runtime.runTurn({
       threadId: "t1",
       input: [{ type: "text", text: "call_tool:my_test_tool" }],
+      options: fullRuntimeOptions,
     });
     await waitForCondition(
       () =>
@@ -1815,7 +1849,7 @@ rl.on("line", (line) => {
     });
 
     await expect(
-      runtime.runTurn({ threadId: "nonexistent", input: [{ type: "text", text: "hi" }] }),
+      runtime.runTurn({ threadId: "nonexistent", input: [{ type: "text", text: "hi" }], options: fullRuntimeOptions }),
     ).rejects.toThrow('No provider associated with thread "nonexistent"');
     await runtime.shutdown();
   });
@@ -1837,6 +1871,7 @@ rl.on("line", (line) => {
       threadId: "t1",
       projectId: "p1",
       providerId: "fake",
+      options: fullRuntimeOptions,
     });
 
     // runTurn on a thread that the fake provider doesn't know about (start creates it,
@@ -1870,10 +1905,11 @@ rl.on("line", (line) => {
       threadId: "t1",
       projectId: "p1",
       providerId: "fake",
+      options: fullRuntimeOptions,
     });
     // This should reject because the provider returns a -32601 error
     await expect(
-      runtime2.runTurn({ threadId: "t1", input: [{ type: "text", text: "hi" }] }),
+      runtime2.runTurn({ threadId: "t1", input: [{ type: "text", text: "hi" }], options: fullRuntimeOptions }),
     ).rejects.toThrow("Method not found");
     await runtime.shutdown();
     await runtime2.shutdown();
@@ -1932,6 +1968,7 @@ rl.on("line", (line) => {
       threadId: "t1",
       projectId: "p1",
       providerId: "fake",
+      options: fullRuntimeOptions,
     });
     await runtime.shutdown();
     // Should not hang
@@ -2026,11 +2063,12 @@ rl.on("line", (line) => {
       threadId: "t1",
       projectId: "p1",
       providerId: "fake",
+      options: fullRuntimeOptions,
     });
     await waitForCondition(() => exitInfo.mock.calls.length === 1);
 
     await expect(
-      runtime.runTurn({ threadId: "t1", input: [{ type: "text", text: "hi" }] }),
+      runtime.runTurn({ threadId: "t1", input: [{ type: "text", text: "hi" }], options: fullRuntimeOptions }),
     ).rejects.toThrow(/exited|not running|no provider associated/i);
     await runtime.shutdown();
   });
@@ -2075,11 +2113,12 @@ rl.on("line", (line) => {
       threadId: "t1",
       projectId: "p1",
       providerId: "fake",
+      options: fullRuntimeOptions,
     });
 
     // runTurn sends the request but the provider crashes without responding
     await expect(
-      runtime.runTurn({ threadId: "t1", input: [{ type: "text", text: "hi" }] }),
+      runtime.runTurn({ threadId: "t1", input: [{ type: "text", text: "hi" }], options: fullRuntimeOptions }),
     ).rejects.toThrow(/exited unexpectedly/i);
     await runtime.shutdown();
   });
@@ -2137,12 +2176,14 @@ rl.on("line", (line) => {
       threadId: "t1",
       projectId: "p1",
       providerId: "fake",
+      options: fullRuntimeOptions,
     });
     const r2 = await runtime.startThread({
       environmentId: "env-1",
       threadId: "t2",
       projectId: "p1",
       providerId: "fake",
+      options: fullRuntimeOptions,
     });
 
     // Each thread gets a unique providerThreadId
@@ -2150,8 +2191,8 @@ rl.on("line", (line) => {
 
     // Run turns concurrently
     await Promise.all([
-      runtime.runTurn({ threadId: "t1", input: [{ type: "text", text: "thread 1" }] }),
-      runtime.runTurn({ threadId: "t2", input: [{ type: "text", text: "thread 2" }] }),
+      runtime.runTurn({ threadId: "t1", input: [{ type: "text", text: "thread 1" }], options: fullRuntimeOptions }),
+      runtime.runTurn({ threadId: "t2", input: [{ type: "text", text: "thread 2" }], options: fullRuntimeOptions }),
     ]);
     await wait(100);
 
@@ -2185,10 +2226,12 @@ rl.on("line", (line) => {
       threadId: "my-thread",
       projectId: "p1",
       providerId: "fake",
+      options: fullRuntimeOptions,
     });
     await runtime.runTurn({
       threadId: "my-thread",
       input: [{ type: "text", text: "check ids" }],
+      options: fullRuntimeOptions,
     });
     await wait(100);
 
@@ -2222,17 +2265,19 @@ rl.on("line", (line) => {
       threadId: "t1",
       projectId: "p1",
       providerId: "fake",
+      options: fullRuntimeOptions,
     });
     const r2 = await runtime.startThread({
       environmentId: "env-1",
       threadId: "t2",
       projectId: "p1",
       providerId: "fake",
+      options: fullRuntimeOptions,
     });
 
     await Promise.all([
-      runtime.runTurn({ threadId: "t1", input: [{ type: "text", text: "from t1" }] }),
-      runtime.runTurn({ threadId: "t2", input: [{ type: "text", text: "from t2" }] }),
+      runtime.runTurn({ threadId: "t1", input: [{ type: "text", text: "from t1" }], options: fullRuntimeOptions }),
+      runtime.runTurn({ threadId: "t2", input: [{ type: "text", text: "from t2" }], options: fullRuntimeOptions }),
     ]);
     await wait(100);
 
@@ -2319,12 +2364,14 @@ rl.on("line", (line) => {
       threadId: "t1",
       projectId: "p1",
       providerId: "started-fake",
+      options: fullRuntimeOptions,
     });
     await runtime.startThread({
       environmentId: "env-1",
       threadId: "t2",
       projectId: "p1",
       providerId: "started-fake",
+      options: fullRuntimeOptions,
     });
     await wait(50);
 
@@ -2415,22 +2462,26 @@ rl.on("line", (line) => {
       threadId: "t1",
       projectId: "p1",
       providerId: "warning-fake",
+      options: fullRuntimeOptions,
     });
     await runtime.startThread({
       environmentId: "env-1",
       threadId: "t2",
       projectId: "p1",
       providerId: "warning-fake",
+      options: fullRuntimeOptions,
     });
 
     await Promise.all([
       runtime.runTurn({
         threadId: "t1",
         input: [{ type: "text", text: "from t1" }],
+        options: fullRuntimeOptions,
       }),
       runtime.runTurn({
         threadId: "t2",
         input: [{ type: "text", text: "from t2" }],
+        options: fullRuntimeOptions,
       }),
     ]);
     await wait(100);
@@ -2480,17 +2531,19 @@ rl.on("line", (line) => {
       threadId: "t1",
       projectId: "p1",
       providerId: "provider-a",
+      options: fullRuntimeOptions,
     });
     await runtime.startThread({
       environmentId: "env-1",
       threadId: "t2",
       projectId: "p1",
       providerId: "provider-b",
+      options: fullRuntimeOptions,
     });
 
     await Promise.all([
-      runtime.runTurn({ threadId: "t1", input: [{ type: "text", text: "from a" }] }),
-      runtime.runTurn({ threadId: "t2", input: [{ type: "text", text: "from b" }] }),
+      runtime.runTurn({ threadId: "t1", input: [{ type: "text", text: "from a" }], options: fullRuntimeOptions }),
+      runtime.runTurn({ threadId: "t2", input: [{ type: "text", text: "from b" }], options: fullRuntimeOptions }),
     ]);
     await wait(100);
 
@@ -2520,8 +2573,9 @@ rl.on("line", (line) => {
       threadId: "t1",
       projectId: "p1",
       providerId: "fake",
+      options: fullRuntimeOptions,
     });
-    await runtime1.runTurn({ threadId: "t1", input: [{ type: "text", text: "first runtime" }] });
+    await runtime1.runTurn({ threadId: "t1", input: [{ type: "text", text: "first runtime" }], options: fullRuntimeOptions });
     await wait(100);
     await runtime1.shutdown();
 
@@ -2542,10 +2596,12 @@ rl.on("line", (line) => {
       threadId: "t1-resumed",
       providerThreadId,
       providerId: "fake",
+      options: fullRuntimeOptions,
     });
     await runtime2.runTurn({
       threadId: "t1-resumed",
       input: [{ type: "text", text: "second runtime" }],
+      options: fullRuntimeOptions,
     });
     await wait(100);
 

@@ -105,26 +105,16 @@ function createAdapterTurnIdPrefix(): string {
 }
 
 function toAdapterOptions(
-  execOpts: AgentRuntimeExecutionOptions | undefined,
+  execOpts: AgentRuntimeExecutionOptions,
   instructions: string | undefined,
   envVars: Record<string, string>,
-): AdapterOptions | undefined {
-  if (!execOpts && !instructions && Object.keys(envVars).length === 0) return undefined;
-  const permissionPolicy = execOpts
-    ? resolveAdapterPermissionPolicy(execOpts)
-    : null;
+): AdapterOptions {
+  const permissionPolicy = resolveAdapterPermissionPolicy(execOpts);
   return {
-    model: execOpts?.model,
-    serviceTier: execOpts?.serviceTier,
-    reasoningLevel: execOpts?.reasoningLevel,
-    ...(permissionPolicy
-      ? {
-          permissionMode: permissionPolicy.permissionMode,
-          ...(permissionPolicy.permissionEscalation === null
-            ? {}
-            : { permissionEscalation: permissionPolicy.permissionEscalation }),
-        }
-      : {}),
+    model: execOpts.model,
+    serviceTier: execOpts.serviceTier,
+    reasoningLevel: execOpts.reasoningLevel,
+    ...permissionPolicy,
     instructions,
     envVars,
   };
@@ -209,7 +199,7 @@ interface ThreadRuntimeConfig {
   environmentId: string;
   instructionMode: InstructionMode;
   instructions?: string;
-  options?: AgentRuntimeExecutionOptions;
+  options: AgentRuntimeExecutionOptions;
   projectId?: string;
   providerId: string;
   resumePath?: string;
@@ -363,17 +353,15 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
   }
 
   function sameExecutionSettings(
-    left: AgentRuntimeExecutionOptions | undefined,
-    right: AgentRuntimeExecutionOptions | undefined,
+    left: AgentRuntimeExecutionOptions,
+    right: AgentRuntimeExecutionOptions,
   ): boolean {
-    const leftPolicy = resolveAdapterPermissionPolicy(left);
-    const rightPolicy = resolveAdapterPermissionPolicy(right);
     return (
-      left?.model === right?.model &&
-      left?.serviceTier === right?.serviceTier &&
-      left?.reasoningLevel === right?.reasoningLevel &&
-      leftPolicy.permissionMode === rightPolicy.permissionMode &&
-      leftPolicy.permissionEscalation === rightPolicy.permissionEscalation
+      left.model === right.model &&
+      left.serviceTier === right.serviceTier &&
+      left.reasoningLevel === right.reasoningLevel &&
+      left.permissionMode === right.permissionMode &&
+      left.permissionEscalation === right.permissionEscalation
     );
   }
 
@@ -435,7 +423,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
 
   async function reconfigureThreadIfNeeded(args: {
     instructions: string | undefined;
-    options: AgentRuntimeExecutionOptions | undefined;
+    options: AgentRuntimeExecutionOptions;
     threadId: string;
   }): Promise<void> {
     const currentConfig = threadRuntimeConfigs.get(args.threadId);
@@ -443,7 +431,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       return;
     }
 
-    const nextOptions = args.options ?? currentConfig.options;
+    const nextOptions = args.options;
     const nextInstructions = args.instructions ?? currentConfig.instructions;
 
     if (
@@ -667,7 +655,9 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     if (
       // Managed/non-interactive contexts use deny escalation so providers get a
       // deterministic denial instead of waiting for a UI that will never answer.
-      shouldAutoDenyInteractiveRequest(threadConfig?.options ?? {})
+      (threadConfig
+        ? shouldAutoDenyInteractiveRequest(threadConfig.options)
+        : false)
       || !options.onInteractiveRequest
     ) {
       const resolution = buildDeniedInteractiveResolution(interactiveReq.payload);
