@@ -5,11 +5,11 @@ import {
   type WorkspaceOpenTarget,
   type WorkspaceOpenTargetId,
 } from "@bb/host-daemon-contract";
-import { createLocalStorageEnumStorage } from "./browser-storage";
+import { createNullableLocalStorageEnumStorage } from "./browser-storage";
 
 export const WORKSPACE_OPEN_TARGET_STORAGE_KEY = "bb.workspaceOpenTarget";
 
-export type StoredWorkspaceOpenTargetPreference = "" | WorkspaceOpenTargetId;
+export type StoredWorkspaceOpenTargetPreference = WorkspaceOpenTargetId | null;
 
 interface ResolvePreferredWorkspaceOpenTargetArgs {
   preferredTargetId: StoredWorkspaceOpenTargetPreference;
@@ -18,19 +18,19 @@ interface ResolvePreferredWorkspaceOpenTargetArgs {
 
 function isStoredWorkspaceOpenTargetPreference(
   value: string,
-): value is StoredWorkspaceOpenTargetPreference {
-  return value === "" || workspaceOpenTargetIdSchema.safeParse(value).success;
+): value is WorkspaceOpenTargetId {
+  return workspaceOpenTargetIdSchema.safeParse(value).success;
 }
 
 const workspaceOpenTargetPreferenceStorage =
-  createLocalStorageEnumStorage<StoredWorkspaceOpenTargetPreference>(
+  createNullableLocalStorageEnumStorage<WorkspaceOpenTargetId>(
     isStoredWorkspaceOpenTargetPreference,
   );
 
 const workspaceOpenTargetPreferenceAtom =
   atomWithStorage<StoredWorkspaceOpenTargetPreference>(
     WORKSPACE_OPEN_TARGET_STORAGE_KEY,
-    "",
+    null,
     workspaceOpenTargetPreferenceStorage,
     { getOnInit: true },
   );
@@ -38,7 +38,7 @@ const workspaceOpenTargetPreferenceAtom =
 export function resolvePreferredWorkspaceOpenTarget(
   args: ResolvePreferredWorkspaceOpenTargetArgs,
 ): WorkspaceOpenTarget | null {
-  if (args.preferredTargetId !== "") {
+  if (args.preferredTargetId !== null) {
     const preferredTarget = args.targets.find(
       (target) => target.id === args.preferredTargetId,
     );
@@ -47,6 +47,8 @@ export function resolvePreferredWorkspaceOpenTarget(
     }
   }
 
+  // Preserve stale preferences rather than clearing them. The app may be
+  // temporarily unavailable and should become primary again after reinstall.
   return args.targets[0] ?? null;
 }
 

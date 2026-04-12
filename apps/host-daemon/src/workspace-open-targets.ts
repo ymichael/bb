@@ -42,9 +42,9 @@ interface ExecFileResult {
 
 type ExecFileHandler = (file: string, args: string[]) => Promise<ExecFileResult>;
 
-interface WorkspaceOpenTargetRuntime {
+export interface WorkspaceOpenTargetRuntime {
+  applicationDirectories: string[];
   execFile: ExecFileHandler;
-  homeDirectory: string;
   platform: NodeJS.Platform;
 }
 
@@ -78,6 +78,7 @@ const WORKSPACE_OPEN_TARGET_DEFINITIONS: WorkspaceOpenTargetDefinition[] = [
     kind: "editor",
     macos: {
       appName: "Cursor",
+      // ToDesktop bundle IDs are generated; keep app-name path fallback below.
       bundleIds: ["com.todesktop.230313mzl4w4u92"],
       builtIn: false,
     },
@@ -195,9 +196,14 @@ async function defaultExecFile(
 }
 
 function createDefaultRuntime(): WorkspaceOpenTargetRuntime {
+  const homeDirectory = os.homedir();
   return {
+    applicationDirectories: [
+      "/Applications",
+      "/System/Applications",
+      path.join(homeDirectory, "Applications"),
+    ],
     execFile: defaultExecFile,
-    homeDirectory: os.homedir(),
     platform: process.platform,
   };
 }
@@ -207,11 +213,9 @@ function getMacApplicationCandidatePaths(
   runtime: WorkspaceOpenTargetRuntime,
 ): string[] {
   const appBundleName = `${definition.macos.appName}.app`;
-  return [
-    path.join("/Applications", appBundleName),
-    path.join("/System/Applications", appBundleName),
-    path.join(runtime.homeDirectory, "Applications", appBundleName),
-  ];
+  return runtime.applicationDirectories.map((directory) =>
+    path.join(directory, appBundleName),
+  );
 }
 
 async function pathExists(candidatePath: string): Promise<boolean> {
@@ -229,7 +233,7 @@ async function hasMacBundleId(
 ): Promise<boolean> {
   try {
     const result = await runtime.execFile("mdfind", [
-      `kMDItemCFBundleIdentifier == '${bundleId}'`,
+      `kMDItemCFBundleIdentifier == ${toMdfindStringLiteral(bundleId)}`,
     ]);
     return result.stdout.trim().length > 0;
   } catch {
@@ -237,17 +241,17 @@ async function hasMacBundleId(
   }
 }
 
+function toMdfindStringLiteral(value: string): string {
+  return `'${value.replaceAll("\\", "\\\\").replaceAll("'", "\\'")}'`;
+}
+
 async function hasMacApplicationPath(
   definition: WorkspaceOpenTargetDefinition,
   runtime: WorkspaceOpenTargetRuntime,
 ): Promise<boolean> {
   const candidatePaths = getMacApplicationCandidatePaths(definition, runtime);
-  for (const candidatePath of candidatePaths) {
-    if (await pathExists(candidatePath)) {
-      return true;
-    }
-  }
-  return false;
+  const results = await Promise.all(candidatePaths.map(pathExists));
+  return results.some(Boolean);
 }
 
 async function isMacTargetAvailable(
@@ -267,20 +271,27 @@ async function isMacTargetAvailable(
   return hasMacApplicationPath(definition, runtime);
 }
 
-async function listWorkspaceOpenTargetsWithRuntime(
+function isWorkspaceOpenTarget(
+  target: WorkspaceOpenTarget | null,
+): target is WorkspaceOpenTarget {
+  return target !== null;
+}
+
+export async function listWorkspaceOpenTargetsWithRuntime(
   runtime: WorkspaceOpenTargetRuntime,
 ): Promise<WorkspaceOpenTarget[]> {
   if (runtime.platform !== "darwin") {
     return [];
   }
 
-  const targets: WorkspaceOpenTarget[] = [];
-  for (const definition of WORKSPACE_OPEN_TARGET_DEFINITIONS) {
-    if (await isMacTargetAvailable(definition, runtime)) {
-      targets.push(toWorkspaceOpenTarget(definition));
-    }
-  }
-  return targets;
+  const targets = await Promise.all(
+    WORKSPACE_OPEN_TARGET_DEFINITIONS.map(async (definition) =>
+      await isMacTargetAvailable(definition, runtime)
+        ? toWorkspaceOpenTarget(definition)
+        : null,
+    ),
+  );
+  return targets.filter(isWorkspaceOpenTarget);
 }
 
 function findTargetDefinition(
@@ -308,7 +319,7 @@ async function requireDirectory(directoryPath: string): Promise<void> {
   }
 }
 
-async function openWorkspaceInTargetWithRuntime(
+export async function openWorkspaceInTargetWithRuntime(
   args: WorkspaceOpenTargetLauncherArgs,
   runtime: WorkspaceOpenTargetRuntime,
 ): Promise<void> {
@@ -329,7 +340,7 @@ async function openWorkspaceInTargetWithRuntime(
     });
   }
 
-  await runtime.execFile("open", ["-a", definition.macos.appName, args.path]);
+  await runtime.execFile("open", ["-a", definition.macos.appName, "--", args.path]);
 }
 
 export async function listWorkspaceOpenTargets(): Promise<WorkspaceOpenTarget[]> {
@@ -341,4 +352,3 @@ export async function openWorkspaceInTarget(
 ): Promise<void> {
   await openWorkspaceInTargetWithRuntime(args, createDefaultRuntime());
 }
-

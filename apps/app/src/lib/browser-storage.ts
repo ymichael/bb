@@ -3,6 +3,7 @@ import { atomWithStorage } from "jotai/utils";
 import { getProjectScopedStorageKey } from "./project-scoped-storage";
 
 type ProjectScopedStorageParam = string | null | undefined;
+type StringValueGuard<T extends string> = (value: string) => value is T;
 type StoredValueListener = (storedValue: string | null) => void;
 
 interface SyncStorage<T> {
@@ -121,13 +122,48 @@ export function createLocalStorageSyncStorage<T>(
 }
 
 export function createLocalStorageEnumStorage<T extends string>(
-  isValue: (value: string) => value is T,
+  isValue: StringValueGuard<T>,
 ): SyncStorage<T> {
   return createLocalStorageSyncStorage<T>({
     parse: (storedValue, initialValue) =>
       storedValue !== null && isValue(storedValue) ? storedValue : initialValue,
     serialize: (value) => value,
   });
+}
+
+export function createNullableLocalStorageEnumStorage<T extends string>(
+  isValue: StringValueGuard<T>,
+): SyncStorage<T | null> {
+  return {
+    getItem: (key: string, initialValue: T | null) => {
+      const storedValue = localStorageStringStorage.getItem(key);
+      return storedValue !== null && isValue(storedValue)
+        ? storedValue
+        : initialValue;
+    },
+    setItem: (key: string, value: T | null) => {
+      if (value === null) {
+        localStorageStringStorage.removeItem(key);
+        return;
+      }
+      localStorageStringStorage.setItem(key, value);
+    },
+    removeItem: (key: string) => {
+      localStorageStringStorage.removeItem(key);
+    },
+    subscribe: (
+      key: string,
+      callback: (value: T | null) => void,
+      initialValue: T | null,
+    ) =>
+      subscribeToLocalStorageKey(key, (storedValue) => {
+        callback(
+          storedValue !== null && isValue(storedValue)
+            ? storedValue
+            : initialValue,
+        );
+      }),
+  };
 }
 
 export function createProjectScopedStorageAtomFamily<T>(

@@ -74,6 +74,11 @@ function installQuickCreateFetchRoutes(
           : new Response(null, { status: 503 }),
     },
     {
+      pathname: "/workspace-open-targets",
+      port: 4123,
+      handler: async () => new Response(null, { status: 404 }),
+    },
+    {
       method: "POST",
       pathname: "/api/v1/projects",
       handler: async (request) => {

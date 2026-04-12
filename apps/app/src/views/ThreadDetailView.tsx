@@ -564,7 +564,7 @@ export function ThreadDetailView() {
     threadEnvironmentIsLocal,
   });
   const workspaceOpenButton =
-    workspaceOpenPath && openWorkspace && workspaceOpenTargets.length > 0 ? (
+    workspaceOpenPath && openWorkspace ? (
       <ThreadWorkspaceOpenButton
         targets={workspaceOpenTargets}
         onOpenWorkspace={(targetId) =>

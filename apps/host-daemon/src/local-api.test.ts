@@ -13,6 +13,7 @@ import {
   type LocalApiServer,
 } from "./local-api.js";
 import type { HostDaemonLocalApiConfig } from "./local-api-config.js";
+import { WorkspaceOpenTargetError } from "./workspace-open-targets.js";
 
 async function waitFor(
   predicate: () => boolean,
@@ -267,22 +268,18 @@ describe("local API server", () => {
     await rm(workspacePath, { recursive: true, force: true });
   });
 
-  it("rejects workspace open requests for unavailable targets", async () => {
-    const workspacePath = await mkdtemp(path.join(tmpdir(), "bb-workspace-"));
-    const targets: WorkspaceOpenTarget[] = [
-      {
-        id: "finder",
-        label: "Finder",
-        kind: "file-manager",
-      },
-    ];
-    const openWorkspace = vi.fn(async () => undefined);
+  it("translates workspace opener errors to bad requests", async () => {
+    const openWorkspace = vi.fn(async () => {
+      throw new WorkspaceOpenTargetError({
+        code: "target_unavailable",
+        message: "Workspace open target is unavailable: VS Code",
+      });
+    });
     server = await startLocalApiServer({
       hostId: "host-1",
       localApiConfig: createLocalApiConfig(),
       serverUrl: "http://server.test",
       getConnected: () => true,
-      listWorkspaceOpenTargets: async () => targets,
       openWorkspace,
       restart: () => undefined,
       listActiveThreads: () => [],
@@ -291,52 +288,16 @@ describe("local API server", () => {
 
     const response = await client["open-workspace"].$post({
       json: {
-        path: workspacePath,
+        path: "/tmp/workspace",
         targetId: "vscode",
       },
     });
 
     expect(response.status).toBe(400);
-    expect(openWorkspace).not.toHaveBeenCalled();
-
-    await rm(workspacePath, { recursive: true, force: true });
-  });
-
-  it("rejects workspace open requests for non-directory paths", async () => {
-    const tmpRoot = await mkdtemp(path.join(tmpdir(), "bb-workspace-"));
-    const filePath = path.join(tmpRoot, "file.txt");
-    await writeFile(filePath, "not a workspace");
-    const targets: WorkspaceOpenTarget[] = [
-      {
-        id: "vscode",
-        label: "VS Code",
-        kind: "editor",
-      },
-    ];
-    const openWorkspace = vi.fn(async () => undefined);
-    server = await startLocalApiServer({
-      hostId: "host-1",
-      localApiConfig: createLocalApiConfig(),
-      serverUrl: "http://server.test",
-      getConnected: () => true,
-      listWorkspaceOpenTargets: async () => targets,
-      openWorkspace,
-      restart: () => undefined,
-      listActiveThreads: () => [],
+    expect(openWorkspace).toHaveBeenCalledWith({
+      path: "/tmp/workspace",
+      targetId: "vscode",
     });
-    const client = createHostDaemonLocalClient(`http://localhost:${server.port}`);
-
-    const response = await client["open-workspace"].$post({
-      json: {
-        path: filePath,
-        targetId: "vscode",
-      },
-    });
-
-    expect(response.status).toBe(400);
-    expect(openWorkspace).not.toHaveBeenCalled();
-
-    await rm(tmpRoot, { recursive: true, force: true });
   });
 
   it("returns 501 for folder picking when native picker support is unavailable", async () => {

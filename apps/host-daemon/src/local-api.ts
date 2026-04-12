@@ -138,20 +138,6 @@ export async function startLocalApiServer(
   );
 
   post("/open-workspace", openWorkspaceRequestSchema, async (c, payload) => {
-    const stat = await fs.stat(payload.path).catch(() => null);
-    if (!stat?.isDirectory()) {
-      throw new HTTPException(400, {
-        message: `Workspace path is not a directory: ${payload.path}`,
-      });
-    }
-
-    const targets = await (options.listWorkspaceOpenTargets ?? listWorkspaceOpenTargets)();
-    if (!targets.some((target) => target.id === payload.targetId)) {
-      throw new HTTPException(400, {
-        message: `Workspace open target is unavailable: ${payload.targetId}`,
-      });
-    }
-
     try {
       await (options.openWorkspace ?? openWorkspaceInTarget)(payload);
     } catch (error) {

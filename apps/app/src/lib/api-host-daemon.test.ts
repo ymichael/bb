@@ -174,6 +174,36 @@ describe("api-host-daemon", () => {
     await expect(fetchWorkspaceOpenTargets(3002)).resolves.toEqual([])
   })
 
+  it("rejects workspace open target discovery failures", async () => {
+    installFetchRoutes([
+      {
+        pathname: "/workspace-open-targets",
+        port: 3002,
+        handler: async () => new Response(null, { status: 500 }),
+      },
+    ])
+
+    const { fetchWorkspaceOpenTargets } = await importFreshApiHostDaemon()
+
+    await expect(fetchWorkspaceOpenTargets(3002)).rejects.toThrow(
+      "Workspace open target discovery failed: HTTP 500",
+    )
+  })
+
+  it("rejects malformed workspace open target responses", async () => {
+    installFetchRoutes([
+      {
+        pathname: "/workspace-open-targets",
+        port: 3002,
+        handler: async () => jsonResponse({ targets: [{ label: "VS Code" }] }),
+      },
+    ])
+
+    const { fetchWorkspaceOpenTargets } = await importFreshApiHostDaemon()
+
+    await expect(fetchWorkspaceOpenTargets(3002)).rejects.toThrow()
+  })
+
   it("opens a workspace with a selected target", async () => {
     const requests: Array<ReturnType<typeof openWorkspaceRequestSchema.parse>> = []
     installFetchRoutes([
@@ -209,7 +239,10 @@ describe("api-host-daemon", () => {
         method: "POST",
         pathname: "/open-workspace",
         port: 3002,
-        handler: async () => new Response(null, { status: 400 }),
+        handler: async () => jsonResponse(
+          { message: "Workspace open target is unavailable: VS Code" },
+          { status: 400 },
+        ),
       },
     ])
 
@@ -220,6 +253,6 @@ describe("api-host-daemon", () => {
         path: "/tmp/workspace",
         targetId: "vscode",
       }),
-    ).rejects.toThrow("Failed to open workspace: 400")
+    ).rejects.toThrow("Workspace open target is unavailable: VS Code")
   })
 })

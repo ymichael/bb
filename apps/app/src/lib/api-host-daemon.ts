@@ -1,14 +1,20 @@
 import {
   createHostDaemonLocalClient,
+  workspaceOpenTargetsResponseSchema,
   type OpenWorkspaceRequest,
   type StatusResponse,
   type WorkspaceOpenTarget,
 } from "@bb/host-daemon-contract";
+import { z } from "zod";
 
 let client: ReturnType<typeof createHostDaemonLocalClient> | null = null;
 let clientPort: number | null = null;
 
 export interface HostDaemonStatusSnapshot extends StatusResponse {}
+
+const hostDaemonErrorResponseSchema = z.object({
+  message: z.string().min(1),
+});
 
 /**
  * Get or create the host daemon client.
@@ -58,15 +64,17 @@ export async function openPath(port: number, path: string): Promise<void> {
 export async function fetchWorkspaceOpenTargets(
   port: number,
 ): Promise<WorkspaceOpenTarget[]> {
-  try {
-    const daemon = getHostDaemonClient(port);
-    const res = await daemon["workspace-open-targets"].$get();
-    if (!res.ok) return [];
-    const body = await res.json();
-    return body.targets;
-  } catch {
+  const daemon = getHostDaemonClient(port);
+  const res = await daemon["workspace-open-targets"].$get();
+  const status = Number(res.status);
+  if (status === 404) {
     return [];
   }
+  if (!res.ok) {
+    throw new Error(`Workspace open target discovery failed: HTTP ${status}`);
+  }
+  const body = workspaceOpenTargetsResponseSchema.parse(await res.json());
+  return body.targets;
 }
 
 export async function openWorkspace(
@@ -76,8 +84,36 @@ export async function openWorkspace(
   const daemon = getHostDaemonClient(port);
   const res = await daemon["open-workspace"].$post({ json: request });
   if (!res.ok) {
-    throw new Error(`Failed to open workspace: ${res.status}`);
+    const status = Number(res.status);
+    throw new Error(
+      await readHostDaemonErrorMessage(
+        res,
+        `Failed to open workspace: HTTP ${status}`,
+      ),
+    );
   }
+}
+
+async function readHostDaemonErrorMessage(
+  response: Response,
+  fallbackMessage: string,
+): Promise<string> {
+  const text = await response.text().catch(() => "");
+  const trimmedText = text.trim();
+  if (trimmedText === "") {
+    return fallbackMessage;
+  }
+
+  try {
+    const parsed = hostDaemonErrorResponseSchema.safeParse(JSON.parse(trimmedText));
+    if (parsed.success) {
+      return parsed.data.message;
+    }
+  } catch {
+    return trimmedText;
+  }
+
+  return trimmedText;
 }
 
 /**

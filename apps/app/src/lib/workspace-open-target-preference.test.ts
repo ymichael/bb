@@ -32,7 +32,7 @@ describe("resolvePreferredWorkspaceOpenTarget", () => {
   it("falls back to the first target when no preference is stored", () => {
     expect(
       resolvePreferredWorkspaceOpenTarget({
-        preferredTargetId: "",
+        preferredTargetId: null,
         targets: TARGETS,
       }),
     ).toEqual({
@@ -64,4 +64,3 @@ describe("resolvePreferredWorkspaceOpenTarget", () => {
     ).toBeNull();
   });
 });
-

@@ -78,6 +78,8 @@ describe("ThreadWorkspaceOpenButton", () => {
     fireEvent.pointerDown(
       screen.getByRole("button", { name: "Choose workspace open target" }),
     );
+    expect(await screen.findByText("Editors")).toBeTruthy();
+    expect(screen.getByText("File Managers")).toBeTruthy();
     fireEvent.click(await screen.findByRole("menuitem", { name: "Finder" }));
 
     await waitFor(() => {

@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { buttonVariants, type ButtonProps } from "@/components/ui/button";
@@ -6,10 +6,13 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
 interface SplitButtonAction {
+  groupLabel?: string;
   label: string;
   onSelect: () => void;
   content?: ReactNode;
@@ -64,15 +67,29 @@ function SplitButton({
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" sideOffset={2} mobileTitle={mobileTitle}>
-          {secondaryActions.map((action) => (
-            <DropdownMenuItem
-              key={action.label}
-              onSelect={action.onSelect}
-              textValue={action.label}
-            >
-              {action.content ?? action.label}
-            </DropdownMenuItem>
-          ))}
+          {secondaryActions.map((action, index) => {
+            const previousAction = secondaryActions[index - 1];
+            const showGroupLabel =
+              action.groupLabel !== undefined &&
+              action.groupLabel !== previousAction?.groupLabel;
+
+            return (
+              <Fragment key={action.label}>
+                {showGroupLabel ? (
+                  <>
+                    {index > 0 ? <DropdownMenuSeparator /> : null}
+                    <DropdownMenuLabel>{action.groupLabel}</DropdownMenuLabel>
+                  </>
+                ) : null}
+                <DropdownMenuItem
+                  onSelect={action.onSelect}
+                  textValue={action.label}
+                >
+                  {action.content ?? action.label}
+                </DropdownMenuItem>
+              </Fragment>
+            );
+          })}
         </DropdownMenuContent>
       </DropdownMenu>
     </div>
