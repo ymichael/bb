@@ -1,9 +1,11 @@
 import { useState } from "react"
-import type { Thread, ThreadListEntry } from "@bb/domain"
+import type { Thread, ThreadEnvironmentKind, ThreadListEntry } from "@bb/domain"
 import {
   ChevronDown,
   ChevronRight,
   CircleDashed,
+  Container,
+  FolderGit2,
   UserRound,
 } from "lucide-react"
 import { NavLink } from "react-router-dom"
@@ -96,6 +98,10 @@ interface ThreadLeadingGlyphProps {
   showUnreadBadge: boolean
 }
 
+interface ThreadEnvironmentIconProps {
+  environmentKind: ThreadEnvironmentKind
+}
+
 function ThreadLeadingGlyph({
   hasPendingInteraction,
   isManagedChild,
@@ -122,6 +128,24 @@ function ThreadLeadingGlyph({
         />
       ) : null}
     </span>
+  )
+}
+
+function ThreadEnvironmentIcon({ environmentKind }: ThreadEnvironmentIconProps) {
+  if (environmentKind === "sandbox") {
+    return (
+      <Container
+        className="size-4 text-sidebar-foreground/70"
+        aria-label="Sandbox environment"
+      />
+    )
+  }
+
+  return (
+    <FolderGit2
+      className="size-4 text-sidebar-foreground/70"
+      aria-label="Worktree environment"
+    />
   )
 }
 
@@ -211,6 +235,8 @@ export function ThreadRow({
               <UserRound className="size-4 text-sidebar-foreground/70" aria-label="Manager" />
             ) : isManagedChild && threadIsBusy ? (
               <CircleDashed className="size-4 animate-spin text-sidebar-foreground/70" />
+            ) : thread.environmentKind ? (
+              <ThreadEnvironmentIcon environmentKind={thread.environmentKind} />
             ) : null}
           </span>
           <div

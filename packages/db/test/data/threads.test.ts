@@ -11,6 +11,7 @@ import {
   listHostThreadIds,
   listThreadEnvironmentAssignmentsOnHost,
   listThreads,
+  listThreadsWithPendingInteractionState,
   updateThread,
   deleteThread,
   archiveThread,
@@ -98,6 +99,56 @@ describe("threads", () => {
     expect(listThreads(db, { projectId: project.id, parentThreadId: parent.id })).toHaveLength(1);
     expect(listThreads(db, { projectId: project.id, archived: true })).toHaveLength(1);
     expect(listThreads(db, { projectId: project.id, archived: false })).toHaveLength(2);
+  });
+
+  it("lists thread environment kind without per-thread lookups", () => {
+    const { db, host, project } = setup();
+    const sandboxHost = upsertHost(db, noopNotifier, {
+      name: "sandbox-host",
+      type: "ephemeral",
+    });
+    const directEnvironment = createEnvironment(db, noopNotifier, {
+      projectId: project.id,
+      hostId: host.id,
+      workspaceProvisionType: "unmanaged",
+      isWorktree: false,
+    });
+    const worktreeEnvironment = createEnvironment(db, noopNotifier, {
+      projectId: project.id,
+      hostId: host.id,
+      workspaceProvisionType: "managed-worktree",
+      isWorktree: true,
+    });
+    const sandboxEnvironment = createEnvironment(db, noopNotifier, {
+      projectId: project.id,
+      hostId: sandboxHost.id,
+      workspaceProvisionType: "managed-worktree",
+      isWorktree: true,
+    });
+    const directThread = createThread(db, noopNotifier, {
+      projectId: project.id,
+      environmentId: directEnvironment.id,
+      providerId: "codex",
+    });
+    const worktreeThread = createThread(db, noopNotifier, {
+      projectId: project.id,
+      environmentId: worktreeEnvironment.id,
+      providerId: "codex",
+    });
+    const sandboxThread = createThread(db, noopNotifier, {
+      projectId: project.id,
+      environmentId: sandboxEnvironment.id,
+      providerId: "codex",
+    });
+
+    const environmentKindsByThreadId = new Map(
+      listThreadsWithPendingInteractionState(db, { projectId: project.id })
+        .map((thread) => [thread.id, thread.environmentKind]),
+    );
+
+    expect(environmentKindsByThreadId.get(directThread.id)).toBeNull();
+    expect(environmentKindsByThreadId.get(worktreeThread.id)).toBe("worktree");
+    expect(environmentKindsByThreadId.get(sandboxThread.id)).toBe("sandbox");
   });
 
   it("updates thread title", () => {

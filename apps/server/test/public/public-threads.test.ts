@@ -632,6 +632,75 @@ describe("public thread routes", () => {
     }
   });
 
+  it("includes environmentKind in thread list responses", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const sandboxHost = seedHost(harness.deps, {
+        id: "host-thread-list-sandbox",
+        type: "ephemeral",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/thread-list-environment-kind",
+      });
+      const directEnvironment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/thread-list-environment-kind/direct",
+        projectId: project.id,
+        workspaceProvisionType: "unmanaged",
+      });
+      const worktreeEnvironment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/thread-list-environment-kind/worktree",
+        projectId: project.id,
+        workspaceProvisionType: "managed-worktree",
+      });
+      const sandboxEnvironment = seedEnvironment(harness.deps, {
+        hostId: sandboxHost.id,
+        path: "/tmp/thread-list-environment-kind/sandbox",
+        projectId: project.id,
+        workspaceProvisionType: "managed-worktree",
+      });
+      const directThread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: directEnvironment.id,
+      });
+      const worktreeThread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: worktreeEnvironment.id,
+      });
+      const sandboxThread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: sandboxEnvironment.id,
+      });
+
+      const response = await harness.app.request(
+        `/api/v1/threads?projectId=${project.id}&archived=false`,
+      );
+
+      expect(response.status).toBe(200);
+      await expect(readJson(response)).resolves.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: directThread.id,
+            environmentKind: null,
+          }),
+          expect.objectContaining({
+            id: worktreeThread.id,
+            environmentKind: "worktree",
+          }),
+          expect.objectContaining({
+            id: sandboxThread.id,
+            environmentKind: "sandbox",
+          }),
+        ]),
+      );
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("fails host thread creation when the host is destroyed", async () => {
     const harness = await createTestAppHarness();
     try {

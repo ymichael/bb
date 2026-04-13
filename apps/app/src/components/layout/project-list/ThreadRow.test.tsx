@@ -30,6 +30,7 @@ function createThread(overrides: Partial<ThreadListEntry> = {}): ThreadListEntry
     createdAt: 1,
     updatedAt: 2,
     hasPendingInteraction: false,
+    environmentKind: null,
     ...overrides,
   };
 }
@@ -81,5 +82,17 @@ describe("ThreadRow", () => {
     }));
 
     expect(screen.getByLabelText("Pending interaction requires attention")).not.toBeNull();
+  });
+
+  it("shows a worktree environment icon", () => {
+    renderThreadRow(createThread({ environmentKind: "worktree" }));
+
+    expect(screen.getByLabelText("Worktree environment")).not.toBeNull();
+  });
+
+  it("shows a sandbox environment icon", () => {
+    renderThreadRow(createThread({ environmentKind: "sandbox" }));
+
+    expect(screen.getByLabelText("Sandbox environment")).not.toBeNull();
   });
 });

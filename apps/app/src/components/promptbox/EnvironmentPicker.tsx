@@ -1,7 +1,8 @@
 import { useAtomValue } from "jotai";
 import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Check, ChevronDown, Container, Monitor } from "lucide-react";
+import { Check, ChevronDown, Container, FolderGit2, Monitor } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import type { Host, ProjectSource, SandboxBackendInfo } from "@bb/domain";
 import { LocalhostBadge } from "@bb/ui-core";
 import { findLocalPathProjectSourceForHost, isGitHubRepoProjectSource } from "@bb/domain";
@@ -112,7 +113,7 @@ function buildHostSections(
 interface SelectedEnvironment {
   modeLabel: string;
   hostLabel?: string;
-  icon: typeof Monitor;
+  icon: LucideIcon;
   hostConnected?: boolean;
 }
 
@@ -144,12 +145,13 @@ export function EnvironmentPicker({
     if (!parsed) return { modeLabel: "Environment", icon: Monitor };
     if (parsed.type === "host") {
       const modeLabel = parsed.mode === "worktree" ? "Worktree" : "Direct";
+      const icon = parsed.mode === "worktree" ? FolderGit2 : Monitor;
       const host = hosts.find((h) => h.id === parsed.hostId);
       const hostConnected = host?.status === "connected";
       if (isLocalHost(parsed.hostId)) {
-        return { modeLabel, icon: Monitor, hostConnected };
+        return { modeLabel, icon, hostConnected };
       }
-      return { modeLabel, hostLabel: host?.name ?? "Unknown", icon: Monitor, hostConnected };
+      return { modeLabel, hostLabel: host?.name ?? "Unknown", icon, hostConnected };
     }
     const backend = sandboxBackends.find((b) => b.id === parsed.backendId);
     return { modeLabel: backend?.displayName ?? "Sandbox", icon: Container };
@@ -243,12 +245,14 @@ function HostSectionGroup({
           <>
             <EnvironmentMenuItem
               label="Direct"
+              icon={Monitor}
               itemValue={localValue}
               selectedValue={value}
               onSelect={onChange}
             />
             <EnvironmentMenuItem
               label="Worktree"
+              icon={FolderGit2}
               itemValue={worktreeValue}
               selectedValue={value}
               onSelect={onChange}
@@ -292,6 +296,7 @@ function SandboxSection({ backends, hasGitHubSource, projectId, value, onChange 
             <EnvironmentMenuItem
               key={backend.id}
               label={backend.displayName}
+              icon={Container}
               itemValue={encodeSandboxValue(backend.id)}
               selectedValue={value}
               onSelect={onChange}
@@ -322,6 +327,7 @@ function SandboxSection({ backends, hasGitHubSource, projectId, value, onChange 
 
 interface EnvironmentMenuItemProps {
   label: string;
+  icon: LucideIcon;
   itemValue: string;
   selectedValue: string;
   onSelect: (value: string) => void;
@@ -330,6 +336,7 @@ interface EnvironmentMenuItemProps {
 
 function EnvironmentMenuItem({
   label,
+  icon: Icon,
   itemValue,
   selectedValue,
   onSelect,
@@ -341,7 +348,10 @@ function EnvironmentMenuItem({
       onSelect={() => onSelect(itemValue)}
       className="flex items-center justify-between gap-3"
     >
-      <span className="truncate text-xs">{label}</span>
+      <span className="flex min-w-0 items-center gap-2">
+        <Icon className="size-3.5 shrink-0 text-muted-foreground" />
+        <span className="truncate text-xs">{label}</span>
+      </span>
       <Check
         className={cn(
           "size-4",

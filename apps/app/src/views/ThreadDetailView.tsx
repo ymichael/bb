@@ -33,7 +33,7 @@ import { ThreadDeleteDialog } from "@/components/thread/ThreadDeleteDialog";
 import { ThreadActionsMenu } from "@/components/thread/ThreadActionsMenu";
 import { ThreadWorkspaceOpenButton } from "@/components/thread/ThreadWorkspaceOpenButton";
 import { formatEnvironmentDisplay } from "@bb/core-ui";
-import { Container, Monitor } from "lucide-react";
+import { Container, FolderGit2, Monitor } from "lucide-react";
 import { findLatestActivityRowId } from "@bb/ui-core";
 import type { Thread } from "@bb/domain";
 import { useDialogState } from "@/hooks/useDialogState";
@@ -431,7 +431,11 @@ export function ThreadDetailView() {
         hostProvider: environmentHost?.provider,
       })
     : undefined;
-  const threadEnvironmentIcon = threadEnvironmentDisplay?.location === "cloud" ? Container : Monitor;
+  const threadEnvironmentIcon = threadEnvironmentDisplay?.location === "cloud"
+    ? Container
+    : threadEnvironmentDisplay?.mode === "worktree"
+      ? FolderGit2
+      : Monitor;
   const promptBannerSummary = workspaceStatus
     ? showBranchComparisonUi
       ? formatChangeSummary(workspaceStatus.workingTree)

@@ -204,6 +204,8 @@ export type {
 
 export {
   threadQueuedMessageSchema,
+  threadEnvironmentKindSchema,
+  threadEnvironmentKindValues,
   threadSchema,
   threadListEntrySchema,
   threadStatusSchema,
@@ -222,6 +224,7 @@ export {
 } from "./thread.js";
 export type {
   Thread,
+  ThreadEnvironmentKind,
   ThreadListEntry,
   ThreadQueuedMessage,
   ThreadStatus,

@@ -9,10 +9,16 @@ import {
   isNull,
   ne,
 } from "drizzle-orm";
-import type { ThreadChangeKind, ThreadStatus, ThreadType } from "@bb/domain";
+import type {
+  HostType,
+  ThreadChangeKind,
+  ThreadEnvironmentKind,
+  ThreadStatus,
+  ThreadType,
+} from "@bb/domain";
 import type { DbConnection } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
-import { environments, pendingInteractions, threads } from "../schema.js";
+import { environments, hosts, pendingInteractions, threads } from "../schema.js";
 import { createThreadId } from "../ids.js";
 
 /**
@@ -83,6 +89,12 @@ type ThreadRow = typeof threads.$inferSelect;
 
 export interface ThreadWithPendingInteractionState extends ThreadRow {
   hasPendingInteraction: boolean;
+  environmentKind: ThreadEnvironmentKind | null;
+}
+
+interface ResolveThreadEnvironmentKindArgs {
+  environmentIsWorktree: boolean | null;
+  hostType: HostType | null;
 }
 
 export interface CountLiveThreadsInEnvironmentArgs {
@@ -154,6 +166,21 @@ function buildListThreadsFilters(options: ListThreadsOptions) {
   ].filter((value) => value !== undefined);
 }
 
+function resolveThreadEnvironmentKind({
+  environmentIsWorktree,
+  hostType,
+}: ResolveThreadEnvironmentKindArgs): ThreadEnvironmentKind | null {
+  if (hostType === "ephemeral") {
+    return "sandbox";
+  }
+
+  if (environmentIsWorktree === true) {
+    return "worktree";
+  }
+
+  return null;
+}
+
 export function listThreads(
   db: DbConnection,
   options: ListThreadsOptions,
@@ -173,9 +200,13 @@ export function listThreadsWithPendingInteractionState(
   const rows = db
     .select({
       ...getTableColumns(threads),
+      environmentIsWorktree: environments.isWorktree,
+      hostType: hosts.type,
       pendingInteractionCount: count(pendingInteractions.id),
     })
     .from(threads)
+    .leftJoin(environments, eq(threads.environmentId, environments.id))
+    .leftJoin(hosts, eq(environments.hostId, hosts.id))
     .leftJoin(
       pendingInteractions,
       and(
@@ -188,8 +219,17 @@ export function listThreadsWithPendingInteractionState(
     .orderBy(desc(threads.createdAt))
     .all();
 
-  return rows.map(({ pendingInteractionCount, ...thread }) => ({
+  return rows.map(({
+    environmentIsWorktree,
+    hostType,
+    pendingInteractionCount,
+    ...thread
+  }) => ({
     ...thread,
+    environmentKind: resolveThreadEnvironmentKind({
+      environmentIsWorktree,
+      hostType,
+    }),
     hasPendingInteraction: pendingInteractionCount > 0,
   }));
 }
