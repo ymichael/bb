@@ -284,6 +284,9 @@ describe("generated managed branch names", () => {
         }),
       ).resolves.toBeNull();
       expect(piAiMocks.complete).toHaveBeenCalledTimes(1);
+      const completeCall = piAiMocks.complete.mock.calls[0];
+      expect(completeCall?.[2]?.signal).toBeInstanceOf(AbortSignal);
+      expect(completeCall?.[2]?.signal.aborted).toBe(true);
     } finally {
       await harness.cleanup();
     }

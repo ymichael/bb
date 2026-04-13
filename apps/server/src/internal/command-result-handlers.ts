@@ -1,4 +1,4 @@
-import { and, desc, eq, or } from "drizzle-orm";
+import { and, desc, eq, gt, or } from "drizzle-orm";
 import {
   events,
   getEnvironment,
@@ -12,9 +12,10 @@ import {
   hostDaemonCommandSchema,
   type HostDaemonCommandResultReport,
 } from "@bb/host-daemon-contract";
+import { systemThreadProvisioningEventDataSchema } from "@bb/domain";
 import type { AppDeps } from "../types.js";
 import {
-  appendProvisioningEvent,
+  appendThreadProvisioningEvent,
   buildCwdBranchEntries,
   parseStoredTurnRequestEvent,
   appendSystemErrorEvent,
@@ -89,6 +90,11 @@ type WorkspaceMutationCommand = Extract<
     type: WorkspaceMutationResultReport["type"];
   }
 >;
+type HasStreamedProvisioningTranscriptArgs = {
+  deps: CommandResultSideEffectsDeps;
+  threadId: string;
+  afterSequence: number;
+};
 
 function isWorkspaceMutationCommand(
   command: ParsedHostDaemonCommand,
@@ -96,6 +102,28 @@ function isWorkspaceMutationCommand(
 ): command is WorkspaceMutationCommand {
   return "environmentId" in command && command.type === expectedType;
 }
+
+function hasStreamedProvisioningTranscript(
+  args: HasStreamedProvisioningTranscriptArgs,
+): boolean {
+  const rows = args.deps.db
+    .select({ data: events.data })
+    .from(events)
+    .where(
+      and(
+        eq(events.threadId, args.threadId),
+        eq(events.type, "system/thread-provisioning"),
+        gt(events.sequence, args.afterSequence),
+      ),
+    )
+    .all();
+
+  return rows.some((row) => {
+    const eventData = systemThreadProvisioningEventDataSchema.parse(JSON.parse(row.data));
+    return eventData.entries.length > 0;
+  });
+}
+
 async function handleProvisionCommandResult(
   deps: CommandResultSideEffectsDeps,
   report: Extract<HostDaemonCommandResultReport, { type: "environment.provision" }>,
@@ -144,14 +172,22 @@ async function handleProvisionCommandResult(
       }
 
       const isInitiator = thread.id === command.initiator?.threadId;
-      let entries = cwdBranchEntries;
-      if (isInitiator && report.result.transcript.length > 0) {
-        entries = report.result.transcript;
-      }
-      const completedEventSequence = appendProvisioningEvent(deps, {
+      const hasStreamedTranscript = isInitiator && command.initiator
+        ? hasStreamedProvisioningTranscript({
+            deps,
+            threadId: thread.id,
+            afterSequence: command.initiator.eventSequence,
+          })
+        : false;
+      const entries = hasStreamedTranscript
+        ? []
+        : report.result.transcript.length > 0
+          ? report.result.transcript
+          : cwdBranchEntries;
+      const workspaceReadyEventSequence = appendThreadProvisioningEvent(deps, {
         threadId: thread.id,
         environmentId: command.environmentId,
-        status: "completed",
+        status: "in_progress",
         entries,
       });
 
@@ -201,7 +237,7 @@ async function handleProvisionCommandResult(
           path: report.result.path,
           workspaceProvisionType: command.workspaceProvisionType,
         },
-        eventSequence: completedEventSequence,
+        eventSequence: workspaceReadyEventSequence,
         input: parsedStartEvent.input,
         execution: parsedStartEvent.execution,
         projectId: thread.projectId,
@@ -226,16 +262,18 @@ async function handleProvisionCommandResult(
   });
 
   for (const thread of boundThreads) {
-    appendProvisioningEvent(deps, {
+    appendThreadProvisioningEvent(deps, {
       threadId: thread.id,
       environmentId: command.environmentId,
       status: "failed",
       entries: [
         {
           type: "step",
-          key: "environment",
-          text: report.errorMessage,
+          key: "workspace-failed",
+          text: "Workspace setup failed",
           status: "failed",
+          startedAt: commandRow.createdAt,
+          metadata: { durationMs: Date.now() - commandRow.createdAt },
         },
       ],
     });
@@ -243,7 +281,7 @@ async function handleProvisionCommandResult(
       threadId: thread.id,
       environmentId: command.environmentId,
       code: "thread_provisioning_failed",
-      message: `Thread provisioning failed for project ${thread.projectId}`,
+      message: "Provisioning thread failed",
       detail: report.errorMessage,
     });
     tryTransition(deps.db, deps.hub, thread.id, "error");
@@ -325,7 +363,27 @@ function handleThreadStartResult(
   })) {
     return;
   }
+  const thread = getThread(deps.db, command.threadId);
+  if (!thread) {
+    return;
+  }
+
   if (!report.ok) {
+    appendThreadProvisioningEvent(deps, {
+      threadId: thread.id,
+      environmentId: command.environmentId,
+      status: "failed",
+      entries: [
+        {
+          type: "step",
+          key: "agent-session-failed",
+          text: "Agent session failed",
+          status: "failed",
+          startedAt: commandRow.createdAt,
+          metadata: { durationMs: Date.now() - commandRow.createdAt },
+        },
+      ],
+    });
     failThreadStartForCommand(deps, {
       commandId: commandRow.id,
       failureReason: report.errorMessage,
@@ -333,10 +391,21 @@ function handleThreadStartResult(
     return;
   }
 
-  const thread = getThread(deps.db, command.threadId);
-  if (!thread) {
-    return;
-  }
+  appendThreadProvisioningEvent(deps, {
+    threadId: thread.id,
+    environmentId: command.environmentId,
+    status: "completed",
+    entries: [
+      {
+        type: "step",
+        key: "agent-session-completed",
+        text: "Agent session ready",
+        status: "completed",
+        startedAt: commandRow.createdAt,
+        metadata: { durationMs: Date.now() - commandRow.createdAt },
+      },
+    ],
+  });
 
   completeThreadStartForCommand(deps, {
     commandId: commandRow.id,

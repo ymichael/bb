@@ -60,7 +60,7 @@ describe.sequential("fake provider smoke reuse integration", () => {
       expect(
         events.some(
           (event) =>
-            event.type === "system/provisioning" &&
+            event.type === "system/thread-provisioning" &&
             event.data.status === "failed",
         ),
       ).toBe(true);

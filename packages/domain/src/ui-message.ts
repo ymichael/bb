@@ -153,7 +153,7 @@ export const viewOperationTypeValues = [
   "warning",
   "deprecation",
   "thread-interrupted",
-  "provisioning",
+  "thread-provisioning",
   "operation",
   "compaction",
   "turn-diff",

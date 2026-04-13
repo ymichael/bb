@@ -45,6 +45,20 @@ interface InferenceCompleteArgs<T extends TSchema> {
   timeoutMs?: number;
 }
 
+export interface InferenceTimeoutErrorArgs {
+  timeoutMs: number;
+}
+
+export class InferenceTimeoutError extends Error {
+  readonly timeoutMs: number;
+
+  constructor(args: InferenceTimeoutErrorArgs) {
+    super("Inference request timed out");
+    this.name = "InferenceTimeoutError";
+    this.timeoutMs = args.timeoutMs;
+  }
+}
+
 /**
  * Send a prompt to the configured inference model and return structured
  * output validated via a tool call. The model is given a single tool whose
@@ -69,28 +83,39 @@ export async function inferenceComplete<T extends TSchema>(
     },
   ];
 
-  const completionPromise = complete(model, {
-    messages: [
-      {
-        role: "user",
-        content: args.prompt,
-        timestamp: Date.now(),
-      },
-    ],
-    tools,
-  });
+  const timeoutMs = args.timeoutMs;
+  const abortController = timeoutMs ? new AbortController() : null;
+  const completionPromise = complete(
+    model,
+    {
+      messages: [
+        {
+          role: "user",
+          content: args.prompt,
+          timestamp: Date.now(),
+        },
+      ],
+      tools,
+    },
+    abortController ? { signal: abortController.signal } : undefined,
+  );
 
-  const response = args.timeoutMs
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const response = timeoutMs
     ? await Promise.race([
         completionPromise,
         new Promise<never>((_, reject) => {
-          const timer = setTimeout(
-            () => reject(new Error("Inference request timed out")),
-            args.timeoutMs,
-          );
+          timer = setTimeout(() => {
+            reject(new InferenceTimeoutError({ timeoutMs }));
+            abortController?.abort();
+          }, timeoutMs);
           timer.unref();
         }),
-      ])
+      ]).finally(() => {
+        if (timer) {
+          clearTimeout(timer);
+        }
+      })
     : await completionPromise;
 
   const toolCall = response.content.find(

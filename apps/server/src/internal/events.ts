@@ -160,9 +160,8 @@ function resolveProviderIdentifiers(
     case "system/error":
     case "system/manager/user_message":
     case "system/thread/interrupted":
-    case "system/thread-title/updated":
     case "system/operation":
-    case "system/provisioning":
+    case "system/thread-provisioning":
       return { providerThreadId: null, turnId: null };
     case "thread/identity":
     case "thread/name/updated":

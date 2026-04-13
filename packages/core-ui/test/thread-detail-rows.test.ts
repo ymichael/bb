@@ -58,7 +58,7 @@ function provisioningOperation(
     sourceSeqStart: seq,
     sourceSeqEnd: seq,
     createdAt: seq,
-    opType: "provisioning",
+    opType: "thread-provisioning",
     title,
     status,
     ...((options?.environmentId ||
@@ -1035,34 +1035,37 @@ describe("buildTimelineRows reconnect error collapsing", () => {
 describe("buildTimelineRows provisioning operation collapsing", () => {
   it("collapses multiple provisioning events into one operation row", () => {
     const rows = getOperationRows([
-      provisioningOperation(1, "Provisioning started", "pending", undefined, {
-        transcript: [{ type: "step", key: "provision", text: "Provisioning worktree", status: "started" }],
+      provisioningOperation(1, "Provisioning thread", "pending", undefined, {
+        transcript: [{ type: "step", key: "provision", text: "Creating worktree", status: "started" }],
       }),
-      provisioningOperation(2, "Provisioning environment", "pending", undefined, {
-        transcript: [{ type: "step", key: "setup", text: "running .bb-env-setup.sh", status: "started" }],
+      provisioningOperation(2, "Provisioning thread", "pending", undefined, {
+        transcript: [{ type: "step", key: "setup", text: "Running .bb-env-setup.sh", status: "started" }],
       }),
-      provisioningOperation(3, "Provisioning environment", "pending", undefined, {
-        transcript: [{ type: "step", key: "setup", text: "ran .bb-env-setup.sh in 3s", status: "completed" }],
+      provisioningOperation(3, "Provisioning thread", "pending", undefined, {
+        transcript: [{ type: "step", key: "setup", text: ".bb-env-setup.sh finished", status: "completed" }],
       }),
-      provisioningOperation(4, "Provisioning ready", "completed", undefined, {
-        transcript: [{ type: "step", key: "provision", text: "Provisioning worktree", status: "started" }],
+      provisioningOperation(4, "Provisioned thread", "completed", undefined, {
+        transcript: [{ type: "step", key: "provision", text: "Created worktree", status: "completed" }],
       }),
     ]);
 
     expect(rows).toHaveLength(1);
-    expect(rows[0]?.opType).toBe("provisioning");
-    expect(rows[0]?.title).toBe("Provisioned environment");
+    expect(rows[0]?.opType).toBe("thread-provisioning");
+    expect(rows[0]?.title).toBe("Provisioned thread");
     const envEntry = rows[0]?.provisioning?.transcript?.find((e) => e.key === "provision");
     expect(envEntry).toBeDefined();
     if (envEntry?.type === "step") {
-      expect(envEntry.text).toBe("Provisioning worktree");
+      expect(envEntry.text).toBe("Creating worktree");
     }
-    const setupEntry = rows[0]?.provisioning?.transcript?.find((e) => e.key === "setup");
-    expect(setupEntry).toBeDefined();
-    if (setupEntry?.type === "step") {
-      expect(setupEntry.text).toBe("ran .bb-env-setup.sh in 3s");
-      expect(setupEntry.status).toBe("completed");
-    }
+    const setupEntries = rows[0]?.provisioning?.transcript?.filter((e) => e.key === "setup");
+    expect(setupEntries?.map((entry) => entry.text)).toEqual([
+      "Running .bb-env-setup.sh",
+      ".bb-env-setup.sh finished",
+    ]);
+    expect(setupEntries?.map((entry) => (entry.type === "step" ? entry.status : undefined))).toEqual([
+      "started",
+      "completed",
+    ]);
     expect(rows[0]?.sourceSeqStart).toBe(1);
     expect(rows[0]?.sourceSeqEnd).toBe(4);
     expect(rows[0]?.detail).toBeUndefined();
@@ -1070,76 +1073,76 @@ describe("buildTimelineRows provisioning operation collapsing", () => {
 
   it("keeps completed provisioning rows fully structured", () => {
     const rows = getOperationRows([
-      provisioningOperation(1, "Provisioning started", "pending", undefined, {
-        transcript: [{ type: "step", key: "provision", text: "Provisioning environment", status: "started" }],
+      provisioningOperation(1, "Provisioning thread", "pending", undefined, {
+        transcript: [{ type: "step", key: "provision", text: "Provisioning thread", status: "started" }],
       }),
-      provisioningOperation(2, "Provisioning ready", "completed", undefined, {
-        transcript: [{ type: "step", key: "provision", text: "Provisioning environment", status: "started" }],
+      provisioningOperation(2, "Provisioned thread", "completed", undefined, {
+        transcript: [{ type: "step", key: "provision", text: "Provisioning thread", status: "started" }],
       }),
     ]);
 
     expect(rows).toHaveLength(1);
-    expect(rows[0]?.opType).toBe("provisioning");
-    expect(rows[0]?.title).toBe("Provisioned environment");
+    expect(rows[0]?.opType).toBe("thread-provisioning");
+    expect(rows[0]?.title).toBe("Provisioned thread");
     const envEntry = rows[0]?.provisioning?.transcript?.find((e) => e.key === "provision");
     expect(envEntry).toBeDefined();
     if (envEntry?.type === "step") {
-      expect(envEntry.text).toBe("Provisioning environment");
+      expect(envEntry.text).toBe("Provisioning thread");
     }
     expect(rows[0]?.detail).toBeUndefined();
   });
 
   it("keeps a stable merged provisioning id as new lifecycle updates arrive", () => {
     const startedRows = getOperationRows([
-      provisioningOperation(1, "Provisioning started", "pending", undefined, {
-        transcript: [{ type: "step", key: "provision", text: "Provisioning worktree", status: "started" }],
+      provisioningOperation(1, "Provisioning thread", "pending", undefined, {
+        transcript: [{ type: "step", key: "provision", text: "Creating worktree", status: "started" }],
       }),
     ]);
     const mergedRows = getOperationRows([
-      provisioningOperation(1, "Provisioning started", "pending", undefined, {
-        transcript: [{ type: "step", key: "provision", text: "Provisioning worktree", status: "started" }],
+      provisioningOperation(1, "Provisioning thread", "pending", undefined, {
+        transcript: [{ type: "step", key: "provision", text: "Creating worktree", status: "started" }],
       }),
-      provisioningOperation(2, "Provisioning environment", "pending", undefined, {
-        transcript: [{ type: "step", key: "setup", text: "running .bb-env-setup.sh", status: "started" }],
+      provisioningOperation(2, "Provisioning thread", "pending", undefined, {
+        transcript: [{ type: "step", key: "setup", text: "Running .bb-env-setup.sh", status: "started" }],
       }),
-      provisioningOperation(3, "Provisioning environment", "pending", undefined, {
-        transcript: [{ type: "step", key: "setup", text: "running .bb-env-setup.sh", status: "started" }],
+      provisioningOperation(3, "Provisioning thread", "pending", undefined, {
+        transcript: [{ type: "step", key: "setup", text: "Running .bb-env-setup.sh", status: "started" }],
       }),
     ]);
 
     expect(startedRows[0]?.id).toBe("provisioning-1");
-    expect(startedRows[0]?.opType).toBe("provisioning");
-    expect(startedRows[0]?.title).toBe("Provisioning started");
+    expect(startedRows[0]?.opType).toBe("thread-provisioning");
+    expect(startedRows[0]?.title).toBe("Provisioning thread");
     expect(mergedRows[0]?.id).toBe("provisioning-1");
   });
 
   it("preserves transcript entries when collapsing provisioning rows", () => {
     const rows = getOperationRows([
-      provisioningOperation(1, "Provisioning started", "pending", undefined, {
-        transcript: [{ type: "step", key: "provision", text: "Provisioning worktree", status: "started" }],
+      provisioningOperation(1, "Provisioning thread", "pending", undefined, {
+        transcript: [{ type: "step", key: "provision", text: "Creating worktree", status: "started" }],
       }),
-      provisioningOperation(2, "Provisioning environment", "pending", undefined, {
-        transcript: [{ type: "step", key: "setup", text: "running .bb-env-setup.sh", status: "started" }],
+      provisioningOperation(2, "Provisioning thread", "pending", undefined, {
+        transcript: [{ type: "step", key: "setup", text: "Running .bb-env-setup.sh", status: "started" }],
       }),
-      provisioningOperation(3, "Provisioning environment", "pending", undefined, {
+      provisioningOperation(3, "Provisioning thread", "pending", undefined, {
         transcript: [{ type: "output", key: "setup-out-1", text: "+ pnpm install" }],
       }),
-      provisioningOperation(4, "Provisioning environment", "pending", undefined, {
+      provisioningOperation(4, "Provisioning thread", "pending", undefined, {
         transcript: [{ type: "output", key: "setup-out-2", text: "Done in 3.2s" }],
       }),
     ]);
 
     expect(rows).toHaveLength(1);
-    expect(rows[0]?.opType).toBe("provisioning");
-    expect(rows[0]?.title).toBe("Provisioning environment");
+    expect(rows[0]?.opType).toBe("thread-provisioning");
+    expect(rows[0]?.title).toBe("Provisioning thread");
     const envEntry = rows[0]?.provisioning?.transcript?.find((e) => e.key === "provision");
     expect(envEntry).toBeDefined();
     if (envEntry?.type === "step") {
-      expect(envEntry.text).toBe("Provisioning worktree");
+      expect(envEntry.text).toBe("Creating worktree");
     }
     const setupEntry = rows[0]?.provisioning?.transcript?.find((e) => e.key === "setup");
     expect(setupEntry).toBeDefined();
-    expect(setupEntry?.text).toBe("running .bb-env-setup.sh");
+    expect(setupEntry?.text).toBe("Running .bb-env-setup.sh");
     const outputEntries = rows[0]?.provisioning?.transcript?.filter((e) => e.type === "output");
     expect(outputEntries).toHaveLength(2);
     expect(rows[0]?.detail).toBeUndefined();
@@ -1147,21 +1150,21 @@ describe("buildTimelineRows provisioning operation collapsing", () => {
 
   it("preserves provisioning transcript when collapsing provisioning rows", () => {
     const rows = getOperationRows([
-      provisioningOperation(1, "Provisioning started", "pending", undefined, {
+      provisioningOperation(1, "Provisioning thread", "pending", undefined, {
         transcript: [
-          { type: "step", key: "provision", text: "Provisioning environment", status: "started" },
+          { type: "step", key: "provision", text: "Provisioning thread", status: "started" },
         ],
       }),
-      provisioningOperation(2, "Provisioning environment", "pending", undefined, {
+      provisioningOperation(2, "Provisioning thread", "pending", undefined, {
         transcript: [
-          { type: "step", key: "session", text: "starting provider session", status: "started" },
+          { type: "step", key: "session", text: "Starting agent session", status: "started" },
         ],
       }),
     ]);
 
     expect(rows).toHaveLength(1);
-    expect(rows[0]?.opType).toBe("provisioning");
-    expect(rows[0]?.title).toBe("Provisioning environment");
+    expect(rows[0]?.opType).toBe("thread-provisioning");
+    expect(rows[0]?.title).toBe("Provisioning thread");
     expect(rows[0]?.provisioning?.transcript?.map((entry) => entry.key)).toEqual([
       "provision",
       "session",
@@ -1170,14 +1173,14 @@ describe("buildTimelineRows provisioning operation collapsing", () => {
 
   it("keeps one provisioning row when user interruption lands mid-provisioning", () => {
     const rows = buildTimelineRows([
-      provisioningOperation(1, "Provisioning started", "pending", undefined, {
+      provisioningOperation(1, "Provisioning thread", "pending", undefined, {
         transcript: [
-          { type: "step", key: "provision", text: "Provisioning environment", status: "started" },
+          { type: "step", key: "provision", text: "Provisioning thread", status: "started" },
         ],
       }),
-      provisioningOperation(2, "Provisioning environment", "pending", undefined, {
+      provisioningOperation(2, "Provisioning thread", "pending", undefined, {
         transcript: [
-          { type: "step", key: "session", text: "starting provider session", status: "started" },
+          { type: "step", key: "session", text: "Starting agent session", status: "started" },
         ],
       }),
       {
@@ -1192,9 +1195,9 @@ describe("buildTimelineRows provisioning operation collapsing", () => {
         title: "Stopped by user",
         status: "interrupted",
       },
-      provisioningOperation(4, "Provisioning failed", "error", undefined, {
+      provisioningOperation(4, "Provisioning thread failed", "error", undefined, {
         transcript: [
-          { type: "step", key: "session", text: "provider session start failed", status: "failed" },
+          { type: "step", key: "session", text: "Agent session failed", status: "failed" },
         ],
       }),
       {
@@ -1205,15 +1208,15 @@ describe("buildTimelineRows provisioning operation collapsing", () => {
         sourceSeqEnd: 5,
         createdAt: 5,
         rawType: "system/error",
-        message: "Thread provisioning failed",
+        message: "Provisioning thread failed",
       },
     ]).filter((row): row is Extract<TimelineRow, { kind: "message" }> => row.kind === "message");
 
     expect(rows).toHaveLength(3);
     expect(rows[0]?.message.kind).toBe("operation");
     if (rows[0]?.message.kind === "operation") {
-      expect(rows[0].message.opType).toBe("provisioning");
-      expect(rows[0].message.title).toBe("Provisioning environment failed");
+      expect(rows[0].message.opType).toBe("thread-provisioning");
+      expect(rows[0].message.title).toBe("Provisioning thread failed");
       expect(rows[0].message.sourceSeqStart).toBe(1);
       expect(rows[0].message.sourceSeqEnd).toBe(4);
     }
@@ -1226,27 +1229,27 @@ describe("buildTimelineRows provisioning operation collapsing", () => {
 
   it("preserves ordered provisioning transcript items when collapsing rows", () => {
     const rows = getOperationRows([
-      provisioningOperation(1, "Provisioning started", "pending", undefined, {
+      provisioningOperation(1, "Provisioning thread", "pending", undefined, {
         transcript: [
-          { type: "step", key: "provision", text: "Provisioning worktree", status: "started" },
-          { type: "step", key: "worktree", text: "creating worktree", status: "completed" },
+          { type: "step", key: "provision", text: "Creating worktree", status: "started" },
+          { type: "step", key: "worktree", text: "Created worktree", status: "completed" },
         ],
       }),
-      provisioningOperation(2, "Provisioning environment", "pending", undefined, {
+      provisioningOperation(2, "Provisioning thread", "pending", undefined, {
         transcript: [
-          { type: "step", key: "branch", text: "checked out branch feature/test (abcdef1)", status: "completed" },
-          { type: "step", key: "setup", text: "running .bb-env-setup.sh", status: "started" },
+          { type: "step", key: "branch", text: "Using branch: feature/test (abcdef1)", status: "completed" },
+          { type: "step", key: "setup", text: "Running .bb-env-setup.sh", status: "started" },
         ],
       }),
-      provisioningOperation(3, "Provisioning environment", "pending", undefined, {
+      provisioningOperation(3, "Provisioning thread", "pending", undefined, {
         transcript: [
-          { type: "step", key: "session", text: "started provider session in 2s", status: "completed" },
+          { type: "step", key: "session", text: "Agent session ready", status: "completed" },
         ],
       }),
     ]);
 
     expect(rows).toHaveLength(1);
-    expect(rows[0]?.opType).toBe("provisioning");
+    expect(rows[0]?.opType).toBe("thread-provisioning");
     expect(rows[0]?.provisioning?.transcript?.map((entry) => entry.key)).toEqual([
       "provision",
       "worktree",
@@ -1256,46 +1259,57 @@ describe("buildTimelineRows provisioning operation collapsing", () => {
     ]);
   });
 
-  it("merges transcript entries with the same key", () => {
+  it("preserves transcript entries with the same key", () => {
     const rows = getOperationRows([
-      provisioningOperation(1, "Provisioning environment", "pending", undefined, {
-        transcript: [{ type: "step", key: "setup", text: "running .bb-env-setup.sh", status: "started" }],
+      provisioningOperation(1, "Provisioning thread", "pending", undefined, {
+        transcript: [{ type: "step", key: "setup", text: "Running .bb-env-setup.sh", status: "started" }],
       }),
-      provisioningOperation(2, "Provisioning environment", "pending", undefined, {
-        transcript: [{ type: "step", key: "setup", text: "running .bb-env-setup.sh", status: "started" }],
+      provisioningOperation(2, "Provisioning thread", "pending", undefined, {
+        transcript: [{ type: "step", key: "setup", text: "Running .bb-env-setup.sh", status: "started" }],
       }),
-      provisioningOperation(3, "Provisioning ready", "completed", undefined, {
-        transcript: [{ type: "step", key: "setup", text: "ran .bb-env-setup.sh", status: "completed" }],
+      provisioningOperation(3, "Provisioned thread", "completed", undefined, {
+        transcript: [{ type: "step", key: "setup", text: ".bb-env-setup.sh finished", status: "completed" }],
       }),
     ]);
 
     expect(rows).toHaveLength(1);
-    const setupEntry = rows[0]?.provisioning?.transcript?.find((e) => e.key === "setup");
-    expect(setupEntry).toBeDefined();
-    if (setupEntry?.type === "step") {
-      expect(setupEntry.text).toBe("ran .bb-env-setup.sh");
-      expect(setupEntry.status).toBe("completed");
-    }
+    const setupEntries = rows[0]?.provisioning?.transcript?.filter((e) => e.key === "setup");
+    expect(setupEntries?.map((entry) => entry.text)).toEqual([
+      "Running .bb-env-setup.sh",
+      "Running .bb-env-setup.sh",
+      ".bb-env-setup.sh finished",
+    ]);
+    expect(setupEntries?.map((entry) => (entry.type === "step" ? entry.status : undefined))).toEqual([
+      "started",
+      "started",
+      "completed",
+    ]);
   });
 
   it("collapses two provisioning updates into a single completed row", () => {
     const rows = getOperationRows([
-      provisioningOperation(1, "Provisioning environment", "pending", undefined, {
-        transcript: [{ type: "step", key: "setup", text: "running .bb-env-setup.sh", status: "started" }],
+      provisioningOperation(1, "Provisioning thread", "pending", undefined, {
+        transcript: [{ type: "step", key: "setup", text: "Running .bb-env-setup.sh", status: "started" }],
       }),
-      provisioningOperation(2, "Provisioning ready", "completed", undefined, {
-        transcript: [{ type: "step", key: "setup", text: "ran .bb-env-setup.sh in 3s", status: "completed" }],
+      provisioningOperation(2, "Provisioned thread", "completed", undefined, {
+        transcript: [{ type: "step", key: "setup", text: ".bb-env-setup.sh finished", status: "completed" }],
       }),
     ]);
 
     expect(rows).toHaveLength(1);
-    expect(rows[0]?.opType).toBe("provisioning");
-    expect(rows[0]?.title).toBe("Provisioned environment");
+    expect(rows[0]?.opType).toBe("thread-provisioning");
+    expect(rows[0]?.title).toBe("Provisioned thread");
     expect(rows[0]?.sourceSeqStart).toBe(1);
     expect(rows[0]?.sourceSeqEnd).toBe(2);
-    const setupEntry = rows[0]?.provisioning?.transcript?.find((e) => e.key === "setup");
-    expect(setupEntry?.text).toBe("ran .bb-env-setup.sh in 3s");
-    expect(setupEntry?.status).toBe("completed");
+    const setupEntries = rows[0]?.provisioning?.transcript?.filter((e) => e.key === "setup");
+    expect(setupEntries?.map((entry) => entry.text)).toEqual([
+      "Running .bb-env-setup.sh",
+      ".bb-env-setup.sh finished",
+    ]);
+    expect(setupEntries?.map((entry) => (entry.type === "step" ? entry.status : undefined))).toEqual([
+      "started",
+      "completed",
+    ]);
     expect(rows[0]?.detail).toBeUndefined();
   });
 
@@ -1304,37 +1318,36 @@ describe("buildTimelineRows provisioning operation collapsing", () => {
     // provisioning ops as error when the thread status is "error". The merge
     // must still produce "completed" when the final provisioning event succeeded.
     const rows = getOperationRows([
-      provisioningOperation(1, "Provisioning started", "error", undefined, {
-        transcript: [{ type: "step", key: "provision", text: "Waiting for environment...", status: "started" }],
+      provisioningOperation(1, "Provisioning thread", "error", undefined, {
+        transcript: [{ type: "step", key: "provision", text: "Waiting for workspace", status: "started" }],
       }),
-      provisioningOperation(2, "Provisioning environment", "error", undefined, {
+      provisioningOperation(2, "Provisioning thread", "error", undefined, {
         transcript: [{ type: "step", key: "git-clone", text: "git clone ...", status: "completed" }],
       }),
-      provisioningOperation(3, "Provisioning ready", "completed", undefined, {
-        transcript: [{ type: "step", key: "branch", text: "Branch: main", status: "completed" }],
+      provisioningOperation(3, "Provisioned thread", "completed", undefined, {
+        transcript: [{ type: "step", key: "branch", text: "Using branch: main", status: "completed" }],
       }),
     ]);
 
     expect(rows).toHaveLength(1);
-    expect(rows[0]?.opType).toBe("provisioning");
+    expect(rows[0]?.opType).toBe("thread-provisioning");
     expect(rows[0]?.status).toBe("completed");
-    expect(rows[0]?.title).toBe("Provisioned environment");
+    expect(rows[0]?.title).toBe("Provisioned thread");
   });
 
   it("shows completed when a completed provisioning event is followed by stale interrupted updates", () => {
     const rows = getOperationRows([
-      provisioningOperation(1, "Provisioning ready", "completed", undefined, {
-        transcript: [{ type: "step", key: "branch", text: "Branch: main", status: "completed" }],
+      provisioningOperation(1, "Provisioned thread", "completed", undefined, {
+        transcript: [{ type: "step", key: "branch", text: "Using branch: main", status: "completed" }],
       }),
-      provisioningOperation(2, "Provisioning environment", "interrupted", undefined, {
+      provisioningOperation(2, "Provisioning thread", "interrupted", undefined, {
         transcript: [{ type: "output", key: "setup-out-1", text: "Done in 8.4s" }],
       }),
     ]);
 
     expect(rows).toHaveLength(1);
-    expect(rows[0]?.opType).toBe("provisioning");
+    expect(rows[0]?.opType).toBe("thread-provisioning");
     expect(rows[0]?.status).toBe("completed");
-    expect(rows[0]?.title).toBe("Provisioned environment");
+    expect(rows[0]?.title).toBe("Provisioned thread");
   });
 });
-

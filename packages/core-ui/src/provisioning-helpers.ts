@@ -1,5 +1,6 @@
 import { getMessageStartedAt } from "./format-helpers.js";
 import type {
+  ProvisioningTranscriptEntry,
   ViewMessage,
   ViewProvisioningMetadata,
   ViewProvisioningTranscriptEntry,
@@ -8,7 +9,7 @@ import type {
 // --- Helpers used by to-view-messages.ts (event -> view decoding) ---
 
 export function readProvisioningTranscript(
-  entries: Array<{ type: string; key: string; text?: string; startedAt?: number; status?: string; metadata?: Record<string, unknown> }> | undefined,
+  entries: ProvisioningTranscriptEntry[] | undefined,
 ): ViewProvisioningTranscriptEntry[] | undefined {
   if (!Array.isArray(entries) || entries.length === 0) return undefined;
 
@@ -21,12 +22,11 @@ export function readProvisioningTranscript(
     if (!text) continue;
 
     if (entry.type === "step") {
-      const status = entry.status as "started" | "completed" | "failed" | undefined;
       result.push({
         type: "step",
         key,
         text,
-        ...(status ? { status } : { status: "started" }),
+        status: entry.status ?? "started",
         ...(entry.startedAt !== undefined ? { startedAt: entry.startedAt } : {}),
         ...(entry.metadata ? { metadata: entry.metadata } : {}),
       });
@@ -50,35 +50,7 @@ function isProvisioningOperation(
   message: ViewMessage,
 ): message is Extract<ViewMessage, { kind: "operation" }> {
   if (message.kind !== "operation") return false;
-  return message.opType === "provisioning";
-}
-
-function mergeProvisioningTranscriptEntry(
-  existing: ViewProvisioningTranscriptEntry | undefined,
-  incoming: ViewProvisioningTranscriptEntry,
-): ViewProvisioningTranscriptEntry {
-  if (!existing) {
-    return { ...incoming };
-  }
-
-  // Output entries are append-only (unique keys, never merge)
-  if (incoming.type === "output") {
-    return { ...incoming };
-  }
-
-  // Steps with same key: latest wins
-  if (existing.type === "step" && incoming.type === "step") {
-    return {
-      type: "step",
-      key: existing.key,
-      text: incoming.text,
-      ...(incoming.status ? { status: incoming.status } : {}),
-      ...(incoming.startedAt !== undefined ? { startedAt: incoming.startedAt } : existing.startedAt !== undefined ? { startedAt: existing.startedAt } : {}),
-      ...(incoming.metadata ? { metadata: incoming.metadata } : existing.metadata ? { metadata: existing.metadata } : {}),
-    };
-  }
-
-  return { ...incoming };
+  return message.opType === "thread-provisioning";
 }
 
 function mergeProvisioningTranscript(
@@ -92,23 +64,10 @@ function mergeProvisioningTranscript(
     return incoming.map((entry) => ({ ...entry }));
   }
 
-  const merged = new Map<string, ViewProvisioningTranscriptEntry>();
-  const order: string[] = [];
-  for (const entry of existing) {
-    const key = entry.key;
-    order.push(key);
-    merged.set(key, { ...entry });
-  }
-  for (const entry of incoming) {
-    const key = entry.key;
-    if (!merged.has(key)) {
-      order.push(key);
-    }
-    merged.set(key, mergeProvisioningTranscriptEntry(merged.get(key), entry));
-  }
-  return order
-    .map((key) => merged.get(key))
-    .filter((entry): entry is ViewProvisioningTranscriptEntry => Boolean(entry));
+  return [
+    ...existing.map((entry) => ({ ...entry })),
+    ...incoming.map((entry) => ({ ...entry })),
+  ];
 }
 
 function mergeProvisioningMetadata(
@@ -180,9 +139,9 @@ export function mergeProvisioningOperations(messages: ViewMessage[]): ViewMessag
       undefined,
     );
     const title = (() => {
-      if (mergedStatus === "interrupted") return "Provisioning environment interrupted";
-      if (mergedStatus === "error") return "Provisioning environment failed";
-      return mergedStatus === "completed" ? "Provisioned environment" : "Provisioning environment";
+      if (mergedStatus === "interrupted") return "Provisioning thread interrupted";
+      if (mergedStatus === "error") return "Provisioning thread failed";
+      return mergedStatus === "completed" ? "Provisioned thread" : "Provisioning thread";
     })();
 
     merged.push({
@@ -194,7 +153,7 @@ export function mergeProvisioningOperations(messages: ViewMessage[]): ViewMessag
       createdAt: Math.max(...active.map((message) => message.createdAt)),
       startedAt: Math.min(...active.map((message) => getMessageStartedAt(message))),
       turnId: first.turnId ?? last.turnId,
-      opType: "provisioning",
+      opType: "thread-provisioning",
       title,
       detail: uniqueDetailLines.length > 0 ? uniqueDetailLines.join("\n") : undefined,
       status: mergedStatus,

@@ -18,7 +18,8 @@ function normalizeErrorMessageText(value: string): string {
 }
 
 function isThreadProvisioningFailureTitle(value: string): boolean {
-  return /^Thread provisioning failed for project\s+.+$/i.test(value.trim());
+  const normalized = value.trim();
+  return /^Provisioning thread failed$/i.test(normalized);
 }
 
 function normalizeProvisioningErrorDetail(detail: string): string {
@@ -40,7 +41,7 @@ function normalizeProvisioningErrorDetail(detail: string): string {
 function normalizeErrorDetailForDisplay(title: string, detail?: string): string | undefined {
   const normalized = detail?.trim();
   if (!normalized) return undefined;
-  if (title === "Thread provisioning failed") {
+  if (title === "Provisioning thread failed") {
     return normalizeProvisioningErrorDetail(normalized);
   }
   return normalizeErrorMessageText(normalized).trim();
@@ -74,7 +75,7 @@ function parseErrorDisplay(message: ViewErrorMessage): {
 
   if (titleFromDelimiter && isThreadProvisioningFailureTitle(titleFromDelimiter)) {
     return {
-      title: "Thread provisioning failed",
+      title: "Provisioning thread failed",
       detail: detailFromDelimiter
         ? normalizeProvisioningErrorDetail(detailFromDelimiter)
         : undefined,
@@ -82,7 +83,7 @@ function parseErrorDisplay(message: ViewErrorMessage): {
   }
 
   if (isThreadProvisioningFailureTitle(trimmed)) {
-    return { title: "Thread provisioning failed" };
+    return { title: "Provisioning thread failed" };
   }
 
   if (titleFromDelimiter && detailFromDelimiter && titleFromDelimiter.length <= 96) {

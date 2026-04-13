@@ -31,7 +31,10 @@ import {
 import type { AppDeps, SandboxWorkSessionDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
 import { advanceEnvironmentCleanup, requestEnvironmentCleanup } from "../environments/environment-cleanup.js";
-import { appendThreadInterruptedEvent } from "./thread-events.js";
+import {
+  appendThreadInterruptedEvent,
+  appendThreadProvisioningEvent,
+} from "./thread-events.js";
 import { tryTransition } from "./thread-transitions.js";
 import { getLastProviderThreadId } from "./thread-events.js";
 import {
@@ -313,7 +316,26 @@ export async function requestThreadStart(
     return;
   }
 
-  const command = await buildThreadStartCommand(deps, args);
+  const agentSessionStartedAt = Date.now();
+  const eventSequence = appendThreadProvisioningEvent(deps, {
+    threadId: args.thread.id,
+    environmentId: args.environment.id,
+    status: "in_progress",
+    entries: [
+      {
+        type: "step",
+        key: "agent-session-started",
+        text: "Starting agent session",
+        status: "started",
+        startedAt: agentSessionStartedAt,
+      },
+    ],
+  });
+
+  const command = await buildThreadStartCommand(deps, {
+    ...args,
+    eventSequence,
+  });
   upsertThreadOperationRecord(deps.db, {
     threadId: args.thread.id,
     kind: "start",

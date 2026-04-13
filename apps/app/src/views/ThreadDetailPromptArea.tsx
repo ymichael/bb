@@ -170,7 +170,7 @@ export function ThreadDetailPromptArea({
     isCreated
       ? "Thread is being created..."
       : isProvisioning
-      ? "Thread is provisioning..."
+      ? "Thread is being provisioned..."
       : isRuntimeError
       ? "Retry by sending a follow-up message"
       : thread.status === "idle"

@@ -30,7 +30,7 @@ import type { SandboxHostProgressEvent } from "@bb/sandbox-host";
 import type { AppDeps, SandboxWorkSessionDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
 import {
-  appendProvisioningEvent,
+  appendThreadProvisioningEvent,
   appendSystemErrorEvent,
 } from "../threads/thread-events.js";
 import {
@@ -113,7 +113,7 @@ function listLiveEnvironmentThreads(
     .all();
 }
 
-function appendProvisioningEventToEnvironmentThreads(
+function appendThreadProvisioningEventToEnvironmentThreads(
   deps: Pick<AppDeps, "db" | "hub">,
   args: {
     entries: ProvisioningTranscriptEntry[];
@@ -129,7 +129,7 @@ function appendProvisioningEventToEnvironmentThreads(
     ?? listLiveEnvironmentThreads(deps, args.environmentId);
 
   for (const thread of liveThreads) {
-    appendProvisioningEvent(deps, {
+    appendThreadProvisioningEvent(deps, {
       entries: args.entries,
       environmentId: args.environmentId,
       status: args.status,
@@ -155,21 +155,21 @@ function sandboxHostProgressEntry(
     case "host":
       return {
         type: "step",
-        key: "sandbox-host",
+        key: `sandbox-host-${event.status}`,
         text:
           event.status === "completed"
             ? "Sandbox host ready"
-            : "Preparing sandbox host",
+            : "Preparing sandbox",
         startedAt,
         status: event.status,
       };
     case "daemon-start":
       return {
         type: "step",
-        key: "sandbox-daemon",
+        key: `sandbox-daemon-${event.status}`,
         text:
           event.status === "completed"
-            ? "Sandbox daemon started"
+            ? "Sandbox daemon ready"
             : "Starting sandbox daemon",
         startedAt,
         status: event.status,
@@ -407,13 +407,13 @@ async function bootstrapSandboxProvisioning(
     request: SandboxHostEnvironmentProvisionRequest;
   },
 ): Promise<void> {
-  appendProvisioningEventToEnvironmentThreads(deps, {
+  appendThreadProvisioningEventToEnvironmentThreads(deps, {
     environmentId: args.environment.id,
     status: "in_progress",
     entries: [
       {
         type: "step",
-        key: "sandbox-connect",
+        key: "sandbox-connect-started",
         text: "Waiting for sandbox host to connect",
         startedAt: Date.now(),
         status: "started",
@@ -426,7 +426,7 @@ async function bootstrapSandboxProvisioning(
       hostId: args.environment.hostId,
       progressCallbacks: {
         onProgress: (event) => {
-          appendProvisioningEventToEnvironmentThreads(deps, {
+          appendThreadProvisioningEventToEnvironmentThreads(deps, {
             environmentId: args.environment.id,
             status: "in_progress",
             entries: [sandboxHostProgressEntry(event)],
@@ -435,13 +435,13 @@ async function bootstrapSandboxProvisioning(
       },
     });
 
-    appendProvisioningEventToEnvironmentThreads(deps, {
+    appendThreadProvisioningEventToEnvironmentThreads(deps, {
       environmentId: args.environment.id,
       status: "in_progress",
       entries: [
         {
           type: "step",
-          key: "sandbox-connect",
+          key: "sandbox-connect-completed",
           text: "Sandbox host connected",
           startedAt: Date.now(),
           status: "completed",
@@ -464,14 +464,14 @@ async function bootstrapSandboxProvisioning(
       failureReason,
     });
 
-    appendProvisioningEventToEnvironmentThreads(deps, {
+    appendThreadProvisioningEventToEnvironmentThreads(deps, {
       environmentId: args.environment.id,
       status: "failed",
       threads: liveThreads,
       entries: [
         {
           type: "step",
-          key: "sandbox-host",
+          key: "sandbox-failed",
           text: failureReason,
           startedAt: Date.now(),
           status: "failed",
@@ -484,7 +484,7 @@ async function bootstrapSandboxProvisioning(
         threadId: thread.id,
         environmentId: args.environment.id,
         code: "thread_provisioning_failed",
-        message: `Thread provisioning failed for project ${thread.projectId}`,
+        message: "Provisioning thread failed",
         detail: failureReason,
       });
       tryTransition(deps.db, deps.hub, thread.id, "error");
@@ -608,15 +608,15 @@ export async function queueManagedEnvironmentReprovision(
   if (args.thread.status === "idle") {
     tryTransition(deps.db, deps.hub, args.thread.id, "provisioning");
   }
-  const provisionEventSequence = appendProvisioningEvent(deps, {
+  const provisionEventSequence = appendThreadProvisioningEvent(deps, {
     threadId: args.thread.id,
     environmentId: args.environment.id,
     status: "started",
     entries: [
       {
         type: "step",
-        key: "provision",
-        text: `Provisioning ${toProvisioningLabel(args.environment.workspaceProvisionType).toLowerCase()}`,
+        key: "workspace-restore-started",
+        text: `Restoring ${toProvisioningLabel(args.environment.workspaceProvisionType).toLowerCase()}`,
         status: "started",
       },
     ],

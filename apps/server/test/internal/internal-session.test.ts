@@ -22,7 +22,7 @@ import {
   hostDaemonSessionOpenResponseSchema,
   hostRuntimeMaterialSnapshotSchema,
 } from "@bb/host-daemon-contract";
-import { threadSchema } from "@bb/domain";
+import { systemThreadProvisioningEventDataSchema, threadSchema } from "@bb/domain";
 import { describe, expect, it, vi } from "vitest";
 import { appendClientTurnEvent } from "../../src/services/threads/thread-events.js";
 import { finalizeStoppedThread } from "../../src/services/threads/thread-lifecycle.js";
@@ -686,7 +686,7 @@ describe("internal session routes", () => {
           type: "environment.provision",
           ok: false,
           errorCode: "provision_failed",
-          errorMessage: "Provisioning failed",
+          errorMessage: "git clone failed",
         }),
       });
       expect(failureResponse.status).toBe(200);
@@ -703,7 +703,7 @@ describe("internal session routes", () => {
         failureEvent ? JSON.parse(failureEvent.data) : null,
       ).toMatchObject({
         code: "thread_provisioning_failed",
-        detail: "Provisioning failed",
+        detail: "git clone failed",
       });
     } finally {
       await harness.cleanup();
@@ -873,10 +873,10 @@ describe("internal session routes", () => {
       });
 
       const transcriptEntries = [
-        { type: "step", key: "cwd", text: "cwd: /tmp/transcript-source", status: "completed" },
-        { type: "step", key: "git-worktree", text: "git worktree add -B bb/transcript /tmp/transcript-test", status: "completed" },
-        { type: "step", key: "cwd", text: "cwd: /tmp/transcript-test", status: "completed" },
-        { type: "step", key: "branch", text: "Branch: bb/transcript (abc1234)", status: "completed" },
+        { type: "step", key: "workspace-source", text: "Using workspace: /tmp/transcript-source", status: "completed" },
+        { type: "output", key: "git-worktree-command", text: "git worktree add -B bb/transcript /tmp/transcript-test" },
+        { type: "step", key: "workspace-target", text: "Using workspace: /tmp/transcript-test", status: "completed" },
+        { type: "step", key: "workspace-branch", text: "Using branch: bb/transcript (abc1234)", status: "completed" },
       ];
       const response = await harness.app.request("/internal/session/command-result", {
         method: "POST",
@@ -900,15 +900,115 @@ describe("internal session routes", () => {
       });
       expect(response.status).toBe(200);
 
-      const completedEvents = harness.db
+      const transcriptEvents = harness.db
         .select({ data: events.data })
         .from(events)
-        .where(and(eq(events.threadId, thread.id), eq(events.type, "system/provisioning")))
+        .where(and(eq(events.threadId, thread.id), eq(events.type, "system/thread-provisioning")))
         .all()
-        .map((row) => JSON.parse(row.data))
-        .filter((d: { status: string }) => d.status === "completed");
-      expect(completedEvents).toHaveLength(1);
-      expect(completedEvents[0].entries).toEqual(transcriptEntries);
+        .map((row) => systemThreadProvisioningEventDataSchema.parse(JSON.parse(row.data)))
+        .filter((eventData) =>
+          eventData.entries.some((entry) => entry.key === "git-worktree-command")
+        );
+      expect(transcriptEvents).toHaveLength(1);
+      expect(transcriptEvents[0]?.status).toBe("in_progress");
+      expect(transcriptEvents[0]?.entries).toEqual(transcriptEntries);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("does not replay the initiator daemon transcript when streamed entries already exist", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-streamed-transcript",
+      });
+      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        managed: true,
+        projectId: project.id,
+        path: "/tmp/streamed-transcript",
+        status: "provisioning",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "provisioning",
+      });
+      seedEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        sequence: 11,
+        type: "system/thread-provisioning",
+        data: {
+          status: "in_progress",
+          environmentId: environment.id,
+          entries: [
+            { type: "step", key: "git-worktree-started", text: "Creating worktree", status: "started" },
+          ],
+        },
+      });
+      const command = queueEnvironmentProvisionLifecycleCommand(harness, {
+        hostId: host.id,
+        sessionId: session.id,
+        environmentId: environment.id,
+        command: {
+          type: "environment.provision",
+          environmentId: environment.id,
+          initiator: { threadId: thread.id, eventSequence: 10 },
+          workspaceProvisionType: "managed-worktree",
+          targetPath: "/tmp/streamed-transcript",
+          sourcePath: "/tmp/streamed-source",
+          branchName: "bb/streamed-transcript",
+          setupTimeoutMs: 900000,
+        },
+      });
+
+      const response = await harness.app.request("/internal/session/command-result", {
+        method: "POST",
+        headers: internalAuthHeaders(harness),
+        body: JSON.stringify({
+          sessionId: session.id,
+          commandId: command.id,
+          cursor: command.cursor,
+          completedAt: Date.now(),
+          type: "environment.provision",
+          ok: true,
+          result: {
+            path: "/tmp/streamed-transcript",
+            branchName: "bb/streamed-transcript",
+            defaultBranch: "main",
+            isGitRepo: true,
+            isWorktree: true,
+            transcript: [
+              { type: "output", key: "git-worktree-command", text: "git worktree add -B bb/streamed-transcript /tmp/streamed-transcript" },
+            ],
+          },
+        }),
+      });
+      expect(response.status).toBe(200);
+
+      const provisioningEvents = harness.db
+        .select({ data: events.data })
+        .from(events)
+        .where(and(eq(events.threadId, thread.id), eq(events.type, "system/thread-provisioning")))
+        .all()
+        .map((row) => systemThreadProvisioningEventDataSchema.parse(JSON.parse(row.data)));
+
+      expect(
+        provisioningEvents.some((eventData) =>
+          eventData.entries.some((entry) => entry.key === "git-worktree-command")
+        ),
+      ).toBe(false);
+      expect(provisioningEvents).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            status: "in_progress",
+            entries: [],
+          }),
+        ]),
+      );
     } finally {
       await harness.cleanup();
     }
@@ -1227,10 +1327,10 @@ describe("internal session routes", () => {
             isGitRepo: true,
             isWorktree: true,
             transcript: [
-              { type: "step", key: "cwd-source", text: "cwd: /tmp/reprovision-filter-source", status: "completed" },
-              { type: "step", key: "git-worktree", text: "git worktree add -B bb/reprovision-filter /tmp/reprovision-filter", status: "completed" },
-              { type: "step", key: "cwd-target", text: "cwd: /tmp/reprovision-filter", status: "completed" },
-              { type: "step", key: "branch", text: "Branch: bb/reprovision-filter (abc1234)", status: "completed" },
+              { type: "step", key: "workspace-source", text: "Using workspace: /tmp/reprovision-filter-source", status: "completed" },
+              { type: "output", key: "git-worktree-command", text: "git worktree add -B bb/reprovision-filter /tmp/reprovision-filter" },
+              { type: "step", key: "workspace-target", text: "Using workspace: /tmp/reprovision-filter", status: "completed" },
+              { type: "step", key: "workspace-branch", text: "Using branch: bb/reprovision-filter (abc1234)", status: "completed" },
             ],
           },
         }),
@@ -1240,36 +1340,40 @@ describe("internal session routes", () => {
       expect(getThread(harness.db, provisioningThread.id)?.status).toBe("provisioning");
       expect(getThread(harness.db, idleSibling.id)?.status).toBe("idle");
 
-      // Initiator gets the full daemon transcript
+      // Initiator gets the full daemon transcript because no streamed transcript was already appended.
       const initiatorEvents = harness.db
         .select({ data: events.data })
         .from(events)
-        .where(and(eq(events.threadId, provisioningThread.id), eq(events.type, "system/provisioning")))
+        .where(and(eq(events.threadId, provisioningThread.id), eq(events.type, "system/thread-provisioning")))
         .all()
-        .map((row) => JSON.parse(row.data))
-        .filter((d: { status: string }) => d.status === "completed");
+        .map((row) => systemThreadProvisioningEventDataSchema.parse(JSON.parse(row.data)))
+        .filter((eventData) =>
+          eventData.entries.some((entry) => entry.key === "git-worktree-command")
+        );
       expect(initiatorEvents).toHaveLength(1);
       expect(initiatorEvents[0].entries).toHaveLength(4);
       expect(initiatorEvents[0].entries).toEqual(
         expect.arrayContaining([
-          expect.objectContaining({ key: "git-worktree" }),
-          expect.objectContaining({ key: "branch", text: "Branch: bb/reprovision-filter (abc1234)" }),
+          expect.objectContaining({ key: "git-worktree-command" }),
+          expect.objectContaining({ key: "workspace-branch", text: "Using branch: bb/reprovision-filter (abc1234)" }),
         ]),
       );
-      // Sibling gets server-generated cwd/branch fallback (no git commands)
+      // Sibling gets the same environment-level transcript.
       const siblingEvents = harness.db
         .select({ data: events.data })
         .from(events)
-        .where(and(eq(events.threadId, idleSibling.id), eq(events.type, "system/provisioning")))
+        .where(and(eq(events.threadId, idleSibling.id), eq(events.type, "system/thread-provisioning")))
         .all()
-        .map((row) => JSON.parse(row.data))
-        .filter((d: { status: string }) => d.status === "completed");
+        .map((row) => systemThreadProvisioningEventDataSchema.parse(JSON.parse(row.data)))
+        .filter((eventData) =>
+          eventData.entries.some((entry) => entry.key === "git-worktree-command")
+        );
       expect(siblingEvents).toHaveLength(1);
-      expect(siblingEvents[0].entries).toHaveLength(2);
+      expect(siblingEvents[0].entries).toHaveLength(4);
       expect(siblingEvents[0].entries).toEqual(
         expect.arrayContaining([
-          expect.objectContaining({ key: "cwd", text: "cwd: /tmp/reprovision-filter" }),
-          expect.objectContaining({ key: "branch", text: "Branch: bb/reprovision-filter" }),
+          expect.objectContaining({ key: "workspace-target", text: "Using workspace: /tmp/reprovision-filter" }),
+          expect.objectContaining({ key: "workspace-branch", text: "Using branch: bb/reprovision-filter (abc1234)" }),
         ]),
       );
 
