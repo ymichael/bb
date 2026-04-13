@@ -13,7 +13,9 @@ import { useSendThreadMessage } from "../hooks/mutations/thread-runtime-mutation
 import { useUpdateEnvironment } from "../hooks/mutations/environment-mutations";
 import { useEnvironment, useEnvironmentWorkStatus } from "../hooks/queries/environment-queries";
 import {
+  getLatestPendingInteraction,
   useThread,
+  useThreadPendingInteractions,
   useThreadTimeline,
   useThreadTimelineToolDetails,
   useThreads,
@@ -73,6 +75,8 @@ export function ThreadDetailView() {
     refetchOnMount: "always",
   });
   const { data: parentThread } = useThread(thread?.parentThreadId ?? "");
+  const { data: pendingInteractions = [] } = useThreadPendingInteractions(thread?.id ?? "");
+  const hasPendingInteraction = getLatestPendingInteraction(pendingInteractions) !== null;
   const isManagerThread = thread?.type === "manager";
   const [storedShowAllEvents, setStoredShowAllEvents] = useStoredShowAllEvents();
   const showAllEvents = isManagerThread ? storedShowAllEvents : false;
@@ -623,6 +627,7 @@ export function ThreadDetailView() {
       showBranchComparisonUi={showBranchComparisonUi}
       showPromptGitStatsBanner={showPromptGitStatsBanner}
       showScrollToBottom={showScrollToBottom}
+      pendingInteractions={pendingInteractions}
       thread={thread}
       threadDetailRows={threadDetailRows}
       workspaceStatus={workspaceStatus}
@@ -750,6 +755,9 @@ export function ThreadDetailView() {
           showOngoingIndicator:
             thread.status === "active" &&
             !isThreadTimelinePending,
+          ongoingIndicatorLabel: hasPendingInteraction
+            ? "Waiting for approval"
+            : undefined,
           threadDetailRows,
           threadId: thread.id,
           threadStatus: thread.status,

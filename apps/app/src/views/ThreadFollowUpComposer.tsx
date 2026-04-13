@@ -235,7 +235,6 @@ export interface ThreadFollowUpComposerProps {
   composer: ComposerCoreProps;
   environment: ComposerEnvironmentProps;
   execution: ComposerExecutionProps;
-  interactionBanner?: ReactNode;
   mentions: ComposerMentionsProps;
   queue: ComposerQueueProps;
 }
@@ -246,7 +245,6 @@ export function ThreadFollowUpComposer({
   composer,
   environment,
   execution,
-  interactionBanner,
   mentions,
   queue,
 }: ThreadFollowUpComposerProps) {
@@ -268,7 +266,6 @@ export function ThreadFollowUpComposer({
           visible={queue.showScrollToBottom}
           onClick={queue.onScrollToBottom}
         />
-        {interactionBanner}
         {banner.showPromptGitStatsBanner ? (
           <div
             className={cn(

@@ -1,29 +1,20 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
-  ChevronDown,
-} from "lucide-react";
-import {
-  formatPendingInteractionKindLabel,
-  formatPendingInteractionSummary,
+  extractShellCommandFromString,
+  getPendingInteractionCommandApprovalDecisionKind,
 } from "@bb/core-ui";
 import {
   type PendingInteraction,
-  type PendingInteractionCommandApprovalDecision,
+  type PendingInteractionResolution,
 } from "@bb/domain";
-import {
-  StatusPill,
-} from "@bb/ui-core";
+import { ExpandableLine, StatusPill } from "@bb/ui-core";
 import { useResolveThreadPendingInteraction } from "@/hooks/mutations/thread-interaction-mutations";
 import { getMutationErrorMessage } from "@/lib/mutation-errors";
 import { cn } from "@/lib/utils";
 import {
   buildPermissionDecisionButtons,
-  describeCommandDecision,
-  hasExpandableDetails,
-  type FileChangeDecisionAction,
-  type PermissionDecisionButtonConfig,
+  labelForCommandDecision,
 } from "./pending-interactions/banner-helpers";
-import { renderPendingInteractionDetails } from "./pending-interactions/PendingInteractionDetails";
 import { Button } from "../ui/button";
 
 interface ThreadPendingInteractionBannerProps {
@@ -31,54 +22,16 @@ interface ThreadPendingInteractionBannerProps {
   threadId: string;
 }
 
-interface PendingInteractionSectionProps {
-  children: ReactNode;
-  isExpanded: boolean;
+interface BannerOption {
+  label: string;
+  resolution: PendingInteractionResolution;
 }
 
-interface PendingInteractionActionButtonProps {
-  children: ReactNode;
-  disabled: boolean;
-  onClick: () => void;
-  variant: "default" | "outline" | "ghost";
-}
-
-function PendingInteractionSection({
-  children,
-  isExpanded,
-}: PendingInteractionSectionProps) {
-  return (
-    <div
-      className={cn(
-        "grid overflow-hidden transition-[grid-template-rows,opacity,margin,padding,border-color] duration-200 ease-out",
-        isExpanded
-          ? "mt-2 grid-rows-[1fr] border-t border-border/50 pt-2 opacity-100"
-          : "grid-rows-[0fr] border-t border-transparent pt-0 opacity-0",
-      )}
-    >
-      <div className="overflow-hidden">{children}</div>
-    </div>
-  );
-}
-
-function PendingInteractionActionButton({
-  children,
-  disabled,
-  onClick,
-  variant,
-}: PendingInteractionActionButtonProps) {
-  return (
-    <Button
-      type="button"
-      size="sm"
-      variant={variant}
-      disabled={disabled}
-      onClick={onClick}
-      className="h-7"
-    >
-      {children}
-    </Button>
-  );
+interface BannerModel {
+  title: string;
+  subject: ReactNode | null;
+  options: BannerOption[];
+  skip: BannerOption | null;
 }
 
 export function ThreadPendingInteractionBanner({
@@ -86,182 +39,114 @@ export function ThreadPendingInteractionBanner({
   threadId,
 }: ThreadPendingInteractionBannerProps) {
   const resolvePendingInteraction = useResolveThreadPendingInteraction();
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [selectedIndex, setSelectedIndex] = useState(0);
   const isResolving = interaction.status === "resolving";
 
   useEffect(() => {
-    setIsExpanded(false);
+    setSelectedIndex(0);
   }, [interaction.id]);
 
-  const details = useMemo(
-    () => renderPendingInteractionDetails(interaction),
-    [interaction],
-  );
-  const canExpand = hasExpandableDetails(interaction);
-  const mutationErrorMessage =
-    resolvePendingInteraction.error
-      ? getMutationErrorMessage({
-          error: resolvePendingInteraction.error,
-          fallbackMessage: "Failed to resolve pending interaction.",
-        })
-      : null;
+  const model = useMemo(() => buildBannerModel(interaction), [interaction]);
+  const mutationErrorMessage = resolvePendingInteraction.error
+    ? getMutationErrorMessage({
+        error: resolvePendingInteraction.error,
+        fallbackMessage: "Failed to resolve pending interaction.",
+      })
+    : null;
 
-  const handleCommandDecision = (decision: PendingInteractionCommandApprovalDecision) => {
-    void resolvePendingInteraction.mutateAsync({
-      threadId,
-      interactionId: interaction.id,
-      resolution: {
-        kind: "command_approval",
-        decision,
-      },
-    }).catch(() => {});
-  };
+  const submitIndex = Math.min(selectedIndex, model.options.length - 1);
+  const submitOption = model.options[submitIndex] ?? null;
+  const skipOption = model.skip;
+  const showSubmit = !isResolving && submitOption !== null;
+  const showSkip = !isResolving && skipOption !== null;
+  const showFooter = showSubmit || showSkip;
 
-  const handleFileChangeDecision = (decision: FileChangeDecisionAction) => {
-    void resolvePendingInteraction.mutateAsync({
-      threadId,
-      interactionId: interaction.id,
-      resolution: {
-        kind: "file_change_approval",
-        decision,
-      },
-    }).catch(() => {});
-  };
-
-  const handlePermissionDecision = (decision: PermissionDecisionButtonConfig) => {
-    void resolvePendingInteraction.mutateAsync({
-      threadId,
-      interactionId: interaction.id,
-      resolution: decision.resolution,
-    }).catch(() => {});
+  const submitResolution = (resolution: PendingInteractionResolution) => {
+    void resolvePendingInteraction
+      .mutateAsync({
+        threadId,
+        interactionId: interaction.id,
+        resolution,
+      })
+      .catch(() => {});
   };
 
   return (
-    <div className="mb-2 rounded-md border border-border/60 bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 items-center gap-2">
-            <StatusPill variant="outline">
-              {formatPendingInteractionKindLabel({
-                kind: interaction.payload.kind,
-                surface: "app",
-              })}
-            </StatusPill>
-            {isResolving ? (
-              <StatusPill variant="secondary">
-                Delivering
-              </StatusPill>
-            ) : null}
-            <span className="truncate text-sm text-foreground">
-              {formatPendingInteractionSummary({
-                interaction,
-                surface: "app",
-              })}
-            </span>
-          </div>
-          <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-            <span>{interaction.providerId}</span>
-            {interaction.payload.kind === "permission_request" && interaction.payload.toolName ? (
-              <span>Tool: {interaction.payload.toolName}</span>
-            ) : null}
-          </div>
-        </div>
-        {canExpand ? (
-          <Button
-            type="button"
-            size="icon"
-            variant="ghost"
-            className="size-7 text-muted-foreground"
-            onClick={() => {
-              setIsExpanded((current) => !current);
-            }}
-            aria-label={isExpanded ? "Hide interaction details" : "Show interaction details"}
+    <div className="mb-2 rounded-lg border border-border/60 bg-muted/40 px-4 py-3 text-xs text-muted-foreground">
+      <div className="flex min-w-0 items-center gap-2">
+        <h3 className="min-w-0 flex-1 text-sm font-semibold text-foreground">
+          <ExpandableLine
+            fullText={model.title}
+            collapsedClassName="line-clamp-2"
           >
-            <ChevronDown
-              className={cn(
-                "size-3.5 transition-transform duration-200",
-                isExpanded && "rotate-180",
-              )}
-            />
-          </Button>
+            {model.title}
+          </ExpandableLine>
+        </h3>
+        {isResolving ? (
+          <StatusPill variant="secondary">Delivering</StatusPill>
         ) : null}
       </div>
 
+      {model.subject ? <div className="mt-3">{model.subject}</div> : null}
+
       {isResolving ? (
-        <div className="mt-2 rounded-md border border-border/50 bg-background/60 px-2 py-1 text-xs text-muted-foreground">
+        <div className="mt-3 rounded-md border border-border/50 bg-background/60 px-3 py-2 text-xs text-muted-foreground">
           Answer submitted. Delivering it to the provider.
         </div>
-      ) : (
-        <div className="mt-2 flex flex-wrap items-center gap-2">
-          {interaction.payload.kind === "command_approval"
-            ? interaction.payload.availableDecisions.map((decision) => {
-                const button = describeCommandDecision(decision);
-                return (
-                  <PendingInteractionActionButton
-                    key={button.label}
-                    variant={button.variant}
-                    disabled={resolvePendingInteraction.isPending}
-                    onClick={() => {
-                      handleCommandDecision(button.decision);
-                    }}
-                  >
-                    {button.label}
-                  </PendingInteractionActionButton>
-                );
-              })
-            : null}
-          {interaction.payload.kind === "file_change_approval" ? (
-            <>
-              <PendingInteractionActionButton
-                variant="default"
-                disabled={resolvePendingInteraction.isPending}
-                onClick={() => {
-                  handleFileChangeDecision("accept_for_session");
-                }}
-              >
-                Approve for session
-              </PendingInteractionActionButton>
-              <PendingInteractionActionButton
-                variant="outline"
-                disabled={resolvePendingInteraction.isPending}
-                onClick={() => {
-                  handleFileChangeDecision("decline");
-                }}
-              >
-                Deny
-              </PendingInteractionActionButton>
-              <PendingInteractionActionButton
-                variant="ghost"
-                disabled={resolvePendingInteraction.isPending}
-                onClick={() => {
-                  handleFileChangeDecision("cancel");
-                }}
-              >
-                Cancel
-              </PendingInteractionActionButton>
-            </>
-          ) : null}
-          {interaction.payload.kind === "permission_request"
-            ? buildPermissionDecisionButtons(interaction.payload.permissions).map((decision) => (
-                <PendingInteractionActionButton
-                  key={decision.label}
-                  variant={decision.variant}
-                  disabled={resolvePendingInteraction.isPending}
-                  onClick={() => {
-                    handlePermissionDecision(decision);
-                  }}
-                >
-                  {decision.label}
-                </PendingInteractionActionButton>
-              ))
-            : null}
-        </div>
-      )}
+      ) : null}
 
-      {details ? (
-        <PendingInteractionSection isExpanded={isExpanded}>
-          {details}
-        </PendingInteractionSection>
+      {!isResolving && model.options.length > 0 ? (
+        <ol className="mt-3 flex flex-col">
+          {model.options.map((option, index) => {
+            const isSelected = index === submitIndex;
+            return (
+              <li key={option.label}>
+                <button
+                  type="button"
+                  onClick={() => setSelectedIndex(index)}
+                  disabled={resolvePendingInteraction.isPending}
+                  className={cn(
+                    "flex w-full items-center rounded-md px-3 py-2 text-left text-sm transition-colors",
+                    isSelected
+                      ? "bg-foreground/15 font-bold text-foreground"
+                      : "text-muted-foreground hover:bg-foreground/5 hover:text-foreground",
+                    resolvePendingInteraction.isPending && "opacity-60",
+                  )}
+                  aria-pressed={isSelected}
+                >
+                  <span className="flex-1 truncate">{option.label}</span>
+                </button>
+              </li>
+            );
+          })}
+        </ol>
+      ) : null}
+
+      {showFooter ? (
+        <div className="mt-3 flex items-center justify-end gap-2">
+          {showSkip && skipOption ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="link"
+              disabled={resolvePendingInteraction.isPending}
+              onClick={() => submitResolution(skipOption.resolution)}
+            >
+              {skipOption.label}
+            </Button>
+          ) : null}
+          {showSubmit && submitOption ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="default"
+              disabled={resolvePendingInteraction.isPending}
+              onClick={() => submitResolution(submitOption.resolution)}
+            >
+              Submit
+            </Button>
+          ) : null}
+        </div>
       ) : null}
 
       {mutationErrorMessage ? (
@@ -271,4 +156,98 @@ export function ThreadPendingInteractionBanner({
       ) : null}
     </div>
   );
+}
+
+function buildBannerModel(interaction: PendingInteraction): BannerModel {
+  switch (interaction.payload.kind) {
+    case "command_approval": {
+      const rawCommand = interaction.payload.command;
+      const command = rawCommand
+        ? extractShellCommandFromString(rawCommand) ?? rawCommand
+        : null;
+      const subject = command ? (
+        <div className="overflow-hidden rounded-lg border border-border bg-card">
+          <pre className="max-h-[220px] overflow-auto whitespace-pre px-4 py-3 font-mono ui-text-sm leading-tight text-foreground">
+            $ {command}
+          </pre>
+        </div>
+      ) : null;
+
+      const cancelDecision = interaction.payload.availableDecisions.find(
+        (decision) =>
+          getPendingInteractionCommandApprovalDecisionKind(decision) === "cancel",
+      );
+      const nonCancelDecisions = interaction.payload.availableDecisions.filter(
+        (decision) =>
+          getPendingInteractionCommandApprovalDecisionKind(decision) !== "cancel",
+      );
+
+      return {
+        title: interaction.payload.reason ?? "Do you want to run this command?",
+        subject,
+        options: nonCancelDecisions.map((decision) => ({
+          label: labelForCommandDecision(decision),
+          resolution: {
+            kind: "command_approval",
+            decision,
+          },
+        })),
+        skip: cancelDecision
+          ? {
+              label: "Cancel",
+              resolution: {
+                kind: "command_approval",
+                decision: cancelDecision,
+              },
+            }
+          : null,
+      };
+    }
+    case "file_change_approval": {
+      return {
+        title: interaction.payload.reason ?? "Do you want to make these changes?",
+        subject: null,
+        options: [
+          {
+            label: "Yes",
+            resolution: {
+              kind: "file_change_approval",
+              decision: "accept_for_session",
+            },
+          },
+          {
+            label: "No",
+            resolution: {
+              kind: "file_change_approval",
+              decision: "decline",
+            },
+          },
+        ],
+        skip: {
+          label: "Cancel",
+          resolution: {
+            kind: "file_change_approval",
+            decision: "cancel",
+          },
+        },
+      };
+    }
+    case "permission_request": {
+      const buttons = buildPermissionDecisionButtons(interaction.payload.permissions);
+      return {
+        title:
+          interaction.payload.reason ?? "Do you want to grant this permission?",
+        subject: interaction.payload.toolName ? (
+          <div className="rounded-lg border border-border bg-card px-4 py-3 font-mono ui-text-sm leading-tight text-foreground">
+            {interaction.payload.toolName}
+          </div>
+        ) : null,
+        options: buttons.map((button) => ({
+          label: button.label,
+          resolution: button.resolution,
+        })),
+        skip: null,
+      };
+    }
+  }
 }

@@ -1,22 +1,12 @@
 import {
   getPendingInteractionCommandApprovalDecisionKind,
-  summarizePendingInteractionRequestedPermissions,
   toGrantedPendingInteractionPermissions,
 } from "@bb/core-ui";
 import {
-  type PendingInteraction,
   type PendingInteractionCommandApprovalDecision,
   type PendingInteractionGrantablePermissionProfile,
   type PermissionRequestPendingInteractionResolution,
 } from "@bb/domain";
-
-export type FileChangeDecisionAction = "accept_for_session" | "decline" | "cancel";
-
-export interface CommandDecisionButtonConfig {
-  decision: PendingInteractionCommandApprovalDecision;
-  label: string;
-  variant: "default" | "outline" | "ghost";
-}
 
 export interface PermissionDecisionButtonConfig {
   label: string;
@@ -24,70 +14,22 @@ export interface PermissionDecisionButtonConfig {
   variant: "default" | "outline";
 }
 
-export function describeCommandDecision(
+export function labelForCommandDecision(
   decision: PendingInteractionCommandApprovalDecision,
-): CommandDecisionButtonConfig {
+): string {
   switch (getPendingInteractionCommandApprovalDecisionKind(decision)) {
     case "accept":
-      return {
-        decision,
-        label: "Approve",
-        variant: "default",
-      };
+      return "Yes";
     case "accept_for_session":
-      return {
-        decision,
-        label: "Approve for session",
-        variant: "default",
-      };
-    case "decline":
-      return {
-        decision,
-        label: "Deny",
-        variant: "outline",
-      };
-    case "cancel":
-      return {
-        decision,
-        label: "Cancel",
-        variant: "ghost",
-      };
+      return "Yes, and don't ask again this session";
     case "accept_with_exec_policy_amendment":
-      return {
-        decision,
-        label: "Approve with exec policy amendment",
-        variant: "default",
-      };
+      return "Yes, and always allow similar commands";
     case "apply_network_policy_amendment":
-      return {
-        decision,
-        label: "Approve with network policy amendment",
-        variant: "default",
-      };
-  }
-}
-
-export function hasExpandableDetails(interaction: PendingInteraction): boolean {
-  switch (interaction.payload.kind) {
-    case "command_approval":
-      return (
-        interaction.payload.reason !== null ||
-        interaction.payload.command !== null ||
-        interaction.payload.cwd !== null ||
-        interaction.payload.commandActions.length > 0 ||
-        interaction.payload.requestedPermissions !== null ||
-        interaction.payload.availableDecisions.some((decision) => typeof decision !== "string")
-      );
-    case "file_change_approval":
-      return interaction.payload.grantRoot !== null || interaction.payload.reason !== null;
-    case "permission_request":
-      return (
-        interaction.payload.reason !== null ||
-        interaction.payload.toolName !== null ||
-        summarizePendingInteractionRequestedPermissions(
-          interaction.payload.permissions,
-        ).length > 0
-      );
+      return "Yes, and always allow this host";
+    case "decline":
+      return "No";
+    case "cancel":
+      return "Cancel";
   }
 }
 

@@ -23,6 +23,7 @@ interface ThreadTimelinePaneProps {
   projectId?: string;
   scrollRef: (element: HTMLDivElement | null) => void;
   showOngoingIndicator: boolean;
+  ongoingIndicatorLabel?: string;
   threadDetailRows: TimelineRow[];
   threadId: string;
   threadStatus: string;
@@ -42,6 +43,7 @@ export function ThreadTimelinePane({
   projectId,
   scrollRef,
   showOngoingIndicator,
+  ongoingIndicatorLabel,
   threadDetailRows,
   threadId,
   threadStatus,
@@ -81,7 +83,10 @@ export function ThreadTimelinePane({
           )}
         </ConversationTimeline>
         {showOngoingIndicator ? (
-          <ConversationWorkingIndicator isThinking={isReasoningBlockActive} />
+          <ConversationWorkingIndicator
+            isThinking={isReasoningBlockActive}
+            label={ongoingIndicatorLabel}
+          />
         ) : null}
         <div
           ref={bottomSentinelRef}

@@ -1,5 +1,6 @@
 import { useCallback, useState, type ComponentType, type ReactNode, type RefObject } from "react";
 import type {
+  PendingInteraction,
   PermissionMode,
   PromptInput,
   ReasoningLevel,
@@ -19,7 +20,6 @@ import {
   getLatestPendingInteraction,
   useThreadDefaultExecutionOptions,
   useThreadDrafts,
-  useThreadPendingInteractions,
 } from "@/hooks/queries/thread-queries";
 import { getMutationErrorMessage } from "@/lib/mutation-errors";
 import { promptDraftToInput, type PromptDraftState } from "@/lib/prompt-draft";
@@ -55,6 +55,7 @@ interface ThreadDetailPromptAreaProps {
   mergeBaseBranchOptions?: readonly string[];
   onMergeBaseBranchChange?: (branch: string) => void;
   onMergeBaseBranchPickerOpenChange?: (open: boolean) => void;
+  pendingInteractions: readonly PendingInteraction[];
   openDiffFile: (path: string) => void;
   openThreadDiffPanel: () => void;
   projectId: string;
@@ -84,6 +85,7 @@ export function ThreadDetailPromptArea({
   mergeBaseBranchOptions,
   onMergeBaseBranchChange,
   onMergeBaseBranchPickerOpenChange,
+  pendingInteractions,
   openDiffFile,
   openThreadDiffPanel,
   projectId,
@@ -101,7 +103,6 @@ export function ThreadDetailPromptArea({
 }: ThreadDetailPromptAreaProps) {
   const { data: defaultExecutionOptions } = useThreadDefaultExecutionOptions(thread.id);
   const { data: queuedMessages = [] } = useThreadDrafts(thread.id);
-  const { data: pendingInteractions = [] } = useThreadPendingInteractions(thread.id);
   const createDraft = useCreateThreadDraft();
   const sendDraft = useSendThreadDraft();
   const deleteDraft = useDeleteThreadDraft();
@@ -393,6 +394,17 @@ export function ThreadDetailPromptArea({
     openDiffFile(file.path);
   }, [openDiffFile]);
 
+  if (activePendingInteraction) {
+    return (
+      <div ref={promptComposerRef}>
+        <ThreadPendingInteractionBanner
+          interaction={activePendingInteraction}
+          threadId={thread.id}
+        />
+      </div>
+    );
+  }
+
   return (
     <ThreadFollowUpComposer
       attachments={{
@@ -466,14 +478,6 @@ export function ThreadDetailPromptArea({
         supportsServiceTier,
         serviceTierSupportByProvider,
       }}
-      interactionBanner={
-        activePendingInteraction ? (
-          <ThreadPendingInteractionBanner
-            interaction={activePendingInteraction}
-            threadId={thread.id}
-          />
-        ) : undefined
-      }
       mentions={{
         mentionError: promptMentions.isError,
         mentionLoading: promptMentions.isLoading,

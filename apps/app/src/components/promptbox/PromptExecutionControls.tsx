@@ -46,13 +46,17 @@ export interface PromptExecutionControlsProps {
   reasoning: PromptExecutionReasoningConfig;
 }
 
+export interface PromptPermissionModePickerProps extends PromptExecutionPermissionConfig {
+  className?: string;
+}
+
 export function PromptPermissionModePicker({
   value,
   options,
   onChange,
   supported,
   className,
-}: PromptExecutionPermissionConfig & { className?: string }) {
+}: PromptPermissionModePickerProps) {
   if (!supported || options.length <= 1) {
     return null;
   }

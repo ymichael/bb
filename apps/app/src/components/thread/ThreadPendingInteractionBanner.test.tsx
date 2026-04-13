@@ -146,7 +146,7 @@ describe("ThreadPendingInteractionBanner", () => {
       interaction: createCommandApprovalInteraction(),
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Approve" }));
+    fireEvent.click(screen.getByRole("button", { name: /Submit/ }));
 
     await waitFor(() => {
       expect(api.resolveThreadPendingInteraction).toHaveBeenCalledWith(
@@ -174,7 +174,8 @@ describe("ThreadPendingInteractionBanner", () => {
       interaction: createFileChangeInteraction(),
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Deny" }));
+    fireEvent.click(screen.getByRole("button", { name: "No" }));
+    fireEvent.click(screen.getByRole("button", { name: /Submit/ }));
 
     await waitFor(() => {
       expect(api.resolveThreadPendingInteraction).toHaveBeenCalledWith(
@@ -210,7 +211,8 @@ describe("ThreadPendingInteractionBanner", () => {
       interaction: createPermissionRequestInteraction(),
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Allow for session" }));
+    fireEvent.click(screen.getByRole("button", { name: /Allow for session/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Submit/ }));
 
     await waitFor(() => {
       expect(api.resolveThreadPendingInteraction).toHaveBeenCalledWith(
@@ -244,11 +246,11 @@ describe("ThreadPendingInteractionBanner", () => {
       interaction: createCommandApprovalInteraction(),
     });
 
-    const approveButton = screen.getByRole("button", { name: "Approve" });
-    fireEvent.click(approveButton);
+    const submitButton = screen.getByRole("button", { name: /Submit/ });
+    fireEvent.click(submitButton);
 
     await waitFor(() => {
-      expect(approveButton.hasAttribute("disabled")).toBe(true);
+      expect(submitButton.hasAttribute("disabled")).toBe(true);
     });
 
     rejectResolution(new Error("Resolution rejected"));
@@ -256,17 +258,17 @@ describe("ThreadPendingInteractionBanner", () => {
     await waitFor(() => {
       expect(screen.getByText("Resolution rejected")).not.toBeNull();
     });
-    expect(approveButton.hasAttribute("disabled")).toBe(false);
+    expect(submitButton.hasAttribute("disabled")).toBe(false);
   });
 
-  it("shows amendment details for command approvals with amended decisions", () => {
+  it("offers an amendment option when the provider proposes one", () => {
     renderBanner({
       interaction: createAmendmentCommandApprovalInteraction(),
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Show interaction details" }));
-
-    expect(screen.getByText("allow workspace-write")).not.toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Yes, and always allow similar commands" }),
+    ).not.toBeNull();
   });
 
   it("shows resolving interactions as submitted instead of actionable", () => {
@@ -278,6 +280,6 @@ describe("ThreadPendingInteractionBanner", () => {
     expect(
       screen.getByText("Answer submitted. Delivering it to the provider."),
     ).not.toBeNull();
-    expect(screen.queryByRole("button", { name: "Approve" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Submit/ })).toBeNull();
   });
 });

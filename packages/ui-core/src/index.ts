@@ -46,6 +46,8 @@ export {
   type EventCodeBlockProps,
 } from "./event-content.js";
 export { ConversationEntry } from "./thread-timeline/ConversationEntry.js";
+export { ExpandableLine } from "./thread-timeline/rows/ExpandableLine.js";
+export type { ExpandableLineProps } from "./thread-timeline/rows/ExpandableLine.js";
 export { ThreadTimelineRows } from "./thread-timeline/ThreadTimelineRows.js";
 export {
   findLatestActivityMessageId,

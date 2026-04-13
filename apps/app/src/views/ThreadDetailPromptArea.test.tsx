@@ -137,13 +137,10 @@ function mockMatchMedia(): void {
 }
 
 describe("ThreadDetailPromptArea", () => {
-  it("shows the pending interaction banner and disables the normal follow-up prompt", async () => {
+  it("renders only the pending interaction banner when an interaction is awaiting", async () => {
     mockMatchMedia();
     vi.mocked(api.getThreadDefaultExecutionOptions).mockResolvedValue(null);
     vi.mocked(api.listThreadDrafts).mockResolvedValue([]);
-    vi.mocked(api.listThreadPendingInteractions).mockResolvedValue([
-      createPendingInteraction(),
-    ]);
     vi.mocked(api.listSystemProviders).mockResolvedValue([makeProvider()]);
     vi.mocked(api.getAvailableModels).mockResolvedValue([makeModel()]);
     vi.mocked(api.listThreads).mockResolvedValue([]);
@@ -157,6 +154,7 @@ describe("ThreadDetailPromptArea", () => {
         isDiffPanelActive={false}
         isEnvironmentActionPending={false}
         isLoadingMergeBaseBranchOptions={false}
+        pendingInteractions={[createPendingInteraction()]}
         openDiffFile={() => {}}
         openThreadDiffPanel={() => {}}
         projectId="proj_1"
@@ -177,28 +175,8 @@ describe("ThreadDetailPromptArea", () => {
     );
 
     await waitFor(() => {
-      expect(api.listThreadPendingInteractions).toHaveBeenCalledWith(
-        "thr_1",
-        expect.anything(),
-      );
-    });
-
-    expect(await screen.findByText("Permission request")).not.toBeNull();
-
-    await waitFor(() => {
       expect(screen.getAllByText("Need network access").length).toBeGreaterThan(0);
     });
-    expect(
-      await screen.findByPlaceholderText(
-        "Resolve the pending interaction below before sending another message",
-      ),
-    ).not.toBeNull();
-
-    await waitFor(() => {
-      expect(screen.getByTitle("Submit (Enter)")).toHaveProperty(
-        "disabled",
-        true,
-      );
-    });
+    expect(screen.queryByTitle("Submit (Enter)")).toBeNull();
   });
 });
