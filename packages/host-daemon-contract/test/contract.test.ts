@@ -243,6 +243,28 @@ describe("host-daemon command schemas", () => {
 
     expect(
       hostDaemonCommandSchema.parse({
+        type: "interactive.resolve",
+        environmentId: "env_123",
+        threadId: "thr_123",
+        interactionId: "pint_123",
+        providerId: "codex",
+        providerThreadId: "provider-thread-123",
+        providerRequestId: "request-123",
+        resolution: {
+          kind: "command_approval",
+          decision: "accept_for_session",
+        },
+      }),
+    ).toMatchObject({
+      type: "interactive.resolve",
+      interactionId: "pint_123",
+      resolution: {
+        decision: "accept_for_session",
+      },
+    });
+
+    expect(
+      hostDaemonCommandSchema.parse({
         type: "host.sync_runtime_material",
         version: "runtime-version-1",
       }),
@@ -781,37 +803,25 @@ describe("host-daemon session schemas", () => {
 
     expect(
       hostDaemonInteractiveRequestResponseSchema.parse({
-        outcome: "resolved",
-        resolution: {
-          kind: "command_approval",
-          decision: "accept_for_session",
-        },
+        outcome: "created",
+        interactionId: "pint_123",
+        status: "pending",
       }),
     ).toMatchObject({
-      outcome: "resolved",
-      resolution: {
-        decision: "accept_for_session",
-      },
+      outcome: "created",
+      interactionId: "pint_123",
     });
 
     expect(
       hostDaemonInteractiveRequestResponseSchema.parse({
-        outcome: "resolved",
-        resolution: {
-          kind: "command_approval",
-          decision: {
-            kind: "accept_with_exec_policy_amendment",
-            execPolicyAmendment: ["allow", "git", "push"],
-          },
-        },
+        outcome: "existing",
+        interactionId: "pint_123",
+        status: "resolving",
       }),
     ).toMatchObject({
-      outcome: "resolved",
-      resolution: {
-        decision: {
-          kind: "accept_with_exec_policy_amendment",
-        },
-      },
+      outcome: "existing",
+      interactionId: "pint_123",
+      status: "resolving",
     });
 
     expect(

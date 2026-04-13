@@ -6,6 +6,7 @@ import { CommandRouter } from "./command-router.js";
 import { createDaemon, type HostDaemon } from "./daemon.js";
 import { createEventBuffer, type EventBuffer } from "./event-buffer.js";
 import { createBufferedEnvironmentChangeReporter } from "./environment-change-reporter.js";
+import { InteractiveRequestRegistry } from "./interactive-request-registry.js";
 import {
   defaultListModels,
   shutdownDefaultListModelsRuntimes,
@@ -248,6 +249,18 @@ export async function createHostDaemonApp(
     postEvents: (events) => serverClient.postEvents(events),
   });
 
+  const interactiveRequestRegistry = new InteractiveRequestRegistry({
+    registerRequest: (request) => serverClient.registerInteractiveRequest(request),
+    onRegistrationFailure: ({ error, request }) => {
+      enqueueInteractiveInterrupt({
+        providerId: request.providerId,
+        reason:
+          `Failed to register interactive request while provider was waiting: ${error.message}`,
+        threadIds: [request.threadId],
+      });
+    },
+  });
+
   const runtimeManager = new RuntimeManager({
     adapterFactory: options.adapterFactory,
     bridgeBundleDir: options.bridgeBundleDir,
@@ -315,15 +328,7 @@ export async function createHostDaemonApp(
       }),
     onInteractiveRequest: async (request) => {
       try {
-        const response = await serverClient.requestInteractiveResolution(request);
-        switch (response.outcome) {
-          case "resolved":
-            return response.resolution;
-          case "rejected":
-          case "interrupted":
-          case "expired":
-            throw new Error(response.reason);
-        }
+        return await interactiveRequestRegistry.registerAndWait(request);
       } catch (error) {
         options.logger.error(
           {
@@ -343,11 +348,18 @@ export async function createHostDaemonApp(
       if (info.threadIds.length === 0) {
         return;
       }
+      const reason =
+        `Provider "${info.providerId}" exited while awaiting user interaction`;
+      interactiveRequestRegistry.interruptThreads({
+        providerId: info.providerId,
+        threadIds: info.threadIds,
+        reason,
+      });
 
       enqueueInteractiveInterrupt({
         providerId: info.providerId,
         threadIds: info.threadIds,
-        reason: `Provider "${info.providerId}" exited while awaiting user interaction`,
+        reason,
       });
     },
     threadStorageRootPath,
@@ -363,6 +375,9 @@ export async function createHostDaemonApp(
       defaultListModels(providerId, {
         bridgeBundleDir: options.bridgeBundleDir,
       }),
+    resolveInteractiveRequest: async (request) => {
+      interactiveRequestRegistry.resolve(request);
+    },
     threadStorageRootPath,
     logger: options.logger,
     seedThreadHighWaterMark: ({ threadId, sequence }) =>

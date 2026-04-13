@@ -292,6 +292,7 @@ export {
   listPendingInteractionsByStatus,
   setPendingInteractionExpired,
   setPendingInteractionInterrupted,
+  setPendingInteractionResolving,
   setPendingInteractionResolved,
 } from "./pending-interactions.js";
 export type {
@@ -303,6 +304,7 @@ export type {
   ListPendingInteractionsByStatusArgs,
   PendingInteractionProviderRequestIdentity,
   PendingInteractionRow,
+  SetPendingInteractionResolvingArgs,
 } from "./pending-interactions.js";
 
 export {

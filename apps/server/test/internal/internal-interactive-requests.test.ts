@@ -3,6 +3,7 @@ import { deleteThread } from "@bb/db";
 import { describe, expect, it } from "vitest";
 import {
   internalAuthHeaders,
+  reportQueuedCommandSuccess,
   waitForQueuedCommand,
 } from "../helpers/commands.js";
 import { readJson } from "../helpers/json.js";
@@ -35,7 +36,7 @@ async function waitForPendingInteractionId(args: {
 }
 
 describe("internal interactive request lifecycle", () => {
-  it("persists an interactive request and waits for a later resolution", async () => {
+  it("persists an interactive request and delivers a later resolution through a command", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host, session } = seedHostSession(harness.deps, {
@@ -53,7 +54,7 @@ describe("internal interactive request lifecycle", () => {
         environmentId: environment.id,
       });
 
-      const responsePromise = harness.app.request("/internal/session/interactive-request", {
+      const response = await harness.app.request("/internal/session/interactive-request", {
         method: "POST",
         headers: internalAuthHeaders(harness),
         body: JSON.stringify({
@@ -77,6 +78,11 @@ describe("internal interactive request lifecycle", () => {
           },
         }),
       });
+      expect(response.status).toBe(200);
+      await expect(readJson(response)).resolves.toMatchObject({
+        outcome: "created",
+        status: "pending",
+      });
 
       const interactionId = await waitForPendingInteractionId({
         harness,
@@ -93,13 +99,40 @@ describe("internal interactive request lifecycle", () => {
 
       expect(resolved).toMatchObject({
         id: interactionId,
-        status: "resolved",
+        status: "resolving",
       });
 
-      const response = await responsePromise;
-      expect(response.status).toBe(200);
-      await expect(readJson(response)).resolves.toEqual({
-        outcome: "resolved",
+      const queuedResolve = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "interactive.resolve" &&
+          command.interactionId === interactionId,
+      );
+      expect(queuedResolve.command).toMatchObject({
+        type: "interactive.resolve",
+        providerId: "codex",
+        providerThreadId: "provider-thread-1",
+        providerRequestId: "request-1",
+        resolution: {
+          kind: "command_approval",
+          decision: "accept_for_session",
+        },
+      });
+      const commandResultResponse = await reportQueuedCommandSuccess(
+        harness,
+        queuedResolve,
+        {},
+      );
+      expect(commandResultResponse.status).toBe(200);
+
+      expect(
+        harness.deps.pendingInteractions.getThreadInteraction({
+          threadId: thread.id,
+          interactionId,
+        }),
+      ).toMatchObject({
+        id: interactionId,
+        status: "resolved",
         resolution: {
           kind: "command_approval",
           decision: "accept_for_session",
@@ -128,7 +161,7 @@ describe("internal interactive request lifecycle", () => {
         environmentId: environment.id,
       });
 
-      const responsePromise = harness.app.request("/internal/session/interactive-request", {
+      const response = await harness.app.request("/internal/session/interactive-request", {
         method: "POST",
         headers: internalAuthHeaders(harness),
         body: JSON.stringify({
@@ -151,6 +184,11 @@ describe("internal interactive request lifecycle", () => {
             },
           },
         }),
+      });
+      expect(response.status).toBe(200);
+      await expect(readJson(response)).resolves.toMatchObject({
+        outcome: "created",
+        status: "pending",
       });
 
       await waitForPendingInteractionId({
@@ -178,12 +216,14 @@ describe("internal interactive request lifecycle", () => {
         interactionIds: [expect.any(String)],
       });
 
-      const response = await responsePromise;
-      expect(response.status).toBe(200);
-      await expect(readJson(response)).resolves.toEqual({
-        outcome: "interrupted",
-        reason: "Provider exited",
-      });
+      expect(
+        harness.deps.pendingInteractions.listThreadInteractions(thread.id),
+      ).toEqual([
+        expect.objectContaining({
+          status: "interrupted",
+          statusReason: "Provider exited",
+        }),
+      ]);
     } finally {
       await harness.cleanup();
     }
@@ -212,7 +252,7 @@ describe("internal interactive request lifecycle", () => {
       });
       deleteThread(harness.db, harness.hub, deletedThread.id);
 
-      const responsePromise = harness.app.request("/internal/session/interactive-request", {
+      const response = await harness.app.request("/internal/session/interactive-request", {
         method: "POST",
         headers: internalAuthHeaders(harness),
         body: JSON.stringify({
@@ -235,6 +275,11 @@ describe("internal interactive request lifecycle", () => {
             },
           },
         }),
+      });
+      expect(response.status).toBe(200);
+      await expect(readJson(response)).resolves.toMatchObject({
+        outcome: "created",
+        status: "pending",
       });
 
       const interactionId = await waitForPendingInteractionId({
@@ -262,12 +307,15 @@ describe("internal interactive request lifecycle", () => {
         interactionIds: [interactionId],
       });
 
-      const response = await responsePromise;
-      expect(response.status).toBe(200);
-      await expect(readJson(response)).resolves.toEqual({
-        outcome: "interrupted",
-        reason: "Provider exited",
-      });
+      expect(
+        harness.deps.pendingInteractions.listThreadInteractions(liveThread.id),
+      ).toEqual([
+        expect.objectContaining({
+          id: interactionId,
+          status: "interrupted",
+          statusReason: "Provider exited",
+        }),
+      ]);
     } finally {
       await harness.cleanup();
     }
@@ -291,7 +339,7 @@ describe("internal interactive request lifecycle", () => {
         environmentId: environment.id,
       });
 
-      const responsePromise = harness.app.request("/internal/session/interactive-request", {
+      const response = await harness.app.request("/internal/session/interactive-request", {
         method: "POST",
         headers: internalAuthHeaders(harness),
         body: JSON.stringify({
@@ -314,6 +362,11 @@ describe("internal interactive request lifecycle", () => {
             },
           },
         }),
+      });
+      expect(response.status).toBe(200);
+      await expect(readJson(response)).resolves.toMatchObject({
+        outcome: "created",
+        status: "pending",
       });
 
       await waitForPendingInteractionId({
@@ -340,12 +393,6 @@ describe("internal interactive request lifecycle", () => {
       );
       expect(queuedDelete.row.sessionId).toBe(session.id);
 
-      const response = await responsePromise;
-      expect(response.status).toBe(200);
-      await expect(readJson(response)).resolves.toEqual({
-        outcome: "interrupted",
-        reason: "Thread was deleted while awaiting user interaction",
-      });
       expect(harness.deps.pendingInteractions.listThreadInteractions(thread.id)).toEqual([]);
     } finally {
       await harness.cleanup();
@@ -371,7 +418,7 @@ describe("internal interactive request lifecycle", () => {
         providerId: "claude-code",
       });
 
-      const responsePromise = harness.app.request("/internal/session/interactive-request", {
+      const response = await harness.app.request("/internal/session/interactive-request", {
         method: "POST",
         headers: internalAuthHeaders(harness),
         body: JSON.stringify({
@@ -395,6 +442,11 @@ describe("internal interactive request lifecycle", () => {
           },
         }),
       });
+      expect(response.status).toBe(200);
+      await expect(readJson(response)).resolves.toMatchObject({
+        outcome: "created",
+        status: "pending",
+      });
 
       const interactionId = await waitForPendingInteractionId({
         harness,
@@ -416,13 +468,20 @@ describe("internal interactive request lifecycle", () => {
 
       expect(resolved).toMatchObject({
         id: interactionId,
-        status: "resolved",
+        status: "resolving",
       });
 
-      const response = await responsePromise;
-      expect(response.status).toBe(200);
-      await expect(readJson(response)).resolves.toEqual({
-        outcome: "resolved",
+      const queuedResolve = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "interactive.resolve" &&
+          command.interactionId === interactionId,
+      );
+      expect(queuedResolve.command).toMatchObject({
+        type: "interactive.resolve",
+        providerId: "claude-code",
+        providerThreadId: "claude-thread-1",
+        providerRequestId: "request-claude-1",
         resolution: {
           kind: "permission_request",
           decision: "allow",
@@ -432,6 +491,22 @@ describe("internal interactive request lifecycle", () => {
           },
           scope: "session",
         },
+      });
+      const commandResultResponse = await reportQueuedCommandSuccess(
+        harness,
+        queuedResolve,
+        {},
+      );
+      expect(commandResultResponse.status).toBe(200);
+
+      expect(
+        harness.deps.pendingInteractions.getThreadInteraction({
+          threadId: thread.id,
+          interactionId,
+        }),
+      ).toMatchObject({
+        id: interactionId,
+        status: "resolved",
       });
     } finally {
       await harness.cleanup();

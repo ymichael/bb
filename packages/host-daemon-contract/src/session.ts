@@ -4,7 +4,7 @@ import {
   ENVIRONMENT_CHANGE_KINDS,
   hostTypeSchema,
   pendingInteractionCreateSchema,
-  pendingInteractionResolutionSchema,
+  pendingInteractionStatusSchema,
   threadEventSchema,
   toolCallRequestSchema,
   toolCallResponseSchema,
@@ -209,19 +209,17 @@ export type HostDaemonInteractiveRequest = z.infer<
 export const hostDaemonInteractiveRequestResponseSchema =
   z.discriminatedUnion("outcome", [
     z.object({
-      outcome: z.literal("resolved"),
-      resolution: pendingInteractionResolutionSchema,
+      outcome: z.literal("created"),
+      interactionId: z.string().min(1),
+      status: pendingInteractionStatusSchema,
+    }),
+    z.object({
+      outcome: z.literal("existing"),
+      interactionId: z.string().min(1),
+      status: pendingInteractionStatusSchema,
     }),
     z.object({
       outcome: z.literal("rejected"),
-      reason: z.string().min(1),
-    }),
-    z.object({
-      outcome: z.literal("interrupted"),
-      reason: z.string().min(1),
-    }),
-    z.object({
-      outcome: z.literal("expired"),
       reason: z.string().min(1),
     }),
   ]);
@@ -304,7 +302,7 @@ export type HostDaemonInternalSchema = {
     >;
   };
   "/session/interactive-request": {
-    /** Used by the daemon to persist an interactive provider request and await a later server-side resolution. */
+    /** Used by the daemon to persist an interactive provider request before awaiting an interactive.resolve command. */
     $post: Endpoint<
       { json: HostDaemonInteractiveRequest },
       HostDaemonInteractiveRequestResponse

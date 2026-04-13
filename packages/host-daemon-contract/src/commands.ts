@@ -3,6 +3,7 @@ import {
   discoveredWorkspacePropertiesSchema,
   dynamicToolSchema,
   instructionModeSchema,
+  pendingInteractionResolutionSchema,
   promptInputSchema,
   threadGitDiffResponseSchema,
   workspaceProvisionTypeSchema,
@@ -15,7 +16,7 @@ import {
 import { z } from "zod";
 import { hostRuntimeMaterialSnapshotSchema } from "./local-state.js";
 
-export const HOST_DAEMON_PROTOCOL_VERSION = 7 as const;
+export const HOST_DAEMON_PROTOCOL_VERSION = 8 as const;
 
 export const HOST_DAEMON_COMMAND_TYPES = [
   "thread.start",
@@ -24,6 +25,7 @@ export const HOST_DAEMON_COMMAND_TYPES = [
   "thread.stop",
   "thread.rename",
   "thread.deleted",
+  "interactive.resolve",
   "host.sync_runtime_material",
   "host.list_files",
   "host.read_file",
@@ -124,6 +126,15 @@ export const threadRenameCommandSchema = hostDaemonThreadTargetSchema.extend({
 
 export const threadDeletedCommandSchema = hostDaemonThreadTargetSchema.extend({
   type: z.literal("thread.deleted"),
+});
+
+export const interactiveResolveCommandSchema = hostDaemonThreadTargetSchema.extend({
+  type: z.literal("interactive.resolve"),
+  interactionId: z.string().min(1),
+  providerId: z.string().min(1),
+  providerThreadId: z.string().min(1),
+  providerRequestId: z.string().min(1),
+  resolution: pendingInteractionResolutionSchema,
 });
 
 /**
@@ -288,6 +299,7 @@ const hostDaemonNonProvisionCommandSchema = z.discriminatedUnion("type", [
   threadStopCommandSchema,
   threadRenameCommandSchema,
   threadDeletedCommandSchema,
+  interactiveResolveCommandSchema,
   hostSyncRuntimeMaterialCommandSchema,
   hostListFilesCommandSchema,
   hostReadFileCommandSchema,
@@ -331,6 +343,7 @@ export const hostDaemonCommandResultSchemaByType = {
   "thread.stop": z.object({}),
   "thread.rename": z.object({}),
   "thread.deleted": z.object({}),
+  "interactive.resolve": z.object({}),
   "host.sync_runtime_material": z.object({
     appliedVersion: z.string().min(1),
   }),

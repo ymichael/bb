@@ -10,9 +10,11 @@ import {
   interruptPendingInteractionsForThreads,
   listPendingInteractionsByThread,
   listPendingInteractionsOnEphemeralHosts,
+  queueCommandInTransaction,
   setPendingInteractionExpired,
   setPendingInteractionInterrupted,
   setPendingInteractionResolved,
+  setPendingInteractionResolving,
   type PendingInteractionRow,
 } from "@bb/db";
 import {
@@ -20,6 +22,7 @@ import {
   type PendingInteractionCreate,
   type PendingInteractionResolution,
 } from "@bb/domain";
+import type { HostDaemonCommand } from "@bb/host-daemon-contract";
 import { ApiError } from "../../errors.js";
 import type { AppDeps } from "../../types.js";
 import { appendPendingInteractionTimelineEvent } from "./pending-interaction-timeline.js";
@@ -73,6 +76,23 @@ interface ResolvePendingInteractionArgs {
   threadId: string;
 }
 
+interface QueueInteractionResolutionCommandArgs {
+  interaction: PendingInteraction;
+  resolution: PendingInteractionResolution;
+  sessionId: string;
+}
+
+interface CompleteResolvingInteractionArgs {
+  interactionId: string;
+  resolution: PendingInteractionResolution;
+}
+
+interface BuildInteractiveResolveCommandArgs {
+  environmentId: string;
+  interaction: PendingInteraction;
+  resolution: PendingInteractionResolution;
+}
+
 interface GetThreadInteractionArgs {
   interactionId: string;
   threadId: string;
@@ -118,6 +138,21 @@ function getUnsupportedPendingInteractionReason(
   }
 
   return null;
+}
+
+function buildInteractiveResolveCommand(
+  args: BuildInteractiveResolveCommandArgs,
+): Extract<HostDaemonCommand, { type: "interactive.resolve" }> {
+  return {
+    type: "interactive.resolve",
+    environmentId: args.environmentId,
+    threadId: args.interaction.threadId,
+    interactionId: args.interaction.id,
+    providerId: args.interaction.providerId,
+    providerThreadId: args.interaction.providerThreadId,
+    providerRequestId: args.interaction.providerRequestId,
+    resolution: args.resolution,
+  };
 }
 
 export const DEFAULT_SANDBOX_PENDING_INTERACTION_EXPIRY_MS = 10 * 60 * 1000;
@@ -408,13 +443,14 @@ export class PendingInteractionLifecycle {
   resolvePendingInteraction(
     args: ResolvePendingInteractionArgs,
   ): PendingInteraction {
-    const current = this.getThreadInteraction({
-      threadId: args.threadId,
-      interactionId: args.interactionId,
-    });
+    const currentRow = this.requireInteractionRow(args.interactionId);
+    const current = toPendingInteraction(currentRow);
+    if (current.threadId !== args.threadId) {
+      throw new ApiError(404, "invalid_request", "Pending interaction not found");
+    }
     if (current.status !== "pending") {
       if (
-        current.status === "resolved"
+        (current.status === "resolving" || current.status === "resolved")
         && pendingInteractionResolutionEquals(current.resolution, args.resolution)
       ) {
         return current;
@@ -424,9 +460,10 @@ export class PendingInteractionLifecycle {
     }
     validatePendingInteractionResolution(current, args.resolution);
 
-    const updated = setPendingInteractionResolved(this.deps.db, {
-      id: args.interactionId,
-      resolution: JSON.stringify(args.resolution),
+    const updated = this.queueInteractionResolutionCommand({
+      interaction: current,
+      resolution: args.resolution,
+      sessionId: currentRow.sessionId,
     });
     if (!updated) {
       const latest = this.getThreadInteraction({
@@ -434,13 +471,29 @@ export class PendingInteractionLifecycle {
         interactionId: args.interactionId,
       });
       if (
-        latest.status === "resolved"
+        (latest.status === "resolving" || latest.status === "resolved")
         && pendingInteractionResolutionEquals(latest.resolution, args.resolution)
       ) {
         return latest;
       }
 
       throw buildResolveConflictError(latest);
+    }
+
+    const interaction = toPendingInteraction(updated);
+    this.finishInteraction(interaction);
+    return interaction;
+  }
+
+  completeResolvingInteraction(
+    args: CompleteResolvingInteractionArgs,
+  ): PendingInteraction | null {
+    const updated = setPendingInteractionResolved(this.deps.db, {
+      id: args.interactionId,
+      resolution: JSON.stringify(args.resolution),
+    });
+    if (!updated) {
+      return null;
     }
 
     const interaction = toPendingInteraction(updated);
@@ -497,13 +550,70 @@ export class PendingInteractionLifecycle {
     return interactions;
   }
 
+  private queueInteractionResolutionCommand(
+    args: QueueInteractionResolutionCommandArgs,
+  ): PendingInteractionRow | null {
+    const thread = getThread(this.deps.db, args.interaction.threadId);
+    if (!thread?.environmentId) {
+      throw new ApiError(
+        409,
+        "invalid_request",
+        "Cannot resolve pending interaction because its thread has no active environment",
+      );
+    }
+
+    const environment = getEnvironment(this.deps.db, thread.environmentId);
+    if (!environment) {
+      throw new ApiError(
+        409,
+        "invalid_request",
+        "Cannot resolve pending interaction because its environment no longer exists",
+      );
+    }
+
+    const command = buildInteractiveResolveCommand({
+      environmentId: environment.id,
+      interaction: args.interaction,
+      resolution: args.resolution,
+    });
+    const resolutionJson = JSON.stringify(args.resolution);
+    const commandPayload = JSON.stringify(command);
+    const updated = this.deps.db.transaction((tx) => {
+      const resolving = setPendingInteractionResolving(tx, {
+        id: args.interaction.id,
+        resolution: resolutionJson,
+      });
+      if (!resolving) {
+        return null;
+      }
+
+      queueCommandInTransaction(tx, {
+        hostId: environment.hostId,
+        sessionId: args.sessionId,
+        type: command.type,
+        payload: commandPayload,
+      });
+      return resolving;
+    });
+
+    if (updated) {
+      this.deps.hub.notifyCommand(environment.hostId);
+    }
+
+    return updated;
+  }
+
   private requireInteraction(interactionId: string): PendingInteraction {
+    return toPendingInteraction(this.requireInteractionRow(interactionId));
+  }
+
+  private requireInteractionRow(interactionId: string): PendingInteractionRow {
     const interaction = getPendingInteraction(this.deps.db, interactionId);
     if (!interaction) {
       throw new ApiError(404, "invalid_request", "Pending interaction not found");
     }
 
-    return toPendingInteraction(interaction);
+    return interaction;
   }
 
   private removeWaiter(

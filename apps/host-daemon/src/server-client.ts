@@ -96,7 +96,7 @@ export interface ServerClient {
   postEnvironmentChange(args: HostDaemonEnvironmentChangePayload): Promise<void>;
   postEvents(events: HostDaemonEventEnvelope[]): Promise<Record<string, number>>;
   callTool(request: ToolCallRequest): Promise<HostDaemonToolCallResponse>;
-  requestInteractiveResolution(
+  registerInteractiveRequest(
     request: PendingInteractionCreate,
   ): Promise<HostDaemonInteractiveRequestResponse>;
   interruptInteractiveRequests(args: {
@@ -107,6 +107,7 @@ export interface ServerClient {
 }
 
 const COMMAND_RESULT_RETRIES = 5;
+const INTERACTIVE_REQUEST_REGISTRATION_RETRIES = 5;
 
 function usesSecureRuntimeMaterialTransport(serverUrl: string): boolean {
   const parsed = new URL(serverUrl);
@@ -423,30 +424,48 @@ export function createServerClient(
       return hostDaemonToolCallResponseSchema.parse(await response.json());
     },
 
-    async requestInteractiveResolution(
+    async registerInteractiveRequest(
       request: PendingInteractionCreate,
     ): Promise<HostDaemonInteractiveRequestResponse> {
-      const payload = hostDaemonInteractiveRequestSchema.parse({
-        sessionId: requireSessionId(),
-        interaction: request,
-      });
-      const response = await fetchFn(
-        buildInternalUrl("/session/interactive-request"),
-        {
-          method: "POST",
-          headers: headers(),
-          body: JSON.stringify(payload),
+      return pRetry(
+        async () => {
+          const payload = hostDaemonInteractiveRequestSchema.parse({
+            sessionId: requireSessionId(),
+            interaction: request,
+          });
+          const response = await fetchFn(
+            buildInternalUrl("/session/interactive-request"),
+            {
+              method: "POST",
+              headers: headers(),
+              body: JSON.stringify(payload),
+            },
+          );
+
+          if (!response.ok) {
+            throw createResponseError("register interactive request", response);
+          }
+
+          return hostDaemonInteractiveRequestResponseSchema.parse(
+            await response.json(),
+          );
         },
-      );
-
-      if (!response.ok) {
-        throw new Error(
-          `Failed to request interactive resolution: ${response.status} ${response.statusText}`,
-        );
-      }
-
-      return hostDaemonInteractiveRequestResponseSchema.parse(
-        await response.json(),
+        {
+          retries: INTERACTIVE_REQUEST_REGISTRATION_RETRIES,
+          minTimeout: 100,
+          maxTimeout: 2_000,
+          randomize: true,
+          onFailedAttempt(context): void {
+            options.logger.warn(
+              {
+                err: context,
+                attempt: context.attemptNumber,
+                retriesLeft: context.retriesLeft,
+              },
+              "interactive request registration failed, retrying",
+            );
+          },
+        },
       );
     },
 

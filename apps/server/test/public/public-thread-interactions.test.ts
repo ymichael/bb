@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import type { PendingInteractionLifecycle } from "../../src/services/interactions/pending-interactions.js";
 import { readJson } from "../helpers/json.js";
 import {
+  reportQueuedCommandSuccess,
   waitForQueuedCommand,
 } from "../helpers/commands.js";
 import {
@@ -18,10 +19,11 @@ import { createTestAppHarness } from "../helpers/test-app.js";
 function registerPendingInteraction(
   lifecycle: PendingInteractionLifecycle,
   interaction: PendingInteractionCreate,
+  sessionId: string,
 ) {
   return lifecycle.registerPendingInteraction({
     interaction,
-    sessionId: "session-1",
+    sessionId,
   });
 }
 
@@ -29,7 +31,7 @@ describe("public thread interaction routes", () => {
   it("lists, gets, and resolves thread-owned interactions", async () => {
     const harness = await createTestAppHarness();
     try {
-      const { host } = seedHostSession(harness.deps, {
+      const { host, session } = seedHostSession(harness.deps, {
         id: "host-public-thread-interactions",
       });
       const { project } = seedProjectWithSource(harness.deps, {
@@ -48,23 +50,27 @@ describe("public thread interaction routes", () => {
         environmentId: environment.id,
       });
 
-      const registered = registerPendingInteraction(harness.deps.pendingInteractions, {
-        threadId: thread.id,
-        turnId: "turn-public-1",
-        providerId: "codex",
-        providerThreadId: "provider-thread-1",
-        providerRequestId: "request-1",
-        payload: {
-          kind: "command_approval",
-          itemId: "item-1",
-          reason: "Approve command",
-          command: "git push",
-          cwd: "/tmp/project",
-          commandActions: [],
-          requestedPermissions: null,
-          availableDecisions: ["accept", "accept_for_session", "decline", "cancel"],
+      const registered = registerPendingInteraction(
+        harness.deps.pendingInteractions,
+        {
+          threadId: thread.id,
+          turnId: "turn-public-1",
+          providerId: "codex",
+          providerThreadId: "provider-thread-1",
+          providerRequestId: "request-1",
+          payload: {
+            kind: "command_approval",
+            itemId: "item-1",
+            reason: "Approve command",
+            command: "git push",
+            cwd: "/tmp/project",
+            commandActions: [],
+            requestedPermissions: null,
+            availableDecisions: ["accept", "accept_for_session", "decline", "cancel"],
+          },
         },
-      });
+        session.id,
+      );
       if (registered.outcome === "rejected") {
         throw new Error(`Expected interaction registration to succeed: ${registered.reason}`);
       }
@@ -129,7 +135,7 @@ describe("public thread interaction routes", () => {
       expect(resolveResponse.status).toBe(200);
       await expect(readJson(resolveResponse)).resolves.toMatchObject({
         id: registered.interaction.id,
-        status: "resolved",
+        status: "resolving",
         resolution: {
           kind: "command_approval",
           decision: "accept_for_session",
@@ -152,7 +158,7 @@ describe("public thread interaction routes", () => {
       expect(duplicateResolveResponse.status).toBe(200);
       await expect(readJson(duplicateResolveResponse)).resolves.toMatchObject({
         id: registered.interaction.id,
-        status: "resolved",
+        status: "resolving",
         resolution: {
           kind: "command_approval",
           decision: "accept_for_session",
@@ -175,8 +181,21 @@ describe("public thread interaction routes", () => {
       expect(conflictingResolveResponse.status).toBe(409);
       await expect(readJson(conflictingResolveResponse)).resolves.toEqual({
         code: "invalid_request",
-        message: `Pending interaction ${registered.interaction.id} is already resolved`,
+        message: `Pending interaction ${registered.interaction.id} is already resolving`,
       });
+
+      const queuedResolve = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "interactive.resolve" &&
+          command.interactionId === registered.interaction.id,
+      );
+      const commandResultResponse = await reportQueuedCommandSuccess(
+        harness,
+        queuedResolve,
+        {},
+      );
+      expect(commandResultResponse.status).toBe(200);
 
       const postResolveListResponse = await harness.app.request(
         `/api/v1/threads/${thread.id}/interactions`,
@@ -191,7 +210,7 @@ describe("public thread interaction routes", () => {
   it("rejects unavailable command decisions and mismatched resolution kinds", async () => {
     const harness = await createTestAppHarness();
     try {
-      const { host } = seedHostSession(harness.deps, {
+      const { host, session } = seedHostSession(harness.deps, {
         id: "host-public-thread-invalid-resolution",
       });
       const { project } = seedProjectWithSource(harness.deps, {
@@ -206,23 +225,27 @@ describe("public thread interaction routes", () => {
         environmentId: environment.id,
       });
 
-      const commandApproval = registerPendingInteraction(harness.deps.pendingInteractions, {
-        threadId: thread.id,
-        turnId: "turn-invalid-command-resolution",
-        providerId: "codex",
-        providerThreadId: "provider-thread-invalid-command-resolution",
-        providerRequestId: "request-invalid-command-resolution",
-        payload: {
-          kind: "command_approval",
-          itemId: "item-invalid-command-resolution",
-          reason: "Approve command",
-          command: "git push",
-          cwd: "/tmp/project",
-          commandActions: [],
-          requestedPermissions: null,
-          availableDecisions: ["accept", "decline", "cancel"],
+      const commandApproval = registerPendingInteraction(
+        harness.deps.pendingInteractions,
+        {
+          threadId: thread.id,
+          turnId: "turn-invalid-command-resolution",
+          providerId: "codex",
+          providerThreadId: "provider-thread-invalid-command-resolution",
+          providerRequestId: "request-invalid-command-resolution",
+          payload: {
+            kind: "command_approval",
+            itemId: "item-invalid-command-resolution",
+            reason: "Approve command",
+            command: "git push",
+            cwd: "/tmp/project",
+            commandActions: [],
+            requestedPermissions: null,
+            availableDecisions: ["accept", "decline", "cancel"],
+          },
         },
-      });
+        session.id,
+      );
       if (commandApproval.outcome === "rejected") {
         throw new Error(`Expected command interaction registration to succeed: ${commandApproval.reason}`);
       }
@@ -316,7 +339,7 @@ describe("public thread interaction routes", () => {
   it("resolves permission requests and rejects grants outside the requested scope", async () => {
     const harness = await createTestAppHarness();
     try {
-      const { host } = seedHostSession(harness.deps, {
+      const { host, session } = seedHostSession(harness.deps, {
         id: "host-public-thread-permission-resolution",
       });
       const { project } = seedProjectWithSource(harness.deps, {
@@ -331,26 +354,30 @@ describe("public thread interaction routes", () => {
         environmentId: environment.id,
       });
 
-      const permissionRequest = registerPendingInteraction(harness.deps.pendingInteractions, {
-        threadId: thread.id,
-        turnId: "turn-permission-resolution",
-        providerId: "codex",
-        providerThreadId: "provider-thread-permission-resolution",
-        providerRequestId: "request-permission-resolution",
-        payload: {
-          kind: "permission_request",
-          itemId: "item-permission-resolution",
-          reason: "Grant workspace access",
-          toolName: null,
-          permissions: {
-            network: { enabled: true },
-            fileSystem: {
-              read: ["/tmp/project/README.md"],
-              write: ["/tmp/project/notes.md"],
+      const permissionRequest = registerPendingInteraction(
+        harness.deps.pendingInteractions,
+        {
+          threadId: thread.id,
+          turnId: "turn-permission-resolution",
+          providerId: "codex",
+          providerThreadId: "provider-thread-permission-resolution",
+          providerRequestId: "request-permission-resolution",
+          payload: {
+            kind: "permission_request",
+            itemId: "item-permission-resolution",
+            reason: "Grant workspace access",
+            toolName: null,
+            permissions: {
+              network: { enabled: true },
+              fileSystem: {
+                read: ["/tmp/project/README.md"],
+                write: ["/tmp/project/notes.md"],
+              },
             },
           },
         },
-      });
+        session.id,
+      );
       if (permissionRequest.outcome === "rejected") {
         throw new Error(`Expected permission interaction registration to succeed: ${permissionRequest.reason}`);
       }
@@ -379,7 +406,7 @@ describe("public thread interaction routes", () => {
       expect(grantResponse.status).toBe(200);
       await expect(readJson(grantResponse)).resolves.toMatchObject({
         id: permissionRequest.interaction.id,
-        status: "resolved",
+        status: "resolving",
         resolution: {
           kind: "permission_request",
           decision: "allow",
@@ -393,24 +420,40 @@ describe("public thread interaction routes", () => {
           scope: "session",
         },
       });
+      const grantCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "interactive.resolve" &&
+          command.interactionId === permissionRequest.interaction.id,
+      );
+      const grantCommandResponse = await reportQueuedCommandSuccess(
+        harness,
+        grantCommand,
+        {},
+      );
+      expect(grantCommandResponse.status).toBe(200);
 
-      const deniedPermissionRequest = registerPendingInteraction(harness.deps.pendingInteractions, {
-        threadId: thread.id,
-        turnId: "turn-permission-resolution-denied",
-        providerId: "codex",
-        providerThreadId: "provider-thread-permission-resolution",
-        providerRequestId: "request-permission-resolution-denied",
-        payload: {
-          kind: "permission_request",
-          itemId: "item-permission-resolution-denied",
-          reason: "Grant network access",
-          toolName: null,
-          permissions: {
-            network: { enabled: true },
-            fileSystem: null,
+      const deniedPermissionRequest = registerPendingInteraction(
+        harness.deps.pendingInteractions,
+        {
+          threadId: thread.id,
+          turnId: "turn-permission-resolution-denied",
+          providerId: "codex",
+          providerThreadId: "provider-thread-permission-resolution",
+          providerRequestId: "request-permission-resolution-denied",
+          payload: {
+            kind: "permission_request",
+            itemId: "item-permission-resolution-denied",
+            reason: "Grant network access",
+            toolName: null,
+            permissions: {
+              network: { enabled: true },
+              fileSystem: null,
+            },
           },
         },
-      });
+        session.id,
+      );
       if (deniedPermissionRequest.outcome === "rejected") {
         throw new Error(`Expected permission interaction registration to succeed: ${deniedPermissionRequest.reason}`);
       }
@@ -431,33 +474,49 @@ describe("public thread interaction routes", () => {
       expect(denyResponse.status).toBe(200);
       await expect(readJson(denyResponse)).resolves.toMatchObject({
         id: deniedPermissionRequest.interaction.id,
-        status: "resolved",
+        status: "resolving",
         resolution: {
           kind: "permission_request",
           decision: "deny",
         },
       });
+      const denyCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "interactive.resolve" &&
+          command.interactionId === deniedPermissionRequest.interaction.id,
+      );
+      const denyCommandResponse = await reportQueuedCommandSuccess(
+        harness,
+        denyCommand,
+        {},
+      );
+      expect(denyCommandResponse.status).toBe(200);
 
-      const invalidPermissionRequest = registerPendingInteraction(harness.deps.pendingInteractions, {
-        threadId: thread.id,
-        turnId: "turn-permission-resolution-invalid",
-        providerId: "codex",
-        providerThreadId: "provider-thread-permission-resolution",
-        providerRequestId: "request-permission-resolution-invalid",
-        payload: {
-          kind: "permission_request",
-          itemId: "item-permission-resolution-invalid",
-          reason: "Grant workspace access",
-          toolName: null,
-          permissions: {
-            network: null,
-            fileSystem: {
-              read: ["/tmp/project/README.md"],
-              write: [],
+      const invalidPermissionRequest = registerPendingInteraction(
+        harness.deps.pendingInteractions,
+        {
+          threadId: thread.id,
+          turnId: "turn-permission-resolution-invalid",
+          providerId: "codex",
+          providerThreadId: "provider-thread-permission-resolution",
+          providerRequestId: "request-permission-resolution-invalid",
+          payload: {
+            kind: "permission_request",
+            itemId: "item-permission-resolution-invalid",
+            reason: "Grant workspace access",
+            toolName: null,
+            permissions: {
+              network: null,
+              fileSystem: {
+                read: ["/tmp/project/README.md"],
+                write: [],
+              },
             },
           },
         },
-      });
+        session.id,
+      );
       if (invalidPermissionRequest.outcome === "rejected") {
         throw new Error(`Expected permission interaction registration to succeed: ${invalidPermissionRequest.reason}`);
       }
@@ -496,7 +555,7 @@ describe("public thread interaction routes", () => {
   it("accepts command approval amendment resolutions that were offered by the provider", async () => {
     const harness = await createTestAppHarness();
     try {
-      const { host } = seedHostSession(harness.deps, {
+      const { host, session } = seedHostSession(harness.deps, {
         id: "host-public-thread-amendment-resolution",
       });
       const { project } = seedProjectWithSource(harness.deps, {
@@ -511,30 +570,34 @@ describe("public thread interaction routes", () => {
         environmentId: environment.id,
       });
 
-      const commandApproval = registerPendingInteraction(harness.deps.pendingInteractions, {
-        threadId: thread.id,
-        turnId: "turn-amendment-resolution",
-        providerId: "codex",
-        providerThreadId: "provider-thread-amendment-resolution",
-        providerRequestId: "request-amendment-resolution",
-        payload: {
-          kind: "command_approval",
-          itemId: "item-amendment-resolution",
-          reason: "Approve command",
-          command: "git push",
-          cwd: "/tmp/project",
-          commandActions: [],
-          requestedPermissions: null,
-          availableDecisions: [
-            {
-              kind: "accept_with_exec_policy_amendment",
-              execPolicyAmendment: ["allow", "git", "push"],
-            },
-            "decline",
-            "cancel",
-          ],
+      const commandApproval = registerPendingInteraction(
+        harness.deps.pendingInteractions,
+        {
+          threadId: thread.id,
+          turnId: "turn-amendment-resolution",
+          providerId: "codex",
+          providerThreadId: "provider-thread-amendment-resolution",
+          providerRequestId: "request-amendment-resolution",
+          payload: {
+            kind: "command_approval",
+            itemId: "item-amendment-resolution",
+            reason: "Approve command",
+            command: "git push",
+            cwd: "/tmp/project",
+            commandActions: [],
+            requestedPermissions: null,
+            availableDecisions: [
+              {
+                kind: "accept_with_exec_policy_amendment",
+                execPolicyAmendment: ["allow", "git", "push"],
+              },
+              "decline",
+              "cancel",
+            ],
+          },
         },
-      });
+        session.id,
+      );
       if (commandApproval.outcome === "rejected") {
         throw new Error(`Expected command interaction registration to succeed: ${commandApproval.reason}`);
       }
@@ -558,7 +621,7 @@ describe("public thread interaction routes", () => {
       expect(resolveResponse.status).toBe(200);
       await expect(readJson(resolveResponse)).resolves.toMatchObject({
         id: commandApproval.interaction.id,
-        status: "resolved",
+        status: "resolving",
         resolution: {
           kind: "command_approval",
           decision: {
@@ -575,7 +638,7 @@ describe("public thread interaction routes", () => {
   it("rejects send and draft-send while a thread awaits user interaction", async () => {
     const harness = await createTestAppHarness();
     try {
-      const { host } = seedHostSession(harness.deps, {
+      const { host, session } = seedHostSession(harness.deps, {
         id: "host-public-thread-blocked-send",
       });
       const { project } = seedProjectWithSource(harness.deps, {
@@ -599,23 +662,27 @@ describe("public thread interaction routes", () => {
         reasoningLevel: "medium",
         permissionMode: "full",
       });
-      const pending = registerPendingInteraction(harness.deps.pendingInteractions, {
-        threadId: thread.id,
-        turnId: "turn-blocked-send",
-        providerId: "codex",
-        providerThreadId: "provider-thread-blocked",
-        providerRequestId: "request-blocked",
-        payload: {
-          kind: "command_approval",
-          itemId: "item-blocked",
-          reason: "Approve command",
-          command: "git push",
-          cwd: "/tmp/project",
-          commandActions: [],
-          requestedPermissions: null,
-          availableDecisions: ["accept", "accept_for_session", "decline", "cancel"],
+      const pending = registerPendingInteraction(
+        harness.deps.pendingInteractions,
+        {
+          threadId: thread.id,
+          turnId: "turn-blocked-send",
+          providerId: "codex",
+          providerThreadId: "provider-thread-blocked",
+          providerRequestId: "request-blocked",
+          payload: {
+            kind: "command_approval",
+            itemId: "item-blocked",
+            reason: "Approve command",
+            command: "git push",
+            cwd: "/tmp/project",
+            commandActions: [],
+            requestedPermissions: null,
+            availableDecisions: ["accept", "accept_for_session", "decline", "cancel"],
+          },
         },
-      });
+        session.id,
+      );
       if (pending.outcome === "rejected") {
         throw new Error(`Expected interaction registration to succeed: ${pending.reason}`);
       }
@@ -718,7 +785,7 @@ describe("public thread interaction routes", () => {
   it("resolves file-change interactions through thread routes", async () => {
     const harness = await createTestAppHarness();
     try {
-      const { host } = seedHostSession(harness.deps, {
+      const { host, session } = seedHostSession(harness.deps, {
         id: "host-public-thread-extra-interactions",
       });
       const { project } = seedProjectWithSource(harness.deps, {
@@ -733,19 +800,23 @@ describe("public thread interaction routes", () => {
         environmentId: environment.id,
       });
 
-      const fileChange = registerPendingInteraction(harness.deps.pendingInteractions, {
-        threadId: thread.id,
-        turnId: "turn-file-change",
-        providerId: "codex",
-        providerThreadId: "provider-thread-file-change",
-        providerRequestId: "request-file-change",
-        payload: {
-          kind: "file_change_approval",
-          itemId: "item-file-change",
-          reason: "Approve file changes",
-          grantRoot: "/tmp/project",
+      const fileChange = registerPendingInteraction(
+        harness.deps.pendingInteractions,
+        {
+          threadId: thread.id,
+          turnId: "turn-file-change",
+          providerId: "codex",
+          providerThreadId: "provider-thread-file-change",
+          providerRequestId: "request-file-change",
+          payload: {
+            kind: "file_change_approval",
+            itemId: "item-file-change",
+            reason: "Approve file changes",
+            grantRoot: "/tmp/project",
+          },
         },
-      });
+        session.id,
+      );
       if (fileChange.outcome === "rejected") {
         throw new Error(`Expected file-change interaction registration to succeed: ${fileChange.reason}`);
       }
@@ -766,7 +837,7 @@ describe("public thread interaction routes", () => {
       expect(fileChangeResponse.status).toBe(200);
       await expect(readJson(fileChangeResponse)).resolves.toMatchObject({
         id: fileChange.interaction.id,
-        status: "resolved",
+        status: "resolving",
         resolution: {
           kind: "file_change_approval",
           decision: "accept_for_session",
@@ -781,7 +852,7 @@ describe("public thread interaction routes", () => {
   it("projects pending-interaction lifecycle updates into the thread timeline", async () => {
     const harness = await createTestAppHarness();
     try {
-      const { host } = seedHostSession(harness.deps, {
+      const { host, session } = seedHostSession(harness.deps, {
         id: "host-public-thread-interaction-timeline",
       });
       const { project } = seedProjectWithSource(harness.deps, {
@@ -796,23 +867,27 @@ describe("public thread interaction routes", () => {
         environmentId: environment.id,
       });
 
-      const registered = registerPendingInteraction(harness.deps.pendingInteractions, {
-        threadId: thread.id,
-        turnId: "turn-timeline",
-        providerId: "codex",
-        providerThreadId: "provider-thread-timeline",
-        providerRequestId: "request-timeline",
-        payload: {
-          kind: "command_approval",
-          itemId: "item-timeline",
-          reason: "Approve command",
-          command: "git push",
-          cwd: "/tmp/project",
-          commandActions: [],
-          requestedPermissions: null,
-          availableDecisions: ["accept", "accept_for_session", "decline", "cancel"],
+      const registered = registerPendingInteraction(
+        harness.deps.pendingInteractions,
+        {
+          threadId: thread.id,
+          turnId: "turn-timeline",
+          providerId: "codex",
+          providerThreadId: "provider-thread-timeline",
+          providerRequestId: "request-timeline",
+          payload: {
+            kind: "command_approval",
+            itemId: "item-timeline",
+            reason: "Approve command",
+            command: "git push",
+            cwd: "/tmp/project",
+            commandActions: [],
+            requestedPermissions: null,
+            availableDecisions: ["accept", "accept_for_session", "decline", "cancel"],
+          },
         },
-      });
+        session.id,
+      );
       if (registered.outcome === "rejected") {
         throw new Error(`Expected interaction registration to succeed: ${registered.reason}`);
       }
@@ -825,6 +900,18 @@ describe("public thread interaction routes", () => {
           decision: "accept_for_session",
         },
       });
+      const queuedResolve = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "interactive.resolve" &&
+          command.interactionId === registered.interaction.id,
+      );
+      const commandResultResponse = await reportQueuedCommandSuccess(
+        harness,
+        queuedResolve,
+        {},
+      );
+      expect(commandResultResponse.status).toBe(200);
 
       const timelineResponse = await harness.app.request(
         `/api/v1/threads/${thread.id}/timeline`,

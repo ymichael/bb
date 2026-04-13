@@ -91,6 +91,10 @@ type WorkspaceMutationCommand = Extract<
     type: WorkspaceMutationResultReport["type"];
   }
 >;
+type InteractiveResolveResultReport = Extract<
+  HostDaemonCommandResultReport,
+  { type: "interactive.resolve" }
+>;
 
 function isWorkspaceMutationCommand(
   command: ParsedHostDaemonCommand,
@@ -409,6 +413,30 @@ function handleThreadCommandFailure(
   tryTransition(deps.db, deps.hub, thread.id, "error");
 }
 
+function handleInteractiveResolveResult(
+  deps: CommandResultSideEffectsDeps,
+  report: InteractiveResolveResultReport,
+  commandRow: typeof hostDaemonCommands.$inferSelect,
+): void {
+  const command = parseCommand(commandRow);
+  if (command.type !== "interactive.resolve") {
+    return;
+  }
+
+  if (!report.ok) {
+    deps.pendingInteractions.interruptPendingInteraction({
+      interactionId: command.interactionId,
+      reason: report.errorMessage,
+    });
+    return;
+  }
+
+  deps.pendingInteractions.completeResolvingInteraction({
+    interactionId: command.interactionId,
+    resolution: command.resolution,
+  });
+}
+
 function handleWorkspaceMutationResult(
   deps: Pick<AppDeps, "db" | "hub">,
   report: WorkspaceMutationResultReport,
@@ -486,6 +514,9 @@ export async function handleCommandResultSideEffects(
       if (!report.ok) {
         handleThreadCommandFailure(deps, report, commandRow);
       }
+      return;
+    case "interactive.resolve":
+      handleInteractiveResolveResult(deps, report, commandRow);
       return;
     case "workspace.commit":
     case "workspace.squash_merge":

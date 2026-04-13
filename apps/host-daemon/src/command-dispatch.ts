@@ -12,6 +12,7 @@ import {
 import { provisionEnvironment } from "./command-handlers/environment.js";
 import { listHostFiles, readHostFile } from "./command-handlers/host-files.js";
 import { syncRuntimeMaterial } from "./command-handlers/host-runtime-material.js";
+import { resolveInteractiveRequest } from "./command-handlers/interactive.js";
 import {
   ensureThreadRuntime,
   handleThreadDeleted,
@@ -103,6 +104,10 @@ export async function dispatchCommand<TCommand extends HostDaemonCommand>(
     }
     case "thread.deleted":
       return handleThreadDeleted(command, options) as Promise<
+        HostDaemonCommandResult<TCommand["type"]>
+      >;
+    case "interactive.resolve":
+      return resolveInteractiveRequest(command, options) as Promise<
         HostDaemonCommandResult<TCommand["type"]>
       >;
     case "host.sync_runtime_material":

@@ -15,6 +15,7 @@ import type {
   WorkspaceContext,
 } from "@bb/host-daemon-contract";
 import type { HostRuntimeMaterialState } from "@bb/host-runtime-material";
+import type { InteractiveResolveCommandInput } from "./interactive-request-registry.js";
 import { RuntimeManager, type RuntimeEntry } from "./runtime-manager.js";
 
 export type CommandOf<TType extends HostDaemonCommand["type"]> = Extract<
@@ -43,6 +44,9 @@ export interface CommandDispatchOptions {
   eventSink?: EventSink;
   listModels?: (providerId: string) => Promise<AvailableModel[]>;
   listProviders?: () => ProviderInfo[];
+  resolveInteractiveRequest?: (
+    request: InteractiveResolveCommandInput,
+  ) => Promise<void>;
   threadStorageRootPath: string;
 }
 

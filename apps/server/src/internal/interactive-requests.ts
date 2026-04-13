@@ -54,25 +54,11 @@ export function registerInternalInteractiveRequestRoutes(
         });
       }
 
-      const outcome = await deps.pendingInteractions.waitForTerminalState({
+      return context.json({
+        outcome: registered.outcome,
         interactionId: registered.interaction.id,
-        signal: context.req.raw.signal,
-        abortReason: "Daemon request ended while awaiting user interaction",
+        status: registered.interaction.status,
       });
-
-      switch (outcome.outcome) {
-        case "resolved":
-          return context.json({
-            outcome: "resolved",
-            resolution: outcome.resolution,
-          });
-        case "interrupted":
-        case "expired":
-          return context.json({
-            outcome: outcome.outcome,
-            reason: outcome.reason,
-          });
-      }
     },
   );
 

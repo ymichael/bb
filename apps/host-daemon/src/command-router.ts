@@ -21,6 +21,7 @@ export interface CommandRouterOptions {
   seedThreadHighWaterMark?: CommandDispatchOptions["seedThreadHighWaterMark"];
   eventSink?: CommandDispatchOptions["eventSink"];
   listModels?: CommandDispatchOptions["listModels"];
+  resolveInteractiveRequest?: CommandDispatchOptions["resolveInteractiveRequest"];
   threadStorageRootPath: string;
   logger: Pick<HostDaemonLogger, "warn">;
   now?: () => number;
@@ -149,6 +150,7 @@ export class CommandRouter {
         seedThreadHighWaterMark: this.options.seedThreadHighWaterMark,
         eventSink: this.options.eventSink,
         listModels: this.options.listModels,
+        resolveInteractiveRequest: this.options.resolveInteractiveRequest,
         threadStorageRootPath: this.options.threadStorageRootPath,
       });
       return {

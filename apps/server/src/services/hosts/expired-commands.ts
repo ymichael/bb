@@ -18,7 +18,8 @@ type LifecycleFailureReport =
   | Extract<HostDaemonCommandResultReport, { type: "environment.destroy" }>
   | Extract<HostDaemonCommandResultReport, { type: "environment.provision" }>
   | Extract<HostDaemonCommandResultReport, { type: "thread.start" }>
-  | Extract<HostDaemonCommandResultReport, { type: "thread.stop" }>;
+  | Extract<HostDaemonCommandResultReport, { type: "thread.stop" }>
+  | Extract<HostDaemonCommandResultReport, { type: "interactive.resolve" }>;
 
 type ExpiredCommandDeps = Pick<
   AppDeps,
@@ -75,6 +76,7 @@ export async function handleExpiredCommands(
       case "environment.provision":
       case "thread.start":
       case "thread.stop":
+      case "interactive.resolve":
         await handleCommandResultSideEffects(
           deps,
           buildExpiredLifecycleFailureReport({
