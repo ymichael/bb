@@ -625,7 +625,7 @@ describe("claude-code provider adapter", () => {
     });
   });
 
-  it("keeps turn-scoped Claude permission approvals as allow responses", () => {
+  it("keeps turn-scoped Claude permission approvals scoped to the current tool request", () => {
     const adapter = createClaudeCodeProviderAdapter();
 
     expect(

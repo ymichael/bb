@@ -86,6 +86,9 @@ export function registerInternalSessionRoutes(app: Hono, deps: AppDeps): void {
     if (existingSession && existingSession.id !== session.id) {
       deps.hub.closeDaemonSession(existingSession.id, "replaced");
 
+      // Pending interactions are bound to the daemon session that registered
+      // them. A new session id is a new in-memory provider-request registry,
+      // even if the daemon instance id is unchanged and reports active threads.
       const pendingInteractionInterruptReason =
         existingSession.instanceId !== payload.instanceId
           ? "Host daemon restarted while awaiting user interaction; retry the thread to continue"

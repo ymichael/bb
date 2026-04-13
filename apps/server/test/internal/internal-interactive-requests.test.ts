@@ -191,6 +191,26 @@ describe("internal interactive request lifecycle", () => {
           decision: "accept_for_session",
         },
       });
+
+      const retriedCommandResultResponse = await reportQueuedCommandSuccess(
+        harness,
+        queuedResolve,
+        {},
+      );
+      expect(retriedCommandResultResponse.status).toBe(200);
+      expect(
+        harness.deps.pendingInteractions.getThreadInteraction({
+          threadId: thread.id,
+          interactionId,
+        }),
+      ).toMatchObject({
+        id: interactionId,
+        status: "resolved",
+        resolution: {
+          kind: "command_approval",
+          decision: "accept_for_session",
+        },
+      });
     } finally {
       await harness.cleanup();
     }

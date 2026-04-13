@@ -431,10 +431,19 @@ function handleInteractiveResolveResult(
     return;
   }
 
-  deps.pendingInteractions.completeResolvingInteraction({
+  const completed = deps.pendingInteractions.completeResolvingInteraction({
     interactionId: command.interactionId,
     resolution: command.resolution,
   });
+  if (!completed) {
+    deps.logger.info(
+      {
+        commandId: commandRow.id,
+        interactionId: command.interactionId,
+      },
+      "Interactive resolve command result did not advance pending interaction",
+    );
+  }
 }
 
 function handleWorkspaceMutationResult(

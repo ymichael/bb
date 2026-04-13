@@ -64,7 +64,7 @@ import type {
   ProviderAdapter,
 } from "../provider-adapter.js";
 import {
-  buildClaudePermissionUpdates,
+  buildClaudeSessionPermissionUpdates,
   CLAUDE_PERMISSION_REQUEST_APPROVAL_METHOD,
   claudePermissionRequestApprovalParamsSchema,
   toClaudePermissionMode,
@@ -992,9 +992,18 @@ export function createClaudeCodeProviderAdapter(
             };
           }
 
-          const updatedPermissions = buildClaudePermissionUpdates({
+          if (args.resolution.scope === "turn") {
+            // Claude canUseTool approvals without updatedPermissions apply only
+            // to the current tool request. Session grants are the only scope
+            // that should mutate Claude's permission state.
+            return {
+              kind: "permission_request",
+              behavior: "allow",
+            };
+          }
+
+          const updatedPermissions = buildClaudeSessionPermissionUpdates({
             permissions: args.resolution.permissions,
-            scope: args.resolution.scope,
             toolName: args.request.payload.toolName,
           });
 

@@ -10,6 +10,7 @@ import type { CommandExecutionRequestApprovalResponse } from "./generated/codex-
 import type { FileChangeRequestApprovalResponse } from "./generated/codex-app-server/schema/v2/FileChangeRequestApprovalResponse.js";
 import type { PermissionsRequestApprovalResponse } from "./generated/codex-app-server/schema/v2/PermissionsRequestApprovalResponse.js";
 import { normalizePendingInteractionRequestedPermissionProfile } from "../shared/pending-interaction-normalization.js";
+import { ProviderRequestDecodeError } from "../provider-adapter.js";
 import type {
   CodexAdditionalPermissions,
   CodexCommandApprovalDecision,
@@ -152,12 +153,14 @@ export function toCodexCommandApprovalDecision(
 
 export function parseCodexAvailableDecisions(
   decisions: CodexCommandApprovalDecision[] | null | undefined,
-): PendingInteractionCommandApprovalDecision[] | null {
+): PendingInteractionCommandApprovalDecision[] {
   if (!decisions) {
     return ["accept", "accept_for_session", "decline", "cancel"];
   }
   if (decisions.length === 0) {
-    return null;
+    throw new ProviderRequestDecodeError(
+      "Command approval requests must include at least one available decision",
+    );
   }
 
   return decisions.map(fromCodexCommandApprovalDecision);

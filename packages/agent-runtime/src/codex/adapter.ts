@@ -45,7 +45,6 @@ import {
 } from "../shared/provider-tool-call-contract.js";
 import { resolveAdapterPermissionPolicy } from "../shared/permission-policy.js";
 import { createUnhandledProviderEvent } from "../shared/provider-unhandled-event.js";
-import { ProviderRequestDecodeError } from "../provider-adapter.js";
 import type {
   AdapterCommand,
   AdapterOptions,
@@ -862,11 +861,6 @@ export function createCodexProviderAdapter(
           const availableDecisions = parseCodexAvailableDecisions(
             parsed.data.availableDecisions,
           );
-          if (!availableDecisions) {
-            throw new ProviderRequestDecodeError(
-              "Command approval requests must include at least one available decision",
-            );
-          }
           return {
             requestId: request.id,
             method: request.method,

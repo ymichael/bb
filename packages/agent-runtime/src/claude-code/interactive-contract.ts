@@ -2,7 +2,6 @@ import { z } from "zod";
 import type {
   PendingInteractionGrantedPermissionProfile,
   PendingInteractionGrantablePermissionProfile,
-  PendingInteractionPermissionGrantScope,
 } from "@bb/domain";
 import type {
   ResolvedAdapterPermissionPolicy,
@@ -215,17 +214,12 @@ export type ClaudeInteractiveResponse = z.infer<
 
 interface BuildClaudePermissionUpdatesArgs {
   permissions: PendingInteractionGrantedPermissionProfile;
-  scope: PendingInteractionPermissionGrantScope;
   toolName: string | null | undefined;
 }
 
-export function buildClaudePermissionUpdates(
+export function buildClaudeSessionPermissionUpdates(
   args: BuildClaudePermissionUpdatesArgs,
 ): ClaudePermissionUpdate[] | undefined {
-  if (args.scope !== "session") {
-    return undefined;
-  }
-
   const updates: ClaudePermissionUpdate[] = [];
   const directories = [
     ...(args.permissions.fileSystem?.read ?? []),
