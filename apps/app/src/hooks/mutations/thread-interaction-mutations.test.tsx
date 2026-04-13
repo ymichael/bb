@@ -23,7 +23,7 @@ vi.mock("@/lib/api", async (importOriginal) => {
   };
 });
 
-function createResolvedInteraction(): PendingInteraction {
+function createResolvingInteraction(): PendingInteraction {
   return {
     id: "pi_1",
     threadId: "thr_1",
@@ -31,7 +31,7 @@ function createResolvedInteraction(): PendingInteraction {
     providerId: "codex",
     providerThreadId: "provider-thread-1",
     providerRequestId: "request-1",
-    status: "resolved",
+    status: "resolving",
     payload: {
       kind: "file_change_approval",
       itemId: "item_1",
@@ -44,7 +44,7 @@ function createResolvedInteraction(): PendingInteraction {
     },
     statusReason: null,
     createdAt: 1,
-    resolvedAt: 2,
+    resolvedAt: null,
   };
 }
 
@@ -55,7 +55,7 @@ afterEach(() => {
 describe("useResolveThreadPendingInteraction", () => {
   it("resolves an interaction and invalidates dependent thread queries", async () => {
     vi.mocked(api.resolveThreadPendingInteraction).mockResolvedValue(
-      createResolvedInteraction(),
+      createResolvingInteraction(),
     );
     const { queryClient, wrapper } = createQueryClientTestHarness();
     const invalidateQueries = vi.spyOn(queryClient, "invalidateQueries");

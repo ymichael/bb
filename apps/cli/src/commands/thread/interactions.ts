@@ -40,6 +40,12 @@ type PrintablePermissionProfile =
   | PendingInteractionGrantablePermissionProfile
   | PendingInteractionRequestedPermissionProfile;
 
+interface FetchInteractionArgs {
+  getUrl: () => string;
+  interactionId: string;
+  threadId: string;
+}
+
 function parsePermissionGrantScope(
   value: string | undefined,
 ): "session" | "turn" {
@@ -87,6 +93,9 @@ function printInteraction(interaction: PendingInteraction): void {
   }
   if (interaction.statusReason) {
     console.log(`  Reason: ${interaction.statusReason}`);
+  }
+  if (interaction.status === "resolving") {
+    console.log("  Delivery: waiting for provider acknowledgement");
   }
 
   switch (interaction.payload.kind) {
@@ -150,11 +159,7 @@ function printInteraction(interaction: PendingInteraction): void {
   }
 }
 
-async function fetchInteraction(args: {
-  getUrl: () => string;
-  interactionId: string;
-  threadId: string;
-}): Promise<PendingInteraction> {
+async function fetchInteraction(args: FetchInteractionArgs): Promise<PendingInteraction> {
   const client = createClient(args.getUrl());
   return unwrap<PendingInteraction>(
     client.api.v1.threads[":id"].interactions[":interactionId"].$get({
@@ -172,12 +177,20 @@ interface ResolveInteractionArgs {
   getUrl: () => string;
   interactionId: string;
   json: boolean | undefined;
-  successMessage: (args: {
-    interaction: PendingInteraction;
-    resolution: PendingInteractionResolution;
-    updated: PendingInteraction;
-  }) => string;
+  successMessage: (args: ResolveInteractionSuccessMessageArgs) => string;
   threadId: string;
+}
+
+interface ResolveInteractionSuccessMessageArgs {
+  interaction: PendingInteraction;
+  resolution: PendingInteractionResolution;
+  updated: PendingInteraction;
+}
+
+interface FormatResolutionSuccessMessageArgs {
+  interactionId: string;
+  resolution: PendingInteractionResolution;
+  updated: PendingInteraction;
 }
 
 async function resolveInteraction(
@@ -325,6 +338,18 @@ function formatBinaryResolutionMessage(
   );
 }
 
+function formatResolutionSuccessMessage(
+  args: FormatResolutionSuccessMessageArgs,
+): string {
+  const resolution = args.updated.resolution ?? args.resolution;
+  const outcome = formatBinaryResolutionMessage(resolution);
+  if (args.updated.status === "resolving") {
+    return `Interaction ${args.interactionId} submitted (${outcome}); delivering to provider`;
+  }
+
+  return `Interaction ${args.interactionId} ${outcome}`;
+}
+
 export function registerInteractionCommands(
   parent: Command,
   getUrl: () => string,
@@ -422,7 +447,11 @@ export function registerInteractionCommands(
         json: opts.json,
         threadId: resolved.id,
         successMessage: ({ resolution, updated }) =>
-          `Interaction ${interactionId} ${formatBinaryResolutionMessage(updated.resolution ?? resolution)}`,
+          formatResolutionSuccessMessage({
+            interactionId,
+            resolution,
+            updated,
+          }),
       });
     }));
 
@@ -448,7 +477,11 @@ export function registerInteractionCommands(
         json: opts.json,
         threadId: resolved.id,
         successMessage: ({ resolution, updated }) =>
-          `Interaction ${interactionId} ${formatBinaryResolutionMessage(updated.resolution ?? resolution)}`,
+          formatResolutionSuccessMessage({
+            interactionId,
+            resolution,
+            updated,
+          }),
       });
     }));
 
@@ -472,7 +505,11 @@ export function registerInteractionCommands(
         json: opts.json,
         threadId: resolved.id,
         successMessage: ({ resolution, updated }) =>
-          `Interaction ${interactionId} ${formatBinaryResolutionMessage(updated.resolution ?? resolution)}`,
+          formatResolutionSuccessMessage({
+            interactionId,
+            resolution,
+            updated,
+          }),
       });
     }));
 

@@ -2622,6 +2622,49 @@ describe("CLI JSON output contracts", () => {
     ]);
   });
 
+  it("bb thread interactions show indicates when resolution delivery is in progress", async () => {
+    const getInteraction = vi.fn(async () =>
+      makePendingInteraction({
+        id: "int-show-resolving",
+        providerId: "codex",
+        providerRequestId: "request-show-resolving",
+        providerThreadId: "provider-thread-show-resolving",
+        threadId: "thread-show-resolving",
+        turnId: "turn-show-resolving",
+        status: "resolving",
+        resolution: {
+          kind: "command_approval",
+          decision: "accept_for_session",
+        },
+      }),
+    );
+    createClientMock.mockReturnValue(asServerClient({
+      api: {
+        v1: {
+          threads: {
+            ":id": {
+              interactions: {
+                ":interactionId": {
+                  $get: getInteraction,
+                },
+              },
+            },
+          },
+        },
+      },
+    }));
+
+    await runCommand(["thread", "interactions", "show", "int-show-resolving"], (program) =>
+      registerThreadCommands(program, () => "http://server"),
+    );
+
+    const lines = collectLogLines(vi.mocked(console.log));
+    expect(lines).toContain("  Status: resolving");
+    expect(lines).toContain("  Delivery: waiting for provider acknowledgement");
+    expect(lines).toContain("Resolution:");
+    expect(lines).toContain("  Decision: accept_for_session");
+  });
+
   it("bb thread interactions approve resolves command approvals for the session", async () => {
     const getInteraction = vi.fn(async () =>
       makePendingInteraction({
@@ -2641,8 +2684,8 @@ describe("CLI JSON output contracts", () => {
         providerThreadId: "provider-thread-approve",
         threadId: "thread-approve",
         turnId: "turn-approve",
-        status: "resolved",
-        resolvedAt: Date.now(),
+        status: "resolving",
+        resolvedAt: null,
         resolution: {
           kind: "command_approval",
           decision: "accept_for_session",
@@ -2683,7 +2726,7 @@ describe("CLI JSON output contracts", () => {
       },
     });
     expect(collectLogLines(vi.mocked(console.log))).toEqual([
-      "Interaction int-approve approved for this session",
+      "Interaction int-approve submitted (approved for this session); delivering to provider",
     ]);
   });
 
@@ -2726,8 +2769,8 @@ describe("CLI JSON output contracts", () => {
           requestedPermissions: null,
           availableDecisions: ["accept", "decline", "cancel"],
         },
-        status: "resolved",
-        resolvedAt: Date.now(),
+        status: "resolving",
+        resolvedAt: null,
         resolution: {
           kind: "command_approval",
           decision: "accept",
@@ -2769,7 +2812,7 @@ describe("CLI JSON output contracts", () => {
       },
     });
     expect(collectLogLines(vi.mocked(console.log))).toEqual([
-      "Interaction int-approve-no-session approved",
+      "Interaction int-approve-no-session submitted (approved); delivering to provider",
     ]);
   });
 
@@ -2826,8 +2869,8 @@ describe("CLI JSON output contracts", () => {
             "cancel",
           ],
         },
-        status: "resolved",
-        resolvedAt: Date.now(),
+        status: "resolving",
+        resolvedAt: null,
         resolution: {
           kind: "command_approval",
           decision: {
@@ -2875,7 +2918,7 @@ describe("CLI JSON output contracts", () => {
       },
     });
     expect(collectLogLines(vi.mocked(console.log))).toEqual([
-      "Interaction int-approve-amendment approved with exec policy amendment",
+      "Interaction int-approve-amendment submitted (approved with exec policy amendment); delivering to provider",
     ]);
   });
 
@@ -2898,8 +2941,8 @@ describe("CLI JSON output contracts", () => {
         providerThreadId: "provider-thread-deny",
         threadId: "thread-deny",
         turnId: "turn-deny",
-        status: "resolved",
-        resolvedAt: Date.now(),
+        status: "resolving",
+        resolvedAt: null,
         resolution: {
           kind: "command_approval",
           decision: "decline",
@@ -2940,7 +2983,7 @@ describe("CLI JSON output contracts", () => {
       },
     });
     expect(collectLogLines(vi.mocked(console.log))).toEqual([
-      "Interaction int-deny denied",
+      "Interaction int-deny submitted (denied); delivering to provider",
     ]);
   });
 
@@ -2983,8 +3026,8 @@ describe("CLI JSON output contracts", () => {
           requestedPermissions: null,
           availableDecisions: ["accept", "cancel"],
         },
-        status: "resolved",
-        resolvedAt: Date.now(),
+        status: "resolving",
+        resolvedAt: null,
         resolution: {
           kind: "command_approval",
           decision: "cancel",
@@ -3026,7 +3069,7 @@ describe("CLI JSON output contracts", () => {
       },
     });
     expect(collectLogLines(vi.mocked(console.log))).toEqual([
-      "Interaction int-cancel cancelled",
+      "Interaction int-cancel submitted (cancelled); delivering to provider",
     ]);
   });
 
@@ -3061,8 +3104,8 @@ describe("CLI JSON output contracts", () => {
           reason: "Approve file changes",
           grantRoot: "/tmp/project",
         },
-        status: "resolved",
-        resolvedAt: Date.now(),
+        status: "resolving",
+        resolvedAt: null,
         resolution: {
           kind: "file_change_approval",
           decision: "accept_for_session",
@@ -3103,7 +3146,7 @@ describe("CLI JSON output contracts", () => {
       },
     });
     expect(collectLogLines(vi.mocked(console.log))).toEqual([
-      "Interaction int-file-change approved for this session",
+      "Interaction int-file-change submitted (approved for this session); delivering to provider",
     ]);
   });
 
@@ -3152,8 +3195,8 @@ describe("CLI JSON output contracts", () => {
             },
           },
         },
-        status: "resolved",
-        resolvedAt: Date.now(),
+        status: "resolving",
+        resolvedAt: null,
         resolution: {
           kind: "permission_request",
           decision: "allow",
@@ -3217,7 +3260,7 @@ describe("CLI JSON output contracts", () => {
       },
     });
     expect(collectLogLines(vi.mocked(console.log))).toEqual([
-      "Interaction int-permission-grant granted for this session",
+      "Interaction int-permission-grant submitted (granted for this session); delivering to provider",
     ]);
   });
 
@@ -3260,8 +3303,8 @@ describe("CLI JSON output contracts", () => {
             fileSystem: null,
           },
         },
-        status: "resolved",
-        resolvedAt: Date.now(),
+        status: "resolving",
+        resolvedAt: null,
         resolution: {
           kind: "permission_request",
           decision: "deny",
@@ -3303,7 +3346,7 @@ describe("CLI JSON output contracts", () => {
       },
     });
     expect(collectLogLines(vi.mocked(console.log))).toEqual([
-      "Interaction int-permission-deny denied",
+      "Interaction int-permission-deny submitted (denied); delivering to provider",
     ]);
   });
 

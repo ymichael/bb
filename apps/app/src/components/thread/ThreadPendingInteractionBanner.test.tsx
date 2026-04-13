@@ -63,6 +63,17 @@ function createCommandApprovalInteraction(): PendingInteraction {
   };
 }
 
+function createResolvingCommandApprovalInteraction(): PendingInteraction {
+  return {
+    ...createCommandApprovalInteraction(),
+    status: "resolving",
+    resolution: {
+      kind: "command_approval",
+      decision: "accept_for_session",
+    },
+  };
+}
+
 function createAmendmentCommandApprovalInteraction(): PendingInteraction {
   return {
     ...createPendingInteractionBase(),
@@ -124,12 +135,11 @@ describe("ThreadPendingInteractionBanner", () => {
   it("resolves command approvals with the selected decision", async () => {
     vi.mocked(api.resolveThreadPendingInteraction).mockResolvedValue({
       ...createCommandApprovalInteraction(),
-      status: "resolved",
+      status: "resolving",
       resolution: {
         kind: "command_approval",
         decision: "accept",
       },
-      resolvedAt: 2,
     });
 
     renderBanner({
@@ -153,12 +163,11 @@ describe("ThreadPendingInteractionBanner", () => {
   it("resolves file-change approvals from the banner actions", async () => {
     vi.mocked(api.resolveThreadPendingInteraction).mockResolvedValue({
       ...createFileChangeInteraction(),
-      status: "resolved",
+      status: "resolving",
       resolution: {
         kind: "file_change_approval",
         decision: "decline",
       },
-      resolvedAt: 2,
     });
 
     renderBanner({
@@ -182,7 +191,7 @@ describe("ThreadPendingInteractionBanner", () => {
   it("resolves permission requests with the selected grant scope", async () => {
     vi.mocked(api.resolveThreadPendingInteraction).mockResolvedValue({
       ...createPermissionRequestInteraction(),
-      status: "resolved",
+      status: "resolving",
       resolution: {
         kind: "permission_request",
         decision: "allow",
@@ -195,7 +204,6 @@ describe("ThreadPendingInteractionBanner", () => {
         },
         scope: "session",
       },
-      resolvedAt: 2,
     });
 
     renderBanner({
@@ -259,5 +267,17 @@ describe("ThreadPendingInteractionBanner", () => {
     fireEvent.click(screen.getByRole("button", { name: "Show interaction details" }));
 
     expect(screen.getByText("allow workspace-write")).not.toBeNull();
+  });
+
+  it("shows resolving interactions as submitted instead of actionable", () => {
+    renderBanner({
+      interaction: createResolvingCommandApprovalInteraction(),
+    });
+
+    expect(screen.getByText("Delivering")).not.toBeNull();
+    expect(
+      screen.getByText("Answer submitted. Delivering it to the provider."),
+    ).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Approve" })).toBeNull();
   });
 });

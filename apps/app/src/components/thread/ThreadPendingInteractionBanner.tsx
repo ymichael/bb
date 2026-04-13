@@ -87,6 +87,7 @@ export function ThreadPendingInteractionBanner({
 }: ThreadPendingInteractionBannerProps) {
   const resolvePendingInteraction = useResolveThreadPendingInteraction();
   const [isExpanded, setIsExpanded] = useState(false);
+  const isResolving = interaction.status === "resolving";
 
   useEffect(() => {
     setIsExpanded(false);
@@ -146,6 +147,11 @@ export function ThreadPendingInteractionBanner({
                 surface: "app",
               })}
             </StatusPill>
+            {isResolving ? (
+              <StatusPill variant="secondary">
+                Delivering
+              </StatusPill>
+            ) : null}
             <span className="truncate text-sm text-foreground">
               {formatPendingInteractionSummary({
                 interaction,
@@ -181,70 +187,76 @@ export function ThreadPendingInteractionBanner({
         ) : null}
       </div>
 
-      <div className="mt-2 flex flex-wrap items-center gap-2">
-        {interaction.payload.kind === "command_approval"
-          ? interaction.payload.availableDecisions.map((decision) => {
-              const button = describeCommandDecision(decision);
-              return (
-                <PendingInteractionActionButton
-                  key={button.label}
-                  variant={button.variant}
-                  disabled={resolvePendingInteraction.isPending}
-                  onClick={() => {
-                    handleCommandDecision(button.decision);
-                  }}
-                >
-                  {button.label}
-                </PendingInteractionActionButton>
-              );
-            })
-          : null}
-        {interaction.payload.kind === "file_change_approval" ? (
-          <>
-            <PendingInteractionActionButton
-              variant="default"
-              disabled={resolvePendingInteraction.isPending}
-              onClick={() => {
-                handleFileChangeDecision("accept_for_session");
-              }}
-            >
-              Approve for session
-            </PendingInteractionActionButton>
-            <PendingInteractionActionButton
-              variant="outline"
-              disabled={resolvePendingInteraction.isPending}
-              onClick={() => {
-                handleFileChangeDecision("decline");
-              }}
-            >
-              Deny
-            </PendingInteractionActionButton>
-            <PendingInteractionActionButton
-              variant="ghost"
-              disabled={resolvePendingInteraction.isPending}
-              onClick={() => {
-                handleFileChangeDecision("cancel");
-              }}
-            >
-              Cancel
-            </PendingInteractionActionButton>
-          </>
-        ) : null}
-        {interaction.payload.kind === "permission_request"
-          ? buildPermissionDecisionButtons(interaction.payload.permissions).map((decision) => (
+      {isResolving ? (
+        <div className="mt-2 rounded-md border border-border/50 bg-background/60 px-2 py-1 text-xs text-muted-foreground">
+          Answer submitted. Delivering it to the provider.
+        </div>
+      ) : (
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          {interaction.payload.kind === "command_approval"
+            ? interaction.payload.availableDecisions.map((decision) => {
+                const button = describeCommandDecision(decision);
+                return (
+                  <PendingInteractionActionButton
+                    key={button.label}
+                    variant={button.variant}
+                    disabled={resolvePendingInteraction.isPending}
+                    onClick={() => {
+                      handleCommandDecision(button.decision);
+                    }}
+                  >
+                    {button.label}
+                  </PendingInteractionActionButton>
+                );
+              })
+            : null}
+          {interaction.payload.kind === "file_change_approval" ? (
+            <>
               <PendingInteractionActionButton
-                key={decision.label}
-                variant={decision.variant}
+                variant="default"
                 disabled={resolvePendingInteraction.isPending}
                 onClick={() => {
-                  handlePermissionDecision(decision);
+                  handleFileChangeDecision("accept_for_session");
                 }}
               >
-                {decision.label}
+                Approve for session
               </PendingInteractionActionButton>
-            ))
-          : null}
-      </div>
+              <PendingInteractionActionButton
+                variant="outline"
+                disabled={resolvePendingInteraction.isPending}
+                onClick={() => {
+                  handleFileChangeDecision("decline");
+                }}
+              >
+                Deny
+              </PendingInteractionActionButton>
+              <PendingInteractionActionButton
+                variant="ghost"
+                disabled={resolvePendingInteraction.isPending}
+                onClick={() => {
+                  handleFileChangeDecision("cancel");
+                }}
+              >
+                Cancel
+              </PendingInteractionActionButton>
+            </>
+          ) : null}
+          {interaction.payload.kind === "permission_request"
+            ? buildPermissionDecisionButtons(interaction.payload.permissions).map((decision) => (
+                <PendingInteractionActionButton
+                  key={decision.label}
+                  variant={decision.variant}
+                  disabled={resolvePendingInteraction.isPending}
+                  onClick={() => {
+                    handlePermissionDecision(decision);
+                  }}
+                >
+                  {decision.label}
+                </PendingInteractionActionButton>
+              ))
+            : null}
+        </div>
+      )}
 
       {details ? (
         <PendingInteractionSection isExpanded={isExpanded}>
