@@ -4,6 +4,7 @@ import {
   extractThreadContextWindowUsage,
   TIMELINE_NOISE_EVENT_TYPES,
   toViewProjection,
+  toViewMessages,
   type ThreadEventWithMeta,
 } from "@bb/core-ui";
 import type {
@@ -80,12 +81,10 @@ function flattenTimelineRowsToMessageRows(
 }
 
 function buildManagerConversationRows(
-  projection: ViewProjection,
+  messages: ViewMessage[],
 ): TimelineMessageRow[] {
-  const messages = flattenProjectionMessages(projection).filter(
-    isManagerConversationMessage,
-  );
-  const rows = buildTimelineRowsFromMessagesForNestedDisplay(messages, {
+  const visibleMessages = messages.filter(isManagerConversationMessage);
+  const rows = buildTimelineRowsFromMessagesForNestedDisplay(visibleMessages, {
     includeToolGroupMessages: true,
   });
   return flattenTimelineRowsToMessageRows(rows);
@@ -222,20 +221,26 @@ export function buildThreadTimeline(
   const eventRows = compactSummaryStoredEventRows(rawEventRows);
   const isDefaultManagerView =
     thread.type === "manager" && !options.showAllManagerEvents;
-  const projection = toViewProjection(
-    eventRows.map((row) => toThreadEventWithMeta(row)),
-    {
-      includeInternalSystemMessages: options.showAllManagerEvents,
-      threadStatus: thread.status,
-      threadType: thread.type,
-      turnMessageDetail: isDefaultManagerView ? "full" : "summary",
-    },
-  );
+  const decodedEvents = eventRows.map((row) => toThreadEventWithMeta(row));
   const rows = isDefaultManagerView
-    ? buildManagerConversationRows(projection)
-    : buildTimelineRows(projection, {
-        includeToolGroupMessages: options.includeToolGroupMessages ?? false,
-      });
+    ? buildManagerConversationRows(
+        toViewMessages(decodedEvents, {
+          includeInternalSystemMessages: options.showAllManagerEvents,
+          threadStatus: thread.status,
+          threadType: thread.type,
+        }),
+      )
+    : buildTimelineRows(
+        toViewProjection(decodedEvents, {
+          includeInternalSystemMessages: options.showAllManagerEvents,
+          threadStatus: thread.status,
+          threadType: thread.type,
+          turnMessageDetail: "summary",
+        }),
+        {
+          includeToolGroupMessages: options.includeToolGroupMessages ?? false,
+        },
+      );
   const contextWindowUsageRows = listContextWindowUsageRows(db, {
     threadId: thread.id,
   });
