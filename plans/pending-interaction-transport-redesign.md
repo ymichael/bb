@@ -26,7 +26,7 @@ Registration and resolution delivery become separate operations:
 - server persists the pending interaction and returns quickly
 - daemon keeps a local pending-request registry keyed by the provider request identity
 - user resolves the interaction through UI or CLI
-- server validates and records the resolution intent
+- server validates the answer and moves the interaction to `resolving`
 - server queues an `interactive.resolve` daemon command
 - daemon consumes the command and resolves the local provider request
 - daemon reports command success or failure
@@ -87,6 +87,14 @@ Response carries:
 
 Registration must be idempotent for the same live provider request. If the daemon retries because the HTTP response was lost, the server should return the existing pending interaction rather than creating a duplicate or rejecting a valid retry.
 
+The idempotency key should be:
+
+```text
+sessionId + threadId + providerId + providerThreadId + providerRequestId
+```
+
+The session id is part of the key because provider request ids can repeat after provider or daemon restart. A repeated provider id from a new daemon session is not the same live request handle.
+
 ### Resolve command
 
 Add a daemon command:
@@ -118,11 +126,9 @@ The command result must distinguish:
 
 The server should map terminal delivery failures to `interrupted`, not `resolved`.
 
-## Lifecycle States To Decide
+## Lifecycle States
 
-The current `pending -> resolved | interrupted | expired` model may be too coarse once resolution delivery is asynchronous.
-
-Consider adding an intermediate state:
+The redesign adds `resolving` as a first-class status:
 
 ```ts
 pending -> resolving -> resolved
@@ -130,9 +136,17 @@ pending -> interrupted
 resolving -> interrupted
 ```
 
-`resolving` would mean: the user answered and the server queued delivery to the daemon, but the provider has not acknowledged the response yet.
+`resolving` means: the user answered and the server queued delivery to the daemon, but the provider has not acknowledged the response yet.
 
-Without `resolving`, the server would mark the interaction `resolved` before it knows whether the provider received the answer. That may be acceptable if timeline language says "User answered" rather than "Provider accepted", but the lifecycle should make that decision explicit.
+The server must not mark an interaction `resolved` when it merely queues delivery. `resolved` means the daemon reported that the provider request was answered.
+
+UI, CLI, and timeline copy should distinguish:
+
+- `pending`: waiting for user action
+- `resolving`: user answered, delivering to provider
+- `resolved`: provider request answered successfully
+- `interrupted`: provider request could not be answered or is no longer live
+- `expired`: ephemeral resource lifecycle expired before resolution
 
 ## Recovery Rules
 
@@ -140,9 +154,13 @@ Without `resolving`, the server would mark the interaction `resolved` before it 
 
 Daemon retries registration with the same provider request identity. Server returns the existing pending interaction if it is still pending and belongs to the same session/thread/provider scope.
 
+If the retry arrives after the user already answered, the server returns the existing row in its current state. The daemon must reconcile that response with its local live handle instead of registering a duplicate.
+
 ### HTTP abort after registration
 
 No terminal state change. Registration is complete, and resolution delivery no longer depends on that HTTP request.
+
+If registration never succeeds after bounded retries, the daemon should deny or error the provider request locally and report best-effort interruption to the server. The daemon must not hold a local provider request forever when no server row exists.
 
 ### Daemon restart or session replacement
 
@@ -170,66 +188,77 @@ Ephemeral hosts may still need bounded pending-interaction expiry because the co
 
 The existing command lifecycle should own retry, expiry, and reconciliation. A pending interaction in `resolving` should not stay there forever; command expiry should transition it to `interrupted` with a reason that the resolution could not be delivered.
 
+Interactive resolve command expiry is different from user-wait time. The command is queued only after the user answers, so long user think time happens while the interaction is still `pending`, not while a command is aging. The resolve command TTL should cover only delivery to a daemon that is expected to be online.
+
+If the daemon delivers the provider response but the command-result ack is lost, retry must not double-answer the provider request or incorrectly mark the interaction interrupted. The daemon should keep a short-lived delivered-command tombstone keyed by `interactionId` and provider request identity, or the command-result lifecycle must otherwise guarantee idempotent acknowledgement after successful delivery.
+
 ## Implementation Phases
 
-### Phase 1: Document Current Transport
+### Phase 1: Inventory Current Transport Semantics
 
-- Add comments or docs around the current long-poll route explaining the provider request lifetime.
-- Add tests pinning the current terminal behavior on request abort so the redesign can intentionally change it.
 - Identify every place that currently assumes the HTTP response is the provider response delivery mechanism.
+- Identify every place that turns HTTP abort, daemon disconnect, provider exit, thread stop, thread deletion, command expiry, or session replacement into an interaction terminal state.
+- Identify every UI, CLI, and timeline path that renders interrupted, expired, resolved, or HTTP-aborted pending interactions.
+- Identify every test fixture that asserts long-poll behavior or HTTP-abort-specific messages.
 
 Exit criteria:
 
-- The current behavior is explicitly documented.
-- There is a failing-test path ready for the redesign rather than ambiguous behavior hidden in route code.
+- There is a concrete implementation checklist for removing the long-poll path.
+- The review can distinguish provider-lifecycle interruption from transport-request abort.
+- No tests are added only to preserve behavior that this plan intends to delete.
 
 ### Phase 2: Add Daemon Pending-Request Registry
 
 - Add a daemon-owned registry for live interactive provider requests.
 - Store entries by the scoped provider request identity used by the server.
 - Ensure provider process exit, thread stop, and session replacement remove entries and notify the server.
+- Add bounded registration retry. If the server row cannot be created or recovered, resolve the provider request locally with a denial/error and report best-effort interruption.
+- Add double-delivery protection for resolve-command retry after successful provider delivery.
 
 Exit criteria:
 
 - Daemon can register and later resolve a local provider request without depending on a long-held HTTP response.
 - Missing entries are reported as stale provider requests, not ignored.
+- Daemon-local entries cannot leak forever when registration fails.
+- Retried resolve commands cannot answer the same provider request twice.
 
-### Phase 3: Convert Registration To Fast Return
+### Phase 3: Resolving State And Atomic Command Cutover
 
+- Add `resolving` to the DB schema, domain schemas, and server lifecycle.
 - Change the internal interactive-request route to persist and return `interactionId`.
 - Make registration idempotent for retry after lost response.
 - Remove waiter semantics from the registration request path.
-
-Exit criteria:
-
-- HTTP request abort after registration does not terminally change the interaction.
-- Retried registration returns the same pending row for the same live provider request.
-
-### Phase 4: Add Resolve Command Delivery
-
 - Add `interactive.resolve` to the host-daemon command contract.
+- Bump the host-daemon protocol version.
+- Reject or disable pending-interaction registration for daemons that do not support the new protocol. Do not silently fall back to long-poll.
 - Queue the command when a user resolves an interaction.
 - Have the daemon translate the domain resolution and answer the provider request.
 - Handle stale-request failures explicitly.
+- Move interactions to `resolving` before command delivery and to `resolved` only after successful command result.
 
 Exit criteria:
 
+- There is no intermediate commit where registration fast-returns but no resolution delivery path exists.
+- HTTP request abort after registration does not terminally change the interaction.
+- Retried registration returns the same pending row for the same live provider request.
 - User resolution reaches the provider through command delivery.
 - Server does not mark provider delivery successful when the daemon lacks the live request.
-- Contract tests cover the new command on the current daemon protocol version.
+- Contract tests cover the new command on the bumped daemon protocol version.
+- Old daemons cannot accept pending-interaction work through an unsupported protocol path.
 
-### Phase 5: Decide And Implement Resolution Lifecycle State
+### Phase 4: Surface Resolving State
 
-- Decide whether to add `resolving`.
-- If added, update DB schema, domain schemas, server lifecycle, CLI, app UI, and timeline events.
-- If not added, update timeline and API language so `resolved` means user answer accepted by server, not provider delivery guaranteed.
+- Update app UI, CLI, API responses, and timeline events for `resolving`.
+- Remove copy that implies provider acceptance before successful command result.
+- Ensure app and CLI still expose one active interaction per thread while it is `pending` or `resolving`.
 
 Exit criteria:
 
 - The lifecycle state language is accurate.
 - UI and CLI do not misrepresent an undelivered resolution as provider-accepted.
+- Timeline events distinguish "answer submitted" from "provider request answered" when both are user-visible.
 
-### Phase 6: Recovery And Sweep Integration
+### Phase 5: Recovery And Sweep Integration
 
 - Interrupt pending interactions on daemon restart, session replacement, provider exit, thread stop, and thread deletion.
 - Add session lease-expiry cleanup for persistent hosts.
@@ -242,11 +271,12 @@ Exit criteria:
 - Persistent-host prompts do not expire solely because an HTTP request timed out.
 - Ephemeral-host cleanup is explicit and tested.
 
-### Phase 7: Remove Long-Poll Code
+### Phase 6: Remove Long-Poll Code
 
 - Delete server waiter code that exists only to hold HTTP requests open.
 - Delete daemon long-poll request handling.
-- Remove tests that assert long-poll behavior and replace them with command-delivery tests.
+- Remove tests, fixtures, and app/CLI error-rendering paths that distinguish HTTP-aborted waits from lifecycle interruptions.
+- Replace long-poll tests with command-delivery and lifecycle-recovery tests.
 
 Exit criteria:
 
@@ -266,14 +296,18 @@ Automated:
 Targeted tests:
 
 - registration retry after lost response returns the same pending interaction
+- registration retry after the user resolved returns the same current row and does not create a duplicate
 - HTTP abort after successful registration does not interrupt the interaction
 - UI resolution queues an `interactive.resolve` command
+- user resolution transitions `pending -> resolving`
 - daemon resolves the matching live provider request
+- successful daemon command result transitions `resolving -> resolved`
 - stale provider request command result interrupts the interaction
+- retried resolve command after successful delivery does not double-answer or mark interrupted
 - daemon restart interrupts pending interactions owned by the old session
 - session lease expiry interrupts persistent-host pending interactions
 - thread deletion emits interrupted timeline event before cascade removes rows
-- command expiry interrupts `resolving` interactions if that state is added
+- command expiry interrupts `resolving` interactions
 
 Manual smoke:
 
