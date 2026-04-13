@@ -1,15 +1,13 @@
 import {
   createPendingInteraction,
   getActivePendingInteractionForThread,
-  getEnvironment,
-  getHost,
   getPendingInteraction,
   getPendingInteractionByProviderRequest,
   getThread,
   interruptPendingInteractionsForThreadIds,
   interruptPendingInteractionsForThreads,
   listPendingInteractionsByThread,
-  listPendingInteractionsOnEphemeralHosts,
+  listPendingInteractionsByStatus,
   setPendingInteractionExpired,
   setPendingInteractionInterrupted,
   setPendingInteractionResolved,
@@ -41,6 +39,11 @@ interface WaitForTerminalStateArgs {
 }
 
 export type PendingInteractionWaitOutcome =
+  | {
+      outcome: "aborted";
+      interaction: PendingInteraction;
+      reason: string;
+    }
   | {
       outcome: "expired" | "interrupted";
       interaction: PendingInteraction;
@@ -124,10 +127,6 @@ interface PendingInteractionExpiryTimer {
   timeout: PendingInteractionTimeoutHandle;
 }
 
-interface PendingInteractionTimeoutHandleWithUnref {
-  unref(): void;
-}
-
 interface PendingInteractionLifecycleArgs extends CreateLifecycleDeps {
   sandboxInteractionExpiryMs: number;
   now?: () => number;
@@ -176,21 +175,8 @@ function notifyInteractionChanged(
   deps.hub.notifyThread(threadId, ["interactions-changed"]);
 }
 
-function timeoutHandleHasUnref(
-  timeout: PendingInteractionTimeoutHandle,
-): timeout is PendingInteractionTimeoutHandle & PendingInteractionTimeoutHandleWithUnref {
-  return (
-    typeof timeout === "object"
-    && timeout !== null
-    && "unref" in timeout
-    && typeof timeout.unref === "function"
-  );
-}
-
 function unrefTimeoutHandle(timeout: PendingInteractionTimeoutHandle): void {
-  if (timeoutHandleHasUnref(timeout)) {
-    timeout.unref();
-  }
+  timeout.unref();
 }
 
 export class PendingInteractionLifecycle {
@@ -363,16 +349,18 @@ export class PendingInteractionLifecycle {
       };
 
       abortHandler = (): void => {
-        const interrupted = this.interruptPendingInteraction({
-          interactionId: args.interactionId,
-          reason:
-            args.abortReason
-            ?? "Daemon request ended while awaiting user interaction",
-        });
-        if (interrupted) {
+        const current = this.requireInteraction(args.interactionId);
+        const currentOutcome = requireWaitableOutcome(current);
+        if (currentOutcome) {
+          waiter.resolve(currentOutcome);
           return;
         }
-        resolveCurrentTerminalOutcome();
+        waiter.resolve({
+          outcome: "aborted",
+          interaction: current,
+          reason:
+            args.abortReason ?? "Daemon request ended while awaiting user interaction",
+        });
       };
 
       const waiters =
@@ -512,7 +500,8 @@ export class PendingInteractionLifecycle {
   private hydratePendingInteractions(): void {
     let offset = 0;
     while (true) {
-      const pendingInteractions = listPendingInteractionsOnEphemeralHosts(this.deps.db, {
+      const pendingInteractions = listPendingInteractionsByStatus(this.deps.db, {
+        statuses: ["pending"],
         limit: PENDING_INTERACTION_HYDRATE_BATCH_SIZE,
         offset,
       }).map(toPendingInteraction);
@@ -531,34 +520,8 @@ export class PendingInteractionLifecycle {
     }
   }
 
-  private resolveInteractionExpiryMs(
-    interaction: PendingInteraction,
-  ): number | null {
-    const thread = getThread(this.deps.db, interaction.threadId);
-    if (!thread?.environmentId) {
-      return null;
-    }
-
-    const environment = getEnvironment(this.deps.db, thread.environmentId);
-    if (!environment) {
-      return null;
-    }
-
-    const host = getHost(this.deps.db, environment.hostId);
-    if (host?.type !== "ephemeral") {
-      return null;
-    }
-
-    return this.sandboxInteractionExpiryMs;
-  }
-
   private scheduleInteractionExpiry(interaction: PendingInteraction): void {
-    const interactionExpiryMs = this.resolveInteractionExpiryMs(interaction);
-    if (interactionExpiryMs === null) {
-      return;
-    }
-
-    this.scheduleInteractionExpiryWithMs(interaction, interactionExpiryMs);
+    this.scheduleInteractionExpiryWithMs(interaction, this.sandboxInteractionExpiryMs);
   }
 
   private scheduleInteractionExpiryWithMs(

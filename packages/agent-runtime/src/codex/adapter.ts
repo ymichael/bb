@@ -861,9 +861,6 @@ export function createCodexProviderAdapter(
           const availableDecisions = parseCodexAvailableDecisions(
             parsed.data.availableDecisions,
           );
-          if (!availableDecisions) {
-            return null;
-          }
           return {
             requestId: request.id,
             method: request.method,

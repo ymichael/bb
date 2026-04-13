@@ -152,13 +152,9 @@ export function toCodexCommandApprovalDecision(
 
 export function parseCodexAvailableDecisions(
   decisions: CodexCommandApprovalDecision[] | null | undefined,
-): PendingInteractionCommandApprovalDecision[] | null {
+): PendingInteractionCommandApprovalDecision[] {
   if (!decisions) {
     return ["accept", "accept_for_session", "decline", "cancel"];
   }
-  if (decisions.length === 0) {
-    return null;
-  }
-
   return decisions.map(fromCodexCommandApprovalDecision);
 }

@@ -660,4 +660,79 @@ describe("internal session correctness", () => {
       await harness.cleanup();
     }
   });
+
+  it("interrupts pending interactions for threads missing from a replacement daemon session", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-daemon-session-same-instance-missing-thread",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+      });
+
+      const registered = harness.deps.pendingInteractions.registerPendingInteraction({
+        threadId: thread.id,
+        turnId: "turn-session-same-instance-missing-thread",
+        providerId: "codex",
+        providerThreadId: "provider-thread-session-same-instance-missing-thread",
+        providerRequestId: "request-session-same-instance-missing-thread",
+        payload: {
+          kind: "command_approval",
+          itemId: "item-session-same-instance-missing-thread",
+          reason: "Needs approval",
+          command: "git push",
+          cwd: "/tmp/project",
+          commandActions: [],
+          requestedPermissions: null,
+          availableDecisions: ["accept", "accept_for_session", "decline", "cancel"],
+        },
+      });
+      if (registered.outcome === "rejected") {
+        throw new Error(`Expected interaction registration to succeed: ${registered.reason}`);
+      }
+
+      const response = await harness.app.request("/internal/session/open", {
+        method: "POST",
+        headers: internalAuthHeaders(harness, { hostId: host.id, hostType: host.type }),
+        body: JSON.stringify({
+          hostId: host.id,
+          instanceId: "instance-1",
+          hostName: host.name,
+          hostType: host.type,
+          dataDir: "/tmp/host-daemon-session-same-instance-missing-thread",
+          protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
+          activeThreads: [],
+        }),
+      });
+
+      expect(response.status).toBe(201);
+      const interrupted = harness.deps.pendingInteractions.getThreadInteraction({
+        threadId: thread.id,
+        interactionId: registered.interaction.id,
+      });
+      expect(interrupted).toMatchObject({
+        status: "interrupted",
+        statusReason:
+          "Host daemon session was replaced while awaiting user interaction; retry the thread to continue",
+      });
+
+      const originalSession = harness.db
+        .select()
+        .from(hostDaemonSessions)
+        .where(eq(hostDaemonSessions.id, session.id))
+        .get();
+      expect(originalSession?.closeReason).toBe("replaced");
+    } finally {
+      await harness.cleanup();
+    }
+  });
 });

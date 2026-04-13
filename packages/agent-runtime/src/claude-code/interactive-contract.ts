@@ -243,10 +243,7 @@ export function buildClaudePermissionUpdates(
 
   if (
     args.toolName
-    && (
-      args.permissions.network?.enabled === true
-      || uniqueDirectories.length === 0
-    )
+    && args.permissions.network?.enabled === true
   ) {
     updates.push({
       type: "addRules",

@@ -63,6 +63,8 @@ export function registerInternalInteractiveRequestRoutes(
             outcome: "resolved",
             resolution: outcome.resolution,
           });
+        case "aborted":
+          throw new ApiError(408, "request_aborted", outcome.reason, true);
         case "interrupted":
         case "expired":
           return context.json({

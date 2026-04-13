@@ -1,5 +1,7 @@
 # Timeline Projection Overhaul
 
+Status: Deferred design plan. This branch only fixes the stale web-search projection bug that exposed the active-turn inference problem; it does not implement the projection overhaul below.
+
 ## Goal
 
 Make timeline rendering use explicit turn lifecycle state instead of inferring whether a turn is active from child message statuses. A provider turn should be active because its `turn/started` event has not been matched by a terminal `turn/completed` event, not because one projected child row happens to be `pending`.

@@ -86,11 +86,24 @@ export function registerInternalSessionRoutes(app: Hono, deps: AppDeps): void {
     if (existingSession && existingSession.id !== session.id) {
       deps.hub.closeDaemonSession(existingSession.id, "replaced");
 
+      const hostThreadIds = listHostThreadIds(deps.db, daemon.hostId);
       if (existingSession.instanceId !== payload.instanceId) {
         deps.pendingInteractions.interruptPendingInteractionsForThreadIds({
-          threadIds: listHostThreadIds(deps.db, daemon.hostId),
+          threadIds: hostThreadIds,
           reason:
             "Host daemon restarted while awaiting user interaction; retry the thread to continue",
+        });
+      } else {
+        const activeThreadIds = new Set(
+          payload.activeThreads.map((thread) => thread.threadId),
+        );
+        const inactiveThreadIds = hostThreadIds.filter(
+          (threadId) => !activeThreadIds.has(threadId),
+        );
+        deps.pendingInteractions.interruptPendingInteractionsForThreadIds({
+          threadIds: inactiveThreadIds,
+          reason:
+            "Host daemon session was replaced while awaiting user interaction; retry the thread to continue",
         });
       }
     }
