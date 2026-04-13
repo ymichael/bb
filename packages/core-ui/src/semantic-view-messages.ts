@@ -1,6 +1,7 @@
 import type {
   ViewDelegationMessage,
   ViewMessage,
+  ViewMessageStatus,
   ViewProjection,
   ViewTasksMessage,
   ViewTimelineEntry,
@@ -8,11 +9,15 @@ import type {
   ViewTurn,
   ViewTurnStatus,
 } from "@bb/domain";
+import {
+  findLastTerminalTimelineMessage,
+  isTimelineUngroupableMessage,
+} from "./timeline-message-helpers.js";
 import { isDelegationToolName } from "./tool-call-parsing.js";
 
-interface IndexedMessage {
-  index: number;
-  message: ViewMessage;
+interface MessageTimingSource {
+  createdAt: number;
+  startedAt?: number;
 }
 
 interface ProjectionMessageBounds {
@@ -22,87 +27,26 @@ interface ProjectionMessageBounds {
   startedAt: number;
 }
 
-function getStartedAt(message: Pick<ViewMessage, "startedAt" | "createdAt">): number {
+interface StandaloneMessageContext {
+  kind: "message";
+  entryIndex: number;
+  message: ViewMessage;
+  messageIndex: number;
+}
+
+interface TurnMessageContext {
+  kind: "turn";
+  entryIndex: number;
+  message: ViewMessage;
+  messageIndex: number;
+  turn: ViewTurn;
+}
+
+type SemanticMessageContext = StandaloneMessageContext | TurnMessageContext;
+type TurnMetadataMode = "source" | "scoped";
+
+function getStartedAt(message: MessageTimingSource): number {
   return message.startedAt ?? message.createdAt;
-}
-
-function getSyntheticTurnStatus(messages: ViewMessage[]): ViewTurnStatus {
-  if (messages.some((message) => message.kind === "error")) {
-    return "error";
-  }
-  if (
-    messages.some((message) =>
-      "status" in message &&
-      (message.status === "pending" || message.status === "streaming")
-    )
-  ) {
-    return "pending";
-  }
-  return "completed";
-}
-
-function syntheticTurnFromMessages(
-  turnId: string,
-  messages: ViewMessage[],
-): ViewTurn {
-  const firstMessage = messages[0];
-  if (!firstMessage) {
-    throw new Error(`Cannot build synthetic projection turn ${turnId} without messages`);
-  }
-  const sourceSeqStart = Math.min(...messages.map((message) => message.sourceSeqStart));
-  const sourceSeqEnd = Math.max(...messages.map((message) => message.sourceSeqEnd));
-  const startedAt = Math.min(...messages.map((message) => getStartedAt(message)));
-  const createdAt = Math.max(...messages.map((message) => message.createdAt));
-  const status = getSyntheticTurnStatus(messages);
-  return {
-    turnId,
-    threadId: firstMessage.threadId,
-    sourceSeqStart,
-    sourceSeqEnd,
-    startedAt,
-    createdAt,
-    completedAt: status === "pending" ? null : createdAt,
-    status,
-    summaryCount: 0,
-    messages,
-  };
-}
-
-function projectionFromMessages(messages: ViewMessage[]): ViewProjection {
-  const entries: ViewProjection["entries"] = [];
-  const turnMessagesById = new Map<string, ViewMessage[]>();
-  const emittedTurnIds = new Set<string>();
-
-  for (const message of messages) {
-    if (!message.turnId) {
-      entries.push({ kind: "message", message });
-      continue;
-    }
-
-    const turnMessages = turnMessagesById.get(message.turnId) ?? [];
-    turnMessages.push(message);
-    turnMessagesById.set(message.turnId, turnMessages);
-    if (!emittedTurnIds.has(message.turnId)) {
-      emittedTurnIds.add(message.turnId);
-      entries.push({
-        kind: "turn",
-        turn: syntheticTurnFromMessages(message.turnId, turnMessages),
-      });
-    }
-  }
-
-  return {
-    entries: entries.map((entry) => {
-      if (entry.kind === "message") {
-        return entry;
-      }
-      const messagesForTurn = turnMessagesById.get(entry.turn.turnId) ?? [];
-      return {
-        kind: "turn",
-        turn: syntheticTurnFromMessages(entry.turn.turnId, messagesForTurn),
-      };
-    }),
-  };
 }
 
 function mergeTaskMessages(
@@ -164,12 +108,23 @@ function isDelegationCandidate(
   );
 }
 
+function maybeStartedAt(
+  message: ViewToolCallMessage,
+  childBounds: ProjectionMessageBounds | null,
+): number | undefined {
+  if (childBounds) {
+    return Math.min(getStartedAt(message), childBounds.startedAt);
+  }
+  return message.startedAt;
+}
+
 function toDelegationMessage(
   message: ViewToolCallMessage,
   childProjection: ViewProjection,
 ): ViewDelegationMessage {
   const childBounds = getProjectionMessageBounds(childProjection);
-  return {
+  const startedAt = maybeStartedAt(message, childBounds);
+  const delegation: ViewDelegationMessage = {
     kind: "delegation",
     id: message.id,
     threadId: message.threadId,
@@ -182,13 +137,6 @@ function toDelegationMessage(
     createdAt: childBounds
       ? Math.max(message.createdAt, childBounds.createdAt)
       : message.createdAt,
-    ...(childBounds
-      ? { startedAt: Math.min(getStartedAt(message), childBounds.startedAt) }
-      : message.startedAt !== undefined
-        ? { startedAt: message.startedAt }
-        : {}),
-    ...(message.turnId ? { turnId: message.turnId } : {}),
-    ...(message.parentToolCallId ? { parentToolCallId: message.parentToolCallId } : {}),
     toolName: message.toolName,
     callId: message.callId,
     command: message.command,
@@ -200,6 +148,16 @@ function toDelegationMessage(
     status: message.status,
     childProjection,
   };
+  if (startedAt !== undefined) {
+    delegation.startedAt = startedAt;
+  }
+  if (message.turnId) {
+    delegation.turnId = message.turnId;
+  }
+  if (message.parentToolCallId) {
+    delegation.parentToolCallId = message.parentToolCallId;
+  }
+  return delegation;
 }
 
 function getEntryMessages(entry: ViewTimelineEntry): readonly ViewMessage[] {
@@ -213,18 +171,6 @@ function getEntryMessages(entry: ViewTimelineEntry): readonly ViewMessage[] {
     return [entry.turn.terminalMessage];
   }
   return [];
-}
-
-function collectProjectionMessages(projection: ViewProjection): IndexedMessage[] {
-  const messages: IndexedMessage[] = [];
-  let index = 0;
-  for (const entry of projection.entries) {
-    for (const message of getEntryMessages(entry)) {
-      messages.push({ index, message });
-      index += 1;
-    }
-  }
-  return messages;
 }
 
 function getProjectionMessageBounds(
@@ -252,144 +198,304 @@ function getProjectionMessageBounds(
   return bounds;
 }
 
-function collectDescendantMessageIds(
-  callId: string,
-  childIdsByParentCallId: Map<string, string[]>,
-  messagesById: Map<string, ViewMessage>,
-): Set<string> {
-  const descendantIds = new Set<string>();
-  const pendingIds = [...(childIdsByParentCallId.get(callId) ?? [])];
-
-  while (pendingIds.length > 0) {
-    const messageId = pendingIds.pop();
-    if (!messageId || descendantIds.has(messageId)) {
-      continue;
-    }
-
-    descendantIds.add(messageId);
-    const message = messagesById.get(messageId);
-    if (message && isDelegationCandidate(message)) {
-      pendingIds.push(...(childIdsByParentCallId.get(message.callId) ?? []));
-    }
+function getMessageStatus(message: ViewMessage): ViewMessageStatus {
+  switch (message.kind) {
+    case "assistant-reasoning":
+    case "assistant-text":
+    case "tool-exploring":
+    case "tool-call":
+    case "web-search":
+    case "file-edit":
+    case "tasks":
+    case "delegation":
+      return message.status;
+    case "operation":
+      return message.status ?? "completed";
+    case "error":
+      return "error";
+    case "user":
+    case "debug/raw-event":
+      return "completed";
   }
-
-  return descendantIds;
 }
 
-function filterProjectionMessages(
-  projection: ViewProjection,
-  includedMessageIds: Set<string>,
-  transformMessage: (message: ViewMessage) => ViewMessage,
-): ViewProjection {
-  const entries: ViewTimelineEntry[] = [];
+function getScopedTurnStatus(messages: ViewMessage[]): ViewTurnStatus {
+  const statuses = messages.map((message) => getMessageStatus(message));
+  if (statuses.includes("error")) {
+    return "error";
+  }
+  if (statuses.includes("pending") || statuses.includes("streaming")) {
+    return "pending";
+  }
+  if (statuses.includes("interrupted")) {
+    return "interrupted";
+  }
+  return "completed";
+}
 
-  for (const entry of projection.entries) {
-    if (entry.kind === "message") {
-      if (includedMessageIds.has(entry.message.id)) {
-        entries.push({
-          kind: "message",
-          message: transformMessage(entry.message),
-        });
-      }
+function getDurationMs(
+  startedAt: number,
+  completedAt: number | null,
+): number | undefined {
+  if (completedAt === null) {
+    return undefined;
+  }
+  return Math.max(0, completedAt - startedAt);
+}
+
+function getProjectionMessageSummaryCount(message: ViewMessage): number {
+  if (message.kind === "tool-exploring") {
+    return Math.max(1, message.calls.length);
+  }
+  if (message.kind === "file-edit") {
+    return Math.max(1, message.changes.length);
+  }
+  return 1;
+}
+
+function getProjectionSummaryCount(
+  messages: ViewMessage[],
+  terminalMessage: ViewMessage | undefined,
+): number {
+  let count = 0;
+  for (const message of messages) {
+    if (terminalMessage && message.id === terminalMessage.id) {
+      break;
+    }
+    if (isTimelineUngroupableMessage(message)) {
       continue;
     }
+    count += getProjectionMessageSummaryCount(message);
+  }
+  return count;
+}
 
-    const messages = getEntryMessages(entry)
-      .filter((message) => includedMessageIds.has(message.id))
-      .map((message) => transformMessage(message));
-    if (messages.length === 0) {
-      continue;
-    }
-
-    entries.push({
-      kind: "turn",
-      turn: {
-        ...entry.turn,
-        messages,
-      },
-    });
+function buildScopedTurn(
+  sourceTurn: ViewTurn,
+  messages: ViewMessage[],
+): ViewTurn {
+  const firstMessage = messages[0];
+  if (!firstMessage) {
+    throw new Error(
+      `Cannot build scoped projection turn ${sourceTurn.turnId} without messages`,
+    );
   }
 
-  return { entries };
+  const sourceSeqStart = Math.min(...messages.map((message) => message.sourceSeqStart));
+  const sourceSeqEnd = Math.max(...messages.map((message) => message.sourceSeqEnd));
+  const startedAt = Math.min(...messages.map((message) => getStartedAt(message)));
+  const createdAt = Math.max(...messages.map((message) => message.createdAt));
+  const status = getScopedTurnStatus(messages);
+  const completedAt = status === "pending" ? null : createdAt;
+  const terminalMessage = findLastTerminalTimelineMessage(messages);
+  const turn: ViewTurn = {
+    turnId: sourceTurn.turnId,
+    threadId: firstMessage.threadId,
+    sourceSeqStart,
+    sourceSeqEnd,
+    startedAt,
+    createdAt,
+    completedAt,
+    status,
+    summaryCount: getProjectionSummaryCount(messages, terminalMessage),
+    messages,
+  };
+
+  if (terminalMessage) {
+    turn.terminalMessage = terminalMessage;
+  }
+  const durationMs = getDurationMs(startedAt, completedAt);
+  if (durationMs !== undefined) {
+    turn.durationMs = durationMs;
+  }
+  return turn;
+}
+
+function buildSourceTurn(
+  sourceTurn: ViewTurn,
+  messages: ViewMessage[],
+): ViewTurn {
+  const terminalMessage = findLastTerminalTimelineMessage(messages);
+  const turn: ViewTurn = {
+    ...sourceTurn,
+    summaryCount: getProjectionSummaryCount(messages, terminalMessage),
+    messages,
+  };
+  delete turn.terminalMessage;
+  if (terminalMessage) {
+    turn.terminalMessage = terminalMessage;
+  }
+  return turn;
+}
+
+function collectProjectionMessageContexts(
+  projection: ViewProjection,
+): SemanticMessageContext[] {
+  const contexts: SemanticMessageContext[] = [];
+  let messageIndex = 0;
+
+  projection.entries.forEach((entry, entryIndex) => {
+    if (entry.kind === "message") {
+      contexts.push({
+        kind: "message",
+        entryIndex,
+        message: entry.message,
+        messageIndex,
+      });
+      messageIndex += 1;
+      return;
+    }
+
+    for (const message of getEntryMessages(entry)) {
+      contexts.push({
+        kind: "turn",
+        entryIndex,
+        message,
+        messageIndex,
+        turn: entry.turn,
+      });
+      messageIndex += 1;
+    }
+  });
+
+  return contexts;
+}
+
+function collectFlatMessageContexts(
+  messages: ViewMessage[],
+): SemanticMessageContext[] {
+  return messages.map((message, index) => ({
+    kind: "message",
+    entryIndex: index,
+    message,
+    messageIndex: index,
+  }));
+}
+
+function isSameTurnEntry(
+  left: SemanticMessageContext,
+  right: SemanticMessageContext,
+): right is TurnMessageContext {
+  return (
+    left.kind === "turn" &&
+    right.kind === "turn" &&
+    left.entryIndex === right.entryIndex
+  );
+}
+
+class SemanticProjectionBuilder {
+  private readonly attachedMessageIds = new Set<string>();
+  private readonly childrenByParentCallId = new Map<string, SemanticMessageContext[]>();
+  private readonly rootContexts: SemanticMessageContext[];
+
+  constructor(contexts: SemanticMessageContext[]) {
+    const delegationCallIds = new Set(
+      contexts
+        .map((context) => context.message)
+        .filter(isDelegationCandidate)
+        .map((message) => message.callId),
+    );
+
+    for (const context of contexts) {
+      const parentToolCallId = context.message.parentToolCallId;
+      if (!parentToolCallId || !delegationCallIds.has(parentToolCallId)) {
+        continue;
+      }
+
+      const children = this.childrenByParentCallId.get(parentToolCallId) ?? [];
+      children.push(context);
+      this.childrenByParentCallId.set(parentToolCallId, children);
+      this.attachedMessageIds.add(context.message.id);
+    }
+
+    this.rootContexts = contexts.filter((context) =>
+      !this.attachedMessageIds.has(context.message.id)
+    );
+  }
+
+  buildRootProjection(): ViewProjection {
+    return this.buildProjection(this.rootContexts, "source");
+  }
+
+  buildRootMessages(): ViewMessage[] {
+    return this.rootContexts.map((context) =>
+      this.toSemanticMessage(context.message)
+    );
+  }
+
+  private buildProjection(
+    contexts: SemanticMessageContext[],
+    turnMetadataMode: TurnMetadataMode,
+  ): ViewProjection {
+    const entries: ViewTimelineEntry[] = [];
+    let index = 0;
+
+    while (index < contexts.length) {
+      const context = contexts[index];
+      if (!context) {
+        break;
+      }
+
+      if (context.kind === "message") {
+        entries.push({
+          kind: "message",
+          message: this.toSemanticMessage(context.message),
+        });
+        index += 1;
+        continue;
+      }
+
+      const sourceTurn = context.turn;
+      const messages: ViewMessage[] = [];
+      messages.push(this.toSemanticMessage(context.message));
+      index += 1;
+
+      while (index < contexts.length) {
+        const nextContext = contexts[index];
+        if (!nextContext || !isSameTurnEntry(context, nextContext)) {
+          break;
+        }
+        messages.push(this.toSemanticMessage(nextContext.message));
+        index += 1;
+      }
+
+      entries.push({
+        kind: "turn",
+        turn: turnMetadataMode === "source"
+          ? buildSourceTurn(sourceTurn, messages)
+          : buildScopedTurn(sourceTurn, messages),
+      });
+    }
+
+    return { entries };
+  }
+
+  private toSemanticMessage(message: ViewMessage): ViewMessage {
+    if (!isDelegationCandidate(message)) {
+      return message;
+    }
+
+    const childProjection = this.buildProjection(
+      this.childrenByParentCallId.get(message.callId) ?? [],
+      "scoped",
+    );
+    return toDelegationMessage(message, childProjection);
+  }
 }
 
 export function normalizeSemanticViewProjection(
   projection: ViewProjection,
 ): ViewProjection {
-  const indexedMessages = collectProjectionMessages(projection);
-  const messagesById = new Map(
-    indexedMessages.map((entry) => [entry.message.id, entry.message]),
-  );
-  const delegationCallIds = new Set(
-    indexedMessages
-      .map((entry) => entry.message)
-      .filter(isDelegationCandidate)
-      .map((message) => message.callId),
-  );
-  const childIdsByParentCallId = new Map<string, string[]>();
-  const attachedIds = new Set<string>();
-
-  for (const { message } of indexedMessages) {
-    const parentToolCallId = message.parentToolCallId;
-    if (!parentToolCallId || !delegationCallIds.has(parentToolCallId)) {
-      continue;
-    }
-
-    const existing = childIdsByParentCallId.get(parentToolCallId) ?? [];
-    existing.push(message.id);
-    childIdsByParentCallId.set(parentToolCallId, existing);
-    attachedIds.add(message.id);
-  }
-
-  const rootIds = new Set(
-    indexedMessages
-      .filter((entry) => !attachedIds.has(entry.message.id))
-      .map((entry) => entry.message.id),
-  );
-
-  const toSemanticMessage = (message: ViewMessage): ViewMessage => {
-    if (!isDelegationCandidate(message)) {
-      return message;
-    }
-
-    const descendantIds = collectDescendantMessageIds(
-      message.callId,
-      childIdsByParentCallId,
-      messagesById,
-    );
-    const childProjection = normalizeSemanticViewProjection(
-      filterProjectionMessages(
-        projection,
-        descendantIds,
-        (childMessage) => childMessage,
-      ),
-    );
-    return toDelegationMessage(message, childProjection);
-  };
-
-  return filterProjectionMessages(projection, rootIds, toSemanticMessage);
-}
-
-function flattenTopLevelProjectionMessages(projection: ViewProjection): ViewMessage[] {
-  const messages: ViewMessage[] = [];
-  for (const entry of projection.entries) {
-    if (entry.kind === "message") {
-      messages.push(entry.message);
-      continue;
-    }
-    messages.push(...getEntryMessages(entry));
-  }
-  return messages;
+  return new SemanticProjectionBuilder(
+    collectProjectionMessageContexts(projection),
+  ).buildRootProjection();
 }
 
 export function normalizeSemanticViewMessages(
   messages: ViewMessage[],
 ): ViewMessage[] {
-  return flattenTopLevelProjectionMessages(
-    normalizeSemanticViewProjection(
-      projectionFromMessages(
-        sortViewMessagesBySource(compactTaskMessages(messages)),
-      ),
-    ),
-  );
+  const orderedMessages = sortViewMessagesBySource(compactTaskMessages(messages));
+  return new SemanticProjectionBuilder(
+    collectFlatMessageContexts(orderedMessages),
+  ).buildRootMessages();
 }
