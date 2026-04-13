@@ -2,10 +2,16 @@ import {
   buildTimelineRows,
   extractThreadContextWindowUsage,
   TIMELINE_NOISE_EVENT_TYPES,
-  toViewMessages,
+  toViewProjection,
   type ThreadEventWithMeta,
 } from "@bb/core-ui";
-import type { Thread, ViewMessage } from "@bb/domain";
+import type {
+  Thread,
+  TimelineRow,
+  TimelineToolGroupRow,
+  ViewMessage,
+  ViewProjection,
+} from "@bb/domain";
 import type {
   ThreadTimelineResponse,
   TimelineToolDetailsResponse,
@@ -23,26 +29,64 @@ import {
 
 const MIN_AGENT_MESSAGE_DELTAS_FOR_SUMMARY_COMPACTION = 1000;
 
+interface TimelineSourceSeqRange {
+  sourceSeqEnd: number;
+  sourceSeqStart: number;
+}
+
 /**
  * For manager threads in the default (non-debug) view, only show user messages,
  * message_user output, and lifecycle operations (provisioning, compaction).
  * Everything else (assistant text, delegations, other tool calls, etc.) is
  * internal manager machinery.
  */
-function filterManagerConversationMessages(
-  messages: ViewMessage[],
-): ViewMessage[] {
-  return messages.filter((message) => {
-    if (message.kind === "user") return true;
-    if (message.kind === "operation") return true;
-    if (
-      message.kind === "assistant-text" &&
-      message.isManagerUserMessage === true
-    ) {
-      return true;
+function isManagerConversationMessage(message: ViewMessage): boolean {
+  if (message.kind === "user") return true;
+  if (message.kind === "operation") return true;
+  if (
+    message.kind === "assistant-text" &&
+    message.isManagerUserMessage === true
+  ) {
+    return true;
+  }
+  return false;
+}
+
+function filterManagerConversationRows(rows: TimelineRow[]): TimelineRow[] {
+  return rows.filter(
+    (row): row is Extract<TimelineRow, { kind: "message" }> =>
+      row.kind === "message" && isManagerConversationMessage(row.message),
+  );
+}
+
+function flattenProjectionMessages(projection: ViewProjection): ViewMessage[] {
+  const messages: ViewMessage[] = [];
+  for (const entry of projection.entries) {
+    if (entry.kind === "message") {
+      messages.push(entry.message);
+      continue;
     }
-    return false;
-  });
+    if (entry.turn.messages) {
+      messages.push(...entry.turn.messages);
+      continue;
+    }
+    if (entry.turn.terminalMessage) {
+      messages.push(entry.turn.terminalMessage);
+    }
+  }
+  return messages;
+}
+
+function findMatchingToolGroupRow(
+  rows: TimelineRow[],
+  options: TimelineSourceSeqRange,
+): TimelineToolGroupRow | null {
+  return rows.find(
+    (row): row is TimelineToolGroupRow =>
+      row.kind === "tool-group" &&
+      row.sourceSeqStart === options.sourceSeqStart &&
+      row.sourceSeqEnd === options.sourceSeqEnd,
+  ) ?? null;
 }
 
 export function toThreadEventWithMeta(
@@ -121,26 +165,28 @@ export function buildThreadTimeline(
       : { excludedTypes: TIMELINE_NOISE_EVENT_TYPES }),
   });
   const eventRows = compactSummaryStoredEventRows(rawEventRows);
-  const allMessages = toViewMessages(
+  const projection = toViewProjection(
     eventRows.map((row) => toThreadEventWithMeta(row)),
     {
       includeInternalSystemMessages: options.showAllManagerEvents,
       threadStatus: thread.status,
       threadType: thread.type,
+      turnMessageDetail: "summary",
     },
   );
-  const messages =
+  const allRows = buildTimelineRows(projection, {
+    includeToolGroupMessages: options.includeToolGroupMessages ?? false,
+  });
+  const rows =
     thread.type === "manager" && !options.showAllManagerEvents
-      ? filterManagerConversationMessages(allMessages)
-      : allMessages;
+      ? filterManagerConversationRows(allRows)
+      : allRows;
   const contextWindowUsageRows = listContextWindowUsageRows(db, {
     threadId: thread.id,
   });
 
   return {
-    rows: buildTimelineRows(messages, {
-      includeToolGroupMessages: options.includeToolGroupMessages ?? false,
-    }),
+    rows,
     contextWindowUsage:
       extractThreadContextWindowUsage(
         contextWindowUsageRows.map((row) => parseStoredEventRow(row)),
@@ -163,14 +209,24 @@ export function buildTimelineToolDetails(
     seqEnd: options.sourceSeqEnd,
   });
 
+  const projection = toViewProjection(
+    eventRows.map((row) => toThreadEventWithMeta(row)),
+    {
+      includeInternalSystemMessages: options.showAllManagerEvents,
+      threadStatus: thread.status,
+      threadType: thread.type,
+      turnMessageDetail: "full",
+    },
+  );
+  const rows = buildTimelineRows(projection, {
+    includeToolGroupMessages: true,
+  });
+  const matchingToolGroup = findMatchingToolGroupRow(rows, {
+    sourceSeqStart: options.sourceSeqStart,
+    sourceSeqEnd: options.sourceSeqEnd,
+  });
+
   return {
-    messages: toViewMessages(
-      eventRows.map((row) => toThreadEventWithMeta(row)),
-      {
-        includeInternalSystemMessages: options.showAllManagerEvents,
-        threadStatus: thread.status,
-        threadType: thread.type,
-      },
-    ),
+    messages: matchingToolGroup?.messages ?? flattenProjectionMessages(projection),
   };
 }

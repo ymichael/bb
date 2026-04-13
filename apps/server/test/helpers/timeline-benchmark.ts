@@ -18,6 +18,7 @@ import {
   buildTimelineRows,
   TIMELINE_NOISE_EVENT_TYPES,
   toViewMessages,
+  toViewProjection,
   type ThreadEventWithMeta,
 } from "@bb/core-ui";
 import { replayFixtures } from "@bb/agent-provider-audit";
@@ -153,10 +154,6 @@ function createTimelineBenchmarkScenario(
   const decodedSummaryEvents = summaryEventRows.map((row) =>
     toThreadEventWithMeta(row),
   );
-  const summaryMessages = toViewMessages(decodedSummaryEvents, {
-    threadStatus: thread.status,
-    threadType: thread.type,
-  });
   const buildSummary = () => buildThreadTimeline(db, thread, {});
 
   const buildAndSerializeSummary = () => JSON.stringify(buildSummary());
@@ -177,17 +174,34 @@ function createTimelineBenchmarkScenario(
       threadStatus: thread.status,
       threadType: thread.type,
     });
+  const buildFullSummaryRowsOnly = () =>
+    buildTimelineRows(
+      toViewProjection(decodedSummaryEvents, {
+        threadStatus: thread.status,
+        threadType: thread.type,
+        turnMessageDetail: "full",
+      }),
+      {
+        includeToolGroupMessages: true,
+      },
+    );
   const buildSummaryRowsOnly = () =>
-    buildTimelineRows(summaryMessages, {
-      includeToolGroupMessages: false,
-    });
+    buildTimelineRows(
+      toViewProjection(decodedSummaryEvents, {
+        threadStatus: thread.status,
+        threadType: thread.type,
+        turnMessageDetail: "summary",
+      }),
+      {
+        includeToolGroupMessages: false,
+      },
+    );
   const summaryBytes = Buffer.byteLength(buildAndSerializeSummary(), "utf8");
   const fullBytes = Buffer.byteLength(
-    JSON.stringify(
-      buildThreadTimeline(db, thread, {
-        includeToolGroupMessages: true,
-      }),
-    ),
+    JSON.stringify({
+      ...buildSummary(),
+      rows: buildFullSummaryRowsOnly(),
+    }),
     "utf8",
   );
 

@@ -68,6 +68,7 @@ export { extractThreadContextWindowUsage } from "./thread-context-window-usage.j
 
 export {
   buildTimelineRows,
+  buildTimelineRowsFromMessagesForNestedDisplay,
 } from "./thread-detail-rows.js";
 export type {
   BuildTimelineRowsOptions,

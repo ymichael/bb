@@ -16,7 +16,7 @@ import type {
 } from "@bb/domain";
 import { durationToCompactString } from "./format-helpers.js";
 import { taskStatusGlyph } from "./task-status.js";
-import { buildTimelineRows } from "./thread-detail-rows.js";
+import { buildTimelineRowsFromMessagesForNestedDisplay } from "./thread-detail-rows.js";
 import { buildToolGroupSummaryParts } from "./timeline-summary.js";
 import {
   buildExploringDetailLines,
@@ -131,7 +131,7 @@ function toTimelineRows(entries: TimelineTextEntry[]): TimelineRow[] {
     messages.push(entry);
   }
 
-  return buildTimelineRows(messages);
+  return buildTimelineRowsFromMessagesForNestedDisplay(messages);
 }
 
 function formatUser(msg: ViewUserMessage, _verbose: boolean, color: boolean): string {
@@ -314,7 +314,10 @@ function formatDelegation(
     return lines.join("\n");
   }
 
-  for (const row of buildTimelineRows(msg.children, { collapseAll: true })) {
+  for (const row of buildTimelineRowsFromMessagesForNestedDisplay(
+    msg.children,
+    { collapseAll: true },
+  )) {
     const block = formatTimelineRow(row, true, color);
     if (block) {
       lines.push(indentBlock(block, "  "));

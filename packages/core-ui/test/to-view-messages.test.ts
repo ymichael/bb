@@ -3,7 +3,9 @@ import type { ThreadEventRow } from "@bb/domain";
 import { decodeRow } from "../src/event-decode.js";
 import { toViewMessages, toViewProjection } from "../src/to-view-messages.js";
 import type { ThreadEventWithMeta } from "../src/to-view-messages.js";
-import { buildTimelineRows } from "../src/thread-detail-rows.js";
+import {
+  buildTimelineRowsFromMessagesForNestedDisplay as buildTimelineRows,
+} from "../src/thread-detail-rows.js";
 import type { ViewMessage } from "@bb/domain";
 
 /** Convert raw ThreadEventRow[] (test fixtures / inline data) to typed input for toViewMessages. */

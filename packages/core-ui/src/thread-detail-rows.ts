@@ -2,6 +2,8 @@ import type {
   TimelineRow,
   TimelineToolGroupRow,
   ViewMessage,
+  ViewProjection,
+  ViewTurn,
 } from "@bb/domain";
 import { assertNever } from "./assert-never.js";
 import { getMessageStartedAt } from "./format-helpers.js";
@@ -301,7 +303,7 @@ function getToolGroupStatus(messages: ViewMessage[]): TimelineToolGroupRow["stat
   );
 }
 
-function isActiveTurn(messages: IndexedTurnMessage[]): boolean {
+function isLossyActiveTurn(messages: IndexedTurnMessage[]): boolean {
   return messages.some(({ message }) => getGroupMessageStatus(message) === "pending");
 }
 
@@ -318,6 +320,13 @@ interface IndexedTurnMessageGroup {
 interface CollapsedTurnGroup {
   messages: ViewMessage[];
   turnId: string;
+}
+
+interface BuildTurnToolGroupRowArgs {
+  includeToolGroupMessages: boolean;
+  messages: ViewMessage[];
+  summaryCount: number;
+  turn: ViewTurn;
 }
 
 function collectMessagesByTurnSegment(messages: ViewMessage[]): IndexedTurnMessageGroup[] {
@@ -367,7 +376,162 @@ function findLastTerminalIndex(turnMessages: IndexedTurnMessage[]): number | nul
   return null;
 }
 
+function prepareTimelineMessages(messages: ViewMessage[]): ViewMessage[] {
+  const provisioningMergedMessages = mergeProvisioningOperations(messages);
+  const reconnectMergedMessages = mergeConsecutiveReconnectErrors(
+    provisioningMergedMessages,
+  );
+  return mergeConsecutiveToolActivityMessages(reconnectMergedMessages);
+}
+
+function getTurnToolGroupRowId(turn: ViewTurn): string {
+  return `${turn.turnId}:tool-group:${turn.sourceSeqStart}`;
+}
+
+function toMessageRow(message: ViewMessage): TimelineRow {
+  return {
+    kind: "message",
+    id: message.id,
+    message,
+  };
+}
+
+function findLastTerminalMessage(messages: ViewMessage[]): ViewMessage | undefined {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message && isTerminalMessage(message)) {
+      return message;
+    }
+  }
+  return undefined;
+}
+
+function buildTurnToolGroupRow(
+  args: BuildTurnToolGroupRowArgs,
+): TimelineToolGroupRow {
+  const groupMessages = args.includeToolGroupMessages
+    ? mergeConsecutiveToolActivityMessages(args.messages)
+    : [];
+  return {
+    kind: "tool-group",
+    id: getTurnToolGroupRowId(args.turn),
+    turnId: args.turn.turnId,
+    summaryCount: args.summaryCount,
+    sourceSeqStart: args.turn.sourceSeqStart,
+    sourceSeqEnd: args.turn.sourceSeqEnd,
+    startedAt: args.turn.startedAt,
+    createdAt: args.turn.createdAt,
+    durationMs: args.turn.durationMs ?? getGroupDurationMs(args.messages),
+    status: args.turn.status,
+    messages: groupMessages,
+  };
+}
+
+function buildPendingTurnRows(turn: ViewTurn): TimelineRow[] {
+  return prepareTimelineMessages(turn.messages ?? []).map((message) =>
+    toMessageRow(message)
+  );
+}
+
+function buildSummaryTurnRows(
+  turn: ViewTurn,
+  includeToolGroupMessages: boolean,
+): TimelineRow[] {
+  const rows: TimelineRow[] = [];
+  if (turn.summaryCount > 0) {
+    rows.push(buildTurnToolGroupRow({
+      includeToolGroupMessages,
+      messages: turn.messages ?? [],
+      summaryCount: turn.summaryCount,
+      turn,
+    }));
+  }
+  if (turn.terminalMessage) {
+    rows.push(toMessageRow(turn.terminalMessage));
+  }
+  return rows;
+}
+
+function buildTerminalTurnRows(
+  turn: ViewTurn,
+  includeToolGroupMessages: boolean,
+): TimelineRow[] {
+  if (!turn.messages) {
+    return buildSummaryTurnRows(turn, includeToolGroupMessages);
+  }
+
+  const mergedMessages = prepareTimelineMessages(turn.messages);
+  const terminalMessage = findLastTerminalMessage(mergedMessages);
+  const collapsedMessageIndices = new Set<number>();
+  const groupedTurnMessages = mergedMessages
+    .map((message, index) => ({ index, message }))
+    .filter(({ message }) => {
+      if (isUngroupableMessage(message)) return false;
+      if (terminalMessage && message.id === terminalMessage.id) return false;
+      return true;
+    });
+  const collapsedByFirstIndex = new Map<number, ViewMessage[]>();
+
+  if (groupedTurnMessages.length > 0) {
+    for (const { index } of groupedTurnMessages) {
+      collapsedMessageIndices.add(index);
+    }
+    collapsedByFirstIndex.set(
+      groupedTurnMessages[0]!.index,
+      groupedTurnMessages.map(({ message }) => message),
+    );
+  }
+
+  const rows: TimelineRow[] = [];
+  for (const [index, message] of mergedMessages.entries()) {
+    const collapseGroup = collapsedByFirstIndex.get(index);
+    if (collapseGroup) {
+      rows.push(buildTurnToolGroupRow({
+        includeToolGroupMessages,
+        messages: collapseGroup,
+        summaryCount: getToolGroupSummaryCount(collapseGroup),
+        turn,
+      }));
+    }
+    if (collapsedMessageIndices.has(index)) {
+      continue;
+    }
+    rows.push(toMessageRow(message));
+  }
+  return rows;
+}
+
+function buildTurnRows(
+  turn: ViewTurn,
+  options: BuildTimelineRowsOptions | undefined,
+): TimelineRow[] {
+  const includeToolGroupMessages = options?.includeToolGroupMessages ?? true;
+  if (turn.status === "pending") {
+    return buildPendingTurnRows(turn);
+  }
+  return buildTerminalTurnRows(turn, includeToolGroupMessages);
+}
+
 export function buildTimelineRows(
+  projection: ViewProjection,
+  options?: BuildTimelineRowsOptions,
+): TimelineRow[] {
+  const rows: TimelineRow[] = [];
+  for (const entry of projection.entries) {
+    if (entry.kind === "message") {
+      rows.push({
+        kind: "message",
+        id: entry.message.id,
+        message: entry.message,
+      });
+      continue;
+    }
+    rows.push(...buildTurnRows(entry.turn, options));
+  }
+  return rows;
+}
+
+export function buildTimelineRowsFromMessagesForNestedDisplay(
   messages: ViewMessage[],
   options?: BuildTimelineRowsOptions,
 ): TimelineRow[] {
@@ -376,11 +540,7 @@ export function buildTimelineRows(
   // stay familiar across projections instead of showing near-duplicate status updates.
   const includeToolGroupMessages = options?.includeToolGroupMessages ?? true;
   const collapseAll = options?.collapseAll ?? false;
-  const provisioningMergedMessages = mergeProvisioningOperations(messages);
-  const reconnectMergedMessages = mergeConsecutiveReconnectErrors(
-    provisioningMergedMessages,
-  );
-  const mergedMessages = mergeConsecutiveToolActivityMessages(reconnectMergedMessages);
+  const mergedMessages = prepareTimelineMessages(messages);
 
   // Group messages by turn. In collapseAll mode, group everything
   // non-ungroupable. Otherwise find the last terminal message (assistant-text
@@ -389,7 +549,7 @@ export function buildTimelineRows(
   const collapsedMessageIndices = new Set<number>();
 
   for (const { messages: turnMessages, turnId } of collectMessagesByTurnSegment(mergedMessages)) {
-    if (isActiveTurn(turnMessages)) {
+    if (isLossyActiveTurn(turnMessages)) {
       continue;
     }
 

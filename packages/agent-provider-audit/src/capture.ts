@@ -12,6 +12,7 @@ import {
   decodeRow,
   formatTimelineAsText,
   toViewMessages,
+  toViewProjection,
 } from "@bb/core-ui";
 import {
   buildThreadEvent,
@@ -1087,7 +1088,12 @@ export function buildBundle(args: {
     threadStatus: "idle",
     includeDebugRawEvents: true,
   });
-  const timelineRows = buildTimelineRows(viewMessages);
+  const timelineRows = buildTimelineRows(
+    toViewProjection(decodedRows, {
+      threadStatus: "idle",
+      turnMessageDetail: "full",
+    }),
+  );
   const timelineText = formatTimelineAsText(timelineRows, {
     verbose: false,
     color: false,

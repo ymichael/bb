@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { buildTimelineRows, type TimelineRow } from "../src/thread-detail-rows.js";
-import type { ViewMessage, ViewProvisioningTranscriptEntry } from "@bb/domain";
+import {
+  buildTimelineRows as buildTimelineRowsFromProjection,
+  buildTimelineRowsFromMessagesForNestedDisplay as buildTimelineRows,
+  type TimelineRow,
+} from "../src/thread-detail-rows.js";
+import type {
+  ViewMessage,
+  ViewProjection,
+  ViewProvisioningTranscriptEntry,
+} from "@bb/domain";
 
 type TimelineMessageRow = Extract<TimelineRow, { kind: "message" }>;
 type TimelineToolGroupRow = Extract<TimelineRow, { kind: "tool-group" }>;
@@ -80,6 +88,132 @@ function getOperationRows(messages: ViewMessage[]): Array<Extract<ViewMessage, {
       row.kind === "message" && row.message.kind === "operation")
     .map((row) => row.message);
 }
+
+describe("buildTimelineRows projection turn lifecycle", () => {
+  it("collapses a completed turn even when a child message is still pending", () => {
+    const projection: ViewProjection = {
+      entries: [
+        {
+          kind: "turn",
+          turn: {
+            turnId: "turn-1",
+            threadId: "thread-1",
+            sourceSeqStart: 1,
+            sourceSeqEnd: 4,
+            startedAt: 1,
+            createdAt: 4,
+            completedAt: 4,
+            status: "completed",
+            summaryCount: 1,
+            durationMs: 3,
+            terminalMessage: {
+              kind: "assistant-text",
+              id: "assistant-1",
+              threadId: "thread-1",
+              sourceSeqStart: 3,
+              sourceSeqEnd: 3,
+              createdAt: 3,
+              turnId: "turn-1",
+              text: "Done.",
+              status: "completed",
+            },
+            messages: [
+              {
+                kind: "tool-call",
+                id: "tool-1",
+                threadId: "thread-1",
+                sourceSeqStart: 2,
+                sourceSeqEnd: 2,
+                createdAt: 2,
+                turnId: "turn-1",
+                toolName: "exec_command",
+                callId: "call-1",
+                command: "pnpm test",
+                status: "pending",
+              },
+              {
+                kind: "assistant-text",
+                id: "assistant-1",
+                threadId: "thread-1",
+                sourceSeqStart: 3,
+                sourceSeqEnd: 3,
+                createdAt: 3,
+                turnId: "turn-1",
+                text: "Done.",
+                status: "completed",
+              },
+            ],
+          },
+        },
+      ],
+    };
+
+    const rows = buildTimelineRowsFromProjection(projection, {
+      includeToolGroupMessages: true,
+    });
+
+    expect(rows.map((row) => row.kind)).toEqual(["tool-group", "message"]);
+    const toolGroup = expectToolGroupRow(rows[0]);
+    expect(toolGroup.status).toBe("completed");
+    expect(toolGroup.sourceSeqStart).toBe(1);
+    expect(toolGroup.sourceSeqEnd).toBe(4);
+    expect(toolGroup.messages).toHaveLength(1);
+    expect(toolGroup.messages[0]?.kind).toBe("tool-call");
+  });
+
+  it("keeps a pending turn expanded even when all current messages are terminal", () => {
+    const projection: ViewProjection = {
+      entries: [
+        {
+          kind: "turn",
+          turn: {
+            turnId: "turn-1",
+            threadId: "thread-1",
+            sourceSeqStart: 1,
+            sourceSeqEnd: 2,
+            startedAt: 1,
+            createdAt: 2,
+            completedAt: null,
+            status: "pending",
+            summaryCount: 0,
+            terminalMessage: {
+              kind: "assistant-text",
+              id: "assistant-1",
+              threadId: "thread-1",
+              sourceSeqStart: 2,
+              sourceSeqEnd: 2,
+              createdAt: 2,
+              turnId: "turn-1",
+              text: "Still checking.",
+              status: "completed",
+            },
+            messages: [
+              {
+                kind: "assistant-text",
+                id: "assistant-1",
+                threadId: "thread-1",
+                sourceSeqStart: 2,
+                sourceSeqEnd: 2,
+                createdAt: 2,
+                turnId: "turn-1",
+                text: "Still checking.",
+                status: "completed",
+              },
+            ],
+          },
+        },
+      ],
+    };
+
+    const rows = buildTimelineRowsFromProjection(projection);
+
+    expect(rows.map((row) => row.kind)).toEqual(["message"]);
+    const messageRow = expectMessageRow(rows[0]);
+    expect(expectAssistantTextMessage(messageRow.message).text).toBe(
+      "Still checking.",
+    );
+  });
+});
 
 describe("buildTimelineRows tool group collapsing", () => {
   it("collapses earlier assistant messages before the last terminal into a tool group", () => {

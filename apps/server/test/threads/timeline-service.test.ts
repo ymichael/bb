@@ -52,7 +52,9 @@ describe("buildThreadTimeline", () => {
       threadId: thread.id,
       environmentId: environment.id,
       sequence: 1,
-      type: "thread/started",
+      providerThreadId: "provider-thread-1",
+      turnId: "turn-1",
+      type: "turn/started",
       data: {},
     });
 
@@ -92,6 +94,17 @@ describe("buildThreadTimeline", () => {
       providerThreadId: "provider-thread-1",
       turnId: "turn-1",
       sequence: 1003,
+      type: "turn/completed",
+      data: {
+        status: "completed",
+      },
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-thread-1",
+      turnId: "turn-1",
+      sequence: 1004,
       type: "thread/contextWindowUsage/updated",
       data: {
         contextWindowUsage: {
@@ -234,13 +247,23 @@ describe("buildThreadTimeline", () => {
       },
     });
 
-    // Internal assistant text (should be hidden)
     seedEvent(harness.deps, {
       threadId: thread.id,
       environmentId: environment.id,
       providerThreadId: "provider-1",
       turnId: "turn-1",
       sequence: 3,
+      type: "turn/started",
+      data: {},
+    });
+
+    // Internal assistant text (should be hidden)
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-1",
+      turnId: "turn-1",
+      sequence: 4,
       type: "item/completed",
       data: {
         item: {
@@ -257,7 +280,7 @@ describe("buildThreadTimeline", () => {
       environmentId: environment.id,
       providerThreadId: "provider-1",
       turnId: "turn-1",
-      sequence: 4,
+      sequence: 5,
       type: "item/completed",
       data: {
         item: {
@@ -274,7 +297,7 @@ describe("buildThreadTimeline", () => {
     seedEvent(harness.deps, {
       threadId: thread.id,
       environmentId: environment.id,
-      sequence: 5,
+      sequence: 6,
       type: "system/manager/user_message",
       data: {
         text: "Hello from manager",
@@ -283,11 +306,23 @@ describe("buildThreadTimeline", () => {
       },
     });
 
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-1",
+      turnId: "turn-1",
+      sequence: 7,
+      type: "turn/completed",
+      data: {
+        status: "completed",
+      },
+    });
+
     // User sends a follow-up message (should be visible)
     seedEvent(harness.deps, {
       threadId: thread.id,
       environmentId: environment.id,
-      sequence: 6,
+      sequence: 8,
       type: "client/turn/requested",
       data: {
         direction: "outbound",
