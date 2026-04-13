@@ -1170,6 +1170,7 @@ describe("public thread routes", () => {
         ({ command }) => command.type === "environment.provision",
       );
       expect(queued.command).toMatchObject({
+        branchName: `bb/${createdThread.id}`,
         environmentId: createdThread.environmentId,
         sourcePath: "https://github.com/example/secondary.git",
         targetPath: `/tmp/.bb-worktrees/${project.id}/${createdThread.id}`,
@@ -1331,6 +1332,7 @@ describe("public thread routes", () => {
         ]),
       );
       expect(queued.command).toMatchObject({
+        branchName: `bb/${createdThread.id}`,
         environmentId: environment.id,
         sourcePath: "https://github.com/example/repo.git",
         targetPath: `/tmp/.bb-worktrees/${project.id}/${createdThread.id}`,

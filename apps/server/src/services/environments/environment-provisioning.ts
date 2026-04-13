@@ -603,7 +603,7 @@ export async function queueManagedEnvironmentReprovision(
     buildManagedTargetPath(source.path, args.thread.projectId, args.thread.id);
   const branchName =
     args.environment.branchName ??
-    buildManagedBranchName(args.thread.id);
+    buildManagedBranchName({ threadId: args.thread.id });
 
   if (args.thread.status === "idle") {
     tryTransition(deps.db, deps.hub, args.thread.id, "provisioning");

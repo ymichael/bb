@@ -12,12 +12,25 @@ import type {
 import type { AppDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
 import type { ThreadCreateServiceRequest } from "./thread-create-request.js";
-import { deriveTitleFallback } from "./title-generation.js";
+import {
+  deriveTitleFallback,
+  sanitizeGeneratedBranchSlug,
+} from "./title-generation.js";
 
 const REMOTE_WORKSPACE_ROOT = "/tmp/bb-managed-workspaces";
 
-export function buildManagedBranchName(threadId: string): string {
-  return `bb/${threadId}`;
+export interface ManagedBranchNameArgs {
+  branchSlug?: string | null;
+  threadId: string;
+}
+
+export function buildManagedBranchName(args: ManagedBranchNameArgs): string {
+  const branchSlug = args.branchSlug
+    ? sanitizeGeneratedBranchSlug(args.branchSlug)
+    : null;
+  return branchSlug
+    ? `bb/${branchSlug}-${args.threadId}`
+    : `bb/${args.threadId}`;
 }
 
 function isRemoteSourcePath(sourcePath: string): boolean {

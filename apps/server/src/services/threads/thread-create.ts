@@ -35,7 +35,11 @@ import {
   rememberProjectExecutionDefaultsForCreate,
   resolveProjectExecutionDefaultsForCreate,
 } from "./project-execution-defaults.js";
-import { generateThreadTitle } from "./title-generation.js";
+import {
+  applyGeneratedThreadTitle,
+  generateThreadMetadata,
+  generateThreadTitle,
+} from "./title-generation.js";
 import {
   buildManagedBranchName,
   buildEnvironmentProvisionCommand,
@@ -91,11 +95,74 @@ interface ReuseEnvironmentByHostPathArgs {
   request: ThreadCreateServiceRequest;
 }
 
+interface ManagedThreadMetadataArgs {
+  request: ThreadCreateServiceRequest;
+  threadId: string;
+}
+
+interface ManagedThreadMetadataResult {
+  branchSlug: string | null;
+}
+
+interface ScheduleGeneratedThreadTitleArgs {
+  request: ThreadCreateServiceRequest;
+  threadId: string;
+}
+
 interface CreateSandboxHostThreadArgs {
   cloneSource: GitHubRepoProjectSource;
   projectDefaults: Parameters<typeof buildExecutionOptions>[2]["projectDefaults"];
   request: ThreadCreateServiceRequest;
   sandboxType: string;
+}
+
+type ManagedThreadMetadataDeps = Pick<ThreadCreateDeps, "config" | "db" | "hub" | "logger">;
+
+const MANAGED_THREAD_METADATA_TIMEOUT_MS = 2_000;
+
+async function resolveManagedThreadMetadata(
+  deps: ManagedThreadMetadataDeps,
+  args: ManagedThreadMetadataArgs,
+): Promise<ManagedThreadMetadataResult> {
+  // Managed branch names must be known before provisioning is queued. Keep
+  // inference bounded and let branch creation fall back to bb/<threadId>.
+  const metadata = await generateThreadMetadata(deps, {
+    input: args.request.input,
+    threadId: args.threadId,
+    timeoutMs: MANAGED_THREAD_METADATA_TIMEOUT_MS,
+  });
+
+  if (!args.request.title && metadata?.title) {
+    try {
+      applyGeneratedThreadTitle(deps, {
+        threadId: args.threadId,
+        title: metadata.title,
+      });
+    } catch (error) {
+      deps.logger.warn(
+        { err: error, threadId: args.threadId },
+        "Failed to apply generated thread title",
+      );
+    }
+  }
+
+  return {
+    branchSlug: metadata?.branchSlug ?? null,
+  };
+}
+
+function scheduleGeneratedThreadTitle(
+  deps: ThreadCreateDeps,
+  args: ScheduleGeneratedThreadTitleArgs,
+): void {
+  if (args.request.title) {
+    return;
+  }
+
+  void generateThreadTitle(deps, {
+    threadId: args.threadId,
+    input: args.request.input,
+  });
 }
 
 async function createThreadInEnvironment(
@@ -183,13 +250,6 @@ async function createThreadInEnvironment(
     request: args.request,
   });
 
-  if (!args.request.title) {
-    void generateThreadTitle(deps, {
-      threadId: thread.id,
-      input: args.request.input,
-    });
-  }
-
   return getThreadSafe(deps, thread.id);
 }
 
@@ -211,21 +271,31 @@ async function reuseEnvironmentByHostPath(
   }
 
   if (existing.status === "ready") {
-    return createThreadInEnvironment(deps, {
+    const thread = await createThreadInEnvironment(deps, {
       environment: existing,
       projectDefaults: args.projectDefaults,
       request: args.request,
       threadStatus: "created",
     });
+    scheduleGeneratedThreadTitle(deps, {
+      request: args.request,
+      threadId: thread.id,
+    });
+    return thread;
   }
 
   if (existing.status === "provisioning") {
-    return createThreadInEnvironment(deps, {
+    const thread = await createThreadInEnvironment(deps, {
       environment: existing,
       projectDefaults: args.projectDefaults,
       request: args.request,
       threadStatus: "provisioning",
     });
+    scheduleGeneratedThreadTitle(deps, {
+      request: args.request,
+      threadId: thread.id,
+    });
+    return thread;
   }
 
   throw new ApiError(
@@ -309,9 +379,16 @@ async function createSandboxHostThread(
   }
 
   const provisionEventSequence = getHighWaterMarks(deps.db, [thread.id])[thread.id] ?? 0;
+  const managedMetadata = await resolveManagedThreadMetadata(deps, {
+    request: args.request,
+    threadId: thread.id,
+  });
 
   const command = buildEnvironmentProvisionCommand({
-    branchName: buildManagedBranchName(thread.id),
+    branchName: buildManagedBranchName({
+      branchSlug: managedMetadata.branchSlug,
+      threadId: thread.id,
+    }),
     environmentId: environment.id,
     hostId,
     initiator: { threadId: thread.id, eventSequence: provisionEventSequence },
@@ -332,7 +409,7 @@ async function createSandboxHostThread(
     environmentId: environment.id,
   });
 
-  return thread;
+  return getThreadSafe(deps, thread.id);
 }
 
 export async function createThreadFromRequest(
@@ -372,24 +449,34 @@ export async function createThreadFromRequest(
     const environment = resolvedEnvironment.environment;
     if (environment.status === "provisioning") {
       requireNonDestroyedHostWithStatus(deps.db, environment.hostId);
-      return createThreadInEnvironment(deps, {
+      const thread = await createThreadInEnvironment(deps, {
         environment,
         projectDefaults: executionDefaults,
         request,
         threadStatus: "provisioning",
       });
+      scheduleGeneratedThreadTitle(deps, {
+        request,
+        threadId: thread.id,
+      });
+      return thread;
     }
 
     if (environment.status === "ready") {
       if (!environment.path) {
         throw new ApiError(409, "invalid_request", "Environment is not ready");
       }
-      return createThreadInEnvironment(deps, {
+      const thread = await createThreadInEnvironment(deps, {
         environment,
         projectDefaults: executionDefaults,
         request,
         threadStatus: "created",
       });
+      scheduleGeneratedThreadTitle(deps, {
+        request,
+        threadId: thread.id,
+      });
+      return thread;
     }
     throw new ApiError(409, "invalid_request", "Environment is not ready");
   }
@@ -494,6 +581,10 @@ export async function createThreadFromRequest(
       if (!managedSource) {
         throw new Error("Validated managed host request is missing a local source");
       }
+      const managedMetadata = await resolveManagedThreadMetadata(deps, {
+        request,
+        threadId: thread.id,
+      });
       provisionCommand = buildEnvironmentProvisionCommand({
         environmentId: environment.id,
         hostId,
@@ -505,7 +596,10 @@ export async function createThreadFromRequest(
           request.projectId,
           thread.id,
         ),
-        branchName: buildManagedBranchName(thread.id),
+        branchName: buildManagedBranchName({
+          branchSlug: managedMetadata.branchSlug,
+          threadId: thread.id,
+        }),
         setupTimeoutMs: SETUP_TIMEOUT_MS,
       });
       break;
@@ -529,10 +623,10 @@ export async function createThreadFromRequest(
     request,
   });
 
-  if (!request.title) {
-    void generateThreadTitle(deps, {
+  if (workspace.type === "unmanaged") {
+    scheduleGeneratedThreadTitle(deps, {
+      request,
       threadId: thread.id,
-      input: request.input,
     });
   }
   return getThreadSafe(deps, thread.id);

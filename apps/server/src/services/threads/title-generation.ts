@@ -12,6 +12,37 @@ import { queueThreadRenameCommand } from "./thread-commands.js";
 import { appendThreadTitleUpdatedEvent } from "./thread-events.js";
 
 const MIN_TITLE_GENERATION_WORDS = 5;
+const MAX_BRANCH_SLUG_LENGTH = 48;
+
+type ThreadMetadataGenerationDeps = Pick<AppDeps, "config" | "logger">;
+type ThreadTitleApplyDeps = Pick<AppDeps, "db" | "hub">;
+type ThreadTitleGenerationDeps = Pick<AppDeps, "config" | "db" | "hub" | "logger">;
+
+export interface ApplyGeneratedThreadTitleArgs {
+  threadId: string;
+  title: string;
+}
+
+export interface ThreadMetadataGenerationArgs {
+  input: PromptInput[];
+  threadId: string;
+  timeoutMs?: number;
+}
+
+export interface ThreadTitleGenerationArgs {
+  input: PromptInput[];
+  threadId: string;
+}
+
+export interface GeneratedThreadMetadata {
+  branchSlug?: string;
+  title?: string;
+}
+
+interface RawGeneratedThreadMetadata {
+  branchSlug?: string;
+  title?: string;
+}
 
 function cleanPromptText(input: PromptInput[]): string {
   return input
@@ -39,28 +70,55 @@ export function shouldGenerateThreadTitle(input: PromptInput[]): boolean {
   return text.split(/\s+/u).length >= MIN_TITLE_GENERATION_WORDS;
 }
 
-const titleSchema = Type.Object({
+export function sanitizeGeneratedBranchSlug(value: string): string | null {
+  const slug = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/gu, "-")
+    .replace(/-{2,}/gu, "-")
+    .replace(/^-+|-+$/gu, "")
+    .slice(0, MAX_BRANCH_SLUG_LENGTH)
+    .replace(/-+$/u, "");
+
+  return slug.length > 0 ? slug : null;
+}
+
+const threadMetadataSchema = Type.Object({
+  branchSlug: Type.Optional(Type.String()),
   title: Type.Optional(Type.String()),
 });
 
-export async function generateThreadTitle(
-  deps: Pick<AppDeps, "config" | "db" | "hub" | "logger">,
-  args: {
-    input: PromptInput[];
-    threadId: string;
-  },
-): Promise<void> {
-  const fallback = deriveTitleFallback(args.input);
-  if (!fallback) {
-    return;
-  }
-  if (!shouldGenerateThreadTitle(args.input)) {
-    return;
+function normalizeGeneratedThreadMetadata(
+  parsed: RawGeneratedThreadMetadata | null,
+): GeneratedThreadMetadata | null {
+  if (!parsed) {
+    return null;
   }
 
-  const thread = getThread(deps.db, args.threadId);
-  if (!thread || thread.title) {
-    return;
+  const title = parsed.title?.trim();
+  const branchSlug = parsed.branchSlug
+    ? sanitizeGeneratedBranchSlug(parsed.branchSlug)
+    : null;
+  if (!title && !branchSlug) {
+    return null;
+  }
+
+  return {
+    ...(branchSlug ? { branchSlug } : {}),
+    ...(title ? { title } : {}),
+  };
+}
+
+export async function generateThreadMetadata(
+  deps: ThreadMetadataGenerationDeps,
+  args: ThreadMetadataGenerationArgs,
+): Promise<GeneratedThreadMetadata | null> {
+  const fallback = deriveTitleFallback(args.input);
+  if (!fallback) {
+    return null;
+  }
+  if (!shouldGenerateThreadTitle(args.input)) {
+    return null;
   }
 
   try {
@@ -70,31 +128,77 @@ export async function generateThreadTitle(
 
     const parsed = await inferenceComplete(deps, {
       prompt,
-      schema: titleSchema,
+      schema: threadMetadataSchema,
+      ...(args.timeoutMs ? { timeoutMs: args.timeoutMs } : {}),
     });
 
-    if (!parsed?.title || parsed.title.trim().length === 0) {
-      return;
-    }
+    return normalizeGeneratedThreadMetadata(parsed);
+  } catch (error) {
+    deps.logger.warn(
+      { err: error, threadId: args.threadId },
+      "Failed to generate thread metadata",
+    );
+    return null;
+  }
+}
 
-    const currentThread = getThread(deps.db, args.threadId);
-    if (!currentThread || currentThread.title) {
-      return;
-    }
+export function applyGeneratedThreadTitle(
+  deps: ThreadTitleApplyDeps,
+  args: ApplyGeneratedThreadTitleArgs,
+): boolean {
+  const title = args.title.trim();
+  if (title.length === 0) {
+    return false;
+  }
 
-    updateThread(deps.db, deps.hub, args.threadId, {
-      title: parsed.title,
-    });
-    appendThreadTitleUpdatedEvent(deps, {
+  const currentThread = getThread(deps.db, args.threadId);
+  if (!currentThread || currentThread.title) {
+    return false;
+  }
+
+  updateThread(deps.db, deps.hub, args.threadId, {
+    title,
+  });
+  appendThreadTitleUpdatedEvent(deps, {
+    threadId: args.threadId,
+    previousTitle: currentThread.title,
+    nextTitle: title,
+  });
+
+  return true;
+}
+
+export async function generateThreadTitle(
+  deps: ThreadTitleGenerationDeps,
+  args: ThreadTitleGenerationArgs,
+): Promise<void> {
+  const thread = getThread(deps.db, args.threadId);
+  if (!thread || thread.title) {
+    return;
+  }
+
+  const metadata = await generateThreadMetadata(deps, args);
+  if (!metadata?.title) {
+    return;
+  }
+
+  try {
+    if (!applyGeneratedThreadTitle(deps, {
       threadId: args.threadId,
-      previousTitle: currentThread.title,
-      nextTitle: parsed.title,
-    });
+      title: metadata.title,
+    })) {
+      return;
+    }
 
     const titledThread = getThread(deps.db, args.threadId);
     const environment =
       titledThread?.environmentId ? getEnvironment(deps.db, titledThread.environmentId) : null;
-    if (!titledThread || !environment || titledThread.status === "created" || titledThread.status === "provisioning") {
+    if (
+      !titledThread ||
+      !environment ||
+      titledThread.status === "created" ||
+      titledThread.status === "provisioning"
+    ) {
       return;
     }
 
@@ -104,9 +208,12 @@ export async function generateThreadTitle(
         hostId: environment.hostId,
       },
       threadId: titledThread.id,
-      title: parsed.title,
+      title: metadata.title,
     });
   } catch (error) {
-    deps.logger.warn({ err: error, threadId: args.threadId }, "Failed to generate thread title");
+    deps.logger.warn(
+      { err: error, threadId: args.threadId },
+      "Failed to generate thread title",
+    );
   }
 }
