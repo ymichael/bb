@@ -32,6 +32,7 @@ import {
   hasActiveThreadStopOperationForCommand,
   requestThreadStart,
 } from "../services/threads/thread-lifecycle.js";
+import { isPreStartThreadStatus } from "../services/threads/thread-status.js";
 import {
   advanceEnvironmentCleanup,
   completeEnvironmentDestroyForCommand,
@@ -192,7 +193,7 @@ async function handleProvisionCommandResult(
       }
 
       let parsedStartEvent: ParsedStoredTurnRequestEvent | null = null;
-      if (thread.status === "created" || thread.status === "provisioning") {
+      if (isPreStartThreadStatus(thread.status)) {
         const startEvent = deps.db
           .select({
             data: events.data,

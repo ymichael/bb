@@ -5,6 +5,7 @@ import {
   pruneThreadEventHistoryBestEffort,
   resetActiveThreadEventPruningState,
 } from "../services/system/event-pruning.js";
+import { isPreStartThreadStatus } from "../services/threads/thread-status.js";
 
 export interface ApplyTurnCompletedEventResult {
   nextStatus: ThreadStatus | null;
@@ -26,8 +27,7 @@ export function applyTurnCompletedEvent(
   } else if (payload.status === "interrupted") {
     nextStatus = "idle";
   } else if (
-    thread.status === "created"
-    || thread.status === "provisioning"
+    isPreStartThreadStatus(thread.status)
     || thread.status === "active"
     || thread.status === "error"
   ) {

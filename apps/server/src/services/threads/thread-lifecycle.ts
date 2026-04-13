@@ -47,6 +47,7 @@ import {
 } from "./thread-commands.js";
 import { ensureHostSessionReadyForWork } from "../hosts/host-lifecycle.js";
 import { parseJsonWithSchema } from "../lib/json-parsing.js";
+import { isPreStartThreadStatus } from "./thread-status.js";
 
 type QueueReadyThreadTurnCommandResult = "thread.start" | "turn.run";
 
@@ -317,7 +318,7 @@ export async function requestThreadStart(
   }
 
   let eventSequence = args.eventSequence;
-  if (args.thread.status === "created" || args.thread.status === "provisioning") {
+  if (isPreStartThreadStatus(args.thread.status)) {
     const agentSessionStartedAt = Date.now();
     eventSequence = appendThreadProvisioningEvent(deps, {
       threadId: args.thread.id,

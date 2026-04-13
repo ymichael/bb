@@ -12,6 +12,7 @@ import {
   inferenceComplete,
 } from "../ai/inference.js";
 import { queueThreadRenameCommand } from "./thread-commands.js";
+import { isPreStartThreadStatus } from "./thread-status.js";
 
 const MIN_TITLE_GENERATION_WORDS = 5;
 const MAX_BRANCH_SLUG_LENGTH = 48;
@@ -233,8 +234,7 @@ export async function generateThreadTitle(
     if (
       !titledThread ||
       !environment ||
-      titledThread.status === "created" ||
-      titledThread.status === "provisioning"
+      isPreStartThreadStatus(titledThread.status)
     ) {
       return;
     }
