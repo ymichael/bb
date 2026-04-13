@@ -157,6 +157,98 @@ describe("toViewProjection turn lifecycle", () => {
     expect(entry.turn.messages?.[0]?.kind).toBe("assistant-text");
   });
 
+  it("keeps summary turn messages when messages after the terminal need standalone rows", () => {
+    const events: ThreadEventRow[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "turn/started",
+        data: {
+          providerThreadId: "provider-thread-1",
+          turnId: "turn-1",
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "item/completed",
+        data: {
+          providerThreadId: "provider-thread-1",
+          turnId: "turn-1",
+          item: {
+            type: "toolCall",
+            id: "tool-1",
+            tool: "exec_command",
+            arguments: { cmd: "pnpm test" },
+            status: "completed",
+          },
+        },
+        createdAt: 2,
+      },
+      {
+        id: "evt-3",
+        threadId: "thread-1",
+        seq: 3,
+        type: "item/completed",
+        data: {
+          providerThreadId: "provider-thread-1",
+          turnId: "turn-1",
+          item: {
+            type: "agentMessage",
+            id: "assistant-1",
+            text: "Done.",
+          },
+        },
+        createdAt: 3,
+      },
+      {
+        id: "evt-4",
+        threadId: "thread-1",
+        seq: 4,
+        type: "turn/diff/updated",
+        data: {
+          providerThreadId: "provider-thread-1",
+          turnId: "turn-1",
+          diff: "M package.json",
+        },
+        createdAt: 4,
+      },
+      {
+        id: "evt-5",
+        threadId: "thread-1",
+        seq: 5,
+        type: "turn/completed",
+        data: {
+          providerThreadId: "provider-thread-1",
+          turnId: "turn-1",
+          status: "completed",
+        },
+        createdAt: 5,
+      },
+    ];
+
+    const projection = toViewProjection(fromRows(events), {
+      includeOptionalOperations: true,
+      threadStatus: "idle",
+      turnMessageDetail: "summary",
+    });
+
+    const entry = projection.entries[0];
+    expect(entry?.kind).toBe("turn");
+    if (entry?.kind !== "turn") {
+      throw new Error("Expected a turn entry");
+    }
+    expect(entry.turn.summaryCount).toBe(1);
+    expect(entry.turn.messages?.map((message) => message.kind)).toEqual([
+      "tool-call",
+      "assistant-text",
+      "operation",
+    ]);
+  });
+
   it("rejects turn-scoped messages that do not have turn lifecycle events", () => {
     const events: ThreadEventRow[] = [
       {

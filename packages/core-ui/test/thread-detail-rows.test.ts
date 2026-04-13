@@ -213,6 +213,195 @@ describe("buildTimelineRows projection turn lifecycle", () => {
       "Still checking.",
     );
   });
+
+  it("keeps messages after the terminal message standalone in a completed turn", () => {
+    const projection: ViewProjection = {
+      entries: [
+        {
+          kind: "turn",
+          turn: {
+            turnId: "turn-1",
+            threadId: "thread-1",
+            sourceSeqStart: 1,
+            sourceSeqEnd: 5,
+            startedAt: 1,
+            createdAt: 5,
+            completedAt: 5,
+            status: "completed",
+            summaryCount: 2,
+            durationMs: 4,
+            terminalMessage: {
+              kind: "assistant-text",
+              id: "assistant-1",
+              threadId: "thread-1",
+              sourceSeqStart: 3,
+              sourceSeqEnd: 3,
+              createdAt: 3,
+              turnId: "turn-1",
+              text: "Done.",
+              status: "completed",
+            },
+            messages: [
+              {
+                kind: "tool-call",
+                id: "tool-1",
+                threadId: "thread-1",
+                sourceSeqStart: 2,
+                sourceSeqEnd: 2,
+                createdAt: 2,
+                turnId: "turn-1",
+                toolName: "exec_command",
+                callId: "call-1",
+                command: "pnpm test",
+                status: "completed",
+              },
+              {
+                kind: "assistant-text",
+                id: "assistant-1",
+                threadId: "thread-1",
+                sourceSeqStart: 3,
+                sourceSeqEnd: 3,
+                createdAt: 3,
+                turnId: "turn-1",
+                text: "Done.",
+                status: "completed",
+              },
+              {
+                kind: "operation",
+                id: "operation-1",
+                threadId: "thread-1",
+                sourceSeqStart: 4,
+                sourceSeqEnd: 4,
+                createdAt: 4,
+                turnId: "turn-1",
+                opType: "operation",
+                title: "Follow-up operation",
+                status: "completed",
+              },
+            ],
+          },
+        },
+      ],
+    };
+
+    const rows = buildTimelineRowsFromProjection(projection, {
+      includeToolGroupMessages: true,
+    });
+
+    expect(rows.map((row) => row.kind)).toEqual([
+      "tool-group",
+      "message",
+      "message",
+    ]);
+    const toolGroup = expectToolGroupRow(rows[0]);
+    expect(toolGroup.messages.map((message) => message.id)).toEqual([
+      "tool-1",
+    ]);
+    const terminalRow = expectMessageRow(rows[1]);
+    expect(terminalRow.message.id).toBe("assistant-1");
+    const operationRow = expectMessageRow(rows[2]);
+    expect(operationRow.message.id).toBe("operation-1");
+  });
+
+  it("does not collapse projection turn messages across a user boundary", () => {
+    const projection: ViewProjection = {
+      entries: [
+        {
+          kind: "turn",
+          turn: {
+            turnId: "turn-1",
+            threadId: "thread-1",
+            sourceSeqStart: 1,
+            sourceSeqEnd: 6,
+            startedAt: 1,
+            createdAt: 6,
+            completedAt: 6,
+            status: "completed",
+            summaryCount: 2,
+            durationMs: 5,
+            terminalMessage: {
+              kind: "assistant-text",
+              id: "assistant-1",
+              threadId: "thread-1",
+              sourceSeqStart: 5,
+              sourceSeqEnd: 5,
+              createdAt: 5,
+              turnId: "turn-1",
+              text: "Done.",
+              status: "completed",
+            },
+            messages: [
+              {
+                kind: "tool-call",
+                id: "tool-1",
+                threadId: "thread-1",
+                sourceSeqStart: 2,
+                sourceSeqEnd: 2,
+                createdAt: 2,
+                turnId: "turn-1",
+                toolName: "exec_command",
+                callId: "call-1",
+                command: "pnpm test",
+                status: "completed",
+              },
+              {
+                kind: "user",
+                id: "user-1",
+                threadId: "thread-1",
+                sourceSeqStart: 3,
+                sourceSeqEnd: 3,
+                createdAt: 3,
+                turnId: "turn-1",
+                text: "Actually, run the focused test.",
+              },
+              {
+                kind: "tool-call",
+                id: "tool-2",
+                threadId: "thread-1",
+                sourceSeqStart: 4,
+                sourceSeqEnd: 4,
+                createdAt: 4,
+                turnId: "turn-1",
+                toolName: "exec_command",
+                callId: "call-2",
+                command: "pnpm exec turbo run test --filter=@bb/core-ui",
+                status: "completed",
+              },
+              {
+                kind: "assistant-text",
+                id: "assistant-1",
+                threadId: "thread-1",
+                sourceSeqStart: 5,
+                sourceSeqEnd: 5,
+                createdAt: 5,
+                turnId: "turn-1",
+                text: "Done.",
+                status: "completed",
+              },
+            ],
+          },
+        },
+      ],
+    };
+
+    const rows = buildTimelineRowsFromProjection(projection, {
+      includeToolGroupMessages: true,
+    });
+
+    expect(rows.map((row) => row.kind)).toEqual([
+      "message",
+      "message",
+      "tool-group",
+      "message",
+    ]);
+    expect(expectMessageRow(rows[0]).message.id).toBe("tool-1");
+    expect(expectMessageRow(rows[1]).message.id).toBe("user-1");
+    const toolGroup = expectToolGroupRow(rows[2]);
+    expect(toolGroup.messages.map((message) => message.id)).toEqual([
+      "tool-2",
+    ]);
+    expect(expectMessageRow(rows[3]).message.id).toBe("assistant-1");
+  });
 });
 
 describe("buildTimelineRows tool group collapsing", () => {

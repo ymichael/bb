@@ -1421,16 +1421,27 @@ function isProjectionTerminalMessage(message: ViewMessage): boolean {
   return message.kind === "assistant-text" || message.kind === "error";
 }
 
-function findProjectionTerminalMessage(
+function findProjectionTerminalMessageIndex(
   messages: ViewMessage[],
-): ViewMessage | undefined {
+): number | null {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index];
     if (message && isProjectionTerminalMessage(message)) {
-      return message;
+      return index;
     }
   }
-  return undefined;
+  return null;
+}
+
+function findProjectionTerminalMessage(
+  messages: ViewMessage[],
+): ViewMessage | undefined {
+  const terminalIndex = findProjectionTerminalMessageIndex(messages);
+  return terminalIndex === null ? undefined : messages[terminalIndex];
+}
+
+function isProjectionUngroupableMessage(message: ViewMessage): boolean {
+  return message.kind === "user" || message.kind === "debug/raw-event";
 }
 
 function getProjectionMessageSummaryCount(message: ViewMessage): number {
@@ -1447,15 +1458,44 @@ function getProjectionSummaryCount(
   messages: ViewMessage[],
   terminalMessage: ViewMessage | undefined,
 ): number {
-  return messages.reduce((count, message) => {
-    if (message.kind === "user" || message.kind === "debug/raw-event") {
-      return count;
+  if (!terminalMessage) {
+    return 0;
+  }
+  let count = 0;
+  for (const message of messages) {
+    if (message.id === terminalMessage.id) {
+      break;
     }
-    if (terminalMessage && message.id === terminalMessage.id) {
-      return count;
+    if (isProjectionUngroupableMessage(message)) {
+      continue;
     }
-    return count + getProjectionMessageSummaryCount(message);
-  }, 0);
+    count += getProjectionMessageSummaryCount(message);
+  }
+  return count;
+}
+
+function shouldIncludeSummaryTurnMessages(
+  messages: ViewMessage[],
+  terminalMessage: ViewMessage | undefined,
+): boolean {
+  if (!terminalMessage) {
+    return messages.length > 0;
+  }
+
+  let foundTerminalMessage = false;
+  for (const message of messages) {
+    if (message.id === terminalMessage.id) {
+      foundTerminalMessage = true;
+      continue;
+    }
+    if (isProjectionUngroupableMessage(message)) {
+      return true;
+    }
+    if (foundTerminalMessage) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function createViewTimelineEntry(
@@ -1483,7 +1523,9 @@ function createViewTimelineEntry(
     terminalMessage,
   );
   const includeMessages =
-    turnDraft.turn.status === "pending" || turnMessageDetail === "full";
+    turnDraft.turn.status === "pending" ||
+    turnMessageDetail === "full" ||
+    shouldIncludeSummaryTurnMessages(turnDraft.messages, terminalMessage);
   const turn: ViewTurn = {
     ...turnDraft.turn,
     summaryCount,

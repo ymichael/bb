@@ -396,14 +396,39 @@ function toMessageRow(message: ViewMessage): TimelineRow {
   };
 }
 
-function findLastTerminalMessage(messages: ViewMessage[]): ViewMessage | undefined {
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const message = messages[index];
-    if (message && isTerminalMessage(message)) {
-      return message;
+function findLastUngroupableIndexBeforeTerminal(
+  messages: IndexedTurnMessage[],
+  terminalIndex: number,
+): number {
+  let boundaryIndex = -1;
+  for (const { index, message } of messages) {
+    if (index >= terminalIndex) {
+      break;
+    }
+    if (isUngroupableMessage(message)) {
+      boundaryIndex = index;
     }
   }
-  return undefined;
+  return boundaryIndex;
+}
+
+function getGroupedTerminalTurnMessages(
+  messages: IndexedTurnMessage[],
+): IndexedTurnMessage[] {
+  const terminalIndex = findLastTerminalIndex(messages);
+  if (terminalIndex === null) {
+    return [];
+  }
+  const boundaryIndex = findLastUngroupableIndexBeforeTerminal(
+    messages,
+    terminalIndex,
+  );
+  return messages.filter(({ index, message }) => {
+    if (index <= boundaryIndex) return false;
+    if (index >= terminalIndex) return false;
+    if (isUngroupableMessage(message)) return false;
+    return true;
+  });
 }
 
 function buildTurnToolGroupRow(
@@ -461,15 +486,12 @@ function buildTerminalTurnRows(
   }
 
   const mergedMessages = prepareTimelineMessages(turn.messages);
-  const terminalMessage = findLastTerminalMessage(mergedMessages);
+  const indexedMessages = mergedMessages.map((message, index) => ({
+    index,
+    message,
+  }));
   const collapsedMessageIndices = new Set<number>();
-  const groupedTurnMessages = mergedMessages
-    .map((message, index) => ({ index, message }))
-    .filter(({ message }) => {
-      if (isUngroupableMessage(message)) return false;
-      if (terminalMessage && message.id === terminalMessage.id) return false;
-      return true;
-    });
+  const groupedTurnMessages = getGroupedTerminalTurnMessages(indexedMessages);
   const collapsedByFirstIndex = new Map<number, ViewMessage[]>();
 
   if (groupedTurnMessages.length > 0) {
