@@ -211,7 +211,7 @@ function buildClaudeApprovalSubject(
           type: "unknown",
           command,
         }],
-        executionScope: args.permissions,
+        sessionGrant: args.permissions,
       };
     }
   }
@@ -223,7 +223,7 @@ function buildClaudeApprovalSubject(
         kind: "file_change",
         itemId: args.itemId,
         writeScope: null,
-        executionScope: args.permissions,
+        sessionGrant: args.permissions,
       };
     }
   }
@@ -240,18 +240,29 @@ function resolveClaudeGrantedPermissions(
   payload: ApprovalPendingInteractionPayload,
   grantedPermissions: PendingInteractionGrantedPermissionProfile | null,
 ): PendingInteractionGrantedPermissionProfile {
+  if (grantedPermissions === null) {
+    throw new Error("Session approval resolution must include granted permissions");
+  }
+
   switch (payload.subject.kind) {
     case "command":
     case "file_change":
-      return {
-        network: null,
-        fileSystem: null,
-      };
-    case "permission_grant":
-      if (grantedPermissions === null) {
-        throw new Error("Permission grant resolution must include granted permissions");
-      }
       return grantedPermissions;
+    case "permission_grant":
+      return grantedPermissions;
+  }
+}
+
+function getClaudePermissionUpdateToolName(
+  payload: ApprovalPendingInteractionPayload,
+): string | null {
+  switch (payload.subject.kind) {
+    case "command":
+      return "Bash";
+    case "file_change":
+      return null;
+    case "permission_grant":
+      return payload.subject.toolName;
   }
 }
 
@@ -1096,9 +1107,7 @@ export function createClaudeCodeProviderAdapter(
               args.request.payload,
               args.resolution.grantedPermissions,
             ),
-            toolName: args.request.payload.subject.kind === "permission_grant"
-              ? args.request.payload.subject.toolName
-              : null,
+            toolName: getClaudePermissionUpdateToolName(args.request.payload),
           });
 
           return {

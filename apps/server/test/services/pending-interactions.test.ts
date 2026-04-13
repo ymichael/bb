@@ -301,7 +301,7 @@ describe("pending interaction lifecycle", () => {
     }
   });
 
-  it("rejects command approvals that try to grant execution-scope permissions", async () => {
+  it("allows command approvals to grant explicit session permissions for session decisions", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host, session } = seedHostSession(harness.deps, {
@@ -331,7 +331,7 @@ describe("pending interaction lifecycle", () => {
             itemId: "item-command-grant",
             reason: "Needs network",
             command: "curl https://example.com",
-            executionScope: {
+            sessionGrant: {
               network: { enabled: true },
               fileSystem: null,
             },
@@ -343,7 +343,7 @@ describe("pending interaction lifecycle", () => {
         throw new Error(`Expected interaction registration to succeed: ${created.reason}`);
       }
 
-      expect(() =>
+      expect(
         harness.deps.pendingInteractions.resolvePendingInteraction({
           threadId: thread.id,
           interactionId: created.interaction.id,
@@ -352,7 +352,16 @@ describe("pending interaction lifecycle", () => {
             fileSystem: null,
           }),
         }),
-      ).toThrow("Only permission-grant approvals can grant permissions");
+      ).toEqual(expect.objectContaining({
+        status: "resolving",
+        resolution: expect.objectContaining({
+          decision: "allow_for_session",
+          grantedPermissions: {
+            network: { enabled: true },
+            fileSystem: null,
+          },
+        }),
+      }));
     } finally {
       await harness.cleanup();
     }
@@ -408,7 +417,7 @@ describe("pending interaction lifecycle", () => {
             },
           }),
         }),
-      ).toThrow("Only permission-grant approvals can grant permissions");
+      ).toThrow("Only session approval decisions with a session grant can grant permissions");
     } finally {
       await harness.cleanup();
     }

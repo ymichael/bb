@@ -90,23 +90,34 @@ function validateAvailableDecision(
 
 function getRequestedPermissions(
   interaction: PendingInteraction,
+  decision: PendingInteractionApprovalDecision,
 ): PendingInteractionGrantedPermissionProfile | null {
   if (interaction.payload.subject.kind === "permission_grant") {
     return interaction.payload.subject.permissions;
+  }
+  if (decision !== "allow_for_session") {
+    return null;
+  }
+  if (
+    interaction.payload.subject.kind === "command"
+    || interaction.payload.subject.kind === "file_change"
+  ) {
+    return interaction.payload.subject.sessionGrant;
   }
   return null;
 }
 
 function validateGrantedPermissions(
   interaction: PendingInteraction,
+  decision: PendingInteractionApprovalDecision,
   permissions: PendingInteractionGrantedPermissionProfile,
 ): void {
-  const requestedPermissions = getRequestedPermissions(interaction);
+  const requestedPermissions = getRequestedPermissions(interaction, decision);
   if (requestedPermissions === null) {
     throw new ApiError(
       400,
       "invalid_request",
-      "Only permission-grant approvals can grant permissions",
+      "Only session approval decisions with a session grant can grant permissions",
     );
   }
 
@@ -172,7 +183,11 @@ export function validatePendingInteractionResolution(
   validateAvailableDecision(interaction, resolution.decision);
   if (resolution.decision !== "deny") {
     if (resolution.grantedPermissions !== null) {
-      validateGrantedPermissions(interaction, resolution.grantedPermissions);
+      validateGrantedPermissions(
+        interaction,
+        resolution.decision,
+        resolution.grantedPermissions,
+      );
     } else if (interaction.payload.subject.kind === "permission_grant") {
       throw new ApiError(
         400,

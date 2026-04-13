@@ -38,7 +38,7 @@ function createResolvingInteraction(): PendingInteraction {
         kind: "file_change",
         itemId: "item_1",
         writeScope: null,
-        executionScope: null,
+        sessionGrant: null,
       },
       reason: "Needs file write approval",
       availableDecisions: ["allow_once", "deny"],

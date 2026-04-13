@@ -505,7 +505,7 @@ describe("claude-code provider adapter", () => {
           command: "git status",
           cwd: "/tmp/project",
           actions: [{ type: "unknown", command: "git status" }],
-          executionScope: {
+          sessionGrant: {
             network: null,
             fileSystem: {
               read: ["/tmp/project"],
@@ -553,7 +553,7 @@ describe("claude-code provider adapter", () => {
           kind: "file_change",
           itemId: "toolu_edit",
           writeScope: null,
-          executionScope: {
+          sessionGrant: {
             network: null,
             fileSystem: {
               read: [],
@@ -639,7 +639,7 @@ describe("claude-code provider adapter", () => {
     });
   });
 
-  it("does not build broad Claude permission updates for empty session grants", () => {
+  it("builds Claude session permission updates for command approvals", () => {
     const adapter = createClaudeCodeProviderAdapter();
 
     expect(
@@ -658,47 +658,15 @@ describe("claude-code provider adapter", () => {
               command: "pwd",
               cwd: null,
               actions: [],
-              executionScope: null,
+              sessionGrant: {
+                network: null,
+                fileSystem: {
+                  read: ["/tmp/project"],
+                  write: ["/tmp/project"],
+                },
+              },
             },
             reason: "Needs approval",
-            availableDecisions: ["allow_once", "deny"],
-          },
-        },
-        resolution: {
-          kind: "approval",
-          decision: "allow_for_session",
-          grantedPermissions: {
-            network: null,
-            fileSystem: null,
-          },
-        },
-      }),
-    ).toEqual({
-      kind: "permission_request",
-      behavior: "allow",
-    });
-  });
-
-  it("does not build Claude directory updates for file-change approvals", () => {
-    const adapter = createClaudeCodeProviderAdapter();
-
-    expect(
-      adapter.buildInteractiveResponse?.({
-        request: {
-          requestId: "req-4d",
-          method: CLAUDE_PERMISSION_REQUEST_APPROVAL_METHOD,
-          threadId: "thr_1",
-          providerThreadId: "claude-session-1",
-          turnId: "",
-          payload: {
-            kind: "approval",
-            subject: {
-              kind: "file_change",
-              itemId: "toolu_3d",
-              writeScope: null,
-              executionScope: null,
-            },
-            reason: "Needs file access",
             availableDecisions: ["allow_once", "allow_for_session", "deny"],
           },
         },
@@ -717,13 +685,74 @@ describe("claude-code provider adapter", () => {
     ).toEqual({
       kind: "permission_request",
       behavior: "allow",
+      updatedPermissions: [
+        {
+          type: "addDirectories",
+          directories: ["/tmp/project"],
+          destination: "session",
+        },
+      ],
     });
   });
 
-  it("does not grant top-level file-change permissions without an explicit resolution grant", () => {
+  it("builds Claude session directory updates for file-change approvals", () => {
     const adapter = createClaudeCodeProviderAdapter();
 
     expect(
+      adapter.buildInteractiveResponse?.({
+        request: {
+          requestId: "req-4d",
+          method: CLAUDE_PERMISSION_REQUEST_APPROVAL_METHOD,
+          threadId: "thr_1",
+          providerThreadId: "claude-session-1",
+          turnId: "",
+          payload: {
+            kind: "approval",
+            subject: {
+              kind: "file_change",
+              itemId: "toolu_3d",
+              writeScope: null,
+              sessionGrant: {
+                network: null,
+                fileSystem: {
+                  read: [],
+                  write: ["/tmp/project"],
+                },
+              },
+            },
+            reason: "Needs file access",
+            availableDecisions: ["allow_once", "allow_for_session", "deny"],
+          },
+        },
+        resolution: {
+          kind: "approval",
+          decision: "allow_for_session",
+          grantedPermissions: {
+            network: null,
+            fileSystem: {
+              read: [],
+              write: ["/tmp/project"],
+            },
+          },
+        },
+      }),
+    ).toEqual({
+      kind: "permission_request",
+      behavior: "allow",
+      updatedPermissions: [
+        {
+          type: "addDirectories",
+          directories: ["/tmp/project"],
+          destination: "session",
+        },
+      ],
+    });
+  });
+
+  it("rejects session-scoped Claude approvals without an explicit resolution grant", () => {
+    const adapter = createClaudeCodeProviderAdapter();
+
+    expect(() =>
       adapter.buildInteractiveResponse?.({
         request: {
           requestId: "req-4e",
@@ -737,7 +766,7 @@ describe("claude-code provider adapter", () => {
               kind: "file_change",
               itemId: "toolu_3e",
               writeScope: null,
-              executionScope: null,
+              sessionGrant: null,
             },
             reason: "Needs file access",
             availableDecisions: ["allow_once", "allow_for_session", "deny"],
@@ -749,10 +778,7 @@ describe("claude-code provider adapter", () => {
           grantedPermissions: null,
         },
       }),
-    ).toEqual({
-      kind: "permission_request",
-      behavior: "allow",
-    });
+    ).toThrow("Session approval resolution must include granted permissions");
   });
 
   it("keeps turn-scoped Claude permission approvals scoped to the current tool request", () => {
@@ -774,7 +800,7 @@ describe("claude-code provider adapter", () => {
               command: "pwd",
               cwd: null,
               actions: [],
-              executionScope: null,
+              sessionGrant: null,
             },
             reason: "Needs approval",
             availableDecisions: ["allow_once", "deny"],

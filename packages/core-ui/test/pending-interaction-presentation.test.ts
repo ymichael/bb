@@ -49,7 +49,7 @@ describe("pending interaction presentation", () => {
         command: "npm publish",
         cwd: "/tmp/project",
         actions: [],
-        executionScope: null,
+        sessionGrant: null,
       },
       reason: "Needs approval to publish",
       availableDecisions: ["allow_once", "deny"],

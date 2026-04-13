@@ -22,7 +22,7 @@ describe("pending interaction schemas", () => {
             command: "npm install",
             cwd: "/tmp/project",
             actions: [],
-            executionScope: {
+            sessionGrant: {
               network: { enabled: true },
               fileSystem: null,
             },
@@ -57,7 +57,7 @@ describe("pending interaction schemas", () => {
             kind: "file_change",
             itemId: "item_124",
             writeScope: { root: "/tmp/project" },
-            executionScope: null,
+            sessionGrant: null,
           },
           reason: "Review file edits",
           availableDecisions: ["allow_once", "deny"],

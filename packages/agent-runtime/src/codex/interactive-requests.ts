@@ -23,6 +23,8 @@ import {
 type BuildCodexInteractiveResponseArgs = Parameters<
   NonNullable<ProviderAdapter["buildInteractiveResponse"]>
 >[0];
+type BuildCodexInteractiveResponseResolution =
+  BuildCodexInteractiveResponseArgs["resolution"];
 
 export type CodexInteractiveResponse =
   | CommandExecutionRequestApprovalResponse
@@ -31,6 +33,18 @@ export type CodexInteractiveResponse =
 
 function assertNever(value: never, message?: string): never {
   throw new Error(message ?? `Unexpected value: ${String(value)}`);
+}
+
+function requireGrantedPermissions(
+  args: BuildCodexInteractiveResponseResolution,
+) {
+  if (args.decision === "deny") {
+    throw new Error("Denied approval responses do not include granted permissions");
+  }
+  if (args.grantedPermissions === null) {
+    throw new Error("Permission grant approval must include granted permissions");
+  }
+  return args.grantedPermissions;
 }
 
 export function decodeCodexInteractiveRequest(
@@ -69,7 +83,7 @@ export function decodeCodexInteractiveRequest(
             command: parsed.data.command,
             cwd: parsed.data.cwd ?? null,
             actions: parsed.data.commandActions ?? [],
-            executionScope: parsed.data.additionalPermissions
+            sessionGrant: parsed.data.additionalPermissions
               ? toPendingInteractionGrantablePermissionProfile(
                   parsed.data.additionalPermissions,
                 )
@@ -98,7 +112,15 @@ export function decodeCodexInteractiveRequest(
             kind: "file_change",
             itemId: parsed.data.itemId,
             writeScope: parsed.data.grantRoot ? { root: parsed.data.grantRoot } : null,
-            executionScope: null,
+            sessionGrant: parsed.data.grantRoot
+              ? {
+                  network: null,
+                  fileSystem: {
+                    read: [],
+                    write: [parsed.data.grantRoot],
+                  },
+                }
+              : null,
           },
           reason: parsed.data.reason ?? null,
           availableDecisions: ["allow_once", "allow_for_session", "deny"],
@@ -172,8 +194,7 @@ export function buildCodexInteractiveResponse(
           }
           const response: PermissionsRequestApprovalResponse = {
             permissions: toCodexGrantedPermissionProfile(
-              args.resolution.grantedPermissions
-                ?? args.request.payload.subject.permissions,
+              requireGrantedPermissions(args.resolution),
             ),
             scope: args.resolution.decision === "allow_for_session"
               ? "session"

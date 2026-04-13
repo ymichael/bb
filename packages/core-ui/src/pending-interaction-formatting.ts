@@ -132,9 +132,9 @@ export function formatPendingInteractionSubjectDetailLines(
           const actionLines = summarizePendingInteractionCommandActions(
             interaction.payload.subject.actions,
           ).map((action) => `Action: ${action}`);
-          const executionScope = formatPermissionSummaryLine(
-            "Execution scope",
-            interaction.payload.subject.executionScope,
+          const sessionGrant = formatPermissionSummaryLine(
+            "Session grant",
+            interaction.payload.subject.sessionGrant,
           );
           return [
             `Command: ${interaction.payload.subject.command}`,
@@ -142,20 +142,20 @@ export function formatPendingInteractionSubjectDetailLines(
               ? [`Cwd: ${interaction.payload.subject.cwd}`]
               : []),
             ...actionLines,
-            ...(executionScope ? [executionScope] : []),
+            ...(sessionGrant ? [sessionGrant] : []),
           ];
         }
         case "file_change": {
-          const executionScope = formatPermissionSummaryLine(
-            "Execution scope",
-            interaction.payload.subject.executionScope,
+          const sessionGrant = formatPermissionSummaryLine(
+            "Session grant",
+            interaction.payload.subject.sessionGrant,
           );
           return [
             `Item: ${interaction.payload.subject.itemId}`,
             ...(interaction.payload.subject.writeScope
               ? [`Write root: ${interaction.payload.subject.writeScope.root}`]
               : []),
-            ...(executionScope ? [executionScope] : []),
+            ...(sessionGrant ? [sessionGrant] : []),
           ];
         }
         case "permission_grant": {
@@ -228,6 +228,7 @@ export function isPendingInteractionCommandApprovalPositiveDecision(
 
 export function getPendingInteractionApprovalGrantedPermissions(
   interaction: PendingInteraction,
+  decision: PendingInteractionApprovalDecision,
 ): PendingInteractionGrantedPermissionProfile | null {
   if (
     interaction.payload.kind === "approval"
@@ -236,6 +237,20 @@ export function getPendingInteractionApprovalGrantedPermissions(
     return toGrantedPendingInteractionPermissions(
       interaction.payload.subject.permissions,
     );
+  }
+
+  if (decision !== "allow_for_session") {
+    return null;
+  }
+
+  if (
+    interaction.payload.kind === "approval"
+    && (
+      interaction.payload.subject.kind === "command"
+      || interaction.payload.subject.kind === "file_change"
+    )
+  ) {
+    return interaction.payload.subject.sessionGrant;
   }
 
   return null;
@@ -255,7 +270,10 @@ export function buildPendingInteractionApprovalResolution(
   return {
     kind: "approval",
     decision,
-    grantedPermissions: getPendingInteractionApprovalGrantedPermissions(interaction),
+    grantedPermissions: getPendingInteractionApprovalGrantedPermissions(
+      interaction,
+      decision,
+    ),
   };
 }
 

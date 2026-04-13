@@ -92,7 +92,7 @@ describe("pending interaction formatting", () => {
     ).toBe("Permissions granted for this session");
   });
 
-  it("builds approval resolutions without granting extra command permissions", () => {
+  it("builds session approval resolutions with explicit command session grants", () => {
     const interaction = createInteraction({
       kind: "approval",
       subject: {
@@ -101,7 +101,7 @@ describe("pending interaction formatting", () => {
         command: "curl https://example.com",
         cwd: "/tmp/project",
         actions: [{ type: "unknown", command: "curl https://example.com" }],
-        executionScope: {
+        sessionGrant: {
           network: { enabled: true },
           fileSystem: null,
         },
@@ -115,6 +115,17 @@ describe("pending interaction formatting", () => {
     ).toEqual({
       kind: "approval",
       decision: "allow_for_session",
+      grantedPermissions: {
+        network: { enabled: true },
+        fileSystem: null,
+      },
+    });
+
+    expect(
+      buildPendingInteractionApprovalResolution(interaction, "allow_once"),
+    ).toEqual({
+      kind: "approval",
+      decision: "allow_once",
       grantedPermissions: null,
     });
 
@@ -122,7 +133,7 @@ describe("pending interaction formatting", () => {
       "Command: curl https://example.com",
       "Cwd: /tmp/project",
       "Action: curl https://example.com",
-      "Execution scope: Network access",
+      "Session grant: Network access",
     ]);
   });
 

@@ -1433,7 +1433,7 @@ describe("codex provider adapter", () => {
               command: "git push",
             },
           ],
-          executionScope: {
+          sessionGrant: {
             network: { enabled: true },
             fileSystem: null,
           },
@@ -1511,7 +1511,7 @@ describe("codex provider adapter", () => {
           command: "osascript -e 'tell app \"Finder\" to activate'",
           cwd: "/tmp/project",
           actions: [],
-          executionScope: {
+          sessionGrant: {
             network: null,
             fileSystem: null,
           },
@@ -1650,7 +1650,7 @@ describe("codex provider adapter", () => {
           command: "git push",
           cwd: "/tmp/project",
           actions: [],
-          executionScope: null,
+          sessionGrant: null,
         },
         reason: "Needs approval",
         availableDecisions: ["deny"],
@@ -1684,7 +1684,13 @@ describe("codex provider adapter", () => {
           kind: "file_change",
           itemId: "item-file-change",
           writeScope: { root: "/tmp/project" },
-          executionScope: null,
+          sessionGrant: {
+            network: null,
+            fileSystem: {
+              read: [],
+              write: ["/tmp/project"],
+            },
+          },
         },
         reason: "Review generated file changes",
         availableDecisions: ["allow_once", "allow_for_session", "deny"],
@@ -1755,7 +1761,7 @@ describe("codex provider adapter", () => {
               command: "git push",
               cwd: "/tmp/project",
               actions: [],
-              executionScope: null,
+              sessionGrant: null,
             },
             reason: null,
             availableDecisions: ["allow_once", "allow_for_session", "deny"],
@@ -1789,7 +1795,7 @@ describe("codex provider adapter", () => {
               command: "git push",
               cwd: "/tmp/project",
               actions: [],
-              executionScope: null,
+              sessionGrant: null,
             },
             reason: null,
             availableDecisions: ["allow_once", "deny"],
@@ -1820,7 +1826,7 @@ describe("codex provider adapter", () => {
               kind: "file_change",
               itemId: "item-file-change",
               writeScope: null,
-              executionScope: null,
+              sessionGrant: null,
             },
             reason: "Review generated file changes",
             availableDecisions: ["allow_once", "allow_for_session", "deny"],
