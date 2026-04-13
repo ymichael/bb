@@ -2,13 +2,13 @@ import {
   createPendingInteraction,
   getActivePendingInteractionForThread,
   getEnvironment,
-  getHost,
   getPendingInteraction,
   getPendingInteractionByProviderRequest,
   interruptPendingInteractionsForSessionIds,
   getThread,
   interruptPendingInteractionsForThreadIds,
   interruptPendingInteractionsForThreads,
+  isThreadOnEphemeralHost,
   listPendingInteractionsByThread,
   listPendingInteractionsOnEphemeralHosts,
   queueCommandInTransaction,
@@ -164,11 +164,17 @@ function notifyInteractionChanged(
   deps.hub.notifyThread(threadId, ["interactions-changed"]);
 }
 
+/**
+ * Owns the server-side pending interaction lifecycle: registration, resolution
+ * command queuing, terminal state transitions, timeline events, and restart
+ * hydration for ephemeral-host expiries.
+ */
 export class PendingInteractionLifecycle {
   private readonly deps: CreateLifecycleDeps;
   private readonly sandboxInteractionExpiryMs: number;
   private readonly now: () => number;
   private readonly expiryTimers = new Map<string, PendingInteractionExpiryTimer>();
+  private started = false;
 
   constructor(args: PendingInteractionLifecycleArgs) {
     if (args.sandboxInteractionExpiryMs <= 0) {
@@ -181,7 +187,13 @@ export class PendingInteractionLifecycle {
     };
     this.sandboxInteractionExpiryMs = args.sandboxInteractionExpiryMs;
     this.now = args.now ?? Date.now;
+  }
 
+  start(): void {
+    if (this.started) {
+      return;
+    }
+    this.started = true;
     this.hydratePendingInteractions();
   }
 
@@ -344,7 +356,7 @@ export class PendingInteractionLifecycle {
     }
 
     const interaction = toPendingInteraction(updated);
-    this.finishInteraction(interaction);
+    this.settleInteractionTerminalState(interaction);
     return interaction;
   }
 
@@ -360,7 +372,7 @@ export class PendingInteractionLifecycle {
     }
 
     const interaction = toPendingInteraction(updated);
-    this.finishInteraction(interaction);
+    this.settleInteractionTerminalState(interaction);
     return interaction;
   }
 
@@ -376,14 +388,14 @@ export class PendingInteractionLifecycle {
     }
 
     const interaction = toPendingInteraction(updated);
-    this.finishInteraction(interaction);
+    this.settleInteractionTerminalState(interaction);
     return interaction;
   }
 
   interruptPendingInteractionsForThreads(
     args: InterruptPendingInteractionsForThreadsLifecycleArgs,
   ): PendingInteraction[] {
-    return this.finishInterruptedRows(
+    return this.settleInterruptedRows(
       interruptPendingInteractionsForThreads(this.deps.db, {
         providerId: args.providerId,
         threadIds: args.threadIds,
@@ -395,7 +407,7 @@ export class PendingInteractionLifecycle {
   interruptPendingInteractionsForThreadIds(
     args: InterruptPendingInteractionsForThreadIdsLifecycleArgs,
   ): PendingInteraction[] {
-    return this.finishInterruptedRows(
+    return this.settleInterruptedRows(
       interruptPendingInteractionsForThreadIds(this.deps.db, {
         threadIds: args.threadIds,
         statusReason: args.reason,
@@ -406,7 +418,7 @@ export class PendingInteractionLifecycle {
   interruptPendingInteractionsForSessionIds(
     args: InterruptPendingInteractionsForSessionIdsLifecycleArgs,
   ): PendingInteraction[] {
-    return this.finishInterruptedRows(
+    return this.settleInterruptedRows(
       interruptPendingInteractionsForSessionIds(this.deps.db, {
         sessionIds: args.sessionIds,
         statusReason: args.reason,
@@ -414,12 +426,12 @@ export class PendingInteractionLifecycle {
     );
   }
 
-  private finishInterruptedRows(
+  private settleInterruptedRows(
     rows: PendingInteractionRow[],
   ): PendingInteraction[] {
     const interactions = rows.map(toPendingInteraction);
     for (const interaction of interactions) {
-      this.finishInteraction(interaction);
+      this.settleInteractionTerminalState(interaction);
     }
     return interactions;
   }
@@ -515,18 +527,7 @@ export class PendingInteractionLifecycle {
   private resolveInteractionExpiryMs(
     interaction: PendingInteraction,
   ): number | null {
-    const thread = getThread(this.deps.db, interaction.threadId);
-    if (!thread?.environmentId) {
-      return null;
-    }
-
-    const environment = getEnvironment(this.deps.db, thread.environmentId);
-    if (!environment) {
-      return null;
-    }
-
-    const host = getHost(this.deps.db, environment.hostId);
-    if (host?.type !== "ephemeral") {
+    if (!isThreadOnEphemeralHost(this.deps.db, { threadId: interaction.threadId })) {
       return null;
     }
 
@@ -598,11 +599,11 @@ export class PendingInteractionLifecycle {
     }
 
     const interaction = toPendingInteraction(updated);
-    this.finishInteraction(interaction);
+    this.settleInteractionTerminalState(interaction);
     return interaction;
   }
 
-  private finishInteraction(interaction: PendingInteraction): void {
+  private settleInteractionTerminalState(interaction: PendingInteraction): void {
     this.clearExpiryTimer(interaction.id);
     appendPendingInteractionTimelineEvent(this.deps, interaction);
     notifyInteractionChanged(this.deps, interaction.threadId);

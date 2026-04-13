@@ -30,6 +30,7 @@ async function main(): Promise<void> {
     hub,
     sandboxInteractionExpiryMs: DEFAULT_SANDBOX_PENDING_INTERACTION_EXPIRY_MS,
   });
+  pendingInteractions.start();
   const sandboxRegistry = createSandboxHostRegistry();
   const publicUrl = toOptionalString(serverConfig.BB_PUBLIC_URL);
 

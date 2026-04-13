@@ -18,6 +18,7 @@ import type {
   JsonRpcMessage,
   ProviderAdapter,
 } from "./provider-adapter.js";
+import { ProviderRequestDecodeError } from "./provider-adapter.js";
 import { createProviderForId } from "./provider-registry.js";
 import type {
   AgentRuntime,
@@ -48,6 +49,18 @@ type ThreadIdentityResult = z.infer<typeof threadIdentityResultSchema>;
 
 interface ResolveThreadIdentityResultArgs {
   result: ThreadIdentityResult;
+  threadId: string;
+}
+
+interface StampThreadEventScopeArgs {
+  event: ThreadEvent;
+  providerThreadId: string | undefined;
+  threadId: string;
+}
+
+interface ReconfigureThreadIfNeededArgs {
+  instructions: string | undefined;
+  options: AgentRuntimeExecutionOptions;
   threadId: string;
 }
 
@@ -212,6 +225,23 @@ function sendJsonRpcError(
   );
 }
 
+interface SendProviderRequestDecodeErrorArgs {
+  child: ChildProcess;
+  error: unknown;
+  id: string | number;
+}
+
+function sendProviderRequestDecodeErrorIfKnown(
+  args: SendProviderRequestDecodeErrorArgs,
+): boolean {
+  if (!(args.error instanceof ProviderRequestDecodeError)) {
+    return false;
+  }
+
+  sendJsonRpcError(args.child, args.id, args.error.message, args.error.code);
+  return true;
+}
+
 interface ThreadRuntimeConfig {
   dynamicTools?: DynamicTool[];
   environmentId: string;
@@ -281,6 +311,10 @@ function scopeProviderRequestId(
   return `${scope}:${String(requestId)}`;
 }
 
+/**
+ * Owns provider processes for an environment and bridges provider JSON-RPC
+ * traffic into bb thread events, dynamic tool calls, and pending interactions.
+ */
 export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
   let nextRequestId = 1;
   let nextCaptureId = 1;
@@ -351,11 +385,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     return undefined;
   }
 
-  function stampThreadEventScope(args: {
-    event: ThreadEvent;
-    providerThreadId: string | undefined;
-    threadId: string;
-  }): ThreadEvent {
+  function stampThreadEventScope(args: StampThreadEventScopeArgs): ThreadEvent {
     if ("providerThreadId" in args.event && args.providerThreadId) {
       return {
         ...args.event,
@@ -439,11 +469,9 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     }
   }
 
-  async function reconfigureThreadIfNeeded(args: {
-    instructions: string | undefined;
-    options: AgentRuntimeExecutionOptions;
-    threadId: string;
-  }): Promise<void> {
+  async function reconfigureThreadIfNeeded(
+    args: ReconfigureThreadIfNeededArgs,
+  ): Promise<void> {
     const currentConfig = threadRuntimeConfigs.get(args.threadId);
     if (!currentConfig) {
       return;
@@ -528,7 +556,19 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     args: RuntimeProviderRequestArgs,
   ): boolean {
     const providerId = args.proc.adapter.id;
-    const toolCallReq = args.proc.adapter.decodeToolCallRequest(args.rawRequest);
+    let toolCallReq: ReturnType<ProviderAdapter["decodeToolCallRequest"]>;
+    try {
+      toolCallReq = args.proc.adapter.decodeToolCallRequest(args.rawRequest);
+    } catch (error) {
+      if (sendProviderRequestDecodeErrorIfKnown({
+        child: args.proc.child,
+        error,
+        id: args.parsedId,
+      })) {
+        return true;
+      }
+      throw error;
+    }
     if (!toolCallReq) {
       return false;
     }
@@ -610,9 +650,24 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     args: RuntimeProviderRequestArgs,
   ): boolean {
     const providerId = args.proc.adapter.id;
-    const interactiveReq = args.proc.adapter.decodeInteractiveRequest?.(
-      args.rawRequest,
-    );
+    const decodeInteractiveRequest = args.proc.adapter.decodeInteractiveRequest;
+    if (!decodeInteractiveRequest) {
+      return false;
+    }
+
+    let interactiveReq: ReturnType<typeof decodeInteractiveRequest>;
+    try {
+      interactiveReq = decodeInteractiveRequest(args.rawRequest);
+    } catch (error) {
+      if (sendProviderRequestDecodeErrorIfKnown({
+        child: args.proc.child,
+        error,
+        id: args.parsedId,
+      })) {
+        return true;
+      }
+      throw error;
+    }
     if (!interactiveReq) {
       return false;
     }

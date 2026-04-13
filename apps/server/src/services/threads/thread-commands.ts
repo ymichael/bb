@@ -95,10 +95,52 @@ export type PreparedTurnRunCommandPayload = Omit<
 >;
 type PreparedTurnRunCommandBuildArgs = Omit<TurnRunCommandPayloadArgs, "eventSequence">;
 
-function toRuntimeExecutionOptions(args: {
+interface RuntimeExecutionOptionsArgs {
   execution: ResolvedThreadExecutionOptions;
   permissionEscalation: PermissionEscalation;
-}): RuntimeThreadExecutionOptions {
+}
+
+interface BuildExecutionOptionsArgs {
+  projectDefaults?: ProjectExecutionDefaults | null;
+  threadId: string;
+}
+
+type BuildExecutionOptionsSource =
+  | "client/thread/start"
+  | "client/turn/requested"
+  | "client/turn/start";
+
+interface QueueTurnRunCommandInTransactionArgs {
+  command: Extract<HostDaemonCommand, { type: "turn.run" }>;
+  hostId: string;
+  sessionId: string | null;
+}
+
+export interface QueueTurnSteerCommandArgs extends PrepareTurnRunCommandPayloadArgs {
+  eventSequence: number;
+  expectedTurnId: string;
+}
+
+export interface QueueThreadRenameCommandArgs {
+  environment: {
+    hostId: string;
+    id: string;
+  };
+  threadId: string;
+  title: string;
+}
+
+export interface QueueThreadDeletedCommandArgs {
+  environment: {
+    hostId: string;
+    id: string;
+  };
+  threadId: string;
+}
+
+function toRuntimeExecutionOptions(
+  args: RuntimeExecutionOptionsArgs,
+): RuntimeThreadExecutionOptions {
   const base = {
     model: args.execution.model,
     serviceTier: args.execution.serviceTier,
@@ -121,11 +163,8 @@ function toRuntimeExecutionOptions(args: {
 export async function buildExecutionOptions(
   deps: Pick<AppDeps, "db" | "hub">,
   request: ExecutionOptionsRequest,
-  args: {
-    projectDefaults?: ProjectExecutionDefaults | null;
-    threadId: string;
-  },
-  source: "client/thread/start" | "client/turn/requested" | "client/turn/start",
+  args: BuildExecutionOptionsArgs,
+  source: BuildExecutionOptionsSource,
 ): Promise<ResolvedThreadExecutionOptions> {
   return resolveExecutionOptions(deps, {
     ...(args.projectDefaults ? { projectDefaults: args.projectDefaults } : {}),
@@ -238,11 +277,7 @@ async function createTurnRunCommandPayload(
 
 export function queueTurnRunCommandInTransaction(
   db: DbTransaction,
-  args: {
-    command: Extract<HostDaemonCommand, { type: "turn.run" }>;
-    hostId: string;
-    sessionId: string | null;
-  },
+  args: QueueTurnRunCommandInTransactionArgs,
 ) {
   return queueCommandInTransaction(db, {
     hostId: args.hostId,
@@ -254,15 +289,7 @@ export function queueTurnRunCommandInTransaction(
 
 export async function queueTurnRunCommand(
   deps: SandboxWorkSessionDeps,
-  args: {
-    eventSequence: number;
-    environment: ThreadRuntimeCommandEnvironment;
-    execution: ResolvedThreadExecutionOptions;
-    permissionEscalation: PermissionEscalation;
-    input: PromptInput[];
-    providerThreadId?: string;
-    thread: Thread;
-  },
+  args: CreateTurnRunCommandPayloadArgs,
 ): Promise<void> {
   const session = await ensureHostSessionReadyForWork(deps, {
     hostId: args.environment.hostId,
@@ -282,16 +309,7 @@ export async function queueTurnRunCommand(
 
 export async function queueTurnSteerCommand(
   deps: SandboxWorkSessionDeps,
-  args: {
-    eventSequence: number;
-    environment: ThreadRuntimeCommandEnvironment;
-    execution: ResolvedThreadExecutionOptions;
-    permissionEscalation: PermissionEscalation;
-    expectedTurnId: string;
-    input: PromptInput[];
-    providerThreadId?: string;
-    thread: Thread;
-  },
+  args: QueueTurnSteerCommandArgs,
 ): Promise<void> {
   const session = await ensureHostSessionReadyForWork(deps, {
     hostId: args.environment.hostId,
@@ -349,14 +367,7 @@ function requireProviderThreadId(
 
 export function queueThreadRenameCommand(
   deps: Pick<AppDeps, "db" | "hub">,
-  args: {
-    environment: {
-      hostId: string;
-      id: string;
-    };
-    threadId: string;
-    title: string;
-  },
+  args: QueueThreadRenameCommandArgs,
 ): void {
   const session = getActiveSession(deps.db, args.environment.hostId);
   queueCommand(deps.db, deps.hub, {
@@ -374,13 +385,7 @@ export function queueThreadRenameCommand(
 
 export function queueThreadDeletedCommand(
   deps: Pick<AppDeps, "db" | "hub">,
-  args: {
-    environment: {
-      hostId: string;
-      id: string;
-    };
-    threadId: string;
-  },
+  args: QueueThreadDeletedCommandArgs,
 ): boolean {
   const session = getActiveSession(deps.db, args.environment.hostId);
   if (!session) {

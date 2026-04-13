@@ -536,7 +536,7 @@ describe("claude-code provider adapter", () => {
     });
   });
 
-  it("builds Claude permission approval responses for addRules-only session grants", () => {
+  it("does not build broad Claude permission updates for empty session grants", () => {
     const adapter = createClaudeCodeProviderAdapter();
 
     expect(
@@ -571,11 +571,54 @@ describe("claude-code provider adapter", () => {
     ).toEqual({
       kind: "permission_request",
       behavior: "allow",
+    });
+  });
+
+  it("builds Claude directory updates for file-system session grants", () => {
+    const adapter = createClaudeCodeProviderAdapter();
+
+    expect(
+      adapter.buildInteractiveResponse?.({
+        request: {
+          requestId: "req-4d",
+          method: CLAUDE_PERMISSION_REQUEST_APPROVAL_METHOD,
+          threadId: "thr_1",
+          providerThreadId: "claude-session-1",
+          turnId: "",
+          payload: {
+            kind: "permission_request",
+            itemId: "toolu_3d",
+            toolName: "Edit",
+            reason: "Needs file access",
+            permissions: {
+              network: null,
+              fileSystem: {
+                read: ["/tmp/project"],
+                write: ["/tmp/project"],
+              },
+            },
+          },
+        },
+        resolution: {
+          kind: "permission_request",
+          decision: "allow",
+          permissions: {
+            network: null,
+            fileSystem: {
+              read: ["/tmp/project"],
+              write: ["/tmp/project"],
+            },
+          },
+          scope: "session",
+        },
+      }),
+    ).toEqual({
+      kind: "permission_request",
+      behavior: "allow",
       updatedPermissions: [
         {
-          type: "addRules",
-          rules: [{ toolName: "Bash" }],
-          behavior: "allow",
+          type: "addDirectories",
+          directories: ["/tmp/project"],
           destination: "session",
         },
       ],

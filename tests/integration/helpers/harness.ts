@@ -197,6 +197,7 @@ async function startIntegrationServer(
     hub,
     sandboxInteractionExpiryMs: DEFAULT_SANDBOX_PENDING_INTERACTION_EXPIRY_MS,
   });
+  pendingInteractions.start();
   const sandboxRegistry = createSandboxHostRegistry();
   const config: ServerRuntimeConfig = {
     anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? "",

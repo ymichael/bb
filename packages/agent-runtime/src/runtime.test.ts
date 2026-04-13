@@ -14,6 +14,7 @@ import type {
   DecodedToolCallRequest,
   ProviderAdapter,
 } from "./provider-adapter.js";
+import { ProviderRequestDecodeError } from "./provider-adapter.js";
 import { createAgentRuntime } from "./runtime.js";
 import { parseAvailableModelList } from "./shared/available-models.js";
 import type { AgentRuntimeExecutionOptions } from "./types.js";
@@ -164,6 +165,22 @@ describe("createAgentRuntime", () => {
         }
 
         return null;
+      },
+      buildInteractiveResponse({ resolution }) {
+        return { resolution };
+      },
+    };
+  }
+
+  function createInvalidInteractiveRequestAdapter(scriptPath: string): ProviderAdapter {
+    const adapter = createFakeAdapter(scriptPath);
+    return {
+      ...adapter,
+      decodeInteractiveRequest(request): DecodedInteractiveRequest | null {
+        if (request.method !== "request_interaction") {
+          return null;
+        }
+        throw new ProviderRequestDecodeError("Invalid interactive request params");
       },
       buildInteractiveResponse({ resolution }) {
         return { resolution };
@@ -1746,6 +1763,133 @@ rl.on("line", (line) => {
         item: expect.objectContaining({
           type: "agentMessage",
           text: 'Unsupported provider request "request_unsupported"',
+        }),
+      }),
+    );
+    await runtime.shutdown();
+  });
+
+  it("responds to invalid interactive request params with a JSON-RPC invalid params error", async () => {
+    const invalidScriptPath = join(tmpDir, "invalid-interactive-provider.cjs");
+    writeFileSync(
+      invalidScriptPath,
+      `
+const readline = require("node:readline");
+let pendingInteractive = null;
+
+function send(message) {
+  process.stdout.write(JSON.stringify(message) + "\\n");
+}
+
+function completeTurn(text) {
+  send({
+    jsonrpc: "2.0",
+    method: "item/completed",
+    params: {
+      threadId: "prov-t1",
+      turnId: "turn-1",
+      item: {
+        type: "agentMessage",
+        id: "msg-turn-1",
+        text,
+      },
+    },
+  });
+  send({
+    jsonrpc: "2.0",
+    method: "turn/completed",
+    params: {
+      threadId: "prov-t1",
+      turnId: "turn-1",
+      status: "completed",
+      providerThreadId: "prov-t1",
+    },
+  });
+}
+
+const rl = readline.createInterface({ input: process.stdin });
+rl.on("line", (line) => {
+  const message = JSON.parse(line);
+
+  if (message.id !== undefined && !message.method) {
+    if (!pendingInteractive || pendingInteractive !== message.id) {
+      return;
+    }
+    pendingInteractive = null;
+    completeTurn(String(message.error && message.error.code));
+    return;
+  }
+
+  if (message.method === "initialize" || message.method === "model/list") {
+    send({ jsonrpc: "2.0", id: message.id, result: message.method === "model/list" ? [] : {} });
+    return;
+  }
+
+  if (message.method === "thread/start") {
+    send({ jsonrpc: "2.0", id: message.id, result: { providerThreadId: "prov-t1" } });
+    send({ jsonrpc: "2.0", method: "thread/identity", params: { threadId: message.params.threadId, providerThreadId: "prov-t1" } });
+    return;
+  }
+
+  if (message.method === "turn/start") {
+    send({ jsonrpc: "2.0", id: message.id, result: { ok: true } });
+    send({
+      jsonrpc: "2.0",
+      method: "turn/started",
+      params: { threadId: "prov-t1", turnId: "turn-1", providerThreadId: "prov-t1" },
+    });
+    pendingInteractive = 101;
+    send({
+      jsonrpc: "2.0",
+      id: pendingInteractive,
+      method: "request_interaction",
+      params: { broken: true },
+    });
+  }
+});
+`,
+      "utf8",
+    );
+
+    const events: ThreadEvent[] = [];
+    const runtime = createAgentRuntime({
+      workspacePath: tmpDir,
+      onEvent: (event) => events.push(event),
+      onToolCall: async () => ({
+        contentItems: [{ type: "inputText", text: "ok" }],
+        success: true,
+      }),
+      adapterFactory: () => createInvalidInteractiveRequestAdapter(invalidScriptPath),
+    });
+
+    await runtime.startThread({
+      environmentId: "env-1",
+      threadId: "t1",
+      projectId: "p1",
+      providerId: "fake",
+      options: fullRuntimeOptions,
+    });
+    await runtime.runTurn({
+      threadId: "t1",
+      input: [{ type: "text", text: "trigger invalid interactive request" }],
+      options: fullRuntimeOptions,
+    });
+    await waitForCondition(
+      () =>
+        events.some(
+          (event) =>
+            event.type === "item/completed"
+            && event.item.type === "agentMessage"
+            && event.item.text === "-32602",
+        ),
+    );
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "item/completed",
+        item: expect.objectContaining({
+          type: "agentMessage",
+          text: "-32602",
         }),
       }),
     );

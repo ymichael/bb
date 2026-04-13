@@ -92,6 +92,7 @@ export async function createTestAppHarness(
     hub,
     sandboxInteractionExpiryMs: DEFAULT_SANDBOX_PENDING_INTERACTION_EXPIRY_MS,
   });
+  pendingInteractions.start();
   const sandboxRegistry = createSandboxHostRegistry();
   const machineAuth = await createMachineAuthService({
     dataDir,

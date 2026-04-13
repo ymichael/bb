@@ -257,6 +257,76 @@ describe("pending interaction lifecycle", () => {
     }
   });
 
+  it("rejects permission allow resolutions that grant nothing", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-pending-interaction-empty-grant",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+      });
+
+      const created = registerPendingInteraction(
+        harness.deps.pendingInteractions,
+        {
+          threadId: thread.id,
+          turnId: "turn-empty-grant",
+          providerId: "codex",
+          providerThreadId: "provider-thread-empty-grant",
+          providerRequestId: "request-empty-grant",
+          payload: {
+            kind: "permission_request",
+            itemId: "item-empty-grant",
+            reason: "Needs network access",
+            toolName: "WebFetch",
+            permissions: {
+              network: { enabled: true },
+              fileSystem: null,
+            },
+          },
+        },
+        session.id,
+      );
+      if (created.outcome === "rejected") {
+        throw new Error(`Expected interaction registration to succeed: ${created.reason}`);
+      }
+
+      expect(() =>
+        harness.deps.pendingInteractions.resolvePendingInteraction({
+          threadId: thread.id,
+          interactionId: created.interaction.id,
+          resolution: {
+            kind: "permission_request",
+            decision: "allow",
+            permissions: {
+              network: null,
+              fileSystem: null,
+            },
+            scope: "session",
+          },
+        }),
+      ).toThrow("Allowed permission resolutions must grant at least one permission");
+
+      expect(
+        harness.deps.pendingInteractions.getThreadInteraction({
+          threadId: thread.id,
+          interactionId: created.interaction.id,
+        }).status,
+      ).toBe("pending");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("rejects a second active interaction on the same thread", async () => {
     const harness = await createTestAppHarness();
     try {
@@ -561,6 +631,7 @@ describe("pending interaction lifecycle", () => {
         hub: harness.hub,
         sandboxInteractionExpiryMs: 20,
       });
+      restartedLifecycle.start();
       await sleep(50);
 
       expect(

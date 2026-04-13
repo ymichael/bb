@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createCodexProviderAdapter } from "./adapter.js";
 import type { CodexEvent } from "./adapter.js";
+import { ProviderRequestDecodeError } from "../provider-adapter.js";
 import type { AdapterOptions } from "../provider-adapter.js";
 
 // ---------------------------------------------------------------------------
@@ -1441,10 +1442,10 @@ describe("codex provider adapter", () => {
     });
   });
 
-  it("decodeInteractiveRequest rejects empty command approval decisions", () => {
+  it("decodeInteractiveRequest rejects empty command approval decisions as invalid params", () => {
     const adapter = createCodexProviderAdapter();
     expect(
-      adapter.decodeInteractiveRequest?.({
+      () => adapter.decodeInteractiveRequest?.({
         jsonrpc: "2.0",
         id: 8,
         method: "item/commandExecution/requestApproval",
@@ -1459,7 +1460,7 @@ describe("codex provider adapter", () => {
           availableDecisions: [],
         },
       }),
-    ).toBeNull();
+    ).toThrowError(ProviderRequestDecodeError);
   });
 
   it("decodeInteractiveRequest preserves macOS permission bundles in command approvals", () => {

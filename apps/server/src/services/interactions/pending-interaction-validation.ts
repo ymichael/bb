@@ -75,6 +75,19 @@ function permissionProfileEquals(
   );
 }
 
+function hasGrantedPermissions(
+  permissions: PendingInteractionGrantedPermissionProfile,
+): boolean {
+  if (permissions.network?.enabled === true) {
+    return true;
+  }
+
+  return (
+    (permissions.fileSystem?.read.length ?? 0) > 0
+    || (permissions.fileSystem?.write.length ?? 0) > 0
+  );
+}
+
 export function pendingInteractionResolutionEquals(
   left: PendingInteraction["resolution"],
   right: PendingInteraction["resolution"],
@@ -178,6 +191,14 @@ function validatePermissionRequestResolution(
   }
   if (resolution.decision === "deny") {
     return;
+  }
+
+  if (!hasGrantedPermissions(resolution.permissions)) {
+    throw new ApiError(
+      400,
+      "invalid_request",
+      "Allowed permission resolutions must grant at least one permission",
+    );
   }
 
   if (resolution.permissions.network !== null) {

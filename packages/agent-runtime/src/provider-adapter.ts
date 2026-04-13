@@ -31,6 +31,17 @@ export type JsonValue =
   | JsonValue[]
   | { [key: string]: JsonValue | undefined };
 
+export const JSON_RPC_INVALID_PARAMS_CODE = -32602;
+
+export class ProviderRequestDecodeError extends Error {
+  readonly code = JSON_RPC_INVALID_PARAMS_CODE;
+
+  constructor(message: string) {
+    super(message);
+    this.name = "ProviderRequestDecodeError";
+  }
+}
+
 export interface ProviderTranslationContext {
   threadId?: string;
   parentToolCallId?: string;

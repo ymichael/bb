@@ -47,6 +47,10 @@ export interface ListPendingInteractionsByStatusArgs {
   statuses: readonly PendingInteractionStatus[];
 }
 
+export interface IsThreadOnEphemeralHostArgs {
+  threadId: string;
+}
+
 export interface SetPendingInteractionTerminalStateArgs {
   allowedCurrentStatuses?: readonly PendingInteractionStatus[];
   id: string;
@@ -307,6 +311,21 @@ export function listPendingInteractionsOnEphemeralHosts(
       : query.limit(args.limit);
 
   return limitedQuery.all();
+}
+
+export function isThreadOnEphemeralHost(
+  db: PendingInteractionReadConnection,
+  args: IsThreadOnEphemeralHostArgs,
+): boolean {
+  const row = db
+    .select({ threadId: threads.id })
+    .from(threads)
+    .innerJoin(environments, eq(environments.id, threads.environmentId))
+    .innerJoin(hosts, eq(hosts.id, environments.hostId))
+    .where(and(eq(threads.id, args.threadId), eq(hosts.type, "ephemeral")))
+    .get();
+
+  return row !== undefined;
 }
 
 export function setPendingInteractionResolved(
