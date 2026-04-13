@@ -4,6 +4,7 @@ import { decodeRow } from "../src/event-decode.js";
 import { toViewMessages, toViewProjection } from "../src/to-view-messages.js";
 import type { ThreadEventWithMeta } from "../src/to-view-messages.js";
 import {
+  buildTimelineRows as buildTimelineRowsFromProjection,
   buildTimelineRowsFromMessagesForNestedDisplay as buildTimelineRows,
 } from "../src/thread-detail-rows.js";
 import type { ViewMessage } from "@bb/domain";
@@ -246,6 +247,131 @@ describe("toViewProjection turn lifecycle", () => {
       "tool-call",
       "assistant-text",
       "operation",
+    ]);
+  });
+
+  it("summarizes completed tool-only turns without retaining full messages", () => {
+    const events: ThreadEventRow[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "turn/started",
+        data: {
+          providerThreadId: "provider-thread-1",
+          turnId: "turn-1",
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "item/completed",
+        data: {
+          providerThreadId: "provider-thread-1",
+          turnId: "turn-1",
+          item: {
+            type: "toolCall",
+            id: "tool-1",
+            tool: "exec_command",
+            arguments: { cmd: "pnpm test" },
+            status: "completed",
+          },
+        },
+        createdAt: 2,
+      },
+      {
+        id: "evt-3",
+        threadId: "thread-1",
+        seq: 3,
+        type: "turn/completed",
+        data: {
+          providerThreadId: "provider-thread-1",
+          turnId: "turn-1",
+          status: "completed",
+        },
+        createdAt: 3,
+      },
+    ];
+
+    const projection = toViewProjection(fromRows(events), {
+      threadStatus: "idle",
+      turnMessageDetail: "summary",
+    });
+
+    const entry = projection.entries[0];
+    expect(entry?.kind).toBe("turn");
+    if (entry?.kind !== "turn") {
+      throw new Error("Expected a turn entry");
+    }
+    expect(entry.turn.summaryCount).toBe(1);
+    expect(entry.turn.terminalMessage).toBeUndefined();
+    expect(entry.turn.messages).toBeUndefined();
+
+    const rows = buildTimelineRowsFromProjection(projection);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.kind).toBe("tool-group");
+  });
+
+  it("retains completed no-terminal turns when they contain standalone-only messages", () => {
+    const events: ThreadEventRow[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "turn/started",
+        data: {
+          providerThreadId: "provider-thread-1",
+          turnId: "turn-1",
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "item/completed",
+        data: {
+          providerThreadId: "provider-thread-1",
+          turnId: "turn-1",
+          item: {
+            type: "userMessage",
+            id: "user-1",
+            content: [
+              { type: "text", text: "Follow-up question" },
+            ],
+          },
+        },
+        createdAt: 2,
+      },
+      {
+        id: "evt-3",
+        threadId: "thread-1",
+        seq: 3,
+        type: "turn/completed",
+        data: {
+          providerThreadId: "provider-thread-1",
+          turnId: "turn-1",
+          status: "completed",
+        },
+        createdAt: 3,
+      },
+    ];
+
+    const projection = toViewProjection(fromRows(events), {
+      threadStatus: "idle",
+      turnMessageDetail: "summary",
+    });
+
+    const entry = projection.entries[0];
+    expect(entry?.kind).toBe("turn");
+    if (entry?.kind !== "turn") {
+      throw new Error("Expected a turn entry");
+    }
+    expect(entry.turn.summaryCount).toBe(0);
+    expect(entry.turn.messages?.map((message) => message.kind)).toEqual([
+      "user",
     ]);
   });
 

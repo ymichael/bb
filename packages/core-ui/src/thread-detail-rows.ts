@@ -8,11 +8,12 @@ import type {
 import { assertNever } from "./assert-never.js";
 import { getMessageStartedAt } from "./format-helpers.js";
 import { mergeProvisioningOperations } from "./provisioning-helpers.js";
-
-/** Messages that are never absorbed into a tool-group (they always stay standalone). */
-function isUngroupableMessage(message: ViewMessage): boolean {
-  return message.kind === "user" || message.kind === "debug/raw-event";
-}
+import {
+  findLastTerminalTimelineMessageIndex,
+  isTimelineUngroupableMessage,
+  toIndexedTimelineMessages,
+  type IndexedTimelineMessage,
+} from "./timeline-message-helpers.js";
 
 export interface BuildTimelineRowsOptions {
   includeToolGroupMessages?: boolean;
@@ -303,13 +304,10 @@ function getToolGroupStatus(messages: ViewMessage[]): TimelineToolGroupRow["stat
   );
 }
 
+type IndexedTurnMessage = IndexedTimelineMessage;
+
 function isLossyActiveTurn(messages: IndexedTurnMessage[]): boolean {
   return messages.some(({ message }) => getGroupMessageStatus(message) === "pending");
-}
-
-interface IndexedTurnMessage {
-  index: number;
-  message: ViewMessage;
 }
 
 interface IndexedTurnMessageGroup {
@@ -362,20 +360,6 @@ function collectMessagesByTurnSegment(messages: ViewMessage[]): IndexedTurnMessa
   return groups;
 }
 
-function isTerminalMessage(message: ViewMessage): boolean {
-  return message.kind === "assistant-text" || message.kind === "error";
-}
-
-function findLastTerminalIndex(turnMessages: IndexedTurnMessage[]): number | null {
-  for (let i = turnMessages.length - 1; i >= 0; i -= 1) {
-    const turnMessage = turnMessages[i];
-    if (turnMessage && isTerminalMessage(turnMessage.message)) {
-      return turnMessage.index;
-    }
-  }
-  return null;
-}
-
 function prepareTimelineMessages(messages: ViewMessage[]): ViewMessage[] {
   const provisioningMergedMessages = mergeProvisioningOperations(messages);
   const reconnectMergedMessages = mergeConsecutiveReconnectErrors(
@@ -397,7 +381,7 @@ function toMessageRow(message: ViewMessage): TimelineRow {
 }
 
 function findLastUngroupableIndexBeforeTerminal(
-  messages: IndexedTurnMessage[],
+  messages: IndexedTimelineMessage[],
   terminalIndex: number,
 ): number {
   let boundaryIndex = -1;
@@ -405,7 +389,7 @@ function findLastUngroupableIndexBeforeTerminal(
     if (index >= terminalIndex) {
       break;
     }
-    if (isUngroupableMessage(message)) {
+    if (isTimelineUngroupableMessage(message)) {
       boundaryIndex = index;
     }
   }
@@ -413,9 +397,9 @@ function findLastUngroupableIndexBeforeTerminal(
 }
 
 function getGroupedTerminalTurnMessages(
-  messages: IndexedTurnMessage[],
-): IndexedTurnMessage[] {
-  const terminalIndex = findLastTerminalIndex(messages);
+  messages: IndexedTimelineMessage[],
+): IndexedTimelineMessage[] {
+  const terminalIndex = findLastTerminalTimelineMessageIndex(messages);
   if (terminalIndex === null) {
     return [];
   }
@@ -426,7 +410,7 @@ function getGroupedTerminalTurnMessages(
   return messages.filter(({ index, message }) => {
     if (index <= boundaryIndex) return false;
     if (index >= terminalIndex) return false;
-    if (isUngroupableMessage(message)) return false;
+    if (isTimelineUngroupableMessage(message)) return false;
     return true;
   });
 }
@@ -486,10 +470,7 @@ function buildTerminalTurnRows(
   }
 
   const mergedMessages = prepareTimelineMessages(turn.messages);
-  const indexedMessages = mergedMessages.map((message, index) => ({
-    index,
-    message,
-  }));
+  const indexedMessages = toIndexedTimelineMessages(mergedMessages);
   const collapsedMessageIndices = new Set<number>();
   const groupedTurnMessages = getGroupedTerminalTurnMessages(indexedMessages);
   const collapsedByFirstIndex = new Map<number, ViewMessage[]>();
@@ -575,9 +556,11 @@ export function buildTimelineRowsFromMessagesForNestedDisplay(
       continue;
     }
 
-    const terminalIndex = collapseAll ? null : findLastTerminalIndex(turnMessages);
+    const terminalIndex = collapseAll
+      ? null
+      : findLastTerminalTimelineMessageIndex(turnMessages);
     const groupedTurnMessages = turnMessages.filter(({ index, message }) => {
-      if (isUngroupableMessage(message)) return false;
+      if (isTimelineUngroupableMessage(message)) return false;
       if (collapseAll) return true;
       if (terminalIndex === null) return false;
       return index < terminalIndex;

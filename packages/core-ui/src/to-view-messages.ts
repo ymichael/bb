@@ -22,6 +22,11 @@ import { parseWebSearchLifecycleEvent } from "./web-search-lifecycle.js";
 import { isExploringCall } from "./tool-call-parsing.js";
 import { parseOperationMessage, finalizeOperationMessage } from "./parse-operation-message.js";
 import { parseErrorMessage, isDuplicateEventType, isIgnoredItemStartEvent, isIgnoredItemCompletedEvent, appendDebugEvent } from "./parse-error-message.js";
+import {
+  findLastTerminalTimelineMessageIndex,
+  isTimelineUngroupableMessage,
+  toIndexedTimelineMessages,
+} from "./timeline-message-helpers.js";
 import { isIgnoredNoiseType } from "./timeline-noise-events.js";
 import { normalizeSemanticViewMessages } from "./semantic-view-messages.js";
 import { parseTaskMessage, shouldSuppressLowValueToolCall } from "./task-message-parsing.js";
@@ -1417,31 +1422,13 @@ function updateProjectionTurnCompletion(
   }
 }
 
-function isProjectionTerminalMessage(message: ViewMessage): boolean {
-  return message.kind === "assistant-text" || message.kind === "error";
-}
-
-function findProjectionTerminalMessageIndex(
-  messages: ViewMessage[],
-): number | null {
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const message = messages[index];
-    if (message && isProjectionTerminalMessage(message)) {
-      return index;
-    }
-  }
-  return null;
-}
-
 function findProjectionTerminalMessage(
   messages: ViewMessage[],
 ): ViewMessage | undefined {
-  const terminalIndex = findProjectionTerminalMessageIndex(messages);
+  const terminalIndex = findLastTerminalTimelineMessageIndex(
+    toIndexedTimelineMessages(messages),
+  );
   return terminalIndex === null ? undefined : messages[terminalIndex];
-}
-
-function isProjectionUngroupableMessage(message: ViewMessage): boolean {
-  return message.kind === "user" || message.kind === "debug/raw-event";
 }
 
 function getProjectionMessageSummaryCount(message: ViewMessage): number {
@@ -1458,15 +1445,12 @@ function getProjectionSummaryCount(
   messages: ViewMessage[],
   terminalMessage: ViewMessage | undefined,
 ): number {
-  if (!terminalMessage) {
-    return 0;
-  }
   let count = 0;
   for (const message of messages) {
-    if (message.id === terminalMessage.id) {
+    if (terminalMessage && message.id === terminalMessage.id) {
       break;
     }
-    if (isProjectionUngroupableMessage(message)) {
+    if (isTimelineUngroupableMessage(message)) {
       continue;
     }
     count += getProjectionMessageSummaryCount(message);
@@ -1478,20 +1462,16 @@ function shouldIncludeSummaryTurnMessages(
   messages: ViewMessage[],
   terminalMessage: ViewMessage | undefined,
 ): boolean {
-  if (!terminalMessage) {
-    return messages.length > 0;
-  }
-
   let foundTerminalMessage = false;
   for (const message of messages) {
-    if (message.id === terminalMessage.id) {
+    if (terminalMessage && message.id === terminalMessage.id) {
       foundTerminalMessage = true;
       continue;
     }
-    if (isProjectionUngroupableMessage(message)) {
+    if (isTimelineUngroupableMessage(message)) {
       return true;
     }
-    if (foundTerminalMessage) {
+    if (terminalMessage && foundTerminalMessage) {
       return true;
     }
   }
