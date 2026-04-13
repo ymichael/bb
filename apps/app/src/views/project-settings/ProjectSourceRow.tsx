@@ -45,14 +45,18 @@ export function ProjectSourceRow({
       ) : (
         <GitHubIcon className="size-4 shrink-0" />
       )}
-      <span className="flex min-w-0 flex-1 items-center gap-1.5">
+      <span className="flex min-w-0 flex-1 items-baseline gap-1.5">
         <span className="min-w-0 flex-shrink truncate">
           {isLocalSource ? source.path : source.repoUrl}
         </span>
         {isLocalSource ? (
-          <span className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
+          <span className="shrink-0 text-xs text-muted-foreground">
             {hostName}
-            {isLocalhostSource ? <LocalhostBadge /> : null}
+          </span>
+        ) : null}
+        {isLocalhostSource ? (
+          <span className="self-center">
+            <LocalhostBadge />
           </span>
         ) : null}
         {isLocalPathInvalid ? (
