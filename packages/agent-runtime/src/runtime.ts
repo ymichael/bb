@@ -64,6 +64,16 @@ interface ReconfigureThreadIfNeededArgs {
   threadId: string;
 }
 
+type ProviderRequestKind = "interactive request" | "tool call";
+
+interface ResolveProviderRequestThreadIdArgs {
+  parsedId: string | number;
+  proc: ProviderProcess;
+  providerThreadId: string;
+  requestKind: ProviderRequestKind;
+  threadIdHint: string | undefined;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
@@ -385,6 +395,39 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     return undefined;
   }
 
+  function formatProviderRequestKindForSentence(
+    requestKind: ProviderRequestKind,
+  ): string {
+    return requestKind === "tool call" ? "Tool call" : "Interactive request";
+  }
+
+  function resolveProviderRequestThreadId(
+    args: ResolveProviderRequestThreadIdArgs,
+  ): string | null {
+    const resolvedThreadId = resolveBbThreadIdForProcess(
+      args.proc,
+      args.providerThreadId,
+    );
+    if (!resolvedThreadId) {
+      sendJsonRpcError(
+        args.proc.child,
+        args.parsedId,
+        `Unable to resolve BB thread id for ${args.requestKind} on provider thread "${args.providerThreadId}"`,
+      );
+      return null;
+    }
+    if (args.threadIdHint && args.threadIdHint !== resolvedThreadId) {
+      sendJsonRpcError(
+        args.proc.child,
+        args.parsedId,
+        `${formatProviderRequestKindForSentence(args.requestKind)} thread hint "${args.threadIdHint}" did not match resolved BB thread "${resolvedThreadId}" for provider thread "${args.providerThreadId}"`,
+      );
+      return null;
+    }
+
+    return resolvedThreadId;
+  }
+
   function stampThreadEventScope(args: StampThreadEventScopeArgs): ThreadEvent {
     if ("providerThreadId" in args.event && args.providerThreadId) {
       return {
@@ -573,27 +616,14 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       return false;
     }
 
-    const resolvedThreadId = resolveBbThreadIdForProcess(
-      args.proc,
-      toolCallReq.providerThreadId,
-    );
+    const resolvedThreadId = resolveProviderRequestThreadId({
+      parsedId: args.parsedId,
+      proc: args.proc,
+      providerThreadId: toolCallReq.providerThreadId,
+      requestKind: "tool call",
+      threadIdHint: toolCallReq.threadId,
+    });
     if (!resolvedThreadId) {
-      sendJsonRpcError(
-        args.proc.child,
-        args.parsedId,
-        `Unable to resolve BB thread id for tool call on provider thread "${toolCallReq.providerThreadId}"`,
-      );
-      return true;
-    }
-    if (
-      toolCallReq.threadId
-      && toolCallReq.threadId !== resolvedThreadId
-    ) {
-      sendJsonRpcError(
-        args.proc.child,
-        args.parsedId,
-        `Tool call thread hint "${toolCallReq.threadId}" did not match resolved BB thread "${resolvedThreadId}" for provider thread "${toolCallReq.providerThreadId}"`,
-      );
       return true;
     }
 
@@ -672,27 +702,14 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       return false;
     }
 
-    const resolvedThreadId = resolveBbThreadIdForProcess(
-      args.proc,
-      interactiveReq.providerThreadId,
-    );
+    const resolvedThreadId = resolveProviderRequestThreadId({
+      parsedId: args.parsedId,
+      proc: args.proc,
+      providerThreadId: interactiveReq.providerThreadId,
+      requestKind: "interactive request",
+      threadIdHint: interactiveReq.threadId,
+    });
     if (!resolvedThreadId) {
-      sendJsonRpcError(
-        args.proc.child,
-        args.parsedId,
-        `Unable to resolve BB thread id for interactive request on provider thread "${interactiveReq.providerThreadId}"`,
-      );
-      return true;
-    }
-    if (
-      interactiveReq.threadId
-      && interactiveReq.threadId !== resolvedThreadId
-    ) {
-      sendJsonRpcError(
-        args.proc.child,
-        args.parsedId,
-        `Interactive request thread hint "${interactiveReq.threadId}" did not match resolved BB thread "${resolvedThreadId}" for provider thread "${interactiveReq.providerThreadId}"`,
-      );
       return true;
     }
     if (!args.proc.adapter.buildInteractiveResponse) {
