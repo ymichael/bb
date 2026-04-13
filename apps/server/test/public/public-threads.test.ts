@@ -26,7 +26,7 @@ import {
   updateHost,
 } from "@bb/db";
 import { HOST_DAEMON_PROTOCOL_VERSION } from "@bb/host-daemon-contract";
-import { systemOperationEventDataSchema, systemProvisioningEventDataSchema, threadSchema } from "@bb/domain";
+import { systemOperationEventDataSchema, systemThreadProvisioningEventDataSchema, threadSchema } from "@bb/domain";
 import type { SandboxHostProgressCallbacks } from "@bb/sandbox-host";
 import { renderTemplate } from "@bb/templates";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -1374,16 +1374,16 @@ describe("public thread routes", () => {
         .from(events)
         .where(eq(events.threadId, createdThread.id))
         .all()
-        .filter((event) => event.type === "system/provisioning")
-        .map((event) => systemProvisioningEventDataSchema.parse(JSON.parse(event.data)));
+        .filter((event) => event.type === "system/thread-provisioning")
+        .map((event) => systemThreadProvisioningEventDataSchema.parse(JSON.parse(event.data)));
       expect(
         provisioningEvents.flatMap((event) => event.entries.map((entry) => entry.text)),
       ).toEqual(
         expect.arrayContaining([
-          "Preparing sandbox host",
+          "Preparing sandbox",
           "Sandbox host ready",
           "Starting sandbox daemon",
-          "Sandbox daemon started",
+          "Sandbox daemon ready",
           "Sandbox host connected",
         ]),
       );
@@ -1706,8 +1706,8 @@ describe("public thread routes", () => {
         .where(eq(events.threadId, createdThread.id))
         .all();
       const failureEvents = storedEvents
-        .filter((event) => event.type === "system/provisioning")
-        .map((event) => systemProvisioningEventDataSchema.parse(JSON.parse(event.data)));
+        .filter((event) => event.type === "system/thread-provisioning")
+        .map((event) => systemThreadProvisioningEventDataSchema.parse(JSON.parse(event.data)));
       expect(
         failureEvents.flatMap((event) => event.entries.map((entry) => entry.text)),
       ).toContain("sandbox bootstrap failed");

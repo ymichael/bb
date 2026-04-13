@@ -11,9 +11,8 @@ export const systemEventTypeValues = [
   "system/error",
   "system/manager/user_message",
   "system/thread/interrupted",
-  "system/thread-title/updated",
   "system/operation",
-  "system/provisioning",
+  "system/thread-provisioning",
 ] as const;
 export const systemEventTypeSchema = z.enum(systemEventTypeValues);
 export type SystemEventType = z.infer<typeof systemEventTypeSchema>;
@@ -71,16 +70,6 @@ export const systemErrorEventDataSchema = z.object({
 });
 export type SystemErrorEventData = z.infer<typeof systemErrorEventDataSchema>;
 
-export const systemThreadTitleUpdatedEventDataSchema = z.object({
-  title: z.string(),
-  previousTitle: z.string().optional(),
-  source: z.literal("provider"),
-  providerMethod: z.string().optional(),
-});
-export type SystemThreadTitleUpdatedEventData = z.infer<
-  typeof systemThreadTitleUpdatedEventDataSchema
->;
-
 export const systemOperationEventDataSchema = z.object({
   operation: z.string(),
   status: z.string(),
@@ -112,13 +101,25 @@ export type ProvisioningTranscriptEntry = z.infer<
   typeof provisioningTranscriptEntrySchema
 >;
 
-export const systemProvisioningEventDataSchema = z.object({
-  status: z.enum(["started", "in_progress", "completed", "failed"]),
+export const systemThreadProvisioningStatusValues = [
+  "active",
+  "completed",
+  "failed",
+] as const;
+export const systemThreadProvisioningStatusSchema = z.enum(
+  systemThreadProvisioningStatusValues,
+);
+export type SystemThreadProvisioningStatus = z.infer<
+  typeof systemThreadProvisioningStatusSchema
+>;
+
+export const systemThreadProvisioningEventDataSchema = z.object({
+  status: systemThreadProvisioningStatusSchema,
   environmentId: z.string(),
   entries: z.array(provisioningTranscriptEntrySchema),
 });
-export type SystemProvisioningEventData = z.infer<
-  typeof systemProvisioningEventDataSchema
+export type SystemThreadProvisioningEventData = z.infer<
+  typeof systemThreadProvisioningEventDataSchema
 >;
 
 export const systemManagerUserMessageEventDataSchema = z.object({
@@ -145,9 +146,8 @@ export type ThreadEventDataByType = {
   "system/error": SystemErrorEventData;
   "system/manager/user_message": SystemManagerUserMessageEventData;
   "system/thread/interrupted": SystemThreadInterruptedEventData;
-  "system/thread-title/updated": SystemThreadTitleUpdatedEventData;
   "system/operation": SystemOperationEventData;
-  "system/provisioning": SystemProvisioningEventData;
+  "system/thread-provisioning": SystemThreadProvisioningEventData;
 };
 
 export type ThreadEventData =

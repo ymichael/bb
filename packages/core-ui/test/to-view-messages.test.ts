@@ -812,11 +812,11 @@ describe("toViewMessages replay coverage", () => {
         id: "evt-1",
         threadId: "thread-1",
         seq: 1,
-        type: "system/provisioning",
+        type: "system/thread-provisioning",
         data: {
-          status: "started",
+          status: "active",
           environmentId: "env-1",
-          entries: [{ type: "step", key: "provision", text: "Provisioning worktree", status: "started" }],
+          entries: [{ type: "step", key: "provision", text: "Creating worktree", status: "started" }],
         },
         createdAt: 1,
       },
@@ -824,11 +824,11 @@ describe("toViewMessages replay coverage", () => {
         id: "evt-2",
         threadId: "thread-1",
         seq: 2,
-        type: "system/provisioning",
+        type: "system/thread-provisioning",
         data: {
-          status: "in_progress",
+          status: "active",
           environmentId: "env-1",
-          entries: [{ type: "step", key: "setup", text: "running .bb-env-setup.sh", status: "started" }],
+          entries: [{ type: "step", key: "setup", text: "Running .bb-env-setup.sh", status: "started" }],
         },
         createdAt: 2,
       },
@@ -849,9 +849,9 @@ describe("toViewMessages replay coverage", () => {
       return;
     }
 
-    expect(messageRows[0].message.opType).toBe("provisioning");
+    expect(messageRows[0].message.opType).toBe("thread-provisioning");
     expect(messageRows[0].message.status).toBe("pending");
-    expect(messageRows[0].message.title).toBe("Provisioning environment");
+    expect(messageRows[0].message.title).toBe("Provisioning thread");
   });
 
   it("finalizes streaming assistant and reasoning messages when thread is idle", () => {
@@ -1467,12 +1467,11 @@ describe("toViewMessages replay coverage", () => {
         id: "evt-2",
         threadId: "thread-1",
         seq: 2,
-        type: "system/thread-title/updated",
+        type: "thread/name/updated",
         data: {
-          turnId: "turn-1",
-          title: "server restart bug",
-          previousTitle: "threads - why is that?",
-          source: "provider",
+          providerThreadId: "thread-1",
+          threadId: "thread-1",
+          threadName: "server restart bug",
         },
         createdAt: 2,
       },
@@ -1536,11 +1535,11 @@ describe("toViewMessages replay coverage", () => {
         id: "evt-2",
         threadId: "thread-1",
         seq: 2,
-        type: "system/thread-title/updated",
+        type: "thread/name/updated",
         data: {
-          turnId: "turn-1",
-          title: "new thread name",
-          source: "provider",
+          providerThreadId: "thread-1",
+          threadId: "thread-1",
+          threadName: "new thread name",
         },
         createdAt: 2,
       },
@@ -2137,34 +2136,6 @@ describe("toViewMessages replay coverage", () => {
     expect(op?.detail).toBe("status: allowed • limit: five_hour");
   });
 
-  it("hides system thread title updates from the timeline", () => {
-    const events: ThreadEventRow[] = [
-      {
-        id: "evt-1",
-        threadId: "thread-1",
-        seq: 1,
-        type: "system/thread-title/updated",
-        data: {
-          title: "Fix collapsed groups",
-          previousTitle: "Investigate slowness",
-          source: "provider",
-          providerMethod: "thread/started",
-        },
-        createdAt: 1,
-      },
-    ];
-
-    const projected = toViewMessages(fromRows(events), {
-      threadStatus: "active",
-    });
-    const ops = projected.filter(
-      (message): message is Extract<ViewMessage, { kind: "operation" }> =>
-        message.kind === "operation",
-    );
-
-    expect(ops).toHaveLength(0);
-  });
-
   it("hides provider thread name updates from the timeline", () => {
     const events: ThreadEventRow[] = [
       {
@@ -2192,7 +2163,7 @@ describe("toViewMessages replay coverage", () => {
     expect(ops).toHaveLength(0);
   });
 
-  it("hides both provider + system title update pairs from the timeline", () => {
+  it("hides repeated provider thread name updates from the timeline", () => {
     const events: ThreadEventRow[] = [
       {
         id: "evt-1",
@@ -2210,12 +2181,11 @@ describe("toViewMessages replay coverage", () => {
         id: "evt-2",
         threadId: "thread-1",
         seq: 2,
-        type: "system/thread-title/updated",
+        type: "thread/name/updated",
         data: {
-          title: "Server-assigned title",
-          previousTitle: "Old title",
-          source: "provider",
-          providerMethod: "thread/name/updated",
+          providerThreadId: "thread-1",
+          threadId: "thread-1",
+          threadName: "Server-assigned title",
         },
         createdAt: 2,
       },
@@ -2533,11 +2503,11 @@ describe("toViewMessages replay coverage", () => {
         id: "evt-1",
         threadId: "thread-1",
         seq: 1,
-        type: "system/provisioning",
+        type: "system/thread-provisioning",
         data: {
-          status: "started",
+          status: "active",
           environmentId: "env-1",
-          entries: [{ type: "step", key: "provision", text: "Provisioning worktree", status: "started" }],
+          entries: [{ type: "step", key: "provision", text: "Creating worktree", status: "started" }],
         },
         createdAt: 1,
       },
@@ -2545,11 +2515,11 @@ describe("toViewMessages replay coverage", () => {
         id: "evt-2",
         threadId: "thread-1",
         seq: 2,
-        type: "system/provisioning",
+        type: "system/thread-provisioning",
         data: {
-          status: "in_progress",
+          status: "active",
           environmentId: "env-1",
-          entries: [{ type: "step", key: "setup", text: "running .bb-env-setup.sh", status: "started" }],
+          entries: [{ type: "step", key: "setup", text: "Running .bb-env-setup.sh", status: "started" }],
         },
         createdAt: 2,
       },
@@ -2557,11 +2527,11 @@ describe("toViewMessages replay coverage", () => {
         id: "evt-3",
         threadId: "thread-1",
         seq: 3,
-        type: "system/provisioning",
+        type: "system/thread-provisioning",
         data: {
           status: "completed",
           environmentId: "env-1",
-          entries: [{ type: "step", key: "setup", text: "ran .bb-env-setup.sh", status: "completed" }],
+          entries: [{ type: "step", key: "setup", text: ".bb-env-setup.sh finished", status: "completed" }],
         },
         createdAt: 3,
       },
@@ -2576,25 +2546,25 @@ describe("toViewMessages replay coverage", () => {
     );
 
     expect(ops).toHaveLength(3);
-    expect(ops[0]?.opType).toBe("provisioning");
-    expect(ops[0]?.title).toBe("Provisioning started");
-    expect(ops[1]?.opType).toBe("provisioning");
-    expect(ops[1]?.title).toBe("Provisioning environment");
-    expect(ops[2]?.opType).toBe("provisioning");
-    expect(ops[2]?.title).toBe("Provisioning ready");
+    expect(ops[0]?.opType).toBe("thread-provisioning");
+    expect(ops[0]?.title).toBe("Provisioning thread");
+    expect(ops[1]?.opType).toBe("thread-provisioning");
+    expect(ops[1]?.title).toBe("Provisioning thread");
+    expect(ops[2]?.opType).toBe("thread-provisioning");
+    expect(ops[2]?.title).toBe("Provisioned thread");
   });
 
-  it("projects provisioning in_progress events as pending operations", () => {
+  it("projects active provisioning events as pending operations", () => {
     const events: ThreadEventRow[] = [
       {
         id: "evt-1",
         threadId: "thread-1",
         seq: 1,
-        type: "system/provisioning",
+        type: "system/thread-provisioning",
         data: {
-          status: "in_progress",
+          status: "active",
           environmentId: "env-1",
-          entries: [{ type: "step", key: "session", text: "starting provider session", status: "started" }],
+          entries: [{ type: "step", key: "session", text: "Starting agent session", status: "started" }],
         },
         createdAt: 1,
       },
@@ -2609,8 +2579,8 @@ describe("toViewMessages replay coverage", () => {
     );
 
     expect(ops).toHaveLength(1);
-    expect(ops[0]?.opType).toBe("provisioning");
-    expect(ops[0]?.title).toBe("Provisioning environment");
+    expect(ops[0]?.opType).toBe("thread-provisioning");
+    expect(ops[0]?.title).toBe("Provisioning thread");
     expect(ops[0]?.status).toBe("pending");
   });
 
@@ -2620,13 +2590,13 @@ describe("toViewMessages replay coverage", () => {
         id: "evt-1",
         threadId: "thread-1",
         seq: 1,
-        type: "system/provisioning",
+        type: "system/thread-provisioning",
         data: {
-          status: "in_progress",
+          status: "active",
           environmentId: "env-1",
           entries: [
-            { type: "step", key: "branch", text: "checked out branch bb/thread-123 (abcdef1)", status: "completed" },
-            { type: "step", key: "setup", text: "running .bb-env-setup.sh", status: "started" },
+            { type: "step", key: "branch", text: "Using branch: bb/thread-123 (abcdef1)", status: "completed" },
+            { type: "step", key: "setup", text: "Running .bb-env-setup.sh", status: "started" },
           ],
         },
         createdAt: 1,
@@ -2641,10 +2611,10 @@ describe("toViewMessages replay coverage", () => {
         message.kind === "operation",
     );
 
-    expect(op?.opType).toBe("provisioning");
+    expect(op?.opType).toBe("thread-provisioning");
     expect(op?.provisioning?.transcript).toEqual([
-      { type: "step", key: "branch", text: "checked out branch bb/thread-123 (abcdef1)", status: "completed" },
-      { type: "step", key: "setup", text: "running .bb-env-setup.sh", status: "started" },
+      { type: "step", key: "branch", text: "Using branch: bb/thread-123 (abcdef1)", status: "completed" },
+      { type: "step", key: "setup", text: "Running .bb-env-setup.sh", status: "started" },
     ]);
   });
 
@@ -3040,11 +3010,11 @@ describe("toViewMessages replay coverage", () => {
         id: "evt-2",
         threadId: "thread-1",
         seq: 2,
-        type: "system/provisioning",
+        type: "system/thread-provisioning",
         data: {
-          status: "started",
+          status: "active",
           environmentId: "env-1",
-          entries: [{ type: "step", key: "provision", text: "Provisioning worktree", status: "started" }],
+          entries: [{ type: "step", key: "provision", text: "Creating worktree", status: "started" }],
         },
         createdAt: 2,
       },
@@ -3052,11 +3022,11 @@ describe("toViewMessages replay coverage", () => {
         id: "evt-3",
         threadId: "thread-1",
         seq: 3,
-        type: "system/provisioning",
+        type: "system/thread-provisioning",
         data: {
           status: "failed",
           environmentId: "env-1",
-          entries: [{ type: "step", key: "setup", text: "setup script failed: .bb-env-setup.sh", status: "failed" }],
+          entries: [{ type: "step", key: "setup", text: ".bb-env-setup.sh failed", status: "failed" }],
         },
         createdAt: 3,
       },
@@ -3067,7 +3037,7 @@ describe("toViewMessages replay coverage", () => {
         type: "system/error",
         data: {
           code: "thread_provisioning_failed",
-          message: "Thread provisioning failed for project proj-1",
+          message: "Provisioning thread failed",
           detail: "pnpm build failed",
         },
         createdAt: 4,
@@ -3093,13 +3063,13 @@ describe("toViewMessages replay coverage", () => {
 
     expect(messageRows[1]?.message.kind).toBe("operation");
     if (messageRows[1]?.message.kind === "operation") {
-      expect(messageRows[1].message.opType).toBe("provisioning");
-      expect(messageRows[1].message.title).toBe("Provisioning environment failed");
+      expect(messageRows[1].message.opType).toBe("thread-provisioning");
+      expect(messageRows[1].message.title).toBe("Provisioning thread failed");
     }
 
     expect(messageRows[2]?.message.kind).toBe("error");
     if (messageRows[2]?.message.kind === "error") {
-      expect(messageRows[2].message.message).toContain("Thread provisioning failed");
+      expect(messageRows[2].message.message).toContain("Provisioning thread failed");
       expect(messageRows[2].message.message).toContain("pnpm build failed");
     }
   });
@@ -3134,11 +3104,11 @@ describe("toViewMessages replay coverage", () => {
         id: "evt-2",
         threadId: "thread-1",
         seq: 2,
-        type: "system/provisioning",
+        type: "system/thread-provisioning",
         data: {
-          status: "started",
+          status: "active",
           environmentId: "env-1",
-          entries: [{ type: "step", key: "provision", text: "Provisioning environment", status: "started" }],
+          entries: [{ type: "step", key: "provision", text: "Provisioning thread", status: "started" }],
         },
         createdAt: 2,
       },
@@ -3149,7 +3119,7 @@ describe("toViewMessages replay coverage", () => {
         type: "system/error",
         data: {
           code: "thread_provisioning_failed",
-          message: "Thread provisioning failed for project proj-1",
+          message: "Provisioning thread failed",
           detail: "Provider runtime is unavailable",
         },
         createdAt: 3,
@@ -3170,8 +3140,8 @@ describe("toViewMessages replay coverage", () => {
     expect(messageRows).toHaveLength(3);
     expect(messageRows[1]?.message.kind).toBe("operation");
     if (messageRows[1]?.message.kind === "operation") {
-      expect(messageRows[1].message.opType).toBe("provisioning");
-      expect(messageRows[1].message.title).toBe("Provisioning failed");
+      expect(messageRows[1].message.opType).toBe("thread-provisioning");
+      expect(messageRows[1].message.title).toBe("Provisioning thread failed");
     }
 
     expect(messageRows[2]?.message.kind).toBe("error");
@@ -3505,11 +3475,11 @@ describe("toViewMessages replay coverage", () => {
         id: "evt-2",
         threadId: "thread-1",
         seq: 2,
-        type: "system/provisioning",
+        type: "system/thread-provisioning",
         data: {
-          status: "started",
+          status: "active",
           environmentId: "env-1",
-          entries: [{ type: "step", key: "provision", text: "Provisioning worktree", status: "started" }],
+          entries: [{ type: "step", key: "provision", text: "Creating worktree", status: "started" }],
         },
         createdAt: 2,
       },
@@ -3517,11 +3487,11 @@ describe("toViewMessages replay coverage", () => {
         id: "evt-3",
         threadId: "thread-1",
         seq: 3,
-        type: "system/provisioning",
+        type: "system/thread-provisioning",
         data: {
           status: "completed",
           environmentId: "env-1",
-          entries: [{ type: "step", key: "provision", text: "Provisioning worktree", status: "started" }],
+          entries: [{ type: "step", key: "provision", text: "Created worktree", status: "completed" }],
         },
         createdAt: 3,
       },
@@ -3586,7 +3556,7 @@ describe("toViewMessages replay coverage", () => {
     }
     expect(messageRows[1]?.message.kind).toBe("operation");
     if (messageRows[1]?.message.kind === "operation") {
-      expect(messageRows[1].message.opType).toBe("provisioning");
+      expect(messageRows[1].message.opType).toBe("thread-provisioning");
     }
   });
 
@@ -3620,11 +3590,11 @@ describe("toViewMessages replay coverage", () => {
         id: "evt-2",
         threadId: "thread-1",
         seq: 2,
-        type: "system/provisioning",
+        type: "system/thread-provisioning",
         data: {
-          status: "started",
+          status: "active",
           environmentId: "env-1",
-          entries: [{ type: "step", key: "provision", text: "Provisioning environment", status: "started" }],
+          entries: [{ type: "step", key: "provision", text: "Provisioning thread", status: "started" }],
         },
         createdAt: 2,
       },
@@ -3632,11 +3602,11 @@ describe("toViewMessages replay coverage", () => {
         id: "evt-3",
         threadId: "thread-1",
         seq: 3,
-        type: "system/provisioning",
+        type: "system/thread-provisioning",
         data: {
           status: "completed",
           environmentId: "env-1",
-          entries: [{ type: "step", key: "provision", text: "Provisioning environment", status: "started" }],
+          entries: [{ type: "step", key: "provision", text: "Provisioning thread", status: "started" }],
         },
         createdAt: 3,
       },
@@ -3659,10 +3629,10 @@ describe("toViewMessages replay coverage", () => {
       return;
     }
 
-    expect(messageRows[1].message.opType).toBe("provisioning");
-    expect(messageRows[1].message.title).toBe("Provisioned environment");
+    expect(messageRows[1].message.opType).toBe("thread-provisioning");
+    expect(messageRows[1].message.title).toBe("Provisioned thread");
     expect(messageRows[1].message.provisioning?.transcript?.[0]?.text).toBe(
-      "Provisioning environment",
+      "Provisioning thread",
     );
     expect(messageRows[1].message.detail).toBeUndefined();
   });

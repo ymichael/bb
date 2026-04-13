@@ -31,6 +31,15 @@ function splitNonEmptyLines(value: string | undefined): string[] {
 function formatProvisioningTranscriptEntry(
   entry: ViewProvisioningTranscriptEntry,
 ): string | undefined {
+  const durationMs = typeof entry.metadata?.durationMs === "number"
+    ? entry.metadata.durationMs
+    : undefined;
+  if (
+    durationMs !== undefined &&
+    (entry.status === "completed" || entry.status === "failed")
+  ) {
+    return `${entry.text} (${durationToCompactString(durationMs)})`;
+  }
   return entry.text;
 }
 
@@ -200,14 +209,14 @@ function buildProvisioningSummary(
     default:
       switch (message.status) {
         case "completed":
-          return <EventTitle prefix="Provisioned" detail="environment" tone={tone} />;
+          return <EventTitle prefix="Provisioned" detail="thread" tone={tone} />;
         case "error":
-          return <EventTitle prefix="Provisioning" detail="environment" emphasis="failed" tone={tone} />;
+          return <EventTitle prefix="Provisioning" detail="thread" emphasis="failed" tone={tone} />;
         case "interrupted":
           return (
             <EventTitle
               prefix="Provisioning"
-              detail="environment"
+              detail="thread"
               emphasis="interrupted"
               tone={tone}
             />
@@ -216,7 +225,7 @@ function buildProvisioningSummary(
           return (
             <EventTitle
               prefix="Provisioning"
-              detail="environment"
+              detail="thread"
               tone={tone}
               shimmerPrefix={isPending}
             />
@@ -240,8 +249,13 @@ function buildProvisioningTranscript(
   // Operation rows advance createdAt as provisioning transcript updates arrive,
   // so createdAt - startedAt reflects the elapsed provisioning time.
   if (message.status !== "pending" && message.startedAt !== undefined && message.createdAt >= message.startedAt) {
+    const label = message.status === "completed"
+      ? "Provisioned thread"
+      : message.status === "error"
+        ? "Provisioning thread failed"
+        : "Provisioning thread interrupted";
     lines.push(
-      `provisioning took ${durationToCompactString(message.createdAt - message.startedAt)}`,
+      `${label} (${durationToCompactString(message.createdAt - message.startedAt)})`,
     );
   }
 
@@ -316,7 +330,7 @@ export function OperationRow({
   const { elementRef: provisioningScrollRef, handleScroll: handleProvisioningScroll } =
     useStickyBottomAutoScroll<HTMLDivElement>({
       isExpanded,
-      scrollDep: message.opType === "provisioning" ? message.provisioning?.transcript : undefined,
+      scrollDep: message.opType === "thread-provisioning" ? message.provisioning?.transcript : undefined,
     });
   const tone = getOperationTone(message);
   if (message.opType === "plan-updated") {
@@ -337,7 +351,7 @@ export function OperationRow({
     );
   }
 
-  if (message.opType === "provisioning") {
+  if (message.opType === "thread-provisioning") {
     const summaryContent = buildProvisioningSummary(message, tone);
     const { lines } = buildProvisioningTranscript(message);
     const additionalDetailLines = splitNonEmptyLines(message.detail).filter(

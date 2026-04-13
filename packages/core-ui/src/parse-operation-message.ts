@@ -1,6 +1,7 @@
 import type {
   ThreadEvent,
   ThreadEventPlanStepStatus,
+  SystemThreadProvisioningStatus,
   ViewThreadOperationKind,
   ViewThreadOperationStatus,
 } from "@bb/domain";
@@ -109,11 +110,10 @@ export function threadOperationStatus(
 }
 
 function provisioningOperationStatus(
-  status: "started" | "in_progress" | "completed" | "failed",
+  status: SystemThreadProvisioningStatus,
 ): ViewOperationMessage["status"] {
   switch (status) {
-    case "started":
-    case "in_progress":
+    case "active":
       return "pending";
     case "completed":
       return "completed";
@@ -241,39 +241,31 @@ export function parseOperationMessage(
     });
   }
 
-  if (decoded.type === "system/provisioning") {
+  if (decoded.type === "system/thread-provisioning") {
     const { status, environmentId } = decoded;
     const transcript = readProvisioningTranscript(decoded.entries);
     const title = (() => {
       switch (status) {
-        case "started":
-          return "Provisioning started";
-        case "in_progress":
-          return "Provisioning environment";
+        case "active":
+          return "Provisioning thread";
         case "completed":
-          return "Provisioning ready";
+          return "Provisioned thread";
         case "failed":
-          return "Provisioning failed";
+          return "Provisioning thread failed";
         default:
-          return "Provisioning";
+          return "Provisioning thread";
       }
     })();
-    return op(decoded, meta, "provisioning", {
+    return op(decoded, meta, "thread-provisioning", {
       turnId: eventTurnId,
-      opType: "provisioning",
+      opType: "thread-provisioning",
       title,
       status: provisioningOperationStatus(status),
       provisioning: {
-        ...(environmentId ? { environmentId } : {}),
+        environmentId,
         ...(transcript ? { transcript } : {}),
       },
     });
-  }
-
-  // Title-update events are hidden from the timeline — the title is already
-  // visible in the thread header, so surfacing it inline is just noise.
-  if (decoded.type === "system/thread-title/updated") {
-    return null;
   }
 
   if (decoded.type === "thread/name/updated") {
@@ -335,8 +327,8 @@ export function interruptOperationMessage(message: ViewOperationMessage): void {
     case "operation":
       message.title = "Operation interrupted";
       return;
-    case "provisioning":
-      message.title = "Provisioning interrupted";
+    case "thread-provisioning":
+      message.title = "Provisioning thread interrupted";
       return;
     case "compaction":
       message.title = "Context compaction interrupted";
@@ -354,9 +346,9 @@ export function finalizeOperationMessage(
 
   if (options?.threadStatus === "error") {
     switch (message.opType) {
-      case "provisioning":
+      case "thread-provisioning":
         message.status = "error";
-        message.title = "Provisioning failed";
+        message.title = "Provisioning thread failed";
         return;
       default:
         break;

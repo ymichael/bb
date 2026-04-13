@@ -9,7 +9,7 @@ import {
   seedProjectWithSource,
 } from "../helpers/seed.js";
 import { createTestAppHarness } from "../helpers/test-app.js";
-import { generateThreadMetadata } from "../../src/services/threads/title-generation.js";
+import { generateThreadMetadataWithOutcome } from "../../src/services/threads/title-generation.js";
 
 const piAiMocks = vi.hoisted(() => ({
   complete: vi.fn(),
@@ -272,7 +272,7 @@ describe("generated managed branch names", () => {
     const harness = await createTestAppHarness();
     try {
       await expect(
-        generateThreadMetadata(harness.deps, {
+        generateThreadMetadataWithOutcome(harness.deps, {
           input: [
             {
               type: "text",
@@ -282,7 +282,10 @@ describe("generated managed branch names", () => {
           threadId: "thr_timeout",
           timeoutMs: 1,
         }),
-      ).resolves.toBeNull();
+      ).resolves.toMatchObject({
+        metadata: null,
+        reason: "timeout",
+      });
       expect(piAiMocks.complete).toHaveBeenCalledTimes(1);
     } finally {
       await harness.cleanup();

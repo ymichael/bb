@@ -6,7 +6,6 @@ import {
   deleteHost,
   deleteThread,
   findEnvironmentByHostPath,
-  getHighWaterMarks,
   upsertHost,
 } from "@bb/db";
 import { applyProvisionedEnvironmentRecord } from "@bb/db/internal-lifecycle";
@@ -29,7 +28,7 @@ import {
 import { requireReachablePublicServerUrl } from "../hosts/public-server-url.js";
 import { assertSandboxProvisioningConfig } from "../hosts/sandbox-backends.js";
 import { ensureHostSessionReadyForWork } from "../hosts/host-lifecycle.js";
-import { appendClientTurnEvent, appendProvisioningEvent, buildCwdBranchEntries } from "./thread-events.js";
+import { appendClientTurnEvent, appendThreadProvisioningEvent, buildCwdBranchEntries } from "./thread-events.js";
 import { buildExecutionOptions } from "./thread-commands.js";
 import {
   rememberProjectExecutionDefaultsForCreate,
@@ -37,8 +36,9 @@ import {
 } from "./project-execution-defaults.js";
 import {
   applyGeneratedThreadTitle,
-  generateThreadMetadata,
+  generateThreadMetadataWithOutcome,
   generateThreadTitle,
+  type ThreadMetadataGenerationOutcome,
 } from "./title-generation.js";
 import {
   buildManagedBranchName,
@@ -97,12 +97,19 @@ interface ReuseEnvironmentByHostPathArgs {
 }
 
 interface ManagedThreadMetadataArgs {
+  environmentId: string;
   request: ThreadCreateServiceRequest;
   threadId: string;
 }
 
 interface ManagedThreadMetadataResult {
   branchSlug: string | null;
+  eventSequence: number;
+}
+
+interface MetadataCompletedTextArgs {
+  outcome: ThreadMetadataGenerationOutcome;
+  request: ThreadCreateServiceRequest;
 }
 
 interface ScheduleGeneratedThreadTitleArgs {
@@ -119,18 +126,74 @@ interface CreateSandboxHostThreadArgs {
 
 type ManagedThreadMetadataDeps = Pick<ThreadCreateDeps, "config" | "db" | "hub" | "logger">;
 
-const MANAGED_THREAD_METADATA_TIMEOUT_MS = 2_000;
+const MANAGED_THREAD_METADATA_TIMEOUT_MS = 5_000;
+
+function metadataStartedText(request: ThreadCreateServiceRequest): string {
+  return request.title
+    ? "Generating branch name"
+    : "Generating title and branch name";
+}
+
+function metadataCompletedText(args: MetadataCompletedTextArgs): string {
+  const hasTitle = !args.request.title && Boolean(args.outcome.metadata?.title);
+  const hasBranchName = Boolean(args.outcome.metadata?.branchSlug);
+  if (hasTitle && hasBranchName) {
+    return "Generated title and branch name";
+  }
+  if (hasBranchName) {
+    return "Generated branch name";
+  }
+  return "Using fallback branch name";
+}
 
 async function resolveManagedThreadMetadata(
   deps: ManagedThreadMetadataDeps,
   args: ManagedThreadMetadataArgs,
 ): Promise<ManagedThreadMetadataResult> {
+  const startedAt = Date.now();
+  appendThreadProvisioningEvent(deps, {
+    threadId: args.threadId,
+    environmentId: args.environmentId,
+    status: "active",
+    entries: [
+      {
+        type: "step",
+        key: "metadata-started",
+        text: metadataStartedText(args.request),
+        status: "started",
+        startedAt,
+      },
+    ],
+  });
+
   // Managed branch names must be known before provisioning is queued. Keep
   // inference bounded and let branch creation fall back to bb/<threadId>.
-  const metadata = await generateThreadMetadata(deps, {
+  const outcome = await generateThreadMetadataWithOutcome(deps, {
     input: args.request.input,
     threadId: args.threadId,
     timeoutMs: MANAGED_THREAD_METADATA_TIMEOUT_MS,
+  });
+  const metadata = outcome.metadata;
+
+  const metadataCompletedSequence = appendThreadProvisioningEvent(deps, {
+    threadId: args.threadId,
+    environmentId: args.environmentId,
+    status: "active",
+    entries: [
+      {
+        type: "step",
+        key: "metadata-completed",
+        text: metadataCompletedText({ outcome, request: args.request }),
+        status: "completed",
+        startedAt,
+        metadata: {
+          durationMs: outcome.durationMs,
+          branchNameGenerated: Boolean(metadata?.branchSlug),
+          titleGenerated: !args.request.title && Boolean(metadata?.title),
+          ...(outcome.reason ? { reason: outcome.reason } : {}),
+        },
+      },
+    ],
   });
 
   if (!args.request.title && metadata?.title) {
@@ -149,6 +212,7 @@ async function resolveManagedThreadMetadata(
 
   return {
     branchSlug: metadata?.branchSlug ?? null,
+    eventSequence: metadataCompletedSequence,
   };
 }
 
@@ -205,15 +269,15 @@ async function createThreadInEnvironment(
     );
 
     if (args.threadStatus === "provisioning") {
-      appendProvisioningEvent(deps, {
+      appendThreadProvisioningEvent(deps, {
         threadId: thread.id,
         environmentId: args.environment.id,
-        status: "started",
+        status: "active",
         entries: args.provisioningEntries ?? [
           {
             type: "step",
-            key: "provision",
-            text: "Waiting for environment...",
+            key: "workspace-waiting",
+            text: "Waiting for workspace",
             status: "started",
           },
         ],
@@ -227,10 +291,10 @@ async function createThreadInEnvironment(
           path: args.environment.path,
           branchName: args.environment.branchName,
         });
-        latestSequence = appendProvisioningEvent(deps, {
+        latestSequence = appendThreadProvisioningEvent(deps, {
           threadId: thread.id,
           environmentId: args.environment.id,
-          status: "completed",
+          status: "active",
           entries: cwdEntries,
         });
       }
@@ -369,8 +433,8 @@ async function createSandboxHostThread(
       provisioningEntries: [
         {
           type: "step",
-          key: "sandbox-host",
-          text: "Preparing sandbox host",
+          key: "sandbox-started",
+          text: "Preparing sandbox",
           status: "started",
         },
       ],
@@ -383,8 +447,8 @@ async function createSandboxHostThread(
     throw error;
   }
 
-  const provisionEventSequence = getHighWaterMarks(deps.db, [thread.id])[thread.id] ?? 0;
   const managedMetadata = await resolveManagedThreadMetadata(deps, {
+    environmentId: environment.id,
     request: args.request,
     threadId: thread.id,
   });
@@ -396,7 +460,7 @@ async function createSandboxHostThread(
     }),
     environmentId: environment.id,
     hostId,
-    initiator: { threadId: thread.id, eventSequence: provisionEventSequence },
+    initiator: { threadId: thread.id, eventSequence: managedMetadata.eventSequence },
     sourcePath: args.cloneSource.repoUrl,
     targetPath: resolveManagedTargetPath({
       dataDir: SANDBOX_DATA_DIR,
@@ -551,23 +615,21 @@ export async function createThreadFromRequest(
     source: "spawn",
   });
 
-  const provisioningLabel = workspace.type === "unmanaged"
-    ? "Provisioning environment"
-    : workspace.type === "managed-worktree"
-      ? "Provisioning worktree"
-      : "Provisioning clone";
-  const provisionEventSequence = appendProvisioningEvent(deps, {
+  const provisioningEntries: ProvisioningTranscriptEntry[] = workspace.type === "unmanaged"
+    ? [
+        {
+          type: "step",
+          key: "workspace-started",
+          text: "Preparing workspace",
+          status: "started",
+        },
+      ]
+    : [];
+  const provisionEventSequence = appendThreadProvisioningEvent(deps, {
     threadId: thread.id,
     environmentId: environment.id,
-    status: "started",
-    entries: [
-      {
-        type: "step",
-        key: "provision",
-        text: provisioningLabel,
-        status: "started",
-      },
-    ],
+    status: "active",
+    entries: provisioningEntries,
   });
 
   let provisionCommand: ReturnType<typeof buildEnvironmentProvisionCommand>;
@@ -591,13 +653,14 @@ export async function createThreadFromRequest(
         throw new Error("Validated managed host request is missing a local source");
       }
       const managedMetadata = await resolveManagedThreadMetadata(deps, {
+        environmentId: environment.id,
         request,
         threadId: thread.id,
       });
       provisionCommand = buildEnvironmentProvisionCommand({
         environmentId: environment.id,
         hostId,
-        initiator: { threadId: thread.id, eventSequence: provisionEventSequence },
+        initiator: { threadId: thread.id, eventSequence: managedMetadata.eventSequence },
         workspaceProvisionType: workspace.type,
         sourcePath: managedSource.path,
         targetPath: resolveManagedTargetPath({

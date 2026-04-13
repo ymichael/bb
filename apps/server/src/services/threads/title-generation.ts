@@ -7,9 +7,12 @@ import {
 import type { PromptInput } from "@bb/domain";
 import type { AppDeps } from "../../types.js";
 import { Type } from "@mariozechner/pi-ai";
-import { inferenceComplete } from "../ai/inference.js";
+import {
+  InferenceTimeoutError,
+  inferenceComplete,
+} from "../ai/inference.js";
 import { queueThreadRenameCommand } from "./thread-commands.js";
-import { appendThreadTitleUpdatedEvent } from "./thread-events.js";
+import { isPreStartThreadStatus } from "./thread-status.js";
 
 const MIN_TITLE_GENERATION_WORDS = 5;
 const MAX_BRANCH_SLUG_LENGTH = 48;
@@ -37,6 +40,19 @@ export interface ThreadTitleGenerationArgs {
 export interface GeneratedThreadMetadata {
   branchSlug?: string;
   title?: string;
+}
+
+export type ThreadMetadataGenerationOutcomeReason =
+  | "empty-input"
+  | "failed"
+  | "inference-unavailable"
+  | "too-short"
+  | "timeout";
+
+export interface ThreadMetadataGenerationOutcome {
+  durationMs: number;
+  metadata: GeneratedThreadMetadata | null;
+  reason?: ThreadMetadataGenerationOutcomeReason;
 }
 
 interface RawGeneratedThreadMetadata {
@@ -109,16 +125,26 @@ function normalizeGeneratedThreadMetadata(
   };
 }
 
-export async function generateThreadMetadata(
+export async function generateThreadMetadataWithOutcome(
   deps: ThreadMetadataGenerationDeps,
   args: ThreadMetadataGenerationArgs,
-): Promise<GeneratedThreadMetadata | null> {
+): Promise<ThreadMetadataGenerationOutcome> {
+  const startedAt = Date.now();
   const fallback = deriveTitleFallback(args.input);
+  const complete = (
+    metadata: GeneratedThreadMetadata | null,
+    reason?: ThreadMetadataGenerationOutcomeReason,
+  ): ThreadMetadataGenerationOutcome => ({
+    durationMs: Date.now() - startedAt,
+    metadata,
+    ...(reason ? { reason } : {}),
+  });
+
   if (!fallback) {
-    return null;
+    return complete(null, "empty-input");
   }
   if (!shouldGenerateThreadTitle(args.input)) {
-    return null;
+    return complete(null, "too-short");
   }
 
   try {
@@ -132,14 +158,31 @@ export async function generateThreadMetadata(
       ...(args.timeoutMs ? { timeoutMs: args.timeoutMs } : {}),
     });
 
-    return normalizeGeneratedThreadMetadata(parsed);
+    const metadata = normalizeGeneratedThreadMetadata(parsed);
+    return complete(metadata, metadata ? undefined : "inference-unavailable");
   } catch (error) {
+    if (error instanceof InferenceTimeoutError) {
+      deps.logger.info(
+        { threadId: args.threadId, timeoutMs: error.timeoutMs },
+        "Thread metadata inference timed out",
+      );
+      return complete(null, "timeout");
+    }
+
     deps.logger.warn(
       { err: error, threadId: args.threadId },
       "Failed to generate thread metadata",
     );
-    return null;
+    return complete(null, "failed");
   }
+}
+
+export async function generateThreadMetadata(
+  deps: ThreadMetadataGenerationDeps,
+  args: ThreadMetadataGenerationArgs,
+): Promise<GeneratedThreadMetadata | null> {
+  const outcome = await generateThreadMetadataWithOutcome(deps, args);
+  return outcome.metadata;
 }
 
 export function applyGeneratedThreadTitle(
@@ -158,11 +201,6 @@ export function applyGeneratedThreadTitle(
 
   updateThread(deps.db, deps.hub, args.threadId, {
     title,
-  });
-  appendThreadTitleUpdatedEvent(deps, {
-    threadId: args.threadId,
-    previousTitle: currentThread.title,
-    nextTitle: title,
   });
 
   return true;
@@ -196,8 +234,7 @@ export async function generateThreadTitle(
     if (
       !titledThread ||
       !environment ||
-      titledThread.status === "created" ||
-      titledThread.status === "provisioning"
+      isPreStartThreadStatus(titledThread.status)
     ) {
       return;
     }

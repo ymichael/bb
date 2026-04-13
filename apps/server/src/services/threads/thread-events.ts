@@ -14,6 +14,7 @@ import {
 import type {
   PromptInput,
   ProvisioningTranscriptEntry,
+  SystemThreadProvisioningStatus,
   TurnRequestEventData,
   ThreadEventType,
   ResolvedThreadExecutionOptions,
@@ -178,19 +179,19 @@ export function parseStoredTurnRequestEvent(
   }
 }
 
-export function appendProvisioningEvent(
+export function appendThreadProvisioningEvent(
   deps: Pick<AppDeps, "db" | "hub">,
   args: {
     entries: ProvisioningTranscriptEntry[];
     environmentId: string;
-    status: "completed" | "failed" | "in_progress" | "started";
+    status: SystemThreadProvisioningStatus;
     threadId: string;
   },
 ): number {
   return appendThreadEvent(deps, {
     threadId: args.threadId,
     environmentId: args.environmentId,
-    type: "system/provisioning",
+    type: "system/thread-provisioning",
     data: {
       status: args.status,
       environmentId: args.environmentId,
@@ -205,11 +206,11 @@ export function buildCwdBranchEntries(args: {
 }): ProvisioningTranscriptEntry[] {
   const now = Date.now();
   const entries: ProvisioningTranscriptEntry[] = [
-    { type: "step", key: "cwd", text: `cwd: ${args.path}`, status: "completed", startedAt: now },
+    { type: "step", key: "workspace-path", text: `Using workspace: ${args.path}`, status: "completed", startedAt: now },
   ];
   if (args.branchName) {
     entries.push({
-      type: "step", key: "branch", text: `Branch: ${args.branchName}`, status: "completed", startedAt: now,
+      type: "step", key: "workspace-branch", text: `Using branch: ${args.branchName}`, status: "completed", startedAt: now,
     });
   }
   return entries;
@@ -250,26 +251,6 @@ export function appendThreadInterruptedEvent(
     data: {
       reason: "user",
       ...(args.message ? { message: args.message } : {}),
-    },
-  });
-}
-
-export function appendThreadTitleUpdatedEvent(
-  deps: Pick<AppDeps, "db" | "hub">,
-  args: {
-    nextTitle: string;
-    previousTitle?: string | null;
-    threadId: string;
-  },
-): number {
-  return appendThreadEvent(deps, {
-    threadId: args.threadId,
-    type: "system/thread-title/updated",
-    data: {
-      title: args.nextTitle,
-      ...(args.previousTitle ? { previousTitle: args.previousTitle } : {}),
-      source: "provider",
-      providerMethod: "server/thread-title",
     },
   });
 }

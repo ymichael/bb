@@ -180,7 +180,7 @@ export function ThreadDetailPromptArea({
     isCreated
       ? "Thread is being created..."
       : isProvisioning
-      ? "Thread is provisioning..."
+      ? "Thread is being provisioned..."
       : hasPendingInteraction
       ? "Resolve the pending interaction below before sending another message"
       : isRuntimeError

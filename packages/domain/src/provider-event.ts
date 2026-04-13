@@ -3,10 +3,9 @@ import {
   systemErrorEventDataSchema,
   systemManagerUserMessageEventDataSchema,
   systemOperationEventDataSchema,
-  systemProvisioningEventDataSchema,
+  systemThreadProvisioningEventDataSchema,
   systemEventTypeValues,
   systemThreadInterruptedEventDataSchema,
-  systemThreadTitleUpdatedEventDataSchema,
   turnRequestEventDataSchema,
 } from "./thread-events.js";
 import { jsonValueSchema } from "./json-value.js";
@@ -415,17 +414,13 @@ export const systemEventSchema = z.union([
     threadId: z.string(),
   }).merge(systemThreadInterruptedEventDataSchema),
   z.object({
-    type: z.literal("system/thread-title/updated"),
-    threadId: z.string(),
-  }).merge(systemThreadTitleUpdatedEventDataSchema),
-  z.object({
     type: z.literal("system/operation"),
     threadId: z.string(),
   }).merge(systemOperationEventDataSchema),
   z.object({
-    type: z.literal("system/provisioning"),
+    type: z.literal("system/thread-provisioning"),
     threadId: z.string(),
-  }).merge(systemProvisioningEventDataSchema),
+  }).merge(systemThreadProvisioningEventDataSchema),
 ]);
 export type SystemEvent = z.infer<typeof systemEventSchema>;
 

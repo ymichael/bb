@@ -1,4 +1,4 @@
-import { and, desc, eq, or } from "drizzle-orm";
+import { and, desc, eq, gt, or } from "drizzle-orm";
 import {
   events,
   getEnvironment,
@@ -12,9 +12,13 @@ import {
   hostDaemonCommandSchema,
   type HostDaemonCommandResultReport,
 } from "@bb/host-daemon-contract";
+import {
+  type ProvisioningTranscriptEntry,
+  systemThreadProvisioningEventDataSchema,
+} from "@bb/domain";
 import type { AppDeps } from "../types.js";
 import {
-  appendProvisioningEvent,
+  appendThreadProvisioningEvent,
   buildCwdBranchEntries,
   parseStoredTurnRequestEvent,
   appendSystemErrorEvent,
@@ -28,6 +32,7 @@ import {
   hasActiveThreadStopOperationForCommand,
   requestThreadStart,
 } from "../services/threads/thread-lifecycle.js";
+import { isPreStartThreadStatus } from "../services/threads/thread-status.js";
 import {
   advanceEnvironmentCleanup,
   completeEnvironmentDestroyForCommand,
@@ -95,6 +100,18 @@ type InteractiveResolveResultReport = Extract<
   HostDaemonCommandResultReport,
   { type: "interactive.resolve" }
 >;
+type HasStreamedProvisioningTranscriptArgs = {
+  deps: CommandResultSideEffectsDeps;
+  threadId: string;
+  afterSequence: number;
+};
+type ParsedStoredTurnRequestEvent = ReturnType<typeof parseStoredTurnRequestEvent>;
+
+const WORKSPACE_PROVISIONING_TRANSCRIPT_KEY_PREFIXES = [
+  "git-",
+  "setup-",
+  "workspace-",
+];
 
 function isWorkspaceMutationCommand(
   command: ParsedHostDaemonCommand,
@@ -102,6 +119,38 @@ function isWorkspaceMutationCommand(
 ): command is WorkspaceMutationCommand {
   return "environmentId" in command && command.type === expectedType;
 }
+
+function hasStreamedProvisioningTranscript(
+  args: HasStreamedProvisioningTranscriptArgs,
+): boolean {
+  const rows = args.deps.db
+    .select({ data: events.data })
+    .from(events)
+    .where(
+      and(
+        eq(events.threadId, args.threadId),
+        eq(events.type, "system/thread-provisioning"),
+        gt(events.sequence, args.afterSequence),
+      ),
+    )
+    .all();
+
+  return rows.some((row) => {
+    const eventData = systemThreadProvisioningEventDataSchema.parse(
+      JSON.parse(row.data),
+    );
+    return eventData.entries.some(isWorkspaceProvisioningTranscriptEntry);
+  });
+}
+
+function isWorkspaceProvisioningTranscriptEntry(
+  entry: ProvisioningTranscriptEntry,
+): boolean {
+  return WORKSPACE_PROVISIONING_TRANSCRIPT_KEY_PREFIXES.some((prefix) =>
+    entry.key.startsWith(prefix)
+  );
+}
+
 async function handleProvisionCommandResult(
   deps: CommandResultSideEffectsDeps,
   report: Extract<HostDaemonCommandResultReport, { type: "environment.provision" }>,
@@ -149,53 +198,60 @@ async function handleProvisionCommandResult(
         continue;
       }
 
-      const isInitiator = thread.id === command.initiator?.threadId;
-      let entries = cwdBranchEntries;
-      if (isInitiator && report.result.transcript.length > 0) {
-        entries = report.result.transcript;
+      let parsedStartEvent: ParsedStoredTurnRequestEvent | null = null;
+      if (isPreStartThreadStatus(thread.status)) {
+        const startEvent = deps.db
+          .select({
+            data: events.data,
+            sequence: events.sequence,
+            threadId: events.threadId,
+            type: events.type,
+          })
+          .from(events)
+          .where(
+            and(
+              eq(events.threadId, thread.id),
+              or(
+                eq(events.type, "client/thread/start"),
+                eq(events.type, "client/turn/requested"),
+              ),
+            ),
+          )
+          .orderBy(desc(events.sequence))
+          .limit(1)
+          .get();
+        parsedStartEvent = startEvent
+          ? parseStoredTurnRequestEvent({
+              data: startEvent.data,
+              sequence: startEvent.sequence,
+              threadId: startEvent.threadId,
+              type: startEvent.type,
+            })
+          : null;
       }
-      const completedEventSequence = appendProvisioningEvent(deps, {
+
+      const willStartThread = Boolean(parsedStartEvent?.input?.length);
+      const isInitiator = thread.id === command.initiator?.threadId;
+      const hasStreamedTranscript = isInitiator && command.initiator
+        ? hasStreamedProvisioningTranscript({
+            deps,
+            threadId: thread.id,
+            afterSequence: command.initiator.eventSequence,
+          })
+        : false;
+      const entries = hasStreamedTranscript
+        ? []
+        : isInitiator && report.result.transcript.length > 0
+          ? report.result.transcript
+          : cwdBranchEntries;
+      const workspaceReadyEventSequence = appendThreadProvisioningEvent(deps, {
         threadId: thread.id,
         environmentId: command.environmentId,
-        status: "completed",
+        status: willStartThread ? "active" : "completed",
         entries,
       });
 
-      if (thread.status !== "created" && thread.status !== "provisioning") {
-        continue;
-      }
-
-      const startEvent = deps.db
-        .select({
-          data: events.data,
-          sequence: events.sequence,
-          threadId: events.threadId,
-          type: events.type,
-        })
-        .from(events)
-        .where(
-          and(
-            eq(events.threadId, thread.id),
-            or(
-              eq(events.type, "client/thread/start"),
-              eq(events.type, "client/turn/requested"),
-            ),
-          ),
-        )
-        .orderBy(desc(events.sequence))
-        .limit(1)
-        .get();
-      if (!startEvent) {
-        continue;
-      }
-
-      const parsedStartEvent = parseStoredTurnRequestEvent({
-        data: startEvent.data,
-        sequence: startEvent.sequence,
-        threadId: startEvent.threadId,
-        type: startEvent.type,
-      });
-      if (!parsedStartEvent.input || parsedStartEvent.input.length === 0) {
+      if (!parsedStartEvent?.input || parsedStartEvent.input.length === 0) {
         continue;
       }
 
@@ -207,7 +263,7 @@ async function handleProvisionCommandResult(
           path: report.result.path,
           workspaceProvisionType: command.workspaceProvisionType,
         },
-        eventSequence: completedEventSequence,
+        eventSequence: workspaceReadyEventSequence,
         input: parsedStartEvent.input,
         execution: parsedStartEvent.execution,
         permissionEscalation: resolvePermissionEscalation({
@@ -236,16 +292,18 @@ async function handleProvisionCommandResult(
   });
 
   for (const thread of boundThreads) {
-    appendProvisioningEvent(deps, {
+    appendThreadProvisioningEvent(deps, {
       threadId: thread.id,
       environmentId: command.environmentId,
       status: "failed",
       entries: [
         {
           type: "step",
-          key: "environment",
-          text: report.errorMessage,
+          key: "workspace-failed",
+          text: "Workspace setup failed",
           status: "failed",
+          startedAt: commandRow.createdAt,
+          metadata: { durationMs: Date.now() - commandRow.createdAt },
         },
       ],
     });
@@ -253,7 +311,7 @@ async function handleProvisionCommandResult(
       threadId: thread.id,
       environmentId: command.environmentId,
       code: "thread_provisioning_failed",
-      message: `Thread provisioning failed for project ${thread.projectId}`,
+      message: "Provisioning thread failed",
       detail: report.errorMessage,
     });
     tryTransition(deps.db, deps.hub, thread.id, "error");
@@ -335,18 +393,49 @@ function handleThreadStartResult(
   })) {
     return;
   }
+  const thread = getThread(deps.db, command.threadId);
+  if (!thread) {
+    return;
+  }
+
   if (!report.ok) {
     failThreadStartForCommand(deps, {
       commandId: commandRow.id,
       failureReason: report.errorMessage,
     });
+    appendThreadProvisioningEvent(deps, {
+      threadId: thread.id,
+      environmentId: command.environmentId,
+      status: "failed",
+      entries: [
+        {
+          type: "step",
+          key: "agent-session-failed",
+          text: "Agent session failed",
+          status: "failed",
+          startedAt: commandRow.createdAt,
+          metadata: { durationMs: Date.now() - commandRow.createdAt },
+        },
+      ],
+    });
     return;
   }
 
-  const thread = getThread(deps.db, command.threadId);
-  if (!thread) {
-    return;
-  }
+  appendThreadProvisioningEvent(deps, {
+    threadId: thread.id,
+    environmentId: command.environmentId,
+    status: "completed",
+    entries: [
+      {
+        type: "step",
+        key: "agent-session-completed",
+        text: "Agent session ready",
+        status: "completed",
+        startedAt: commandRow.createdAt,
+        metadata: { durationMs: Date.now() - commandRow.createdAt },
+      },
+    ],
+  });
 
   completeThreadStartForCommand(deps, {
     commandId: commandRow.id,

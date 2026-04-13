@@ -5,7 +5,7 @@ function isProvisioningActivityOperation(
   message: Extract<ViewMessage, { kind: "operation" }>,
 ): boolean {
   switch (message.opType) {
-    case "provisioning":
+    case "thread-provisioning":
       return true;
     default:
       return false;

@@ -224,12 +224,12 @@ describe("buildThreadTimeline", () => {
       threadId: thread.id,
       environmentId: environment.id,
       sequence: 2,
-      type: "system/provisioning",
+      type: "system/thread-provisioning",
       data: {
         status: "completed",
         environmentId: environment.id,
         entries: [
-          { type: "step", key: "cwd", text: "cwd: /tmp/test", status: "completed" },
+          { type: "step", key: "workspace-path", text: "Using workspace: /tmp/test", status: "completed" },
         ],
       },
     });

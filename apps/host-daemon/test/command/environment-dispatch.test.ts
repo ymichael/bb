@@ -31,10 +31,10 @@ describe("environment command dispatch", () => {
     });
     expect(result.transcript).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ key: "cwd", text: `cwd: ${sourcePath}` }),
+        expect.objectContaining({ key: "workspace-path", text: `Using workspace: ${sourcePath}` }),
         expect.objectContaining({
-          key: "branch",
-          text: expect.stringContaining("Branch: main"),
+          key: "workspace-branch",
+          text: expect.stringContaining("Using branch: main"),
         }),
       ]),
     );
@@ -74,9 +74,10 @@ describe("environment command dispatch", () => {
     });
     expect(result.transcript).toEqual(
       expect.arrayContaining([
+        expect.objectContaining({ key: "workspace-path", text: "Using workspace: /tmp/worktree" }),
         expect.objectContaining({
-          key: "branch",
-          text: expect.stringContaining("Branch: main"),
+          key: "workspace-branch",
+          text: expect.stringContaining("Using branch: main"),
         }),
       ]),
     );
@@ -119,9 +120,10 @@ describe("environment command dispatch", () => {
     });
     expect(result.transcript).toEqual(
       expect.arrayContaining([
+        expect.objectContaining({ key: "workspace-path", text: "Using workspace: /tmp/clone" }),
         expect.objectContaining({
-          key: "branch",
-          text: expect.stringContaining("Branch: main"),
+          key: "workspace-branch",
+          text: expect.stringContaining("Using branch: main"),
         }),
       ]),
     );
@@ -170,8 +172,8 @@ describe("environment command dispatch", () => {
     expect(result.transcript.length).toBeGreaterThan(0);
     expect(result.transcript).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ key: "cwd" }),
-        expect.objectContaining({ key: "branch" }),
+        expect.objectContaining({ key: "workspace-path" }),
+        expect.objectContaining({ key: "workspace-branch" }),
       ]),
     );
   });

@@ -3,6 +3,13 @@ import type { HostDaemonCommandResult, environmentProvisionCommandSchema } from 
 import type { ProvisionWorkspaceArgs } from "@bb/host-workspace";
 import { type CommandDispatchOptions, type CommandOf } from "../command-dispatch-support.js";
 
+type ProvisionProgressCallback = (entry: ProvisioningTranscriptEntry) => void;
+type BuildOnProgressArgs = {
+  command: CommandOf<"environment.provision">;
+  options: CommandDispatchOptions;
+  transcript: ProvisioningTranscriptEntry[];
+};
+
 export async function provisionEnvironment(
   command: CommandOf<"environment.provision">,
   options: CommandDispatchOptions,
@@ -40,19 +47,19 @@ export async function provisionEnvironment(
       if (!entry.workspace.managed) {
         onProgress({
           type: "step",
-          key: "cwd",
-          text: `cwd: ${entry.workspace.path}`,
+          key: "workspace-path",
+          text: `Using workspace: ${entry.workspace.path}`,
           status: "completed",
           startedAt: Date.now(),
         });
       }
       if (entry.workspace.isGitRepo && branchName) {
-        let branchText = `Branch: ${branchName}`;
+        let branchText = `Using branch: ${branchName}`;
         const metadata: { branchName: string; sha?: string } = { branchName };
         try {
           const sha = await entry.workspace.getHeadSha();
           if (sha) {
-            branchText = `Branch: ${branchName} (${sha.slice(0, 7)})`;
+            branchText = `Using branch: ${branchName} (${sha.slice(0, 7)})`;
             metadata.sha = sha;
           }
         } catch {
@@ -60,7 +67,7 @@ export async function provisionEnvironment(
         }
         onProgress({
           type: "step",
-          key: "branch",
+          key: "workspace-branch",
           text: branchText,
           status: "completed",
           startedAt: Date.now(),
@@ -86,11 +93,7 @@ export async function provisionEnvironment(
   }
 }
 
-function buildOnProgress(args: {
-  command: CommandOf<"environment.provision">;
-  options: CommandDispatchOptions;
-  transcript: ProvisioningTranscriptEntry[];
-}): (entry: ProvisioningTranscriptEntry) => void {
+function buildOnProgress(args: BuildOnProgressArgs): ProvisionProgressCallback {
   const { command, options, transcript } = args;
   const threadId = command.initiator?.threadId;
   const eventSink = options.eventSink;
@@ -106,9 +109,9 @@ function buildOnProgress(args: {
       environmentId: command.environmentId,
       threadId,
       event: {
-        type: "system/provisioning",
+        type: "system/thread-provisioning",
         threadId,
-        status: "in_progress",
+        status: "active",
         environmentId: command.environmentId,
         entries: [entry],
       },
@@ -118,7 +121,7 @@ function buildOnProgress(args: {
 
 export function toProvisionWorkspaceOptions(
   command: typeof environmentProvisionCommandSchema._type,
-  onProgress?: (entry: ProvisioningTranscriptEntry) => void,
+  onProgress?: ProvisionProgressCallback,
 ): ProvisionWorkspaceArgs {
   switch (command.workspaceProvisionType) {
     case "unmanaged": {

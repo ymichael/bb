@@ -2409,8 +2409,8 @@ describe("CLI JSON output contracts", () => {
             sourceSeqEnd: 8,
             createdAt: 8,
             startedAt: 2,
-            opType: "provisioning",
-            title: "Provisioning ready",
+            opType: "thread-provisioning",
+            title: "Provisioned thread",
             status: "completed",
           },
         },
@@ -2453,7 +2453,7 @@ describe("CLI JSON output contracts", () => {
     );
 
     const output = String(vi.mocked(console.log).mock.calls[0]?.[0]);
-    expect(output).toContain("Provisioning ready");
+    expect(output).toContain("Provisioned thread");
     expect(output).not.toContain("Provisioning interrupted");
   });
 

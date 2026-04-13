@@ -34,6 +34,7 @@ import {
 import { syncManagerThreadSchedules } from "../services/scheduling/manager-schedule-sync.js";
 import { queueManagerSystemMessage } from "../services/threads/manager-system-messages.js";
 import { sendNextQueuedDraftIfPresent } from "../services/threads/queued-drafts.js";
+import { isPreStartThreadStatus } from "../services/threads/thread-status.js";
 import { tryTransition } from "../services/threads/thread-transitions.js";
 import { getAuthenticatedDaemon } from "./auth.js";
 import { applyTurnCompletedEvent } from "./turn-completed-events.js";
@@ -163,9 +164,8 @@ function resolveProviderIdentifiers(
     case "system/error":
     case "system/manager/user_message":
     case "system/thread/interrupted":
-    case "system/thread-title/updated":
     case "system/operation":
-    case "system/provisioning":
+    case "system/thread-provisioning":
       return { providerThreadId: null, turnId: null };
     case "thread/identity":
     case "thread/name/updated":
@@ -258,8 +258,7 @@ async function applyEventEffects(
           continue;
         }
         if (
-          thread.status === "created"
-          || thread.status === "provisioning"
+          isPreStartThreadStatus(thread.status)
           || thread.status === "idle"
           || thread.status === "error"
         ) {
