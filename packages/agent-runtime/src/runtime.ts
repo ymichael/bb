@@ -32,6 +32,11 @@ import {
   sendProviderRequestDecodeErrorIfKnown,
   settleJsonRpcResponse,
 } from "./runtime-json-rpc.js";
+import {
+  RuntimeThreadIdentityRegistry,
+  type RuntimeProviderIdentityState,
+  stampThreadEventScope,
+} from "./runtime-thread-identity.js";
 import type {
   AgentRuntime,
   AgentRuntimeExecutionOptions,
@@ -51,12 +56,6 @@ type ThreadIdentityResult = z.infer<typeof threadIdentityResultSchema>;
 
 interface ResolveThreadIdentityResultArgs {
   result: ThreadIdentityResult;
-  threadId: string;
-}
-
-interface StampThreadEventScopeArgs {
-  event: ThreadEvent;
-  providerThreadId: string | undefined;
   threadId: string;
 }
 
@@ -143,16 +142,9 @@ interface ProviderProcess {
   child: ChildProcess;
   adapter: ProviderAdapter;
   interactiveRequestScope: string;
+  identity: RuntimeProviderIdentityState;
   pending: Map<string | number, PendingJsonRpcRequest>;
-  identityWaiters: Map<string, PendingIdentityWaiter>;
-  threadIds: Set<string>;
   stderrChunks: string[];
-  pendingIdentity: string[];
-}
-
-interface PendingIdentityWaiter {
-  resolve: (providerThreadId: string | null) => void;
-  timeout: ReturnType<typeof setTimeout>;
 }
 
 interface ThreadRuntimeConfig {
@@ -235,8 +227,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
   let nextCaptureId = 1;
   const processes = new Map<string, ProviderProcess>();
   const providerStarting = new Map<string, Promise<void>>();
-  const threadToProvider = new Map<string, string>();
-  const threadToProviderThread = new Map<string, string>();
+  const threadIdentityRegistry = new RuntimeThreadIdentityRegistry();
   const threadRuntimeConfigs = new Map<string, ThreadRuntimeConfig>();
   let shuttingDown = false;
 
@@ -275,29 +266,17 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
   }
 
   function resolveProviderForThread(threadId: string): string {
-    const providerId = threadToProvider.get(threadId);
-    if (!providerId) {
-      throw new Error(`No provider associated with thread "${threadId}"`);
-    }
-    return providerId;
+    return threadIdentityRegistry.resolveProviderForThread(threadId);
   }
 
   function resolveBbThreadIdForProcess(
     proc: ProviderProcess,
     providerThreadId: string | undefined,
   ): string | undefined {
-    if (providerThreadId) {
-      for (const [bbThreadId, mappedProviderThreadId] of threadToProviderThread) {
-        if (
-          mappedProviderThreadId === providerThreadId
-          && proc.threadIds.has(bbThreadId)
-        ) {
-          return bbThreadId;
-        }
-      }
-    }
-
-    return undefined;
+    return threadIdentityRegistry.resolveBbThreadIdForProviderThread({
+      providerState: proc.identity,
+      providerThreadId,
+    });
   }
 
   function formatProviderRequestKindForSentence(
@@ -333,21 +312,6 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     return resolvedThreadId;
   }
 
-  function stampThreadEventScope(args: StampThreadEventScopeArgs): ThreadEvent {
-    if ("providerThreadId" in args.event && args.providerThreadId) {
-      return {
-        ...args.event,
-        providerThreadId: args.providerThreadId,
-        threadId: args.threadId,
-      };
-    }
-
-    return {
-      ...args.event,
-      threadId: args.threadId,
-    };
-  }
-
   function sameExecutionSettings(
     left: AgentRuntimeExecutionOptions,
     right: AgentRuntimeExecutionOptions,
@@ -377,14 +341,11 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     threadId: string,
     providerThreadId: string,
   ): void {
-    threadToProviderThread.set(threadId, providerThreadId);
-    const waiter = proc.identityWaiters.get(threadId);
-    if (!waiter) {
-      return;
-    }
-    clearTimeout(waiter.timeout);
-    proc.identityWaiters.delete(threadId);
-    waiter.resolve(providerThreadId);
+    threadIdentityRegistry.recordProviderThreadIdentity({
+      providerState: proc.identity,
+      threadId,
+      providerThreadId,
+    });
   }
 
   function waitForProviderThreadIdentity(
@@ -392,29 +353,15 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     threadId: string,
     timeoutMs: number,
   ): Promise<string | null> {
-    const existing = threadToProviderThread.get(threadId);
-    if (existing) {
-      return Promise.resolve(existing);
-    }
-
-    return new Promise((resolve) => {
-      const timeout = setTimeout(() => {
-        proc.identityWaiters.delete(threadId);
-        resolve(null);
-      }, timeoutMs);
-      proc.identityWaiters.set(threadId, {
-        resolve,
-        timeout,
-      });
+    return threadIdentityRegistry.waitForProviderThreadIdentity({
+      providerState: proc.identity,
+      threadId,
+      timeoutMs,
     });
   }
 
   function resolvePendingIdentityWaiters(proc: ProviderProcess): void {
-    for (const [threadId, waiter] of proc.identityWaiters) {
-      clearTimeout(waiter.timeout);
-      proc.identityWaiters.delete(threadId);
-      waiter.resolve(null);
-    }
+    threadIdentityRegistry.resolvePendingIdentityWaiters(proc.identity);
   }
 
   async function reconfigureThreadIfNeeded(
@@ -447,7 +394,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       type: "thread/resume",
       threadId: args.threadId,
       cwd: currentConfig.workspacePath,
-      providerThreadId: threadToProviderThread.get(args.threadId),
+      providerThreadId: threadIdentityRegistry.getProviderThreadId(args.threadId),
       options: toAdapterOptions(nextOptions, nextInstructions, envVars),
       resumePath: currentConfig.resumePath,
       dynamicTools: currentConfig.dynamicTools,
@@ -727,39 +674,25 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         continue;
       }
 
-      if (args.proc.threadIds.has(event.threadId)) {
+      if (args.proc.identity.threadIds.has(event.threadId)) {
         recordProviderThreadIdentity(args.proc, event.threadId, event.providerThreadId);
         continue;
       }
 
-      if (args.proc.pendingIdentity.length > 0) {
-        const bbThreadId = args.proc.pendingIdentity.shift();
-        if (bbThreadId) {
-          recordProviderThreadIdentity(args.proc, bbThreadId, event.providerThreadId);
-        }
+      const bbThreadId = threadIdentityRegistry.resolvePendingProviderThreadIdentity(
+        args.proc.identity,
+      );
+      if (bbThreadId) {
+        recordProviderThreadIdentity(args.proc, bbThreadId, event.providerThreadId);
       }
     }
 
     for (const event of args.events) {
-      let resolvedBbThreadId: string | undefined;
-      if (args.sourceThreadId && args.proc.threadIds.has(args.sourceThreadId)) {
-        resolvedBbThreadId = args.sourceThreadId;
-      } else if (event.threadId && args.proc.threadIds.has(event.threadId)) {
-        resolvedBbThreadId = event.threadId;
-      } else {
-        const lookupId = args.sourceThreadId || event.threadId;
-        if (lookupId) {
-          for (const [bbId, provId] of threadToProviderThread) {
-            if (provId === lookupId && args.proc.threadIds.has(bbId)) {
-              resolvedBbThreadId = bbId;
-              break;
-            }
-          }
-        }
-      }
-      if (!resolvedBbThreadId && args.proc.threadIds.size === 1) {
-        resolvedBbThreadId = [...args.proc.threadIds][0];
-      }
+      const resolvedBbThreadId = threadIdentityRegistry.resolveProviderEventThreadId({
+        eventThreadId: event.threadId,
+        providerState: args.proc.identity,
+        sourceThreadId: args.sourceThreadId,
+      });
 
       if (!resolvedBbThreadId) {
         options.onStderr?.(
@@ -770,7 +703,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
 
       const stampedEvent = stampThreadEventScope({
         event,
-        providerThreadId: threadToProviderThread.get(resolvedBbThreadId),
+        providerThreadId: threadIdentityRegistry.getProviderThreadId(resolvedBbThreadId),
         threadId: resolvedBbThreadId,
       });
 
@@ -878,11 +811,9 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       child,
       adapter,
       interactiveRequestScope: randomUUID(),
+      identity: threadIdentityRegistry.createProviderState({ providerId }),
       pending: new Map(),
-      identityWaiters: new Map(),
-      threadIds: new Set(),
       stderrChunks: [],
-      pendingIdentity: [],
     };
 
     // Read stdout line by line
@@ -911,7 +842,6 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       }
       proc.pending.clear();
       resolvePendingIdentityWaiters(proc);
-      proc.pendingIdentity = [];
 
       emitCapture({
         kind: "provider-process-error",
@@ -922,7 +852,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
 
       options.onProcessExit?.({
         providerId,
-        threadIds: [...proc.threadIds],
+        threadIds: [...proc.identity.threadIds],
         code: null,
         signal: null,
       });
@@ -932,13 +862,11 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     child.on("exit", (code, signal) => {
       if (shuttingDown) return;
       processes.delete(providerId);
-      const threadIds = [...proc.threadIds];
+      const threadIds = [...proc.identity.threadIds];
       for (const tid of threadIds) {
-        threadToProvider.delete(tid);
-        threadToProviderThread.delete(tid);
+        threadIdentityRegistry.clearThread(tid);
         clearThreadRuntimeConfig(tid);
       }
-      proc.pendingIdentity = [];
       // Reject any pending requests
       for (const [, pending] of proc.pending) {
         pending.reject(new Error(`Provider "${providerId}" exited unexpectedly`));
@@ -1032,9 +960,12 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       await runtime.ensureProvider({ providerId: pid });
 
       const proc = requireProviderProcess(pid);
-      threadToProvider.set(threadId, pid);
-      proc.threadIds.add(threadId);
-      proc.pendingIdentity.push(threadId);
+      threadIdentityRegistry.registerThreadProvider({
+        providerId: pid,
+        providerState: proc.identity,
+        shouldWaitForProviderIdentity: true,
+        threadId,
+      });
       setThreadRuntimeConfig(threadId, {
         dynamicTools,
         environmentId,
@@ -1116,8 +1047,12 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       await runtime.ensureProvider({ providerId: pid });
 
       const proc = requireProviderProcess(pid);
-      threadToProvider.set(threadId, pid);
-      proc.threadIds.add(threadId);
+      threadIdentityRegistry.registerThreadProvider({
+        providerId: pid,
+        providerState: proc.identity,
+        shouldWaitForProviderIdentity: providerThreadId === undefined,
+        threadId,
+      });
       setThreadRuntimeConfig(threadId, {
         dynamicTools,
         environmentId,
@@ -1132,8 +1067,6 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
 
       if (providerThreadId) {
         recordProviderThreadIdentity(proc, threadId, providerThreadId);
-      } else {
-        proc.pendingIdentity.push(threadId);
       }
 
       const envVars = buildThreadShellEnvironment({
@@ -1148,7 +1081,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         threadId,
         cwd: options.workspacePath,
         providerThreadId:
-          providerThreadId ?? threadToProviderThread.get(threadId),
+          providerThreadId ?? threadIdentityRegistry.getProviderThreadId(threadId),
         options: toAdapterOptions(execOpts, instructions, envVars),
         resumePath,
         dynamicTools,
@@ -1157,7 +1090,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
 
       if (!cmd) {
         const currentProviderThreadId =
-          providerThreadId ?? threadToProviderThread.get(threadId);
+          providerThreadId ?? threadIdentityRegistry.getProviderThreadId(threadId);
         if (!currentProviderThreadId) {
           throw new Error(`No provider thread id available for ${threadId}`);
         }
@@ -1174,7 +1107,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       const resolvedId =
         resolveThreadIdentityResult({ result, threadId }) ??
         providerThreadId ??
-        threadToProviderThread.get(threadId);
+        threadIdentityRegistry.getProviderThreadId(threadId);
       if (!resolvedId) {
         throw new Error(`Provider resume did not return a thread id for ${threadId}`);
       }
@@ -1195,7 +1128,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       const cmd = proc.adapter.buildCommand({
         type: "turn/start",
         threadId,
-        providerThreadId: threadToProviderThread.get(threadId),
+        providerThreadId: threadIdentityRegistry.getProviderThreadId(threadId),
         input,
         options: toAdapterOptions(execOpts, instructions, {}),
       });
@@ -1222,7 +1155,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       const cmd = proc.adapter.buildCommand({
         type: "turn/steer",
         threadId,
-        providerThreadId: threadToProviderThread.get(threadId),
+        providerThreadId: threadIdentityRegistry.getProviderThreadId(threadId),
         expectedTurnId,
         input,
         options: toAdapterOptions(execOpts, instructions, {}),
@@ -1253,7 +1186,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       const cmd = proc.adapter.buildCommand({
         type: "thread/name/set",
         threadId,
-        providerThreadId: threadToProviderThread.get(threadId),
+        providerThreadId: threadIdentityRegistry.getProviderThreadId(threadId),
         title,
       });
 
@@ -1316,12 +1249,10 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         resolvePendingIdentityWaiters(proc);
 
         // Clean up mappings
-        for (const tid of proc.threadIds) {
-          threadToProvider.delete(tid);
-          threadToProviderThread.delete(tid);
+        for (const tid of proc.identity.threadIds) {
+          threadIdentityRegistry.clearThread(tid);
           clearThreadRuntimeConfig(tid);
         }
-        proc.pendingIdentity = [];
         processes.delete(providerId);
       }
 
