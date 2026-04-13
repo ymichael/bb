@@ -119,6 +119,7 @@ describe("useProjectListActions", () => {
       () =>
         useProjectListActions({
           onProjectRemoved,
+          onThreadArchived: vi.fn(),
           onThreadDeleted,
           threads: [],
         }),
@@ -152,6 +153,7 @@ describe("useProjectListActions", () => {
   it("opens archive confirmation when force is required and closes it after the thread becomes archived", async () => {
     const thread = makeThread();
     const onProjectRemoved = vi.fn();
+    const onThreadArchived = vi.fn();
     const onThreadDeleted = vi.fn();
 
     vi.mocked(api.archiveThread).mockRejectedValueOnce(makeArchiveForceRequiredError());
@@ -161,6 +163,7 @@ describe("useProjectListActions", () => {
       ({ threads }: ThreadListHookProps) =>
         useProjectListActions({
           onProjectRemoved,
+          onThreadArchived,
           onThreadDeleted,
           threads,
         }),
@@ -180,6 +183,8 @@ describe("useProjectListActions", () => {
       expect(result.current.archiveConfirmationDialog.target).toEqual(thread);
     });
 
+    expect(onThreadArchived).not.toHaveBeenCalled();
+
     rerender({
       threads: [
         makeThread({
@@ -191,6 +196,98 @@ describe("useProjectListActions", () => {
 
     await waitFor(() => {
       expect(result.current.archiveConfirmationDialog.isOpen).toBe(false);
+    });
+  });
+
+  it("does not notify when toggling an archived thread to unarchive", async () => {
+    const thread = makeThread({ archivedAt: 100 });
+    const onThreadArchived = vi.fn();
+
+    vi.mocked(api.unarchiveThread).mockResolvedValue(undefined);
+
+    const { wrapper } = createQueryClientTestHarness();
+    const { result } = renderHook(
+      () =>
+        useProjectListActions({
+          onProjectRemoved: vi.fn(),
+          onThreadArchived,
+          onThreadDeleted: vi.fn(),
+          threads: [thread],
+        }),
+      { wrapper },
+    );
+
+    act(() => {
+      result.current.toggleThreadArchive(thread);
+    });
+
+    await waitFor(() => {
+      expect(api.unarchiveThread).toHaveBeenCalledWith(thread.id);
+    });
+
+    expect(api.archiveThread).not.toHaveBeenCalled();
+    expect(onThreadArchived).not.toHaveBeenCalled();
+  });
+
+  it("notifies after a successful archive", async () => {
+    const thread = makeThread();
+    const onThreadArchived = vi.fn();
+
+    vi.mocked(api.archiveThread).mockResolvedValue(undefined);
+
+    const { wrapper } = createQueryClientTestHarness();
+    const { result } = renderHook(
+      () =>
+        useProjectListActions({
+          onProjectRemoved: vi.fn(),
+          onThreadArchived,
+          onThreadDeleted: vi.fn(),
+          threads: [thread],
+        }),
+      { wrapper },
+    );
+
+    act(() => {
+      result.current.toggleThreadArchive(thread);
+    });
+
+    await waitFor(() => {
+      expect(api.archiveThread).toHaveBeenCalledWith(thread.id, { force: false });
+    });
+
+    await waitFor(() => {
+      expect(onThreadArchived).toHaveBeenCalledWith(thread);
+    });
+  });
+
+  it("notifies after a successful forced archive", async () => {
+    const thread = makeThread();
+    const onThreadArchived = vi.fn();
+
+    vi.mocked(api.archiveThread).mockResolvedValue(undefined);
+
+    const { wrapper } = createQueryClientTestHarness();
+    const { result } = renderHook(
+      () =>
+        useProjectListActions({
+          onProjectRemoved: vi.fn(),
+          onThreadArchived,
+          onThreadDeleted: vi.fn(),
+          threads: [thread],
+        }),
+      { wrapper },
+    );
+
+    act(() => {
+      result.current.confirmArchiveThread(thread);
+    });
+
+    await waitFor(() => {
+      expect(api.archiveThread).toHaveBeenCalledWith(thread.id, { force: true });
+    });
+
+    await waitFor(() => {
+      expect(onThreadArchived).toHaveBeenCalledWith(thread);
     });
   });
 
@@ -224,6 +321,7 @@ describe("useProjectListActions", () => {
       () =>
         useProjectListActions({
           onProjectRemoved: vi.fn(),
+          onThreadArchived: vi.fn(),
           onThreadDeleted: vi.fn(),
           threads: [],
         }),
@@ -255,6 +353,7 @@ describe("useProjectListActions", () => {
       () =>
         useProjectListActions({
           onProjectRemoved: vi.fn(),
+          onThreadArchived: vi.fn(),
           onThreadDeleted: vi.fn(),
           threads: [],
         }),

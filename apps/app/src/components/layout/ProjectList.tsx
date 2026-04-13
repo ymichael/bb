@@ -158,7 +158,7 @@ export function ProjectList({
     }
   }, [navigate, selectedProjectId, setCollapsedProjectIdList])
 
-  const handleThreadDeleted = useCallback((thread: Thread) => {
+  const handleThreadRemovedFromView = useCallback((thread: Thread) => {
     if (selectedThreadId === thread.id) {
       navigate(`/projects/${thread.projectId}`, { replace: true })
     }
@@ -167,7 +167,8 @@ export function ProjectList({
   const actions = useProjectListActions({
     threads,
     onProjectRemoved: handleProjectRemoved,
-    onThreadDeleted: handleThreadDeleted,
+    onThreadArchived: handleThreadRemovedFromView,
+    onThreadDeleted: handleThreadRemovedFromView,
   })
 
   const toggleProjectCollapsed = useCallback((projectId: string) => {

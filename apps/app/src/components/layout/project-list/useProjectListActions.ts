@@ -16,12 +16,14 @@ import { getThreadReadToggleAction } from "./threadReadState"
 interface UseProjectListActionsParams {
   threads: Thread[]
   onProjectRemoved: (projectId: string) => void
+  onThreadArchived: (thread: Thread) => void
   onThreadDeleted: (thread: Thread) => void
 }
 
 export function useProjectListActions({
   threads,
   onProjectRemoved,
+  onThreadArchived,
   onThreadDeleted,
 }: UseProjectListActionsParams) {
   const {
@@ -139,6 +141,9 @@ export function useProjectListActions({
     archiveThread(
       { id: thread.id, force: false },
       {
+        onSuccess: () => {
+          onThreadArchived(thread)
+        },
         onError: (error) => {
           if (isArchiveForceRequiredError(error)) {
             openArchiveConfirmationDialog(thread)
@@ -152,7 +157,7 @@ export function useProjectListActions({
         },
       },
     )
-  }, [archiveThread, isArchivePending, openArchiveConfirmationDialog])
+  }, [archiveThread, isArchivePending, onThreadArchived, openArchiveConfirmationDialog])
 
   const confirmArchiveThread = useCallback((thread: Thread) => {
     if (isArchivePending) return
@@ -162,6 +167,9 @@ export function useProjectListActions({
     archiveThread(
       { id: thread.id, force: true },
       {
+        onSuccess: () => {
+          onThreadArchived(thread)
+        },
         onError: (error) => {
           toast.error(getMutationErrorMessage({
             error,
@@ -170,7 +178,7 @@ export function useProjectListActions({
         },
       },
     )
-  }, [archiveThread, closeArchiveConfirmationDialog, isArchivePending])
+  }, [archiveThread, closeArchiveConfirmationDialog, isArchivePending, onThreadArchived])
 
   const requestRenameThread = useCallback((thread: Thread) => {
     if (isThreadRenamePending) return
