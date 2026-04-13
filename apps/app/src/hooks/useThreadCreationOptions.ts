@@ -1,6 +1,7 @@
 import { useAtom } from "jotai";
 import { type ComponentType, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
+  ProviderInfo,
   ReasoningLevel,
   SandboxMode,
   ServiceTier,
@@ -23,6 +24,7 @@ const SANDBOX_STORAGE_KEY = "bb.promptbox.sandbox";
 const ENVIRONMENT_STORAGE_KEY = "bb.promptbox.environment";
 const PROVIDER_STORAGE_KEY = "bb.promptbox.provider";
 type StoredServiceTier = "" | ServiceTier;
+const EMPTY_PROVIDERS: ProviderInfo[] = [];
 
 const REASONING_LABELS: Record<ReasoningLevel, string> = {
   low: "Low",
@@ -248,34 +250,51 @@ export function formatModelLabel(value: string, providerId?: string): string {
 }
 
 export function useThreadCreationOptions(options?: UsePromptModelReasoningOptions) {
-  const scope = options?.scope ?? "new-thread";
+  const {
+    initialEnvironmentSelectionValue,
+    initialModel,
+    initialProviderId,
+    initialReasoningLevel,
+    initialSandboxMode,
+    initialServiceTier,
+    projectId,
+    resetKey,
+    scope = "new-thread",
+  } = options ?? {};
   const [storedProviderId, setStoredProviderId] = useAtom(
-    providerIdAtomFamily(options?.projectId),
+    providerIdAtomFamily(projectId),
   );
   const [storedSelectedModel, setStoredSelectedModel] = useAtom(
-    modelAtomFamily(options?.projectId),
+    modelAtomFamily(projectId),
   );
   const [storedServiceTier, setStoredServiceTier] = useAtom(
-    serviceTierAtomFamily(options?.projectId),
+    serviceTierAtomFamily(projectId),
   );
   const [storedReasoningLevel, setStoredReasoningLevel] = useAtom(
-    reasoningLevelAtomFamily(options?.projectId),
+    reasoningLevelAtomFamily(projectId),
   );
   const [storedSandboxMode, setStoredSandboxMode] = useAtom(
-    sandboxModeAtomFamily(options?.projectId),
+    sandboxModeAtomFamily(projectId),
   );
   const [storedEnvironmentSelectionValue, setStoredEnvironmentSelectionValue] = useAtom(
-    environmentSelectionAtomFamily(options?.projectId),
+    environmentSelectionAtomFamily(projectId),
   );
   const [threadSelections, setThreadSelections] = useState<ThreadPromptSelections>(() =>
-    getInitialThreadPromptSelections(options),
+    getInitialThreadPromptSelections({
+      initialEnvironmentSelectionValue,
+      initialModel,
+      initialProviderId,
+      initialReasoningLevel,
+      initialSandboxMode,
+      initialServiceTier,
+    }),
   );
   const touchedThreadFieldsRef = useRef<Set<ThreadPromptField>>(new Set());
-  const threadResetKeyRef = useRef<string | number | null | undefined>(options?.resetKey);
+  const threadResetKeyRef = useRef<string | number | null | undefined>(resetKey);
 
   // --- Provider selection ---
   const providersQuery = useSystemProviders();
-  const providers = providersQuery.data ?? [];
+  const providers = providersQuery.data ?? EMPTY_PROVIDERS;
   const hasMultipleProviders = providers.length >= 2;
 
   const rawSelectedProviderId =
@@ -330,10 +349,13 @@ export function useThreadCreationOptions(options?: UsePromptModelReasoningOption
     activeProviderCapabilities?.supportsServiceTier ?? false;
 
   const serviceTierSupportByProvider = useMemo(
-    () =>
-      Object.fromEntries(
-        providers.map((p) => [p.id, p.capabilities.supportsServiceTier]),
-      ) as Record<string, boolean>,
+    () => {
+      const supportByProvider: Record<string, boolean> = {};
+      for (const provider of providers) {
+        supportByProvider[provider.id] = provider.capabilities.supportsServiceTier;
+      }
+      return supportByProvider;
+    },
     [providers],
   );
 
@@ -415,9 +437,16 @@ export function useThreadCreationOptions(options?: UsePromptModelReasoningOption
 
   useEffect(() => {
     if (scope !== "thread") return;
-    const nextSelections = getInitialThreadPromptSelections(options);
-    if (threadResetKeyRef.current !== options?.resetKey) {
-      threadResetKeyRef.current = options?.resetKey;
+    const nextSelections = getInitialThreadPromptSelections({
+      initialEnvironmentSelectionValue,
+      initialModel,
+      initialProviderId,
+      initialReasoningLevel,
+      initialSandboxMode,
+      initialServiceTier,
+    });
+    if (threadResetKeyRef.current !== resetKey) {
+      threadResetKeyRef.current = resetKey;
       touchedThreadFieldsRef.current = new Set();
       setThreadSelections(nextSelections);
       return;
@@ -428,13 +457,13 @@ export function useThreadCreationOptions(options?: UsePromptModelReasoningOption
       touchedFields: touchedThreadFieldsRef.current,
     }));
   }, [
-    options?.initialProviderId,
-    options?.initialEnvironmentSelectionValue,
-    options?.initialModel,
-    options?.initialReasoningLevel,
-    options?.initialSandboxMode,
-    options?.initialServiceTier,
-    options?.resetKey,
+    initialEnvironmentSelectionValue,
+    initialModel,
+    initialProviderId,
+    initialReasoningLevel,
+    initialSandboxMode,
+    initialServiceTier,
+    resetKey,
     scope,
   ]);
 

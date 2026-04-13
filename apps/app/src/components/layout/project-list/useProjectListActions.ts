@@ -24,80 +24,124 @@ export function useProjectListActions({
   onProjectRemoved,
   onThreadDeleted,
 }: UseProjectListActionsParams) {
-  const archiveThread = useArchiveThread()
-  const markThreadRead = useMarkThreadRead()
-  const markThreadUnread = useMarkThreadUnread()
-  const updateThread = useUpdateThread()
-  const unarchiveThread = useUnarchiveThread()
-  const deleteThread = useDeleteThread()
-  const updateProject = useUpdateProject()
-  const deleteProject = useDeleteProject()
+  const {
+    isPending: isArchivePending,
+    mutate: archiveThread,
+  } = useArchiveThread()
+  const {
+    isPending: isMarkThreadReadPending,
+    mutate: markThreadRead,
+  } = useMarkThreadRead()
+  const {
+    isPending: isMarkThreadUnreadPending,
+    mutate: markThreadUnread,
+  } = useMarkThreadUnread()
+  const {
+    isPending: isThreadRenamePending,
+    mutate: updateThread,
+  } = useUpdateThread()
+  const {
+    isPending: isUnarchivePending,
+    mutate: unarchiveThread,
+  } = useUnarchiveThread()
+  const {
+    isPending: deleteThreadDialogPending,
+    mutate: deleteThread,
+  } = useDeleteThread()
+  const {
+    isPending: isProjectRenamePending,
+    mutate: updateProject,
+  } = useUpdateProject()
+  const {
+    isPending: isProjectDeletePending,
+    mutate: deleteProject,
+  } = useDeleteProject()
   const archiveConfirmationDialog = useDialogState<Thread>()
   const projectRenameDialog = useDialogState<ProjectRenameDialogTarget>()
   const projectDeleteDialog = useDialogState<ProjectDeleteDialogTarget>()
   const threadRenameDialog = useDialogState<ThreadRenameDialogTarget>()
   const threadDeleteDialog = useDialogState<Thread>()
+  const {
+    onClose: closeArchiveConfirmationDialog,
+    onOpen: openArchiveConfirmationDialog,
+    target: archiveConfirmationTarget,
+  } = archiveConfirmationDialog
+  const {
+    onClose: closeProjectRenameDialog,
+    onOpen: openProjectRenameDialog,
+  } = projectRenameDialog
+  const {
+    onClose: closeProjectDeleteDialog,
+    onOpen: openProjectDeleteDialog,
+  } = projectDeleteDialog
+  const {
+    onClose: closeThreadRenameDialog,
+    onOpen: openThreadRenameDialog,
+  } = threadRenameDialog
+  const {
+    onClose: closeThreadDeleteDialog,
+    onOpen: openThreadDeleteDialog,
+  } = threadDeleteDialog
 
   useEffect(() => {
-    const archiveConfirmationTarget = archiveConfirmationDialog.target
     if (!archiveConfirmationTarget || threads.length === 0) return
 
     const nextThread = threads.find((thread) => thread.id === archiveConfirmationTarget.id)
     if (!nextThread || nextThread.archivedAt != null) {
-      archiveConfirmationDialog.onClose()
+      closeArchiveConfirmationDialog()
     }
-  }, [archiveConfirmationDialog.onClose, archiveConfirmationDialog.target, threads])
+  }, [archiveConfirmationTarget, closeArchiveConfirmationDialog, threads])
 
   const requestRenameProject = useCallback((project: ProjectResponse) => {
-    if (updateProject.isPending) return
+    if (isProjectRenamePending) return
 
-    projectRenameDialog.onOpen({
+    openProjectRenameDialog({
       id: project.id,
       currentName: project.name,
     })
-  }, [projectRenameDialog.onOpen, updateProject.isPending])
+  }, [isProjectRenamePending, openProjectRenameDialog])
 
   const submitProjectRename = useCallback((projectId: string, name: string) => {
-    updateProject.mutate(
+    updateProject(
       {
         id: projectId,
         name,
       },
       {
         onSuccess: () => {
-          projectRenameDialog.onClose()
+          closeProjectRenameDialog()
         },
       },
     )
-  }, [projectRenameDialog.onClose, updateProject.mutate])
+  }, [closeProjectRenameDialog, updateProject])
 
   const requestDeleteProject = useCallback((project: ProjectResponse) => {
-    if (deleteProject.isPending) return
+    if (isProjectDeletePending) return
 
-    projectDeleteDialog.onOpen({
+    openProjectDeleteDialog({
       id: project.id,
       name: project.name,
     })
-  }, [deleteProject.isPending, projectDeleteDialog.onOpen])
+  }, [isProjectDeletePending, openProjectDeleteDialog])
 
   const confirmDeleteProject = useCallback((projectId: string) => {
-    deleteProject.mutate(projectId, {
+    deleteProject(projectId, {
       onSuccess: () => {
-        projectDeleteDialog.onClose()
+        closeProjectDeleteDialog()
         onProjectRemoved(projectId)
       },
     })
-  }, [deleteProject.mutate, onProjectRemoved, projectDeleteDialog.onClose])
+  }, [closeProjectDeleteDialog, deleteProject, onProjectRemoved])
 
   const requestArchiveThread = useCallback((thread: Thread) => {
-    if (archiveThread.isPending) return
+    if (isArchivePending) return
 
-    archiveThread.mutate(
+    archiveThread(
       { id: thread.id, force: false },
       {
         onError: (error) => {
           if (isArchiveForceRequiredError(error)) {
-            archiveConfirmationDialog.onOpen(thread)
+            openArchiveConfirmationDialog(thread)
             return
           }
 
@@ -108,14 +152,14 @@ export function useProjectListActions({
         },
       },
     )
-  }, [archiveConfirmationDialog.onOpen, archiveThread.isPending, archiveThread.mutate])
+  }, [archiveThread, isArchivePending, openArchiveConfirmationDialog])
 
   const confirmArchiveThread = useCallback((thread: Thread) => {
-    if (archiveThread.isPending) return
+    if (isArchivePending) return
 
     const label = threadTypeLabel(thread.type)
-    archiveConfirmationDialog.onClose()
-    archiveThread.mutate(
+    closeArchiveConfirmationDialog()
+    archiveThread(
       { id: thread.id, force: true },
       {
         onError: (error) => {
@@ -126,52 +170,52 @@ export function useProjectListActions({
         },
       },
     )
-  }, [archiveConfirmationDialog.onClose, archiveThread.isPending, archiveThread.mutate])
+  }, [archiveThread, closeArchiveConfirmationDialog, isArchivePending])
 
   const requestRenameThread = useCallback((thread: Thread) => {
-    if (updateThread.isPending) return
+    if (isThreadRenamePending) return
 
-    threadRenameDialog.onOpen({
+    openThreadRenameDialog({
       id: thread.id,
       currentTitle: getThreadDisplayTitle(thread),
       threadType: thread.type,
     })
-  }, [threadRenameDialog.onOpen, updateThread.isPending])
+  }, [isThreadRenamePending, openThreadRenameDialog])
 
   const submitThreadRename = useCallback((threadId: string, title: string) => {
-    updateThread.mutate(
+    updateThread(
       {
         id: threadId,
         title,
       },
       {
         onSuccess: () => {
-          threadRenameDialog.onClose()
+          closeThreadRenameDialog()
         },
       },
     )
-  }, [threadRenameDialog.onClose, updateThread.mutate])
+  }, [closeThreadRenameDialog, updateThread])
 
   const requestDeleteThread = useCallback((thread: Thread) => {
-    if (deleteThread.isPending) return
-    threadDeleteDialog.onOpen(thread)
-  }, [deleteThread.isPending, threadDeleteDialog.onOpen])
+    if (deleteThreadDialogPending) return
+    openThreadDeleteDialog(thread)
+  }, [deleteThreadDialogPending, openThreadDeleteDialog])
 
   const confirmDeleteThread = useCallback((thread: Thread) => {
-    deleteThread.mutate(
+    deleteThread(
       { id: thread.id },
       {
         onSuccess: () => {
-          threadDeleteDialog.onClose()
+          closeThreadDeleteDialog()
           onThreadDeleted(thread)
         },
       },
     )
-  }, [deleteThread.mutate, onThreadDeleted, threadDeleteDialog.onClose])
+  }, [closeThreadDeleteDialog, deleteThread, onThreadDeleted])
 
   const toggleThreadArchive = useCallback((thread: Thread) => {
     if (thread.archivedAt != null) {
-      unarchiveThread.mutate({ id: thread.id })
+      unarchiveThread({ id: thread.id })
       return
     }
 
@@ -180,7 +224,7 @@ export function useProjectListActions({
 
   const toggleThreadRead = useCallback((thread: Thread) => {
     if (getThreadReadToggleAction(thread) === "mark_unread") {
-      markThreadUnread.mutate(thread.id, {
+      markThreadUnread(thread.id, {
         onError: (error) => {
           toast.error(getMutationErrorMessage({
             error,
@@ -191,7 +235,7 @@ export function useProjectListActions({
       return
     }
 
-    markThreadRead.mutate(thread.id, {
+    markThreadRead(thread.id, {
       onError: (error) => {
         toast.error(getMutationErrorMessage({
           error,
@@ -206,11 +250,11 @@ export function useProjectListActions({
     confirmArchiveThread,
     confirmDeleteProject,
     confirmDeleteThread,
-    deleteThreadDialogPending: deleteThread.isPending,
-    isArchivePending: archiveThread.isPending,
-    isProjectDeletePending: deleteProject.isPending,
-    isProjectRenamePending: updateProject.isPending,
-    isThreadRenamePending: updateThread.isPending,
+    deleteThreadDialogPending,
+    isArchivePending,
+    isProjectDeletePending,
+    isProjectRenamePending,
+    isThreadRenamePending,
     projectDeleteDialog,
     projectRenameDialog,
     requestDeleteProject,
@@ -220,12 +264,12 @@ export function useProjectListActions({
     submitProjectRename,
     submitThreadRename,
     threadActionsDisabled:
-      archiveThread.isPending ||
-      unarchiveThread.isPending ||
-      deleteThread.isPending ||
-      updateThread.isPending ||
-      markThreadRead.isPending ||
-      markThreadUnread.isPending,
+      isArchivePending ||
+      isUnarchivePending ||
+      deleteThreadDialogPending ||
+      isThreadRenamePending ||
+      isMarkThreadReadPending ||
+      isMarkThreadUnreadPending,
     threadDeleteDialog,
     threadRenameDialog,
     toggleThreadArchive,

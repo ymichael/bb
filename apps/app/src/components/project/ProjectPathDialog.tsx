@@ -137,9 +137,7 @@ function ProjectPathDialogContent({
       : copy.placeholder
 
   useEffect(() => {
-    if (validationMessage) {
-      setValidationMessage(null)
-    }
+    setValidationMessage(null)
   }, [pathValue])
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {

@@ -105,14 +105,14 @@ export function ProjectSettingsView() {
   }, [githubRepos, repoSearch]);
 
   const project = projects?.find((p) => p.id === projectId);
-  const unsortedSources = project?.sources ?? [];
+  const projectSources = project?.sources;
   const sources = useMemo(
-    () => [...unsortedSources].sort((a, b) => {
+    () => [...(projectSources ?? [])].sort((a, b) => {
       const aGh = isGitHubRepoProjectSource(a) ? 0 : 1;
       const bGh = isGitHubRepoProjectSource(b) ? 0 : 1;
       return aGh - bGh;
     }),
-    [unsortedSources],
+    [projectSources],
   );
   const hostNameById = useMemo(() => new Map(hosts.map((h) => [h.id, h.name])), [hosts]);
   const hasGitHubSource = sources.some(isGitHubRepoProjectSource);

@@ -329,7 +329,6 @@ export function ThreadDetailView() {
     );
   }, [
     archiveThread,
-    environment,
     navigate,
     thread,
     threadArchiveConfirmationDialog,

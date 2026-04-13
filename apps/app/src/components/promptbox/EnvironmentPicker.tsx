@@ -153,7 +153,7 @@ export function EnvironmentPicker({
     }
     const backend = sandboxBackends.find((b) => b.id === parsed.backendId);
     return { modeLabel: backend?.displayName ?? "Sandbox", icon: Container };
-  }, [value, hosts, sandboxBackends]);
+  }, [value, hosts, sandboxBackends, isLocalHost]);
 
   return (
     <DropdownMenu>

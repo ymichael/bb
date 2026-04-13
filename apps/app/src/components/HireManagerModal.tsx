@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useId, useMemo, useState, type FormEvent } from "react";
 import type { ReasoningLevel, Thread } from "@bb/domain";
+import type { SystemProviderInfo } from "@bb/server-contract";
 import { findLocalPathProjectSourceForHost } from "@bb/domain";
 import { DetailCard, DetailRow } from "@bb/ui-core";
 import {
@@ -34,6 +35,7 @@ const REASONING_LABELS: Record<ReasoningLevel, string> = {
   high: "High",
   xhigh: "Extra High",
 };
+const EMPTY_SYSTEM_PROVIDERS: SystemProviderInfo[] = [];
 
 interface HireManagerModalProps {
   projectId: string;
@@ -50,7 +52,7 @@ export function HireManagerModal({
 }: HireManagerModalProps) {
   const nameInputId = useId();
   const providersQuery = useSystemProviders();
-  const providers = providersQuery.data ?? [];
+  const providers = providersQuery.data ?? EMPTY_SYSTEM_PROVIDERS;
   const { data: projects } = useProjects();
   const { data: hosts = [] } = useHosts();
   const { isLocalHost } = useHostDaemon();
@@ -201,7 +203,6 @@ export function HireManagerModal({
       setIsPending(false);
     }
   }, [
-    hasMultipleProviders,
     hireManager,
     isPending,
     managerName,

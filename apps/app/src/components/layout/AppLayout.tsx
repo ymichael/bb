@@ -379,7 +379,7 @@ export function AppLayout({ children }: AppLayoutProps) {
       document.body.style.cursor = ""
       document.body.style.userSelect = ""
     }
-  }, [isSidebarResizing])
+  }, [isSidebarResizing, setSidebarWidth])
 
   useEffect(() => {
     liveWidthRef.current = sidebarWidth

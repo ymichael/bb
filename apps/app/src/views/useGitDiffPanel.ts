@@ -279,7 +279,13 @@ export function useGitDiffPanel({
         { replace: true },
       );
     },
-    [location.pathname, location.search, navigate, onBeforePanelChange],
+    [
+      location.pathname,
+      location.search,
+      navigate,
+      onBeforePanelChange,
+      setPersistedSecondaryPanel,
+    ],
   );
 
   const openThreadSecondaryPanel = useCallback(
