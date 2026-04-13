@@ -8,6 +8,7 @@ import {
   formatPendingInteractionFileChangeApprovalResolutionOutcome,
   formatPendingInteractionPermissionResolutionMessage,
   formatPendingInteractionPermissionResolutionOutcome,
+  formatPendingInteractionSubjectDetailLines,
   summarizePendingInteractionRequestedPermissions,
 } from "../src/index.js";
 
@@ -99,6 +100,11 @@ describe("pending interaction formatting", () => {
         itemId: "item_123",
         command: "curl https://example.com",
         cwd: "/tmp/project",
+        actions: [{ type: "unknown", command: "curl https://example.com" }],
+        executionScope: {
+          network: { enabled: true },
+          fileSystem: null,
+        },
       },
       reason: "Needs network",
       availableDecisions: ["allow_once", "allow_for_session", "deny"],
@@ -111,6 +117,13 @@ describe("pending interaction formatting", () => {
       decision: "allow_for_session",
       grantedPermissions: null,
     });
+
+    expect(formatPendingInteractionSubjectDetailLines(interaction)).toEqual([
+      "Command: curl https://example.com",
+      "Cwd: /tmp/project",
+      "Action: curl https://example.com",
+      "Execution scope: Network access",
+    ]);
   });
 
   it("builds approval resolutions with explicit permission-grant permissions", () => {

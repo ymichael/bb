@@ -301,6 +301,119 @@ describe("pending interaction lifecycle", () => {
     }
   });
 
+  it("rejects command approvals that try to grant execution-scope permissions", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-pending-interaction-command-grant",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+      });
+
+      const created = registerPendingInteraction(
+        harness.deps.pendingInteractions,
+        {
+          threadId: thread.id,
+          turnId: "turn-command-grant",
+          providerId: "codex",
+          providerThreadId: "provider-thread-command-grant",
+          providerRequestId: "request-command-grant",
+          payload: createCommandApprovalPayload({
+            itemId: "item-command-grant",
+            reason: "Needs network",
+            command: "curl https://example.com",
+            executionScope: {
+              network: { enabled: true },
+              fileSystem: null,
+            },
+          }),
+        },
+        session.id,
+      );
+      if (created.outcome === "rejected") {
+        throw new Error(`Expected interaction registration to succeed: ${created.reason}`);
+      }
+
+      expect(() =>
+        harness.deps.pendingInteractions.resolvePendingInteraction({
+          threadId: thread.id,
+          interactionId: created.interaction.id,
+          resolution: createAllowForSessionResolution({
+            network: { enabled: true },
+            fileSystem: null,
+          }),
+        }),
+      ).toThrow("Only permission-grant approvals can grant permissions");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("rejects file-change approvals that try to grant write-scope permissions", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-pending-interaction-file-change-grant",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+      });
+
+      const created = registerPendingInteraction(
+        harness.deps.pendingInteractions,
+        {
+          threadId: thread.id,
+          turnId: "turn-file-change-grant",
+          providerId: "codex",
+          providerThreadId: "provider-thread-file-change-grant",
+          providerRequestId: "request-file-change-grant",
+          payload: createFileChangeApprovalPayload({
+            itemId: "item-file-change-grant",
+            reason: "Needs file write approval",
+            writeScope: { root: "/tmp/project" },
+          }),
+        },
+        session.id,
+      );
+      if (created.outcome === "rejected") {
+        throw new Error(`Expected interaction registration to succeed: ${created.reason}`);
+      }
+
+      expect(() =>
+        harness.deps.pendingInteractions.resolvePendingInteraction({
+          threadId: thread.id,
+          interactionId: created.interaction.id,
+          resolution: createAllowForSessionResolution({
+            network: null,
+            fileSystem: {
+              read: [],
+              write: ["/tmp/project"],
+            },
+          }),
+        }),
+      ).toThrow("Only permission-grant approvals can grant permissions");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("rejects a second active interaction on the same thread", async () => {
     const harness = await createTestAppHarness();
     try {

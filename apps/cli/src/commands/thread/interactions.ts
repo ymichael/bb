@@ -3,6 +3,7 @@ import {
   buildPendingInteractionApprovalResolution,
   formatPendingInteractionCommandApprovalDecision,
   formatPendingInteractionCommandApprovalResolutionOutcome,
+  formatPendingInteractionSubjectDetailLines,
   formatPendingInteractionSummary,
   summarizePendingInteractionRequestedPermissions,
 } from "@bb/core-ui";
@@ -102,13 +103,10 @@ function printInteraction(interaction: PendingInteraction): void {
     case "approval":
       switch (interaction.payload.subject.kind) {
         case "command":
-          console.log(`  Command: ${interaction.payload.subject.command}`);
-          if (interaction.payload.subject.cwd) {
-            console.log(`  Cwd: ${interaction.payload.subject.cwd}`);
-          }
-          break;
         case "file_change":
-          console.log(`  Item: ${interaction.payload.subject.itemId}`);
+          for (const line of formatPendingInteractionSubjectDetailLines(interaction)) {
+            console.log(`  ${line}`);
+          }
           break;
         case "permission_grant":
           if (interaction.payload.subject.toolName) {

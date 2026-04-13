@@ -37,6 +37,8 @@ function createResolvingInteraction(): PendingInteraction {
       subject: {
         kind: "file_change",
         itemId: "item_1",
+        writeScope: null,
+        executionScope: null,
       },
       reason: "Needs file write approval",
       availableDecisions: ["allow_once", "deny"],

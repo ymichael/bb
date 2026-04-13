@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   buildPendingInteractionApprovalResolution,
   extractShellCommandFromString,
+  formatPendingInteractionSubjectDetailLines,
 } from "@bb/core-ui";
 import {
   type PendingInteraction,
@@ -173,11 +174,21 @@ function buildBannerModel(interaction: PendingInteraction): BannerModel {
           const command = rawCommand
             ? extractShellCommandFromString(rawCommand) ?? rawCommand
             : null;
+          const detailLines = formatPendingInteractionSubjectDetailLines(
+            interaction,
+          ).filter((line) => !line.startsWith("Command: "));
           const subject = command ? (
             <div className="overflow-hidden rounded-lg border border-border bg-card">
               <pre className="max-h-[220px] overflow-auto whitespace-pre px-4 py-3 font-mono ui-text-sm leading-tight text-foreground">
                 $ {command}
               </pre>
+              {detailLines.length > 0 ? (
+                <ul className="border-t border-border/60 px-4 py-3 text-xs text-muted-foreground">
+                  {detailLines.map((line) => (
+                    <li key={line}>{line}</li>
+                  ))}
+                </ul>
+              ) : null}
             </div>
           ) : null;
 
@@ -188,25 +199,41 @@ function buildBannerModel(interaction: PendingInteraction): BannerModel {
             skip: null,
           };
         }
-        case "file_change":
+        case "file_change": {
+          const detailLines = formatPendingInteractionSubjectDetailLines(
+            interaction,
+          );
           return {
             title: interaction.payload.reason ?? "Do you want to make these changes?",
-            subject: null,
-            options,
-            skip: null,
-          };
-        case "permission_grant":
-          return {
-            title:
-              interaction.payload.reason ?? "Do you want to grant this permission?",
-            subject: interaction.payload.subject.toolName ? (
-              <div className="rounded-lg border border-border bg-card px-4 py-3 font-mono ui-text-sm leading-tight text-foreground">
-                {interaction.payload.subject.toolName}
-              </div>
+            subject: detailLines.length > 0 ? (
+              <ul className="rounded-lg border border-border bg-card px-4 py-3 text-xs text-muted-foreground">
+                {detailLines.map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
             ) : null,
             options,
             skip: null,
           };
+        }
+        case "permission_grant": {
+          const detailLines = formatPendingInteractionSubjectDetailLines(
+            interaction,
+          );
+          return {
+            title:
+              interaction.payload.reason ?? "Do you want to grant this permission?",
+            subject: detailLines.length > 0 ? (
+              <ul className="rounded-lg border border-border bg-card px-4 py-3 text-xs text-muted-foreground">
+                {detailLines.map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
+            ) : null,
+            options,
+            skip: null,
+          };
+        }
       }
     }
   }

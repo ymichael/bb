@@ -101,20 +101,20 @@ function validateGrantedPermissions(
   interaction: PendingInteraction,
   permissions: PendingInteractionGrantedPermissionProfile,
 ): void {
-  if (!hasGrantedPermissions(permissions)) {
-    throw new ApiError(
-      400,
-      "invalid_request",
-      "Allowed permission resolutions must grant at least one permission",
-    );
-  }
-
   const requestedPermissions = getRequestedPermissions(interaction);
   if (requestedPermissions === null) {
     throw new ApiError(
       400,
       "invalid_request",
-      "Granted permissions must be a subset of the requested permissions",
+      "Only permission-grant approvals can grant permissions",
+    );
+  }
+
+  if (!hasGrantedPermissions(permissions)) {
+    throw new ApiError(
+      400,
+      "invalid_request",
+      "Allowed permission resolutions must grant at least one permission",
     );
   }
 

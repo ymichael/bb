@@ -1,6 +1,7 @@
 import type {
   PendingInteractionApprovalDecision,
   ApprovalPendingInteractionResolution,
+  PendingInteractionCommandAction,
   PendingInteractionGrantablePermissionProfile,
   PendingInteractionGrantedPermissionProfile,
   PendingInteractionMacOsPermissions,
@@ -87,6 +88,89 @@ export function summarizePendingInteractionRequestedPermissions(
       "macos" in permissions ? permissions.macos : null,
     ),
   ];
+}
+
+export function summarizePendingInteractionCommandActions(
+  actions: PendingInteractionCommandAction[],
+): string[] {
+  return actions.map((action) => {
+    switch (action.type) {
+      case "read":
+        return `Read ${action.path}`;
+      case "listFiles":
+        return action.path ? `List files in ${action.path}` : "List files";
+      case "search":
+        return action.query
+          ? `Search for ${action.query}${action.path ? ` in ${action.path}` : ""}`
+          : action.path
+          ? `Search in ${action.path}`
+          : "Search files";
+      case "unknown":
+        return action.command;
+    }
+  });
+}
+
+function formatPermissionSummaryLine(
+  label: string,
+  permissions: PendingInteractionGrantablePermissionProfile | null,
+): string | null {
+  if (permissions === null) {
+    return null;
+  }
+  const summaries = summarizePendingInteractionRequestedPermissions(permissions);
+  return summaries.length > 0 ? `${label}: ${summaries.join(", ")}` : null;
+}
+
+export function formatPendingInteractionSubjectDetailLines(
+  interaction: PendingInteraction,
+): string[] {
+  switch (interaction.payload.kind) {
+    case "approval":
+      switch (interaction.payload.subject.kind) {
+        case "command": {
+          const actionLines = summarizePendingInteractionCommandActions(
+            interaction.payload.subject.actions,
+          ).map((action) => `Action: ${action}`);
+          const executionScope = formatPermissionSummaryLine(
+            "Execution scope",
+            interaction.payload.subject.executionScope,
+          );
+          return [
+            `Command: ${interaction.payload.subject.command}`,
+            ...(interaction.payload.subject.cwd
+              ? [`Cwd: ${interaction.payload.subject.cwd}`]
+              : []),
+            ...actionLines,
+            ...(executionScope ? [executionScope] : []),
+          ];
+        }
+        case "file_change": {
+          const executionScope = formatPermissionSummaryLine(
+            "Execution scope",
+            interaction.payload.subject.executionScope,
+          );
+          return [
+            `Item: ${interaction.payload.subject.itemId}`,
+            ...(interaction.payload.subject.writeScope
+              ? [`Write root: ${interaction.payload.subject.writeScope.root}`]
+              : []),
+            ...(executionScope ? [executionScope] : []),
+          ];
+        }
+        case "permission_grant": {
+          const permissions = summarizePendingInteractionRequestedPermissions(
+            interaction.payload.subject.permissions,
+          );
+          return [
+            ...(interaction.payload.subject.toolName
+              ? [`Tool: ${interaction.payload.subject.toolName}`]
+              : []),
+            ...permissions.map((permission) => `Permission: ${permission}`),
+          ];
+        }
+      }
+  }
 }
 
 export function toGrantedPendingInteractionPermissions(

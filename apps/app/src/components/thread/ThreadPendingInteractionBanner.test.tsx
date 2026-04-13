@@ -57,6 +57,8 @@ function createCommandApprovalInteraction(): PendingInteraction {
         itemId: "item_1",
         command: "git push origin feature",
         cwd: "/tmp/project",
+        actions: [],
+        executionScope: null,
       },
       reason: "Run a command that modifies the repo",
       availableDecisions: ["allow_once", "allow_for_session", "deny"],
@@ -84,6 +86,8 @@ function createFileChangeInteraction(): PendingInteraction {
       subject: {
         kind: "file_change",
         itemId: "item_2",
+        writeScope: null,
+        executionScope: null,
       },
       reason: "Write generated files",
       availableDecisions: ["allow_once", "allow_for_session", "deny"],
