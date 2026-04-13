@@ -44,14 +44,21 @@ export interface QueueThreadStopCommandArgs {
   threadId: string;
 }
 
+export interface QueueThreadStartCommandEnvironment {
+  hostId: string;
+  id: string;
+  path: string | null;
+  workspaceProvisionType: WorkspaceProvisionType;
+}
+
+export interface ThreadHostCommandEnvironment {
+  hostId: string;
+  id: string;
+}
+
 export interface QueueThreadStartCommandArgs {
   eventSequence: number;
-  environment: {
-    hostId: string;
-    id: string;
-    path: string | null;
-    workspaceProvisionType: WorkspaceProvisionType;
-  };
+  environment: QueueThreadStartCommandEnvironment;
   execution: ResolvedThreadExecutionOptions;
   permissionEscalation: PermissionEscalation;
   input: PromptInput[];
@@ -122,19 +129,13 @@ export interface QueueTurnSteerCommandArgs extends PrepareTurnRunCommandPayloadA
 }
 
 export interface QueueThreadRenameCommandArgs {
-  environment: {
-    hostId: string;
-    id: string;
-  };
+  environment: ThreadHostCommandEnvironment;
   threadId: string;
   title: string;
 }
 
 export interface QueueThreadDeletedCommandArgs {
-  environment: {
-    hostId: string;
-    id: string;
-  };
+  environment: ThreadHostCommandEnvironment;
   threadId: string;
 }
 
