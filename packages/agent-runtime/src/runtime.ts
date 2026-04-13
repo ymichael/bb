@@ -18,8 +18,17 @@ import type {
   JsonRpcMessage,
   ProviderAdapter,
 } from "./provider-adapter.js";
-import { ProviderRequestDecodeError } from "./provider-adapter.js";
 import { createProviderForId } from "./provider-registry.js";
+import {
+  ignoredJsonRpcResultSchema,
+  isJsonRpcId,
+  type PendingJsonRpcRequest,
+  sendJsonRpc,
+  sendJsonRpcError,
+  sendJsonRpcRequest,
+  sendJsonRpcResult,
+  sendProviderRequestDecodeErrorIfKnown,
+} from "./runtime-json-rpc.js";
 import type {
   AgentRuntime,
   AgentRuntimeExecutionOptions,
@@ -31,16 +40,6 @@ import {
   shouldAutoDenyInteractiveRequest,
 } from "./shared/permission-policy.js";
 
-// ---------------------------------------------------------------------------
-// JSON-RPC helpers
-// ---------------------------------------------------------------------------
-
-interface PendingRequest {
-  resolve: (result: unknown) => void;
-  reject: (error: Error) => void;
-}
-
-const ignoredJsonRpcResultSchema = z.unknown();
 const threadIdentityResultSchema = z.object({
   providerThreadId: z.string().nullable().optional(),
   threadId: z.string().nullable().optional(),
@@ -88,52 +87,6 @@ function resolveThreadIdentityResult(
     return args.result.threadId;
   }
   return undefined;
-}
-
-function isJsonRpcId(value: unknown): value is string | number {
-  return typeof value === "string" || typeof value === "number";
-}
-
-function sendJsonRpc(
-  child: ChildProcess,
-  message: JsonRpcMessage,
-): void {
-  const line = JSON.stringify(message);
-  child.stdin?.write(line + "\n");
-}
-
-function sendRequest<TResult>(
-  child: ChildProcess,
-  message: JsonRpcMessage,
-  pending: Map<string | number, PendingRequest>,
-  getNextId: () => number,
-  resultSchema: z.ZodType<TResult>,
-  timeoutMs = 30_000,
-): Promise<TResult> {
-  const id = getNextId();
-  const withId: JsonRpcMessage = { ...message, id };
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      pending.delete(id);
-      reject(new Error(`JSON-RPC request timed out: ${message.method}`));
-    }, timeoutMs);
-    pending.set(id, {
-      resolve: (result) => {
-        clearTimeout(timer);
-        const parsedResult = resultSchema.safeParse(result);
-        if (!parsedResult.success) {
-          reject(new Error(`Invalid JSON-RPC result for ${message.method}`));
-          return;
-        }
-        resolve(parsedResult.data);
-      },
-      reject: (error) => {
-        clearTimeout(timer);
-        reject(error);
-      },
-    });
-    sendJsonRpc(child, withId);
-  });
 }
 
 // ---------------------------------------------------------------------------
@@ -191,7 +144,7 @@ interface ProviderProcess {
   child: ChildProcess;
   adapter: ProviderAdapter;
   interactiveRequestScope: string;
-  pending: Map<string | number, PendingRequest>;
+  pending: Map<string | number, PendingJsonRpcRequest>;
   identityWaiters: Map<string, PendingIdentityWaiter>;
   threadIds: Set<string>;
   stderrChunks: string[];
@@ -201,55 +154,6 @@ interface ProviderProcess {
 interface PendingIdentityWaiter {
   resolve: (providerThreadId: string | null) => void;
   timeout: ReturnType<typeof setTimeout>;
-}
-
-function sendJsonRpcResult(
-  child: ChildProcess,
-  id: string | number,
-  result: unknown,
-): void {
-  child.stdin?.write(
-    JSON.stringify({
-      jsonrpc: "2.0",
-      id,
-      result,
-    }) + "\n",
-  );
-}
-
-function sendJsonRpcError(
-  child: ChildProcess,
-  id: string | number,
-  message: string,
-  code = -32000,
-): void {
-  child.stdin?.write(
-    JSON.stringify({
-      jsonrpc: "2.0",
-      id,
-      error: {
-        code,
-        message,
-      },
-    }) + "\n",
-  );
-}
-
-interface SendProviderRequestDecodeErrorArgs {
-  child: ChildProcess;
-  error: unknown;
-  id: string | number;
-}
-
-function sendProviderRequestDecodeErrorIfKnown(
-  args: SendProviderRequestDecodeErrorArgs,
-): boolean {
-  if (!(args.error instanceof ProviderRequestDecodeError)) {
-    return false;
-  }
-
-  sendJsonRpcError(args.child, args.id, args.error.message, args.error.code);
-  return true;
 }
 
 interface ThreadRuntimeConfig {
@@ -409,19 +313,19 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       args.providerThreadId,
     );
     if (!resolvedThreadId) {
-      sendJsonRpcError(
-        args.proc.child,
-        args.parsedId,
-        `Unable to resolve BB thread id for ${args.requestKind} on provider thread "${args.providerThreadId}"`,
-      );
+      sendJsonRpcError({
+        child: args.proc.child,
+        id: args.parsedId,
+        message: `Unable to resolve BB thread id for ${args.requestKind} on provider thread "${args.providerThreadId}"`,
+      });
       return null;
     }
     if (args.threadIdHint && args.threadIdHint !== resolvedThreadId) {
-      sendJsonRpcError(
-        args.proc.child,
-        args.parsedId,
-        `${formatProviderRequestKindForSentence(args.requestKind)} thread hint "${args.threadIdHint}" did not match resolved BB thread "${resolvedThreadId}" for provider thread "${args.providerThreadId}"`,
-      );
+      sendJsonRpcError({
+        child: args.proc.child,
+        id: args.parsedId,
+        message: `${formatProviderRequestKindForSentence(args.requestKind)} thread hint "${args.threadIdHint}" did not match resolved BB thread "${resolvedThreadId}" for provider thread "${args.providerThreadId}"`,
+      });
       return null;
     }
 
@@ -550,13 +454,13 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     });
 
     if (command) {
-      const result = await sendRequest(
-        proc.child,
-        command,
-        proc.pending,
-        () => nextRequestId++,
-        threadIdentityResultSchema,
-      );
+      const result = await sendJsonRpcRequest({
+        child: proc.child,
+        message: command,
+        pending: proc.pending,
+        getNextId: () => nextRequestId++,
+        resultSchema: threadIdentityResultSchema,
+      });
       const providerThreadId = resolveThreadIdentityResult({
         result,
         threadId: args.threadId,
@@ -656,7 +560,11 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         success: true,
         response,
       });
-      sendJsonRpcResult(args.proc.child, args.parsedId, response);
+      sendJsonRpcResult({
+        child: args.proc.child,
+        id: args.parsedId,
+        result: response,
+      });
     }).catch((err) => {
       emitCapture({
         kind: "tool-call-result",
@@ -667,11 +575,11 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         success: false,
         errorMessage: err instanceof Error ? err.message : String(err),
       });
-      sendJsonRpcError(
-        args.proc.child,
-        args.parsedId,
-        err instanceof Error ? err.message : String(err),
-      );
+      sendJsonRpcError({
+        child: args.proc.child,
+        id: args.parsedId,
+        message: err instanceof Error ? err.message : String(err),
+      });
     });
     return true;
   }
@@ -713,11 +621,11 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       return true;
     }
     if (!args.proc.adapter.buildInteractiveResponse) {
-      sendJsonRpcError(
-        args.proc.child,
-        args.parsedId,
-        `Provider "${providerId}" cannot encode interactive response for "${interactiveReq.method}"`,
-      );
+      sendJsonRpcError({
+        child: args.proc.child,
+        id: args.parsedId,
+        message: `Provider "${providerId}" cannot encode interactive response for "${interactiveReq.method}"`,
+      });
       return true;
     }
     const buildInteractiveResponse = args.proc.adapter.buildInteractiveResponse;
@@ -762,14 +670,14 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         success: true,
         resolution,
       });
-      sendJsonRpcResult(
-        args.proc.child,
-        args.parsedId,
-        buildInteractiveResponse({
+      sendJsonRpcResult({
+        child: args.proc.child,
+        id: args.parsedId,
+        result: buildInteractiveResponse({
           request: interactiveReq,
           resolution,
         }),
-      );
+      });
       return true;
     }
 
@@ -783,14 +691,14 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         success: true,
         resolution,
       });
-      sendJsonRpcResult(
-        args.proc.child,
-        args.parsedId,
-        buildInteractiveResponse({
+      sendJsonRpcResult({
+        child: args.proc.child,
+        id: args.parsedId,
+        result: buildInteractiveResponse({
           request: interactiveReq,
           resolution,
         }),
-      );
+      });
     }).catch((err) => {
       emitCapture({
         kind: "interactive-result",
@@ -801,11 +709,11 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         success: false,
         errorMessage: err instanceof Error ? err.message : String(err),
       });
-      sendJsonRpcError(
-        args.proc.child,
-        args.parsedId,
-        err instanceof Error ? err.message : String(err),
-      );
+      sendJsonRpcError({
+        child: args.proc.child,
+        id: args.parsedId,
+        message: err instanceof Error ? err.message : String(err),
+      });
     });
     return true;
   }
@@ -818,12 +726,12 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       return;
     }
 
-    sendJsonRpcError(
-      args.proc.child,
-      args.parsedId,
-      `Unsupported provider request "${args.parsedMethod}"`,
-      -32601,
-    );
+    sendJsonRpcError({
+      child: args.proc.child,
+      id: args.parsedId,
+      message: `Unsupported provider request "${args.parsedMethod}"`,
+      code: -32601,
+    });
   }
 
   function emitTranslatedEvents(args: EmitTranslatedEventsArgs): void {
@@ -1123,13 +1031,13 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         // Send initialize command
         const initCmd = adapter.buildCommand({ type: "initialize" });
         if (initCmd) {
-          await sendRequest(
-            proc.child,
-            initCmd,
-            proc.pending,
-            () => nextRequestId++,
-            ignoredJsonRpcResultSchema,
-          );
+          await sendJsonRpcRequest({
+            child: proc.child,
+            message: initCmd,
+            pending: proc.pending,
+            getNextId: () => nextRequestId++,
+            resultSchema: ignoredJsonRpcResultSchema,
+          });
         }
       })();
 
@@ -1190,13 +1098,13 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         throw new Error(`Adapter "${pid}" returned null for thread/start`);
       }
 
-      const result = await sendRequest(
-        proc.child,
-        cmd,
-        proc.pending,
-        () => nextRequestId++,
-        threadIdentityResultSchema,
-      );
+      const result = await sendJsonRpcRequest({
+        child: proc.child,
+        message: cmd,
+        pending: proc.pending,
+        getNextId: () => nextRequestId++,
+        resultSchema: threadIdentityResultSchema,
+      });
       const providerThreadId = resolveThreadIdentityResult({
         result,
         threadId,
@@ -1288,13 +1196,13 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         return { providerThreadId: currentProviderThreadId };
       }
 
-      const result = await sendRequest(
-        proc.child,
-        cmd,
-        proc.pending,
-        () => nextRequestId++,
-        threadIdentityResultSchema,
-      );
+      const result = await sendJsonRpcRequest({
+        child: proc.child,
+        message: cmd,
+        pending: proc.pending,
+        getNextId: () => nextRequestId++,
+        resultSchema: threadIdentityResultSchema,
+      });
       const resolvedId =
         resolveThreadIdentityResult({ result, threadId }) ??
         providerThreadId ??
@@ -1325,13 +1233,13 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       });
 
       if (!cmd) return;
-      await sendRequest(
-        proc.child,
-        cmd,
-        proc.pending,
-        () => nextRequestId++,
-        ignoredJsonRpcResultSchema,
-      );
+      await sendJsonRpcRequest({
+        child: proc.child,
+        message: cmd,
+        pending: proc.pending,
+        getNextId: () => nextRequestId++,
+        resultSchema: ignoredJsonRpcResultSchema,
+      });
     },
 
     async steerTurn({ threadId, expectedTurnId, input, options: execOpts, instructions }) {
@@ -1382,13 +1290,13 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       });
 
       if (!cmd) return;
-      await sendRequest(
-        proc.child,
-        cmd,
-        proc.pending,
-        () => nextRequestId++,
-        ignoredJsonRpcResultSchema,
-      );
+      await sendJsonRpcRequest({
+        child: proc.child,
+        message: cmd,
+        pending: proc.pending,
+        getNextId: () => nextRequestId++,
+        resultSchema: ignoredJsonRpcResultSchema,
+      });
     },
 
     async listModels({ providerId }) {
@@ -1398,13 +1306,13 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       if (!command) {
         throw new Error(`Provider "${providerId}" does not support model/list`);
       }
-      const result = await sendRequest(
-        proc.child,
-        command,
-        proc.pending,
-        () => nextRequestId++,
-        ignoredJsonRpcResultSchema,
-      );
+      const result = await sendJsonRpcRequest({
+        child: proc.child,
+        message: command,
+        pending: proc.pending,
+        getNextId: () => nextRequestId++,
+        resultSchema: ignoredJsonRpcResultSchema,
+      });
       return proc.adapter.parseModelListResult(result);
     },
 
