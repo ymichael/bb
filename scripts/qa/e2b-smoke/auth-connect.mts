@@ -14,6 +14,8 @@ import {
   type SmokeQaAuthProviderId,
 } from "./fixture.ts";
 
+const QA_AUTH_APP_ORIGIN = "http://localhost:5173";
+
 interface AuthConnectCliArgs {
   callbackInput: string | null;
   fixturePath: string;
@@ -316,6 +318,7 @@ async function main(): Promise<void> {
   const providerDefinition = getCloudAuthProviderDefinition(args.providerId);
   const flow = await providerDefinition.createAuthorizationFlow();
   const callbackServer = await startOAuthCallbackServer({
+    appOrigin: QA_AUTH_APP_ORIGIN,
     errorTitle: providerDefinition.callback.errorTitle,
     expectedState: flow.state,
     listenHost: providerDefinition.callback.listenHost,

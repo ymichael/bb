@@ -10,6 +10,7 @@ ARG CODEX_VERSION=0.117.0
 # Keep this intentionally minimal: enough for git-driven Node work,
 # repo search, health checks, and native npm fallback builds.
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    bubblewrap \
     ca-certificates \
     curl \
     g++ \
