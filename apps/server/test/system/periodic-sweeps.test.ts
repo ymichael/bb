@@ -9,6 +9,7 @@ import {
   getHost,
   getThread,
   hostDaemonCommands,
+  hostDaemonSessions,
   markEphemeralHostActivity,
   openSession,
   transitionThreadStatus,
@@ -722,6 +723,72 @@ describe("periodic sweeps", () => {
       expect(sandboxHost.suspend).not.toHaveBeenCalled();
       expect(getActiveSession(harness.db, host.id)).not.toBeNull();
       expect(getHost(harness.db, host.id)?.suspendedAt).toBeNull();
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("interrupts pending interactions when a host session lease expires", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-periodic-expired-interaction",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+      });
+
+      const registered = harness.deps.pendingInteractions.registerPendingInteraction({
+        interaction: {
+          threadId: thread.id,
+          turnId: "turn-periodic-expired-interaction",
+          providerId: "codex",
+          providerThreadId: "provider-thread-periodic-expired-interaction",
+          providerRequestId: "request-periodic-expired-interaction",
+          payload: {
+            kind: "command_approval",
+            itemId: "item-periodic-expired-interaction",
+            reason: "Approve command",
+            command: "git push",
+            cwd: "/tmp/project",
+            commandActions: [],
+            requestedPermissions: null,
+            availableDecisions: ["accept", "accept_for_session", "decline", "cancel"],
+          },
+        },
+        sessionId: session.id,
+      });
+      if (registered.outcome === "rejected") {
+        throw new Error(`Expected interaction registration to succeed: ${registered.reason}`);
+      }
+
+      harness.db
+        .update(hostDaemonSessions)
+        .set({ leaseExpiresAt: Date.now() - 1_000 })
+        .where(eq(hostDaemonSessions.id, session.id))
+        .run();
+
+      await runPeriodicSweeps(harness.deps);
+
+      expect(getActiveSession(harness.db, host.id)).toBeNull();
+      expect(
+        harness.deps.pendingInteractions.getThreadInteraction({
+          threadId: thread.id,
+          interactionId: registered.interaction.id,
+        }),
+      ).toMatchObject({
+        status: "interrupted",
+        statusReason:
+          "Host daemon session expired while awaiting user interaction; retry the thread to continue",
+      });
     } finally {
       await harness.cleanup();
     }

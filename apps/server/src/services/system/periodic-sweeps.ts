@@ -314,7 +314,14 @@ export async function runPeriodicSweeps(
         commandIds: expired.erroredCommandIds,
       });
     }
-    sweepExpiredLeases(deps.db, deps.hub);
+    const expiredLeases = sweepExpiredLeases(deps.db, deps.hub);
+    if (expiredLeases.expiredSessionIds.length > 0) {
+      deps.pendingInteractions.interruptPendingInteractionsForSessionIds({
+        sessionIds: expiredLeases.expiredSessionIds,
+        reason:
+          "Host daemon session expired while awaiting user interaction; retry the thread to continue",
+      });
+    }
     sweepDestroyingEnvironments(deps.db, deps.hub);
     await sweepDueAutomations(deps);
     await sweepDueNudges(deps);

@@ -20,6 +20,12 @@ const PROVISION_COMMAND_TTL_MS = 20 * 60_000;
 /** Destroyed environments are hard-deleted after 7 days. */
 const DESTROYING_ENVIRONMENT_TTL_MS = 7 * 24 * 60 * 60_000;
 
+export interface SweepExpiredLeasesResult {
+  expiredSessionIds: string[];
+  sessionsClosed: number;
+  threadsErrored: number;
+}
+
 /**
  * Sweep expired commands (fetched but not completed past TTL).
  *
@@ -120,7 +126,7 @@ export function sweepExpiredLeases(
   db: DbConnection,
   notifier: DbNotifier,
   now?: number,
-) {
+): SweepExpiredLeasesResult {
   const currentTime = now ?? Date.now();
 
   // Find active sessions past their lease
@@ -136,7 +142,11 @@ export function sweepExpiredLeases(
     .all();
 
   if (expiredSessions.length === 0) {
-    return { sessionsClosed: 0, threadsErrored: 0 };
+    return {
+      expiredSessionIds: [],
+      sessionsClosed: 0,
+      threadsErrored: 0,
+    };
   }
 
   db.update(hostDaemonSessions)
@@ -178,6 +188,7 @@ export function sweepExpiredLeases(
   });
 
   return {
+    expiredSessionIds: expiredSessions.map((session) => session.id),
     sessionsClosed: expiredSessions.length,
     threadsErrored: erroredThreadIds.length,
   };

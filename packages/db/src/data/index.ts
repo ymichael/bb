@@ -284,6 +284,7 @@ export {
   getActivePendingInteractionForThread,
   getPendingInteraction,
   getPendingInteractionByProviderRequest,
+  interruptPendingInteractionsForSessionIds,
   interruptPendingInteractionsForThreadIds,
   interruptPendingInteractionsForThreads,
   listPendingInteractionThreadIds,
@@ -297,6 +298,7 @@ export {
 } from "./pending-interactions.js";
 export type {
   CreatePendingInteractionInput,
+  InterruptPendingInteractionsForSessionIdsArgs,
   InterruptPendingInteractionsForThreadIdsArgs,
   InterruptPendingInteractionsForThreadsArgs,
   ListPendingInteractionThreadIdsArgs,

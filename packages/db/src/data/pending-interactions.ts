@@ -74,6 +74,12 @@ export interface InterruptPendingInteractionsForThreadIdsArgs {
   threadIds: readonly string[];
 }
 
+export interface InterruptPendingInteractionsForSessionIdsArgs {
+  resolvedAt?: number;
+  sessionIds: readonly string[];
+  statusReason: string;
+}
+
 export interface ListPendingInteractionThreadIdsArgs {
   threadIds: readonly string[];
 }
@@ -435,6 +441,41 @@ export function interruptPendingInteractionsForThreadIds(
         .where(
           and(
             inArray(pendingInteractions.threadId, threadIdsBatch),
+            inArray(pendingInteractions.status, ["pending", "resolving"]),
+          ),
+        )
+        .returning()
+        .all(),
+    );
+  }
+
+  return interruptedRows;
+}
+
+export function interruptPendingInteractionsForSessionIds(
+  db: PendingInteractionWriteConnection,
+  args: InterruptPendingInteractionsForSessionIdsArgs,
+): PendingInteractionRow[] {
+  if (args.sessionIds.length === 0) {
+    return [];
+  }
+
+  const now = Date.now();
+  const interruptedRows: PendingInteractionRow[] = [];
+
+  for (const sessionIdsBatch of sliceInClauseBatches(args.sessionIds)) {
+    interruptedRows.push(
+      ...db
+        .update(pendingInteractions)
+        .set({
+          status: "interrupted",
+          statusReason: args.statusReason,
+          resolvedAt: args.resolvedAt ?? now,
+          updatedAt: now,
+        })
+        .where(
+          and(
+            inArray(pendingInteractions.sessionId, sessionIdsBatch),
             inArray(pendingInteractions.status, ["pending", "resolving"]),
           ),
         )

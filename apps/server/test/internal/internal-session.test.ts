@@ -401,6 +401,78 @@ describe("internal session routes", () => {
     }
   });
 
+  it("interrupts pending interactions owned by a replaced session", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const existing = seedHostSession(harness.deps, {
+        id: "host-replace-interaction-session",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: existing.host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: existing.host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+      });
+
+      const registered = harness.deps.pendingInteractions.registerPendingInteraction({
+        interaction: {
+          threadId: thread.id,
+          turnId: "turn-replace-interaction-session",
+          providerId: "codex",
+          providerThreadId: "provider-thread-replace-interaction-session",
+          providerRequestId: "request-replace-interaction-session",
+          payload: {
+            kind: "command_approval",
+            itemId: "item-replace-interaction-session",
+            reason: "Approve command",
+            command: "git push",
+            cwd: "/tmp/project",
+            commandActions: [],
+            requestedPermissions: null,
+            availableDecisions: ["accept", "accept_for_session", "decline", "cancel"],
+          },
+        },
+        sessionId: existing.session.id,
+      });
+      if (registered.outcome === "rejected") {
+        throw new Error(`Expected interaction registration to succeed: ${registered.reason}`);
+      }
+
+      const response = await harness.app.request("/internal/session/open", {
+        method: "POST",
+        headers: internalAuthHeaders(harness),
+        body: JSON.stringify({
+          activeThreads: [{ threadId: thread.id }],
+          dataDir: "/tmp/host-replace-interaction-session-data",
+          hostId: existing.host.id,
+          instanceId: existing.session.instanceId,
+          hostName: "Replacement Session Host",
+          hostType: "persistent",
+          protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
+        }),
+      });
+
+      expect(response.status).toBe(201);
+      expect(
+        harness.deps.pendingInteractions.getThreadInteraction({
+          threadId: thread.id,
+          interactionId: registered.interaction.id,
+        }),
+      ).toMatchObject({
+        status: "interrupted",
+        statusReason:
+          "Host daemon session was replaced while awaiting user interaction; retry the thread to continue",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("clears suspended state without requeueing runtime sync when an ephemeral host session reconnects with the current version already applied", async () => {
     const harness = await createTestAppHarness({
       githubPat: "test-github-pat",

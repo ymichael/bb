@@ -24,72 +24,6 @@ function registerPendingInteraction(
 }
 
 describe("pending interaction lifecycle", () => {
-  it("interrupts waits that start with an already-aborted signal", async () => {
-    const harness = await createTestAppHarness();
-    try {
-      const { host, session } = seedHostSession(harness.deps, {
-        id: "host-pending-interaction-aborted-signal",
-      });
-      const { project } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
-      });
-      const environment = seedEnvironment(harness.deps, {
-        hostId: host.id,
-        projectId: project.id,
-      });
-      const thread = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: environment.id,
-      });
-
-      const registered = registerPendingInteraction(
-        harness.deps.pendingInteractions,
-        {
-          threadId: thread.id,
-          turnId: "turn-aborted-signal",
-          providerId: "codex",
-          providerThreadId: "provider-thread-aborted-signal",
-          providerRequestId: "request-aborted-signal",
-          payload: {
-            kind: "command_approval",
-            itemId: "item-aborted-signal",
-            reason: "Needs approval",
-            command: "git push",
-            cwd: "/tmp/project",
-            commandActions: [],
-            requestedPermissions: null,
-            availableDecisions: ["accept", "accept_for_session", "decline", "cancel"],
-          },
-        },
-        session.id,
-      );
-      if (registered.outcome === "rejected") {
-        throw new Error(`Expected interaction registration to succeed: ${registered.reason}`);
-      }
-
-      const controller = new AbortController();
-      controller.abort();
-
-      await expect(
-        harness.deps.pendingInteractions.waitForTerminalState({
-          interactionId: registered.interaction.id,
-          signal: controller.signal,
-          abortReason: "Request aborted",
-        }),
-      ).resolves.toMatchObject({
-        outcome: "interrupted",
-        reason: "Request aborted",
-        interaction: expect.objectContaining({
-          id: registered.interaction.id,
-          status: "interrupted",
-          statusReason: "Request aborted",
-        }),
-      });
-    } finally {
-      await harness.cleanup();
-    }
-  });
-
   it("rejects reused provider request ids after the original interaction is terminal", async () => {
     const harness = await createTestAppHarness();
     try {
@@ -323,85 +257,6 @@ describe("pending interaction lifecycle", () => {
     }
   });
 
-  it("resolves waiters when an interaction reaches a terminal state", async () => {
-    const harness = await createTestAppHarness();
-    try {
-      const { host, session } = seedHostSession(harness.deps, {
-        id: "host-pending-interaction-wait-resolve",
-      });
-      const { project } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
-      });
-      const environment = seedEnvironment(harness.deps, {
-        hostId: host.id,
-        projectId: project.id,
-      });
-      const thread = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: environment.id,
-      });
-
-      const created = registerPendingInteraction(
-        harness.deps.pendingInteractions,
-        {
-          threadId: thread.id,
-          turnId: "turn-wait-resolve",
-          providerId: "codex",
-          providerThreadId: "provider-thread-wait-resolve",
-          providerRequestId: "request-wait-resolve",
-          payload: {
-            kind: "command_approval",
-            itemId: "item-wait-resolve",
-            reason: "Needs approval",
-            command: "git push",
-            cwd: "/tmp/project",
-            commandActions: [],
-            requestedPermissions: null,
-            availableDecisions: ["accept", "accept_for_session", "decline", "cancel"],
-          },
-        },
-        session.id,
-      );
-      if (created.outcome === "rejected") {
-        throw new Error(`Expected interaction registration to succeed: ${created.reason}`);
-      }
-
-      const outcomePromise = harness.deps.pendingInteractions.waitForTerminalState({
-        interactionId: created.interaction.id,
-      });
-      const resolving = harness.deps.pendingInteractions.resolvePendingInteraction({
-        threadId: thread.id,
-        interactionId: created.interaction.id,
-        resolution: {
-          kind: "command_approval",
-          decision: "accept",
-        },
-      });
-      expect(resolving.status).toBe("resolving");
-      harness.deps.pendingInteractions.completeResolvingInteraction({
-        interactionId: created.interaction.id,
-        resolution: {
-          kind: "command_approval",
-          decision: "accept",
-        },
-      });
-
-      await expect(outcomePromise).resolves.toMatchObject({
-        outcome: "resolved",
-        interaction: expect.objectContaining({
-          id: created.interaction.id,
-          status: "resolved",
-          resolution: {
-            kind: "command_approval",
-            decision: "accept",
-          },
-        }),
-      });
-    } finally {
-      await harness.cleanup();
-    }
-  });
-
   it("rejects a second active interaction on the same thread", async () => {
     const harness = await createTestAppHarness();
     try {
@@ -586,7 +441,7 @@ describe("pending interaction lifecycle", () => {
     }
   });
 
-  it("expires pending waits that are never resolved", async () => {
+  it("expires pending ephemeral-host interactions that are never resolved", async () => {
     const harness = await createTestAppHarness();
     try {
       const pendingInteractions = new PendingInteractionLifecycle({
@@ -635,19 +490,17 @@ describe("pending interaction lifecycle", () => {
         throw new Error(`Expected interaction registration to succeed: ${created.reason}`);
       }
 
-      const outcomePromise = pendingInteractions.waitForTerminalState({
-        interactionId: created.interaction.id,
-      });
       await sleep(50);
 
-      await expect(outcomePromise).resolves.toMatchObject({
-        outcome: "expired",
-        reason: "Pending interaction expired while waiting for a user response",
-        interaction: expect.objectContaining({
+      expect(
+        pendingInteractions.getThreadInteraction({
+          threadId: thread.id,
+          interactionId: created.interaction.id,
+        }),
+      ).toMatchObject({
           id: created.interaction.id,
           status: "expired",
           statusReason: "Pending interaction expired while waiting for a user response",
-        }),
       });
     } finally {
       await harness.cleanup();

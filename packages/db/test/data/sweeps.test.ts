@@ -258,6 +258,7 @@ describe("sweepExpiredLeases", () => {
     const result = sweepExpiredLeases(db, spy);
     expect(result.sessionsClosed).toBe(1);
     expect(result.threadsErrored).toBe(1);
+    expect(result.expiredSessionIds).toEqual([session.id]);
 
     // Session should be closed
     const updatedSession = db
@@ -317,6 +318,7 @@ describe("sweepExpiredLeases", () => {
     const result = sweepExpiredLeases(db, noopNotifier);
     expect(result.sessionsClosed).toBe(1);
     expect(result.threadsErrored).toBe(0);
+    expect(result.expiredSessionIds).toEqual([session.id]);
 
     const updatedThread = db
       .select()
