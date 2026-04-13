@@ -166,6 +166,63 @@ describe("toViewProjection turn lifecycle", () => {
     expect(entry.turn.terminalMessage?.kind).toBe("assistant-text");
   });
 
+  it("keeps zero duration on completed turns instead of dropping it", () => {
+    const events: ThreadEventRow[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "turn/started",
+        data: {
+          providerThreadId: "provider-thread-1",
+          turnId: "turn-1",
+        },
+        createdAt: 10,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "item/completed",
+        data: {
+          providerThreadId: "provider-thread-1",
+          turnId: "turn-1",
+          item: {
+            type: "agentMessage",
+            id: "assistant-1",
+            text: "Done.",
+          },
+        },
+        createdAt: 10,
+      },
+      {
+        id: "evt-3",
+        threadId: "thread-1",
+        seq: 3,
+        type: "turn/completed",
+        data: {
+          providerThreadId: "provider-thread-1",
+          turnId: "turn-1",
+          status: "completed",
+        },
+        createdAt: 10,
+      },
+    ];
+
+    const projection = toViewProjection(fromRows(events), {
+      threadStatus: "idle",
+      turnMessageDetail: "summary",
+    });
+
+    const entry = projection.entries[0];
+    expect(entry?.kind).toBe("turn");
+    if (entry?.kind !== "turn") {
+      throw new Error("Expected a turn entry");
+    }
+    expect(entry.turn.completedAt).toBe(10);
+    expect(entry.turn.durationMs).toBe(0);
+  });
+
   it("keeps pending turn messages present even when current messages are terminal", () => {
     const events: ThreadEventRow[] = [
       {

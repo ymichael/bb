@@ -54,6 +54,7 @@ export interface ViewTurn {
   completedAt: number | null;
   status: ViewTurnStatus;
   summaryCount: number;
+  /** Present for completed turns; non-positive measured durations are clamped to 0. */
   durationMs?: number;
   terminalMessage?: ViewMessage;
   messages?: ViewMessage[];
