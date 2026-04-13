@@ -23,6 +23,7 @@ export interface CreatePendingInteractionInput {
   providerId: string;
   providerRequestId: string;
   providerThreadId: string;
+  sessionId: string;
   threadId: string;
   turnId: string;
 }
@@ -31,6 +32,7 @@ export interface PendingInteractionProviderRequestIdentity {
   providerId: string;
   providerRequestId: string;
   providerThreadId: string;
+  sessionId: string;
 }
 
 export interface ListPendingInteractionsArgs {
@@ -52,6 +54,11 @@ export interface SetPendingInteractionTerminalStateArgs {
   resolvedAt?: number;
   status: "expired" | "interrupted" | "resolved";
   statusReason: string | null;
+}
+
+export interface SetPendingInteractionResolvingArgs {
+  id: string;
+  resolution: string;
 }
 
 export interface InterruptPendingInteractionsForThreadsArgs {
@@ -140,6 +147,7 @@ export function createPendingInteraction(
       providerId: input.providerId,
       providerThreadId: input.providerThreadId,
       providerRequestId: input.providerRequestId,
+      sessionId: input.sessionId,
       kind: input.kind,
       status: "pending",
       payload: input.payload,
@@ -172,6 +180,7 @@ export function getPendingInteractionByProviderRequest(
         eq(pendingInteractions.providerId, args.providerId),
         eq(pendingInteractions.providerThreadId, args.providerThreadId),
         eq(pendingInteractions.providerRequestId, args.providerRequestId),
+        eq(pendingInteractions.sessionId, args.sessionId),
       ),
     )
     .get() ?? null;
@@ -187,7 +196,7 @@ export function getActivePendingInteractionForThread(
     .where(
       and(
         eq(pendingInteractions.threadId, threadId),
-        eq(pendingInteractions.status, "pending"),
+        inArray(pendingInteractions.status, ["pending", "resolving"]),
       ),
     )
     .orderBy(desc(pendingInteractions.createdAt))
@@ -230,7 +239,7 @@ export function listPendingInteractionThreadIds(
       .where(
         and(
           inArray(pendingInteractions.threadId, threadIdsBatch),
-          eq(pendingInteractions.status, "pending"),
+          inArray(pendingInteractions.status, ["pending", "resolving"]),
         ),
       )
       .all();
@@ -303,11 +312,35 @@ export function setPendingInteractionResolved(
 ): PendingInteractionRow | null {
   return updatePendingInteractionTerminalState(db, {
     id: args.id,
-    allowedCurrentStatuses: ["pending"],
+    allowedCurrentStatuses: ["pending", "resolving"],
     resolution: args.resolution,
     status: "resolved",
     statusReason: null,
   });
+}
+
+export function setPendingInteractionResolving(
+  db: PendingInteractionWriteConnection,
+  args: SetPendingInteractionResolvingArgs,
+): PendingInteractionRow | null {
+  const now = Date.now();
+
+  return db
+    .update(pendingInteractions)
+    .set({
+      status: "resolving",
+      resolution: args.resolution,
+      statusReason: null,
+      updatedAt: now,
+    })
+    .where(
+      and(
+        eq(pendingInteractions.id, args.id),
+        eq(pendingInteractions.status, "pending"),
+      ),
+    )
+    .returning()
+    .get() ?? null;
 }
 
 export function setPendingInteractionInterrupted(
@@ -319,7 +352,7 @@ export function setPendingInteractionInterrupted(
 ): PendingInteractionRow | null {
   return updatePendingInteractionTerminalState(db, {
     id: args.id,
-    allowedCurrentStatuses: ["pending"],
+    allowedCurrentStatuses: ["pending", "resolving"],
     resolution: null,
     status: "interrupted",
     statusReason: args.statusReason,
@@ -335,7 +368,7 @@ export function setPendingInteractionExpired(
 ): PendingInteractionRow | null {
   return updatePendingInteractionTerminalState(db, {
     id: args.id,
-    allowedCurrentStatuses: ["pending"],
+    allowedCurrentStatuses: ["pending", "resolving"],
     resolution: null,
     status: "expired",
     statusReason: args.statusReason,
@@ -367,7 +400,7 @@ export function interruptPendingInteractionsForThreads(
           and(
             eq(pendingInteractions.providerId, args.providerId),
             inArray(pendingInteractions.threadId, threadIdsBatch),
-            eq(pendingInteractions.status, "pending"),
+            inArray(pendingInteractions.status, ["pending", "resolving"]),
           ),
         )
         .returning()
@@ -402,7 +435,7 @@ export function interruptPendingInteractionsForThreadIds(
         .where(
           and(
             inArray(pendingInteractions.threadId, threadIdsBatch),
-            eq(pendingInteractions.status, "pending"),
+            inArray(pendingInteractions.status, ["pending", "resolving"]),
           ),
         )
         .returning()

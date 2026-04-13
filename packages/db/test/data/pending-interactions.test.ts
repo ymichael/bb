@@ -64,6 +64,7 @@ describe("pending interactions", () => {
       providerId: "codex",
       providerThreadId: "provider-thread-1",
       providerRequestId: "request-1",
+      sessionId: "session-1",
       kind: "command_approval",
       payload: JSON.stringify({
         kind: "command_approval",
@@ -83,6 +84,7 @@ describe("pending interactions", () => {
         providerId: "codex",
         providerThreadId: "provider-thread-1",
         providerRequestId: "request-1",
+        sessionId: "session-1",
       })?.id,
     ).toBe(created.id);
     expect(getActivePendingInteractionForThread(db, thread.id)?.id).toBe(created.id);
@@ -97,6 +99,7 @@ describe("pending interactions", () => {
       providerId: "codex",
       providerThreadId: "provider-thread-1",
       providerRequestId: "request-1",
+      sessionId: "session-1",
       kind: "command_approval",
       payload: JSON.stringify({
         kind: "command_approval",
@@ -115,6 +118,7 @@ describe("pending interactions", () => {
       providerId: "codex",
       providerThreadId: "provider-thread-1",
       providerRequestId: "request-2",
+      sessionId: "session-1",
       kind: "file_change_approval",
       payload: JSON.stringify({
         kind: "file_change_approval",
@@ -152,6 +156,7 @@ describe("pending interactions", () => {
       providerId: "codex",
       providerThreadId: "provider-thread-1",
       providerRequestId: "request-1",
+      sessionId: "session-1",
       kind: "command_approval",
       payload: JSON.stringify({
         kind: "command_approval",
@@ -170,6 +175,7 @@ describe("pending interactions", () => {
       providerId: "claude-code",
       providerThreadId: "provider-thread-2",
       providerRequestId: "request-2",
+      sessionId: "session-1",
       kind: "command_approval",
       payload: JSON.stringify({
         kind: "command_approval",
@@ -222,6 +228,7 @@ describe("pending interactions", () => {
         providerId: "codex",
         providerThreadId: `provider-thread-batched-interrupt-provider-${index}`,
         providerRequestId: `request-batched-interrupt-provider-${index}`,
+        sessionId: "session-1",
         kind: "command_approval",
         payload: JSON.stringify({
           kind: "command_approval",
@@ -271,6 +278,7 @@ describe("pending interactions", () => {
         providerId: "codex",
         providerThreadId: `provider-thread-batched-interrupt-thread-${index}`,
         providerRequestId: `request-batched-interrupt-thread-${index}`,
+        sessionId: "session-1",
         kind: "command_approval",
         payload: JSON.stringify({
           kind: "command_approval",
@@ -304,6 +312,7 @@ describe("pending interactions", () => {
       providerId: "codex",
       providerThreadId: "provider-thread-expire-1",
       providerRequestId: "request-expire-1",
+      sessionId: "session-1",
       kind: "command_approval",
       payload: JSON.stringify({
         kind: "command_approval",
@@ -358,6 +367,7 @@ describe("pending interactions", () => {
         providerId: "codex",
         providerThreadId: `provider-thread-batched-${index}`,
         providerRequestId: `request-batched-${index}`,
+        sessionId: "session-1",
         kind: "command_approval",
         payload: JSON.stringify({
           kind: "command_approval",

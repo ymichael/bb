@@ -1378,21 +1378,24 @@ describe("internal event side effects", () => {
         model: "gpt-5.4",
       });
       const pending = harness.deps.pendingInteractions.registerPendingInteraction({
-        threadId: managerThread.id,
-        turnId: "turn-manager-awaiting-interaction",
-        providerId: "codex",
-        providerThreadId: "provider-manager-awaiting-interaction",
-        providerRequestId: "request-manager-awaiting-interaction",
-        payload: {
-          kind: "command_approval",
-          itemId: "item-manager-awaiting-interaction",
-          reason: "Approve command",
-          command: "git push",
-          cwd: "/tmp/project",
-          commandActions: [],
-          requestedPermissions: null,
-          availableDecisions: ["accept", "accept_for_session", "decline", "cancel"],
+        interaction: {
+          threadId: managerThread.id,
+          turnId: "turn-manager-awaiting-interaction",
+          providerId: "codex",
+          providerThreadId: "provider-manager-awaiting-interaction",
+          providerRequestId: "request-manager-awaiting-interaction",
+          payload: {
+            kind: "command_approval",
+            itemId: "item-manager-awaiting-interaction",
+            reason: "Approve command",
+            command: "git push",
+            cwd: "/tmp/project",
+            commandActions: [],
+            requestedPermissions: null,
+            availableDecisions: ["accept", "accept_for_session", "decline", "cancel"],
+          },
         },
+        sessionId: "session-1",
       });
       if (pending.outcome === "rejected") {
         throw new Error(`Expected pending interaction registration to succeed: ${pending.reason}`);

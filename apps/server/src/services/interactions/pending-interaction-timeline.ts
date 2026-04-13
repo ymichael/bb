@@ -15,6 +15,7 @@ function toPendingInteractionOperationStatus(
 ): "completed" | "failed" | "started" {
   switch (interaction.status) {
     case "pending":
+    case "resolving":
       return "started";
     case "resolved":
       return "completed";
@@ -45,6 +46,8 @@ export function formatPendingInteractionLifecycleMessage(
       const exhaustivePayload: never = interaction.payload;
       throw new Error(`Unsupported pending interaction payload: ${String(exhaustivePayload)}`);
     }
+    case "resolving":
+      return "Delivering user response to provider";
     case "resolved":
       if (interaction.resolution === null) {
         return "Interaction resolved";

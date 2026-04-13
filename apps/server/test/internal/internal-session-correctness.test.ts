@@ -492,21 +492,24 @@ describe("internal session correctness", () => {
       });
 
       const registered = harness.deps.pendingInteractions.registerPendingInteraction({
-        threadId: thread.id,
-        turnId: "turn-disconnect-pending-interaction",
-        providerId: "codex",
-        providerThreadId: "provider-thread-disconnect-pending-interaction",
-        providerRequestId: "request-disconnect-pending-interaction",
-        payload: {
-          kind: "command_approval",
-          itemId: "item-disconnect-pending-interaction",
-          reason: "Needs approval",
-          command: "git push",
-          cwd: "/tmp/project",
-          commandActions: [],
-          requestedPermissions: null,
-          availableDecisions: ["accept", "accept_for_session", "decline", "cancel"],
+        interaction: {
+          threadId: thread.id,
+          turnId: "turn-disconnect-pending-interaction",
+          providerId: "codex",
+          providerThreadId: "provider-thread-disconnect-pending-interaction",
+          providerRequestId: "request-disconnect-pending-interaction",
+          payload: {
+            kind: "command_approval",
+            itemId: "item-disconnect-pending-interaction",
+            reason: "Needs approval",
+            command: "git push",
+            cwd: "/tmp/project",
+            commandActions: [],
+            requestedPermissions: null,
+            availableDecisions: ["accept", "accept_for_session", "decline", "cancel"],
+          },
         },
+        sessionId: session.id,
       });
       if (registered.outcome === "rejected") {
         throw new Error(`Expected interaction registration to succeed: ${registered.reason}`);
@@ -605,21 +608,24 @@ describe("internal session correctness", () => {
       });
 
       const registered = harness.deps.pendingInteractions.registerPendingInteraction({
-        threadId: thread.id,
-        turnId: "turn-session-restart-interaction",
-        providerId: "codex",
-        providerThreadId: "provider-thread-session-restart-interaction",
-        providerRequestId: "request-session-restart-interaction",
-        payload: {
-          kind: "command_approval",
-          itemId: "item-session-restart-interaction",
-          reason: "Needs approval",
-          command: "git push",
-          cwd: "/tmp/project",
-          commandActions: [],
-          requestedPermissions: null,
-          availableDecisions: ["accept", "accept_for_session", "decline", "cancel"],
+        interaction: {
+          threadId: thread.id,
+          turnId: "turn-session-restart-interaction",
+          providerId: "codex",
+          providerThreadId: "provider-thread-session-restart-interaction",
+          providerRequestId: "request-session-restart-interaction",
+          payload: {
+            kind: "command_approval",
+            itemId: "item-session-restart-interaction",
+            reason: "Needs approval",
+            command: "git push",
+            cwd: "/tmp/project",
+            commandActions: [],
+            requestedPermissions: null,
+            availableDecisions: ["accept", "accept_for_session", "decline", "cancel"],
+          },
         },
+        sessionId: session.id,
       });
       if (registered.outcome === "rejected") {
         throw new Error(`Expected interaction registration to succeed: ${registered.reason}`);

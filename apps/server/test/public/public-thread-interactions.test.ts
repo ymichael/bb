@@ -1,5 +1,7 @@
 import { createDraft } from "@bb/db";
+import type { PendingInteractionCreate } from "@bb/domain";
 import { describe, expect, it } from "vitest";
+import type { PendingInteractionLifecycle } from "../../src/services/interactions/pending-interactions.js";
 import { readJson } from "../helpers/json.js";
 import {
   waitForQueuedCommand,
@@ -12,6 +14,16 @@ import {
   seedThreadRuntimeState,
 } from "../helpers/seed.js";
 import { createTestAppHarness } from "../helpers/test-app.js";
+
+function registerPendingInteraction(
+  lifecycle: PendingInteractionLifecycle,
+  interaction: PendingInteractionCreate,
+) {
+  return lifecycle.registerPendingInteraction({
+    interaction,
+    sessionId: "session-1",
+  });
+}
 
 describe("public thread interaction routes", () => {
   it("lists, gets, and resolves thread-owned interactions", async () => {
@@ -36,7 +48,7 @@ describe("public thread interaction routes", () => {
         environmentId: environment.id,
       });
 
-      const registered = harness.deps.pendingInteractions.registerPendingInteraction({
+      const registered = registerPendingInteraction(harness.deps.pendingInteractions, {
         threadId: thread.id,
         turnId: "turn-public-1",
         providerId: "codex",
@@ -194,7 +206,7 @@ describe("public thread interaction routes", () => {
         environmentId: environment.id,
       });
 
-      const commandApproval = harness.deps.pendingInteractions.registerPendingInteraction({
+      const commandApproval = registerPendingInteraction(harness.deps.pendingInteractions, {
         threadId: thread.id,
         turnId: "turn-invalid-command-resolution",
         providerId: "codex",
@@ -319,7 +331,7 @@ describe("public thread interaction routes", () => {
         environmentId: environment.id,
       });
 
-      const permissionRequest = harness.deps.pendingInteractions.registerPendingInteraction({
+      const permissionRequest = registerPendingInteraction(harness.deps.pendingInteractions, {
         threadId: thread.id,
         turnId: "turn-permission-resolution",
         providerId: "codex",
@@ -382,7 +394,7 @@ describe("public thread interaction routes", () => {
         },
       });
 
-      const deniedPermissionRequest = harness.deps.pendingInteractions.registerPendingInteraction({
+      const deniedPermissionRequest = registerPendingInteraction(harness.deps.pendingInteractions, {
         threadId: thread.id,
         turnId: "turn-permission-resolution-denied",
         providerId: "codex",
@@ -426,7 +438,7 @@ describe("public thread interaction routes", () => {
         },
       });
 
-      const invalidPermissionRequest = harness.deps.pendingInteractions.registerPendingInteraction({
+      const invalidPermissionRequest = registerPendingInteraction(harness.deps.pendingInteractions, {
         threadId: thread.id,
         turnId: "turn-permission-resolution-invalid",
         providerId: "codex",
@@ -499,7 +511,7 @@ describe("public thread interaction routes", () => {
         environmentId: environment.id,
       });
 
-      const commandApproval = harness.deps.pendingInteractions.registerPendingInteraction({
+      const commandApproval = registerPendingInteraction(harness.deps.pendingInteractions, {
         threadId: thread.id,
         turnId: "turn-amendment-resolution",
         providerId: "codex",
@@ -587,7 +599,7 @@ describe("public thread interaction routes", () => {
         reasoningLevel: "medium",
         permissionMode: "full",
       });
-      const pending = harness.deps.pendingInteractions.registerPendingInteraction({
+      const pending = registerPendingInteraction(harness.deps.pendingInteractions, {
         threadId: thread.id,
         turnId: "turn-blocked-send",
         providerId: "codex",
@@ -721,7 +733,7 @@ describe("public thread interaction routes", () => {
         environmentId: environment.id,
       });
 
-      const fileChange = harness.deps.pendingInteractions.registerPendingInteraction({
+      const fileChange = registerPendingInteraction(harness.deps.pendingInteractions, {
         threadId: thread.id,
         turnId: "turn-file-change",
         providerId: "codex",
@@ -784,7 +796,7 @@ describe("public thread interaction routes", () => {
         environmentId: environment.id,
       });
 
-      const registered = harness.deps.pendingInteractions.registerPendingInteraction({
+      const registered = registerPendingInteraction(harness.deps.pendingInteractions, {
         threadId: thread.id,
         turnId: "turn-timeline",
         providerId: "codex",

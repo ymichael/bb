@@ -1,5 +1,6 @@
 import { setTimeout as sleep } from "node:timers/promises";
 import { describe, expect, it } from "vitest";
+import type { PendingInteractionCreate } from "@bb/domain";
 import {
   PendingInteractionLifecycle,
 } from "../../src/services/interactions/pending-interactions.js";
@@ -10,6 +11,16 @@ import {
   seedThread,
 } from "../helpers/seed.js";
 import { createTestAppHarness } from "../helpers/test-app.js";
+
+function registerPendingInteraction(
+  lifecycle: PendingInteractionLifecycle,
+  interaction: PendingInteractionCreate,
+) {
+  return lifecycle.registerPendingInteraction({
+    interaction,
+    sessionId: "session-1",
+  });
+}
 
 describe("pending interaction lifecycle", () => {
   it("interrupts waits that start with an already-aborted signal", async () => {
@@ -30,7 +41,7 @@ describe("pending interaction lifecycle", () => {
         environmentId: environment.id,
       });
 
-      const registered = harness.deps.pendingInteractions.registerPendingInteraction({
+      const registered = registerPendingInteraction(harness.deps.pendingInteractions, {
         threadId: thread.id,
         turnId: "turn-aborted-signal",
         providerId: "codex",
@@ -92,7 +103,7 @@ describe("pending interaction lifecycle", () => {
         environmentId: environment.id,
       });
 
-      const created = harness.deps.pendingInteractions.registerPendingInteraction({
+      const created = registerPendingInteraction(harness.deps.pendingInteractions, {
         threadId: thread.id,
         turnId: "turn-terminal-dedupe-1",
         providerId: "codex",
@@ -123,7 +134,7 @@ describe("pending interaction lifecycle", () => {
       });
 
       expect(
-        harness.deps.pendingInteractions.registerPendingInteraction({
+        registerPendingInteraction(harness.deps.pendingInteractions, {
           threadId: thread.id,
           turnId: "turn-terminal-dedupe-2",
           providerId: "codex",
@@ -170,7 +181,7 @@ describe("pending interaction lifecycle", () => {
       });
 
       expect(
-        harness.deps.pendingInteractions.registerPendingInteraction({
+        registerPendingInteraction(harness.deps.pendingInteractions, {
           threadId: thread.id,
           turnId: "turn-provider-mismatch",
           providerId: "claude-code",
@@ -215,7 +226,7 @@ describe("pending interaction lifecycle", () => {
         environmentId: environment.id,
       });
 
-      const created = harness.deps.pendingInteractions.registerPendingInteraction({
+      const created = registerPendingInteraction(harness.deps.pendingInteractions, {
         threadId: thread.id,
         turnId: "turn-idempotent-permissions",
         providerId: "codex",
@@ -302,7 +313,7 @@ describe("pending interaction lifecycle", () => {
         environmentId: environment.id,
       });
 
-      const created = harness.deps.pendingInteractions.registerPendingInteraction({
+      const created = registerPendingInteraction(harness.deps.pendingInteractions, {
         threadId: thread.id,
         turnId: "turn-wait-resolve",
         providerId: "codex",
@@ -369,7 +380,7 @@ describe("pending interaction lifecycle", () => {
         environmentId: environment.id,
       });
 
-      const created = harness.deps.pendingInteractions.registerPendingInteraction({
+      const created = registerPendingInteraction(harness.deps.pendingInteractions, {
         threadId: thread.id,
         turnId: "turn-concurrent-reject-1",
         providerId: "codex",
@@ -391,7 +402,7 @@ describe("pending interaction lifecycle", () => {
       }
 
       expect(
-        harness.deps.pendingInteractions.registerPendingInteraction({
+        registerPendingInteraction(harness.deps.pendingInteractions, {
           threadId: thread.id,
           turnId: "turn-concurrent-reject-2",
           providerId: "codex",
@@ -432,7 +443,7 @@ describe("pending interaction lifecycle", () => {
       });
 
       expect(
-        harness.deps.pendingInteractions.registerPendingInteraction({
+        registerPendingInteraction(harness.deps.pendingInteractions, {
           threadId: thread.id,
           turnId: "turn-empty-decisions",
           providerId: "codex",
@@ -476,7 +487,7 @@ describe("pending interaction lifecycle", () => {
         environmentId: environment.id,
       });
 
-      const created = harness.deps.pendingInteractions.registerPendingInteraction({
+      const created = registerPendingInteraction(harness.deps.pendingInteractions, {
         threadId: thread.id,
         turnId: "turn-resolve-interrupted",
         providerId: "codex",
@@ -543,7 +554,7 @@ describe("pending interaction lifecycle", () => {
         environmentId: environment.id,
       });
 
-      const created = pendingInteractions.registerPendingInteraction({
+      const created = registerPendingInteraction(pendingInteractions, {
         threadId: thread.id,
         turnId: "turn-expiry",
         providerId: "codex",
@@ -607,7 +618,7 @@ describe("pending interaction lifecycle", () => {
         environmentId: environment.id,
       });
 
-      const created = originalLifecycle.registerPendingInteraction({
+      const created = registerPendingInteraction(originalLifecycle, {
         threadId: thread.id,
         turnId: "turn-hydrate-expiry",
         providerId: "codex",
@@ -673,7 +684,7 @@ describe("pending interaction lifecycle", () => {
         environmentId: environment.id,
       });
 
-      const created = pendingInteractions.registerPendingInteraction({
+      const created = registerPendingInteraction(pendingInteractions, {
         threadId: thread.id,
         turnId: "turn-no-expiry",
         providerId: "codex",

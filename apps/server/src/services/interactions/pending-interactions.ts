@@ -62,6 +62,11 @@ export type RegisterPendingInteractionResult =
       reason: string;
     };
 
+interface RegisterPendingInteractionArgs {
+  interaction: PendingInteractionCreate;
+  sessionId: string;
+}
+
 interface ResolvePendingInteractionArgs {
   interactionId: string;
   resolution: PendingInteractionResolution;
@@ -143,6 +148,7 @@ function requireWaitableOutcome(
 ): PendingInteractionWaitOutcome | null {
   switch (interaction.status) {
     case "pending":
+    case "resolving":
       return null;
     case "resolved":
       if (interaction.resolution === null) {
@@ -222,7 +228,7 @@ export class PendingInteractionLifecycle {
   listPendingThreadInteractions(threadId: string): PendingInteraction[] {
     return listPendingInteractionsByThread(this.deps.db, {
       threadId,
-      statuses: ["pending"],
+      statuses: ["pending", "resolving"],
     }).map(toPendingInteraction);
   }
 
@@ -239,8 +245,9 @@ export class PendingInteractionLifecycle {
   }
 
   registerPendingInteraction(
-    interaction: PendingInteractionCreate,
+    args: RegisterPendingInteractionArgs,
   ): RegisterPendingInteractionResult {
+    const { interaction } = args;
     const thread = getThread(this.deps.db, interaction.threadId);
     if (!thread || thread.deletedAt !== null) {
       return {
@@ -268,9 +275,13 @@ export class PendingInteractionLifecycle {
         providerId: interaction.providerId,
         providerThreadId: interaction.providerThreadId,
         providerRequestId: interaction.providerRequestId,
+        sessionId: args.sessionId,
       });
       if (existing) {
-        if (existing.status !== "pending") {
+        if (
+          existing.status !== "pending"
+          && existing.status !== "resolving"
+        ) {
           return {
             outcome: "rejected" as const,
             reason:
@@ -303,6 +314,7 @@ export class PendingInteractionLifecycle {
           providerId: interaction.providerId,
           providerThreadId: interaction.providerThreadId,
           providerRequestId: interaction.providerRequestId,
+          sessionId: args.sessionId,
           kind: interaction.payload.kind,
           payload: JSON.stringify(interaction.payload),
         }),

@@ -1454,21 +1454,24 @@ describe("internal session routes", () => {
       });
 
       const interaction = harness.deps.pendingInteractions.registerPendingInteraction({
-        threadId: thread.id,
-        turnId: "turn-stop-interaction",
-        providerId: "codex",
-        providerThreadId: "provider-thread-stop-interaction",
-        providerRequestId: "request-stop-interaction",
-        payload: {
-          kind: "command_approval",
-          itemId: "item-stop-interaction",
-          reason: "Approve command",
-          command: "git push",
-          cwd: "/tmp/project",
-          commandActions: [],
-          requestedPermissions: null,
-          availableDecisions: ["accept", "accept_for_session", "decline", "cancel"],
+        interaction: {
+          threadId: thread.id,
+          turnId: "turn-stop-interaction",
+          providerId: "codex",
+          providerThreadId: "provider-thread-stop-interaction",
+          providerRequestId: "request-stop-interaction",
+          payload: {
+            kind: "command_approval",
+            itemId: "item-stop-interaction",
+            reason: "Approve command",
+            command: "git push",
+            cwd: "/tmp/project",
+            commandActions: [],
+            requestedPermissions: null,
+            availableDecisions: ["accept", "accept_for_session", "decline", "cancel"],
+          },
         },
+        sessionId: "session-1",
       });
       if (interaction.outcome === "rejected") {
         throw new Error(`Expected interaction registration to succeed: ${interaction.reason}`);

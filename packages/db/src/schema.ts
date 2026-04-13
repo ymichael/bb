@@ -476,6 +476,7 @@ export const pendingInteractions = sqliteTable(
     providerId: text("provider_id").notNull(),
     providerThreadId: text("provider_thread_id").notNull(),
     providerRequestId: text("provider_request_id").notNull(),
+    sessionId: text("session_id").notNull(),
     kind: text("kind").$type<PendingInteractionKind>().notNull(),
     status: text("status").$type<PendingInteractionStatus>().notNull(),
     payload: text("payload").notNull(),
@@ -487,6 +488,7 @@ export const pendingInteractions = sqliteTable(
   },
   (table) => [
     uniqueIndex("pending_interactions_provider_request_idx").on(
+      table.sessionId,
       table.providerId,
       table.providerThreadId,
       table.providerRequestId,

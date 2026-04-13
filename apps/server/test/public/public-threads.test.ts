@@ -605,6 +605,7 @@ describe("public thread routes", () => {
         providerId: "codex",
         providerRequestId: "request-1",
         providerThreadId: "provider-thread-1",
+        sessionId: "session-1",
         threadId: firstThread.id,
         turnId: "turn_1",
       });
