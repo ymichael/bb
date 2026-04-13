@@ -6730,8 +6730,8 @@ I'm trying to understand Excalidraw's collaboration startup flow before changing
     ◼ Locate collaboration UI entry points and startup handlers
     □ Trace room initialization, socket setup, and first-scene load through current code
     □ Summarize collaboration mode state flips, key types/state, and fallback/failure paths with file refs
-  ── Explored 19 files, 13 searches, 1 list ──────────────────
-    Search collab|collaboration|room|portal|socket|isCollaborating|isCollab|startCollab|initializeRoom|joinRoom in .
+  ── Explored 19 files, 12 searches, 2 lists ─────────────────
+    List .
     List .
     Search startCollaboration|initializeRoom|setIsCollaborating|stopCollaboration|fallbackInitializationHandler|socketInitializationTimer|isCollaboratingAtom|activeRoomLinkAtom|initializeScene|getCollaborationLinkData|isCollaborationLink|generateCollaborationLinkData|loadScene|loadFromFirebase|saveToFirebase|WS_EVENTS|init-room|join-room in excalidraw-app
     Search LiveCollaborationTrigger|collab-button|ShareDialog|button_startSession|button_stopSession|onCollabButtonClick|onSelect:.*collab|showShareDialog|setShareDialogState|collaborationOnly in packages/excalidraw
@@ -7071,8 +7071,8 @@ There's a positioning bug in the eyedropper preview: near the viewport edges, th
     □ Add focused tests for edge flipping/clamping behavior and run relevant test checks
   ── Assistant ───────────────────────────────────────────────
   \`bb\` isn’t available in this environment, so I’m proceeding directly with repo inspection and the fix.
-  ── Explored 8 files, 4 searches, 4 lists ───────────────────
-    Search eyedropper|eye dropper|preview in .
+  ── Explored 8 files, 3 searches, 5 lists ───────────────────
+    List .
     List .
     Read packages/excalidraw/components/EyeDropper.tsx
     Read packages/excalidraw/components/EyeDropper.scss
@@ -7451,9 +7451,9 @@ Make the Magic Frame AI workflow discoverable from the command or search experie
     exit code 127
   ── Assistant ───────────────────────────────────────────────
   Using the \`vercel-react-best-practices\` skill because this is a React UI change with discoverability and test coverage.
-  ── Explored 2 files ────────────────────────────────────────
+  ── Explored 1 file, 1 list ─────────────────────────────────
     Read $HOME/.agents/skills/vercel-react-best-practices/SKILL.md
-    Read package.json
+    List .
   ── Tool Call: exec_command ─────────────────────────────────
     ✓ git status --short
     0ms
@@ -9892,7 +9892,7 @@ There's a usability bug in the canvas search sidebar: if I navigate to a later m
     □ Add/regress a test covering the focus reset when the query narrows results
     □ Run targeted tests and verify the fix
   ── Explored 6 files, 2 searches, 1 list ────────────────────
-    List src
+    List .
     Search search sidebar|canvas search|match in packages
     Read packages/excalidraw/components/SearchMenu.tsx
     Search SearchMenu|searchMatches|handleSearch\\( in packages/excalidraw/components

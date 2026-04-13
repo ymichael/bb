@@ -334,6 +334,23 @@ describe("parseShellCommandIntents", () => {
     ]);
   });
 
+  it("classifies bare ls (no path) as a list of the cwd", () => {
+    expect(parseShellCommandIntents("ls")).toEqual([
+      {
+        type: "list_files",
+        cmd: "ls",
+        path: ".",
+      },
+    ]);
+    expect(parseShellCommandIntents("ls -la")).toEqual([
+      {
+        type: "list_files",
+        cmd: "ls -la",
+        path: ".",
+      },
+    ]);
+  });
+
   it("does not classify heredoc-based file writes as reads", () => {
     expect(
       parseShellCommandIntents(

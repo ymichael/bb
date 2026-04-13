@@ -738,8 +738,7 @@ function classifyShellSegment(
     }
     case "ls": {
       const positionals = collectPositionals(argTokens, NO_FLAGS_WITH_VALUE);
-      const path = positionals[0];
-      if (!path) return { kind: "none" };
+      const path = positionals[0] ?? ".";
       return { kind: "intent", intent: { type: "list_files", cmd: fullCommand, path } };
     }
     case "cat":
