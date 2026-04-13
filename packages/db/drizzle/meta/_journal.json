@@ -218,6 +218,13 @@
       "when": 1775720400000,
       "tag": "0031_app_sandbox_env_vars",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "6",
+      "when": 1775724000000,
+      "tag": "0032_session_data_dir_not_null",
+      "breakpoints": true
     }
   ]
 }

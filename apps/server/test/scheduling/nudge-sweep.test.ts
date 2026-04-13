@@ -33,6 +33,7 @@ type SandboxHostMockArgs = Array<object | string | undefined>;
 
 vi.mock("@bb/sandbox-host", () => ({
   DEFAULT_SANDBOX_TIMEOUT_MS: 15 * 60 * 1000,
+  SANDBOX_DATA_DIR: "/tmp/bb-data",
   provisionHost: (...args: SandboxHostMockArgs) => provisionHostMock(...args),
   resumeHost: (...args: SandboxHostMockArgs) => resumeHostMock(...args),
 }));

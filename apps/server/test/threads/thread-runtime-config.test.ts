@@ -1,5 +1,3 @@
-import { eq } from "drizzle-orm";
-import { hostDaemonSessions } from "@bb/db";
 import { describe, expect, it } from "vitest";
 import { resolveThreadRuntimeCommandConfig } from "../../src/services/threads/thread-runtime-config.js";
 import {
@@ -193,45 +191,4 @@ describe("thread runtime config", () => {
     }
   });
 
-  it("rejects manager runtime config when the active session has no data directory", async () => {
-    const harness = await createTestAppHarness();
-    try {
-      const { session } = seedHostSession(harness.deps, {
-        id: "host-runtime-missing-data-dir",
-      });
-      const { project } = seedProjectWithSource(harness.deps, {
-        hostId: session.hostId,
-        path: "/tmp/runtime-project-root",
-      });
-      const environment = seedEnvironment(harness.deps, {
-        hostId: session.hostId,
-        projectId: project.id,
-        path: "/tmp/runtime-project-root",
-      });
-      const managerThread = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: environment.id,
-        type: "manager",
-      });
-      harness.db.update(hostDaemonSessions)
-        .set({ dataDir: null })
-        .where(eq(hostDaemonSessions.id, session.id))
-        .run();
-
-      await expect(
-        resolveThreadRuntimeCommandConfig(harness.deps, {
-          thread: managerThread,
-          environment: {
-            hostId: environment.hostId,
-            id: environment.id,
-            path: environment.path,
-            workspaceProvisionType: environment.workspaceProvisionType,
-          },
-          isThreadCreation: true,
-        }),
-      ).rejects.toThrow("Connected host session did not report its data directory");
-    } finally {
-      await harness.cleanup();
-    }
-  });
 });

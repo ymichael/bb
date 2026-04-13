@@ -6,7 +6,7 @@ export {
   startBackgroundProcess,
   writeSandboxFile,
 } from "./provision.js";
-export { DEFAULT_SANDBOX_TIMEOUT_MS } from "./constants.js";
+export { DEFAULT_SANDBOX_TIMEOUT_MS, SANDBOX_DATA_DIR } from "./constants.js";
 export { createSandboxHost, resumeSandbox } from "./lifecycle.js";
 export type {
   CreateSandboxOptions,

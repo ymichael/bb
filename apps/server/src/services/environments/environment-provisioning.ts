@@ -36,10 +36,10 @@ import {
 import {
   buildEnvironmentProvisionCommand,
   buildManagedBranchName,
-  buildManagedTargetPath,
   SETUP_TIMEOUT_MS,
   requireSourceForHost,
 } from "../threads/thread-create-helpers.js";
+import { resolveManagedTargetPath } from "../threads/worktree-paths.js";
 import {
   buildDirectEnvironmentProvisionRequest,
   environmentProvisionRequestSchema,
@@ -594,13 +594,17 @@ export async function queueManagedEnvironmentReprovision(
     args.thread.projectId,
     args.environment.hostId,
   );
-  await ensureHostSessionReadyForWork(deps, {
+  const hostSession = await ensureHostSessionReadyForWork(deps, {
     hostId: args.environment.hostId,
   });
 
   const targetPath =
     args.environment.path ??
-    buildManagedTargetPath(source.path, args.thread.projectId, args.thread.id);
+    resolveManagedTargetPath({
+      dataDir: hostSession.dataDir,
+      environmentId: args.environment.id,
+      sourcePath: source.path,
+    });
   const branchName =
     args.environment.branchName ??
     buildManagedBranchName({ threadId: args.thread.id });

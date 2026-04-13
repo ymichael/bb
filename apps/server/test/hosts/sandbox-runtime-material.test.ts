@@ -82,6 +82,7 @@ describe("sandbox runtime material", () => {
         instanceId: "instance-runtime-requeue",
         leaseTimeoutMs: 30_000,
         protocolVersion: 2,
+        dataDir: "/tmp/bb-test-data",
       });
 
       await requestSandboxRuntimeMaterialSync(harness.deps, {
@@ -161,6 +162,7 @@ describe("sandbox runtime material", () => {
         instanceId: "instance-runtime-applied",
         leaseTimeoutMs: 30_000,
         protocolVersion: 2,
+        dataDir: "/tmp/bb-test-data",
       });
 
       const desiredSnapshot = await requestSandboxRuntimeMaterialSync(harness.deps, {
@@ -227,6 +229,7 @@ describe("sandbox runtime material", () => {
         instanceId: "instance-runtime-ensure",
         leaseTimeoutMs: 30_000,
         protocolVersion: 2,
+        dataDir: "/tmp/bb-test-data",
       });
 
       const ensurePromise = ensureSandboxRuntimeMaterialSynced(harness.deps, {
@@ -286,6 +289,7 @@ describe("sandbox runtime material", () => {
         instanceId: "instance-runtime-expired-session",
         leaseTimeoutMs: 30_000,
         protocolVersion: 2,
+        dataDir: "/tmp/bb-test-data",
       });
       harness.db
         .update(hostDaemonSessions)
@@ -330,6 +334,7 @@ describe("sandbox runtime material", () => {
         instanceId: "instance-runtime-version-mismatch",
         leaseTimeoutMs: 30_000,
         protocolVersion: 2,
+        dataDir: "/tmp/bb-test-data",
       });
 
       const ensurePromise = ensureSandboxRuntimeMaterialSynced(harness.deps, {

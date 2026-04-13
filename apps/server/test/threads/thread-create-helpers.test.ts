@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  buildManagedBranchName,
-  buildManagedTargetPath,
-} from "../../src/services/threads/thread-create-helpers.js";
+import { buildManagedBranchName } from "../../src/services/threads/thread-create-helpers.js";
 import { sanitizeGeneratedBranchSlug } from "../../src/services/threads/title-generation.js";
 
 describe("sanitizeGeneratedBranchSlug", () => {
@@ -59,24 +56,3 @@ describe("buildManagedBranchName", () => {
   });
 });
 
-describe("buildManagedTargetPath", () => {
-  it("keeps managed workspaces next to local sources", () => {
-    expect(
-      buildManagedTargetPath(
-        "/tmp/project-root",
-        "proj_123",
-        "thr_456",
-      ),
-    ).toBe("/tmp/.bb-worktrees/proj_123/thr_456");
-  });
-
-  it("uses a local sandbox workspace root for remote git sources", () => {
-    expect(
-      buildManagedTargetPath(
-        "https://github.com/octocat/Hello-World.git",
-        "proj_123",
-        "thr_456",
-      ),
-    ).toBe("/tmp/bb-managed-workspaces/proj_123/thr_456");
-  });
-});

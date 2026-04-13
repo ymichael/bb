@@ -97,6 +97,7 @@ describe("host lifecycle", () => {
           instanceId: "instance-opened",
           leaseTimeoutMs: 30_000,
           protocolVersion: 2,
+          dataDir: "/tmp/bb-test-data",
         });
       }, 500);
 
@@ -137,6 +138,7 @@ describe("host lifecycle", () => {
           instanceId: "instance-unrelated",
           leaseTimeoutMs: 30_000,
           protocolVersion: 2,
+          dataDir: "/tmp/bb-test-data",
         });
       }, 500);
       setTimeout(() => {
@@ -148,6 +150,7 @@ describe("host lifecycle", () => {
           instanceId: "instance-target",
           leaseTimeoutMs: 30_000,
           protocolVersion: 2,
+          dataDir: "/tmp/bb-test-data",
         });
       }, 1_000);
 
@@ -402,6 +405,7 @@ describe("host lifecycle", () => {
           instanceId: "instance-concurrent-ready",
           leaseTimeoutMs: 30_000,
           protocolVersion: 2,
+          dataDir: "/tmp/bb-test-data",
         });
       }, 50);
 
@@ -573,6 +577,7 @@ describe("host lifecycle", () => {
           instanceId: "instance-suspended-cached",
           leaseTimeoutMs: 30_000,
           protocolVersion: 2,
+          dataDir: "/tmp/bb-test-data",
         });
       }, 10);
 
@@ -638,6 +643,7 @@ describe("host lifecycle", () => {
         instanceId: "instance-idle",
         leaseTimeoutMs: 30_000,
         protocolVersion: 2,
+        dataDir: "/tmp/bb-test-data",
       });
       markEphemeralHostActivity(harness.db, {
         hostId: host.id,
@@ -679,6 +685,7 @@ describe("host lifecycle", () => {
         instanceId: "instance-idle-pending-command",
         leaseTimeoutMs: 30_000,
         protocolVersion: 2,
+        dataDir: "/tmp/bb-test-data",
       });
       markEphemeralHostActivity(harness.db, {
         hostId: host.id,
@@ -743,6 +750,7 @@ describe("host lifecycle", () => {
           instanceId: "instance-runtime-sync",
           leaseTimeoutMs: 30_000,
           protocolVersion: 2,
+          dataDir: "/tmp/bb-test-data",
         });
       }, 10);
 

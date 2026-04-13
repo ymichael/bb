@@ -135,6 +135,7 @@ describe("db rebuild schema", () => {
       instanceId: "instance-1",
       hostName: "Local host",
       hostType: "persistent",
+      dataDir: "/tmp/test-data",
       protocolVersion: 1,
       heartbeatIntervalMs: 10_000,
       leaseTimeoutMs: 30_000,
@@ -448,6 +449,7 @@ describe("db rebuild schema", () => {
       instanceId: "instance-1",
       hostName: "Local host",
       hostType: "persistent",
+      dataDir: "/tmp/test-data",
       protocolVersion: 1,
       heartbeatIntervalMs: 10_000,
       leaseTimeoutMs: 30_000,
@@ -501,6 +503,7 @@ describe("db rebuild schema", () => {
       instanceId: "instance-1",
       hostName: "Local host",
       hostType: "persistent",
+      dataDir: "/tmp/test-data",
       protocolVersion: 1,
       heartbeatIntervalMs: 10_000,
       leaseTimeoutMs: 30_000,
@@ -703,5 +706,38 @@ describe("db rebuild schema", () => {
     expect(createDraftId()).toMatch(/^draft_/u);
     expect(createHostDaemonSessionId()).toMatch(/^hses_/u);
     expect(createHostDaemonCommandId()).toMatch(/^hcmd_/u);
+  });
+
+  it("requires a non-null data_dir on host_daemon_sessions", () => {
+    const db = createConnection(":memory:");
+    migrate(db);
+    const hostId = createHostId();
+    const now = Date.now();
+    db.insert(hosts).values({
+      id: hostId,
+      name: "host",
+      type: "persistent",
+      lastSeenAt: now,
+      createdAt: now,
+      updatedAt: now,
+    }).run();
+    expect(() =>
+      db.insert(hostDaemonSessions).values({
+        id: createHostDaemonSessionId(),
+        hostId,
+        instanceId: "instance",
+        hostName: "host",
+        hostType: "persistent",
+        // data_dir intentionally omitted — column is NOT NULL.
+        protocolVersion: 1,
+        heartbeatIntervalMs: 1_000,
+        leaseTimeoutMs: 10_000,
+        status: "active",
+        leaseExpiresAt: now + 10_000,
+        createdAt: now,
+        updatedAt: now,
+      } as never).run(),
+    ).toThrow(/NOT NULL constraint failed: host_daemon_sessions\.data_dir/);
+    closeConnection(db);
   });
 });

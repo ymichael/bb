@@ -71,6 +71,7 @@ type AssertionFn = () => void;
 // server policy and request/response behavior.
 vi.mock("@bb/sandbox-host", () => ({
   DEFAULT_SANDBOX_TIMEOUT_MS: 15 * 60 * 1000,
+  SANDBOX_DATA_DIR: "/tmp/bb-data",
   provisionHost: (...args: SandboxHostMockArgs) => provisionHostMock(...args),
   resumeHost: (...args: SandboxHostMockArgs) => resumeHostMock(...args),
 }));
@@ -737,7 +738,9 @@ describe("public thread routes", () => {
         sourcePath: secondarySource.path,
         workspaceProvisionType: "managed-worktree",
       });
-      expect(queued.command.targetPath).toContain(`.bb-worktrees/${project.id}/${createdThread.id}`);
+      expect(queued.command.targetPath).toBe(
+        `/tmp/bb-host-data/${secondaryHost.id}/worktrees/${createdThread.environmentId}/secondary-managed-source`,
+      );
     } finally {
       await harness.cleanup();
     }
@@ -1111,6 +1114,7 @@ describe("public thread routes", () => {
           instanceId: "instance-sandbox-secondary-source",
           leaseTimeoutMs: 60_000,
           protocolVersion: 2,
+          dataDir: "/tmp/bb-test-data",
         });
         return {
           destroy: vi.fn().mockResolvedValue(undefined),
@@ -1173,7 +1177,7 @@ describe("public thread routes", () => {
         branchName: `bb/${createdThread.id}`,
         environmentId: createdThread.environmentId,
         sourcePath: "https://github.com/example/secondary.git",
-        targetPath: `/tmp/.bb-worktrees/${project.id}/${createdThread.id}`,
+        targetPath: `/tmp/bb-data/worktrees/${createdThread.environmentId}/secondary`,
         workspaceProvisionType: "managed-clone",
       });
     } finally {
@@ -1225,6 +1229,7 @@ describe("public thread routes", () => {
           instanceId: "instance-sandbox-test",
           leaseTimeoutMs: 60_000,
           protocolVersion: 2,
+          dataDir: "/tmp/bb-test-data",
         });
         return {
           ...sandboxLifecycle,
@@ -1335,7 +1340,7 @@ describe("public thread routes", () => {
         branchName: `bb/${createdThread.id}`,
         environmentId: environment.id,
         sourcePath: "https://github.com/example/repo.git",
-        targetPath: `/tmp/.bb-worktrees/${project.id}/${createdThread.id}`,
+        targetPath: `/tmp/bb-data/worktrees/${environment.id}/repo`,
         workspaceProvisionType: "managed-clone",
       });
       expect(queued.row.hostId).toBe(environment.hostId);

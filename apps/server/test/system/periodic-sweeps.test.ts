@@ -55,6 +55,7 @@ type SandboxHostMockArgs = Array<object | string | undefined>;
 
 vi.mock("@bb/sandbox-host", () => ({
   DEFAULT_SANDBOX_TIMEOUT_MS: 15 * 60 * 1000,
+  SANDBOX_DATA_DIR: "/tmp/bb-data",
   provisionHost: (...args: SandboxHostMockArgs) => provisionHostMock(...args),
   resumeHost: (...args: SandboxHostMockArgs) => resumeHostMock(...args),
   resumeSandbox: (...args: SandboxHostMockArgs) => resumeSandboxMock(...args),
@@ -299,6 +300,7 @@ describe("periodic sweeps", () => {
         instanceId: "instance-periodic-sandbox-bootstrap",
         leaseTimeoutMs: 30_000,
         protocolVersion: 2,
+        dataDir: "/tmp/bb-test-data",
       });
       await reportNextRuntimeMaterialSyncSuccess(harness, {
         hostId: host.id,
@@ -670,6 +672,7 @@ describe("periodic sweeps", () => {
         instanceId: "instance-periodic-idle",
         leaseTimeoutMs: 30_000,
         protocolVersion: 2,
+        dataDir: "/tmp/bb-test-data",
       });
       markEphemeralHostActivity(harness.db, {
         hostId: host.id,
@@ -706,6 +709,7 @@ describe("periodic sweeps", () => {
         instanceId: "instance-periodic-active",
         leaseTimeoutMs: 30_000,
         protocolVersion: 2,
+        dataDir: "/tmp/bb-test-data",
       });
       markEphemeralHostActivity(harness.db, {
         hostId: host.id,

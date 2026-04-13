@@ -1,4 +1,3 @@
-import path from "node:path";
 import {
   createThread,
   getProjectSourceByHost,
@@ -17,8 +16,6 @@ import {
   sanitizeGeneratedBranchSlug,
 } from "./title-generation.js";
 
-const REMOTE_WORKSPACE_ROOT = "/tmp/bb-managed-workspaces";
-
 export interface ManagedBranchNameArgs {
   branchSlug?: string | null;
   threadId: string;
@@ -31,38 +28,6 @@ export function buildManagedBranchName(args: ManagedBranchNameArgs): string {
   return branchSlug
     ? `bb/${branchSlug}-${args.threadId}`
     : `bb/${args.threadId}`;
-}
-
-function isRemoteSourcePath(sourcePath: string): boolean {
-  if (sourcePath.startsWith("git@")) {
-    return true;
-  }
-
-  try {
-    const protocol = new URL(sourcePath).protocol;
-    return protocol === "http:" || protocol === "https:" || protocol === "ssh:";
-  } catch {
-    return false;
-  }
-}
-
-export function buildManagedTargetPath(
-  sourcePath: string,
-  projectId: string,
-  threadId: string,
-): string {
-  if (isRemoteSourcePath(sourcePath)) {
-    return path.join(REMOTE_WORKSPACE_ROOT, projectId, threadId);
-  }
-
-  return path.join(path.dirname(sourcePath), ".bb-worktrees", projectId, threadId);
-}
-
-export function buildSandboxTargetPath(
-  projectId: string,
-  threadId: string,
-): string {
-  return path.posix.join("/tmp", ".bb-worktrees", projectId, threadId);
 }
 
 export function requireProjectExists(

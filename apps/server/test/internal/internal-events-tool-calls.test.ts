@@ -157,6 +157,7 @@ describe("internal event and tool-call routes", () => {
         instanceId: "instance-event-activity",
         leaseTimeoutMs: 30_000,
         protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
+        dataDir: "/tmp/bb-test-data",
       });
       const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
       const environment = seedEnvironment(harness.deps, {
@@ -296,6 +297,7 @@ describe("internal event and tool-call routes", () => {
         instanceId: "instance-tool-call-activity",
         leaseTimeoutMs: 30_000,
         protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
+        dataDir: "/tmp/bb-test-data",
       });
       const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
       const environment = seedEnvironment(harness.deps, {

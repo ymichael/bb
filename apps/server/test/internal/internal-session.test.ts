@@ -242,6 +242,7 @@ describe("internal session routes", () => {
         instanceId: "instance-host-commands",
         leaseTimeoutMs: 30_000,
         protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
+        dataDir: "/tmp/bb-test-data",
       });
       const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
       const environment = seedEnvironment(harness.deps, {
@@ -321,6 +322,7 @@ describe("internal session routes", () => {
         instanceId: "instance-command-result-activity",
         leaseTimeoutMs: 30_000,
         protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
+        dataDir: "/tmp/bb-test-data",
       });
       const command = queueCommand(harness.db, harness.hub, {
         hostId: host.id,
@@ -420,6 +422,7 @@ describe("internal session routes", () => {
         instanceId: "instance-before-reconnect",
         leaseTimeoutMs: 30_000,
         protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
+        dataDir: "/tmp/bb-test-data",
       });
       const initialSnapshot = await requestSandboxRuntimeMaterialSync(harness.deps, {
         hostId: host.id,
@@ -496,6 +499,7 @@ describe("internal session routes", () => {
         instanceId: "instance-before-reconnect-fetched",
         leaseTimeoutMs: 30_000,
         protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
+        dataDir: "/tmp/bb-test-data",
       });
       const initialSnapshot = await requestSandboxRuntimeMaterialSync(harness.deps, {
         hostId: host.id,
@@ -787,6 +791,7 @@ describe("internal session routes", () => {
         instanceId: "instance-runtime-material-route",
         leaseTimeoutMs: 30_000,
         protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
+        dataDir: "/tmp/bb-test-data",
       });
       const desiredSnapshot = await buildSandboxRuntimeMaterialSnapshot(harness.deps);
 

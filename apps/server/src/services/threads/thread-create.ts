@@ -43,13 +43,13 @@ import {
 import {
   buildManagedBranchName,
   buildEnvironmentProvisionCommand,
-  buildManagedTargetPath,
-  buildSandboxTargetPath,
   createThreadRecord,
   getThreadSafe,
   requireProjectExists,
   SETUP_TIMEOUT_MS,
 } from "./thread-create-helpers.js";
+import { resolveManagedTargetPath } from "./worktree-paths.js";
+import { SANDBOX_DATA_DIR } from "@bb/sandbox-host";
 import {
   advanceEnvironmentProvisioning,
   requestEnvironmentProvision,
@@ -393,7 +393,11 @@ async function createSandboxHostThread(
     hostId,
     initiator: { threadId: thread.id, eventSequence: provisionEventSequence },
     sourcePath: args.cloneSource.repoUrl,
-    targetPath: buildSandboxTargetPath(args.request.projectId, thread.id),
+    targetPath: resolveManagedTargetPath({
+      dataDir: SANDBOX_DATA_DIR,
+      environmentId: environment.id,
+      sourcePath: args.cloneSource.repoUrl,
+    }),
     workspaceProvisionType: "managed-clone",
     setupTimeoutMs: SETUP_TIMEOUT_MS,
   });
@@ -487,7 +491,7 @@ export async function createThreadFromRequest(
     workspace.type === "unmanaged" ? null : resolvedEnvironment.localSource;
   const unmanagedPath =
     workspace.type === "unmanaged" ? resolvedEnvironment.unmanagedPath : null;
-  await ensureHostSessionReadyForWork(deps, {
+  const hostSession = await ensureHostSessionReadyForWork(deps, {
     hostId,
   });
 
@@ -591,11 +595,11 @@ export async function createThreadFromRequest(
         initiator: { threadId: thread.id, eventSequence: provisionEventSequence },
         workspaceProvisionType: workspace.type,
         sourcePath: managedSource.path,
-        targetPath: buildManagedTargetPath(
-          managedSource.path,
-          request.projectId,
-          thread.id,
-        ),
+        targetPath: resolveManagedTargetPath({
+          dataDir: hostSession.dataDir,
+          environmentId: environment.id,
+          sourcePath: managedSource.path,
+        }),
         branchName: buildManagedBranchName({
           branchSlug: managedMetadata.branchSlug,
           threadId: thread.id,
