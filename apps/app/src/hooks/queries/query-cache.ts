@@ -231,7 +231,7 @@ export function optimisticallyInsertThread(
       [{
         ...thread,
         hasPendingInteraction: false,
-        environmentKind: null,
+        environmentWorkspaceDisplayKind: "other",
       }, ...list],
     );
   }

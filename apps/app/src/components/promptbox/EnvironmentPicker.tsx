@@ -1,7 +1,7 @@
 import { useAtomValue } from "jotai";
 import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Check, ChevronDown, Container, FolderGit2, Monitor } from "lucide-react";
+import { Check, ChevronDown, Monitor } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { Host, ProjectSource, SandboxBackendInfo } from "@bb/domain";
 import { LocalhostBadge } from "@bb/ui-core";
@@ -18,6 +18,7 @@ import {
 import { useHostDaemon } from "@/hooks/useHostDaemon";
 import { useHosts, useSandboxBackends } from "@/hooks/queries/system-queries";
 import { sandboxHostSupportedAtom } from "@/lib/atoms";
+import { getEnvironmentWorkspaceDisplayIcon } from "@/lib/environment-workspace-display";
 import { HostStatusBadge, HostStatusDot } from "@/components/HostStatusIndicator";
 import { cn } from "@/lib/utils";
 import {
@@ -145,7 +146,9 @@ export function EnvironmentPicker({
     if (!parsed) return { modeLabel: "Environment", icon: Monitor };
     if (parsed.type === "host") {
       const modeLabel = parsed.mode === "worktree" ? "Worktree" : "Direct";
-      const icon = parsed.mode === "worktree" ? FolderGit2 : Monitor;
+      const icon = getEnvironmentWorkspaceDisplayIcon(
+        parsed.mode === "worktree" ? "git-worktree" : "primary-checkout",
+      ) ?? Monitor;
       const host = hosts.find((h) => h.id === parsed.hostId);
       const hostConnected = host?.status === "connected";
       if (isLocalHost(parsed.hostId)) {
@@ -154,7 +157,10 @@ export function EnvironmentPicker({
       return { modeLabel, hostLabel: host?.name ?? "Unknown", icon, hostConnected };
     }
     const backend = sandboxBackends.find((b) => b.id === parsed.backendId);
-    return { modeLabel: backend?.displayName ?? "Sandbox", icon: Container };
+    return {
+      modeLabel: backend?.displayName ?? "Sandbox",
+      icon: getEnvironmentWorkspaceDisplayIcon("sandbox") ?? Monitor,
+    };
   }, [value, hosts, sandboxBackends, isLocalHost]);
 
   return (
@@ -245,14 +251,14 @@ function HostSectionGroup({
           <>
             <EnvironmentMenuItem
               label="Direct"
-              icon={Monitor}
+              icon={getEnvironmentWorkspaceDisplayIcon("primary-checkout") ?? Monitor}
               itemValue={localValue}
               selectedValue={value}
               onSelect={onChange}
             />
             <EnvironmentMenuItem
               label="Worktree"
-              icon={FolderGit2}
+              icon={getEnvironmentWorkspaceDisplayIcon("git-worktree") ?? Monitor}
               itemValue={worktreeValue}
               selectedValue={value}
               onSelect={onChange}
@@ -296,7 +302,7 @@ function SandboxSection({ backends, hasGitHubSource, projectId, value, onChange 
             <EnvironmentMenuItem
               key={backend.id}
               label={backend.displayName}
-              icon={Container}
+              icon={getEnvironmentWorkspaceDisplayIcon("sandbox") ?? Monitor}
               itemValue={encodeSandboxValue(backend.id)}
               selectedValue={value}
               onSelect={onChange}

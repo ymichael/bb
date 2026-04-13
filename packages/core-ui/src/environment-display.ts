@@ -1,4 +1,9 @@
-import type { Environment, HostType } from "@bb/domain";
+import type {
+  Environment,
+  EnvironmentWorkspaceDisplayKind,
+  HostType,
+} from "@bb/domain";
+import { resolveEnvironmentWorkspaceDisplayKind } from "@bb/domain";
 
 export interface EnvironmentDisplayInfo {
   /** Human-readable mode: "Direct" or "Worktree", or the sandbox provider name for cloud. */
@@ -9,6 +14,7 @@ export interface EnvironmentDisplayInfo {
   /** "local" for the user's machine, "remote" for other persistent hosts, "cloud" for sandbox hosts. */
   location: "local" | "remote" | "cloud";
   mode: "direct" | "worktree";
+  workspaceDisplayKind: EnvironmentWorkspaceDisplayKind;
 }
 
 interface FormatEnvironmentDisplayArgs {
@@ -35,6 +41,10 @@ export function formatEnvironmentDisplay({
   hostProvider,
 }: FormatEnvironmentDisplayArgs): EnvironmentDisplayInfo {
   const mode: EnvironmentDisplayInfo["mode"] = environment.isWorktree ? "worktree" : "direct";
+  const workspaceDisplayKind = resolveEnvironmentWorkspaceDisplayKind({
+    environment,
+    hostType: hostType ?? null,
+  });
 
   const modeLabel = mode === "worktree" ? "Worktree" : "Direct";
 
@@ -49,10 +59,18 @@ export function formatEnvironmentDisplay({
       id: environment.id,
       location: "cloud",
       mode,
+      workspaceDisplayKind,
     };
   }
 
   const location: EnvironmentDisplayInfo["location"] = isLocalHost ? "local" : "remote";
 
-  return { modeLabel, hostLabel: hostName ?? null, id: environment.id, location, mode };
+  return {
+    modeLabel,
+    hostLabel: hostName ?? null,
+    id: environment.id,
+    location,
+    mode,
+    workspaceDisplayKind,
+  };
 }

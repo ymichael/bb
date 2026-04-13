@@ -1,16 +1,18 @@
 import { useState } from "react"
-import type { Thread, ThreadEnvironmentKind, ThreadListEntry } from "@bb/domain"
+import type { Thread, ThreadListEntry } from "@bb/domain"
 import {
   ChevronDown,
   ChevronRight,
   CircleDashed,
-  Container,
-  FolderGit2,
   UserRound,
 } from "lucide-react"
 import { NavLink } from "react-router-dom"
 import { ThreadActionsMenu } from "@/components/thread/ThreadActionsMenu"
 import { SidebarMenuBadge } from "@/components/ui/sidebar"
+import {
+  getEnvironmentWorkspaceDisplayIcon,
+  getEnvironmentWorkspaceDisplayIconLabel,
+} from "@/lib/environment-workspace-display"
 import { isBusyThread, isUnreadDoneThread } from "@/lib/thread-activity"
 import { getThreadDisplayTitle } from "@/lib/thread-title"
 import { cn } from "@/lib/utils"
@@ -98,10 +100,6 @@ interface ThreadLeadingGlyphProps {
   showUnreadBadge: boolean
 }
 
-interface ThreadEnvironmentIconProps {
-  environmentKind: ThreadEnvironmentKind
-}
-
 function ThreadLeadingGlyph({
   hasPendingInteraction,
   isManagedChild,
@@ -131,24 +129,6 @@ function ThreadLeadingGlyph({
   )
 }
 
-function ThreadEnvironmentIcon({ environmentKind }: ThreadEnvironmentIconProps) {
-  if (environmentKind === "sandbox") {
-    return (
-      <Container
-        className="size-4 text-sidebar-foreground/70"
-        aria-label="Sandbox environment"
-      />
-    )
-  }
-
-  return (
-    <FolderGit2
-      className="size-4 text-sidebar-foreground/70"
-      aria-label="Worktree environment"
-    />
-  )
-}
-
 export function ThreadRow({
   projectId,
   thread,
@@ -175,6 +155,12 @@ export function ThreadRow({
   const managedChildBusyCount =
     options.kind === "manager" ? options.managedChildBusyCount : 0
   const isManagerBusy = isManager && (threadIsBusy || managedChildBusyCount > 0)
+  const EnvironmentIcon = getEnvironmentWorkspaceDisplayIcon(
+    thread.environmentWorkspaceDisplayKind,
+  )
+  const environmentIconLabel = getEnvironmentWorkspaceDisplayIconLabel(
+    thread.environmentWorkspaceDisplayKind,
+  )
 
   return (
     <div
@@ -235,8 +221,11 @@ export function ThreadRow({
               <UserRound className="size-4 text-sidebar-foreground/70" aria-label="Manager" />
             ) : isManagedChild && threadIsBusy ? (
               <CircleDashed className="size-4 animate-spin text-sidebar-foreground/70" />
-            ) : thread.environmentKind ? (
-              <ThreadEnvironmentIcon environmentKind={thread.environmentKind} />
+            ) : EnvironmentIcon ? (
+              <EnvironmentIcon
+                className="size-4 text-sidebar-foreground/70"
+                aria-label={environmentIconLabel ?? undefined}
+              />
             ) : null}
           </span>
           <div

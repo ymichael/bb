@@ -124,6 +124,9 @@ export {
   environmentSchema,
   environmentStatusSchema,
   environmentStatusValues,
+  environmentWorkspaceDisplayKindSchema,
+  environmentWorkspaceDisplayKindValues,
+  resolveEnvironmentWorkspaceDisplayKind,
   workspaceProvisionTypeSchema,
 } from "./environment.js";
 export type {
@@ -131,6 +134,8 @@ export type {
   Environment,
   EnvironmentCleanupMode,
   EnvironmentStatus,
+  EnvironmentWorkspaceDisplayKind,
+  ResolveEnvironmentWorkspaceDisplayKindArgs,
   WorkspaceProvisionType,
 } from "./environment.js";
 
@@ -204,8 +209,6 @@ export type {
 
 export {
   threadQueuedMessageSchema,
-  threadEnvironmentKindSchema,
-  threadEnvironmentKindValues,
   threadSchema,
   threadListEntrySchema,
   threadStatusSchema,
@@ -224,7 +227,6 @@ export {
 } from "./thread.js";
 export type {
   Thread,
-  ThreadEnvironmentKind,
   ThreadListEntry,
   ThreadQueuedMessage,
   ThreadStatus,

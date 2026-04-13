@@ -101,7 +101,7 @@ describe("threads", () => {
     expect(listThreads(db, { projectId: project.id, archived: false })).toHaveLength(2);
   });
 
-  it("lists thread environment kind without per-thread lookups", () => {
+  it("lists thread environment workspace display kind without per-thread lookups", () => {
     const { db, host, project } = setup();
     const sandboxHost = upsertHost(db, noopNotifier, {
       name: "sandbox-host",
@@ -111,6 +111,7 @@ describe("threads", () => {
       projectId: project.id,
       hostId: host.id,
       workspaceProvisionType: "unmanaged",
+      isGitRepo: true,
       isWorktree: false,
     });
     const worktreeEnvironment = createEnvironment(db, noopNotifier, {
@@ -141,14 +142,14 @@ describe("threads", () => {
       providerId: "codex",
     });
 
-    const environmentKindsByThreadId = new Map(
+    const displayKindsByThreadId = new Map(
       listThreadsWithPendingInteractionState(db, { projectId: project.id })
-        .map((thread) => [thread.id, thread.environmentKind]),
+        .map((thread) => [thread.id, thread.environmentWorkspaceDisplayKind]),
     );
 
-    expect(environmentKindsByThreadId.get(directThread.id)).toBeNull();
-    expect(environmentKindsByThreadId.get(worktreeThread.id)).toBe("worktree");
-    expect(environmentKindsByThreadId.get(sandboxThread.id)).toBe("sandbox");
+    expect(displayKindsByThreadId.get(directThread.id)).toBe("primary-checkout");
+    expect(displayKindsByThreadId.get(worktreeThread.id)).toBe("git-worktree");
+    expect(displayKindsByThreadId.get(sandboxThread.id)).toBe("sandbox");
   });
 
   it("updates thread title", () => {

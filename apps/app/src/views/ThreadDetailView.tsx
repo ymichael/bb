@@ -33,7 +33,6 @@ import { ThreadDeleteDialog } from "@/components/thread/ThreadDeleteDialog";
 import { ThreadActionsMenu } from "@/components/thread/ThreadActionsMenu";
 import { ThreadWorkspaceOpenButton } from "@/components/thread/ThreadWorkspaceOpenButton";
 import { formatEnvironmentDisplay } from "@bb/core-ui";
-import { Container, FolderGit2, Monitor } from "lucide-react";
 import { findLatestActivityRowId } from "@bb/ui-core";
 import type { Thread } from "@bb/domain";
 import { useDialogState } from "@/hooks/useDialogState";
@@ -41,6 +40,7 @@ import { useHostDaemon } from "@/hooks/useHostDaemon";
 import { useWorkspaceOpenTargets } from "@/hooks/useWorkspaceOpenTargets";
 import { useHost } from "@/hooks/queries/system-queries";
 import { usePreferredTheme } from "@/hooks/useTheme";
+import { getEnvironmentWorkspaceDisplayIcon } from "@/lib/environment-workspace-display";
 import { useStoredShowAllEvents } from "@/lib/show-all-events-preference";
 import { getGitStatusDisplay } from "@/lib/workspace-status";
 import {
@@ -431,11 +431,9 @@ export function ThreadDetailView() {
         hostProvider: environmentHost?.provider,
       })
     : undefined;
-  const threadEnvironmentIcon = threadEnvironmentDisplay?.location === "cloud"
-    ? Container
-    : threadEnvironmentDisplay?.mode === "worktree"
-      ? FolderGit2
-      : Monitor;
+  const threadEnvironmentIcon = threadEnvironmentDisplay
+    ? getEnvironmentWorkspaceDisplayIcon(threadEnvironmentDisplay.workspaceDisplayKind)
+    : null;
   const promptBannerSummary = workspaceStatus
     ? showBranchComparisonUi
       ? formatChangeSummary(workspaceStatus.workingTree)
@@ -607,7 +605,7 @@ export function ThreadDetailView() {
       canUseGitUi={canUseGitUi}
       contextWindowUsage={contextWindowUsage}
       environmentHostConnected={environmentHost ? environmentHost.status === "connected" : undefined}
-      environmentIcon={threadEnvironmentDisplay ? threadEnvironmentIcon : undefined}
+      environmentIcon={threadEnvironmentIcon ?? undefined}
       environmentLabel={threadEnvironmentValue}
       isDiffPanelActive={isDiffPanelActive}
       isEnvironmentActionPending={requestEnvironmentAction.isPending}

@@ -37,6 +37,7 @@ describe("formatEnvironmentDisplay", () => {
         id: "env_test",
         location: "local",
         mode: "direct",
+        workspaceDisplayKind: "primary-checkout",
       });
     });
 
@@ -51,6 +52,7 @@ describe("formatEnvironmentDisplay", () => {
         id: "env_test",
         location: "local",
         mode: "worktree",
+        workspaceDisplayKind: "git-worktree",
       });
     });
 
@@ -78,6 +80,7 @@ describe("formatEnvironmentDisplay", () => {
         id: "env_test",
         location: "remote",
         mode: "direct",
+        workspaceDisplayKind: "primary-checkout",
       });
     });
 
@@ -93,6 +96,7 @@ describe("formatEnvironmentDisplay", () => {
         id: "env_test",
         location: "remote",
         mode: "worktree",
+        workspaceDisplayKind: "git-worktree",
       });
     });
 
@@ -121,6 +125,7 @@ describe("formatEnvironmentDisplay", () => {
         id: "env_test",
         location: "cloud",
         mode: "direct",
+        workspaceDisplayKind: "sandbox",
       });
     });
 
@@ -143,6 +148,7 @@ describe("formatEnvironmentDisplay", () => {
       });
       expect(result.mode).toBe("worktree");
       expect(result.modeLabel).toBe("E2B Sandbox");
+      expect(result.workspaceDisplayKind).toBe("sandbox");
     });
   });
 });

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { HostType } from "./host.js";
 
 export const environmentStatusValues = [
   "provisioning",
@@ -26,6 +27,46 @@ export const WORKSPACE_PROVISION_TYPES = [
 ] as const;
 export const workspaceProvisionTypeSchema = z.enum(WORKSPACE_PROVISION_TYPES);
 export type WorkspaceProvisionType = z.infer<typeof workspaceProvisionTypeSchema>;
+
+export const environmentWorkspaceDisplayKindValues = [
+  "sandbox",
+  "git-worktree",
+  "primary-checkout",
+  "other",
+] as const;
+export const environmentWorkspaceDisplayKindSchema = z.enum(
+  environmentWorkspaceDisplayKindValues,
+);
+export type EnvironmentWorkspaceDisplayKind = z.infer<
+  typeof environmentWorkspaceDisplayKindSchema
+>;
+
+export interface ResolveEnvironmentWorkspaceDisplayKindArgs {
+  environment: {
+    isGitRepo: boolean | null;
+    isWorktree: boolean | null;
+  };
+  hostType: HostType | null;
+}
+
+export function resolveEnvironmentWorkspaceDisplayKind({
+  environment,
+  hostType,
+}: ResolveEnvironmentWorkspaceDisplayKindArgs): EnvironmentWorkspaceDisplayKind {
+  if (hostType === "ephemeral") {
+    return "sandbox";
+  }
+
+  if (environment.isWorktree === true) {
+    return "git-worktree";
+  }
+
+  if (environment.isGitRepo === true) {
+    return "primary-checkout";
+  }
+
+  return "other";
+}
 
 /**
  * Properties discovered about a workspace during provisioning.

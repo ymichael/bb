@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { environmentWorkspaceDisplayKindSchema } from "./environment.js";
 import {
   promptInputSchema,
   permissionModeSchema,
@@ -19,10 +20,6 @@ export type ThreadStatus = z.infer<typeof threadStatusSchema>;
 export const threadTypeValues = ["standard", "manager"] as const;
 export const threadTypeSchema = z.enum(threadTypeValues);
 export type ThreadType = z.infer<typeof threadTypeSchema>;
-
-export const threadEnvironmentKindValues = ["worktree", "sandbox"] as const;
-export const threadEnvironmentKindSchema = z.enum(threadEnvironmentKindValues);
-export type ThreadEnvironmentKind = z.infer<typeof threadEnvironmentKindSchema>;
 
 export const workspaceStateValues = [
   "clean",
@@ -127,6 +124,6 @@ export type Thread = z.infer<typeof threadSchema>;
 
 export const threadListEntrySchema = threadSchema.extend({
   hasPendingInteraction: z.boolean(),
-  environmentKind: threadEnvironmentKindSchema.nullable(),
+  environmentWorkspaceDisplayKind: environmentWorkspaceDisplayKindSchema,
 });
 export type ThreadListEntry = z.infer<typeof threadListEntrySchema>;

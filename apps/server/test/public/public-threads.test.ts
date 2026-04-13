@@ -632,7 +632,7 @@ describe("public thread routes", () => {
     }
   });
 
-  it("includes environmentKind in thread list responses", async () => {
+  it("includes environmentWorkspaceDisplayKind in thread list responses", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps);
@@ -684,15 +684,15 @@ describe("public thread routes", () => {
         expect.arrayContaining([
           expect.objectContaining({
             id: directThread.id,
-            environmentKind: null,
+            environmentWorkspaceDisplayKind: "primary-checkout",
           }),
           expect.objectContaining({
             id: worktreeThread.id,
-            environmentKind: "worktree",
+            environmentWorkspaceDisplayKind: "git-worktree",
           }),
           expect.objectContaining({
             id: sandboxThread.id,
-            environmentKind: "sandbox",
+            environmentWorkspaceDisplayKind: "sandbox",
           }),
         ]),
       );

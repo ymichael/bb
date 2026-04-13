@@ -30,7 +30,7 @@ function createThread(overrides: Partial<ThreadListEntry> = {}): ThreadListEntry
     createdAt: 1,
     updatedAt: 2,
     hasPendingInteraction: false,
-    environmentKind: null,
+    environmentWorkspaceDisplayKind: "other",
     ...overrides,
   };
 }
@@ -85,13 +85,13 @@ describe("ThreadRow", () => {
   });
 
   it("shows a worktree environment icon", () => {
-    renderThreadRow(createThread({ environmentKind: "worktree" }));
+    renderThreadRow(createThread({ environmentWorkspaceDisplayKind: "git-worktree" }));
 
-    expect(screen.getByLabelText("Worktree environment")).not.toBeNull();
+    expect(screen.getByLabelText("Git worktree environment")).not.toBeNull();
   });
 
   it("shows a sandbox environment icon", () => {
-    renderThreadRow(createThread({ environmentKind: "sandbox" }));
+    renderThreadRow(createThread({ environmentWorkspaceDisplayKind: "sandbox" }));
 
     expect(screen.getByLabelText("Sandbox environment")).not.toBeNull();
   });

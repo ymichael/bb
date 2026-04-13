@@ -10,12 +10,12 @@ import {
   ne,
 } from "drizzle-orm";
 import type {
-  HostType,
+  EnvironmentWorkspaceDisplayKind,
   ThreadChangeKind,
-  ThreadEnvironmentKind,
   ThreadStatus,
   ThreadType,
 } from "@bb/domain";
+import { resolveEnvironmentWorkspaceDisplayKind } from "@bb/domain";
 import type { DbConnection } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
 import { environments, hosts, pendingInteractions, threads } from "../schema.js";
@@ -89,12 +89,7 @@ type ThreadRow = typeof threads.$inferSelect;
 
 export interface ThreadWithPendingInteractionState extends ThreadRow {
   hasPendingInteraction: boolean;
-  environmentKind: ThreadEnvironmentKind | null;
-}
-
-interface ResolveThreadEnvironmentKindArgs {
-  environmentIsWorktree: boolean | null;
-  hostType: HostType | null;
+  environmentWorkspaceDisplayKind: EnvironmentWorkspaceDisplayKind;
 }
 
 export interface CountLiveThreadsInEnvironmentArgs {
@@ -166,21 +161,6 @@ function buildListThreadsFilters(options: ListThreadsOptions) {
   ].filter((value) => value !== undefined);
 }
 
-function resolveThreadEnvironmentKind({
-  environmentIsWorktree,
-  hostType,
-}: ResolveThreadEnvironmentKindArgs): ThreadEnvironmentKind | null {
-  if (hostType === "ephemeral") {
-    return "sandbox";
-  }
-
-  if (environmentIsWorktree === true) {
-    return "worktree";
-  }
-
-  return null;
-}
-
 export function listThreads(
   db: DbConnection,
   options: ListThreadsOptions,
@@ -200,6 +180,7 @@ export function listThreadsWithPendingInteractionState(
   const rows = db
     .select({
       ...getTableColumns(threads),
+      environmentIsGitRepo: environments.isGitRepo,
       environmentIsWorktree: environments.isWorktree,
       hostType: hosts.type,
       pendingInteractionCount: count(pendingInteractions.id),
@@ -220,14 +201,18 @@ export function listThreadsWithPendingInteractionState(
     .all();
 
   return rows.map(({
+    environmentIsGitRepo,
     environmentIsWorktree,
     hostType,
     pendingInteractionCount,
     ...thread
   }) => ({
     ...thread,
-    environmentKind: resolveThreadEnvironmentKind({
-      environmentIsWorktree,
+    environmentWorkspaceDisplayKind: resolveEnvironmentWorkspaceDisplayKind({
+      environment: {
+        isGitRepo: environmentIsGitRepo,
+        isWorktree: environmentIsWorktree,
+      },
       hostType,
     }),
     hasPendingInteraction: pendingInteractionCount > 0,
