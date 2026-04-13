@@ -4,6 +4,7 @@ import { promisify } from "node:util";
 import { serve } from "@hono/node-server";
 import {
   healthResponseSchema,
+  openWorkspaceRequestSchema,
   openRequestSchema,
   pathsExistRequestSchema,
   restartRequestSchema,
@@ -11,21 +12,34 @@ import {
   type HostDaemonActiveThread,
   type HostDaemonLocalSchema,
   type HostPlatform,
+  type OpenWorkspaceRequest,
+  type WorkspaceOpenTarget,
 } from "@bb/host-daemon-contract";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { HTTPException } from "hono/http-exception";
 import open from "open";
 import type { HostDaemonLocalApiConfig } from "./local-api-config.js";
+import {
+  listWorkspaceOpenTargets,
+  openWorkspaceInTarget,
+  WorkspaceOpenTargetError,
+} from "./workspace-open-targets.js";
 
 const execFileAsync = promisify(execFile);
+
+export type OpenPathHandler = (path: string) => Promise<void>;
+export type WorkspaceOpenTargetListHandler = () => Promise<WorkspaceOpenTarget[]>;
+export type WorkspaceOpenHandler = (request: OpenWorkspaceRequest) => Promise<void>;
 
 export interface StartLocalApiServerOptions {
   hostId: string;
   localApiConfig: HostDaemonLocalApiConfig;
   serverUrl: string;
   getConnected: () => boolean;
-  openPath?: (path: string) => Promise<void>;
+  listWorkspaceOpenTargets?: WorkspaceOpenTargetListHandler;
+  openPath?: OpenPathHandler;
+  openWorkspace?: WorkspaceOpenHandler;
   pickFolder?: () => Promise<string | null>;
   listActiveThreads: () => HostDaemonActiveThread[];
   restart: () => Promise<void> | void;
@@ -115,6 +129,25 @@ export async function startLocalApiServer(
       payload.paths.map(async (path) => [path, await pathExists(path)] as const),
     );
     return c.json({ existence: Object.fromEntries(entries) });
+  });
+
+  get("/workspace-open-targets", async (c) =>
+    c.json({
+      targets: await (options.listWorkspaceOpenTargets ?? listWorkspaceOpenTargets)(),
+    }),
+  );
+
+  post("/open-workspace", openWorkspaceRequestSchema, async (c, payload) => {
+    try {
+      await (options.openWorkspace ?? openWorkspaceInTarget)(payload);
+    } catch (error) {
+      if (error instanceof WorkspaceOpenTargetError) {
+        throw new HTTPException(400, { message: error.message });
+      }
+      throw error;
+    }
+
+    return c.json({});
   });
 
   post("/pick-folder", async (c) => {

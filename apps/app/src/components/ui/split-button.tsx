@@ -1,3 +1,4 @@
+import { Fragment, type ReactNode } from "react";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { buttonVariants, type ButtonProps } from "@/components/ui/button";
@@ -5,12 +6,16 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
 interface SplitButtonAction {
+  groupLabel?: string;
   label: string;
   onSelect: () => void;
+  content?: ReactNode;
 }
 
 interface SplitButtonProps {
@@ -21,6 +26,8 @@ interface SplitButtonProps {
   disabled?: boolean;
   /** Applied to both the primary and trigger buttons (on top of variant/size). */
   className?: string;
+  triggerLabel?: string;
+  mobileTitle?: string;
 }
 
 function SplitButton({
@@ -30,6 +37,8 @@ function SplitButton({
   size = "sm",
   disabled = false,
   className,
+  triggerLabel = "More actions",
+  mobileTitle,
 }: SplitButtonProps) {
   const base = cn(buttonVariants({ variant, size }), className);
 
@@ -39,9 +48,11 @@ function SplitButton({
         type="button"
         disabled={disabled}
         className={cn(base, "rounded-r-none border-r-0 focus-visible:z-10")}
+        aria-label={primaryAction.label}
+        title={primaryAction.label}
         onClick={primaryAction.onSelect}
       >
-        {primaryAction.label}
+        {primaryAction.content ?? primaryAction.label}
       </button>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
@@ -49,20 +60,36 @@ function SplitButton({
             type="button"
             disabled={disabled}
             className={cn(base, "rounded-l-none px-1 focus-visible:z-10")}
-            aria-label="More actions"
+            aria-label={triggerLabel}
+            title={triggerLabel}
           >
             <ChevronDown className="size-3" />
           </button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" sideOffset={2}>
-          {secondaryActions.map((action) => (
-            <DropdownMenuItem
-              key={action.label}
-              onSelect={action.onSelect}
-            >
-              {action.label}
-            </DropdownMenuItem>
-          ))}
+        <DropdownMenuContent align="end" sideOffset={2} mobileTitle={mobileTitle}>
+          {secondaryActions.map((action, index) => {
+            const previousAction = secondaryActions[index - 1];
+            const showGroupLabel =
+              action.groupLabel !== undefined &&
+              action.groupLabel !== previousAction?.groupLabel;
+
+            return (
+              <Fragment key={action.label}>
+                {showGroupLabel ? (
+                  <>
+                    {index > 0 ? <DropdownMenuSeparator /> : null}
+                    <DropdownMenuLabel>{action.groupLabel}</DropdownMenuLabel>
+                  </>
+                ) : null}
+                <DropdownMenuItem
+                  onSelect={action.onSelect}
+                  textValue={action.label}
+                >
+                  {action.content ?? action.label}
+                </DropdownMenuItem>
+              </Fragment>
+            );
+          })}
         </DropdownMenuContent>
       </DropdownMenu>
     </div>

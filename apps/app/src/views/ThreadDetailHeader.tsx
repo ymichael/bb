@@ -25,6 +25,7 @@ interface ThreadDetailHeaderProps {
   onToggleSecondaryPanel: () => void;
   threadHeaderGitActions: ThreadHeaderGitAction[];
   threadTitle: string;
+  workspaceOpenButton?: ReactNode;
 }
 
 export function ThreadDetailHeader({
@@ -37,6 +38,7 @@ export function ThreadDetailHeader({
   onToggleSecondaryPanel,
   threadHeaderGitActions,
   threadTitle,
+  workspaceOpenButton,
 }: ThreadDetailHeaderProps) {
   const [primaryAction, ...secondaryActions] = threadHeaderGitActions;
 
@@ -53,6 +55,7 @@ export function ThreadDetailHeader({
           ) : null}
         </div>
         <div className="flex shrink-0 items-center gap-1">
+          {workspaceOpenButton}
           {primaryAction && secondaryActions.length > 0 ? (
             <SplitButton
               variant="outline"

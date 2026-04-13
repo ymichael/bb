@@ -19,6 +19,41 @@ export const openRequestSchema = z.object({
 });
 export type OpenRequest = z.infer<typeof openRequestSchema>;
 
+export const workspaceOpenTargetIdValues = [
+  "vscode",
+  "cursor",
+  "sublime-text",
+  "zed",
+  "windsurf",
+  "antigravity",
+  "finder",
+  "terminal",
+  "iterm2",
+  "ghostty",
+  "xcode",
+] as const;
+export const workspaceOpenTargetIdSchema = z.enum(workspaceOpenTargetIdValues);
+export type WorkspaceOpenTargetId = z.infer<typeof workspaceOpenTargetIdSchema>;
+
+export const workspaceOpenTargetSchema = z.object({
+  id: workspaceOpenTargetIdSchema,
+  label: z.string().min(1),
+});
+export type WorkspaceOpenTarget = z.infer<typeof workspaceOpenTargetSchema>;
+
+export const workspaceOpenTargetsResponseSchema = z.object({
+  targets: z.array(workspaceOpenTargetSchema),
+});
+export type WorkspaceOpenTargetsResponse = z.infer<
+  typeof workspaceOpenTargetsResponseSchema
+>;
+
+export const openWorkspaceRequestSchema = z.object({
+  path: z.string().min(1),
+  targetId: workspaceOpenTargetIdSchema,
+});
+export type OpenWorkspaceRequest = z.infer<typeof openWorkspaceRequestSchema>;
+
 export const restartRequestSchema = z.object({
   force: z.boolean().optional(),
 });
@@ -70,6 +105,12 @@ export type HostDaemonLocalSchema = {
   };
   "/open-path": {
     $post: Endpoint<{ json: OpenRequest }, Record<string, never>>;
+  };
+  "/workspace-open-targets": {
+    $get: Endpoint<EmptyInput, WorkspaceOpenTargetsResponse>;
+  };
+  "/open-workspace": {
+    $post: Endpoint<{ json: OpenWorkspaceRequest }, Record<string, never>>;
   };
   "/pick-folder": {
     $post: Endpoint<EmptyInput, PickFolderResponse>;

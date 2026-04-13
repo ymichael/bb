@@ -29,12 +29,14 @@ import { PageShell } from "@/components/layout/PageShell";
 import { ThreadArchiveConfirmationDialog } from "@/components/thread/ThreadArchiveConfirmationDialog";
 import { ThreadDeleteDialog } from "@/components/thread/ThreadDeleteDialog";
 import { ThreadActionsMenu } from "@/components/thread/ThreadActionsMenu";
+import { ThreadWorkspaceOpenButton } from "@/components/thread/ThreadWorkspaceOpenButton";
 import { formatEnvironmentDisplay } from "@bb/core-ui";
 import { Container, Monitor } from "lucide-react";
 import { findLatestActivityRowId } from "@bb/ui-core";
 import type { Thread } from "@bb/domain";
 import { useDialogState } from "@/hooks/useDialogState";
 import { useHostDaemon } from "@/hooks/useHostDaemon";
+import { useWorkspaceOpenTargets } from "@/hooks/useWorkspaceOpenTargets";
 import { useHost } from "@/hooks/queries/system-queries";
 import { usePreferredTheme } from "@/hooks/useTheme";
 import { useStoredShowAllEvents } from "@/lib/show-all-events-preference";
@@ -57,6 +59,7 @@ import { useThreadStorageViewer } from "./useThreadStorageViewer";
 import { useEnvironmentMergeBase } from "./useEnvironmentMergeBase";
 import { useThreadGitActions } from "./useThreadGitActions";
 import { useThreadReadTracking } from "./useThreadReadTracking";
+import { resolveThreadWorkspaceOpenPath } from "./threadWorkspaceOpenButton";
 import { toast } from "sonner";
 
 export function ThreadDetailView() {
@@ -192,7 +195,18 @@ export function ThreadDetailView() {
     workspaceStatusError ? undefined : (workStatus ?? undefined);
   const workspaceWorkingTree = workspaceStatus?.workingTree;
   const workspaceBranch = workspaceStatus?.branch;
-  const { isLocalHost, openPath } = useHostDaemon();
+  const {
+    isLocalHost,
+    openPath,
+  } = useHostDaemon();
+  const threadEnvironmentIsLocal = environment ? isLocalHost(environment.hostId) : false;
+  const { openWorkspace, workspaceOpenTargets } = useWorkspaceOpenTargets({
+    enabled: Boolean(
+      environment &&
+        threadEnvironmentIsLocal &&
+        environment.status === "ready",
+    ),
+  });
   const { data: environmentHost } = useHost(environment?.hostId);
   const isReasoningBlockActive = false;
   const isThreadTimelinePending = timelineLoading && threadDetailRows.length === 0;
@@ -409,7 +423,7 @@ export function ThreadDetailView() {
   const threadEnvironmentDisplay = environment
     ? formatEnvironmentDisplay({
         environment,
-        isLocalHost: isLocalHost(environment.hostId),
+        isLocalHost: threadEnvironmentIsLocal,
         hostName: environmentHost?.name,
         hostType: environmentHost?.type,
         hostProvider: environmentHost?.provider,
@@ -549,6 +563,24 @@ export function ThreadDetailView() {
         ? "thread-info"
         : activeSecondaryPanel;
   const hasParsedGitDiffFiles = parsedGitDiffFileEntries.length > 0;
+  const workspaceOpenPath = resolveThreadWorkspaceOpenPath({
+    canOpenWorkspace: openWorkspace !== null,
+    environment,
+    hasWorkspaceOpenTargets: workspaceOpenTargets.length > 0,
+    threadEnvironmentIsLocal,
+  });
+  const workspaceOpenButton =
+    workspaceOpenPath && openWorkspace ? (
+      <ThreadWorkspaceOpenButton
+        targets={workspaceOpenTargets}
+        onOpenWorkspace={(targetId) =>
+          openWorkspace({
+            path: workspaceOpenPath,
+            targetId,
+          })
+        }
+      />
+    ) : undefined;
   const timelineHeader = (
     <ThreadDetailHeader
       actionsMenu={threadActionsMenu}
@@ -560,6 +592,7 @@ export function ThreadDetailView() {
       onToggleSecondaryPanel={toggleThreadSecondaryPanel}
       threadHeaderGitActions={gitActions.threadHeaderGitActions}
       threadTitle={threadTitle}
+      workspaceOpenButton={workspaceOpenButton}
     />
   );
   const composerFooter = (
@@ -648,7 +681,7 @@ export function ThreadDetailView() {
           threadEnvironmentType,
           threadEnvironmentValue,
           threadHostConnected: environmentHost ? environmentHost.status === "connected" : undefined,
-          threadHostIsLocal: environment ? isLocalHost(environment.hostId) : undefined,
+          threadHostIsLocal: environment ? threadEnvironmentIsLocal : undefined,
           threadHostName: environmentHost?.name,
           threadGitStatusDisplay,
           threadGitStatusLabelClass,
@@ -684,7 +717,7 @@ export function ThreadDetailView() {
           onGitDiffDisplayModeChange: handleGitDiffDisplayModeChange,
           onGitDiffSelectionChange: onGitDiffSelectionChange,
           onOpenFile:
-            environment?.path && isLocalHost(environment.hostId)
+            environment?.path && threadEnvironmentIsLocal
               ? (relativePath: string) => {
                   const fullPath = `${environment.path}/${relativePath}`;
                   void openPath?.(fullPath);

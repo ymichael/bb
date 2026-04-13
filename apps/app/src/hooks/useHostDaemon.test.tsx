@@ -3,6 +3,9 @@
 import { Suspense, useEffect, type ReactNode } from "react"
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import type { Host } from "@bb/domain"
+import {
+  openRequestSchema,
+} from "@bb/host-daemon-contract"
 import type { HostDaemonStatusSnapshot } from "@/lib/api-host-daemon"
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness"
 import { resetFakeReconnectingWebSockets } from "@/test/fake-reconnecting-websocket"
@@ -135,8 +138,7 @@ function installHostDaemonFetchRoutes(
       pathname: "/open-path",
       port: 4123,
       handler: async (request) => {
-        const bodyText = await request.text()
-        const parsedBody = JSON.parse(bodyText) as { path: string }
+        const parsedBody = openRequestSchema.parse(await request.json())
         openPathRequests.push(parsedBody.path)
         return jsonResponse({})
       },

@@ -1,8 +1,9 @@
 import { atom } from "jotai";
+import type { WorkspaceOpenTarget } from "@bb/host-daemon-contract";
 import type { HostDaemonStatusSnapshot } from "./api-host-daemon";
 import type { SystemConfigResponse } from "@bb/server-contract";
 import { apiClient } from "./api-server";
-import { fetchHostStatus } from "./api-host-daemon";
+import { fetchHostStatus, fetchWorkspaceOpenTargets } from "./api-host-daemon";
 import { wsManager } from "./ws";
 
 async function loadSystemConfig(): Promise<SystemConfigResponse> {
@@ -91,6 +92,21 @@ export const localHostIdAtom = atom<Promise<string | null>>(async (get) => {
     return null;
   }
   return localHostStatus.hostId;
+});
+
+/** Workspace open targets available through the local host daemon. */
+export const localWorkspaceOpenTargetsAtom = atom<Promise<WorkspaceOpenTarget[]>>(async (get) => {
+  const localHostStatus = await get(localHostStatusAtom);
+  if (!localHostStatus?.connected) {
+    return [];
+  }
+
+  const config = await get(systemConfigAtom);
+  if (!config.hostDaemonPort) {
+    return [];
+  }
+
+  return fetchWorkspaceOpenTargets(config.hostDaemonPort);
 });
 
 // ---------------------------------------------------------------------------
