@@ -47,12 +47,16 @@ describe.sequential("fake provider smoke reuse integration", () => {
           path: missingPath,
         },
       });
-      const environmentId = thread.environmentId;
+      const erroredThread = await waitForThreadStatus(
+        harness.api,
+        thread.id,
+        "error",
+        TURN_TIMEOUT_MS,
+      );
+      const environmentId = erroredThread.environmentId;
       if (!environmentId) {
         throw new Error("Provisioning thread was missing an environment");
       }
-
-      await waitForThreadStatus(harness.api, thread.id, "error", TURN_TIMEOUT_MS);
 
       const environment = await getEnvironment(harness.api, environmentId);
       const events = await getThreadEvents(harness.api, thread.id);
