@@ -4,9 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsc --noEmit",
     "clean": "rimraf dist tsconfig.tsbuildinfo",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run --config vitest.config.ts",
     "test:e2b-smoke": "tsx src/e2b-smoke.ts",
     "auth:e2b-smoke": "tsx src/e2b-smoke/auth-connect.ts",
     "standalone:start": "tsx src/standalone/start.ts",
@@ -25,13 +25,15 @@
     "@bb/sandbox-host": "workspace:*",
     "@bb/sandbox-image": "workspace:*",
     "@bb/server": "workspace:*",
-    "@bb/server-contract": "workspace:*"
+    "@bb/server-contract": "workspace:*",
+    "zod": "^3.24.0"
   },
   "devDependencies": {
     "@bb/tsconfig": "workspace:*",
     "@types/node": "^22.0.0",
     "rimraf": "^6.1.0",
     "tsx": "^4.21.0",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "vitest": "^4.1.1"
   }
 }

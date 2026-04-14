@@ -57,7 +57,7 @@
       "dependsOn": ["build", "^build"]
     },
     "test:e2b-smoke": {
-      "dependsOn": ["build", "^build"],
+      "dependsOn": ["typecheck", "^build"],
       "cache": false,
       "passThroughEnv": [
         "BB_CLOUD_AUTH_FIXTURE_PATH",

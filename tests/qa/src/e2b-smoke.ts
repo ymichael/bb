@@ -5,14 +5,14 @@ import { setTimeout as delay } from "node:timers/promises";
 import {
   deleteSandboxProviderCredentialByProviderId,
   upsertSandboxProviderCredential,
-} from "../../../packages/db/src/index.js";
-import type { DbConnection } from "../../../packages/db/src/index.js";
+} from "@bb/db";
+import type { DbConnection } from "@bb/db";
 import {
   buildCloudAuthCredentialUpsert,
   createCloudAuthCrypto,
   type ClaudeStoredCredential,
   type CodexStoredCredential,
-} from "../../../packages/agent-provider-auth/src/index.js";
+} from "@bb/agent-provider-auth";
 import { createCloudAuthService } from "../../../apps/server/src/services/cloud-auth/service.js";
 import { createSandboxEnvService } from "../../../apps/server/src/services/sandbox-env/service.js";
 import type { ServerRuntimeConfig } from "../../../apps/server/src/types.js";
@@ -23,28 +23,29 @@ import {
   HOST_RUNTIME_MATERIAL_FILE_NAME,
   hostAuthStateSchema,
   normalizeServerUrl,
-} from "../../../packages/host-daemon-contract/src/index.js";
+} from "@bb/host-daemon-contract";
 import {
   createHostJoinResponseSchema,
   projectResponseSchema,
-} from "../../../packages/server-contract/src/index.js";
+} from "@bb/server-contract";
 import {
   availableModelSchema,
+  hostSchema,
   threadSchema,
   type AvailableModel,
   type ThreadStatus,
-} from "../../../packages/domain/src/index.js";
+} from "@bb/domain";
 import {
   createSandbox,
   resumeSandbox,
   runSandboxCommand,
   writeSandboxFile,
-} from "../../../packages/sandbox-host/src/index.js";
+} from "@bb/sandbox-host";
 import {
   buildHostRuntimeMaterialState,
   hostRuntimeMaterialStateSchema,
-} from "../../../packages/host-runtime-material/src/index.js";
-import { PI_DEFAULT_MODEL_PER_PROVIDER } from "../../../packages/agent-providers/src/index.js";
+} from "@bb/host-runtime-material";
+import { PI_DEFAULT_MODEL_PER_PROVIDER } from "@bb/agent-providers";
 import { loadSandboxDaemonArtifacts } from "../../../packages/sandbox-host/src/daemon-artifacts.js";
 import {
   SANDBOX_BB_EXECUTABLE_PATH,
@@ -57,7 +58,7 @@ import {
   buildSandboxDaemonEnv,
   startSandboxDaemon,
 } from "../../../packages/sandbox-host/src/provision.js";
-import { resolveSandboxImageTemplate } from "../../../packages/sandbox-image/src/index.js";
+import { resolveSandboxImageTemplate } from "@bb/sandbox-image";
 import {
   createProject,
   createHostJoin,
@@ -434,7 +435,7 @@ async function waitForHostStatus(
           return null;
         }
 
-        const host = await response.json();
+        const host = hostSchema.parse(await response.json());
         return host?.status === expectedStatus ? host : null;
       } catch {
         return null;

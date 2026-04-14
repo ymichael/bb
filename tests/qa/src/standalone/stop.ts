@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import {
   cleanupStandaloneInstance,
   killProcess,
+  parseStandaloneState,
   readStandaloneStateRuntime,
 } from "../shared.js";
 
@@ -18,7 +19,7 @@ function parseStatePath() {
 async function main() {
   const statePath = parseStatePath();
   const rawState = await fs.readFile(statePath, "utf8");
-  const state = JSON.parse(rawState);
+  const state = parseStandaloneState(rawState);
   const runtime = readStandaloneStateRuntime(state);
 
   await killProcess(runtime.daemonPid).catch(() => undefined);

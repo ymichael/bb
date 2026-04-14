@@ -2,9 +2,23 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { loadQaAuthFixture } from "../../../tests/qa/src/e2b-smoke/fixture.js";
+import { z } from "zod";
+import { loadQaAuthFixture } from "../src/e2b-smoke/fixture.js";
 
 const FIXTURE_PATH_ENV_VAR = "BB_CLOUD_AUTH_FIXTURE_PATH";
+const persistedClaudeFixtureSchema = z.object({
+  claude: z.object({
+    access: z.string(),
+    refresh: z.string(),
+  }).optional(),
+});
+const persistedCodexFixtureSchema = z.object({
+  "openai-codex": z.object({
+    access: z.string(),
+    idToken: z.string(),
+    refresh: z.string(),
+  }).optional(),
+});
 
 describe("e2b smoke auth fixture", () => {
   const originalFixturePath = process.env[FIXTURE_PATH_ENV_VAR];
@@ -76,9 +90,9 @@ describe("e2b smoke auth fixture", () => {
         access: "new-claude-access-token",
         refresh: "new-claude-refresh-token",
       });
-      const persisted = JSON.parse(await readFile(fixturePath, "utf8")) as {
-        claude?: { access: string; refresh: string };
-      };
+      const persisted = persistedClaudeFixtureSchema.parse(
+        JSON.parse(await readFile(fixturePath, "utf8")),
+      );
       expect(persisted.claude).toMatchObject({
         access: "new-claude-access-token",
         refresh: "new-claude-refresh-token",
@@ -129,13 +143,9 @@ describe("e2b smoke auth fixture", () => {
         idToken: "new-codex-id-token",
         refresh: "new-codex-refresh-token",
       });
-      const persisted = JSON.parse(await readFile(fixturePath, "utf8")) as {
-        "openai-codex"?: {
-          access: string;
-          idToken: string;
-          refresh: string;
-        };
-      };
+      const persisted = persistedCodexFixtureSchema.parse(
+        JSON.parse(await readFile(fixturePath, "utf8")),
+      );
       expect(persisted["openai-codex"]).toMatchObject({
         access: "new-codex-access-token",
         idToken: "new-codex-id-token",

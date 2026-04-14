@@ -7,6 +7,17 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
+import { hostSchema } from "@bb/domain";
+import type { Host } from "@bb/domain";
+import {
+  createHostJoinResponseSchema,
+  projectResponseSchema,
+  type CreateHostJoinRequest,
+  type CreateHostJoinResponse,
+  type CreateProjectRequest,
+  type ProjectResponse,
+} from "@bb/server-contract";
+import { z } from "zod";
 
 const execFile = promisify(execFileCallback);
 
@@ -23,53 +34,6 @@ interface StandaloneStateRuntime {
   parentPid: number | null;
   serverPid: number | null;
   tmpRoot: string | null;
-}
-
-interface StandaloneState {
-  daemon?: {
-    pid?: number | null;
-  };
-  daemonPid?: number | null;
-  instanceId?: string | null;
-  parentPid?: number | null;
-  paths?: {
-    tmpRoot?: string | null;
-  };
-  server?: {
-    pid?: number | null;
-  };
-  serverPid?: number | null;
-  tmpRoot?: string | null;
-}
-
-interface ProjectCreateRequest {
-  name: string;
-  source: {
-    hostId: string;
-    path: string;
-    type: string;
-  };
-}
-
-interface ProjectCreateResponse {
-  id: string;
-}
-
-interface HostJoinRequest {
-  externalId?: string;
-  hostId?: string;
-  hostType: string;
-  provider?: string;
-}
-
-interface HostJoinResponse {
-  hostId: string;
-  joinCode: string;
-}
-
-interface ConnectedHostResponse {
-  id: string;
-  status: string;
 }
 
 interface SpawnLoggedProcessOptions {
@@ -132,6 +96,24 @@ interface WaitForOptions {
   timeoutMs: number;
 }
 
+const standaloneStateSchema = z.object({
+  daemon: z.object({
+    pid: z.number().int().positive().nullable().optional(),
+  }).optional(),
+  instanceId: z.string().nullable().optional(),
+  parentPid: z.number().int().positive().nullable().optional(),
+  paths: z.object({
+    tmpRoot: z.string().nullable().optional(),
+  }).optional(),
+  server: z.object({
+    pid: z.number().int().positive().nullable().optional(),
+  }).optional(),
+});
+
+type StandaloneState = z.infer<typeof standaloneStateSchema>;
+
+const connectedHostListSchema = z.array(hostSchema);
+
 export const repoRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "../../..",
@@ -155,12 +137,16 @@ export function readStandaloneStateRuntime(
   state: StandaloneState | null,
 ): StandaloneStateRuntime {
   return {
-    daemonPid: state?.daemon?.pid ?? state?.daemonPid ?? null,
+    daemonPid: state?.daemon?.pid ?? null,
     instanceId: state?.instanceId ?? null,
     parentPid: state?.parentPid ?? null,
-    serverPid: state?.server?.pid ?? state?.serverPid ?? null,
-    tmpRoot: state?.paths?.tmpRoot ?? state?.tmpRoot ?? null,
+    serverPid: state?.server?.pid ?? null,
+    tmpRoot: state?.paths?.tmpRoot ?? null,
   };
+}
+
+export function parseStandaloneState(raw: string): StandaloneState {
+  return standaloneStateSchema.parse(JSON.parse(raw));
 }
 
 async function resolveProjectEnvCandidates(): Promise<string[]> {
@@ -210,8 +196,8 @@ export async function createTestGitRepo(repoDir: string): Promise<string> {
 
 export async function createProject(
   serverUrl: string,
-  project: ProjectCreateRequest,
-): Promise<ProjectCreateResponse> {
+  project: CreateProjectRequest,
+): Promise<ProjectResponse> {
   const response = await fetch(`${serverUrl}/api/v1/projects`, {
     method: "POST",
     headers: {
@@ -224,13 +210,13 @@ export async function createProject(
       `Failed to create project: ${response.status} ${await response.text()}`,
     );
   }
-  return response.json();
+  return projectResponseSchema.parse(await response.json());
 }
 
 export async function createHostJoin(
   serverUrl: string,
-  body: HostJoinRequest = { hostType: "persistent" },
-): Promise<HostJoinResponse> {
+  body: CreateHostJoinRequest = { hostType: "persistent" },
+): Promise<CreateHostJoinResponse> {
   const response = await fetch(`${serverUrl}/api/v1/hosts/join`, {
     method: "POST",
     headers: {
@@ -243,7 +229,7 @@ export async function createHostJoin(
       `Failed to create host join material: ${response.status} ${await response.text()}`,
     );
   }
-  return response.json();
+  return createHostJoinResponseSchema.parse(await response.json());
 }
 
 export async function killProcess(pid: number | null | undefined): Promise<void> {
@@ -547,7 +533,7 @@ export async function startQaServer(
 async function readJsonIfExists(filePath: string): Promise<StandaloneState | null> {
   try {
     const raw = await fs.readFile(filePath, "utf8");
-    return JSON.parse(raw);
+    return parseStandaloneState(raw);
   } catch (error) {
     if (isNodeError(error) && error.code === "ENOENT") {
       return null;
@@ -672,7 +658,10 @@ export async function cleanupStandaloneOrphans(): Promise<CleanupStandaloneResul
     }
     const cleanupResult = await cleanupStandaloneInstance({
       ...state,
-      tmpRoot,
+      paths: {
+        ...state?.paths,
+        tmpRoot,
+      },
     }).catch(() => ({
       killedPids: [],
       removedRoot: null,
@@ -749,7 +738,7 @@ export async function waitFor<TResult>(
 
 export async function waitForConnectedHost(
   serverUrl: string,
-): Promise<ConnectedHostResponse> {
+): Promise<Host> {
   return waitFor(
     async () => {
       let response;
@@ -761,7 +750,7 @@ export async function waitForConnectedHost(
       if (!response.ok) {
         return null;
       }
-      const hosts: ConnectedHostResponse[] = await response.json();
+      const hosts = connectedHostListSchema.parse(await response.json());
       return hosts.find((host) => host.status === "connected") ?? null;
     },
     {

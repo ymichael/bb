@@ -2,11 +2,10 @@ import { stdin, stdout } from "node:process";
 import { createInterface } from "node:readline/promises";
 import {
   getCloudAuthProviderDefinition,
+  type CloudAuthProviderDefinition,
   type StoredCloudAuthCredential,
-} from "../../../../packages/agent-provider-auth/src/index.js";
-import type {
-  CloudAuthProviderDefinition,
-} from "../../../../packages/agent-provider-auth/src/provider-definitions.js";
+} from "@bb/agent-provider-auth";
+
 import {
   startOAuthCallbackServer,
   type OAuthCallbackPayload,

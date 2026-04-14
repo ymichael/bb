@@ -1,9 +1,10 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { z } from "zod";
 import {
   getCloudAuthProviderDefinition,
   type StoredCloudAuthCredential,
-} from "../../../../packages/agent-provider-auth/src/index.js";
+} from "@bb/agent-provider-auth";
 
 export const DEFAULT_QA_AUTH_FIXTURE_PATH = "/tmp/bb-oauth-handshakes/credentials.json";
 export const E2B_SMOKE_README_PATH = "tests/qa/src/e2b-smoke/README.md";
@@ -50,99 +51,28 @@ export interface QaAuthCoverageSummary {
   hasSubscriptionCoverage: boolean;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
+const smokeQaClaudeFixtureSchema = z.object({
+  access: z.string(),
+  expires: z.number(),
+  refresh: z.string(),
+});
 
-function requireFixtureString(
-  record: Record<string, unknown>,
-  fieldName: string,
-  label: string,
-): string {
-  const value = record[fieldName];
-  if (typeof value !== "string") {
-    throw new Error(`Invalid ${label}`);
-  }
-  return value;
-}
+const smokeQaCodexFixtureSchema = z.object({
+  access: z.string(),
+  accountId: z.string().optional(),
+  expires: z.number(),
+  idToken: z.string().optional(),
+  refresh: z.string(),
+});
 
-function requireFixtureNumber(
-  record: Record<string, unknown>,
-  fieldName: string,
-  label: string,
-): number {
-  const value = record[fieldName];
-  if (typeof value !== "number") {
-    throw new Error(`Invalid ${label}`);
-  }
-  return value;
-}
+const smokeQaAuthFixtureSchema = z.object({
+  claude: smokeQaClaudeFixtureSchema.optional(),
+  createdAt: z.string().optional(),
+  "openai-codex": smokeQaCodexFixtureSchema.optional(),
+});
 
 function parseQaAuthFixture(raw: string): SmokeQaAuthFixture {
-  const value = JSON.parse(raw);
-  if (!isRecord(value)) {
-    throw new Error("Cloud auth fixture must be an object");
-  }
-
-  const claude = value.claude;
-  if (
-    claude !== undefined
-    && (
-      !isRecord(claude)
-      || typeof claude.access !== "string"
-      || typeof claude.expires !== "number"
-      || typeof claude.refresh !== "string"
-    )
-  ) {
-    throw new Error("Invalid Claude auth fixture");
-  }
-
-  const codex = value["openai-codex"];
-  if (
-    codex !== undefined
-    && (
-      !isRecord(codex)
-      || typeof codex.access !== "string"
-      || typeof codex.expires !== "number"
-      || typeof codex.refresh !== "string"
-      || (codex.accountId !== undefined && typeof codex.accountId !== "string")
-      || (codex.idToken !== undefined && typeof codex.idToken !== "string")
-    )
-  ) {
-    throw new Error("Invalid Codex auth fixture");
-  }
-
-  const createdAt = value.createdAt;
-  if (createdAt !== undefined && typeof createdAt !== "string") {
-    throw new Error("Invalid cloud auth fixture createdAt");
-  }
-
-  const claudeFixture =
-    claude && isRecord(claude)
-      ? {
-          access: requireFixtureString(claude, "access", "Claude auth fixture"),
-          expires: requireFixtureNumber(claude, "expires", "Claude auth fixture"),
-          refresh: requireFixtureString(claude, "refresh", "Claude auth fixture"),
-        }
-      : null;
-  const codexFixture =
-    codex && isRecord(codex)
-      ? {
-          access: requireFixtureString(codex, "access", "Codex auth fixture"),
-          ...(typeof codex.accountId === "string"
-            ? { accountId: codex.accountId }
-            : {}),
-          expires: requireFixtureNumber(codex, "expires", "Codex auth fixture"),
-          ...(typeof codex.idToken === "string" ? { idToken: codex.idToken } : {}),
-          refresh: requireFixtureString(codex, "refresh", "Codex auth fixture"),
-        }
-      : null;
-
-  return {
-    ...(typeof createdAt === "string" ? { createdAt } : {}),
-    ...(claudeFixture ? { claude: claudeFixture } : {}),
-    ...(codexFixture ? { "openai-codex": codexFixture } : {}),
-  };
+  return smokeQaAuthFixtureSchema.parse(JSON.parse(raw));
 }
 
 function serializeQaAuthFixture(fixture: SmokeQaAuthFixture): string {

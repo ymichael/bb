@@ -13,6 +13,7 @@ export {
   getCloudAuthProviderDefinition,
   refreshStoredCloudAuthCredential,
   listCloudAuthProviderDefinitions,
+  type CloudAuthProviderDefinition,
   type ClaudeStoredCredential,
   type CodexStoredCredential,
   type StoredCloudAuthCredential,
