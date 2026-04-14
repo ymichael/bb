@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { cn } from "../../cn.js";
 import {
   COLLAPSIBLE_HEADER_STATIC_TONE_CLASS,
@@ -7,6 +7,7 @@ import {
 } from "../../disclosure.js";
 import type { ViewAssistantReasoningMessage } from "@bb/domain";
 import { ConversationMarkdown } from "../ConversationMarkdown.js";
+import { useLatestInitialExpanded } from "../latestInitialExpanded.js";
 import {
   EVENT_LARGE_DETAIL_MAX_HEIGHT_CLASS,
   ExpandableDetailScrollArea,
@@ -37,20 +38,22 @@ function isReasoningExpandable(reasoning: string, title: string): boolean {
   return normalizedReasoning !== normalizedTitle;
 }
 
-export function ReasoningRow({ message }: { message: ViewAssistantReasoningMessage }) {
+export function ReasoningRow({
+  message,
+  initialExpanded = false,
+}: {
+  message: ViewAssistantReasoningMessage;
+  initialExpanded?: boolean;
+}) {
   const isStreaming = message.status === "streaming";
-  const [isExpanded, setIsExpanded] = useState(isStreaming);
   const title = useMemo(() => getReasoningTitle(message.text), [message.text]);
   const expandable = useMemo(
     () => isStreaming || isReasoningExpandable(message.text, title),
     [isStreaming, message.text, title],
   );
-  const headerToneClass = getCollapsibleHeaderToneClass(isExpanded);
 
-  useEffect(() => {
-    if (isStreaming) setIsExpanded(true);
-    if (!isStreaming && !expandable) setIsExpanded(false);
-  }, [expandable, isStreaming]);
+  const { isExpanded, onToggle } = useLatestInitialExpanded(initialExpanded || isStreaming);
+  const headerToneClass = getCollapsibleHeaderToneClass(isExpanded);
 
   if (!expandable) {
     return (
@@ -74,7 +77,7 @@ export function ReasoningRow({ message }: { message: ViewAssistantReasoningMessa
           summaryContent={isExpanded ? "Thinking..." : title}
           headerToneClass={headerToneClass}
           headerButtonClassName="italic"
-          onToggle={() => setIsExpanded((prev) => !prev)}
+          onToggle={onToggle}
         >
           <ExpandableDetailScrollArea
             className="italic text-muted-foreground"

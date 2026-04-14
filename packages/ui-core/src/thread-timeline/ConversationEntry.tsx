@@ -50,7 +50,7 @@ function ConversationEntryComponent({
         />
       );
     case "assistant-reasoning":
-      return <ReasoningRow message={message} />;
+      return <ReasoningRow message={message} initialExpanded={initialExpanded} />;
     case "assistant-text":
       return <AssistantMessageRow message={message} />;
     case "tool-exploring":
