@@ -88,10 +88,9 @@ describe("internal command result idempotency", () => {
             source: "client/thread/start",
           },
           input: [{ type: "text", text: "Start once" }],
-          metadataResolved: true,
           provisionEventSequence,
+          stage: "environment-provisioning",
           titleProvided: true,
-          workspaceReadyEventSequence: null,
         }),
       });
       const command = queueEnvironmentProvisionLifecycleCommand(harness, {

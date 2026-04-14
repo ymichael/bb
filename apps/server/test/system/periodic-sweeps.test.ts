@@ -479,8 +479,6 @@ describe("periodic sweeps", () => {
         threadId: thread.id,
         kind: "provision",
         payload: JSON.stringify({
-          attachedEnvironmentId: environment.id,
-          branchSlug: null,
           environmentIntent: {
             type: "reuse",
             environmentId: environment.id,
@@ -494,10 +492,8 @@ describe("periodic sweeps", () => {
             source: "client/thread/start",
           },
           input: [{ type: "text", text: "short" }],
-          metadataResolved: false,
-          provisionEventSequence: null,
+          stage: "metadata-pending",
           titleProvided: false,
-          workspaceReadyEventSequence: null,
         }),
       });
 
