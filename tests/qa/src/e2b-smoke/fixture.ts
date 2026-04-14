@@ -1,12 +1,13 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { z } from "zod";
 import {
   getCloudAuthProviderDefinition,
   type StoredCloudAuthCredential,
-} from "../../../packages/agent-provider-auth/src/index.ts";
+} from "@bb/agent-provider-auth";
 
 export const DEFAULT_QA_AUTH_FIXTURE_PATH = "/tmp/bb-oauth-handshakes/credentials.json";
-export const E2B_SMOKE_README_PATH = "scripts/qa/e2b-smoke/README.md";
+export const E2B_SMOKE_README_PATH = "tests/qa/src/e2b-smoke/README.md";
 
 export type SmokeQaAuthProviderId = "claude-code" | "codex";
 
@@ -50,76 +51,28 @@ export interface QaAuthCoverageSummary {
   hasSubscriptionCoverage: boolean;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
+const smokeQaClaudeFixtureSchema = z.object({
+  access: z.string(),
+  expires: z.number(),
+  refresh: z.string(),
+});
+
+const smokeQaCodexFixtureSchema = z.object({
+  access: z.string(),
+  accountId: z.string().optional(),
+  expires: z.number(),
+  idToken: z.string().optional(),
+  refresh: z.string(),
+});
+
+const smokeQaAuthFixtureSchema = z.object({
+  claude: smokeQaClaudeFixtureSchema.optional(),
+  createdAt: z.string().optional(),
+  "openai-codex": smokeQaCodexFixtureSchema.optional(),
+});
 
 function parseQaAuthFixture(raw: string): SmokeQaAuthFixture {
-  const value = JSON.parse(raw);
-  if (!isRecord(value)) {
-    throw new Error("Cloud auth fixture must be an object");
-  }
-
-  const claude = value.claude;
-  if (
-    claude !== undefined
-    && (
-      !isRecord(claude)
-      || typeof claude.access !== "string"
-      || typeof claude.expires !== "number"
-      || typeof claude.refresh !== "string"
-    )
-  ) {
-    throw new Error("Invalid Claude auth fixture");
-  }
-
-  const codex = value["openai-codex"];
-  if (
-    codex !== undefined
-    && (
-      !isRecord(codex)
-      || typeof codex.access !== "string"
-      || typeof codex.expires !== "number"
-      || typeof codex.refresh !== "string"
-      || (codex.accountId !== undefined && typeof codex.accountId !== "string")
-      || (codex.idToken !== undefined && typeof codex.idToken !== "string")
-    )
-  ) {
-    throw new Error("Invalid Codex auth fixture");
-  }
-
-  const createdAt = value.createdAt;
-  if (createdAt !== undefined && typeof createdAt !== "string") {
-    throw new Error("Invalid cloud auth fixture createdAt");
-  }
-
-  return {
-    ...(typeof createdAt === "string" ? { createdAt } : {}),
-    ...(claude && isRecord(claude)
-      ? {
-          claude: {
-            access: claude.access,
-            expires: claude.expires,
-            refresh: claude.refresh,
-          },
-        }
-      : {}),
-    ...(codex && isRecord(codex)
-      ? {
-          "openai-codex": {
-            access: codex.access,
-            ...(typeof codex.accountId === "string"
-              ? { accountId: codex.accountId }
-              : {}),
-            expires: codex.expires,
-            ...(typeof codex.idToken === "string"
-              ? { idToken: codex.idToken }
-              : {}),
-            refresh: codex.refresh,
-          },
-        }
-      : {}),
-  };
+  return smokeQaAuthFixtureSchema.parse(JSON.parse(raw));
 }
 
 function serializeQaAuthFixture(fixture: SmokeQaAuthFixture): string {
@@ -142,7 +95,7 @@ async function writeQaAuthFixtureFile(
 
 async function enrichQaAuthFixture(
   fixture: SmokeQaAuthFixture,
-  notices: string[],
+  fixturePath: string,
 ): Promise<SmokeQaAuthFixture> {
   let nextFixture: SmokeQaAuthFixture = fixture;
 
@@ -164,6 +117,10 @@ async function enrichQaAuthFixture(
         ...nextFixture,
         ...buildFixtureFromCredential(refreshedCredential),
       };
+      await writeQaAuthFixtureFile({
+        fixture: nextFixture,
+        fixturePath,
+      });
     } catch {
       throw new Error(
         "Claude fixture refresh failed; reacquire it with the auth-connect helper.",
@@ -192,7 +149,7 @@ async function enrichQaAuthFixture(
       throw new Error("Codex credential refresh did not return an idToken");
     }
 
-    return {
+    nextFixture = {
       ...nextFixture,
       "openai-codex": {
         access: refreshedCredential.accessToken,
@@ -204,6 +161,11 @@ async function enrichQaAuthFixture(
         refresh: refreshedCredential.refreshToken,
       },
     };
+    await writeQaAuthFixtureFile({
+      fixture: nextFixture,
+      fixturePath,
+    });
+    return nextFixture;
   } catch {
     throw new Error(
       "Codex fixture refresh failed; reacquire it with the auth-connect helper.",
@@ -269,7 +231,7 @@ function buildFixtureFromCredential(
 export function formatQaAuthHelperCommand(
   providerId: SmokeQaAuthProviderId,
 ): string {
-  return `pnpm --filter @bb/sandbox-host exec tsx ../../scripts/qa/e2b-smoke/auth-connect.mts --provider ${providerId}`;
+  return `pnpm --filter @bb/qa auth:e2b-smoke --provider ${providerId}`;
 }
 
 export function loadSmokeQaProviderId(input: string): SmokeQaAuthProviderId {
@@ -292,7 +254,7 @@ export async function loadQaAuthFixture(): Promise<LoadedSmokeQaAuthFixture> {
     };
   }
 
-  const enrichedFixture = await enrichQaAuthFixture(rawFixture, notices);
+  const enrichedFixture = await enrichQaAuthFixture(rawFixture, fixturePath);
   if (serializeQaAuthFixture(enrichedFixture) !== serializeQaAuthFixture(rawFixture)) {
     await writeQaAuthFixtureFile({
       fixture: enrichedFixture,

@@ -24,13 +24,13 @@ jq --help
 Before starting, clear any leftover standalone QA processes or temp roots from a prior run:
 
 ```bash
-node scripts/qa/cleanup-standalone.mjs
+pnpm qa:standalone:cleanup
 ```
 
 Start an isolated server + daemon pair and load the exported QA environment:
 
 ```bash
-eval "$(node scripts/qa/start-standalone.mjs --format env)"
+eval "$(pnpm --silent qa:standalone:start --format env)"
 jq . "$STATE_PATH"
 
 alias bb="node apps/cli/dist/index.js"
@@ -51,8 +51,8 @@ bb provider list
 Teardown:
 
 ```bash
-node scripts/qa/stop-standalone.mjs --state "$STATE_PATH"
-node scripts/qa/cleanup-standalone.mjs
+pnpm qa:standalone:stop --state "$STATE_PATH"
+pnpm qa:standalone:cleanup
 ```
 
 ## Smoke Pass

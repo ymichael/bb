@@ -2,13 +2,16 @@ import fs from "node:fs/promises";
 import {
   cleanupStandaloneInstance,
   killProcess,
+  parseStandaloneState,
   readStandaloneStateRuntime,
-} from "./shared.mjs";
+} from "../shared.js";
 
 function parseStatePath() {
   const stateFlagIndex = process.argv.indexOf("--state");
   if (stateFlagIndex < 0 || !process.argv[stateFlagIndex + 1]) {
-    throw new Error("Usage: node scripts/qa/stop-standalone.mjs --state <path>");
+    throw new Error(
+      "Usage: pnpm --filter @bb/qa standalone:stop --state <path>",
+    );
   }
   return process.argv[stateFlagIndex + 1];
 }
@@ -16,7 +19,7 @@ function parseStatePath() {
 async function main() {
   const statePath = parseStatePath();
   const rawState = await fs.readFile(statePath, "utf8");
-  const state = JSON.parse(rawState);
+  const state = parseStandaloneState(rawState);
   const runtime = readStandaloneStateRuntime(state);
 
   await killProcess(runtime.daemonPid).catch(() => undefined);

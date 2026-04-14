@@ -13,12 +13,13 @@ import {
   loadDotEnv,
   repoRoot,
   reservePort,
+  shellQuote,
   startQaServer,
   STANDALONE_INSTANCE_ENV,
   STANDALONE_PARENT_PID_ENV,
   spawnLoggedProcess,
   waitForConnectedHost,
-} from "./shared.mjs";
+} from "../shared.js";
 
 function parseArgs() {
   let format = "json";
@@ -29,7 +30,7 @@ function parseArgs() {
       const nextArg = process.argv[index + 1];
       if (nextArg !== "env" && nextArg !== "json") {
         throw new Error(
-          "Usage: node scripts/qa/start-standalone.mjs [--format json|env]",
+          "Usage: pnpm --filter @bb/qa standalone:start --format json|env",
         );
       }
       format = nextArg;
@@ -37,7 +38,9 @@ function parseArgs() {
       continue;
     }
 
-    throw new Error("Usage: node scripts/qa/start-standalone.mjs [--format json|env]");
+    throw new Error(
+      "Usage: pnpm --filter @bb/qa standalone:start --format json|env",
+    );
   }
 
   return { format };
@@ -81,6 +84,9 @@ async function main() {
       port: serverPort,
     });
     serverProcess = qaServer.process;
+    if (!serverProcess) {
+      throw new Error("Standalone QA server unexpectedly reused an existing server");
+    }
 
     const join = await createHostJoin(serverUrl, {
       hostType: "persistent",
@@ -110,9 +116,9 @@ async function main() {
     });
 
     const cleanupCommand =
-      `node ${path.join(repoRoot, "scripts/qa/stop-standalone.mjs")} ` +
-      `--state ${statePath} && ` +
-      `node ${path.join(repoRoot, "scripts/qa/cleanup-standalone.mjs")}`;
+      `pnpm --silent --dir ${shellQuote(repoRoot)} --filter @bb/qa standalone:stop ` +
+      `--state ${shellQuote(statePath)} && ` +
+      `pnpm --silent --dir ${shellQuote(repoRoot)} --filter @bb/qa standalone:cleanup`;
     const restartDaemonCommand = buildDaemonRestartCommand({
       daemonPid: daemonProcess.pid,
       daemonPort,

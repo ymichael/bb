@@ -56,7 +56,7 @@ Windows support means the Linux stack runs entirely inside WSL2:
 
 ### Maintainer-only or best-effort surfaces
 
-- ad hoc Unix-only QA helpers under [`scripts/qa/`](../scripts/qa/)
+- workspace-owned QA helpers under [`tests/qa/`](../tests/qa/)
 - dev restart internals that are not part of the shipped product path
 - sandbox execution on Windows
 - native Windows PowerShell, CMD, and host-daemon runtime flows

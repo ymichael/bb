@@ -2,7 +2,7 @@
 
 Date: 2026-03-31
 Operator: Codex
-Standalone workflow: `scripts/qa/start-standalone.mjs` / `scripts/qa/stop-standalone.mjs`
+Standalone workflow: `pnpm qa:standalone:start` / `pnpm qa:standalone:stop`
 
 ## Smoke
 
@@ -114,7 +114,7 @@ Validated:
 Notes:
 
 - `bb thread show --self --json` is not currently supported by the CLI; the codex smoke thread reported `unknown option '--self'`. This did not block verification because `bb thread update --self` worked and the follow-up checks used `bb thread show <thread-id> --json`.
-- The standalone restart helper was incorrect at the start of QA because it tried to launch a new daemon without stopping the existing one, which correctly failed on the daemon lock. `scripts/qa/shared.mjs` and `scripts/qa/start-standalone.mjs` were updated so the generated restart command now kills the old daemon PID before starting the replacement process.
+- The standalone restart helper was incorrect at the start of QA because it tried to launch a new daemon without stopping the existing one, which correctly failed on the daemon lock. `tests/qa/src/shared.ts` and `tests/qa/src/standalone/start.ts` were updated so the generated restart command now kills the old daemon PID before starting the replacement process.
 
 ## Manager CLI
 

@@ -1,4 +1,4 @@
-import { cleanupStandaloneOrphans } from "./shared.mjs";
+import { cleanupStandaloneOrphans } from "../shared.js";
 
 async function main() {
   const result = await cleanupStandaloneOrphans();

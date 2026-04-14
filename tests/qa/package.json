@@ -1,0 +1,39 @@
+{
+  "name": "@bb/qa",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "clean": "rimraf dist tsconfig.tsbuildinfo",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --config vitest.config.ts",
+    "test:e2b-smoke": "tsx src/e2b-smoke.ts",
+    "auth:e2b-smoke": "tsx src/e2b-smoke/auth-connect.ts",
+    "standalone:start": "tsx src/standalone/start.ts",
+    "standalone:stop": "tsx src/standalone/stop.ts",
+    "standalone:cleanup": "tsx src/standalone/cleanup.ts"
+  },
+  "dependencies": {
+    "@bb/agent-provider-auth": "workspace:*",
+    "@bb/agent-providers": "workspace:*",
+    "@bb/core-ui": "workspace:*",
+    "@bb/db": "workspace:*",
+    "@bb/domain": "workspace:*",
+    "@bb/host-daemon-contract": "workspace:*",
+    "@bb/host-runtime-material": "workspace:*",
+    "@bb/logger": "workspace:*",
+    "@bb/sandbox-host": "workspace:*",
+    "@bb/sandbox-image": "workspace:*",
+    "@bb/server": "workspace:*",
+    "@bb/server-contract": "workspace:*",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@bb/tsconfig": "workspace:*",
+    "@types/node": "^22.0.0",
+    "rimraf": "^6.1.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.7.0",
+    "vitest": "^4.1.1"
+  }
+}

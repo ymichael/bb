@@ -56,6 +56,16 @@
     "test:smoke": {
       "dependsOn": ["build", "^build"]
     },
+    "test:e2b-smoke": {
+      "dependsOn": ["typecheck", "^build"],
+      "cache": false,
+      "passThroughEnv": [
+        "BB_CLOUD_AUTH_FIXTURE_PATH",
+        "BB_E2B_SMOKE_REQUIRE_FULL_AUTH",
+        "BB_E2B_TEMPLATE",
+        "E2B_API_KEY"
+      ]
+    },
     "bench": {
       "dependsOn": ["build", "^build"]
     },

@@ -28,8 +28,8 @@ If the fixture is missing, the smoke still runs its non-auth coverage. If you wa
 From the repo root, run one helper per provider:
 
 ```sh
-pnpm --filter @bb/sandbox-host exec tsx ../../scripts/qa/e2b-smoke/auth-connect.mts --provider claude-code
-pnpm --filter @bb/sandbox-host exec tsx ../../scripts/qa/e2b-smoke/auth-connect.mts --provider codex
+pnpm --filter @bb/qa auth:e2b-smoke --provider claude-code
+pnpm --filter @bb/qa auth:e2b-smoke --provider codex
 ```
 
 The helper will:
@@ -60,13 +60,13 @@ So the browser does not need to successfully connect back to localhost as long a
 From the repo root:
 
 ```sh
-pnpm --filter @bb/sandbox-host exec tsx ../../scripts/qa/e2b-smoke.mts
+pnpm exec turbo run test:e2b-smoke --filter=@bb/qa
 ```
 
 For a stricter auth gate:
 
 ```sh
-BB_E2B_SMOKE_REQUIRE_FULL_AUTH=1 pnpm --filter @bb/sandbox-host exec tsx ../../scripts/qa/e2b-smoke.mts
+BB_E2B_SMOKE_REQUIRE_FULL_AUTH=1 pnpm exec turbo run test:e2b-smoke --filter=@bb/qa
 ```
 
 ## Coverage Policy

@@ -2,17 +2,20 @@ import { stdin, stdout } from "node:process";
 import { createInterface } from "node:readline/promises";
 import {
   getCloudAuthProviderDefinition,
-} from "../../../packages/agent-provider-auth/src/index.ts";
+  type CloudAuthProviderDefinition,
+  type StoredCloudAuthCredential,
+} from "@bb/agent-provider-auth";
+
 import {
   startOAuthCallbackServer,
   type OAuthCallbackPayload,
-} from "../../../apps/server/src/services/cloud-auth/callback-server.ts";
+} from "../../../../apps/server/src/services/cloud-auth/callback-server.js";
 import {
   DEFAULT_QA_AUTH_FIXTURE_PATH,
   loadSmokeQaProviderId,
   upsertQaAuthFixtureCredential,
   type SmokeQaAuthProviderId,
-} from "./fixture.ts";
+} from "./fixture.js";
 
 const QA_AUTH_APP_ORIGIN = "http://localhost:5173";
 
@@ -54,7 +57,7 @@ function printHelp(): void {
   console.log("");
   console.log("Usage:");
   console.log(
-    "  pnpm --filter @bb/sandbox-host exec tsx ../../scripts/qa/e2b-smoke/auth-connect.mts --provider <claude-code|codex>",
+    "  pnpm --filter @bb/qa auth:e2b-smoke --provider <claude-code|codex>",
   );
   console.log("");
   console.log("Options:");
@@ -315,7 +318,8 @@ async function main(): Promise<void> {
     return;
   }
 
-  const providerDefinition = getCloudAuthProviderDefinition(args.providerId);
+  const providerDefinition: CloudAuthProviderDefinition<StoredCloudAuthCredential> =
+    getCloudAuthProviderDefinition(args.providerId);
   const flow = await providerDefinition.createAuthorizationFlow();
   const callbackServer = await startOAuthCallbackServer({
     appOrigin: QA_AUTH_APP_ORIGIN,
@@ -356,9 +360,9 @@ async function main(): Promise<void> {
     if (label) {
       console.log(`Connected account: ${label}`);
     }
-  console.log(`Credential expires at: ${new Date(credential.expiresAt).toISOString()}`);
-  console.log("You can now run:");
-  console.log("  pnpm --filter @bb/sandbox-host exec tsx ../../scripts/qa/e2b-smoke.mts");
+    console.log(`Credential expires at: ${new Date(credential.expiresAt).toISOString()}`);
+    console.log("You can now run:");
+    console.log("  pnpm exec turbo run test:e2b-smoke --filter=@bb/qa");
   } finally {
     await callbackServer.close();
   }

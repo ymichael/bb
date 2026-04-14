@@ -90,6 +90,10 @@ const providerErrorBodySchema = z
   })
   .passthrough();
 
+function formatOAuthAuthorizationUrl(url: URL): string {
+  return url.toString().replaceAll("+", "%20");
+}
+
 export const claudeSubscriptionTypeSchema = z
   .enum(["enterprise", "max", "pro", "team"])
   .nullable();
@@ -354,7 +358,7 @@ const claudeProviderDefinition: CloudAuthProviderDefinition<ClaudeStoredCredenti
     url.searchParams.set("state", state);
 
     return {
-      authorizationUrl: url.toString(),
+      authorizationUrl: formatOAuthAuthorizationUrl(url),
       state,
       verifier,
     };
@@ -459,7 +463,7 @@ const codexProviderDefinition: CloudAuthProviderDefinition<CodexStoredCredential
     url.searchParams.set("originator", "pi");
 
     return {
-      authorizationUrl: url.toString(),
+      authorizationUrl: formatOAuthAuthorizationUrl(url),
       state,
       verifier,
     };
