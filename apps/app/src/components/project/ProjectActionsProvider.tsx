@@ -61,6 +61,13 @@ export function ProjectActionsProvider({
   const updateProject = useUpdateProject()
   const deleteProject = useDeleteProject()
   const addLocalSource = useAddLocalProjectSource()
+  // Destructure `.mutate` so useCallback deps see a stable reference across
+  // renders. Depending on the full mutation object would churn the callback
+  // identity on every isPending flip and force every useProjectActions()
+  // consumer to re-render.
+  const { mutate: updateProjectMutate } = updateProject
+  const { mutate: deleteProjectMutate } = deleteProject
+  const { mutate: addLocalSourceMutate } = addLocalSource
 
   const renameDialog = useDialogState<ProjectRenameDialogTarget>()
   const deleteDialog = useDialogState<ProjectDeleteDialogTarget>()
@@ -71,12 +78,12 @@ export function ProjectActionsProvider({
   const addLocalSourceSubmit = useCallback(
     ({ path, hostId, target, closeDialog }: LocalPathSubmitParams) => {
       if (target.kind !== "add-source") return
-      addLocalSource.mutate(
+      addLocalSourceMutate(
         { projectId: target.projectId, path, hostId },
         { onSuccess: closeDialog },
       )
     },
-    [addLocalSource],
+    [addLocalSourceMutate],
   )
   const addLocalSourcePicker = useLocalPathPicker({
     isPending: addLocalSource.isPending,
@@ -92,12 +99,12 @@ export function ProjectActionsProvider({
 
   const submitRename = useCallback(
     (projectId: string, name: string) => {
-      updateProject.mutate(
+      updateProjectMutate(
         { id: projectId, name },
         { onSuccess: () => closeRenameDialog() },
       )
     },
-    [closeRenameDialog, updateProject],
+    [closeRenameDialog, updateProjectMutate],
   )
 
   const requestDelete = useCallback(
@@ -109,7 +116,7 @@ export function ProjectActionsProvider({
 
   const confirmDelete = useCallback(
     (projectId: string) => {
-      deleteProject.mutate(projectId, {
+      deleteProjectMutate(projectId, {
         onSuccess: () => {
           closeDeleteDialog()
           // Drop the deleted project from the collapsed-state set so stale
@@ -121,7 +128,7 @@ export function ProjectActionsProvider({
         },
       })
     },
-    [closeDeleteDialog, deleteProject, navigate, setCollapsedProjectIdList],
+    [closeDeleteDialog, deleteProjectMutate, navigate, setCollapsedProjectIdList],
   )
 
   const requestAddLocalPath = useCallback(

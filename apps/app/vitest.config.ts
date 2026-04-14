@@ -16,5 +16,6 @@ export default defineConfig({
     silent: "passed-only",
     environment: "node",
     include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
+    setupFiles: ["src/test/setup.ts"],
   },
 })

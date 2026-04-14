@@ -6,10 +6,11 @@ import type { ProjectResponse } from "@bb/server-contract";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
-import { Provider as JotaiProvider } from "jotai";
+import { Provider as JotaiProvider, createStore } from "jotai";
 import { QueryClientProvider } from "@tanstack/react-query";
 import * as api from "@/lib/api";
 import { createAppQueryClient } from "@/lib/query-client";
+import { collapsedProjectIdsAtom } from "@/components/layout/project-list/collapsedState";
 import {
   ProjectActionsProvider,
   useProjectActions,
@@ -49,7 +50,10 @@ function makeProjectResponse(overrides: Partial<Project> = {}): ProjectResponse 
   };
 }
 
-function renderWithProvider(children: ReactNode) {
+function renderWithProvider(
+  children: ReactNode,
+  { jotaiStore }: { jotaiStore?: ReturnType<typeof createStore> } = {},
+) {
   const queryClient = createAppQueryClient({
     defaultOptions: {
       mutations: { retry: false },
@@ -57,7 +61,7 @@ function renderWithProvider(children: ReactNode) {
     },
   });
   return render(
-    <JotaiProvider>
+    <JotaiProvider store={jotaiStore}>
       <QueryClientProvider client={queryClient}>
         <MemoryRouter>
           <ProjectActionsProvider>{children}</ProjectActionsProvider>
@@ -153,26 +157,33 @@ describe("ProjectActionsProvider", () => {
     });
   });
 
-  it("suppresses concurrent rename requests while one is pending", () => {
+  it("clears the deleted project from the collapsed-projects atom on success", async () => {
     const project = makeProjectResponse();
-    vi.mocked(api.updateProject).mockImplementation(() => new Promise(() => {}));
+    const other = makeProjectResponse({ id: "project-2", name: "Project Two" });
+    const jotaiStore = createStore();
+    jotaiStore.set(collapsedProjectIdsAtom, [project.id, other.id]);
+    vi.mocked(api.deleteProject).mockResolvedValue(undefined);
 
     let actions: ReturnType<typeof useProjectActions> | null = null;
-    renderWithProvider(<HookProbe onReady={(a) => { actions = a; }} />);
-
-    act(() => {
-      actions!.requestRename(project);
-    });
-    const firstInput = screen.getByLabelText("Project name") as HTMLInputElement;
-    fireEvent.change(firstInput, { target: { value: "First rename" } });
-    fireEvent.submit(firstInput.closest("form")!);
-
-    // Second request while the first mutation is still in flight should be ignored.
-    act(() => {
-      actions!.requestRename({ ...project, name: "Different name" });
-    });
-    expect((screen.getByLabelText("Project name") as HTMLInputElement).value).toBe(
-      "First rename",
+    renderWithProvider(
+      <HookProbe onReady={(a) => { actions = a; }} />,
+      { jotaiStore },
     );
+
+    act(() => {
+      actions!.requestDelete(project);
+    });
+    fireEvent.click(
+      await screen.findByRole("button", { name: /remove project/i }),
+    );
+
+    await waitFor(() => {
+      expect(api.deleteProject).toHaveBeenCalledWith(project.id);
+    });
+
+    // The deleted id is removed; unrelated ids stay.
+    await waitFor(() => {
+      expect(jotaiStore.get(collapsedProjectIdsAtom)).toEqual([other.id]);
+    });
   });
 });

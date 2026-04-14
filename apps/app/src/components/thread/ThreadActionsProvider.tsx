@@ -63,6 +63,16 @@ export function ThreadActionsProvider({ children }: ThreadActionsProviderProps) 
   const markThreadUnread = useMarkThreadUnread()
   const deleteThread = useDeleteThread()
   const updateThread = useUpdateThread()
+  // Destructure `.mutate` so useCallback deps see stable references across
+  // renders. Depending on the full mutation objects would churn callback
+  // identities on every isPending flip and force every useThreadActions()
+  // consumer to re-render whenever any mutation fires.
+  const { mutate: archiveMutate } = archiveThread
+  const { mutate: unarchiveMutate } = unarchiveThread
+  const { mutate: markReadMutate } = markThreadRead
+  const { mutate: markUnreadMutate } = markThreadUnread
+  const { mutate: deleteMutate } = deleteThread
+  const { mutate: updateMutate } = updateThread
 
   const renameDialog = useDialogState<ThreadRenameDialogTarget>()
   const deleteDialog = useDialogState<Thread>()
@@ -105,7 +115,7 @@ export function ThreadActionsProvider({ children }: ThreadActionsProviderProps) 
 
   const submitRename = useCallback(
     (threadId: string, title: string) => {
-      updateThread.mutate(
+      updateMutate(
         { id: threadId, title },
         {
           onSuccess: () => {
@@ -114,7 +124,7 @@ export function ThreadActionsProvider({ children }: ThreadActionsProviderProps) 
         },
       )
     },
-    [closeRenameDialog, updateThread],
+    [closeRenameDialog, updateMutate],
   )
 
   const requestDelete = useCallback(
@@ -126,7 +136,7 @@ export function ThreadActionsProvider({ children }: ThreadActionsProviderProps) 
 
   const confirmDelete = useCallback(
     (thread: Thread) => {
-      deleteThread.mutate(
+      deleteMutate(
         { id: thread.id },
         {
           onSuccess: () => {
@@ -136,12 +146,21 @@ export function ThreadActionsProvider({ children }: ThreadActionsProviderProps) 
         },
       )
     },
-    [closeDeleteDialog, deleteThread, navigateAwayIfViewing],
+    [closeDeleteDialog, deleteMutate, navigateAwayIfViewing],
   )
+
+  const showArchiveError = useCallback((thread: Thread, error: unknown) => {
+    toast.error(
+      getMutationErrorMessage({
+        error,
+        fallbackMessage: `Failed to archive ${threadTypeLabel(thread.type)}.`,
+      }),
+    )
+  }, [])
 
   const requestArchive = useCallback(
     (thread: Thread) => {
-      archiveThread.mutate(
+      archiveMutate(
         { id: thread.id, force: false },
         {
           onSuccess: () => {
@@ -152,57 +171,47 @@ export function ThreadActionsProvider({ children }: ThreadActionsProviderProps) 
               openArchiveConfirmationDialog(thread)
               return
             }
-            toast.error(
-              getMutationErrorMessage({
-                error,
-                fallbackMessage: `Failed to archive ${threadTypeLabel(thread.type)}.`,
-              }),
-            )
+            showArchiveError(thread, error)
           },
         },
       )
     },
-    [archiveThread, navigateAwayIfViewing, openArchiveConfirmationDialog],
+    [archiveMutate, navigateAwayIfViewing, openArchiveConfirmationDialog, showArchiveError],
   )
 
   const confirmArchive = useCallback(
     (thread: Thread) => {
       closeArchiveConfirmationDialog()
-      archiveThread.mutate(
+      archiveMutate(
         { id: thread.id, force: true },
         {
           onSuccess: () => {
             navigateAwayIfViewing(thread)
           },
           onError: (error) => {
-            toast.error(
-              getMutationErrorMessage({
-                error,
-                fallbackMessage: `Failed to archive ${threadTypeLabel(thread.type)}.`,
-              }),
-            )
+            showArchiveError(thread, error)
           },
         },
       )
     },
-    [archiveThread, closeArchiveConfirmationDialog, navigateAwayIfViewing],
+    [archiveMutate, closeArchiveConfirmationDialog, navigateAwayIfViewing, showArchiveError],
   )
 
   const toggleArchive = useCallback(
     (thread: Thread) => {
       if (thread.archivedAt != null) {
-        unarchiveThread.mutate({ id: thread.id })
+        unarchiveMutate({ id: thread.id })
         return
       }
       requestArchive(thread)
     },
-    [requestArchive, unarchiveThread],
+    [requestArchive, unarchiveMutate],
   )
 
   const toggleRead = useCallback(
     (thread: Thread) => {
       if (getThreadReadToggleAction(thread) === "mark_unread") {
-        markThreadUnread.mutate(thread.id, {
+        markUnreadMutate(thread.id, {
           onError: (error) => {
             toast.error(
               getMutationErrorMessage({
@@ -214,7 +223,7 @@ export function ThreadActionsProvider({ children }: ThreadActionsProviderProps) 
         })
         return
       }
-      markThreadRead.mutate(thread.id, {
+      markReadMutate(thread.id, {
         onError: (error) => {
           toast.error(
             getMutationErrorMessage({
@@ -225,7 +234,7 @@ export function ThreadActionsProvider({ children }: ThreadActionsProviderProps) 
         },
       })
     },
-    [markThreadRead, markThreadUnread],
+    [markReadMutate, markUnreadMutate],
   )
 
   const value = useMemo<ThreadActionsContextValue>(
