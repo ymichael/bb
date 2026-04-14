@@ -59,11 +59,6 @@ export async function dispatchCommand<TCommand extends HostDaemonCommand>(
     case "turn.run": {
       seedThreadHighWaterMarkIfPresent(command, options);
       const entry = await ensureThreadRuntime(command, options);
-      options.runtimeManager.markThreadActive(
-        command.environmentId,
-        command.threadId,
-        command.resumeContext.providerThreadId,
-      );
       await entry.runtime.runTurn({
         threadId: command.threadId,
         input: command.input,
@@ -75,11 +70,6 @@ export async function dispatchCommand<TCommand extends HostDaemonCommand>(
     case "turn.steer": {
       seedThreadHighWaterMarkIfPresent(command, options);
       const entry = await ensureThreadRuntime(command, options);
-      options.runtimeManager.markThreadActive(
-        command.environmentId,
-        command.threadId,
-        command.resumeContext.providerThreadId,
-      );
       await entry.runtime.steerTurn({
         threadId: command.threadId,
         expectedTurnId: command.expectedTurnId,

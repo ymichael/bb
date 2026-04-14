@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import type { AgentRuntimeOptions } from "@bb/agent-runtime";
 import { afterEach, describe, expect, it } from "vitest";
 import { dispatchCommand } from "../../src/command-dispatch.js";
 import { RuntimeManager } from "../../src/runtime-manager.js";
@@ -138,15 +139,66 @@ describe("thread command dispatch", () => {
     expect(harness.runtimeState.steeredTurnInstructions).toBe("Be a helpful coding agent.");
   });
 
-  it("marks known idle threads active when dispatching turn.run", async () => {
-    const harness = createHarness();
-    await harness.manager.ensureEnvironment({
+  it("marks a known thread active for the next turn after runtime completion made it idle", async () => {
+    const { runtime, state } = createFakeRuntime();
+    const { workspace } = createFakeWorkspace("/tmp/env-1");
+    let runtimeOptions: AgentRuntimeOptions | undefined;
+    let completedTurns = 0;
+    runtime.runTurn = async (args) => {
+      state.ranTurnText = args.input[0]?.text;
+      completedTurns += 1;
+      if (completedTurns === 1) {
+        runtimeOptions?.onEvent?.({
+          type: "turn/completed",
+          threadId: "thread-1",
+          providerThreadId: "provider-1",
+          turnId: `turn-${completedTurns}`,
+          status: "completed",
+        });
+      }
+    };
+    const manager = new RuntimeManager({
+      provisionWorkspace: async () => workspace,
+      createRuntime: (options) => {
+        runtimeOptions = options;
+        return runtime;
+      },
+    });
+
+    await manager.ensureEnvironment({
       environmentId: "env-1",
       workspacePath: "/tmp/env-1",
     });
-    harness.manager.markThreadActive("env-1", "thread-1", "provider-1");
-    harness.manager.markThreadInactive("env-1", "thread-1");
-    expect(harness.manager.listActiveThreads()).toEqual([]);
+    manager.markThreadActive("env-1", "thread-1", "provider-1");
+
+    await dispatchCommand(
+      {
+        type: "turn.run",
+        environmentId: "env-1",
+        threadId: "thread-1",
+        eventSequence: 4,
+        input: [{ type: "text", text: "finish this" }],
+        options: {
+          model: "gpt-5",
+          serviceTier: "default",
+          reasoningLevel: "medium",
+          permissionMode: "full",
+          permissionEscalation: null,
+        },
+        resumeContext: {
+          workspaceContext: { workspacePath: "/tmp/env-1", workspaceProvisionType: "unmanaged" },
+          projectId: "project-1",
+          providerId: "fake",
+          providerThreadId: "provider-1",
+          instructions: "Be a helpful coding agent.",
+          dynamicTools: [],
+          instructionMode: "append",
+        },
+      },
+      { runtimeManager: manager, threadStorageRootPath: "/tmp/bb-test-thread-storage" },
+    );
+
+    expect(manager.listActiveThreads()).toEqual([]);
 
     const result = await dispatchCommand(
       {
@@ -172,11 +224,58 @@ describe("thread command dispatch", () => {
           instructionMode: "append",
         },
       },
+      { runtimeManager: manager, threadStorageRootPath: "/tmp/bb-test-thread-storage" },
+    );
+
+    expect(result).toEqual({});
+    expect(state.ranTurnText).toBe("resume work");
+    expect(manager.listActiveThreads()).toEqual([
+      {
+        threadId: "thread-1",
+      },
+    ]);
+  });
+
+  it("marks known idle threads active when dispatching turn.steer", async () => {
+    const harness = createHarness();
+    await harness.manager.ensureEnvironment({
+      environmentId: "env-1",
+      workspacePath: "/tmp/env-1",
+    });
+    harness.manager.markThreadActive("env-1", "thread-1", "provider-1");
+    harness.manager.markThreadInactive("env-1", "thread-1");
+    expect(harness.manager.listActiveThreads()).toEqual([]);
+
+    const result = await dispatchCommand(
+      {
+        type: "turn.steer",
+        environmentId: "env-1",
+        threadId: "thread-1",
+        eventSequence: 5,
+        expectedTurnId: "turn-1",
+        input: [{ type: "text", text: "adjust course" }],
+        options: {
+          model: "gpt-5",
+          serviceTier: "default",
+          reasoningLevel: "medium",
+          permissionMode: "full",
+          permissionEscalation: null,
+        },
+        resumeContext: {
+          workspaceContext: { workspacePath: "/tmp/env-1", workspaceProvisionType: "unmanaged" },
+          projectId: "project-1",
+          providerId: "fake",
+          providerThreadId: "provider-1",
+          instructions: "Be a helpful coding agent.",
+          dynamicTools: [],
+          instructionMode: "append",
+        },
+      },
       harness.dispatchOptions(),
     );
 
     expect(result).toEqual({});
-    expect(harness.runtimeState.ranTurnText).toBe("resume work");
+    expect(harness.runtimeState.steeredTurnId).toBe("turn-1");
     expect(harness.manager.listActiveThreads()).toEqual([
       {
         threadId: "thread-1",

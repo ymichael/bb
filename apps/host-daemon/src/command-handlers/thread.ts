@@ -71,6 +71,7 @@ export async function ensureThreadRuntime(
   options: CommandDispatchOptions,
 ): Promise<RuntimeEntry> {
   const { resumeContext } = command;
+  let providerThreadId = resumeContext.providerThreadId;
   let entry = options.runtimeManager.get(command.environmentId);
   if (!entry) {
     entry = await options.runtimeManager.ensureEnvironment({
@@ -99,12 +100,13 @@ export async function ensureThreadRuntime(
       dynamicTools: resumeContext.dynamicTools,
       instructionMode: resumeContext.instructionMode,
     });
-    options.runtimeManager.markThreadActive(
-      command.environmentId,
-      command.threadId,
-      result.providerThreadId,
-    );
+    providerThreadId = result.providerThreadId;
   }
+  options.runtimeManager.markThreadActive(
+    command.environmentId,
+    command.threadId,
+    providerThreadId,
+  );
   return entry;
 }
 
