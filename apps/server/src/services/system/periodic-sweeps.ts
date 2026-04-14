@@ -40,6 +40,7 @@ import {
   finalizeStoppedThread,
   requestThreadStop,
 } from "../threads/thread-lifecycle.js";
+import { advanceThreadProvisioning } from "../threads/thread-provisioning.js";
 
 export type EvaluateManagedEnvironmentArchiveCleanupFn =
   typeof advanceEnvironmentCleanup;
@@ -222,6 +223,26 @@ export async function runIdleSandboxSuspendSweep(
 export async function runThreadLifecycleSweep(
   deps: LoggedPendingInteractionWorkSessionDeps,
 ): Promise<void> {
+  for (const operation of listThreadOperations(deps.db, {
+    kinds: ["provision"],
+    states: [...activeLifecycleOperationStates],
+  })) {
+    try {
+      await advanceThreadProvisioning(deps, {
+        threadId: operation.threadId,
+      });
+    } catch (error) {
+      deps.logger.warn(
+        {
+          err: error,
+          threadId: operation.threadId,
+          operationKind: operation.kind,
+        },
+        "Thread provisioning sweep failed",
+      );
+    }
+  }
+
   for (const operation of listThreadOperations(deps.db, {
     kinds: ["start"],
     states: [...activeLifecycleOperationStates],

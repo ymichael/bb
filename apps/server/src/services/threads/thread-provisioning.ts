@@ -1,0 +1,805 @@
+import { z } from "zod";
+import {
+  createEnvironment,
+  createHostId,
+  type CreateEnvironmentInput,
+  getEnvironment,
+  getThread,
+  getThreadOperation,
+  updateThread,
+  upsertHost,
+} from "@bb/db";
+import {
+  markThreadOperationRecordCompleted,
+  markThreadOperationRecordFailed,
+  upsertEnvironmentOperationRecord,
+  upsertThreadOperationRecord,
+} from "@bb/db/internal-lifecycle";
+import {
+  isActiveLifecycleOperationState,
+  promptInputSchema,
+  resolvedThreadExecutionOptionsSchema,
+  type Environment,
+  type PromptInput,
+  type ProvisioningTranscriptEntry,
+  type ResolvedThreadExecutionOptions,
+  type Thread,
+} from "@bb/domain";
+import { SANDBOX_DATA_DIR } from "@bb/sandbox-host";
+import type { AppDeps } from "../../types.js";
+import { ApiError } from "../../errors.js";
+import {
+  advanceEnvironmentProvisioning,
+} from "../environments/environment-provisioning.js";
+import {
+  buildDirectEnvironmentProvisionRequest,
+  buildSandboxHostEnvironmentProvisionRequest,
+} from "../environments/environment-provision-request.js";
+import {
+  buildEnvironmentProvisionCommand,
+  buildManagedBranchName,
+  SETUP_TIMEOUT_MS,
+} from "./thread-create-helpers.js";
+import { queueThreadRenameCommand } from "./thread-commands.js";
+import {
+  appendClientTurnEvent,
+  appendSystemErrorEvent,
+  appendThreadProvisioningEvent,
+  appendThreadProvisioningEventInTransaction,
+  buildCwdBranchEntries,
+} from "./thread-events.js";
+import {
+  inferThreadMetadata,
+  MANAGED_THREAD_METADATA_TIMEOUT_MS,
+} from "./thread-metadata-inference.js";
+import { resolveManagedTargetPath } from "./worktree-paths.js";
+import { ensureHostSessionReadyForWork } from "../hosts/host-lifecycle.js";
+import { requestThreadStart } from "./thread-lifecycle.js";
+import { resolvePermissionEscalation } from "./thread-runtime-config.js";
+import { parseJsonWithSchema } from "../lib/json-parsing.js";
+import { tryTransition } from "./thread-transitions.js";
+
+type ThreadProvisioningDeps = Pick<
+  AppDeps,
+  | "cloudAuth"
+  | "config"
+  | "db"
+  | "hostLifecycle"
+  | "hub"
+  | "logger"
+  | "machineAuth"
+  | "sandboxEnv"
+  | "sandboxRegistry"
+>;
+
+const directUnmanagedIntentSchema = z.object({
+  type: z.literal("direct-unmanaged"),
+  hostId: z.string().min(1),
+  path: z.string().min(1),
+});
+
+const directManagedIntentSchema = z.object({
+  type: z.literal("direct-managed"),
+  hostId: z.string().min(1),
+  sourcePath: z.string().min(1),
+  workspaceProvisionType: z.enum(["managed-worktree", "managed-clone"]),
+});
+
+const sandboxManagedIntentSchema = z.object({
+  type: z.literal("sandbox-managed"),
+  cloneRepoUrl: z.string().min(1),
+  sandboxType: z.string().min(1),
+});
+
+const reuseIntentSchema = z.object({
+  type: z.literal("reuse"),
+  environmentId: z.string().min(1),
+});
+
+const threadProvisionEnvironmentIntentSchema = z.discriminatedUnion("type", [
+  directUnmanagedIntentSchema,
+  directManagedIntentSchema,
+  sandboxManagedIntentSchema,
+  reuseIntentSchema,
+]);
+
+const threadProvisionPayloadSchema = z.object({
+  attachedEnvironmentId: z.string().nullable(),
+  branchSlug: z.string().nullable(),
+  environmentIntent: threadProvisionEnvironmentIntentSchema,
+  execution: resolvedThreadExecutionOptionsSchema,
+  input: z.array(promptInputSchema),
+  metadataResolved: z.boolean(),
+  provisionEventSequence: z.number().int().nonnegative().nullable(),
+  titleProvided: z.boolean(),
+  workspaceReadyEventSequence: z.number().int().nonnegative().nullable(),
+});
+
+type ThreadProvisionEnvironmentIntent = z.infer<
+  typeof threadProvisionEnvironmentIntentSchema
+>;
+type ThreadProvisionPayload = z.infer<typeof threadProvisionPayloadSchema>;
+type DirectManagedIntent = z.infer<typeof directManagedIntentSchema>;
+type SandboxManagedIntent = z.infer<typeof sandboxManagedIntentSchema>;
+type DirectUnmanagedIntent = z.infer<typeof directUnmanagedIntentSchema>;
+
+export interface RequestThreadProvisionArgs {
+  environmentIntent: ThreadProvisionEnvironmentIntent;
+  execution: ResolvedThreadExecutionOptions;
+  input: PromptInput[];
+  thread: Thread;
+  titleProvided: boolean;
+}
+
+export interface AdvanceThreadProvisioningArgs {
+  threadId: string;
+}
+
+interface BuildEnvironmentProvisionRequestArgs {
+  environment: Environment;
+  eventSequence: number;
+  payload: ThreadProvisionPayload;
+}
+
+interface CreateProvisioningEnvironmentWithOperationArgs {
+  buildRequest: (args: BuildEnvironmentProvisionRequestArgs) =>
+    | ReturnType<typeof buildDirectEnvironmentProvisionRequest>
+    | ReturnType<typeof buildSandboxHostEnvironmentProvisionRequest>;
+  environmentInput: CreateEnvironmentInput;
+  payload: ThreadProvisionPayload;
+  thread: Thread;
+}
+
+interface ThreadProvisioningResult {
+  environment: Environment;
+  payload: ThreadProvisionPayload;
+}
+
+interface SaveThreadProvisionPayloadArgs {
+  payload: ThreadProvisionPayload;
+  threadId: string;
+}
+
+interface FailThreadProvisioningArgs {
+  detail: string;
+  environmentId: string | null;
+  thread: Thread;
+}
+
+interface ResolveMetadataIfNeededArgs {
+  payload: ThreadProvisionPayload;
+  thread: Thread;
+}
+
+interface EnvironmentPayloadThreadArgs {
+  environment: Environment;
+  payload: ThreadProvisionPayload;
+  thread: Thread;
+}
+
+interface DirectUnmanagedEnvironmentArgs {
+  intent: DirectUnmanagedIntent;
+  payload: ThreadProvisionPayload;
+  thread: Thread;
+}
+
+interface DirectManagedEnvironmentArgs {
+  intent: DirectManagedIntent;
+  payload: ThreadProvisionPayload;
+  thread: Thread;
+}
+
+interface SandboxManagedEnvironmentArgs {
+  intent: SandboxManagedIntent;
+  payload: ThreadProvisionPayload;
+  thread: Thread;
+}
+
+interface EnsureEnvironmentRequestedArgs {
+  payload: ThreadProvisionPayload;
+  thread: Thread;
+}
+
+function initialProvisioningEntries(
+  environment: Pick<Environment, "workspaceProvisionType">,
+): ProvisioningTranscriptEntry[] {
+  switch (environment.workspaceProvisionType) {
+    case "unmanaged":
+      return [
+        {
+          type: "step",
+          key: "workspace-started",
+          text: "Preparing workspace",
+          status: "started",
+        },
+      ];
+    case "managed-worktree":
+      return [
+        {
+          type: "step",
+          key: "workspace-started",
+          text: "Preparing worktree",
+          status: "started",
+        },
+      ];
+    case "managed-clone":
+      return [
+        {
+          type: "step",
+          key: "workspace-started",
+          text: "Preparing clone",
+          status: "started",
+        },
+      ];
+  }
+}
+
+function loadActiveThreadProvisionPayload(
+  deps: Pick<AppDeps, "db">,
+  threadId: string,
+): ThreadProvisionPayload | null {
+  const operation = getThreadOperation(deps.db, {
+    threadId,
+    kind: "provision",
+  });
+  if (!operation || !isActiveLifecycleOperationState(operation.state)) {
+    return null;
+  }
+  return parseJsonWithSchema(operation.payload, threadProvisionPayloadSchema);
+}
+
+function saveThreadProvisionPayload(
+  deps: Pick<AppDeps, "db">,
+  args: SaveThreadProvisionPayloadArgs,
+): void {
+  upsertThreadOperationRecord(deps.db, {
+    threadId: args.threadId,
+    kind: "provision",
+    payload: JSON.stringify(args.payload),
+  });
+}
+
+function completeThreadProvisioning(
+  deps: Pick<AppDeps, "db">,
+  threadId: string,
+): void {
+  markThreadOperationRecordCompleted(deps.db, {
+    threadId,
+    kind: "provision",
+  });
+}
+
+function failThreadProvisioning(
+  deps: Pick<AppDeps, "db" | "hub">,
+  args: FailThreadProvisioningArgs,
+): void {
+  markThreadOperationRecordFailed(deps.db, {
+    threadId: args.thread.id,
+    kind: "provision",
+    failureReason: args.detail,
+  });
+  if (args.environmentId) {
+    appendSystemErrorEvent(deps, {
+      threadId: args.thread.id,
+      environmentId: args.environmentId,
+      code: "thread_provisioning_failed",
+      message: "Provisioning thread failed",
+      detail: args.detail,
+    });
+  }
+  tryTransition(deps.db, deps.hub, args.thread.id, "error");
+}
+
+async function resolveMetadataIfNeeded(
+  deps: ThreadProvisioningDeps,
+  args: ResolveMetadataIfNeededArgs,
+): Promise<ThreadProvisionPayload> {
+  if (args.payload.metadataResolved) {
+    return args.payload;
+  }
+
+  const needsBranch =
+    args.payload.environmentIntent.type === "direct-managed"
+    || args.payload.environmentIntent.type === "sandbox-managed";
+  if (!needsBranch) {
+    if (!args.payload.titleProvided) {
+      void inferThreadMetadata(deps, {
+        environmentId: null,
+        generateBranchName: false,
+        generateTitle: true,
+        input: args.payload.input,
+        threadId: args.thread.id,
+        writeTranscript: false,
+      }).then((metadata) => {
+        if (!metadata.titleApplied || !metadata.title) {
+          return;
+        }
+        const titledThread = getThread(deps.db, args.thread.id);
+        const environment = titledThread?.environmentId
+          ? getEnvironment(deps.db, titledThread.environmentId)
+          : null;
+        if (!titledThread || !environment || titledThread.status !== "active") {
+          return;
+        }
+        queueThreadRenameCommand(deps, {
+          environment: {
+            id: environment.id,
+            hostId: environment.hostId,
+          },
+          threadId: titledThread.id,
+          title: metadata.title,
+        });
+      }).catch((error) => {
+        deps.logger.warn(
+          { err: error, threadId: args.thread.id },
+          "Failed to generate thread title",
+        );
+      });
+    }
+    const resolvedPayload: ThreadProvisionPayload = {
+      ...args.payload,
+      metadataResolved: true,
+    };
+    saveThreadProvisionPayload(deps, {
+      threadId: args.thread.id,
+      payload: resolvedPayload,
+    });
+    return resolvedPayload;
+  }
+
+  const metadata = await inferThreadMetadata(deps, {
+    environmentId: null,
+    generateBranchName: needsBranch,
+    generateTitle: !args.payload.titleProvided,
+    input: args.payload.input,
+    threadId: args.thread.id,
+    timeoutMs: needsBranch ? MANAGED_THREAD_METADATA_TIMEOUT_MS : undefined,
+    writeTranscript: false,
+  });
+
+  const resolvedPayload: ThreadProvisionPayload = {
+    ...args.payload,
+    branchSlug: metadata.branchSlug,
+    metadataResolved: true,
+  };
+  saveThreadProvisionPayload(deps, {
+    threadId: args.thread.id,
+    payload: resolvedPayload,
+  });
+  return resolvedPayload;
+}
+
+function attachThreadToEnvironment(
+  deps: Pick<AppDeps, "db" | "hub">,
+  args: EnvironmentPayloadThreadArgs,
+): ThreadProvisionPayload {
+  if (args.thread.environmentId !== args.environment.id) {
+    updateThread(deps.db, deps.hub, args.thread.id, {
+      environmentId: args.environment.id,
+    });
+  }
+  if (args.payload.attachedEnvironmentId === args.environment.id) {
+    return args.payload;
+  }
+  const attachedPayload: ThreadProvisionPayload = {
+    ...args.payload,
+    attachedEnvironmentId: args.environment.id,
+  };
+  saveThreadProvisionPayload(deps, {
+    threadId: args.thread.id,
+    payload: attachedPayload,
+  });
+  return attachedPayload;
+}
+
+function appendProvisioningStartedEvent(
+  deps: Pick<AppDeps, "db" | "hub">,
+  args: EnvironmentPayloadThreadArgs,
+): ThreadProvisionPayload {
+  if (args.payload.provisionEventSequence !== null) {
+    return args.payload;
+  }
+
+  const eventSequence = appendThreadProvisioningEvent(deps, {
+    threadId: args.thread.id,
+    environmentId: args.environment.id,
+    status: "active",
+    entries: initialProvisioningEntries(args.environment),
+  });
+  const updatedPayload: ThreadProvisionPayload = {
+    ...args.payload,
+    provisionEventSequence: eventSequence,
+  };
+  saveThreadProvisionPayload(deps, {
+    threadId: args.thread.id,
+    payload: updatedPayload,
+  });
+  return updatedPayload;
+}
+
+function createProvisioningEnvironmentWithOperation(
+  deps: Pick<AppDeps, "db" | "hub">,
+  args: CreateProvisioningEnvironmentWithOperationArgs,
+): ThreadProvisioningResult {
+  const result = deps.db.transaction(
+    (tx) => {
+      const environment = createEnvironment(tx, deps.hub, args.environmentInput);
+      if (args.thread.environmentId !== environment.id) {
+        updateThread(tx, deps.hub, args.thread.id, {
+          environmentId: environment.id,
+        });
+      }
+
+      const attachedPayload: ThreadProvisionPayload = {
+        ...args.payload,
+        attachedEnvironmentId: environment.id,
+      };
+      const eventSequence = appendThreadProvisioningEventInTransaction(tx, {
+        threadId: args.thread.id,
+        environmentId: environment.id,
+        status: "active",
+        entries: initialProvisioningEntries(environment),
+      });
+      const payload: ThreadProvisionPayload = {
+        ...attachedPayload,
+        provisionEventSequence: eventSequence,
+      };
+      upsertThreadOperationRecord(tx, {
+        threadId: args.thread.id,
+        kind: "provision",
+        payload: JSON.stringify(payload),
+      });
+      upsertEnvironmentOperationRecord(tx, {
+        environmentId: environment.id,
+        kind: "provision",
+        payload: JSON.stringify(
+          args.buildRequest({
+            environment,
+            eventSequence,
+            payload,
+          }),
+        ),
+      });
+      return { environment, payload };
+    },
+    { behavior: "immediate" },
+  );
+  deps.hub.notifyThread(args.thread.id, ["events-appended"]);
+  return result;
+}
+
+function createDirectUnmanagedEnvironment(
+  deps: Pick<AppDeps, "db" | "hub">,
+  args: DirectUnmanagedEnvironmentArgs,
+): ThreadProvisioningResult {
+  return createProvisioningEnvironmentWithOperation(deps, {
+    thread: args.thread,
+    payload: args.payload,
+    environmentInput: {
+      projectId: args.thread.projectId,
+      hostId: args.intent.hostId,
+      managed: false,
+      workspaceProvisionType: "unmanaged",
+      status: "provisioning",
+    },
+    buildRequest: ({ environment, eventSequence }) =>
+      buildDirectEnvironmentProvisionRequest(
+        buildEnvironmentProvisionCommand({
+          environmentId: environment.id,
+          hostId: args.intent.hostId,
+          initiator: {
+            threadId: args.thread.id,
+            eventSequence,
+          },
+          path: args.intent.path,
+          workspaceProvisionType: "unmanaged",
+        }),
+      ),
+  });
+}
+
+async function createDirectManagedEnvironment(
+  deps: ThreadProvisioningDeps,
+  args: DirectManagedEnvironmentArgs,
+): Promise<ThreadProvisioningResult> {
+  const hostSession = await ensureHostSessionReadyForWork(deps, {
+    hostId: args.intent.hostId,
+  });
+  return createProvisioningEnvironmentWithOperation(deps, {
+    thread: args.thread,
+    payload: args.payload,
+    environmentInput: {
+      projectId: args.thread.projectId,
+      hostId: args.intent.hostId,
+      managed: true,
+      workspaceProvisionType: args.intent.workspaceProvisionType,
+      status: "provisioning",
+    },
+    buildRequest: ({ environment, eventSequence, payload }) =>
+      buildDirectEnvironmentProvisionRequest(
+        buildEnvironmentProvisionCommand({
+          branchName: buildManagedBranchName({
+            branchSlug: payload.branchSlug,
+            threadId: args.thread.id,
+          }),
+          environmentId: environment.id,
+          hostId: args.intent.hostId,
+          initiator: {
+            threadId: args.thread.id,
+            eventSequence,
+          },
+          sourcePath: args.intent.sourcePath,
+          targetPath: resolveManagedTargetPath({
+            dataDir: hostSession.dataDir,
+            environmentId: environment.id,
+            sourcePath: args.intent.sourcePath,
+          }),
+          workspaceProvisionType: args.intent.workspaceProvisionType,
+          setupTimeoutMs: SETUP_TIMEOUT_MS,
+        }),
+      ),
+  });
+}
+
+function createSandboxManagedEnvironment(
+  deps: Pick<AppDeps, "db" | "hub">,
+  args: SandboxManagedEnvironmentArgs,
+): ThreadProvisioningResult {
+  const hostId = createHostId();
+  const hostName = `sandbox-${hostId.slice(-6)}`;
+  upsertHost(deps.db, deps.hub, {
+    id: hostId,
+    name: hostName,
+    provider: args.intent.sandboxType,
+    type: "ephemeral",
+  });
+  return createProvisioningEnvironmentWithOperation(deps, {
+    thread: args.thread,
+    payload: args.payload,
+    environmentInput: {
+      hostId,
+      managed: true,
+      projectId: args.thread.projectId,
+      status: "provisioning",
+      workspaceProvisionType: "managed-clone",
+    },
+    buildRequest: ({ environment, eventSequence, payload }) =>
+      buildSandboxHostEnvironmentProvisionRequest({
+        sandboxType: args.intent.sandboxType,
+        command: buildEnvironmentProvisionCommand({
+          branchName: buildManagedBranchName({
+            branchSlug: payload.branchSlug,
+            threadId: args.thread.id,
+          }),
+          environmentId: environment.id,
+          hostId,
+          initiator: {
+            threadId: args.thread.id,
+            eventSequence,
+          },
+          sourcePath: args.intent.cloneRepoUrl,
+          targetPath: resolveManagedTargetPath({
+            dataDir: SANDBOX_DATA_DIR,
+            environmentId: environment.id,
+            sourcePath: args.intent.cloneRepoUrl,
+          }),
+          workspaceProvisionType: "managed-clone",
+          setupTimeoutMs: SETUP_TIMEOUT_MS,
+        }),
+      }),
+  });
+}
+
+async function ensureEnvironmentRequested(
+  deps: ThreadProvisioningDeps,
+  args: EnsureEnvironmentRequestedArgs,
+): Promise<ThreadProvisioningResult> {
+  if (args.payload.attachedEnvironmentId) {
+    const environment = getEnvironment(deps.db, args.payload.attachedEnvironmentId);
+    if (!environment) {
+      throw new ApiError(404, "environment_not_found", "Environment not found");
+    }
+    return {
+      environment,
+      payload: args.payload,
+    };
+  }
+
+  switch (args.payload.environmentIntent.type) {
+    case "reuse": {
+      const environment = getEnvironment(
+        deps.db,
+        args.payload.environmentIntent.environmentId,
+      );
+      if (!environment) {
+        throw new ApiError(404, "environment_not_found", "Environment not found");
+      }
+      let payload = attachThreadToEnvironment(deps, {
+        environment,
+        payload: args.payload,
+        thread: args.thread,
+      });
+      if (environment.status === "provisioning") {
+        payload = appendProvisioningStartedEvent(deps, {
+          environment,
+          payload,
+          thread: args.thread,
+        });
+      }
+      return { environment, payload };
+    }
+    case "direct-unmanaged":
+      return createDirectUnmanagedEnvironment(deps, {
+        intent: args.payload.environmentIntent,
+        payload: args.payload,
+        thread: args.thread,
+      });
+    case "direct-managed":
+      return createDirectManagedEnvironment(deps, {
+        intent: args.payload.environmentIntent,
+        payload: args.payload,
+        thread: args.thread,
+      });
+    case "sandbox-managed":
+      return createSandboxManagedEnvironment(deps, {
+        intent: args.payload.environmentIntent,
+        payload: args.payload,
+        thread: args.thread,
+      });
+  }
+}
+
+async function startThreadIfEnvironmentReady(
+  deps: ThreadProvisioningDeps,
+  args: EnvironmentPayloadThreadArgs,
+): Promise<void> {
+  if (args.environment.status === "error") {
+    failThreadProvisioning(deps, {
+      thread: args.thread,
+      environmentId: args.environment.id,
+      detail: "Environment provisioning failed",
+    });
+    return;
+  }
+  if (args.environment.status !== "ready" || !args.environment.path) {
+    return;
+  }
+
+  let payload = args.payload;
+  if (payload.workspaceReadyEventSequence === null) {
+    const eventSequence = appendThreadProvisioningEvent(deps, {
+      threadId: args.thread.id,
+      environmentId: args.environment.id,
+      status: "active",
+      entries: buildCwdBranchEntries({
+        path: args.environment.path,
+        branchName: args.environment.branchName,
+      }),
+    });
+    payload = {
+      ...payload,
+      workspaceReadyEventSequence: eventSequence,
+    };
+    saveThreadProvisionPayload(deps, {
+      threadId: args.thread.id,
+      payload,
+    });
+  }
+
+  const workspaceReadyEventSequence = payload.workspaceReadyEventSequence;
+  if (workspaceReadyEventSequence === null) {
+    throw new Error("Workspace ready event sequence was not recorded");
+  }
+
+  await requestThreadStart(deps, {
+    thread: args.thread,
+    environment: {
+      id: args.environment.id,
+      hostId: args.environment.hostId,
+      path: args.environment.path,
+      workspaceProvisionType: args.environment.workspaceProvisionType,
+    },
+    input: payload.input,
+    eventSequence: workspaceReadyEventSequence,
+    execution: payload.execution,
+    permissionEscalation: resolvePermissionEscalation({
+      thread: args.thread,
+      initiator: args.thread.type === "manager" ? "system" : "user",
+    }),
+    projectId: args.thread.projectId,
+    providerId: args.thread.providerId,
+  });
+  completeThreadProvisioning(deps, args.thread.id);
+}
+
+export function requestThreadProvision(
+  deps: Pick<AppDeps, "db" | "hub">,
+  args: RequestThreadProvisionArgs,
+): void {
+  appendClientTurnEvent(deps, {
+    threadId: args.thread.id,
+    environmentId: args.thread.environmentId,
+    type: "client/thread/start",
+    input: args.input,
+    execution: args.execution,
+    initiator: args.thread.type === "manager" ? "system" : "user",
+    requestMethod: "thread/start",
+    source: "spawn",
+  });
+
+  const payload: ThreadProvisionPayload = {
+    attachedEnvironmentId: args.thread.environmentId,
+    branchSlug: null,
+    environmentIntent: args.environmentIntent,
+    execution: args.execution,
+    input: args.input,
+    metadataResolved: false,
+    provisionEventSequence: null,
+    titleProvided: args.titleProvided,
+    workspaceReadyEventSequence: null,
+  };
+  upsertThreadOperationRecord(deps.db, {
+    threadId: args.thread.id,
+    kind: "provision",
+    payload: JSON.stringify(payload),
+  });
+}
+
+export async function advanceThreadProvisioning(
+  deps: ThreadProvisioningDeps,
+  args: AdvanceThreadProvisioningArgs,
+): Promise<void> {
+  const thread = getThread(deps.db, args.threadId);
+  if (!thread || thread.deletedAt !== null) {
+    return;
+  }
+  let payload = loadActiveThreadProvisionPayload(deps, thread.id);
+  if (!payload) {
+    return;
+  }
+  if (thread.status === "error") {
+    markThreadOperationRecordFailed(deps.db, {
+      threadId: thread.id,
+      kind: "provision",
+      failureReason: "Thread provisioning failed",
+    });
+    return;
+  }
+  if (thread.archivedAt !== null || thread.stopRequestedAt !== null) {
+    return;
+  }
+
+  try {
+    payload = await resolveMetadataIfNeeded(deps, {
+      payload,
+      thread,
+    });
+    const { environment, payload: attachedPayload } =
+      await ensureEnvironmentRequested(deps, {
+        payload,
+        thread,
+      });
+    payload = attachedPayload;
+
+    if (environment.status === "provisioning") {
+      await advanceEnvironmentProvisioning(deps, {
+        environmentId: environment.id,
+      });
+    }
+    await startThreadIfEnvironmentReady(deps, {
+      environment: getEnvironment(deps.db, environment.id) ?? environment,
+      payload,
+      thread: getThread(deps.db, thread.id) ?? thread,
+    });
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 502) {
+      return;
+    }
+    const detail = error instanceof Error ? error.message : String(error);
+    failThreadProvisioning(deps, {
+      thread,
+      environmentId: payload.attachedEnvironmentId,
+      detail,
+    });
+  }
+}

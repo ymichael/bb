@@ -8,6 +8,7 @@ import {
   getEnvironment,
   getHost,
   getThread,
+  getThreadOperation,
   hostDaemonCommands,
   hostDaemonSessions,
   markEphemeralHostActivity,
@@ -445,6 +446,81 @@ describe("periodic sweeps", () => {
       expect(queued.command).toMatchObject({
         workspaceProvisionType: "unmanaged",
         path: "/tmp/periodic-provision",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("advances requested thread provisioning operations without a live command", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-periodic-thread-provision",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/periodic-thread-provision",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/periodic-thread-provision",
+        status: "ready",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "provisioning",
+        title: "Periodic thread provision",
+      });
+
+      upsertThreadOperationRecord(harness.db, {
+        threadId: thread.id,
+        kind: "provision",
+        payload: JSON.stringify({
+          attachedEnvironmentId: environment.id,
+          branchSlug: null,
+          environmentIntent: {
+            type: "reuse",
+            environmentId: environment.id,
+          },
+          execution: {
+            model: "gpt-5",
+            serviceTier: "default",
+            reasoningLevel: "medium",
+            permissionMode: "full",
+            permissionEscalation: null,
+            source: "client/thread/start",
+          },
+          input: [{ type: "text", text: "short" }],
+          metadataResolved: false,
+          provisionEventSequence: null,
+          titleProvided: false,
+          workspaceReadyEventSequence: null,
+        }),
+      });
+
+      await runThreadLifecycleSweep(harness.deps);
+
+      const queued = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "thread.start"
+          && command.threadId === thread.id,
+      );
+      expect(queued.command).toMatchObject({
+        environmentId: environment.id,
+        threadId: thread.id,
+      });
+      expect(getThread(harness.db, thread.id)).toMatchObject({
+        status: "provisioning",
+      });
+      expect(getThreadOperation(harness.db, {
+        threadId: thread.id,
+        kind: "provision",
+      })).toMatchObject({
+        state: "completed",
       });
     } finally {
       await harness.cleanup();

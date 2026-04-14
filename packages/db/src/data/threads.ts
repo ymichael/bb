@@ -16,10 +16,12 @@ import type {
   ThreadType,
 } from "@bb/domain";
 import { resolveEnvironmentWorkspaceDisplayKind } from "@bb/domain";
-import type { DbConnection } from "../connection.js";
+import type { DbConnection, DbTransaction } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
 import { environments, hosts, pendingInteractions, threads } from "../schema.js";
 import { createThreadId } from "../ids.js";
+
+type ThreadWriteConnection = DbConnection | DbTransaction;
 
 /**
  * Allowed thread status transitions.
@@ -320,7 +322,7 @@ export interface UpdateThreadInput {
 }
 
 export function updateThread(
-  db: DbConnection,
+  db: ThreadWriteConnection,
   notifier: DbNotifier,
   id: string,
   input: UpdateThreadInput,

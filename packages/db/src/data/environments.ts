@@ -6,10 +6,13 @@ import type {
   EnvironmentStatus,
   WorkspaceProvisionType,
 } from "@bb/domain";
-import type { DbConnection } from "../connection.js";
+import type { DbConnection, DbTransaction } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
 import { environments } from "../schema.js";
 import { createEnvironmentId } from "../ids.js";
+
+type EnvironmentReadConnection = DbConnection | DbTransaction;
+type EnvironmentWriteConnection = DbConnection | DbTransaction;
 
 export interface CreateEnvironmentInput {
   cleanupMode?: EnvironmentCleanupMode | null;
@@ -28,7 +31,7 @@ export interface CreateEnvironmentInput {
 }
 
 export function createEnvironment(
-  db: DbConnection,
+  db: EnvironmentWriteConnection,
   notifier: DbNotifier,
   input: CreateEnvironmentInput,
 ) {
@@ -59,7 +62,7 @@ export function createEnvironment(
   return row;
 }
 
-export function getEnvironment(db: DbConnection, id: string) {
+export function getEnvironment(db: EnvironmentReadConnection, id: string) {
   return (
     db.select().from(environments).where(eq(environments.id, id)).get() ?? null
   );

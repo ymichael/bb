@@ -54,6 +54,23 @@ export interface AppendSystemErrorEventArgs {
   threadId: string;
 }
 
+export interface AppendThreadProvisioningEventArgs {
+  entries: ProvisioningTranscriptEntry[];
+  environmentId: string;
+  status: SystemThreadProvisioningStatus;
+  threadId: string;
+}
+
+export interface BuildCwdBranchEntriesArgs {
+  branchName?: string | null;
+  path: string;
+}
+
+export interface AppendThreadInterruptedEventArgs {
+  message?: string;
+  threadId: string;
+}
+
 const storedEventPayloadSchema = z.record(z.unknown());
 
 function buildClientTurnEventData(
@@ -181,12 +198,7 @@ export function parseStoredTurnRequestEvent(
 
 export function appendThreadProvisioningEvent(
   deps: Pick<AppDeps, "db" | "hub">,
-  args: {
-    entries: ProvisioningTranscriptEntry[];
-    environmentId: string;
-    status: SystemThreadProvisioningStatus;
-    threadId: string;
-  },
+  args: AppendThreadProvisioningEventArgs,
 ): number {
   return appendThreadEvent(deps, {
     threadId: args.threadId,
@@ -200,10 +212,23 @@ export function appendThreadProvisioningEvent(
   });
 }
 
-export function buildCwdBranchEntries(args: {
-  path: string;
-  branchName?: string | null;
-}): ProvisioningTranscriptEntry[] {
+export function appendThreadProvisioningEventInTransaction(
+  db: DbTransaction,
+  args: AppendThreadProvisioningEventArgs,
+): number {
+  return appendThreadEventInTransaction(db, {
+    threadId: args.threadId,
+    environmentId: args.environmentId,
+    type: "system/thread-provisioning",
+    data: {
+      status: args.status,
+      environmentId: args.environmentId,
+      entries: args.entries,
+    },
+  });
+}
+
+export function buildCwdBranchEntries(args: BuildCwdBranchEntriesArgs): ProvisioningTranscriptEntry[] {
   const now = Date.now();
   const entries: ProvisioningTranscriptEntry[] = [
     { type: "step", key: "workspace-path", text: `Using workspace: ${args.path}`, status: "completed", startedAt: now },
@@ -240,10 +265,7 @@ export function buildSystemErrorEventData(
 
 export function appendThreadInterruptedEvent(
   deps: Pick<AppDeps, "db" | "hub">,
-  args: {
-    message?: string;
-    threadId: string;
-  },
+  args: AppendThreadInterruptedEventArgs,
 ): number {
   return appendThreadEvent(deps, {
     threadId: args.threadId,

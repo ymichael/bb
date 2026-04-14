@@ -40,6 +40,7 @@ export type EnvironmentOperationKind = z.infer<
 >;
 
 export const threadOperationKindValues = [
+  "provision",
   "start",
   "stop",
 ] as const;

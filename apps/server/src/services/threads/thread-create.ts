@@ -1,19 +1,11 @@
 import {
   createEnvironment,
-  createHostId,
-  createThread,
-  deleteEnvironment,
-  deleteHost,
   deleteThread,
   findEnvironmentByHostPath,
-  upsertHost,
 } from "@bb/db";
 import { applyProvisionedEnvironmentRecord } from "@bb/db/internal-lifecycle";
 import type {
   Environment,
-  GitHubRepoProjectSource,
-  LocalPathProjectSource,
-  ProvisioningTranscriptEntry,
 } from "@bb/domain";
 import { hostDaemonCommandResultSchemaByType } from "@bb/host-daemon-contract";
 import type { AppDeps } from "../../types.js";
@@ -28,38 +20,24 @@ import {
 import { requireReachablePublicServerUrl } from "../hosts/public-server-url.js";
 import { assertSandboxProvisioningConfig } from "../hosts/sandbox-backends.js";
 import { ensureHostSessionReadyForWork } from "../hosts/host-lifecycle.js";
-import { appendClientTurnEvent, appendThreadProvisioningEvent, buildCwdBranchEntries } from "./thread-events.js";
 import { buildExecutionOptions } from "./thread-commands.js";
 import {
   rememberProjectExecutionDefaultsForCreate,
   resolveProjectExecutionDefaultsForCreate,
 } from "./project-execution-defaults.js";
 import {
-  applyGeneratedThreadTitle,
-  generateThreadMetadataWithOutcome,
-  generateThreadTitle,
-  type ThreadMetadataGenerationOutcome,
-} from "./title-generation.js";
-import {
-  buildManagedBranchName,
   buildEnvironmentProvisionCommand,
   createThreadRecord,
   getThreadSafe,
   requireProjectExists,
-  SETUP_TIMEOUT_MS,
 } from "./thread-create-helpers.js";
-import { resolveManagedTargetPath } from "./worktree-paths.js";
-import { SANDBOX_DATA_DIR } from "@bb/sandbox-host";
 import {
   advanceEnvironmentProvisioning,
   requestEnvironmentProvision,
 } from "../environments/environment-provisioning.js";
 import {
   buildDirectEnvironmentProvisionRequest,
-  buildSandboxHostEnvironmentProvisionRequest,
 } from "../environments/environment-provision-request.js";
-import { requestThreadStart } from "./thread-lifecycle.js";
-import { resolvePermissionEscalation } from "./thread-runtime-config.js";
 import {
   resolveStableThreadRequestEnvironment,
 } from "./thread-request-eligibility.js";
@@ -67,6 +45,11 @@ import {
   type ThreadCreateServiceRequestInput,
   type ThreadCreateServiceRequest,
 } from "./thread-create-request.js";
+import {
+  advanceThreadProvisioning,
+  requestThreadProvision,
+  type RequestThreadProvisionArgs,
+} from "./thread-provisioning.js";
 
 type ThreadCreateDeps = Pick<
   AppDeps,
@@ -81,247 +64,45 @@ type ThreadCreateDeps = Pick<
   | "sandboxRegistry"
 >;
 
-interface CreateThreadInEnvironmentArgs {
-  environment: Environment;
-  projectDefaults: Parameters<typeof buildExecutionOptions>[2]["projectDefaults"];
-  provisioningEntries?: ProvisioningTranscriptEntry[];
-  request: ThreadCreateServiceRequest;
-  threadStatus: "created" | "provisioning";
-}
-
-interface ReuseEnvironmentByHostPathArgs {
+interface ReuseEnvironmentIntentByHostPathArgs {
   hostId: string;
   path: string;
-  projectDefaults: Parameters<typeof buildExecutionOptions>[2]["projectDefaults"];
   request: ThreadCreateServiceRequest;
 }
 
-interface ManagedThreadMetadataArgs {
-  environmentId: string;
-  request: ThreadCreateServiceRequest;
-  threadId: string;
-}
-
-interface ManagedThreadMetadataResult {
-  branchSlug: string | null;
-  eventSequence: number;
-}
-
-interface MetadataCompletedTextArgs {
-  outcome: ThreadMetadataGenerationOutcome;
+interface CreateProvisioningThreadArgs {
+  environmentId: string | null;
+  executionDefaults: Parameters<typeof buildExecutionOptions>[2]["projectDefaults"];
   request: ThreadCreateServiceRequest;
 }
 
-interface ScheduleGeneratedThreadTitleArgs {
-  request: ThreadCreateServiceRequest;
-  threadId: string;
+interface EnsureProjectSourceEnvironmentArgs {
+  hostId: string;
+  path: string;
+  projectId: string;
 }
 
-interface CreateSandboxHostThreadArgs {
-  cloneSource: GitHubRepoProjectSource;
-  projectDefaults: Parameters<typeof buildExecutionOptions>[2]["projectDefaults"];
-  request: ThreadCreateServiceRequest;
-  sandboxType: string;
-}
+type ThreadProvisionEnvironmentIntent =
+  RequestThreadProvisionArgs["environmentIntent"];
 
-type ManagedThreadMetadataDeps = Pick<ThreadCreateDeps, "config" | "db" | "hub" | "logger">;
-
-const MANAGED_THREAD_METADATA_TIMEOUT_MS = 5_000;
-
-function metadataStartedText(request: ThreadCreateServiceRequest): string {
-  return request.title
-    ? "Generating branch name"
-    : "Generating title and branch name";
-}
-
-function metadataCompletedText(args: MetadataCompletedTextArgs): string {
-  const hasTitle = !args.request.title && Boolean(args.outcome.metadata?.title);
-  const hasBranchName = Boolean(args.outcome.metadata?.branchSlug);
-  if (hasTitle && hasBranchName) {
-    return "Generated title and branch name";
-  }
-  if (hasBranchName) {
-    return "Generated branch name";
-  }
-  return "Using fallback branch name";
-}
-
-async function resolveManagedThreadMetadata(
-  deps: ManagedThreadMetadataDeps,
-  args: ManagedThreadMetadataArgs,
-): Promise<ManagedThreadMetadataResult> {
-  const startedAt = Date.now();
-  appendThreadProvisioningEvent(deps, {
-    threadId: args.threadId,
-    environmentId: args.environmentId,
-    status: "active",
-    entries: [
-      {
-        type: "step",
-        key: "metadata-started",
-        text: metadataStartedText(args.request),
-        status: "started",
-        startedAt,
-      },
-    ],
-  });
-
-  // Managed branch names must be known before provisioning is queued. Keep
-  // inference bounded and let branch creation fall back to bb/<threadId>.
-  const outcome = await generateThreadMetadataWithOutcome(deps, {
-    input: args.request.input,
-    threadId: args.threadId,
-    timeoutMs: MANAGED_THREAD_METADATA_TIMEOUT_MS,
-  });
-  const metadata = outcome.metadata;
-
-  const metadataCompletedSequence = appendThreadProvisioningEvent(deps, {
-    threadId: args.threadId,
-    environmentId: args.environmentId,
-    status: "active",
-    entries: [
-      {
-        type: "step",
-        key: "metadata-completed",
-        text: metadataCompletedText({ outcome, request: args.request }),
-        status: "completed",
-        startedAt,
-        metadata: {
-          durationMs: outcome.durationMs,
-          branchNameGenerated: Boolean(metadata?.branchSlug),
-          titleGenerated: !args.request.title && Boolean(metadata?.title),
-          ...(outcome.reason ? { reason: outcome.reason } : {}),
-        },
-      },
-    ],
-  });
-
-  if (!args.request.title && metadata?.title) {
-    try {
-      applyGeneratedThreadTitle(deps, {
-        threadId: args.threadId,
-        title: metadata.title,
-      });
-    } catch (error) {
-      deps.logger.warn(
-        { err: error, threadId: args.threadId },
-        "Failed to apply generated thread title",
-      );
-    }
-  }
-
-  return {
-    branchSlug: metadata?.branchSlug ?? null,
-    eventSequence: metadataCompletedSequence,
-  };
-}
-
-function scheduleGeneratedThreadTitle(
+function scheduleThreadProvisioningAdvance(
   deps: ThreadCreateDeps,
-  args: ScheduleGeneratedThreadTitleArgs,
+  threadId: string,
 ): void {
-  if (args.request.title) {
-    return;
-  }
-
-  void generateThreadTitle(deps, {
-    threadId: args.threadId,
-    input: args.request.input,
+  void advanceThreadProvisioning(deps, {
+    threadId,
+  }).catch((error) => {
+    deps.logger.warn(
+      { err: error, threadId },
+      "Failed to advance thread provisioning after thread creation",
+    );
   });
 }
 
-async function createThreadInEnvironment(
+function reuseEnvironmentIntentByHostPath(
   deps: ThreadCreateDeps,
-  args: CreateThreadInEnvironmentArgs,
-) {
-  const thread = createThreadRecord(
-    deps,
-    {
-      request: args.request,
-      environmentId: args.environment.id,
-      status: args.threadStatus,
-    },
-  );
-  let execution: Awaited<ReturnType<typeof buildExecutionOptions>>;
-  try {
-    execution = await buildExecutionOptions(
-      deps,
-      args.request,
-      {
-        ...(args.projectDefaults ? { projectDefaults: args.projectDefaults } : {}),
-        threadId: thread.id,
-      },
-      "client/thread/start",
-    );
-
-    const eventSequence = appendClientTurnEvent(
-      deps,
-      {
-        threadId: thread.id,
-        environmentId: args.environment.id,
-        type: "client/thread/start",
-        input: args.request.input,
-        execution,
-        initiator: args.request.type === "manager" ? "system" : "user",
-        requestMethod: "thread/start",
-        source: "spawn",
-      },
-    );
-
-    if (args.threadStatus === "provisioning") {
-      appendThreadProvisioningEvent(deps, {
-        threadId: thread.id,
-        environmentId: args.environment.id,
-        status: "active",
-        entries: args.provisioningEntries ?? [
-          {
-            type: "step",
-            key: "workspace-waiting",
-            text: "Waiting for workspace",
-            status: "started",
-          },
-        ],
-      });
-    }
-
-    if (args.threadStatus === "created") {
-      let latestSequence = eventSequence;
-      if (args.environment.path) {
-        const cwdEntries = buildCwdBranchEntries({
-          path: args.environment.path,
-          branchName: args.environment.branchName,
-        });
-        latestSequence = appendThreadProvisioningEvent(deps, {
-          threadId: thread.id,
-          environmentId: args.environment.id,
-          status: "active",
-          entries: cwdEntries,
-        });
-      }
-      await startQueuedThreadIfNeeded(deps, {
-        thread,
-        environment: args.environment,
-        execution,
-        eventSequence: latestSequence,
-        request: args.request,
-      });
-    }
-  } catch (error) {
-    deleteThread(deps.db, deps.hub, thread.id);
-    throw error;
-  }
-  rememberProjectExecutionDefaultsForCreate(deps, {
-    execution,
-    request: args.request,
-  });
-
-  return getThreadSafe(deps, thread.id);
-}
-
-async function reuseEnvironmentByHostPath(
-  deps: ThreadCreateDeps,
-  args: ReuseEnvironmentByHostPathArgs,
-): Promise<ReturnType<typeof getThreadSafe> | null> {
+  args: ReuseEnvironmentIntentByHostPathArgs,
+): Extract<ThreadProvisionEnvironmentIntent, { type: "reuse" }> | null {
   const existing = findEnvironmentByHostPath(deps.db, args.hostId, args.path);
   if (!existing) {
     return null;
@@ -335,32 +116,11 @@ async function reuseEnvironmentByHostPath(
     );
   }
 
-  if (existing.status === "ready") {
-    const thread = await createThreadInEnvironment(deps, {
-      environment: existing,
-      projectDefaults: args.projectDefaults,
-      request: args.request,
-      threadStatus: "created",
-    });
-    scheduleGeneratedThreadTitle(deps, {
-      request: args.request,
-      threadId: thread.id,
-    });
-    return thread;
-  }
-
-  if (existing.status === "provisioning") {
-    const thread = await createThreadInEnvironment(deps, {
-      environment: existing,
-      projectDefaults: args.projectDefaults,
-      request: args.request,
-      threadStatus: "provisioning",
-    });
-    scheduleGeneratedThreadTitle(deps, {
-      request: args.request,
-      threadId: thread.id,
-    });
-    return thread;
+  if (existing.status === "ready" || existing.status === "provisioning") {
+    return {
+      type: "reuse",
+      environmentId: existing.id,
+    };
   }
 
   throw new ApiError(
@@ -370,118 +130,44 @@ async function reuseEnvironmentByHostPath(
   );
 }
 
-async function startQueuedThreadIfNeeded(
+async function createProvisioningThread(
   deps: ThreadCreateDeps,
-  args: {
-    environment: Environment;
-    execution: Awaited<ReturnType<typeof buildExecutionOptions>>;
-    eventSequence: number;
-    request: ThreadCreateServiceRequest;
-    thread: ReturnType<typeof createThread>;
+  args: CreateProvisioningThreadArgs & {
+    environmentIntent: ThreadProvisionEnvironmentIntent;
   },
-): Promise<void> {
-  await requestThreadStart(deps, {
-    thread: args.thread,
-    environment: {
-      id: args.environment.id,
-      hostId: args.environment.hostId,
-      path: args.environment.path,
-      workspaceProvisionType: args.environment.workspaceProvisionType,
-    },
-    input: args.request.input,
-    eventSequence: args.eventSequence,
-    execution: args.execution,
-    permissionEscalation: resolvePermissionEscalation({
-      thread: args.thread,
-      initiator: args.request.type === "manager" ? "system" : "user",
-    }),
-    projectId: args.thread.projectId,
-    providerId: args.thread.providerId,
-  });
-}
-
-async function createSandboxHostThread(
-  deps: ThreadCreateDeps,
-  args: CreateSandboxHostThreadArgs,
 ) {
-  requireReachablePublicServerUrl(deps.config);
-  assertSandboxProvisioningConfig(args.sandboxType, deps.config);
-
-  const hostId = createHostId();
-  const hostName = `sandbox-${hostId.slice(-6)}`;
-
-  upsertHost(deps.db, deps.hub, {
-    id: hostId,
-    name: hostName,
-    provider: args.sandboxType,
-    type: "ephemeral",
-  });
-
-  const environment = createEnvironment(deps.db, deps.hub, {
-    hostId,
-    managed: true,
-    projectId: args.request.projectId,
+  const thread = createThreadRecord(deps, {
+    request: args.request,
+    environmentId: args.environmentId,
     status: "provisioning",
-    workspaceProvisionType: "managed-clone",
   });
-
-  let thread;
+  let execution: Awaited<ReturnType<typeof buildExecutionOptions>>;
   try {
-    thread = await createThreadInEnvironment(deps, {
-      environment,
-      projectDefaults: args.projectDefaults,
-      provisioningEntries: [
-        {
-          type: "step",
-          key: "sandbox-started",
-          text: "Preparing sandbox",
-          status: "started",
-        },
-      ],
-      request: args.request,
-      threadStatus: "provisioning",
+    execution = await buildExecutionOptions(
+      deps,
+      args.request,
+      {
+        ...(args.executionDefaults ? { projectDefaults: args.executionDefaults } : {}),
+        threadId: thread.id,
+      },
+      "client/thread/start",
+    );
+    requestThreadProvision(deps, {
+      thread,
+      environmentIntent: args.environmentIntent,
+      execution,
+      input: args.request.input,
+      titleProvided: Boolean(args.request.title),
     });
   } catch (error) {
-    deleteEnvironment(deps.db, deps.hub, environment.id);
-    deleteHost(deps.db, deps.hub, hostId);
+    deleteThread(deps.db, deps.hub, thread.id);
     throw error;
   }
-
-  const managedMetadata = await resolveManagedThreadMetadata(deps, {
-    environmentId: environment.id,
+  rememberProjectExecutionDefaultsForCreate(deps, {
+    execution,
     request: args.request,
-    threadId: thread.id,
   });
-
-  const command = buildEnvironmentProvisionCommand({
-    branchName: buildManagedBranchName({
-      branchSlug: managedMetadata.branchSlug,
-      threadId: thread.id,
-    }),
-    environmentId: environment.id,
-    hostId,
-    initiator: { threadId: thread.id, eventSequence: managedMetadata.eventSequence },
-    sourcePath: args.cloneSource.repoUrl,
-    targetPath: resolveManagedTargetPath({
-      dataDir: SANDBOX_DATA_DIR,
-      environmentId: environment.id,
-      sourcePath: args.cloneSource.repoUrl,
-    }),
-    workspaceProvisionType: "managed-clone",
-    setupTimeoutMs: SETUP_TIMEOUT_MS,
-  });
-  requestEnvironmentProvision(deps, {
-    environmentId: environment.id,
-    kind: "provision",
-    request: buildSandboxHostEnvironmentProvisionRequest({
-      command,
-      sandboxType: args.sandboxType,
-    }),
-  });
-  await advanceEnvironmentProvisioning(deps, {
-    environmentId: environment.id,
-  });
-
+  scheduleThreadProvisioningAdvance(deps, thread.id);
   return getThreadSafe(deps, thread.id);
 }
 
@@ -509,199 +195,84 @@ export async function createThreadFromRequest(
     projectId: request.projectId,
   });
 
-  if (resolvedEnvironment.type === "sandbox-host") {
-    return createSandboxHostThread(deps, {
-      cloneSource: resolvedEnvironment.cloneSource,
-      projectDefaults: executionDefaults,
-      request,
-      sandboxType: resolvedEnvironment.sandboxType,
-    });
-  }
+  let environmentId: string | null = null;
+  let environmentIntent: ThreadProvisionEnvironmentIntent;
 
-  if (resolvedEnvironment.type === "reuse") {
-    const environment = resolvedEnvironment.environment;
-    if (environment.status === "provisioning") {
-      requireNonDestroyedHostWithStatus(deps.db, environment.hostId);
-      const thread = await createThreadInEnvironment(deps, {
-        environment,
-        projectDefaults: executionDefaults,
-        request,
-        threadStatus: "provisioning",
-      });
-      scheduleGeneratedThreadTitle(deps, {
-        request,
-        threadId: thread.id,
-      });
-      return thread;
-    }
-
-    if (environment.status === "ready") {
-      if (!environment.path) {
-        throw new ApiError(409, "invalid_request", "Environment is not ready");
-      }
-      const thread = await createThreadInEnvironment(deps, {
-        environment,
-        projectDefaults: executionDefaults,
-        request,
-        threadStatus: "created",
-      });
-      scheduleGeneratedThreadTitle(deps, {
-        request,
-        threadId: thread.id,
-      });
-      return thread;
-    }
-    throw new ApiError(409, "invalid_request", "Environment is not ready");
-  }
-
-  const hostId = resolvedEnvironment.hostId;
-  const workspace = resolvedEnvironment.workspace;
-  const managedSource: LocalPathProjectSource | null =
-    workspace.type === "unmanaged" ? null : resolvedEnvironment.localSource;
-  const unmanagedPath =
-    workspace.type === "unmanaged" ? resolvedEnvironment.unmanagedPath : null;
-  const hostSession = await ensureHostSessionReadyForWork(deps, {
-    hostId,
-  });
-
-  if (workspace.type === "unmanaged" && unmanagedPath === null) {
-    throw new Error("Validated unmanaged host request is missing a workspace path");
-  }
-
-  if (workspace.type === "unmanaged" && unmanagedPath) {
-    const reusedThread = await reuseEnvironmentByHostPath(deps, {
-      hostId,
-      path: unmanagedPath,
-      projectDefaults: executionDefaults,
-      request,
-    });
-    if (reusedThread) {
-      return reusedThread;
-    }
-  }
-  const environment = createEnvironment(deps.db, deps.hub, {
-    projectId: request.projectId,
-    hostId,
-    managed: workspace.type !== "unmanaged",
-    workspaceProvisionType: workspace.type,
-    status: "provisioning",
-  });
-  const thread = createThreadRecord(
-    deps,
-    {
-      request,
-      environmentId: environment.id,
-      status: "provisioning",
-    },
-  );
-
-  const execution = await buildExecutionOptions(
-    deps,
-    request,
-    {
-      ...(executionDefaults ? { projectDefaults: executionDefaults } : {}),
-      threadId: thread.id,
-    },
-    "client/thread/start",
-  );
-  appendClientTurnEvent(deps, {
-    threadId: thread.id,
-    environmentId: environment.id,
-    type: "client/thread/start",
-    input: request.input,
-    execution,
-    initiator: request.type === "manager" ? "system" : "user",
-    requestMethod: "thread/start",
-    source: "spawn",
-  });
-
-  const provisioningEntries: ProvisioningTranscriptEntry[] = workspace.type === "unmanaged"
-    ? [
-        {
-          type: "step",
-          key: "workspace-started",
-          text: "Preparing workspace",
-          status: "started",
-        },
-      ]
-    : [];
-  const provisionEventSequence = appendThreadProvisioningEvent(deps, {
-    threadId: thread.id,
-    environmentId: environment.id,
-    status: "active",
-    entries: provisioningEntries,
-  });
-
-  let provisionCommand: ReturnType<typeof buildEnvironmentProvisionCommand>;
-  switch (workspace.type) {
-    case "unmanaged": {
-      if (unmanagedPath === null) {
-        throw new Error("Validated unmanaged host request is missing a workspace path");
-      }
-      provisionCommand = buildEnvironmentProvisionCommand({
-        environmentId: environment.id,
-        hostId,
-        initiator: { threadId: thread.id, eventSequence: provisionEventSequence },
-        path: unmanagedPath,
-        workspaceProvisionType: "unmanaged",
-      });
+  switch (resolvedEnvironment.type) {
+    case "sandbox-host": {
+      requireReachablePublicServerUrl(deps.config);
+      assertSandboxProvisioningConfig(
+        resolvedEnvironment.sandboxType,
+        deps.config,
+      );
+      environmentIntent = {
+        type: "sandbox-managed",
+        cloneRepoUrl: resolvedEnvironment.cloneSource.repoUrl,
+        sandboxType: resolvedEnvironment.sandboxType,
+      };
       break;
     }
-    case "managed-worktree":
-    case "managed-clone": {
+    case "reuse": {
+      const environment = resolvedEnvironment.environment;
+      if (environment.status !== "ready" && environment.status !== "provisioning") {
+        throw new ApiError(409, "invalid_request", "Environment is not ready");
+      }
+      if (environment.status === "ready" && !environment.path) {
+        throw new ApiError(409, "invalid_request", "Environment is not ready");
+      }
+      if (environment.status === "provisioning") {
+        requireNonDestroyedHostWithStatus(deps.db, environment.hostId);
+      }
+      environmentId = environment.id;
+      environmentIntent = {
+        type: "reuse",
+        environmentId: environment.id,
+      };
+      break;
+    }
+    case "host": {
+      const hostId = resolvedEnvironment.hostId;
+      const workspace = resolvedEnvironment.workspace;
+      if (workspace.type === "unmanaged") {
+        if (resolvedEnvironment.unmanagedPath === null) {
+          throw new Error("Validated unmanaged host request is missing a workspace path");
+        }
+        const reuseIntent = reuseEnvironmentIntentByHostPath(deps, {
+          hostId,
+          path: resolvedEnvironment.unmanagedPath,
+          request,
+        });
+        environmentIntent = reuseIntent ?? {
+          type: "direct-unmanaged",
+          hostId,
+          path: resolvedEnvironment.unmanagedPath,
+        };
+        if (reuseIntent) {
+          environmentId = reuseIntent.environmentId;
+        }
+        break;
+      }
+
+      const managedSource = resolvedEnvironment.localSource;
       if (!managedSource) {
         throw new Error("Validated managed host request is missing a local source");
       }
-      const managedMetadata = await resolveManagedThreadMetadata(deps, {
-        environmentId: environment.id,
-        request,
-        threadId: thread.id,
-      });
-      provisionCommand = buildEnvironmentProvisionCommand({
-        environmentId: environment.id,
+      environmentIntent = {
+        type: "direct-managed",
         hostId,
-        initiator: { threadId: thread.id, eventSequence: managedMetadata.eventSequence },
-        workspaceProvisionType: workspace.type,
         sourcePath: managedSource.path,
-        targetPath: resolveManagedTargetPath({
-          dataDir: hostSession.dataDir,
-          environmentId: environment.id,
-          sourcePath: managedSource.path,
-        }),
-        branchName: buildManagedBranchName({
-          branchSlug: managedMetadata.branchSlug,
-          threadId: thread.id,
-        }),
-        setupTimeoutMs: SETUP_TIMEOUT_MS,
-      });
+        workspaceProvisionType: workspace.type,
+      };
       break;
     }
-    default: {
-      const _exhaustive: never = workspace;
-      throw new Error(`Unsupported workspace request: ${_exhaustive}`);
-    }
   }
 
-  requestEnvironmentProvision(deps, {
-    environmentId: environment.id,
-    kind: "provision",
-    request: buildDirectEnvironmentProvisionRequest(provisionCommand),
-  });
-  await advanceEnvironmentProvisioning(deps, {
-    environmentId: environment.id,
-  });
-  rememberProjectExecutionDefaultsForCreate(deps, {
-    execution,
+  return createProvisioningThread(deps, {
+    environmentId,
+    environmentIntent,
+    executionDefaults,
     request,
   });
-
-  if (workspace.type === "unmanaged") {
-    scheduleGeneratedThreadTitle(deps, {
-      request,
-      threadId: thread.id,
-    });
-  }
-  return getThreadSafe(deps, thread.id);
 }
 
 export async function ensureProjectSourceEnvironment(
@@ -712,15 +283,12 @@ export async function ensureProjectSourceEnvironment(
     | "db"
     | "hostLifecycle"
     | "hub"
+    | "logger"
     | "machineAuth"
     | "sandboxEnv"
     | "sandboxRegistry"
   >,
-  args: {
-    hostId: string;
-    path: string;
-    projectId: string;
-  },
+  args: EnsureProjectSourceEnvironmentArgs,
 ): Promise<Environment> {
   const existing = findEnvironmentByHostPath(deps.db, args.hostId, args.path);
   if (existing && existing.status === "ready") {

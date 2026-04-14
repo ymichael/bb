@@ -179,7 +179,7 @@ export function ensureThreadCanQueueStartRequest(
   thread: Pick<Thread, "id" | "status">,
 ): void {
   if (
-    thread.status === "created"
+    isPreStartThreadStatus(thread.status)
     && hasActiveThreadStartOperation(deps, thread.id)
   ) {
     throw new ApiError(409, "invalid_request", "Thread is still starting");

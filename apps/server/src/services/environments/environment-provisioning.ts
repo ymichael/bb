@@ -92,6 +92,13 @@ interface QueueEnvironmentProvisionCommandArgs {
   kind: EnvironmentProvisionOperationKind;
 }
 
+interface FailEnvironmentProvisioningDurablyArgs {
+  commandId?: string;
+  environmentId: string;
+  failureEntry: ProvisioningTranscriptEntry;
+  failureReason: string;
+}
+
 type LiveEnvironmentThread = Pick<Thread, "id" | "projectId">;
 const sandboxBootstrapDeduper = createAsyncDeduper<string, void>();
 
@@ -372,6 +379,61 @@ export function failEnvironmentProvisioning(
   return true;
 }
 
+export async function failEnvironmentProvisioningDurably(
+  deps: Pick<
+    AppDeps,
+    | "cloudAuth"
+    | "config"
+    | "db"
+    | "hostLifecycle"
+    | "hub"
+    | "machineAuth"
+    | "sandboxEnv"
+    | "sandboxRegistry"
+  >,
+  args: FailEnvironmentProvisioningDurablyArgs,
+): Promise<void> {
+  const environment = getEnvironment(deps.db, args.environmentId);
+  if (!environment) {
+    return;
+  }
+  const liveThreads = listLiveEnvironmentThreads(deps, environment.id);
+
+  if (args.commandId) {
+    failEnvironmentProvisioningForCommand(deps, {
+      commandId: args.commandId,
+      failureReason: args.failureReason,
+    });
+  } else {
+    failEnvironmentProvisioning(deps, {
+      environmentId: environment.id,
+      failureReason: args.failureReason,
+    });
+  }
+
+  appendThreadProvisioningEventToEnvironmentThreads(deps, {
+    environmentId: environment.id,
+    status: "failed",
+    threads: liveThreads,
+    entries: [args.failureEntry],
+  });
+
+  for (const thread of liveThreads) {
+    appendSystemErrorEvent(deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      code: "thread_provisioning_failed",
+      message: "Provisioning thread failed",
+      detail: args.failureReason,
+    });
+    tryTransition(deps.db, deps.hub, thread.id, "error");
+  }
+
+  await advanceEnvironmentCleanup(deps, {
+    environmentId: environment.id,
+  });
+}
+
 export function requestEnvironmentProvision(
   deps: Pick<AppDeps, "db" | "hub">,
   args: RequestEnvironmentProvisionArgs,
@@ -458,47 +520,24 @@ async function bootstrapSandboxProvisioning(
   } catch (error) {
     const failureReason =
       error instanceof Error ? error.message : String(error);
-    const liveThreads = listLiveEnvironmentThreads(deps, args.environment.id);
 
-    failEnvironmentProvisioning(deps, {
+    await failEnvironmentProvisioningDurably(deps, {
       environmentId: args.environment.id,
       failureReason,
+      failureEntry: {
+        type: "step",
+        key: "sandbox-failed",
+        text: failureReason,
+        startedAt: Date.now(),
+        status: "failed",
+      },
     });
-
-    appendThreadProvisioningEventToEnvironmentThreads(deps, {
-      environmentId: args.environment.id,
-      status: "failed",
-      threads: liveThreads,
-      entries: [
-        {
-          type: "step",
-          key: "sandbox-failed",
-          text: failureReason,
-          startedAt: Date.now(),
-          status: "failed",
-        },
-      ],
-    });
-
-    for (const thread of liveThreads) {
-      appendSystemErrorEvent(deps, {
-        threadId: thread.id,
-        environmentId: args.environment.id,
-        code: "thread_provisioning_failed",
-        message: "Provisioning thread failed",
-        detail: failureReason,
-      });
-      tryTransition(deps.db, deps.hub, thread.id, "error");
-    }
 
     const host = getHost(deps.db, args.environment.hostId);
     if (host && host.destroyedAt === null) {
       await destroyHost(deps, host.id).catch(() => undefined);
     }
 
-    await advanceEnvironmentCleanup(deps, {
-      environmentId: args.environment.id,
-    });
   }
 }
 

@@ -3,9 +3,11 @@ import {
   cancelCommand,
   getEnvironment,
   getEnvironmentOperation,
+  getThread,
   getThreadOperation,
   hostDaemonCommands,
 } from "@bb/db";
+import { upsertThreadOperationRecord } from "@bb/db/internal-lifecycle";
 import { describe, expect, it } from "vitest";
 import { appendClientTurnEvent } from "../../src/services/threads/thread-events.js";
 import {
@@ -18,6 +20,7 @@ import {
 } from "../../src/services/threads/thread-lifecycle.js";
 import { buildEnvironmentProvisionCommand } from "../../src/services/threads/thread-create-helpers.js";
 import {
+  reportQueuedCommandError,
   reportQueuedCommandSuccess,
   waitForQueuedCommand,
   waitForQueuedCommandAfter,
@@ -50,7 +53,7 @@ describe("internal command result idempotency", () => {
         environmentId: environment.id,
         status: "provisioning",
       });
-      appendClientTurnEvent(harness.deps, {
+      const provisionEventSequence = appendClientTurnEvent(harness.deps, {
         threadId: thread.id,
         environmentId: environment.id,
         type: "client/thread/start",
@@ -65,6 +68,31 @@ describe("internal command result idempotency", () => {
         initiator: "user",
         requestMethod: "thread/start",
         source: "spawn",
+      });
+      upsertThreadOperationRecord(harness.db, {
+        threadId: thread.id,
+        kind: "provision",
+        payload: JSON.stringify({
+          attachedEnvironmentId: environment.id,
+          branchSlug: null,
+          environmentIntent: {
+            type: "reuse",
+            environmentId: environment.id,
+          },
+          execution: {
+            model: "gpt-5",
+            serviceTier: "default",
+            reasoningLevel: "medium",
+            permissionMode: "full",
+            permissionEscalation: null,
+            source: "client/thread/start",
+          },
+          input: [{ type: "text", text: "Start once" }],
+          metadataResolved: true,
+          provisionEventSequence,
+          titleProvided: true,
+          workspaceReadyEventSequence: null,
+        }),
       });
       const command = queueEnvironmentProvisionLifecycleCommand(harness, {
         hostId: host.id,
@@ -314,6 +342,62 @@ describe("internal command result idempotency", () => {
         state: "queued",
       });
       expect(getEnvironment(harness.db, environment.id)?.status).toBe("provisioning");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("durably fails direct environment.provision command errors", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-direct-provision-failure",
+      });
+      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/direct-provision-failure",
+        status: "provisioning",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "provisioning",
+      });
+      const command = queueEnvironmentProvisionLifecycleCommand(harness, {
+        hostId: host.id,
+        sessionId: session.id,
+        environmentId: environment.id,
+        command: {
+          type: "environment.provision",
+          environmentId: environment.id,
+          initiator: { threadId: thread.id, eventSequence: 0 },
+          workspaceProvisionType: "unmanaged",
+          path: "/tmp/direct-provision-failure",
+        },
+      });
+      const queued = await waitForQueuedCommand(
+        harness,
+        ({ row }) => row.id === command.id,
+      );
+
+      const response = await reportQueuedCommandError(harness, queued, {
+        errorCode: "workspace_setup_failed",
+        errorMessage: "setup failed",
+      });
+      expect(response.status).toBe(200);
+
+      expect(getEnvironment(harness.db, environment.id)?.status).toBe("error");
+      expect(getThread(harness.db, thread.id)?.status).toBe("error");
+      expect(getEnvironmentOperation(harness.db, {
+        environmentId: environment.id,
+        kind: "provision",
+      })).toMatchObject({
+        commandId: command.id,
+        failureReason: "setup failed",
+        state: "failed",
+      });
     } finally {
       await harness.cleanup();
     }

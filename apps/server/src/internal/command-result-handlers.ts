@@ -1,6 +1,5 @@
-import { and, desc, eq, gt, or } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import {
-  events,
   getEnvironment,
   getHost,
   getThread,
@@ -12,15 +11,9 @@ import {
   hostDaemonCommandSchema,
   type HostDaemonCommandResultReport,
 } from "@bb/host-daemon-contract";
-import {
-  type ProvisioningTranscriptEntry,
-  systemThreadProvisioningEventDataSchema,
-} from "@bb/domain";
 import type { AppDeps } from "../types.js";
 import {
   appendThreadProvisioningEvent,
-  buildCwdBranchEntries,
-  parseStoredTurnRequestEvent,
   appendSystemErrorEvent,
 } from "../services/threads/thread-events.js";
 import {
@@ -30,9 +23,7 @@ import {
   finalizeStoppedThread,
   hasActiveThreadStartOperationForCommand,
   hasActiveThreadStopOperationForCommand,
-  requestThreadStart,
 } from "../services/threads/thread-lifecycle.js";
-import { isPreStartThreadStatus } from "../services/threads/thread-status.js";
 import {
   advanceEnvironmentCleanup,
   completeEnvironmentDestroyForCommand,
@@ -41,7 +32,7 @@ import {
 } from "../services/environments/environment-cleanup.js";
 import {
   completeEnvironmentProvisioningForCommand,
-  failEnvironmentProvisioningForCommand,
+  failEnvironmentProvisioningDurably,
   hasActiveEnvironmentProvisionOperationForCommand,
 } from "../services/environments/environment-provisioning.js";
 import { destroyEphemeralHostIfReady } from "../services/hosts/host-lifecycle.js";
@@ -53,7 +44,7 @@ import {
 import {
   tryTransition,
 } from "../services/threads/thread-transitions.js";
-import { resolvePermissionEscalation } from "../services/threads/thread-runtime-config.js";
+import { advanceThreadProvisioning } from "../services/threads/thread-provisioning.js";
 
 export type CommandResultSideEffectsDeps = Pick<
   AppDeps,
@@ -100,55 +91,11 @@ type InteractiveResolveResultReport = Extract<
   HostDaemonCommandResultReport,
   { type: "interactive.resolve" }
 >;
-type HasStreamedProvisioningTranscriptArgs = {
-  deps: CommandResultSideEffectsDeps;
-  threadId: string;
-  afterSequence: number;
-};
-type ParsedStoredTurnRequestEvent = ReturnType<typeof parseStoredTurnRequestEvent>;
-
-const WORKSPACE_PROVISIONING_TRANSCRIPT_KEY_PREFIXES = [
-  "git-",
-  "setup-",
-  "workspace-",
-];
-
 function isWorkspaceMutationCommand(
   command: ParsedHostDaemonCommand,
   expectedType: WorkspaceMutationResultReport["type"],
 ): command is WorkspaceMutationCommand {
   return "environmentId" in command && command.type === expectedType;
-}
-
-function hasStreamedProvisioningTranscript(
-  args: HasStreamedProvisioningTranscriptArgs,
-): boolean {
-  const rows = args.deps.db
-    .select({ data: events.data })
-    .from(events)
-    .where(
-      and(
-        eq(events.threadId, args.threadId),
-        eq(events.type, "system/thread-provisioning"),
-        gt(events.sequence, args.afterSequence),
-      ),
-    )
-    .all();
-
-  return rows.some((row) => {
-    const eventData = systemThreadProvisioningEventDataSchema.parse(
-      JSON.parse(row.data),
-    );
-    return eventData.entries.some(isWorkspaceProvisioningTranscriptEntry);
-  });
-}
-
-function isWorkspaceProvisioningTranscriptEntry(
-  entry: ProvisioningTranscriptEntry,
-): boolean {
-  return WORKSPACE_PROVISIONING_TRANSCRIPT_KEY_PREFIXES.some((prefix) =>
-    entry.key.startsWith(prefix)
-  );
 }
 
 async function handleProvisionCommandResult(
@@ -183,11 +130,6 @@ async function handleProvisionCommandResult(
     });
     deps.hub.notifyEnvironment(command.environmentId, ["work-status-changed"]);
 
-    const cwdBranchEntries = buildCwdBranchEntries({
-      path: report.result.path,
-      branchName: report.result.branchName,
-    });
-
     for (const thread of boundThreads) {
       if (thread.deletedAt !== null) {
         await finalizeStoppedThread(deps, { threadId: thread.id });
@@ -198,80 +140,8 @@ async function handleProvisionCommandResult(
         continue;
       }
 
-      let parsedStartEvent: ParsedStoredTurnRequestEvent | null = null;
-      if (isPreStartThreadStatus(thread.status)) {
-        const startEvent = deps.db
-          .select({
-            data: events.data,
-            sequence: events.sequence,
-            threadId: events.threadId,
-            type: events.type,
-          })
-          .from(events)
-          .where(
-            and(
-              eq(events.threadId, thread.id),
-              or(
-                eq(events.type, "client/thread/start"),
-                eq(events.type, "client/turn/requested"),
-              ),
-            ),
-          )
-          .orderBy(desc(events.sequence))
-          .limit(1)
-          .get();
-        parsedStartEvent = startEvent
-          ? parseStoredTurnRequestEvent({
-              data: startEvent.data,
-              sequence: startEvent.sequence,
-              threadId: startEvent.threadId,
-              type: startEvent.type,
-            })
-          : null;
-      }
-
-      const willStartThread = Boolean(parsedStartEvent?.input?.length);
-      const isInitiator = thread.id === command.initiator?.threadId;
-      const hasStreamedTranscript = isInitiator && command.initiator
-        ? hasStreamedProvisioningTranscript({
-            deps,
-            threadId: thread.id,
-            afterSequence: command.initiator.eventSequence,
-          })
-        : false;
-      const entries = hasStreamedTranscript
-        ? []
-        : isInitiator && report.result.transcript.length > 0
-          ? report.result.transcript
-          : cwdBranchEntries;
-      const workspaceReadyEventSequence = appendThreadProvisioningEvent(deps, {
+      await advanceThreadProvisioning(deps, {
         threadId: thread.id,
-        environmentId: command.environmentId,
-        status: willStartThread ? "active" : "completed",
-        entries,
-      });
-
-      if (!parsedStartEvent?.input || parsedStartEvent.input.length === 0) {
-        continue;
-      }
-
-      await requestThreadStart(deps, {
-        thread,
-        environment: {
-          id: command.environmentId,
-          hostId: commandRow.hostId,
-          path: report.result.path,
-          workspaceProvisionType: command.workspaceProvisionType,
-        },
-        eventSequence: workspaceReadyEventSequence,
-        input: parsedStartEvent.input,
-        execution: parsedStartEvent.execution,
-        permissionEscalation: resolvePermissionEscalation({
-          thread,
-          initiator: parsedStartEvent.initiator ?? "user",
-        }),
-        projectId: thread.projectId,
-        providerId: thread.providerId,
       });
     }
 
@@ -286,39 +156,18 @@ async function handleProvisionCommandResult(
     return;
   }
 
-  failEnvironmentProvisioningForCommand(deps, {
+  await failEnvironmentProvisioningDurably(deps, {
     commandId: commandRow.id,
-    failureReason: report.errorMessage,
-  });
-
-  for (const thread of boundThreads) {
-    appendThreadProvisioningEvent(deps, {
-      threadId: thread.id,
-      environmentId: command.environmentId,
-      status: "failed",
-      entries: [
-        {
-          type: "step",
-          key: "workspace-failed",
-          text: "Workspace setup failed",
-          status: "failed",
-          startedAt: commandRow.createdAt,
-          metadata: { durationMs: Date.now() - commandRow.createdAt },
-        },
-      ],
-    });
-    appendSystemErrorEvent(deps, {
-      threadId: thread.id,
-      environmentId: command.environmentId,
-      code: "thread_provisioning_failed",
-      message: "Provisioning thread failed",
-      detail: report.errorMessage,
-    });
-    tryTransition(deps.db, deps.hub, thread.id, "error");
-  }
-
-  await advanceEnvironmentCleanup(deps, {
     environmentId: command.environmentId,
+    failureReason: report.errorMessage,
+    failureEntry: {
+      type: "step",
+      key: "workspace-failed",
+      text: "Workspace setup failed",
+      status: "failed",
+      startedAt: commandRow.createdAt,
+      metadata: { durationMs: Date.now() - commandRow.createdAt },
+    },
   });
 }
 

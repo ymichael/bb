@@ -13,6 +13,7 @@ import {
   events,
   getDraft,
   getEnvironment,
+  getEnvironmentOperation,
   getProjectExecutionDefaults,
   getHost,
   openSession,
@@ -132,6 +133,26 @@ async function waitForAssertion(assertion: AssertionFn): Promise<void> {
   throw new Error(lastMessage);
 }
 
+async function waitForThreadEnvironment(
+  harness: Awaited<ReturnType<typeof createTestAppHarness>>,
+  threadId: string,
+) {
+  let environmentId: string | null = null;
+  await waitForAssertion(() => {
+    const thread = getThread(harness.db, threadId);
+    environmentId = thread?.environmentId ?? null;
+    expect(environmentId).toMatch(/^env_/u);
+  });
+  if (!environmentId) {
+    throw new Error("Expected thread environment id to be set");
+  }
+  const environment = getEnvironment(harness.db, environmentId);
+  if (!environment) {
+    throw new Error("Expected thread environment to exist");
+  }
+  return environment;
+}
+
 function cleanWorkspaceStatus() {
   return {
     workingTree: {
@@ -197,7 +218,10 @@ describe("public thread routes", () => {
       const createdThread = threadSchema.parse(await readJson(response));
       expect(createdThread.status).toBe("provisioning");
 
-      const environment = getEnvironment(harness.db, createdThread.environmentId);
+      const environment = await waitForThreadEnvironment(
+        harness,
+        createdThread.id,
+      );
       expect(environment).toMatchObject({
         projectId: project.id,
         status: "provisioning",
@@ -532,7 +556,7 @@ describe("public thread routes", () => {
     }
   });
 
-  it("fails host thread creation when the host is offline", async () => {
+  it("creates host threads while the host is offline and leaves provisioning requested", async () => {
     const harness = await createTestAppHarness();
     try {
       const host = seedHost(harness.deps, {
@@ -564,12 +588,24 @@ describe("public thread routes", () => {
         }),
       });
 
-      expect(response.status).toBe(502);
-      await expect(readJson(response)).resolves.toMatchObject({
-        code: "host_disconnected",
+      expect(response.status).toBe(201);
+      const createdThread = threadSchema.parse(await readJson(response));
+      expect(createdThread.status).toBe("provisioning");
+
+      const environments = listEnvironments(harness.db, project.id);
+      expect(environments).toHaveLength(1);
+      expect(environments[0]).toMatchObject({
+        hostId: host.id,
+        status: "provisioning",
+        workspaceProvisionType: "unmanaged",
       });
-      expect(listThreads(harness.db, { projectId: project.id })).toHaveLength(0);
-      expect(listEnvironments(harness.db, project.id)).toHaveLength(0);
+      expect(getEnvironmentOperation(harness.db, {
+        environmentId: environments[0]!.id,
+        kind: "provision",
+      })).toMatchObject({
+        state: "requested",
+      });
+      expect(listThreads(harness.db, { projectId: project.id })).toHaveLength(1);
       expect(
         harness.db
           .select()
@@ -847,19 +883,23 @@ describe("public thread routes", () => {
       expect(response.status).toBe(201);
       const createdThread = threadSchema.parse(await readJson(response));
       expect(createdThread.status).toBe("provisioning");
+      const environment = await waitForThreadEnvironment(
+        harness,
+        createdThread.id,
+      );
 
       const queued = await waitForQueuedCommand(
         harness,
         ({ command }) =>
           command.type === "environment.provision" &&
-          command.environmentId === createdThread.environmentId,
+          command.environmentId === environment.id,
       );
       expect(queued.command).toMatchObject({
         sourcePath: secondarySource.path,
         workspaceProvisionType: "managed-worktree",
       });
       expect(queued.command.targetPath).toBe(
-        `/tmp/bb-host-data/${secondaryHost.id}/worktrees/${createdThread.environmentId}/secondary-managed-source`,
+        `/tmp/bb-host-data/${secondaryHost.id}/worktrees/${environment.id}/secondary-managed-source`,
       );
     } finally {
       await harness.cleanup();
@@ -948,12 +988,16 @@ describe("public thread routes", () => {
       expect(response.status).toBe(201);
       const createdThread = threadSchema.parse(await readJson(response));
       expect(createdThread.status).toBe("provisioning");
+      const environment = await waitForThreadEnvironment(
+        harness,
+        createdThread.id,
+      );
 
       const queued = await waitForQueuedCommand(
         harness,
         ({ command }) =>
           command.type === "environment.provision" &&
-          command.environmentId === createdThread.environmentId,
+          command.environmentId === environment.id,
       );
       expect(queued.command).toMatchObject({
         path: "/tmp/explicit-unmanaged-workspace",
@@ -1004,7 +1048,7 @@ describe("public thread routes", () => {
       const createdThread = threadSchema.parse(await readJson(response));
       expect(createdThread).toMatchObject({
         environmentId: environment.id,
-        status: "created",
+        status: "provisioning",
       });
 
       const queuedStart = await waitForQueuedCommand(
@@ -1124,7 +1168,7 @@ describe("public thread routes", () => {
 
       expect(createResponse.status).toBe(201);
       const createdThread = threadSchema.parse(await readJson(createResponse));
-      expect(createdThread.status).toBe("created");
+      expect(createdThread.status).toBe("provisioning");
 
       const queuedStart = await waitForQueuedCommand(
         harness,
@@ -1164,7 +1208,7 @@ describe("public thread routes", () => {
       expect(requestedEvents).toHaveLength(0);
 
       expect(getThread(harness.db, createdThread.id)).toMatchObject({
-        status: "created",
+        status: "provisioning",
       });
       expect(
         harness.db
@@ -1281,10 +1325,10 @@ describe("public thread routes", () => {
 
       expect(response.status).toBe(201);
       const createdThread = threadSchema.parse(await readJson(response));
-      const sandboxEnvironment = getEnvironment(harness.db, createdThread.environmentId ?? "");
-      if (!sandboxEnvironment) {
-        throw new Error("Expected sandbox environment to exist");
-      }
+      const sandboxEnvironment = await waitForThreadEnvironment(
+        harness,
+        createdThread.id,
+      );
       await reportNextRuntimeMaterialSyncSuccess(harness, {
         hostId: sandboxEnvironment.hostId,
       });
@@ -1295,9 +1339,9 @@ describe("public thread routes", () => {
       );
       expect(queued.command).toMatchObject({
         branchName: `bb/${createdThread.id}`,
-        environmentId: createdThread.environmentId,
+        environmentId: sandboxEnvironment.id,
         sourcePath: "https://github.com/example/secondary.git",
-        targetPath: `/tmp/bb-data/worktrees/${createdThread.environmentId}/secondary`,
+        targetPath: `/tmp/bb-data/worktrees/${sandboxEnvironment.id}/secondary`,
         workspaceProvisionType: "managed-clone",
       });
     } finally {
@@ -1385,11 +1429,7 @@ describe("public thread routes", () => {
       });
 
       expect(response.status).toBe(201);
-      const createdThread = await readJson(response) as {
-        environmentId: string;
-        id: string;
-        status: string;
-      };
+      const createdThread = threadSchema.parse(await readJson(response));
       expect(createdThread.status).toBe("provisioning");
       await waitForAssertion(() => {
         expect(provisionHostMock).toHaveBeenCalledWith(expect.objectContaining({
@@ -1406,10 +1446,7 @@ describe("public thread routes", () => {
         }));
       });
 
-      const environment = getEnvironment(harness.db, createdThread.environmentId);
-      if (!environment) {
-        throw new Error("Expected environment to exist");
-      }
+      const environment = await waitForThreadEnvironment(harness, createdThread.id);
       expect(environment).toMatchObject({
         hostId: expect.stringMatching(/^host_/u),
         managed: true,
@@ -1536,9 +1573,10 @@ describe("public thread routes", () => {
         const sandboxHost = getHost(harness.db, sandboxHostId);
         expect(sandboxHost).toMatchObject({ id: sandboxHostId });
         expect(createdThread.status).toBe("provisioning");
-        expect(createdThread.environmentId).toMatch(/^env_/u);
+      });
 
-        const environment = getEnvironment(harness.db, createdThread.environmentId!);
+      const environment = await waitForThreadEnvironment(harness, createdThread.id);
+      await waitForAssertion(() => {
         expect(environment).toMatchObject({
           hostId: sandboxHostId,
           managed: true,
@@ -1584,7 +1622,7 @@ describe("public thread routes", () => {
         harness,
         ({ command }) =>
           command.type === "environment.provision"
-          && command.environmentId === createdThread.environmentId,
+          && command.environmentId === environment.id,
       );
       expect(queued.row.hostId).toBe(sandboxHostId);
     } finally {
@@ -1651,6 +1689,7 @@ describe("public thread routes", () => {
 
       expect(firstResponse.status).toBe(201);
       const firstThread = threadSchema.parse(await readJson(firstResponse));
+      const firstEnvironment = await waitForThreadEnvironment(harness, firstThread.id);
 
       const reuseResponse = await harness.app.request("/api/v1/threads", {
         method: "POST",
@@ -1665,14 +1704,14 @@ describe("public thread routes", () => {
           input: [{ type: "text", text: "Reuse the provisioning sandbox" }],
           environment: {
             type: "reuse",
-            environmentId: firstThread.environmentId,
+            environmentId: firstEnvironment.id,
           },
         }),
       });
 
       expect(reuseResponse.status).toBe(201);
       const reusedThread = threadSchema.parse(await readJson(reuseResponse));
-      expect(reusedThread.environmentId).toBe(firstThread.environmentId);
+      expect(reusedThread.environmentId).toBe(firstEnvironment.id);
       expect(reusedThread.status).toBe("provisioning");
 
       await waitForAssertion(() => {
@@ -1710,7 +1749,7 @@ describe("public thread routes", () => {
         harness,
         ({ command }) =>
           command.type === "environment.provision"
-          && command.environmentId === firstThread.environmentId,
+          && command.environmentId === firstEnvironment.id,
       );
       expect(queued.row.hostId).toBe(sandboxHostId);
     } finally {
@@ -1837,12 +1876,13 @@ describe("public thread routes", () => {
 
       expect(createResponse.status).toBe(201);
       const createdThread = threadSchema.parse(await readJson(createResponse));
+      const environment = await waitForThreadEnvironment(harness, createdThread.id);
 
       const deleteResponse = await harness.app.request(`/api/v1/threads/${createdThread.id}`, {
         method: "DELETE",
       });
       expect(deleteResponse.status).toBe(200);
-      expect(getEnvironment(harness.db, createdThread.environmentId)).toMatchObject({
+      expect(getEnvironment(harness.db, environment.id)).toMatchObject({
         cleanupMode: "force",
         cleanupRequestedAt: expect.any(Number),
         status: "provisioning",
@@ -1854,7 +1894,7 @@ describe("public thread routes", () => {
       rejectProvisionHost(new Error("sandbox bootstrap failed"));
 
       await waitForAssertion(() => {
-        expect(getEnvironment(harness.db, createdThread.environmentId)).toMatchObject({
+        expect(getEnvironment(harness.db, environment.id)).toMatchObject({
           cleanupMode: null,
           cleanupRequestedAt: null,
           status: "destroyed",
@@ -2094,7 +2134,7 @@ describe("public thread routes", () => {
       expect(response.status).toBe(201);
       await expect(readJson(response)).resolves.toMatchObject({
         environmentId: environment.id,
-        status: "created",
+        status: "provisioning",
       });
     } finally {
       await harness.cleanup();
@@ -2780,7 +2820,7 @@ describe("public thread routes", () => {
 
       expect(createResponse.status).toBe(201);
       const createdThread = threadSchema.parse(await readJson(createResponse));
-      expect(createdThread.status).toBe("created");
+      expect(createdThread.status).toBe("provisioning");
 
       const queuedStart = await waitForQueuedCommand(
         harness,
@@ -2856,7 +2896,7 @@ describe("public thread routes", () => {
 
       expect(createResponse.status).toBe(201);
       const createdThread = threadSchema.parse(await readJson(createResponse));
-      expect(createdThread.status).toBe("created");
+      expect(createdThread.status).toBe("provisioning");
 
       const queuedStart = await waitForQueuedCommand(
         harness,
