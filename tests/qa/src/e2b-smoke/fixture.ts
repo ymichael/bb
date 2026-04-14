@@ -95,7 +95,7 @@ async function writeQaAuthFixtureFile(
 
 async function enrichQaAuthFixture(
   fixture: SmokeQaAuthFixture,
-  notices: string[],
+  fixturePath: string,
 ): Promise<SmokeQaAuthFixture> {
   let nextFixture: SmokeQaAuthFixture = fixture;
 
@@ -117,6 +117,10 @@ async function enrichQaAuthFixture(
         ...nextFixture,
         ...buildFixtureFromCredential(refreshedCredential),
       };
+      await writeQaAuthFixtureFile({
+        fixture: nextFixture,
+        fixturePath,
+      });
     } catch {
       throw new Error(
         "Claude fixture refresh failed; reacquire it with the auth-connect helper.",
@@ -145,7 +149,7 @@ async function enrichQaAuthFixture(
       throw new Error("Codex credential refresh did not return an idToken");
     }
 
-    return {
+    nextFixture = {
       ...nextFixture,
       "openai-codex": {
         access: refreshedCredential.accessToken,
@@ -157,6 +161,11 @@ async function enrichQaAuthFixture(
         refresh: refreshedCredential.refreshToken,
       },
     };
+    await writeQaAuthFixtureFile({
+      fixture: nextFixture,
+      fixturePath,
+    });
+    return nextFixture;
   } catch {
     throw new Error(
       "Codex fixture refresh failed; reacquire it with the auth-connect helper.",
@@ -245,7 +254,7 @@ export async function loadQaAuthFixture(): Promise<LoadedSmokeQaAuthFixture> {
     };
   }
 
-  const enrichedFixture = await enrichQaAuthFixture(rawFixture, notices);
+  const enrichedFixture = await enrichQaAuthFixture(rawFixture, fixturePath);
   if (serializeQaAuthFixture(enrichedFixture) !== serializeQaAuthFixture(rawFixture)) {
     await writeQaAuthFixtureFile({
       fixture: enrichedFixture,

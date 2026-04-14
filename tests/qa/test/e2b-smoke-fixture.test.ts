@@ -189,4 +189,80 @@ describe("e2b smoke auth fixture", () => {
       await rm(tempDir, { recursive: true, force: true });
     }
   });
+
+  it("persists a refreshed claude fixture before failing on codex refresh", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "bb-e2b-fixture-test-"));
+    const fixturePath = join(tempDir, "credentials.json");
+    const fixture = {
+      claude: {
+        access: "old-claude-access-token",
+        expires: 1_777_000_000_000,
+        refresh: "old-claude-refresh-token",
+      },
+      "openai-codex": {
+        access: "old-codex-access-token",
+        expires: 1_777_000_000_000,
+        refresh: "old-codex-refresh-token",
+      },
+      createdAt: "2026-04-10T00:00:00.000Z",
+    };
+
+    try {
+      await writeFile(
+        fixturePath,
+        `${JSON.stringify(fixture, null, 2)}\n`,
+        "utf8",
+      );
+      process.env[FIXTURE_PATH_ENV_VAR] = fixturePath;
+      globalThis.fetch = vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              access_token: "new-claude-access-token",
+              expires_in: 3600,
+              refresh_token: "new-claude-refresh-token",
+              scope: "user:profile",
+            }),
+            { status: 200 },
+          ),
+        )
+        .mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              account: {
+                email: "qa@example.com",
+                uuid: "acct_123",
+              },
+              organization: {
+                name: "QA Org",
+                organization_type: "claude_pro",
+                uuid: "org_123",
+              },
+            }),
+            { status: 200 },
+          ),
+        )
+        .mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({ error: "invalid_grant" }),
+            { status: 400 },
+          ),
+        );
+
+      await expect(loadQaAuthFixture()).rejects.toThrow(
+        "Codex fixture refresh failed; reacquire it with the auth-connect helper.",
+      );
+
+      const persisted = persistedClaudeFixtureSchema.parse(
+        JSON.parse(await readFile(fixturePath, "utf8")),
+      );
+      expect(persisted.claude).toMatchObject({
+        access: "new-claude-access-token",
+        refresh: "new-claude-refresh-token",
+      });
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
 });
