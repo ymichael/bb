@@ -996,7 +996,7 @@ describe("public thread interaction routes", () => {
           payload: createFileChangeApprovalPayload({
             itemId: "item-file-timeline",
             reason: "Approve file edits",
-            writeScope: { root: "/tmp/project" },
+            writeScope: "/tmp/project",
           }),
         },
         session.id,
@@ -1083,7 +1083,7 @@ describe("public thread interaction routes", () => {
             expect.objectContaining({
               kind: "message",
               message: expect.objectContaining({
-                kind: "approval-lifecycle",
+                kind: "permission-grant-lifecycle",
                 title: "Waiting for approval to grant Bash",
                 status: "pending",
                 approvalTarget: {

@@ -53,7 +53,7 @@ describe("pending interaction schemas", () => {
           subject: {
             kind: "file_change",
             itemId: "item_124",
-            writeScope: { root: "/tmp/project" },
+            writeScope: "/tmp/project",
             sessionGrant: null,
           },
           reason: "Review file edits",

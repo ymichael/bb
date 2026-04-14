@@ -41,14 +41,12 @@ function toTaskMessageStatus(
   status: ThreadEventItemStatus,
 ): ViewTasksMessage["status"] {
   switch (status) {
-    case "waiting_for_approval":
     case "pending":
       return "pending";
     case "completed":
       return "completed";
     case "failed":
       return "error";
-    case "denied":
     case "interrupted":
       return "interrupted";
   }

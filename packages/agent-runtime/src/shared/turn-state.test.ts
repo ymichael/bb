@@ -81,6 +81,7 @@ describe("turn-state", () => {
       command: "pwd",
       cwd: "/tmp",
       status: "pending",
+      approvalStatus: null,
     });
 
     registry.finishTurn({

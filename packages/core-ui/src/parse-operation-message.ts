@@ -16,7 +16,7 @@ import {
 } from "./provisioning-helpers.js";
 import type {
   ToViewMessagesOptions,
-  ViewApprovalLifecycleMessage,
+  ViewPermissionGrantLifecycleMessage,
   ViewOperationMessage,
   ViewThreadOperationMetadata,
 } from "@bb/domain";
@@ -126,9 +126,9 @@ function provisioningOperationStatus(
   }
 }
 
-function approvalLifecycleStatus(
+function permissionGrantLifecycleStatus(
   status: PendingInteractionStatus,
-): ViewApprovalLifecycleMessage["status"] {
+): ViewPermissionGrantLifecycleMessage["status"] {
   switch (status) {
     case "pending":
     case "resolving":
@@ -191,7 +191,7 @@ export function parseOperationMessage(
   decoded: ThreadEvent,
   meta: EventMeta,
   options?: { includeOptionalOperations?: boolean },
-): ViewOperationMessage | ViewApprovalLifecycleMessage | null {
+): ViewOperationMessage | ViewPermissionGrantLifecycleMessage | null {
   const eventTurnId = getEventTurnId(decoded);
 
   if (decoded.type === "turn/plan/updated") {
@@ -316,9 +316,9 @@ export function parseOperationMessage(
     });
   }
 
-  if (decoded.type === "system/approval/lifecycle") {
+  if (decoded.type === "system/permissionGrant/lifecycle") {
     return {
-      kind: "approval-lifecycle",
+      kind: "permission-grant-lifecycle",
       id: messageId(decoded.threadId, "approval", decoded.interactionId),
       threadId: decoded.threadId,
       sourceSeqStart: meta.seq,
@@ -327,7 +327,7 @@ export function parseOperationMessage(
       startedAt: meta.createdAt,
       turnId: eventTurnId,
       title: decoded.message,
-      status: approvalLifecycleStatus(decoded.status),
+      status: permissionGrantLifecycleStatus(decoded.status),
       approvalTarget: {
         itemId: decoded.subject.itemId,
         toolName: decoded.subject.toolName,

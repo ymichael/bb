@@ -13,7 +13,32 @@ import {
 
 /** Convert raw ThreadEventRow[] (test fixtures / inline data) to typed input for toViewMessages. */
 function fromRows(rows: ThreadEventRow[]): ThreadEventWithMeta[] {
-  return rows.map((row) => decodeRow(row));
+  return rows.map((row) => decodeRow(withExplicitApprovalStatus(row)));
+}
+
+function withExplicitApprovalStatus(row: ThreadEventRow): ThreadEventRow {
+  if (row.type !== "item/started" && row.type !== "item/completed") {
+    return row;
+  }
+
+  const item = row.data.item;
+  if (item.type !== "commandExecution" && item.type !== "fileChange") {
+    return row;
+  }
+  if (item.approvalStatus !== undefined) {
+    return row;
+  }
+
+  return {
+    ...row,
+    data: {
+      ...row.data,
+      item: {
+        ...item,
+        approvalStatus: null,
+      },
+    },
+  };
 }
 
 function flattenProjectionMessages(projection: ViewProjection): ViewMessage[] {
@@ -3166,7 +3191,7 @@ describe("toViewMessages replay coverage", () => {
         id: "evt-approval",
         threadId: "thread-1",
         seq: 1,
-        type: "system/approval/lifecycle",
+        type: "system/permissionGrant/lifecycle",
         data: {
           interactionId: "pi_123",
           providerId: "codex",
@@ -3196,7 +3221,7 @@ describe("toViewMessages replay coverage", () => {
 
     expect(projected).toEqual([
       expect.objectContaining({
-        kind: "approval-lifecycle",
+        kind: "permission-grant-lifecycle",
         id: "thread-1:approval:pi_123",
         title: "Waiting for approval to grant Bash",
         status: "pending",
@@ -3223,7 +3248,8 @@ describe("toViewMessages replay coverage", () => {
             id: "item-1",
             command: "git push",
             cwd: "/tmp/project",
-            status: "waiting_for_approval",
+            status: "pending",
+            approvalStatus: "waiting_for_approval",
           },
         },
         createdAt: 1,
@@ -3242,6 +3268,7 @@ describe("toViewMessages replay coverage", () => {
             command: "git push",
             cwd: "/tmp/project",
             status: "pending",
+            approvalStatus: null,
           },
         },
         createdAt: 2,
@@ -3260,6 +3287,7 @@ describe("toViewMessages replay coverage", () => {
             command: "git push",
             cwd: "/tmp/project",
             status: "completed",
+            approvalStatus: null,
             aggregatedOutput: "done",
             exitCode: 0,
           },
@@ -3299,7 +3327,8 @@ describe("toViewMessages replay coverage", () => {
             id: "item-1",
             command: "git push",
             cwd: "/tmp/project",
-            status: "waiting_for_approval",
+            status: "pending",
+            approvalStatus: "waiting_for_approval",
           },
         },
         createdAt: 1,
@@ -3317,7 +3346,8 @@ describe("toViewMessages replay coverage", () => {
             id: "item-1",
             command: "git push",
             cwd: "/tmp/project",
-            status: "denied",
+            status: "interrupted",
+            approvalStatus: "denied",
           },
         },
         createdAt: 2,
@@ -3353,7 +3383,8 @@ describe("toViewMessages replay coverage", () => {
             type: "fileChange",
             id: "item-file",
             changes: [],
-            status: "waiting_for_approval",
+            status: "pending",
+            approvalStatus: "waiting_for_approval",
           },
         },
         createdAt: 1,
@@ -3377,6 +3408,7 @@ describe("toViewMessages replay coverage", () => {
               },
             ],
             status: "completed",
+            approvalStatus: null,
           },
         },
         createdAt: 2,

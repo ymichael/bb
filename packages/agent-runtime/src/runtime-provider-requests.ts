@@ -14,10 +14,12 @@ import type {
   JsonRpcMessage,
   ProviderAdapter,
 } from "./provider-adapter.js";
+import { ProviderResponseEncodeError } from "./provider-adapter.js";
 import {
   sendJsonRpcError,
   sendJsonRpcResult,
   sendProviderRequestDecodeErrorIfKnown,
+  sendProviderResponseEncodeErrorIfKnown,
 } from "./runtime-json-rpc.js";
 import { shouldAutoDenyInteractiveRequest } from "./shared/permission-policy.js";
 
@@ -68,7 +70,9 @@ function buildDeniedInteractiveResolution(
   payload: PendingInteractionPayload,
 ): PendingInteractionResolution {
   if (!payload.availableDecisions.includes("deny")) {
-    throw new Error("Interactive request cannot be auto-denied because deny is unavailable");
+    throw new ProviderResponseEncodeError(
+      "Interactive request cannot be auto-denied because deny is unavailable",
+    );
   }
   return {
     decision: "deny",
@@ -233,24 +237,51 @@ function handleInteractiveProviderRequest(
       : false)
     || !args.onInteractiveRequest
   ) {
-    const resolution = buildDeniedInteractiveResolution(interactiveReq.payload);
-    args.emitCapture({
-      kind: "interactive-result",
-      capturedAt: Date.now(),
-      providerId,
-      requestCaptureId: captureId,
-      requestId: scopedInteractiveReq.providerRequestId,
-      success: true,
-      resolution,
-    });
-    sendJsonRpcResult({
-      child: args.providerProcess.child,
-      id: args.parsedId,
-      result: buildInteractiveResponse({
+    try {
+      const resolution = buildDeniedInteractiveResolution(interactiveReq.payload);
+      const result = buildInteractiveResponse({
         request: interactiveReq,
         resolution,
-      }),
-    });
+      });
+      args.emitCapture({
+        kind: "interactive-result",
+        capturedAt: Date.now(),
+        providerId,
+        requestCaptureId: captureId,
+        requestId: scopedInteractiveReq.providerRequestId,
+        success: true,
+        resolution,
+      });
+      sendJsonRpcResult({
+        child: args.providerProcess.child,
+        id: args.parsedId,
+        result,
+      });
+    } catch (error) {
+      args.emitCapture({
+        kind: "interactive-result",
+        capturedAt: Date.now(),
+        providerId,
+        requestCaptureId: captureId,
+        requestId: scopedInteractiveReq.providerRequestId,
+        success: false,
+        errorMessage: error instanceof Error ? error.message : String(error),
+      });
+      if (
+        sendProviderResponseEncodeErrorIfKnown({
+          child: args.providerProcess.child,
+          error,
+          id: args.parsedId,
+        })
+      ) {
+        return true;
+      }
+      sendJsonRpcError({
+        child: args.providerProcess.child,
+        id: args.parsedId,
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
     return true;
   }
 
@@ -264,13 +295,14 @@ function handleInteractiveProviderRequest(
       success: true,
       resolution,
     });
+    const result = buildInteractiveResponse({
+      request: interactiveReq,
+      resolution,
+    });
     sendJsonRpcResult({
       child: args.providerProcess.child,
       id: args.parsedId,
-      result: buildInteractiveResponse({
-        request: interactiveReq,
-        resolution,
-      }),
+      result,
     });
   }).catch((err) => {
     args.emitCapture({
@@ -282,6 +314,15 @@ function handleInteractiveProviderRequest(
       success: false,
       errorMessage: err instanceof Error ? err.message : String(err),
     });
+    if (
+      sendProviderResponseEncodeErrorIfKnown({
+        child: args.providerProcess.child,
+        error: err,
+        id: args.parsedId,
+      })
+    ) {
+      return;
+    }
     sendJsonRpcError({
       child: args.providerProcess.child,
       id: args.parsedId,

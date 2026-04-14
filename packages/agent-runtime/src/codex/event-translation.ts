@@ -179,6 +179,7 @@ function translateCodexItem(item: unknown): ThreadEventItem | null {
         command: parsedItem.command,
         cwd: parsedItem.cwd,
         status: toItemStatus(parsedItem.status),
+        approvalStatus: null,
         aggregatedOutput: parsedItem.aggregatedOutput ?? undefined,
         exitCode: parsedItem.exitCode ?? undefined,
         durationMs: parsedItem.durationMs ?? undefined,
@@ -196,6 +197,7 @@ function translateCodexItem(item: unknown): ThreadEventItem | null {
           ...(change.diff ? { diff: change.diff } : {}),
         })),
         status: toItemStatus(parsedItem.status),
+        approvalStatus: null,
       };
     case "mcpToolCall":
       {

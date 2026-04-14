@@ -245,8 +245,8 @@ export interface ViewOperationMessage extends ViewMessageBase {
   threadOperation?: ViewThreadOperationMetadata;
 }
 
-export interface ViewApprovalLifecycleMessage extends ViewMessageBase {
-  kind: "approval-lifecycle";
+export interface ViewPermissionGrantLifecycleMessage extends ViewMessageBase {
+  kind: "permission-grant-lifecycle";
   title: string;
   status: Extract<
     ViewMessageStatus,
@@ -319,7 +319,7 @@ export type ViewMessage =
   | ViewWebSearchMessage
   | ViewFileEditMessage
   | ViewOperationMessage
-  | ViewApprovalLifecycleMessage
+  | ViewPermissionGrantLifecycleMessage
   | ViewTasksMessage
   | ViewDelegationMessage
   | ViewErrorMessage

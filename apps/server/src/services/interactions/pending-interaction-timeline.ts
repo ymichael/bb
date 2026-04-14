@@ -6,6 +6,7 @@ import type {
   PendingInteraction,
   PendingInteractionApprovalSubject,
   PendingInteractionPermissionGrantApprovalSubject,
+  ThreadEventItemApprovalStatus,
   ThreadEventItem,
 } from "@bb/domain";
 import { getThread } from "@bb/db";
@@ -18,7 +19,7 @@ type ApprovalTimelineItem = Extract<
 >;
 type ApprovalTimelineItemStatus = Extract<
   ApprovalTimelineItem["status"],
-  "waiting_for_approval" | "denied" | "interrupted"
+  "pending" | "interrupted"
 >;
 
 function permissionGrantLifecycleMessage(
@@ -53,7 +54,7 @@ function appendPermissionGrantTimelineEvent(
   appendThreadEvent(deps, {
     threadId: interaction.threadId,
     environmentId: thread?.environmentId ?? null,
-    type: "system/approval/lifecycle",
+    type: "system/permissionGrant/lifecycle",
     data: {
       status: interaction.status,
       message: permissionGrantLifecycleMessage(interaction, subject),
@@ -74,7 +75,7 @@ function appendApprovalItemEvent(
   appendThreadEvent(deps, {
     threadId: interaction.threadId,
     environmentId: thread?.environmentId ?? null,
-    type: item.status === "waiting_for_approval" ? "item/started" : "item/completed",
+    type: item.status === "pending" ? "item/started" : "item/completed",
     providerThreadId: interaction.providerThreadId,
     turnId: interaction.turnId,
     data: {
@@ -90,6 +91,7 @@ function appendApprovalSubjectItemEvent(
   interaction: PendingInteraction,
   subject: Exclude<PendingInteractionApprovalSubject, { kind: "permission_grant" }>,
   status: ApprovalTimelineItemStatus,
+  approvalStatus: ThreadEventItemApprovalStatus,
 ): void {
   switch (subject.kind) {
     case "command":
@@ -99,6 +101,7 @@ function appendApprovalSubjectItemEvent(
         command: subject.command,
         cwd: subject.cwd ?? "",
         status,
+        approvalStatus,
       });
       return;
     case "file_change":
@@ -107,6 +110,7 @@ function appendApprovalSubjectItemEvent(
         id: subject.itemId,
         changes: [],
         status,
+        approvalStatus,
       });
       return;
     default:
@@ -144,6 +148,7 @@ function appendItemLifecycleTimelineEvent(
         deps,
         interaction,
         subject,
+        "pending",
         "waiting_for_approval",
       );
       return;
@@ -151,12 +156,24 @@ function appendItemLifecycleTimelineEvent(
       return;
     case "resolved":
       if (interaction.resolution?.decision === "deny") {
-        appendApprovalSubjectItemEvent(deps, interaction, subject, "denied");
+        appendApprovalSubjectItemEvent(
+          deps,
+          interaction,
+          subject,
+          "interrupted",
+          "denied",
+        );
       }
       return;
     case "interrupted":
     case "expired":
-      appendApprovalSubjectItemEvent(deps, interaction, subject, "interrupted");
+      appendApprovalSubjectItemEvent(
+        deps,
+        interaction,
+        subject,
+        "interrupted",
+        null,
+      );
       return;
   }
 }

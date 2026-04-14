@@ -299,6 +299,7 @@ function buildPiFileChangeItem(
       ...(diff ? { diff } : {}),
     }],
     status: "pending",
+    approvalStatus: null,
   };
 }
 
@@ -329,6 +330,7 @@ function translatePiToolUseItem(
         command,
         cwd: parsed.success ? (toOptionalString(parsed.data.cwd) ?? "") : "",
         status: "pending",
+        approvalStatus: null,
       }, input.parentToolCallId);
     }
     case "edit":
@@ -372,6 +374,7 @@ function translatePiToolResultItem(
           aggregatedOutput: outputText,
           exitCode: input.isError ? 1 : 0,
           status,
+          approvalStatus: startedItem.approvalStatus,
         }, input.parentToolCallId ?? startedItem.parentToolCallId);
       case "fileChange":
         return withParentToolCallId({
@@ -379,6 +382,7 @@ function translatePiToolResultItem(
           id: input.callId,
           changes: startedItem.changes,
           status,
+          approvalStatus: startedItem.approvalStatus,
         }, input.parentToolCallId ?? startedItem.parentToolCallId);
       case "toolCall":
         return withParentToolCallId({
@@ -404,6 +408,7 @@ function translatePiToolResultItem(
         aggregatedOutput: outputText,
         exitCode: input.isError ? 1 : 0,
         status,
+        approvalStatus: null,
       }, input.parentToolCallId);
     case "edit":
     case "write":
@@ -412,6 +417,7 @@ function translatePiToolResultItem(
         id: input.callId,
         changes: [],
         status,
+        approvalStatus: null,
       }, input.parentToolCallId);
     default:
       return withParentToolCallId({

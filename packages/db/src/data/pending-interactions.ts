@@ -156,7 +156,6 @@ export function createPendingInteraction(
       providerThreadId: input.providerThreadId,
       providerRequestId: input.providerRequestId,
       sessionId: input.sessionId,
-      kind: "approval",
       status: "pending",
       payload: input.payload,
       resolution: null,

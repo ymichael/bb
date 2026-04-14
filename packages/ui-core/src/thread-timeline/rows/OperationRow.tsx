@@ -3,7 +3,7 @@ import { durationToCompactString } from "@bb/core-ui";
 import { ExpandablePanel } from "../../disclosure.js";
 import { EventCodeBlock } from "../../event-content.js";
 import type {
-  ViewApprovalLifecycleMessage,
+  ViewPermissionGrantLifecycleMessage,
   ViewOperationMessage,
   ViewProvisioningTranscriptEntry,
   ViewThreadOperationStatus,
@@ -430,11 +430,11 @@ export function OperationRow({
   );
 }
 
-export function ApprovalLifecycleRow({
+export function PermissionGrantLifecycleRow({
   message,
   initialExpanded = false,
 }: {
-  message: ViewApprovalLifecycleMessage;
+  message: ViewPermissionGrantLifecycleMessage;
   initialExpanded?: boolean;
 }) {
   const { isExpanded, onToggle } = useLatestInitialExpanded(initialExpanded);

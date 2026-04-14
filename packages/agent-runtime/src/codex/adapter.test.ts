@@ -1412,7 +1412,7 @@ describe("codex provider adapter", () => {
             fileSystem: null,
             macos: null,
           },
-          availableDecisions: ["accept", "acceptForSession", "decline", "cancel"],
+          availableDecisions: ["accept", "acceptForSession", "decline"],
         },
       }),
     ).toEqual({
@@ -1439,6 +1439,44 @@ describe("codex provider adapter", () => {
         },
         reason: "Needs approval",
         availableDecisions: ["allow_once", "allow_for_session", "deny"],
+      },
+    });
+  });
+
+  it("decodeInteractiveRequest omits command session approval without session grants", () => {
+    const adapter = createCodexProviderAdapter();
+    expect(
+      adapter.decodeInteractiveRequest?.({
+        jsonrpc: "2.0",
+        id: 80,
+        method: "item/commandExecution/requestApproval",
+        params: {
+          threadId: "t1",
+          turnId: "turn-1",
+          itemId: "item-1",
+          reason: "Needs approval",
+          command: "git push",
+          cwd: "/tmp/project",
+          commandActions: [],
+          availableDecisions: ["accept", "acceptForSession", "decline"],
+        },
+      }),
+    ).toEqual({
+      requestId: 80,
+      method: "item/commandExecution/requestApproval",
+      providerThreadId: "t1",
+      turnId: "turn-1",
+      payload: {
+        subject: {
+          kind: "command",
+          itemId: "item-1",
+          command: "git push",
+          cwd: "/tmp/project",
+          actions: [],
+          sessionGrant: null,
+        },
+        reason: "Needs approval",
+        availableDecisions: ["allow_once", "deny"],
       },
     });
   });
@@ -1485,9 +1523,9 @@ describe("codex provider adapter", () => {
     ).toThrowError(ProviderRequestDecodeError);
   });
 
-  it("decodeInteractiveRequest omits unsupported macOS permissions from command session grants", () => {
+  it("decodeInteractiveRequest rejects unsupported macOS permissions in command session grants", () => {
     const adapter = createCodexProviderAdapter();
-    const decoded = adapter.decodeInteractiveRequest?.({
+    expect(() => adapter.decodeInteractiveRequest?.({
         jsonrpc: "2.0",
         id: 8,
         method: "item/commandExecution/requestApproval",
@@ -1514,25 +1552,14 @@ describe("codex provider adapter", () => {
               contacts: "none",
             },
           },
-          availableDecisions: ["accept", "decline", "cancel"],
+          availableDecisions: ["accept", "decline"],
         },
-      });
-    expect(decoded?.payload.subject).toEqual({
-      kind: "command",
-      itemId: "item-1",
-      command: "osascript -e 'tell app \"Finder\" to activate'",
-      cwd: "/tmp/project",
-      actions: [],
-      sessionGrant: {
-        network: null,
-        fileSystem: null,
-      },
-    });
+      })).toThrowError(ProviderRequestDecodeError);
   });
 
-  it("decodeInteractiveRequest preserves macOS automation none in command approvals", () => {
+  it("decodeInteractiveRequest rejects macOS automation none in command approvals", () => {
     const adapter = createCodexProviderAdapter();
-    const decoded = adapter.decodeInteractiveRequest?.({
+    expect(() => adapter.decodeInteractiveRequest?.({
         jsonrpc: "2.0",
         id: 81,
         method: "item/commandExecution/requestApproval",
@@ -1557,25 +1584,14 @@ describe("codex provider adapter", () => {
               contacts: "none",
             },
           },
-          availableDecisions: ["accept", "decline", "cancel"],
+          availableDecisions: ["accept", "decline"],
         },
-      });
-    expect(decoded?.payload.subject).toEqual({
-      kind: "command",
-      itemId: "item-1",
-      command: "open -a Finder",
-      cwd: "/tmp/project",
-      actions: [],
-      sessionGrant: {
-        network: null,
-        fileSystem: null,
-      },
-    });
+      })).toThrowError(ProviderRequestDecodeError);
   });
 
-  it("decodeInteractiveRequest omits unsupported macOS automation grants from command session grants", () => {
+  it("decodeInteractiveRequest rejects unsupported macOS automation grants from command session grants", () => {
     const adapter = createCodexProviderAdapter();
-    const decoded = adapter.decodeInteractiveRequest?.({
+    expect(() => adapter.decodeInteractiveRequest?.({
         jsonrpc: "2.0",
         id: 82,
         method: "item/commandExecution/requestApproval",
@@ -1600,26 +1616,15 @@ describe("codex provider adapter", () => {
               contacts: "none",
             },
           },
-          availableDecisions: ["accept", "decline", "cancel"],
+          availableDecisions: ["accept", "decline"],
         },
-      });
-    expect(decoded?.payload.subject).toEqual({
-      kind: "command",
-      itemId: "item-1",
-      command: "open -a Finder",
-      cwd: "/tmp/project",
-      actions: [],
-      sessionGrant: {
-        network: null,
-        fileSystem: null,
-      },
-    });
+      })).toThrowError(ProviderRequestDecodeError);
   });
 
-  it("decodeInteractiveRequest ignores unsupported policy-amendment decisions", () => {
+  it("decodeInteractiveRequest rejects unsupported policy-amendment decisions", () => {
     const adapter = createCodexProviderAdapter();
     expect(
-      adapter.decodeInteractiveRequest?.({
+      () => adapter.decodeInteractiveRequest?.({
         jsonrpc: "2.0",
         id: 9,
         method: "item/commandExecution/requestApproval",
@@ -1651,15 +1656,10 @@ describe("codex provider adapter", () => {
               },
             },
             "decline",
-            "cancel",
           ],
         },
       }),
-    ).toMatchObject({
-      payload: {
-        availableDecisions: ["deny"],
-      },
-    });
+    ).toThrowError(ProviderRequestDecodeError);
   });
 
   it("decodeInteractiveRequest maps file-change approvals into pending interactions", () => {
@@ -1686,7 +1686,7 @@ describe("codex provider adapter", () => {
         subject: {
           kind: "file_change",
           itemId: "item-file-change",
-          writeScope: { root: "/tmp/project" },
+          writeScope: "/tmp/project",
           sessionGrant: {
             network: null,
             fileSystem: {
@@ -1697,6 +1697,39 @@ describe("codex provider adapter", () => {
         },
         reason: "Review generated file changes",
         availableDecisions: ["allow_once", "allow_for_session", "deny"],
+      },
+    });
+  });
+
+  it("decodeInteractiveRequest omits file-change session approval without grant root", () => {
+    const adapter = createCodexProviderAdapter();
+    expect(
+      adapter.decodeInteractiveRequest?.({
+        jsonrpc: "2.0",
+        id: 11,
+        method: "item/fileChange/requestApproval",
+        params: {
+          threadId: "t1",
+          turnId: "turn-file-change",
+          itemId: "item-file-change",
+          reason: "Review generated file changes",
+          grantRoot: null,
+        },
+      }),
+    ).toEqual({
+      requestId: 11,
+      method: "item/fileChange/requestApproval",
+      providerThreadId: "t1",
+      turnId: "turn-file-change",
+      payload: {
+        subject: {
+          kind: "file_change",
+          itemId: "item-file-change",
+          writeScope: null,
+          sessionGrant: null,
+        },
+        reason: "Review generated file changes",
+        availableDecisions: ["allow_once", "deny"],
       },
     });
   });

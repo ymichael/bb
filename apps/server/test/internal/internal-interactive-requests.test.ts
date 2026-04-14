@@ -202,6 +202,113 @@ describe("internal interactive request lifecycle", () => {
     }
   });
 
+  it("persists a session-scoped command approval resolution", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-interaction-session-resolve",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+      });
+      const sessionGrant = {
+        network: { enabled: true },
+        fileSystem: null,
+      };
+      const sessionResolution = createAllowForSessionResolution(sessionGrant);
+
+      const response = await harness.app.request("/internal/session/interactive-request", {
+        method: "POST",
+        headers: internalAuthHeaders(harness),
+        body: JSON.stringify({
+          sessionId: session.id,
+          interaction: {
+            threadId: thread.id,
+            turnId: "turn-session-1",
+            providerId: "codex",
+            providerThreadId: "provider-thread-session-1",
+            providerRequestId: "request-session-1",
+            payload: createCommandApprovalPayload({
+              itemId: "item-session-1",
+              reason: "Needs approval",
+              command: "git push",
+              cwd: "/tmp/project",
+              sessionGrant,
+            }),
+          },
+        }),
+      });
+      expect(response.status).toBe(200);
+      await expect(readJson(response)).resolves.toMatchObject({
+        outcome: "created",
+        status: "pending",
+      });
+
+      const interactionId = await waitForPendingInteractionId({
+        harness,
+        threadId: thread.id,
+      });
+      const resolved = harness.deps.pendingInteractions.resolvePendingInteraction({
+        threadId: thread.id,
+        interactionId,
+        resolution: sessionResolution,
+      });
+
+      expect(resolved).toMatchObject({
+        id: interactionId,
+        status: "resolving",
+        resolution: sessionResolution,
+      });
+
+      const queuedResolve = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "interactive.resolve" &&
+          command.interactionId === interactionId,
+      );
+      expect(queuedResolve.command).toMatchObject({
+        type: "interactive.resolve",
+        providerId: "codex",
+        providerThreadId: "provider-thread-session-1",
+        providerRequestId: "request-session-1",
+        resolution: sessionResolution,
+      });
+      const commandResultResponse = await reportQueuedCommandSuccess(
+        harness,
+        queuedResolve,
+        {},
+      );
+      expect(commandResultResponse.status).toBe(200);
+      expect(
+        harness.deps.pendingInteractions.getThreadInteraction({
+          threadId: thread.id,
+          interactionId,
+        }),
+      ).toMatchObject({
+        id: interactionId,
+        status: "resolved",
+        resolution: sessionResolution,
+      });
+
+      const retriedCommandResultResponse = await reportQueuedCommandSuccess(
+        harness,
+        queuedResolve,
+        {},
+      );
+      expect(retriedCommandResultResponse.status).toBe(200);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("returns the existing pending interaction when registration is retried", async () => {
     const harness = await createTestAppHarness();
     try {

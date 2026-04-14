@@ -131,17 +131,7 @@ export type PendingInteractionApprovalDecision = z.infer<
   typeof pendingInteractionApprovalDecisionSchema
 >;
 
-export const pendingInteractionPermissionGrantScopeSchema = z.enum([
-  "turn",
-  "session",
-]);
-export type PendingInteractionPermissionGrantScope = z.infer<
-  typeof pendingInteractionPermissionGrantScopeSchema
->;
-
-export const pendingInteractionFileChangeWriteScopeSchema = z.object({
-  root: z.string().min(1),
-});
+export const pendingInteractionFileChangeWriteScopeSchema = z.string().min(1);
 export type PendingInteractionFileChangeWriteScope = z.infer<
   typeof pendingInteractionFileChangeWriteScopeSchema
 >;

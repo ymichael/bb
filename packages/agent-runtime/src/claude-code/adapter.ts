@@ -169,6 +169,7 @@ function buildClaudeFileChangeItem(
       ...(diff ? { diff } : {}),
     }],
     status: "pending",
+    approvalStatus: null,
   };
 }
 
@@ -284,6 +285,7 @@ function translateClaudeToolUseItem(
         command,
         cwd: parsed.success ? (toOptionalString(parsed.data.cwd) ?? "") : "",
         status: "pending",
+        approvalStatus: null,
       }, input.parentToolCallId);
     }
     case "Edit":
@@ -344,6 +346,7 @@ function translateClaudeToolResultItem(
           aggregatedOutput: outputText,
           exitCode: bashExitCode,
           status: itemStatus,
+          approvalStatus: startedItem.approvalStatus,
         }, input.parentToolCallId ?? startedItem.parentToolCallId);
       case "fileChange":
         return withParentToolCallId({
@@ -351,6 +354,7 @@ function translateClaudeToolResultItem(
           id: input.callId,
           changes: startedItem.changes,
           status: itemStatus,
+          approvalStatus: startedItem.approvalStatus,
         }, input.parentToolCallId ?? startedItem.parentToolCallId);
       case "webSearch":
         return withParentToolCallId({
@@ -392,6 +396,7 @@ function translateClaudeToolResultItem(
         aggregatedOutput: outputText,
         exitCode: bashExitCode,
         status: itemStatus,
+        approvalStatus: null,
       }, input.parentToolCallId);
     case "Edit":
     case "Write":
@@ -400,6 +405,7 @@ function translateClaudeToolResultItem(
         id: input.callId,
         changes: [],
         status: itemStatus,
+        approvalStatus: null,
       }, input.parentToolCallId);
     case "WebSearch":
       return withParentToolCallId({

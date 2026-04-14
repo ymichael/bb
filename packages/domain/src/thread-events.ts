@@ -16,7 +16,7 @@ export const systemEventTypeValues = [
   "system/manager/user_message",
   "system/thread/interrupted",
   "system/operation",
-  "system/approval/lifecycle",
+  "system/permissionGrant/lifecycle",
   "system/thread-provisioning",
 ] as const;
 export const systemEventTypeSchema = z.enum(systemEventTypeValues);
@@ -86,7 +86,7 @@ export type SystemOperationEventData = z.infer<
   typeof systemOperationEventDataSchema
 >;
 
-export const systemApprovalLifecycleEventDataSchema = z.object({
+export const systemPermissionGrantLifecycleEventDataSchema = z.object({
   interactionId: z.string(),
   providerId: z.string(),
   providerRequestId: z.string(),
@@ -94,8 +94,8 @@ export const systemApprovalLifecycleEventDataSchema = z.object({
   message: z.string(),
   subject: pendingInteractionPermissionGrantApprovalSubjectSchema,
 });
-export type SystemApprovalLifecycleEventData = z.infer<
-  typeof systemApprovalLifecycleEventDataSchema
+export type SystemPermissionGrantLifecycleEventData = z.infer<
+  typeof systemPermissionGrantLifecycleEventDataSchema
 >;
 
 export const systemThreadInterruptedEventDataSchema = z.object({
@@ -164,7 +164,7 @@ export type ThreadEventDataByType = {
   "system/manager/user_message": SystemManagerUserMessageEventData;
   "system/thread/interrupted": SystemThreadInterruptedEventData;
   "system/operation": SystemOperationEventData;
-  "system/approval/lifecycle": SystemApprovalLifecycleEventData;
+  "system/permissionGrant/lifecycle": SystemPermissionGrantLifecycleEventData;
   "system/thread-provisioning": SystemThreadProvisioningEventData;
 };
 

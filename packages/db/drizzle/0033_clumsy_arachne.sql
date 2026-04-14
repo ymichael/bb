@@ -6,7 +6,6 @@ CREATE TABLE `pending_interactions` (
 	`provider_thread_id` text NOT NULL,
 	`provider_request_id` text NOT NULL,
 	`session_id` text NOT NULL,
-	`kind` text NOT NULL,
 	`status` text NOT NULL,
 	`payload` text NOT NULL,
 	`resolution` text,

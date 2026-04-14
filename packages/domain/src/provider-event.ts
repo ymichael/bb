@@ -1,7 +1,7 @@
 import { z } from "zod";
 import {
   systemErrorEventDataSchema,
-  systemApprovalLifecycleEventDataSchema,
+  systemPermissionGrantLifecycleEventDataSchema,
   systemManagerUserMessageEventDataSchema,
   systemOperationEventDataSchema,
   systemThreadProvisioningEventDataSchema,
@@ -16,10 +16,15 @@ export const threadEventItemStatusSchema = z.enum([
   "completed",
   "failed",
   "interrupted",
-  "waiting_for_approval",
-  "denied",
 ]);
 export type ThreadEventItemStatus = z.infer<typeof threadEventItemStatusSchema>;
+
+export const threadEventItemApprovalStatusSchema = z
+  .enum(["waiting_for_approval", "denied"])
+  .nullable();
+export type ThreadEventItemApprovalStatus = z.infer<
+  typeof threadEventItemApprovalStatusSchema
+>;
 
 export const threadEventTurnStatusSchema = z.enum([
   "completed",
@@ -157,6 +162,7 @@ export const threadEventItemSchema = z.discriminatedUnion("type", [
     command: z.string(),
     cwd: z.string(),
     status: threadEventItemStatusSchema,
+    approvalStatus: threadEventItemApprovalStatusSchema,
     aggregatedOutput: z.string().optional(),
     exitCode: z.number().optional(),
     durationMs: z.number().optional(),
@@ -167,6 +173,7 @@ export const threadEventItemSchema = z.discriminatedUnion("type", [
     id: z.string(),
     changes: z.array(threadEventFileChangeSchema),
     status: threadEventItemStatusSchema,
+    approvalStatus: threadEventItemApprovalStatusSchema,
     parentToolCallId: z.string().optional(),
   }),
   z.object({
@@ -421,9 +428,9 @@ export const systemEventSchema = z.union([
     threadId: z.string(),
   }).merge(systemOperationEventDataSchema),
   z.object({
-    type: z.literal("system/approval/lifecycle"),
+    type: z.literal("system/permissionGrant/lifecycle"),
     threadId: z.string(),
-  }).merge(systemApprovalLifecycleEventDataSchema),
+  }).merge(systemPermissionGrantLifecycleEventDataSchema),
   z.object({
     type: z.literal("system/thread-provisioning"),
     threadId: z.string(),

@@ -12,7 +12,6 @@ import {
   type PendingInteractionApprovalDecision,
   type PendingInteractionGrantablePermissionProfile,
   type PendingInteractionRequestedPermissionProfile,
-  pendingInteractionPermissionGrantScopeSchema,
   PendingInteractionResolution,
 } from "@bb/domain";
 import { action } from "../../action.js";
@@ -51,9 +50,8 @@ function parsePermissionGrantScope(
     return "session";
   }
 
-  const parsed = pendingInteractionPermissionGrantScopeSchema.safeParse(value);
-  if (parsed.success) {
-    return parsed.data;
+  if (value === "turn" || value === "session") {
+    return value;
   }
 
   throw new Error("Invalid --scope. Expected 'turn' or 'session'.");
@@ -217,17 +215,11 @@ function pickApprovalDecision(
   action: "approve" | "deny",
 ): PendingInteractionApprovalDecision {
   if (action === "approve") {
-    const turnApproval = interaction.payload.availableDecisions.find(
-      (availableDecision) => availableDecision === "allow_once",
-    );
-    if (turnApproval) {
-      return turnApproval;
+    if (interaction.payload.availableDecisions.includes("allow_once")) {
+      return "allow_once";
     }
-    const sessionApproval = interaction.payload.availableDecisions.find(
-      (availableDecision) => availableDecision === "allow_for_session",
-    );
-    if (sessionApproval) {
-      return sessionApproval;
+    if (interaction.payload.availableDecisions.includes("allow_for_session")) {
+      return "allow_for_session";
     }
     throw new Error(
       `Interaction ${interaction.id} does not offer an approval decision.`,

@@ -476,7 +476,6 @@ export const pendingInteractions = sqliteTable(
     providerThreadId: text("provider_thread_id").notNull(),
     providerRequestId: text("provider_request_id").notNull(),
     sessionId: text("session_id").notNull(),
-    kind: text("kind").$type<"approval">().notNull(),
     status: text("status").$type<PendingInteractionStatus>().notNull(),
     payload: text("payload").notNull(),
     resolution: text("resolution"),

@@ -6,6 +6,11 @@ import {
 } from "@bb/domain";
 import { ApiError } from "../../errors.js";
 
+type GrantedPendingInteractionResolution = Extract<
+  PendingInteractionResolution,
+  { decision: "allow_once" | "allow_for_session" }
+>;
+
 function stringSetEquals(left: readonly string[], right: readonly string[]): boolean {
   const leftSet = new Set(left);
   const rightSet = new Set(right);
@@ -34,6 +39,16 @@ function permissionProfileEquals(
   );
 }
 
+function grantedResolutionEquals(
+  left: GrantedPendingInteractionResolution,
+  right: GrantedPendingInteractionResolution,
+): boolean {
+  if (left.grantedPermissions === null || right.grantedPermissions === null) {
+    return left.grantedPermissions === right.grantedPermissions;
+  }
+  return permissionProfileEquals(left.grantedPermissions, right.grantedPermissions);
+}
+
 function hasGrantedPermissions(
   permissions: PendingInteractionGrantedPermissionProfile,
 ): boolean {
@@ -55,18 +70,14 @@ export function pendingInteractionResolutionEquals(
     return left === right;
   }
 
-  if (left.decision !== right.decision) {
-    return false;
+  switch (left.decision) {
+    case "deny":
+      return right.decision === "deny";
+    case "allow_once":
+      return right.decision === "allow_once" && grantedResolutionEquals(left, right);
+    case "allow_for_session":
+      return right.decision === "allow_for_session" && grantedResolutionEquals(left, right);
   }
-  if (left.decision === "deny" || right.decision === "deny") {
-    return true;
-  }
-
-  if (left.grantedPermissions === null || right.grantedPermissions === null) {
-    return left.grantedPermissions === right.grantedPermissions;
-  }
-
-  return permissionProfileEquals(left.grantedPermissions, right.grantedPermissions);
 }
 
 function validateAvailableDecision(
@@ -164,6 +175,31 @@ function validateGrantedPermissions(
   }
 }
 
+function validateCommandOrFileChangeSessionGrant(
+  interaction: PendingInteraction,
+  permissions: PendingInteractionGrantedPermissionProfile,
+): void {
+  if (
+    interaction.payload.subject.kind !== "command"
+    && interaction.payload.subject.kind !== "file_change"
+  ) {
+    return;
+  }
+
+  const sessionGrant = interaction.payload.subject.sessionGrant;
+  if (sessionGrant === null) {
+    return;
+  }
+
+  if (!permissionProfileEquals(permissions, sessionGrant)) {
+    throw new ApiError(
+      400,
+      "invalid_request",
+      "Command and file-change session approvals must grant the requested session permissions exactly",
+    );
+  }
+}
+
 export function validatePendingInteractionResolution(
   interaction: PendingInteraction,
   resolution: PendingInteractionResolution,
@@ -176,6 +212,12 @@ export function validatePendingInteractionResolution(
         resolution.decision,
         resolution.grantedPermissions,
       );
+      if (resolution.decision === "allow_for_session") {
+        validateCommandOrFileChangeSessionGrant(
+          interaction,
+          resolution.grantedPermissions,
+        );
+      }
     } else if (interaction.payload.subject.kind === "permission_grant") {
       throw new ApiError(
         400,

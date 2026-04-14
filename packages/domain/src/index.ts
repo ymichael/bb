@@ -43,7 +43,6 @@ export {
   pendingInteractionMacOsPermissionsSchema,
   pendingInteractionPayloadSchema,
   pendingInteractionGrantablePermissionProfileSchema,
-  pendingInteractionPermissionGrantScopeSchema,
   pendingInteractionPermissionGrantApprovalSubjectSchema,
   pendingInteractionRequestedPermissionProfileSchema,
   pendingInteractionResolutionSchema,
@@ -70,7 +69,6 @@ export type {
   PendingInteractionMacOsPreferencesPermission,
   PendingInteractionNetworkPermissions,
   PendingInteractionPayload,
-  PendingInteractionPermissionGrantScope,
   PendingInteractionPermissionGrantApprovalSubject,
   PendingInteractionRequestedPermissionProfile,
   PendingInteractionResolution,
@@ -244,7 +242,7 @@ export type {
 
 export {
   provisioningTranscriptEntrySchema,
-  systemApprovalLifecycleEventDataSchema,
+  systemPermissionGrantLifecycleEventDataSchema,
   systemErrorEventDataSchema,
   systemManagerUserMessageEventDataSchema,
   systemOperationEventDataSchema,
@@ -266,7 +264,7 @@ export {
 } from "./thread-events.js";
 export type {
   ProvisioningTranscriptEntry,
-  SystemApprovalLifecycleEventData,
+  SystemPermissionGrantLifecycleEventData,
   SystemErrorEventData,
   SystemManagerUserMessageEventData,
   SystemOperationEventData,
@@ -343,6 +341,7 @@ export type {
   ThreadEventFileChangeKind,
   ThreadEventItem,
   ThreadEventItemType,
+  ThreadEventItemApprovalStatus,
   ThreadEventItemStatus,
   ThreadEventPlanStep,
   ThreadEventPlanStepStatus,
@@ -388,7 +387,7 @@ export {
 } from "./ui-message.js";
 export type {
   ToViewMessagesOptions,
-  ViewApprovalLifecycleMessage,
+  ViewPermissionGrantLifecycleMessage,
   ViewApprovalTarget,
   ViewApprovalLifecycleStatus,
   ViewAssistantReasoningMessage,

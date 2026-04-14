@@ -277,7 +277,7 @@ function getGroupMessageStatus(
     case "file-edit":
     case "tasks":
     case "delegation":
-    case "approval-lifecycle":
+    case "permission-grant-lifecycle":
       return message.status;
     case "assistant-reasoning":
     case "assistant-text":

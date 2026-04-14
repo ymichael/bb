@@ -2,6 +2,7 @@ import type { ChildProcess } from "node:child_process";
 import { z } from "zod";
 import {
   ProviderRequestDecodeError,
+  ProviderResponseEncodeError,
   type JsonRpcMessage,
 } from "./provider-adapter.js";
 
@@ -71,6 +72,12 @@ interface SendJsonRpcErrorArgs {
 }
 
 interface SendProviderRequestDecodeErrorArgs {
+  child: ChildProcess;
+  error: unknown;
+  id: string | number;
+}
+
+interface SendProviderResponseEncodeErrorArgs {
   child: ChildProcess;
   error: unknown;
   id: string | number;
@@ -236,6 +243,22 @@ export function sendProviderRequestDecodeErrorIfKnown(
   args: SendProviderRequestDecodeErrorArgs,
 ): boolean {
   if (!(args.error instanceof ProviderRequestDecodeError)) {
+    return false;
+  }
+
+  sendJsonRpcError({
+    child: args.child,
+    id: args.id,
+    message: args.error.message,
+    code: args.error.code,
+  });
+  return true;
+}
+
+export function sendProviderResponseEncodeErrorIfKnown(
+  args: SendProviderResponseEncodeErrorArgs,
+): boolean {
+  if (!(args.error instanceof ProviderResponseEncodeError)) {
     return false;
   }
 

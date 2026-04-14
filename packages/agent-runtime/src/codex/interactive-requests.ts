@@ -22,6 +22,10 @@ import {
   codexFileChangeRequestApprovalParamsSchema,
   codexPermissionsRequestApprovalParamsSchema,
 } from "./schemas.js";
+import type {
+  PendingInteractionApprovalDecision,
+  PendingInteractionGrantablePermissionProfile,
+} from "@bb/domain";
 
 export type CodexInteractiveResponse =
   | CommandExecutionRequestApprovalResponse
@@ -44,6 +48,36 @@ function requireGrantedPermissions(
     );
   }
   return args.grantedPermissions;
+}
+
+function hasGrantablePermissions(
+  permissions: PendingInteractionGrantablePermissionProfile | null,
+): boolean {
+  const fileSystem = permissions?.fileSystem ?? null;
+  return (
+    permissions?.network?.enabled === true ||
+    (
+      fileSystem !== null &&
+      (fileSystem.read.length > 0 || fileSystem.write.length > 0)
+    )
+  );
+}
+
+function filterSessionDecisionWithoutGrant(
+  decisions: PendingInteractionApprovalDecision[],
+  sessionGrant: PendingInteractionGrantablePermissionProfile | null,
+): PendingInteractionApprovalDecision[] {
+  if (hasGrantablePermissions(sessionGrant)) {
+    return decisions;
+  }
+
+  const filtered = decisions.filter((decision) => decision !== "allow_for_session");
+  if (filtered.length === 0) {
+    throw new ProviderRequestDecodeErrorValue(
+      "Approval request did not include decisions compatible with the requested permissions",
+    );
+  }
+  return filtered;
 }
 
 export function decodeCodexInteractiveRequest(
@@ -69,6 +103,11 @@ export function decodeCodexInteractiveRequest(
           "Command approval request did not include a command subject",
         );
       }
+      const sessionGrant = parsed.data.additionalPermissions
+        ? toPendingInteractionGrantablePermissionProfile(
+            parsed.data.additionalPermissions,
+          )
+        : null;
       return {
         requestId: request.id,
         method: request.method,
@@ -81,14 +120,15 @@ export function decodeCodexInteractiveRequest(
             command: parsed.data.command,
             cwd: parsed.data.cwd ?? null,
             actions: parsed.data.commandActions ?? [],
-            sessionGrant: parsed.data.additionalPermissions
-              ? toPendingInteractionGrantablePermissionProfile(
-                  parsed.data.additionalPermissions,
-                )
+            sessionGrant: hasGrantablePermissions(sessionGrant)
+              ? sessionGrant
               : null,
           },
           reason: parsed.data.reason ?? null,
-          availableDecisions,
+          availableDecisions: filterSessionDecisionWithoutGrant(
+            availableDecisions,
+            sessionGrant,
+          ),
         },
       };
     }
@@ -99,6 +139,16 @@ export function decodeCodexInteractiveRequest(
       if (!parsed.success) {
         return null;
       }
+      const sessionGrant: PendingInteractionGrantablePermissionProfile | null =
+        parsed.data.grantRoot
+          ? {
+              network: null,
+              fileSystem: {
+                read: [],
+                write: [parsed.data.grantRoot],
+              },
+            }
+          : null;
       return {
         requestId: request.id,
         method: request.method,
@@ -108,19 +158,14 @@ export function decodeCodexInteractiveRequest(
           subject: {
             kind: "file_change",
             itemId: parsed.data.itemId,
-            writeScope: parsed.data.grantRoot ? { root: parsed.data.grantRoot } : null,
-            sessionGrant: parsed.data.grantRoot
-              ? {
-                  network: null,
-                  fileSystem: {
-                    read: [],
-                    write: [parsed.data.grantRoot],
-                  },
-                }
-              : null,
+            writeScope: parsed.data.grantRoot ?? null,
+            sessionGrant,
           },
           reason: parsed.data.reason ?? null,
-          availableDecisions: ["allow_once", "allow_for_session", "deny"],
+          availableDecisions: filterSessionDecisionWithoutGrant(
+            ["allow_once", "allow_for_session", "deny"],
+            sessionGrant,
+          ),
         },
       };
     }

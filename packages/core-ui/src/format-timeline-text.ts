@@ -3,7 +3,7 @@ import type {
   TimelineToolGroupRow,
   ViewAssistantReasoningMessage,
   ViewAssistantTextMessage,
-  ViewApprovalLifecycleMessage,
+  ViewPermissionGrantLifecycleMessage,
   ViewDelegationMessage,
   ViewErrorMessage,
   ViewFileEditMessage,
@@ -270,8 +270,8 @@ function formatOperation(
   return lines.join("\n");
 }
 
-function formatApprovalLifecycle(
-  msg: ViewApprovalLifecycleMessage,
+function formatPermissionGrantLifecycle(
+  msg: ViewPermissionGrantLifecycleMessage,
   verbose: boolean,
   color: boolean,
 ): string {
@@ -361,8 +361,8 @@ function formatMessage(msg: ViewMessage, verbose: boolean, color: boolean): stri
       return formatWebSearch(msg, verbose, color);
     case "operation":
       return formatOperation(msg, verbose, color);
-    case "approval-lifecycle":
-      return formatApprovalLifecycle(msg, verbose, color);
+    case "permission-grant-lifecycle":
+      return formatPermissionGrantLifecycle(msg, verbose, color);
     case "tasks":
       return formatTasks(msg, verbose, color);
     case "delegation":

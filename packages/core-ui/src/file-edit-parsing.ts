@@ -54,7 +54,7 @@ export function parseFileEditFromItemEvent(
   return {
     callId,
     changes,
-    approvalStatus: itemStatusToApprovalStatus(decoded.item.status),
+    approvalStatus: itemStatusToApprovalStatus(decoded.item.approvalStatus),
     status: itemStatusToFileEditStatus(decoded.item.status) ?? defaultStatus,
     ...(parentToolCallId ? { parentToolCallId } : {}),
   };

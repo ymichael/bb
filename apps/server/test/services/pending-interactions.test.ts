@@ -367,6 +367,68 @@ describe("pending interaction lifecycle", () => {
     }
   });
 
+  it("rejects narrowed command session approval grants", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-pending-interaction-narrowed-command-grant",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+      });
+
+      const created = registerPendingInteraction(
+        harness.deps.pendingInteractions,
+        {
+          threadId: thread.id,
+          turnId: "turn-narrowed-command-grant",
+          providerId: "codex",
+          providerThreadId: "provider-thread-narrowed-command-grant",
+          providerRequestId: "request-narrowed-command-grant",
+          payload: createCommandApprovalPayload({
+            itemId: "item-narrowed-command-grant",
+            reason: "Needs network and file access",
+            command: "curl https://example.com > out.txt",
+            sessionGrant: {
+              network: { enabled: true },
+              fileSystem: {
+                read: [],
+                write: ["/tmp/project"],
+              },
+            },
+          }),
+        },
+        session.id,
+      );
+      if (created.outcome === "rejected") {
+        throw new Error(`Expected interaction registration to succeed: ${created.reason}`);
+      }
+
+      expect(() =>
+        harness.deps.pendingInteractions.resolvePendingInteraction({
+          threadId: thread.id,
+          interactionId: created.interaction.id,
+          resolution: createAllowForSessionResolution({
+            network: { enabled: true },
+            fileSystem: null,
+          }),
+        }),
+      ).toThrow(
+        "Command and file-change session approvals must grant the requested session permissions exactly",
+      );
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("rejects session command approvals without granted permissions", async () => {
     const harness = await createTestAppHarness();
     try {
@@ -450,7 +512,8 @@ describe("pending interaction lifecycle", () => {
           payload: createFileChangeApprovalPayload({
             itemId: "item-file-change-grant",
             reason: "Needs file write approval",
-            writeScope: { root: "/tmp/project" },
+            writeScope: "/tmp/project",
+            availableDecisions: ["allow_once", "allow_for_session", "deny"],
           }),
         },
         session.id,

@@ -208,7 +208,7 @@ function getMessageStatus(message: ViewMessage): ViewMessageStatus {
     case "file-edit":
     case "tasks":
     case "delegation":
-    case "approval-lifecycle":
+    case "permission-grant-lifecycle":
       return message.status;
     case "operation":
       return message.status ?? "completed";

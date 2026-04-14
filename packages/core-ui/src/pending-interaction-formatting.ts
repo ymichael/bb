@@ -151,7 +151,7 @@ export function formatPendingInteractionSubjectDetailLines(
       return [
         `Item: ${interaction.payload.subject.itemId}`,
         ...(interaction.payload.subject.writeScope
-          ? [`Write root: ${interaction.payload.subject.writeScope.root}`]
+          ? [`Write root: ${interaction.payload.subject.writeScope}`]
           : []),
         ...(sessionGrant ? [sessionGrant] : []),
       ];
@@ -301,6 +301,8 @@ export function formatPendingInteractionPermissionResolutionOutcome(
       return "granted for this turn";
     case "allow_for_session":
       return "granted for this session";
+    default:
+      return assertNever(args);
   }
 }
 

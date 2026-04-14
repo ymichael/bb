@@ -74,6 +74,15 @@ export function toPendingInteractionPermissionProfile(
 export function toPendingInteractionGrantablePermissionProfile(
   permissions: CodexAdditionalPermissions | CodexRequestedPermissionProfile,
 ): PendingInteractionGrantablePermissionProfile {
+  if (
+    "macos" in permissions
+    && permissions.macos !== null
+    && permissions.macos !== undefined
+  ) {
+    throw new ProviderRequestDecodeError(
+      "Codex macOS permission grants are not supported by the provider-neutral permission layer",
+    );
+  }
   const normalized = toPendingInteractionPermissionProfile(permissions);
   return {
     network: normalized.network,
@@ -98,19 +107,9 @@ export function toCodexGrantedPermissionProfile(
 }
 
 function fromCodexCommandApprovalDecision(
-  decision: CodexCommandApprovalDecision,
-): PendingInteractionApprovalDecision | null {
-  if (decision === "cancel") {
-    return null;
-  }
-  if (typeof decision === "string") {
-    return codexToPendingInteractionApprovalDecision[decision];
-  }
-
-  // Policy-amendment choices require a provider-specific response shape that the
-  // provider-neutral approval contract does not expose. Keep the neutral choices
-  // available, but do not present an option we cannot encode back to Codex.
-  return null;
+  decision: Exclude<CodexSimpleCommandApprovalDecision, "cancel">,
+): PendingInteractionApprovalDecision {
+  return codexToPendingInteractionApprovalDecision[decision];
 }
 
 export function toCodexCommandApprovalDecision(
@@ -133,10 +132,12 @@ export function parseCodexAvailableDecisions(
 
   const mappedDecisions: PendingInteractionApprovalDecision[] = [];
   for (const decision of decisions) {
-    const mappedDecision = fromCodexCommandApprovalDecision(decision);
-    if (mappedDecision) {
-      mappedDecisions.push(mappedDecision);
+    if (typeof decision !== "string" || decision === "cancel") {
+      throw new ProviderRequestDecodeError(
+        "Command approval request included unsupported provider-specific decisions",
+      );
     }
+    mappedDecisions.push(fromCodexCommandApprovalDecision(decision));
   }
   const uniqueDecisions = [...new Set(mappedDecisions)];
   if (uniqueDecisions.length === 0) {

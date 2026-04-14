@@ -107,6 +107,10 @@ interface PendingUserSignatureCounts {
   provider: Map<string, number>;
 }
 
+type ApprovalStatusDelta =
+  | { kind: "keep" }
+  | { kind: "set"; value: ViewApprovalLifecycleStatus | null };
+
 interface ClientStartEventContext {
   eventType: ClientInputEventType;
   startSource?: string;
@@ -263,14 +267,29 @@ function mergeCallStatus(
     : current;
 }
 
-function mergeApprovalStatus(
-  current: ViewApprovalLifecycleStatus | null,
+function buildApprovalStatusDelta(
   incoming: ViewApprovalLifecycleStatus | null | undefined,
   incomingStatus: ViewToolCallMessage["status"] | undefined,
+): ApprovalStatusDelta {
+  if (incoming !== undefined) {
+    return { kind: "set", value: incoming };
+  }
+  if (incomingStatus !== undefined) {
+    return { kind: "set", value: null };
+  }
+  return { kind: "keep" };
+}
+
+function applyApprovalStatusDelta(
+  current: ViewApprovalLifecycleStatus | null,
+  delta: ApprovalStatusDelta,
 ): ViewApprovalLifecycleStatus | null {
-  if (incoming !== undefined) return incoming;
-  if (incomingStatus !== undefined) return null;
-  return current;
+  switch (delta.kind) {
+    case "keep":
+      return current;
+    case "set":
+      return delta.value;
+  }
 }
 
 function hasSemanticIntent(intents: ViewToolParsedIntent[]): boolean {
@@ -361,10 +380,9 @@ function upsertRunningExecCall(
   existing.threadId = threadId;
   existing.parsedCmd = chooseParsedIntents(existing.parsedCmd, incoming.parsedCmd);
   if (incoming.exitCode !== undefined) existing.exitCode = incoming.exitCode;
-  existing.approvalStatus = mergeApprovalStatus(
+  existing.approvalStatus = applyApprovalStatusDelta(
     existing.approvalStatus,
-    incoming.approvalStatus,
-    incoming.status,
+    buildApprovalStatusDelta(incoming.approvalStatus, incoming.status),
   );
   existing.status = mergeCallStatus(existing.status, incoming.status) ?? "pending";
   existing.sourceSeqEnd = Math.max(existing.sourceSeqEnd, meta.seq);
@@ -610,10 +628,9 @@ function mergeCallSummary(
   if (incoming.description && !target.description) {
     target.description = incoming.description;
   }
-  target.approvalStatus = mergeApprovalStatus(
+  target.approvalStatus = applyApprovalStatusDelta(
     target.approvalStatus,
-    incoming.approvalStatus,
-    incoming.status,
+    buildApprovalStatusDelta(incoming.approvalStatus, incoming.status),
   );
   target.status = mergeCallStatus(target.status, incoming.status) ?? target.status;
 }
@@ -722,7 +739,7 @@ function onExecBegin(
     return;
   }
 
-  const exploring = call.approvalStatus !== null ? false : isExploringCall(call);
+  const exploring = isExploringCall(call);
   const active = state.toolActivity.activeCell;
 
   if (exploring && active?.kind === "tool-exploring") {
@@ -874,7 +891,7 @@ function onExecEnd(
 
   flushActiveToolCell(state);
 
-  if (!merged.approvalStatus && isExploringCall(merged)) {
+  if (isExploringCall(merged)) {
     const exploringMessage = createExploringMessage(merged);
     syncExploringStatus(exploringMessage);
     state.toolActivity.activeCell = exploringMessage;
@@ -1078,11 +1095,10 @@ function upsertFileEdit(
     existing.stderr = partial.stderr;
   }
 
-  existing.approvalStatus = partial.approvalStatus !== undefined
-    ? partial.approvalStatus
-    : partial.status !== undefined
-    ? null
-    : existing.approvalStatus;
+  existing.approvalStatus = applyApprovalStatusDelta(
+    existing.approvalStatus,
+    buildApprovalStatusDelta(partial.approvalStatus, partial.status),
+  );
 
   if (partial.status) {
     if (partial.status === "error") {

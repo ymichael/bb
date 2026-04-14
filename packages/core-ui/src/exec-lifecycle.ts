@@ -1,4 +1,8 @@
-import type { ThreadEvent, ThreadEventItemStatus } from "@bb/domain";
+import type {
+  ThreadEvent,
+  ThreadEventItemApprovalStatus,
+  ThreadEventItemStatus,
+} from "@bb/domain";
 import { getEventParentToolCallId, type EventMeta } from "./event-decode.js";
 import type {
   ViewApprovalLifecycleStatus,
@@ -44,10 +48,6 @@ type ExecItemViewStatus = ViewToolCallMessage["status"];
 
 function itemStatusToExecStatus(status: ThreadEventItemStatus): ExecItemViewStatus {
   switch (status) {
-    case "waiting_for_approval":
-      return "pending";
-    case "denied":
-      return "interrupted";
     case "pending":
       return "pending";
     case "completed":
@@ -60,17 +60,14 @@ function itemStatusToExecStatus(status: ThreadEventItemStatus): ExecItemViewStat
 }
 
 export function itemStatusToApprovalStatus(
-  status: ThreadEventItemStatus,
+  status: ThreadEventItemApprovalStatus,
 ): ViewApprovalLifecycleStatus | null {
   switch (status) {
     case "waiting_for_approval":
       return "waiting_for_approval";
     case "denied":
       return "denied";
-    case "pending":
-    case "completed":
-    case "failed":
-    case "interrupted":
+    case null:
       return null;
   }
 }
@@ -291,7 +288,7 @@ export function parseExecLifecycleEvent(
         exitCode,
         durationMs,
         duration: durationToString(durationMs),
-        approvalStatus: itemStatusToApprovalStatus(decoded.item.status),
+        approvalStatus: itemStatusToApprovalStatus(decoded.item.approvalStatus),
         status,
         ...(parentToolCallId ? { parentToolCallId } : {}),
       },
