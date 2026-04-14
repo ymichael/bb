@@ -56,6 +56,7 @@ import {
 import {
   advanceThreadProvisioning,
   recordThreadProvisionWorkspaceReady,
+  shouldSyncGeneratedThreadTitle,
 } from "../services/threads/thread-provisioning.js";
 
 export type CommandResultSideEffectsDeps = Pick<
@@ -399,7 +400,7 @@ function handleThreadStartResult(
   completeThreadStartForCommand(deps, {
     commandId: commandRow.id,
   });
-  if (thread.title) {
+  if (thread.title && shouldSyncGeneratedThreadTitle(deps, thread.id)) {
     queueThreadRenameCommand(deps, {
       environment: {
         id: command.environmentId,

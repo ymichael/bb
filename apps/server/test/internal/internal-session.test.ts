@@ -14,6 +14,7 @@ import {
   markThreadStopRequested,
   openSession,
   queueCommand,
+  threads,
   upsertHost,
 } from "@bb/db";
 import {
@@ -22,11 +23,16 @@ import {
   hostDaemonSessionOpenResponseSchema,
   hostRuntimeMaterialSnapshotSchema,
 } from "@bb/host-daemon-contract";
-import { systemThreadProvisioningEventDataSchema, threadSchema } from "@bb/domain";
+import {
+  type ProvisioningTranscriptEntry,
+  systemThreadProvisioningEventDataSchema,
+  threadSchema,
+} from "@bb/domain";
 import { describe, expect, it, vi } from "vitest";
 import { appendClientTurnEvent } from "../../src/services/threads/thread-events.js";
 import { finalizeStoppedThread } from "../../src/services/threads/thread-lifecycle.js";
 import {
+  recordThreadProvisionWorkspaceReady,
   requestThreadProvision,
   requestThreadReprovision,
 } from "../../src/services/threads/thread-provisioning.js";
@@ -1096,6 +1102,75 @@ describe("internal session routes", () => {
     }
   });
 
+  it("records workspace ready once for repeated thread provisioning advancement", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-workspace-ready-once",
+      });
+      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        managed: true,
+        projectId: project.id,
+        path: "/tmp/workspace-ready-once",
+        status: "provisioning",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "provisioning",
+      });
+      requestThreadReprovision(harness.deps, {
+        thread,
+        environment,
+        eventSequence: 0,
+        input: [{ type: "text", text: "Resume once" }],
+        execution: {
+          model: "gpt-5",
+          serviceTier: "default",
+          reasoningLevel: "medium",
+          permissionMode: "full",
+          permissionEscalation: null,
+          source: "client/turn/requested",
+        },
+        initiator: "user",
+      });
+
+      const entries: ProvisioningTranscriptEntry[] = [
+        {
+          type: "step",
+          key: "workspace-path",
+          text: "Using workspace: /tmp/workspace-ready-once",
+          status: "completed",
+        },
+      ];
+      recordThreadProvisionWorkspaceReady(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        entries,
+      });
+      recordThreadProvisionWorkspaceReady(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        entries,
+      });
+
+      const workspaceReadyEvents = harness.db
+        .select({ data: events.data })
+        .from(events)
+        .where(and(eq(events.threadId, thread.id), eq(events.type, "system/thread-provisioning")))
+        .all()
+        .map((row) => systemThreadProvisioningEventDataSchema.parse(JSON.parse(row.data)))
+        .filter((eventData) =>
+          eventData.entries.some((entry) => entry.key === "workspace-path")
+        );
+      expect(workspaceReadyEvents).toHaveLength(1);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("restarts reprovisioned threads with thread.start instead of turn.run", async () => {
     const harness = await createTestAppHarness();
     try {
@@ -1359,6 +1434,24 @@ describe("internal session routes", () => {
         environmentId: environment.id,
         status: "idle",
       });
+      const archivedSibling = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "provisioning",
+      });
+      harness.db
+        .update(threads)
+        .set({ archivedAt: Date.now() })
+        .where(eq(threads.id, archivedSibling.id))
+        .run();
+      const stopRequestedSibling = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "provisioning",
+      });
+      markThreadStopRequested(harness.db, harness.hub, {
+        threadId: stopRequestedSibling.id,
+      });
       requestThreadReprovision(harness.deps, {
         thread: provisioningThread,
         environment,
@@ -1434,6 +1527,8 @@ describe("internal session routes", () => {
       expect(response.status).toBe(200);
       expect(getThread(harness.db, provisioningThread.id)?.status).toBe("provisioning");
       expect(getThread(harness.db, idleSibling.id)?.status).toBe("idle");
+      expect(getThread(harness.db, archivedSibling.id)?.archivedAt).toBeTypeOf("number");
+      expect(getThread(harness.db, stopRequestedSibling.id)?.stopRequestedAt).toBeTypeOf("number");
 
       // Initiator gets the full daemon transcript because no streamed transcript was already appended.
       const initiatorEvents = harness.db
@@ -1490,6 +1585,20 @@ describe("internal session routes", () => {
 
       expect(queuedStarts).toHaveLength(1);
       expect(queuedStarts[0]?.threadId).toBe(provisioningThread.id);
+      for (const skippedThread of [archivedSibling, stopRequestedSibling]) {
+        const skippedEvents = harness.db
+          .select({ data: events.data })
+          .from(events)
+          .where(and(
+            eq(events.threadId, skippedThread.id),
+            eq(events.type, "system/thread-provisioning"),
+          ))
+          .all();
+        expect(skippedEvents).toHaveLength(0);
+        expect(
+          queuedStarts.some((command) => command.threadId === skippedThread.id),
+        ).toBe(false);
+      }
     } finally {
       await harness.cleanup();
     }

@@ -150,10 +150,6 @@ function assertNeverSandboxHostProgressStage(value: never): never {
   throw new Error(`Unsupported sandbox host progress stage: ${String(value)}`);
 }
 
-function assertNeverWorkspaceProvisionType(value: never): never {
-  throw new Error(`Unsupported workspace provision type: ${String(value)}`);
-}
-
 function sandboxHostProgressEntry(
   event: SandboxHostProgressEvent,
 ): ProvisioningTranscriptEntry {
@@ -216,21 +212,6 @@ function isActiveProvisionOperationState(
   state: EnvironmentOperationRow["state"],
 ): boolean {
   return state === "requested" || state === "queued" || state === "fetched";
-}
-
-function toProvisioningLabel(
-  workspaceProvisionType: Environment["workspaceProvisionType"],
-): string {
-  switch (workspaceProvisionType) {
-    case "unmanaged":
-      return "Environment";
-    case "managed-worktree":
-      return "Worktree";
-    case "managed-clone":
-      return "Clone";
-  }
-
-  return assertNeverWorkspaceProvisionType(workspaceProvisionType);
 }
 
 function getActiveProvisionOperation(
@@ -612,12 +593,27 @@ export type ManagedReprovisionResult =
   | QueuedManagedReprovision
   | typeof MANAGED_REPROVISION_IN_PROGRESS;
 
+export interface ActiveManagedEnvironmentProvisionArgs {
+  environmentId: string;
+}
+
+export interface QueueManagedEnvironmentReprovisionArgs {
+  environment: Environment;
+  projectId: string;
+  provisionEventSequence: number;
+  threadId: string;
+}
+
+export function hasActiveManagedEnvironmentProvision(
+  deps: Pick<AppDeps, "db">,
+  args: ActiveManagedEnvironmentProvisionArgs,
+): boolean {
+  return Boolean(getActiveProvisionOperation(deps, args.environmentId));
+}
+
 export async function queueManagedEnvironmentReprovision(
   deps: SandboxWorkSessionDeps,
-  args: {
-    environment: Environment;
-    thread: Thread;
-  },
+  args: QueueManagedEnvironmentReprovisionArgs,
 ): Promise<ManagedReprovisionResult> {
   const provisionType = args.environment.workspaceProvisionType;
   if (!args.environment.managed || provisionType === "unmanaged") {
@@ -635,7 +631,7 @@ export async function queueManagedEnvironmentReprovision(
 
   const source = requireSourceForHost(
     deps,
-    args.thread.projectId,
+    args.projectId,
     args.environment.hostId,
   );
   const hostSession = await ensureHostSessionReadyForWork(deps, {
@@ -651,30 +647,16 @@ export async function queueManagedEnvironmentReprovision(
     });
   const branchName =
     args.environment.branchName ??
-    buildManagedBranchName({ threadId: args.thread.id });
-
-  if (args.thread.status === "idle") {
-    tryTransition(deps.db, deps.hub, args.thread.id, "provisioning");
-  }
-  const provisionEventSequence = appendThreadProvisioningEvent(deps, {
-    threadId: args.thread.id,
-    environmentId: args.environment.id,
-    status: "active",
-    entries: [
-      {
-        type: "step",
-        key: "workspace-restore-started",
-        text: `Restoring ${toProvisioningLabel(args.environment.workspaceProvisionType).toLowerCase()}`,
-        status: "started",
-      },
-    ],
-  });
+    buildManagedBranchName({ threadId: args.threadId });
 
   const command = buildEnvironmentProvisionCommand({
     branchName,
     environmentId: args.environment.id,
     hostId: args.environment.hostId,
-    initiator: { threadId: args.thread.id, eventSequence: provisionEventSequence },
+    initiator: {
+      threadId: args.threadId,
+      eventSequence: args.provisionEventSequence,
+    },
     sourcePath: source.path,
     targetPath,
     workspaceProvisionType: provisionType,
@@ -692,7 +674,7 @@ export async function queueManagedEnvironmentReprovision(
     kind: "reprovision",
   });
   return {
-    eventSequence: provisionEventSequence,
+    eventSequence: args.provisionEventSequence,
     status: MANAGED_REPROVISION_QUEUED,
   };
 }

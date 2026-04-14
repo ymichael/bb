@@ -199,6 +199,88 @@ describe("generated managed branch names", () => {
     }
   });
 
+  it("does not queue a daemon rename for user-supplied titles", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-user-title-no-rename",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/user-title-no-rename-project",
+      });
+
+      const response = await harness.app.request("/api/v1/threads", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          projectId: project.id,
+          providerId: "codex",
+          model: "gpt-5",
+          title: "User Picked Title",
+          input: [
+            {
+              type: "text",
+              text: "Use the user supplied title without daemon rename",
+            },
+          ],
+          environment: {
+            type: "host",
+            hostId: host.id,
+            workspace: { type: "managed-worktree" },
+          },
+        }),
+      });
+
+      expect(response.status).toBe(201);
+      const thread = threadSchema.parse(await readJson(response));
+      const provision = await waitForQueuedCommand(
+        harness,
+        ({ command }) => command.type === "environment.provision",
+      );
+      if (provision.command.type !== "environment.provision") {
+        throw new Error("Expected environment.provision command");
+      }
+      await reportQueuedCommandSuccess(
+        harness,
+        provision,
+        {
+          path: "/tmp/user-title-no-rename-project/.bb-worktrees/thread",
+          branchName: `bb/${thread.id}`,
+          defaultBranch: "main",
+          isGitRepo: true,
+          isWorktree: true,
+          transcript: [],
+        },
+        { hostId: host.id },
+      );
+      const start = await waitForQueuedCommandAfter(
+        harness,
+        provision.row.cursor,
+        ({ command }) =>
+          command.type === "thread.start" && command.threadId === thread.id,
+      );
+      await reportQueuedCommandSuccess(
+        harness,
+        start,
+        { providerThreadId: "provider-user-title-no-rename" },
+        { hostId: host.id },
+      );
+
+      await expect(
+        waitForQueuedCommandAfter(
+          harness,
+          start.row.cursor,
+          ({ command }) =>
+            command.type === "thread.rename" && command.threadId === thread.id,
+          100,
+        ),
+      ).rejects.toThrow("Timed out waiting for queued command");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("uses generated branch slugs without retrying title inference when no title is returned", async () => {
     mockThreadMetadata({
       branchSlug: "Slug Only Branch",

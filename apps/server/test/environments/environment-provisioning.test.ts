@@ -47,11 +47,15 @@ describe("environment reprovisioning", () => {
 
       const firstAttempt = await queueManagedEnvironmentReprovision(harness.deps, {
         environment,
-        thread,
+        projectId: thread.projectId,
+        provisionEventSequence: 1,
+        threadId: thread.id,
       });
       const secondAttempt = await queueManagedEnvironmentReprovision(harness.deps, {
         environment,
-        thread,
+        projectId: thread.projectId,
+        provisionEventSequence: 2,
+        threadId: thread.id,
       });
 
       expect(firstAttempt).toMatchObject({
@@ -108,7 +112,9 @@ describe("environment reprovisioning", () => {
 
       await queueManagedEnvironmentReprovision(harness.deps, {
         environment,
-        thread,
+        projectId: thread.projectId,
+        provisionEventSequence: 1,
+        threadId: thread.id,
       });
 
       const queued = await waitForQueuedCommand(
@@ -151,7 +157,9 @@ describe("environment reprovisioning", () => {
       try {
         await queueManagedEnvironmentReprovision(harness.deps, {
           environment,
-          thread,
+          projectId: thread.projectId,
+          provisionEventSequence: 1,
+          threadId: thread.id,
         });
       } catch (error) {
         if (error instanceof ApiError) {

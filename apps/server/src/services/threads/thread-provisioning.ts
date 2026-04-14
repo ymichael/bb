@@ -161,6 +161,12 @@ export interface RecordThreadProvisionWorkspaceReadyArgs {
   threadId: string;
 }
 
+interface EnsureWorkspaceReadyEventArgs {
+  entries: ProvisioningTranscriptEntry[];
+  environmentId: string;
+  threadId: string;
+}
+
 interface BuildEnvironmentProvisionRequestArgs {
   environment: Environment;
   eventSequence: number;
@@ -284,6 +290,52 @@ function saveThreadProvisionPayload(
     kind: "provision",
     payload: JSON.stringify(args.payload),
   });
+}
+
+function ensureWorkspaceReadyEvent(
+  deps: Pick<AppDeps, "db" | "hub">,
+  args: EnsureWorkspaceReadyEventArgs,
+): number | null {
+  const result = deps.db.transaction(
+    (tx) => {
+      const operation = getThreadOperation(tx, {
+        threadId: args.threadId,
+        kind: "provision",
+      });
+      if (!operation || !isActiveLifecycleOperationState(operation.state)) {
+        return null;
+      }
+      const payload = parseJsonWithSchema(
+        operation.payload,
+        threadProvisionPayloadSchema,
+      );
+      if (payload.workspaceReadyEventSequence !== null) {
+        return payload.workspaceReadyEventSequence;
+      }
+
+      const eventSequence = appendThreadProvisioningEventInTransaction(tx, {
+        threadId: args.threadId,
+        environmentId: args.environmentId,
+        status: "active",
+        entries: args.entries,
+      });
+      upsertThreadOperationRecord(tx, {
+        threadId: args.threadId,
+        kind: "provision",
+        payload: JSON.stringify({
+          ...payload,
+          workspaceReadyEventSequence: eventSequence,
+        }),
+      });
+      return eventSequence;
+    },
+    { behavior: "immediate" },
+  );
+
+  if (result !== null) {
+    deps.hub.notifyThread(args.threadId, ["events-appended"]);
+  }
+  return result;
 }
 
 function completeThreadProvisioning(
@@ -758,28 +810,14 @@ async function startThreadIfEnvironmentReady(
     return;
   }
 
-  let payload = args.payload;
-  if (payload.workspaceReadyEventSequence === null) {
-    const eventSequence = appendThreadProvisioningEvent(deps, {
-      threadId: args.thread.id,
-      environmentId: args.environment.id,
-      status: "active",
-      entries: buildCwdBranchEntries({
-        path: args.environment.path,
-        branchName: args.environment.branchName,
-      }),
-    });
-    payload = {
-      ...payload,
-      workspaceReadyEventSequence: eventSequence,
-    };
-    saveThreadProvisionPayload(deps, {
-      threadId: args.thread.id,
-      payload,
-    });
-  }
-
-  const workspaceReadyEventSequence = payload.workspaceReadyEventSequence;
+  const workspaceReadyEventSequence = ensureWorkspaceReadyEvent(deps, {
+    threadId: args.thread.id,
+    environmentId: args.environment.id,
+    entries: buildCwdBranchEntries({
+      path: args.environment.path,
+      branchName: args.environment.branchName,
+    }),
+  });
   if (workspaceReadyEventSequence === null) {
     throw new Error("Workspace ready event sequence was not recorded");
   }
@@ -792,9 +830,9 @@ async function startThreadIfEnvironmentReady(
       path: args.environment.path,
       workspaceProvisionType: args.environment.workspaceProvisionType,
     },
-    input: payload.input,
+    input: args.payload.input,
     eventSequence: workspaceReadyEventSequence,
-    execution: payload.execution,
+    execution: args.payload.execution,
     permissionEscalation: resolvePermissionEscalation({
       thread: args.thread,
       initiator: args.thread.type === "manager" ? "system" : "user",
@@ -874,26 +912,32 @@ export function requestThreadReprovision(
   });
 }
 
+export function shouldSyncGeneratedThreadTitle(
+  deps: Pick<AppDeps, "db">,
+  threadId: string,
+): boolean {
+  const operation = getThreadOperation(deps.db, {
+    threadId,
+    kind: "provision",
+  });
+  if (!operation) {
+    return false;
+  }
+  const payload = parseJsonWithSchema(
+    operation.payload,
+    threadProvisionPayloadSchema,
+  );
+  return !payload.titleProvided;
+}
+
 export function recordThreadProvisionWorkspaceReady(
   deps: Pick<AppDeps, "db" | "hub">,
   args: RecordThreadProvisionWorkspaceReadyArgs,
 ): void {
-  const payload = loadActiveThreadProvisionPayload(deps, args.threadId);
-  if (!payload || payload.workspaceReadyEventSequence !== null) {
-    return;
-  }
-  const eventSequence = appendThreadProvisioningEvent(deps, {
+  ensureWorkspaceReadyEvent(deps, {
     threadId: args.threadId,
     environmentId: args.environmentId,
-    status: "active",
     entries: args.entries,
-  });
-  saveThreadProvisionPayload(deps, {
-    threadId: args.threadId,
-    payload: {
-      ...payload,
-      workspaceReadyEventSequence: eventSequence,
-    },
   });
 }
 
