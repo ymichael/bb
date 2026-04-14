@@ -43,6 +43,7 @@ export function createAppQueryClient(
       queries: {
         staleTime: 2000,
         refetchOnWindowFocus: true,
+        retry: 0,
         ...defaultOptions?.queries,
       },
     },

@@ -67,7 +67,7 @@ export function ThreadTimelinePane({
           {isThreadTimelinePending ? (
             <ConversationWorkingIndicator label="Loading thread..." className="mt-6" />
           ) : timelineError ? (
-            <ConversationEmptyState message="Failed to load timeline" />
+            <div className="mt-6 px-2 text-sm text-destructive">Failed to load timeline</div>
           ) : threadDetailRows.length === 0 ? (
             <ConversationEmptyState message="No events yet" />
           ) : (
