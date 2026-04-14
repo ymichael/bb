@@ -1,6 +1,11 @@
+import { setTimeout as sleep } from "node:timers/promises";
 import { eq } from "drizzle-orm";
 import {
   createProjectSource,
+  environments,
+  events,
+  getThread,
+  getThreadOperation,
   hostDaemonCommands,
   listThreads,
   transitionThreadStatus,
@@ -8,6 +13,7 @@ import {
 import { threadSchema } from "@bb/domain";
 import { describe, expect, it } from "vitest";
 import { completeThreadStart } from "../../src/services/threads/thread-lifecycle.js";
+import { advanceThreadProvisioning } from "../../src/services/threads/thread-provisioning.js";
 import {
   reportQueuedCommandSuccess,
   waitForQueuedCommand,
@@ -20,7 +26,30 @@ import {
   seedHostSession,
   seedProjectWithSource,
 } from "../helpers/seed.js";
-import { createTestAppHarness } from "../helpers/test-app.js";
+import {
+  createTestAppHarness,
+  type TestAppHarness,
+} from "../helpers/test-app.js";
+
+interface WaitForThreadStatusArgs {
+  status: string;
+  threadId: string;
+  timeoutMs?: number;
+}
+
+async function waitForThreadStatus(
+  harness: TestAppHarness,
+  args: WaitForThreadStatusArgs,
+): Promise<void> {
+  const deadline = Date.now() + (args.timeoutMs ?? 1_000);
+  while (Date.now() < deadline) {
+    if (getThread(harness.db, args.threadId)?.status === args.status) {
+      return;
+    }
+    await sleep(10);
+  }
+  throw new Error(`Timed out waiting for thread ${args.threadId} to be ${args.status}`);
+}
 
 describe("public thread lifecycle regressions", () => {
   it("uses unique branch names for same-title managed worktree threads", async () => {
@@ -282,6 +311,115 @@ describe("public thread lifecycle regressions", () => {
     }
   });
 
+  it("fails direct-host provisioning durably when the host is disconnected", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const host = seedHost(harness.deps, { id: "host-direct-disconnected" });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/direct-disconnected",
+      });
+
+      const response = await harness.app.request("/api/v1/threads", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          projectId: project.id,
+          providerId: "codex",
+          model: "gpt-5",
+          title: "Disconnected host thread",
+          input: [{ type: "text", text: "Start on disconnected host" }],
+          environment: {
+            type: "host",
+            hostId: host.id,
+            workspace: { type: "unmanaged", path: "/tmp/direct-disconnected" },
+          },
+        }),
+      });
+
+      expect(response.status).toBe(201);
+      const createdThread = threadSchema.parse(await readJson(response));
+      await advanceThreadProvisioning(harness.deps, {
+        threadId: createdThread.id,
+      });
+      await waitForThreadStatus(harness, {
+        threadId: createdThread.id,
+        status: "error",
+      });
+
+      expect(getThreadOperation(harness.db, {
+        threadId: createdThread.id,
+        kind: "provision",
+      })?.state).toBe("failed");
+      const errorEvent = harness.db
+        .select()
+        .from(events)
+        .where(eq(events.threadId, createdThread.id))
+        .all()
+        .find((event) => event.type === "system/error");
+      expect(errorEvent ? JSON.parse(errorEvent.data) : null).toMatchObject({
+        code: "thread_provisioning_failed",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("dedupes concurrent direct-host provisioning advances", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-direct-dedupe",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/direct-dedupe",
+      });
+
+      const response = await harness.app.request("/api/v1/threads", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          projectId: project.id,
+          providerId: "codex",
+          model: "gpt-5",
+          title: "Concurrent provisioning",
+          input: [{ type: "text", text: "Create only one workspace" }],
+          environment: {
+            type: "host",
+            hostId: host.id,
+            workspace: { type: "managed-worktree" },
+          },
+        }),
+      });
+
+      expect(response.status).toBe(201);
+      const createdThread = threadSchema.parse(await readJson(response));
+      await Promise.all([
+        advanceThreadProvisioning(harness.deps, { threadId: createdThread.id }),
+        advanceThreadProvisioning(harness.deps, { threadId: createdThread.id }),
+      ]);
+
+      const provisionCommands = harness.db
+        .select()
+        .from(hostDaemonCommands)
+        .where(eq(hostDaemonCommands.type, "environment.provision"))
+        .all();
+      const createdEnvironments = harness.db
+        .select()
+        .from(environments)
+        .where(eq(environments.projectId, project.id))
+        .all();
+      expect(provisionCommands).toHaveLength(1);
+      expect(createdEnvironments).toHaveLength(1);
+      expect(getThread(harness.db, createdThread.id)?.environmentId).toBe(
+        createdEnvironments[0]?.id,
+      );
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("only queues environment.destroy after the last thread in a managed environment is deleted", async () => {
     const harness = await createTestAppHarness();
     try {
@@ -386,7 +524,7 @@ describe("public thread lifecycle regressions", () => {
     }
   });
 
-  it("keeps reused threads in provisioning when the reused environment is still provisioning", async () => {
+  it("fails reused threads when a provisioning environment has no active lifecycle operation", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps, { id: "host-reuse-provisioning" });
@@ -417,26 +555,29 @@ describe("public thread lifecycle regressions", () => {
       });
 
       expect(response.status).toBe(201);
-      const createdThread = await readJson(response);
-      if (
-        typeof createdThread !== "object" ||
-        !createdThread ||
-        !("id" in createdThread) ||
-        typeof createdThread.id !== "string"
-      ) {
-        throw new Error("Thread creation response shape was invalid");
-      }
+      const createdThread = threadSchema.parse(await readJson(response));
 
-      expect(listThreads(harness.db, { projectId: project.id })[0]?.status).toBe("provisioning");
-      await expect(
-        waitForQueuedCommand(
-          harness,
-          ({ command }) =>
-            command.type === "thread.start" &&
-            command.threadId === createdThread.id,
-          100,
-        ),
-      ).rejects.toThrow("Timed out waiting for queued command");
+      await advanceThreadProvisioning(harness.deps, {
+        threadId: createdThread.id,
+      });
+      await waitForThreadStatus(harness, {
+        threadId: createdThread.id,
+        status: "error",
+      });
+      expect(getThreadOperation(harness.db, {
+        threadId: createdThread.id,
+        kind: "provision",
+      })?.state).toBe("failed");
+      const errorEvent = harness.db
+        .select()
+        .from(events)
+        .where(eq(events.threadId, createdThread.id))
+        .all()
+        .find((event) => event.type === "system/error");
+      expect(errorEvent ? JSON.parse(errorEvent.data) : null).toMatchObject({
+        code: "thread_provisioning_failed",
+        detail: "Environment is provisioning without an active provision operation",
+      });
     } finally {
       await harness.cleanup();
     }

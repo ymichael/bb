@@ -2,7 +2,9 @@ import { getThread } from "@bb/db";
 import { threadSchema } from "@bb/domain";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  reportQueuedCommandSuccess,
   waitForQueuedCommand,
+  waitForQueuedCommandAfter,
 } from "../helpers/commands.js";
 import { readJson } from "../helpers/json.js";
 import {
@@ -105,6 +107,93 @@ describe("generated managed branch names", () => {
         `bb/improve-branch-names-${thread.id}`,
       );
       expect(piAiMocks.complete).toHaveBeenCalledTimes(1);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("queues a daemon rename after a generated title thread starts", async () => {
+    mockThreadMetadata({
+      branchSlug: "Generated Rename Branch",
+      title: "Generated Rename Title",
+    });
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-generated-title-rename",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/generated-title-rename-project",
+      });
+
+      const response = await harness.app.request("/api/v1/threads", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          projectId: project.id,
+          providerId: "codex",
+          model: "gpt-5",
+          input: [
+            {
+              type: "text",
+              text: "Generate a title then sync it after startup",
+            },
+          ],
+          environment: {
+            type: "host",
+            hostId: host.id,
+            workspace: { type: "managed-worktree" },
+          },
+        }),
+      });
+
+      expect(response.status).toBe(201);
+      const thread = threadSchema.parse(await readJson(response));
+      const provision = await waitForQueuedCommand(
+        harness,
+        ({ command }) => command.type === "environment.provision",
+      );
+      if (provision.command.type !== "environment.provision") {
+        throw new Error("Expected environment.provision command");
+      }
+      await reportQueuedCommandSuccess(
+        harness,
+        provision,
+        {
+          path: "/tmp/generated-title-rename-project/.bb-worktrees/thread",
+          branchName: `bb/generated-rename-branch-${thread.id}`,
+          defaultBranch: "main",
+          isGitRepo: true,
+          isWorktree: true,
+          transcript: [],
+        },
+        { hostId: host.id },
+      );
+      const start = await waitForQueuedCommandAfter(
+        harness,
+        provision.row.cursor,
+        ({ command }) =>
+          command.type === "thread.start" && command.threadId === thread.id,
+      );
+      await reportQueuedCommandSuccess(
+        harness,
+        start,
+        { providerThreadId: "provider-generated-title-rename" },
+        { hostId: host.id },
+      );
+
+      const rename = await waitForQueuedCommandAfter(
+        harness,
+        start.row.cursor,
+        ({ command }) =>
+          command.type === "thread.rename" && command.threadId === thread.id,
+      );
+      expect(rename.command).toMatchObject({
+        type: "thread.rename",
+        threadId: thread.id,
+        title: "Generated Rename Title",
+      });
     } finally {
       await harness.cleanup();
     }

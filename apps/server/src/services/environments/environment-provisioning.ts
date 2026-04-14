@@ -604,8 +604,12 @@ export async function advanceEnvironmentProvisioning(
 
 export const MANAGED_REPROVISION_QUEUED = "queued" as const;
 export const MANAGED_REPROVISION_IN_PROGRESS = "already-provisioning" as const;
+export interface QueuedManagedReprovision {
+  eventSequence: number;
+  status: typeof MANAGED_REPROVISION_QUEUED;
+}
 export type ManagedReprovisionResult =
-  | typeof MANAGED_REPROVISION_QUEUED
+  | QueuedManagedReprovision
   | typeof MANAGED_REPROVISION_IN_PROGRESS;
 
 export async function queueManagedEnvironmentReprovision(
@@ -687,5 +691,8 @@ export async function queueManagedEnvironmentReprovision(
     environment: args.environment,
     kind: "reprovision",
   });
-  return MANAGED_REPROVISION_QUEUED;
+  return {
+    eventSequence: provisionEventSequence,
+    status: MANAGED_REPROVISION_QUEUED,
+  };
 }

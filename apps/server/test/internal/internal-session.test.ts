@@ -26,6 +26,10 @@ import { systemThreadProvisioningEventDataSchema, threadSchema } from "@bb/domai
 import { describe, expect, it, vi } from "vitest";
 import { appendClientTurnEvent } from "../../src/services/threads/thread-events.js";
 import { finalizeStoppedThread } from "../../src/services/threads/thread-lifecycle.js";
+import {
+  requestThreadProvision,
+  requestThreadReprovision,
+} from "../../src/services/threads/thread-provisioning.js";
 import { ensureSandboxHostSessionReady } from "../../src/services/hosts/host-lifecycle.js";
 import {
   advanceSandboxRuntimeMaterialSync,
@@ -658,21 +662,22 @@ describe("internal session routes", () => {
         environmentId: successEnvironment.id,
         status: "provisioning",
       });
-      appendClientTurnEvent(harness.deps, {
-        threadId: successThread.id,
-        environmentId: successEnvironment.id,
-        type: "client/thread/start",
+      requestThreadProvision(harness.deps, {
+        thread: successThread,
+        environmentIntent: {
+          type: "reuse",
+          environmentId: successEnvironment.id,
+        },
         input: [{ type: "text", text: "Start when ready" }],
         execution: {
           model: "gpt-5",
           serviceTier: "default",
           reasoningLevel: "medium",
           permissionMode: "full",
+          permissionEscalation: null,
           source: "client/thread/start",
         },
-        initiator: "user",
-        requestMethod: "thread/start",
-        source: "spawn",
+        titleProvided: true,
       });
       const successCommand = queueEnvironmentProvisionLifecycleCommand(harness, {
         hostId: host.id,
@@ -1081,7 +1086,7 @@ describe("internal session routes", () => {
       expect(provisioningEvents).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
-            status: "completed",
+            status: "active",
             entries: [],
           }),
         ]),
@@ -1119,21 +1124,20 @@ describe("internal session routes", () => {
         type: "thread/identity",
         data: {},
       });
-      appendClientTurnEvent(harness.deps, {
-        threadId: thread.id,
-        environmentId: environment.id,
-        type: "client/turn/requested",
+      requestThreadReprovision(harness.deps, {
+        thread,
+        environment,
+        eventSequence: 0,
         input: [{ type: "text", text: "Resume after reprovision" }],
         execution: {
           model: "gpt-5",
           serviceTier: "default",
           reasoningLevel: "medium",
           permissionMode: "full",
+          permissionEscalation: null,
           source: "client/turn/requested",
         },
         initiator: "user",
-        requestMethod: "turn/start",
-        source: "tell",
       });
       const provisionCommand = queueEnvironmentProvisionLifecycleCommand(harness, {
         hostId: host.id,
@@ -1199,7 +1203,7 @@ describe("internal session routes", () => {
     }
   });
 
-  it("fails reprovision restart loudly when the latest stored request event is malformed", async () => {
+  it("restarts reprovisioned threads from the durable thread provision payload", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host, session } = seedHostSession(harness.deps, {
@@ -1258,6 +1262,21 @@ describe("internal session routes", () => {
           source: "tell",
         },
       });
+      requestThreadReprovision(harness.deps, {
+        thread,
+        environment,
+        eventSequence: 0,
+        input: [{ type: "text", text: "Durable reprovision payload" }],
+        execution: {
+          model: "gpt-5",
+          serviceTier: "default",
+          reasoningLevel: "medium",
+          permissionMode: "full",
+          permissionEscalation: null,
+          source: "client/turn/requested",
+        },
+        initiator: "user",
+      });
       const provisionCommand = queueEnvironmentProvisionLifecycleCommand(harness, {
         hostId: host.id,
         sessionId: session.id,
@@ -1294,11 +1313,7 @@ describe("internal session routes", () => {
         }),
       });
 
-      expect(response.status).toBe(500);
-      await expect(readJson(response)).resolves.toMatchObject({
-        code: "internal_error",
-        message: expect.stringContaining(`thread ${thread.id}`),
-      });
+      expect(response.status).toBe(200);
       const followupCommands = harness.db
         .select({
           cursor: hostDaemonCommands.cursor,
@@ -1308,8 +1323,12 @@ describe("internal session routes", () => {
         .where(eq(hostDaemonCommands.hostId, host.id))
         .all()
         .filter((row) => row.cursor > provisionCommand.cursor)
-        .map((row) => hostDaemonCommandSchema.parse(JSON.parse(row.payload)));
-      expect(followupCommands).toEqual([]);
+        .map((row) => hostDaemonCommandSchema.parse(JSON.parse(row.payload)))
+        .filter((command) => command.type === "thread.start");
+      expect(followupCommands).toHaveLength(1);
+      expect(followupCommands[0]).toMatchObject({
+        threadId: thread.id,
+      });
     } finally {
       await harness.cleanup();
     }
@@ -1340,21 +1359,20 @@ describe("internal session routes", () => {
         environmentId: environment.id,
         status: "idle",
       });
-      appendClientTurnEvent(harness.deps, {
-        threadId: provisioningThread.id,
-        environmentId: environment.id,
-        type: "client/turn/requested",
+      requestThreadReprovision(harness.deps, {
+        thread: provisioningThread,
+        environment,
+        eventSequence: 0,
         input: [{ type: "text", text: "Resume provisioning thread" }],
         execution: {
           model: "gpt-5",
           serviceTier: "default",
           reasoningLevel: "medium",
           permissionMode: "full",
+          permissionEscalation: null,
           source: "client/turn/requested",
         },
         initiator: "user",
-        requestMethod: "turn/start",
-        source: "tell",
       });
       appendClientTurnEvent(harness.deps, {
         threadId: idleSibling.id,

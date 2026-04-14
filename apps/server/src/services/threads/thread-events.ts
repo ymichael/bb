@@ -62,7 +62,7 @@ export interface AppendThreadProvisioningEventArgs {
 }
 
 export interface BuildCwdBranchEntriesArgs {
-  branchName?: string | null;
+  branchName: string | null;
   path: string;
 }
 

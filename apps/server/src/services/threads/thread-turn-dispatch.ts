@@ -8,8 +8,11 @@ import type {
 import type { SandboxWorkSessionDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
 import { queueManagedEnvironmentReprovision } from "../environments/environment-provisioning.js";
-import { MANAGED_REPROVISION_QUEUED } from "../environments/environment-provisioning.js";
-import { appendClientTurnEvent } from "./thread-events.js";
+import {
+  MANAGED_REPROVISION_IN_PROGRESS,
+  MANAGED_REPROVISION_QUEUED,
+} from "../environments/environment-provisioning.js";
+import { requestThreadReprovision } from "./thread-provisioning.js";
 
 export interface ReadyThreadEnvironment extends Environment {
   path: string;
@@ -58,19 +61,20 @@ export async function queueTurnDuringReprovision(
     environment: args.environment,
     thread: args.thread,
   });
-  if (reprovisionResult !== MANAGED_REPROVISION_QUEUED) {
+  if (reprovisionResult === MANAGED_REPROVISION_IN_PROGRESS) {
     throw new ApiError(409, "invalid_request", "Environment is already provisioning");
   }
+  if (reprovisionResult.status !== MANAGED_REPROVISION_QUEUED) {
+    throw new ApiError(500, "internal_error", "Unexpected reprovision result");
+  }
 
-  appendClientTurnEvent(args.deps, {
-    threadId: args.thread.id,
-    environmentId: args.environment.id,
-    type: "client/turn/requested",
+  requestThreadReprovision(args.deps, {
+    thread: args.thread,
+    environment: args.environment,
+    eventSequence: reprovisionResult.eventSequence,
     input: args.input,
     execution: args.execution,
     initiator: args.initiator,
-    requestMethod: "turn/start",
-    source: "tell",
   });
   args.onQueued?.();
   return true;

@@ -1,9 +1,11 @@
 import { and, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import type { HostChangeKind, HostType } from "@bb/domain";
-import type { DbConnection } from "../connection.js";
+import type { DbConnection, DbTransaction } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
 import { environments, hostDaemonSessions, hosts } from "../schema.js";
 import { createHostId } from "../ids.js";
+
+type HostWriteConnection = DbConnection | DbTransaction;
 
 export interface UpsertHostInput {
   id?: string;
@@ -60,7 +62,7 @@ function getHostConnectionChange(
 }
 
 export function upsertHost(
-  db: DbConnection,
+  db: HostWriteConnection,
   notifier: DbNotifier,
   input: UpsertHostInput,
 ) {

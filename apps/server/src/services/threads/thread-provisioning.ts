@@ -3,7 +3,9 @@ import {
   createEnvironment,
   createHostId,
   type CreateEnvironmentInput,
+  type UpsertHostInput,
   getEnvironment,
+  getEnvironmentOperation,
   getThread,
   getThreadOperation,
   updateThread,
@@ -24,6 +26,7 @@ import {
   type ProvisioningTranscriptEntry,
   type ResolvedThreadExecutionOptions,
   type Thread,
+  type ThreadTurnInitiator,
 } from "@bb/domain";
 import { SANDBOX_DATA_DIR } from "@bb/sandbox-host";
 import type { AppDeps } from "../../types.js";
@@ -58,6 +61,7 @@ import { requestThreadStart } from "./thread-lifecycle.js";
 import { resolvePermissionEscalation } from "./thread-runtime-config.js";
 import { parseJsonWithSchema } from "../lib/json-parsing.js";
 import { tryTransition } from "./thread-transitions.js";
+import { createAsyncDeduper } from "../lib/async-deduper.js";
 
 type ThreadProvisioningDeps = Pick<
   AppDeps,
@@ -115,6 +119,13 @@ const threadProvisionPayloadSchema = z.object({
   workspaceReadyEventSequence: z.number().int().nonnegative().nullable(),
 });
 
+const ACTIVE_DIRECT_ENVIRONMENT_OPERATION_KINDS = [
+  "provision",
+  "reprovision",
+] as const;
+
+const threadProvisionAdvanceDeduper = createAsyncDeduper<string, void>();
+
 type ThreadProvisionEnvironmentIntent = z.infer<
   typeof threadProvisionEnvironmentIntentSchema
 >;
@@ -131,7 +142,22 @@ export interface RequestThreadProvisionArgs {
   titleProvided: boolean;
 }
 
+export interface RequestThreadReprovisionArgs {
+  environment: Environment;
+  eventSequence: number;
+  execution: ResolvedThreadExecutionOptions;
+  input: PromptInput[];
+  initiator: ThreadTurnInitiator;
+  thread: Thread;
+}
+
 export interface AdvanceThreadProvisioningArgs {
+  threadId: string;
+}
+
+export interface RecordThreadProvisionWorkspaceReadyArgs {
+  entries: ProvisioningTranscriptEntry[];
+  environmentId: string;
   threadId: string;
 }
 
@@ -146,6 +172,7 @@ interface CreateProvisioningEnvironmentWithOperationArgs {
     | ReturnType<typeof buildDirectEnvironmentProvisionRequest>
     | ReturnType<typeof buildSandboxHostEnvironmentProvisionRequest>;
   environmentInput: CreateEnvironmentInput;
+  hostInput: UpsertHostInput | null;
   payload: ThreadProvisionPayload;
   thread: Thread;
 }
@@ -278,16 +305,27 @@ function failThreadProvisioning(
     kind: "provision",
     failureReason: args.detail,
   });
-  if (args.environmentId) {
-    appendSystemErrorEvent(deps, {
-      threadId: args.thread.id,
-      environmentId: args.environmentId,
-      code: "thread_provisioning_failed",
-      message: "Provisioning thread failed",
-      detail: args.detail,
-    });
-  }
+  appendSystemErrorEvent(deps, {
+    threadId: args.thread.id,
+    environmentId: args.environmentId,
+    code: "thread_provisioning_failed",
+    message: "Provisioning thread failed",
+    detail: args.detail,
+  });
   tryTransition(deps.db, deps.hub, args.thread.id, "error");
+}
+
+function hasActiveEnvironmentProvisionOperation(
+  deps: Pick<AppDeps, "db">,
+  environment: Environment,
+): boolean {
+  return ACTIVE_DIRECT_ENVIRONMENT_OPERATION_KINDS.some((kind) => {
+    const operation = getEnvironmentOperation(deps.db, {
+      environmentId: environment.id,
+      kind,
+    });
+    return Boolean(operation && isActiveLifecycleOperationState(operation.state));
+  });
 }
 
 async function resolveMetadataIfNeeded(
@@ -423,6 +461,34 @@ function createProvisioningEnvironmentWithOperation(
 ): ThreadProvisioningResult {
   const result = deps.db.transaction(
     (tx) => {
+      const activeOperation = getThreadOperation(tx, {
+        threadId: args.thread.id,
+        kind: "provision",
+      });
+      if (!activeOperation || !isActiveLifecycleOperationState(activeOperation.state)) {
+        throw new Error("Thread provision operation is no longer active");
+      }
+      const activePayload = parseJsonWithSchema(
+        activeOperation.payload,
+        threadProvisionPayloadSchema,
+      );
+      if (activePayload.attachedEnvironmentId) {
+        const existingEnvironment = getEnvironment(
+          tx,
+          activePayload.attachedEnvironmentId,
+        );
+        if (!existingEnvironment) {
+          throw new Error("Attached provisioning environment no longer exists");
+        }
+        return {
+          environment: existingEnvironment,
+          payload: activePayload,
+        };
+      }
+
+      if (args.hostInput) {
+        upsertHost(tx, deps.hub, args.hostInput);
+      }
       const environment = createEnvironment(tx, deps.hub, args.environmentInput);
       if (args.thread.environmentId !== environment.id) {
         updateThread(tx, deps.hub, args.thread.id, {
@@ -482,6 +548,7 @@ function createDirectUnmanagedEnvironment(
       workspaceProvisionType: "unmanaged",
       status: "provisioning",
     },
+    hostInput: null,
     buildRequest: ({ environment, eventSequence }) =>
       buildDirectEnvironmentProvisionRequest(
         buildEnvironmentProvisionCommand({
@@ -515,6 +582,7 @@ async function createDirectManagedEnvironment(
       workspaceProvisionType: args.intent.workspaceProvisionType,
       status: "provisioning",
     },
+    hostInput: null,
     buildRequest: ({ environment, eventSequence, payload }) =>
       buildDirectEnvironmentProvisionRequest(
         buildEnvironmentProvisionCommand({
@@ -547,12 +615,6 @@ function createSandboxManagedEnvironment(
 ): ThreadProvisioningResult {
   const hostId = createHostId();
   const hostName = `sandbox-${hostId.slice(-6)}`;
-  upsertHost(deps.db, deps.hub, {
-    id: hostId,
-    name: hostName,
-    provider: args.intent.sandboxType,
-    type: "ephemeral",
-  });
   return createProvisioningEnvironmentWithOperation(deps, {
     thread: args.thread,
     payload: args.payload,
@@ -562,6 +624,12 @@ function createSandboxManagedEnvironment(
       projectId: args.thread.projectId,
       status: "provisioning",
       workspaceProvisionType: "managed-clone",
+    },
+    hostInput: {
+      id: hostId,
+      name: hostName,
+      provider: args.intent.sandboxType,
+      type: "ephemeral",
     },
     buildRequest: ({ environment, eventSequence, payload }) =>
       buildSandboxHostEnvironmentProvisionRequest({
@@ -594,6 +662,37 @@ async function ensureEnvironmentRequested(
   deps: ThreadProvisioningDeps,
   args: EnsureEnvironmentRequestedArgs,
 ): Promise<ThreadProvisioningResult> {
+  if (args.payload.environmentIntent.type === "reuse") {
+    const environment = getEnvironment(
+      deps.db,
+      args.payload.environmentIntent.environmentId,
+    );
+    if (!environment) {
+      throw new ApiError(404, "environment_not_found", "Environment not found");
+    }
+    let payload = attachThreadToEnvironment(deps, {
+      environment,
+      payload: args.payload,
+      thread: args.thread,
+    });
+    if (environment.status === "provisioning") {
+      if (!hasActiveEnvironmentProvisionOperation(deps, environment)) {
+        failThreadProvisioning(deps, {
+          thread: args.thread,
+          environmentId: environment.id,
+          detail: "Environment is provisioning without an active provision operation",
+        });
+        return { environment, payload };
+      }
+      payload = appendProvisioningStartedEvent(deps, {
+        environment,
+        payload,
+        thread: args.thread,
+      });
+    }
+    return { environment, payload };
+  }
+
   if (args.payload.attachedEnvironmentId) {
     const environment = getEnvironment(deps.db, args.payload.attachedEnvironmentId);
     if (!environment) {
@@ -606,28 +705,6 @@ async function ensureEnvironmentRequested(
   }
 
   switch (args.payload.environmentIntent.type) {
-    case "reuse": {
-      const environment = getEnvironment(
-        deps.db,
-        args.payload.environmentIntent.environmentId,
-      );
-      if (!environment) {
-        throw new ApiError(404, "environment_not_found", "Environment not found");
-      }
-      let payload = attachThreadToEnvironment(deps, {
-        environment,
-        payload: args.payload,
-        thread: args.thread,
-      });
-      if (environment.status === "provisioning") {
-        payload = appendProvisioningStartedEvent(deps, {
-          environment,
-          payload,
-          thread: args.thread,
-        });
-      }
-      return { environment, payload };
-    }
     case "direct-unmanaged":
       return createDirectUnmanagedEnvironment(deps, {
         intent: args.payload.environmentIntent,
@@ -661,7 +738,23 @@ async function startThreadIfEnvironmentReady(
     });
     return;
   }
-  if (args.environment.status !== "ready" || !args.environment.path) {
+  if (args.environment.status === "provisioning") {
+    return;
+  }
+  if (args.environment.status !== "ready") {
+    failThreadProvisioning(deps, {
+      thread: args.thread,
+      environmentId: args.environment.id,
+      detail: `Environment is ${args.environment.status}`,
+    });
+    return;
+  }
+  if (!args.environment.path) {
+    failThreadProvisioning(deps, {
+      thread: args.thread,
+      environmentId: args.environment.id,
+      detail: "Environment is ready without a workspace path",
+    });
     return;
   }
 
@@ -745,7 +838,66 @@ export function requestThreadProvision(
   });
 }
 
-export async function advanceThreadProvisioning(
+export function requestThreadReprovision(
+  deps: Pick<AppDeps, "db" | "hub">,
+  args: RequestThreadReprovisionArgs,
+): void {
+  appendClientTurnEvent(deps, {
+    threadId: args.thread.id,
+    environmentId: args.environment.id,
+    type: "client/turn/requested",
+    input: args.input,
+    execution: args.execution,
+    initiator: args.initiator,
+    requestMethod: "turn/start",
+    source: "tell",
+  });
+
+  const payload: ThreadProvisionPayload = {
+    attachedEnvironmentId: args.environment.id,
+    branchSlug: null,
+    environmentIntent: {
+      type: "reuse",
+      environmentId: args.environment.id,
+    },
+    execution: args.execution,
+    input: args.input,
+    metadataResolved: true,
+    provisionEventSequence: args.eventSequence,
+    titleProvided: true,
+    workspaceReadyEventSequence: null,
+  };
+  upsertThreadOperationRecord(deps.db, {
+    threadId: args.thread.id,
+    kind: "provision",
+    payload: JSON.stringify(payload),
+  });
+}
+
+export function recordThreadProvisionWorkspaceReady(
+  deps: Pick<AppDeps, "db" | "hub">,
+  args: RecordThreadProvisionWorkspaceReadyArgs,
+): void {
+  const payload = loadActiveThreadProvisionPayload(deps, args.threadId);
+  if (!payload || payload.workspaceReadyEventSequence !== null) {
+    return;
+  }
+  const eventSequence = appendThreadProvisioningEvent(deps, {
+    threadId: args.threadId,
+    environmentId: args.environmentId,
+    status: "active",
+    entries: args.entries,
+  });
+  saveThreadProvisionPayload(deps, {
+    threadId: args.threadId,
+    payload: {
+      ...payload,
+      workspaceReadyEventSequence: eventSequence,
+    },
+  });
+}
+
+async function advanceThreadProvisioningOnce(
   deps: ThreadProvisioningDeps,
   args: AdvanceThreadProvisioningArgs,
 ): Promise<void> {
@@ -792,9 +944,6 @@ export async function advanceThreadProvisioning(
       thread: getThread(deps.db, thread.id) ?? thread,
     });
   } catch (error) {
-    if (error instanceof ApiError && error.status === 502) {
-      return;
-    }
     const detail = error instanceof Error ? error.message : String(error);
     failThreadProvisioning(deps, {
       thread,
@@ -802,4 +951,13 @@ export async function advanceThreadProvisioning(
       detail,
     });
   }
+}
+
+export async function advanceThreadProvisioning(
+  deps: ThreadProvisioningDeps,
+  args: AdvanceThreadProvisioningArgs,
+): Promise<void> {
+  await threadProvisionAdvanceDeduper.run(args.threadId, () =>
+    advanceThreadProvisioningOnce(deps, args)
+  );
 }

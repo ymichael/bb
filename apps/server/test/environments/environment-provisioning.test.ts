@@ -54,7 +54,10 @@ describe("environment reprovisioning", () => {
         thread,
       });
 
-      expect(firstAttempt).toBe(MANAGED_REPROVISION_QUEUED);
+      expect(firstAttempt).toMatchObject({
+        status: MANAGED_REPROVISION_QUEUED,
+        eventSequence: expect.any(Number),
+      });
       expect(secondAttempt).toBe(MANAGED_REPROVISION_IN_PROGRESS);
       expect(getEnvironment(harness.db, environment.id)?.status).toBe("provisioning");
       const queued = await waitForQueuedCommand(
