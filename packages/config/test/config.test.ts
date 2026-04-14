@@ -236,12 +236,14 @@ describe("consumer-specific config", () => {
 
   it("reads the dev-env tunnel token from its dedicated config scope", async () => {
     vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("BB_DEV_APP_HOST", "0.0.0.0");
     vi.stubEnv("DEV_CLOUDFLARED_TUNNEL_TOKEN", "test-tunnel-token");
 
     const { devEnvConfig } = await importFresh<typeof import("../src/dev-env.js")>(
       "../src/dev-env.js",
     );
 
+    expect(devEnvConfig.BB_DEV_APP_HOST).toBe("0.0.0.0");
     expect(devEnvConfig.DEV_CLOUDFLARED_TUNNEL_TOKEN).toBe("test-tunnel-token");
   });
 
