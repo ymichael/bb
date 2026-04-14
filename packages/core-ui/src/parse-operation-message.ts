@@ -2,7 +2,7 @@ import type {
   ThreadEvent,
   ThreadEventPlanStepStatus,
   SystemThreadProvisioningStatus,
-  ViewApprovalTarget,
+  PendingInteractionStatus,
   ViewThreadOperationKind,
   ViewThreadOperationStatus,
 } from "@bb/domain";
@@ -16,6 +16,7 @@ import {
 } from "./provisioning-helpers.js";
 import type {
   ToViewMessagesOptions,
+  ViewApprovalLifecycleMessage,
   ViewOperationMessage,
   ViewThreadOperationMetadata,
 } from "@bb/domain";
@@ -64,40 +65,6 @@ function createThreadOperationMetadata(
     ...(decoded.operationId ? { operationId: decoded.operationId } : {}),
     ...(decoded.metadata ? { metadata: decoded.metadata } : {}),
   };
-}
-
-function metadataStringValue(
-  metadata: ViewThreadOperationMetadata["metadata"],
-  key: string,
-): string | undefined {
-  const value = metadata?.[key];
-  return typeof value === "string" && value.length > 0 ? value : undefined;
-}
-
-function parseApprovalTarget(
-  decoded: Extract<ThreadEvent, { type: "system/operation" }>,
-): ViewApprovalTarget | undefined {
-  if (decoded.operation !== "approval") {
-    return undefined;
-  }
-
-  const subjectKind = metadataStringValue(decoded.metadata, "subjectKind");
-  const itemId = metadataStringValue(decoded.metadata, "itemId");
-  if (!subjectKind || !itemId) {
-    return undefined;
-  }
-
-  switch (subjectKind) {
-    case "permission_grant": {
-      const toolName = metadataStringValue(decoded.metadata, "toolName");
-      return {
-        itemId,
-        toolName: toolName ?? null,
-      };
-    }
-    default:
-      return undefined;
-  }
 }
 
 export function threadOperationTitle(meta: ViewThreadOperationMetadata | null): string {
@@ -159,6 +126,22 @@ function provisioningOperationStatus(
   }
 }
 
+function approvalLifecycleStatus(
+  status: PendingInteractionStatus,
+): ViewApprovalLifecycleMessage["status"] {
+  switch (status) {
+    case "pending":
+    case "resolving":
+      return "pending";
+    case "resolved":
+      return "completed";
+    case "interrupted":
+      return "interrupted";
+    case "expired":
+      return "error";
+  }
+}
+
 /** Build the common scaffolding shared by all operation messages. */
 function op(
   decoded: ThreadEvent,
@@ -174,7 +157,6 @@ function op(
     sourceSeqEnd: meta.seq,
     createdAt: meta.createdAt,
     startedAt: meta.createdAt,
-    approvalTarget: null,
     ...fields,
   };
 }
@@ -188,10 +170,7 @@ type ViewOperationFields = Omit<
   | "sourceSeqEnd"
   | "createdAt"
   | "startedAt"
-  | "approvalTarget"
-> & {
-  approvalTarget?: ViewApprovalTarget | null;
-};
+>;
 
 function formatPlanStepStatus(status: ThreadEventPlanStepStatus | undefined): string {
   switch (status) {
@@ -212,7 +191,7 @@ export function parseOperationMessage(
   decoded: ThreadEvent,
   meta: EventMeta,
   options?: { includeOptionalOperations?: boolean },
-): ViewOperationMessage | null {
+): ViewOperationMessage | ViewApprovalLifecycleMessage | null {
   const eventTurnId = getEventTurnId(decoded);
 
   if (decoded.type === "turn/plan/updated") {
@@ -319,12 +298,11 @@ export function parseOperationMessage(
 
   if (decoded.type === "system/operation") {
     const threadOperation = createThreadOperationMetadata(decoded);
-    const approvalTarget = parseApprovalTarget(decoded);
-    const title = approvalTarget ? decoded.message : threadOperationTitle(threadOperation);
+    const title = threadOperationTitle(threadOperation);
 
     const branch = typeof decoded.metadata?.branch === "string" ? decoded.metadata.branch : undefined;
     const detailParts = [
-      approvalTarget ? undefined : decoded.message,
+      decoded.message,
       branch ? `Branch: ${branch}` : undefined,
     ].filter((value): value is string => Boolean(value));
 
@@ -334,9 +312,27 @@ export function parseOperationMessage(
       title,
       detail: detailParts.length > 0 ? detailParts.join(" • ") : undefined,
       status: threadOperationStatus(threadOperation),
-      approvalTarget,
       threadOperation,
     });
+  }
+
+  if (decoded.type === "system/approval/lifecycle") {
+    return {
+      kind: "approval-lifecycle",
+      id: messageId(decoded.threadId, "approval", decoded.interactionId),
+      threadId: decoded.threadId,
+      sourceSeqStart: meta.seq,
+      sourceSeqEnd: meta.seq,
+      createdAt: meta.createdAt,
+      startedAt: meta.createdAt,
+      turnId: eventTurnId,
+      title: decoded.message,
+      status: approvalLifecycleStatus(decoded.status),
+      approvalTarget: {
+        itemId: decoded.subject.itemId,
+        toolName: decoded.subject.toolName,
+      },
+    };
   }
 
   if (decoded.type === "thread/compacted") {
@@ -390,11 +386,6 @@ export function finalizeOperationMessage(
   options: ToViewMessagesOptions | undefined,
 ): void {
   if (message.status !== "pending") return;
-
-  if (message.approvalTarget) {
-    message.status = "completed";
-    return;
-  }
 
   if (options?.threadStatus === "error") {
     switch (message.opType) {

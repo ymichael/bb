@@ -241,9 +241,18 @@ export interface ViewOperationMessage extends ViewMessageBase {
     ViewMessageStatus,
     "pending" | "completed" | "error" | "interrupted"
   >;
-  approvalTarget: ViewApprovalTarget | null;
   provisioning?: ViewProvisioningMetadata;
   threadOperation?: ViewThreadOperationMetadata;
+}
+
+export interface ViewApprovalLifecycleMessage extends ViewMessageBase {
+  kind: "approval-lifecycle";
+  title: string;
+  status: Extract<
+    ViewMessageStatus,
+    "pending" | "completed" | "error" | "interrupted"
+  >;
+  approvalTarget: ViewApprovalTarget;
 }
 
 export const viewTaskStatusValues = [
@@ -310,6 +319,7 @@ export type ViewMessage =
   | ViewWebSearchMessage
   | ViewFileEditMessage
   | ViewOperationMessage
+  | ViewApprovalLifecycleMessage
   | ViewTasksMessage
   | ViewDelegationMessage
   | ViewErrorMessage

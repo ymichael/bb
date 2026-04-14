@@ -1129,7 +1129,6 @@ function onCompactionBegin(
     title: "Context compacting...",
     detail: payload.detail,
     status: "pending",
-    approvalTarget: null,
   };
   state.openCompactionsByKey.set(payload.key, message);
   state.messages.push(message);
@@ -1172,7 +1171,6 @@ function onCompactionEnd(
     title: "Context compacted",
     detail: payload.detail,
     status: "completed",
-    approvalTarget: null,
   });
   state.finalizedCompactionKeys.add(payload.key);
   state.lastCompletedCompactionKeyByThreadId.set(threadId, payload.key);

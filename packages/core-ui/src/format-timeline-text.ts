@@ -3,6 +3,7 @@ import type {
   TimelineToolGroupRow,
   ViewAssistantReasoningMessage,
   ViewAssistantTextMessage,
+  ViewApprovalLifecycleMessage,
   ViewDelegationMessage,
   ViewErrorMessage,
   ViewFileEditMessage,
@@ -259,18 +260,29 @@ function formatOperation(
   const lines: string[] = [];
   lines.push(separator(`Operation: ${msg.title}`, color));
   if (msg.detail) lines.push(dim(`  ${msg.detail}`, color));
-  if (verbose && msg.approvalTarget) {
-    lines.push(`  item: ${msg.approvalTarget.itemId}`);
-    if (msg.approvalTarget.toolName) {
-      lines.push(dim(`  tool: ${msg.approvalTarget.toolName}`, color));
-    }
-  }
   if (
     msg.status &&
     msg.opType !== "warning" &&
     msg.opType !== "deprecation"
   ) {
     lines.push(`  ${statusBadge(msg.status, color)}`);
+  }
+  return lines.join("\n");
+}
+
+function formatApprovalLifecycle(
+  msg: ViewApprovalLifecycleMessage,
+  verbose: boolean,
+  color: boolean,
+): string {
+  const lines: string[] = [];
+  lines.push(separator(msg.title, color));
+  lines.push(`  ${statusBadge(msg.status, color)}`);
+  if (verbose) {
+    lines.push(`  item: ${msg.approvalTarget.itemId}`);
+    if (msg.approvalTarget.toolName) {
+      lines.push(dim(`  tool: ${msg.approvalTarget.toolName}`, color));
+    }
   }
   return lines.join("\n");
 }
@@ -349,6 +361,8 @@ function formatMessage(msg: ViewMessage, verbose: boolean, color: boolean): stri
       return formatWebSearch(msg, verbose, color);
     case "operation":
       return formatOperation(msg, verbose, color);
+    case "approval-lifecycle":
+      return formatApprovalLifecycle(msg, verbose, color);
     case "tasks":
       return formatTasks(msg, verbose, color);
     case "delegation":

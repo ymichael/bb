@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   systemErrorEventDataSchema,
+  systemApprovalLifecycleEventDataSchema,
   systemManagerUserMessageEventDataSchema,
   systemOperationEventDataSchema,
   systemThreadProvisioningEventDataSchema,
@@ -419,6 +420,10 @@ export const systemEventSchema = z.union([
     type: z.literal("system/operation"),
     threadId: z.string(),
   }).merge(systemOperationEventDataSchema),
+  z.object({
+    type: z.literal("system/approval/lifecycle"),
+    threadId: z.string(),
+  }).merge(systemApprovalLifecycleEventDataSchema),
   z.object({
     type: z.literal("system/thread-provisioning"),
     threadId: z.string(),

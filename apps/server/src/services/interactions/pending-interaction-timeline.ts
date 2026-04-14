@@ -44,21 +44,6 @@ function permissionGrantLifecycleMessage(
   }
 }
 
-function permissionGrantOperationStatus(
-  interaction: PendingInteraction,
-): "completed" | "failed" | "started" {
-  switch (interaction.status) {
-    case "pending":
-    case "resolving":
-      return "started";
-    case "resolved":
-      return "completed";
-    case "interrupted":
-    case "expired":
-      return "failed";
-  }
-}
-
 function appendPermissionGrantTimelineEvent(
   deps: Pick<AppDeps, "db" | "hub">,
   interaction: PendingInteraction,
@@ -68,20 +53,14 @@ function appendPermissionGrantTimelineEvent(
   appendThreadEvent(deps, {
     threadId: interaction.threadId,
     environmentId: thread?.environmentId ?? null,
-    type: "system/operation",
+    type: "system/approval/lifecycle",
     data: {
-      operation: "approval",
-      status: permissionGrantOperationStatus(interaction),
-      operationId: interaction.id,
+      status: interaction.status,
       message: permissionGrantLifecycleMessage(interaction, subject),
-      metadata: {
-        interactionId: interaction.id,
-        providerId: interaction.providerId,
-        providerRequestId: interaction.providerRequestId,
-        subjectKind: subject.kind,
-        itemId: subject.itemId,
-        ...(subject.toolName ? { toolName: subject.toolName } : {}),
-      },
+      interactionId: interaction.id,
+      providerId: interaction.providerId,
+      providerRequestId: interaction.providerRequestId,
+      subject,
     },
   });
 }

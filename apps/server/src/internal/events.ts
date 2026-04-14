@@ -165,6 +165,7 @@ function resolveProviderIdentifiers(
     case "system/manager/user_message":
     case "system/thread/interrupted":
     case "system/operation":
+    case "system/approval/lifecycle":
     case "system/thread-provisioning":
       return { providerThreadId: null, turnId: null };
     case "thread/identity":

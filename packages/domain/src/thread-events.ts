@@ -1,5 +1,9 @@
 import { z } from "zod";
 import {
+  pendingInteractionPermissionGrantApprovalSubjectSchema,
+  pendingInteractionStatusSchema,
+} from "./pending-interactions.js";
+import {
   promptInputSchema,
   resolvedThreadExecutionOptionsSchema,
 } from "./shared-types.js";
@@ -12,6 +16,7 @@ export const systemEventTypeValues = [
   "system/manager/user_message",
   "system/thread/interrupted",
   "system/operation",
+  "system/approval/lifecycle",
   "system/thread-provisioning",
 ] as const;
 export const systemEventTypeSchema = z.enum(systemEventTypeValues);
@@ -81,6 +86,18 @@ export type SystemOperationEventData = z.infer<
   typeof systemOperationEventDataSchema
 >;
 
+export const systemApprovalLifecycleEventDataSchema = z.object({
+  interactionId: z.string(),
+  providerId: z.string(),
+  providerRequestId: z.string(),
+  status: pendingInteractionStatusSchema,
+  message: z.string(),
+  subject: pendingInteractionPermissionGrantApprovalSubjectSchema,
+});
+export type SystemApprovalLifecycleEventData = z.infer<
+  typeof systemApprovalLifecycleEventDataSchema
+>;
+
 export const systemThreadInterruptedEventDataSchema = z.object({
   reason: z.literal("user"),
   message: z.string().optional(),
@@ -147,6 +164,7 @@ export type ThreadEventDataByType = {
   "system/manager/user_message": SystemManagerUserMessageEventData;
   "system/thread/interrupted": SystemThreadInterruptedEventData;
   "system/operation": SystemOperationEventData;
+  "system/approval/lifecycle": SystemApprovalLifecycleEventData;
   "system/thread-provisioning": SystemThreadProvisioningEventData;
 };
 

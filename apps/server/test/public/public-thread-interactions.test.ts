@@ -1029,4 +1029,74 @@ describe("public thread interaction routes", () => {
       await harness.cleanup();
     }
   });
+
+  it("projects permission-grant approvals into typed lifecycle timeline rows", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-public-thread-interaction-permission-timeline",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "active",
+      });
+
+      const registered = registerPendingInteraction(
+        harness.deps.pendingInteractions,
+        {
+          threadId: thread.id,
+          turnId: "turn-permission-timeline",
+          providerId: "codex",
+          providerThreadId: "provider-thread-permission-timeline",
+          providerRequestId: "request-permission-timeline",
+          payload: createPermissionGrantApprovalPayload({
+            itemId: "item-permission-timeline",
+            reason: "Need network access",
+            toolName: "Bash",
+            permissions: {
+              network: { enabled: true },
+              fileSystem: null,
+            },
+          }),
+        },
+        session.id,
+      );
+      if (registered.outcome === "rejected") {
+        throw new Error(`Expected interaction registration to succeed: ${registered.reason}`);
+      }
+
+      const timelineResponse = await harness.app.request(
+        `/api/v1/threads/${thread.id}/timeline`,
+      );
+      expect(timelineResponse.status).toBe(200);
+      await expect(readJson(timelineResponse)).resolves.toEqual(
+        expect.objectContaining({
+          rows: expect.arrayContaining([
+            expect.objectContaining({
+              kind: "message",
+              message: expect.objectContaining({
+                kind: "approval-lifecycle",
+                title: "Waiting for approval to grant Bash",
+                status: "pending",
+                approvalTarget: {
+                  itemId: "item-permission-timeline",
+                  toolName: "Bash",
+                },
+              }),
+            }),
+          ]),
+        }),
+      );
+    } finally {
+      await harness.cleanup();
+    }
+  });
 });

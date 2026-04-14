@@ -3,6 +3,7 @@ import { durationToCompactString } from "@bb/core-ui";
 import { ExpandablePanel } from "../../disclosure.js";
 import { EventCodeBlock } from "../../event-content.js";
 import type {
+  ViewApprovalLifecycleMessage,
   ViewOperationMessage,
   ViewProvisioningTranscriptEntry,
   ViewThreadOperationStatus,
@@ -270,10 +271,6 @@ function buildOperationSummary(
   message: ViewOperationMessage,
   tone: "default" | "destructive",
 ): ReactNode {
-  if (message.approvalTarget) {
-    return <span>{message.title}</span>;
-  }
-
   const metadata = message.threadOperation;
   if (!metadata) return <span>{message.title}</span>;
   const metadataAction =
@@ -387,8 +384,7 @@ export function OperationRow({
   if (message.opType === "operation") {
     const { operationDetailText, promptText } = extractPromptSections(message.detail);
     const summaryContent = buildOperationSummary(message, tone);
-    const approvalTarget = message.approvalTarget;
-    if (!operationDetailText && !promptText && !approvalTarget) {
+    if (!operationDetailText && !promptText) {
       return <StaticOperationRow summaryContent={summaryContent} tone={tone} />;
     }
 
@@ -400,15 +396,6 @@ export function OperationRow({
         tone={tone}
       >
         <div className="mt-0.5 space-y-2">
-          {approvalTarget ? (
-            <OperationDetailLines
-              lines={[
-                `Permission grant approval`,
-                `Item: ${approvalTarget.itemId}`,
-                ...(approvalTarget.toolName ? [`Tool: ${approvalTarget.toolName}`] : []),
-              ]}
-            />
-          ) : null}
           {operationDetailText ? (
             <OperationDetailLines lines={splitNonEmptyLines(operationDetailText)} />
           ) : null}
@@ -436,6 +423,35 @@ export function OperationRow({
       isExpanded={isExpanded}
       onToggle={onToggle}
       summaryContent={summaryContent}
+      tone={tone}
+    >
+      <OperationDetailLines lines={detailLines} />
+    </ExpandableOperationRow>
+  );
+}
+
+export function ApprovalLifecycleRow({
+  message,
+  initialExpanded = false,
+}: {
+  message: ViewApprovalLifecycleMessage;
+  initialExpanded?: boolean;
+}) {
+  const { isExpanded, onToggle } = useLatestInitialExpanded(initialExpanded);
+  const tone = message.status === "error" ? "destructive" : "default";
+  const detailLines = [
+    "Permission grant approval",
+    `Item: ${message.approvalTarget.itemId}`,
+    ...(message.approvalTarget.toolName
+      ? [`Tool: ${message.approvalTarget.toolName}`]
+      : []),
+  ];
+
+  return (
+    <ExpandableOperationRow
+      isExpanded={isExpanded}
+      onToggle={onToggle}
+      summaryContent={<span>{message.title}</span>}
       tone={tone}
     >
       <OperationDetailLines lines={detailLines} />

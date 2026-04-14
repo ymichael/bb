@@ -6,7 +6,7 @@ import { DelegationRow } from "./rows/DelegationRow.js";
 import { DebugEventRow } from "./rows/DebugEventRow.js";
 import { ErrorRow } from "./rows/ErrorRow.js";
 import { FileEditRow } from "./rows/FileEditRow.js";
-import { OperationRow } from "./rows/OperationRow.js";
+import { ApprovalLifecycleRow, OperationRow } from "./rows/OperationRow.js";
 import { ReasoningRow } from "./rows/ReasoningRow.js";
 import { TasksRow } from "./rows/TasksRow.js";
 import { ToolCallRow } from "./rows/ToolCallRow.js";
@@ -84,6 +84,13 @@ function ConversationEntryComponent({
       );
     case "operation":
       return <OperationRow message={message} initialExpanded={initialExpanded} />;
+    case "approval-lifecycle":
+      return (
+        <ApprovalLifecycleRow
+          message={message}
+          initialExpanded={initialExpanded}
+        />
+      );
     case "tasks":
       return <TasksRow message={message} initialExpanded={initialExpanded} />;
     case "delegation":

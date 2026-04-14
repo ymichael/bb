@@ -3160,6 +3160,54 @@ describe("toViewMessages replay coverage", () => {
     });
   });
 
+  it("projects permission approval lifecycle events without operation metadata", () => {
+    const events: ThreadEventRow[] = [
+      {
+        id: "evt-approval",
+        threadId: "thread-1",
+        seq: 1,
+        type: "system/approval/lifecycle",
+        data: {
+          interactionId: "pi_123",
+          providerId: "codex",
+          providerRequestId: "request-123",
+          status: "pending",
+          message: "Waiting for approval to grant Bash",
+          subject: {
+            kind: "permission_grant",
+            itemId: "item_123",
+            toolName: "Bash",
+            permissions: {
+              network: null,
+              fileSystem: {
+                read: ["/tmp/project"],
+                write: [],
+              },
+            },
+          },
+        },
+        createdAt: 1,
+      },
+    ];
+
+    const projected = toViewMessages(fromRows(events), {
+      threadStatus: "active",
+    });
+
+    expect(projected).toEqual([
+      expect.objectContaining({
+        kind: "approval-lifecycle",
+        id: "thread-1:approval:pi_123",
+        title: "Waiting for approval to grant Bash",
+        status: "pending",
+        approvalTarget: {
+          itemId: "item_123",
+          toolName: "Bash",
+        },
+      }),
+    ]);
+  });
+
   it("replaces command approval state with the command item lifecycle", () => {
     const events: ThreadEventRow[] = [
       {

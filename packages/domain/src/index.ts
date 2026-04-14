@@ -244,6 +244,7 @@ export type {
 
 export {
   provisioningTranscriptEntrySchema,
+  systemApprovalLifecycleEventDataSchema,
   systemErrorEventDataSchema,
   systemManagerUserMessageEventDataSchema,
   systemOperationEventDataSchema,
@@ -265,6 +266,7 @@ export {
 } from "./thread-events.js";
 export type {
   ProvisioningTranscriptEntry,
+  SystemApprovalLifecycleEventData,
   SystemErrorEventData,
   SystemManagerUserMessageEventData,
   SystemOperationEventData,
@@ -386,6 +388,7 @@ export {
 } from "./ui-message.js";
 export type {
   ToViewMessagesOptions,
+  ViewApprovalLifecycleMessage,
   ViewApprovalTarget,
   ViewApprovalLifecycleStatus,
   ViewAssistantReasoningMessage,
