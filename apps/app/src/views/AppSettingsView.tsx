@@ -222,11 +222,11 @@ export function AppSettingsView() {
               <DropdownMenuContent align="end" className="w-48">
                 <DropdownMenuItem onSelect={() => setPreferredTheme("light")}>
                   Light
-                  <Check className={theme === "light" ? "ml-auto size-4" : "ml-auto size-4 opacity-0"} />
+                  <Check className={theme === "light" ? "ml-auto size-5 md:size-4" : "ml-auto size-5 opacity-0 md:size-4"} />
                 </DropdownMenuItem>
                 <DropdownMenuItem onSelect={() => setPreferredTheme("dark")}>
                   Dark
-                  <Check className={theme === "dark" ? "ml-auto size-4" : "ml-auto size-4 opacity-0"} />
+                  <Check className={theme === "dark" ? "ml-auto size-5 md:size-4" : "ml-auto size-5 opacity-0 md:size-4"} />
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

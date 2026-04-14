@@ -2,10 +2,7 @@ import { useCallback, useMemo, useRef, type ReactNode } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useRequestEnvironmentAction } from "../hooks/mutations/environment-mutations";
 import {
-  useArchiveThread,
-  useDeleteThread,
   useMarkThreadRead,
-  useMarkThreadUnread,
   useUnarchiveThread,
   useUpdateThread,
 } from "../hooks/mutations/thread-state-mutations";
@@ -23,19 +20,11 @@ import {
 import {
   ThreadGitActionDialog,
 } from "@/components/thread/ThreadGitActionDialog";
-import {
-  ThreadRenameDialog,
-  type ThreadRenameDialogTarget,
-} from "@/components/thread/ThreadRenameDialog";
 import { PageShell } from "@/components/layout/PageShell";
-import { ThreadArchiveConfirmationDialog } from "@/components/thread/ThreadArchiveConfirmationDialog";
-import { ThreadDeleteDialog } from "@/components/thread/ThreadDeleteDialog";
 import { ThreadActionsMenu } from "@/components/thread/ThreadActionsMenu";
 import { ThreadWorkspaceOpenButton } from "@/components/thread/ThreadWorkspaceOpenButton";
 import { formatEnvironmentDisplay } from "@bb/core-ui";
 import { findLatestActivityRowId } from "@bb/ui-core";
-import type { Thread } from "@bb/domain";
-import { useDialogState } from "@/hooks/useDialogState";
 import { useHostDaemon } from "@/hooks/useHostDaemon";
 import { useWorkspaceOpenTargets } from "@/hooks/useWorkspaceOpenTargets";
 import { useHost } from "@/hooks/queries/system-queries";
@@ -47,11 +36,7 @@ import {
   formatChangeSummary,
   formatWorkspaceChangeSummary,
 } from "@/lib/workspace-change-summary";
-import { getThreadDisplayTitle, threadTypeLabel } from "@/lib/thread-title";
-import {
-  isArchiveForceRequiredError,
-} from "@/lib/thread-archive";
-import { getMutationErrorMessage } from "@/lib/mutation-errors";
+import { getThreadDisplayTitle } from "@/lib/thread-title";
 import { useGitDiffPanel } from "./useGitDiffPanel";
 import { useThreadTimelineController } from "./useThreadTimelineController";
 import { ThreadDetailHeader } from "./ThreadDetailHeader";
@@ -112,17 +97,11 @@ export function ThreadDetailView() {
   );
   const timelineToolDetails = useThreadTimelineToolDetails();
   const sendMessage = useSendThreadMessage();
-  const archiveThread = useArchiveThread();
   const requestEnvironmentAction = useRequestEnvironmentAction();
   const unarchiveThread = useUnarchiveThread();
   const markThreadRead = useMarkThreadRead();
-  const markThreadUnread = useMarkThreadUnread();
-  const deleteThread = useDeleteThread();
   const updateEnvironment = useUpdateEnvironment();
   const updateThread = useUpdateThread();
-  const threadArchiveConfirmationDialog = useDialogState<Thread>();
-  const threadRenameDialog = useDialogState<ThreadRenameDialogTarget>();
-  const threadDeleteDialog = useDialogState<Thread>();
   const captureTimelineScrollPositionRef = useRef<() => void>(() => {});
   const preferredTheme = usePreferredTheme();
   const threadDetailRows = useMemo(() => timeline?.rows ?? [], [timeline?.rows]);
@@ -264,79 +243,6 @@ export function ThreadDetailView() {
     workspaceStatus,
   });
 
-  const renameThread = useCallback(() => {
-    if (!thread || updateThread.isPending) return;
-    threadRenameDialog.onOpen({
-      id: thread.id,
-      currentTitle: getThreadDisplayTitle(thread),
-      threadType: thread.type,
-    });
-  }, [thread, threadRenameDialog, updateThread.isPending]);
-  const submitThreadRename = useCallback((currentThreadId: string, title: string) => {
-    updateThread.mutate(
-      {
-        id: currentThreadId,
-        title,
-      },
-      {
-        onSuccess: () => {
-          threadRenameDialog.onClose();
-        },
-      },
-    );
-  }, [threadRenameDialog, updateThread]);
-  const confirmArchiveThread = useCallback((threadToArchive: Thread) => {
-    const label = threadTypeLabel(threadToArchive.type);
-
-    threadArchiveConfirmationDialog.onClose();
-    archiveThread.mutate(
-      { id: threadToArchive.id, force: true },
-      {
-        onSuccess: () => {
-          navigate(`/projects/${threadToArchive.projectId}`);
-        },
-        onError: (nextError) => {
-          toast.error(getMutationErrorMessage({
-            error: nextError,
-            fallbackMessage: `Failed to archive ${label}.`,
-          }));
-        },
-      },
-    );
-  }, [archiveThread, navigate, threadArchiveConfirmationDialog]);
-  const toggleArchiveThread = useCallback(() => {
-    if (!thread) return;
-    const label = threadTypeLabel(thread.type);
-    if (thread.archivedAt != null) {
-      unarchiveThread.mutate({ id: thread.id });
-      return;
-    }
-
-    archiveThread.mutate(
-      { id: thread.id, force: false },
-      {
-        onSuccess: () => {
-          navigate(`/projects/${thread.projectId}`);
-        },
-        onError: (nextError) => {
-          if (isArchiveForceRequiredError(nextError)) {
-            threadArchiveConfirmationDialog.onOpen(thread);
-            return;
-          }
-          toast.error(getMutationErrorMessage({
-            error: nextError,
-            fallbackMessage: `Failed to archive ${label}.`,
-          }));
-        },
-      },
-    );
-  }, [
-    archiveThread,
-    navigate,
-    thread,
-    threadArchiveConfirmationDialog,
-    unarchiveThread,
-  ]);
   const parentThreadId = thread?.parentThreadId;
   const parentThreadDisplayName =
     parentThread?.title && parentThread.title.trim().length > 0
@@ -494,14 +400,6 @@ export function ThreadDetailView() {
       thread.archivedAt != null,
   );
   const threadTitle = getThreadDisplayTitle(thread);
-  const threadActionsDisabled =
-    archiveThread.isPending ||
-    unarchiveThread.isPending ||
-    markThreadRead.isPending ||
-    markThreadUnread.isPending ||
-    deleteThread.isPending ||
-    updateThread.isPending ||
-    updateEnvironment.isPending;
   const handleCopyThreadBranch = async () => {
     if (!threadBranchName) {
       return;
@@ -519,45 +417,14 @@ export function ThreadDetailView() {
   };
   const threadActionsMenu = (
     <ThreadActionsMenu
-      triggerClassName="h-7 w-7 rounded-md p-0 text-muted-foreground"
-      disabled={threadActionsDisabled}
+      thread={thread}
+      triggerClassName="h-9 w-9 [&_svg]:size-5 md:h-8 md:w-8 md:[&_svg]:size-4"
       align="end"
-      isRead={(thread.lastReadAt ?? 0) >= thread.updatedAt}
-      onToggleRead={() => {
-        if ((thread.lastReadAt ?? 0) >= thread.updatedAt) {
-          markThreadUnread.mutate(thread.id, {
-            onError: (nextError) => {
-              toast.error(getMutationErrorMessage({
-                error: nextError,
-                fallbackMessage: "Failed to mark thread unread.",
-              }));
-            },
-          });
-          return;
-        }
-        markThreadRead.mutate(thread.id, {
-          onError: (nextError) => {
-            toast.error(getMutationErrorMessage({
-              error: nextError,
-              fallbackMessage: "Failed to mark thread read.",
-            }));
-          },
-        });
-      }}
-      onRename={renameThread}
-      onToggleArchive={() => {
-        void toggleArchiveThread();
-      }}
-      onDelete={() => {
-        threadDeleteDialog.onOpen(thread);
-      }}
       viewerToggleLabel={isManagerThread ? "Show all events" : undefined}
       viewerToggleChecked={isManagerThread ? showAllEvents : undefined}
       onViewerToggleCheckedChange={
         isManagerThread ? handleShowAllEventsChange : undefined
       }
-      isArchived={thread.archivedAt != null}
-      threadType={thread.type}
     />
   );
   const effectiveSecondaryPanel =
@@ -762,34 +629,6 @@ export function ThreadDetailView() {
           threadId: thread.id,
           threadStatus: thread.status,
           toolGroupMessagesById,
-        }}
-      />
-      <ThreadRenameDialog
-        target={threadRenameDialog.target}
-        pending={updateThread.isPending}
-        onOpenChange={threadRenameDialog.onOpenChange}
-        onRename={submitThreadRename}
-      />
-      <ThreadArchiveConfirmationDialog
-        target={threadArchiveConfirmationDialog.target}
-        pending={archiveThread.isPending}
-        onOpenChange={threadArchiveConfirmationDialog.onOpenChange}
-        onArchive={confirmArchiveThread}
-      />
-      <ThreadDeleteDialog
-        target={threadDeleteDialog.target}
-        pending={deleteThread.isPending}
-        onOpenChange={threadDeleteDialog.onOpenChange}
-        onDelete={(target) => {
-          deleteThread.mutate(
-            { id: target.id },
-            {
-              onSuccess: () => {
-                threadDeleteDialog.onClose();
-                navigate(`/projects/${target.projectId}`, { replace: true });
-              },
-            },
-          );
         }}
       />
       {canUseGitUi ? (

@@ -172,16 +172,16 @@ export function PromptProviderModelPicker({
                     }
                   }}
                   className={cn(
-                    "flex h-7 w-6 items-center justify-center border-b-2 transition-colors",
+                    "flex h-9 w-9 items-center justify-center border-b-2 transition-colors md:h-7 md:w-6",
                     isActive
                       ? "border-foreground text-foreground"
                       : "border-transparent text-muted-foreground hover:text-foreground",
                   )}
                 >
                   {Icon ? (
-                    <Icon className="size-4" />
+                    <Icon className="size-5 md:size-4" />
                   ) : (
-                    <span className="text-xs font-medium">
+                    <span className="text-sm font-medium md:text-xs">
                       {provider.label.charAt(0)}
                     </span>
                   )}
@@ -219,7 +219,7 @@ export function PromptProviderModelPicker({
                 </span>
                 <Check
                   className={cn(
-                    "size-4 shrink-0",
+                    "size-5 shrink-0 md:size-4",
                     !isPreviewing && option.value === modelValue
                       ? "opacity-100"
                       : "opacity-0",

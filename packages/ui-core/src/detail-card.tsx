@@ -5,8 +5,8 @@ const DETAIL_ROW_GRID_CLASS =
   "grid grid-cols-[80px_minmax(0,1fr)] gap-x-3 gap-y-1 sm:grid-cols-[112px_minmax(0,1fr)]";
 const DETAIL_CARD_COLUMNS_CLASS =
   "grid grid-cols-[80px_minmax(0,1fr)] gap-x-3 gap-y-1 sm:grid-cols-[112px_minmax(0,1fr)]";
-const DETAIL_LABEL_CLASS = "m-0 ui-text-sm leading-5 text-muted-foreground";
-const DETAIL_VALUE_CLASS = "m-0 min-w-0 ui-text-sm leading-5 text-foreground";
+const DETAIL_LABEL_CLASS = "m-0 text-xs leading-5 text-muted-foreground";
+const DETAIL_VALUE_CLASS = "m-0 min-w-0 text-xs leading-5 text-foreground";
 
 type DetailCardLayout = "stack" | "columns";
 type DetailRowLayout = "stack" | "contents" | "vertical";

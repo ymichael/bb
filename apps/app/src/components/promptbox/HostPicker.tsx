@@ -78,7 +78,7 @@ export function HostPicker({
               </span>
               <Check
                 className={cn(
-                  "size-4 shrink-0",
+                  "size-5 shrink-0 md:size-4",
                   host.id === selectedHostId ? "opacity-100" : "opacity-0",
                 )}
               />

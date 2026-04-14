@@ -29,13 +29,13 @@ export function WorkspaceChangesList({
           key={`${file.status}:${file.path}`}
           className="grid grid-cols-[1.5rem_minmax(0,1fr)] items-start gap-x-3"
         >
-          <span className="ui-text-sm leading-5 text-muted-foreground/80">
+          <span className="text-xs leading-5 text-muted-foreground/80">
             {formatWorkspaceFileStatus(file.status)}
           </span>
           {canClick ? (
             <button
               type="button"
-              className="min-w-0 truncate text-left ui-text-sm leading-5 underline-offset-2 hover:underline"
+              className="min-w-0 truncate text-left text-xs leading-5 underline-offset-2 hover:underline"
               title={file.path}
               onClick={() => {
                 if (onFileClick) {
@@ -48,7 +48,7 @@ export function WorkspaceChangesList({
               {file.path}
             </button>
           ) : (
-            <span className="min-w-0 truncate ui-text-sm leading-5">{file.path}</span>
+            <span className="min-w-0 truncate text-xs leading-5">{file.path}</span>
           )}
         </li>
       ))}

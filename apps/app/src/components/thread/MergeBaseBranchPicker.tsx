@@ -160,7 +160,7 @@ export function MergeBaseBranchPicker({
                   {branch}
                 </span>
                 <Check
-                  className={branch === value ? "size-4 shrink-0 opacity-100" : "size-4 shrink-0 opacity-0"}
+                  className={branch === value ? "size-5 shrink-0 opacity-100 md:size-4" : "size-5 shrink-0 opacity-0 md:size-4"}
                 />
               </button>
             ))

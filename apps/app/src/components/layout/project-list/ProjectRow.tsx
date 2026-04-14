@@ -1,28 +1,15 @@
 import { useMemo } from "react"
-import {
-  findLocalPathProjectSourceForHost,
-  type Thread,
-  type ThreadListEntry,
-} from "@bb/domain"
+import type { ThreadListEntry } from "@bb/domain"
 import type { ProjectResponse } from "@bb/server-contract"
 import {
   AlertTriangle,
   ChevronRight,
   Folder,
   FolderOpen,
-  FolderPlus,
-  MoreHorizontal,
-  PencilLine,
-  Trash2,
 } from "lucide-react"
 import { NavLink } from "react-router-dom"
 import { EmptyState } from "@/components/shared/EmptyState"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+import { ProjectActionsMenu } from "@/components/project/ProjectActionsMenu"
 import { SidebarMenuItem, SidebarMenuSkeleton } from "@/components/ui/sidebar"
 import { isBusyThread } from "@/lib/thread-activity"
 import { cn } from "@/lib/utils"
@@ -32,25 +19,14 @@ interface ProjectRowProps {
   project: ProjectResponse
   projectThreads: ThreadListEntry[]
   threadsLoading: boolean
-  localHostId: string | null | undefined
   selectedThreadId?: string
   isActive: boolean
   isCollapsed: boolean
   collapsedManagerIds: Set<string>
-  isProjectRenamePending: boolean
-  isProjectDeletePending: boolean
   isLocalPathInvalid: boolean
-  areThreadActionsDisabled: boolean
   onProjectSelect?: () => void
   onToggleProjectCollapsed: (projectId: string) => void
   onToggleManagerCollapsed: (threadId: string) => void
-  onRenameProject: (project: ProjectResponse) => void
-  onAddLocalPath: (projectId: string) => void
-  onDeleteProject: (project: ProjectResponse) => void
-  onRenameThread: (thread: Thread) => void
-  onToggleThreadArchive: (thread: Thread) => void
-  onDeleteThread: (thread: Thread) => void
-  onToggleThreadRead: (thread: Thread) => void
 }
 
 interface ProjectThreadGroups {
@@ -102,42 +78,25 @@ export function ProjectRow({
   project,
   projectThreads,
   threadsLoading,
-  localHostId,
   selectedThreadId,
   isActive,
   isCollapsed,
   collapsedManagerIds,
-  isProjectRenamePending,
-  isProjectDeletePending,
   isLocalPathInvalid,
-  areThreadActionsDisabled,
   onProjectSelect,
   onToggleProjectCollapsed,
   onToggleManagerCollapsed,
-  onRenameProject,
-  onAddLocalPath,
-  onDeleteProject,
-  onRenameThread,
-  onToggleThreadArchive,
-  onDeleteThread,
-  onToggleThreadRead,
 }: ProjectRowProps) {
   const { managerThreads, managedThreadsByManagerId, otherThreads } = useMemo(
     () => buildProjectThreadGroups(projectThreads),
     [projectThreads],
   )
-  const localSource = localHostId
-    ? findLocalPathProjectSourceForHost(project.sources, localHostId)
-    : undefined
-  const showAddLocalPathMenuItem = localHostId != null && !localSource
-  const isProjectActionsDisabled =
-    isProjectRenamePending || isProjectDeletePending
 
   return (
     <SidebarMenuItem className="space-y-1">
       <div
         className={cn(
-          "group/project-row relative flex h-8 w-full items-center rounded-md text-sm transition-colors",
+          "group/project-row relative flex h-10 w-full items-center rounded-md text-sm transition-colors md:h-8",
           isActive
             ? "bg-sidebar-border/80 text-sidebar-foreground"
             : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
@@ -157,19 +116,19 @@ export function ProjectRow({
           onClick={() => {
             onToggleProjectCollapsed(project.id)
           }}
-          className="relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/70 outline-none ring-sidebar-ring transition-colors hover:text-sidebar-foreground focus-visible:ring-2"
+          className="relative z-10 flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/70 outline-none ring-sidebar-ring transition-colors hover:text-sidebar-foreground focus-visible:ring-2 md:h-8 md:w-8"
         >
-          <span className="relative inline-flex size-4 items-center justify-center">
+          <span className="relative inline-flex size-5 items-center justify-center md:size-4">
             <ChevronRight
               className={cn(
-                "absolute size-4 opacity-0 transition-all duration-150 group-hover/project-row:opacity-100",
+                "absolute size-5 opacity-0 transition-all duration-150 group-hover/project-row:opacity-100 md:size-4",
                 !isCollapsed && "rotate-90",
               )}
             />
             {isCollapsed ? (
-              <Folder className="absolute size-4 opacity-100 transition-opacity duration-150 group-hover/project-row:opacity-0" />
+              <Folder className="absolute size-5 opacity-100 transition-opacity duration-150 group-hover/project-row:opacity-0 md:size-4" />
             ) : (
-              <FolderOpen className="absolute size-4 opacity-100 transition-opacity duration-150 group-hover/project-row:opacity-0" />
+              <FolderOpen className="absolute size-5 opacity-100 transition-opacity duration-150 group-hover/project-row:opacity-0 md:size-4" />
             )}
           </span>
         </button>
@@ -185,61 +144,15 @@ export function ProjectRow({
             }}
             title="Project folder not found. Open project settings to fix."
             aria-label="Project folder not found"
-            className="relative z-10 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-destructive outline-none ring-sidebar-ring transition-colors hover:bg-destructive/10 hover:text-destructive focus-visible:ring-2"
+            className="relative z-10 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-destructive outline-none ring-sidebar-ring transition-colors hover:bg-destructive/10 hover:text-destructive focus-visible:ring-2 md:h-7 md:w-7"
           >
-            <AlertTriangle className="size-4" />
+            <AlertTriangle className="size-5 md:size-4" />
           </NavLink>
         ) : null}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button
-              type="button"
-              title={`${project.name} options`}
-              aria-label={`${project.name} options`}
-              className="relative z-10 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/70 outline-none ring-sidebar-ring transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-foreground focus-visible:ring-2"
-              onClick={(event) => {
-                event.stopPropagation()
-              }}
-            >
-              <MoreHorizontal className="size-4" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-44">
-            <DropdownMenuItem
-              disabled={isProjectActionsDisabled}
-              onSelect={(event) => {
-                event.preventDefault()
-                onRenameProject(project)
-              }}
-            >
-              <PencilLine className="size-4" />
-              Rename
-            </DropdownMenuItem>
-            {showAddLocalPathMenuItem ? (
-              <DropdownMenuItem
-                disabled={isProjectActionsDisabled}
-                onSelect={(event) => {
-                  event.preventDefault()
-                  onAddLocalPath(project.id)
-                }}
-              >
-                <FolderPlus className="size-4" />
-                Add local path
-              </DropdownMenuItem>
-            ) : null}
-            <DropdownMenuItem
-              className="text-destructive focus:text-destructive"
-              disabled={isProjectActionsDisabled}
-              onSelect={(event) => {
-                event.preventDefault()
-                onDeleteProject(project)
-              }}
-            >
-              <Trash2 className="size-4" />
-              Remove
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <ProjectActionsMenu
+          project={project}
+          triggerClassName="relative z-10 h-9 w-9 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-foreground md:h-7 md:w-7"
+        />
       </div>
 
       {!isCollapsed ? (
@@ -259,13 +172,8 @@ export function ProjectRow({
                     projectId={project.id}
                     thread={thread}
                     isActive={selectedThreadId === thread.id}
-                    isActionsDisabled={areThreadActionsDisabled}
                     onProjectSelect={onProjectSelect}
                     onToggleManagerCollapsed={onToggleManagerCollapsed}
-                    onToggleRead={onToggleThreadRead}
-                    onRename={onRenameThread}
-                    onToggleArchive={onToggleThreadArchive}
-                    onDelete={onDeleteThread}
                     options={{
                       kind: "manager",
                       hasManagedChildren: managedChildren.length > 0,
@@ -282,12 +190,7 @@ export function ProjectRow({
                           projectId={project.id}
                           thread={childThread}
                           isActive={selectedThreadId === childThread.id}
-                          isActionsDisabled={areThreadActionsDisabled}
                           onProjectSelect={onProjectSelect}
-                          onToggleRead={onToggleThreadRead}
-                          onRename={onRenameThread}
-                          onToggleArchive={onToggleThreadArchive}
-                          onDelete={onDeleteThread}
                           options={{ kind: "managed-child" }}
                         />
                       ))}
@@ -302,12 +205,7 @@ export function ProjectRow({
                 projectId={project.id}
                 thread={thread}
                 isActive={selectedThreadId === thread.id}
-                isActionsDisabled={areThreadActionsDisabled}
                 onProjectSelect={onProjectSelect}
-                onToggleRead={onToggleThreadRead}
-                onRename={onRenameThread}
-                onToggleArchive={onToggleThreadArchive}
-                onDelete={onDeleteThread}
                 options={{ kind: "default" }}
               />
             ))}

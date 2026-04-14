@@ -178,7 +178,7 @@ export function EnvironmentPicker({
           )}
         >
           <span className={PROMPT_OPTION_CONTENT_CLASS_NAME}>
-            <selected.icon className="size-3.5 shrink-0" />
+            <selected.icon className="size-5 shrink-0 md:size-3.5" />
             <span className="truncate">
               {selected.modeLabel}
               {selected.hostLabel ? (
@@ -189,7 +189,7 @@ export function EnvironmentPicker({
               <HostStatusBadge connected={selected.hostConnected} />
             ) : null}
           </span>
-          <ChevronDown className="size-3.5 text-muted-foreground" />
+          <ChevronDown className="size-5 text-muted-foreground md:size-3.5" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="min-w-52 max-w-80 divide-y [&>*+*]:pt-2 [&>*:not(:last-child)]:pb-2" mobileTitle="Environment">
@@ -242,7 +242,7 @@ function HostSectionGroup({
 
   return (
     <DropdownMenuGroup>
-        <DropdownMenuLabel className="flex items-center gap-1.5 ui-text-xs text-muted-foreground">
+        <DropdownMenuLabel className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <span className="truncate">{section.host.name}</span>
           {section.isLocal ? <LocalhostBadge /> : null}
           {section.isConnected ? <HostStatusDot /> : null}
@@ -292,7 +292,7 @@ function SandboxSection({ backends, hasGitHubSource, projectId, value, onChange 
 
   return (
     <DropdownMenuGroup>
-      <DropdownMenuLabel className="ui-text-xs text-muted-foreground">
+      <DropdownMenuLabel className="text-xs text-muted-foreground">
         Sandbox
       </DropdownMenuLabel>
       {hasGitHubSource ? (
@@ -355,12 +355,12 @@ function EnvironmentMenuItem({
       className="flex items-center justify-between gap-3"
     >
       <span className="flex min-w-0 items-center gap-2">
-        <Icon className="size-3.5 shrink-0 text-muted-foreground" />
+        <Icon className="size-5 shrink-0 text-muted-foreground md:size-3.5" />
         <span className="truncate text-xs">{label}</span>
       </span>
       <Check
         className={cn(
-          "size-4",
+          "size-5 md:size-4",
           itemValue === selectedValue ? "opacity-100" : "opacity-0",
         )}
       />

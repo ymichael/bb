@@ -24,7 +24,7 @@ function FixtureTimeline({ fixtureId }: { fixtureId: FixtureStoryId }) {
   return (
     <div className="mx-auto flex min-h-screen max-w-5xl flex-col gap-4 px-6 py-8">
       <header className="space-y-1 rounded-md border border-border/70 bg-card/60 px-4 py-3">
-        <p className="font-mono ui-text-xs text-muted-foreground">
+        <p className="font-mono text-xs text-muted-foreground">
           {fixture.providerId} / {fixture.taskId}
         </p>
         <h1 className="text-lg font-semibold text-foreground">{fixture.scenarioDescription}</h1>

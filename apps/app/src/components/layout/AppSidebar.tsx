@@ -60,7 +60,7 @@ export function AppSidebar({
             <SidebarMenuItem>
               <SidebarMenuButton
                 onClick={toggleTheme}
-                className="w-8 justify-center p-0"
+                className="h-9 w-9 justify-center p-0 [&>svg]:size-5 md:h-8 md:w-8 md:[&>svg]:size-4"
                 tooltip={isDarkTheme ? "Switch to light mode" : "Switch to dark mode"}
                 aria-label={isDarkTheme ? "Switch to light mode" : "Switch to dark mode"}
               >
@@ -70,7 +70,7 @@ export function AppSidebar({
             <SidebarMenuItem>
               <SidebarMenuButton
                 asChild
-                className="w-8 justify-center p-0"
+                className="h-9 w-9 justify-center p-0 [&>svg]:size-5 md:h-8 md:w-8 md:[&>svg]:size-4"
                 tooltip="App settings"
                 aria-label="App settings"
               >

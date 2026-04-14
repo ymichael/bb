@@ -83,7 +83,7 @@ export function ConversationMarkdown({
                   <pre className="my-2 overflow-x-auto rounded-md border border-border/70 bg-muted/35 p-3">
                     <code
                       className={cx(
-                        "font-mono ui-text-sm",
+                        "font-mono text-xs",
                         language ? `language-${language}` : "",
                       )}
                       {...props}

@@ -648,8 +648,9 @@ export function PromptBox({
         placeholder={placeholder}
         rows={1}
         autoFocus={autoFocus}
+        enterKeyHint="send"
         className={cn(
-          "w-full resize-none overflow-y-auto bg-transparent px-4 pb-1 pr-14 pt-3 text-sm leading-relaxed outline-none placeholder:text-muted-foreground/60",
+          "w-full resize-none overflow-y-auto bg-transparent px-4 pb-1 pr-14 pt-3 text-base leading-relaxed md:text-sm outline-none placeholder:text-muted-foreground/60",
           isZenMode && "min-h-0 flex-1 px-6 pb-3 pt-8"
         )}
         style={{
@@ -706,7 +707,7 @@ export function PromptBox({
             title="Attach files"
             disabled={!onAttachFiles || isAttaching}
             onClick={() => attachmentInputRef.current?.click()}
-            className="size-auto h-8 px-2 transition-all"
+            className="size-auto h-10 px-2.5 transition-all md:h-8 md:px-2"
           >
             {isAttaching ? (
               <Loader2 className="size-4 animate-spin" />
@@ -726,7 +727,7 @@ export function PromptBox({
               }
               disabled={!canStartVoiceInput}
               onClick={voiceInput.start}
-              className="size-auto h-8 px-2 transition-all"
+              className="size-auto h-10 px-2.5 transition-all md:h-8 md:px-2"
             >
               <Mic className="size-4" />
             </Button>
@@ -738,7 +739,7 @@ export function PromptBox({
               variant="secondary"
               title="Stop run"
               onClick={onStop}
-              className="size-auto h-8 px-2 transition-all"
+              className="size-auto h-10 px-2.5 transition-all md:h-8 md:px-2"
             >
               <Square className="size-3.5" fill="currentColor" strokeWidth={0} />
             </Button>
@@ -750,7 +751,7 @@ export function PromptBox({
                 variant="default"
                 title="Stop and transcribe recording"
                 onClick={voiceInput.stop}
-                className="h-8 rounded-r-none px-2"
+                className="h-10 rounded-r-none px-2.5 md:h-8 md:px-2"
               >
                 <AudioLines className="size-4 animate-pulse" />
               </Button>
@@ -760,7 +761,7 @@ export function PromptBox({
                 variant="default"
                 title="Cancel recording"
                 onClick={voiceInput.cancel}
-                className="h-8 w-8 rounded-l-none border-l border-l-primary-foreground/20 px-0 transition-all hover:border-l-primary-foreground/30"
+                className="h-10 w-10 rounded-l-none border-l border-l-primary-foreground/20 px-0 transition-all hover:border-l-primary-foreground/30 md:h-8 md:w-8"
               >
                 <X className="size-3.5" />
               </Button>
@@ -773,7 +774,7 @@ export function PromptBox({
                 variant="default"
                 title="Transcribing voice input..."
                 disabled
-                className="h-8 rounded-r-none px-2"
+                className="h-10 rounded-r-none px-2.5 md:h-8 md:px-2"
               >
                 <AudioLines className="size-4" />
                 <Loader2 className="size-4 animate-spin" />
@@ -784,7 +785,7 @@ export function PromptBox({
                 variant="default"
                 title="Cancel transcription"
                 onClick={voiceInput.cancel}
-                className="h-8 w-8 rounded-l-none border-l border-l-primary-foreground/20 px-0 transition-all hover:border-l-primary-foreground/30"
+                className="h-10 w-10 rounded-l-none border-l border-l-primary-foreground/20 px-0 transition-all hover:border-l-primary-foreground/30 md:h-8 md:w-8"
               >
                 <X className="size-3.5" />
               </Button>
@@ -796,7 +797,7 @@ export function PromptBox({
               variant="default"
               title={effectiveSubmitTitle}
               disabled={!canSubmit}
-              className="h-8 px-2 transition-all"
+              className="h-10 px-2.5 transition-all md:h-8 md:px-2"
             >
               {isSubmitting ? (
                 <Loader2 className="size-4 animate-spin" />

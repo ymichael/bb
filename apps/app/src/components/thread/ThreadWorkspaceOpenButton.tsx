@@ -22,7 +22,7 @@ import {
 import { toast } from "sonner";
 
 const WORKSPACE_OPEN_BUTTON_CLASS =
-  "h-7 rounded-md border-border/70 bg-background/70 px-1 text-xs font-medium text-foreground/85 shadow-none hover:bg-muted/45 hover:text-foreground";
+  "h-9 rounded-md border-border/70 bg-background/70 px-1 text-xs font-medium text-foreground/85 shadow-none hover:bg-muted/45 hover:text-foreground md:h-8";
 
 const WORKSPACE_OPEN_TARGET_ICONS: Record<WorkspaceOpenTargetId, string> = {
   vscode: vscodeIcon,

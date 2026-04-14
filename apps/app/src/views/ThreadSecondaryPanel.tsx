@@ -149,7 +149,7 @@ function GitDiffSelector({
             </span>
             <Check
               className={cn(
-                "size-3.5",
+                "size-5 md:size-3.5",
                 option.value === value ? "opacity-100" : "opacity-0",
               )}
             />

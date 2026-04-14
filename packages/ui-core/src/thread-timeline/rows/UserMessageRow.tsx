@@ -125,7 +125,7 @@ export function UserMessageRow({
                 {attachments.map((attachment) => (
                   <span
                     key={attachment}
-                    className="inline-flex items-center rounded-full border border-primary/30 bg-background/70 px-2 py-0 ui-text-2xs text-muted-foreground"
+                    className="inline-flex items-center rounded-full border border-primary/30 bg-background/70 px-2 py-0 text-xs text-muted-foreground"
                   >
                     {attachment}
                   </span>

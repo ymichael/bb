@@ -53,7 +53,7 @@ export function TasksRow({
             {message.tasks.map((task, index) => (
               <div
                 key={`${message.id}:${index}`}
-                className="grid grid-cols-[auto_1fr] gap-2 font-mono ui-text-sm text-foreground/85"
+                className="grid grid-cols-[auto_1fr] gap-2 font-mono text-xs text-foreground/85"
               >
                 <span>{taskStatusGlyph(task.status)}</span>
                 <span

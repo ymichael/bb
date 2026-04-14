@@ -376,7 +376,7 @@ export function FileEditRow({
           headerToneClass={headerToneClass}
           onToggle={onToggle}
         >
-          <div className="font-mono ui-text-sm text-foreground/90">
+          <div className="font-mono text-xs text-foreground/90">
             {message.changes.map((change, index) => {
               const stats = diffStats(change);
               const fileName = fileNameFromPath(change.path);
@@ -392,7 +392,7 @@ export function FileEditRow({
               const changeHeaderToneClass = getEventHeaderToneClass(isChangeExpanded);
               const hasChangeStats = stats.added > 0 || stats.removed > 0;
               const changeSummaryContent = (
-                <span className="inline-flex min-w-0 items-center gap-2 font-mono ui-text-sm text-foreground/90">
+                <span className="inline-flex min-w-0 items-center gap-2 font-mono text-xs text-foreground/90">
                   <span className="min-w-0 flex-1 truncate" title={change.path}>
                     {fileName}
                   </span>
@@ -433,13 +433,13 @@ export function FileEditRow({
                       ) : (
                         <div className="flex items-center gap-1">
                           <span
-                            className="min-w-0 flex-1 truncate font-mono ui-text-sm text-foreground/90"
+                            className="min-w-0 flex-1 truncate font-mono text-xs text-foreground/90"
                             title={change.path}
                           >
                             {fileName}
                           </span>
                           {hasChangeStats ? (
-                            <span className="shrink-0 font-mono ui-text-sm">
+                            <span className="shrink-0 font-mono text-xs">
                               <span className="text-emerald-600">+{stats.added}</span>{" "}
                               <span className="text-destructive/80">-{stats.removed}</span>
                             </span>
@@ -466,7 +466,7 @@ export function FileEditRow({
                     ) : null}
                     {isChangeExpanded && plainDiff ? (
                       <div className="animate-in fade-in-0 slide-in-from-top-1 duration-200">
-                        <pre className="max-h-[240px] overflow-auto border-t border-border/60 bg-background/80 px-3 py-2 font-mono ui-text-xs whitespace-pre-wrap text-foreground/90">
+                        <pre className="max-h-[240px] overflow-auto border-t border-border/60 bg-background/80 px-3 py-2 font-mono text-xs whitespace-pre-wrap text-foreground/90">
                           {plainDiff}
                         </pre>
                       </div>

@@ -42,7 +42,7 @@ export function DebugEventRow({ message }: { message: ViewDebugRawEventMessage }
           onClick={() => setIsExpanded((value) => !value)}
           className="w-full px-1 py-0.5 text-left"
         >
-          <p className="flex items-center gap-1.5 font-mono ui-text-xs text-muted-foreground">
+          <p className="flex items-center gap-1.5 font-mono text-xs text-muted-foreground">
             {isExpanded ? (
               <ChevronDown className="size-3 shrink-0" />
             ) : (
@@ -50,14 +50,14 @@ export function DebugEventRow({ message }: { message: ViewDebugRawEventMessage }
             )}
             <span className="shrink-0">#{event.seq}</span>
             <span className="shrink-0">{message.rawType}</span>
-            <span className="inline-flex h-4 items-center rounded border border-border/70 px-1 ui-text-3xs text-muted-foreground">
+            <span className="inline-flex h-4 items-center rounded border border-border/70 px-1 text-xs text-muted-foreground">
               {message.reason}
             </span>
           </p>
         </button>
         {isExpanded ? (
           <div className="mt-1 rounded-md border border-border/60 bg-muted/30 px-2 py-1">
-            <pre className="whitespace-pre-wrap break-all font-mono ui-text-xs text-muted-foreground/80">
+            <pre className="whitespace-pre-wrap break-all font-mono text-xs text-muted-foreground/80">
               {expandedContent}
             </pre>
           </div>

@@ -88,7 +88,7 @@ export function ToolExploringRow({
               <ExpandableLine
                 key={`${message.id}:${index}`}
                 fullText={line}
-                className="min-w-0 font-mono ui-text-sm text-foreground/80"
+                className="min-w-0 font-mono text-xs text-foreground/80"
                 collapsedClassName="truncate"
               >
                 {line}

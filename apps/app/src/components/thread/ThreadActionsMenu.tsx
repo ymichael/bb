@@ -1,4 +1,4 @@
-import type { ThreadType } from "@bb/domain"
+import type { Thread } from "@bb/domain"
 import { MoreHorizontal } from "lucide-react"
 import {
   DropdownMenu,
@@ -11,42 +11,45 @@ import {
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { threadTypeLabel } from "@/lib/thread-title"
+import { useThreadActions } from "./ThreadActionsProvider"
 
 interface ThreadActionsMenuProps {
-  onToggleRead: () => void
-  onRename: () => void
-  onToggleArchive: () => void
-  onDelete?: () => void
+  thread: Thread
+  /**
+   * Pass `false` to hide the Delete entry (e.g. sidebar rows that intentionally
+   * route users to the thread detail page for destructive actions). Defaults
+   * to true.
+   */
+  canDelete?: boolean
   viewerToggleLabel?: string
   viewerToggleChecked?: boolean
   onViewerToggleCheckedChange?: (checked: boolean) => void
-  isRead: boolean
-  isArchived: boolean
   onOpenChange?: (open: boolean) => void
-  disabled?: boolean
   triggerClassName?: string
   align?: "start" | "center" | "end"
-  threadType?: ThreadType
 }
 
 export function ThreadActionsMenu({
-  onToggleRead,
-  onRename,
-  onToggleArchive,
-  onDelete,
+  thread,
+  canDelete = true,
   viewerToggleLabel,
   viewerToggleChecked,
   onViewerToggleCheckedChange,
-  isRead,
-  isArchived,
   onOpenChange,
-  disabled = false,
   triggerClassName,
   align = "end",
-  threadType,
 }: ThreadActionsMenuProps) {
-  const label = threadTypeLabel(threadType ?? "standard")
+  const {
+    requestRename,
+    requestDelete,
+    toggleArchive,
+    toggleRead,
+  } = useThreadActions()
+  const label = threadTypeLabel(thread.type)
   const capitalizedLabel = label.charAt(0).toUpperCase() + label.slice(1)
+  const isRead = (thread.lastReadAt ?? 0) >= thread.updatedAt
+  const isArchived = thread.archivedAt != null
+
   return (
     <DropdownMenu onOpenChange={onOpenChange}>
       <DropdownMenuTrigger asChild>
@@ -56,55 +59,49 @@ export function ThreadActionsMenu({
           size="icon"
           className={cn(
             "rounded-md p-0 text-muted-foreground hover:bg-accent/45 hover:text-foreground data-[state=open]:bg-accent/35 data-[state=open]:text-foreground",
-            triggerClassName
+            triggerClassName,
           )}
           aria-label={`${capitalizedLabel} actions`}
           title={`${capitalizedLabel} actions`}
-          disabled={disabled}
           onClick={(event) => {
             event.stopPropagation()
           }}
         >
-          <MoreHorizontal className="size-3.5" />
+          <MoreHorizontal className="size-5 md:size-4" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align={align} className="w-44">
         <DropdownMenuItem
-          disabled={disabled}
           onSelect={(event) => {
             event.preventDefault()
-            onToggleRead()
+            toggleRead(thread)
           }}
         >
           {isRead ? "Mark as unread" : "Mark as read"}
         </DropdownMenuItem>
         <DropdownMenuItem
-          disabled={disabled}
           onSelect={() => {
-            // Defer opening the rename dialog until Radix closes the menu.
             window.setTimeout(() => {
-              onRename()
+              requestRename(thread)
             }, 0)
           }}
         >
           Rename
         </DropdownMenuItem>
         <DropdownMenuItem
-          disabled={disabled}
           onSelect={(event) => {
             event.preventDefault()
-            onToggleArchive()
+            toggleArchive(thread)
           }}
         >
           {isArchived ? "Unarchive" : "Archive"}
         </DropdownMenuItem>
-        {onDelete ? (
+        {canDelete ? (
           <DropdownMenuItem
-            disabled={disabled}
             className="text-destructive focus:text-destructive"
             onSelect={() => {
               window.setTimeout(() => {
-                onDelete()
+                requestDelete(thread)
               }, 0)
             }}
           >
@@ -115,7 +112,6 @@ export function ThreadActionsMenu({
           <>
             <DropdownMenuSeparator />
             <DropdownMenuCheckboxItem
-              disabled={disabled}
               checked={viewerToggleChecked}
               onCheckedChange={(checked) => {
                 onViewerToggleCheckedChange(checked === true)

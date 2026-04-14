@@ -1,5 +1,5 @@
 import { useState } from "react"
-import type { Thread, ThreadListEntry } from "@bb/domain"
+import type { ThreadListEntry } from "@bb/domain"
 import {
   ChevronDown,
   ChevronRight,
@@ -36,13 +36,8 @@ interface ThreadRowProps {
   projectId: string
   thread: ThreadListEntry
   isActive: boolean
-  isActionsDisabled: boolean
   onProjectSelect?: () => void
   onToggleManagerCollapsed?: (threadId: string) => void
-  onToggleRead: (thread: Thread) => void
-  onRename: (thread: Thread) => void
-  onToggleArchive: (thread: Thread) => void
-  onDelete: (thread: Thread) => void
   options: ThreadRowOptions
 }
 
@@ -72,18 +67,18 @@ function ManagerChevron({
         event.stopPropagation()
         onToggle()
       }}
-      className="relative z-10 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/60 outline-none ring-sidebar-ring transition-colors hover:text-sidebar-foreground focus-visible:ring-2"
+      className="relative z-10 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/60 outline-none ring-sidebar-ring transition-colors hover:text-sidebar-foreground focus-visible:ring-2 md:h-4 md:w-4"
     >
-      <span className="relative inline-flex size-4 items-center justify-center">
+      <span className="relative inline-flex size-5 items-center justify-center md:size-4">
         {isBusy ? (
           <CircleDashed
-            className="absolute size-4 animate-spin opacity-100 transition-opacity duration-150 group-hover/thread-row:opacity-0"
+            className="absolute size-5 animate-spin opacity-100 transition-opacity duration-150 group-hover/thread-row:opacity-0 md:size-4"
             aria-hidden
           />
         ) : null}
         <ChevronRight
           className={cn(
-            "absolute size-4 transition-all duration-150",
+            "absolute size-5 transition-all duration-150 md:size-4",
             !isCollapsed && "rotate-90",
             isBusy ? "opacity-0 group-hover/thread-row:opacity-100" : "opacity-100",
           )}
@@ -107,20 +102,20 @@ function ThreadLeadingGlyph({
   showUnreadBadge,
 }: ThreadLeadingGlyphProps) {
   return (
-    <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center text-sidebar-foreground/60">
+    <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center text-sidebar-foreground/60 md:h-4 md:w-4">
       {isManagedChild ? (
-        <ChevronDown aria-hidden="true" className="size-4 shrink-0 rotate-45" />
+        <ChevronDown aria-hidden="true" className="size-5 shrink-0 rotate-45 md:size-4" />
       ) : hasPendingInteraction ? (
         <span
-          className="size-1.5 rounded-full bg-attention"
+          className="size-2 rounded-full bg-attention md:size-1.5"
           aria-label="Pending interaction requires attention"
           title="Pending interaction"
         />
       ) : isBusy ? (
-        <CircleDashed className="size-4 animate-spin" />
+        <CircleDashed className="size-5 animate-spin md:size-4" />
       ) : showUnreadBadge ? (
         <span
-          className="size-1.5 rounded-full bg-primary"
+          className="size-2 rounded-full bg-primary md:size-1.5"
           aria-label="Unread completed thread"
           title="Unread completion"
         />
@@ -133,13 +128,8 @@ export function ThreadRow({
   projectId,
   thread,
   isActive,
-  isActionsDisabled,
   onProjectSelect,
   onToggleManagerCollapsed,
-  onToggleRead,
-  onRename,
-  onToggleArchive,
-  onDelete,
   options,
 }: ThreadRowProps) {
   const [isActionsOpen, setIsActionsOpen] = useState(false)
@@ -166,7 +156,7 @@ export function ThreadRow({
     <div
       className={cn(
         "group/thread-row relative flex w-full items-center gap-2 rounded-md pr-0 text-sm transition-colors",
-        isManagedChild ? "h-7" : "h-8",
+        isManagedChild ? "h-9 md:h-7" : "h-10 md:h-8",
         isManagedChild ? "pl-6 text-sidebar-foreground/60" : "pl-2",
         isActive
           ? "bg-sidebar-border/80 text-sidebar-foreground"
@@ -198,10 +188,10 @@ export function ThreadRow({
         />
       )}
       <span className="min-w-0 flex-1 truncate">{threadTitle}</span>
-      <span className="flex h-7 shrink-0 items-center justify-end">
+      <span className="flex h-9 shrink-0 items-center justify-end md:h-7">
         {isManager && managedChildCount > 0 ? (
           <span
-            className="inline-flex h-7 w-7 shrink-0 items-center justify-center"
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center md:h-7 md:w-7"
             aria-label={`${managedChildCount} managed thread${managedChildCount === 1 ? "" : "s"}`}
             title={`${managedChildCount} managed thread${managedChildCount === 1 ? "" : "s"}`}
           >
@@ -210,7 +200,7 @@ export function ThreadRow({
             </SidebarMenuBadge>
           </span>
         ) : null}
-        <span className="relative h-7 w-7 shrink-0">
+        <span className="relative h-9 w-9 shrink-0 md:h-7 md:w-7">
           <span
             className={cn(
               "absolute inset-0 flex items-center justify-center transition-opacity",
@@ -218,12 +208,12 @@ export function ThreadRow({
             )}
           >
             {isManager ? (
-              <UserRound className="size-4 text-sidebar-foreground/70" aria-label="Manager" />
+              <UserRound className="size-5 text-sidebar-foreground/70 md:size-4" aria-label="Manager" />
             ) : isManagedChild && threadIsBusy ? (
-              <CircleDashed className="size-4 animate-spin text-sidebar-foreground/70" />
+              <CircleDashed className="size-5 animate-spin text-sidebar-foreground/70 md:size-4" />
             ) : EnvironmentIcon ? (
               <EnvironmentIcon
-                className="size-4 text-sidebar-foreground/70"
+                className="size-5 text-sidebar-foreground/70 md:size-4"
                 aria-label={environmentIconLabel ?? undefined}
               />
             ) : null}
@@ -237,24 +227,9 @@ export function ThreadRow({
             )}
           >
             <ThreadActionsMenu
-              triggerClassName="h-7 w-7 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+              thread={thread}
+              triggerClassName="h-9 w-9 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground md:h-7 md:w-7"
               onOpenChange={setIsActionsOpen}
-              disabled={isActionsDisabled}
-              isRead={(thread.lastReadAt ?? 0) >= thread.updatedAt}
-              onToggleRead={() => {
-                onToggleRead(thread)
-              }}
-              onRename={() => {
-                onRename(thread)
-              }}
-              onToggleArchive={() => {
-                onToggleArchive(thread)
-              }}
-              onDelete={() => {
-                onDelete(thread)
-              }}
-              isArchived={thread.archivedAt != null}
-              threadType={thread.type}
             />
           </div>
         </span>

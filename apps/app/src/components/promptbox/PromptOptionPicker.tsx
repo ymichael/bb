@@ -122,7 +122,7 @@ export function PromptOptionPicker<T extends string>({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className={cn("min-w-52 max-w-96", contentClassName)} mobileTitle={label}>
-        <DropdownMenuLabel className="ui-text-xs text-muted-foreground">
+        <DropdownMenuLabel className="text-xs text-muted-foreground">
           {label}
         </DropdownMenuLabel>
         {options.map((option) => {
@@ -153,7 +153,7 @@ export function PromptOptionPicker<T extends string>({
               </span>
               <Check
                 className={cn(
-                  "size-4",
+                  "size-5 md:size-4",
                   option.value === value ? "opacity-100" : "opacity-0"
                 )}
               />

@@ -167,7 +167,7 @@ function buildBannerModel(interaction: PendingInteraction): BannerModel {
         : null;
       const subject = command ? (
         <div className="overflow-hidden rounded-lg border border-border bg-card">
-          <pre className="max-h-[220px] overflow-auto whitespace-pre px-4 py-3 font-mono ui-text-sm leading-tight text-foreground">
+          <pre className="max-h-[220px] overflow-auto whitespace-pre px-4 py-3 font-mono text-xs leading-tight text-foreground">
             $ {command}
           </pre>
         </div>
@@ -238,7 +238,7 @@ function buildBannerModel(interaction: PendingInteraction): BannerModel {
         title:
           interaction.payload.reason ?? "Do you want to grant this permission?",
         subject: interaction.payload.toolName ? (
-          <div className="rounded-lg border border-border bg-card px-4 py-3 font-mono ui-text-sm leading-tight text-foreground">
+          <div className="rounded-lg border border-border bg-card px-4 py-3 font-mono text-xs leading-tight text-foreground">
             {interaction.payload.toolName}
           </div>
         ) : null,

@@ -8,7 +8,7 @@ import { StatusPill } from "@bb/ui-core";
 import type { ThreadGitActionDialogTarget } from "@/components/thread/ThreadGitActionDialog";
 
 const THREAD_HEADER_ACTION_BUTTON_CLASS =
-  "h-7 rounded-md border-border/70 bg-background/70 px-2 text-xs font-medium text-foreground/85 shadow-none hover:bg-muted/45 hover:text-foreground";
+  "h-9 rounded-md border-border/70 bg-background/70 px-2 text-xs font-medium text-foreground/85 shadow-none hover:bg-muted/45 hover:text-foreground md:h-8";
 
 interface ThreadHeaderGitAction {
   label: string;
@@ -90,14 +90,14 @@ export function ThreadDetailHeader({
             size="icon"
             className={
               isSecondaryPanelOpen
-                ? "h-7 w-7 rounded-md p-0 bg-accent/35 text-foreground hover:bg-accent/45"
-                : "h-7 w-7 rounded-md p-0 text-muted-foreground hover:bg-accent/45 hover:text-foreground"
+                ? "h-9 w-9 rounded-md p-0 bg-accent/35 text-foreground hover:bg-accent/45 md:h-8 md:w-8"
+                : "h-9 w-9 rounded-md p-0 text-muted-foreground hover:bg-accent/45 hover:text-foreground md:h-8 md:w-8"
             }
             aria-label={isSecondaryPanelOpen ? "Hide secondary panel" : "Show secondary panel"}
             title={isSecondaryPanelOpen ? "Hide secondary panel" : "Show secondary panel"}
             onClick={onToggleSecondaryPanel}
           >
-            <PanelRight className="size-3.5" />
+            <PanelRight className="size-5 md:size-4" />
           </Button>
         </div>
       </div>

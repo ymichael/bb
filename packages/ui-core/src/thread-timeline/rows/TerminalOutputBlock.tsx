@@ -37,7 +37,7 @@ export function TerminalOutputBlock({
     <div
       className={cn("overflow-hidden rounded-lg border border-border bg-card", className)}
     >
-      <div className="px-4 py-3 font-mono ui-text-sm leading-tight text-foreground">
+      <div className="px-4 py-3 font-mono text-xs leading-tight text-foreground">
         {command ? (
           <ExpandableLine
             fullText={`$ ${command}`}

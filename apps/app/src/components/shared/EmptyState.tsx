@@ -24,7 +24,7 @@ export function EmptyState({
           className={cn("size-4 shrink-0 text-muted-foreground/70", iconClassName)}
         />
       ) : null}
-      <p className={cn("ui-text-sm leading-5 text-muted-foreground", messageClassName)}>
+      <p className={cn("text-xs leading-5 text-muted-foreground", messageClassName)}>
         {message}
       </p>
     </div>

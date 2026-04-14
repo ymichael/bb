@@ -17,7 +17,7 @@ export function EventCodeBlock({
   return (
     <pre
       className={cx(
-        "overflow-auto whitespace-pre-wrap break-words rounded-md px-2 py-1.5 font-mono ui-text-xs leading-tight",
+        "overflow-auto whitespace-pre-wrap break-words rounded-md px-2 py-1.5 font-mono text-xs leading-tight",
         maxHeightClassName,
         tone === "danger"
           ? "text-destructive/90"

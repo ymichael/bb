@@ -254,9 +254,9 @@ const DropdownMenuCheckboxItem = React.forwardRef<
           }
         }}
       >
-        <span className="absolute right-2 flex h-3.5 w-3.5 items-center justify-center">
+        <span className="absolute right-2 flex h-5 w-5 items-center justify-center md:h-3.5 md:w-3.5">
           {(checked === true || checked === "indeterminate") && (
-            <Check className="h-3.5 w-3.5" />
+            <Check className="h-5 w-5 md:h-3.5 md:w-3.5" />
           )}
         </span>
         {children}
@@ -278,9 +278,9 @@ const DropdownMenuCheckboxItem = React.forwardRef<
       textValue={_textValue}
       {...domProps}
     >
-      <span className="absolute right-2 flex h-3.5 w-3.5 items-center justify-center">
+      <span className="absolute right-2 flex h-5 w-5 items-center justify-center md:h-3.5 md:w-3.5">
         <DropdownMenuPrimitive.ItemIndicator>
-          <Check className="h-3.5 w-3.5" />
+          <Check className="h-5 w-5 md:h-3.5 md:w-3.5" />
         </DropdownMenuPrimitive.ItemIndicator>
       </span>
       {children}

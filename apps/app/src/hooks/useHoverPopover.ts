@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useIsMobile } from "@/hooks/useMobile";
 
 interface HoverPopoverHandlers {
   onPointerEnter: () => void;
@@ -23,6 +24,7 @@ const DEFAULT_CLOSE_DELAY_MS = 160;
 export function useHoverPopover({
   closeDelayMs = DEFAULT_CLOSE_DELAY_MS,
 }: UseHoverPopoverOptions = {}): UseHoverPopoverResult {
+  const isMobile = useIsMobile();
   const [open, setOpen] = useState(false);
   const [isPointerOverTrigger, setIsPointerOverTrigger] = useState(false);
   const [isPointerOverContent, setIsPointerOverContent] = useState(false);
@@ -37,6 +39,10 @@ export function useHoverPopover({
   }, []);
 
   useEffect(() => {
+    // On touch/narrow viewports, the popover opens via tap (MobileTrigger) and
+    // closes via drawer dismiss. Pointer-based hover state has no role.
+    if (isMobile) return;
+
     clearCloseTimeout();
 
     if (isPointerOverTrigger || isPointerOverContent) {
@@ -50,7 +56,7 @@ export function useHoverPopover({
     }, closeDelayMs);
 
     return clearCloseTimeout;
-  }, [clearCloseTimeout, closeDelayMs, isPointerOverContent, isPointerOverTrigger]);
+  }, [clearCloseTimeout, closeDelayMs, isMobile, isPointerOverContent, isPointerOverTrigger]);
 
   useEffect(() => clearCloseTimeout, [clearCloseTimeout]);
 
@@ -67,30 +73,39 @@ export function useHoverPopover({
     setOpen(false);
   }, [clearCloseTimeout]);
 
-  const triggerHoverProps = {
-    onPointerEnter: () => {
-      setIsPointerOverTrigger(true);
-    },
-    onPointerLeave: () => {
-      setIsPointerOverTrigger(false);
-    },
+  const emptyHoverProps = {
+    onPointerEnter: () => {},
+    onPointerLeave: () => {},
   };
 
-  const contentHoverProps = {
-    onPointerEnter: () => {
-      setIsPointerOverContent(true);
-    },
-    onPointerLeave: () => {
-      setIsPointerOverContent(false);
-    },
-    // Hover-driven popovers should not steal or restore focus.
-    onOpenAutoFocus: (event: Event) => {
-      event.preventDefault();
-    },
-    onCloseAutoFocus: (event: Event) => {
-      event.preventDefault();
-    },
-  };
+  const triggerHoverProps = isMobile
+    ? emptyHoverProps
+    : {
+        onPointerEnter: () => {
+          setIsPointerOverTrigger(true);
+        },
+        onPointerLeave: () => {
+          setIsPointerOverTrigger(false);
+        },
+      };
+
+  const contentHoverProps = isMobile
+    ? emptyHoverProps
+    : {
+        onPointerEnter: () => {
+          setIsPointerOverContent(true);
+        },
+        onPointerLeave: () => {
+          setIsPointerOverContent(false);
+        },
+        // Hover-driven popovers should not steal or restore focus.
+        onOpenAutoFocus: (event: Event) => {
+          event.preventDefault();
+        },
+        onCloseAutoFocus: (event: Event) => {
+          event.preventDefault();
+        },
+      };
 
   return {
     open,

@@ -2,42 +2,36 @@ import { Fragment, type ReactNode } from "react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useAtom } from "jotai"
 import { atomWithStorage } from "jotai/utils"
-import { Link, useLocation, useMatch, useNavigate } from "react-router-dom"
+import { Link, useLocation, useNavigate } from "react-router-dom"
 import {
   Archive,
   ChevronRight,
-  MoreHorizontal,
-  PencilLine,
   Settings,
   UserRoundPlus,
-  X,
 } from "lucide-react"
 import type { Thread } from "@bb/domain"
+import type { ProjectResponse } from "@bb/server-contract"
 import {
   SidebarProvider,
   SidebarInset,
   SidebarTrigger,
-  useSidebar,
 } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
-import { Button } from "@/components/ui/button"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import { AppSidebar } from "./AppSidebar"
 import {
   useHireProjectManager,
 } from "@/hooks/mutations/project-mutations"
 import { useProjects } from "@/hooks/queries/project-queries"
 import { useThread } from "@/hooks/queries/thread-queries"
+import { useAppRoute } from "@/hooks/useAppRoute"
 import { useDialogState } from "@/hooks/useDialogState"
 import { getThreadDisplayTitle } from "@/lib/thread-title"
 import { cn } from "@/lib/utils"
 import { HireManagerModal } from "@/components/HireManagerModal"
 import { ProjectPathDialog } from "@/components/project/ProjectPathDialog"
+import { ProjectActionsMenu } from "@/components/project/ProjectActionsMenu"
+import { ProjectActionsProvider } from "@/components/project/ProjectActionsProvider"
+import { ThreadActionsProvider } from "@/components/thread/ThreadActionsProvider"
 import { createLocalStorageSyncStorage } from "@/lib/browser-storage"
 import { useQuickCreateProjectController } from "@/hooks/useQuickCreateProject"
 
@@ -79,6 +73,7 @@ interface AppHeaderProps {
   isProjectMainView: boolean
   projectName?: string
   projectId?: string
+  project?: ProjectResponse
   isManagerActionPending?: boolean
   onOpenManager?: () => void
   meta: {
@@ -92,13 +87,12 @@ function AppHeader({
   isProjectMainView,
   projectName,
   projectId,
+  project,
   isManagerActionPending = false,
   onOpenManager,
   meta,
 }: AppHeaderProps) {
-  const { isMobile, open, openMobile } = useSidebar()
-  const isSidebarCollapsed = isMobile ? !openMobile : !open
-  const showProjectMenuButton = isProjectMainView && isSidebarCollapsed
+  const showProjectMenuButton = isProjectMainView && !!project
   const showProjectNameInHeader = !isProjectMainView
   const headerBreadcrumbs = showProjectNameInHeader ? meta.breadcrumbs : undefined
   const headerTitle =
@@ -156,61 +150,40 @@ function AppHeader({
           </div>
         </div>
         {isProjectMainView && projectId ? (
-          <div className="mr-2 flex items-center gap-1">
+          <div className="flex items-center gap-1">
             <button
               type="button"
-              className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60 md:h-8 md:w-8"
               aria-label="Hire manager"
               title="Hire manager"
               disabled={!projectId || isManagerActionPending}
               onClick={() => onOpenManager?.()}
             >
-              <UserRoundPlus className="size-4" />
+              <UserRoundPlus className="size-5 md:size-4" />
             </button>
             <Link
               to={`/projects/${projectId}/settings`}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground md:h-8 md:w-8"
               aria-label="Project settings"
               title="Project settings"
             >
-              <Settings className="size-4" />
+              <Settings className="size-5 md:size-4" />
             </Link>
             <Link
               to={`/projects/${projectId}/archived`}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground md:h-8 md:w-8"
               aria-label="Archived threads"
               title="Archived threads"
             >
-              <Archive className="size-4" />
+              <Archive className="size-5 md:size-4" />
             </Link>
+            {showProjectMenuButton && project ? (
+              <ProjectActionsMenu
+                project={project}
+                triggerClassName="h-9 w-9 [&_svg]:size-5 md:h-8 md:w-8 md:[&_svg]:size-4"
+              />
+            ) : null}
           </div>
-        ) : null}
-        {showProjectMenuButton ? (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 data-[state=open]:bg-accent data-[state=open]:text-accent-foreground"
-                aria-label="Project menu"
-              >
-                <MoreHorizontal className="size-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-44">
-              <DropdownMenuItem onSelect={(event) => event.preventDefault()}>
-                <PencilLine className="size-4" />
-                Edit name
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onSelect={(event) => event.preventDefault()}
-                className="text-destructive focus:text-destructive"
-              >
-                <X className="size-4" />
-                Remove
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
         ) : null}
       </div>
     </header>
@@ -237,40 +210,37 @@ export function AppLayout({ children }: AppLayoutProps) {
   const liveWidthRef = useRef(sidebarWidth)
   const animationFrameRef = useRef<number | null>(null)
 
-  const projectMatch = useMatch("/projects/:projectId/*")
-  const projectThreadMatch = useMatch("/projects/:projectId/threads/:threadId/*")
-  const projectArchivedMatch = useMatch("/projects/:projectId/archived")
-  const projectSettingsMatch = useMatch("/projects/:projectId/settings")
-  const threadMatch = projectThreadMatch
-  const showHeader = location.pathname !== "/" && !threadMatch
-  const showFloatingSidebarTrigger = location.pathname === "/"
-  const isProjectMainView = Boolean(
-    projectMatch && !threadMatch && !projectArchivedMatch && !projectSettingsMatch
-  )
-  const threadId = projectThreadMatch?.params.threadId ?? ""
+  const {
+    projectId,
+    threadId,
+    isProjectMainView,
+    isThreadView,
+    isArchivedView,
+    isSettingsView,
+    isRootView,
+  } = useAppRoute()
+  const showHeader = !isRootView && !isThreadView
+  const showFloatingSidebarTrigger = isRootView
 
-  const projectId = projectMatch?.params.projectId
   const project = projectId
     ? projects?.find((candidate) => candidate.id === projectId)
     : undefined
-  const projectName = projectId
-    ? project?.name
-    : undefined
+  const projectName = projectId ? project?.name : undefined
   const projectLabel =
     projectName ??
     (projectId ? (projectsLoading ? "Loading project…" : projectId) : undefined)
-  const { data: thread } = useThread(threadId)
+  const { data: thread } = useThread(threadId ?? "")
   const threadDisplayTitle = thread
     ? getThreadDisplayTitle(thread)
     : threadId
       ? `Thread ${threadId.slice(0, 8)}`
       : "Thread"
-  const meta = threadMatch
+  const meta = isThreadView
     ? {
         title: thread ? getThreadDisplayTitle(thread) : "Thread",
         subtitle: undefined,
       }
-    : projectArchivedMatch && projectId
+    : isArchivedView && projectId
       ? {
           title: "",
           subtitle: undefined,
@@ -282,7 +252,7 @@ export function AppLayout({ children }: AppLayoutProps) {
             { label: "Archived" },
           ],
         }
-    : projectSettingsMatch && projectId
+    : isSettingsView && projectId
       ? {
           title: "",
           subtitle: undefined,
@@ -294,7 +264,7 @@ export function AppLayout({ children }: AppLayoutProps) {
             { label: "Settings" },
           ],
         }
-    : projectMatch && projectId
+    : projectId
       ? {
           title: projectLabel ?? projectId,
           subtitle: undefined,
@@ -302,16 +272,16 @@ export function AppLayout({ children }: AppLayoutProps) {
       : (routeTitles[location.pathname] ?? { title: "" })
 
   const documentTitle = (() => {
-    if (threadMatch) {
+    if (isThreadView) {
       return threadDisplayTitle
     }
-    if (projectArchivedMatch && projectId) {
+    if (isArchivedView && projectId) {
       return `${projectLabel ?? projectId} · Archived`
     }
-    if (projectSettingsMatch && projectId) {
+    if (isSettingsView && projectId) {
       return `${projectLabel ?? projectId} · Settings`
     }
-    if (projectMatch && projectId) {
+    if (projectId) {
       return projectLabel ?? projectId
     }
     const routeTitle = routeTitles[location.pathname]?.title
@@ -392,60 +362,63 @@ export function AppLayout({ children }: AppLayoutProps) {
   }, [documentTitle])
 
   return (
-    <>
-    <SidebarProvider
-      ref={providerRef}
-      className="[--sidebar-width:20rem]"
-      open={sidebarOpen}
-      onOpenChange={setSidebarOpen}
-    >
-      <AppSidebar
-        onResizeMouseDown={handleResizeMouseDown}
-        isResizing={isSidebarResizing}
-      />
-      <SidebarInset>
-        <div className="relative flex h-[100dvh] min-w-0 w-full flex-col">
-          {showFloatingSidebarTrigger ? (
-            <div className="absolute left-3 top-3.5 z-20">
-              <SidebarTrigger className="h-5 w-5 rounded-md p-0" />
+    <ProjectActionsProvider>
+      <ThreadActionsProvider>
+        <SidebarProvider
+          ref={providerRef}
+          className="[--sidebar-width:20rem]"
+          open={sidebarOpen}
+          onOpenChange={setSidebarOpen}
+        >
+          <AppSidebar
+            onResizeMouseDown={handleResizeMouseDown}
+            isResizing={isSidebarResizing}
+          />
+          <SidebarInset>
+            <div className="relative flex h-[100dvh] min-w-0 w-full flex-col">
+              {showFloatingSidebarTrigger ? (
+                <div className="absolute left-3 top-3.5 z-20">
+                  <SidebarTrigger className="h-5 w-5 rounded-md p-0" />
+                </div>
+              ) : null}
+              {showHeader ? (
+                <AppHeader
+                  isProjectMainView={isProjectMainView}
+                  projectName={projectLabel}
+                  projectId={projectId}
+                  project={project}
+                  isManagerActionPending={hireProjectManager.isPending || hireManagerModal.isOpen}
+                  onOpenManager={() => {
+                    if (!projectId || hireManagerModal.isOpen) return
+                    hireManagerModal.onOpen(projectId)
+                  }}
+                  meta={meta}
+                />
+              ) : null}
+              <main className="flex min-h-0 flex-1 flex-col p-4 md:p-5">
+                {children}
+              </main>
             </div>
-          ) : null}
-          {showHeader ? (
-            <AppHeader
-              isProjectMainView={isProjectMainView}
-              projectName={projectLabel}
-              projectId={projectId}
-              isManagerActionPending={hireProjectManager.isPending || hireManagerModal.isOpen}
-              onOpenManager={() => {
-                if (!projectId || hireManagerModal.isOpen) return
-                hireManagerModal.onOpen(projectId)
-              }}
-              meta={meta}
-            />
-          ) : null}
-          <main className="flex min-h-0 flex-1 flex-col p-4 md:p-5">
-            {children}
-          </main>
-        </div>
-      </SidebarInset>
-    </SidebarProvider>
-    <ProjectPathDialog
-      target={quickCreateProject.projectPathDialog.target}
-      pending={quickCreateProject.isCreating}
-      platform={quickCreateProject.platform}
-      onOpenChange={quickCreateProject.projectPathDialog.onOpenChange}
-      onSubmit={quickCreateProject.submitProjectPath}
-    />
-    {hireManagerModal.target ? (
-      <HireManagerModal
-        projectId={hireManagerModal.target}
-        open
-        onClose={hireManagerModal.onClose}
-        onHired={(thread: Thread) => {
-          navigate(`/projects/${thread.projectId}/threads/${thread.id}`)
-        }}
-      />
-    ) : null}
-    </>
+          </SidebarInset>
+        </SidebarProvider>
+        <ProjectPathDialog
+          target={quickCreateProject.projectPathDialog.target}
+          pending={quickCreateProject.isCreating}
+          platform={quickCreateProject.platform}
+          onOpenChange={quickCreateProject.projectPathDialog.onOpenChange}
+          onSubmit={quickCreateProject.submitProjectPath}
+        />
+        {hireManagerModal.target ? (
+          <HireManagerModal
+            projectId={hireManagerModal.target}
+            open
+            onClose={hireManagerModal.onClose}
+            onHired={(thread: Thread) => {
+              navigate(`/projects/${thread.projectId}/threads/${thread.id}`)
+            }}
+          />
+        ) : null}
+      </ThreadActionsProvider>
+    </ProjectActionsProvider>
   )
 }

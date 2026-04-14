@@ -123,7 +123,9 @@ const PopoverContent = React.forwardRef<
           </DrawerTitle>
           <div
             ref={ref}
-            className="overflow-y-auto pb-[max(0.5rem,env(safe-area-inset-bottom))]"
+            className={cn(
+              "overflow-y-auto px-4 pt-2 pb-[max(1rem,env(safe-area-inset-bottom))]",
+            )}
             {...domProps}
           >
             {children}

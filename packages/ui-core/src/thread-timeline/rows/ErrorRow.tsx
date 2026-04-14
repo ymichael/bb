@@ -146,7 +146,7 @@ export function ErrorRow({
           headerToneClass={headerToneClass}
           onToggle={onToggle}
         >
-          <div className="space-y-1 rounded-md border border-destructive/25 bg-destructive/[0.06] px-2 py-1.5 ui-text-sm text-destructive/90">
+          <div className="space-y-1 rounded-md border border-destructive/25 bg-destructive/[0.06] px-2 py-1.5 text-xs text-destructive/90">
             {detailText ? (
               hasMultilineDetail ? (
                 <EventCodeBlock

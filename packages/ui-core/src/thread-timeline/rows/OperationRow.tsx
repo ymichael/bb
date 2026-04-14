@@ -163,7 +163,7 @@ function OperationDetailLines({
   scrollRef?: Ref<HTMLDivElement>;
   onScroll?: (event: UIEvent<HTMLDivElement>) => void;
 }) {
-  const baseLineClassName = "font-mono ui-text-sm text-foreground/80";
+  const baseLineClassName = "font-mono text-xs text-foreground/80";
   return (
     <ExpandableDetailScrollArea className="mt-0.5 space-y-0.5" maxHeightClassName={maxHeightClassName} scrollRef={scrollRef} onScroll={onScroll}>
       {lines.map((line, index) => {

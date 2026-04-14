@@ -98,7 +98,7 @@ export function PromptMentionMenu({
               >
                 <div className="flex min-w-0 items-center gap-1.5">
                   {typeLabel !== null ? (
-                    <span className="shrink-0 rounded bg-muted px-1 py-px ui-text-2xs text-muted-foreground">
+                    <span className="shrink-0 rounded bg-muted px-1 py-px text-xs text-muted-foreground">
                       {typeLabel}
                     </span>
                   ) : null}

@@ -265,8 +265,12 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
   post("/threads/:id/archive", archiveThreadRequestSchema, async (context, payload) => {
     const force = payload.force;
     const { environment, thread } = requirePublicThreadEnvironment(deps.db, context.req.param("id"));
+    // Idempotent: archiving an already-archived thread is a no-op success.
+    // A concurrent archive (e.g. from another tab) could land between the
+    // client seeing a confirmation-required 409 and the user clicking
+    // "Archive anyway"; we'd rather succeed than surface a confusing error.
     if (thread.archivedAt !== null) {
-      throw new ApiError(409, "invalid_request", "Thread is already archived");
+      return context.json({ ok: true });
     }
     const shouldRequestCleanup = await validateArchiveCleanupRequest(
       deps,

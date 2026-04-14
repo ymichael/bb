@@ -4,12 +4,31 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import type { ThreadListEntry } from "@bb/domain";
 import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router-dom";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { Provider as JotaiProvider } from "jotai";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { createAppQueryClient } from "@/lib/query-client";
+import { ThreadActionsProvider } from "@/components/thread/ThreadActionsProvider";
 import { ThreadRow } from "./ThreadRow";
 
-vi.mock("@/components/thread/ThreadActionsMenu", () => ({
-  ThreadActionsMenu: () => <div data-testid="thread-actions-menu" />,
+vi.mock("sonner", () => ({
+  toast: { error: vi.fn(), success: vi.fn() },
 }));
+
+beforeAll(() => {
+  if (!window.matchMedia) {
+    window.matchMedia = (query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    });
+  }
+});
 
 function createThread(overrides: Partial<ThreadListEntry> = {}): ThreadListEntry {
   return {
@@ -36,10 +55,20 @@ function createThread(overrides: Partial<ThreadListEntry> = {}): ThreadListEntry
 }
 
 function renderThreadRow(thread: ThreadListEntry) {
+  const queryClient = createAppQueryClient({
+    defaultOptions: {
+      mutations: { retry: false },
+      queries: { gcTime: Infinity, retry: false },
+    },
+  });
   const wrapper = ({ children }: { children: ReactNode }) => (
-    <MemoryRouter>
-      {children}
-    </MemoryRouter>
+    <JotaiProvider>
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>
+          <ThreadActionsProvider>{children}</ThreadActionsProvider>
+        </MemoryRouter>
+      </QueryClientProvider>
+    </JotaiProvider>
   );
 
   return render(
@@ -47,11 +76,6 @@ function renderThreadRow(thread: ThreadListEntry) {
       projectId="proj_1"
       thread={thread}
       isActive={false}
-      isActionsDisabled={false}
-      onToggleRead={() => {}}
-      onRename={() => {}}
-      onToggleArchive={() => {}}
-      onDelete={() => {}}
       options={{ kind: "default" }}
     />,
     { wrapper },

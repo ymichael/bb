@@ -186,8 +186,8 @@ function ThreadManagerSelector({
                 <Check
                   className={
                     managerSelectorValue === option.value
-                      ? "size-4 opacity-100"
-                      : "size-4 opacity-0"
+                      ? "size-5 opacity-100 md:size-4"
+                      : "size-5 opacity-0 md:size-4"
                   }
                 />
               </DropdownMenuItem>

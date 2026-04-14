@@ -243,9 +243,23 @@
   * {
     @apply border-border;
   }
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
   body {
     @apply bg-background text-foreground;
     font-family: var(--font-sans);
+  }
+
+  button,
+  a,
+  [role="button"],
+  input,
+  textarea,
+  select,
+  label {
+    touch-action: manipulation;
   }
 
   .chat-prompt-box {
@@ -270,24 +284,20 @@ body.sidebar-resizing [data-sidebar="panel"] {
 }
 
 @layer utilities {
-  .ui-text-3xs {
-    font-size: 0.5625rem;
-    line-height: 0.75rem;
-  }
-
-  .ui-text-2xs {
-    font-size: 0.625rem;
-    line-height: 0.875rem;
-  }
-
-  .ui-text-xs {
-    font-size: 0.6875rem;
-    line-height: 0.875rem;
-  }
-
-  .ui-text-sm {
-    font-size: 0.75rem;
-    line-height: 1rem;
+  /* Bump Tailwind's small text tokens on narrow viewports so dense UI copy
+     lands at ~14–15px instead of 12–14px. Breakpoint matches Tailwind's md:
+     (≥768px), which is where the sidebar switches to a drawer and where the
+     rest of the app's responsive sizing fires — keeping these in sync avoids
+     a jarring intermediate state where icons have grown but text hasn't. */
+  @media (max-width: 767px) {
+    .text-xs {
+      font-size: 0.875rem;
+      line-height: 1.25rem;
+    }
+    .text-sm {
+      font-size: 0.9375rem;
+      line-height: 1.375rem;
+    }
   }
 
   .animate-shine {
