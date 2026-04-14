@@ -69,9 +69,6 @@ export function registerSystemRoutes(app: Hono, deps: AppDeps): void {
       if (deps.config.appUrl) {
         allowedOrigins.add(new URL(deps.config.appUrl).origin);
       }
-      if (deps.config.externalUrl) {
-        allowedOrigins.add(new URL(deps.config.externalUrl).origin);
-      }
       if (!allowedOrigins.has(parsed.origin)) {
         throw new ApiError(400, "invalid_app_origin", "The provided app origin is not allowed.");
       }

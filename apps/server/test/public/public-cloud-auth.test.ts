@@ -463,6 +463,58 @@ describe("public cloud auth routes", () => {
     }
   });
 
+  it("does not allow cloud auth CORS from the external URL origin", async () => {
+    const harness = await createTestAppHarness({
+      appUrl: "https://app.example.test",
+      externalUrl: "https://external.example.test",
+    });
+
+    try {
+      const allowedResponse = await harness.app.request("/api/v1/system/cloud-auth", {
+        headers: {
+          origin: "https://app.example.test",
+        },
+      });
+      expect(allowedResponse.headers.get("access-control-allow-origin")).toBe(
+        "https://app.example.test",
+      );
+
+      const blockedResponse = await harness.app.request("/api/v1/system/cloud-auth", {
+        headers: {
+          origin: "https://external.example.test",
+        },
+      });
+      expect(blockedResponse.headers.get("access-control-allow-origin")).toBeNull();
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("rejects cloud auth app origins from the external URL origin", async () => {
+    const harness = await createTestAppHarness({
+      appUrl: "https://app.example.test",
+      externalUrl: "https://external.example.test",
+    });
+
+    try {
+      const response = await harness.app.request(
+        "/api/v1/system/cloud-auth/codex/connect",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ appOrigin: "https://external.example.test" }),
+        },
+      );
+
+      expect(response.status).toBe(400);
+      await expect(readJson(response)).resolves.toMatchObject({
+        code: "invalid_app_origin",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   itIfCodexCallbackPortAvailable("does not persist a credential after the connection attempt is cancelled", async () => {
     const nativeFetch = globalThis.fetch;
     const tokenExchange = createDeferred<Response>();

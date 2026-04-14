@@ -86,9 +86,6 @@ function buildAllowedCorsOrigins(deps: AppDeps): Set<string> {
   if (deps.config.appUrl) {
     allowedOrigins.add(new URL(deps.config.appUrl).origin);
   }
-  if (deps.config.externalUrl) {
-    allowedOrigins.add(new URL(deps.config.externalUrl).origin);
-  }
   return allowedOrigins;
 }
 
