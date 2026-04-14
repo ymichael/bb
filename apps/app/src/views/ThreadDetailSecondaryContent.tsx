@@ -5,6 +5,8 @@ import { Check, ChevronDown, ChevronRight, Copy, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Panel, PanelGroup } from "react-resizable-panels";
 import { Button } from "@/components/ui/button";
+import { Drawer, DrawerContent, DrawerTitle } from "@/components/ui/drawer";
+import { useIsMobile } from "@/hooks/useMobile";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -456,6 +458,54 @@ export function ThreadDetailSecondaryContent({
   showThreadMetadata,
   timeline,
 }: ThreadDetailSecondaryContentProps) {
+  const isMobile = useIsMobile();
+
+  const secondaryPanelContent = (
+    <ThreadSecondaryPanel
+      {...secondaryPanel}
+      isMobile={isMobile}
+      metadataContent={
+        showThreadMetadata ? (
+          <ThreadMetadataContent {...metadata} />
+        ) : (
+          <div className="pt-1 text-sm text-muted-foreground">
+            No thread details available.
+          </div>
+        )
+      }
+      threadStorageContent={
+        threadStorage ? (
+          <ThreadStorageContent {...threadStorage} />
+        ) : undefined
+      }
+    />
+  );
+
+  if (isMobile) {
+    return (
+      <div className="-mx-4 -mb-4 -mt-4 flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        <ThreadTimelinePane
+          {...timeline}
+          footer={footer}
+          header={header}
+        />
+        <Drawer
+          open={isSecondaryPanelOpen}
+          onOpenChange={(open) => {
+            if (!open) secondaryPanel.onClose();
+          }}
+        >
+          <DrawerContent className="h-[92dvh] max-h-[92dvh]">
+            <DrawerTitle className="sr-only">Thread details</DrawerTitle>
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+              {secondaryPanelContent}
+            </div>
+          </DrawerContent>
+        </Drawer>
+      </div>
+    );
+  }
+
   return (
     <div className="-mx-4 -mb-4 -mt-4 flex h-full min-h-0 min-w-0 flex-1 overflow-hidden md:-mx-5 md:-mb-5 md:-mt-5">
       <PanelGroup
@@ -480,23 +530,7 @@ export function ThreadDetailSecondaryContent({
             header={header}
           />
         </Panel>
-        <ThreadSecondaryPanel
-          {...secondaryPanel}
-          metadataContent={
-            showThreadMetadata ? (
-              <ThreadMetadataContent {...metadata} />
-            ) : (
-              <div className="pt-1 text-sm text-muted-foreground">
-                No thread details available.
-              </div>
-            )
-          }
-          threadStorageContent={
-            threadStorage ? (
-              <ThreadStorageContent {...threadStorage} />
-            ) : undefined
-          }
-        />
+        {secondaryPanelContent}
       </PanelGroup>
     </div>
   );

@@ -85,6 +85,9 @@ function ProjectRenameDialogContent({
             aria-label="Project name"
             value={nextName}
             autoFocus
+            autoCapitalize="words"
+            autoCorrect="off"
+            spellCheck={false}
             disabled={pending}
             onChange={(event) => {
               setNextName(event.target.value)

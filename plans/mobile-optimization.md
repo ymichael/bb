@@ -17,7 +17,11 @@ Goal: make the app genuinely usable on a phone without a ground-up rewrite.
 
 **Shipped** (commit `43fea405`): Phase 1 typography + touch hardening + most icon-button sizing + input floors; Phase 2 sidebar density; provider refactor + route-derivation hook + server archive idempotency + picker/menu icon bumps (not originally planned).
 
-**Deferred**: Phase 2 mobile Dialog variant; Phase 3 vertical thread split, iOS keyboard, breadcrumb overflow.
+**Shipped** (commit `7dec0dbe`): code-review follow-ups — provider callback stability, shared media-query subscription, shared jsdom test setup, `showArchiveError` helper.
+
+**Shipped** (this commit): Phase 1.4 rename-input attributes, Phase 2.2 mobile `Dialog` → Drawer, Phase 3.1 secondary panel as bottom drawer on mobile.
+
+**Deferred**: Phase 3 iOS keyboard (`3.2`), breadcrumb overflow (`3.3`).
 
 **Declined**: Phase 2.1 always-visible touch row actions — the same actions are reachable from the thread detail page and project header, so hover-only sidebar kebabs are intentional.
 
@@ -47,12 +51,12 @@ If a future round of QA determines 36px is causing mis-taps, the fix is one resp
 
 Sidebar row slots (project collapse, thread leading glyph, trailing kebab) bumped in lockstep so rows stay aligned. Icon-inside-button sizes bumped `size-4` → `size-5` on mobile across sidebar, headers, menus, and pickers.
 
-### 1.4 Input font-size floor + keyboard hints · DONE (one gap)
+### 1.4 Input font-size floor + keyboard hints · DONE
 
 - `Input` primitive and composer textarea: `text-base md:text-sm` + `h-10 md:h-9` — eliminates iOS autofocus zoom.
 - Composer gets `enterKeyHint="send"`.
-
-**Gap:** `autocapitalize` / `autocorrect` hints not added to rename dialogs (`ProjectRenameDialog.tsx`, `ThreadRenameDialog.tsx`). Five-minute follow-up; not critical.
+- `ProjectRenameDialog` inputs: `autoCapitalize="words"`, `autoCorrect="off"`, `spellCheck={false}`.
+- `ThreadRenameDialog` inputs: `autoCapitalize="sentences"`, `autoCorrect="off"`, `spellCheck={false}`.
 
 ### Exit criteria · met
 
@@ -74,16 +78,16 @@ The same rename/archive/delete actions are reachable from:
 
 Adding always-visible sidebar kebabs would duplicate chrome for no real discoverability gain on touch. Kebabs stay hover-only.
 
-### 2.2 Mobile `Dialog` variant · DEFERRED
+### 2.2 Mobile `Dialog` variant · DONE
 
-`dialog.tsx:38-42` still renders a centered popup at all sizes. Rename, delete confirmation, archive confirmation, project path, hire manager, git action — every `Dialog` in the app would benefit.
+`dialog.tsx` now mirrors the `Popover` / `DropdownMenu` responsive pattern. A shared `ResponsiveDialogContext` provided via `useResponsiveRoot` tracks `isMobile`. Below `md`:
+- `Dialog` root skips the Radix root; context alone handles open state.
+- `DialogTrigger` uses `MobileTrigger` for correct aria-expanded / haspopup.
+- `DialogContent` renders inside `Drawer` + `DrawerContent` with safe-area-aware padding.
+- `DialogClose` dispatches `onOpenChange(false)` through context.
+- `DialogTitle` switches to vaul's `DrawerTitle` primitive so screen readers announce the drawer header.
 
-Approach (unchanged from original plan):
-- Factor the `useIsMobile()` check already used in `dropdown-menu.tsx` / `popover.tsx`.
-- Below `md`, render `DialogContent` through the `Drawer` primitive with the same children.
-- Desktop path byte-identical.
-
-Estimated ~1 hour. High leverage.
+Desktop path byte-identical. Every existing `Dialog` caller (rename dialogs, delete confirmations, archive confirmation, project path, hire manager, git action) benefits automatically.
 
 ### 2.3 Sidebar density on mobile · DONE (per-row, not via primitive)
 
@@ -97,7 +101,7 @@ Sidebar footer (theme toggle + settings) also bumped to `h-9 w-9` mobile via `Ap
 
 Structural work. Needs real-device QA before landing.
 
-### 3.1 Secondary panel as bottom drawer on mobile
+### 3.1 Secondary panel as bottom drawer on mobile · DONE
 
 `ThreadDetailSecondaryContent.tsx:462` still hard-codes `PanelGroup direction="horizontal"`. On phones this creates two unreadable columns plus a draggable resize handle.
 
@@ -129,6 +133,12 @@ Structural work. Needs real-device QA before landing.
 
 **Reference:** see repo research notes in conversation on 2026-04-13.
 
+**Implementation notes:**
+- `ThreadSecondaryPanel` accepts an `isMobile` prop. When true, it returns only the `<aside>` body (no `PanelResizeHandle`, no `Panel` wrapper). Desktop path unchanged.
+- `ThreadDetailSecondaryContent` branches at the top on `useIsMobile()`. Mobile: `ThreadTimelinePane` renders full-width in a flex column; the secondary panel body lives inside a shadcn `Drawer` at `h-[85dvh]` driven by `isSecondaryPanelOpen` / `secondaryPanel.onClose`.
+- `ThreadDetailHeader` swaps `PanelRight` → `PanelBottom` for the toggle icon when `useIsMobile()` is true. Same handler, same button.
+- Drawer defaults closed on mobile via the existing open-state machinery (no separate persistence needed — `isSecondaryPanelOpen` starts false on first load).
+
 ### 3.2 Composer + iOS keyboard
 
 `.chat-prompt-box` safe-area-inset is still gated to PWA standalone mode (`app.css`); no `visualViewport` listener.
@@ -157,11 +167,8 @@ Surfaced during the session and included:
 
 ## Remaining work (priority order)
 
-1. **Phase 1.4 gap** — add `autocapitalize="words"` / `autocorrect="off"` on `ProjectRenameDialog` and `ThreadRenameDialog` inputs. Also consider `autocorrect="off"` on project path / branch inputs. **5 min.**
-2. **Phase 2.2 Mobile Dialog → Drawer** — highest-leverage remaining item. Pattern already exists for Dropdown and Popover. Affects every `Dialog` caller automatically. **~1 hr.**
-3. **Phase 3.2 iOS keyboard handling** — real-device-dependent but high impact for anyone drafting a message on their phone. **~1.5 hr.**
-4. **Phase 3.3 Breadcrumb overflow** — quick once we decide the UX (hide intermediates vs. "‹ Back" affordance). **~30 min.**
-5. **Phase 3.1 Vertical split** — biggest structural change. Should ship behind its own review. **~2 hr.**
+1. **Phase 3.2 iOS keyboard handling** — real-device-dependent but high impact for anyone drafting a message on their phone. **~1.5 hr.**
+2. **Phase 3.3 Breadcrumb overflow** — quick once we decide the UX (hide intermediates vs. "‹ Back" affordance). **~30 min.**
 
 ---
 

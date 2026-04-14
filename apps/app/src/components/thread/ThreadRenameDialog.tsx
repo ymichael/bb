@@ -91,6 +91,9 @@ function ThreadRenameDialogContent({
             aria-label={`${label.charAt(0).toUpperCase() + label.slice(1)} name`}
             value={nextTitle}
             autoFocus
+            autoCapitalize="sentences"
+            autoCorrect="off"
+            spellCheck={false}
             disabled={pending}
             onChange={(event) => {
               setNextTitle(event.target.value)

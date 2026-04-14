@@ -1,10 +1,11 @@
 import type { ReactNode } from "react";
-import { PanelRight } from "lucide-react";
+import { PanelBottom, PanelRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SplitButton } from "@/components/ui/split-button";
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { StatusPill } from "@bb/ui-core";
+import { useIsMobile } from "@/hooks/useMobile";
 import type { ThreadGitActionDialogTarget } from "@/components/thread/ThreadGitActionDialog";
 
 const THREAD_HEADER_ACTION_BUTTON_CLASS =
@@ -41,6 +42,8 @@ export function ThreadDetailHeader({
   workspaceOpenButton,
 }: ThreadDetailHeaderProps) {
   const [primaryAction, ...secondaryActions] = threadHeaderGitActions;
+  const isMobile = useIsMobile();
+  const SecondaryPanelIcon = isMobile ? PanelBottom : PanelRight;
 
   return (
     <header className="shrink-0 border-b border-border/80 bg-background/95 px-4 backdrop-blur-sm">
@@ -97,7 +100,7 @@ export function ThreadDetailHeader({
             title={isSecondaryPanelOpen ? "Hide secondary panel" : "Show secondary panel"}
             onClick={onToggleSecondaryPanel}
           >
-            <PanelRight className="size-5 md:size-4" />
+            <SecondaryPanelIcon className="size-5 md:size-4" />
           </Button>
         </div>
       </div>
