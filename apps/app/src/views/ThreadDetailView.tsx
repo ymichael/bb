@@ -88,7 +88,7 @@ export function ThreadDetailView() {
     () => (allProjectThreads ?? []).filter((candidate) => candidate.type === "manager"),
     [allProjectThreads],
   );
-  const { data: timeline, isLoading: timelineLoading } = useThreadTimeline(
+  const { data: timeline, isLoading: timelineLoading, error: timelineError } = useThreadTimeline(
     threadId ?? "",
     {
       refetchOnMount: "always",
@@ -613,6 +613,7 @@ export function ThreadDetailView() {
         timeline={{
           isReasoningBlockActive,
           isThreadTimelinePending,
+          timelineError: Boolean(timelineError),
           latestActivityRowId,
           loadingToolGroupIds,
           onLoadToolGroupMessages: handleLoadToolGroupMessages,

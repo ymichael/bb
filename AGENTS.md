@@ -24,7 +24,8 @@
 
 ## Build and Typecheck
 
-- Always use Turbo: `pnpm exec turbo run <task> --filter=@bb/<pkg>`. Turbo ensures upstream `^build` dependencies run first. Running package scripts directly (e.g., `pnpm --filter @bb/foo test`) skips these and will often fail.
+- Always use Turbo: `pnpm exec turbo run <task> --filter=@bb/<pkg>`. Turbo ensures upstream `^build` dependencies run first. Running package scripts directly (e.g., `pnpm --filter @bb/foo test`) or raw `npx tsc` skips these and will often fail with spurious module-not-found errors.
+- Typecheck: `pnpm exec turbo run typecheck --filter=@bb/<pkg>`. Do not run `npx tsc --noEmit` directly — cross-package references require upstream builds.
 
 ## Testing
 

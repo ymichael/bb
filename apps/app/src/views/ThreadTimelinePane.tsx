@@ -15,6 +15,7 @@ interface ThreadTimelinePaneProps {
   header: ReactNode;
   isReasoningBlockActive: boolean;
   isThreadTimelinePending: boolean;
+  timelineError: boolean;
   latestActivityRowId: string | null;
   loadingToolGroupIds: ReadonlySet<string>;
   onLoadToolGroupMessages: (entry: TimelineToolGroupRow) => void;
@@ -34,6 +35,7 @@ export function ThreadTimelinePane({
   header,
   isReasoningBlockActive,
   isThreadTimelinePending,
+  timelineError,
   latestActivityRowId,
   loadingToolGroupIds,
   onLoadToolGroupMessages,
@@ -64,6 +66,8 @@ export function ThreadTimelinePane({
         <ConversationTimeline>
           {isThreadTimelinePending ? (
             <ConversationWorkingIndicator label="Loading thread..." className="mt-6" />
+          ) : timelineError ? (
+            <ConversationEmptyState message="Failed to load timeline" />
           ) : threadDetailRows.length === 0 ? (
             <ConversationEmptyState message="No events yet" />
           ) : (
