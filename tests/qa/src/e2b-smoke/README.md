@@ -28,8 +28,8 @@ If the fixture is missing, the smoke still runs its non-auth coverage. If you wa
 From the repo root, run one helper per provider:
 
 ```sh
-pnpm --filter @bb/qa auth:e2b-smoke -- --provider claude-code
-pnpm --filter @bb/qa auth:e2b-smoke -- --provider codex
+pnpm --filter @bb/qa auth:e2b-smoke --provider claude-code
+pnpm --filter @bb/qa auth:e2b-smoke --provider codex
 ```
 
 The helper will:

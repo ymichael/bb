@@ -30,7 +30,7 @@ function parseArgs() {
       const nextArg = process.argv[index + 1];
       if (nextArg !== "env" && nextArg !== "json") {
         throw new Error(
-          "Usage: pnpm --filter @bb/qa standalone:start -- --format json|env",
+          "Usage: pnpm --filter @bb/qa standalone:start --format json|env",
         );
       }
       format = nextArg;
@@ -39,7 +39,7 @@ function parseArgs() {
     }
 
     throw new Error(
-      "Usage: pnpm --filter @bb/qa standalone:start -- --format json|env",
+      "Usage: pnpm --filter @bb/qa standalone:start --format json|env",
     );
   }
 
@@ -116,7 +116,7 @@ async function main() {
     });
 
     const cleanupCommand =
-      `pnpm --dir ${shellQuote(repoRoot)} --filter @bb/qa standalone:stop -- ` +
+      `pnpm --dir ${shellQuote(repoRoot)} --filter @bb/qa standalone:stop ` +
       `--state ${shellQuote(statePath)} && ` +
       `pnpm --dir ${shellQuote(repoRoot)} --filter @bb/qa standalone:cleanup`;
     const restartDaemonCommand = buildDaemonRestartCommand({

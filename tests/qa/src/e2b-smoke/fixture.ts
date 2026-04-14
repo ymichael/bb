@@ -292,7 +292,7 @@ function buildFixtureFromCredential(
 export function formatQaAuthHelperCommand(
   providerId: SmokeQaAuthProviderId,
 ): string {
-  return `pnpm --filter @bb/qa auth:e2b-smoke -- --provider ${providerId}`;
+  return `pnpm --filter @bb/qa auth:e2b-smoke --provider ${providerId}`;
 }
 
 export function loadSmokeQaProviderId(input: string): SmokeQaAuthProviderId {

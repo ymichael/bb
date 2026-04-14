@@ -30,7 +30,7 @@ pnpm qa:standalone:cleanup
 Start an isolated server + daemon pair and load the exported QA environment:
 
 ```bash
-eval "$(pnpm qa:standalone:start -- --format env)"
+eval "$(pnpm qa:standalone:start --format env)"
 jq . "$STATE_PATH"
 
 alias bb="node apps/cli/dist/index.js"
@@ -51,7 +51,7 @@ bb provider list
 Teardown:
 
 ```bash
-pnpm qa:standalone:stop -- --state "$STATE_PATH"
+pnpm qa:standalone:stop --state "$STATE_PATH"
 pnpm qa:standalone:cleanup
 ```
 

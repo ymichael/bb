@@ -58,7 +58,7 @@ function printHelp(): void {
   console.log("");
   console.log("Usage:");
   console.log(
-    "  pnpm --filter @bb/qa auth:e2b-smoke -- --provider <claude-code|codex>",
+    "  pnpm --filter @bb/qa auth:e2b-smoke --provider <claude-code|codex>",
   );
   console.log("");
   console.log("Options:");
