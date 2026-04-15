@@ -905,10 +905,6 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       const activeTurnId = activeTurnIdByThreadId.get(threadId);
       const shouldRestartProvider =
         proc.adapter.threadStopBehavior === "restart-provider";
-      syntheticUserMessageAcks.clearThread(threadId);
-      activeTurnIdByThreadId.delete(threadId);
-      completedTurnIdsByThreadId.delete(threadId);
-
       const cmd = proc.adapter.buildCommand({
         type: "thread/stop",
         threadId,
@@ -918,6 +914,8 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
 
       if (!cmd) {
         if (activeTurnId === undefined) {
+          syntheticUserMessageAcks.clearThread(threadId);
+          completedTurnIdsByThreadId.delete(threadId);
           return;
         }
         throw new Error(
@@ -931,6 +929,9 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         getNextId: () => nextRequestId++,
         resultSchema: ignoredJsonRpcResultSchema,
       });
+      syntheticUserMessageAcks.clearThread(threadId);
+      activeTurnIdByThreadId.delete(threadId);
+      completedTurnIdsByThreadId.delete(threadId);
       if (shouldRestartProvider) {
         await providerProcesses.shutdownProvider({ providerId: pid });
       }
