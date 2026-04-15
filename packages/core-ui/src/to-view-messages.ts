@@ -52,6 +52,14 @@ import {
   parseReasoningFinalText,
   isTerminalAssistantFlushEvent,
 } from "./assistant-buffering.js";
+import {
+  appendPendingClientRequestedMessage,
+  attachPendingClientRequestedMessagesToTurn,
+  createPendingClientRequestedMessageQueue,
+  materializePendingClientRequestedMessages,
+  shiftPendingClientRequestedMessage,
+  type PendingClientRequestedMessageQueue,
+} from "./pending-client-requested-messages.js";
 import type {
   ToViewMessagesOptions,
   ToViewProjectionOptions,
@@ -75,6 +83,7 @@ import type {
 interface ProjectionState {
   messages: ViewMessage[];
   seenUserKeys: Set<string>;
+  activeTurnIdByThreadId: Map<string, string>;
   openAssistantByTurn: Map<string, ViewAssistantTextMessage>;
   finalizedAssistantTurnKeys: Set<string>;
   openReasoningByTurn: Map<string, ViewAssistantReasoningMessage>;
@@ -104,6 +113,7 @@ interface PendingUserSignatureCounts {
   clientStart: Map<string, number>;
   clientThreadStart: Map<string, number>;
   clientRequested: Map<string, number>;
+  clientRequestedMessages: PendingClientRequestedMessageQueue;
   provider: Map<string, number>;
 }
 
@@ -123,9 +133,16 @@ interface ProjectedClientUserArgs {
   counts: PendingUserSignatureCounts;
   signature: string;
   context: ClientStartEventContext;
+  message?: ProjectedUserMessage;
+  turnId?: string;
 }
 
 interface ProviderUserDeduplicationArgs {
+  counts: PendingUserSignatureCounts;
+  signature: string;
+}
+
+interface PendingClientRequestedCountsArgs {
   counts: PendingUserSignatureCounts;
   signature: string;
 }
@@ -134,6 +151,7 @@ function createProjectionState(): ProjectionState {
   return {
     messages: [],
     seenUserKeys: new Set(),
+    activeTurnIdByThreadId: new Map(),
     openAssistantByTurn: new Map(),
     finalizedAssistantTurnKeys: new Set(),
     openReasoningByTurn: new Map(),
@@ -413,6 +431,14 @@ function incrementPendingSignatureCount(
   map.set(signature, getPendingSignatureCount(map, signature) + 1);
 }
 
+function consumePendingClientRequestedCounts(
+  args: PendingClientRequestedCountsArgs,
+): void {
+  decrementPendingSignatureCount(args.counts.clientStart, args.signature);
+  decrementPendingSignatureCount(args.counts.clientThreadStart, args.signature);
+  decrementPendingSignatureCount(args.counts.clientRequested, args.signature);
+}
+
 function decrementPendingSignatureCount(
   map: Map<string, number>,
   signature: string,
@@ -507,6 +533,16 @@ function recordProjectedClientUser(
   }
   if (args.context.isTurnRequested) {
     incrementPendingSignatureCount(args.counts.clientRequested, args.signature);
+    if (args.message) {
+      appendPendingClientRequestedMessage(
+        args.counts.clientRequestedMessages,
+        {
+          message: args.message,
+          signature: args.signature,
+          turnId: args.turnId,
+        },
+      );
+    }
   }
 }
 
@@ -526,7 +562,7 @@ function consumePendingClientStartUser(
 }
 
 function buildUserMessageKey(message: ProjectedUserMessage): string {
-  return `${message.turnId ?? message.id}:${message.text}`;
+  return `${message.id}:${message.text}`;
 }
 
 function areExploringCallsCompatible(
@@ -1353,6 +1389,7 @@ function buildFlatViewMessages(
     clientStart: new Map(),
     clientThreadStart: new Map(),
     clientRequested: new Map(),
+    clientRequestedMessages: createPendingClientRequestedMessageQueue(),
     provider: new Map(),
   };
   const execLifecycleContext = createExecLifecycleContext();
@@ -1368,7 +1405,19 @@ function buildFlatViewMessages(
         ? state.delegationParentToolCallIdsByProviderThreadId.get(eventProviderThreadId)
         : undefined);
 
+    if (decoded.type === "turn/started") {
+      state.activeTurnIdByThreadId.set(decoded.threadId, decoded.turnId);
+      attachPendingClientRequestedMessagesToTurn(
+        pendingUserSignatureCounts.clientRequestedMessages,
+        {
+          threadId: decoded.threadId,
+          turnId: decoded.turnId,
+        },
+      );
+    }
+
     if (eventType === "turn/completed") {
+      state.activeTurnIdByThreadId.delete(decoded.threadId);
       pendingUserSignatureCounts.clientStart.clear();
       pendingUserSignatureCounts.clientThreadStart.clear();
       pendingUserSignatureCounts.clientRequested.clear();
@@ -1454,7 +1503,23 @@ function buildFlatViewMessages(
       ) {
         continue;
       }
-      const key = buildUserMessageKey(userFromClientThreadStart);
+      const activeTurnId = decoded.type === "client/turn/requested"
+        ? state.activeTurnIdByThreadId.get(decoded.threadId)
+        : undefined;
+      const projectedClientUser: ProjectedUserMessage = activeTurnId
+        ? { ...userFromClientThreadStart, turnId: activeTurnId }
+        : userFromClientThreadStart;
+      if (clientStartContext?.isTurnRequested) {
+        recordProjectedClientUser({
+          counts: pendingUserSignatureCounts,
+          signature,
+          context: clientStartContext,
+          message: projectedClientUser,
+          turnId: projectedClientUser.turnId,
+        });
+        continue;
+      }
+      const key = buildUserMessageKey(projectedClientUser);
       if (!state.seenUserKeys.has(key)) {
         state.seenUserKeys.add(key);
         if (clientStartContext) {
@@ -1462,10 +1527,12 @@ function buildFlatViewMessages(
             counts: pendingUserSignatureCounts,
             signature,
             context: clientStartContext,
+            message: projectedClientUser,
+            turnId: projectedClientUser.turnId,
           });
         }
         flushToolActivityBeforeNonToolMessage(state);
-        state.messages.push(userFromClientThreadStart);
+        state.messages.push(projectedClientUser);
       }
       continue;
     }
@@ -1485,14 +1552,33 @@ function buildFlatViewMessages(
         localImages: userMessage.attachments?.localImages ?? 0,
         localFiles: userMessage.attachments?.localFiles ?? 0,
       });
-      if (consumePendingClientStartUser({
-        counts: pendingUserSignatureCounts,
-        signature,
-      })) {
-        state.seenUserKeys.add(buildUserMessageKey(userMessage));
-        continue;
+      const clientRequestedMatch = shiftPendingClientRequestedMessage(
+        pendingUserSignatureCounts.clientRequestedMessages,
+        {
+          signature,
+          turnId: userMessage.turnId,
+        },
+      );
+      const projectedUserMessage: ProjectedUserMessage =
+        clientRequestedMatch?.turnId && !userMessage.turnId
+          ? { ...userMessage, turnId: clientRequestedMatch.turnId }
+          : userMessage;
+      if (clientRequestedMatch) {
+        consumePendingClientRequestedCounts({
+          counts: pendingUserSignatureCounts,
+          signature,
+        });
+      } else {
+        const consumedClientStart = consumePendingClientStartUser({
+          counts: pendingUserSignatureCounts,
+          signature,
+        });
+        if (consumedClientStart) {
+          state.seenUserKeys.add(buildUserMessageKey(projectedUserMessage));
+          continue;
+        }
       }
-      const key = buildUserMessageKey(userMessage);
+      const key = buildUserMessageKey(projectedUserMessage);
       if (!state.seenUserKeys.has(key)) {
         state.seenUserKeys.add(key);
         incrementPendingSignatureCount(
@@ -1500,7 +1586,7 @@ function buildFlatViewMessages(
           signature,
         );
         flushToolActivityBeforeNonToolMessage(state);
-        state.messages.push(userMessage);
+        state.messages.push(projectedUserMessage);
       }
       continue;
     }
@@ -1914,7 +2000,14 @@ function buildFlatViewMessages(
   }
 
   finalizePendingMessages(state, options);
-  return sortViewMessagesBySource(compactTaskMessages(state.messages));
+  const durableMessages = sortViewMessagesBySource(compactTaskMessages(state.messages));
+  return [
+    ...durableMessages,
+    ...materializePendingClientRequestedMessages(
+      pendingUserSignatureCounts.clientRequestedMessages,
+      orderedEvents[orderedEvents.length - 1]?.meta.seq ?? 0,
+    ),
+  ];
 }
 
 function toFullProjection(

@@ -143,11 +143,11 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
       "── Worked on 1 item ────────────────────────────────────────",
       "── Error ───────────────────────────────────────────────────",
       "  Provider error - API Error: 529 {"type":"error","error":{"type":"overloaded_error","message":"Overloaded. https://docs.claude.com/en/api/errors"},"request_id":"req_011CZTEH9bHapHWpCiwcW6wV"}",
-      "── User ────────────────────────────────────────────────────",
-      "What's the safest extension point if I want to instrument room startup without changing behavior?",
       "── Worked on 1 item ────────────────────────────────────────",
       "── Error ───────────────────────────────────────────────────",
       "  Provider error - API Error: 529 {"type":"error","error":{"type":"overloaded_error","message":"Overloaded. https://docs.claude.com/en/api/errors"},"request_id":"req_011CZTEWYZGkHjeP8JDFyYyK"}",
+      "── User ────────────────────────────────────────────────────",
+      "What's the safest extension point if I want to instrument room startup without changing behavior?",
     ],
     "timelineRowCount": 6,
     "translatedThreadEventCount": 13,
@@ -252,8 +252,6 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
       "- [WebKit Standards Position — Eyedropper API](https://github.com/WebKit/standards-positions/issues/29)",
       "- [Mozilla Standards Position — EyeDropper API](https://github.com/mozilla/standards-positions/issues/557)",
       "- [WICG EyeDropper API Spec](https://wicg.github.io/eyedropper-api/)",
-      "── User ────────────────────────────────────────────────────",
-      "Implement that improvement with focused validation and keep the existing behavior for unsupported browsers intact.",
       "── Worked for 3m 37s ───────────────────────────────────────",
       "── Assistant ───────────────────────────────────────────────",
       "Here's a summary of everything that was changed and why:",
@@ -285,8 +283,6 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
       "| \`tsc --noEmit\` | ✅ Zero errors |",
       "| \`vitest run\` | ✅ 102 test files, 1320 tests pass, 0 failures |",
       "| \`eslint\` on changed files | ✅ Zero warnings |",
-      "── User ────────────────────────────────────────────────────",
-      "Summarize the external references you relied on and the files you changed.",
       "── Assistant ───────────────────────────────────────────────",
       "## External references",
       "All sourced during the research phase before writing any code:",
@@ -302,6 +298,10 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
       "| \`packages/excalidraw/components/EyeDropper.tsx\` | Exported \`supportsNativeEyeDropper()\` feature-detection helper. Extracted the original canvas-pixel-reading logic into \`CanvasEyeDropper\` (unchanged behavior). Added \`NativeEyeDropper\` that calls the browser API with \`AbortController\`-based cancellation. The public \`EyeDropper\` component delegates to one or the other based on feature detection. |",
       "| \`packages/excalidraw/components/ColorPicker/ColorInput.tsx\` | Imported \`supportsNativeEyeDropper\`. Made the eyedropper button's \`title\` attribute choose between \`labels.eyeDropper\` and \`labels.eyeDropperCanvasOnly\` based on capability. |",
       "| \`packages/excalidraw/locales/en.json\` | Changed \`labels.eyeDropper\` from "Pick color from canvas" to "Pick color from screen". Added \`labels.eyeDropperCanvasOnly\` as "Pick color from canvas". |",
+      "── User ────────────────────────────────────────────────────",
+      "Implement that improvement with focused validation and keep the existing behavior for unsupported browsers intact.",
+      "── User ────────────────────────────────────────────────────",
+      "Summarize the external references you relied on and the files you changed.",
     ],
     "timelineRowCount": 8,
     "translatedThreadEventCount": 407,
@@ -328,8 +328,6 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
       "── Worked for 1m 25s ───────────────────────────────────────",
       "── Error ───────────────────────────────────────────────────",
       "  Provider error - API Error: 500 {"type":"error","error":{"type":"api_error","message":"Internal server error"},"request_id":"req_011CZTEbvYVvxTSx1wnhXfkG"}",
-      "── User ────────────────────────────────────────────────────",
-      "Explain how the old positioning logic failed and how your regression coverage would have caught it.",
       "── Worked for 2m 34s ───────────────────────────────────────",
       "── Assistant ───────────────────────────────────────────────",
       "Everything looks good. Here's a summary of the changes:",
@@ -364,6 +362,8 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
       "| **one pixel past boundary** | Preview overflows by 1 px → flip triggers |",
       "| **sweep regression guard** | 8 extreme positions (all corners, edge midpoints) all stay fully inside the viewport |",
       "The last test is the direct regression check: the old code would have produced \`left = 1920 + 20 = 1940\` for a pointer at \`x = 1920\` on a 1920-wide viewport — clearly off-screen. The test asserts \`left + PREVIEW_SIZE ≤ viewportWidth − PREVIEW_MARGIN\` for every edge position, which the old code would fail on all right/bottom positions.",
+      "── User ────────────────────────────────────────────────────",
+      "Explain how the old positioning logic failed and how your regression coverage would have caught it.",
     ],
     "timelineRowCount": 6,
     "translatedThreadEventCount": 220,
@@ -415,8 +415,6 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
       "| Availability gating | Keyword search "ai" | Entry is discoverable via the \`ai\` keyword |",
       "| Availability gating | View mode | Entry is hidden in view mode |",
       "| Action wiring | Click executes handler | Clicking the entry calls \`onMagicframeToolSelect()\` |",
-      "── User ────────────────────────────────────────────────────",
-      "Summarize the user-visible behavior and the validation you ran.",
       "── Assistant ───────────────────────────────────────────────",
       "**User-visible behavior:**",
       "When a user opens the command palette (Ctrl+Shift+P) on desktop and the AI feature is enabled with the diagram-to-code plugin active, a new "Wireframe to code..." entry appears under the Tools category. It uses the magic wand icon and can be found by searching for "wireframe", "ai", "generate", or "code". Selecting it triggers the same Magic Frame tool flow that already exists in the toolbar dropdown. The entry does not appear if AI is disabled, if the diagram-to-code plugin hasn't been registered, or if the user is in view mode.",
@@ -428,6 +426,8 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
       "- Entry discoverable by typing "ai" in the search box",
       "- Entry hidden in view mode",
       "- Clicking the entry calls \`onMagicframeToolSelect\` exactly once",
+      "── User ────────────────────────────────────────────────────",
+      "Summarize the user-visible behavior and the validation you ran.",
     ],
     "timelineRowCount": 5,
     "translatedThreadEventCount": 402,
@@ -466,8 +466,6 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
       "\`\`\`",
       "This ensures that when matches exist, focus always points to a valid index (preferring the first visible match, falling back to index 0). When no matches exist, it correctly returns \`null\`.",
       "**Regression test:** Added a test that creates 3 text elements, searches for "foo" (3 matches), navigates to match index 2, then changes the query to "unique" (1 match), and asserts that focus resets to the first match.",
-      "── User ────────────────────────────────────────────────────",
-      "Explain why the regression would have failed before your change.",
       "── Worked for 16s ──────────────────────────────────────────",
       "── Assistant ───────────────────────────────────────────────",
       "Let me trace through the test step-by-step with the old code.",
@@ -505,6 +503,8 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
       "  matchItems.length > 0 ? (visibleIndex >= 0 ? visibleIndex : 0) : null;",
       "\`\`\`",
       "When \`findIndex\` returns \`-1\`, the expression \`visibleIndex >= 0\` is \`false\`, so it falls back to \`0\`. Since there is 1 match, \`focusIndex = 0\`, which correctly focuses the first (and only) match.",
+      "── User ────────────────────────────────────────────────────",
+      "Explain why the regression would have failed before your change.",
     ],
     "timelineRowCount": 6,
     "translatedThreadEventCount": 267,
@@ -541,8 +541,6 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
       "2. **"should show 'No matches found' when query has no results"** — Verifies the empty state message appears for a non-matching query",
       "3. **"should not show summary or empty state when query is empty"** — Verifies neither the summary nor the empty state renders when the search input is blank",
       "All existing keyboard navigation tests continue to pass (8/8 tests green).",
-      "── User ────────────────────────────────────────────────────",
-      "Summarize the files you changed and the validation you ran.",
       "── Assistant ───────────────────────────────────────────────",
       "### Files Changed",
       "1. **\`packages/excalidraw/components/SearchMenu.tsx\`** — Added \`data-testid="search-result-summary"\` to the match count element and replaced the inline-styled "no match" \`<div>\` with a \`data-testid="search-no-match"\` and a dedicated CSS class (\`layer-ui__search-no-match\`).",
@@ -553,6 +551,8 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
       "   - Neither summary nor empty state renders when the query is blank.",
       "### Validation",
       "Ran \`npx vitest run packages/excalidraw/tests/search.test.tsx\` — all 8 tests passed (5 existing + 3 new), confirming the result summary, empty state, and existing keyboard navigation all work correctly.",
+      "── User ────────────────────────────────────────────────────",
+      "Summarize the files you changed and the validation you ran.",
     ],
     "timelineRowCount": 5,
     "translatedThreadEventCount": 205,
@@ -712,8 +712,6 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
       "          → addElementsFromPasteOrLibrary()",
       "            → scene.replaceAllElements()                              ← canvas updated",
       "\`\`\`",
-      "── User ────────────────────────────────────────────────────",
-      "What's the safest extension point if I want to tweak the UI without changing the scene-generation logic?",
       "── Worked for 1m ───────────────────────────────────────────",
       "── Assistant ───────────────────────────────────────────────",
       "Here's a layered answer, from safest to progressively more involved:",
@@ -797,6 +795,8 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
       "**For chat UI changes:** Edit \`ChatMessage.tsx\` and \`ChatInterface.tsx\` — they're pure presentation, all mutations are callback-driven.",
       "**For panel layout changes:** Edit \`TTDChatPanel.tsx\` and \`TTDPreviewPanel.tsx\` — thin wrappers with minimal state.",
       "**The invariant to maintain:** Never change the signatures of the callback props that \`TextToDiagram.tsx\` passes down (\`onGenerate\`, \`onInsertMessage\`, \`onRetry\`, etc.), and never touch the \`canvasRef\` that \`useMermaidRenderer\` writes into.",
+      "── User ────────────────────────────────────────────────────",
+      "What's the safest extension point if I want to tweak the UI without changing the scene-generation logic?",
     ],
     "timelineRowCount": 6,
     "translatedThreadEventCount": 471,
@@ -1726,8 +1726,6 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
       "| \`excalidraw-app/share/ShareDialog.tsx\` | UI: start/stop session, copy link, share link. Switches between \`ShareDialogPicker\` and \`ActiveRoomDialog\` based on \`activeRoomLinkAtom\` |",
       "| \`excalidraw-app/app_constants.ts\` | All timing constants, \`WS_EVENTS\`, \`WS_SUBTYPES\` enum, storage keys |",
       "| \`packages/excalidraw/components/live-collaboration/LiveCollaborationTrigger.tsx\` | The Share button component (library-level, app-agnostic) |",
-      "── User ────────────────────────────────────────────────────",
-      "What's the safest extension point if I want to instrument room startup without changing behavior?",
       "── Worked for 59s ──────────────────────────────────────────",
       "── Assistant ───────────────────────────────────────────────",
       "Here's the precise recommendation.",
@@ -1840,6 +1838,8 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
       "- **Don't wrap or override \`startCollaboration\`** — it's referenced by identity in the \`CollabAPI\` object frozen into the atom at mount time. Replacing it after mount won't propagate.",
       "- **Don't add state to \`Collab\`** — it's a \`PureComponent\`; extra \`setState\` calls change re-render timing and could trigger \`broadcastElements\` at unexpected moments since \`onChange\` checks \`isCollaborating()\`.",
       "- **Don't subscribe inside \`Collab.componentDidMount\`** — the component mounts once and the method is already dense with setup; adding instrumentation there couples your telemetry lifecycle to React's.",
+      "── User ────────────────────────────────────────────────────",
+      "What's the safest extension point if I want to instrument room startup without changing behavior?",
     ],
     "timelineRowCount": 6,
     "translatedThreadEventCount": 337,
@@ -1927,8 +1927,6 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
       "3. **\`viewMode\` is checked independently** in both \`handleKeyDown\` and \`isCommandAvailable\`, so you get view-mode gating for free.",
       "4. **The \`canvasActions\` UIOptions check** in \`handleKeyDown\`/\`renderAction\` also honors your action's name automatically once it's registered.",
       "5. **Type safety** — adding to the \`ActionName\` union ensures TypeScript catches any misspelling or missing wiring at compile time.",
-      "── User ────────────────────────────────────────────────────",
-      "Based on that map, add one small discoverability improvement for an existing gated action and include focused coverage.",
       "── Worked for 3m 16s ───────────────────────────────────────",
       "── Assistant ───────────────────────────────────────────────",
       "Clean typecheck. Here's a summary of the change:",
@@ -1952,8 +1950,6 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
       "|---|---|---|",
       "| **keyword discoverability** | 8 parameterized + 1 negative | Builds the same haystack the \`CommandPalette\` builds and runs the same \`fuzzy.filter\` + \`deburr\` pipeline against each keyword, plus a negative control (\`"eraser"\` → no match) |",
       "| **action behaviour** | 2 integration | \`executeAction\` opens the correct sidebar tab; \`perform\` returns \`false\` when a dialog is already open |",
-      "── User ────────────────────────────────────────────────────",
-      "Summarize the directories you explored, the behavior change, and the validation you ran.",
       "── Assistant ───────────────────────────────────────────────",
       "## Directories explored",
       "| Directory | What I found there |",
@@ -1978,6 +1974,10 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
       "   - **1 dialog-guard test** — calls \`perform\` directly when \`openDialog\` is already set and asserts the action returns \`false\`.",
       "2. **Full action test suite** — ran all 6 test files in \`packages/excalidraw/actions/\` (50 tests total): all passed, confirming no regressions.",
       "3. **TypeScript typecheck** — \`tsc --noEmit\` against the package produced zero errors.",
+      "── User ────────────────────────────────────────────────────",
+      "Based on that map, add one small discoverability improvement for an existing gated action and include focused coverage.",
+      "── User ────────────────────────────────────────────────────",
+      "Summarize the directories you explored, the behavior change, and the validation you ran.",
     ],
     "timelineRowCount": 8,
     "translatedThreadEventCount": 421,
@@ -2019,8 +2019,6 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
       "- Bottom-right corner (both axes flip)",
       "- Boundary conditions (exactly fits → no flip, off by one pixel → flips)",
       "- Origin (0, 0) pointer position",
-      "── User ────────────────────────────────────────────────────",
-      "Explain how the old positioning logic failed and how your regression coverage would have caught it.",
       "── Assistant ───────────────────────────────────────────────",
       "## How the Old Logic Failed",
       "The old code was two unconditional lines:",
@@ -2058,6 +2056,8 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
       "| **"flips at off-by-one (bottom)"** | Expects flipped top for pointer at y=701 | Old code returns \`721\`, and \`721 + 48 = 769 > 768\`. Same off-by-one catch. |",
       "| **"pointer at origin"** | \`left=20, top=20\` for pointer at (0,0) | Would **pass** — interior of viewport. |",
       "Five of the nine tests fail on the old code. The boundary pair (just-fits vs. off-by-one) is particularly important — it verifies the flip condition uses \`>\` not \`>=\`, so the preview is allowed to touch the viewport edge but never exceed it. Without those, a future change from \`>\` to \`>=\` (or vice versa) could introduce an unnecessary flip or a 1px overflow, and the test suite would catch it immediately.",
+      "── User ────────────────────────────────────────────────────",
+      "Explain how the old positioning logic failed and how your regression coverage would have caught it.",
     ],
     "timelineRowCount": 5,
     "translatedThreadEventCount": 128,
@@ -2122,8 +2122,6 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
       "2. Searches for "alpha" → 3 matches, navigates to the last one (index 2)",
       "3. Changes the query to "beta only" → only 1 match remains",
       "4. Asserts that focus lands on match index 0 (not the stale index 2)",
-      "── User ────────────────────────────────────────────────────",
-      "Explain why the regression would have failed before your change.",
       "── Assistant ───────────────────────────────────────────────",
       "Before the fix, the two \`handleSearch\` callback sites behaved differently:",
       "- **\`onChange\`** called \`setFocusIndex(index)\` — focus reset correctly.",
@@ -2135,6 +2133,8 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
       "4. On the next render, the \`useEffect\` runs again. \`isSearching\` is now \`false\`, and it checks whether the query or scene nonce has drifted from what was last searched. If either has changed (e.g. due to React batching timing or a scene nonce bump), it calls \`handleSearch\` again — but its callback never called \`setFocusIndex\`.",
       "At that point \`searchMatches.items\` has 1 entry, but \`focusIndex\` is still 2. The effect that syncs \`focusIndex\` into \`appState.searchMatches\` tries to access \`matches[2]\`, which is \`undefined\` — so \`focusedId\` becomes \`null\` and no match gets \`focus: true\`. The test's assertion that \`matches[0].focus\` is \`true\` would fail because nothing is focused.",
       "Adding \`setFocusIndex(index)\` to the \`useEffect\` callback ensures that whenever results are recalculated through that path, focus resets to the first visible match instead of staying stale.",
+      "── User ────────────────────────────────────────────────────",
+      "Explain why the regression would have failed before your change.",
     ],
     "timelineRowCount": 5,
     "translatedThreadEventCount": 185,
@@ -2174,13 +2174,13 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
       "| \`should not show empty state when search field is cleared\` | Clearing the input hides both the empty state and the summary |",
       "| \`should preserve keyboard navigation after summary is displayed\` | Enter/ArrowDown/ArrowUp cycle the focus index and the summary updates to \`"2 / 3 results"\` → \`"3 / 3 results"\` → \`"2 / 3 results"\` (wrap-around) |",
       "The existing 4 tests continue to pass unchanged, confirming keyboard navigation behavior is intact.",
-      "── User ────────────────────────────────────────────────────",
-      "Summarize the files you changed and the validation you ran.",
       "── Assistant ───────────────────────────────────────────────",
       "Two files changed:",
       "1. **\`packages/excalidraw/components/SearchMenu.tsx\`** — added \`data-testid="search-summary"\` to the result-count div and \`data-testid="search-empty"\` to the no-matches div. No logic changes; purely stable test hooks on existing UI.",
       "2. **\`packages/excalidraw/tests/search.test.tsx\`** — added six tests: multi-match summary text, single-match singular wording, no-matches empty state visibility, empty state hiding when the input is cleared, and keyboard navigation (Enter, ArrowDown, ArrowUp with wrap-around) updating the summary correctly.",
       "Ran \`npx vitest run packages/excalidraw/tests/search.test.tsx\` — all 10 tests passed (4 existing + 6 new).",
+      "── User ────────────────────────────────────────────────────",
+      "Summarize the files you changed and the validation you ran.",
     ],
     "timelineRowCount": 5,
     "translatedThreadEventCount": 100,
@@ -2331,8 +2331,6 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
       "       └─ common.ts: insertToEditor()",
       "            └─ app.addElementsFromPasteOrLibrary() ── final scene mutation",
       "\`\`\`",
-      "── User ────────────────────────────────────────────────────",
-      "What's the safest extension point if I want to tweak the UI without changing the scene-generation logic?",
       "── Assistant ───────────────────────────────────────────────",
       "The safest extension points are the **props that \`TTDDialog\` already exposes** to the host app. They sit at the boundary between the app layer (\`excalidraw-app/components/AI.tsx\`) and the library internals, so you never touch the generation pipeline.",
       "---",
@@ -2387,6 +2385,8 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
       "---",
       "### Recommendation",
       "For purely visual changes (branding, layout, info panels, upsell banners), start with **\`renderWelcomeScreen\`** and **\`renderWarning\`** — they're designed exactly for this. If you need to alter the chat list or add buttons to the chat panel, the next step would be wrapping or forking \`TTDChatPanel\`, but at that point you're inside \`packages/excalidraw\` and should be careful not to disturb the hook wiring in \`TextToDiagram.tsx\`.",
+      "── User ────────────────────────────────────────────────────",
+      "What's the safest extension point if I want to tweak the UI without changing the scene-generation logic?",
     ],
     "timelineRowCount": 5,
     "translatedThreadEventCount": 201,
@@ -2701,15 +2701,15 @@ I'm trying to understand Excalidraw's collaboration startup flow before changing
 ── Error ───────────────────────────────────────────────────
   Provider error - API Error: 529 {"type":"error","error":{"type":"overloaded_error","message":"Overloaded. https://docs.claude.com/en/api/errors"},"request_id":"req_011CZTEH9bHapHWpCiwcW6wV"}
 
-── User ────────────────────────────────────────────────────
-What's the safest extension point if I want to instrument room startup without changing behavior?
-
 ── Worked on 1 item ────────────────────────────────────────
   ── Assistant ───────────────────────────────────────────────
   API Error: 529 {"type":"error","error":{"type":"overloaded_error","message":"Overloaded. https://docs.claude.com/en/api/errors"},"request_id":"req_011CZTEWYZGkHjeP8JDFyYyK"}
 
 ── Error ───────────────────────────────────────────────────
-  Provider error - API Error: 529 {"type":"error","error":{"type":"overloaded_error","message":"Overloaded. https://docs.claude.com/en/api/errors"},"request_id":"req_011CZTEWYZGkHjeP8JDFyYyK"}",
+  Provider error - API Error: 529 {"type":"error","error":{"type":"overloaded_error","message":"Overloaded. https://docs.claude.com/en/api/errors"},"request_id":"req_011CZTEWYZGkHjeP8JDFyYyK"}
+
+── User ────────────────────────────────────────────────────
+What's the safest extension point if I want to instrument room startup without changing behavior?",
   },
   {
     "fixture": "excalidraw/claude-code/eyedropper-browser-compat",
@@ -3011,9 +3011,6 @@ Shall I go ahead and implement this progressive-enhancement change?
 - [WebKit Standards Position — Eyedropper API](https://github.com/WebKit/standards-positions/issues/29)
 - [Mozilla Standards Position — EyeDropper API](https://github.com/mozilla/standards-positions/issues/557)
 - [WICG EyeDropper API Spec](https://wicg.github.io/eyedropper-api/)
-
-── User ────────────────────────────────────────────────────
-Implement that improvement with focused validation and keep the existing behavior for unsupported browsers intact.
 
 ── Worked for 3m 37s ───────────────────────────────────────
   ── Assistant ───────────────────────────────────────────────
@@ -3361,9 +3358,6 @@ This tells users upfront what to expect from the tool on their browser.
 | \`vitest run\` | ✅ 102 test files, 1320 tests pass, 0 failures |
 | \`eslint\` on changed files | ✅ Zero warnings |
 
-── User ────────────────────────────────────────────────────
-Summarize the external references you relied on and the files you changed.
-
 ── Assistant ───────────────────────────────────────────────
 ## External references
 
@@ -3386,7 +3380,13 @@ All sourced during the research phase before writing any code:
 | \`packages/excalidraw/global.d.ts\` | Added TypeScript declarations for the native \`EyeDropper\` class, its option/result interfaces, and \`window.EyeDropper?\`. |
 | \`packages/excalidraw/components/EyeDropper.tsx\` | Exported \`supportsNativeEyeDropper()\` feature-detection helper. Extracted the original canvas-pixel-reading logic into \`CanvasEyeDropper\` (unchanged behavior). Added \`NativeEyeDropper\` that calls the browser API with \`AbortController\`-based cancellation. The public \`EyeDropper\` component delegates to one or the other based on feature detection. |
 | \`packages/excalidraw/components/ColorPicker/ColorInput.tsx\` | Imported \`supportsNativeEyeDropper\`. Made the eyedropper button's \`title\` attribute choose between \`labels.eyeDropper\` and \`labels.eyeDropperCanvasOnly\` based on capability. |
-| \`packages/excalidraw/locales/en.json\` | Changed \`labels.eyeDropper\` from "Pick color from canvas" to "Pick color from screen". Added \`labels.eyeDropperCanvasOnly\` as "Pick color from canvas". |",
+| \`packages/excalidraw/locales/en.json\` | Changed \`labels.eyeDropper\` from "Pick color from canvas" to "Pick color from screen". Added \`labels.eyeDropperCanvasOnly\` as "Pick color from canvas". |
+
+── User ────────────────────────────────────────────────────
+Implement that improvement with focused validation and keep the existing behavior for unsupported browsers intact.
+
+── User ────────────────────────────────────────────────────
+Summarize the external references you relied on and the files you changed.",
   },
   {
     "fixture": "excalidraw/claude-code/eyedropper-preview-bugfix",
@@ -3541,9 +3541,6 @@ There's a positioning bug in the eyedropper preview: near the viewport edges, th
 
 ── Error ───────────────────────────────────────────────────
   Provider error - API Error: 500 {"type":"error","error":{"type":"api_error","message":"Internal server error"},"request_id":"req_011CZTEbvYVvxTSx1wnhXfkG"}
-
-── User ────────────────────────────────────────────────────
-Explain how the old positioning logic failed and how your regression coverage would have caught it.
 
 ── Worked for 2m 34s ───────────────────────────────────────
   ── Assistant ───────────────────────────────────────────────
@@ -3775,7 +3772,10 @@ The test file (\`EyeDropper.test.ts\`) has 11 cases covering every edge scenario
 | **one pixel past boundary** | Preview overflows by 1 px → flip triggers |
 | **sweep regression guard** | 8 extreme positions (all corners, edge midpoints) all stay fully inside the viewport |
 
-The last test is the direct regression check: the old code would have produced \`left = 1920 + 20 = 1940\` for a pointer at \`x = 1920\` on a 1920-wide viewport — clearly off-screen. The test asserts \`left + PREVIEW_SIZE ≤ viewportWidth − PREVIEW_MARGIN\` for every edge position, which the old code would fail on all right/bottom positions.",
+The last test is the direct regression check: the old code would have produced \`left = 1920 + 20 = 1940\` for a pointer at \`x = 1920\` on a 1920-wide viewport — clearly off-screen. The test asserts \`left + PREVIEW_SIZE ≤ viewportWidth − PREVIEW_MARGIN\` for every edge position, which the old code would fail on all right/bottom positions.
+
+── User ────────────────────────────────────────────────────
+Explain how the old positioning logic failed and how your regression coverage would have caught it.",
   },
   {
     "fixture": "excalidraw/claude-code/magicframe-feature",
@@ -4804,9 +4804,6 @@ Six focused tests covering:
 | Availability gating | View mode | Entry is hidden in view mode |
 | Action wiring | Click executes handler | Clicking the entry calls \`onMagicframeToolSelect()\` |
 
-── User ────────────────────────────────────────────────────
-Summarize the user-visible behavior and the validation you ran.
-
 ── Assistant ───────────────────────────────────────────────
 **User-visible behavior:**
 
@@ -4821,7 +4818,10 @@ Ran the new test suite (\`vitest run\`) — all 6 tests pass:
 - Entry visible when both conditions are met
 - Entry discoverable by typing "ai" in the search box
 - Entry hidden in view mode
-- Clicking the entry calls \`onMagicframeToolSelect\` exactly once",
+- Clicking the entry calls \`onMagicframeToolSelect\` exactly once
+
+── User ────────────────────────────────────────────────────
+Summarize the user-visible behavior and the validation you ran.",
   },
   {
     "fixture": "excalidraw/claude-code/search-bugfix",
@@ -5184,9 +5184,6 @@ This ensures that when matches exist, focus always points to a valid index (pref
 
 **Regression test:** Added a test that creates 3 text elements, searches for "foo" (3 matches), navigates to match index 2, then changes the query to "unique" (1 match), and asserts that focus resets to the first match.
 
-── User ────────────────────────────────────────────────────
-Explain why the regression would have failed before your change.
-
 ── Worked for 16s ──────────────────────────────────────────
   ── Reasoning ───────────────────────────────────────────────
   Let me trace through the test scenario with the old code to show exactly why it would fail.
@@ -5244,7 +5241,10 @@ const focusIndex =
   matchItems.length > 0 ? (visibleIndex >= 0 ? visibleIndex : 0) : null;
 \`\`\`
 
-When \`findIndex\` returns \`-1\`, the expression \`visibleIndex >= 0\` is \`false\`, so it falls back to \`0\`. Since there is 1 match, \`focusIndex = 0\`, which correctly focuses the first (and only) match.",
+When \`findIndex\` returns \`-1\`, the expression \`visibleIndex >= 0\` is \`false\`, so it falls back to \`0\`. Since there is 1 match, \`focusIndex = 0\`, which correctly focuses the first (and only) match.
+
+── User ────────────────────────────────────────────────────
+Explain why the regression would have failed before your change.",
   },
   {
     "fixture": "excalidraw/claude-code/search-feature",
@@ -5642,9 +5642,6 @@ All 8 tests pass. Here's a summary of what was done:
 
 All existing keyboard navigation tests continue to pass (8/8 tests green).
 
-── User ────────────────────────────────────────────────────
-Summarize the files you changed and the validation you ran.
-
 ── Assistant ───────────────────────────────────────────────
 ### Files Changed
 
@@ -5659,7 +5656,10 @@ Summarize the files you changed and the validation you ran.
 
 ### Validation
 
-Ran \`npx vitest run packages/excalidraw/tests/search.test.tsx\` — all 8 tests passed (5 existing + 3 new), confirming the result summary, empty state, and existing keyboard navigation all work correctly.",
+Ran \`npx vitest run packages/excalidraw/tests/search.test.tsx\` — all 8 tests passed (5 existing + 3 new), confirming the result summary, empty state, and existing keyboard navigation all work correctly.
+
+── User ────────────────────────────────────────────────────
+Summarize the files you changed and the validation you ran.",
   },
   {
     "fixture": "excalidraw/claude-code/ttd-explanation",
@@ -6568,9 +6568,6 @@ TTDDialogTrigger → setAppState({ openDialog: "ttd" })
             → scene.replaceAllElements()                              ← canvas updated
 \`\`\`
 
-── User ────────────────────────────────────────────────────
-What's the safest extension point if I want to tweak the UI without changing the scene-generation logic?
-
 ── Worked for 1m ───────────────────────────────────────────
   ── Reasoning ───────────────────────────────────────────────
   The user wants to know the safest extension point for tweaking the UI without touching scene-generation logic. Based on the thorough analysis we already did, I can answer this from what we know, but let me verify a few specific things about the component boundaries and prop interfaces to give precise advice.
@@ -6708,7 +6705,10 @@ The clean separation is that \`TextToDiagram.tsx\` acts as the **adapter** betwe
 
 **For panel layout changes:** Edit \`TTDChatPanel.tsx\` and \`TTDPreviewPanel.tsx\` — thin wrappers with minimal state.
 
-**The invariant to maintain:** Never change the signatures of the callback props that \`TextToDiagram.tsx\` passes down (\`onGenerate\`, \`onInsertMessage\`, \`onRetry\`, etc.), and never touch the \`canvasRef\` that \`useMermaidRenderer\` writes into.",
+**The invariant to maintain:** Never change the signatures of the callback props that \`TextToDiagram.tsx\` passes down (\`onGenerate\`, \`onInsertMessage\`, \`onRetry\`, etc.), and never touch the \`canvasRef\` that \`useMermaidRenderer\` writes into.
+
+── User ────────────────────────────────────────────────────
+What's the safest extension point if I want to tweak the UI without changing the scene-generation logic?",
   },
   {
     "fixture": "excalidraw/codex/collab-startup-explanation",
@@ -11786,9 +11786,6 @@ Once collaboration is live:
 | \`excalidraw-app/app_constants.ts\` | All timing constants, \`WS_EVENTS\`, \`WS_SUBTYPES\` enum, storage keys |
 | \`packages/excalidraw/components/live-collaboration/LiveCollaborationTrigger.tsx\` | The Share button component (library-level, app-agnostic) |
 
-── User ────────────────────────────────────────────────────
-What's the safest extension point if I want to instrument room startup without changing behavior?
-
 ── Worked for 59s ──────────────────────────────────────────
   ── Reasoning ───────────────────────────────────────────────
   The user wants to know the safest place to add instrumentation (logging, metrics, telemetry) to the collaboration room startup flow without changing any existing behavior. Let me think about this based on the code I've already read.
@@ -11945,7 +11942,10 @@ Socket.IO allows multiple listeners per event, so these don't replace the existi
 
 - **Don't wrap or override \`startCollaboration\`** — it's referenced by identity in the \`CollabAPI\` object frozen into the atom at mount time. Replacing it after mount won't propagate.
 - **Don't add state to \`Collab\`** — it's a \`PureComponent\`; extra \`setState\` calls change re-render timing and could trigger \`broadcastElements\` at unexpected moments since \`onChange\` checks \`isCollaborating()\`.
-- **Don't subscribe inside \`Collab.componentDidMount\`** — the component mounts once and the method is already dense with setup; adding instrumentation there couples your telemetry lifecycle to React's.",
+- **Don't subscribe inside \`Collab.componentDidMount\`** — the component mounts once and the method is already dense with setup; adding instrumentation there couples your telemetry lifecycle to React's.
+
+── User ────────────────────────────────────────────────────
+What's the safest extension point if I want to instrument room startup without changing behavior?",
   },
   {
     "fixture": "excalidraw/pi/command-palette-map",
@@ -12092,9 +12092,6 @@ Adding a new action requires its \`name\` to be added to the **\`ActionName\` un
 3. **\`viewMode\` is checked independently** in both \`handleKeyDown\` and \`isCommandAvailable\`, so you get view-mode gating for free.
 4. **The \`canvasActions\` UIOptions check** in \`handleKeyDown\`/\`renderAction\` also honors your action's name automatically once it's registered.
 5. **Type safety** — adding to the \`ActionName\` union ensures TypeScript catches any misspelling or missing wiring at compile time.
-
-── User ────────────────────────────────────────────────────
-Based on that map, add one small discoverability improvement for an existing gated action and include focused coverage.
 
 ── Worked for 3m 16s ───────────────────────────────────────
   ── Assistant ───────────────────────────────────────────────
@@ -12441,9 +12438,6 @@ This is a purely additive, data-only change. No dispatch paths, gating logic, or
 | **keyword discoverability** | 8 parameterized + 1 negative | Builds the same haystack the \`CommandPalette\` builds and runs the same \`fuzzy.filter\` + \`deburr\` pipeline against each keyword, plus a negative control (\`"eraser"\` → no match) |
 | **action behaviour** | 2 integration | \`executeAction\` opens the correct sidebar tab; \`perform\` returns \`false\` when a dialog is already open |
 
-── User ────────────────────────────────────────────────────
-Summarize the directories you explored, the behavior change, and the validation you ran.
-
 ── Assistant ───────────────────────────────────────────────
 ## Directories explored
 
@@ -12476,7 +12470,13 @@ This is a data-only change on a single field of one registered action. Nothing i
 
 2. **Full action test suite** — ran all 6 test files in \`packages/excalidraw/actions/\` (50 tests total): all passed, confirming no regressions.
 
-3. **TypeScript typecheck** — \`tsc --noEmit\` against the package produced zero errors.",
+3. **TypeScript typecheck** — \`tsc --noEmit\` against the package produced zero errors.
+
+── User ────────────────────────────────────────────────────
+Based on that map, add one small discoverability improvement for an existing gated action and include focused coverage.
+
+── User ────────────────────────────────────────────────────
+Summarize the directories you explored, the behavior change, and the validation you ran.",
   },
   [Object],
   [Object],

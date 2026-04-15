@@ -10,6 +10,7 @@ import type { ThreadEventWithMeta } from "../src/to-view-messages.js";
 import {
   buildTimelineRows,
 } from "../src/thread-detail-rows.js";
+import { createTimelineEventFactory } from "./timeline-test-harness.js";
 
 /** Convert raw ThreadEventRow[] (test fixtures / inline data) to typed input for toViewMessages. */
 function fromRows(rows: ThreadEventRow[]): ThreadEventWithMeta[] {
@@ -509,6 +510,465 @@ describe("toViewProjection turn lifecycle", () => {
     expect(entry.turn.messages?.map((message) => message.kind)).toEqual([
       "user",
     ]);
+  });
+
+  it("renders unacknowledged active-turn steer messages after durable rows", () => {
+    const events: ThreadEventRow[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "turn/started",
+        data: {
+          providerThreadId: "provider-thread-1",
+          turnId: "turn-1",
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "item/completed",
+        data: {
+          providerThreadId: "provider-thread-1",
+          turnId: "turn-1",
+          item: {
+            type: "toolCall",
+            id: "tool-before-steer",
+            tool: "exec_command",
+            arguments: { cmd: "pnpm test" },
+            status: "completed",
+          },
+        },
+        createdAt: 2,
+      },
+      {
+        id: "evt-3",
+        threadId: "thread-1",
+        seq: 3,
+        type: "client/turn/requested",
+        data: {
+          direction: "outbound",
+          source: "tell",
+          initiator: "user",
+          input: [{ type: "text", text: "Please account for the restart" }],
+          request: {
+            method: "turn/start",
+            params: {},
+          },
+          execution: {
+            model: "gpt-5",
+            serviceTier: "default",
+            reasoningLevel: "medium",
+            permissionMode: "full",
+            source: "client/turn/requested",
+          },
+        },
+        createdAt: 3,
+      },
+      {
+        id: "evt-4",
+        threadId: "thread-1",
+        seq: 4,
+        type: "item/completed",
+        data: {
+          providerThreadId: "provider-thread-1",
+          turnId: "turn-1",
+          item: {
+            type: "toolCall",
+            id: "tool-after-steer",
+            tool: "exec_command",
+            arguments: { cmd: "sqlite3 ~/.bb-dev/bb.db '.tables'" },
+            status: "completed",
+          },
+        },
+        createdAt: 4,
+      },
+      {
+        id: "evt-5",
+        threadId: "thread-1",
+        seq: 5,
+        type: "item/completed",
+        data: {
+          providerThreadId: "provider-thread-1",
+          turnId: "turn-1",
+          item: {
+            type: "agentMessage",
+            id: "assistant-1",
+            text: "Done.",
+          },
+        },
+        createdAt: 5,
+      },
+      {
+        id: "evt-6",
+        threadId: "thread-1",
+        seq: 6,
+        type: "turn/completed",
+        data: {
+          providerThreadId: "provider-thread-1",
+          turnId: "turn-1",
+          status: "completed",
+        },
+        createdAt: 6,
+      },
+    ];
+
+    const projection = toViewProjection(fromRows(events), {
+      threadStatus: "idle",
+      turnMessageDetail: "summary",
+    });
+    const rows = buildTimelineRows(projection, {
+      includeToolGroupMessages: true,
+    });
+
+    expect(rows.map((row) => row.kind)).toEqual([
+      "tool-group",
+      "message",
+      "message",
+    ]);
+    const steerRow = rows[2];
+    expect(steerRow?.kind).toBe("message");
+    if (steerRow?.kind !== "message") {
+      throw new Error("Expected steer message row");
+    }
+    expect(steerRow.message.kind).toBe("user");
+    if (steerRow.message.kind !== "user") {
+      throw new Error("Expected user steer message");
+    }
+    expect(steerRow.message.text).toBe("Please account for the restart");
+    expect(steerRow.message.sourceSeqStart).toBe(7);
+    expect(steerRow.message.turnId).toBeUndefined();
+  });
+
+  it("switches active-turn steer messages to the provider ack sequence", () => {
+    const events: ThreadEventRow[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "turn/started",
+        data: {
+          providerThreadId: "provider-thread-1",
+          turnId: "turn-1",
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "item/completed",
+        data: {
+          providerThreadId: "provider-thread-1",
+          turnId: "turn-1",
+          item: {
+            type: "toolCall",
+            id: "tool-before-steer",
+            tool: "exec_command",
+            arguments: { cmd: "pnpm test" },
+            status: "completed",
+          },
+        },
+        createdAt: 2,
+      },
+      {
+        id: "evt-3",
+        threadId: "thread-1",
+        seq: 3,
+        type: "client/turn/requested",
+        data: {
+          direction: "outbound",
+          source: "tell",
+          initiator: "user",
+          input: [{ type: "text", text: "Please account for the restart" }],
+          request: {
+            method: "turn/start",
+            params: {},
+          },
+          execution: {
+            model: "gpt-5",
+            serviceTier: "default",
+            reasoningLevel: "medium",
+            permissionMode: "full",
+            source: "client/turn/requested",
+          },
+        },
+        createdAt: 3,
+      },
+      {
+        id: "evt-4",
+        threadId: "thread-1",
+        seq: 4,
+        type: "item/completed",
+        data: {
+          providerThreadId: "provider-thread-1",
+          turnId: "turn-1",
+          item: {
+            type: "userMessage",
+            id: "provider-user-1",
+            content: [{ type: "text", text: "Please account for the restart" }],
+          },
+        },
+        createdAt: 4,
+      },
+      {
+        id: "evt-5",
+        threadId: "thread-1",
+        seq: 5,
+        type: "item/completed",
+        data: {
+          providerThreadId: "provider-thread-1",
+          turnId: "turn-1",
+          item: {
+            type: "toolCall",
+            id: "tool-after-steer",
+            tool: "exec_command",
+            arguments: { cmd: "sqlite3 ~/.bb-dev/bb.db '.tables'" },
+            status: "completed",
+          },
+        },
+        createdAt: 5,
+      },
+      {
+        id: "evt-6",
+        threadId: "thread-1",
+        seq: 6,
+        type: "item/completed",
+        data: {
+          providerThreadId: "provider-thread-1",
+          turnId: "turn-1",
+          item: {
+            type: "agentMessage",
+            id: "assistant-1",
+            text: "Done.",
+          },
+        },
+        createdAt: 6,
+      },
+      {
+        id: "evt-7",
+        threadId: "thread-1",
+        seq: 7,
+        type: "turn/completed",
+        data: {
+          providerThreadId: "provider-thread-1",
+          turnId: "turn-1",
+          status: "completed",
+        },
+        createdAt: 7,
+      },
+    ];
+
+    const projection = toViewProjection(fromRows(events), {
+      threadStatus: "idle",
+      turnMessageDetail: "summary",
+    });
+    const rows = buildTimelineRows(projection, {
+      includeToolGroupMessages: true,
+    });
+    const userRows = rows.filter(
+      (row): row is Extract<(typeof rows)[number], { kind: "message" }> =>
+        row.kind === "message" && row.message.kind === "user",
+    );
+
+    expect(userRows).toHaveLength(1);
+    const steerMessage = userRows[0]?.message;
+    expect(steerMessage?.kind).toBe("user");
+    if (steerMessage?.kind !== "user") {
+      throw new Error("Expected user steer message");
+    }
+    expect(steerMessage.text).toBe("Please account for the restart");
+    expect(steerMessage.sourceSeqStart).toBe(4);
+    expect(steerMessage.turnId).toBe("turn-1");
+  });
+
+  it("pairs multiple unacknowledged active-turn steers with provider acks in FIFO order", () => {
+    const event = createTimelineEventFactory({
+      providerThreadId: "provider-thread-1",
+      threadId: "thread-1",
+      turnId: "turn-1",
+    });
+    const events: ThreadEventRow[] = [
+      event.turnStarted(),
+      event.clientTurnRequested({ text: "Repeat this" }),
+      event.clientTurnRequested({ text: "Repeat this" }),
+      event.userMessageAck({
+        itemId: "provider-user-1",
+        text: "Repeat this",
+      }),
+      event.userMessageAck({
+        itemId: "provider-user-2",
+        text: "Repeat this",
+      }),
+      event.assistantCompleted({ text: "Done." }),
+      event.turnCompleted(),
+    ];
+
+    const projection = toViewProjection(fromRows(events), {
+      threadStatus: "idle",
+      turnMessageDetail: "summary",
+    });
+    const userMessages = flattenProjectionMessages(projection).filter(
+      (message) => message.kind === "user",
+    );
+
+    expect(userMessages).toHaveLength(2);
+    expect(userMessages.map((message) => message.id)).toEqual([
+      "thread-1:user:provider-user-1",
+      "thread-1:user:provider-user-2",
+    ]);
+    expect(userMessages.map((message) => message.sourceSeqStart)).toEqual([4, 5]);
+    expect(userMessages.map((message) => message.turnId)).toEqual([
+      "turn-1",
+      "turn-1",
+    ]);
+  });
+
+  it("renders acked active-turn steers inline and unacked steers at the bottom", () => {
+    const event = createTimelineEventFactory({
+      providerThreadId: "provider-thread-1",
+      threadId: "thread-1",
+      turnId: "turn-1",
+    });
+    const events: ThreadEventRow[] = [
+      event.turnStarted(),
+      event.clientTurnRequested({ text: "Acked steer" }),
+      event.clientTurnRequested({ text: "Pending steer" }),
+      event.userMessageAck({
+        itemId: "provider-user-1",
+        text: "Acked steer",
+      }),
+      event.assistantCompleted({ text: "Done." }),
+      event.turnCompleted(),
+    ];
+
+    const projection = toViewProjection(fromRows(events), {
+      threadStatus: "idle",
+      turnMessageDetail: "summary",
+    });
+    const rows = buildTimelineRows(projection, {
+      includeToolGroupMessages: true,
+    });
+    const userRows = rows.filter(
+      (row): row is Extract<(typeof rows)[number], { kind: "message" }> =>
+        row.kind === "message" && row.message.kind === "user",
+    );
+
+    expect(userRows).toHaveLength(2);
+    expect(userRows.map((row) => row.message.text)).toEqual([
+      "Acked steer",
+      "Pending steer",
+    ]);
+    expect(userRows.map((row) => row.message.sourceSeqStart)).toEqual([4, 7]);
+    expect(userRows.map((row) => row.message.turnId)).toEqual([
+      "turn-1",
+      undefined,
+    ]);
+    expect(rows.at(-1)).toBe(userRows[1]);
+  });
+
+  it("replaces an active-turn steer when the provider ack arrives after turn completion", () => {
+    const event = createTimelineEventFactory({
+      providerThreadId: "provider-thread-1",
+      threadId: "thread-1",
+      turnId: "turn-1",
+    });
+    const events: ThreadEventRow[] = [
+      event.turnStarted(),
+      event.clientTurnRequested({ text: "Late ack steer" }),
+      event.turnCompleted(),
+      event.userMessageAck({
+        itemId: "provider-user-1",
+        text: "Late ack steer",
+      }),
+    ];
+
+    const projection = toViewProjection(fromRows(events), {
+      threadStatus: "idle",
+      turnMessageDetail: "summary",
+    });
+    const userMessages = flattenProjectionMessages(projection).filter(
+      (message) => message.kind === "user",
+    );
+
+    expect(userMessages).toHaveLength(1);
+    expect(userMessages[0]?.id).toBe("thread-1:user:provider-user-1");
+    expect(userMessages[0]?.sourceSeqStart).toBe(4);
+    expect(userMessages[0]?.turnId).toBe("turn-1");
+  });
+
+  it("does not pair a stale turnless request with a later turn ack that has the same text", () => {
+    const event = createTimelineEventFactory({
+      providerThreadId: "provider-thread-1",
+      threadId: "thread-1",
+      turnId: "turn-1",
+    });
+    const events: ThreadEventRow[] = [
+      event.clientTurnRequested({ text: "Same steer" }),
+      event.turnStarted({ turnId: "turn-1" }),
+      event.turnCompleted({ turnId: "turn-1" }),
+      event.clientTurnRequested({ text: "Same steer" }),
+      event.turnStarted({ turnId: "turn-2" }),
+      event.userMessageAck({
+        itemId: "provider-user-2",
+        text: "Same steer",
+        turnId: "turn-2",
+      }),
+    ];
+
+    const projection = toViewProjection(fromRows(events), {
+      threadStatus: "idle",
+      turnMessageDetail: "summary",
+    });
+    const userMessages = flattenProjectionMessages(projection).filter(
+      (message) => message.kind === "user",
+    );
+
+    expect(userMessages).toHaveLength(2);
+    expect(userMessages.map((message) => message.id)).toEqual([
+      "thread-1:user:provider-user-2",
+      "thread-1:user-seed:1",
+    ]);
+    expect(userMessages.map((message) => message.turnId)).toEqual([
+      "turn-2",
+      undefined,
+    ]);
+  });
+
+  it("rejects provider user acks without turnId at the decode boundary", () => {
+    const event = createTimelineEventFactory({
+      providerThreadId: "provider-thread-1",
+      threadId: "thread-1",
+      turnId: "turn-1",
+    });
+    const events: ThreadEventRow[] = [
+      event.turnStarted(),
+      event.clientTurnRequested({ text: "Turnless ack steer" }),
+      {
+        id: "evt-turnless-user-ack",
+        threadId: "thread-1",
+        seq: 3,
+        type: "item/completed",
+        data: {
+          providerThreadId: "provider-thread-1",
+          item: {
+            type: "userMessage",
+            id: "provider-user-1",
+            content: [{ type: "text", text: "Turnless ack steer" }],
+          },
+        },
+        createdAt: 3,
+      },
+    ];
+
+    expect(() =>
+      toViewProjection(fromRows(events), {
+        threadStatus: "active",
+        turnMessageDetail: "summary",
+      })
+    ).toThrow(/turnId/);
   });
 
   it("rejects turn-scoped messages that do not have turn lifecycle events", () => {
@@ -4094,6 +4554,7 @@ describe("toViewMessages replay coverage", () => {
 
     expect(userMessages).toHaveLength(1);
     expect(userMessages[0]?.text).toBe("Please keep going until the roadmap is done");
+    expect(userMessages[0]?.sourceSeqStart).toBe(3);
   });
 
   it("keeps the client thread input and suppresses a matching later user item event", () => {
