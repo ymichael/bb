@@ -9,6 +9,6 @@ export default defineConfig({
     silent: "passed-only",
     name: "@bb/agent-runtime",
     include: ["src/**/*.test.ts"],
-    exclude: ["dist/**", "node_modules/**", "src/integration.test.ts"],
+    exclude: ["dist/**", "node_modules/**", "src/integration*.test.ts"],
   },
 });
