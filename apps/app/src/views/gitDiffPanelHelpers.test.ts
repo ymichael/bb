@@ -73,8 +73,8 @@ describe("gitDiffPanelHelpers", () => {
 
     expect(buildGitDiffSelectionOptions(commits)).toEqual([
       { value: "all", label: "All changes" },
-      { value: "abc123", label: "abc123 · Initial change" },
-      { value: "def456", label: "def456 · Follow-up" },
+      { value: "abc123", label: "Initial change", monoPrefix: "abc123" },
+      { value: "def456", label: "Follow-up", monoPrefix: "def456" },
     ]);
     expect(shouldResetSelectedGitDiffCommit("missing", commits)).toBe(true);
     expect(shouldResetSelectedGitDiffCommit("abc123", commits)).toBe(false);
@@ -91,7 +91,7 @@ describe("gitDiffPanelHelpers", () => {
     ).toEqual([
       { value: "all", label: "All changes" },
       { value: "uncommitted", label: "Uncommitted changes" },
-      { value: "abc123", label: "abc123 · Feature" },
+      { value: "abc123", label: "Feature", monoPrefix: "abc123" },
     ]);
 
     expect(

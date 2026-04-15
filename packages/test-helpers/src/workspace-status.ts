@@ -10,7 +10,6 @@ export function makeWorkspaceWorkingTree(
   return {
     hasUncommittedChanges: false,
     state: "clean",
-    changedFiles: 0,
     insertions: 0,
     deletions: 0,
     files: [],
@@ -29,6 +28,8 @@ export function makeWorkspaceMergeBase(
     hasCommittedUnmergedChanges: false,
     commits: [],
     files: [],
+    insertions: 0,
+    deletions: 0,
     ...overrides,
   };
 }

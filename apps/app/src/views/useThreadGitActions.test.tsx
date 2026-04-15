@@ -3,6 +3,11 @@
 import { act, cleanup, renderHook } from "@testing-library/react";
 import type { Environment, PromptInput, Thread, WorkspaceStatus } from "@bb/domain";
 import type { EnvironmentActionResponse } from "@bb/server-contract";
+import {
+  makeWorkspaceMergeBase,
+  makeWorkspaceStatus as baseMakeWorkspaceStatus,
+  makeWorkspaceWorkingTree,
+} from "@bb/test-helpers";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ThreadGitActionDialogError } from "@/components/thread/ThreadGitActionDialog";
 import { HttpError } from "@/lib/api";
@@ -82,29 +87,22 @@ function makeEnvironment(overrides: EnvironmentOverrides = {}): Environment {
 function makeWorkspaceStatus(
   options: WorkspaceStatusOptions = {},
 ): WorkspaceStatus {
-  return {
-    branch: {
-      currentBranch: "feature/test",
-      defaultBranch: "main",
-    },
-    mergeBase: {
+  return baseMakeWorkspaceStatus({
+    branch: { currentBranch: "feature/test", defaultBranch: "main" },
+    mergeBase: makeWorkspaceMergeBase({
       aheadCount: 1,
       baseRef: "origin/main",
-      behindCount: 0,
-      commits: [],
-      files: [],
       hasCommittedUnmergedChanges: options.hasCommittedUnmergedChanges ?? false,
-      mergeBaseBranch: "main",
-    },
-    workingTree: {
-      changedFiles: 1,
-      deletions: 0,
-      files: [],
+    }),
+    workingTree: makeWorkspaceWorkingTree({
+      files: options.hasUncommittedChanges
+        ? [{ path: "file.ts", status: "M" }]
+        : [],
       hasUncommittedChanges: options.hasUncommittedChanges ?? false,
       insertions: 1,
       state: options.hasUncommittedChanges ? "dirty_uncommitted" : "clean",
-    },
-  };
+    }),
+  });
 }
 
 function makeCommitActionResponse(): EnvironmentActionResponse {

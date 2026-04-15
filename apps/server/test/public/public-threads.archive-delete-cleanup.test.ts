@@ -104,7 +104,6 @@ describe("public thread archive delete cleanup routes", () => {
           workingTree: {
             ...cleanWorkspaceStatus().workingTree,
             state: "dirty_uncommitted",
-            changedFiles: 1,
             hasUncommittedChanges: true,
           },
         },

@@ -247,7 +247,7 @@ export function registerShowCommand(
             console.log(`  Branch:   ${ws.branch.currentBranch}`);
           }
           console.log(
-            `  Changed files: ${ws.workingTree.changedFiles}`,
+            `  Changed files: ${ws.workingTree.files.length}`,
           );
           console.log(
             `  Insertions:    +${ws.workingTree.insertions}`,

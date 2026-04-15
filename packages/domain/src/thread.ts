@@ -63,13 +63,22 @@ export const workspaceCommitSummarySchema = z.object({
 });
 export type WorkspaceCommitSummary = z.infer<typeof workspaceCommitSummarySchema>;
 
-export const workspaceWorkingTreeSchema = z.object({
-  hasUncommittedChanges: z.boolean(),
-  state: workspaceStateSchema,
-  changedFiles: z.number(),
+/**
+ * Fields shared by any surface that reports a set of changed files plus the
+ * line-level totals across them. Both `workspaceWorkingTreeSchema` and
+ * `workspaceMergeBaseSchema` embed these so their file list and stats stay
+ * in lockstep.
+ */
+export const workspaceChangeStatsSchema = z.object({
   insertions: z.number(),
   deletions: z.number(),
   files: z.array(workspaceFileStatusSchema),
+});
+export type WorkspaceChangeStats = z.infer<typeof workspaceChangeStatsSchema>;
+
+export const workspaceWorkingTreeSchema = workspaceChangeStatsSchema.extend({
+  hasUncommittedChanges: z.boolean(),
+  state: workspaceStateSchema,
 });
 export type WorkspaceWorkingTree = z.infer<typeof workspaceWorkingTreeSchema>;
 
@@ -79,15 +88,17 @@ export const workspaceBranchSchema = z.object({
 });
 export type WorkspaceBranch = z.infer<typeof workspaceBranchSchema>;
 
-export const workspaceMergeBaseSchema = z.object({
+/**
+ * Stats and file list are relative to the merge-base-to-HEAD range
+ * (committed, unmerged) via `workspaceChangeStatsSchema`.
+ */
+export const workspaceMergeBaseSchema = workspaceChangeStatsSchema.extend({
   mergeBaseBranch: z.string(),
   baseRef: z.string().nullable(),
   aheadCount: z.number(),
   behindCount: z.number(),
   hasCommittedUnmergedChanges: z.boolean(),
   commits: z.array(workspaceCommitSummarySchema),
-  /** Files changed between the merge base and HEAD (committed, unmerged). */
-  files: z.array(workspaceFileStatusSchema),
 });
 export type WorkspaceMergeBase = z.infer<typeof workspaceMergeBaseSchema>;
 

@@ -79,7 +79,8 @@ export function buildGitDiffSelectionOptions(
   };
   const commitOptions = diffCommits.map((commit) => ({
     value: commit.sha,
-    label: `${commit.shortSha} · ${commit.subject}`,
+    label: commit.subject,
+    monoPrefix: commit.shortSha,
   }));
 
   const hasMergeBaseContext = diffCommits.length > 0 || options.hasUncommittedChanges;

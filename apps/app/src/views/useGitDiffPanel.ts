@@ -256,7 +256,7 @@ export function useGitDiffPanel({
   }, [environmentId]);
 
   const hasUncommittedChanges =
-    (gitDiffWorkspaceStatus?.workingTree.changedFiles ?? 0) > 0;
+    (gitDiffWorkspaceStatus?.workingTree.files.length ?? 0) > 0;
 
   useEffect(() => {
     if (

@@ -16,7 +16,6 @@ const CLEAN_STATUS = {
     workingTree: {
       hasUncommittedChanges: false,
       state: "clean" as const,
-      changedFiles: 0,
       insertions: 0,
       deletions: 0,
       files: [],
@@ -34,7 +33,6 @@ const DIRTY_STATUS = {
     workingTree: {
       hasUncommittedChanges: true,
       state: "dirty_uncommitted" as const,
-      changedFiles: 1,
       insertions: 1,
       deletions: 0,
       files: [],

@@ -6,6 +6,11 @@ import {
   upsertHost,
 } from "@bb/db";
 import { HOST_DAEMON_PROTOCOL_VERSION } from "@bb/host-daemon-contract";
+import {
+  makeWorkspaceMergeBase,
+  makeWorkspaceStatus,
+  makeWorkspaceWorkingTree,
+} from "@bb/test-helpers";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   reportNextRuntimeMaterialSyncSuccess,
@@ -57,7 +62,6 @@ describe("public environment and system routes", () => {
           workingTree: {
             hasUncommittedChanges: false,
             state: "clean",
-            changedFiles: 0,
             insertions: 0,
             deletions: 0,
             files: [],
@@ -174,29 +178,20 @@ describe("public environment and system routes", () => {
         mergeBaseBranch: "main",
       });
       await reportQueuedCommandSuccess(harness, statusCommand, {
-        workspaceStatus: {
-          workingTree: {
+        workspaceStatus: makeWorkspaceStatus({
+          workingTree: makeWorkspaceWorkingTree({
             hasUncommittedChanges: true,
             state: "dirty_uncommitted",
-            changedFiles: 2,
             insertions: 5,
             deletions: 1,
-            files: [],
-          },
-          branch: {
-            currentBranch: "bb/details",
-            defaultBranch: "main",
-          },
-          mergeBase: {
-            mergeBaseBranch: "main",
+          }),
+          branch: { currentBranch: "bb/details", defaultBranch: "main" },
+          mergeBase: makeWorkspaceMergeBase({
             baseRef: "origin/main",
             aheadCount: 1,
-            behindCount: 0,
             hasCommittedUnmergedChanges: true,
-            commits: [],
-            files: [],
-          },
-        },
+          }),
+        }),
       });
       const statusResponse = await statusPromise;
       expect(statusResponse.status).toBe(200);
@@ -336,7 +331,6 @@ describe("public environment and system routes", () => {
           workingTree: {
             hasUncommittedChanges: true,
             state: "dirty_uncommitted",
-            changedFiles: 1,
             insertions: 1,
             deletions: 0,
             files: [],
@@ -521,7 +515,6 @@ describe("public environment and system routes", () => {
           workingTree: {
             hasUncommittedChanges: false,
             state: "clean",
-            changedFiles: 0,
             insertions: 0,
             deletions: 0,
             files: [],
@@ -618,7 +611,6 @@ describe("public environment and system routes", () => {
           workingTree: {
             hasUncommittedChanges: false,
             state: "clean",
-            changedFiles: 0,
             insertions: 0,
             deletions: 0,
             files: [],
@@ -681,7 +673,6 @@ describe("public environment and system routes", () => {
             workingTree: {
               hasUncommittedChanges: false,
               state: "clean",
-              changedFiles: 0,
               insertions: 0,
               deletions: 0,
               files: [],
@@ -749,7 +740,6 @@ describe("public environment and system routes", () => {
           workingTree: {
             hasUncommittedChanges: true,
             state: "dirty_uncommitted",
-            changedFiles: 2,
             insertions: 5,
             deletions: 1,
             files: [],

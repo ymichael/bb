@@ -364,7 +364,6 @@ export class Workspace {
       workingTree: {
         hasUncommittedChanges: hasDirtyEntries,
         state,
-        changedFiles: entries.length,
         insertions: workingTreeSummary.insertions,
         deletions: workingTreeSummary.deletions,
         files: entries.map((entry) => ({
@@ -754,7 +753,7 @@ export class Workspace {
   }
 
   private async readMergeBaseStatus(mergeBaseBranch: string): Promise<WorkspaceStatus["mergeBase"]> {
-    const [mergeBaseRef, aheadBehindCounts, commits, nameStatus] = await Promise.all([
+    const [mergeBaseRef, aheadBehindCounts, commits, nameStatus, numstat] = await Promise.all([
       readMergeBaseRef(this.path, mergeBaseBranch),
       runGit(
         [
@@ -772,6 +771,10 @@ export class Workspace {
         ["diff", "--no-ext-diff", "--name-status", "-z", `${mergeBaseBranch}...HEAD`],
         { cwd: this.path, allowFailure: true },
       ),
+      runGit(
+        ["diff", "--no-ext-diff", "--numstat", `${mergeBaseBranch}...HEAD`],
+        { cwd: this.path, allowFailure: true },
+      ),
     ]);
     const [behindCount, aheadCount] = aheadBehindCounts.stdout
       .trim()
@@ -786,6 +789,12 @@ export class Workspace {
           status: mapNameStatusLetter(entry.status),
         }))
       : [];
+    const mergeBaseSummary =
+      numstat.exitCode === 0
+        ? summarizeNumstat(numstat.stdout)
+        : { changedFiles: 0, insertions: 0, deletions: 0 };
+    let effectiveInsertions = mergeBaseSummary.insertions;
+    let effectiveDeletions = mergeBaseSummary.deletions;
 
     // `--cherry-pick` handles regular merges, rebase-merges, and cherry-picks,
     // but not squash merges. Only look for a squash when the branch still
@@ -803,10 +812,12 @@ export class Workspace {
     // exist on the base are excluded), but `--name-status <base>...HEAD` is
     // not. If every branch commit has landed on the base via cherry-pick or
     // squash merge, there's nothing "committed unmerged" to surface — drop
-    // the file list to match so the UI doesn't show files with no commits
-    // behind them.
+    // the file list and stats to match so the UI doesn't show files with no
+    // commits behind them.
     if (effectiveCommits.length === 0) {
       effectiveFiles = [];
+      effectiveInsertions = 0;
+      effectiveDeletions = 0;
     }
 
     return {
@@ -817,6 +828,8 @@ export class Workspace {
       hasCommittedUnmergedChanges: normalizedAheadCount > 0,
       commits: effectiveCommits,
       files: effectiveFiles,
+      insertions: effectiveInsertions,
+      deletions: effectiveDeletions,
     };
   }
 

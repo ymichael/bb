@@ -53,7 +53,6 @@ function createFakeWorkspace(path: string): FakeWorkspace {
       workingTree: {
         hasUncommittedChanges: false,
         state: "clean" as const,
-        changedFiles: 0,
         insertions: 0,
         deletions: 0,
         files: [],

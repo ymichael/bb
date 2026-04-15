@@ -74,12 +74,12 @@ describe("Workspace", () => {
     await fs.writeFile(path.join(repoPath, "notes.txt"), "note\n", "utf8");
     const untrackedStatus = await workspace.getStatus();
     expect(untrackedStatus.workingTree.state).toBe("untracked");
-    expect(untrackedStatus.workingTree.changedFiles).toBe(1);
+    expect(untrackedStatus.workingTree.files).toHaveLength(1);
 
     await fs.writeFile(path.join(repoPath, "README.md"), "dirty with note\n", "utf8");
     const mixedStatus = await workspace.getStatus();
     expect(mixedStatus.workingTree.state).toBe("dirty_uncommitted");
-    expect(mixedStatus.workingTree.changedFiles).toBe(2);
+    expect(mixedStatus.workingTree.files).toHaveLength(2);
   });
 
   it("reports deleted tracked files as dirty file changes", async () => {
@@ -168,7 +168,6 @@ describe("Workspace", () => {
     const status = await workspace.getStatus({ mergeBaseBranch: "main" });
 
     expect(status.workingTree.state).toBe("dirty_and_committed_unmerged");
-    expect(status.workingTree.changedFiles).toBe(1);
     expect(status.workingTree.files).toEqual([
       {
         path: "notes.txt",
@@ -228,6 +227,12 @@ describe("Workspace", () => {
       aheadCount: 0,
     });
     expect(status.mergeBase?.commits).toEqual([]);
+    // Files and line counts must collapse along with commits — if they don't,
+    // the UI would show "Committed · N files, +X -Y" for a squash-merged
+    // branch that has nothing left to merge.
+    expect(status.mergeBase?.files).toEqual([]);
+    expect(status.mergeBase?.insertions).toBe(0);
+    expect(status.mergeBase?.deletions).toBe(0);
   });
 
   it("recognizes squash-merged branch after main advances past the squash commit", async () => {

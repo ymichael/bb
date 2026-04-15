@@ -27,13 +27,18 @@ function makeStatus(options: MakeStatusOptions): WorkspaceStatus {
     options.state === "untracked" ||
     options.state === "dirty_uncommitted" ||
     options.state === "dirty_and_committed_unmerged";
+  const fileCount = options.changedFiles ?? 0;
+  const files = Array.from({ length: fileCount }, (_, index) => ({
+    path: `file-${index}.ts`,
+    status: "M" as const,
+  }));
   return makeWorkspaceStatus({
     workingTree: makeWorkspaceWorkingTree({
       hasUncommittedChanges,
       state: options.state,
-      changedFiles: options.changedFiles ?? 0,
       insertions: options.insertions ?? 0,
       deletions: options.deletions ?? 0,
+      files,
     }),
     branch: {
       currentBranch: "feature",

@@ -7,6 +7,7 @@ import type {
   ServiceTier,
   Thread,
   TimelineRow,
+  WorkspaceFileStatus,
   WorkspaceStatus,
 } from "@bb/domain";
 import type { ThreadTimelineResponse } from "@bb/server-contract";
@@ -60,6 +61,7 @@ interface ThreadDetailPromptAreaProps {
   openDiffFile: (path: string) => void;
   openThreadDiffPanel: () => void;
   projectId: string;
+  promptBannerFiles?: WorkspaceFileStatus[];
   promptBannerMergeBaseBranch?: string;
   promptBannerSummary: string;
   promptComposerRef: RefObject<HTMLDivElement | null>;
@@ -91,6 +93,7 @@ export function ThreadDetailPromptArea({
   openDiffFile,
   openThreadDiffPanel,
   projectId,
+  promptBannerFiles,
   promptBannerMergeBaseBranch,
   promptBannerSummary,
   promptComposerRef,
@@ -434,6 +437,7 @@ export function ThreadDetailPromptArea({
         onToggleChangeListExpanded: () => {
           setIsChangeListExpanded((previousValue) => !previousValue);
         },
+        promptBannerFiles,
         promptBannerMergeBaseBranch,
         promptBannerSummary,
         showBranchComparisonUi,

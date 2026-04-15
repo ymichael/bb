@@ -35,7 +35,6 @@ import { useStoredShowAllEvents } from "@/lib/show-all-events-preference";
 import { getGitStatusDisplay } from "@/lib/workspace-status";
 import {
   formatChangeSummary,
-  formatWorkspaceChangeSummary,
   selectWorkspaceChangedFilesSection,
 } from "@/lib/workspace-change-summary";
 import { getThreadDisplayTitle } from "@/lib/thread-title";
@@ -50,6 +49,12 @@ import { useThreadGitActions } from "./useThreadGitActions";
 import { useThreadReadTracking } from "./useThreadReadTracking";
 import { resolveThreadWorkspaceOpenPath } from "./threadWorkspaceOpenButton";
 import { copyToClipboardWithToast } from "@/lib/clipboard";
+
+const PROMPT_BANNER_KIND_PREFIX = {
+  uncommitted: "Uncommitted",
+  untracked: "Untracked",
+  committed: "Committed",
+} as const;
 
 export function ThreadDetailView() {
   const { projectId, threadId } = useParams<{
@@ -347,20 +352,13 @@ export function ThreadDetailView() {
   const threadEnvironmentIcon = threadEnvironmentDisplay
     ? getEnvironmentWorkspaceDisplayIcon(threadEnvironmentDisplay.workspaceDisplayKind)
     : null;
-  const promptBannerSummary = workspaceStatus
-    ? showBranchComparisonUi
-      ? formatChangeSummary(workspaceStatus.workingTree)
-      : formatWorkspaceChangeSummary(workspaceStatus.workingTree)
+  const promptBannerSummary = workspaceChangedFilesSection
+    ? `${PROMPT_BANNER_KIND_PREFIX[workspaceChangedFilesSection.kind]} · ${formatChangeSummary(workspaceChangedFilesSection.stats)}`
     : "";
-  const showPromptGitStatsBanner = canUseGitUi && Boolean(
-    workspaceStatus &&
-    workspaceStatus.workingTree.changedFiles > 0,
-  );
-  const canExpandPromptChangeList = Boolean(
-    canUseGitUi &&
-    workspaceStatus &&
-    (workspaceWorkingTree?.files.length ?? 0) > 0,
-  );
+  const showPromptGitStatsBanner =
+    canUseGitUi && workspaceChangedFilesSection !== null;
+  const canExpandPromptChangeList =
+    canUseGitUi && (workspaceChangedFilesSection?.files.length ?? 0) > 0;
   const promptBannerMergeBaseBranch = effectiveMergeBaseBranch;
   const threadEnvironmentType =
     threadEnvironmentDisplay?.modeLabel ??
@@ -488,6 +486,7 @@ export function ThreadDetailView() {
       openDiffFile={openDiffFile}
       openThreadDiffPanel={openThreadDiffPanel}
       projectId={projectId}
+      promptBannerFiles={workspaceChangedFilesSection?.files}
       promptBannerMergeBaseBranch={promptBannerMergeBaseBranch}
       promptBannerSummary={promptBannerSummary}
       promptComposerRef={promptComposerRef}

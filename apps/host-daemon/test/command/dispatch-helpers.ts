@@ -48,7 +48,6 @@ export function createFakeWorkspace(pathname: string) {
         workingTree: {
           hasUncommittedChanges: false,
           state: "clean",
-          changedFiles: 0,
           insertions: 0,
           deletions: 0,
           files: [],

@@ -7,6 +7,7 @@ import {
   type ReasoningLevel,
   type ServiceTier,
   type ThreadQueuedMessage,
+  type WorkspaceFileStatus,
   type WorkspaceStatus,
 } from "@bb/domain";
 import {
@@ -162,6 +163,7 @@ export interface ComposerBannerProps {
   onPromptBannerMergeBaseBranchPickerOpenChange?: (open: boolean) => void;
   onPromptGitStatsBannerClick: () => void;
   onToggleChangeListExpanded: () => void;
+  promptBannerFiles?: WorkspaceFileStatus[];
   promptBannerMergeBaseBranch?: string;
   promptBannerSummary: string;
   showBranchComparisonUi: boolean;
@@ -331,7 +333,7 @@ export function ThreadFollowUpComposer({
                 </span>
               )}
             </div>
-            {banner.canExpandPromptChangeList && banner.workspaceStatus ? (
+            {banner.canExpandPromptChangeList && banner.promptBannerFiles ? (
               <div
                 className={cn(
                   "grid overflow-hidden transition-[grid-template-rows,opacity,margin,padding,border-color] duration-200 ease-out",
@@ -345,7 +347,7 @@ export function ThreadFollowUpComposer({
               >
                 <div className="overflow-hidden">
                   <WorkspaceChangesList
-                    files={banner.workspaceStatus.workingTree.files}
+                    files={banner.promptBannerFiles}
                     onFileClick={banner.onPromptBannerFileClick}
                   />
                 </div>

@@ -1,9 +1,7 @@
 import { assertNever } from "@bb/core-ui";
 import type { WorkspaceStatus } from "@bb/domain";
 import { HttpError } from "@/lib/api";
-import {
-  formatWorkspaceChangeSummary,
-} from "@/lib/workspace-change-summary";
+import { formatChangeSummary } from "@/lib/workspace-change-summary";
 
 interface ThreadGitStatusDisplay {
   label:
@@ -80,11 +78,11 @@ export function getGitStatusDisplay(
     ? formatComparisonSummary(status, resolvedMergeBaseBranch)
     : null;
   const hasWorkspaceChanges =
-    status.workingTree.changedFiles > 0 ||
+    status.workingTree.files.length > 0 ||
     status.workingTree.insertions > 0 ||
     status.workingTree.deletions > 0;
   const workspaceSummary = hasWorkspaceChanges
-    ? formatWorkspaceChangeSummary(status.workingTree)
+    ? formatChangeSummary(status.workingTree)
     : null;
 
   switch (status.workingTree.state) {

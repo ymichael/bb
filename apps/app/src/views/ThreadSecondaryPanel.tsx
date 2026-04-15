@@ -58,6 +58,8 @@ const THREAD_SECONDARY_PANEL_TRANSITION_CLASS =
 export interface GitDiffSelectionOption {
   value: string;
   label: string;
+  /** When set, rendered in monospace before the label (e.g. a short commit SHA). */
+  monoPrefix?: string;
 }
 
 interface ParsedGitDiffFileEntry {
@@ -116,6 +118,7 @@ function GitDiffSelector({
 }) {
   const selectedOption = options.find((option) => option.value === value);
   const selectedLabel = selectedOption?.label ?? value;
+  const selectedMonoPrefix = selectedOption?.monoPrefix;
 
   return (
     <DropdownMenu>
@@ -130,13 +133,23 @@ function GitDiffSelector({
             disabled && "opacity-60",
           )}
         >
-          <span className="truncate">{selectedLabel}</span>
+          <span className="flex min-w-0 items-baseline gap-2">
+            {selectedMonoPrefix ? (
+              <span className="shrink-0 font-mono text-muted-foreground">
+                {selectedMonoPrefix}
+              </span>
+            ) : null}
+            <span className="truncate">{selectedLabel}</span>
+          </span>
           <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="start"
-        className="w-[var(--radix-dropdown-menu-trigger-width)] max-w-[var(--radix-dropdown-menu-trigger-width)]"
+        // Cap at viewport so we don't overflow; otherwise grow to content.
+        // Bigger than the trigger so commit-label rows can breathe and match
+        // the width of the diff cards rendered below the selector.
+        className="min-w-[var(--radix-dropdown-menu-trigger-width)] max-w-[var(--radix-popper-available-width)]"
       >
         {options.map((option) => (
           <DropdownMenuItem
@@ -144,8 +157,18 @@ function GitDiffSelector({
             onSelect={() => onChange(option.value)}
             className="flex items-center justify-between gap-2"
           >
-            <span className="truncate" title={option.label}>
-              {option.label}
+            <span
+              className="flex min-w-0 items-baseline gap-2"
+              title={
+                option.monoPrefix ? `${option.monoPrefix} ${option.label}` : option.label
+              }
+            >
+              {option.monoPrefix ? (
+                <span className="shrink-0 font-mono text-muted-foreground">
+                  {option.monoPrefix}
+                </span>
+              ) : null}
+              <span className="truncate">{option.label}</span>
             </span>
             <Check
               className={cn(
