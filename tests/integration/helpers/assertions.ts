@@ -73,6 +73,22 @@ async function readThreadEvents(
   return response.json();
 }
 
+async function readThreadOutput(
+  api: PublicApiClient,
+  threadId: string,
+): Promise<string | null> {
+  const response = await api.threads[":id"].output.$get({
+    param: { id: threadId },
+  });
+  if (response.status !== 200) {
+    throw new Error(
+      `Expected thread output for ${threadId}, got ${response.status}`,
+    );
+  }
+  const payload = await response.json();
+  return payload.output;
+}
+
 async function readHost(
   api: PublicApiClient,
   hostId: string,
@@ -105,18 +121,61 @@ function stringifyEventData(event: ThreadEventRow | undefined): string {
   return JSON.stringify(event?.data ?? null);
 }
 
+function previewText(value: string | null): string {
+  const normalized = (value ?? "").replace(/\s+/g, " ").trim();
+  if (normalized.length <= 240) {
+    return normalized;
+  }
+  return `${normalized.slice(0, 240)}...`;
+}
+
+function describeThreadEvent(event: ThreadEventRow): string {
+  if (event.type === "item/completed") {
+    const item = event.data.item;
+    if (item.type === "toolCall") {
+      const error = item.error ? ` error=${item.error}` : "";
+      return `${event.seq}:${event.type}:${item.type}:${item.tool}:${item.status}${error}`;
+    }
+    if (item.type === "commandExecution") {
+      return `${event.seq}:${event.type}:${item.type}:${item.status}:${item.approvalStatus}`;
+    }
+    if (item.type === "fileChange") {
+      return `${event.seq}:${event.type}:${item.type}:${item.status}:${item.approvalStatus}`;
+    }
+    return `${event.seq}:${event.type}:${item.type}`;
+  }
+  if (event.type === "item/started") {
+    return `${event.seq}:${event.type}:${event.data.item.type}`;
+  }
+  if (event.type === "error") {
+    const detail = event.data.detail ? ` ${event.data.detail}` : "";
+    return `${event.seq}:${event.type}:${event.data.message}${detail}`;
+  }
+  if (event.type === "system/error") {
+    const detail = event.data.detail ? ` ${event.data.detail}` : "";
+    return `${event.seq}:${event.type}:${event.data.message}${detail}`;
+  }
+  return `${event.seq}:${event.type}`;
+}
+
 async function buildThreadStatusFailureMessage(
   api: PublicApiClient,
   context: ThreadStatusFailureContext,
 ): Promise<string> {
-  const events = await readThreadEvents(api, context.threadId);
-  const recentEventTypes = events
-    .slice(-10)
-    .map((event) => event.type)
-    .join(", ");
+  const [events, output] = await Promise.all([
+    readThreadEvents(api, context.threadId),
+    readThreadOutput(api, context.threadId).catch(() => null),
+  ]);
+  const recentEvents = events
+    .slice(-12)
+    .map(describeThreadEvent)
+    .join(" | ");
   const lastError = [...events]
     .reverse()
     .find((event) => event.type === "error" || event.type === "system/error");
+  const lastTurnStarted = [...events]
+    .reverse()
+    .find((event) => event.type === "turn/started");
   const lastTurnCompleted = [...events]
     .reverse()
     .find((event) => event.type === "turn/completed");
@@ -124,9 +183,11 @@ async function buildThreadStatusFailureMessage(
   return [
     `Thread ${context.threadId} entered ${context.currentStatus} while waiting for ${context.expectedStatus}`,
     `events=${events.length}`,
-    `recentEventTypes=[${recentEventTypes || "none"}]`,
+    `recentEvents=[${recentEvents || "none"}]`,
     `lastError=${stringifyEventData(lastError)}`,
+    `lastTurnStarted=${stringifyEventData(lastTurnStarted)}`,
     `lastTurnCompleted=${stringifyEventData(lastTurnCompleted)}`,
+    `outputPreview=${JSON.stringify(previewText(output))}`,
   ].join("; ");
 }
 

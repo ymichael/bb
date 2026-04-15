@@ -33,6 +33,52 @@ import type { AgentRuntime, AgentRuntimeExecutionOptions } from "./types.js";
 // ---------------------------------------------------------------------------
 
 type ThreadIdentityEvent = Extract<ThreadEvent, { type: "thread/identity" }>;
+type TurnStartedEvent = Extract<ThreadEvent, { type: "turn/started" }>;
+type UserMessageAckEvent = Extract<ThreadEvent, { type: "item/completed" }>;
+type ErrorThreadEvent = Extract<ThreadEvent, { type: "error" | "system/error" }>;
+type WaitPredicate = () => boolean;
+type WaitFailureDescription = () => string | null | undefined;
+
+interface WaitForConditionOptions {
+  describeFailure?: WaitFailureDescription;
+  failFast?: WaitFailureDescription;
+  label?: string;
+  timeoutMs?: number;
+}
+
+interface RuntimeDiagnosticsArgs {
+  ctx: TestContext;
+  threadId?: string;
+}
+
+interface RuntimeWaitArgs extends RuntimeDiagnosticsArgs {
+  label: string;
+  timeoutMs?: number;
+}
+
+interface RuntimeConditionWaitArgs extends RuntimeWaitArgs {
+  predicate: WaitPredicate;
+}
+
+interface TurnCompletedCountWaitArgs extends RuntimeWaitArgs {
+  count: number;
+}
+
+interface ThreadWaitArgs extends RuntimeWaitArgs {
+  threadId: string;
+}
+
+interface ThreadTurnCompletedCountWaitArgs extends ThreadWaitArgs {
+  count: number;
+}
+
+interface ToolCallWaitArgs extends ThreadWaitArgs {
+  toolName: string;
+}
+
+interface InteractiveRequestWaitArgs extends ThreadWaitArgs {
+  count: number;
+}
 
 const fullRuntimeOptions = {
   permissionMode: "full",
@@ -60,8 +106,8 @@ const readonlyDenyRuntimeOptions = {
 } satisfies AgentRuntimeExecutionOptions;
 
 function waitForCondition(
-  predicate: () => boolean,
-  opts?: { timeoutMs?: number; label?: string },
+  predicate: WaitPredicate,
+  opts?: WaitForConditionOptions,
 ): Promise<void> {
   const timeoutMs = opts?.timeoutMs ?? 30_000;
   const label = opts?.label ?? "condition";
@@ -72,8 +118,15 @@ function waitForCondition(
         resolve();
         return;
       }
+      const failFastMessage = opts?.failFast?.();
+      if (failFastMessage) {
+        reject(new Error(failFastMessage));
+        return;
+      }
       if (Date.now() - start > timeoutMs) {
-        reject(new Error(`Timeout after ${timeoutMs}ms waiting for ${label}`));
+        const failureDetail = opts?.describeFailure?.();
+        const detail = failureDetail ? `\n${failureDetail}` : "";
+        reject(new Error(`Timeout after ${timeoutMs}ms waiting for ${label}${detail}`));
         return;
       }
       setTimeout(check, 100);
@@ -82,12 +135,12 @@ function waitForCondition(
   });
 }
 
-function hasTurnCompleted(events: ThreadEvent[]): boolean {
-  return events.some((e) => e.type === "turn/completed");
-}
-
 function turnCompletedCount(events: ThreadEvent[]): number {
   return events.filter((e) => e.type === "turn/completed").length;
+}
+
+function turnStartedCount(events: ThreadEvent[]): number {
+  return events.filter((e) => e.type === "turn/started").length;
 }
 
 function collectTurnIds(events: ThreadEvent[]): Set<string> {
@@ -121,15 +174,11 @@ function providerUsesRuntimeTurnIds(providerId: string): boolean {
   return providerId === "claude-code" || providerId === "pi";
 }
 
-function providerEmitsInterruptedTurnCompletion(providerId: string): boolean {
-  return providerId === "codex";
-}
-
 function getUserMessageAckEvents(
   events: ThreadEvent[],
-): Array<Extract<ThreadEvent, { type: "item/completed" }>> {
+): UserMessageAckEvent[] {
   return events.filter(
-    (event): event is Extract<ThreadEvent, { type: "item/completed" }> =>
+    (event): event is UserMessageAckEvent =>
       event.type === "item/completed" && event.item.type === "userMessage",
   );
 }
@@ -148,6 +197,42 @@ function getEventsForThread(
   return events.filter((event) =>
     "threadId" in event && event.threadId === threadId,
   );
+}
+
+function findLatestTurnStartedForThread(
+  events: ThreadEvent[],
+  threadId: string,
+): TurnStartedEvent | null {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
+    if (event?.type === "turn/started" && event.threadId === threadId) {
+      return event;
+    }
+  }
+  return null;
+}
+
+function findUserMessageAckTextForThread(
+  events: ThreadEvent[],
+  threadId: string,
+  text: string,
+): UserMessageAckEvent | null {
+  const ack = getUserMessageAckEvents(getEventsForThread(events, threadId)).find(
+    (event) =>
+      event.item.type === "userMessage" &&
+      event.item.content.some((content) =>
+        content.type === "text" && content.text === text,
+      ),
+  );
+  return ack ?? null;
+}
+
+function hasUserMessageAckTextForThread(
+  events: ThreadEvent[],
+  threadId: string,
+  text: string,
+): boolean {
+  return findUserMessageAckTextForThread(events, threadId, text) !== null;
 }
 
 function turnStartedCountForThread(
@@ -252,6 +337,19 @@ function describeEventsForFailure(events: ThreadEvent[]): string {
   return events.map((event) => {
     const threadId = "threadId" in event ? event.threadId : "no-thread";
     if (event.type === "item/completed") {
+      if (event.item.type === "toolCall") {
+        const error = event.item.error ? ` error=${event.item.error}` : "";
+        return `${threadId} ${event.type}:${event.item.type}:${event.item.tool}:${event.item.status}${error}`;
+      }
+      if (event.item.type === "commandExecution") {
+        return `${threadId} ${event.type}:${event.item.type}:${event.item.status}:${event.item.approvalStatus}`;
+      }
+      if (event.item.type === "fileChange") {
+        return `${threadId} ${event.type}:${event.item.type}:${event.item.status}:${event.item.approvalStatus}`;
+      }
+      return `${threadId} ${event.type}:${event.item.type}`;
+    }
+    if (event.type === "item/started") {
       return `${threadId} ${event.type}:${event.item.type}`;
     }
     if (event.type === "error") {
@@ -259,6 +357,207 @@ function describeEventsForFailure(events: ThreadEvent[]): string {
     }
     return `${threadId} ${event.type}`;
   }).join("\n");
+}
+
+function previewText(value: string): string {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (normalized.length <= 240) {
+    return normalized;
+  }
+  return `${normalized.slice(0, 240)}...`;
+}
+
+function isErrorEvent(event: ThreadEvent): event is ErrorThreadEvent {
+  return event.type === "error" || event.type === "system/error";
+}
+
+function findLatestErrorEvent(events: ThreadEvent[]): ErrorThreadEvent | null {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
+    if (event && isErrorEvent(event)) {
+      return event;
+    }
+  }
+  return null;
+}
+
+function formatErrorEvent(event: ErrorThreadEvent): string {
+  const detail = event.detail ? ` detail=${event.detail}` : "";
+  return `${event.type}: ${event.message}${detail}`;
+}
+
+function formatInteractiveRequest(request: PendingInteractionCreate): string {
+  const { subject } = request.payload;
+  switch (subject.kind) {
+    case "command":
+      return `command:${previewText(subject.command)}`;
+    case "file_change":
+      return `file_change:${subject.itemId}`;
+    case "permission_grant":
+      return `permission_grant:${subject.toolName ?? "unknown"}`;
+  }
+}
+
+function describeRuntimeDiagnostics(args: RuntimeDiagnosticsArgs): string {
+  const events = args.threadId
+    ? getEventsForThread(args.ctx.events, args.threadId)
+    : args.ctx.events;
+  const relevantToolCalls = args.threadId
+    ? args.ctx.toolCalls.filter((request) => request.threadId === args.threadId)
+    : args.ctx.toolCalls;
+  const relevantInteractiveRequests = args.threadId
+    ? args.ctx.interactiveRequests.filter((request) => request.threadId === args.threadId)
+    : args.ctx.interactiveRequests;
+  const recentEvents = events.slice(-12);
+  const latestError = findLatestErrorEvent(events);
+  const agentText = previewText(getAgentText(events));
+  const streamedText = previewText(getStreamedText(events));
+  const toolCalls = relevantToolCalls.map((request) => request.tool).join(", ");
+  const interactiveRequests = relevantInteractiveRequests
+    .map(formatInteractiveRequest)
+    .join(", ");
+
+  return [
+    `Diagnostics: threadId=${args.threadId ?? "all"} events=${events.length} turnStarted=${turnStartedCount(events)} turnCompleted=${turnCompletedCount(events)}`,
+    `latestError=${latestError ? formatErrorEvent(latestError) : "none"}`,
+    `toolCalls=[${toolCalls || "none"}]`,
+    `interactiveRequests=[${interactiveRequests || "none"}]`,
+    `agentText=${JSON.stringify(agentText)}`,
+    `streamedText=${JSON.stringify(streamedText)}`,
+    `recentEvents:\n${describeEventsForFailure(recentEvents) || "none"}`,
+  ].join("\n");
+}
+
+function failOnRuntimeError(args: RuntimeDiagnosticsArgs): string | null {
+  const events = args.threadId
+    ? getEventsForThread(args.ctx.events, args.threadId)
+    : args.ctx.events;
+  const latestError = findLatestErrorEvent(events);
+  if (!latestError) {
+    return null;
+  }
+  return `${formatErrorEvent(latestError)}\n${describeRuntimeDiagnostics(args)}`;
+}
+
+function waitForRuntimeCondition(args: RuntimeConditionWaitArgs): Promise<void> {
+  return waitForCondition(args.predicate, {
+    describeFailure: () => describeRuntimeDiagnostics(args),
+    failFast: () => failOnRuntimeError(args),
+    label: args.label,
+    timeoutMs: args.timeoutMs,
+  });
+}
+
+function waitForTurnCompletedCount(args: TurnCompletedCountWaitArgs): Promise<void> {
+  return waitForRuntimeCondition({
+    ctx: args.ctx,
+    label: args.label,
+    predicate: () => turnCompletedCount(args.ctx.events) >= args.count,
+    timeoutMs: args.timeoutMs,
+  });
+}
+
+function waitForThreadTurnCompleted(args: ThreadWaitArgs): Promise<void> {
+  return waitForRuntimeCondition({
+    ctx: args.ctx,
+    label: args.label,
+    predicate: () => turnCompletedCountForThread(
+      args.ctx.events,
+      args.threadId,
+    ) >= 1,
+    threadId: args.threadId,
+    timeoutMs: args.timeoutMs,
+  });
+}
+
+function waitForThreadTurnCompletedCount(
+  args: ThreadTurnCompletedCountWaitArgs,
+): Promise<void> {
+  return waitForRuntimeCondition({
+    ctx: args.ctx,
+    label: args.label,
+    predicate: () => turnCompletedCountForThread(
+      args.ctx.events,
+      args.threadId,
+    ) >= args.count,
+    threadId: args.threadId,
+    timeoutMs: args.timeoutMs,
+  });
+}
+
+function waitForThreadTurnStarted(args: ThreadWaitArgs): Promise<void> {
+  return waitForRuntimeCondition({
+    ctx: args.ctx,
+    label: args.label,
+    predicate: () => findLatestTurnStartedForThread(
+      args.ctx.events,
+      args.threadId,
+    ) !== null,
+    threadId: args.threadId,
+    timeoutMs: args.timeoutMs,
+  });
+}
+
+function hasToolCallForThread(
+  ctx: TestContext,
+  threadId: string,
+  toolName: string,
+): boolean {
+  return ctx.toolCalls.some((request) =>
+    request.threadId === threadId && request.tool === toolName,
+  );
+}
+
+function interactiveRequestCountForThread(
+  ctx: TestContext,
+  threadId: string,
+): number {
+  return ctx.interactiveRequests.filter((request) => request.threadId === threadId)
+    .length;
+}
+
+function waitForToolCallBeforeTurnCompletion(args: ToolCallWaitArgs): Promise<void> {
+  return waitForCondition(
+    () => hasToolCallForThread(args.ctx, args.threadId, args.toolName),
+    {
+      describeFailure: () => describeRuntimeDiagnostics(args),
+      failFast: () => {
+        const runtimeError = failOnRuntimeError(args);
+        if (runtimeError) {
+          return runtimeError;
+        }
+        if (turnCompletedCountForThread(args.ctx.events, args.threadId) > 0) {
+          return `Turn completed before ${args.toolName} was called.\n${describeRuntimeDiagnostics(args)}`;
+        }
+        return null;
+      },
+      label: args.label,
+      timeoutMs: args.timeoutMs,
+    },
+  );
+}
+
+function waitForInteractiveRequestBeforeTurnCompletion(
+  args: InteractiveRequestWaitArgs,
+): Promise<void> {
+  return waitForCondition(
+    () => interactiveRequestCountForThread(args.ctx, args.threadId) >= args.count,
+    {
+      describeFailure: () => describeRuntimeDiagnostics(args),
+      failFast: () => {
+        const runtimeError = failOnRuntimeError(args);
+        if (runtimeError) {
+          return runtimeError;
+        }
+        if (turnCompletedCountForThread(args.ctx.events, args.threadId) > 0) {
+          return `Turn completed before ${args.label} was observed.\n${describeRuntimeDiagnostics(args)}`;
+        }
+        return null;
+      },
+      label: args.label,
+      timeoutMs: args.timeoutMs,
+    },
+  );
 }
 
 function getCompletedCommandOutputs(events: ThreadEvent[]): string {
@@ -515,7 +814,9 @@ for (const providerId of providers) {
           input: [{ type: "text", text: "Reply with exactly: PONG" }],
         });
 
-        await waitForCondition(() => hasTurnCompleted(ctx.events), {
+        await waitForThreadTurnCompleted({
+          ctx,
+          threadId,
           timeoutMs: 30_000,
           label: "turn/completed",
         });
@@ -580,16 +881,19 @@ for (const providerId of providers) {
           }],
         });
 
-        await waitForCondition(() => {
-          const outputs = getCompletedCommandOutputs(ctx.events);
-          return (
-            (
-              outputs.includes(workspaceToken)
-              && outputs.includes(parentToken)
-            )
-            || hasTurnCompleted(ctx.events)
-          );
-        }, {
+        await waitForRuntimeCondition({
+          ctx,
+          threadId,
+          predicate: () => {
+            const outputs = getCompletedCommandOutputs(ctx.events);
+            return (
+              (
+                outputs.includes(workspaceToken)
+                && outputs.includes(parentToken)
+              )
+              || turnCompletedCountForThread(ctx.events, threadId) > 0
+            );
+          },
           timeoutMs: 60_000,
           label: "command outputs or turn/completed",
         });
@@ -630,7 +934,10 @@ for (const providerId of providers) {
           options: fullRuntimeOptions,
         });
 
-        await waitForCondition(() => turnCompletedCount(ctx.events) >= 1, {
+        await waitForThreadTurnCompletedCount({
+          ctx,
+          threadId,
+          count: 1,
           timeoutMs: 30_000,
           label: "first turn/completed",
         });
@@ -642,7 +949,10 @@ for (const providerId of providers) {
           options: fullRuntimeOptions,
         });
 
-        await waitForCondition(() => turnCompletedCount(ctx.events) >= 2, {
+        await waitForThreadTurnCompletedCount({
+          ctx,
+          threadId,
+          count: 2,
           timeoutMs: 30_000,
           label: "second turn/completed",
         });
@@ -658,7 +968,89 @@ for (const providerId of providers) {
       }
     });
 
-    // 4. Stops an active turn and recovers with a resumed session.
+    // 4. Steers an active turn.
+    it("steers an active turn", async () => {
+      const ctx = createTestRuntime(providerId);
+      try {
+        const threadId = newThreadId();
+        const model = await resolveDefaultModel(providerId, ctx);
+        const options = {
+          permissionMode: "full",
+          permissionEscalation: null,
+          ...(model ? { model } : {}),
+        } satisfies AgentRuntimeExecutionOptions;
+        await ctx.runtime.startThread({
+          environmentId: "env-1",
+          threadId,
+          projectId: "test-project",
+          providerId,
+          options,
+        });
+
+        await ctx.runtime.runTurn({
+          threadId,
+          input: [{
+            type: "text",
+            text:
+              "Write a detailed 20 section essay about the history of computing "
+              + "with four sentences per section.",
+          }],
+          options,
+        });
+
+        await waitForThreadTurnStarted({
+          ctx,
+          threadId,
+          timeoutMs: 30_000,
+          label: "turn/started before steer",
+        });
+
+        const activeTurn = findLatestTurnStartedForThread(ctx.events, threadId);
+        if (!activeTurn) {
+          throw new Error("Expected active turn before steering");
+        }
+        const steerText = `STEER_${providerId}_${randomUUID()}`;
+        await ctx.runtime.steerTurn({
+          threadId,
+          expectedTurnId: activeTurn.turnId,
+          input: [{ type: "text", text: steerText }],
+          options,
+        });
+
+        await waitForRuntimeCondition({
+          ctx,
+          threadId,
+          predicate: () => hasUserMessageAckTextForThread(
+            ctx.events,
+            threadId,
+            steerText,
+          ),
+          timeoutMs: 30_000,
+          label: "steer user-message ack",
+        });
+
+        const steerAck = findUserMessageAckTextForThread(
+          ctx.events,
+          threadId,
+          steerText,
+        );
+        expect(steerAck?.type).toBe("item/completed");
+        if (
+          steerAck?.type !== "item/completed" ||
+          steerAck.item.type !== "userMessage"
+        ) {
+          throw new Error("Expected steer user-message ack");
+        }
+        expect(steerAck.turnId).toBe(activeTurn.turnId);
+
+        await ctx.runtime.stopThread({ threadId });
+      } finally {
+        await ctx.runtime.shutdown();
+        cleanup(ctx);
+      }
+    }, 90_000);
+
+    // 5. Stops an active turn and recovers with a resumed session.
     it("stops an active turn and recovers with a follow-up", async () => {
       const ctx = createTestRuntime(providerId);
       try {
@@ -688,27 +1080,17 @@ for (const providerId of providers) {
           options,
         });
 
-        await waitForCondition(
-          () => turnStartedCountForThread(ctx.events, threadId) >= 1,
-          {
-            timeoutMs: 30_000,
-            label: "turn/started before stop",
-          },
-        );
+        await waitForThreadTurnStarted({
+          ctx,
+          threadId,
+          timeoutMs: 30_000,
+          label: "turn/started before stop",
+        });
 
         const completedBeforeStop = turnCompletedCountForThread(ctx.events, threadId);
         expect(completedBeforeStop).toBe(0);
 
         await ctx.runtime.stopThread({ threadId });
-        if (providerEmitsInterruptedTurnCompletion(providerId)) {
-          await waitForCondition(
-            () => turnCompletedCountForThread(ctx.events, threadId) > completedBeforeStop,
-            {
-              timeoutMs: 30_000,
-              label: "interrupted turn/completed after stop",
-            },
-          );
-        }
 
         const providerThreadId = resolveProviderThreadId({
           events: ctx.events,
@@ -736,22 +1118,15 @@ for (const providerId of providers) {
           options,
         });
 
-        try {
-          await waitForCondition(
-            () =>
-              turnCompletedCountForThread(ctx.events, threadId) > completedBeforeRecovery
-              && getAgentTextAfterIndex(ctx.events, recoveryStartIndex, threadId).length > 0,
-            {
-              timeoutMs: 60_000,
-              label: "recovery turn/completed with output",
-            },
-          );
-        } catch {
-          throw new Error(
-            "Timed out waiting for stop recovery turn.\n"
-            + describeEventsForFailure(getEventsForThread(ctx.events, threadId)),
-          );
-        }
+        await waitForRuntimeCondition({
+          ctx,
+          threadId,
+          predicate: () =>
+            turnCompletedCountForThread(ctx.events, threadId) > completedBeforeRecovery
+            && getAgentTextAfterIndex(ctx.events, recoveryStartIndex, threadId).length > 0,
+          timeoutMs: 60_000,
+          label: "recovery turn/completed with output",
+        });
 
         expect(turnStartedCountForThread(ctx.events, threadId)).toBeGreaterThanOrEqual(2);
         expect(getAgentTextAfterIndex(ctx.events, recoveryStartIndex, threadId).length)
@@ -769,7 +1144,7 @@ for (const providerId of providers) {
       }
     }, 90_000);
 
-    // 5. Respects developer instructions
+    // 6. Respects developer instructions
     it("respects developer instructions", async () => {
       const ctx = createTestRuntime(providerId);
       try {
@@ -789,7 +1164,9 @@ for (const providerId of providers) {
           options: fullRuntimeOptions,
         });
 
-        await waitForCondition(() => hasTurnCompleted(ctx.events), {
+        await waitForThreadTurnCompleted({
+          ctx,
+          threadId,
           timeoutMs: 30_000,
           label: "turn/completed",
         });
@@ -802,7 +1179,7 @@ for (const providerId of providers) {
       }
     });
 
-    // 6. Recovers from a bad request
+    // 7. Recovers from a bad request
     it("recovers from a bad request", async () => {
       const ctx = createTestRuntime(providerId);
       try {
@@ -822,7 +1199,9 @@ for (const providerId of providers) {
           options: fullRuntimeOptions,
         });
 
-        await waitForCondition(() => hasTurnCompleted(ctx.events), {
+        await waitForThreadTurnCompleted({
+          ctx,
+          threadId,
           timeoutMs: 30_000,
           label: "first turn/completed",
         });
@@ -848,7 +1227,10 @@ for (const providerId of providers) {
           options: fullRuntimeOptions,
         });
 
-        await waitForCondition(() => turnCompletedCount(ctx.events) >= 2, {
+        await waitForThreadTurnCompletedCount({
+          ctx,
+          threadId,
+          count: 2,
           timeoutMs: 30_000,
           label: "second turn/completed after recovery",
         });
@@ -860,7 +1242,7 @@ for (const providerId of providers) {
       }
     });
 
-    // 7. Handles dynamic tool calls
+    // 8. Handles dynamic tool calls
     it("handles dynamic tool calls", async () => {
       let toolCalled = false;
       const ctx = createTestRuntime(providerId, {
@@ -910,7 +1292,10 @@ for (const providerId of providers) {
           options: fullRuntimeOptions,
         });
 
-        await waitForCondition(() => toolCalled, {
+        await waitForToolCallBeforeTurnCompletion({
+          ctx,
+          threadId,
+          toolName: "bb_test_ping",
           timeoutMs: 30_000,
           label: "tool call",
         });
@@ -922,7 +1307,7 @@ for (const providerId of providers) {
       }
     });
 
-    // 8. Resumes a thread across process lifetimes.
+    // 9. Resumes a thread across process lifetimes.
     it("resumes a thread across process lifetimes", async () => {
       const ctx1 = createTestRuntime(providerId);
       let providerThreadId: string | undefined;
@@ -948,7 +1333,9 @@ for (const providerId of providers) {
           options: fullRuntimeOptions,
         });
 
-        await waitForCondition(() => hasTurnCompleted(ctx1.events), {
+        await waitForThreadTurnCompleted({
+          ctx: ctx1,
+          threadId: firstThreadId,
           timeoutMs: 30_000,
           label: "first session turn/completed",
         });
@@ -995,7 +1382,9 @@ for (const providerId of providers) {
             options: fullRuntimeOptions,
           });
 
-          await waitForCondition(() => hasTurnCompleted(ctx2.events), {
+          await waitForThreadTurnCompleted({
+            ctx: ctx2,
+            threadId,
             timeoutMs: 30_000,
             label: "resumed turn/completed",
           });
@@ -1064,7 +1453,9 @@ describe.concurrent("cross-provider and multi-thread scenarios", () => {
           }),
         ]);
 
-        await waitForCondition(() => turnCompletedCount(ctx.events) >= 2, {
+        await waitForTurnCompletedCount({
+          ctx,
+          count: 2,
           timeoutMs: 30_000,
           label: "both threads turn/completed",
         });
@@ -1117,7 +1508,9 @@ describe.concurrent("cross-provider and multi-thread scenarios", () => {
           }),
         ]);
 
-        await waitForCondition(() => turnCompletedCount(ctx.events) >= 2, {
+        await waitForTurnCompletedCount({
+          ctx,
+          count: 2,
           timeoutMs: 45_000,
           label: "both providers turn/completed",
         });
@@ -1162,7 +1555,9 @@ describe("interactive request scenarios", () => {
         options: fullRuntimeOptions,
       });
 
-      await waitForCondition(() => hasTurnCompleted(ctx.events), {
+      await waitForThreadTurnCompleted({
+        ctx,
+        threadId,
         timeoutMs: 45_000,
         label: "Claude CLAUDE.md turn/completed",
       });
@@ -1216,11 +1611,16 @@ describe("interactive request scenarios", () => {
         options: workspaceWriteAskRuntimeOptions,
       });
 
-      await waitForCondition(() => ctx.interactiveRequests.length >= 1, {
+      await waitForInteractiveRequestBeforeTurnCompletion({
+        ctx,
+        threadId,
+        count: 1,
         timeoutMs: 45_000,
         label: "Claude permission request",
       });
-      await waitForCondition(() => hasTurnCompleted(ctx.events), {
+      await waitForThreadTurnCompleted({
+        ctx,
+        threadId,
         timeoutMs: 45_000,
         label: "Claude permission turn/completed",
       });
@@ -1272,7 +1672,9 @@ describe("interactive request scenarios", () => {
         }],
       });
 
-      await waitForCondition(() => hasTurnCompleted(ctx.events), {
+      await waitForThreadTurnCompleted({
+        ctx,
+        threadId,
         timeoutMs: 45_000,
         label: "Claude workspace-write Write turn/completed",
       });
@@ -1314,7 +1716,9 @@ describe("interactive request scenarios", () => {
         }],
       });
 
-      await waitForCondition(() => hasTurnCompleted(ctx.events), {
+      await waitForThreadTurnCompleted({
+        ctx,
+        threadId,
         timeoutMs: 45_000,
         label: "Claude workspace-write sandboxed Bash turn/completed",
       });
@@ -1356,7 +1760,9 @@ describe("interactive request scenarios", () => {
         }],
       });
 
-      await waitForCondition(() => hasTurnCompleted(ctx.events), {
+      await waitForThreadTurnCompleted({
+        ctx,
+        threadId,
         timeoutMs: 45_000,
         label: "Claude workspace-write outside Bash deny turn/completed",
       });
@@ -1405,7 +1811,9 @@ describe("interactive request scenarios", () => {
         }],
       });
 
-      await waitForCondition(() => hasTurnCompleted(ctx.events), {
+      await waitForThreadTurnCompleted({
+        ctx,
+        threadId,
         timeoutMs: 45_000,
         label: "Codex workspace-write turn/completed",
       });
@@ -1455,11 +1863,16 @@ describe("interactive request scenarios", () => {
         }],
       });
 
-      await waitForCondition(() => ctx.interactiveRequests.length >= 1, {
+      await waitForInteractiveRequestBeforeTurnCompletion({
+        ctx,
+        threadId,
+        count: 1,
         timeoutMs: 45_000,
         label: "Codex workspace-write outside-workspace approval",
       });
-      await waitForCondition(() => hasTurnCompleted(ctx.events), {
+      await waitForThreadTurnCompleted({
+        ctx,
+        threadId,
         timeoutMs: 45_000,
         label: "Codex workspace-write outside-workspace turn/completed",
       });
@@ -1504,11 +1917,16 @@ describe("interactive request scenarios", () => {
         }],
       });
 
-      await waitForCondition(() => ctx.interactiveRequests.length >= 1, {
+      await waitForInteractiveRequestBeforeTurnCompletion({
+        ctx,
+        threadId,
+        count: 1,
         timeoutMs: 45_000,
         label: "Codex readonly write approval",
       });
-      await waitForCondition(() => hasTurnCompleted(ctx.events), {
+      await waitForThreadTurnCompleted({
+        ctx,
+        threadId,
         timeoutMs: 45_000,
         label: "Codex readonly ask turn/completed",
       });
@@ -1553,11 +1971,16 @@ describe("interactive request scenarios", () => {
         }],
       });
 
-      await waitForCondition(() => ctx.interactiveRequests.length >= 1, {
+      await waitForInteractiveRequestBeforeTurnCompletion({
+        ctx,
+        threadId,
+        count: 1,
         timeoutMs: 45_000,
         label: "Codex readonly file-change approval",
       });
-      await waitForCondition(() => hasTurnCompleted(ctx.events), {
+      await waitForThreadTurnCompleted({
+        ctx,
+        threadId,
         timeoutMs: 45_000,
         label: "Codex readonly file-change turn/completed",
       });
@@ -1633,11 +2056,16 @@ describe("interactive request scenarios", () => {
         }],
       });
 
-      await waitForCondition(() => ctx.interactiveRequests.length >= 1, {
+      await waitForInteractiveRequestBeforeTurnCompletion({
+        ctx,
+        threadId,
+        count: 1,
         timeoutMs: 45_000,
         label: "Codex user-denied command approval",
       });
-      await waitForCondition(() => hasTurnCompleted(ctx.events), {
+      await waitForThreadTurnCompleted({
+        ctx,
+        threadId,
         timeoutMs: 45_000,
         label: "Codex user-denied turn/completed",
       });
@@ -1681,7 +2109,9 @@ describe("interactive request scenarios", () => {
         }],
       });
 
-      await waitForCondition(() => hasTurnCompleted(ctx.events), {
+      await waitForThreadTurnCompleted({
+        ctx,
+        threadId,
         timeoutMs: 45_000,
         label: "Codex readonly deny turn/completed",
       });
@@ -1722,11 +2152,16 @@ describe("interactive request scenarios", () => {
         }],
       });
 
-      await waitForCondition(() => ctx.interactiveRequests.length >= 1, {
+      await waitForInteractiveRequestBeforeTurnCompletion({
+        ctx,
+        threadId,
+        count: 1,
         timeoutMs: 45_000,
         label: "Codex readonly network approval",
       });
-      await waitForCondition(() => hasTurnCompleted(ctx.events), {
+      await waitForThreadTurnCompleted({
+        ctx,
+        threadId,
         timeoutMs: 45_000,
         label: "Codex readonly network turn/completed",
       });
@@ -1781,11 +2216,16 @@ describe("interactive request scenarios", () => {
         }],
       });
 
-      await waitForCondition(() => ctx.interactiveRequests.length >= 1, {
+      await waitForInteractiveRequestBeforeTurnCompletion({
+        ctx,
+        threadId,
+        count: 1,
         timeoutMs: 45_000,
         label: "Claude readonly permission request",
       });
-      await waitForCondition(() => hasTurnCompleted(ctx.events), {
+      await waitForThreadTurnCompleted({
+        ctx,
+        threadId,
         timeoutMs: 45_000,
         label: "Claude readonly ask turn/completed",
       });
@@ -1847,11 +2287,16 @@ describe("interactive request scenarios", () => {
         }],
       });
 
-      await waitForCondition(() => ctx.interactiveRequests.length >= 1, {
+      await waitForInteractiveRequestBeforeTurnCompletion({
+        ctx,
+        threadId,
+        count: 1,
         timeoutMs: 45_000,
         label: "Claude readonly Write permission request",
       });
-      await waitForCondition(() => hasTurnCompleted(ctx.events), {
+      await waitForThreadTurnCompleted({
+        ctx,
+        threadId,
         timeoutMs: 45_000,
         label: "Claude readonly Write ask turn/completed",
       });
@@ -1907,11 +2352,16 @@ describe("interactive request scenarios", () => {
         }],
       });
 
-      await waitForCondition(() => ctx.interactiveRequests.length >= 1, {
+      await waitForInteractiveRequestBeforeTurnCompletion({
+        ctx,
+        threadId,
+        count: 1,
         timeoutMs: 45_000,
         label: "Claude session WebFetch approval",
       });
-      await waitForCondition(() => hasTurnCompleted(ctx.events), {
+      await waitForThreadTurnCompleted({
+        ctx,
+        threadId,
         timeoutMs: 45_000,
         label: "Claude session first WebFetch turn/completed",
       });
@@ -1938,7 +2388,10 @@ describe("interactive request scenarios", () => {
         }],
       });
 
-      await waitForCondition(() => turnCompletedCount(ctx.events) >= 2, {
+      await waitForThreadTurnCompletedCount({
+        ctx,
+        threadId,
+        count: 2,
         timeoutMs: 45_000,
         label: "Claude session second WebFetch turn/completed",
       });
@@ -1985,11 +2438,16 @@ describe("interactive request scenarios", () => {
         }],
       });
 
-      await waitForCondition(() => ctx.interactiveRequests.length >= 1, {
+      await waitForInteractiveRequestBeforeTurnCompletion({
+        ctx,
+        threadId,
+        count: 1,
         timeoutMs: 45_000,
         label: "Claude user-denied permission request",
       });
-      await waitForCondition(() => hasTurnCompleted(ctx.events), {
+      await waitForThreadTurnCompleted({
+        ctx,
+        threadId,
         timeoutMs: 45_000,
         label: "Claude user-denied turn/completed",
       });
@@ -2032,7 +2490,9 @@ describe("interactive request scenarios", () => {
         }],
       });
 
-      await waitForCondition(() => hasTurnCompleted(ctx.events), {
+      await waitForThreadTurnCompleted({
+        ctx,
+        threadId,
         timeoutMs: 45_000,
         label: "Claude readonly deny turn/completed",
       });
@@ -2106,12 +2566,17 @@ describe("interactive request scenarios", () => {
         options: fullRuntimeOptions,
       });
 
-      await waitForCondition(() => toolCalledInRuntime1, {
+      await waitForToolCallBeforeTurnCompletion({
+        ctx: ctx1,
+        threadId: firstThreadId,
+        toolName: "bb_test_ping",
         timeoutMs: 30_000,
         label: "tool call in runtime 1",
       });
 
-      await waitForCondition(() => hasTurnCompleted(ctx1.events), {
+      await waitForThreadTurnCompleted({
+        ctx: ctx1,
+        threadId: firstThreadId,
         timeoutMs: 30_000,
         label: "runtime 1 turn/completed",
       });
@@ -2161,7 +2626,10 @@ describe("interactive request scenarios", () => {
         options: fullRuntimeOptions,
       });
 
-      await waitForCondition(() => toolCalledInRuntime2, {
+      await waitForToolCallBeforeTurnCompletion({
+        ctx: ctx2,
+        threadId,
+        toolName: "bb_test_ping",
         timeoutMs: 30_000,
         label: "tool call in runtime 2",
       });
@@ -2199,7 +2667,9 @@ describe("interactive request scenarios", () => {
         options: fullRuntimeOptions,
       });
 
-      await waitForCondition(() => hasTurnCompleted(ctx1.events), {
+      await waitForThreadTurnCompleted({
+        ctx: ctx1,
+        threadId: firstThreadId,
         timeoutMs: 30_000,
         label: "runtime 1 turn/completed",
       });
@@ -2234,7 +2704,9 @@ describe("interactive request scenarios", () => {
         options: fullRuntimeOptions,
       });
 
-      await waitForCondition(() => hasTurnCompleted(ctx2.events), {
+      await waitForThreadTurnCompleted({
+        ctx: ctx2,
+        threadId,
         timeoutMs: 30_000,
         label: "runtime 2 turn/completed",
       });
@@ -2304,9 +2776,18 @@ describe("interactive request scenarios", () => {
         options: fullRuntimeOptions,
       });
 
-      await waitForCondition(() => toolCalledInRuntime1 && hasTurnCompleted(ctx1.events), {
+      await waitForToolCallBeforeTurnCompletion({
+        ctx: ctx1,
+        threadId: firstThreadId,
+        toolName: "bb_test_ping",
         timeoutMs: 30_000,
-        label: "runtime 1 tool call and turn/completed",
+        label: "runtime 1 tool call",
+      });
+      await waitForThreadTurnCompleted({
+        ctx: ctx1,
+        threadId: firstThreadId,
+        timeoutMs: 30_000,
+        label: "runtime 1 turn/completed",
       });
 
       if (!providerThreadId) {
@@ -2359,9 +2840,18 @@ describe("interactive request scenarios", () => {
         options: fullRuntimeOptions,
       });
 
-      await waitForCondition(() => toolCalledInRuntime2 && hasTurnCompleted(ctx2.events), {
+      await waitForToolCallBeforeTurnCompletion({
+        ctx: ctx2,
+        threadId,
+        toolName: "bb_test_ping",
         timeoutMs: 30_000,
-        label: "runtime 2 tool call and turn/completed",
+        label: "runtime 2 tool call",
+      });
+      await waitForThreadTurnCompleted({
+        ctx: ctx2,
+        threadId,
+        timeoutMs: 30_000,
+        label: "runtime 2 turn/completed",
       });
 
       const text = getAgentText(ctx2.events) || getStreamedText(ctx2.events);
@@ -2418,7 +2908,9 @@ describe("interactive request scenarios", () => {
         }),
       ]);
 
-      await waitForCondition(() => turnCompletedCount(ctx1.events) >= 2, {
+      await waitForTurnCompletedCount({
+        ctx: ctx1,
+        count: 2,
         timeoutMs: 45_000,
         label: "both threads turn/completed",
       });
@@ -2480,17 +2972,12 @@ describe("interactive request scenarios", () => {
           }),
         ]);
 
-        try {
-          await waitForCondition(() => turnCompletedCount(ctx2.events) >= 2, {
-            timeoutMs: 45_000,
-            label: "both resumed threads turn/completed",
-          });
-        } catch (error) {
-          throw new Error(
-            `${error instanceof Error ? error.message : "Resume wait failed"}\n`
-            + `Events:\n${describeEventsForFailure(ctx2.events)}`,
-          );
-        }
+        await waitForTurnCompletedCount({
+          ctx: ctx2,
+          count: 2,
+          timeoutMs: 45_000,
+          label: "both resumed threads turn/completed",
+        });
 
         const codexText = getThreadText(ctx2.events, codexThreadId2).toUpperCase();
         const claudeText = getThreadText(ctx2.events, claudeThreadId2).toUpperCase();

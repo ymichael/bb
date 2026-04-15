@@ -55,6 +55,32 @@ interface WaitForTurnStartedResult {
   turnId: string;
 }
 
+interface SendLongRunningTurnArgs {
+  harness: ProviderSmokeHarness;
+  providerId: RealProviderId;
+  threadId: string;
+}
+
+interface ManagedRealThreadWorkspace {
+  type: "managed-worktree";
+}
+
+interface UnmanagedRealThreadWorkspace {
+  path: string | null;
+  type: "unmanaged";
+}
+
+type RealThreadWorkspace =
+  | ManagedRealThreadWorkspace
+  | UnmanagedRealThreadWorkspace;
+
+interface SendAndWaitForIdleArgs {
+  harness: ProviderSmokeHarness;
+  providerId: RealProviderId;
+  text: string;
+  threadId: string;
+}
+
 // Active-turn waits: enough time to confirm the provider has started a long-running turn.
 const ACTIVE_TIMEOUT_MS = scaleTimeoutMs(15_000);
 const REAL_POLL_INTERVAL_MS = 200;
@@ -64,9 +90,6 @@ const TURN_TIMEOUT_MS = scaleTimeoutMs(60_000);
 const STOP_TIMEOUT_MS = scaleTimeoutMs(30_000);
 // Per-test budget: end-to-end provider checks include real network and provider startup latency.
 const TEST_TIMEOUT_MS = scaleTimeoutMs(120_000);
-// Mixed-provider budget: the all-provider pass runs multiple real-provider turns in one test.
-const MIXED_PROVIDER_TIMEOUT_MS = scaleTimeoutMs(240_000);
-
 // Concurrent real-provider harnesses each install daemon shutdown handlers.
 process.setMaxListeners(Math.max(process.getMaxListeners(), 64));
 
@@ -157,17 +180,70 @@ function findTurnStartedAfter(
   return null;
 }
 
+function findErrorAfter(
+  events: ThreadEventRow[],
+  sequence: number,
+): ThreadEventRow | null {
+  return events.find((event) =>
+    event.seq > sequence &&
+    (event.type === "error" || event.type === "system/error")
+  ) ?? null;
+}
+
+function hasTurnCompletedAfter(
+  events: ThreadEventRow[],
+  sequence: number,
+): boolean {
+  return events.some((event) =>
+    event.seq > sequence && event.type === "turn/completed"
+  );
+}
+
+function previewText(value: string | null): string {
+  const normalized = (value ?? "").replace(/\s+/g, " ").trim();
+  if (normalized.length <= 240) {
+    return normalized;
+  }
+  return `${normalized.slice(0, 240)}...`;
+}
+
+function describeThreadEvent(event: ThreadEventRow): string {
+  if (event.type === "item/completed") {
+    const item = event.data.item;
+    if (item.type === "toolCall") {
+      const error = item.error ? ` error=${item.error}` : "";
+      return `${event.seq}:${event.type}:${item.type}:${item.tool}:${item.status}${error}`;
+    }
+    if (item.type === "commandExecution") {
+      return `${event.seq}:${event.type}:${item.type}:${item.status}:${item.approvalStatus}`;
+    }
+    if (item.type === "fileChange") {
+      return `${event.seq}:${event.type}:${item.type}:${item.status}:${item.approvalStatus}`;
+    }
+    return `${event.seq}:${event.type}:${item.type}`;
+  }
+  if (event.type === "item/started") {
+    return `${event.seq}:${event.type}:${event.data.item.type}`;
+  }
+  if (event.type === "error" || event.type === "system/error") {
+    const detail = event.data.detail ? ` ${event.data.detail}` : "";
+    return `${event.seq}:${event.type}:${event.data.message}${detail}`;
+  }
+  return `${event.seq}:${event.type}`;
+}
+
 async function buildThreadDiagnostics(
   args: WaitForThreadEventArgs,
 ): Promise<string> {
-  const [thread, events] = await Promise.all([
+  const [thread, events, output] = await Promise.all([
     getThread(args.harness.api, args.threadId),
     getThreadEvents(args.harness.api, args.threadId),
+    getThreadOutput(args.harness.api, args.threadId).catch(() => null),
   ]);
-  const recentEventTypes = events
+  const recentEvents = events
     .slice(-12)
-    .map((event) => event.type)
-    .join(", ");
+    .map(describeThreadEvent)
+    .join(" | ");
   const lastError = [...events]
     .reverse()
     .find((event) => event.type === "error" || event.type === "system/error");
@@ -177,7 +253,7 @@ async function buildThreadDiagnostics(
   const lastTurnCompleted = [...events]
     .reverse()
     .find((event) => event.type === "turn/completed");
-  return `status=${thread.status}; events=${events.length}; recentEventTypes=[${recentEventTypes || "none"}]; lastError=${JSON.stringify(lastError?.data ?? null)}; lastTurnStarted=${JSON.stringify(lastTurnStarted?.data ?? null)}; lastTurnCompleted=${JSON.stringify(lastTurnCompleted?.data ?? null)}`;
+  return `status=${thread.status}; events=${events.length}; recentEvents=[${recentEvents || "none"}]; lastError=${JSON.stringify(lastError?.data ?? null)}; lastTurnStarted=${JSON.stringify(lastTurnStarted?.data ?? null)}; lastTurnCompleted=${JSON.stringify(lastTurnCompleted?.data ?? null)}; outputPreview=${JSON.stringify(previewText(output))}`;
 }
 
 async function waitForTurnStartedAfter(
@@ -185,10 +261,24 @@ async function waitForTurnStartedAfter(
 ): Promise<WaitForTurnStartedResult> {
   const startedAt = Date.now();
   while (Date.now() - startedAt <= ACTIVE_TIMEOUT_MS) {
-    const events = await getThreadEvents(args.harness.api, args.threadId);
+    const [thread, events] = await Promise.all([
+      getThread(args.harness.api, args.threadId),
+      getThreadEvents(args.harness.api, args.threadId),
+    ]);
     const turnStarted = findTurnStartedAfter(events, args.baselineSequence);
     if (turnStarted) {
       return turnStarted;
+    }
+    const errorEvent = findErrorAfter(events, args.baselineSequence);
+    if (thread.status === "error" || errorEvent) {
+      throw new Error(
+        `Thread failed before turn/started. Diagnostics: ${await buildThreadDiagnostics(args)}`,
+      );
+    }
+    if (hasTurnCompletedAfter(events, args.baselineSequence)) {
+      throw new Error(
+        `Turn completed before turn/started was observed. Diagnostics: ${await buildThreadDiagnostics(args)}`,
+      );
     }
     await new Promise((resolve) => setTimeout(resolve, REAL_POLL_INTERVAL_MS));
   }
@@ -202,15 +292,49 @@ async function waitForUserMessageAckTextAfter(
 ): Promise<void> {
   const startedAt = Date.now();
   while (Date.now() - startedAt <= ACTIVE_TIMEOUT_MS) {
-    const events = await getThreadEvents(args.harness.api, args.threadId);
+    const [thread, events] = await Promise.all([
+      getThread(args.harness.api, args.threadId),
+      getThreadEvents(args.harness.api, args.threadId),
+    ]);
     if (hasUserMessageAckTextAfter(events, args.baselineSequence, args.text)) {
       return;
+    }
+    const errorEvent = findErrorAfter(events, args.baselineSequence);
+    if (thread.status === "error" || errorEvent) {
+      throw new Error(
+        `Thread failed before user-message ack containing ${JSON.stringify(args.text)}. Diagnostics: ${await buildThreadDiagnostics(args)}`,
+      );
+    }
+    if (hasTurnCompletedAfter(events, args.baselineSequence)) {
+      throw new Error(
+        `Turn completed before user-message ack containing ${JSON.stringify(args.text)}. Diagnostics: ${await buildThreadDiagnostics(args)}`,
+      );
     }
     await new Promise((resolve) => setTimeout(resolve, REAL_POLL_INTERVAL_MS));
   }
   throw new Error(
     `Timed out waiting for user-message ack containing ${JSON.stringify(args.text)}. Diagnostics: ${await buildThreadDiagnostics(args)}`,
   );
+}
+
+async function sendLongRunningTurnAndWaitStarted(
+  args: SendLongRunningTurnArgs,
+): Promise<WaitForTurnStartedResult> {
+  const baselineEvents = await getThreadEvents(args.harness.api, args.threadId);
+  const baselineSequence = Math.max(
+    0,
+    ...baselineEvents.map((event) => event.seq),
+  );
+  await sendTextMessage(args.harness.api, args.threadId, {
+    execution: getExecutionOptions(args.providerId),
+    text:
+      "Write a detailed 20 section essay about the history of computing with four sentences per section.",
+  });
+  return waitForTurnStartedAfter({
+    baselineSequence,
+    harness: args.harness,
+    threadId: args.threadId,
+  });
 }
 
 async function pathExists(targetPath: string): Promise<boolean> {
@@ -266,9 +390,7 @@ function hasAssistantTimelineMessage(timeline: ThreadTimelineResponse): boolean 
 
 async function createRealThread(
   providerId: RealProviderId,
-  workspace:
-    | { type: "managed-worktree" }
-    | { path: string | null; type: "unmanaged" },
+  workspace: RealThreadWorkspace,
 ) {
   await assertProviderPrerequisites(providerId);
   const harness = await createIntegrationHarness({ adapterFactory: undefined });
@@ -289,12 +411,7 @@ async function createRealThread(
   };
 }
 
-async function sendAndWaitForIdle(args: {
-  providerId: RealProviderId;
-  threadId: string;
-  text: string;
-  harness: Awaited<ReturnType<typeof createIntegrationHarness>>;
-}) {
+async function sendAndWaitForIdle(args: SendAndWaitForIdleArgs) {
   const baselineEvents = await getThreadEvents(args.harness.api, args.threadId);
   const baselineSequence = Math.max(0, ...baselineEvents.map((event) => event.seq));
   await sendTextMessage(args.harness.api, args.threadId, {
@@ -324,6 +441,11 @@ async function sendAndWaitForIdle(args: {
           reachedIdle = true;
           break;
         }
+        if (hasTurnCompletedAfter(events, requestSequence)) {
+          throw new Error(
+            `Thread ${args.threadId} returned to idle without a completed agent message`,
+          );
+        }
       }
       if (thread.status === "error") {
         throw new Error(
@@ -344,10 +466,10 @@ async function sendAndWaitForIdle(args: {
       getThreadOutput(args.harness.api, args.threadId),
       getThreadTimeline(args.harness.api, args.threadId).catch(() => null),
     ]);
-    const recentEventTypes = events
+    const recentEvents = events
       .slice(-10)
-      .map((event) => event.type)
-      .join(", ");
+      .map(describeThreadEvent)
+      .join(" | ");
     const timelineKinds = timeline
       ? timeline.rows
         .map((row) => (row.kind === "message" ? row.message.kind : row.kind))
@@ -363,7 +485,7 @@ async function sendAndWaitForIdle(args: {
     const message = error instanceof Error ? error.message : String(error);
 
     throw new Error(
-      `${message}. Diagnostics: status=${thread.status}; events=${events.length}; recentEventTypes=[${recentEventTypes || "none"}]; timelineKinds=[${timelineKinds || "none"}]; lastError=${JSON.stringify(lastError?.data ?? null)}; lastTurnCompleted=${JSON.stringify(lastTurnCompleted?.data ?? null)}; outputPreview=${JSON.stringify(outputPreview)}`,
+      `${message}. Diagnostics: status=${thread.status}; events=${events.length}; recentEvents=[${recentEvents || "none"}]; timelineKinds=[${timelineKinds || "none"}]; lastError=${JSON.stringify(lastError?.data ?? null)}; lastTurnCompleted=${JSON.stringify(lastTurnCompleted?.data ?? null)}; outputPreview=${JSON.stringify(outputPreview)}`,
     );
   }
 
@@ -445,18 +567,8 @@ describe("real provider end-to-end integration", () => {
         });
 
         try {
-          const baselineEvents = await getThreadEvents(harness.api, thread.id);
-          const baselineSequence = Math.max(
-            0,
-            ...baselineEvents.map((event) => event.seq),
-          );
-          await sendTextMessage(harness.api, thread.id, {
-            execution: getExecutionOptions(providerId),
-            text:
-              "Write a detailed 20 section essay about the history of computing with four sentences per section.",
-          });
-          await waitForTurnStartedAfter({
-            baselineSequence,
+          await sendLongRunningTurnAndWaitStarted({
+            providerId,
             harness,
             threadId: thread.id,
           });
@@ -504,17 +616,11 @@ describe("real provider end-to-end integration", () => {
         });
 
         try {
-          await sendTextMessage(harness.api, thread.id, {
-            execution: getExecutionOptions(providerId),
-            text:
-              "Write a detailed 20 section essay about the history of computing with four sentences per section.",
+          await sendLongRunningTurnAndWaitStarted({
+            providerId,
+            harness,
+            threadId: thread.id,
           });
-          await waitForThreadStatus(
-            harness.api,
-            thread.id,
-            "active",
-            ACTIVE_TIMEOUT_MS,
-          );
 
           await stopThread(harness.api, thread.id);
           await waitForThreadStatus(
@@ -682,53 +788,29 @@ describe("real provider end-to-end integration", () => {
     TEST_TIMEOUT_MS,
   );
 
-  it.concurrent(
-    "runs codex, claude-code, and pi sequentially through the full registry",
-    async () => {
-      for (const providerId of REAL_PROVIDER_IDS) {
-        await assertProviderPrerequisites(providerId);
-      }
-
-      const harness = await createIntegrationHarness({ adapterFactory: undefined });
-
-      try {
-        const project = await createProjectFixture(harness, {
-          name: "Real Registry Sweep",
+  for (const providerId of REAL_PROVIDER_IDS) {
+    it.concurrent(
+      `${providerId} runs through the registered provider path`,
+      async () => {
+        const { harness, thread } = await createRealThread(providerId, {
+          type: "managed-worktree",
         });
 
-        for (const providerId of REAL_PROVIDER_IDS) {
-          const readyThread = await createReadyHostThread(harness, {
-            execution: getExecutionOptions(providerId),
-            projectId: project.id,
+        try {
+          const { events, output } = await sendAndWaitForIdle({
             providerId,
-            timeoutMs: TURN_TIMEOUT_MS,
-            workspace: { type: "managed-worktree" },
-          });
-          await sendTextMessage(harness.api, readyThread.thread.id, {
-            execution: getExecutionOptions(providerId),
+            threadId: thread.id,
             text: "Reply with a short confirmation that the thread is working.",
+            harness,
           });
-          await waitForThreadStatus(
-            harness.api,
-            readyThread.thread.id,
-            "idle",
-            TURN_TIMEOUT_MS,
-          );
-          expect(
-            countTurnEvents(
-              await getThreadEvents(harness.api, readyThread.thread.id),
-              "turn/completed",
-            ),
-          ).toBeGreaterThanOrEqual(1);
-          expectNonEmptyOutput(
-            await getThreadOutput(harness.api, readyThread.thread.id),
-            `${providerId} registry output`,
-          );
+
+          expect(countTurnEvents(events, "turn/completed")).toBeGreaterThanOrEqual(1);
+          expectNonEmptyOutput(output, `${providerId} registry output`);
+        } finally {
+          await harness.cleanup();
         }
-      } finally {
-        await harness.cleanup();
-      }
-    },
-    MIXED_PROVIDER_TIMEOUT_MS,
-  );
+      },
+      TEST_TIMEOUT_MS,
+    );
+  }
 });

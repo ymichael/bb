@@ -199,7 +199,11 @@ export function createCodexProviderAdapter(
     id: providerInfo.id,
     displayName: providerInfo.displayName,
     capabilities,
-    threadStopBehavior: "keep-provider",
+    // The Codex app-server accepts new turns after turn/interrupt, but the
+    // next turn can sit idle for ~30s while the interrupted session drains.
+    // Restarting forces the next command through thread/resume on a fresh
+    // app-server process.
+    threadStopBehavior: "restart-provider",
     process: {
       command: opts?.processCommand ?? "codex",
       args: opts?.processArgs ?? ["app-server"],
