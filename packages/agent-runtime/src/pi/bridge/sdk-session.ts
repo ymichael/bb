@@ -179,6 +179,32 @@ export class PiSdkSession {
     }
   }
 
+  async closeGracefully(timeoutMs: number): Promise<void> {
+    const session = this.session;
+    this.detach();
+    if (!session) {
+      return;
+    }
+
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const abortCompleted = session.abort().catch(() => undefined);
+    const timeoutReached = new Promise<void>((resolve) => {
+      timeout = setTimeout(resolve, timeoutMs);
+    });
+    try {
+      await Promise.race([abortCompleted, timeoutReached]);
+    } finally {
+      if (timeout) {
+        clearTimeout(timeout);
+      }
+      session.dispose();
+      if (this.session === session) {
+        this.session = undefined;
+      }
+      this.isProcessing = false;
+    }
+  }
+
   private trackProcessingState(event: AgentSessionEvent): void {
     if (event.type === "agent_start") {
       this.isProcessing = true;

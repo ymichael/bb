@@ -8,7 +8,8 @@ import {
   createInteractiveRequestAdapter,
   createInvalidInteractiveRequestAdapter,
   fullRuntimeOptions,
-  waitForCondition,
+  waitForRuntimeState,
+  waitForThreadAgentMessageText,
 } from "./test/runtime-test-harness.js";
 
 describe("createAgentRuntime interactive requests", () => {
@@ -163,8 +164,10 @@ rl.on("line", (line) => {
       input: [{ type: "text", text: "trigger interactive request" }],
       options: fullRuntimeOptions,
     });
-    await waitForCondition(
-      () =>
+    await waitForRuntimeState({
+      events,
+      label: "interactive request handled",
+      predicate: () =>
         requests.length === 1
         && events.some(
           (event) =>
@@ -172,7 +175,10 @@ rl.on("line", (line) => {
             && event.item.type === "agentMessage"
             && event.item.text === "interactive:allow_for_session",
         ),
-    );
+      providerId: "fake",
+      runtime,
+      threadId: "t1",
+    });
 
     expect(requests).toEqual([
       {
@@ -323,15 +329,13 @@ rl.on("line", (line) => {
       input: [{ type: "text", text: "trigger denied interactive request" }],
       options: { permissionMode: "readonly", permissionEscalation: "deny" },
     });
-    await waitForCondition(
-      () =>
-        events.some(
-          (event) =>
-            event.type === "item/completed"
-            && event.item.type === "agentMessage"
-            && event.item.text === "interactive:deny",
-        ),
-    );
+    await waitForThreadAgentMessageText({
+      events,
+      providerId: "fake",
+      runtime,
+      text: "interactive:deny",
+      threadId: "t1",
+    });
 
     expect(requests).toEqual([]);
     await runtime.shutdown();
@@ -466,15 +470,13 @@ rl.on("line", (line) => {
       input: [{ type: "text", text: "trigger interactive request failure" }],
       options: fullRuntimeOptions,
     });
-    await waitForCondition(
-      () =>
-        events.some(
-          (event) =>
-            event.type === "item/completed"
-            && event.item.type === "agentMessage"
-            && event.item.text === "Interaction failed",
-        ),
-    );
+    await waitForThreadAgentMessageText({
+      events,
+      providerId: "fake",
+      runtime,
+      text: "Interaction failed",
+      threadId: "t1",
+    });
 
     await runtime.shutdown();
   });
@@ -602,15 +604,13 @@ rl.on("line", (line) => {
       input: [{ type: "text", text: "trigger unsupported interactive request" }],
       options: fullRuntimeOptions,
     });
-    await waitForCondition(
-      () =>
-        events.some(
-          (event) =>
-            event.type === "item/completed"
-            && event.item.type === "agentMessage"
-            && event.item.text === 'Unsupported provider request "request_unsupported"',
-        ),
-    );
+    await waitForThreadAgentMessageText({
+      events,
+      providerId: "fake",
+      runtime,
+      text: 'Unsupported provider request "request_unsupported"',
+      threadId: "t1",
+    });
 
     expect(events).toContainEqual(
       expect.objectContaining({
@@ -729,15 +729,13 @@ rl.on("line", (line) => {
       input: [{ type: "text", text: "trigger invalid interactive request" }],
       options: fullRuntimeOptions,
     });
-    await waitForCondition(
-      () =>
-        events.some(
-          (event) =>
-            event.type === "item/completed"
-            && event.item.type === "agentMessage"
-            && event.item.text === "-32602",
-        ),
-    );
+    await waitForThreadAgentMessageText({
+      events,
+      providerId: "fake",
+      runtime,
+      text: "-32602",
+      threadId: "t1",
+    });
 
     expect(events).toContainEqual(
       expect.objectContaining({

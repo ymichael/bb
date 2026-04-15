@@ -8,6 +8,14 @@ import { ProviderRequestDecodeError } from "../provider-adapter.js";
 import { parseAvailableModelList } from "../shared/available-models.js";
 import type { AgentRuntimeExecutionOptions } from "../types.js";
 import { createFakeAdapter as createSharedFakeAdapter } from "./index.js";
+export {
+  waitForRuntimeState,
+  waitForRuntimeThreadEvent,
+  waitForThreadAgentMessageText,
+  waitForThreadTurnCompleted,
+  waitForThreadTurnStarted,
+  waitForThreadUserMessageText,
+} from "./runtime-wait-helpers.js";
 
 export const fullRuntimeOptions = {
   permissionMode: "full",
@@ -27,20 +35,6 @@ export function wait(ms: number): Promise<void> {
 
 function isRecord(value: unknown): value is RuntimeTestRecord {
   return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
-export async function waitForCondition(
-  condition: () => boolean,
-  timeoutMs = 1_000,
-): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    if (condition()) {
-      return;
-    }
-    await wait(10);
-  }
-  throw new Error("Timed out waiting for condition");
 }
 
 export function findLastRecordedCommand(

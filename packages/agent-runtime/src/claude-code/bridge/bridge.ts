@@ -16,7 +16,9 @@
  */
 
 import { randomUUID } from "node:crypto";
+import { resolve as resolvePath } from "node:path";
 import { createInterface } from "node:readline";
+import { pathToFileURL } from "node:url";
 import type {
   CanUseTool,
   PermissionResult,
@@ -119,11 +121,22 @@ interface PendingInteractiveRequest {
 interface ThreadSession {
   session: SdkSession;
   sessionSerial: number;
+  closing: boolean;
   pendingToolCalls: Map<string | number, PendingToolCall>;
   pendingInteractiveRequests: Map<string | number, PendingInteractiveRequest>;
   permissionEscalation: PermissionEscalation | null;
   permissionMode: ClaudePermissionMode;
   providerThreadId?: string;
+}
+
+interface CloseThreadSessionArgs {
+  graceful: boolean;
+  message: string;
+  threadId: string;
+}
+
+interface ClaudeCodeThreadStopResult {
+  ok: true;
 }
 
 interface ClaudeCanUseToolDecisionContext {
@@ -149,8 +162,13 @@ interface ForwardInteractiveRequestArgs extends BuildInteractiveRequestParamsArg
 }
 
 const sessions = new Map<string, ThreadSession>();
+const closingSessions = new Map<string, Promise<void>>();
 let sessionSerialCounter = 0;
 let toolCallRequestIdCounter = 0;
+
+// Runtime waits on thread/stop until the SDK stream drains or this timeout
+// forces the session closed. Stop remains a best-effort success boundary.
+const THREAD_STOP_CLOSE_TIMEOUT_MS = 4_000;
 
 function send(msg: JsonRpcResponse | SdkMessageNotification | BridgeEventNotification | BridgeToolCallRequest): void {
   process.stdout.write(JSON.stringify(msg) + "\n");
@@ -196,7 +214,11 @@ function getCurrentThreadSession(
   args: CurrentThreadSessionArgs,
 ): ThreadSession | undefined {
   const threadSession = sessions.get(args.threadId);
-  if (!threadSession || threadSession.sessionSerial !== args.sessionSerial) {
+  if (
+    !threadSession
+    || threadSession.closing
+    || threadSession.sessionSerial !== args.sessionSerial
+  ) {
     return undefined;
   }
   return threadSession;
@@ -249,7 +271,7 @@ function createForwardToolCall(threadIdRef: ThreadIdRef): ToolCallForwarder {
   return (toolName, args) => {
     return new Promise<{ content: string; isError?: boolean }>((resolve) => {
       const threadSession = sessions.get(threadIdRef.current);
-      if (!threadSession) {
+      if (!threadSession || threadSession.closing) {
         resolve({ content: "Thread session not found", isError: true });
         return;
       }
@@ -307,25 +329,60 @@ function resolvePendingInteractiveRequests(
   }
 }
 
-function stopThreadSession(threadId: string, message: string): void {
-  const threadSession = sessions.get(threadId);
+function resolvePendingToolCalls(
+  threadSession: ThreadSession,
+  message: string,
+): void {
+  for (const [requestId, pending] of threadSession.pendingToolCalls) {
+    threadSession.pendingToolCalls.delete(requestId);
+    pending.resolve({ content: message, isError: true });
+  }
+}
+
+function resolvePendingSessionWork(
+  threadSession: ThreadSession,
+  message: string,
+): void {
+  resolvePendingToolCalls(threadSession, message);
+  resolvePendingInteractiveRequests(threadSession, message);
+}
+
+async function closeThreadSession(args: CloseThreadSessionArgs): Promise<void> {
+  const existingClose = closingSessions.get(args.threadId);
+  if (existingClose) {
+    await existingClose;
+    return;
+  }
+
+  const threadSession = sessions.get(args.threadId);
   if (!threadSession) {
     return;
   }
 
-  resolvePendingInteractiveRequests(threadSession, message);
-  threadSession.session.stop();
-  sessions.delete(threadId);
+  threadSession.closing = true;
+  resolvePendingSessionWork(threadSession, args.message);
+  const closePromise = (async () => {
+    if (args.graceful) {
+      await threadSession.session.closeGracefully(THREAD_STOP_CLOSE_TIMEOUT_MS);
+      return;
+    }
+    threadSession.session.stop();
+  })().finally(() => {
+    if (sessions.get(args.threadId) === threadSession) {
+      sessions.delete(args.threadId);
+    }
+    closingSessions.delete(args.threadId);
+  });
+  closingSessions.set(args.threadId, closePromise);
+  await closePromise;
 }
 
 async function closeThreadSessionsGracefully(message: string): Promise<void> {
-  const closePromises: Promise<void>[] = [];
-  for (const [threadId, threadSession] of sessions) {
-    resolvePendingInteractiveRequests(threadSession, message);
-    sessions.delete(threadId);
-    closePromises.push(threadSession.session.closeGracefully(4_000));
-  }
-  await Promise.all(closePromises);
+  await Promise.all(
+    Array.from(sessions.keys()).map((threadId) =>
+      closeThreadSession({ graceful: true, message, threadId })
+    ),
+  );
 }
 
 function extractEnvOverrides(config: Record<string, unknown> | undefined): Record<string, string> {
@@ -565,10 +622,10 @@ async function handleRequest(request: ClaudeCodeJsonRpcRequest): Promise<void> {
       sendResult(request.id, await listClaudeCodeBridgeModels());
       break;
     case "thread/start":
-      handleThreadStart(request.id, request.params);
+      await handleThreadStart(request.id, request.params);
       break;
     case "thread/resume":
-      handleThreadResume(request.id, request.params);
+      await handleThreadResume(request.id, request.params);
       break;
     case "turn/start":
       handleTurnStart(request.id, request.params);
@@ -577,23 +634,24 @@ async function handleRequest(request: ClaudeCodeJsonRpcRequest): Promise<void> {
       handleTurnSteer(request.id, request.params);
       break;
     case "thread/stop":
-      handleThreadStop(request.id, request.params);
+      sendResult(request.id, await handleThreadStop(request.params));
       break;
   }
 }
 
-function handleThreadStart(
+async function handleThreadStart(
   id: string | number,
   params: ThreadStartParams,
-): void {
+): Promise<void> {
   const threadIdRef = { current: params.threadId };
 
   const existing = sessions.get(threadIdRef.current);
   if (existing) {
-    stopThreadSession(
-      threadIdRef.current,
-      "Thread session replaced while awaiting permission approval",
-    );
+    await closeThreadSession({
+      graceful: false,
+      message: "Thread session replaced while awaiting permission approval",
+      threadId: threadIdRef.current,
+    });
   }
 
   const envOverrides = extractEnvOverrides(params.config);
@@ -621,6 +679,7 @@ function handleThreadStart(
   const threadSession: ThreadSession = {
     session,
     sessionSerial,
+    closing: false,
     pendingToolCalls: new Map(),
     pendingInteractiveRequests: new Map(),
     permissionEscalation: params.permissionEscalation,
@@ -634,19 +693,20 @@ function handleThreadStart(
   sendThreadIdentity(threadIdRef.current, providerThreadId);
 }
 
-function handleThreadResume(
+async function handleThreadResume(
   id: string | number,
   params: ThreadResumeParams,
-): void {
+): Promise<void> {
   const threadId = params.threadId;
   const providerThreadId = params.providerThreadId ?? undefined;
 
   const existing = sessions.get(threadId);
   if (existing) {
-    stopThreadSession(
+    await closeThreadSession({
+      graceful: false,
+      message: "Thread session replaced while awaiting permission approval",
       threadId,
-      "Thread session replaced while awaiting permission approval",
-    );
+    });
   }
 
   const envOverrides = extractEnvOverrides(params.config);
@@ -672,6 +732,7 @@ function handleThreadResume(
   const threadSession: ThreadSession = {
     session,
     sessionSerial,
+    closing: false,
     pendingToolCalls: new Map(),
     pendingInteractiveRequests: new Map(),
     permissionEscalation: params.permissionEscalation,
@@ -689,7 +750,7 @@ function handleTurnStart(
   params: TurnStartParams,
 ): void {
   const threadSession = sessions.get(params.threadId);
-  if (!threadSession) {
+  if (!threadSession || threadSession.closing) {
     sendError(id, -32000, "No active session");
     return;
   }
@@ -709,7 +770,7 @@ function handleTurnSteer(
   params: TurnSteerParams,
 ): void {
   const threadSession = sessions.get(params.threadId);
-  if (!threadSession) {
+  if (!threadSession || threadSession.closing) {
     sendError(id, -32000, "No active session");
     return;
   }
@@ -724,18 +785,15 @@ function handleTurnSteer(
   sendResult(id, { threadId: params.threadId });
 }
 
-function handleThreadStop(
-  id: string | number,
+async function handleThreadStop(
   params: ThreadStopParams,
-): void {
-  const threadSession = sessions.get(params.threadId);
-  if (threadSession) {
-    stopThreadSession(
-      params.threadId,
-      "Thread stopped while awaiting permission approval",
-    );
-  }
-  sendResult(id, { ok: true });
+): Promise<ClaudeCodeThreadStopResult> {
+  await closeThreadSession({
+    graceful: true,
+    message: "Thread stopped while awaiting permission approval",
+    threadId: params.threadId,
+  });
+  return { ok: true };
 }
 
 function extractInputText(input: unknown): string | undefined {
@@ -753,7 +811,7 @@ function extractInputText(input: unknown): string | undefined {
   return chunks.length > 0 ? chunks.join("\n") : undefined;
 }
 
-function handleLine(line: string): void {
+export function handleLine(line: string): void {
   const trimmed = line.trim();
   if (!trimmed) return;
 
@@ -832,16 +890,24 @@ function shutdownGracefully(message: string): void {
   });
 }
 
-process.once("SIGTERM", () => {
-  shutdownGracefully("Bridge shutting down while awaiting permission approval");
-});
+function isMainModule(): boolean {
+  const entryPoint = process.argv[1];
+  return entryPoint !== undefined
+    && import.meta.url === pathToFileURL(resolvePath(entryPoint)).href;
+}
 
-process.once("SIGINT", () => {
-  shutdownGracefully("Bridge interrupted while awaiting permission approval");
-});
+if (isMainModule()) {
+  process.once("SIGTERM", () => {
+    shutdownGracefully("Bridge shutting down while awaiting permission approval");
+  });
 
-const rl = createInterface({ input: process.stdin, terminal: false });
-rl.on("line", handleLine);
-rl.on("close", () => {
-  shutdownGracefully("Bridge closed while awaiting permission approval");
-});
+  process.once("SIGINT", () => {
+    shutdownGracefully("Bridge interrupted while awaiting permission approval");
+  });
+
+  const rl = createInterface({ input: process.stdin, terminal: false });
+  rl.on("line", handleLine);
+  rl.on("close", () => {
+    shutdownGracefully("Bridge closed while awaiting permission approval");
+  });
+}

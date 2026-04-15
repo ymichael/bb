@@ -967,7 +967,7 @@ export function createPiProviderAdapter(
     id: providerInfo.id,
     displayName: providerInfo.displayName,
     capabilities,
-    threadStopBehavior: "restart-provider",
+    threadStopBehavior: "keep-provider",
     process: {
       command: opts?.processCommand ?? "node",
       args: opts?.processArgs ?? [resolveBridgePath({

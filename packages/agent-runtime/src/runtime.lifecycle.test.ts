@@ -12,7 +12,8 @@ import {
   findLastRecordedCommand,
   fullRuntimeOptions,
   wait,
-  waitForCondition,
+  waitForThreadAgentMessageText,
+  waitForThreadTurnStarted,
 } from "./test/runtime-test-harness.js";
 
 describe("createAgentRuntime lifecycle", () => {
@@ -580,9 +581,13 @@ rl.on("line", (line) => {
         input: [{ type: "text", text: "delay:500" }],
         options: fullRuntimeOptions,
       });
-      await waitForCondition(() =>
-        events.some((event) => event.type === "turn/started" && event.turnId === "turn-1"),
-      );
+      await waitForThreadTurnStarted({
+        events,
+        providerId: "fake",
+        runtime,
+        threadId: "t1",
+        turnId: "turn-1",
+      });
 
       await expect(runtime.stopThread({ threadId: "t1" }))
         .rejects.toThrow(/stop command failed to build/);
@@ -640,14 +645,13 @@ rl.on("line", (line) => {
         input: [{ type: "text", text: "after restart" }],
         options: fullRuntimeOptions,
       });
-      await waitForCondition(() =>
-        events.some(
-          (event) =>
-            event.type === "item/completed" &&
-            event.item.type === "agentMessage" &&
-            event.item.text.includes("after restart"),
-        )
-      );
+      await waitForThreadAgentMessageText({
+        events,
+        providerId: "fake",
+        runtime,
+        text: "after restart",
+        threadId: "t1",
+      });
 
       await runtime.shutdown();
     });
@@ -676,9 +680,13 @@ rl.on("line", (line) => {
         input: [{ type: "text", text: "delay:500" }],
         options: fullRuntimeOptions,
       });
-      await waitForCondition(() =>
-        events.some((event) => event.type === "turn/started" && event.turnId === "turn-1"),
-      );
+      await waitForThreadTurnStarted({
+        events,
+        providerId: "fake",
+        runtime,
+        threadId: "t1",
+        turnId: "turn-1",
+      });
       await runtime.steerTurn({
         threadId: "t1",
         expectedTurnId: "turn-1",
@@ -776,9 +784,13 @@ rl.on("line", (line) => {
         options: { ...fullRuntimeOptions, model: "fake-model" },
         instructions: "Initial instructions",
       });
-      await waitForCondition(() =>
-        events.some((event) => event.type === "turn/started" && event.turnId === "turn-1"),
-      );
+      await waitForThreadTurnStarted({
+        events,
+        providerId: "fake",
+        runtime,
+        threadId: "t1",
+        turnId: "turn-1",
+      });
       builtCommands.length = 0;
 
       await runtime.steerTurn({

@@ -10,7 +10,8 @@ import {
   createFakeAdapter,
   createThreadHintMismatchAdapter,
   fullRuntimeOptions,
-  waitForCondition,
+  waitForRuntimeState,
+  waitForThreadTurnCompleted,
 } from "./test/runtime-test-harness.js";
 
 describe("createAgentRuntime tool calls", () => {
@@ -58,11 +59,15 @@ describe("createAgentRuntime tool calls", () => {
       input: [{ type: "text", text: "call_tool:my_test_tool" }],
       options: fullRuntimeOptions,
     });
-    await waitForCondition(
-      () =>
+    await waitForRuntimeState({
+      events,
+      label: "tool call routed and turn completed",
+      predicate: () =>
         toolCalls.length === 1
         && events.some((event) => event.type === "turn/completed"),
-    );
+      providerId: "fake",
+      runtime,
+    });
 
     expect(toolCalls).toHaveLength(1);
     expect(toolCalls[0]).toEqual({
@@ -101,9 +106,12 @@ describe("createAgentRuntime tool calls", () => {
       input: [{ type: "text", text: "call_tool:my_test_tool" }],
       options: fullRuntimeOptions,
     });
-    await waitForCondition(
-      () => events.some((event) => event.type === "turn/completed"),
-    );
+    await waitForThreadTurnCompleted({
+      events,
+      providerId: "fake",
+      runtime,
+      threadId: "t1",
+    });
 
     expect(toolCalls).toEqual([]);
     await runtime.shutdown();
@@ -133,9 +141,12 @@ describe("createAgentRuntime tool calls", () => {
       input: [{ type: "text", text: "call_tool:failing_tool" }],
       options: fullRuntimeOptions,
     });
-    await waitForCondition(
-      () => events.some((event) => event.type === "turn/completed"),
-    );
+    await waitForThreadTurnCompleted({
+      events,
+      providerId: "fake",
+      runtime,
+      threadId: "t1",
+    });
     await runtime.shutdown();
     // The test passes if no unhandled promise rejection occurs
   });
@@ -165,15 +176,18 @@ describe("createAgentRuntime tool calls", () => {
       input: [{ type: "text", text: "call_tool:my_test_tool" }],
       options: fullRuntimeOptions,
     });
-    await waitForCondition(
-      () =>
+    await waitForRuntimeState({
+      label: "captured tool result and raw turn completion",
+      predicate: () =>
         captures.some((entry) => entry.kind === "tool-call-result")
         && captures.some(
           (entry) =>
             entry.kind === "raw-provider-event"
             && entry.rawEvent.method === "turn/completed",
         ),
-    );
+      providerId: "fake",
+      runtime,
+    });
     await runtime.shutdown();
 
     const rawEvents = captures.filter(

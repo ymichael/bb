@@ -8,7 +8,7 @@ import { fakeProviderScriptPath } from "./test/index.js";
 import {
   createFakeAdapter,
   fullRuntimeOptions,
-  waitForCondition,
+  waitForThreadTurnStarted,
 } from "./test/runtime-test-harness.js";
 
 describe("createAgentRuntime command contracts", () => {
@@ -94,9 +94,13 @@ describe("createAgentRuntime command contracts", () => {
       input: [{ type: "text", text: "delay:500" }],
       options: fullRuntimeOptions,
     });
-    await waitForCondition(() =>
-      events.some((event) => event.type === "turn/started" && event.turnId === "turn-1"),
-    );
+    await waitForThreadTurnStarted({
+      events,
+      providerId: "fake",
+      runtime,
+      threadId: "t1",
+      turnId: "turn-1",
+    });
     await expect(
       runtime.steerTurn({
         threadId: "t1",
@@ -200,9 +204,13 @@ describe("createAgentRuntime command contracts", () => {
       input: [{ type: "text", text: "delay:500" }],
       options: fullRuntimeOptions,
     });
-    await waitForCondition(() =>
-      events.some((event) => event.type === "turn/started" && event.turnId === "turn-1"),
-    );
+    await waitForThreadTurnStarted({
+      events,
+      providerId: "fake",
+      runtime,
+      threadId: "t1",
+      turnId: "turn-1",
+    });
     await expect(runtime.stopThread({ threadId: "t1" }))
       .rejects.toThrow(/returned null for thread\/stop with active turn/);
 

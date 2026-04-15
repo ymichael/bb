@@ -9,7 +9,7 @@ import { fakeProviderScriptPath } from "./test/index.js";
 import {
   createFakeAdapter,
   fullRuntimeOptions,
-  waitForCondition,
+  waitForRuntimeState,
 } from "./test/runtime-test-harness.js";
 
 describe("createAgentRuntime process lifecycle", () => {
@@ -115,7 +115,10 @@ describe("createAgentRuntime process lifecycle", () => {
     });
 
     await runtime.ensureProvider({ providerId: "fake" });
-    await waitForCondition(() => exitInfo.mock.calls.length === 1);
+    await waitForRuntimeState({
+      label: "provider process exit callback",
+      predicate: () => exitInfo.mock.calls.length === 1,
+    });
 
     expect(exitInfo).toHaveBeenCalledWith(
       expect.objectContaining({ providerId: "fake", code: 42 }),
@@ -236,7 +239,10 @@ describe("createAgentRuntime process lifecycle", () => {
       providerId: "fake",
       options: fullRuntimeOptions,
     });
-    await waitForCondition(() => exitInfo.mock.calls.length === 1);
+    await waitForRuntimeState({
+      label: "provider process exit callback",
+      predicate: () => exitInfo.mock.calls.length === 1,
+    });
 
     await expect(
       runtime.runTurn({ threadId: "t1", input: [{ type: "text", text: "hi" }], options: fullRuntimeOptions }),

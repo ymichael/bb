@@ -13,20 +13,22 @@ import type {
 import type { AgentRuntimeCaptureEntry } from "../capture-types.js";
 import { createAgentRuntime } from "../runtime.js";
 import type { AgentRuntime, AgentRuntimeExecutionOptions } from "../types.js";
+import {
+  waitForRuntimeConditionUnsafe,
+  waitForThreadTurnCompleted as waitForSharedThreadTurnCompleted,
+  waitForThreadTurnStarted as waitForSharedThreadTurnStarted,
+  type RuntimeWaitConditionOptions,
+  type RuntimeWaitFailureDescription,
+  type RuntimeWaitPredicate,
+} from "./runtime-wait-helpers.js";
 
 export type ThreadIdentityEvent = Extract<ThreadEvent, { type: "thread/identity" }>;
 export type TurnStartedEvent = Extract<ThreadEvent, { type: "turn/started" }>;
 export type UserMessageAckEvent = Extract<ThreadEvent, { type: "item/completed" }>;
 export type ErrorThreadEvent = Extract<ThreadEvent, { type: "error" | "system/error" }>;
-export type WaitPredicate = () => boolean;
-export type WaitFailureDescription = () => string | null | undefined;
-
-export interface WaitForConditionOptions {
-  describeFailure?: WaitFailureDescription;
-  failFast?: WaitFailureDescription;
-  label?: string;
-  timeoutMs?: number;
-}
+export type WaitPredicate = RuntimeWaitPredicate;
+export type WaitFailureDescription = RuntimeWaitFailureDescription;
+export type WaitForConditionOptions = RuntimeWaitConditionOptions;
 
 export interface RuntimeDiagnosticsArgs {
   ctx: TestContext;
@@ -86,36 +88,6 @@ export const readonlyDenyRuntimeOptions = {
   permissionMode: "readonly",
   permissionEscalation: "deny",
 } satisfies AgentRuntimeExecutionOptions;
-
-export function waitForCondition(
-  predicate: WaitPredicate,
-  opts?: WaitForConditionOptions,
-): Promise<void> {
-  const timeoutMs = opts?.timeoutMs ?? 30_000;
-  const label = opts?.label ?? "condition";
-  return new Promise((resolve, reject) => {
-    const start = Date.now();
-    const check = () => {
-      if (predicate()) {
-        resolve();
-        return;
-      }
-      const failFastMessage = opts?.failFast?.();
-      if (failFastMessage) {
-        reject(new Error(failFastMessage));
-        return;
-      }
-      if (Date.now() - start > timeoutMs) {
-        const failureDetail = opts?.describeFailure?.();
-        const detail = failureDetail ? `\n${failureDetail}` : "";
-        reject(new Error(`Timeout after ${timeoutMs}ms waiting for ${label}${detail}`));
-        return;
-      }
-      setTimeout(check, 100);
-    };
-    check();
-  });
-}
 
 export function turnCompletedCount(events: ThreadEvent[]): number {
   return events.filter((e) => e.type === "turn/completed").length;
@@ -422,11 +394,12 @@ export function failOnRuntimeError(args: RuntimeDiagnosticsArgs): string | null 
 }
 
 export function waitForRuntimeCondition(args: RuntimeConditionWaitArgs): Promise<void> {
-  return waitForCondition(args.predicate, {
+  return waitForRuntimeConditionUnsafe(args.predicate, {
     describeFailure: () => describeRuntimeDiagnostics(args),
     failFast: () => failOnRuntimeError(args),
+    intervalMs: 100,
     label: args.label,
-    timeoutMs: args.timeoutMs,
+    timeoutMs: args.timeoutMs ?? 30_000,
   });
 }
 
@@ -440,15 +413,14 @@ export function waitForTurnCompletedCount(args: TurnCompletedCountWaitArgs): Pro
 }
 
 export function waitForThreadTurnCompleted(args: ThreadWaitArgs): Promise<void> {
-  return waitForRuntimeCondition({
-    ctx: args.ctx,
+  return waitForSharedThreadTurnCompleted({
+    describeFailure: () => describeRuntimeDiagnostics(args),
+    events: args.ctx.events,
+    failFast: () => failOnRuntimeError(args),
     label: args.label,
-    predicate: () => turnCompletedCountForThread(
-      args.ctx.events,
-      args.threadId,
-    ) >= 1,
+    runtime: args.ctx.runtime,
     threadId: args.threadId,
-    timeoutMs: args.timeoutMs,
+    timeoutMs: args.timeoutMs ?? 30_000,
   });
 }
 
@@ -468,15 +440,14 @@ export function waitForThreadTurnCompletedCount(
 }
 
 export function waitForThreadTurnStarted(args: ThreadWaitArgs): Promise<void> {
-  return waitForRuntimeCondition({
-    ctx: args.ctx,
+  return waitForSharedThreadTurnStarted({
+    describeFailure: () => describeRuntimeDiagnostics(args),
+    events: args.ctx.events,
+    failFast: () => failOnRuntimeError(args),
     label: args.label,
-    predicate: () => findLatestTurnStartedForThread(
-      args.ctx.events,
-      args.threadId,
-    ) !== null,
+    runtime: args.ctx.runtime,
     threadId: args.threadId,
-    timeoutMs: args.timeoutMs,
+    timeoutMs: args.timeoutMs ?? 30_000,
   });
 }
 
@@ -499,7 +470,7 @@ export function interactiveRequestCountForThread(
 }
 
 export function waitForToolCallBeforeTurnCompletion(args: ToolCallWaitArgs): Promise<void> {
-  return waitForCondition(
+  return waitForRuntimeConditionUnsafe(
     () => hasToolCallForThread(args.ctx, args.threadId, args.toolName),
     {
       describeFailure: () => describeRuntimeDiagnostics(args),
@@ -513,8 +484,9 @@ export function waitForToolCallBeforeTurnCompletion(args: ToolCallWaitArgs): Pro
         }
         return null;
       },
+      intervalMs: 100,
       label: args.label,
-      timeoutMs: args.timeoutMs,
+      timeoutMs: args.timeoutMs ?? 30_000,
     },
   );
 }
@@ -522,7 +494,7 @@ export function waitForToolCallBeforeTurnCompletion(args: ToolCallWaitArgs): Pro
 export function waitForInteractiveRequestBeforeTurnCompletion(
   args: InteractiveRequestWaitArgs,
 ): Promise<void> {
-  return waitForCondition(
+  return waitForRuntimeConditionUnsafe(
     () => interactiveRequestCountForThread(args.ctx, args.threadId) >= args.count,
     {
       describeFailure: () => describeRuntimeDiagnostics(args),
@@ -536,8 +508,9 @@ export function waitForInteractiveRequestBeforeTurnCompletion(
         }
         return null;
       },
+      intervalMs: 100,
       label: args.label,
-      timeoutMs: args.timeoutMs,
+      timeoutMs: args.timeoutMs ?? 30_000,
     },
   );
 }

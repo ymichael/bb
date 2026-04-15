@@ -8,9 +8,12 @@ const {
   mockInMemory,
   mockSettingsInMemory,
   mockCreateAgentSession,
+  mockAbort,
+  mockDispose,
 } = vi.hoisted(() => {
   const mockSubscribe = vi.fn(() => () => {});
   const mockPrompt = vi.fn();
+  const mockAbort = vi.fn(async () => {});
   const mockDispose = vi.fn();
   const mockGetSessionStats = vi.fn();
   const mockGetContextUsage = vi.fn();
@@ -21,6 +24,7 @@ const {
   const mockSettingsInMemory = vi.fn(() => ({ kind: "settings" }));
   const mockCreateAgentSession = vi.fn(async () => ({
     session: {
+      abort: mockAbort,
       subscribe: mockSubscribe,
       prompt: mockPrompt,
       dispose: mockDispose,
@@ -39,6 +43,8 @@ const {
     mockInMemory,
     mockSettingsInMemory,
     mockCreateAgentSession,
+    mockAbort,
+    mockDispose,
   };
 });
 
@@ -63,6 +69,7 @@ describe("PiSdkSession", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockGetActiveToolNames.mockReturnValue([]);
+    mockAbort.mockResolvedValue(undefined);
   });
 
   it("opens a persistent session file when provided", async () => {
@@ -138,5 +145,34 @@ describe("PiSdkSession", () => {
       "bash",
       "message_user",
     ]);
+  });
+
+  it("waits for abort before disposing during graceful close", async () => {
+    let resolveAbort: (() => void) | undefined;
+    mockAbort.mockImplementation(() =>
+      new Promise<void>((resolve) => {
+        resolveAbort = resolve;
+      })
+    );
+    const session = new PiSdkSession(
+      { cwd: "/tmp/project" },
+      vi.fn(),
+      vi.fn(),
+    );
+
+    await session.start();
+    const closePromise = session.closeGracefully(1_000);
+    await Promise.resolve();
+
+    expect(mockAbort).toHaveBeenCalledTimes(1);
+    expect(mockDispose).not.toHaveBeenCalled();
+    if (!resolveAbort) {
+      throw new Error("Expected Pi abort promise to be pending");
+    }
+    resolveAbort();
+    await closePromise;
+
+    expect(mockDispose).toHaveBeenCalledTimes(1);
+    expect(session.getIsProcessing()).toBe(false);
   });
 });

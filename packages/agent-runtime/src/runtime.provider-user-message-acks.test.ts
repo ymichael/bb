@@ -10,7 +10,8 @@ import {
 } from "./test/index.js";
 import {
   fullRuntimeOptions,
-  waitForCondition,
+  waitForThreadTurnStarted,
+  waitForThreadUserMessageText,
 } from "./test/runtime-test-harness.js";
 
 describe("createAgentRuntime provider user-message acks", () => {
@@ -50,16 +51,13 @@ describe("createAgentRuntime provider user-message acks", () => {
       input: [{ type: "text", text: "delay:500 first input" }],
       options: fullRuntimeOptions,
     });
-    await waitForCondition(() =>
-      events.some(
-        (event) =>
-          event.type === "item/completed" &&
-          event.item.type === "userMessage" &&
-          event.item.content.some((content) =>
-            content.type === "text" && content.text === "delay:500 first input",
-          ),
-      ),
-    );
+    await waitForThreadUserMessageText({
+      events,
+      providerId: "fake",
+      runtime,
+      text: "delay:500 first input",
+      threadId: "t1",
+    });
 
     const activeTurn = events.find(
       (event) => event.type === "turn/started" && event.turnId === "turn-1",
@@ -72,17 +70,14 @@ describe("createAgentRuntime provider user-message acks", () => {
       options: fullRuntimeOptions,
     });
 
-    await waitForCondition(() =>
-      events.some(
-        (event) =>
-          event.type === "item/completed" &&
-          event.item.type === "userMessage" &&
-          event.turnId === "turn-1" &&
-          event.item.content.some((content) =>
-            content.type === "text" && content.text === "steer input",
-          ),
-      ),
-    );
+    await waitForThreadUserMessageText({
+      events,
+      providerId: "fake",
+      runtime,
+      text: "steer input",
+      threadId: "t1",
+      turnId: "turn-1",
+    });
 
     await runtime.shutdown();
   });
@@ -179,9 +174,13 @@ rl.on("line", (line) => {
       input: [{ type: "text", text: "active turn" }],
       options: fullRuntimeOptions,
     });
-    await waitForCondition(() =>
-      events.some((event) => event.type === "turn/started" && event.turnId === "turn-1"),
-    );
+    await waitForThreadTurnStarted({
+      events,
+      providerId: "fake",
+      runtime,
+      threadId: "t1",
+      turnId: "turn-1",
+    });
     await runtime.steerTurn({
       threadId: "t1",
       expectedTurnId: "turn-1",
@@ -286,9 +285,13 @@ rl.on("line", (line) => {
       input: [{ type: "text", text: "active turn" }],
       options: fullRuntimeOptions,
     });
-    await waitForCondition(() =>
-      events.some((event) => event.type === "turn/started" && event.turnId === "turn-1"),
-    );
+    await waitForThreadTurnStarted({
+      events,
+      providerId: "fake",
+      runtime,
+      threadId: "t1",
+      turnId: "turn-1",
+    });
 
     await expect(
       runtime.steerTurn({

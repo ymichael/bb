@@ -5,6 +5,7 @@ import { homedir } from "node:os";
 import { extname } from "node:path";
 import { join, resolve } from "node:path";
 import { createInterface } from "node:readline";
+import { pathToFileURL } from "node:url";
 import { z } from "zod";
 import {
   decodeBridgeJsonRpcResponse,
@@ -154,9 +155,23 @@ interface ThreadSession {
   pendingToolCalls: Map<string | number, PendingToolCall>;
 }
 
+interface CloseThreadSessionArgs {
+  message: string;
+  threadId: string;
+}
+
+interface PiThreadStopResult {
+  ok: true;
+}
+
 const sessions = new Map<string, ThreadSession>();
+const closingSessions = new Map<string, Promise<void>>();
 let sessionSerialCounter = 0;
 let toolCallRequestIdCounter = 0;
+
+// Runtime waits on thread/stop until Pi aborts the active operation or this
+// timeout forces disposal. Stop remains a best-effort success boundary.
+const THREAD_STOP_CLOSE_TIMEOUT_MS = 4_000;
 
 function send(msg: JsonRpcResponse | SdkEventNotification | BridgeEventNotification | BridgeToolCallRequest): void {
   process.stdout.write(JSON.stringify(msg) + "\n");
@@ -272,7 +287,7 @@ function createForwardToolCall(threadId: string): ToolCallForwarder {
   return (toolName, args) => {
     return new Promise<{ content: string; isError?: boolean }>((resolve) => {
       const threadSession = sessions.get(threadId);
-      if (!threadSession) {
+      if (!threadSession || threadSession.stopping) {
         resolve({ content: "Thread session not found", isError: true });
         return;
       }
@@ -301,6 +316,50 @@ function findSessionByPendingToolCall(id: string | number): ThreadSession | unde
     if (session.pendingToolCalls.has(id)) return session;
   }
   return undefined;
+}
+
+function resolvePendingToolCalls(
+  threadSession: ThreadSession,
+  message: string,
+): void {
+  for (const [requestId, pending] of threadSession.pendingToolCalls) {
+    threadSession.pendingToolCalls.delete(requestId);
+    pending.resolve({ content: message, isError: true });
+  }
+}
+
+async function closeThreadSession(args: CloseThreadSessionArgs): Promise<void> {
+  const existingClose = closingSessions.get(args.threadId);
+  if (existingClose) {
+    await existingClose;
+    return;
+  }
+
+  const threadSession = sessions.get(args.threadId);
+  if (!threadSession) {
+    return;
+  }
+
+  threadSession.stopping = true;
+  resolvePendingToolCalls(threadSession, args.message);
+  const closePromise = (async () => {
+    await threadSession.session.closeGracefully(THREAD_STOP_CLOSE_TIMEOUT_MS);
+  })().finally(() => {
+    if (sessions.get(args.threadId) === threadSession) {
+      sessions.delete(args.threadId);
+    }
+    closingSessions.delete(args.threadId);
+  });
+  closingSessions.set(args.threadId, closePromise);
+  await closePromise;
+}
+
+async function closeThreadSessionsGracefully(message: string): Promise<void> {
+  await Promise.all(
+    Array.from(sessions.keys()).map((threadId) =>
+      closeThreadSession({ message, threadId })
+    ),
+  );
 }
 
 function extractEnvOverrides(config: Record<string, unknown> | undefined): Record<string, string> {
@@ -380,28 +439,28 @@ function sanitizeSessionKey(threadId: string): string {
   return threadId.replace(/[^A-Za-z0-9._-]/g, "_");
 }
 
-function handleRequest(request: PiCommand & { id: string | number }): void {
+async function handleRequest(request: PiCommand & { id: string | number }): Promise<void> {
   switch (request.method) {
     case "initialize":
       sendResult(request.id, { ok: true });
       break;
     case "model/list":
-      void handleModelList(request.id);
+      await handleModelList(request.id);
       break;
     case "thread/start":
-      void handleThreadStart(request.id, request.params);
+      await handleThreadStart(request.id, request.params);
       break;
     case "thread/resume":
-      void handleThreadResume(request.id, request.params);
+      await handleThreadResume(request.id, request.params);
       break;
     case "turn/start":
-      void handleTurnStart(request.id, request.params);
+      await handleTurnStart(request.id, request.params);
       break;
     case "turn/steer":
-      void handleTurnSteer(request.id, request.params);
+      await handleTurnSteer(request.id, request.params);
       break;
     case "thread/stop":
-      void handleThreadStop(request.id, request.params);
+      sendResult(request.id, await handleThreadStop(request.params));
       break;
   }
 }
@@ -430,8 +489,10 @@ async function handleThreadStart(
   // Stop existing session for this thread if any
   const existing = sessions.get(threadId);
   if (existing) {
-    existing.session.stop();
-    sessions.delete(threadId);
+    await closeThreadSession({
+      message: "Pi thread session replaced while tool call was pending",
+      threadId,
+    });
   }
 
   const envOverrides = extractEnvOverrides(params.config);
@@ -473,8 +534,10 @@ async function handleThreadResume(
   // Stop existing session for this thread if any
   const existing = sessions.get(threadId);
   if (existing) {
-    existing.session.stop();
-    sessions.delete(threadId);
+    await closeThreadSession({
+      message: "Pi thread session replaced while tool call was pending",
+      threadId,
+    });
   }
 
   const envOverrides = extractEnvOverrides(params.config);
@@ -507,7 +570,7 @@ async function handleTurnStart(
   params: TurnStartParams,
 ): Promise<void> {
   const threadSession = sessions.get(params.threadId);
-  if (!threadSession) {
+  if (!threadSession || threadSession.stopping) {
     sendError(id, -32000, "No active pi session");
     return;
   }
@@ -527,7 +590,7 @@ async function handleTurnSteer(
   params: TurnSteerParams,
 ): Promise<void> {
   const threadSession = sessions.get(params.threadId);
-  if (!threadSession) {
+  if (!threadSession || threadSession.stopping) {
     sendError(id, -32000, "No active pi session");
     return;
   }
@@ -543,21 +606,13 @@ async function handleTurnSteer(
 }
 
 async function handleThreadStop(
-  id: string | number,
   params: ThreadStopParams,
-): Promise<void> {
-  try {
-    const threadSession = sessions.get(params.threadId);
-    if (threadSession) {
-      threadSession.stopping = true;
-      threadSession.session.stop();
-      sessions.delete(params.threadId);
-    }
-    sendResult(id, { ok: true });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    sendError(id, -32000, message);
-  }
+): Promise<PiThreadStopResult> {
+  await closeThreadSession({
+    message: "Pi thread stopped while tool call was pending",
+    threadId: params.threadId,
+  });
+  return { ok: true };
 }
 
 interface ExtractedInput {
@@ -614,7 +669,7 @@ function extractInput(input: unknown): ExtractedInput {
   };
 }
 
-function handleLine(line: string): void {
+export function handleLine(line: string): void {
   const trimmed = line.trim();
   if (!trimmed) return;
 
@@ -643,16 +698,27 @@ function handleLine(line: string): void {
 
   const request = decodePiJsonRpcRequest(parsed);
   if (!request) return;
-  handleRequest(request);
+  void handleRequest(request).catch((error: unknown) => {
+    const message = error instanceof Error ? error.message : String(error);
+    sendError(request.id, -32000, message);
+  });
 }
 
-// Main entry point
-const rl = createInterface({ input: process.stdin, terminal: false });
-rl.on("line", handleLine);
-rl.on("close", () => {
-  for (const threadSession of sessions.values()) {
-    threadSession.session.stop();
-  }
-  sessions.clear();
-  process.exit(0);
-});
+function isMainModule(): boolean {
+  const entryPoint = process.argv[1];
+  return entryPoint !== undefined
+    && import.meta.url === pathToFileURL(resolve(entryPoint)).href;
+}
+
+if (isMainModule()) {
+  const rl = createInterface({ input: process.stdin, terminal: false });
+  rl.on("line", handleLine);
+  rl.on("close", () => {
+    // Stdin close is a process shutdown boundary; wait briefly for per-thread
+    // abort/dispose so SDK work does not continue while the bridge exits.
+    void closeThreadSessionsGracefully("Pi bridge shutting down while tool call was pending")
+      .finally(() => {
+        process.exit(0);
+      });
+  });
+}

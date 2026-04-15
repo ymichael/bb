@@ -1,4 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
+import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 
 const mockQueryInstance = {
   close: vi.fn(),
@@ -55,6 +56,33 @@ describe("SdkSession", () => {
     session.stop();
     expect(mockQueryInstance.close).toHaveBeenCalled();
     expect(session.getIsProcessing()).toBe(false);
+  });
+
+  it("waits for the SDK stream to finish during graceful close", async () => {
+    let finishStream: ((result: IteratorResult<SDKMessage>) => void) | undefined;
+    const next = vi.fn(() =>
+      new Promise<IteratorResult<SDKMessage>>((resolve) => {
+        finishStream = resolve;
+      })
+    );
+    mockQueryInstance[Symbol.asyncIterator].mockReturnValue({
+      next,
+      return: vi.fn().mockResolvedValue({ value: undefined, done: true }),
+    });
+    const session = new SdkSession(defaultOptions, vi.fn(), vi.fn());
+
+    session.start();
+    const closePromise = session.closeGracefully(1_000);
+    await Promise.resolve();
+
+    expect(mockQueryInstance.close).not.toHaveBeenCalled();
+    if (!finishStream) {
+      throw new Error("Expected Claude SDK stream to be pending");
+    }
+    finishStream({ value: undefined, done: true });
+    await closePromise;
+
+    expect(mockQueryInstance.close).not.toHaveBeenCalled();
   });
 
   it("forwards restricted built-in tools to the SDK when configured", () => {

@@ -30,6 +30,11 @@ describe("pi provider adapter", () => {
     expect(adapter.displayName).toBe("Pi");
   });
 
+  it("keeps the provider process alive after thread stop", () => {
+    const adapter = createPiProviderAdapter();
+    expect(adapter.threadStopBehavior).toBe("keep-provider");
+  });
+
   it("has correct process config", () => {
     const adapter = createPiProviderAdapter();
     expect(adapter.process.command).toBe("node");

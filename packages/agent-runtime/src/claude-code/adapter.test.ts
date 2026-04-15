@@ -31,6 +31,11 @@ describe("claude-code provider adapter", () => {
     expect(adapter.displayName).toBe("Claude Code");
   });
 
+  it("keeps the provider process alive after thread stop", () => {
+    const adapter = createClaudeCodeProviderAdapter();
+    expect(adapter.threadStopBehavior).toBe("keep-provider");
+  });
+
   it("has correct process config", () => {
     const adapter = createClaudeCodeProviderAdapter();
     expect(adapter.process.command).toBe("node");

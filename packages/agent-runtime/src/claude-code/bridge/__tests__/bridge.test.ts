@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 
 const { queryMock } = vi.hoisted(() => ({
   queryMock: vi.fn(),
@@ -12,8 +13,42 @@ vi.mock("@anthropic-ai/claude-agent-sdk", () => ({
 
 import {
   buildSessionOptions,
+  handleLine,
 } from "../bridge.js";
 import { listClaudeCodeBridgeModels } from "../model-list.js";
+import { createBridgeJsonRpcTestHarness } from "../../../test/bridge-json-rpc-test-helpers.js";
+
+interface ControlledClaudeQuery {
+  close: ReturnType<typeof vi.fn>;
+  finish(): void;
+  initializationResult: ReturnType<typeof vi.fn>;
+  [Symbol.asyncIterator](): AsyncIterator<SDKMessage>;
+}
+
+function createControlledClaudeQuery(): ControlledClaudeQuery {
+  let finishNext: ((result: IteratorResult<SDKMessage>) => void) | undefined;
+  const iterator: AsyncIterator<SDKMessage> = {
+    next: () =>
+      new Promise<IteratorResult<SDKMessage>>((resolve) => {
+        finishNext = resolve;
+      }),
+    return: async () => ({ value: undefined, done: true }),
+  };
+  return {
+    close: vi.fn(),
+    finish() {
+      if (!finishNext) {
+        throw new Error("Expected Claude query iterator to be waiting");
+      }
+      finishNext({ value: undefined, done: true });
+      finishNext = undefined;
+    },
+    initializationResult: vi.fn(),
+    [Symbol.asyncIterator]() {
+      return iterator;
+    },
+  };
+}
 
 describe("bridge", () => {
   beforeEach(() => {
@@ -240,5 +275,98 @@ describe("bridge", () => {
       }),
     ]);
     expect(queryMock).not.toHaveBeenCalled();
+  });
+
+  it("holds thread stop open until the Claude SDK stream closes", async () => {
+    const bridge = createBridgeJsonRpcTestHarness(handleLine);
+    const queries: ControlledClaudeQuery[] = [];
+    queryMock.mockImplementation(() => {
+      const query = createControlledClaudeQuery();
+      queries.push(query);
+      return query;
+    });
+
+    try {
+      bridge.sendRequest(1, "thread/start", {
+        baseInstructions: "test",
+        cwd: "/tmp/worktree",
+        instructionMode: "append",
+        permissionEscalation: "ask",
+        permissionMode: "default",
+        threadId: "thread-stop-waits",
+      });
+      await bridge.waitForResponse(1);
+
+      bridge.sendRequest(2, "thread/stop", { threadId: "thread-stop-waits" });
+      await bridge.flushWork();
+
+      expect(bridge.hasResponse(2)).toBe(false);
+      expect(queries).toHaveLength(1);
+      expect(queries[0]?.close).not.toHaveBeenCalled();
+
+      queries[0]?.finish();
+      await expect(bridge.waitForResponse(2)).resolves.toMatchObject({
+        id: 2,
+        result: { ok: true },
+      });
+      expect(queries[0]?.close).not.toHaveBeenCalled();
+    } finally {
+      bridge.restore();
+    }
+  });
+
+  it("waits for an in-flight close before replacing the same thread", async () => {
+    const bridge = createBridgeJsonRpcTestHarness(handleLine);
+    const queries: ControlledClaudeQuery[] = [];
+    queryMock.mockImplementation(() => {
+      const query = createControlledClaudeQuery();
+      queries.push(query);
+      return query;
+    });
+
+    try {
+      bridge.sendRequest(11, "thread/start", {
+        baseInstructions: "test",
+        cwd: "/tmp/worktree",
+        instructionMode: "append",
+        permissionEscalation: "ask",
+        permissionMode: "default",
+        threadId: "thread-overlap",
+      });
+      await bridge.waitForResponse(11);
+
+      bridge.sendRequest(12, "thread/stop", { threadId: "thread-overlap" });
+      await bridge.flushWork();
+      bridge.sendRequest(13, "thread/start", {
+        baseInstructions: "test",
+        cwd: "/tmp/worktree",
+        instructionMode: "append",
+        permissionEscalation: "ask",
+        permissionMode: "default",
+        threadId: "thread-overlap",
+      });
+      await bridge.flushWork();
+
+      expect(bridge.hasResponse(12)).toBe(false);
+      expect(bridge.hasResponse(13)).toBe(false);
+      expect(queries).toHaveLength(1);
+
+      queries[0]?.finish();
+      await expect(bridge.waitForResponse(12)).resolves.toMatchObject({
+        id: 12,
+        result: { ok: true },
+      });
+      await expect(bridge.waitForResponse(13)).resolves.toMatchObject({
+        id: 13,
+      });
+      expect(queries).toHaveLength(2);
+
+      bridge.sendRequest(14, "thread/stop", { threadId: "thread-overlap" });
+      await bridge.flushWork();
+      queries[1]?.finish();
+      await bridge.waitForResponse(14);
+    } finally {
+      bridge.restore();
+    }
   });
 });
