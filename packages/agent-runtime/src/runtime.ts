@@ -3,12 +3,13 @@ import type {
   InstructionMode,
   ThreadEvent,
 } from "@bb/domain";
-import { z } from "zod";
 import type { AgentRuntimeCaptureEntry } from "./capture-types.js";
-import type {
-  AdapterOptions,
-  JsonRpcMessage,
-} from "./provider-adapter.js";
+import type { JsonRpcMessage } from "./provider-adapter.js";
+import {
+  assertProviderSupportsExecutionOptions,
+  sameExecutionSettings,
+  toAdapterOptions,
+} from "./execution-options.js";
 import {
   getJsonRpcStringParam,
   ignoredJsonRpcResultSchema,
@@ -35,26 +36,18 @@ import type {
   AgentRuntime,
   AgentRuntimeExecutionOptions,
   AgentRuntimeOptions,
-  AgentRuntimeShellEnvironment,
 } from "./types.js";
 import {
-  resolveAdapterPermissionPolicy,
-} from "./shared/permission-policy.js";
+  buildThreadShellEnvironment,
+} from "./thread-shell-environment.js";
+import {
+  resolveThreadIdentityResult,
+  threadIdentityResultSchema,
+} from "./thread-identity.js";
 import {
   createSyntheticUserMessageAckStore,
   type SyntheticUserMessageAck,
 } from "./synthetic-user-message-acks.js";
-
-const threadIdentityResultSchema = z.object({
-  providerThreadId: z.string().nullable().optional(),
-  threadId: z.string().nullable().optional(),
-});
-type ThreadIdentityResult = z.infer<typeof threadIdentityResultSchema>;
-
-interface ResolveThreadIdentityResultArgs {
-  result: ThreadIdentityResult;
-  threadId: string;
-}
 
 interface ReconfigureThreadIfNeededArgs {
   instructions: string | undefined;
@@ -67,49 +60,11 @@ interface ResolveProviderRequestThreadIdArgs
   proc: ProviderProcess;
 }
 
-function resolveThreadIdentityResult(
-  args: ResolveThreadIdentityResultArgs,
-): string | undefined {
-  if (args.result.providerThreadId) {
-    return args.result.providerThreadId;
-  }
-  if (args.result.threadId && args.result.threadId !== args.threadId) {
-    return args.result.threadId;
-  }
-  return undefined;
-}
-
-// ---------------------------------------------------------------------------
-// Adapter options helpers
-// ---------------------------------------------------------------------------
-
-function toAdapterOptions(
-  execOpts: AgentRuntimeExecutionOptions,
-  instructions: string | undefined,
-  envVars: Record<string, string>,
-): AdapterOptions {
-  const permissionPolicy = resolveAdapterPermissionPolicy(execOpts);
-  return {
-    model: execOpts.model,
-    serviceTier: execOpts.serviceTier,
-    reasoningLevel: execOpts.reasoningLevel,
-    ...permissionPolicy,
-    instructions,
-    envVars,
-  };
-}
-
 // ---------------------------------------------------------------------------
 // Runtime implementation
 // ---------------------------------------------------------------------------
 
 type ProviderProcess = RuntimeProviderProcess;
-
-interface AssertProviderSupportsExecutionOptionsArgs {
-  adapter: ProviderProcess["adapter"];
-  options: AgentRuntimeExecutionOptions;
-  providerId: string;
-}
 
 interface ThreadRuntimeConfig {
   dynamicTools?: DynamicTool[];
@@ -121,40 +76,6 @@ interface ThreadRuntimeConfig {
   providerId: string;
   resumePath?: string;
   workspacePath: string;
-}
-
-function assertProviderSupportsExecutionOptions(
-  args: AssertProviderSupportsExecutionOptionsArgs,
-): void {
-  if (
-    args.options.serviceTier !== undefined &&
-    args.options.serviceTier !== "default" &&
-    !args.adapter.capabilities.supportsServiceTier
-  ) {
-    throw new Error(
-      `Provider "${args.providerId}" does not support service tiers.`,
-    );
-  }
-
-  if (
-    !args.adapter.capabilities.supportedPermissionModes.includes(
-      args.options.permissionMode,
-    )
-  ) {
-    throw new Error(
-      `Provider "${args.providerId}" does not support permission mode "${args.options.permissionMode}".`,
-    );
-  }
-}
-
-interface ThreadShellEnvironmentArgs {
-  environmentId: string;
-  projectId?: string;
-  threadId: string;
-}
-
-interface BuildThreadShellEnvironmentArgs extends ThreadShellEnvironmentArgs {
-  baseShellEnv: AgentRuntimeShellEnvironment | undefined;
 }
 
 interface RuntimeParsedMessageArgs {
@@ -200,17 +121,6 @@ interface ShouldShiftPendingSyntheticAckForLifecycleArgs {
   eventType: "turn/completed" | "turn/started";
   threadId: string;
   turnId: string;
-}
-
-function buildThreadShellEnvironment(
-  args: BuildThreadShellEnvironmentArgs,
-): Record<string, string> {
-  return {
-    ...(args.baseShellEnv ?? {}),
-    ...(args.projectId ? { BB_PROJECT_ID: args.projectId } : {}),
-    BB_THREAD_ID: args.threadId,
-    BB_ENVIRONMENT_ID: args.environmentId,
-  };
 }
 
 /**
@@ -311,19 +221,6 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     return resolvedThreadId;
   }
 
-  function sameExecutionSettings(
-    left: AgentRuntimeExecutionOptions,
-    right: AgentRuntimeExecutionOptions,
-  ): boolean {
-    return (
-      left.model === right.model &&
-      left.serviceTier === right.serviceTier &&
-      left.reasoningLevel === right.reasoningLevel &&
-      left.permissionMode === right.permissionMode &&
-      left.permissionEscalation === right.permissionEscalation
-    );
-  }
-
   function setThreadRuntimeConfig(
     threadId: string,
     config: ThreadRuntimeConfig,
@@ -394,7 +291,10 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     const nextInstructions = args.instructions ?? currentConfig.instructions;
 
     if (
-      sameExecutionSettings(currentConfig.options, nextOptions) &&
+      sameExecutionSettings({
+        left: currentConfig.options,
+        right: nextOptions,
+      }) &&
       currentConfig.instructions === nextInstructions
     ) {
       return;
@@ -413,7 +313,11 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       threadId: args.threadId,
       cwd: currentConfig.workspacePath,
       providerThreadId: threadIdentityRegistry.getProviderThreadId(args.threadId),
-      options: toAdapterOptions(nextOptions, nextInstructions, envVars),
+      options: toAdapterOptions({
+        envVars,
+        execOpts: nextOptions,
+        instructions: nextInstructions,
+      }),
       resumePath: currentConfig.resumePath,
       dynamicTools: currentConfig.dynamicTools,
       instructionMode: currentConfig.instructionMode,
@@ -735,7 +639,11 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         type: "thread/start",
         threadId,
         cwd: options.workspacePath,
-        options: toAdapterOptions(execOpts, instructions, envVars),
+        options: toAdapterOptions({
+          envVars,
+          execOpts,
+          instructions,
+        }),
         dynamicTools,
         instructionMode,
       });
@@ -834,7 +742,11 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         cwd: options.workspacePath,
         providerThreadId:
           providerThreadId ?? threadIdentityRegistry.getProviderThreadId(threadId),
-        options: toAdapterOptions(execOpts, instructions, envVars),
+        options: toAdapterOptions({
+          envVars,
+          execOpts,
+          instructions,
+        }),
         resumePath,
         dynamicTools,
         instructionMode,
@@ -887,7 +799,11 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         threadId,
         providerThreadId: threadIdentityRegistry.getProviderThreadId(threadId),
         input,
-        options: toAdapterOptions(execOpts, instructions, {}),
+        options: toAdapterOptions({
+          envVars: {},
+          execOpts,
+          instructions,
+        }),
       });
 
       if (!cmd) {
@@ -945,7 +861,11 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         providerThreadId: threadIdentityRegistry.getProviderThreadId(threadId),
         expectedTurnId,
         input,
-        options: toAdapterOptions(execOpts, instructions, {}),
+        options: toAdapterOptions({
+          envVars: {},
+          execOpts,
+          instructions,
+        }),
       });
 
       if (!cmd) {
