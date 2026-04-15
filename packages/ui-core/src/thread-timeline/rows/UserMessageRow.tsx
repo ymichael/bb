@@ -1,6 +1,14 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type { ViewUserMessage } from "@bb/domain";
 import { Check, Copy } from "lucide-react";
+import { cn } from "../../cn.js";
 import { ImageLightbox, getWrappedImageIndex } from "../ImageLightbox.js";
 import { toUserAttachmentImageSrc } from "../userAttachmentImages.js";
 import type { UserAttachmentImageSrcResolver } from "../types.js";
@@ -95,7 +103,7 @@ export function UserMessageRow({
         <div className="ml-auto w-fit max-w-[80%]">
           <div className="rounded-md bg-primary/10 p-2 text-sm leading-relaxed text-foreground">
             {messageText ? (
-              <p className="whitespace-pre-wrap break-words">{message.text}</p>
+              <CollapsibleMessageText text={message.text} />
             ) : (
               <p className="text-muted-foreground">Sent attachments</p>
             )}
@@ -163,3 +171,56 @@ export function UserMessageRow({
     </>
   );
 }
+
+// 15 clamped lines × ~80 chars/line ≈ 1200 chars. Below that, wrapping cannot
+// exceed the clamp, so skip measurement entirely.
+const OVERFLOW_MEASURE_MIN_LENGTH = 1200;
+
+function CollapsibleMessageText({ text }: { text: string }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [isOverflowing, setIsOverflowing] = useState(false);
+  const textRef = useRef<HTMLParagraphElement>(null);
+  const canOverflow = text.length >= OVERFLOW_MEASURE_MIN_LENGTH;
+
+  useLayoutEffect(() => {
+    if (!canOverflow || isExpanded) return;
+    const el = textRef.current;
+    if (!el) return;
+    const check = () => {
+      setIsOverflowing(el.scrollHeight > el.clientHeight + 1);
+    };
+    check();
+    const observer = new ResizeObserver(check);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [text, isExpanded, canOverflow]);
+
+  const showToggle = isExpanded || isOverflowing;
+
+  return (
+    <>
+      <p
+        ref={textRef}
+        className={cn(
+          "whitespace-pre-wrap break-words",
+          !isExpanded && "line-clamp-[15]",
+        )}
+      >
+        {text}
+      </p>
+      {showToggle ? (
+        <div className="mt-1 flex justify-end">
+          <button
+            type="button"
+            onClick={() => setIsExpanded((prev) => !prev)}
+            className="text-xs font-medium text-muted-foreground hover:text-foreground"
+            aria-expanded={isExpanded}
+          >
+            {isExpanded ? "Show less" : "Show more"}
+          </button>
+        </div>
+      ) : null}
+    </>
+  );
+}
+
