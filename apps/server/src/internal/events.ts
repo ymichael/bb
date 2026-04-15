@@ -2,7 +2,6 @@ import {
   archiveThread,
   getAutomation,
   deriveStoredEventItemFields,
-  events as storedEvents,
   getHighWaterMarks,
   getThread,
   insertEvents,
@@ -10,14 +9,12 @@ import {
   listThreadEnvironmentAssignmentsOnHost,
   updateThread,
 } from "@bb/db";
-import { and, desc, eq, inArray } from "drizzle-orm";
 import {
   hostDaemonEventBatchRequestSchema,
   typedRoutes,
   type HostDaemonEventEnvelope,
   type HostDaemonInternalSchema,
 } from "@bb/host-daemon-contract";
-import type { ThreadEventType } from "@bb/domain";
 import { renderTemplate } from "@bb/templates";
 import type { Hono } from "hono";
 import { ApiError } from "../errors.js";
@@ -95,11 +92,6 @@ interface ArchiveCompletedAutomationThreadIfNeededArgs {
   turnStatus: CompletedTurnStatus;
 }
 
-interface LatestThreadEventSequenceArgs {
-  threadId: string;
-  types: ThreadEventType[];
-}
-
 interface QueueManagedThreadTurnNotificationArgs {
   managedThreadId: string;
   managerThreadId: string;
@@ -137,48 +129,6 @@ function renderManagedThreadTurnStatusMessage(
       return exhaustiveCheck;
     }
   }
-}
-
-function getLatestThreadEventSequence(
-  deps: Pick<AppDeps, "db">,
-  args: LatestThreadEventSequenceArgs,
-): number | null {
-  const row = deps.db
-    .select({ sequence: storedEvents.sequence })
-    .from(storedEvents)
-    .where(
-      and(
-        eq(storedEvents.threadId, args.threadId),
-        inArray(storedEvents.type, args.types),
-      ),
-    )
-    .orderBy(desc(storedEvents.sequence))
-    .limit(1)
-    .get();
-
-  return row?.sequence ?? null;
-}
-
-function isSupersededByStopInterruption(
-  deps: Pick<AppDeps, "db">,
-  entry: HostDaemonEventEnvelope,
-): boolean {
-  const latestInterruptionSequence = getLatestThreadEventSequence(deps, {
-    threadId: entry.threadId,
-    types: ["system/thread/interrupted"],
-  });
-  if (latestInterruptionSequence === null) {
-    return false;
-  }
-
-  const latestClientRequestSequence = getLatestThreadEventSequence(deps, {
-    threadId: entry.threadId,
-    types: ["client/thread/start", "client/turn/requested", "client/turn/start"],
-  });
-  return (
-    latestClientRequestSequence === null
-    || latestClientRequestSequence <= latestInterruptionSequence
-  );
 }
 
 async function queueManagedThreadTurnNotificationBestEffort(
@@ -308,10 +258,7 @@ async function applyEventEffects(
         if (!thread) {
           continue;
         }
-        if (
-          thread.stopRequestedAt !== null
-          || isSupersededByStopInterruption(deps, entry)
-        ) {
+        if (thread.stopRequestedAt !== null) {
           continue;
         }
         if (

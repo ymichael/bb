@@ -85,6 +85,9 @@ export async function dispatchCommand<TCommand extends HostDaemonCommand>(
         options.runtimeManager,
       );
       await entry.runtime.stopThread({ threadId: command.threadId });
+      // Stop completion finalizes server-side thread state. Flush provider
+      // events first so buffered lifecycle events cannot arrive after that.
+      await options.eventSink?.flush();
       options.runtimeManager.forgetThread(
         command.environmentId,
         command.threadId,
