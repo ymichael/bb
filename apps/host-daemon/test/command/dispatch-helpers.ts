@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import type { AgentRuntime } from "@bb/agent-runtime";
 import type { AvailableModel, DynamicTool, ThreadExecutionOptions } from "@bb/domain";
+import { makeWorkspaceMergeBase, makeWorkspaceStatus } from "@bb/test-helpers";
 import type {
   HostWorkspace,
   ProvisionWorkspaceArgs,
@@ -62,30 +63,14 @@ export function createFakeWorkspace(pathname: string) {
     },
     async getStatus(options?: { mergeBaseBranch?: string }) {
       state.statusReads += 1;
-      return {
-        workingTree: {
-          hasUncommittedChanges: false,
-          state: "clean" as const,
-          changedFiles: 0,
-          insertions: 0,
-          deletions: 0,
-          files: [],
-        },
-        branch: {
-          currentBranch: "main",
-          defaultBranch: "main",
-        },
+      return makeWorkspaceStatus({
         mergeBase: options?.mergeBaseBranch
-          ? {
+          ? makeWorkspaceMergeBase({
               mergeBaseBranch: options.mergeBaseBranch,
               baseRef: options.mergeBaseBranch,
-              aheadCount: 0,
-              behindCount: 0,
-              hasCommittedUnmergedChanges: false,
-              commits: [],
-            }
+            })
           : null,
-      };
+      });
     },
     async getDiff(options?: {
       target?:

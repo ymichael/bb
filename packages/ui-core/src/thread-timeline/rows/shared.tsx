@@ -1,8 +1,11 @@
 import {
   useEffect,
+  useLayoutEffect,
   useRef,
+  useState,
   type Ref,
   type ReactNode,
+  type RefObject,
   type UIEvent,
 } from "react";
 import { durationToCompactString } from "@bb/core-ui";
@@ -141,6 +144,40 @@ function isScrolledNearBottom(
   }
   const distanceFromBottom = maxScrollOffset - element.scrollTop;
   return distanceFromBottom <= DEFAULT_SCROLL_STICK_THRESHOLD_PX;
+}
+
+/**
+ * Returns whether `ref`'s element has content that exceeds its visible height.
+ * Uses ResizeObserver to re-measure on width changes; additional content-level
+ * dependencies can be passed via `deps` to re-run the check when the contents
+ * change without triggering a size change (e.g. when the element is clamped).
+ * When `enabled` is false the observer is skipped and the result stays `false`.
+ */
+export function useIsOverflowing(
+  ref: RefObject<HTMLElement | null>,
+  enabled: boolean,
+  deps: readonly unknown[] = [],
+): boolean {
+  const [isOverflowing, setIsOverflowing] = useState(false);
+
+  useLayoutEffect(() => {
+    if (!enabled) {
+      setIsOverflowing(false);
+      return;
+    }
+    const el = ref.current;
+    if (!el) return;
+    const check = () => {
+      setIsOverflowing(el.scrollHeight > el.clientHeight + 1);
+    };
+    check();
+    const observer = new ResizeObserver(check);
+    observer.observe(el);
+    return () => observer.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled, ref, ...deps]);
+
+  return isOverflowing;
 }
 
 export function useStickyBottomAutoScroll<ElementType extends HTMLElement>({

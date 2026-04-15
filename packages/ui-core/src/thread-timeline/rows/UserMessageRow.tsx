@@ -1,7 +1,6 @@
 import {
   useCallback,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -12,6 +11,7 @@ import { cn } from "../../cn.js";
 import { ImageLightbox, getWrappedImageIndex } from "../ImageLightbox.js";
 import { toUserAttachmentImageSrc } from "../userAttachmentImages.js";
 import type { UserAttachmentImageSrcResolver } from "../types.js";
+import { useIsOverflowing } from "./shared.js";
 
 interface UserMessageRowProps {
   message: ViewUserMessage;
@@ -172,28 +172,20 @@ export function UserMessageRow({
   );
 }
 
-// 15 clamped lines × ~80 chars/line ≈ 1200 chars. Below that, wrapping cannot
-// exceed the clamp, so skip measurement entirely.
-const OVERFLOW_MEASURE_MIN_LENGTH = 1200;
+// 15 clamped lines × ~50 chars/line ≈ 750 chars — sized for narrow viewports
+// (mobile, split panes) where the bubble is ~300px. Messages below this length
+// can't overflow the clamp even when wrapped tightly, so we skip the observer.
+const OVERFLOW_MEASURE_MIN_LENGTH = 800;
 
 function CollapsibleMessageText({ text }: { text: string }) {
   const [isExpanded, setIsExpanded] = useState(false);
-  const [isOverflowing, setIsOverflowing] = useState(false);
   const textRef = useRef<HTMLParagraphElement>(null);
   const canOverflow = text.length >= OVERFLOW_MEASURE_MIN_LENGTH;
-
-  useLayoutEffect(() => {
-    if (!canOverflow || isExpanded) return;
-    const el = textRef.current;
-    if (!el) return;
-    const check = () => {
-      setIsOverflowing(el.scrollHeight > el.clientHeight + 1);
-    };
-    check();
-    const observer = new ResizeObserver(check);
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [text, isExpanded, canOverflow]);
+  const isOverflowing = useIsOverflowing(
+    textRef,
+    canOverflow && !isExpanded,
+    [text],
+  );
 
   const showToggle = isExpanded || isOverflowing;
 

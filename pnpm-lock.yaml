@@ -147,6 +147,9 @@ importers:
         specifier: ^3.24.0
         version: 3.25.76
     devDependencies:
+      '@bb/test-helpers':
+        specifier: workspace:*
+        version: link:../../packages/test-helpers
       '@bb/tsconfig':
         specifier: workspace:*
         version: link:../../packages/tsconfig
@@ -408,6 +411,9 @@ importers:
       '@bb/scripts':
         specifier: workspace:*
         version: link:../../packages/scripts
+      '@bb/test-helpers':
+        specifier: workspace:*
+        version: link:../../packages/test-helpers
       '@bb/tsconfig':
         specifier: workspace:*
         version: link:../../packages/tsconfig
@@ -991,6 +997,9 @@ importers:
 
   packages/test-helpers:
     dependencies:
+      '@bb/domain':
+        specifier: workspace:*
+        version: link:../domain
       zod:
         specifier: ^3.24.0
         version: 3.25.76

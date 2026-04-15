@@ -92,6 +92,7 @@ function makeWorkspaceStatus(
       baseRef: "origin/main",
       behindCount: 0,
       commits: [],
+      files: [],
       hasCommittedUnmergedChanges: options.hasCommittedUnmergedChanges ?? false,
       mergeBaseBranch: "main",
     },

@@ -39,6 +39,12 @@ export const workspaceFileStatusKindSchema = z.enum([
   "C",
   "U",
   "??",
+  /**
+   * Fallback for git status letters we don't recognize. Kept distinct from
+   * "M" so UI and consumers can surface the ambiguity rather than silently
+   * mislabeling the change.
+   */
+  "?",
 ]);
 export type WorkspaceFileStatusKind = z.infer<typeof workspaceFileStatusKindSchema>;
 
@@ -80,6 +86,8 @@ export const workspaceMergeBaseSchema = z.object({
   behindCount: z.number(),
   hasCommittedUnmergedChanges: z.boolean(),
   commits: z.array(workspaceCommitSummarySchema),
+  /** Files changed between the merge base and HEAD (committed, unmerged). */
+  files: z.array(workspaceFileStatusSchema),
 });
 export type WorkspaceMergeBase = z.infer<typeof workspaceMergeBaseSchema>;
 

@@ -194,6 +194,7 @@ describe("public environment and system routes", () => {
             behindCount: 0,
             hasCommittedUnmergedChanges: true,
             commits: [],
+            files: [],
           },
         },
       });

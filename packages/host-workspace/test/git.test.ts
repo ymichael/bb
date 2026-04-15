@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   parseBranchStatus,
+  parseNameStatusEntries,
   parsePorcelainEntries,
   summarizeNumstat,
 } from "../src/git.js";
@@ -89,6 +90,57 @@ describe("parsePorcelainEntries", () => {
         worktreeStatus: " ",
       },
     ]);
+  });
+});
+
+describe("parseNameStatusEntries", () => {
+  it("parses add, modify, and delete entries", () => {
+    const output = ["A", "src/new.ts", "M", "src/existing.ts", "D", "src/old.ts", ""].join("\0");
+    expect(parseNameStatusEntries(output)).toEqual([
+      { path: "src/new.ts", status: "A" },
+      { path: "src/existing.ts", status: "M" },
+      { path: "src/old.ts", status: "D" },
+    ]);
+  });
+
+  it("takes the new path for rename and copy entries", () => {
+    const output = ["R100", "src/old.ts", "src/new.ts", "C75", "src/base.ts", "src/copy.ts", ""].join("\0");
+    expect(parseNameStatusEntries(output)).toEqual([
+      { path: "src/new.ts", status: "R" },
+      { path: "src/copy.ts", status: "C" },
+    ]);
+  });
+
+  it("preserves single-letter status with no similarity score", () => {
+    const output = ["T", "src/link.ts", ""].join("\0");
+    expect(parseNameStatusEntries(output)).toEqual([
+      { path: "src/link.ts", status: "T" },
+    ]);
+  });
+
+  it("interleaves regular and rename entries correctly", () => {
+    const output = [
+      "M", "src/a.ts",
+      "R090", "src/b-old.ts", "src/b-new.ts",
+      "A", "src/c.ts",
+      "",
+    ].join("\0");
+    expect(parseNameStatusEntries(output)).toEqual([
+      { path: "src/a.ts", status: "M" },
+      { path: "src/b-new.ts", status: "R" },
+      { path: "src/c.ts", status: "A" },
+    ]);
+  });
+
+  it("returns empty array for empty input", () => {
+    expect(parseNameStatusEntries("")).toEqual([]);
+  });
+
+  it("skips truncated trailing entries without throwing", () => {
+    // A status token with no following path token.
+    expect(parseNameStatusEntries("M\0")).toEqual([]);
+    // A rename with only the old path, no new path.
+    expect(parseNameStatusEntries("R100\0src/old.ts\0")).toEqual([]);
   });
 });
 

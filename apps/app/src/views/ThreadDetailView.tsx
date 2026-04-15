@@ -36,6 +36,7 @@ import { getGitStatusDisplay } from "@/lib/workspace-status";
 import {
   formatChangeSummary,
   formatWorkspaceChangeSummary,
+  selectWorkspaceChangedFilesSection,
 } from "@/lib/workspace-change-summary";
 import { getThreadDisplayTitle } from "@/lib/thread-title";
 import { useGitDiffPanel } from "./useGitDiffPanel";
@@ -179,6 +180,10 @@ export function ThreadDetailView() {
     workspaceStatusError ? undefined : (workStatus ?? undefined);
   const workspaceWorkingTree = workspaceStatus?.workingTree;
   const workspaceBranch = workspaceStatus?.branch;
+  const workspaceChangedFilesSection = useMemo(
+    () => selectWorkspaceChangedFilesSection(workspaceStatus),
+    [workspaceStatus],
+  );
   const {
     isLocalHost,
     openPath,
@@ -389,11 +394,7 @@ export function ThreadDetailView() {
   const threadGitStatusLabelClass = workspaceWorkingTree?.state === "untracked"
     ? "text-muted-foreground"
     : "text-foreground";
-  const showThreadChangedFiles = canUseGitUi && Boolean(
-    workspaceStatus &&
-      workspaceWorkingTree?.state !== "clean" &&
-      (workspaceWorkingTree?.files.length ?? 0) > 0,
-  );
+  const showThreadChangedFiles = canUseGitUi && workspaceChangedFilesSection !== null;
   const showThreadMetadata = Boolean(
     isManagerThread ||
     parentThreadId ||
@@ -563,7 +564,8 @@ export function ThreadDetailView() {
             unarchiveThread.isPending &&
             unarchiveThread.variables?.id === thread.id,
           updateThreadPending: updateThread.isPending || updateEnvironment.isPending,
-          workspaceStatusFiles: workspaceWorkingTree?.files,
+          workspaceStatusFiles: workspaceChangedFilesSection?.files,
+          workspaceStatusFilesLabel: workspaceChangedFilesSection?.label,
         }}
         secondaryPanel={{
           activePanel: effectiveSecondaryPanel,

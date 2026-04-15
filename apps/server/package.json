@@ -45,6 +45,7 @@
   "devDependencies": {
     "@bb/scripts": "workspace:*",
     "@bb/agent-provider-audit": "workspace:*",
+    "@bb/test-helpers": "workspace:*",
     "@bb/tsconfig": "workspace:*",
     "@types/mime-types": "^3.0.1",
     "@types/node": "^22.0.0",

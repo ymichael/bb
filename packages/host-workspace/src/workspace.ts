@@ -2,6 +2,7 @@ import type {
   ThreadGitDiffResponse,
   WorkspaceCommitSummary,
   WorkspaceDiffTarget,
+  WorkspaceFileStatus,
   WorkspaceFileStatusKind,
   WorkspaceStatus,
 } from "@bb/domain";
@@ -14,6 +15,7 @@ import {
   hasRef,
   hasUncommittedChanges,
   listBranches,
+  parseNameStatusEntries,
   parsePorcelainEntries,
   pathExists,
   readDefaultBranch,
@@ -173,6 +175,24 @@ function resolveWorkspaceFileStatusKind(args: {
     return "D";
   }
   return "M";
+}
+
+function mapNameStatusLetter(letter: string): WorkspaceFileStatusKind {
+  switch (letter) {
+    case "A":
+    case "D":
+    case "R":
+    case "C":
+    case "U":
+    case "M":
+      return letter;
+    // Type change (e.g. file ↔ symlink). Render as a modification — the
+    // WorkspaceFileStatusKind enum doesn't model type changes separately.
+    case "T":
+      return "M";
+    default:
+      return "?";
+  }
 }
 
 function resolveWorkspaceState(args: {
@@ -734,7 +754,7 @@ export class Workspace {
   }
 
   private async readMergeBaseStatus(mergeBaseBranch: string): Promise<WorkspaceStatus["mergeBase"]> {
-    const [mergeBaseRef, aheadBehindCounts, commits] = await Promise.all([
+    const [mergeBaseRef, aheadBehindCounts, commits, nameStatus] = await Promise.all([
       readMergeBaseRef(this.path, mergeBaseBranch),
       runGit(
         [
@@ -748,6 +768,10 @@ export class Workspace {
         { cwd: this.path },
       ),
       this.readPatchUniqueCommitSummaries(mergeBaseBranch),
+      runGit(
+        ["diff", "--no-ext-diff", "--name-status", "-z", `${mergeBaseBranch}...HEAD`],
+        { cwd: this.path, allowFailure: true },
+      ),
     ]);
     const [behindCount, aheadCount] = aheadBehindCounts.stdout
       .trim()
@@ -756,6 +780,12 @@ export class Workspace {
     let normalizedAheadCount = Number.isFinite(aheadCount) ? aheadCount : 0;
     const normalizedBehindCount = Number.isFinite(behindCount) ? behindCount : 0;
     let effectiveCommits = commits;
+    let effectiveFiles: WorkspaceFileStatus[] = nameStatus.exitCode === 0
+      ? parseNameStatusEntries(nameStatus.stdout).map((entry) => ({
+          path: entry.path,
+          status: mapNameStatusLetter(entry.status),
+        }))
+      : [];
 
     // `--cherry-pick` handles regular merges, rebase-merges, and cherry-picks,
     // but not squash merges. Only look for a squash when the branch still
@@ -769,6 +799,16 @@ export class Workspace {
       }
     }
 
+    // `commits` is cherry-pick-filtered (patch-equivalent commits that already
+    // exist on the base are excluded), but `--name-status <base>...HEAD` is
+    // not. If every branch commit has landed on the base via cherry-pick or
+    // squash merge, there's nothing "committed unmerged" to surface — drop
+    // the file list to match so the UI doesn't show files with no commits
+    // behind them.
+    if (effectiveCommits.length === 0) {
+      effectiveFiles = [];
+    }
+
     return {
       mergeBaseBranch,
       baseRef: mergeBaseRef ?? null,
@@ -776,6 +816,7 @@ export class Workspace {
       behindCount: normalizedBehindCount,
       hasCommittedUnmergedChanges: normalizedAheadCount > 0,
       commits: effectiveCommits,
+      files: effectiveFiles,
     };
   }
 

@@ -39,10 +39,16 @@ function buildPatchDiff(count: number): string {
 }
 
 describe("gitDiffPanelHelpers", () => {
-  it("builds git diff targets from commit and merge-base selections", () => {
+  it("builds git diff targets from commit, uncommitted, and merge-base selections", () => {
     expect(buildGitDiffTarget("commit-sha", "main")).toEqual({
       sha: "commit-sha",
       type: "commit",
+    });
+    expect(buildGitDiffTarget("uncommitted", "main")).toEqual({
+      type: "uncommitted",
+    });
+    expect(buildGitDiffTarget("uncommitted", undefined)).toEqual({
+      type: "uncommitted",
     });
     expect(buildGitDiffTarget(null, "main")).toEqual({
       mergeBaseBranch: "main",
@@ -73,6 +79,40 @@ describe("gitDiffPanelHelpers", () => {
     expect(shouldResetSelectedGitDiffCommit("missing", commits)).toBe(true);
     expect(shouldResetSelectedGitDiffCommit("abc123", commits)).toBe(false);
     expect(shouldResetSelectedGitDiffCommit(null, commits)).toBe(false);
+  });
+
+  it("inserts an uncommitted option when the working tree is dirty", () => {
+    const commits = [
+      makeCommit({ sha: "abc123", shortSha: "abc123", subject: "Feature" }),
+    ];
+
+    expect(
+      buildGitDiffSelectionOptions(commits, { hasUncommittedChanges: true }),
+    ).toEqual([
+      { value: "all", label: "All changes" },
+      { value: "uncommitted", label: "Uncommitted changes" },
+      { value: "abc123", label: "abc123 · Feature" },
+    ]);
+
+    expect(
+      buildGitDiffSelectionOptions([], { hasUncommittedChanges: true }),
+    ).toEqual([
+      { value: "all", label: "All changes" },
+      { value: "uncommitted", label: "Uncommitted changes" },
+    ]);
+  });
+
+  it("resets an uncommitted selection once the working tree becomes clean", () => {
+    expect(
+      shouldResetSelectedGitDiffCommit("uncommitted", [], {
+        hasUncommittedChanges: true,
+      }),
+    ).toBe(false);
+    expect(
+      shouldResetSelectedGitDiffCommit("uncommitted", [], {
+        hasUncommittedChanges: false,
+      }),
+    ).toBe(true);
   });
 
   it("formats git diff stats labels for empty and non-empty diffs", () => {

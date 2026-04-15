@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { WorkspaceStatus } from "@bb/domain";
+import {
+  makeWorkspaceMergeBase,
+  makeWorkspaceStatus,
+  makeWorkspaceWorkingTree,
+} from "@bb/test-helpers";
 import { HttpError } from "./api";
 import {
   getGitStatusDisplay,
@@ -22,28 +27,25 @@ function makeStatus(options: MakeStatusOptions): WorkspaceStatus {
     options.state === "untracked" ||
     options.state === "dirty_uncommitted" ||
     options.state === "dirty_and_committed_unmerged";
-  return {
-    workingTree: {
+  return makeWorkspaceStatus({
+    workingTree: makeWorkspaceWorkingTree({
       hasUncommittedChanges,
       state: options.state,
       changedFiles: options.changedFiles ?? 0,
       insertions: options.insertions ?? 0,
       deletions: options.deletions ?? 0,
-      files: [],
-    },
+    }),
     branch: {
       currentBranch: "feature",
       defaultBranch: "main",
     },
-    mergeBase: {
-      mergeBaseBranch: "main",
+    mergeBase: makeWorkspaceMergeBase({
       baseRef: "origin/main",
       aheadCount,
       behindCount,
       hasCommittedUnmergedChanges: aheadCount > 0,
-      commits: [],
-    },
-  };
+    }),
+  });
 }
 
 describe("workspace-status", () => {

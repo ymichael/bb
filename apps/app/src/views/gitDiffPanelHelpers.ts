@@ -10,8 +10,11 @@ export const GIT_DIFF_PARSE_INITIAL_BATCH_SIZE = 6;
 export const GIT_DIFF_PARSE_BATCH_SIZE = 18;
 export const GIT_DIFF_PARSE_BATCH_DELAY_MS = 24;
 
+export const UNCOMMITTED_GIT_DIFF_SELECTION = "uncommitted";
+
 export type GitDiffTarget =
   | { type: "commit"; sha: string }
+  | { type: "uncommitted" }
   | { type: "all"; mergeBaseBranch: string }
   | undefined;
 
@@ -47,6 +50,10 @@ export function buildGitDiffTarget(
   selectedGitDiffCommitSha: string | null,
   effectiveMergeBaseBranch: string | undefined,
 ): GitDiffTarget {
+  if (selectedGitDiffCommitSha === UNCOMMITTED_GIT_DIFF_SELECTION) {
+    return { type: "uncommitted" };
+  }
+
   if (selectedGitDiffCommitSha) {
     return { type: "commit", sha: selectedGitDiffCommitSha };
   }
@@ -63,30 +70,42 @@ export function buildGitDiffTarget(
 
 export function buildGitDiffSelectionOptions(
   diffCommits: readonly WorkspaceCommitSummary[],
+  options: { hasUncommittedChanges: boolean } = { hasUncommittedChanges: false },
 ): GitDiffSelectionOption[] {
   const allChangesOption = { value: "all", label: "All changes" };
+  const uncommittedOption = {
+    value: UNCOMMITTED_GIT_DIFF_SELECTION,
+    label: "Uncommitted changes",
+  };
+  const commitOptions = diffCommits.map((commit) => ({
+    value: commit.sha,
+    label: `${commit.shortSha} · ${commit.subject}`,
+  }));
 
-  if (diffCommits.length === 0) {
+  const hasMergeBaseContext = diffCommits.length > 0 || options.hasUncommittedChanges;
+  if (!hasMergeBaseContext) {
     return [allChangesOption];
   }
 
   return [
     allChangesOption,
-    ...diffCommits.map((commit) => ({
-      value: commit.sha,
-      label: `${commit.shortSha} · ${commit.subject}`,
-    })),
+    ...(options.hasUncommittedChanges ? [uncommittedOption] : []),
+    ...commitOptions,
   ];
 }
 
 export function shouldResetSelectedGitDiffCommit(
   selectedGitDiffCommitSha: string | null,
   diffCommits: readonly WorkspaceCommitSummary[],
+  options: { hasUncommittedChanges: boolean } = { hasUncommittedChanges: false },
 ): boolean {
-  return (
-    Boolean(selectedGitDiffCommitSha) &&
-    !diffCommits.some((commit) => commit.sha === selectedGitDiffCommitSha)
-  );
+  if (!selectedGitDiffCommitSha) {
+    return false;
+  }
+  if (selectedGitDiffCommitSha === UNCOMMITTED_GIT_DIFF_SELECTION) {
+    return !options.hasUncommittedChanges;
+  }
+  return !diffCommits.some((commit) => commit.sha === selectedGitDiffCommitSha);
 }
 
 export function buildGitDiffStatsLabel(

@@ -52,6 +52,7 @@
     "zod": "^3.24.0"
   },
   "devDependencies": {
+    "@bb/test-helpers": "workspace:*",
     "@bb/tsconfig": "workspace:*",
     "@tailwindcss/vite": "^4.0.0",
     "@testing-library/react": "^16.3.2",

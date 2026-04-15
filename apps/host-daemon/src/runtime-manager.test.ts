@@ -10,6 +10,10 @@ import type {
   HostWorkspace,
   ProvisionWorkspaceArgs,
 } from "@bb/host-workspace";
+import {
+  makeWorkspaceMergeBase,
+  makeWorkspaceStatus,
+} from "@bb/test-helpers";
 import { describe, expect, it, vi } from "vitest";
 import { RuntimeManager } from "./runtime-manager.js";
 
@@ -76,28 +80,9 @@ function getProvisionWorkspacePath(args: ProvisionWorkspaceArgs): string {
 function createFakeWorkspace(
   path: string,
 ) {
-  const status: GetStatusResult = {
-    workingTree: {
-      hasUncommittedChanges: false,
-      state: "clean",
-      changedFiles: 0,
-      insertions: 0,
-      deletions: 0,
-      files: [],
-    },
-    branch: {
-      currentBranch: "main",
-      defaultBranch: "main",
-    },
-    mergeBase: {
-      mergeBaseBranch: "main",
-      baseRef: "main",
-      aheadCount: 0,
-      behindCount: 0,
-      hasCommittedUnmergedChanges: false,
-      commits: [],
-    },
-  };
+  const status: GetStatusResult = makeWorkspaceStatus({
+    mergeBase: makeWorkspaceMergeBase(),
+  });
   const diff: GetDiffResult = {
     diff: "",
     truncated: false,

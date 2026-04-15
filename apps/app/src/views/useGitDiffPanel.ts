@@ -255,16 +255,24 @@ export function useGitDiffPanel({
     setPendingGitDiffScrollPath(null);
   }, [environmentId]);
 
+  const hasUncommittedChanges =
+    (gitDiffWorkspaceStatus?.workingTree.changedFiles ?? 0) > 0;
+
   useEffect(() => {
     if (
       shouldResetSelectedGitDiffCommit(
         selectedGitDiffCommitSha,
         gitDiffWorkspaceStatus?.mergeBase?.commits ?? [],
+        { hasUncommittedChanges },
       )
     ) {
       setSelectedGitDiffCommitSha(null);
     }
-  }, [gitDiffWorkspaceStatus?.mergeBase?.commits, selectedGitDiffCommitSha]);
+  }, [
+    gitDiffWorkspaceStatus?.mergeBase?.commits,
+    hasUncommittedChanges,
+    selectedGitDiffCommitSha,
+  ]);
 
   const setThreadSecondaryPanel = useCallback(
     (panel: ThreadSecondaryPanelTab | null) => {
@@ -377,6 +385,7 @@ export function useGitDiffPanel({
   const gitDiffSelectValue = selectedGitDiffCommitSha ?? "all";
   const gitDiffSelectOptions: GitDiffSelectionOption[] = buildGitDiffSelectionOptions(
     diffCommits,
+    { hasUncommittedChanges },
   );
   const currentGitDiff = threadGitDiff?.diff ?? "";
   const gitDiffStats = summarizeGitDiff(

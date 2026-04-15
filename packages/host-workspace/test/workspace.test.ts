@@ -151,6 +151,9 @@ describe("Workspace", () => {
       hasCommittedUnmergedChanges: true,
     });
     expect(status.mergeBase?.commits[0]?.subject).toBe("Feature commit");
+    expect(status.mergeBase?.files).toEqual([
+      { path: "README.md", status: "M" },
+    ]);
   });
 
   it("reports untracked files plus committed unmerged changes as dirty_and_committed_unmerged", async () => {
@@ -178,6 +181,9 @@ describe("Workspace", () => {
       aheadCount: 1,
       behindCount: 0,
     });
+    expect(status.mergeBase?.files).toEqual([
+      { path: "README.md", status: "M" },
+    ]);
   });
 
   it("reports branches that are only behind their merge base as clean", async () => {

@@ -4,6 +4,11 @@ import type {
   ThreadGitDiffResponse,
   WorkspaceStatus,
 } from "@bb/domain";
+import {
+  makeWorkspaceMergeBase,
+  makeWorkspaceStatus,
+  makeWorkspaceWorkingTree,
+} from "@bb/test-helpers";
 import type {
   ThreadTimelineResponse,
 } from "@bb/server-contract";
@@ -29,28 +34,11 @@ import {
 } from "@/test/queryClientTestHarness";
 
 function makeStatus(state: WorkspaceStatus["workingTree"]["state"]): WorkspaceStatus {
-  return {
-    workingTree: {
-      hasUncommittedChanges: false,
-      state,
-      changedFiles: 0,
-      insertions: 0,
-      deletions: 0,
-      files: [],
-    },
-    branch: {
-      currentBranch: "feature",
-      defaultBranch: "main",
-    },
-    mergeBase: {
-      mergeBaseBranch: "main",
-      baseRef: "origin/main",
-      aheadCount: 0,
-      behindCount: 0,
-      hasCommittedUnmergedChanges: false,
-      commits: [],
-    },
-  };
+  return makeWorkspaceStatus({
+    workingTree: makeWorkspaceWorkingTree({ state }),
+    branch: { currentBranch: "feature", defaultBranch: "main" },
+    mergeBase: makeWorkspaceMergeBase({ baseRef: "origin/main" }),
+  });
 }
 
 function makeGitDiffResponse(): ThreadGitDiffResponse {

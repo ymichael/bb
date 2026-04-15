@@ -1,4 +1,8 @@
 import type { SandboxHostProgressCallbacks } from "@bb/sandbox-host";
+import {
+  makeWorkspaceMergeBase,
+  makeWorkspaceStatus,
+} from "@bb/test-helpers";
 import { vi } from "vitest";
 
 export const provisionHostMock = vi.fn();
@@ -25,26 +29,8 @@ vi.mock("@bb/sandbox-host", () => ({
 }));
 
 export function cleanWorkspaceStatus() {
-  return {
-    workingTree: {
-      hasUncommittedChanges: false,
-      state: "clean",
-      changedFiles: 0,
-      insertions: 0,
-      deletions: 0,
-      files: [],
-    },
-    branch: {
-      currentBranch: "bb/thread",
-      defaultBranch: "main",
-    },
-    mergeBase: {
-      mergeBaseBranch: "main",
-      baseRef: "origin/main",
-      aheadCount: 0,
-      behindCount: 0,
-      hasCommittedUnmergedChanges: false,
-      commits: [],
-    },
-  };
+  return makeWorkspaceStatus({
+    branch: { currentBranch: "bb/thread", defaultBranch: "main" },
+    mergeBase: makeWorkspaceMergeBase({ baseRef: "origin/main" }),
+  });
 }

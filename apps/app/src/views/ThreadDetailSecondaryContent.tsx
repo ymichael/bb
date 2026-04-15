@@ -79,6 +79,7 @@ interface ThreadDetailMetadataProps {
   unarchivePending: boolean;
   updateThreadPending: boolean;
   workspaceStatusFiles?: ComponentProps<typeof WorkspaceChangesList>["files"];
+  workspaceStatusFilesLabel?: string;
 }
 
 interface ThreadDetailThreadStorageProps {
@@ -235,133 +236,137 @@ function ThreadMetadataContent({
   unarchivePending,
   updateThreadPending,
   workspaceStatusFiles,
+  workspaceStatusFilesLabel,
 }: ThreadDetailMetadataProps) {
   return (
-    <DetailCard className="rounded-none border-0 bg-transparent px-0 py-0">
-      {isManagerThread ? (
-        <DetailRow
-          label="Kind"
-          valueClassName="min-w-0 truncate"
-        >
-          Manager
-        </DetailRow>
-      ) : null}
-      {!isManagerThread ? (
-        <ThreadManagerSelector
-          canAssignToManager={canAssignToManager}
-          canTakeOverThread={canTakeOverThread}
-          managerSelectorOptions={managerSelectorOptions}
-          managerSelectorValue={managerSelectorValue}
-          onAssignManager={onAssignManager}
-          parentThreadId={parentThreadId}
-          projectId={projectId}
-          selectedManagerOptionLabel={selectedManagerOptionLabel}
-          updateThreadPending={updateThreadPending}
-        />
-      ) : null}
-      {threadHostName ? (
-        <DetailRow
-          label="Host"
-          valueClassName="min-w-0 truncate"
-        >
-          <span className="flex items-center gap-1.5">
-            <span className="truncate">{threadHostName}</span>
-            {threadHostIsLocal ? <LocalhostBadge /> : null}
-            {threadHostConnected !== undefined ? (
-              <HostStatusBadge connected={threadHostConnected} />
-            ) : null}
-          </span>
-        </DetailRow>
-      ) : null}
-      {!isManagerThread && (threadEnvironmentModeLabel ?? threadEnvironmentType) ? (
-        <DetailRow
-          label="Environment"
-          valueClassName="min-w-0 truncate"
-        >
-          {threadEnvironmentModeLabel ?? threadEnvironmentValue ?? threadEnvironmentType}
-        </DetailRow>
-      ) : null}
-      {!isManagerThread && threadBranchName ? (
-        <DetailRow
-          label="Branch"
-          valueClassName="min-w-0 truncate"
-        >
-          <button
-            type="button"
-            className="inline-flex max-w-full items-center gap-1.5 rounded-md text-left text-foreground transition-colors hover:text-foreground/80"
-            onClick={onCopyThreadBranch}
-            aria-label="Copy branch name"
-            title="Copy branch name"
+    <div className="flex h-full min-h-0 flex-col">
+      <DetailCard className="shrink-0 rounded-none border-0 bg-transparent px-0 py-0">
+        {isManagerThread ? (
+          <DetailRow
+            label="Kind"
+            valueClassName="min-w-0 truncate"
           >
-            <span className="truncate">{threadBranchName}</span>
-            <Copy className="size-3.5 shrink-0 text-muted-foreground" />
-          </button>
-        </DetailRow>
-      ) : null}
-      {!isManagerThread && showMergeBase ? (
-        <DetailRow
-          label="Merge base"
-          valueClassName="min-w-0 truncate"
-        >
-          {canSelectMergeBase && mergeBaseBranch ? (
-            <MergeBaseBranchPicker
-              value={mergeBaseBranch}
-              options={mergeBaseCandidates}
-              variant="minimal"
-              loading={isLoadingMergeBaseBranchOptions}
-              onChange={onMergeBaseBranchChange}
-              onOpenChange={onMergeBaseBranchPickerOpenChange}
-              className="max-w-full text-foreground"
+            Manager
+          </DetailRow>
+        ) : null}
+        {!isManagerThread ? (
+          <ThreadManagerSelector
+            canAssignToManager={canAssignToManager}
+            canTakeOverThread={canTakeOverThread}
+            managerSelectorOptions={managerSelectorOptions}
+            managerSelectorValue={managerSelectorValue}
+            onAssignManager={onAssignManager}
+            parentThreadId={parentThreadId}
+            projectId={projectId}
+            selectedManagerOptionLabel={selectedManagerOptionLabel}
+            updateThreadPending={updateThreadPending}
+          />
+        ) : null}
+        {threadHostName ? (
+          <DetailRow
+            label="Host"
+            valueClassName="min-w-0 truncate"
+          >
+            <span className="flex items-center gap-1.5">
+              <span className="truncate">{threadHostName}</span>
+              {threadHostIsLocal ? <LocalhostBadge /> : null}
+              {threadHostConnected !== undefined ? (
+                <HostStatusBadge connected={threadHostConnected} />
+              ) : null}
+            </span>
+          </DetailRow>
+        ) : null}
+        {!isManagerThread && (threadEnvironmentModeLabel ?? threadEnvironmentType) ? (
+          <DetailRow
+            label="Environment"
+            valueClassName="min-w-0 truncate"
+          >
+            {threadEnvironmentModeLabel ?? threadEnvironmentValue ?? threadEnvironmentType}
+          </DetailRow>
+        ) : null}
+        {!isManagerThread && threadBranchName ? (
+          <DetailRow
+            label="Branch"
+            valueClassName="min-w-0 truncate"
+          >
+            <button
+              type="button"
+              className="inline-flex max-w-full items-center gap-1.5 rounded-md text-left text-foreground transition-colors hover:text-foreground/80"
+              onClick={onCopyThreadBranch}
+              aria-label="Copy branch name"
+              title="Copy branch name"
+            >
+              <span className="truncate">{threadBranchName}</span>
+              <Copy className="size-3.5 shrink-0 text-muted-foreground" />
+            </button>
+          </DetailRow>
+        ) : null}
+        {!isManagerThread && showMergeBase ? (
+          <DetailRow
+            label="Merge base"
+            valueClassName="min-w-0 truncate"
+          >
+            {canSelectMergeBase && mergeBaseBranch ? (
+              <MergeBaseBranchPicker
+                value={mergeBaseBranch}
+                options={mergeBaseCandidates}
+                variant="minimal"
+                loading={isLoadingMergeBaseBranchOptions}
+                onChange={onMergeBaseBranchChange}
+                onOpenChange={onMergeBaseBranchPickerOpenChange}
+                className="max-w-full text-foreground"
+              />
+            ) : (
+              mergeBaseBranch
+            )}
+          </DetailRow>
+        ) : null}
+        {showWorkspaceStatus ? (
+          <DetailRow
+            label="Git status"
+            align="start"
+            valueClassName="min-w-0"
+          >
+            <div
+              className="flex min-w-0 items-baseline gap-2 whitespace-nowrap"
+              title={`${threadGitStatusDisplay.label} ${threadGitStatusDisplay.summary}`}
+            >
+              <span className={cn("shrink-0 font-medium", threadGitStatusLabelClass)}>
+                {threadGitStatusDisplay.label}
+              </span>
+              <span className="min-w-0 truncate text-muted-foreground">
+                {threadGitStatusDisplay.summary}
+              </span>
+            </div>
+          </DetailRow>
+        ) : null}
+        {thread.archivedAt != null ? (
+          <DetailRow
+            label="Archived"
+            valueClassName="min-w-0 truncate"
+          >
+            <ArchiveTimestampAction
+              isPending={unarchivePending}
+              onUnarchive={onUnarchive}
+              threadType={thread.type}
             />
-          ) : (
-            mergeBaseBranch
-          )}
-        </DetailRow>
-      ) : null}
-      {showWorkspaceStatus ? (
-        <DetailRow
-          label="Git status"
-          align="start"
-          valueClassName="min-w-0"
-        >
-          <div
-            className="flex min-w-0 items-baseline gap-2 whitespace-nowrap"
-            title={`${threadGitStatusDisplay.label} ${threadGitStatusDisplay.summary}`}
-          >
-            <span className={cn("shrink-0 font-medium", threadGitStatusLabelClass)}>
-              {threadGitStatusDisplay.label}
-            </span>
-            <span className="min-w-0 truncate text-muted-foreground">
-              {threadGitStatusDisplay.summary}
-            </span>
-          </div>
-        </DetailRow>
-      ) : null}
-      {thread.archivedAt != null ? (
-        <DetailRow
-          label="Archived"
-          valueClassName="min-w-0 truncate"
-        >
-          <ArchiveTimestampAction
-            isPending={unarchivePending}
-            onUnarchive={onUnarchive}
-            threadType={thread.type}
-          />
-        </DetailRow>
-      ) : null}
+          </DetailRow>
+        ) : null}
+      </DetailCard>
       {showThreadChangedFiles ? (
-        <DetailRow
-          label="Changed files"
-          layout="vertical"
-          valueClassName="pt-0.5"
-        >
-          <WorkspaceChangesList
-            files={workspaceStatusFiles ?? []}
-            maxHeightClassName="max-h-48"
-          />
-        </DetailRow>
+        <div className="flex min-h-0 flex-1 flex-col space-y-1.5 pl-2.5 pt-0.5">
+          <p className="m-0 shrink-0 text-xs leading-5 text-muted-foreground">
+            {workspaceStatusFilesLabel ?? "Changed files"}
+          </p>
+          <div className="min-h-0 flex-1 pt-0.5">
+            <WorkspaceChangesList
+              files={workspaceStatusFiles ?? []}
+              maxHeightClassName="h-full"
+            />
+          </div>
+        </div>
       ) : null}
-    </DetailCard>
+    </div>
   );
 }
 

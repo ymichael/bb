@@ -5,3 +5,8 @@ export {
 export type {
   DeferredPromise,
 } from "./deferred-promise.js";
+export {
+  makeWorkspaceMergeBase,
+  makeWorkspaceStatus,
+  makeWorkspaceWorkingTree,
+} from "./workspace-status.js";

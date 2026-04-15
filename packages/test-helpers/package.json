@@ -17,6 +17,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@bb/domain": "workspace:*",
     "zod": "^3.24.0"
   },
   "devDependencies": {

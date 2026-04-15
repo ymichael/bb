@@ -346,6 +346,46 @@ export function parsePorcelainEntries(statusOutput: string): PorcelainEntry[] {
     });
 }
 
+export interface NameStatusEntry {
+  path: string;
+  /** Raw status letter from `git diff --name-status` (M, A, D, R, C, T, U). */
+  status: string;
+}
+
+/**
+ * Parses the null-delimited output of `git diff --name-status -z`. Rename (R)
+ * and copy (C) entries are followed by two paths (old then new); we keep only
+ * the new path, which is what consumers want to highlight.
+ */
+export function parseNameStatusEntries(output: string): NameStatusEntry[] {
+  const tokens = output.split("\0");
+  const entries: NameStatusEntry[] = [];
+  let index = 0;
+  while (index < tokens.length) {
+    const statusToken = tokens[index];
+    if (!statusToken) {
+      index += 1;
+      continue;
+    }
+    const statusLetter = statusToken[0] ?? "";
+    const isRenameOrCopy = statusLetter === "R" || statusLetter === "C";
+    if (isRenameOrCopy) {
+      const newPath = tokens[index + 2];
+      if (newPath) {
+        entries.push({ path: newPath, status: statusLetter });
+      }
+      index += 3;
+    } else {
+      const pathToken = tokens[index + 1];
+      if (pathToken) {
+        entries.push({ path: pathToken, status: statusLetter });
+      }
+      index += 2;
+    }
+  }
+  return entries;
+}
+
 export function summarizeNumstat(output: string): {
   changedFiles: number;
   insertions: number;
