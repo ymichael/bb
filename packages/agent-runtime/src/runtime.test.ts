@@ -1089,6 +1089,249 @@ rl.on("line", (line) => {
     await runtime.shutdown();
   });
 
+  it("emits a steer ack when turn completion arrives before the steer response", async () => {
+    const events: ThreadEvent[] = [];
+    const completionBeforeSteerResponseScriptPath = join(
+      tmpDir,
+      "completion-before-steer-response-provider.cjs",
+    );
+    writeFileSync(
+      completionBeforeSteerResponseScriptPath,
+      `
+const readline = require("node:readline");
+
+function send(message) {
+  process.stdout.write(JSON.stringify(message) + "\\n");
+}
+
+const rl = readline.createInterface({ input: process.stdin });
+rl.on("line", (line) => {
+  const message = JSON.parse(line);
+  if (message.method === "initialize") {
+    send({ jsonrpc: "2.0", id: message.id, result: { ok: true } });
+    return;
+  }
+  if (message.method === "thread/start") {
+    send({ jsonrpc: "2.0", id: message.id, result: { providerThreadId: "prov-thread-1" } });
+    send({
+      jsonrpc: "2.0",
+      method: "thread/identity",
+      params: { threadId: message.params.threadId, providerThreadId: "prov-thread-1" },
+    });
+    return;
+  }
+  if (message.method === "turn/start") {
+    send({ jsonrpc: "2.0", id: message.id, result: { ok: true } });
+    send({
+      jsonrpc: "2.0",
+      method: "turn/started",
+      params: {
+        threadId: message.params.threadId,
+        providerThreadId: "prov-thread-1",
+        turnId: "turn-1",
+      },
+    });
+    return;
+  }
+  if (message.method === "turn/steer") {
+    send({
+      jsonrpc: "2.0",
+      method: "turn/completed",
+      params: {
+        threadId: message.params.threadId,
+        providerThreadId: "prov-thread-1",
+        turnId: message.params.expectedTurnId,
+        status: "completed",
+      },
+    });
+    setTimeout(() => {
+      send({ jsonrpc: "2.0", id: message.id, result: { ok: true } });
+    }, 25);
+  }
+});
+`,
+      "utf8",
+    );
+    const runtime = createAgentRuntime({
+      workspacePath: tmpDir,
+      onEvent: (event) => events.push(event),
+      onToolCall: async () => ({
+        contentItems: [{ type: "inputText", text: "ok" }],
+        success: true,
+      }),
+      adapterFactory: () =>
+        createSharedFakeAdapter({
+          id: "pi",
+          scriptPath: completionBeforeSteerResponseScriptPath,
+          syntheticUserMessageAcks: true,
+        }),
+    });
+
+    await runtime.startThread({
+      environmentId: "env-1",
+      threadId: "t1",
+      projectId: "p1",
+      providerId: "pi",
+      options: fullRuntimeOptions,
+    });
+    await runtime.runTurn({
+      threadId: "t1",
+      input: [{ type: "text", text: "active turn" }],
+      options: fullRuntimeOptions,
+    });
+    await waitForCondition(() =>
+      events.some((event) => event.type === "turn/started" && event.turnId === "turn-1"),
+    );
+
+    await runtime.steerTurn({
+      threadId: "t1",
+      expectedTurnId: "turn-1",
+      input: [{ type: "text", text: "completion race steer" }],
+      options: fullRuntimeOptions,
+    });
+
+    const raceAck = events.find(
+      (event) =>
+        event.type === "item/completed" &&
+        event.item.type === "userMessage" &&
+        event.item.content.some((content) =>
+          content.type === "text" && content.text === "completion race steer",
+        ),
+    );
+    expect(raceAck?.type).toBe("item/completed");
+    if (raceAck?.type !== "item/completed" || raceAck.item.type !== "userMessage") {
+      throw new Error("Expected steer userMessage ack after completion race");
+    }
+    expect(raceAck.turnId).toBe("turn-1");
+
+    await runtime.shutdown();
+  });
+
+  it("treats steers for already-completed turns as stale no-ops", async () => {
+    const builtCommands: AdapterCommand[] = [];
+    const events: ThreadEvent[] = [];
+    const stderrLines: string[] = [];
+    const baseAdapter = createSharedFakeAdapter({
+      id: "pi",
+      scriptPath,
+      syntheticUserMessageAcks: true,
+    });
+    const runtime = createAgentRuntime({
+      workspacePath: tmpDir,
+      onEvent: (event) => events.push(event),
+      onStderr: (line) => stderrLines.push(line),
+      onToolCall: async () => ({
+        contentItems: [{ type: "inputText", text: "ok" }],
+        success: true,
+      }),
+      adapterFactory: () => ({
+        ...baseAdapter,
+        buildCommand(command) {
+          builtCommands.push(command);
+          return baseAdapter.buildCommand(command);
+        },
+      }),
+    });
+
+    await runtime.startThread({
+      environmentId: "env-1",
+      threadId: "t1",
+      projectId: "p1",
+      providerId: "pi",
+      options: fullRuntimeOptions,
+    });
+    await runtime.runTurn({
+      threadId: "t1",
+      input: [{ type: "text", text: "complete quickly" }],
+      options: fullRuntimeOptions,
+    });
+    await waitForCondition(() =>
+      events.some((event) => event.type === "turn/completed" && event.turnId === "turn-1"),
+    );
+
+    await runtime.steerTurn({
+      threadId: "t1",
+      expectedTurnId: "turn-1",
+      input: [{ type: "text", text: "late stale steer" }],
+      options: fullRuntimeOptions,
+    });
+
+    expect(builtCommands.some((command) => command.type === "turn/steer")).toBe(false);
+    expect(stderrLines.some((line) => line.includes("Ignoring stale steer"))).toBe(true);
+    const staleAcks = events.filter(
+      (event) =>
+        event.type === "item/completed" &&
+        event.item.type === "userMessage" &&
+        event.item.content.some((content) =>
+          content.type === "text" && content.text === "late stale steer",
+        ),
+    );
+    expect(staleAcks).toHaveLength(0);
+
+    await runtime.shutdown();
+  });
+
+  it("emits separate acks for duplicate concurrent steers on the same turn", async () => {
+    const events: ThreadEvent[] = [];
+    const runtime = createAgentRuntime({
+      workspacePath: tmpDir,
+      onEvent: (event) => events.push(event),
+      onToolCall: async () => ({
+        contentItems: [{ type: "inputText", text: "ok" }],
+        success: true,
+      }),
+      adapterFactory: () =>
+        createSharedFakeAdapter({
+          id: "pi",
+          scriptPath,
+          syntheticUserMessageAcks: true,
+        }),
+    });
+
+    await runtime.startThread({
+      environmentId: "env-1",
+      threadId: "t1",
+      projectId: "p1",
+      providerId: "pi",
+      options: fullRuntimeOptions,
+    });
+    await runtime.runTurn({
+      threadId: "t1",
+      input: [{ type: "text", text: "delay:500" }],
+      options: fullRuntimeOptions,
+    });
+    await waitForCondition(() =>
+      events.some((event) => event.type === "turn/started" && event.turnId === "turn-1"),
+    );
+
+    await Promise.all([
+      runtime.steerTurn({
+        threadId: "t1",
+        expectedTurnId: "turn-1",
+        input: [{ type: "text", text: "duplicate steer" }],
+        options: fullRuntimeOptions,
+      }),
+      runtime.steerTurn({
+        threadId: "t1",
+        expectedTurnId: "turn-1",
+        input: [{ type: "text", text: "duplicate steer" }],
+        options: fullRuntimeOptions,
+      }),
+    ]);
+
+    const duplicateAcks = events.filter(
+      (event) =>
+        event.type === "item/completed" &&
+        event.item.type === "userMessage" &&
+        event.item.content.some((content) =>
+          content.type === "text" && content.text === "duplicate steer",
+        ),
+    );
+    expect(duplicateAcks).toHaveLength(2);
+
+    await runtime.shutdown();
+  });
+
   it("does not emit synthetic steer acks when the provider rejects the steer", async () => {
     const events: ThreadEvent[] = [];
     const rejectingSteerScriptPath = join(tmpDir, "rejecting-steer-provider.cjs");

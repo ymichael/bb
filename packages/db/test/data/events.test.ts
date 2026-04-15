@@ -7,9 +7,9 @@ import {
   appendStoredThreadEvent,
   appendStoredThreadEventInTransaction,
   findStoredEventRow,
+  getActiveStoredTurnId,
   getHighWaterMarks,
   getLastStoredProviderThreadId,
-  getLastStoredTurnLifecycleEvent,
   getLastStoredTurnId,
   getLastStoredTurnRequestEvent,
   getLatestThreadOutputEventRow,
@@ -416,10 +416,7 @@ describe("events", () => {
 
     expect(firstSequence).toBe(1);
     expect(secondSequence).toBe(2);
-    expect(getLastStoredTurnLifecycleEvent(db, thread.id)).toEqual({
-      turnId: "turn_1",
-      type: "turn/started",
-    });
+    expect(getActiveStoredTurnId(db, thread.id)).toBe("turn_1");
     expect(getLastStoredTurnId(db, thread.id)).toBe("turn_1");
     expect(getLastStoredProviderThreadId(db, thread.id)).toBe("provider_thr_1");
     expect(getLastStoredTurnRequestEvent(db, thread.id)).toMatchObject({
@@ -439,10 +436,18 @@ describe("events", () => {
         turnId: "turn_1",
       },
     });
-    expect(getLastStoredTurnLifecycleEvent(db, thread.id)).toEqual({
+    expect(getActiveStoredTurnId(db, thread.id)).toBeNull();
+    appendStoredThreadEvent(db, noopNotifier, {
+      threadId: thread.id,
       turnId: "turn_1",
-      type: "turn/completed",
+      providerThreadId: "provider_thr_1",
+      type: "turn/started",
+      data: {
+        providerThreadId: "provider_thr_1",
+        turnId: "turn_1",
+      },
     });
+    expect(getActiveStoredTurnId(db, thread.id)).toBeNull();
   });
 
   it("lists completed turns for a specific thread set", () => {

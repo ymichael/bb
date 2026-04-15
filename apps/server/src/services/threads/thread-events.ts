@@ -2,8 +2,8 @@ import { z } from "zod";
 import {
   appendStoredThreadEvent,
   appendStoredThreadEventInTransaction,
+  getActiveStoredTurnId,
   getLastStoredProviderThreadId,
-  getLastStoredTurnLifecycleEvent,
   getLastStoredTurnRequestEvent,
   type StoredTurnRequestEventRow,
 } from "@bb/db";
@@ -339,10 +339,18 @@ export function getActiveTurnId(
   deps: Pick<AppDeps, "db">,
   threadId: string,
 ): string | null {
-  const lifecycleEvent = getLastStoredTurnLifecycleEvent(deps.db, threadId);
-  return lifecycleEvent?.type === "turn/started"
-    ? lifecycleEvent.turnId
-    : null;
+  return getActiveStoredTurnId(deps.db, threadId);
+}
+
+export function requireActiveTurnId(
+  deps: Pick<AppDeps, "db">,
+  threadId: string,
+): string {
+  const activeTurnId = getActiveTurnId(deps, threadId);
+  if (activeTurnId === null) {
+    throw new ApiError(409, "invalid_request", "No active turn to steer");
+  }
+  return activeTurnId;
 }
 
 export function getLastProviderThreadId(

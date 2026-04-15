@@ -25,7 +25,7 @@ import {
 } from "./thread-turn-dispatch.js";
 import {
   appendClientTurnEvent,
-  getActiveTurnId,
+  requireActiveTurnId,
 } from "./thread-events.js";
 import { resolvePermissionEscalation } from "./thread-runtime-config.js";
 import { tryTransition } from "./thread-transitions.js";
@@ -83,11 +83,8 @@ async function sendClaimedDraft(
     ensureThreadCanQueueStartRequest(deps, thread);
   }
   const expectedSteerTurnId = sendMode === "steer"
-    ? getActiveTurnId(deps, thread.id)
+    ? requireActiveTurnId(deps, thread.id)
     : null;
-  if (sendMode === "steer" && expectedSteerTurnId === null) {
-    throw new ApiError(409, "invalid_request", "No active turn to steer");
-  }
   const execution = await buildExecutionOptions(
     deps,
     queuedMessage,

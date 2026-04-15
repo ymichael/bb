@@ -12,7 +12,7 @@ import {
   ensureThreadCanQueueStartRequest,
   queueReadyThreadTurnCommand,
 } from "./thread-lifecycle.js";
-import { appendClientTurnEvent, getActiveTurnId } from "./thread-events.js";
+import { appendClientTurnEvent, requireActiveTurnId } from "./thread-events.js";
 import {
   queueTurnDuringReprovision,
   requireReadyThreadEnvironment,
@@ -44,11 +44,8 @@ async function queueReadyManagerSystemMessage(
   args: QueueReadyManagerSystemMessageArgs,
 ): Promise<void> {
   const expectedSteerTurnId = args.thread.status === "active"
-    ? getActiveTurnId(deps, args.thread.id)
+    ? requireActiveTurnId(deps, args.thread.id)
     : null;
-  if (args.thread.status === "active" && expectedSteerTurnId === null) {
-    throw new ApiError(409, "invalid_request", "No active turn to steer");
-  }
 
   const eventSequence = appendClientTurnEvent(deps, {
     threadId: args.thread.id,

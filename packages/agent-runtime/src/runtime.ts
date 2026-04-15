@@ -902,6 +902,14 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         instructions,
       });
 
+      const activeTurnId = activeTurnIdByThreadId.get(threadId);
+      if (activeTurnId !== expectedTurnId) {
+        options.onStderr?.(
+          `Ignoring stale steer for thread "${threadId}" on turn "${expectedTurnId}"; active turn is ${activeTurnId ?? "none"}.`,
+        );
+        return;
+      }
+
       const cmd = proc.adapter.buildCommand({
         type: "turn/steer",
         threadId,
@@ -914,12 +922,6 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       if (!cmd) {
         throw new Error(`Adapter "${pid}" returned null for turn/steer`);
       }
-      const activeTurnId = activeTurnIdByThreadId.get(threadId);
-      if (activeTurnId !== expectedTurnId) {
-        throw new Error(
-          `Cannot steer thread "${threadId}" for turn "${expectedTurnId}"; active turn is ${activeTurnId ?? "none"}.`,
-        );
-      }
       await sendJsonRpcRequest({
         child: proc.child,
         message: cmd,
@@ -927,11 +929,6 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         getNextId: () => nextRequestId++,
         resultSchema: ignoredJsonRpcResultSchema,
       });
-      if (activeTurnIdByThreadId.get(threadId) !== expectedTurnId) {
-        throw new Error(
-          `Cannot acknowledge steer for thread "${threadId}" on turn "${expectedTurnId}"; active turn changed before the provider acknowledged it.`,
-        );
-      }
       const ack = syntheticUserMessageAcks.create({
         buildAck: proc.adapter.buildSyntheticUserMessageAck,
         input,

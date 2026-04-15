@@ -49,7 +49,7 @@ import {
 } from "../../services/threads/thread-lifecycle.js";
 import {
   appendClientTurnEvent,
-  getActiveTurnId,
+  requireActiveTurnId,
 } from "../../services/threads/thread-events.js";
 import { resolvePermissionEscalation } from "../../services/threads/thread-runtime-config.js";
 import { tryTransition } from "../../services/threads/thread-transitions.js";
@@ -133,11 +133,8 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
       ensureThreadCanQueueStartRequest(deps, thread);
     }
     const expectedSteerTurnId = mode === "steer"
-      ? getActiveTurnId(deps, thread.id)
+      ? requireActiveTurnId(deps, thread.id)
       : null;
-    if (mode === "steer" && expectedSteerTurnId === null) {
-      throw new ApiError(409, "invalid_request", "No active turn to steer");
-    }
     const execution = await buildExecutionOptions(
       deps,
       payload,

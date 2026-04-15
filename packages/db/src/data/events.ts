@@ -51,11 +51,6 @@ export interface CompletedStoredTurnRow {
   turnId: string;
 }
 
-export interface StoredTurnLifecycleEventRow {
-  turnId: string;
-  type: "turn/started" | "turn/completed";
-}
-
 /**
  * Insert events with dedup on (threadId, sequence).
  * Uses INSERT OR IGNORE to skip duplicates.
@@ -499,17 +494,17 @@ export function getLastStoredTurnId(
   return row?.turnId ?? null;
 }
 
-export function getLastStoredTurnLifecycleEvent(
+export function getActiveStoredTurnId(
   db: DbConnection,
   threadId: string,
-): StoredTurnLifecycleEventRow | null {
-  const row = db
-    .select({ turnId: events.turnId, type: events.type })
+): string | null {
+  const latestStarted = db
+    .select({ turnId: events.turnId })
     .from(events)
     .where(
       and(
         eq(events.threadId, threadId),
-        inArray(events.type, ["turn/started", "turn/completed"]),
+        eq(events.type, "turn/started"),
         isNotNull(events.turnId),
       ),
     )
@@ -517,17 +512,24 @@ export function getLastStoredTurnLifecycleEvent(
     .limit(1)
     .get();
 
-  if (
-    !row?.turnId ||
-    (row.type !== "turn/started" && row.type !== "turn/completed")
-  ) {
+  if (!latestStarted?.turnId) {
     return null;
   }
 
-  return {
-    turnId: row.turnId,
-    type: row.type,
-  };
+  const completed = db
+    .select({ sequence: events.sequence })
+    .from(events)
+    .where(
+      and(
+        eq(events.threadId, threadId),
+        eq(events.turnId, latestStarted.turnId),
+        eq(events.type, "turn/completed"),
+      ),
+    )
+    .limit(1)
+    .get();
+
+  return completed ? null : latestStarted.turnId;
 }
 
 export function getLastStoredProviderThreadId(
