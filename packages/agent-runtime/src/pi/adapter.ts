@@ -42,6 +42,7 @@ import {
 } from "../shared/adapter-utils.js";
 import {
   createProviderTurnStateRegistry,
+  finishOpenProviderTurn,
 } from "../shared/turn-state.js";
 import {
   getOrCreateScopedItemId,
@@ -581,14 +582,6 @@ export function createPiProviderAdapter(
     turnIdPrefix: opts?.turnIdPrefix,
   });
 
-  function finishOpenPiTurn(threadId: string): void {
-    const state = turnState.getOrCreate({ threadId });
-    if (!state.currentTurnId) {
-      return;
-    }
-    turnState.finishTurn({ state, threadId });
-  }
-
   function translatePiEvent(
     event: unknown,
     context?: ProviderTranslationContext,
@@ -972,7 +965,7 @@ export function createPiProviderAdapter(
             params: {},
           };
         case "thread/start": {
-          finishOpenPiTurn(command.threadId);
+          finishOpenProviderTurn({ registry: turnState, threadId: command.threadId });
           const baseInstructions = command.options?.instructions ?? "";
           const config = buildPiConfig(command.threadId, command.options);
           const finalConfig: Record<string, unknown> = config ? { ...config } : {};
@@ -998,7 +991,7 @@ export function createPiProviderAdapter(
           };
         }
         case "thread/resume": {
-          finishOpenPiTurn(command.threadId);
+          finishOpenProviderTurn({ registry: turnState, threadId: command.threadId });
           const threadId = command.providerThreadId ?? command.threadId;
           const baseInstructions = command.options?.instructions ?? "";
           const config = buildPiConfig(command.threadId, command.options);
@@ -1046,12 +1039,12 @@ export function createPiProviderAdapter(
             },
           };
         case "thread/stop":
-          finishOpenPiTurn(command.threadId);
+          finishOpenProviderTurn({ registry: turnState, threadId: command.threadId });
           return {
             jsonrpc: "2.0" as const,
             method: "thread/stop",
             params: {
-              threadId: command.providerThreadId ?? command.threadId,
+              threadId: command.providerThreadId,
             },
           };
         case "thread/name/set":

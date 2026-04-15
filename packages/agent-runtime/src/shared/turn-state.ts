@@ -53,6 +53,11 @@ export interface GetProviderTurnStateArgs {
   threadId: string;
 }
 
+export interface FinishOpenProviderTurnArgs<TState extends ProviderTurnState> {
+  registry: ProviderTurnStateRegistry<TState>;
+  threadId: string;
+}
+
 export interface GetCurrentOrLastProviderTurnIdArgs<TState extends ProviderTurnState> {
   state: TState;
 }
@@ -188,4 +193,14 @@ export function createProviderTurnStateRegistry<TState extends ProviderTurnState
       });
     },
   };
+}
+
+export function finishOpenProviderTurn<TState extends ProviderTurnState>(
+  args: FinishOpenProviderTurnArgs<TState>,
+): void {
+  const state = args.registry.getOrCreate({ threadId: args.threadId });
+  if (!state.currentTurnId) {
+    return;
+  }
+  args.registry.finishTurn({ state, threadId: args.threadId });
 }

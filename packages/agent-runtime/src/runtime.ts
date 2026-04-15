@@ -1,7 +1,6 @@
 import type {
   DynamicTool,
   InstructionMode,
-  PromptInput,
   ThreadEvent,
 } from "@bb/domain";
 import { z } from "zod";
@@ -9,14 +8,12 @@ import type { AgentRuntimeCaptureEntry } from "./capture-types.js";
 import type {
   AdapterOptions,
   JsonRpcMessage,
-  SyntheticUserMessageAckItem,
 } from "./provider-adapter.js";
 import {
   getJsonRpcStringParam,
   ignoredJsonRpcResultSchema,
   type JsonRpcObject,
   parseJsonRpcLine,
-  sendJsonRpc,
   sendJsonRpcError,
   sendJsonRpcRequest,
   settleJsonRpcResponse,
@@ -43,6 +40,10 @@ import type {
 import {
   resolveAdapterPermissionPolicy,
 } from "./shared/permission-policy.js";
+import {
+  createSyntheticUserMessageAckStore,
+  type SyntheticUserMessageAck,
+} from "./synthetic-user-message-acks.js";
 
 const threadIdentityResultSchema = z.object({
   providerThreadId: z.string().nullable().optional(),
@@ -149,11 +150,6 @@ interface EmitTranslatedEventsArgs {
   sourceThreadId?: string;
 }
 
-interface SyntheticUserMessageAck {
-  itemId: string;
-  item: SyntheticUserMessageAckItem;
-}
-
 interface EmitRuntimeEventArgs {
   event: ThreadEvent;
   proc: ProviderProcess;
@@ -168,17 +164,6 @@ interface EmitSyntheticUserMessageAckArgs {
   providerId: string;
   threadId: string;
   turnId: string;
-}
-
-interface QueueSyntheticUserMessageAckArgs {
-  input: PromptInput[];
-  proc: ProviderProcess;
-  threadId: string;
-}
-
-interface RemoveSyntheticUserMessageAckArgs {
-  ack: SyntheticUserMessageAck;
-  threadId: string;
 }
 
 function buildThreadShellEnvironment(
@@ -203,6 +188,8 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
   const threadIdentityRegistry = new RuntimeThreadIdentityRegistry();
   const threadRuntimeConfigs = new Map<string, ThreadRuntimeConfig>();
   const activeTurnIdByThreadId = new Map<string, string>();
+  const completedTurnIdsByThreadId = new Map<string, Set<string>>();
+  const syntheticUserMessageAcks = createSyntheticUserMessageAckStore();
 
   function createCaptureId(): string {
     const captureId = `capture-${nextCaptureId}`;
@@ -230,16 +217,13 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     onProviderThreadDetached: (threadId) => {
       threadIdentityRegistry.clearThread(threadId);
       clearThreadRuntimeConfig(threadId);
-      clearSyntheticUserMessageAckState(threadId);
+      syntheticUserMessageAcks.clearThread(threadId);
       activeTurnIdByThreadId.delete(threadId);
+      completedTurnIdsByThreadId.delete(threadId);
     },
     onStderr: options.onStderr,
     workspacePath: options.workspacePath,
   });
-  const pendingSyntheticUserMessageAcksByThreadId =
-    new Map<string, SyntheticUserMessageAck[]>();
-  const syntheticUserMessageAckCountersByThreadId = new Map<string, number>();
-
   function requireProviderProcess(providerId: string): ProviderProcess {
     return providerProcesses.requireProviderProcess(providerId);
   }
@@ -339,81 +323,15 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     });
   }
 
-  function nextSyntheticUserMessageAckItemId(threadId: string): string {
-    const next = (syntheticUserMessageAckCountersByThreadId.get(threadId) ?? 0) + 1;
-    syntheticUserMessageAckCountersByThreadId.set(threadId, next);
-    return `runtime-user-${next}`;
+  function recordCompletedTurn(threadId: string, turnId: string): void {
+    const completedTurnIds =
+      completedTurnIdsByThreadId.get(threadId) ?? new Set<string>();
+    completedTurnIds.add(turnId);
+    completedTurnIdsByThreadId.set(threadId, completedTurnIds);
   }
 
-  function createSyntheticUserMessageAck(
-    args: QueueSyntheticUserMessageAckArgs,
-  ): SyntheticUserMessageAck | null {
-    const itemId = nextSyntheticUserMessageAckItemId(args.threadId);
-    const item = args.proc.adapter.buildSyntheticUserMessageAck?.({
-      input: args.input,
-      itemId,
-    });
-    if (!item) {
-      return null;
-    }
-    return {
-      item,
-      itemId,
-    };
-  }
-
-  function queueSyntheticUserMessageAck(
-    args: QueueSyntheticUserMessageAckArgs,
-  ): SyntheticUserMessageAck | null {
-    const ack = createSyntheticUserMessageAck(args);
-    if (!ack) {
-      return null;
-    }
-    pendingSyntheticUserMessageAcksByThreadId.set(args.threadId, [
-      ...(pendingSyntheticUserMessageAcksByThreadId.get(args.threadId) ?? []),
-      ack,
-    ]);
-    return ack;
-  }
-
-  function removeSyntheticUserMessageAck(
-    args: RemoveSyntheticUserMessageAckArgs,
-  ): void {
-    const pending = pendingSyntheticUserMessageAcksByThreadId.get(args.threadId);
-    if (!pending) {
-      return;
-    }
-    const next = pending.filter((ack) => ack !== args.ack);
-    if (next.length === 0) {
-      pendingSyntheticUserMessageAcksByThreadId.delete(args.threadId);
-      return;
-    }
-    pendingSyntheticUserMessageAcksByThreadId.set(args.threadId, next);
-  }
-
-  function shiftSyntheticUserMessageAck(
-    threadId: string,
-  ): SyntheticUserMessageAck | undefined {
-    const pending = pendingSyntheticUserMessageAcksByThreadId.get(threadId);
-    if (!pending || pending.length === 0) {
-      return undefined;
-    }
-    const [ack, ...remaining] = pending;
-    if (remaining.length === 0) {
-      pendingSyntheticUserMessageAcksByThreadId.delete(threadId);
-    } else {
-      pendingSyntheticUserMessageAcksByThreadId.set(threadId, remaining);
-    }
-    return ack;
-  }
-
-  function clearPendingSyntheticUserMessageAcks(threadId: string): void {
-    pendingSyntheticUserMessageAcksByThreadId.delete(threadId);
-  }
-
-  function clearSyntheticUserMessageAckState(threadId: string): void {
-    pendingSyntheticUserMessageAcksByThreadId.delete(threadId);
-    syntheticUserMessageAckCountersByThreadId.delete(threadId);
+  function hasCompletedTurn(threadId: string, turnId: string): boolean {
+    return completedTurnIdsByThreadId.get(threadId)?.has(turnId) ?? false;
   }
 
   async function reconfigureThreadIfNeeded(
@@ -524,6 +442,25 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         threadId: resolvedBbThreadId,
       });
 
+      const activeTurnId = activeTurnIdByThreadId.get(resolvedBbThreadId);
+      if (
+        stampedEvent.type === "turn/completed" &&
+        activeTurnId === undefined
+      ) {
+        const ack = syntheticUserMessageAcks.shiftPending({
+          threadId: resolvedBbThreadId,
+        });
+        if (ack) {
+          emitSyntheticUserMessageAck({
+            ack,
+            proc: args.proc,
+            providerId: args.providerId,
+            threadId: resolvedBbThreadId,
+            turnId: stampedEvent.turnId,
+          });
+        }
+      }
+
       emitRuntimeEvent({
         event: stampedEvent,
         proc: args.proc,
@@ -534,8 +471,12 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       });
 
       if (stampedEvent.type === "turn/started") {
-        activeTurnIdByThreadId.set(resolvedBbThreadId, stampedEvent.turnId);
-        const ack = shiftSyntheticUserMessageAck(resolvedBbThreadId);
+        if (!hasCompletedTurn(resolvedBbThreadId, stampedEvent.turnId)) {
+          activeTurnIdByThreadId.set(resolvedBbThreadId, stampedEvent.turnId);
+        }
+        const ack = syntheticUserMessageAcks.shiftPending({
+          threadId: resolvedBbThreadId,
+        });
         if (ack) {
           emitSyntheticUserMessageAck({
             ack,
@@ -547,8 +488,10 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         }
       }
       if (stampedEvent.type === "turn/completed") {
-        activeTurnIdByThreadId.delete(resolvedBbThreadId);
-        clearPendingSyntheticUserMessageAcks(resolvedBbThreadId);
+        recordCompletedTurn(resolvedBbThreadId, stampedEvent.turnId);
+        if (activeTurnId === stampedEvent.turnId) {
+          activeTurnIdByThreadId.delete(resolvedBbThreadId);
+        }
       }
     }
   }
@@ -874,9 +817,9 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       });
 
       if (!cmd) return;
-      const pendingAck = queueSyntheticUserMessageAck({
+      const pendingAck = syntheticUserMessageAcks.queue({
+        buildAck: proc.adapter.buildSyntheticUserMessageAck,
         input,
-        proc,
         threadId,
       });
       try {
@@ -891,7 +834,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         // If turn/started already arrived, the ack was shifted and emitted;
         // cleanup is then intentionally a no-op because emitted events are immutable.
         if (pendingAck) {
-          removeSyntheticUserMessageAck({ ack: pendingAck, threadId });
+          syntheticUserMessageAcks.removePending({ ack: pendingAck, threadId });
         }
         throw error;
       }
@@ -916,25 +859,37 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       });
 
       if (!cmd) return;
-      try {
-        sendJsonRpc(proc.child, { ...cmd, id: nextRequestId++ });
-        const ack = createSyntheticUserMessageAck({
-          input,
+      const activeTurnId = activeTurnIdByThreadId.get(threadId);
+      if (activeTurnId !== expectedTurnId) {
+        throw new Error(
+          `Cannot steer thread "${threadId}" for turn "${expectedTurnId}"; active turn is ${activeTurnId ?? "none"}.`,
+        );
+      }
+      await sendJsonRpcRequest({
+        child: proc.child,
+        message: cmd,
+        pending: proc.pending,
+        getNextId: () => nextRequestId++,
+        resultSchema: ignoredJsonRpcResultSchema,
+      });
+      if (activeTurnIdByThreadId.get(threadId) !== expectedTurnId) {
+        throw new Error(
+          `Cannot acknowledge steer for thread "${threadId}" on turn "${expectedTurnId}"; active turn changed before the provider acknowledged it.`,
+        );
+      }
+      const ack = syntheticUserMessageAcks.create({
+        buildAck: proc.adapter.buildSyntheticUserMessageAck,
+        input,
+        threadId,
+      });
+      if (ack) {
+        emitSyntheticUserMessageAck({
+          ack,
           proc,
+          providerId: pid,
           threadId,
+          turnId: expectedTurnId,
         });
-        if (ack) {
-          emitSyntheticUserMessageAck({
-            ack,
-            proc,
-            providerId: pid,
-            threadId,
-            turnId: expectedTurnId,
-          });
-        }
-      } catch (error) {
-        clearPendingSyntheticUserMessageAcks(threadId);
-        throw error;
       }
     },
 
@@ -942,17 +897,21 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       const pid = resolveProviderForThread(threadId);
       const proc = requireProviderProcess(pid);
       const providerThreadId = threadIdentityRegistry.getProviderThreadId(threadId);
-      const activeTurnId = activeTurnIdByThreadId.get(threadId);
+      if (!providerThreadId) {
+        throw new Error(`No provider thread id available for ${threadId}`);
+      }
+      const activeTurnId = activeTurnIdByThreadId.get(threadId) ?? null;
       const shouldRestartProvider =
         proc.adapter.threadStopBehavior === "restart-provider";
-      clearSyntheticUserMessageAckState(threadId);
+      syntheticUserMessageAcks.clearThread(threadId);
       activeTurnIdByThreadId.delete(threadId);
+      completedTurnIdsByThreadId.delete(threadId);
 
       const cmd = proc.adapter.buildCommand({
         type: "thread/stop",
         threadId,
         providerThreadId,
-        turnId: activeTurnId,
+        activeTurnId,
       });
 
       if (!cmd) return;
@@ -1011,8 +970,8 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     },
 
     async shutdown() {
-      pendingSyntheticUserMessageAcksByThreadId.clear();
-      syntheticUserMessageAckCountersByThreadId.clear();
+      syntheticUserMessageAcks.clearAll();
+      completedTurnIdsByThreadId.clear();
       await providerProcesses.shutdown();
     },
   };

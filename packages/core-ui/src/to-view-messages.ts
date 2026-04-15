@@ -562,7 +562,10 @@ function consumePendingClientStartUser(
 }
 
 function buildUserMessageKey(message: ProjectedUserMessage): string {
-  return `${message.id}:${message.text}`;
+  const turnKey = message.turnId === undefined
+    ? "turn:undefined"
+    : `turn:${message.turnId}`;
+  return `${turnKey}\u0000${message.id}\u0000${message.text}`;
 }
 
 function areExploringCallsCompatible(
@@ -1506,9 +1509,10 @@ function buildFlatViewMessages(
       const activeTurnId = decoded.type === "client/turn/requested"
         ? state.activeTurnIdByThreadId.get(decoded.threadId)
         : undefined;
-      const projectedClientUser: ProjectedUserMessage = activeTurnId
-        ? { ...userFromClientThreadStart, turnId: activeTurnId }
-        : userFromClientThreadStart;
+      const projectedClientUser: ProjectedUserMessage =
+        activeTurnId !== undefined
+          ? { ...userFromClientThreadStart, turnId: activeTurnId }
+          : userFromClientThreadStart;
       if (clientStartContext?.isTurnRequested) {
         recordProjectedClientUser({
           counts: pendingUserSignatureCounts,
@@ -1560,7 +1564,8 @@ function buildFlatViewMessages(
         },
       );
       const projectedUserMessage: ProjectedUserMessage =
-        clientRequestedMatch?.turnId && !userMessage.turnId
+        clientRequestedMatch?.turnId !== undefined
+        && userMessage.turnId === undefined
           ? { ...userMessage, turnId: clientRequestedMatch.turnId }
           : userMessage;
       if (clientRequestedMatch) {

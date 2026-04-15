@@ -135,8 +135,8 @@ export type AdapterCommand =
   | {
       type: "thread/stop";
       threadId: string;
-      providerThreadId?: string;
-      turnId?: string;
+      providerThreadId: string;
+      activeTurnId: string | null;
     }
   | {
       type: "thread/name/set";

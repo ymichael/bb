@@ -378,6 +378,7 @@ describe("claude-code provider adapter", () => {
       type: "thread/stop",
       threadId: "bb-thread-1",
       providerThreadId: "claude-session-1",
+      activeTurnId: "turn-1",
     });
     expect(cmd).toEqual({
       jsonrpc: "2.0",

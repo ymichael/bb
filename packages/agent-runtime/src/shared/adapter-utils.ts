@@ -57,6 +57,10 @@ function toThreadEventUserContent(input: PromptInput[]): ThreadEventUserContent[
         return { type: "localImage", path: item.path };
       case "localFile":
         return { type: "localFile", path: item.path };
+      default: {
+        const exhaustive: never = item;
+        throw new Error(`Unsupported prompt input type: ${String(exhaustive)}`);
+      }
     }
   });
 }

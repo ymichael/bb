@@ -164,6 +164,7 @@ describe("pi provider adapter", () => {
       type: "thread/stop",
       threadId: "bb-t1",
       providerThreadId: "pi-session-1",
+      activeTurnId: "turn-1",
     });
     expect(cmd).toEqual({
       jsonrpc: "2.0",

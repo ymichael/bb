@@ -826,6 +826,44 @@ describe("toViewProjection turn lifecycle", () => {
     ]);
   });
 
+  it("keeps provider user messages with repeated item ids in different turns", () => {
+    const event = createTimelineEventFactory({
+      providerThreadId: "provider-thread-1",
+      threadId: "thread-1",
+      turnId: "turn-1",
+    });
+    const events: ThreadEventRow[] = [
+      event.turnStarted({ turnId: "turn-1" }),
+      event.userMessageAck({
+        itemId: "runtime-user-1",
+        text: "Repeat after restart",
+        turnId: "turn-1",
+      }),
+      event.turnCompleted({ turnId: "turn-1" }),
+      event.turnStarted({ turnId: "turn-2" }),
+      event.userMessageAck({
+        itemId: "runtime-user-1",
+        text: "Repeat after restart",
+        turnId: "turn-2",
+      }),
+      event.turnCompleted({ turnId: "turn-2" }),
+    ];
+
+    const projection = toViewProjection(fromRows(events), {
+      threadStatus: "idle",
+      turnMessageDetail: "summary",
+    });
+    const userMessages = flattenProjectionMessages(projection).filter(
+      (message) => message.kind === "user",
+    );
+
+    expect(userMessages).toHaveLength(2);
+    expect(userMessages.map((message) => message.turnId)).toEqual([
+      "turn-1",
+      "turn-2",
+    ]);
+  });
+
   it("renders acked active-turn steers inline and unacked steers at the bottom", () => {
     const event = createTimelineEventFactory({
       providerThreadId: "provider-thread-1",

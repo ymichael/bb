@@ -109,7 +109,11 @@ function buildCommand(command: AdapterCommand): JsonRpcMessage | null {
       return {
         jsonrpc: "2.0",
         method: "thread/stop",
-        params: { threadId: command.threadId },
+        params: {
+          activeTurnId: command.activeTurnId,
+          providerThreadId: command.providerThreadId,
+          threadId: command.threadId,
+        },
       };
     case "thread/name/set":
       return {

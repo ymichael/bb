@@ -218,6 +218,8 @@ function getCurrentThreadSession(
   args: CurrentThreadSessionArgs,
 ): ThreadSession | undefined {
   const threadSession = sessions.get(args.threadId);
+  // Runtime treats stop as a terminal boundary for pending acks and active turn
+  // state, so callbacks from a stopping session must not leak stale SDK events.
   if (
     !threadSession
     || threadSession.stopping

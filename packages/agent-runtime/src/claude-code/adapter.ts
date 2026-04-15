@@ -43,6 +43,7 @@ import {
 } from "../shared/adapter-utils.js";
 import {
   createProviderTurnStateRegistry,
+  finishOpenProviderTurn,
   type EnsureProviderTurnStartedArgs,
 } from "../shared/turn-state.js";
 import {
@@ -538,14 +539,6 @@ export function createClaudeCodeProviderAdapter(
     return turnState.ensureTurnStarted(args);
   }
 
-  function finishOpenClaudeTurn(threadId: string): void {
-    const state = turnState.getOrCreate({ threadId });
-    if (!state.currentTurnId) {
-      return;
-    }
-    turnState.finishTurn({ state, threadId });
-  }
-
   function translateClaudeEvent(
     event: unknown,
     context?: ProviderTranslationContext,
@@ -941,7 +934,7 @@ export function createClaudeCodeProviderAdapter(
             params: {},
           };
         case "thread/start": {
-          finishOpenClaudeTurn(command.threadId);
+          finishOpenProviderTurn({ registry: turnState, threadId: command.threadId });
           const baseInstructions = command.options?.instructions ?? "";
           if (command.options?.model) {
             setClaudeModelContextWindowHint(
@@ -977,7 +970,7 @@ export function createClaudeCodeProviderAdapter(
           };
         }
         case "thread/resume": {
-          finishOpenClaudeTurn(command.threadId);
+          finishOpenProviderTurn({ registry: turnState, threadId: command.threadId });
           const baseInstructions = command.options?.instructions ?? "";
           if (command.options?.model) {
             setClaudeModelContextWindowHint(
@@ -1043,7 +1036,7 @@ export function createClaudeCodeProviderAdapter(
             },
           };
         case "thread/stop":
-          finishOpenClaudeTurn(command.threadId);
+          finishOpenProviderTurn({ registry: turnState, threadId: command.threadId });
           return {
             jsonrpc: "2.0",
             method: "thread/stop",

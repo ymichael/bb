@@ -297,7 +297,7 @@ describe("codex provider adapter", () => {
       type: "thread/stop",
       threadId: "bb-t1",
       providerThreadId: "codex-thread-1",
-      turnId: "turn-1",
+      activeTurnId: "turn-1",
     });
     expect(cmd).toMatchObject({
       method: "turn/interrupt",
@@ -314,6 +314,7 @@ describe("codex provider adapter", () => {
       type: "thread/stop",
       threadId: "bb-t1",
       providerThreadId: "codex-thread-1",
+      activeTurnId: null,
     });
     expect(cmd).toBeNull();
   });

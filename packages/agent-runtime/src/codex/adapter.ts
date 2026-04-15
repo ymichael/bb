@@ -305,15 +305,15 @@ export function createCodexProviderAdapter(
             },
           };
         case "thread/stop":
-          if (!command.turnId) {
+          if (command.activeTurnId === null) {
             return null;
           }
           return {
             jsonrpc: "2.0",
             method: "turn/interrupt",
             params: {
-              threadId: command.providerThreadId ?? command.threadId,
-              turnId: command.turnId,
+              threadId: command.providerThreadId,
+              turnId: command.activeTurnId,
             },
           };
       }
