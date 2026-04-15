@@ -58,6 +58,9 @@ function ensureThreadIsWritable(thread: Thread): void {
   if (thread.archivedAt) {
     throw new ApiError(409, "invalid_request", "Thread is archived");
   }
+  if (thread.stopRequestedAt !== null) {
+    throw new ApiError(409, "invalid_request", "Thread is stopping");
+  }
 }
 
 function ensureThreadIsNotAwaitingUserInteraction(
