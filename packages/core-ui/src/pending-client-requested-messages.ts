@@ -4,6 +4,7 @@ type ProjectedUserMessage = Extract<ViewMessage, { kind: "user" }>;
 
 export interface PendingClientRequestedMessageQueue {
   messagesByTurnIdAndSignature: Map<string, Map<string, ProjectedUserMessage[]>>;
+  signatureCounts: Map<string, number>;
 }
 
 interface PendingClientRequestedQueueKeyArgs {
@@ -16,9 +17,18 @@ interface AppendPendingClientRequestedMessageArgs
   message: ProjectedUserMessage;
 }
 
+interface RecordPendingClientRequestedMessageArgs
+  extends PendingClientRequestedQueueKeyArgs {
+  message?: ProjectedUserMessage;
+}
+
 interface AttachPendingClientRequestedMessagesToTurnArgs {
   threadId: string;
   turnId: string;
+}
+
+interface PendingClientRequestedSignatureArgs {
+  signature: string;
 }
 
 interface PendingClientRequestedQueueLocation {
@@ -37,7 +47,25 @@ const TURNLESS_PENDING_CLIENT_REQUESTED_KEY = "";
 export function createPendingClientRequestedMessageQueue(): PendingClientRequestedMessageQueue {
   return {
     messagesByTurnIdAndSignature: new Map(),
+    signatureCounts: new Map(),
   };
+}
+
+function getPendingClientRequestedSignatureCount(
+  queue: PendingClientRequestedMessageQueue,
+  signature: string,
+): number {
+  return queue.signatureCounts.get(signature) ?? 0;
+}
+
+function incrementPendingClientRequestedSignatureCount(
+  queue: PendingClientRequestedMessageQueue,
+  signature: string,
+): void {
+  queue.signatureCounts.set(
+    signature,
+    getPendingClientRequestedSignatureCount(queue, signature) + 1,
+  );
 }
 
 function pendingClientRequestedTurnKey(turnId: string | undefined): string {
@@ -69,6 +97,50 @@ export function appendPendingClientRequestedMessage(
     args.signature,
     [...(signatureMap.get(args.signature) ?? []), args.message],
   );
+}
+
+export function recordPendingClientRequestedMessage(
+  queue: PendingClientRequestedMessageQueue,
+  args: RecordPendingClientRequestedMessageArgs,
+): void {
+  incrementPendingClientRequestedSignatureCount(queue, args.signature);
+  if (!args.message) {
+    return;
+  }
+  appendPendingClientRequestedMessage(queue, {
+    message: args.message,
+    signature: args.signature,
+    turnId: args.turnId,
+  });
+}
+
+export function hasPendingClientRequestedSignature(
+  queue: PendingClientRequestedMessageQueue,
+  args: PendingClientRequestedSignatureArgs,
+): boolean {
+  return getPendingClientRequestedSignatureCount(queue, args.signature) > 0;
+}
+
+export function consumePendingClientRequestedSignature(
+  queue: PendingClientRequestedMessageQueue,
+  args: PendingClientRequestedSignatureArgs,
+): boolean {
+  const count = getPendingClientRequestedSignatureCount(queue, args.signature);
+  if (count <= 0) {
+    return false;
+  }
+  if (count === 1) {
+    queue.signatureCounts.delete(args.signature);
+    return true;
+  }
+  queue.signatureCounts.set(args.signature, count - 1);
+  return true;
+}
+
+export function clearPendingClientRequestedSignatureCounts(
+  queue: PendingClientRequestedMessageQueue,
+): void {
+  queue.signatureCounts.clear();
 }
 
 export function attachPendingClientRequestedMessagesToTurn(
@@ -132,19 +204,6 @@ function findPendingClientRequestedQueueLocation(
     };
   }
   if (!args.turnId) {
-    for (const [turnKey, signatureMap] of queue.messagesByTurnIdAndSignature) {
-      if (turnKey === TURNLESS_PENDING_CLIENT_REQUESTED_KEY) {
-        continue;
-      }
-      const messages = signatureMap.get(args.signature);
-      if (messages && messages.length > 0) {
-        return {
-          signature: args.signature,
-          signatureMap,
-          turnKey,
-        };
-      }
-    }
     return undefined;
   }
   // Provider acks are turn-scoped; only fall back to turnless optimistic requests.

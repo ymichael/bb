@@ -163,16 +163,6 @@ export class PiSdkSession {
     }
   }
 
-  async abort(): Promise<void> {
-    if (!this.session) return;
-    try {
-      await this.session.abort();
-      this.isProcessing = false;
-    } catch (error) {
-      this.onDone(error);
-    }
-  }
-
   detach(): void {
     if (this.unsubscribe) {
       this.unsubscribe();

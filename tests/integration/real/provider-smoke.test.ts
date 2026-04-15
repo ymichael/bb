@@ -30,6 +30,10 @@ import {
   createIntegrationHarness,
   loadProjectEnvFile,
 } from "../helpers/harness.js";
+import {
+  describeThreadEvent,
+  previewThreadText,
+} from "../helpers/thread-diagnostics.js";
 import { scaleTimeoutMs } from "../helpers/time.js";
 
 const REAL_PROVIDER_IDS = ["codex", "claude-code", "pi"] as const;
@@ -199,39 +203,6 @@ function hasTurnCompletedAfter(
   );
 }
 
-function previewText(value: string | null): string {
-  const normalized = (value ?? "").replace(/\s+/g, " ").trim();
-  if (normalized.length <= 240) {
-    return normalized;
-  }
-  return `${normalized.slice(0, 240)}...`;
-}
-
-function describeThreadEvent(event: ThreadEventRow): string {
-  if (event.type === "item/completed") {
-    const item = event.data.item;
-    if (item.type === "toolCall") {
-      const error = item.error ? ` error=${item.error}` : "";
-      return `${event.seq}:${event.type}:${item.type}:${item.tool}:${item.status}${error}`;
-    }
-    if (item.type === "commandExecution") {
-      return `${event.seq}:${event.type}:${item.type}:${item.status}:${item.approvalStatus}`;
-    }
-    if (item.type === "fileChange") {
-      return `${event.seq}:${event.type}:${item.type}:${item.status}:${item.approvalStatus}`;
-    }
-    return `${event.seq}:${event.type}:${item.type}`;
-  }
-  if (event.type === "item/started") {
-    return `${event.seq}:${event.type}:${event.data.item.type}`;
-  }
-  if (event.type === "error" || event.type === "system/error") {
-    const detail = event.data.detail ? ` ${event.data.detail}` : "";
-    return `${event.seq}:${event.type}:${event.data.message}${detail}`;
-  }
-  return `${event.seq}:${event.type}`;
-}
-
 async function buildThreadDiagnostics(
   args: WaitForThreadEventArgs,
 ): Promise<string> {
@@ -253,7 +224,7 @@ async function buildThreadDiagnostics(
   const lastTurnCompleted = [...events]
     .reverse()
     .find((event) => event.type === "turn/completed");
-  return `status=${thread.status}; events=${events.length}; recentEvents=[${recentEvents || "none"}]; lastError=${JSON.stringify(lastError?.data ?? null)}; lastTurnStarted=${JSON.stringify(lastTurnStarted?.data ?? null)}; lastTurnCompleted=${JSON.stringify(lastTurnCompleted?.data ?? null)}; outputPreview=${JSON.stringify(previewText(output))}`;
+  return `status=${thread.status}; events=${events.length}; recentEvents=[${recentEvents || "none"}]; lastError=${JSON.stringify(lastError?.data ?? null)}; lastTurnStarted=${JSON.stringify(lastTurnStarted?.data ?? null)}; lastTurnCompleted=${JSON.stringify(lastTurnCompleted?.data ?? null)}; outputPreview=${JSON.stringify(previewThreadText(output))}`;
 }
 
 async function waitForTurnStartedAfter(

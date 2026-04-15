@@ -14,6 +14,11 @@ import {
   listQueuedCommands,
   type QueuedCommand,
 } from "./queries.js";
+import {
+  describeThreadEvent,
+  previewThreadText,
+  stringifyThreadEventData,
+} from "./thread-diagnostics.js";
 
 const POLL_INTERVAL_MS = 100;
 
@@ -117,47 +122,6 @@ async function readEnvironment(
   return response.json();
 }
 
-function stringifyEventData(event: ThreadEventRow | undefined): string {
-  return JSON.stringify(event?.data ?? null);
-}
-
-function previewText(value: string | null): string {
-  const normalized = (value ?? "").replace(/\s+/g, " ").trim();
-  if (normalized.length <= 240) {
-    return normalized;
-  }
-  return `${normalized.slice(0, 240)}...`;
-}
-
-function describeThreadEvent(event: ThreadEventRow): string {
-  if (event.type === "item/completed") {
-    const item = event.data.item;
-    if (item.type === "toolCall") {
-      const error = item.error ? ` error=${item.error}` : "";
-      return `${event.seq}:${event.type}:${item.type}:${item.tool}:${item.status}${error}`;
-    }
-    if (item.type === "commandExecution") {
-      return `${event.seq}:${event.type}:${item.type}:${item.status}:${item.approvalStatus}`;
-    }
-    if (item.type === "fileChange") {
-      return `${event.seq}:${event.type}:${item.type}:${item.status}:${item.approvalStatus}`;
-    }
-    return `${event.seq}:${event.type}:${item.type}`;
-  }
-  if (event.type === "item/started") {
-    return `${event.seq}:${event.type}:${event.data.item.type}`;
-  }
-  if (event.type === "error") {
-    const detail = event.data.detail ? ` ${event.data.detail}` : "";
-    return `${event.seq}:${event.type}:${event.data.message}${detail}`;
-  }
-  if (event.type === "system/error") {
-    const detail = event.data.detail ? ` ${event.data.detail}` : "";
-    return `${event.seq}:${event.type}:${event.data.message}${detail}`;
-  }
-  return `${event.seq}:${event.type}`;
-}
-
 async function buildThreadStatusFailureMessage(
   api: PublicApiClient,
   context: ThreadStatusFailureContext,
@@ -184,10 +148,10 @@ async function buildThreadStatusFailureMessage(
     `Thread ${context.threadId} entered ${context.currentStatus} while waiting for ${context.expectedStatus}`,
     `events=${events.length}`,
     `recentEvents=[${recentEvents || "none"}]`,
-    `lastError=${stringifyEventData(lastError)}`,
-    `lastTurnStarted=${stringifyEventData(lastTurnStarted)}`,
-    `lastTurnCompleted=${stringifyEventData(lastTurnCompleted)}`,
-    `outputPreview=${JSON.stringify(previewText(output))}`,
+    `lastError=${stringifyThreadEventData(lastError)}`,
+    `lastTurnStarted=${stringifyThreadEventData(lastTurnStarted)}`,
+    `lastTurnCompleted=${stringifyThreadEventData(lastTurnCompleted)}`,
+    `outputPreview=${JSON.stringify(previewThreadText(output))}`,
   ].join("; ");
 }
 

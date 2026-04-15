@@ -4,8 +4,6 @@ import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
 const {
   mockGetActiveToolNames,
   mockSetActiveToolsByName,
-  mockAbort,
-  mockDispose,
   mockOpen,
   mockInMemory,
   mockSettingsInMemory,
@@ -13,7 +11,6 @@ const {
 } = vi.hoisted(() => {
   const mockSubscribe = vi.fn(() => () => {});
   const mockPrompt = vi.fn();
-  const mockAbort = vi.fn();
   const mockDispose = vi.fn();
   const mockGetSessionStats = vi.fn();
   const mockGetContextUsage = vi.fn();
@@ -26,7 +23,6 @@ const {
     session: {
       subscribe: mockSubscribe,
       prompt: mockPrompt,
-      abort: mockAbort,
       dispose: mockDispose,
       getSessionStats: mockGetSessionStats,
       getContextUsage: mockGetContextUsage,
@@ -39,8 +35,6 @@ const {
   return {
     mockGetActiveToolNames,
     mockSetActiveToolsByName,
-    mockAbort,
-    mockDispose,
     mockOpen,
     mockInMemory,
     mockSettingsInMemory,
@@ -144,19 +138,5 @@ describe("PiSdkSession", () => {
       "bash",
       "message_user",
     ]);
-  });
-
-  it("aborts the active session without disposing it", async () => {
-    const session = new PiSdkSession(
-      { cwd: "/tmp/project" },
-      vi.fn(),
-      vi.fn(),
-    );
-
-    await session.start();
-    await session.abort();
-
-    expect(mockAbort).toHaveBeenCalledTimes(1);
-    expect(mockDispose).not.toHaveBeenCalled();
   });
 });

@@ -53,10 +53,13 @@ import {
   isTerminalAssistantFlushEvent,
 } from "./assistant-buffering.js";
 import {
-  appendPendingClientRequestedMessage,
   attachPendingClientRequestedMessagesToTurn,
+  clearPendingClientRequestedSignatureCounts,
+  consumePendingClientRequestedSignature,
   createPendingClientRequestedMessageQueue,
+  hasPendingClientRequestedSignature,
   materializePendingClientRequestedMessages,
+  recordPendingClientRequestedMessage,
   shiftPendingClientRequestedMessage,
   type PendingClientRequestedMessageQueue,
 } from "./pending-client-requested-messages.js";
@@ -112,8 +115,7 @@ interface ExploringCompatibilityContext {
 interface PendingUserSignatureCounts {
   clientStart: Map<string, number>;
   clientThreadStart: Map<string, number>;
-  clientRequested: Map<string, number>;
-  clientRequestedMessages: PendingClientRequestedMessageQueue;
+  clientRequested: PendingClientRequestedMessageQueue;
   provider: Map<string, number>;
 }
 
@@ -436,7 +438,10 @@ function consumePendingClientRequestedCounts(
 ): void {
   decrementPendingSignatureCount(args.counts.clientStart, args.signature);
   decrementPendingSignatureCount(args.counts.clientThreadStart, args.signature);
-  decrementPendingSignatureCount(args.counts.clientRequested, args.signature);
+  consumePendingClientRequestedSignature(
+    args.counts.clientRequested,
+    { signature: args.signature },
+  );
 }
 
 function decrementPendingSignatureCount(
@@ -504,11 +509,13 @@ function shouldSkipProjectedClientUser(
     return true;
   }
 
-  const pendingRequestedCount = getPendingSignatureCount(
-    args.counts.clientRequested,
-    args.signature,
-  );
-  if (args.context.isTurnStart && pendingRequestedCount > 0) {
+  if (
+    args.context.isTurnStart &&
+    hasPendingClientRequestedSignature(
+      args.counts.clientRequested,
+      { signature: args.signature },
+    )
+  ) {
     return true;
   }
 
@@ -532,17 +539,14 @@ function recordProjectedClientUser(
     incrementPendingSignatureCount(args.counts.clientThreadStart, args.signature);
   }
   if (args.context.isTurnRequested) {
-    incrementPendingSignatureCount(args.counts.clientRequested, args.signature);
-    if (args.message) {
-      appendPendingClientRequestedMessage(
-        args.counts.clientRequestedMessages,
-        {
-          message: args.message,
-          signature: args.signature,
-          turnId: args.turnId,
-        },
-      );
-    }
+    recordPendingClientRequestedMessage(
+      args.counts.clientRequested,
+      {
+        message: args.message,
+        signature: args.signature,
+        turnId: args.turnId,
+      },
+    );
   }
 }
 
@@ -1391,8 +1395,7 @@ function buildFlatViewMessages(
   const pendingUserSignatureCounts: PendingUserSignatureCounts = {
     clientStart: new Map(),
     clientThreadStart: new Map(),
-    clientRequested: new Map(),
-    clientRequestedMessages: createPendingClientRequestedMessageQueue(),
+    clientRequested: createPendingClientRequestedMessageQueue(),
     provider: new Map(),
   };
   const execLifecycleContext = createExecLifecycleContext();
@@ -1411,7 +1414,7 @@ function buildFlatViewMessages(
     if (decoded.type === "turn/started") {
       state.activeTurnIdByThreadId.set(decoded.threadId, decoded.turnId);
       attachPendingClientRequestedMessagesToTurn(
-        pendingUserSignatureCounts.clientRequestedMessages,
+        pendingUserSignatureCounts.clientRequested,
         {
           threadId: decoded.threadId,
           turnId: decoded.turnId,
@@ -1423,7 +1426,9 @@ function buildFlatViewMessages(
       state.activeTurnIdByThreadId.delete(decoded.threadId);
       pendingUserSignatureCounts.clientStart.clear();
       pendingUserSignatureCounts.clientThreadStart.clear();
-      pendingUserSignatureCounts.clientRequested.clear();
+      clearPendingClientRequestedSignatureCounts(
+        pendingUserSignatureCounts.clientRequested,
+      );
       pendingUserSignatureCounts.provider.clear();
     }
 
@@ -1557,7 +1562,7 @@ function buildFlatViewMessages(
         localFiles: userMessage.attachments?.localFiles ?? 0,
       });
       const clientRequestedMatch = shiftPendingClientRequestedMessage(
-        pendingUserSignatureCounts.clientRequestedMessages,
+        pendingUserSignatureCounts.clientRequested,
         {
           signature,
           turnId: userMessage.turnId,
@@ -2009,7 +2014,7 @@ function buildFlatViewMessages(
   return [
     ...durableMessages,
     ...materializePendingClientRequestedMessages(
-      pendingUserSignatureCounts.clientRequestedMessages,
+      pendingUserSignatureCounts.clientRequested,
       orderedEvents[orderedEvents.length - 1]?.meta.seq ?? 0,
     ),
   ];

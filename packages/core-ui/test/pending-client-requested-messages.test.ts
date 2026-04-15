@@ -96,4 +96,35 @@ describe("pending client requested messages", () => {
       },
     ]);
   });
+
+  it("does not pair turnless matches with turn-scoped pending requests", () => {
+    const queue = createPendingClientRequestedMessageQueue();
+
+    appendPendingClientRequestedMessage(queue, {
+      signature: "same",
+      message: {
+        ...buildUserMessage({ id: "pending", seq: 2 }),
+        turnId: "turn-1",
+      },
+      turnId: "turn-1",
+    });
+
+    expect(
+      shiftPendingClientRequestedMessage(queue, {
+        signature: "same",
+      }),
+    ).toBeUndefined();
+    expect(
+      shiftPendingClientRequestedMessage(queue, {
+        signature: "same",
+        turnId: "turn-1",
+      }),
+    ).toEqual({
+      message: {
+        ...buildUserMessage({ id: "pending", seq: 2 }),
+        turnId: "turn-1",
+      },
+      turnId: "turn-1",
+    });
+  });
 });
