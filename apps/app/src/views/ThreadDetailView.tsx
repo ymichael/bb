@@ -371,15 +371,18 @@ export function ThreadDetailView() {
     : undefined;
   const threadEnvironmentModeLabel = threadEnvironmentDisplay?.modeLabel;
   const threadBranchName = workspaceBranch?.currentBranch ?? undefined;
+  const isWorkspaceDeleted = environment?.status === "destroyed";
   const showWorkspaceStatus =
     canUseGitUi &&
-    (Boolean(workspaceStatus) || Boolean(workspaceStatusError)) &&
+    (Boolean(workspaceStatus) || Boolean(workspaceStatusError) || isWorkspaceDeleted) &&
     !(thread.archivedAt != null && environment?.managed !== true);
   const threadGitStatusDisplay = getGitStatusDisplay(
     workspaceStatus,
     {
       mergeBaseBranch,
       showBranchComparison: showBranchComparisonUi,
+      error: workspaceStatusError,
+      workspaceDeleted: isWorkspaceDeleted,
     },
   );
   const threadGitStatusLabelClass = workspaceWorkingTree?.state === "untracked"

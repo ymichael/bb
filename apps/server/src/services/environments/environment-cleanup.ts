@@ -122,19 +122,30 @@ async function assertWorkspaceCanBeSafelyCleaned(
     return false;
   }
 
-  const rawResult = await queueCommandAndWait(deps, {
-    hostId: environment.hostId,
-    timeoutMs: 30_000,
-    command: {
-      type: "workspace.status",
-      environmentId: environment.id,
-      workspaceContext: {
-        workspacePath: environment.path,
-        workspaceProvisionType: environment.workspaceProvisionType,
+  let rawResult: unknown;
+  try {
+    rawResult = await queueCommandAndWait(deps, {
+      hostId: environment.hostId,
+      timeoutMs: 30_000,
+      command: {
+        type: "workspace.status",
+        environmentId: environment.id,
+        workspaceContext: {
+          workspacePath: environment.path,
+          workspaceProvisionType: environment.workspaceProvisionType,
+        },
+        ...(mergeBaseBranch ? { mergeBaseBranch } : {}),
       },
-      ...(mergeBaseBranch ? { mergeBaseBranch } : {}),
-    },
-  });
+    });
+  } catch (error) {
+    // Workspace path is gone (e.g. user deleted the worktree out-of-band).
+    // Nothing to inspect and nothing risky to lose — let cleanup proceed so
+    // the environment is marked destroyed via the idempotent destroy command.
+    if (error instanceof ApiError && error.body.code === "path_not_found") {
+      return true;
+    }
+    throw error;
+  }
   const result = hostDaemonCommandResultSchemaByType["workspace.status"].parse(rawResult);
   if (workspaceHasRiskyChanges(result.workspaceStatus)) {
     throw new ApiError(

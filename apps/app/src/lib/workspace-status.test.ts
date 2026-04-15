@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { WorkspaceStatus } from "@bb/domain";
+import { HttpError } from "./api";
 import {
   getGitStatusDisplay,
   workspaceStatusDescription,
@@ -198,5 +199,17 @@ describe("workspace-status", () => {
     expect(workspaceStatusDescription(undefined)).toBe(
       "Workspace status is unavailable.",
     );
+  });
+
+  it("reports a deleted workspace when the path is gone", () => {
+    const error = new HttpError({
+      status: 502,
+      message: "Managed workspace path does not exist",
+      code: "path_not_found",
+    });
+    expect(getGitStatusDisplay(undefined, { error })).toEqual({
+      label: "Deleted",
+      summary: "Workspace deleted.",
+    });
   });
 });

@@ -1,5 +1,6 @@
 import { assertNever } from "@bb/core-ui";
 import type { WorkspaceStatus } from "@bb/domain";
+import { HttpError } from "@/lib/api";
 import {
   formatWorkspaceChangeSummary,
 } from "@/lib/workspace-change-summary";
@@ -7,6 +8,7 @@ import {
 interface ThreadGitStatusDisplay {
   label:
     | "Unknown"
+    | "Deleted"
     | "Up to date"
     | "Clean"
     | "Ahead"
@@ -54,9 +56,19 @@ export function getGitStatusDisplay(
   options?: {
     mergeBaseBranch?: string;
     showBranchComparison?: boolean;
+    error?: unknown;
+    workspaceDeleted?: boolean;
   },
 ): ThreadGitStatusDisplay {
   if (!status) {
+    const isPathNotFound =
+      options?.error instanceof HttpError && options.error.code === "path_not_found";
+    if (options?.workspaceDeleted || isPathNotFound) {
+      return {
+        label: "Deleted",
+        summary: "Workspace deleted.",
+      };
+    }
     return {
       label: "Unknown",
       summary: "Workspace status unavailable.",
