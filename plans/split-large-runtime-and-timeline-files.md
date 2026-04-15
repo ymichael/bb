@@ -282,6 +282,21 @@ without passing a large mutable context object. Candidate file:
 If the extraction requires passing most runtime maps and callbacks around, stop
 and leave this as a documented follow-up instead of forcing a worse abstraction.
 
+Evaluation result:
+
+- Do not extract this in the current branch.
+- `emitTranslatedEvents` currently coordinates provider-thread identity
+  resolution, active/completed turn state, synthetic user-message ack shifting,
+  translated-event capture emission, synthetic ack emission, and stderr
+  reporting.
+- Pulling it into a separate module would require passing a broad mutable
+  runtime context containing the thread identity registry, active/completed turn
+  maps, synthetic ack store, capture callbacks, stderr callback, and event
+  emitters.
+- That would make ownership less clear even though it would reduce
+  `runtime.ts` line count. Revisit only if those lifecycle responsibilities are
+  first encapsulated behind narrower owners.
+
 Validation:
 
 - `pnpm exec turbo run test --filter=@bb/agent-runtime --force`
