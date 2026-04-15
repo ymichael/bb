@@ -13,7 +13,7 @@
 
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type {
@@ -31,6 +31,8 @@ import type { AgentRuntime, AgentRuntimeExecutionOptions } from "./types.js";
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+type ThreadIdentityEvent = Extract<ThreadEvent, { type: "thread/identity" }>;
 
 const fullRuntimeOptions = {
   permissionMode: "full",
@@ -104,8 +106,23 @@ interface RuntimeRestartTurnIdAssertionArgs {
   secondEvents: ThreadEvent[];
 }
 
+interface ResolveProviderThreadIdArgs {
+  events: ThreadEvent[];
+  fallbackProviderThreadId: string | undefined;
+  threadId: string;
+}
+
+interface ResolveResumePathArgs {
+  providerId: string;
+  threadId: string;
+}
+
 function providerUsesRuntimeTurnIds(providerId: string): boolean {
   return providerId === "claude-code" || providerId === "pi";
+}
+
+function providerEmitsInterruptedTurnCompletion(providerId: string): boolean {
+  return providerId === "codex";
 }
 
 function getUserMessageAckEvents(
@@ -122,6 +139,68 @@ function expectUserMessageAckCount(
   count: number,
 ): void {
   expect(getUserMessageAckEvents(events)).toHaveLength(count);
+}
+
+function getEventsForThread(
+  events: ThreadEvent[],
+  threadId: string,
+): ThreadEvent[] {
+  return events.filter((event) =>
+    "threadId" in event && event.threadId === threadId,
+  );
+}
+
+function turnStartedCountForThread(
+  events: ThreadEvent[],
+  threadId: string,
+): number {
+  return getEventsForThread(events, threadId)
+    .filter((event) => event.type === "turn/started").length;
+}
+
+function turnCompletedCountForThread(
+  events: ThreadEvent[],
+  threadId: string,
+): number {
+  return getEventsForThread(events, threadId)
+    .filter((event) => event.type === "turn/completed").length;
+}
+
+function getAgentTextAfterIndex(
+  events: ThreadEvent[],
+  startIndex: number,
+  threadId: string,
+): string {
+  return getThreadText(events.slice(startIndex), threadId);
+}
+
+function isThreadIdentityEvent(
+  event: ThreadEvent,
+  threadId: string,
+): event is ThreadIdentityEvent {
+  return event.type === "thread/identity" && event.threadId === threadId;
+}
+
+function resolveProviderThreadId(args: ResolveProviderThreadIdArgs): string {
+  if (args.fallbackProviderThreadId) {
+    return args.fallbackProviderThreadId;
+  }
+
+  const identityEvent = args.events.find((event) =>
+    isThreadIdentityEvent(event, args.threadId),
+  );
+  if (!identityEvent) {
+    throw new Error(`No provider thread id captured for ${args.threadId}`);
+  }
+  return identityEvent.providerThreadId;
+}
+
+function resolveResumePath(args: ResolveResumePathArgs): string | undefined {
+  if (args.providerId !== "pi") {
+    return undefined;
+  }
+  const sanitized = args.threadId.replace(/[^A-Za-z0-9._-]/g, "_");
+  return join(homedir(), ".bb", "pi-bridge-sessions", `${sanitized}.jsonl`);
 }
 
 function expectNoSharedRuntimeTurnIds(
@@ -579,7 +658,118 @@ for (const providerId of providers) {
       }
     });
 
-    // 4. Respects developer instructions
+    // 4. Stops an active turn and recovers with a resumed session.
+    it("stops an active turn and recovers with a follow-up", async () => {
+      const ctx = createTestRuntime(providerId);
+      try {
+        const threadId = newThreadId();
+        const model = await resolveDefaultModel(providerId, ctx);
+        const options = {
+          permissionMode: "full",
+          permissionEscalation: null,
+          ...(model ? { model } : {}),
+        } satisfies AgentRuntimeExecutionOptions;
+        const startResult = await ctx.runtime.startThread({
+          environmentId: "env-1",
+          threadId,
+          projectId: "test-project",
+          providerId,
+          options,
+        });
+
+        await ctx.runtime.runTurn({
+          threadId,
+          input: [{
+            type: "text",
+            text:
+              "Write a detailed 20 section essay about the history of computing "
+              + "with four sentences per section.",
+          }],
+          options,
+        });
+
+        await waitForCondition(
+          () => turnStartedCountForThread(ctx.events, threadId) >= 1,
+          {
+            timeoutMs: 30_000,
+            label: "turn/started before stop",
+          },
+        );
+
+        const completedBeforeStop = turnCompletedCountForThread(ctx.events, threadId);
+        expect(completedBeforeStop).toBe(0);
+
+        await ctx.runtime.stopThread({ threadId });
+        if (providerEmitsInterruptedTurnCompletion(providerId)) {
+          await waitForCondition(
+            () => turnCompletedCountForThread(ctx.events, threadId) > completedBeforeStop,
+            {
+              timeoutMs: 30_000,
+              label: "interrupted turn/completed after stop",
+            },
+          );
+        }
+
+        const providerThreadId = resolveProviderThreadId({
+          events: ctx.events,
+          fallbackProviderThreadId: startResult.providerThreadId,
+          threadId,
+        });
+        await ctx.runtime.resumeThread({
+          environmentId: "env-1",
+          threadId,
+          projectId: "test-project",
+          providerThreadId,
+          providerId,
+          options,
+          resumePath: resolveResumePath({ providerId, threadId }),
+        });
+
+        const recoveryStartIndex = ctx.events.length;
+        const completedBeforeRecovery = turnCompletedCountForThread(ctx.events, threadId);
+        await ctx.runtime.runTurn({
+          threadId,
+          input: [{
+            type: "text",
+            text: "Reply with a short confirmation that you are ready for the next task.",
+          }],
+          options,
+        });
+
+        try {
+          await waitForCondition(
+            () =>
+              turnCompletedCountForThread(ctx.events, threadId) > completedBeforeRecovery
+              && getAgentTextAfterIndex(ctx.events, recoveryStartIndex, threadId).length > 0,
+            {
+              timeoutMs: 60_000,
+              label: "recovery turn/completed with output",
+            },
+          );
+        } catch {
+          throw new Error(
+            "Timed out waiting for stop recovery turn.\n"
+            + describeEventsForFailure(getEventsForThread(ctx.events, threadId)),
+          );
+        }
+
+        expect(turnStartedCountForThread(ctx.events, threadId)).toBeGreaterThanOrEqual(2);
+        expect(getAgentTextAfterIndex(ctx.events, recoveryStartIndex, threadId).length)
+          .toBeGreaterThan(0);
+        const userMessageAckCount =
+          getUserMessageAckEvents(getEventsForThread(ctx.events, threadId)).length;
+        if (providerId === "codex") {
+          expect(userMessageAckCount).toBeGreaterThanOrEqual(1);
+        } else {
+          expect(userMessageAckCount).toBe(2);
+        }
+      } finally {
+        await ctx.runtime.shutdown();
+        cleanup(ctx);
+      }
+    }, 90_000);
+
+    // 5. Respects developer instructions
     it("respects developer instructions", async () => {
       const ctx = createTestRuntime(providerId);
       try {
@@ -612,7 +802,7 @@ for (const providerId of providers) {
       }
     });
 
-    // 5. Recovers from a bad request
+    // 6. Recovers from a bad request
     it("recovers from a bad request", async () => {
       const ctx = createTestRuntime(providerId);
       try {
@@ -670,7 +860,7 @@ for (const providerId of providers) {
       }
     });
 
-    // 6. Handles dynamic tool calls
+    // 7. Handles dynamic tool calls
     it("handles dynamic tool calls", async () => {
       let toolCalled = false;
       const ctx = createTestRuntime(providerId, {
@@ -732,7 +922,7 @@ for (const providerId of providers) {
       }
     });
 
-    // 7. Resumes a thread across process lifetimes.
+    // 8. Resumes a thread across process lifetimes.
     it("resumes a thread across process lifetimes", async () => {
       const ctx1 = createTestRuntime(providerId);
       let providerThreadId: string | undefined;
@@ -776,11 +966,10 @@ for (const providerId of providers) {
         }
 
         // For pi, the resume path is the session file
-        if (providerId === "pi") {
-          const homeDir = require("node:os").homedir();
-          const sanitized = firstThreadId.replace(/[^A-Za-z0-9._-]/g, "_");
-          resumePath = join(homeDir, ".bb", "pi-bridge-sessions", `${sanitized}.jsonl`);
-        }
+        resumePath = resolveResumePath({
+          providerId,
+          threadId: firstThreadId,
+        });
 
         // Shutdown first runtime (simulates process death)
         await ctx1.runtime.shutdown();

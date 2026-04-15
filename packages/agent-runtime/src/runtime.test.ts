@@ -204,6 +204,7 @@ describe("createAgentRuntime", () => {
         supportsServiceTier: false,
         supportedPermissionModes: ["full", "workspace-write", "readonly"],
       },
+      threadStopBehavior: "keep-provider",
       process: {
         command: "node",
         args: [scriptPath],
@@ -306,6 +307,7 @@ describe("createAgentRuntime", () => {
         supportsServiceTier: false,
         supportedPermissionModes: ["full", "workspace-write", "readonly"],
       },
+      threadStopBehavior: "keep-provider",
       process: {
         command: "node",
         args: [scriptPath],
@@ -1108,6 +1110,59 @@ rl.on("line", (line) => {
       options: fullRuntimeOptions,
     });
     await runtime.stopThread({ threadId: "t1" });
+    await runtime.shutdown();
+  });
+
+  it("restarts providers that require a restart after thread stop", async () => {
+    const events: ThreadEvent[] = [];
+    const adapter = createFakeAdapter(scriptPath);
+    const runtime = createAgentRuntime({
+      workspacePath: tmpDir,
+      onEvent: (event) => events.push(event),
+      onToolCall: async () => ({
+        contentItems: [{ type: "inputText", text: "ok" }],
+        success: true,
+      }),
+      adapterFactory: () => ({
+        ...adapter,
+        threadStopBehavior: "restart-provider",
+      }),
+    });
+
+    const startResult = await runtime.startThread({
+      environmentId: "env-1",
+      threadId: "t1",
+      projectId: "p1",
+      providerId: "fake",
+      options: fullRuntimeOptions,
+    });
+    expect(runtime.listRunningProviders()).toEqual(["fake"]);
+
+    await runtime.stopThread({ threadId: "t1" });
+    expect(runtime.listRunningProviders()).toEqual([]);
+
+    await runtime.resumeThread({
+      environmentId: "env-1",
+      threadId: "t1",
+      projectId: "p1",
+      providerThreadId: startResult.providerThreadId,
+      providerId: "fake",
+      options: fullRuntimeOptions,
+    });
+    await runtime.runTurn({
+      threadId: "t1",
+      input: [{ type: "text", text: "after restart" }],
+      options: fullRuntimeOptions,
+    });
+    await waitForCondition(() =>
+      events.some(
+        (event) =>
+          event.type === "item/completed" &&
+          event.item.type === "agentMessage" &&
+          event.item.text.includes("after restart"),
+      )
+    );
+
     await runtime.shutdown();
   });
 

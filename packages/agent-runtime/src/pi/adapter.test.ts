@@ -158,14 +158,20 @@ describe("pi provider adapter", () => {
     });
   });
 
-  it("buildCommand thread/stop returns null", () => {
+  it("buildCommand thread/stop maps to the bridge stop command", () => {
     const adapter = createPiProviderAdapter();
-    expect(
-      adapter.buildCommand({
-        type: "thread/stop",
-        threadId: "bb-t1",
-      }),
-    ).toBeNull();
+    const cmd = adapter.buildCommand({
+      type: "thread/stop",
+      threadId: "bb-t1",
+      providerThreadId: "pi-session-1",
+    });
+    expect(cmd).toEqual({
+      jsonrpc: "2.0",
+      method: "thread/stop",
+      params: {
+        threadId: "pi-session-1",
+      },
+    });
   });
 
   it("buildCommand turn/start includes input", () => {

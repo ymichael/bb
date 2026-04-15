@@ -538,6 +538,14 @@ export function createClaudeCodeProviderAdapter(
     return turnState.ensureTurnStarted(args);
   }
 
+  function finishOpenClaudeTurn(threadId: string): void {
+    const state = turnState.getOrCreate({ threadId });
+    if (!state.currentTurnId) {
+      return;
+    }
+    turnState.finishTurn({ state, threadId });
+  }
+
   function translateClaudeEvent(
     event: unknown,
     context?: ProviderTranslationContext,
@@ -901,6 +909,7 @@ export function createClaudeCodeProviderAdapter(
     id: providerInfo.id,
     displayName: providerInfo.displayName,
     capabilities,
+    threadStopBehavior: "keep-provider",
     process: {
       command: opts?.processCommand ?? "node",
       args: opts?.processArgs ?? [resolveBridgePath({
@@ -932,6 +941,7 @@ export function createClaudeCodeProviderAdapter(
             params: {},
           };
         case "thread/start": {
+          finishOpenClaudeTurn(command.threadId);
           const baseInstructions = command.options?.instructions ?? "";
           if (command.options?.model) {
             setClaudeModelContextWindowHint(
@@ -967,6 +977,7 @@ export function createClaudeCodeProviderAdapter(
           };
         }
         case "thread/resume": {
+          finishOpenClaudeTurn(command.threadId);
           const baseInstructions = command.options?.instructions ?? "";
           if (command.options?.model) {
             setClaudeModelContextWindowHint(
@@ -1032,7 +1043,14 @@ export function createClaudeCodeProviderAdapter(
             },
           };
         case "thread/stop":
-          return null;
+          finishOpenClaudeTurn(command.threadId);
+          return {
+            jsonrpc: "2.0",
+            method: "thread/stop",
+            params: {
+              threadId: command.threadId,
+            },
+          };
         case "thread/name/set":
           return null; // Claude Code doesn't support rename
       }

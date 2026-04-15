@@ -372,14 +372,20 @@ describe("claude-code provider adapter", () => {
     });
   });
 
-  it("buildCommand thread/stop returns null", () => {
+  it("buildCommand thread/stop maps to the bridge stop command", () => {
     const adapter = createClaudeCodeProviderAdapter();
-    expect(
-      adapter.buildCommand({
-        type: "thread/stop",
+    const cmd = adapter.buildCommand({
+      type: "thread/stop",
+      threadId: "bb-thread-1",
+      providerThreadId: "claude-session-1",
+    });
+    expect(cmd).toEqual({
+      jsonrpc: "2.0",
+      method: "thread/stop",
+      params: {
         threadId: "bb-thread-1",
-      }),
-    ).toBeNull();
+      },
+    });
   });
 
   it("decodeToolCallRequest preserves string request ids", () => {

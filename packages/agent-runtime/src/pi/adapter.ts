@@ -581,6 +581,14 @@ export function createPiProviderAdapter(
     turnIdPrefix: opts?.turnIdPrefix,
   });
 
+  function finishOpenPiTurn(threadId: string): void {
+    const state = turnState.getOrCreate({ threadId });
+    if (!state.currentTurnId) {
+      return;
+    }
+    turnState.finishTurn({ state, threadId });
+  }
+
   function translatePiEvent(
     event: unknown,
     context?: ProviderTranslationContext,
@@ -714,6 +722,10 @@ export function createPiProviderAdapter(
         if (!piEvent.success) {
           return buildUnexpectedPiSdkEvent(event, context);
         }
+        const currentTurnId = state.currentTurnId;
+        if (!currentTurnId) {
+          break;
+        }
         const lastAssistant = findLastAssistantMessage(piEvent.data.messages);
         if (lastAssistant) {
           const text = extractAssistantText(lastAssistant);
@@ -727,35 +739,33 @@ export function createPiProviderAdapter(
               type: "item/completed",
               threadId,
               providerThreadId: "",
-              turnId: state.currentTurnId ?? "",
+              turnId: currentTurnId,
               item: { type: "agentMessage", id: itemId, text },
             });
           }
         }
-        if (state.currentTurnId) {
-          const tokenUsage = extractPiTokenUsage(
-            lastAssistant,
-            state.cumulativeTokens,
-            resolveModelContextWindow,
-          );
-          if (tokenUsage) {
-            events.push({
-              type: "thread/tokenUsage/updated",
-              threadId,
-              providerThreadId: "",
-              turnId: state.currentTurnId,
-              tokenUsage,
-            });
-          }
+        const tokenUsage = extractPiTokenUsage(
+          lastAssistant,
+          state.cumulativeTokens,
+          resolveModelContextWindow,
+        );
+        if (tokenUsage) {
           events.push({
-            type: "turn/completed",
+            type: "thread/tokenUsage/updated",
             threadId,
             providerThreadId: "",
-            turnId: state.currentTurnId,
-            status: "completed",
+            turnId: currentTurnId,
+            tokenUsage,
           });
-          turnState.finishTurn({ state, threadId: stateKey });
         }
+        events.push({
+          type: "turn/completed",
+          threadId,
+          providerThreadId: "",
+          turnId: currentTurnId,
+          status: "completed",
+        });
+        turnState.finishTurn({ state, threadId: stateKey });
         break;
       }
 
@@ -930,6 +940,7 @@ export function createPiProviderAdapter(
     id: providerInfo.id,
     displayName: providerInfo.displayName,
     capabilities,
+    threadStopBehavior: "restart-provider",
     process: {
       command: opts?.processCommand ?? "node",
       args: opts?.processArgs ?? [resolveBridgePath({
@@ -961,6 +972,7 @@ export function createPiProviderAdapter(
             params: {},
           };
         case "thread/start": {
+          finishOpenPiTurn(command.threadId);
           const baseInstructions = command.options?.instructions ?? "";
           const config = buildPiConfig(command.threadId, command.options);
           const finalConfig: Record<string, unknown> = config ? { ...config } : {};
@@ -986,6 +998,7 @@ export function createPiProviderAdapter(
           };
         }
         case "thread/resume": {
+          finishOpenPiTurn(command.threadId);
           const threadId = command.providerThreadId ?? command.threadId;
           const baseInstructions = command.options?.instructions ?? "";
           const config = buildPiConfig(command.threadId, command.options);
@@ -1033,7 +1046,14 @@ export function createPiProviderAdapter(
             },
           };
         case "thread/stop":
-          return null;
+          finishOpenPiTurn(command.threadId);
+          return {
+            jsonrpc: "2.0" as const,
+            method: "thread/stop",
+            params: {
+              threadId: command.providerThreadId ?? command.threadId,
+            },
+          };
         case "thread/name/set":
           return null; // Pi doesn't support rename
       }

@@ -137,12 +137,25 @@ interface PendingToolCall {
   resolve: (value: { content: string; isError?: boolean }) => void;
 }
 
+interface CurrentThreadSessionArgs {
+  sessionSerial: number;
+  threadId: string;
+}
+
+interface CreateSessionCallbackArgs {
+  sessionSerial: number;
+  threadId: string;
+}
+
 interface ThreadSession {
   session: PiSdkSession;
+  sessionSerial: number;
+  stopping: boolean;
   pendingToolCalls: Map<string | number, PendingToolCall>;
 }
 
 const sessions = new Map<string, ThreadSession>();
+let sessionSerialCounter = 0;
 let toolCallRequestIdCounter = 0;
 
 function send(msg: JsonRpcResponse | SdkEventNotification | BridgeEventNotification | BridgeToolCallRequest): void {
@@ -196,24 +209,51 @@ function emitContextWindowUsage(threadId: string): void {
   });
 }
 
-function createOnPiEvent(threadId: string): (event: AgentSessionEvent) => void {
+function nextSessionSerial(): number {
+  sessionSerialCounter += 1;
+  return sessionSerialCounter;
+}
+
+function getCurrentThreadSession(
+  args: CurrentThreadSessionArgs,
+): ThreadSession | undefined {
+  const threadSession = sessions.get(args.threadId);
+  if (
+    !threadSession
+    || threadSession.stopping
+    || threadSession.sessionSerial !== args.sessionSerial
+  ) {
+    return undefined;
+  }
+  return threadSession;
+}
+
+function createOnPiEvent(args: CreateSessionCallbackArgs): (event: AgentSessionEvent) => void {
   return (event: AgentSessionEvent) => {
-    if (!sessions.has(threadId)) return;
+    const threadSession = getCurrentThreadSession({
+      sessionSerial: args.sessionSerial,
+      threadId: args.threadId,
+    });
+    if (!threadSession) return;
     send({
       jsonrpc: "2.0",
       method: "sdk/message",
-      params: { threadId, message: event },
+      params: { threadId: args.threadId, message: event },
     });
     if (event.type === "agent_end") {
-      emitContextWindowUsage(threadId);
+      emitContextWindowUsage(args.threadId);
     }
   };
 }
 
-function createOnSessionDone(threadId: string): (error?: unknown) => void {
+function createOnSessionDone(args: CreateSessionCallbackArgs): (error?: unknown) => void {
   return (error?: unknown) => {
     if (!error) return;
-    if (!sessions.has(threadId)) return;
+    const threadSession = getCurrentThreadSession({
+      sessionSerial: args.sessionSerial,
+      threadId: args.threadId,
+    });
+    if (!threadSession) return;
 
     const message =
       error instanceof Error ? error.message : String(error);
@@ -221,7 +261,7 @@ function createOnSessionDone(threadId: string): (error?: unknown) => void {
     send({
       jsonrpc: "2.0",
       method: "error",
-      params: { threadId, message },
+      params: { threadId: args.threadId, message },
     });
   };
 }
@@ -359,7 +399,7 @@ function handleRequest(request: PiCommand & { id: string | number }): void {
       void handleTurnSteer(request.id, request.params);
       break;
     case "thread/stop":
-      handleThreadStop(request.id, request.params);
+      void handleThreadStop(request.id, request.params);
       break;
   }
 }
@@ -397,10 +437,17 @@ async function handleThreadStart(
   const sessionOptions = buildSessionOptions(params, sessionEnv, threadId);
   applyDynamicTools(sessionOptions, params.dynamicTools, threadId);
 
-  const session = new PiSdkSession(sessionOptions, createOnPiEvent(threadId), createOnSessionDone(threadId));
+  const sessionSerial = nextSessionSerial();
+  const session = new PiSdkSession(
+    sessionOptions,
+    createOnPiEvent({ sessionSerial, threadId }),
+    createOnSessionDone({ sessionSerial, threadId }),
+  );
 
   const threadSession: ThreadSession = {
     session,
+    sessionSerial,
+    stopping: false,
     pendingToolCalls: new Map(),
   };
   sessions.set(threadId, threadSession);
@@ -433,10 +480,17 @@ async function handleThreadResume(
   const sessionOptions = buildSessionOptions(params, sessionEnv, threadId);
   applyDynamicTools(sessionOptions, params.dynamicTools, threadId);
 
-  const session = new PiSdkSession(sessionOptions, createOnPiEvent(threadId), createOnSessionDone(threadId));
+  const sessionSerial = nextSessionSerial();
+  const session = new PiSdkSession(
+    sessionOptions,
+    createOnPiEvent({ sessionSerial, threadId }),
+    createOnSessionDone({ sessionSerial, threadId }),
+  );
 
   const threadSession: ThreadSession = {
     session,
+    sessionSerial,
+    stopping: false,
     pendingToolCalls: new Map(),
   };
   sessions.set(threadId, threadSession);
@@ -486,16 +540,22 @@ async function handleTurnSteer(
   sendResult(id, { threadId: params.threadId });
 }
 
-function handleThreadStop(
+async function handleThreadStop(
   id: string | number,
   params: ThreadStopParams,
-): void {
-  const threadSession = sessions.get(params.threadId);
-  if (threadSession) {
-    threadSession.session.stop();
-    sessions.delete(params.threadId);
+): Promise<void> {
+  try {
+    const threadSession = sessions.get(params.threadId);
+    if (threadSession) {
+      threadSession.stopping = true;
+      threadSession.session.stop();
+      sessions.delete(params.threadId);
+    }
+    sendResult(id, { ok: true });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    sendError(id, -32000, message);
   }
-  sendResult(id, { ok: true });
 }
 
 interface ExtractedInput {

@@ -202,6 +202,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
   let nextCaptureId = 1;
   const threadIdentityRegistry = new RuntimeThreadIdentityRegistry();
   const threadRuntimeConfigs = new Map<string, ThreadRuntimeConfig>();
+  const activeTurnIdByThreadId = new Map<string, string>();
 
   function createCaptureId(): string {
     const captureId = `capture-${nextCaptureId}`;
@@ -230,6 +231,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       threadIdentityRegistry.clearThread(threadId);
       clearThreadRuntimeConfig(threadId);
       clearSyntheticUserMessageAckState(threadId);
+      activeTurnIdByThreadId.delete(threadId);
     },
     onStderr: options.onStderr,
     workspacePath: options.workspacePath,
@@ -532,6 +534,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       });
 
       if (stampedEvent.type === "turn/started") {
+        activeTurnIdByThreadId.set(resolvedBbThreadId, stampedEvent.turnId);
         const ack = shiftSyntheticUserMessageAck(resolvedBbThreadId);
         if (ack) {
           emitSyntheticUserMessageAck({
@@ -544,6 +547,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         }
       }
       if (stampedEvent.type === "turn/completed") {
+        activeTurnIdByThreadId.delete(resolvedBbThreadId);
         clearPendingSyntheticUserMessageAcks(resolvedBbThreadId);
       }
     }
@@ -937,15 +941,30 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     async stopThread({ threadId }) {
       const pid = resolveProviderForThread(threadId);
       const proc = requireProviderProcess(pid);
+      const providerThreadId = threadIdentityRegistry.getProviderThreadId(threadId);
+      const activeTurnId = activeTurnIdByThreadId.get(threadId);
+      const shouldRestartProvider =
+        proc.adapter.threadStopBehavior === "restart-provider";
       clearSyntheticUserMessageAckState(threadId);
+      activeTurnIdByThreadId.delete(threadId);
 
       const cmd = proc.adapter.buildCommand({
         type: "thread/stop",
         threadId,
+        providerThreadId,
+        turnId: activeTurnId,
       });
 
-      if (cmd) {
-        sendJsonRpc(proc.child, { ...cmd, id: nextRequestId++ });
+      if (!cmd) return;
+      await sendJsonRpcRequest({
+        child: proc.child,
+        message: cmd,
+        pending: proc.pending,
+        getNextId: () => nextRequestId++,
+        resultSchema: ignoredJsonRpcResultSchema,
+      });
+      if (shouldRestartProvider) {
+        await providerProcesses.shutdownProvider({ providerId: pid });
       }
     },
 

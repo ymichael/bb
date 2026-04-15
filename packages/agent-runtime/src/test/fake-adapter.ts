@@ -238,6 +238,7 @@ export function createFakeAdapter(
     displayName: options.displayName ?? DEFAULT_DISPLAY_NAME,
     id: options.id ?? DEFAULT_ADAPTER_ID,
     parseModelListResult,
+    threadStopBehavior: "keep-provider",
     process: {
       args: [options.scriptPath ?? fakeProviderScriptPath],
       command: "node",

@@ -48,6 +48,11 @@ export interface EnsureRuntimeProviderArgs {
   providerId: string;
 }
 
+export interface ShutdownRuntimeProviderArgs {
+  providerId: string;
+  timeoutMs?: number;
+}
+
 function createAdapterTurnIdPrefix(): string {
   const adapterId = randomUUID().replaceAll("-", "").slice(0, 16);
   return `turn_${adapterId}_`;
@@ -121,6 +126,30 @@ export class RuntimeProviderProcessManager {
 
   listRunningProviders(): string[] {
     return [...this.processes.keys()];
+  }
+
+  async shutdownProvider(args: ShutdownRuntimeProviderArgs): Promise<void> {
+    const providerProcess = this.processes.get(args.providerId);
+    if (!providerProcess || providerProcess.child.exitCode !== null) {
+      return;
+    }
+
+    await new Promise<void>((resolve) => {
+      const softTimer = setTimeout(() => {
+        if (providerProcess.child.exitCode === null) {
+          providerProcess.child.kill("SIGKILL");
+        }
+      }, args.timeoutMs ?? 5000);
+      const hardTimer = setTimeout(resolve, (args.timeoutMs ?? 5000) + 1000);
+
+      providerProcess.child.once("exit", () => {
+        clearTimeout(softTimer);
+        clearTimeout(hardTimer);
+        resolve();
+      });
+
+      providerProcess.child.kill("SIGTERM");
+    });
   }
 
   async shutdown(): Promise<void> {
@@ -267,7 +296,13 @@ export class RuntimeProviderProcessManager {
       this.args.onProviderThreadDetached(threadId);
     }
     for (const [, pending] of args.providerProcess.pending) {
-      pending.reject(new Error(`Provider "${args.providerId}" exited unexpectedly`));
+      const stderr = args.providerProcess.stderrChunks.join("\n").slice(0, 500);
+      pending.reject(
+        new Error(
+          `Provider "${args.providerId}" exited unexpectedly` +
+          (stderr ? `\nstderr: ${stderr}` : ""),
+        ),
+      );
     }
     args.providerProcess.pending.clear();
     this.args.onProviderIdentityWaitersInterrupted(args.providerProcess);

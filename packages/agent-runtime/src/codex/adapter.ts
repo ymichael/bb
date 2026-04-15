@@ -198,6 +198,7 @@ export function createCodexProviderAdapter(
     id: providerInfo.id,
     displayName: providerInfo.displayName,
     capabilities,
+    threadStopBehavior: "keep-provider",
     process: {
       command: opts?.processCommand ?? "codex",
       args: opts?.processArgs ?? ["app-server"],
@@ -304,7 +305,17 @@ export function createCodexProviderAdapter(
             },
           };
         case "thread/stop":
-          return null;
+          if (!command.turnId) {
+            return null;
+          }
+          return {
+            jsonrpc: "2.0",
+            method: "turn/interrupt",
+            params: {
+              threadId: command.providerThreadId ?? command.threadId,
+              turnId: command.turnId,
+            },
+          };
       }
     },
 

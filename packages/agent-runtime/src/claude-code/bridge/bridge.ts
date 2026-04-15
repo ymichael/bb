@@ -99,6 +99,16 @@ interface ThreadIdRef {
   current: string;
 }
 
+interface CurrentThreadSessionArgs {
+  sessionSerial: number;
+  threadId: string;
+}
+
+interface CreateSdkCallbackArgs {
+  sessionSerial: number;
+  threadIdRef: ThreadIdRef;
+}
+
 interface PendingInteractiveRequest {
   itemId: string;
   kind: "permission_request";
@@ -108,6 +118,7 @@ interface PendingInteractiveRequest {
 
 interface ThreadSession {
   session: SdkSession;
+  sessionSerial: number;
   pendingToolCalls: Map<string | number, PendingToolCall>;
   pendingInteractiveRequests: Map<string | number, PendingInteractiveRequest>;
   permissionEscalation: PermissionEscalation | null;
@@ -138,6 +149,7 @@ interface ForwardInteractiveRequestArgs extends BuildInteractiveRequestParamsArg
 }
 
 const sessions = new Map<string, ThreadSession>();
+let sessionSerialCounter = 0;
 let toolCallRequestIdCounter = 0;
 
 function send(msg: JsonRpcResponse | SdkMessageNotification | BridgeEventNotification | BridgeToolCallRequest): void {
@@ -175,11 +187,29 @@ function sendThreadIdentity(threadId: string, providerThreadId: string): void {
   });
 }
 
+function nextSessionSerial(): number {
+  sessionSerialCounter += 1;
+  return sessionSerialCounter;
+}
+
+function getCurrentThreadSession(
+  args: CurrentThreadSessionArgs,
+): ThreadSession | undefined {
+  const threadSession = sessions.get(args.threadId);
+  if (!threadSession || threadSession.sessionSerial !== args.sessionSerial) {
+    return undefined;
+  }
+  return threadSession;
+}
+
 function createOnSdkMessage(
-  threadIdRef: ThreadIdRef,
+  args: CreateSdkCallbackArgs,
 ): (message: SDKMessage) => void {
   return (message: SDKMessage) => {
-    const threadSession = sessions.get(threadIdRef.current);
+    const threadSession = getCurrentThreadSession({
+      sessionSerial: args.sessionSerial,
+      threadId: args.threadIdRef.current,
+    });
     if (!threadSession) return;
     const providerThreadId = message.session_id.trim();
     if (
@@ -187,18 +217,22 @@ function createOnSdkMessage(
       && threadSession.providerThreadId !== providerThreadId
     ) {
       threadSession.providerThreadId = providerThreadId;
-      sendThreadIdentity(threadIdRef.current, providerThreadId);
+      sendThreadIdentity(args.threadIdRef.current, providerThreadId);
     }
-    sendSdkMessage(threadIdRef.current, message);
+    sendSdkMessage(args.threadIdRef.current, message);
   };
 }
 
 function createOnSdkDone(
-  threadIdRef: ThreadIdRef,
+  args: CreateSdkCallbackArgs,
 ): (error?: unknown) => void {
   return (error?: unknown) => {
     if (!error) return;
-    if (!sessions.has(threadIdRef.current)) return;
+    const threadSession = getCurrentThreadSession({
+      sessionSerial: args.sessionSerial,
+      threadId: args.threadIdRef.current,
+    });
+    if (!threadSession) return;
 
     const message =
       error instanceof Error ? error.message : String(error);
@@ -206,7 +240,7 @@ function createOnSdkDone(
     send({
       jsonrpc: "2.0",
       method: "error",
-      params: { threadId: threadIdRef.current, message },
+      params: { threadId: args.threadIdRef.current, message },
     });
   };
 }
@@ -577,14 +611,16 @@ function handleThreadStart(
     sessionOptions.allowedTools = getAllowedToolNames(params.dynamicTools);
   }
 
+  const sessionSerial = nextSessionSerial();
   const session = new SdkSession(
     sessionOptions,
-    createOnSdkMessage(threadIdRef),
-    createOnSdkDone(threadIdRef),
+    createOnSdkMessage({ sessionSerial, threadIdRef }),
+    createOnSdkDone({ sessionSerial, threadIdRef }),
   );
 
   const threadSession: ThreadSession = {
     session,
+    sessionSerial,
     pendingToolCalls: new Map(),
     pendingInteractiveRequests: new Map(),
     permissionEscalation: params.permissionEscalation,
@@ -626,14 +662,16 @@ function handleThreadResume(
     sessionOptions.mcpServers = { [BRIDGE_MCP_SERVER_NAME]: mcpServer };
     sessionOptions.allowedTools = getAllowedToolNames(params.dynamicTools);
   }
+  const sessionSerial = nextSessionSerial();
   const session = new SdkSession(
     sessionOptions,
-    createOnSdkMessage(threadIdRef),
-    createOnSdkDone(threadIdRef),
+    createOnSdkMessage({ sessionSerial, threadIdRef }),
+    createOnSdkDone({ sessionSerial, threadIdRef }),
   );
 
   const threadSession: ThreadSession = {
     session,
+    sessionSerial,
     pendingToolCalls: new Map(),
     pendingInteractiveRequests: new Map(),
     permissionEscalation: params.permissionEscalation,

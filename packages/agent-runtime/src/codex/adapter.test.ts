@@ -291,14 +291,31 @@ describe("codex provider adapter", () => {
     });
   });
 
-  it("buildCommand thread/stop returns null", () => {
+  it("buildCommand thread/stop maps active turns to turn/interrupt", () => {
     const adapter = createCodexProviderAdapter();
-    expect(
-      adapter.buildCommand({
-        type: "thread/stop",
-        threadId: "bb-t1",
-      }),
-    ).toBeNull();
+    const cmd = adapter.buildCommand({
+      type: "thread/stop",
+      threadId: "bb-t1",
+      providerThreadId: "codex-thread-1",
+      turnId: "turn-1",
+    });
+    expect(cmd).toMatchObject({
+      method: "turn/interrupt",
+      params: {
+        threadId: "codex-thread-1",
+        turnId: "turn-1",
+      },
+    });
+  });
+
+  it("buildCommand thread/stop returns null without an active turn id", () => {
+    const adapter = createCodexProviderAdapter();
+    const cmd = adapter.buildCommand({
+      type: "thread/stop",
+      threadId: "bb-t1",
+      providerThreadId: "codex-thread-1",
+    });
+    expect(cmd).toBeNull();
   });
 
   it("buildCommand turn/start includes input and sandbox policy", () => {

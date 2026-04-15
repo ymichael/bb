@@ -85,7 +85,7 @@ export async function dispatchCommand<TCommand extends HostDaemonCommand>(
         options.runtimeManager,
       );
       await entry.runtime.stopThread({ threadId: command.threadId });
-      options.runtimeManager.markThreadInactive(
+      options.runtimeManager.forgetThread(
         command.environmentId,
         command.threadId,
       );

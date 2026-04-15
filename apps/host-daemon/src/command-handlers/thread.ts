@@ -96,7 +96,6 @@ export async function ensureThreadRuntime(
       providerId: resumeContext.providerId,
       options: command.options,
       instructions: resumeContext.instructions,
-      resumePath: resumeContext.workspaceContext.workspacePath,
       dynamicTools: resumeContext.dynamicTools,
       instructionMode: resumeContext.instructionMode,
     });

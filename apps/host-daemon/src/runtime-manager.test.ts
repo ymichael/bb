@@ -804,6 +804,24 @@ describe("RuntimeManager", () => {
     ]);
   });
 
+  it("forgets stopped threads so follow-ups resume the provider session", async () => {
+    const manager = new RuntimeManager({
+      provisionWorkspace: createProvisionWorkspaceMock("/tmp/env-1"),
+      createRuntime: vi.fn(() => createFakeRuntime()),
+    });
+
+    await manager.ensureEnvironment({
+      environmentId: "env-1",
+      workspacePath: "/tmp/env-1",
+    });
+
+    manager.markThreadActive("env-1", "thread-1", "provider-1");
+    manager.forgetThread("env-1", "thread-1");
+
+    expect(manager.hasThread("env-1", "thread-1")).toBe(false);
+    expect(manager.listActiveThreads()).toEqual([]);
+  });
+
   it("installs one shared thread storage root watcher for tracked threads", async () => {
     const stopWatchingPathChanges = vi.fn(() => undefined);
     let watchThreadStorageRootArgs: WatchThreadStorageRootArgs | undefined;

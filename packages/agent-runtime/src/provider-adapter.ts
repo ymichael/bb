@@ -62,6 +62,8 @@ export interface ProviderAdapterFactoryOptions {
   turnIdPrefix?: string;
 }
 
+export type ProviderThreadStopBehavior = "keep-provider" | "restart-provider";
+
 export interface DecodedToolCallRequest {
   requestId: string | number;
   providerThreadId: string;
@@ -130,7 +132,12 @@ export type AdapterCommand =
       input: PromptInput[];
       options: AdapterOptions;
     }
-  | { type: "thread/stop"; threadId: string }
+  | {
+      type: "thread/stop";
+      threadId: string;
+      providerThreadId?: string;
+      turnId?: string;
+    }
   | {
       type: "thread/name/set";
       threadId: string;
@@ -146,6 +153,7 @@ export interface ProviderAdapter {
   id: string;
   displayName: string;
   capabilities: ProviderCapabilities;
+  threadStopBehavior: ProviderThreadStopBehavior;
   process: { command: string; args: string[] };
 
   buildCommand(command: AdapterCommand): JsonRpcMessage | null;

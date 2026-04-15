@@ -312,6 +312,12 @@ export class RuntimeManager {
     });
   }
 
+  forgetThread(environmentId: string, threadId: string): void {
+    this.entries.get(environmentId)?.threads.delete(threadId);
+    this.trackedThreadStorageTargets.delete(threadId);
+    this.stopWatchingThreadStorageIfNoTrackedThreads();
+  }
+
   listActiveThreads(): HostDaemonActiveThread[] {
     const activeThreads: HostDaemonActiveThread[] = [];
     for (const entry of this.entries.values()) {
