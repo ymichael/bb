@@ -2,10 +2,10 @@ import type { ReactNode } from "react";
 import { PanelBottom, PanelRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SplitButton } from "@/components/ui/split-button";
-import { Separator } from "@/components/ui/separator";
-import { SidebarTrigger } from "@/components/ui/sidebar";
+import { AppPageHeader, HEADER_ICON_BUTTON_CLASS } from "@/components/layout/AppPageHeader";
 import { StatusPill } from "@bb/ui-core";
 import { useIsMobile } from "@/hooks/useMobile";
+import { cn } from "@/lib/utils";
 import type { ThreadGitActionDialogTarget } from "@/components/thread/ThreadGitActionDialog";
 
 const THREAD_HEADER_ACTION_BUTTON_CLASS =
@@ -45,65 +45,65 @@ export function ThreadDetailHeader({
   const isMobile = useIsMobile();
   const SecondaryPanelIcon = isMobile ? PanelBottom : PanelRight;
 
-  return (
-    <header className="shrink-0 border-b border-border/80 bg-background/95 px-4 backdrop-blur-sm">
-      <div className="flex h-12 items-center gap-3">
-        <SidebarTrigger className="h-5 w-5 shrink-0 rounded-md p-0" />
-        <Separator orientation="vertical" className="h-4" />
-        <div className="min-w-0 flex-1 flex items-center gap-2">
-          <p className="truncate text-sm font-semibold">{threadTitle}</p>
-          {isManagerThread ? <StatusPill variant="outline">manager</StatusPill> : null}
-          {!isManagerThread && isManagedThread ? (
-            <StatusPill variant="outline">managed</StatusPill>
-          ) : null}
-        </div>
-        <div className="flex shrink-0 items-center gap-1">
-          {workspaceOpenButton}
-          {primaryAction && secondaryActions.length > 0 ? (
-            <SplitButton
-              variant="outline"
-              size="sm"
-              disabled={isThreadGitActionPending}
-              className={THREAD_HEADER_ACTION_BUTTON_CLASS}
-              primaryAction={{
-                label: primaryAction.label,
-                onSelect: () => onOpenThreadGitAction(primaryAction.target),
-              }}
-              secondaryActions={secondaryActions.map((action) => ({
-                label: action.label,
-                onSelect: () => onOpenThreadGitAction(action.target),
-              }))}
-            />
-          ) : primaryAction ? (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={isThreadGitActionPending}
-              className={THREAD_HEADER_ACTION_BUTTON_CLASS}
-              onClick={() => onOpenThreadGitAction(primaryAction.target)}
-            >
-              {primaryAction.label}
-            </Button>
-          ) : null}
-          {actionsMenu}
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className={
-              isSecondaryPanelOpen
-                ? "h-9 w-9 rounded-md p-0 bg-accent/35 text-foreground hover:bg-accent/45 md:h-8 md:w-8"
-                : "h-9 w-9 rounded-md p-0 text-muted-foreground hover:bg-accent/45 hover:text-foreground md:h-8 md:w-8"
-            }
-            aria-label={isSecondaryPanelOpen ? "Hide secondary panel" : "Show secondary panel"}
-            title={isSecondaryPanelOpen ? "Hide secondary panel" : "Show secondary panel"}
-            onClick={onToggleSecondaryPanel}
-          >
-            <SecondaryPanelIcon className="size-5 md:size-4" />
-          </Button>
-        </div>
-      </div>
-    </header>
+  const center = (
+    <>
+      <p className="truncate text-sm font-semibold">{threadTitle}</p>
+      {isManagerThread ? <StatusPill variant="outline">manager</StatusPill> : null}
+      {!isManagerThread && isManagedThread ? (
+        <StatusPill variant="outline">managed</StatusPill>
+      ) : null}
+    </>
   );
+
+  const actions = (
+    <>
+      {workspaceOpenButton}
+      {primaryAction && secondaryActions.length > 0 ? (
+        <SplitButton
+          variant="outline"
+          size="sm"
+          disabled={isThreadGitActionPending}
+          className={THREAD_HEADER_ACTION_BUTTON_CLASS}
+          primaryAction={{
+            label: primaryAction.label,
+            onSelect: () => onOpenThreadGitAction(primaryAction.target),
+          }}
+          secondaryActions={secondaryActions.map((action) => ({
+            label: action.label,
+            onSelect: () => onOpenThreadGitAction(action.target),
+          }))}
+        />
+      ) : primaryAction ? (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={isThreadGitActionPending}
+          className={THREAD_HEADER_ACTION_BUTTON_CLASS}
+          onClick={() => onOpenThreadGitAction(primaryAction.target)}
+        >
+          {primaryAction.label}
+        </Button>
+      ) : null}
+      {actionsMenu}
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className={cn(
+          HEADER_ICON_BUTTON_CLASS,
+          isSecondaryPanelOpen
+            ? "bg-accent/35 text-foreground hover:bg-accent/45"
+            : "text-muted-foreground hover:bg-accent/45 hover:text-foreground",
+        )}
+        aria-label={isSecondaryPanelOpen ? "Hide secondary panel" : "Show secondary panel"}
+        title={isSecondaryPanelOpen ? "Hide secondary panel" : "Show secondary panel"}
+        onClick={onToggleSecondaryPanel}
+      >
+        <SecondaryPanelIcon />
+      </Button>
+    </>
+  );
+
+  return <AppPageHeader center={center} actions={actions} />;
 }

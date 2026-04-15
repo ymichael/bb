@@ -16,8 +16,8 @@ import {
   SidebarInset,
   SidebarTrigger,
 } from "@/components/ui/sidebar"
-import { Separator } from "@/components/ui/separator"
 import { AppSidebar } from "./AppSidebar"
+import { AppPageHeader, HEADER_ICON_BUTTON_CLASS } from "./AppPageHeader"
 import {
   useHireProjectManager,
 } from "@/hooks/mutations/project-mutations"
@@ -98,95 +98,104 @@ function AppHeader({
   const headerTitle =
     headerBreadcrumbs ? undefined : (showProjectNameInHeader ? meta.title : undefined)
 
+  const hasCenterContent =
+    Boolean(headerBreadcrumbs) || Boolean(headerTitle) || Boolean(meta.subtitle)
+
+  const center = hasCenterContent ? (
+    <div className="min-w-0 flex-1">
+      {headerBreadcrumbs ? (
+        <p className="flex min-w-0 items-center gap-1.5 text-sm font-semibold">
+          {headerBreadcrumbs.map((segment, index) => {
+            const isLast = index === headerBreadcrumbs.length - 1
+            return (
+              <Fragment key={`${segment.label}-${index}`}>
+                {index > 0 ? (
+                  <ChevronRight className="size-3.5 shrink-0 text-muted-foreground/70" />
+                ) : null}
+                {!isLast && segment.to ? (
+                  <Link
+                    to={segment.to}
+                    className="shrink-0 text-muted-foreground transition-colors hover:text-foreground"
+                  >
+                    {segment.label}
+                  </Link>
+                ) : (
+                  <span
+                    className={
+                      isLast
+                        ? "min-w-0 truncate"
+                        : "shrink-0 text-muted-foreground"
+                    }
+                  >
+                    {segment.label}
+                  </span>
+                )}
+              </Fragment>
+            )
+          })}
+        </p>
+      ) : null}
+      {headerTitle ? (
+        <p className="truncate text-sm font-semibold">{headerTitle}</p>
+      ) : null}
+      {meta.subtitle ? (
+        <p className="truncate text-xs text-muted-foreground">{meta.subtitle}</p>
+      ) : null}
+    </div>
+  ) : null
+
+  const actions = isProjectMainView && projectId ? (
+    <>
+      <button
+        type="button"
+        className={cn(
+          HEADER_ICON_BUTTON_CLASS,
+          "inline-flex items-center justify-center text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60",
+        )}
+        aria-label="Hire manager"
+        title="Hire manager"
+        disabled={!projectId || isManagerActionPending}
+        onClick={() => onOpenManager?.()}
+      >
+        <UserRoundPlus />
+      </button>
+      <Link
+        to={`/projects/${projectId}/settings`}
+        className={cn(
+          HEADER_ICON_BUTTON_CLASS,
+          "inline-flex items-center justify-center text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
+        )}
+        aria-label="Project settings"
+        title="Project settings"
+      >
+        <Settings />
+      </Link>
+      <Link
+        to={`/projects/${projectId}/archived`}
+        className={cn(
+          HEADER_ICON_BUTTON_CLASS,
+          "inline-flex items-center justify-center text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
+        )}
+        aria-label="Archived threads"
+        title="Archived threads"
+      >
+        <Archive />
+      </Link>
+      {showProjectMenuButton && project ? (
+        <ProjectActionsMenu
+          project={project}
+          triggerClassName={HEADER_ICON_BUTTON_CLASS}
+        />
+      ) : null}
+    </>
+  ) : null
+
   return (
-    <header
-      className={cn("relative h-12 shrink-0 px-4", !isProjectMainView && "border-b border-border")}
-    >
-      <div className="flex h-full items-center">
-        <SidebarTrigger className="h-5 w-5 shrink-0 rounded-md p-0" />
-        <div className="ml-3 flex min-w-0 flex-1 items-center gap-2">
-          {headerTitle || meta.subtitle ? (
-            <Separator orientation="vertical" className="mr-2 h-4" />
-          ) : null}
-          <div className="min-w-0 flex-1">
-            {headerBreadcrumbs ? (
-              <p className="flex min-w-0 items-center gap-1.5 text-sm font-semibold">
-                {headerBreadcrumbs.map((segment, index) => {
-                  const isLast = index === headerBreadcrumbs.length - 1
-                  return (
-                    <Fragment key={`${segment.label}-${index}`}>
-                      {index > 0 ? (
-                        <ChevronRight className="size-3.5 shrink-0 text-muted-foreground/70" />
-                      ) : null}
-                      {!isLast && segment.to ? (
-                        <Link
-                          to={segment.to}
-                          className="shrink-0 text-muted-foreground transition-colors hover:text-foreground"
-                        >
-                          {segment.label}
-                        </Link>
-                      ) : (
-                        <span
-                          className={
-                            isLast
-                              ? "min-w-0 truncate"
-                              : "shrink-0 text-muted-foreground"
-                          }
-                        >
-                          {segment.label}
-                        </span>
-                      )}
-                    </Fragment>
-                  )
-                })}
-              </p>
-            ) : null}
-            {headerTitle ? (
-              <p className="truncate text-sm font-semibold">{headerTitle}</p>
-            ) : null}
-            {meta.subtitle ? (
-              <p className="truncate text-xs text-muted-foreground">{meta.subtitle}</p>
-            ) : null}
-          </div>
-        </div>
-        {isProjectMainView && projectId ? (
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              className="inline-flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60 md:h-8 md:w-8"
-              aria-label="Hire manager"
-              title="Hire manager"
-              disabled={!projectId || isManagerActionPending}
-              onClick={() => onOpenManager?.()}
-            >
-              <UserRoundPlus className="size-5 md:size-4" />
-            </button>
-            <Link
-              to={`/projects/${projectId}/settings`}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground md:h-8 md:w-8"
-              aria-label="Project settings"
-              title="Project settings"
-            >
-              <Settings className="size-5 md:size-4" />
-            </Link>
-            <Link
-              to={`/projects/${projectId}/archived`}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground md:h-8 md:w-8"
-              aria-label="Archived threads"
-              title="Archived threads"
-            >
-              <Archive className="size-5 md:size-4" />
-            </Link>
-            {showProjectMenuButton && project ? (
-              <ProjectActionsMenu
-                project={project}
-                triggerClassName="h-9 w-9 [&_svg]:size-5 md:h-8 md:w-8 md:[&_svg]:size-4"
-              />
-            ) : null}
-          </div>
-        ) : null}
-      </div>
-    </header>
+    <AppPageHeader
+      bordered={!isProjectMainView}
+      center={center}
+      actions={actions}
+    />
   )
 }
 

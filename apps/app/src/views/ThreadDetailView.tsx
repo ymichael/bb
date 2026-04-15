@@ -21,6 +21,7 @@ import {
   ThreadGitActionDialog,
 } from "@/components/thread/ThreadGitActionDialog";
 import { PageShell } from "@/components/layout/PageShell";
+import { HEADER_ICON_BUTTON_CLASS } from "@/components/layout/AppPageHeader";
 import { ThreadActionsMenu } from "@/components/thread/ThreadActionsMenu";
 import { ThreadWorkspaceOpenButton } from "@/components/thread/ThreadWorkspaceOpenButton";
 import { formatEnvironmentDisplay } from "@bb/core-ui";
@@ -418,7 +419,7 @@ export function ThreadDetailView() {
   const threadActionsMenu = (
     <ThreadActionsMenu
       thread={thread}
-      triggerClassName="h-9 w-9 [&_svg]:size-5 md:h-8 md:w-8 md:[&_svg]:size-4"
+      triggerClassName={HEADER_ICON_BUTTON_CLASS}
       align="end"
       viewerToggleLabel={isManagerThread ? "Show all events" : undefined}
       viewerToggleChecked={isManagerThread ? showAllEvents : undefined}
