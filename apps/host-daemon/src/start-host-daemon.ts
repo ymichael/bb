@@ -21,7 +21,6 @@ import {
   resolveHostDaemonLocalApiConfig,
   type HostDaemonLocalApiOverrides,
 } from "./local-api-config.js";
-import { restartHostDaemon } from "./restart.js";
 import {
   prepareRuntimeShellEnv,
   resolveLocalBbExecutableDirectory,
@@ -42,7 +41,6 @@ export interface StartHostDaemonOptions {
   createInstanceId?: () => string;
   acquireLock?: typeof acquireDaemonLock;
   loadIdentity?: typeof loadHostIdentity;
-  restartProcess?: typeof restartHostDaemon;
   adapterFactory?: AgentRuntimeOptions["adapterFactory"];
   hostWatcher?: HostWatcher;
   onToolCall?: (request: ToolCallRequest) => Promise<ToolCallResponse>;
@@ -155,10 +153,6 @@ export async function startHostDaemon(
         transportMode: hostType === "ephemeral" ? "stream" : "worker",
       }),
       releaseLock,
-      restart: () =>
-        (options.restartProcess ?? restartHostDaemon)({
-          releaseLock,
-        }),
       localApiConfig,
       runtimeShellEnv,
       adapterFactory: options.adapterFactory,

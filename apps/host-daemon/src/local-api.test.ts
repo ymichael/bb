@@ -15,19 +15,6 @@ import {
 import type { HostDaemonLocalApiConfig } from "./local-api-config.js";
 import { WorkspaceOpenTargetError } from "./workspace-open-targets.js";
 
-async function waitFor(
-  predicate: () => boolean,
-  timeoutMs = 1_000,
-): Promise<void> {
-  const startedAt = Date.now();
-  while (!predicate()) {
-    if (Date.now() - startedAt > timeoutMs) {
-      throw new Error("Timed out waiting for condition");
-    }
-    await new Promise((resolve) => setTimeout(resolve, 10));
-  }
-}
-
 describe("local API server", () => {
   let server: LocalApiServer | null = null;
 
@@ -70,8 +57,6 @@ describe("local API server", () => {
       localApiConfig: createLocalApiConfig(),
       serverUrl: "http://server.test",
       getConnected: () => true,
-      restart: () => undefined,
-      listActiveThreads: () => [],
     });
     const client = createHostDaemonLocalClient(`http://localhost:${server.port}`);
 
@@ -100,8 +85,6 @@ describe("local API server", () => {
       getConnected: () => false,
       openPath,
       pickFolder,
-      restart: () => undefined,
-      listActiveThreads: () => [],
     });
     const client = createHostDaemonLocalClient(`http://localhost:${server.port}`);
 
@@ -131,8 +114,6 @@ describe("local API server", () => {
         localApiConfig: createLocalApiConfig(),
         serverUrl: "http://server.test",
         getConnected: () => true,
-        restart: () => undefined,
-        listActiveThreads: () => [],
       });
       const client = createHostDaemonLocalClient(`http://localhost:${server.port}`);
 
@@ -170,8 +151,6 @@ describe("local API server", () => {
         localApiConfig: createLocalApiConfig(),
         serverUrl: "http://server.test",
         getConnected: () => true,
-        restart: () => undefined,
-        listActiveThreads: () => [],
       });
       const client = createHostDaemonLocalClient(`http://localhost:${server.port}`);
 
@@ -198,8 +177,6 @@ describe("local API server", () => {
       localApiConfig: createLocalApiConfig(),
       serverUrl: "http://server.test",
       getConnected: () => true,
-      restart: () => undefined,
-      listActiveThreads: () => [],
     });
     const client = createHostDaemonLocalClient(`http://localhost:${server.port}`);
 
@@ -244,8 +221,6 @@ describe("local API server", () => {
       getConnected: () => true,
       listWorkspaceOpenTargets,
       openWorkspace,
-      restart: () => undefined,
-      listActiveThreads: () => [],
     });
     const client = createHostDaemonLocalClient(`http://localhost:${server.port}`);
 
@@ -279,8 +254,6 @@ describe("local API server", () => {
       serverUrl: "http://server.test",
       getConnected: () => true,
       openWorkspace,
-      restart: () => undefined,
-      listActiveThreads: () => [],
     });
     const client = createHostDaemonLocalClient(`http://localhost:${server.port}`);
 
@@ -308,8 +281,6 @@ describe("local API server", () => {
       localApiConfig: createLocalApiConfig(),
       serverUrl: "http://server.test",
       getConnected: () => true,
-      restart: () => undefined,
-      listActiveThreads: () => [],
     });
     const client = createHostDaemonLocalClient(`http://localhost:${server.port}`);
 
@@ -319,68 +290,6 @@ describe("local API server", () => {
 
     const pickFolderResponse = await client["pick-folder"].$post({});
     expect(pickFolderResponse.status).toBe(501);
-  });
-
-  it("schedules a restart after acknowledging the request", async () => {
-    const restart = vi.fn(async () => undefined);
-    server = await startLocalApiServer({
-      hostId: "host-1",
-      localApiConfig: createLocalApiConfig(),
-      serverUrl: "http://server.test",
-      getConnected: () => true,
-      restart,
-      listActiveThreads: () => [],
-      scheduleRestart: (callback) => {
-        setTimeout(callback, 0);
-      },
-    });
-    const client = createHostDaemonLocalClient(`http://localhost:${server.port}`);
-
-    const response = await client.restart.$post({ json: {} });
-    expect(response.ok).toBe(true);
-    await waitFor(() => restart.mock.calls.length === 1);
-    expect(restart).toHaveBeenCalledTimes(1);
-  });
-
-  it("rejects restart with 409 when threads are active and force is not set", async () => {
-    const restart = vi.fn(async () => undefined);
-    server = await startLocalApiServer({
-      hostId: "host-1",
-      localApiConfig: createLocalApiConfig(),
-      serverUrl: "http://server.test",
-      getConnected: () => true,
-      restart,
-      listActiveThreads: () => [{ threadId: "thread-1" }],
-      scheduleRestart: (callback) => {
-        setTimeout(callback, 0);
-      },
-    });
-    const client = createHostDaemonLocalClient(`http://localhost:${server.port}`);
-
-    const response = await client.restart.$post({ json: {} });
-    expect(response.status).toBe(409);
-    expect(restart).not.toHaveBeenCalled();
-  });
-
-  it("allows restart with force even when threads are active", async () => {
-    const restart = vi.fn(async () => undefined);
-    server = await startLocalApiServer({
-      hostId: "host-1",
-      localApiConfig: createLocalApiConfig(),
-      serverUrl: "http://server.test",
-      getConnected: () => true,
-      restart,
-      listActiveThreads: () => [{ threadId: "thread-1" }],
-      scheduleRestart: (callback) => {
-        setTimeout(callback, 0);
-      },
-    });
-    const client = createHostDaemonLocalClient(`http://localhost:${server.port}`);
-
-    const response = await client.restart.$post({ json: { force: true } });
-    expect(response.ok).toBe(true);
-    await waitFor(() => restart.mock.calls.length === 1);
-    expect(restart).toHaveBeenCalledTimes(1);
   });
 
   it("supports health-only mode for sandbox hosts", async () => {
@@ -394,8 +303,6 @@ describe("local API server", () => {
       }),
       serverUrl: "http://server.test",
       getConnected: () => true,
-      listActiveThreads: () => [],
-      restart: () => undefined,
     });
 
     const healthResponse = await fetch(`http://127.0.0.1:${server.port}/ready`);

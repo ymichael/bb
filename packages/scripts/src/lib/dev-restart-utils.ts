@@ -7,9 +7,6 @@ interface TurboBuildCommand {
   command: string;
 }
 
-export const DEV_SUPERVISOR_RESTART_ENV = "BB_DEV_SUPERVISOR_RESTART";
-export const DEV_SUPERVISOR_RESTART_EXIT_CODE = 75;
-
 export function createTurboBuildCommand(filters: string[]): TurboBuildCommand {
   const args = [
     "exec",

@@ -312,7 +312,6 @@ async function startHarnessDaemon(
       localApiConfig: null,
       logger: testLogger,
       releaseLock,
-      restart: async () => undefined,
       serverUrl: server.baseUrl,
     });
     for (let attempt = 1; attempt <= HARNESS_DAEMON_START_MAX_ATTEMPTS; attempt += 1) {

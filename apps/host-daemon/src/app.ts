@@ -99,7 +99,6 @@ export interface CreateHostDaemonAppOptions {
   instanceId: string;
   logger: HostDaemonLogger;
   releaseLock: () => Promise<void>;
-  restart: () => Promise<void>;
   localApiConfig: HostDaemonLocalApiConfig | null;
   runtimeShellEnv?: AgentRuntimeOptions["shellEnv"];
   adapterFactory?: AgentRuntimeOptions["adapterFactory"];
@@ -438,10 +437,6 @@ export async function createHostDaemonApp(
           getConnected: () => connection.sessionId != null,
           openPath: options.openPath,
           pickFolder: options.pickFolder,
-          listActiveThreads: () => runtimeManager.listActiveThreads(),
-          restart: () => {
-            process.kill(process.pid, "SIGUSR2");
-          },
         })
       : null;
 
@@ -462,7 +457,6 @@ export async function createHostDaemonApp(
       await shutdownDefaultListModelsRuntimes();
       await connection.shutdown();
     },
-    restart: options.restart,
     onStart: async () => {
       options.logger.info(
         { dataDir: options.dataDir, serverUrl: options.serverUrl },

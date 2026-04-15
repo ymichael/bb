@@ -1,10 +1,5 @@
 import type { ChildProcess } from "node:child_process";
-import {
-  createTurboBuildCommand,
-  DEV_SUPERVISOR_RESTART_ENV,
-  DEV_SUPERVISOR_RESTART_EXIT_CODE,
-  resolveSupervisorPidPath,
-} from "./dev-restart-utils.js";
+import { resolveSupervisorPidPath } from "./dev-restart-utils.js";
 import {
   removePidFileSync,
   writePidFile,
@@ -12,7 +7,6 @@ import {
 import {
   installTerminationSignalForwarding,
   killProcessIfRunning,
-  runScriptProcess,
   spawnScriptProcess,
   waitForProcessExit,
 } from "./process-helpers.js";
@@ -29,11 +23,6 @@ interface SpawnChildArgs {
   env?: NodeJS.ProcessEnv;
 }
 
-interface BuildArgs {
-  cwd: string;
-  filters: string[];
-}
-
 interface ScheduleForcedKillArgs {
   child: ChildProcess;
   forceKillAfterMs: number;
@@ -41,8 +30,6 @@ interface ScheduleForcedKillArgs {
 }
 
 export interface DevSupervisorOptions {
-  buildCwd: string;
-  buildFilters: string[];
   childArgs: string[];
   childCommand: string;
   childCwd: string;
@@ -89,7 +76,6 @@ function spawnChildProcess(args: SpawnChildArgs): ChildProcess {
     env: {
       ...process.env,
       ...args.env,
-      [DEV_SUPERVISOR_RESTART_ENV]: "1",
     },
     stdio: "inherit",
   });
@@ -97,18 +83,6 @@ function spawnChildProcess(args: SpawnChildArgs): ChildProcess {
 
 function waitForChildExit(child: ChildProcess): Promise<ChildExitResult> {
   return waitForProcessExit(child);
-}
-
-async function runBuild(args: BuildArgs): Promise<boolean> {
-  const buildCommand = createTurboBuildCommand(args.filters);
-  const exitCode = await runScriptProcess({
-    args: buildCommand.args,
-    command: buildCommand.command,
-    cwd: args.cwd,
-    env: process.env,
-    stdio: "inherit",
-  });
-  return exitCode === 0;
 }
 
 export async function runDevSupervisor(options: DevSupervisorOptions): Promise<void> {
@@ -191,24 +165,6 @@ export async function runDevSupervisor(options: DevSupervisorOptions): Promise<v
 
     if (restartRequested) {
       restartRequested = false;
-      continue;
-    }
-
-    if (code === DEV_SUPERVISOR_RESTART_EXIT_CODE) {
-      process.stdout.write(
-        `[dev-supervisor:${options.serviceName}] Rebuilding before supervised restart.\n`,
-      );
-      const buildSucceeded = await runBuild({
-        cwd: options.buildCwd,
-        filters: options.buildFilters,
-      });
-
-      if (!buildSucceeded) {
-        process.stderr.write(
-          `[dev-supervisor:${options.serviceName}] Build failed during restart. Falling back to the last successful build.\n`,
-        );
-      }
-
       continue;
     }
 

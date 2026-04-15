@@ -7,9 +7,7 @@ import {
   openWorkspaceRequestSchema,
   openRequestSchema,
   pathsExistRequestSchema,
-  restartRequestSchema,
   typedRoutes,
-  type HostDaemonActiveThread,
   type HostDaemonLocalSchema,
   type HostPlatform,
   type OpenWorkspaceRequest,
@@ -41,9 +39,6 @@ export interface StartLocalApiServerOptions {
   openPath?: OpenPathHandler;
   openWorkspace?: WorkspaceOpenHandler;
   pickFolder?: () => Promise<string | null>;
-  listActiveThreads: () => HostDaemonActiveThread[];
-  restart: () => Promise<void> | void;
-  scheduleRestart?: (restart: () => void) => void;
 }
 
 export interface LocalApiServer {
@@ -160,16 +155,6 @@ export async function startLocalApiServer(
     return c.json({ path });
   });
 
-  post("/restart", restartRequestSchema, (c, payload) => {
-    if (!payload.force && options.listActiveThreads().length > 0) {
-      return c.json({ message: "Cannot restart: threads are currently active. Use force to override." }, 409);
-    }
-    (options.scheduleRestart ?? defaultScheduleRestart)(() => {
-      void options.restart();
-    });
-    return c.json({});
-  });
-
   const { server, port: boundPort } = await new Promise<{
     server: ReturnType<typeof serve>;
     port: number;
@@ -200,10 +185,6 @@ export async function startLocalApiServer(
       });
     },
   };
-}
-
-function defaultScheduleRestart(restart: () => void): void {
-  setTimeout(restart, 0);
 }
 
 async function pathExists(path: string): Promise<boolean> {

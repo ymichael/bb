@@ -4,11 +4,8 @@ import { runDevSupervisor } from "@bb/scripts/lib/run-dev-supervisor";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const packageRoot = resolve(scriptDir, "..");
-const repoRoot = resolve(packageRoot, "..", "..");
 
 void runDevSupervisor({
-  buildCwd: repoRoot,
-  buildFilters: ["@bb/host-daemon"],
   childArgs: ["../../packages/scripts/dist/commands/run-host-daemon.js", "--auto-join"],
   childCommand: process.execPath,
   childCwd: packageRoot,

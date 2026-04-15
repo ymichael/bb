@@ -54,11 +54,6 @@ export const openWorkspaceRequestSchema = z.object({
 });
 export type OpenWorkspaceRequest = z.infer<typeof openWorkspaceRequestSchema>;
 
-export const restartRequestSchema = z.object({
-  force: z.boolean().optional(),
-});
-export type RestartRequest = z.infer<typeof restartRequestSchema>;
-
 export const pickFolderResponseSchema = z.object({
   path: z.string().nullable(),
 });
@@ -120,11 +115,6 @@ export type HostDaemonLocalSchema = {
   };
   "/status": {
     $get: Endpoint<EmptyInput, StatusResponse>;
-  };
-  "/restart": {
-    $post:
-      | Endpoint<{ json: RestartRequest }, Record<string, never>, 200>
-      | Endpoint<{ json: RestartRequest }, { message: string }, 409>;
   };
 };
 
