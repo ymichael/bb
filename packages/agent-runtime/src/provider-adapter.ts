@@ -125,6 +125,7 @@ export type AdapterCommand =
       threadId: string;
       providerThreadId?: string;
       input: PromptInput[];
+      clientRequestSequence?: number;
       options: AdapterOptions;
     }
   | {
@@ -133,6 +134,7 @@ export type AdapterCommand =
       providerThreadId?: string;
       expectedTurnId: string;
       input: PromptInput[];
+      clientRequestSequence?: number;
       options: AdapterOptions;
     }
   | {

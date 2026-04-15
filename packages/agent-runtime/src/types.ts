@@ -116,6 +116,7 @@ export interface AgentRuntime {
   runTurn(args: {
     threadId: string;
     input: PromptInput[];
+    clientRequestSequence?: number;
     options: AgentRuntimeExecutionOptions;
     instructions?: string;
   }): Promise<void>;
@@ -124,6 +125,7 @@ export interface AgentRuntime {
     threadId: string;
     expectedTurnId: string;
     input: PromptInput[];
+    clientRequestSequence?: number;
     options: AgentRuntimeExecutionOptions;
     instructions?: string;
   }): Promise<void>;

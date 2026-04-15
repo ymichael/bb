@@ -135,7 +135,9 @@ describe("thread command dispatch", () => {
     expect(runResult).toEqual({});
     expect(steerResult).toEqual({});
     expect(harness.runtimeState.ranTurnText).toBe("hello");
+    expect(harness.runtimeState.ranTurnClientRequestSequence).toBe(3);
     expect(harness.runtimeState.steeredTurnId).toBe("turn-1");
+    expect(harness.runtimeState.steeredClientRequestSequence).toBe(4);
     expect(harness.runtimeState.steeredTurnInstructions).toBe("Be a helpful coding agent.");
   });
 

@@ -13,6 +13,7 @@ export interface AcceptedUserMessage {
 export interface CreateAcceptedUserMessageArgs<
   TState extends AcceptedUserMessageState,
 > {
+  clientRequestSequence?: number;
   input: PromptInput[];
   itemIdPrefix: string;
   state: TState;
@@ -50,6 +51,7 @@ function createAcceptedUserMessage<TState extends AcceptedUserMessageState>(
   const item = buildUserMessageAckItem(
     args.input,
     `${args.itemIdPrefix}-${nextCounter}`,
+    args.clientRequestSequence,
   );
   if (!item) {
     return null;

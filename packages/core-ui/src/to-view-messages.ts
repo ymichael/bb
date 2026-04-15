@@ -47,10 +47,8 @@ import {
   isTerminalAssistantFlushEvent,
 } from "./assistant-buffering.js";
 import {
-  attachPendingClientRequestedMessagesForTurn,
   buildUserMessageKey,
   clearPendingUserSignatureCounts,
-  consumePendingClientRequestedCounts,
   consumePendingClientStartUser,
   createPendingUserSignatureCounts,
   getClientStartEventContext,
@@ -102,7 +100,6 @@ import type {
 interface ProjectionState {
   messages: ViewMessage[];
   seenUserKeys: Set<string>;
-  activeTurnIdByThreadId: Map<string, string>;
   openAssistantByTurn: Map<string, ViewAssistantTextMessage>;
   finalizedAssistantTurnKeys: Set<string>;
   openReasoningByTurn: Map<string, ViewAssistantReasoningMessage>;
@@ -119,7 +116,6 @@ function createProjectionState(): ProjectionState {
   return {
     messages: [],
     seenUserKeys: new Set(),
-    activeTurnIdByThreadId: new Map(),
     openAssistantByTurn: new Map(),
     finalizedAssistantTurnKeys: new Set(),
     openReasoningByTurn: new Map(),
@@ -232,17 +228,7 @@ function buildFlatViewMessages(
         ? state.delegationParentToolCallIdsByProviderThreadId.get(eventProviderThreadId)
         : undefined);
 
-    if (decoded.type === "turn/started") {
-      state.activeTurnIdByThreadId.set(decoded.threadId, decoded.turnId);
-      attachPendingClientRequestedMessagesForTurn({
-        counts: pendingUserSignatureCounts,
-        threadId: decoded.threadId,
-        turnId: decoded.turnId,
-      });
-    }
-
     if (eventType === "turn/completed") {
-      state.activeTurnIdByThreadId.delete(decoded.threadId);
       clearPendingUserSignatureCounts({ counts: pendingUserSignatureCounts });
     }
 
@@ -283,6 +269,7 @@ function buildFlatViewMessages(
           }
           if (clientStartContext) {
             recordProjectedClientUser({
+              clientRequestSequence: meta.seq,
               counts: pendingUserSignatureCounts,
               signature,
               context: clientStartContext,
@@ -325,20 +312,14 @@ function buildFlatViewMessages(
       ) {
         continue;
       }
-      const activeTurnId = decoded.type === "client/turn/requested"
-        ? state.activeTurnIdByThreadId.get(decoded.threadId)
-        : undefined;
-      const projectedClientUser: ProjectedUserMessage =
-        activeTurnId !== undefined
-          ? { ...userFromClientThreadStart, turnId: activeTurnId }
-          : userFromClientThreadStart;
+      const projectedClientUser: ProjectedUserMessage = userFromClientThreadStart;
       if (clientStartContext?.isTurnRequested) {
         recordProjectedClientUser({
+          clientRequestSequence: meta.seq,
           counts: pendingUserSignatureCounts,
           signature,
           context: clientStartContext,
           message: projectedClientUser,
-          turnId: projectedClientUser.turnId,
         });
         continue;
       }
@@ -347,11 +328,11 @@ function buildFlatViewMessages(
         state.seenUserKeys.add(key);
         if (clientStartContext) {
           recordProjectedClientUser({
+            clientRequestSequence: meta.seq,
             counts: pendingUserSignatureCounts,
             signature,
             context: clientStartContext,
             message: projectedClientUser,
-            turnId: projectedClientUser.turnId,
           });
         }
         flushToolActivityBeforeNonToolMessage(state);
@@ -375,21 +356,22 @@ function buildFlatViewMessages(
         localImages: userMessage.attachments?.localImages ?? 0,
         localFiles: userMessage.attachments?.localFiles ?? 0,
       });
-      const clientRequestedMatch = shiftPendingClientRequestedUser({
-        counts: pendingUserSignatureCounts,
-        signature,
-        turnId: userMessage.turnId,
-      });
-      const projectedUserMessage: ProjectedUserMessage =
-        clientRequestedMatch?.turnId !== undefined
-        && userMessage.turnId === undefined
-          ? { ...userMessage, turnId: clientRequestedMatch.turnId }
-          : userMessage;
+      const clientRequestSequence =
+        decoded.type === "item/completed" &&
+        decoded.item.type === "userMessage"
+          ? decoded.item.clientRequestSequence
+          : undefined;
+      const clientRequestedMatch = clientRequestSequence !== undefined
+        ? shiftPendingClientRequestedUser({
+            counts: pendingUserSignatureCounts,
+            clientRequestSequence,
+          })
+        : undefined;
+      const projectedUserMessage: ProjectedUserMessage = userMessage;
       if (clientRequestedMatch) {
-        consumePendingClientRequestedCounts({
-          counts: pendingUserSignatureCounts,
-          signature,
-        });
+        if (!clientRequestedMatch.message) {
+          continue;
+        }
       } else {
         const consumedClientStart = consumePendingClientStartUser({
           counts: pendingUserSignatureCounts,

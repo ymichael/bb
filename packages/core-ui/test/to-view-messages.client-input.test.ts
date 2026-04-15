@@ -208,6 +208,7 @@ describe("toViewMessages client input projection", () => {
           item: {
             type: "userMessage",
             id: "provider-user-1",
+            clientRequestSequence: 3,
             content: [{ type: "text", text: "Please account for the restart" }],
           },
         },
@@ -285,7 +286,7 @@ describe("toViewMessages client input projection", () => {
   });
 
 
-  it("pairs multiple unacknowledged active-turn steers with provider acks in FIFO order", () => {
+  it("pairs multiple unacknowledged active-turn steers with provider acks by client request sequence", () => {
     const event = createTimelineEventFactory({
       providerThreadId: "provider-thread-1",
       threadId: "thread-1",
@@ -296,10 +297,12 @@ describe("toViewMessages client input projection", () => {
       event.clientTurnRequested({ text: "Repeat this" }),
       event.clientTurnRequested({ text: "Repeat this" }),
       event.userMessageAck({
+        clientRequestSequence: 2,
         itemId: "provider-user-1",
         text: "Repeat this",
       }),
       event.userMessageAck({
+        clientRequestSequence: 3,
         itemId: "provider-user-2",
         text: "Repeat this",
       }),
@@ -378,6 +381,7 @@ describe("toViewMessages client input projection", () => {
       event.clientTurnRequested({ text: "Acked steer" }),
       event.clientTurnRequested({ text: "Pending steer" }),
       event.userMessageAck({
+        clientRequestSequence: 2,
         itemId: "provider-user-1",
         text: "Acked steer",
       }),
@@ -422,6 +426,7 @@ describe("toViewMessages client input projection", () => {
       event.clientTurnRequested({ text: "Late ack steer" }),
       event.turnCompleted(),
       event.userMessageAck({
+        clientRequestSequence: 2,
         itemId: "provider-user-1",
         text: "Late ack steer",
       }),
@@ -442,7 +447,36 @@ describe("toViewMessages client input projection", () => {
   });
 
 
-  it("does not pair a stale turnless request with a later turn ack that has the same text", () => {
+  it("does not pair an uncorrelated provider ack by matching text", () => {
+    const event = createTimelineEventFactory({
+      providerThreadId: "provider-thread-1",
+      threadId: "thread-1",
+      turnId: "turn-1",
+    });
+    const events: ThreadEventRow[] = [
+      event.turnStarted(),
+      event.clientTurnRequested({ text: "Needs explicit correlation" }),
+      event.userMessageAck({
+        itemId: "provider-user-1",
+        text: "Needs explicit correlation",
+      }),
+      event.turnCompleted(),
+    ];
+
+    const projection = toViewProjection(fromRows(events), {
+      threadStatus: "idle",
+      turnMessageDetail: "summary",
+    });
+    const userMessages = flattenProjectionMessages(projection).filter(
+      (message) => message.kind === "user",
+    );
+
+    expect(userMessages).toHaveLength(2);
+    expect(userMessages.map((message) => message.sourceSeqStart)).toEqual([3, 5]);
+  });
+
+
+  it("does not pair an older pending request with a later ack that has the same text", () => {
     const event = createTimelineEventFactory({
       providerThreadId: "provider-thread-1",
       threadId: "thread-1",
@@ -455,6 +489,7 @@ describe("toViewMessages client input projection", () => {
       event.clientTurnRequested({ text: "Same steer" }),
       event.turnStarted({ turnId: "turn-2" }),
       event.userMessageAck({
+        clientRequestSequence: 4,
         itemId: "provider-user-2",
         text: "Same steer",
         turnId: "turn-2",
@@ -866,6 +901,7 @@ describe("toViewMessages client input projection", () => {
           item: {
             id: "item-user-1",
             type: "userMessage",
+            clientRequestSequence: 1,
             content: [{ type: "text", text: "Please keep going until the roadmap is done" }],
           },
         },

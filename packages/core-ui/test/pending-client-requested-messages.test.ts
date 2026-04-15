@@ -1,10 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { ViewMessage } from "@bb/domain";
 import {
-  appendPendingClientRequestedMessage,
-  attachPendingClientRequestedMessagesToTurn,
   createPendingClientRequestedMessageQueue,
   materializePendingClientRequestedMessages,
+  recordPendingClientRequestedMessage,
   shiftPendingClientRequestedMessage,
 } from "../src/pending-client-requested-messages.js";
 
@@ -30,62 +29,53 @@ function buildUserMessage(args: BuildUserMessageArgs): UserMessage {
 }
 
 describe("pending client requested messages", () => {
-  it("binds turnless requests to turns so later acks do not consume stale entries", () => {
+  it("pairs pending requests by client request sequence", () => {
     const queue = createPendingClientRequestedMessageQueue();
+    const firstMessage = buildUserMessage({ id: "first", seq: 2 });
+    const secondMessage = buildUserMessage({ id: "second", seq: 4 });
 
-    appendPendingClientRequestedMessage(queue, {
-      signature: "same",
-      message: buildUserMessage({ id: "old", seq: 1 }),
+    recordPendingClientRequestedMessage(queue, {
+      clientRequestSequence: 2,
+      message: firstMessage,
     });
-    attachPendingClientRequestedMessagesToTurn(queue, {
-      threadId: "thread-1",
-      turnId: "turn-1",
-    });
-    appendPendingClientRequestedMessage(queue, {
-      signature: "same",
-      message: buildUserMessage({ id: "new", seq: 4 }),
-    });
-    attachPendingClientRequestedMessagesToTurn(queue, {
-      threadId: "thread-1",
-      turnId: "turn-2",
+    recordPendingClientRequestedMessage(queue, {
+      clientRequestSequence: 4,
+      message: secondMessage,
     });
 
     expect(
       shiftPendingClientRequestedMessage(queue, {
-        signature: "same",
-        turnId: "turn-2",
+        clientRequestSequence: 4,
       }),
-    ).toEqual({
-      message: {
-        ...buildUserMessage({ id: "new", seq: 4 }),
-        turnId: "turn-2",
-      },
-      turnId: "turn-2",
-    });
+    ).toEqual({ message: secondMessage });
     expect(
       shiftPendingClientRequestedMessage(queue, {
-        signature: "same",
-        turnId: "turn-1",
+        clientRequestSequence: 2,
       }),
-    ).toEqual({
-      message: {
-        ...buildUserMessage({ id: "old", seq: 1 }),
-        turnId: "turn-1",
-      },
-      turnId: "turn-1",
-    });
+    ).toEqual({ message: firstMessage });
   });
 
-  it("materializes pending requests after durable rows without turn attachment", () => {
+  it("tracks hidden system requests without materializing a row", () => {
     const queue = createPendingClientRequestedMessageQueue();
 
-    appendPendingClientRequestedMessage(queue, {
-      signature: "same",
-      message: buildUserMessage({ id: "pending", seq: 2 }),
+    recordPendingClientRequestedMessage(queue, {
+      clientRequestSequence: 2,
     });
-    attachPendingClientRequestedMessagesToTurn(queue, {
-      threadId: "thread-1",
-      turnId: "turn-1",
+
+    expect(materializePendingClientRequestedMessages(queue, 10)).toEqual([]);
+    expect(
+      shiftPendingClientRequestedMessage(queue, {
+        clientRequestSequence: 2,
+      }),
+    ).toEqual({});
+  });
+
+  it("materializes unacknowledged pending requests after durable rows", () => {
+    const queue = createPendingClientRequestedMessageQueue();
+
+    recordPendingClientRequestedMessage(queue, {
+      clientRequestSequence: 2,
+      message: buildUserMessage({ id: "pending", seq: 2 }),
     });
 
     expect(materializePendingClientRequestedMessages(queue, 10)).toEqual([
@@ -95,36 +85,5 @@ describe("pending client requested messages", () => {
         sourceSeqEnd: 11,
       },
     ]);
-  });
-
-  it("does not pair turnless matches with turn-scoped pending requests", () => {
-    const queue = createPendingClientRequestedMessageQueue();
-
-    appendPendingClientRequestedMessage(queue, {
-      signature: "same",
-      message: {
-        ...buildUserMessage({ id: "pending", seq: 2 }),
-        turnId: "turn-1",
-      },
-      turnId: "turn-1",
-    });
-
-    expect(
-      shiftPendingClientRequestedMessage(queue, {
-        signature: "same",
-      }),
-    ).toBeUndefined();
-    expect(
-      shiftPendingClientRequestedMessage(queue, {
-        signature: "same",
-        turnId: "turn-1",
-      }),
-    ).toEqual({
-      message: {
-        ...buildUserMessage({ id: "pending", seq: 2 }),
-        turnId: "turn-1",
-      },
-      turnId: "turn-1",
-    });
   });
 });

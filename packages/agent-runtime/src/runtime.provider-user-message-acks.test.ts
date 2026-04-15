@@ -157,6 +157,9 @@ rl.on("line", (line) => {
             item: {
               type: "userMessage",
               id: "provider-user-1",
+              ...(command.clientRequestSequence !== undefined
+                ? { clientRequestSequence: command.clientRequestSequence }
+                : {}),
               content: [{ type: "text", text: "accepted steer" }],
             },
           }];
@@ -182,6 +185,7 @@ rl.on("line", (line) => {
     await runtime.steerTurn({
       threadId: "t1",
       expectedTurnId: "turn-1",
+      clientRequestSequence: 12,
       input: [{ type: "text", text: "accepted steer" }],
       options: fullRuntimeOptions,
     });
@@ -191,7 +195,8 @@ rl.on("line", (line) => {
         (event) =>
           event.type === "item/completed" &&
           event.item.type === "userMessage" &&
-          event.item.id === "provider-user-1",
+          event.item.id === "provider-user-1" &&
+          event.item.clientRequestSequence === 12,
       ),
     ).toBe(true);
 

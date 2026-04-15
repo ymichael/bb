@@ -159,9 +159,11 @@ export function createFakeRuntime() {
     resumedInstructions: undefined as string | undefined,
     resumedProviderThreadId: undefined as string | undefined,
     ranTurnText: undefined as string | undefined,
+    ranTurnClientRequestSequence: undefined as number | undefined,
     ranTurnOptions: undefined as ThreadExecutionOptions | undefined,
     ranTurnInstructions: undefined as string | undefined,
     steeredTurnId: undefined as string | undefined,
+    steeredClientRequestSequence: undefined as number | undefined,
     steeredTurnOptions: undefined as ThreadExecutionOptions | undefined,
     steeredTurnInstructions: undefined as string | undefined,
     stoppedThreadId: undefined as string | undefined,
@@ -202,20 +204,27 @@ export function createFakeRuntime() {
       return { providerThreadId: args.providerThreadId ?? `provider-${args.threadId}` };
     },
     async runTurn(args: {
+      clientRequestSequence?: number;
       input: Array<{ text?: string; type: string }>;
       instructions?: string;
       options?: ThreadExecutionOptions;
+      threadId: string;
     }) {
       state.ranTurnText = args.input[0]?.text;
+      state.ranTurnClientRequestSequence = args.clientRequestSequence;
       state.ranTurnOptions = args.options;
       state.ranTurnInstructions = args.instructions;
     },
     async steerTurn(args: {
+      clientRequestSequence?: number;
       expectedTurnId: string;
+      input: Array<{ text?: string; type: string }>;
       instructions?: string;
       options?: ThreadExecutionOptions;
+      threadId: string;
     }) {
       state.steeredTurnId = args.expectedTurnId;
+      state.steeredClientRequestSequence = args.clientRequestSequence;
       state.steeredTurnOptions = args.options;
       state.steeredTurnInstructions = args.instructions;
     },

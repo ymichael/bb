@@ -15,6 +15,7 @@ import type {
   PromptInput,
   ProviderCapabilities,
   ServiceTier,
+  ThreadEvent,
 } from "@bb/domain";
 import type { ClientRequest as CodexClientRequest } from "./generated/codex-app-server/schema/ClientRequest.js";
 import type { JsonValue } from "./generated/codex-app-server/schema/serde_json/JsonValue.js";
@@ -199,6 +200,8 @@ export function createCodexProviderAdapter(
   };
   const acceptedUserMessageStateByThreadId =
     new Map<string, AcceptedUserMessageState>();
+  const nativeUserMessageClientRequestSequencesByProviderThreadId =
+    new Map<string, number[]>();
 
   function getAcceptedUserMessageState(threadId: string): AcceptedUserMessageState {
     const existing = acceptedUserMessageStateByThreadId.get(threadId);
@@ -211,6 +214,83 @@ export function createCodexProviderAdapter(
     };
     acceptedUserMessageStateByThreadId.set(threadId, state);
     return state;
+  }
+
+  function queueNativeUserMessageClientRequestSequence(args: {
+    clientRequestSequence: number | undefined;
+    providerThreadId: string | undefined;
+  }): void {
+    if (
+      args.clientRequestSequence === undefined ||
+      args.providerThreadId === undefined
+    ) {
+      return;
+    }
+    nativeUserMessageClientRequestSequencesByProviderThreadId.set(
+      args.providerThreadId,
+      [
+        ...(nativeUserMessageClientRequestSequencesByProviderThreadId.get(
+          args.providerThreadId,
+        ) ?? []),
+        args.clientRequestSequence,
+      ],
+    );
+  }
+
+  function shiftNativeUserMessageClientRequestSequence(
+    providerThreadId: string,
+  ): number | undefined {
+    const sequences =
+      nativeUserMessageClientRequestSequencesByProviderThreadId.get(
+        providerThreadId,
+      );
+    if (!sequences || sequences.length === 0) {
+      return undefined;
+    }
+    const [clientRequestSequence, ...remainingSequences] = sequences;
+    if (remainingSequences.length === 0) {
+      nativeUserMessageClientRequestSequencesByProviderThreadId.delete(
+        providerThreadId,
+      );
+    } else {
+      nativeUserMessageClientRequestSequencesByProviderThreadId.set(
+        providerThreadId,
+        remainingSequences,
+      );
+    }
+    return clientRequestSequence;
+  }
+
+  function attachAcceptedUserMessageCorrelation(
+    event: ThreadEvent,
+  ): ThreadEvent {
+    if (event.type === "turn/completed") {
+      nativeUserMessageClientRequestSequencesByProviderThreadId.delete(
+        event.providerThreadId,
+      );
+      return event;
+    }
+
+    if (
+      event.type !== "item/completed" ||
+      event.item.type !== "userMessage"
+    ) {
+      return event;
+    }
+
+    const clientRequestSequence = shiftNativeUserMessageClientRequestSequence(
+      event.providerThreadId,
+    );
+    if (clientRequestSequence === undefined) {
+      return event;
+    }
+    return {
+      ...event,
+      item: {
+        ...event.item,
+        clientRequestSequence,
+      },
+    };
   }
 
   return {
@@ -343,14 +423,23 @@ export function createCodexProviderAdapter(
     },
 
     translateEvent(event: unknown) {
-      return translateCodexEvent(event);
+      return translateCodexEvent(event).map(attachAcceptedUserMessageCorrelation);
     },
 
     translateAcceptedCommand({ command }) {
+      if (command.type === "turn/start") {
+        queueNativeUserMessageClientRequestSequence({
+          clientRequestSequence: command.clientRequestSequence,
+          providerThreadId: command.providerThreadId,
+        });
+        return [];
+      }
+
       if (command.type !== "turn/steer") {
         return [];
       }
       return buildAcceptedUserMessageEvent({
+        clientRequestSequence: command.clientRequestSequence,
         input: command.input,
         itemIdPrefix: "codex-user",
         providerThreadId: command.providerThreadId ?? command.threadId,

@@ -69,6 +69,7 @@ type ClientTurnRequestedArgs = EventFactoryRowOptions & {
 type ClientThreadStartArgs = ClientTurnRequestedArgs;
 
 interface UserMessageAckArgs extends ProviderTurnEventOptions {
+  clientRequestSequence?: number;
   content?: ThreadEventUserContent[];
   itemId?: string;
   text: string;
@@ -473,6 +474,9 @@ export function createTimelineEventFactory(
             type: "userMessage",
             id: args.itemId ?? `user-${base.seq}`,
             content: args.content ?? [{ type: "text", text: args.text }],
+            ...(args.clientRequestSequence !== undefined
+              ? { clientRequestSequence: args.clientRequestSequence }
+              : {}),
           },
         },
       };

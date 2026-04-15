@@ -73,6 +73,7 @@ describe("timeline CLI rendering snapshots", () => {
       }),
       event.clientTurnRequested({ text: "Please account for the restart" }),
       event.userMessageAck({
+        clientRequestSequence: 3,
         itemId: "provider-user-1",
         text: "Please account for the restart",
       }),

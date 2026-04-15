@@ -1,14 +1,9 @@
 import type { ThreadEvent, ViewMessage } from "@bb/domain";
 import {
-  attachPendingClientRequestedMessagesToTurn,
-  clearPendingClientRequestedSignatureCounts,
-  consumePendingClientRequestedSignature,
   createPendingClientRequestedMessageQueue,
-  hasPendingClientRequestedSignature,
   materializePendingClientRequestedMessages,
   recordPendingClientRequestedMessage,
   shiftPendingClientRequestedMessage,
-  type PendingClientRequestedMessageMatch,
   type PendingClientRequestedMessageQueue,
 } from "./pending-client-requested-messages.js";
 
@@ -39,28 +34,18 @@ interface PendingUserSignatureCountsArgs {
 }
 
 interface ProjectedClientUserArgs extends PendingUserSignatureCountsArgs {
+  clientRequestSequence?: number;
   signature: string;
   context: ClientStartEventContext;
   message?: ProjectedUserMessage;
-  turnId?: string;
 }
 
 interface ProviderUserDeduplicationArgs extends PendingUserSignatureCountsArgs {
   signature: string;
 }
 
-interface PendingClientRequestedCountsArgs extends PendingUserSignatureCountsArgs {
-  signature: string;
-}
-
-interface PendingClientRequestedTurnArgs extends PendingUserSignatureCountsArgs {
-  threadId: string;
-  turnId: string;
-}
-
 interface PendingClientRequestedMatchArgs extends PendingUserSignatureCountsArgs {
-  signature: string;
-  turnId?: string;
+  clientRequestSequence: number;
 }
 
 interface MaterializePendingUserMessagesArgs extends PendingUserSignatureCountsArgs {
@@ -111,31 +96,7 @@ export function clearPendingUserSignatureCounts(
 ): void {
   args.counts.clientStart.clear();
   args.counts.clientThreadStart.clear();
-  clearPendingClientRequestedSignatureCounts(args.counts.clientRequested);
   args.counts.provider.clear();
-}
-
-export function attachPendingClientRequestedMessagesForTurn(
-  args: PendingClientRequestedTurnArgs,
-): void {
-  attachPendingClientRequestedMessagesToTurn(
-    args.counts.clientRequested,
-    {
-      threadId: args.threadId,
-      turnId: args.turnId,
-    },
-  );
-}
-
-export function consumePendingClientRequestedCounts(
-  args: PendingClientRequestedCountsArgs,
-): void {
-  decrementPendingSignatureCount(args.counts.clientStart, args.signature);
-  decrementPendingSignatureCount(args.counts.clientThreadStart, args.signature);
-  consumePendingClientRequestedSignature(
-    args.counts.clientRequested,
-    { signature: args.signature },
-  );
 }
 
 export function getClientStartEventContext(
@@ -187,16 +148,6 @@ export function shouldSkipProjectedClientUser(
     return true;
   }
 
-  if (
-    args.context.isTurnStart &&
-    hasPendingClientRequestedSignature(
-      args.counts.clientRequested,
-      { signature: args.signature },
-    )
-  ) {
-    return true;
-  }
-
   const pendingProviderCount = getPendingSignatureCount(
     args.counts.provider,
     args.signature,
@@ -212,17 +163,21 @@ export function shouldSkipProjectedClientUser(
 export function recordProjectedClientUser(
   args: ProjectedClientUserArgs,
 ): void {
-  incrementPendingSignatureCount(args.counts.clientStart, args.signature);
+  if (!args.context.isTurnRequested) {
+    incrementPendingSignatureCount(args.counts.clientStart, args.signature);
+  }
   if (args.context.isThreadStart) {
     incrementPendingSignatureCount(args.counts.clientThreadStart, args.signature);
   }
-  if (args.context.isTurnRequested) {
+  if (
+    args.context.isTurnRequested &&
+    args.clientRequestSequence !== undefined
+  ) {
     recordPendingClientRequestedMessage(
       args.counts.clientRequested,
       {
+        clientRequestSequence: args.clientRequestSequence,
         message: args.message,
-        signature: args.signature,
-        turnId: args.turnId,
       },
     );
   }
@@ -245,12 +200,11 @@ export function consumePendingClientStartUser(
 
 export function shiftPendingClientRequestedUser(
   args: PendingClientRequestedMatchArgs,
-): PendingClientRequestedMessageMatch | undefined {
+): { message?: ProjectedUserMessage } | undefined {
   return shiftPendingClientRequestedMessage(
     args.counts.clientRequested,
     {
-      signature: args.signature,
-      turnId: args.turnId,
+      clientRequestSequence: args.clientRequestSequence,
     },
   );
 }

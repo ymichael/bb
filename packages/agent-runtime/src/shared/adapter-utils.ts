@@ -68,6 +68,7 @@ function toThreadEventUserContent(input: PromptInput[]): ThreadEventUserContent[
 export function buildUserMessageAckItem(
   input: PromptInput[],
   itemId: string,
+  clientRequestSequence: number | undefined,
 ): Extract<ThreadEventItem, { type: "userMessage" }> | null {
   if (input.length === 0) {
     return null;
@@ -76,6 +77,7 @@ export function buildUserMessageAckItem(
     type: "userMessage",
     id: itemId,
     content: toThreadEventUserContent(input),
+    ...(clientRequestSequence !== undefined ? { clientRequestSequence } : {}),
   };
 }
 

@@ -1090,6 +1090,7 @@ export function createClaudeCodeProviderAdapter(
         const turnId = turnState.getCurrentOrLastTurnId({ state });
         if (turnId) {
           return buildAcceptedUserMessageEvent({
+            clientRequestSequence: command.clientRequestSequence,
             input: command.input,
             itemIdPrefix: "claude-user",
             providerThreadId: command.providerThreadId ?? "",
@@ -1099,6 +1100,7 @@ export function createClaudeCodeProviderAdapter(
           });
         }
         queueAcceptedUserMessage({
+          clientRequestSequence: command.clientRequestSequence,
           input: command.input,
           itemIdPrefix: "claude-user",
           state,
@@ -1108,6 +1110,7 @@ export function createClaudeCodeProviderAdapter(
       if (command.type === "turn/steer") {
         const state = turnState.getOrCreate({ threadId: command.threadId });
         return buildAcceptedUserMessageEvent({
+          clientRequestSequence: command.clientRequestSequence,
           input: command.input,
           itemIdPrefix: "claude-user",
           providerThreadId: command.providerThreadId ?? "",

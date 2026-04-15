@@ -736,7 +736,13 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       return { providerThreadId: resolvedId };
     },
 
-    async runTurn({ threadId, input, options: execOpts, instructions }) {
+    async runTurn({
+      threadId,
+      input,
+      clientRequestSequence,
+      options: execOpts,
+      instructions,
+    }) {
       const pid = resolveProviderForThread(threadId);
       const proc = requireProviderProcess(pid);
       assertProviderSupportsExecutionOptions({
@@ -755,6 +761,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         threadId,
         providerThreadId: threadIdentityRegistry.getProviderThreadId(threadId),
         input,
+        ...(clientRequestSequence !== undefined ? { clientRequestSequence } : {}),
         options: toAdapterOptions({
           envVars: {},
           execOpts,
@@ -782,7 +789,14 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       });
     },
 
-    async steerTurn({ threadId, expectedTurnId, input, options: execOpts, instructions }) {
+    async steerTurn({
+      threadId,
+      expectedTurnId,
+      input,
+      clientRequestSequence,
+      options: execOpts,
+      instructions,
+    }) {
       const pid = resolveProviderForThread(threadId);
       const proc = requireProviderProcess(pid);
       assertProviderSupportsExecutionOptions({
@@ -810,6 +824,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         providerThreadId: threadIdentityRegistry.getProviderThreadId(threadId),
         expectedTurnId,
         input,
+        ...(clientRequestSequence !== undefined ? { clientRequestSequence } : {}),
         options: toAdapterOptions({
           envVars: {},
           execOpts,

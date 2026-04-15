@@ -1107,6 +1107,7 @@ export function createPiProviderAdapter(
         const turnId = turnState.getCurrentOrLastTurnId({ state });
         if (turnId) {
           return buildAcceptedUserMessageEvent({
+            clientRequestSequence: command.clientRequestSequence,
             input: command.input,
             itemIdPrefix: "pi-user",
             providerThreadId: command.providerThreadId ?? command.threadId,
@@ -1116,6 +1117,7 @@ export function createPiProviderAdapter(
           });
         }
         queueAcceptedUserMessage({
+          clientRequestSequence: command.clientRequestSequence,
           input: command.input,
           itemIdPrefix: "pi-user",
           state,
@@ -1125,6 +1127,7 @@ export function createPiProviderAdapter(
       if (command.type === "turn/steer") {
         const state = turnState.getOrCreate({ threadId: command.threadId });
         return buildAcceptedUserMessageEvent({
+          clientRequestSequence: command.clientRequestSequence,
           input: command.input,
           itemIdPrefix: "pi-user",
           providerThreadId: command.providerThreadId ?? command.threadId,

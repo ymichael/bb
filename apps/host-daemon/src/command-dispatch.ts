@@ -62,6 +62,7 @@ export async function dispatchCommand<TCommand extends HostDaemonCommand>(
       await entry.runtime.runTurn({
         threadId: command.threadId,
         input: command.input,
+        clientRequestSequence: command.eventSequence,
         options: command.options,
         instructions: command.resumeContext.instructions,
       });
@@ -74,6 +75,7 @@ export async function dispatchCommand<TCommand extends HostDaemonCommand>(
         threadId: command.threadId,
         expectedTurnId: command.expectedTurnId,
         input: command.input,
+        clientRequestSequence: command.eventSequence,
         options: command.options,
         instructions: command.resumeContext.instructions,
       });

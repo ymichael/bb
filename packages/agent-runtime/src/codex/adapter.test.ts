@@ -88,6 +88,46 @@ describe("codex provider adapter", () => {
     ]);
   });
 
+  it("attaches client request sequence to native turn user-message acks", () => {
+    const adapter = createCodexProviderAdapter();
+
+    expect(adapter.translateAcceptedCommand({
+      command: {
+        type: "turn/start",
+        threadId: "thread-1",
+        providerThreadId: "provider-thread-1",
+        clientRequestSequence: 42,
+        input: [{ type: "text", text: "normal turn" }],
+        options: fullAdapterOptions,
+      },
+    })).toEqual([]);
+
+    const events = adapter.translateEvent(codexEvent("item/completed", {
+      threadId: "provider-thread-1",
+      turnId: "turn-1",
+      item: {
+        type: "userMessage",
+        id: "provider-user-1",
+        content: [{ type: "text", text: "normal turn", text_elements: [] }],
+      },
+    }));
+
+    expect(events).toEqual([
+      {
+        type: "item/completed",
+        threadId: "provider-thread-1",
+        providerThreadId: "provider-thread-1",
+        turnId: "turn-1",
+        item: {
+          type: "userMessage",
+          id: "provider-user-1",
+          clientRequestSequence: 42,
+          content: [{ type: "text", text: "normal turn" }],
+        },
+      },
+    ]);
+  });
+
   // -- buildCommand --------------------------------------------------------
 
   it("buildCommand returns codex initialize with experimental API", () => {
