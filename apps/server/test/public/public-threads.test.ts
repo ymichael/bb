@@ -1,8 +1,3 @@
-import { execFile } from "node:child_process";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import path from "node:path";
-import { promisify } from "node:util";
 import { eq } from "drizzle-orm";
 import {
   createPendingInteraction,
@@ -28,9 +23,14 @@ import {
 } from "@bb/db";
 import { HOST_DAEMON_PROTOCOL_VERSION } from "@bb/host-daemon-contract";
 import { systemOperationEventDataSchema, systemThreadProvisioningEventDataSchema, threadSchema } from "@bb/domain";
-import type { SandboxHostProgressCallbacks } from "@bb/sandbox-host";
 import { renderTemplate } from "@bb/templates";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  cleanWorkspaceStatus,
+  provisionHostMock,
+  resumeHostMock,
+  type SandboxProvisionCall,
+} from "./public-thread-test-harness.js";
 import {
   reportNextRuntimeMaterialSyncSuccess,
   reportQueuedCommandError,
@@ -52,131 +52,11 @@ import {
   seedThread,
 } from "../helpers/seed.js";
 import { createTestAppHarness } from "../helpers/test-app.js";
-
-const execFileAsync = promisify(execFile);
-const provisionHostMock = vi.fn();
-const resumeHostMock = vi.fn();
-type SandboxHostMockArgs = Array<object | string | undefined>;
-
-interface SandboxProvisionCall {
-  daemonEnv?: Record<string, string>;
-  enrollKey?: string;
-  hostId: string;
-  hostName: string;
-  progressCallbacks?: SandboxHostProgressCallbacks;
-}
-
-type AssertionFn = () => void;
-
-// Server tests treat @bb/sandbox-host as the external sandbox boundary.
-// Package-level tests cover the E2B mechanics directly; these tests focus on
-// server policy and request/response behavior.
-vi.mock("@bb/sandbox-host", () => ({
-  DEFAULT_SANDBOX_TIMEOUT_MS: 15 * 60 * 1000,
-  SANDBOX_DATA_DIR: "/tmp/bb-data",
-  provisionHost: (...args: SandboxHostMockArgs) => provisionHostMock(...args),
-  resumeHost: (...args: SandboxHostMockArgs) => resumeHostMock(...args),
-}));
-
-interface GitCommandArgs {
-  args: string[];
-  cwd: string;
-}
-
-interface TestGitRepo {
-  cleanup: () => Promise<void>;
-  path: string;
-}
-
-async function runGitCommand(args: GitCommandArgs): Promise<void> {
-  await execFileAsync("git", args.args, {
-    cwd: args.cwd,
-    env: {
-      ...process.env,
-      GIT_AUTHOR_EMAIL: "bb-tests@example.com",
-      GIT_AUTHOR_NAME: "bb tests",
-      GIT_COMMITTER_EMAIL: "bb-tests@example.com",
-      GIT_COMMITTER_NAME: "bb tests",
-    },
-  });
-}
-
-async function createTestGitRepo(): Promise<TestGitRepo> {
-  const repoPath = await mkdtemp(path.join(tmpdir(), "bb-server-thread-repo-"));
-  await runGitCommand({ cwd: repoPath, args: ["init", "--initial-branch=main"] });
-  await writeFile(path.join(repoPath, "README.md"), "# thread test repo\n", "utf8");
-  await runGitCommand({ cwd: repoPath, args: ["add", "README.md"] });
-  await runGitCommand({ cwd: repoPath, args: ["commit", "-m", "Initial commit"] });
-
-  return {
-    path: repoPath,
-    cleanup: async () => {
-      await rm(repoPath, { recursive: true, force: true });
-    },
-  };
-}
-
-async function waitForAssertion(assertion: AssertionFn): Promise<void> {
-  const deadline = Date.now() + 1_000;
-  let lastMessage = "Condition not met";
-
-  while (Date.now() < deadline) {
-    try {
-      assertion();
-      return;
-    } catch (error) {
-      lastMessage = error instanceof Error ? error.message : "Condition not met";
-      await new Promise((resolve) => setTimeout(resolve, 10));
-    }
-  }
-
-  throw new Error(lastMessage);
-}
-
-async function waitForThreadEnvironment(
-  harness: Awaited<ReturnType<typeof createTestAppHarness>>,
-  threadId: string,
-) {
-  let environmentId: string | null = null;
-  await waitForAssertion(() => {
-    const thread = getThread(harness.db, threadId);
-    environmentId = thread?.environmentId ?? null;
-    expect(environmentId).toMatch(/^env_/u);
-  });
-  if (!environmentId) {
-    throw new Error("Expected thread environment id to be set");
-  }
-  const environment = getEnvironment(harness.db, environmentId);
-  if (!environment) {
-    throw new Error("Expected thread environment to exist");
-  }
-  return environment;
-}
-
-function cleanWorkspaceStatus() {
-  return {
-    workingTree: {
-      hasUncommittedChanges: false,
-      state: "clean",
-      changedFiles: 0,
-      insertions: 0,
-      deletions: 0,
-      files: [],
-    },
-    branch: {
-      currentBranch: "bb/thread",
-      defaultBranch: "main",
-    },
-    mergeBase: {
-      mergeBaseBranch: "main",
-      baseRef: "origin/main",
-      aheadCount: 0,
-      behindCount: 0,
-      hasCommittedUnmergedChanges: false,
-      commits: [],
-    },
-  };
-}
+import {
+  waitForAssertion,
+  waitForThreadEnvironment,
+} from "./public-thread-assertions.js";
+import { createTestGitRepo } from "./public-thread-git-fixtures.js";
 
 describe("public thread routes", () => {
   beforeEach(() => {
