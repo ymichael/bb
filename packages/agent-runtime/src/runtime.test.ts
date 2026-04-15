@@ -1028,6 +1028,173 @@ rl.on("line", (line) => {
     await runtime.shutdown();
   });
 
+  it("does not let late duplicate turn starts consume later synthetic user acks", async () => {
+    const events: ThreadEvent[] = [];
+    const stderrLines: string[] = [];
+    const lateDuplicateStartScriptPath = join(
+      tmpDir,
+      "late-duplicate-start-provider.cjs",
+    );
+    writeFileSync(
+      lateDuplicateStartScriptPath,
+      `
+const readline = require("node:readline");
+
+let turnCount = 0;
+
+function send(message) {
+  process.stdout.write(JSON.stringify(message) + "\\n");
+}
+
+const rl = readline.createInterface({ input: process.stdin });
+rl.on("line", (line) => {
+  const message = JSON.parse(line);
+  if (message.method === "initialize") {
+    send({ jsonrpc: "2.0", id: message.id, result: { ok: true } });
+    return;
+  }
+  if (message.method === "thread/start") {
+    send({ jsonrpc: "2.0", id: message.id, result: { providerThreadId: "prov-thread-1" } });
+    send({
+      jsonrpc: "2.0",
+      method: "thread/identity",
+      params: { threadId: message.params.threadId, providerThreadId: "prov-thread-1" },
+    });
+    return;
+  }
+  if (message.method === "turn/start") {
+    turnCount += 1;
+    send({ jsonrpc: "2.0", id: message.id, result: { ok: true } });
+    if (turnCount === 1) {
+      send({
+        jsonrpc: "2.0",
+        method: "turn/completed",
+        params: {
+          threadId: message.params.threadId,
+          providerThreadId: "prov-thread-1",
+          turnId: "turn-1",
+          status: "completed",
+        },
+      });
+      setTimeout(() => {
+        send({
+          jsonrpc: "2.0",
+          method: "turn/started",
+          params: {
+            threadId: message.params.threadId,
+            providerThreadId: "prov-thread-1",
+            turnId: "turn-1",
+          },
+        });
+      }, 25);
+      return;
+    }
+    setTimeout(() => {
+      send({
+        jsonrpc: "2.0",
+        method: "turn/started",
+        params: {
+          threadId: message.params.threadId,
+          providerThreadId: "prov-thread-1",
+          turnId: "turn-2",
+        },
+      });
+    }, 60);
+    setTimeout(() => {
+      send({
+        jsonrpc: "2.0",
+        method: "turn/completed",
+        params: {
+          threadId: message.params.threadId,
+          providerThreadId: "prov-thread-1",
+          turnId: "turn-2",
+          status: "completed",
+        },
+      });
+    }, 80);
+  }
+});
+`,
+      "utf8",
+    );
+    const runtime = createAgentRuntime({
+      workspacePath: tmpDir,
+      onEvent: (event) => events.push(event),
+      onStderr: (line) => stderrLines.push(line),
+      onToolCall: async () => ({
+        contentItems: [{ type: "inputText", text: "ok" }],
+        success: true,
+      }),
+      adapterFactory: () =>
+        createSharedFakeAdapter({
+          id: "claude-code",
+          scriptPath: lateDuplicateStartScriptPath,
+          syntheticUserMessageAcks: true,
+        }),
+    });
+
+    await runtime.startThread({
+      environmentId: "env-1",
+      threadId: "t1",
+      projectId: "p1",
+      providerId: "claude-code",
+      options: fullRuntimeOptions,
+    });
+    await runtime.runTurn({
+      threadId: "t1",
+      input: [{ type: "text", text: "first turn" }],
+      options: fullRuntimeOptions,
+    });
+    await runtime.runTurn({
+      threadId: "t1",
+      input: [{ type: "text", text: "second turn" }],
+      options: fullRuntimeOptions,
+    });
+    await waitForCondition(() =>
+      events.filter(
+        (event) => event.type === "item/completed" && event.item.type === "userMessage",
+      ).length >= 2,
+    );
+
+    const userAcks = events.filter(
+      (event) => event.type === "item/completed" && event.item.type === "userMessage",
+    );
+    expect(userAcks).toHaveLength(2);
+    const firstAck = userAcks.find((event) =>
+      event.type === "item/completed" &&
+      event.item.type === "userMessage" &&
+      event.item.content.some((content) =>
+        content.type === "text" && content.text === "first turn",
+      )
+    );
+    const secondAck = userAcks.find((event) =>
+      event.type === "item/completed" &&
+      event.item.type === "userMessage" &&
+      event.item.content.some((content) =>
+        content.type === "text" && content.text === "second turn",
+      )
+    );
+    expect(firstAck?.type).toBe("item/completed");
+    expect(secondAck?.type).toBe("item/completed");
+    if (
+      firstAck?.type !== "item/completed" ||
+      firstAck.item.type !== "userMessage" ||
+      secondAck?.type !== "item/completed" ||
+      secondAck.item.type !== "userMessage"
+    ) {
+      throw new Error("Expected first and second synthetic userMessage acks");
+    }
+    expect(firstAck.turnId).toBe("turn-1");
+    expect(secondAck.turnId).toBe("turn-2");
+    expect(
+      stderrLines.some((line) =>
+        line.includes("Skipping synthetic user ack for turn/started"),
+      ),
+    ).toBe(true);
+
+    await runtime.shutdown();
+  });
+
   it("emits synthetic provider user acks for Pi steer turns", async () => {
     const events: ThreadEvent[] = [];
     const runtime = createAgentRuntime({

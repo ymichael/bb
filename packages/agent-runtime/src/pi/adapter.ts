@@ -1041,7 +1041,7 @@ export function createPiProviderAdapter(
         case "thread/stop":
           finishOpenProviderTurn({ registry: turnState, threadId: command.threadId });
           return {
-            jsonrpc: "2.0" as const,
+            jsonrpc: "2.0",
             method: "thread/stop",
             params: {
               threadId: command.providerThreadId,

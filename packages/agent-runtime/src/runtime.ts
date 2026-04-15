@@ -196,6 +196,12 @@ interface EmitSyntheticUserMessageAckArgs {
   turnId: string;
 }
 
+interface ShouldShiftPendingSyntheticAckForLifecycleArgs {
+  eventType: "turn/completed" | "turn/started";
+  threadId: string;
+  turnId: string;
+}
+
 function buildThreadShellEnvironment(
   args: BuildThreadShellEnvironmentArgs,
 ): Record<string, string> {
@@ -364,6 +370,18 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     return completedTurnIdsByThreadId.get(threadId)?.has(turnId) ?? false;
   }
 
+  function shouldShiftPendingSyntheticAckForLifecycle(
+    args: ShouldShiftPendingSyntheticAckForLifecycleArgs,
+  ): boolean {
+    if (!hasCompletedTurn(args.threadId, args.turnId)) {
+      return true;
+    }
+    options.onStderr?.(
+      `Skipping synthetic user ack for ${args.eventType} on already completed turn "${args.turnId}" in thread "${args.threadId}".`,
+    );
+    return false;
+  }
+
   async function reconfigureThreadIfNeeded(
     args: ReconfigureThreadIfNeededArgs,
   ): Promise<void> {
@@ -475,7 +493,12 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       const activeTurnId = activeTurnIdByThreadId.get(resolvedBbThreadId);
       if (
         stampedEvent.type === "turn/completed" &&
-        activeTurnId === undefined
+        activeTurnId === undefined &&
+        shouldShiftPendingSyntheticAckForLifecycle({
+          eventType: stampedEvent.type,
+          threadId: resolvedBbThreadId,
+          turnId: stampedEvent.turnId,
+        })
       ) {
         const ack = syntheticUserMessageAcks.shiftPending({
           threadId: resolvedBbThreadId,
@@ -501,20 +524,26 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       });
 
       if (stampedEvent.type === "turn/started") {
-        if (!hasCompletedTurn(resolvedBbThreadId, stampedEvent.turnId)) {
-          activeTurnIdByThreadId.set(resolvedBbThreadId, stampedEvent.turnId);
-        }
-        const ack = syntheticUserMessageAcks.shiftPending({
-          threadId: resolvedBbThreadId,
-        });
-        if (ack) {
-          emitSyntheticUserMessageAck({
-            ack,
-            proc: args.proc,
-            providerId: args.providerId,
+        if (
+          shouldShiftPendingSyntheticAckForLifecycle({
+            eventType: stampedEvent.type,
             threadId: resolvedBbThreadId,
             turnId: stampedEvent.turnId,
+          })
+        ) {
+          activeTurnIdByThreadId.set(resolvedBbThreadId, stampedEvent.turnId);
+          const ack = syntheticUserMessageAcks.shiftPending({
+            threadId: resolvedBbThreadId,
           });
+          if (ack) {
+            emitSyntheticUserMessageAck({
+              ack,
+              proc: args.proc,
+              providerId: args.providerId,
+              threadId: resolvedBbThreadId,
+              turnId: stampedEvent.turnId,
+            });
+          }
         }
       }
       if (stampedEvent.type === "turn/completed") {
@@ -953,7 +982,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       if (!providerThreadId) {
         throw new Error(`No provider thread id available for ${threadId}`);
       }
-      const activeTurnId = activeTurnIdByThreadId.get(threadId) ?? null;
+      const activeTurnId = activeTurnIdByThreadId.get(threadId);
       const shouldRestartProvider =
         proc.adapter.threadStopBehavior === "restart-provider";
       syntheticUserMessageAcks.clearThread(threadId);
@@ -964,11 +993,11 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         type: "thread/stop",
         threadId,
         providerThreadId,
-        activeTurnId,
+        activeTurnId: activeTurnId ?? null,
       });
 
       if (!cmd) {
-        if (activeTurnId === null) {
+        if (activeTurnId === undefined) {
           return;
         }
         throw new Error(

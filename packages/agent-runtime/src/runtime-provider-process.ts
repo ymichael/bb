@@ -58,17 +58,6 @@ function createAdapterTurnIdPrefix(): string {
   return `turn_${adapterId}_`;
 }
 
-function redactProviderDiagnosticLine(line: string): string {
-  return line
-    .replace(/Bearer\s+[^\s"']+/giu, "Bearer [redacted]")
-    .replace(
-      /((?:api[_-]?key|authorization|password|secret|token)\s*[:=]\s*)[^\s"']+/giu,
-      "$1[redacted]",
-    )
-    .replace(/\bsk-[A-Za-z0-9_-]{8,}\b/gu, "[redacted]")
-    .replace(/\bxox[abprs]-[A-Za-z0-9-]{8,}\b/gu, "[redacted]");
-}
-
 export class RuntimeProviderProcessManager {
   private readonly args: RuntimeProviderProcessManagerArgs;
   private readonly processes = new Map<string, RuntimeProviderProcess>();
@@ -243,14 +232,13 @@ export class RuntimeProviderProcessManager {
 
     const stderr = createInterface({ input: child.stderr });
     stderr.on("line", (line) => {
-      const redactedLine = redactProviderDiagnosticLine(line);
-      providerProcess.stderrChunks.push(redactedLine);
-      this.args.onStderr?.(redactedLine);
+      providerProcess.stderrChunks.push(line);
+      this.args.onStderr?.(line);
       this.args.emitCapture({
         kind: "provider-stderr",
         capturedAt: Date.now(),
         providerId,
-        line: redactedLine,
+        line,
       });
     });
 
@@ -277,10 +265,12 @@ export class RuntimeProviderProcessManager {
   private handleProviderProcessError(args: ProviderProcessErrorArgs): void {
     if (this.shuttingDown) return;
     this.processes.delete(args.providerId);
-    const message = redactProviderDiagnosticLine(args.err.message);
+    const message = args.err.message;
     for (const [, pending] of args.providerProcess.pending) {
       pending.reject(
-        new Error(`Provider "${args.providerId}" failed to start: ${message}`),
+        new Error(
+          `Provider "${args.providerId}" failed to start: ${message}`,
+        ),
       );
     }
     args.providerProcess.pending.clear();
