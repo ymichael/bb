@@ -4,12 +4,12 @@ import type { PermissionsRequestApprovalResponse } from "./generated/codex-app-s
 import type {
   BuildInteractiveResponseArgs,
   DecodedInteractiveRequest,
-  JsonRpcMessage,
 } from "../provider-adapter.js";
+import type { ProviderInboundRequest } from "../runtime-json-rpc.js";
 import {
   ProviderRequestDecodeError as ProviderRequestDecodeErrorValue,
   ProviderResponseEncodeError,
-} from "../provider-adapter.js";
+} from "../runtime-json-rpc.js";
 import {
   parseCodexAvailableDecisions,
   pendingInteractionToCodexFileChangeApprovalDecision,
@@ -81,7 +81,7 @@ function filterSessionDecisionWithoutGrant(
 }
 
 export function decodeCodexInteractiveRequest(
-  request: JsonRpcMessage,
+  request: ProviderInboundRequest,
 ): DecodedInteractiveRequest | null {
   if (typeof request.id !== "string" && typeof request.id !== "number") {
     return null;

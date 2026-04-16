@@ -408,16 +408,23 @@ describe("toViewProjection turn lifecycle", () => {
         id: "evt-2",
         threadId: "thread-1",
         seq: 2,
-        type: "item/completed",
+        type: "client/turn/requested",
         data: {
-          providerThreadId: "provider-thread-1",
-          turnId: "turn-1",
-          item: {
-            type: "userMessage",
-            id: "user-1",
-            content: [
-              { type: "text", text: "Follow-up question" },
-            ],
+          direction: "outbound",
+          source: "tell",
+          initiator: "user",
+          input: [{ type: "text", text: "Follow-up question" }],
+          target: { kind: "auto", expectedTurnId: "turn-1" },
+          request: {
+            method: "turn/start",
+            params: {},
+          },
+          execution: {
+            model: "gpt-5",
+            serviceTier: "default",
+            reasoningLevel: "medium",
+            permissionMode: "full",
+            source: "client/turn/requested",
           },
         },
         createdAt: 2,

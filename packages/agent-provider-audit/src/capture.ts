@@ -5,8 +5,8 @@ import { dirname, join, resolve } from "node:path";
 import {
   createAgentRuntime,
   getProviderVisibilityMetadata,
-  type AgentRuntimeCaptureEntry,
 } from "@bb/agent-runtime";
+import type { AgentRuntimeCaptureEntry } from "@bb/agent-runtime/capture";
 import {
   buildTimelineRows,
   decodeRow,
@@ -580,13 +580,14 @@ function buildClientRequestRows(args: {
         source: "tell",
         initiator: "user",
         input: [{ type: "text", text: request.text }],
+        target: request.target,
         request: {
           method: request.requestMethod,
           params: {},
         },
         execution: {
           ...execution,
-          source: request.type,
+          source: "client/turn/requested",
         },
       },
     });
@@ -963,7 +964,8 @@ async function runScenario(args: {
     args.clientRequests.push({
       id: `audit-client-row-${index + 1}`,
       turnIndex: index,
-      type: index === 0 ? "client/thread/start" : "client/turn/requested",
+      type: "client/turn/requested",
+      target: index === 0 ? { kind: "thread-start" } : { kind: "new-turn" },
       requestMethod: index === 0 ? "thread/start" : "turn/start",
       text: args.scenario.turns[index],
       createdAt: Date.now(),

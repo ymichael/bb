@@ -120,7 +120,7 @@ describe("ServerConnection", () => {
     await connection.shutdown();
   });
 
-  it("reports known idle threads as active after dispatching turn.run", async () => {
+  it("reports known idle threads as active after dispatching turn.submit", async () => {
     testServer = await createTestServer();
     const harness = createHarness();
     await harness.manager.ensureEnvironment({
@@ -132,7 +132,7 @@ describe("ServerConnection", () => {
 
     await dispatchCommand(
       {
-        type: "turn.run",
+        type: "turn.submit",
         environmentId: "env-1",
         threadId: "thread-1",
         eventSequence: 5,
@@ -153,6 +153,7 @@ describe("ServerConnection", () => {
           dynamicTools: [],
           instructionMode: "append",
         },
+        target: { mode: "start" },
       },
       harness.dispatchOptions(),
     );
@@ -250,9 +251,9 @@ describe("ServerConnection", () => {
     await serverClient.reportCommandResult({
       commandId: "cmd-1",
       completedAt: 1,
-      type: "turn.run",
+      type: "turn.submit",
       ok: true,
-      result: {},
+      result: { appliedAs: "new-turn" },
     });
 
     expect(testServer.commandResultAttemptCount).toBe(2);
@@ -261,17 +262,17 @@ describe("ServerConnection", () => {
         sessionId: "session-1",
         commandId: "cmd-1",
         completedAt: 1,
-        type: "turn.run",
+        type: "turn.submit",
         ok: true,
-        result: {},
+        result: { appliedAs: "new-turn" },
       }),
       hostDaemonCommandResultReportSchema.parse({
         sessionId: "session-1",
         commandId: "cmd-1",
         completedAt: 1,
-        type: "turn.run",
+        type: "turn.submit",
         ok: true,
-        result: {},
+        result: { appliedAs: "new-turn" },
       }),
     ]);
 
@@ -291,9 +292,9 @@ describe("ServerConnection", () => {
       serverClient.reportCommandResult({
         commandId: "cmd-1",
         completedAt: 1,
-        type: "turn.run",
+        type: "turn.submit",
         ok: true,
-        result: {},
+        result: { appliedAs: "new-turn" },
       }),
     ).rejects.toThrow(/Failed to report command result/u);
 
@@ -315,9 +316,9 @@ describe("ServerConnection", () => {
       serverClient.reportCommandResult({
         commandId: "cmd-1",
         completedAt: 1,
-        type: "turn.run",
+        type: "turn.submit",
         ok: true,
-        result: {},
+        result: { appliedAs: "new-turn" },
       }),
     ).rejects.toThrow(/Failed to report command result/u);
 

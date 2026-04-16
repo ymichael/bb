@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { ThreadEvent } from "@bb/domain";
-import { createAgentRuntime } from "./runtime.js";
+import { createAgentRuntimeWithAdapters } from "./runtime.js";
 import { fakeProviderScriptPath } from "./test/index.js";
 import type { AgentRuntime } from "./types.js";
 import {
@@ -63,7 +63,7 @@ describe("createAgentRuntime multi-thread routing", () => {
 
   it("handles multiple threads on the same provider", async () => {
     const events: ThreadEvent[] = [];
-    const runtime = createAgentRuntime({
+    const runtime = createAgentRuntimeWithAdapters({
       workspacePath: tmpDir,
       onEvent: (e) => events.push(e),
       onToolCall: async () => ({
@@ -127,7 +127,7 @@ describe("createAgentRuntime multi-thread routing", () => {
   it("keeps sibling threads running for keep-provider adapters after stopping one thread", async () => {
     const events: ThreadEvent[] = [];
     const providerId = "keep-provider-fake";
-    const runtime = createAgentRuntime({
+    const runtime = createAgentRuntimeWithAdapters({
       workspacePath: tmpDir,
       onEvent: (event) => events.push(event),
       onToolCall: async () => ({
@@ -140,7 +140,6 @@ describe("createAgentRuntime multi-thread routing", () => {
           ...adapter,
           displayName: "Keep Provider Fake",
           id: providerId,
-          threadStopBehavior: "keep-provider",
         };
       },
     });
@@ -209,7 +208,7 @@ describe("createAgentRuntime multi-thread routing", () => {
 
   it("stamps all events with bb threadId and providerThreadId", async () => {
     const events: ThreadEvent[] = [];
-    const runtime = createAgentRuntime({
+    const runtime = createAgentRuntimeWithAdapters({
       workspacePath: tmpDir,
       onEvent: (e) => events.push(e),
       onToolCall: async () => ({
@@ -253,7 +252,7 @@ describe("createAgentRuntime multi-thread routing", () => {
 
   it("stamps events correctly for multiple threads", async () => {
     const events: ThreadEvent[] = [];
-    const runtime = createAgentRuntime({
+    const runtime = createAgentRuntimeWithAdapters({
       workspacePath: tmpDir,
       onEvent: (e) => events.push(e),
       onToolCall: async () => ({
@@ -365,7 +364,7 @@ rl.on("line", (line) => {
       "utf8",
     );
 
-    const runtime = createAgentRuntime({
+    const runtime = createAgentRuntimeWithAdapters({
       workspacePath: tmpDir,
       onEvent: (event) => events.push(event),
       onToolCall: async () => ({
@@ -482,7 +481,7 @@ rl.on("line", (line) => {
       "utf8",
     );
 
-    const runtime = createAgentRuntime({
+    const runtime = createAgentRuntimeWithAdapters({
       workspacePath: tmpDir,
       onEvent: (e) => events.push(e),
       onToolCall: async () => ({
@@ -558,7 +557,7 @@ rl.on("line", (line) => {
     writeFileSync(script2, readFileSync(fakeProviderScriptPath, "utf8"));
 
     let adapterCallCount = 0;
-    const runtime = createAgentRuntime({
+    const runtime = createAgentRuntimeWithAdapters({
       workspacePath: tmpDir,
       onEvent: (e) => events.push(e),
       onToolCall: async () => ({
@@ -619,7 +618,7 @@ rl.on("line", (line) => {
   it("resumes across runtime instances", async () => {
     // Runtime 1: start a thread
     const events1: ThreadEvent[] = [];
-    const runtime1 = createAgentRuntime({
+    const runtime1 = createAgentRuntimeWithAdapters({
       workspacePath: tmpDir,
       onEvent: (e) => events1.push(e),
       onToolCall: async () => ({
@@ -647,7 +646,7 @@ rl.on("line", (line) => {
 
     // Runtime 2: resume the thread
     const events2: ThreadEvent[] = [];
-    const runtime2 = createAgentRuntime({
+    const runtime2 = createAgentRuntimeWithAdapters({
       workspacePath: tmpDir,
       onEvent: (e) => events2.push(e),
       onToolCall: async () => ({

@@ -107,7 +107,6 @@ export interface RuntimeManagerOptions {
   provisionWorkspace?: (
     options: ProvisionWorkspaceArgs,
   ) => Promise<HostWorkspace>;
-  adapterFactory?: AgentRuntimeOptions["adapterFactory"];
   shellEnv?: AgentRuntimeOptions["shellEnv"];
   onEvent?: (args: { environmentId: string; event: ThreadEvent }) => void;
   threadStorageRootPath?: string | null;
@@ -507,7 +506,6 @@ export class RuntimeManager {
     try {
       runtime = this.createRuntime({
         workspacePath: workspace.path,
-        adapterFactory: this.options.adapterFactory,
         shellEnv: this.getShellEnv(),
         bridgeBundleDir: this.options.bridgeBundleDir,
         onEvent: (event) => {

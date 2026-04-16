@@ -3,11 +3,13 @@ import {
   commonConfig,
   hostDaemonConfig,
 } from "@bb/config/host-daemon";
-import type { AgentRuntimeOptions } from "@bb/agent-runtime";
 import type { HostType, ToolCallRequest, ToolCallResponse } from "@bb/domain";
 import { createHostWatcher, type HostWatcher } from "@bb/host-watcher";
 import { createLogger } from "@bb/logger";
-import { createHostDaemonApp } from "./app.js";
+import {
+  type CreateHostDaemonAppOptions,
+  createHostDaemonApp,
+} from "./app.js";
 import {
   readHostAuthState,
   resolveServerUrl,
@@ -41,7 +43,7 @@ export interface StartHostDaemonOptions {
   createInstanceId?: () => string;
   acquireLock?: typeof acquireDaemonLock;
   loadIdentity?: typeof loadHostIdentity;
-  adapterFactory?: AgentRuntimeOptions["adapterFactory"];
+  createRuntime?: CreateHostDaemonAppOptions["createRuntime"];
   hostWatcher?: HostWatcher;
   onToolCall?: (request: ToolCallRequest) => Promise<ToolCallResponse>;
   openPath?: (path: string) => Promise<void>;
@@ -154,8 +156,8 @@ export async function startHostDaemon(
       }),
       releaseLock,
       localApiConfig,
+      createRuntime: options.createRuntime,
       runtimeShellEnv,
-      adapterFactory: options.adapterFactory,
       hostWatcher,
       onToolCall: options.onToolCall,
       openPath: options.openPath,

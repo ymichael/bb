@@ -10,6 +10,7 @@ import {
   isAgentProviderId,
   listBuiltInAgentProviderInfos,
 } from "@bb/agent-providers";
+import type { ProviderInfo } from "@bb/domain";
 import { createClaudeCodeProviderAdapter } from "./claude-code/adapter.js";
 import { claudeCodeVisibilityMetadata } from "./claude-code/visibility.js";
 import { createCodexProviderAdapter } from "./codex/adapter.js";
@@ -21,7 +22,6 @@ import type {
   ProviderAdapterFactoryOptions,
 } from "./provider-adapter.js";
 import type { ProviderVisibilityMetadata } from "./provider-visibility.js";
-import type { ProviderInfo } from "./types.js";
 
 // ---------------------------------------------------------------------------
 // Registry state

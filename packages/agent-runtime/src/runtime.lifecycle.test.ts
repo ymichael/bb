@@ -3,8 +3,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { ThreadEvent } from "@bb/domain";
-import type { AdapterCommand } from "./provider-adapter.js";
-import { createAgentRuntime } from "./runtime.js";
+import type {
+  AdapterCommand,
+  ProviderCommandPlan,
+  ProviderCommandProcessEffect,
+} from "./provider-adapter.js";
+import { createAgentRuntimeWithAdapters } from "./runtime.js";
 import { fakeProviderScriptPath } from "./test/index.js";
 import {
   createFakeAdapter,
@@ -32,7 +36,7 @@ describe("createAgentRuntime lifecycle", () => {
   describe("thread setup and configuration", () => {
     it("starts a thread and receives a providerThreadId", async () => {
       const events: ThreadEvent[] = [];
-      const runtime = createAgentRuntime({
+      const runtime = createAgentRuntimeWithAdapters({
         workspacePath: tmpDir,
         onEvent: (e) => events.push(e),
         onToolCall: async () => ({
@@ -86,7 +90,7 @@ rl.on("line", (line) => {
 `,
         "utf8",
       );
-      const runtime = createAgentRuntime({
+      const runtime = createAgentRuntimeWithAdapters({
         workspacePath: tmpDir,
         onEvent: () => undefined,
         onToolCall: async () => ({
@@ -110,7 +114,7 @@ rl.on("line", (line) => {
 
     it("merges runtime shell env with per-thread context on start", async () => {
       const recordedCommands: AdapterCommand[] = [];
-      const runtime = createAgentRuntime({
+      const runtime = createAgentRuntimeWithAdapters({
         workspacePath: tmpDir,
         shellEnv: {
           PATH: "/tmp/bb-bin:/usr/bin",
@@ -158,7 +162,7 @@ rl.on("line", (line) => {
 
     it("preserves merged shell env when reconfiguring a thread", async () => {
       const recordedCommands: AdapterCommand[] = [];
-      const runtime = createAgentRuntime({
+      const runtime = createAgentRuntimeWithAdapters({
         workspacePath: tmpDir,
         shellEnv: {
           PATH: "/tmp/bb-bin:/usr/bin",
@@ -213,7 +217,7 @@ rl.on("line", (line) => {
 
     it("passes the workspace cwd when resuming a thread", async () => {
       const recordedCommands: AdapterCommand[] = [];
-      const runtime = createAgentRuntime({
+      const runtime = createAgentRuntimeWithAdapters({
         workspacePath: tmpDir,
         shellEnv: {
           PATH: "/tmp/bb-bin:/usr/bin",
@@ -261,7 +265,7 @@ rl.on("line", (line) => {
 
     it("passes permission mode through to adapter commands", async () => {
       const recordedCommands: AdapterCommand[] = [];
-      const runtime = createAgentRuntime({
+      const runtime = createAgentRuntimeWithAdapters({
         workspacePath: tmpDir,
         onEvent: () => undefined,
         onToolCall: async () => ({
@@ -278,6 +282,7 @@ rl.on("line", (line) => {
         projectId: "p1",
         providerId: "fake",
         options: {
+          ...fullRuntimeOptions,
           permissionMode: "workspace-write",
           permissionEscalation: "ask",
         },
@@ -320,7 +325,7 @@ rl.on("line", (line) => {
 
     it("reconfigures permission policy before starting a turn when options change", async () => {
       const recordedCommands: AdapterCommand[] = [];
-      const runtime = createAgentRuntime({
+      const runtime = createAgentRuntimeWithAdapters({
         workspacePath: tmpDir,
         onEvent: () => undefined,
         onToolCall: async () => ({
@@ -337,6 +342,7 @@ rl.on("line", (line) => {
         projectId: "p1",
         providerId: "fake",
         options: {
+          ...fullRuntimeOptions,
           permissionEscalation: "ask",
           permissionMode: "workspace-write",
         },
@@ -346,6 +352,7 @@ rl.on("line", (line) => {
         threadId: "t1",
         input: [{ type: "text", text: "follow up" }],
         options: {
+          ...fullRuntimeOptions,
           permissionEscalation: "deny",
           permissionMode: "readonly",
         },
@@ -383,7 +390,7 @@ rl.on("line", (line) => {
   describe("turn execution and thread commands", () => {
     it("runs a turn and receives turn/started + turn/completed events", async () => {
       const events: ThreadEvent[] = [];
-      const runtime = createAgentRuntime({
+      const runtime = createAgentRuntimeWithAdapters({
         workspacePath: tmpDir,
         onEvent: (e) => events.push(e),
         onToolCall: async () => ({
@@ -408,9 +415,88 @@ rl.on("line", (line) => {
       await runtime.shutdown();
     });
 
+    it("drops replayed completed turn starts before emitting to consumers", async () => {
+      const replayScriptPath = join(tmpDir, "replayed-turn-provider.cjs");
+      writeFileSync(
+        replayScriptPath,
+        `
+const readline = require("node:readline");
+
+function send(message) {
+  process.stdout.write(JSON.stringify(message) + "\\n");
+}
+
+const rl = readline.createInterface({ input: process.stdin });
+rl.on("line", (line) => {
+  const message = JSON.parse(line);
+  if (message.method === "initialize") {
+    send({ jsonrpc: "2.0", id: message.id, result: { ok: true } });
+    return;
+  }
+  if (message.method === "thread/start") {
+    send({ jsonrpc: "2.0", id: message.id, result: { providerThreadId: "prov-replay" } });
+    send({
+      jsonrpc: "2.0",
+      method: "thread/identity",
+      params: { threadId: message.params.threadId, providerThreadId: "prov-replay" },
+    });
+    return;
+  }
+  if (message.method === "turn/start") {
+    send({ jsonrpc: "2.0", id: message.id, result: { ok: true } });
+    send({
+      jsonrpc: "2.0",
+      method: "turn/started",
+      params: { threadId: message.params.threadId, providerThreadId: "prov-replay", turnId: "turn-1" },
+    });
+    send({
+      jsonrpc: "2.0",
+      method: "turn/completed",
+      params: { threadId: message.params.threadId, providerThreadId: "prov-replay", turnId: "turn-1" },
+    });
+    send({
+      jsonrpc: "2.0",
+      method: "turn/started",
+      params: { threadId: message.params.threadId, providerThreadId: "prov-replay", turnId: "turn-1" },
+    });
+  }
+});
+`,
+        "utf8",
+      );
+      const events: ThreadEvent[] = [];
+      const runtime = createAgentRuntimeWithAdapters({
+        workspacePath: tmpDir,
+        onEvent: (event) => events.push(event),
+        onToolCall: async () => ({
+          contentItems: [{ type: "inputText", text: "ok" }],
+          success: true,
+        }),
+        adapterFactory: () => createFakeAdapter(replayScriptPath),
+      });
+
+      await runtime.startThread({
+        environmentId: "env-1",
+        threadId: "t1",
+        projectId: "p1",
+        providerId: "fake",
+        options: fullRuntimeOptions,
+      });
+      await runtime.runTurn({
+        threadId: "t1",
+        input: [{ type: "text", text: "hello" }],
+        options: fullRuntimeOptions,
+      });
+      await wait(100);
+
+      expect(events.filter((event) => event.type === "turn/started"))
+        .toHaveLength(1);
+      await runtime.shutdown();
+    });
+
     it("runs the initial turn when startThread includes input", async () => {
       const events: ThreadEvent[] = [];
-      const runtime = createAgentRuntime({
+      const runtime = createAgentRuntimeWithAdapters({
         workspacePath: tmpDir,
         onEvent: (e) => events.push(e),
         onToolCall: async () => ({
@@ -438,7 +524,7 @@ rl.on("line", (line) => {
 
     it("does not start a turn until input is sent separately", async () => {
       const events: ThreadEvent[] = [];
-      const runtime = createAgentRuntime({
+      const runtime = createAgentRuntimeWithAdapters({
         workspacePath: tmpDir,
         onEvent: (event) => events.push(event),
         onToolCall: async () => ({
@@ -475,7 +561,7 @@ rl.on("line", (line) => {
 
     it("resumes a thread", async () => {
       const events: ThreadEvent[] = [];
-      const runtime = createAgentRuntime({
+      const runtime = createAgentRuntimeWithAdapters({
         workspacePath: tmpDir,
         onEvent: (e) => events.push(e),
         onToolCall: async () => ({
@@ -503,7 +589,7 @@ rl.on("line", (line) => {
     });
 
     it("renames a thread", async () => {
-      const runtime = createAgentRuntime({
+      const runtime = createAgentRuntimeWithAdapters({
         workspacePath: tmpDir,
         onEvent: () => {},
         onToolCall: async () => ({
@@ -525,7 +611,7 @@ rl.on("line", (line) => {
     });
 
     it("stops a thread", async () => {
-      const runtime = createAgentRuntime({
+      const runtime = createAgentRuntimeWithAdapters({
         workspacePath: tmpDir,
         onEvent: () => {},
         onToolCall: async () => ({
@@ -550,7 +636,7 @@ rl.on("line", (line) => {
       const builtCommands: AdapterCommand[] = [];
       const events: ThreadEvent[] = [];
       const baseAdapter = createFakeAdapter(scriptPath);
-      const runtime = createAgentRuntime({
+      const runtime = createAgentRuntimeWithAdapters({
         workspacePath: tmpDir,
         onEvent: (event) => events.push(event),
         onToolCall: async () => ({
@@ -559,12 +645,12 @@ rl.on("line", (line) => {
         }),
         adapterFactory: () => ({
           ...baseAdapter,
-          buildCommand(command) {
+          buildCommandPlan(command): ProviderCommandPlan {
             if (command.type === "thread/stop") {
               throw new Error("stop command failed to build");
             }
             builtCommands.push(command);
-            return baseAdapter.buildCommand(command);
+            return baseAdapter.buildCommandPlan(command);
           },
         }),
       });
@@ -607,7 +693,7 @@ rl.on("line", (line) => {
     it("restarts providers that require a restart after thread stop", async () => {
       const events: ThreadEvent[] = [];
       const adapter = createFakeAdapter(scriptPath);
-      const runtime = createAgentRuntime({
+      const runtime = createAgentRuntimeWithAdapters({
         workspacePath: tmpDir,
         onEvent: (event) => events.push(event),
         onToolCall: async () => ({
@@ -616,7 +702,14 @@ rl.on("line", (line) => {
         }),
         adapterFactory: () => ({
           ...adapter,
-          threadStopBehavior: "restart-provider",
+          buildCommandPlan(command): ProviderCommandPlan {
+            const plan = adapter.buildCommandPlan(command);
+            if (command.type === "thread/stop" && plan.kind === "request") {
+              const processEffect: ProviderCommandProcessEffect = "restart-provider";
+              return { ...plan, processEffect };
+            }
+            return plan;
+          },
         }),
       });
 
@@ -658,7 +751,7 @@ rl.on("line", (line) => {
 
     it("steers an active turn", async () => {
       const events: ThreadEvent[] = [];
-      const runtime = createAgentRuntime({
+      const runtime = createAgentRuntimeWithAdapters({
         workspacePath: tmpDir,
         onEvent: (event) => events.push(event),
         onToolCall: async () => ({
@@ -699,7 +792,7 @@ rl.on("line", (line) => {
     it("reconfigures the thread before later run turns when settings change", async () => {
       const builtCommands: AdapterCommand[] = [];
       const baseAdapter = createFakeAdapter(scriptPath);
-      const runtime = createAgentRuntime({
+      const runtime = createAgentRuntimeWithAdapters({
         workspacePath: tmpDir,
         onEvent: () => {},
         onToolCall: async () => ({
@@ -708,9 +801,9 @@ rl.on("line", (line) => {
         }),
         adapterFactory: () => ({
           ...baseAdapter,
-          buildCommand(command) {
+          buildCommandPlan(command) {
             builtCommands.push(command);
-            return baseAdapter.buildCommand(command);
+            return baseAdapter.buildCommandPlan(command);
           },
         }),
       });
@@ -754,7 +847,7 @@ rl.on("line", (line) => {
       const builtCommands: AdapterCommand[] = [];
       const events: ThreadEvent[] = [];
       const baseAdapter = createFakeAdapter(scriptPath);
-      const runtime = createAgentRuntime({
+      const runtime = createAgentRuntimeWithAdapters({
         workspacePath: tmpDir,
         onEvent: (event) => events.push(event),
         onToolCall: async () => ({
@@ -763,9 +856,9 @@ rl.on("line", (line) => {
         }),
         adapterFactory: () => ({
           ...baseAdapter,
-          buildCommand(command) {
+          buildCommandPlan(command) {
             builtCommands.push(command);
-            return baseAdapter.buildCommand(command);
+            return baseAdapter.buildCommandPlan(command);
           },
         }),
       });
@@ -824,7 +917,7 @@ rl.on("line", (line) => {
 
   describe("models", () => {
     it("lists models", async () => {
-      const runtime = createAgentRuntime({
+      const runtime = createAgentRuntimeWithAdapters({
         workspacePath: tmpDir,
         onEvent: () => {},
         onToolCall: async () => ({
@@ -845,7 +938,7 @@ rl.on("line", (line) => {
 
   describe("errors", () => {
     it("rejects runTurn for unknown thread", async () => {
-      const runtime = createAgentRuntime({
+      const runtime = createAgentRuntimeWithAdapters({
         workspacePath: tmpDir,
         onEvent: () => {},
         onToolCall: async () => ({

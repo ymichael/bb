@@ -4,15 +4,21 @@ import type {
   ThreadEvent,
 } from "@bb/domain";
 import type { AgentRuntimeCaptureEntry } from "./capture-types.js";
-import type { AdapterCommand, JsonRpcMessage } from "./provider-adapter.js";
+import type {
+  AdapterCommand,
+  ProviderAdapterFactory,
+  ProviderCommandPlan,
+  ProviderRequestCommandPlan,
+} from "./provider-adapter.js";
 import {
   assertProviderSupportsExecutionOptions,
   sameExecutionSettings,
-  toAdapterOptions,
+  toProviderExecutionContext,
 } from "./execution-options.js";
 import {
   getJsonRpcStringParam,
   ignoredJsonRpcResultSchema,
+  type JsonRpcMessage,
   type JsonRpcObject,
   parseJsonRpcLine,
   sendJsonRpcError,
@@ -32,6 +38,8 @@ import {
   RuntimeThreadIdentityRegistry,
   stampThreadEventScope,
 } from "./runtime-thread-identity.js";
+import { RuntimeTurnReplayFilter } from "./runtime-turn-replay-filter.js";
+import { RuntimeTurnState } from "./runtime-turn-state.js";
 import type {
   AgentRuntime,
   AgentRuntimeExecutionOptions,
@@ -49,6 +57,10 @@ interface ReconfigureThreadIfNeededArgs {
   instructions: string | undefined;
   options: AgentRuntimeExecutionOptions;
   threadId: string;
+}
+
+interface AgentRuntimeInternalOptions extends AgentRuntimeOptions {
+  adapterFactory?: ProviderAdapterFactory;
 }
 
 interface ResolveProviderRequestThreadIdArgs
@@ -70,7 +82,6 @@ interface ThreadRuntimeConfig {
   options: AgentRuntimeExecutionOptions;
   projectId?: string;
   providerId: string;
-  resumePath?: string;
   workspacePath: string;
 }
 
@@ -113,18 +124,36 @@ interface EmitAcceptedCommandEventsArgs {
   sourceThreadId?: string;
 }
 
+interface RequireProviderRequestPlanArgs {
+  commandType: AdapterCommand["type"];
+  plan: ProviderCommandPlan;
+  providerId: string;
+}
+
 /**
  * Coordinates provider processes for an environment and bridges provider
  * JSON-RPC traffic into bb thread events, dynamic tool calls, and pending
  * interactions.
  */
 export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
+  return createAgentRuntimeInternal(options);
+}
+
+export function createAgentRuntimeWithAdapters(
+  options: AgentRuntimeInternalOptions,
+): AgentRuntime {
+  return createAgentRuntimeInternal(options);
+}
+
+function createAgentRuntimeInternal(
+  options: AgentRuntimeInternalOptions,
+): AgentRuntime {
   let nextRequestId = 1;
   let nextCaptureId = 1;
   const threadIdentityRegistry = new RuntimeThreadIdentityRegistry();
   const threadRuntimeConfigs = new Map<string, ThreadRuntimeConfig>();
-  const activeTurnIdByThreadId = new Map<string, string>();
-  const completedTurnIdsByThreadId = new Map<string, Set<string>>();
+  const turnState = new RuntimeTurnState();
+  const turnReplayFilter = new RuntimeTurnReplayFilter();
 
   function createCaptureId(): string {
     const captureId = `capture-${nextCaptureId}`;
@@ -152,8 +181,8 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     onProviderThreadDetached: (threadId) => {
       threadIdentityRegistry.clearThread(threadId);
       clearThreadRuntimeConfig(threadId);
-      activeTurnIdByThreadId.delete(threadId);
-      completedTurnIdsByThreadId.delete(threadId);
+      turnState.clearThread(threadId);
+      turnReplayFilter.clearThread(threadId);
     },
     onStderr: options.onStderr,
     workspacePath: options.workspacePath,
@@ -209,6 +238,17 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     return resolvedThreadId;
   }
 
+  function requireProviderRequestPlan(
+    args: RequireProviderRequestPlanArgs,
+  ): ProviderRequestCommandPlan {
+    if (args.plan.kind === "request") {
+      return args.plan;
+    }
+    throw new Error(
+      `Adapter "${args.providerId}" returned no provider request for ${args.commandType}: ${args.plan.reason}`,
+    );
+  }
+
   function setThreadRuntimeConfig(
     threadId: string,
     config: ThreadRuntimeConfig,
@@ -242,17 +282,6 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       threadId,
       timeoutMs,
     });
-  }
-
-  function recordCompletedTurn(threadId: string, turnId: string): void {
-    const completedTurnIds =
-      completedTurnIdsByThreadId.get(threadId) ?? new Set<string>();
-    completedTurnIds.add(turnId);
-    completedTurnIdsByThreadId.set(threadId, completedTurnIds);
-  }
-
-  function hasCompletedTurn(threadId: string, turnId: string): boolean {
-    return completedTurnIdsByThreadId.get(threadId)?.has(turnId) ?? false;
   }
 
   async function reconfigureThreadIfNeeded(
@@ -289,21 +318,19 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       threadId: args.threadId,
       cwd: currentConfig.workspacePath,
       providerThreadId: threadIdentityRegistry.getProviderThreadId(args.threadId),
-      options: toAdapterOptions({
+      options: toProviderExecutionContext({
         envVars,
         execOpts: nextOptions,
         instructions: nextInstructions,
       }),
-      resumePath: currentConfig.resumePath,
       dynamicTools: currentConfig.dynamicTools,
       instructionMode: currentConfig.instructionMode,
     };
-    const command = proc.adapter.buildCommand(adapterCommand);
-
-    if (command) {
+    const plan = proc.adapter.buildCommandPlan(adapterCommand);
+    if (plan.kind === "request") {
       const result = await sendJsonRpcRequest({
         child: proc.child,
-        message: command,
+        message: plan,
         pending: proc.pending,
         getNextId: () => nextRequestId++,
         resultSchema: threadIdentityResultSchema,
@@ -319,7 +346,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         command: adapterCommand,
         proc,
         providerId: currentConfig.providerId,
-        rawMethod: command.method,
+        rawMethod: plan.method,
         sourceThreadId: args.threadId,
       });
     }
@@ -378,32 +405,23 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         threadId: resolvedBbThreadId,
       });
 
-      const activeTurnId = activeTurnIdByThreadId.get(resolvedBbThreadId);
+      const replayResult = turnReplayFilter.observe(stampedEvent);
+      if (replayResult.kind === "drop-replayed-turn-start") {
+        options.onStderr?.(
+          `Dropping replayed turn/started on already completed turn "${replayResult.turnId}" in thread "${replayResult.threadId}".`,
+        );
+        continue;
+      }
 
+      turnState.observe(replayResult.event);
       emitRuntimeEvent({
-        event: stampedEvent,
+        event: replayResult.event,
         proc: args.proc,
         providerId: args.providerId,
         rawCaptureId: args.rawCaptureId,
         rawMethod: args.rawMethod,
         sourceThreadId: args.sourceThreadId,
       });
-
-      if (stampedEvent.type === "turn/started") {
-        if (hasCompletedTurn(resolvedBbThreadId, stampedEvent.turnId)) {
-          options.onStderr?.(
-            `Skipping active turn update for replayed turn/started on already completed turn "${stampedEvent.turnId}" in thread "${resolvedBbThreadId}".`,
-          );
-        } else {
-          activeTurnIdByThreadId.set(resolvedBbThreadId, stampedEvent.turnId);
-        }
-      }
-      if (stampedEvent.type === "turn/completed") {
-        recordCompletedTurn(resolvedBbThreadId, stampedEvent.turnId);
-        if (activeTurnId === stampedEvent.turnId) {
-          activeTurnIdByThreadId.delete(resolvedBbThreadId);
-        }
-      }
     }
   }
 
@@ -542,17 +560,16 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       dynamicTools,
       instructionMode = "append",
     }) {
-      const pid = providerId ?? "codex";
-      await runtime.ensureProvider({ providerId: pid });
+      await runtime.ensureProvider({ providerId });
 
-      const proc = requireProviderProcess(pid);
+      const proc = requireProviderProcess(providerId);
       assertProviderSupportsExecutionOptions({
         adapter: proc.adapter,
         options: execOpts,
-        providerId: pid,
+        providerId,
       });
       threadIdentityRegistry.registerThreadProvider({
-        providerId: pid,
+        providerId,
         providerState: proc.identity,
         shouldWaitForProviderIdentity: true,
         threadId,
@@ -564,7 +581,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         instructions,
         options: execOpts,
         projectId,
-        providerId: pid,
+        providerId,
         workspacePath: options.workspacePath,
       });
 
@@ -579,7 +596,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         type: "thread/start",
         threadId,
         cwd: options.workspacePath,
-        options: toAdapterOptions({
+        options: toProviderExecutionContext({
           envVars,
           execOpts,
           instructions,
@@ -587,11 +604,11 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         dynamicTools,
         instructionMode,
       };
-      const cmd = proc.adapter.buildCommand(adapterCommand);
-
-      if (!cmd) {
-        throw new Error(`Adapter "${pid}" returned null for thread/start`);
-      }
+      const cmd = requireProviderRequestPlan({
+        commandType: adapterCommand.type,
+        plan: proc.adapter.buildCommandPlan(adapterCommand),
+        providerId,
+      });
 
       const result = await sendJsonRpcRequest({
         child: proc.child,
@@ -610,7 +627,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       emitAcceptedCommandEvents({
         command: adapterCommand,
         proc,
-        providerId: pid,
+        providerId,
         rawMethod: cmd.method,
         sourceThreadId: threadId,
       });
@@ -618,7 +635,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       const resolved = await waitForProviderThreadIdentity(proc, threadId, 5000);
       if (!resolved) {
         throw new Error(
-          `Provider "${pid}" did not return a providerThreadId for thread "${threadId}" within 5 seconds`,
+          `Provider "${providerId}" did not return a providerThreadId for thread "${threadId}" within 5 seconds`,
         );
       }
 
@@ -642,21 +659,19 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       providerId,
       options: execOpts,
       instructions,
-      resumePath,
       dynamicTools,
       instructionMode = "append",
     }) {
-      const pid = providerId ?? resolveProviderForThread(threadId);
-      await runtime.ensureProvider({ providerId: pid });
+      await runtime.ensureProvider({ providerId });
 
-      const proc = requireProviderProcess(pid);
+      const proc = requireProviderProcess(providerId);
       assertProviderSupportsExecutionOptions({
         adapter: proc.adapter,
         options: execOpts,
-        providerId: pid,
+        providerId,
       });
       threadIdentityRegistry.registerThreadProvider({
-        providerId: pid,
+        providerId,
         providerState: proc.identity,
         shouldWaitForProviderIdentity: providerThreadId === undefined,
         threadId,
@@ -668,8 +683,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         instructions,
         options: execOpts,
         projectId,
-        providerId: pid,
-        resumePath,
+        providerId,
         workspacePath: options.workspacePath,
       });
 
@@ -690,18 +704,16 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         cwd: options.workspacePath,
         providerThreadId:
           providerThreadId ?? threadIdentityRegistry.getProviderThreadId(threadId),
-        options: toAdapterOptions({
+        options: toProviderExecutionContext({
           envVars,
           execOpts,
           instructions,
         }),
-        resumePath,
         dynamicTools,
         instructionMode,
       };
-      const cmd = proc.adapter.buildCommand(adapterCommand);
-
-      if (!cmd) {
+      const plan = proc.adapter.buildCommandPlan(adapterCommand);
+      if (plan.kind === "noop") {
         const currentProviderThreadId =
           providerThreadId ?? threadIdentityRegistry.getProviderThreadId(threadId);
         if (!currentProviderThreadId) {
@@ -709,6 +721,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         }
         return { providerThreadId: currentProviderThreadId };
       }
+      const cmd = plan;
 
       const result = await sendJsonRpcRequest({
         child: proc.child,
@@ -728,7 +741,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       emitAcceptedCommandEvents({
         command: adapterCommand,
         proc,
-        providerId: pid,
+        providerId,
         rawMethod: cmd.method,
         sourceThreadId: threadId,
       });
@@ -762,24 +775,31 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         providerThreadId: threadIdentityRegistry.getProviderThreadId(threadId),
         input,
         ...(clientRequestSequence !== undefined ? { clientRequestSequence } : {}),
-        options: toAdapterOptions({
+        options: toProviderExecutionContext({
           envVars: {},
           execOpts,
           instructions,
         }),
       };
-      const cmd = proc.adapter.buildCommand(adapterCommand);
-
-      if (!cmd) {
-        throw new Error(`Adapter "${pid}" returned null for turn/start`);
-      }
-      await sendJsonRpcRequest({
-        child: proc.child,
-        message: cmd,
-        pending: proc.pending,
-        getNextId: () => nextRequestId++,
-        resultSchema: ignoredJsonRpcResultSchema,
+      const cmd = requireProviderRequestPlan({
+        commandType: adapterCommand.type,
+        plan: proc.adapter.buildCommandPlan(adapterCommand),
+        providerId: pid,
       });
+      const preparedTurnStart =
+        proc.adapter.prepareTurnStart(adapterCommand);
+      try {
+        await sendJsonRpcRequest({
+          child: proc.child,
+          message: cmd,
+          pending: proc.pending,
+          getNextId: () => nextRequestId++,
+          resultSchema: ignoredJsonRpcResultSchema,
+        });
+      } catch (error) {
+        preparedTurnStart?.rollback();
+        throw error;
+      }
       emitAcceptedCommandEvents({
         command: adapterCommand,
         proc,
@@ -804,19 +824,23 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         options: execOpts,
         providerId: pid,
       });
+
+      const activeTurnId = turnState.getActiveTurnId(threadId);
+      if (activeTurnId !== expectedTurnId) {
+        options.onStderr?.(
+          `Ignoring stale steer for thread "${threadId}" on turn "${expectedTurnId}"; active turn is ${activeTurnId ?? "none"}.`,
+        );
+        return {
+          status: "stale",
+          activeTurnId: activeTurnId ?? null,
+        };
+      }
+
       await reconfigureThreadIfNeeded({
         threadId,
         options: execOpts,
         instructions,
       });
-
-      const activeTurnId = activeTurnIdByThreadId.get(threadId);
-      if (activeTurnId !== expectedTurnId) {
-        options.onStderr?.(
-          `Ignoring stale steer for thread "${threadId}" on turn "${expectedTurnId}"; active turn is ${activeTurnId ?? "none"}.`,
-        );
-        return;
-      }
 
       const adapterCommand: AdapterCommand = {
         type: "turn/steer",
@@ -825,17 +849,17 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         expectedTurnId,
         input,
         ...(clientRequestSequence !== undefined ? { clientRequestSequence } : {}),
-        options: toAdapterOptions({
+        options: toProviderExecutionContext({
           envVars: {},
           execOpts,
           instructions,
         }),
       };
-      const cmd = proc.adapter.buildCommand(adapterCommand);
-
-      if (!cmd) {
-        throw new Error(`Adapter "${pid}" returned null for turn/steer`);
-      }
+      const cmd = requireProviderRequestPlan({
+        commandType: adapterCommand.type,
+        plan: proc.adapter.buildCommandPlan(adapterCommand),
+        providerId: pid,
+      });
       await sendJsonRpcRequest({
         child: proc.child,
         message: cmd,
@@ -850,6 +874,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         rawMethod: cmd.method,
         sourceThreadId: threadId,
       });
+      return { status: "steered" };
     },
 
     async stopThread({ threadId }) {
@@ -859,25 +884,23 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       if (!providerThreadId) {
         throw new Error(`No provider thread id available for ${threadId}`);
       }
-      const activeTurnId = activeTurnIdByThreadId.get(threadId);
-      const shouldRestartProvider =
-        proc.adapter.threadStopBehavior === "restart-provider";
+      const activeTurnId = turnState.getActiveTurnId(threadId);
       const adapterCommand: AdapterCommand = {
         type: "thread/stop",
         threadId,
         providerThreadId,
         activeTurnId: activeTurnId ?? null,
       };
-      const cmd = proc.adapter.buildCommand(adapterCommand);
+      const cmd = proc.adapter.buildCommandPlan(adapterCommand);
 
-      if (!cmd) {
-        if (activeTurnId === undefined) {
-          completedTurnIdsByThreadId.delete(threadId);
-          return;
+      if (cmd.kind === "noop") {
+        if (activeTurnId) {
+          throw new Error(
+            `Adapter "${pid}" returned no provider request for thread/stop with active turn: ${cmd.reason}`,
+          );
         }
-        throw new Error(
-          `Adapter "${pid}" returned null for thread/stop with active turn "${activeTurnId}"`,
-        );
+        turnReplayFilter.clearThread(threadId);
+        return;
       }
       await sendJsonRpcRequest({
         child: proc.child,
@@ -893,9 +916,9 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         rawMethod: cmd.method,
         sourceThreadId: threadId,
       });
-      activeTurnIdByThreadId.delete(threadId);
-      completedTurnIdsByThreadId.delete(threadId);
-      if (shouldRestartProvider) {
+      turnState.clearThread(threadId);
+      turnReplayFilter.clearThread(threadId);
+      if (cmd.processEffect === "restart-provider") {
         await providerProcesses.shutdownProvider({ providerId: pid });
       }
     },
@@ -913,11 +936,11 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         providerThreadId: threadIdentityRegistry.getProviderThreadId(threadId),
         title,
       };
-      const cmd = proc.adapter.buildCommand(adapterCommand);
-
-      if (!cmd) {
-        throw new Error(`Adapter "${pid}" returned null for thread/name/set`);
-      }
+      const cmd = requireProviderRequestPlan({
+        commandType: adapterCommand.type,
+        plan: proc.adapter.buildCommandPlan(adapterCommand),
+        providerId: pid,
+      });
       await sendJsonRpcRequest({
         child: proc.child,
         message: cmd,
@@ -937,10 +960,11 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     async listModels({ providerId }) {
       await runtime.ensureProvider({ providerId });
       const proc = requireProviderProcess(providerId);
-      const command = proc.adapter.buildCommand({ type: "model/list" });
-      if (!command) {
-        throw new Error(`Provider "${providerId}" does not support model/list`);
-      }
+      const command = requireProviderRequestPlan({
+        commandType: "model/list",
+        plan: proc.adapter.buildCommandPlan({ type: "model/list" }),
+        providerId,
+      });
       const result = await sendJsonRpcRequest({
         child: proc.child,
         message: command,
@@ -956,7 +980,8 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     },
 
     async shutdown() {
-      completedTurnIdsByThreadId.clear();
+      turnState.clear();
+      turnReplayFilter.clear();
       await providerProcesses.shutdown();
     },
   };

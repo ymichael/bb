@@ -678,7 +678,7 @@ describe("internal session routes", () => {
           reasoningLevel: "medium",
           permissionMode: "full",
           permissionEscalation: null,
-          source: "client/thread/start",
+          source: "client/turn/requested",
         },
         titleProvided: true,
       });
@@ -928,14 +928,15 @@ describe("internal session routes", () => {
       appendClientTurnEvent(harness.deps, {
         threadId: thread.id,
         environmentId: environment.id,
-        type: "client/thread/start",
+        type: "client/turn/requested",
         input: [{ type: "text", text: "Start" }],
+        target: { kind: "thread-start" },
         execution: {
           model: "gpt-5",
           serviceTier: "default",
           reasoningLevel: "medium",
           permissionMode: "full",
-          source: "client/thread/start",
+          source: "client/turn/requested",
         },
         initiator: "user",
         requestMethod: "thread/start",
@@ -1168,7 +1169,7 @@ describe("internal session routes", () => {
     }
   });
 
-  it("restarts reprovisioned threads with thread.start instead of turn.run", async () => {
+  it("restarts reprovisioned threads with thread.start instead of turn.submit", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host, session } = seedHostSession(harness.deps, {
@@ -1303,6 +1304,7 @@ describe("internal session routes", () => {
         data: {
           direction: "outbound",
           input: [{ type: "text", text: "Valid earlier request" }],
+          target: { kind: "new-turn" },
           execution: {
             model: "gpt-5",
             serviceTier: "default",
@@ -1479,6 +1481,7 @@ describe("internal session routes", () => {
         initiator: "user",
         requestMethod: "turn/start",
         source: "tell",
+        target: { kind: "new-turn" },
       });
       const provisionCommand = queueEnvironmentProvisionLifecycleCommand(harness, {
         hostId: host.id,
@@ -2259,14 +2262,15 @@ describe("internal session routes", () => {
       appendClientTurnEvent(harness.deps, {
         threadId: thread.id,
         environmentId: environment.id,
-        type: "client/thread/start",
+        type: "client/turn/requested",
         input: [{ type: "text", text: "Provision then delete" }],
+        target: { kind: "thread-start" },
         execution: {
           model: "gpt-5",
           reasoningLevel: "medium",
           permissionMode: "full",
           serviceTier: "default",
-          source: "client/thread/start",
+          source: "client/turn/requested",
         },
         initiator: "user",
         requestMethod: "thread/start",

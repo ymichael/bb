@@ -1,5 +1,8 @@
 import { readFileSync } from "node:fs";
+import { turnRequestTargetSchema } from "@bb/domain";
+import type { TurnRequestTarget } from "@bb/domain";
 import { z } from "zod";
+import type { ProviderAuditClientRequest } from "./types.js";
 
 const JSON_RPC_VERSION = "2.0" as const;
 
@@ -52,14 +55,41 @@ export const providerAuditManifestSchema = z.object({
   runtimeWorkspaceGitEnd: providerAuditGitSnapshotSchema.nullable(),
 });
 
-export const providerAuditClientRequestSchema = z.object({
+const CLIENT_TURN_REQUESTED_TYPE = "client/turn/requested";
+const THREAD_START_TARGET = { kind: "thread-start" } satisfies TurnRequestTarget;
+const NEW_TURN_TARGET = { kind: "new-turn" } satisfies TurnRequestTarget;
+
+const providerAuditClientRequestFileSchema = z.object({
   id: z.string(),
   turnIndex: z.number(),
   type: z.enum(["client/thread/start", "client/turn/requested"]),
+  target: turnRequestTargetSchema.optional(),
   requestMethod: z.enum(["thread/start", "turn/start"]),
   text: z.string(),
   createdAt: z.number(),
 });
+type ProviderAuditClientRequestFile = z.infer<
+  typeof providerAuditClientRequestFileSchema
+>;
+
+function normalizeProviderAuditClientRequest(
+  request: ProviderAuditClientRequestFile,
+): ProviderAuditClientRequest {
+  return {
+    ...request,
+    type: CLIENT_TURN_REQUESTED_TYPE,
+    target:
+      request.target ??
+      (request.type === "client/thread/start"
+        ? THREAD_START_TARGET
+        : NEW_TURN_TARGET),
+  };
+}
+
+export const providerAuditClientRequestSchema =
+  providerAuditClientRequestFileSchema.transform(
+    normalizeProviderAuditClientRequest,
+  );
 
 export const providerAuditRawProviderEventCaptureEntrySchema = z.object({
   kind: z.literal("raw-provider-event"),

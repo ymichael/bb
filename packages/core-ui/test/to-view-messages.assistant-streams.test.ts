@@ -581,17 +581,23 @@ describe("toViewMessages assistant streams", () => {
         id: "evt-1",
         threadId: "thread-1",
         seq: 1,
-        type: "item/completed",
+        type: "client/turn/requested",
         data: {
-          providerThreadId: "thread-1",
-          threadId: "thread-1",
-          turnId: "turn-1",
-          item: {
-            type: "userMessage",
-            id: "user-1",
-            content: [
-              { type: "text", text: "First question" },
-            ],
+          direction: "outbound",
+          source: "tell",
+          initiator: "user",
+          input: [{ type: "text", text: "First question" }],
+          target: { kind: "auto", expectedTurnId: "turn-1" },
+          request: {
+            method: "turn/start",
+            params: {},
+          },
+          execution: {
+            model: "gpt-5",
+            serviceTier: "default",
+            reasoningLevel: "medium",
+            permissionMode: "full",
+            source: "client/turn/requested",
           },
         },
         createdAt: 1,
@@ -652,24 +658,32 @@ describe("toViewMessages assistant streams", () => {
         id: "evt-5",
         threadId: "thread-1",
         seq: 5,
-        type: "item/completed",
+        type: "client/turn/requested",
         data: {
-          providerThreadId: "thread-1",
-          threadId: "thread-1",
-          turnId: "turn-2",
-          item: {
-            type: "userMessage",
-            id: "user-2",
-            content: [
-              { type: "text", text: "Second question" },
-            ],
+          direction: "outbound",
+          source: "tell",
+          initiator: "user",
+          input: [{ type: "text", text: "Second question" }],
+          target: { kind: "auto", expectedTurnId: "turn-2" },
+          request: {
+            method: "turn/start",
+            params: {},
+          },
+          execution: {
+            model: "gpt-5",
+            serviceTier: "default",
+            reasoningLevel: "medium",
+            permissionMode: "full",
+            source: "client/turn/requested",
           },
         },
         createdAt: 5,
       },
     ];
 
-    const projected = toViewMessages(fromRows(events));
+    const projected = toViewMessages(fromRows(events), {
+      threadStatus: "idle",
+    });
 
     expect(
       projected.some(

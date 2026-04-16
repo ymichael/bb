@@ -239,6 +239,7 @@ export function seedThreadRuntimeState(
           text: args.inputText ?? "Prior task",
         },
       ],
+      target: { kind: "new-turn" },
       execution: {
         model: args.model ?? "gpt-5",
         serviceTier: args.serviceTier ?? "default",

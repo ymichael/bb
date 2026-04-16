@@ -8,19 +8,27 @@ import {
 import {
   CLAUDE_PERMISSION_REQUEST_APPROVAL_METHOD,
 } from "./interactive-contract.js";
-import type { AdapterOptions } from "../provider-adapter.js";
+import type { ProviderExecutionContext } from "../provider-adapter.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FIXTURES = resolve(__dirname, "../__fixtures__/claude-code");
 
-function loadFixture(name: string): unknown {
-  return JSON.parse(readFileSync(resolve(FIXTURES, name), "utf8"));
+function isFixtureObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-const fullAdapterOptions = {
+function loadFixture(name: string): Record<string, unknown> {
+  const parsed: unknown = JSON.parse(readFileSync(resolve(FIXTURES, name), "utf8"));
+  if (!isFixtureObject(parsed)) {
+    throw new Error(`Fixture ${name} did not contain an object`);
+  }
+  return parsed;
+}
+
+const fullProviderExecutionContext = {
   permissionMode: "full",
   permissionEscalation: null,
-} satisfies AdapterOptions;
+} satisfies ProviderExecutionContext;
 
 describe("claude-code provider adapter", () => {
   // -- Identity & capabilities ---------------------------------------------
@@ -29,11 +37,6 @@ describe("claude-code provider adapter", () => {
     const adapter = createClaudeCodeProviderAdapter();
     expect(adapter.id).toBe("claude-code");
     expect(adapter.displayName).toBe("Claude Code");
-  });
-
-  it("keeps the provider process alive after thread stop", () => {
-    const adapter = createClaudeCodeProviderAdapter();
-    expect(adapter.threadStopBehavior).toBe("keep-provider");
   });
 
   it("has correct process config", () => {
@@ -59,24 +62,51 @@ describe("claude-code provider adapter", () => {
     });
   });
 
+  it("translates accepted steers to input accepted events", () => {
+    const adapter = createClaudeCodeProviderAdapter();
+
+    expect(adapter.translateAcceptedCommand({
+      command: {
+        type: "turn/steer",
+        threadId: "thread-1",
+        providerThreadId: "provider-thread-1",
+        expectedTurnId: "turn-1",
+        clientRequestSequence: 9,
+        input: [{ type: "text", text: "steer turn" }],
+        options: fullProviderExecutionContext,
+      },
+    })).toEqual([
+      {
+        type: "turn/input/accepted",
+        threadId: "thread-1",
+        providerThreadId: "provider-thread-1",
+        turnId: "turn-1",
+        clientRequestSequence: 9,
+      },
+    ]);
+  });
+
   // -- buildCommand --------------------------------------------------------
 
-  it("buildCommand returns null for thread/name/set (rename unsupported)", () => {
+  it("buildCommand returns an unsupported no-op for thread/name/set", () => {
     const adapter = createClaudeCodeProviderAdapter();
     expect(
-      adapter.buildCommand({
+      adapter.buildCommandPlan({
         type: "thread/name/set",
         threadId: "t1",
         providerThreadId: "p1",
         title: "hi",
       }),
-    ).toBeNull();
+    ).toEqual({
+      kind: "noop",
+      reason: "rename unsupported",
+    });
   });
 
   it("buildCommand model/list routes through the bridge", () => {
     const adapter = createClaudeCodeProviderAdapter();
-    expect(adapter.buildCommand({ type: "model/list" })).toEqual({
-      jsonrpc: "2.0",
+    expect(adapter.buildCommandPlan({ type: "model/list" })).toEqual({
+      kind: "request",
       method: "model/list",
       params: {},
     });
@@ -84,13 +114,13 @@ describe("claude-code provider adapter", () => {
 
   it("buildCommand thread/start routes threadId from command", () => {
     const adapter = createClaudeCodeProviderAdapter();
-    const cmd = adapter.buildCommand({
+    const cmd = adapter.buildCommandPlan({
       type: "thread/start",
       cwd: "/tmp/worktree",
       threadId: "bb-thread-1",
       input: [{ type: "text", text: "hello" }],
       instructionMode: "append",
-      options: fullAdapterOptions,
+      options: fullProviderExecutionContext,
     });
     expect(cmd?.params).toMatchObject({
       threadId: "bb-thread-1",
@@ -102,7 +132,7 @@ describe("claude-code provider adapter", () => {
 
   it("buildCommand thread/start passes through model, env vars, instructions, reasoning level, and dynamic tools", () => {
     const adapter = createClaudeCodeProviderAdapter();
-    const cmd = adapter.buildCommand({
+    const cmd = adapter.buildCommandPlan({
       type: "thread/start",
       cwd: "/tmp/worktree",
       threadId: "bb-thread-1",
@@ -170,13 +200,13 @@ describe("claude-code provider adapter", () => {
 
   it("buildCommand thread/resume passes providerThreadId", () => {
     const adapter = createClaudeCodeProviderAdapter();
-    const cmd = adapter.buildCommand({
+    const cmd = adapter.buildCommandPlan({
       type: "thread/resume",
       cwd: "/tmp/worktree",
       threadId: "bb-thread-1",
       providerThreadId: "claude-session-1",
       instructionMode: "append",
-      options: fullAdapterOptions,
+      options: fullProviderExecutionContext,
     });
     expect(cmd?.params).toMatchObject({
       cwd: "/tmp/worktree",
@@ -189,7 +219,7 @@ describe("claude-code provider adapter", () => {
 
   it("buildCommand thread/start maps readonly deny policy to dontAsk with deny escalation", () => {
     const adapter = createClaudeCodeProviderAdapter();
-    const cmd = adapter.buildCommand({
+    const cmd = adapter.buildCommandPlan({
       type: "thread/start",
       cwd: "/tmp/worktree",
       threadId: "bb-thread-1",
@@ -208,7 +238,7 @@ describe("claude-code provider adapter", () => {
 
   it("buildCommand thread/start ignores escalation in full permission mode", () => {
     const adapter = createClaudeCodeProviderAdapter();
-    const cmd = adapter.buildCommand({
+    const cmd = adapter.buildCommandPlan({
       type: "thread/start",
       cwd: "/tmp/worktree",
       threadId: "bb-thread-1",
@@ -246,13 +276,13 @@ describe("claude-code provider adapter", () => {
 
   it("buildCommand thread/resume uses null for missing providerThreadId", () => {
     const adapter = createClaudeCodeProviderAdapter();
-    const cmd = adapter.buildCommand({
+    const cmd = adapter.buildCommandPlan({
       type: "thread/resume",
       cwd: "/tmp/worktree",
       threadId: "bb-thread-1",
       providerThreadId: undefined,
       instructionMode: "append",
-      options: fullAdapterOptions,
+      options: fullProviderExecutionContext,
     });
     expect(cmd?.params).toMatchObject({
       threadId: "bb-thread-1",
@@ -262,7 +292,7 @@ describe("claude-code provider adapter", () => {
 
   it("buildCommand thread/resume maps updated permission policy", () => {
     const adapter = createClaudeCodeProviderAdapter();
-    const cmd = adapter.buildCommand({
+    const cmd = adapter.buildCommandPlan({
       type: "thread/resume",
       cwd: "/tmp/worktree",
       threadId: "bb-thread-1",
@@ -281,14 +311,14 @@ describe("claude-code provider adapter", () => {
 
   it("buildCommand thread/resume passes through options and dynamic tools", () => {
     const adapter = createClaudeCodeProviderAdapter();
-    const cmd = adapter.buildCommand({
+    const cmd = adapter.buildCommandPlan({
       type: "thread/resume",
       cwd: "/tmp/worktree",
       threadId: "bb-thread-1",
       providerThreadId: "claude-session-1",
       instructionMode: "append",
       options: {
-        ...fullAdapterOptions,
+        ...fullProviderExecutionContext,
         model: "claude-sonnet-4-5",
         instructions: "Reopen the thread and continue carefully.",
         reasoningLevel: "high",
@@ -347,12 +377,12 @@ describe("claude-code provider adapter", () => {
 
   it("buildCommand turn/start includes input and providerThreadId", () => {
     const adapter = createClaudeCodeProviderAdapter();
-    const cmd = adapter.buildCommand({
+    const cmd = adapter.buildCommandPlan({
       type: "turn/start",
       threadId: "bb-thread-1",
       providerThreadId: "claude-session-1",
       input: [{ type: "text", text: "follow up" }],
-      options: fullAdapterOptions,
+      options: fullProviderExecutionContext,
     });
     expect(cmd?.params).toMatchObject({
       threadId: "bb-thread-1",
@@ -362,13 +392,13 @@ describe("claude-code provider adapter", () => {
 
   it("buildCommand turn/steer includes expectedTurnId", () => {
     const adapter = createClaudeCodeProviderAdapter();
-    const cmd = adapter.buildCommand({
+    const cmd = adapter.buildCommandPlan({
       type: "turn/steer",
       threadId: "bb-thread-1",
       providerThreadId: "claude-session-1",
       expectedTurnId: "turn-1",
       input: [{ type: "text", text: "steer" }],
-      options: fullAdapterOptions,
+      options: fullProviderExecutionContext,
     });
     expect(cmd?.params).toMatchObject({
       threadId: "bb-thread-1",
@@ -379,14 +409,14 @@ describe("claude-code provider adapter", () => {
 
   it("buildCommand thread/stop maps to the bridge stop command", () => {
     const adapter = createClaudeCodeProviderAdapter();
-    const cmd = adapter.buildCommand({
+    const cmd = adapter.buildCommandPlan({
       type: "thread/stop",
       threadId: "bb-thread-1",
       providerThreadId: "claude-session-1",
       activeTurnId: "turn-1",
     });
     expect(cmd).toEqual({
-      jsonrpc: "2.0",
+      kind: "request",
       method: "thread/stop",
       params: {
         threadId: "bb-thread-1",
@@ -398,7 +428,6 @@ describe("claude-code provider adapter", () => {
     const adapter = createClaudeCodeProviderAdapter();
     expect(
       adapter.decodeToolCallRequest({
-        jsonrpc: "2.0",
         id: "req-1",
         method: "item/tool/call",
         params: {
@@ -425,7 +454,6 @@ describe("claude-code provider adapter", () => {
     const adapter = createClaudeCodeProviderAdapter();
     expect(
       adapter.decodeToolCallRequest({
-        jsonrpc: "2.0",
         method: "item/tool/call",
         params: {
           threadId: "t1",
@@ -443,7 +471,6 @@ describe("claude-code provider adapter", () => {
 
     expect(
       adapter.decodeInteractiveRequest?.({
-        jsonrpc: "2.0",
         id: "req-2",
         method: CLAUDE_PERMISSION_REQUEST_APPROVAL_METHOD,
         params: {
@@ -487,7 +514,6 @@ describe("claude-code provider adapter", () => {
 
     expect(
       adapter.decodeInteractiveRequest?.({
-        jsonrpc: "2.0",
         id: "req-bash",
         method: CLAUDE_PERMISSION_REQUEST_APPROVAL_METHOD,
         params: {
@@ -532,7 +558,6 @@ describe("claude-code provider adapter", () => {
 
     expect(
       adapter.decodeInteractiveRequest?.({
-        jsonrpc: "2.0",
         id: "req-edit",
         method: CLAUDE_PERMISSION_REQUEST_APPROVAL_METHOD,
         params: {
@@ -579,7 +604,6 @@ describe("claude-code provider adapter", () => {
 
     expect(
       adapter.decodeInteractiveRequest?.({
-        jsonrpc: "2.0",
         id: "req-2b",
         method: CLAUDE_PERMISSION_REQUEST_APPROVAL_METHOD,
         params: {
@@ -1959,7 +1983,24 @@ describe("claude-code provider adapter", () => {
       type: "thread/compacted",
       threadId: "",
       providerThreadId: "",
+      turnId: "turn-1",
     });
+  });
+
+  it("translateEvent compact_boundary without a known turn is unhandled", () => {
+    const adapter = createClaudeCodeProviderAdapter();
+
+    const events = adapter.translateEvent({
+      type: "system",
+      subtype: "compact_boundary",
+      session_id: "sess-1",
+    });
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "provider/unhandled",
+      }),
+    );
   });
 
   // -- translateEvent: multiple turns --------------------------------------
@@ -2280,14 +2321,14 @@ describe("claude-code provider adapter", () => {
   it("falls back to a model-based context window when Claude omits modelUsage.contextWindow", () => {
     const adapter = createClaudeCodeProviderAdapter();
 
-    adapter.buildCommand({
+    adapter.buildCommandPlan({
       type: "thread/start",
       threadId: "bb-thread-1",
       cwd: "/tmp/worktree",
       input: [{ type: "text", text: "hello" }],
       instructionMode: "append",
       options: {
-        ...fullAdapterOptions,
+        ...fullProviderExecutionContext,
         model: "claude-opus-4-6[1m]",
       },
     });
@@ -2371,14 +2412,14 @@ describe("claude-code provider adapter", () => {
   it("keeps Claude context-window capacity unknown for the ambiguous default model alias", () => {
     const adapter = createClaudeCodeProviderAdapter();
 
-    adapter.buildCommand({
+    adapter.buildCommandPlan({
       type: "thread/start",
       threadId: "bb-thread-default",
       cwd: "/tmp/worktree",
       input: [{ type: "text", text: "hello" }],
       instructionMode: "append",
       options: {
-        ...fullAdapterOptions,
+        ...fullProviderExecutionContext,
         model: "default",
       },
     });

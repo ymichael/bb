@@ -109,7 +109,7 @@ describe("public thread send and steer routes", () => {
         )
         .all()
         .filter((event) => event.type === "client/turn/requested");
-      expect(requestedEvents).toHaveLength(0);
+      expect(requestedEvents).toHaveLength(1);
 
       expect(getThread(harness.db, createdThread.id)).toMatchObject({
         status: "provisioning",
@@ -129,7 +129,7 @@ describe("public thread send and steer routes", () => {
   });
 
 
-  it("queues turn.run for idle threads and turn.steer for active threads", async () => {
+  it("queues turn.submit for idle and active threads", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps);
@@ -166,6 +166,7 @@ describe("public thread send and steer routes", () => {
         data: {
           direction: "outbound",
           input: [{ type: "text", text: "Prior task" }],
+          target: { kind: "new-turn" },
           execution: {
             model: "gpt-5",
             serviceTier: "default",
@@ -199,6 +200,7 @@ describe("public thread send and steer routes", () => {
         data: {
           direction: "outbound",
           input: [{ type: "text", text: "Prior task" }],
+          target: { kind: "new-turn" },
           execution: {
             model: "gpt-5",
             serviceTier: "default",
@@ -232,10 +234,11 @@ describe("public thread send and steer routes", () => {
       const runCommand = await waitForQueuedCommand(
         harness,
         ({ command }) =>
-          command.type === "turn.run" && command.threadId === idleThread.id,
+          command.type === "turn.submit" && command.threadId === idleThread.id,
       );
       expect(runCommand.command).toMatchObject({
         environmentId: environment.id,
+        target: { mode: "start" },
         options: {
           model: "gpt-5",
           serviceTier: "default",
@@ -269,11 +272,14 @@ describe("public thread send and steer routes", () => {
       const steerCommand = await waitForQueuedCommand(
         harness,
         ({ command }) =>
-          command.type === "turn.steer" && command.threadId === activeThread.id,
+          command.type === "turn.submit" && command.threadId === activeThread.id,
       );
       expect(steerCommand.command).toMatchObject({
-        expectedTurnId: "turn-1",
         environmentId: environment.id,
+        target: {
+          mode: "steer",
+          expectedTurnId: "turn-1",
+        },
         options: {
           model: "gpt-5",
           serviceTier: "default",
@@ -294,7 +300,7 @@ describe("public thread send and steer routes", () => {
   });
 
 
-  it("does not steer a thread whose latest provider turn is already closed", async () => {
+  it("queues explicit stale steer for daemon fallback to a new turn", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps);
@@ -313,8 +319,33 @@ describe("public thread send and steer routes", () => {
         threadId: activeThread.id,
         environmentId: environment.id,
         providerThreadId: "provider-closed-turn",
-        turnId: "turn-closed",
         sequence: 1,
+        type: "client/turn/requested",
+        data: {
+          direction: "outbound",
+          input: [{ type: "text", text: "Prior task" }],
+          target: { kind: "new-turn" },
+          execution: {
+            model: "gpt-5",
+            serviceTier: "default",
+            reasoningLevel: "medium",
+            permissionMode: "full",
+            source: "client/turn/requested",
+          },
+          initiator: "user",
+          request: {
+            method: "turn/start",
+            params: {},
+          },
+          source: "tell",
+        },
+      });
+      seedEvent(harness.deps, {
+        threadId: activeThread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-closed-turn",
+        turnId: "turn-closed",
+        sequence: 2,
         type: "turn/started",
         data: {},
       });
@@ -323,7 +354,7 @@ describe("public thread send and steer routes", () => {
         environmentId: environment.id,
         providerThreadId: "provider-closed-turn",
         turnId: "turn-closed",
-        sequence: 2,
+        sequence: 3,
         type: "turn/completed",
         data: { status: "completed" },
       });
@@ -342,10 +373,17 @@ describe("public thread send and steer routes", () => {
         },
       );
 
-      expect(steerResponse.status).toBe(409);
-      await expect(readJson(steerResponse)).resolves.toMatchObject({
-        code: "invalid_request",
-        message: "No active turn to steer",
+      expect(steerResponse.status).toBe(200);
+      const steerCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "turn.submit" && command.threadId === activeThread.id,
+      );
+      expect(steerCommand.command).toMatchObject({
+        target: {
+          mode: "steer",
+          expectedTurnId: null,
+        },
       });
       const threadEvents = harness.db
         .select({ type: events.type })
@@ -354,8 +392,10 @@ describe("public thread send and steer routes", () => {
         .orderBy(events.sequence)
         .all();
       expect(threadEvents.map((event) => event.type)).toEqual([
+        "client/turn/requested",
         "turn/started",
         "turn/completed",
+        "client/turn/requested",
       ]);
     } finally {
       await harness.cleanup();
@@ -482,11 +522,14 @@ describe("public thread send and steer routes", () => {
       const steerCommand = await waitForQueuedCommand(
         harness,
         ({ command }) =>
-          command.type === "turn.steer" && command.threadId === thread.id,
+          command.type === "turn.submit" && command.threadId === thread.id,
       );
       expect(steerCommand.command).toMatchObject({
-        expectedTurnId: "turn-draft-steer",
         input: [{ type: "text", text: "Queue a correction" }],
+        target: {
+          mode: "auto",
+          expectedTurnId: "turn-draft-steer",
+        },
         options: {
           model: "gpt-5",
         },

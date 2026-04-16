@@ -9,6 +9,7 @@ import type {
   ThreadEventRowOfType,
   ThreadEventUserContent,
   ThreadTurnInitiator,
+  TurnRequestTarget,
   TimelineRow,
   TimelineToolGroupRow,
   ViewMessage,
@@ -62,14 +63,19 @@ type ClientTurnRequestedArgs = EventFactoryRowOptions & {
   execution?: ResolvedThreadExecutionOptions;
   initiator?: ThreadTurnInitiator;
   input?: PromptInput[];
+  requestMethod?: "thread/start" | "turn/start";
   source?: "spawn" | "tell";
+  target?: TurnRequestTarget;
   text: string;
 };
 
 type ClientThreadStartArgs = ClientTurnRequestedArgs;
 
-interface UserMessageAckArgs extends ProviderTurnEventOptions {
-  clientRequestSequence?: number;
+interface InputAcceptedArgs extends ProviderTurnEventOptions {
+  clientRequestSequence: number;
+}
+
+interface ProviderUserMessageArgs extends ProviderTurnEventOptions {
   content?: ThreadEventUserContent[];
   itemId?: string;
   text: string;
@@ -155,15 +161,16 @@ export interface TimelineEventFactory {
   clientTurnRequested(args: ClientTurnRequestedArgs): ThreadEventRowOfType<"client/turn/requested">;
   commandCompleted(args: CommandCompletedArgs): ThreadEventRowOfType<"item/completed">;
   fileChangeCompleted(args: FileChangeCompletedArgs): ThreadEventRowOfType<"item/completed">;
+  inputAccepted(args: InputAcceptedArgs): ThreadEventRowOfType<"turn/input/accepted">;
   managerUserMessage(args: ManagerUserMessageArgs): ThreadEventRowOfType<"system/manager/user_message">;
   permissionGrantLifecycle(args?: PermissionGrantLifecycleArgs): ThreadEventRowOfType<"system/permissionGrant/lifecycle">;
+  providerUserMessage(args: ProviderUserMessageArgs): ThreadEventRowOfType<"item/completed">;
   systemError(args: SystemErrorArgs): ThreadEventRowOfType<"system/error">;
   threadProvisioning(args: ThreadProvisioningArgs): ThreadEventRowOfType<"system/thread-provisioning">;
   toolCallCompleted(args: ToolCallCompletedArgs): ThreadEventRowOfType<"item/completed">;
   turnCompleted(args?: ProviderTurnEventOptions & { status?: "completed" | "failed" | "interrupted" }): ThreadEventRowOfType<"turn/completed">;
   turnPlanUpdated(args: TurnPlanUpdatedArgs): ThreadEventRowOfType<"turn/plan/updated">;
   turnStarted(args?: ProviderTurnEventOptions): ThreadEventRowOfType<"turn/started">;
-  userMessageAck(args: UserMessageAckArgs): ThreadEventRowOfType<"item/completed">;
   webSearchCompleted(args: WebSearchCompletedArgs): ThreadEventRowOfType<"item/completed">;
 }
 
@@ -288,14 +295,9 @@ export function createTimelineEventFactory(
           direction: "outbound",
           source: args.source ?? "spawn",
           initiator: args.initiator ?? "user",
-          input: args.input ?? [{ type: "text", text: args.text }],
           request: {
             method: "thread/start",
             params: {},
-          },
-          execution: args.execution ?? {
-            ...defaultExecution,
-            source: "client/thread/start",
           },
         },
       };
@@ -310,8 +312,9 @@ export function createTimelineEventFactory(
           source: args.source ?? "tell",
           initiator: args.initiator ?? "user",
           input: args.input ?? [{ type: "text", text: args.text }],
+          target: args.target ?? { kind: "new-turn" },
           request: {
-            method: "turn/start",
+            method: args.requestMethod ?? "turn/start",
             params: {},
           },
           execution: args.execution ?? defaultExecution,
@@ -352,6 +355,17 @@ export function createTimelineEventFactory(
             status: args.status ?? "completed",
             approvalStatus: args.approvalStatus ?? null,
           },
+        },
+      };
+    },
+    inputAccepted(args) {
+      const base = nextRowBase("input-accepted", args);
+      return {
+        ...base,
+        type: "turn/input/accepted",
+        data: {
+          ...providerFields(args),
+          clientRequestSequence: args.clientRequestSequence,
         },
       };
     },
@@ -463,8 +477,8 @@ export function createTimelineEventFactory(
         data: providerFields(args),
       };
     },
-    userMessageAck(args) {
-      const base = nextRowBase("user-message-ack", args);
+    providerUserMessage(args) {
+      const base = nextRowBase("provider-user-message", args);
       return {
         ...base,
         type: "item/completed",
@@ -474,9 +488,6 @@ export function createTimelineEventFactory(
             type: "userMessage",
             id: args.itemId ?? `user-${base.seq}`,
             content: args.content ?? [{ type: "text", text: args.text }],
-            ...(args.clientRequestSequence !== undefined
-              ? { clientRequestSequence: args.clientRequestSequence }
-              : {}),
           },
         },
       };

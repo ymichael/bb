@@ -1,10 +1,51 @@
 import type { ChildProcess } from "node:child_process";
 import { z } from "zod";
-import {
-  ProviderRequestDecodeError,
-  ProviderResponseEncodeError,
-  type JsonRpcMessage,
-} from "./provider-adapter.js";
+import type { ProviderRequestCommandPlan } from "./provider-adapter.js";
+
+export type JsonRpcObject = Record<string, unknown>;
+
+export interface JsonRpcMessage extends JsonRpcObject {
+  jsonrpc: "2.0";
+  id?: string | number;
+  method: string;
+  params?: unknown;
+}
+
+export interface ProviderInboundRequest {
+  id?: string | number;
+  method: string;
+  params?: unknown;
+}
+
+export type ProviderRuntimeEvent = JsonRpcObject;
+
+export type JsonValue =
+  | boolean
+  | number
+  | string
+  | null
+  | JsonValue[]
+  | { [key: string]: JsonValue | undefined };
+
+export const JSON_RPC_INVALID_PARAMS_CODE = -32602;
+
+export class ProviderRequestDecodeError extends Error {
+  readonly code = JSON_RPC_INVALID_PARAMS_CODE;
+
+  constructor(message: string) {
+    super(message);
+    this.name = "ProviderRequestDecodeError";
+  }
+}
+
+export class ProviderResponseEncodeError extends Error {
+  readonly code = JSON_RPC_INVALID_PARAMS_CODE;
+
+  constructor(message: string) {
+    super(message);
+    this.name = "ProviderResponseEncodeError";
+  }
+}
 
 export interface PendingJsonRpcRequest {
   resolve: (result: unknown) => void;
@@ -12,8 +53,6 @@ export interface PendingJsonRpcRequest {
 }
 
 export const ignoredJsonRpcResultSchema = z.unknown();
-
-export type JsonRpcObject = Record<string, unknown>;
 
 export interface ParsedJsonRpcNonJsonLine {
   kind: "non_json";
@@ -52,7 +91,7 @@ export type ParsedJsonRpcLine =
 export interface SendJsonRpcRequestArgs<TResult> {
   child: ChildProcess;
   getNextId: () => number;
-  message: JsonRpcMessage;
+  message: JsonRpcMessage | ProviderRequestCommandPlan;
   pending: Map<string | number, PendingJsonRpcRequest>;
   resultSchema: z.ZodType<TResult>;
   timeoutMs?: number;
@@ -181,28 +220,42 @@ export function settleJsonRpcResponse(args: SettleJsonRpcResponseArgs): void {
 
 export function sendJsonRpc(
   child: ChildProcess,
-  message: JsonRpcMessage,
+  message: JsonRpcMessage | ProviderRequestCommandPlan,
 ): void {
-  const line = JSON.stringify(message);
+  const line = JSON.stringify(toJsonRpcMessage(message));
   child.stdin?.write(line + "\n");
+}
+
+export function toJsonRpcMessage(
+  message: JsonRpcMessage | ProviderRequestCommandPlan,
+): JsonRpcMessage {
+  if ("jsonrpc" in message) {
+    return message;
+  }
+  return {
+    jsonrpc: "2.0",
+    method: message.method,
+    ...(message.params !== undefined ? { params: message.params } : {}),
+  };
 }
 
 export function sendJsonRpcRequest<TResult>(
   args: SendJsonRpcRequestArgs<TResult>,
 ): Promise<TResult> {
   const id = args.getNextId();
-  const withId: JsonRpcMessage = { ...args.message, id };
+  const message = toJsonRpcMessage(args.message);
+  const withId: JsonRpcMessage = { ...message, id };
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
       args.pending.delete(id);
-      reject(new Error(`JSON-RPC request timed out: ${args.message.method}`));
+      reject(new Error(`JSON-RPC request timed out: ${message.method}`));
     }, args.timeoutMs ?? 30_000);
     args.pending.set(id, {
       resolve: (result) => {
         clearTimeout(timer);
         const parsedResult = args.resultSchema.safeParse(result);
         if (!parsedResult.success) {
-          reject(new Error(`Invalid JSON-RPC result for ${args.message.method}`));
+          reject(new Error(`Invalid JSON-RPC result for ${message.method}`));
           return;
         }
         resolve(parsedResult.data);

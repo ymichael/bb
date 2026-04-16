@@ -12,7 +12,7 @@ import type {
   ProviderUnhandledEvent,
 } from "@bb/domain";
 import type { ProviderVisibilityMetadata } from "../provider-visibility.js";
-import type { JsonRpcMessage } from "../provider-adapter.js";
+import type { JsonRpcMessage } from "../runtime-json-rpc.js";
 import {
   getStringProperty,
   isRecord,

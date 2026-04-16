@@ -8,9 +8,7 @@
 import { z } from "zod";
 import type {
   ModelReasoningEffort,
-  PromptInput,
   ThreadEventItem,
-  ThreadEventUserContent,
 } from "@bb/domain";
 import {
   contentWrapperSchema,
@@ -41,45 +39,6 @@ export const XHIGH_REASONING_EFFORT: ModelReasoningEffort = {
   reasoningEffort: "xhigh",
   description: "Extra high reasoning effort",
 };
-
-// ---------------------------------------------------------------------------
-// User message ack helpers
-// ---------------------------------------------------------------------------
-
-function toThreadEventUserContent(input: PromptInput[]): ThreadEventUserContent[] {
-  return input.map((item) => {
-    switch (item.type) {
-      case "text":
-        return { type: "text", text: item.text };
-      case "image":
-        return { type: "image", url: item.url };
-      case "localImage":
-        return { type: "localImage", path: item.path };
-      case "localFile":
-        return { type: "localFile", path: item.path };
-      default: {
-        const exhaustive: never = item;
-        throw new Error(`Unsupported prompt input type: ${String(exhaustive)}`);
-      }
-    }
-  });
-}
-
-export function buildUserMessageAckItem(
-  input: PromptInput[],
-  itemId: string,
-  clientRequestSequence: number | undefined,
-): Extract<ThreadEventItem, { type: "userMessage" }> | null {
-  if (input.length === 0) {
-    return null;
-  }
-  return {
-    type: "userMessage",
-    id: itemId,
-    content: toThreadEventUserContent(input),
-    ...(clientRequestSequence !== undefined ? { clientRequestSequence } : {}),
-  };
-}
 
 const shellEnvironmentVariableKeySchema = z.string().regex(
   /^[A-Z_][A-Z0-9_]*$/i,

@@ -8,21 +8,26 @@ import {
 import type {
   AdapterCommand,
   DecodedToolCallRequest,
-  JsonRpcMessage,
   ProviderAdapter,
+  ProviderCommandPlan,
 } from "../provider-adapter.js";
+import { noPreparedProviderCommandDispatch } from "../provider-adapter.js";
+import type {
+  ProviderInboundRequest,
+  ProviderRuntimeEvent,
+} from "../runtime-json-rpc.js";
 import { parseAvailableModelList } from "../shared/available-models.js";
 import { decodeNormalizedProviderToolCallRequest } from "../shared/provider-tool-call-contract.js";
 
-export interface CreateFakeAdapterOptions {
+export interface CreateFakeProviderExecutionContext {
   displayName?: string;
   id?: string;
   scriptPath?: string;
 }
 
 interface FakeEventMessage {
-  method?: string;
-  params?: Record<string, unknown>;
+  method: string;
+  params: Record<string, unknown>;
 }
 
 const DEFAULT_ADAPTER_ID = "fake";
@@ -50,15 +55,15 @@ function resolveFakeProviderScriptPath(): string {
 
 export const fakeProviderScriptPath = resolveFakeProviderScriptPath();
 
-function buildCommand(command: AdapterCommand): JsonRpcMessage | null {
+function buildCommandPlan(command: AdapterCommand): ProviderCommandPlan {
   switch (command.type) {
     case "initialize":
-      return { jsonrpc: "2.0", method: "initialize", params: {} };
+      return { kind: "request", method: "initialize", params: {} };
     case "model/list":
-      return { jsonrpc: "2.0", method: "model/list", params: {} };
+      return { kind: "request", method: "model/list", params: {} };
     case "thread/start":
       return {
-        jsonrpc: "2.0",
+        kind: "request",
         method: "thread/start",
         params: {
           cwd: command.cwd,
@@ -70,20 +75,19 @@ function buildCommand(command: AdapterCommand): JsonRpcMessage | null {
       };
     case "thread/resume":
       return {
-        jsonrpc: "2.0",
+        kind: "request",
         method: "thread/resume",
         params: {
           cwd: command.cwd,
           dynamicTools: command.dynamicTools,
           options: command.options,
           providerThreadId: command.providerThreadId,
-          resumePath: command.resumePath,
           threadId: command.threadId,
         },
       };
     case "turn/start":
       return {
-        jsonrpc: "2.0",
+        kind: "request",
         method: "turn/start",
         params: {
           input: command.input,
@@ -94,7 +98,7 @@ function buildCommand(command: AdapterCommand): JsonRpcMessage | null {
       };
     case "turn/steer":
       return {
-        jsonrpc: "2.0",
+        kind: "request",
         method: "turn/steer",
         params: {
           expectedTurnId: command.expectedTurnId,
@@ -105,7 +109,7 @@ function buildCommand(command: AdapterCommand): JsonRpcMessage | null {
       };
     case "thread/stop":
       return {
-        jsonrpc: "2.0",
+        kind: "request",
         method: "thread/stop",
         params: {
           activeTurnId: command.activeTurnId,
@@ -115,7 +119,7 @@ function buildCommand(command: AdapterCommand): JsonRpcMessage | null {
       };
     case "thread/name/set":
       return {
-        jsonrpc: "2.0",
+        kind: "request",
         method: "thread/name/set",
         params: {
           providerThreadId: command.providerThreadId,
@@ -125,27 +129,41 @@ function buildCommand(command: AdapterCommand): JsonRpcMessage | null {
       };
     default: {
       const _exhaustive: never = command;
-      void _exhaustive;
-      return null;
+      throw new Error(`Unhandled fake adapter command: ${String(_exhaustive)}`);
     }
   }
 }
 
-function translateEventMessage(event: FakeEventMessage): ThreadEvent[] {
-  if (!event.method || !event.params) {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function toFakeEventMessage(event: ProviderRuntimeEvent): FakeEventMessage | null {
+  if (typeof event.method !== "string" || !isRecord(event.params)) {
+    return null;
+  }
+  return {
+    method: event.method,
+    params: event.params,
+  };
+}
+
+function translateEventMessage(event: ProviderRuntimeEvent): ThreadEvent[] {
+  const message = toFakeEventMessage(event);
+  if (!message) {
     return [];
   }
 
   const threadId =
-    typeof event.params.threadId === "string" ? event.params.threadId : "";
+    typeof message.params.threadId === "string" ? message.params.threadId : "";
   const turnId =
-    typeof event.params.turnId === "string" ? event.params.turnId : "";
+    typeof message.params.turnId === "string" ? message.params.turnId : "";
   const providerThreadId =
-    typeof event.params.providerThreadId === "string"
-      ? event.params.providerThreadId
+    typeof message.params.providerThreadId === "string"
+      ? message.params.providerThreadId
       : "";
 
-  switch (event.method) {
+  switch (message.method) {
     case "thread/identity":
       return [
         {
@@ -163,7 +181,8 @@ function translateEventMessage(event: FakeEventMessage): ThreadEvent[] {
           turnId,
         },
       ];
-    case "turn/completed":
+    case "turn/completed": {
+      const status = message.params.status;
       return [
         {
           type: "turn/completed",
@@ -171,22 +190,27 @@ function translateEventMessage(event: FakeEventMessage): ThreadEvent[] {
           providerThreadId,
           turnId,
           status:
-            event.params.status === "failed" ||
-            event.params.status === "interrupted"
-              ? event.params.status
+            status === "failed" || status === "interrupted"
+              ? status
               : "completed",
         },
       ];
-    case "item/completed":
+    }
+    case "item/completed": {
+      const item = threadEventItemSchema.parse(message.params.item);
+      if (item.type === "userMessage") {
+        return [];
+      }
       return [
         {
           type: "item/completed",
           threadId,
           providerThreadId,
           turnId,
-          item: threadEventItemSchema.parse(event.params.item),
+          item,
         },
       ];
+    }
     case "thread/name/updated":
       return [
         {
@@ -194,8 +218,8 @@ function translateEventMessage(event: FakeEventMessage): ThreadEvent[] {
           threadId,
           providerThreadId,
           threadName:
-            typeof event.params.threadName === "string"
-              ? event.params.threadName
+            typeof message.params.threadName === "string"
+              ? message.params.threadName
               : "",
         },
       ];
@@ -204,7 +228,9 @@ function translateEventMessage(event: FakeEventMessage): ThreadEvent[] {
   }
 }
 
-function decodeToolCallRequest(request: JsonRpcMessage): DecodedToolCallRequest | null {
+function decodeToolCallRequest(
+  request: ProviderInboundRequest,
+): DecodedToolCallRequest | null {
   if (typeof request.id !== "string" && typeof request.id !== "number") {
     return null;
   }
@@ -220,7 +246,7 @@ function parseModelListResult(result: unknown): AvailableModel[] {
 }
 
 export function createFakeAdapter(
-  options: CreateFakeAdapterOptions = {},
+  options: CreateFakeProviderExecutionContext = {},
 ): ProviderAdapter {
   /*
    * Fake provider input control tokens:
@@ -230,7 +256,7 @@ export function createFakeAdapter(
    * - remaining text is echoed back as `Response to: ...`.
    */
   return {
-    buildCommand,
+    buildCommandPlan,
     capabilities: {
       supportsRename: true,
       supportsServiceTier: false,
@@ -240,16 +266,13 @@ export function createFakeAdapter(
     displayName: options.displayName ?? DEFAULT_DISPLAY_NAME,
     id: options.id ?? DEFAULT_ADAPTER_ID,
     parseModelListResult,
-    threadStopBehavior: "keep-provider",
+    prepareTurnStart: noPreparedProviderCommandDispatch,
     process: {
       args: [options.scriptPath ?? fakeProviderScriptPath],
       command: "node",
     },
     translateEvent(event) {
-      if (!event || typeof event !== "object") {
-        return [];
-      }
-      return translateEventMessage(event as FakeEventMessage);
+      return translateEventMessage(event);
     },
     translateAcceptedCommand() {
       return [];

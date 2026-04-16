@@ -7,7 +7,7 @@ import {
 } from "node:fs";
 import { basename, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { AgentRuntimeCaptureEntry } from "@bb/agent-runtime";
+import type { AgentRuntimeCaptureEntry } from "@bb/agent-runtime/capture";
 import { z } from "zod";
 import {
   providerAuditClientRequestSchema,

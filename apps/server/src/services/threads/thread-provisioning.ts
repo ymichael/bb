@@ -108,6 +108,7 @@ const threadProvisionEnvironmentIntentSchema = z.discriminatedUnion("type", [
 ]);
 
 const threadProvisionCommonPayloadSchema = z.object({
+  clientRequestSequence: z.number().int().nonnegative(),
   environmentIntent: threadProvisionEnvironmentIntentSchema,
   execution: resolvedThreadExecutionOptionsSchema,
   input: z.array(promptInputSchema),
@@ -356,9 +357,10 @@ function isProvisionablePayload(
 }
 
 function createMetadataPendingPayload(
-  args: RequestThreadProvisionArgs,
+  args: RequestThreadProvisionArgs & { clientRequestSequence: number },
 ): ThreadProvisionMetadataPendingPayload {
   return {
+    clientRequestSequence: args.clientRequestSequence,
     environmentIntent: args.environmentIntent,
     execution: args.execution,
     input: args.input,
@@ -373,6 +375,7 @@ function createEnvironmentPendingPayload(
 ): ThreadProvisionEnvironmentPendingPayload {
   return {
     branchSlug: args.branchSlug,
+    clientRequestSequence: payload.clientRequestSequence,
     environmentIntent: payload.environmentIntent,
     execution: payload.execution,
     input: payload.input,
@@ -388,6 +391,7 @@ function createEnvironmentAttachedPayload(
   return {
     attachedEnvironmentId: args.attachedEnvironmentId,
     branchSlug: payload.branchSlug,
+    clientRequestSequence: payload.clientRequestSequence,
     environmentIntent: payload.environmentIntent,
     execution: payload.execution,
     input: payload.input,
@@ -403,6 +407,7 @@ function createEnvironmentProvisioningPayload(
   return {
     attachedEnvironmentId: payload.attachedEnvironmentId,
     branchSlug: payload.branchSlug,
+    clientRequestSequence: payload.clientRequestSequence,
     environmentIntent: payload.environmentIntent,
     execution: payload.execution,
     input: payload.input,
@@ -413,7 +418,7 @@ function createEnvironmentProvisioningPayload(
 }
 
 function createReprovisioningPayload(
-  args: RequestThreadReprovisionArgs,
+  args: RequestThreadReprovisionArgs & { clientRequestSequence: number },
 ): ThreadProvisionEnvironmentProvisioningPayload {
   return {
     attachedEnvironmentId: args.environment.id,
@@ -422,6 +427,7 @@ function createReprovisioningPayload(
       type: "reuse",
       environmentId: args.environment.id,
     },
+    clientRequestSequence: args.clientRequestSequence,
     execution: args.execution,
     input: args.input,
     provisionEventSequence: args.eventSequence,
@@ -437,6 +443,7 @@ function createWorkspaceReadyPayload(
   return {
     attachedEnvironmentId: payload.attachedEnvironmentId,
     branchSlug: payload.branchSlug,
+    clientRequestSequence: payload.clientRequestSequence,
     environmentIntent: payload.environmentIntent,
     execution: payload.execution,
     input: payload.input,
@@ -1084,7 +1091,7 @@ async function startThreadIfEnvironmentReady(
       workspaceProvisionType: args.environment.workspaceProvisionType,
     },
     input: args.payload.input,
-    eventSequence: workspaceReadyEventSequence,
+    eventSequence: args.payload.clientRequestSequence,
     execution: args.payload.execution,
     permissionEscalation: resolvePermissionEscalation({
       thread: args.thread,
@@ -1100,18 +1107,30 @@ export function requestThreadProvision(
   deps: Pick<AppDeps, "db" | "hub">,
   args: RequestThreadProvisionArgs,
 ): void {
-  appendClientTurnEvent(deps, {
+  const clientRequestSequence = appendClientTurnEvent(deps, {
     threadId: args.thread.id,
     environmentId: args.thread.environmentId,
-    type: "client/thread/start",
+    type: "client/turn/requested",
     input: args.input,
     execution: args.execution,
     initiator: args.thread.type === "manager" ? "system" : "user",
     requestMethod: "thread/start",
     source: "spawn",
+    target: { kind: "thread-start" },
+  });
+  appendClientTurnEvent(deps, {
+    threadId: args.thread.id,
+    environmentId: args.thread.environmentId,
+    type: "client/thread/start",
+    initiator: args.thread.type === "manager" ? "system" : "user",
+    requestMethod: "thread/start",
+    source: "spawn",
   });
 
-  const payload = createMetadataPendingPayload(args);
+  const payload = createMetadataPendingPayload({
+    ...args,
+    clientRequestSequence,
+  });
   upsertThreadOperationRecord(deps.db, {
     threadId: args.thread.id,
     kind: "provision",
@@ -1123,7 +1142,7 @@ export function requestThreadReprovision(
   deps: Pick<AppDeps, "db" | "hub">,
   args: RequestThreadReprovisionArgs,
 ): void {
-  appendClientTurnEvent(deps, {
+  const clientRequestSequence = appendClientTurnEvent(deps, {
     threadId: args.thread.id,
     environmentId: args.environment.id,
     type: "client/turn/requested",
@@ -1132,9 +1151,13 @@ export function requestThreadReprovision(
     initiator: args.initiator,
     requestMethod: "turn/start",
     source: "tell",
+    target: { kind: "new-turn" },
   });
 
-  const payload = createReprovisioningPayload(args);
+  const payload = createReprovisioningPayload({
+    ...args,
+    clientRequestSequence,
+  });
   upsertThreadOperationRecord(deps.db, {
     threadId: args.thread.id,
     kind: "provision",

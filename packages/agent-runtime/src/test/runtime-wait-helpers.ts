@@ -68,15 +68,6 @@ export interface RuntimeThreadAgentMessageWaitArgs
   timeoutMs?: number;
 }
 
-export interface RuntimeThreadUserMessageWaitArgs extends RuntimeFailureContext {
-  events: ThreadEvent[];
-  label?: string;
-  text: string;
-  threadId: string;
-  timeoutMs?: number;
-  turnId?: string;
-}
-
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -251,22 +242,5 @@ export async function waitForThreadAgentMessageText(
       event.threadId === args.threadId &&
       event.item.type === "agentMessage" &&
       event.item.text.includes(args.text),
-  });
-}
-
-export async function waitForThreadUserMessageText(
-  args: RuntimeThreadUserMessageWaitArgs,
-): Promise<void> {
-  await waitForRuntimeThreadEvent({
-    ...args,
-    label: args.label ?? `user message for ${args.threadId}`,
-    predicate: (event) =>
-      event.type === "item/completed" &&
-      event.threadId === args.threadId &&
-      event.item.type === "userMessage" &&
-      (!args.turnId || event.turnId === args.turnId) &&
-      event.item.content.some((content) =>
-        content.type === "text" && content.text === args.text,
-      ),
   });
 }

@@ -31,12 +31,8 @@ import {
 export type { ThreadEventWithMeta } from "./build-view-projection.js";
 import { parseTaskMessage, shouldSuppressLowValueToolCall } from "./task-message-parsing.js";
 import {
-  parsePromptInput,
-  userMessageSignature,
-  shouldRenderThreadStartInput,
   shouldPreservePendingMessages,
-  parseUserFromItemEvent,
-  parseUserFromClientStart,
+  parseUserFromClientRequest,
   parseManagerUserMessage,
 } from "./user-message-parsing.js";
 import {
@@ -46,19 +42,6 @@ import {
   parseReasoningFinalText,
   isTerminalAssistantFlushEvent,
 } from "./assistant-buffering.js";
-import {
-  buildUserMessageKey,
-  clearPendingUserSignatureCounts,
-  consumePendingClientStartUser,
-  createPendingUserSignatureCounts,
-  getClientStartEventContext,
-  materializePendingClientRequestedUserMessages,
-  recordProjectedClientUser,
-  recordProjectedProviderUser,
-  shiftPendingClientRequestedUser,
-  shouldSkipProjectedClientUser,
-  type ProjectedUserMessage,
-} from "./user-message-dedup.js";
 import {
   createToolActivityState,
   flushActiveToolCell,
@@ -74,7 +57,6 @@ import {
 import {
   onCompactionBegin,
   onCompactionEnd,
-  resolveProjectedCompactionEvent,
   upsertFileEdit,
 } from "./operation-projection.js";
 import {
@@ -97,6 +79,8 @@ import type {
 
 // --- Projection state machine ---
 
+type ProjectedUserMessage = Extract<ViewMessage, { kind: "user" }>;
+
 interface ProjectionState {
   messages: ViewMessage[];
   seenUserKeys: Set<string>;
@@ -106,7 +90,6 @@ interface ProjectionState {
   finalizedReasoningTurnKeys: Set<string>;
   openCompactionsByKey: Map<string, ViewOperationMessage>;
   finalizedCompactionKeys: Set<string>;
-  lastCompletedCompactionKeyByThreadId: Map<string, string>;
   fileEditsByCallId: Map<string, ViewFileEditMessage>;
   delegationParentToolCallIdsByProviderThreadId: Map<string, string>;
   toolActivity: ToolActivityState;
@@ -122,7 +105,6 @@ function createProjectionState(): ProjectionState {
     finalizedReasoningTurnKeys: new Set(),
     openCompactionsByKey: new Map(),
     finalizedCompactionKeys: new Set(),
-    lastCompletedCompactionKeyByThreadId: new Map(),
     fileEditsByCallId: new Map(),
     delegationParentToolCallIdsByProviderThreadId: new Map(),
     toolActivity: createToolActivityState(),
@@ -135,6 +117,19 @@ const PROVIDER_THREAD_CHILD_INTERACTION_TOOL_NAMES = new Set([
   "wait",
   "closeAgent",
 ]);
+
+function buildClientRequestTurnIdBySequence(
+  events: ThreadEventWithMeta[],
+): Map<number, string> {
+  const turnIdBySequence = new Map<number, string>();
+  for (const { event } of events) {
+    if (event.type !== "turn/input/accepted") {
+      continue;
+    }
+    turnIdBySequence.set(event.clientRequestSequence, event.turnId);
+  }
+  return turnIdBySequence;
+}
 
 function getToolCallName(decoded: ThreadEvent): string | undefined {
   if (
@@ -210,11 +205,10 @@ function buildFlatViewMessages(
 
   const state = createProjectionState();
   const includeDebugRawEvents = options?.includeDebugRawEvents ?? false;
-  const includeInternalSystemMessages =
-    options?.includeInternalSystemMessages ?? false;
 
   const orderedEvents = getOrderedThreadEvents(events);
-  const pendingUserSignatureCounts = createPendingUserSignatureCounts();
+  const clientRequestTurnIdBySequence =
+    buildClientRequestTurnIdBySequence(orderedEvents);
   const execLifecycleContext = createExecLifecycleContext();
 
   for (const { event: decoded, meta } of orderedEvents) {
@@ -228,113 +222,21 @@ function buildFlatViewMessages(
         ? state.delegationParentToolCallIdsByProviderThreadId.get(eventProviderThreadId)
         : undefined);
 
-    if (eventType === "turn/completed") {
-      clearPendingUserSignatureCounts({ counts: pendingUserSignatureCounts });
-    }
-
     if (state.openAssistantByTurn.size > 0 && isTerminalAssistantFlushEvent(eventType)) {
       flushBufferedAssistantMessages(state);
     }
 
-    if (
-      decoded.type === "client/thread/start" ||
-      decoded.type === "client/turn/requested" ||
-      decoded.type === "client/turn/start"
-    ) {
-      if (
-        decoded.initiator === "system" &&
-        !includeInternalSystemMessages
-      ) {
-        const parsedInput = parsePromptInput(decoded.input);
-        if (parsedInput && shouldRenderThreadStartInput(options?.threadStatus)) {
-          const signature = userMessageSignature({
-            text: parsedInput.text,
-            webImages: parsedInput.webImages,
-            localImages: parsedInput.localImages,
-            localFiles: parsedInput.localFiles,
-          });
-          const clientStartContext = getClientStartEventContext(
-            decoded.type,
-            decoded.source,
-          );
-          if (
-            clientStartContext &&
-            shouldSkipProjectedClientUser({
-              counts: pendingUserSignatureCounts,
-              signature,
-              context: clientStartContext,
-            })
-          ) {
-            continue;
-          }
-          if (clientStartContext) {
-            recordProjectedClientUser({
-              clientRequestSequence: meta.seq,
-              counts: pendingUserSignatureCounts,
-              signature,
-              context: clientStartContext,
-            });
-          }
-        }
-        continue;
-      }
-    }
-
-    const userFromClientThreadStart = parseUserFromClientStart(
+    const userFromClientRequest = parseUserFromClientRequest({
       decoded,
       meta,
       options,
-    );
-    if (userFromClientThreadStart) {
-      const signature = userMessageSignature({
-        text: userFromClientThreadStart.text,
-        webImages: userFromClientThreadStart.attachments?.webImages ?? 0,
-        localImages: userFromClientThreadStart.attachments?.localImages ?? 0,
-        localFiles: userFromClientThreadStart.attachments?.localFiles ?? 0,
-      });
-      const clientStartContext = getClientStartEventContext(
-        decoded.type,
-        (
-          decoded.type === "client/thread/start" ||
-          decoded.type === "client/turn/requested" ||
-          decoded.type === "client/turn/start"
-        )
-          ? decoded.source
-          : undefined,
-      );
-      if (
-        clientStartContext &&
-        shouldSkipProjectedClientUser({
-          counts: pendingUserSignatureCounts,
-          signature,
-          context: clientStartContext,
-        })
-      ) {
-        continue;
-      }
-      const projectedClientUser: ProjectedUserMessage = userFromClientThreadStart;
-      if (clientStartContext?.isTurnRequested) {
-        recordProjectedClientUser({
-          clientRequestSequence: meta.seq,
-          counts: pendingUserSignatureCounts,
-          signature,
-          context: clientStartContext,
-          message: projectedClientUser,
-        });
-        continue;
-      }
-      const key = buildUserMessageKey(projectedClientUser);
+      resolvedTurnId: clientRequestTurnIdBySequence.get(meta.seq),
+    });
+    if (userFromClientRequest) {
+      const projectedClientUser: ProjectedUserMessage = userFromClientRequest;
+      const key = projectedClientUser.id;
       if (!state.seenUserKeys.has(key)) {
         state.seenUserKeys.add(key);
-        if (clientStartContext) {
-          recordProjectedClientUser({
-            clientRequestSequence: meta.seq,
-            counts: pendingUserSignatureCounts,
-            signature,
-            context: clientStartContext,
-            message: projectedClientUser,
-          });
-        }
         flushToolActivityBeforeNonToolMessage(state);
         state.messages.push(projectedClientUser);
       }
@@ -345,53 +247,6 @@ function buildFlatViewMessages(
     if (managerUserMessage) {
       flushToolActivityBeforeNonToolMessage(state);
       state.messages.push(managerUserMessage);
-      continue;
-    }
-
-    const userMessage = parseUserFromItemEvent(decoded, meta);
-    if (userMessage) {
-      const signature = userMessageSignature({
-        text: userMessage.text,
-        webImages: userMessage.attachments?.webImages ?? 0,
-        localImages: userMessage.attachments?.localImages ?? 0,
-        localFiles: userMessage.attachments?.localFiles ?? 0,
-      });
-      const clientRequestSequence =
-        decoded.type === "item/completed" &&
-        decoded.item.type === "userMessage"
-          ? decoded.item.clientRequestSequence
-          : undefined;
-      const clientRequestedMatch = clientRequestSequence !== undefined
-        ? shiftPendingClientRequestedUser({
-            counts: pendingUserSignatureCounts,
-            clientRequestSequence,
-          })
-        : undefined;
-      const projectedUserMessage: ProjectedUserMessage = userMessage;
-      if (clientRequestedMatch) {
-        if (!clientRequestedMatch.message) {
-          continue;
-        }
-      } else {
-        const consumedClientStart = consumePendingClientStartUser({
-          counts: pendingUserSignatureCounts,
-          signature,
-        });
-        if (consumedClientStart) {
-          state.seenUserKeys.add(buildUserMessageKey(projectedUserMessage));
-          continue;
-        }
-      }
-      const key = buildUserMessageKey(projectedUserMessage);
-      if (!state.seenUserKeys.has(key)) {
-        state.seenUserKeys.add(key);
-        recordProjectedProviderUser({
-          counts: pendingUserSignatureCounts,
-          signature,
-        });
-        flushToolActivityBeforeNonToolMessage(state);
-        state.messages.push(projectedUserMessage);
-      }
       continue;
     }
 
@@ -739,18 +594,13 @@ function buildFlatViewMessages(
     const compactionEvent = parseCompactionLifecycleEvent(decoded, meta);
     if (compactionEvent) {
       flushToolActivityBeforeNonToolMessage(state);
-      const projectedCompactionEvent = resolveProjectedCompactionEvent(
-        state,
-        decoded,
-        compactionEvent,
-      );
-      if (projectedCompactionEvent.kind === "begin") {
+      if (compactionEvent.kind === "begin") {
         onCompactionBegin(
           state,
           meta,
           decoded.threadId,
           eventTurnId,
-          projectedCompactionEvent,
+          compactionEvent,
         );
       } else {
         onCompactionEnd(
@@ -758,7 +608,7 @@ function buildFlatViewMessages(
           meta,
           decoded.threadId,
           eventTurnId,
-          projectedCompactionEvent,
+          compactionEvent,
         );
       }
       continue;
@@ -804,14 +654,7 @@ function buildFlatViewMessages(
   }
 
   finalizePendingMessages(state, options);
-  const durableMessages = sortViewMessagesBySource(compactTaskMessages(state.messages));
-  return [
-    ...durableMessages,
-    ...materializePendingClientRequestedUserMessages({
-      counts: pendingUserSignatureCounts,
-      lastSourceSeq: orderedEvents[orderedEvents.length - 1]?.meta.seq ?? 0,
-    }),
-  ];
+  return sortViewMessagesBySource(compactTaskMessages(state.messages));
 }
 
 function toFullProjection(

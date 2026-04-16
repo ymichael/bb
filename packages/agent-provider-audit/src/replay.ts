@@ -3,10 +3,12 @@ import { join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   createProviderForId,
-  type AgentRuntimeCaptureEntry,
-  type AgentRuntimeRawProviderEventCaptureEntry,
-  type AgentRuntimeTranslatedThreadEventCaptureEntry,
 } from "@bb/agent-runtime";
+import type {
+  AgentRuntimeCaptureEntry,
+  AgentRuntimeRawProviderEventCaptureEntry,
+  AgentRuntimeTranslatedThreadEventCaptureEntry,
+} from "@bb/agent-runtime/capture";
 import { threadEventSchema, type ThreadEvent } from "@bb/domain";
 import { z } from "zod";
 import { buildBundle, writeBundle } from "./capture.js";

@@ -2,8 +2,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createCodexProviderAdapter } from "./adapter.js";
 import type { CodexEvent } from "./adapter.js";
-import { ProviderRequestDecodeError } from "../provider-adapter.js";
-import type { AdapterOptions } from "../provider-adapter.js";
+import { ProviderRequestDecodeError } from "../runtime-json-rpc.js";
+import type {
+  ProviderExecutionContext,
+  TurnStartAdapterCommand,
+} from "../provider-adapter.js";
 
 // ---------------------------------------------------------------------------
 // Helpers to build typed CodexEvent fixtures
@@ -20,15 +23,24 @@ function codexEvent<M extends CodexEvent["method"]>(
   };
 }
 
-const fullAdapterOptions = {
+const fullProviderExecutionContext = {
   permissionMode: "full",
   permissionEscalation: null,
-} satisfies AdapterOptions;
+} satisfies ProviderExecutionContext;
 
-const workspaceWriteAskAdapterOptions = {
+const workspaceWriteAskProviderExecutionContext = {
   permissionMode: "workspace-write",
   permissionEscalation: "ask",
-} satisfies AdapterOptions;
+} satisfies ProviderExecutionContext;
+
+type CodexProviderAdapter = ReturnType<typeof createCodexProviderAdapter>;
+
+function prepareTurnStart(
+  adapter: CodexProviderAdapter,
+  command: TurnStartAdapterCommand,
+): void {
+  expect(adapter.prepareTurnStart(command)).not.toBeNull();
+}
 
 describe("codex provider adapter", () => {
   beforeEach(() => {
@@ -52,7 +64,7 @@ describe("codex provider adapter", () => {
     expect(adapter.process.args).toEqual(["app-server"]);
   });
 
-  it("translates accepted steer results to user-message acks", () => {
+  it("translates accepted steer results to input accepted events", () => {
     const adapter = createCodexProviderAdapter();
 
     expect(adapter.translateAcceptedCommand({
@@ -61,7 +73,7 @@ describe("codex provider adapter", () => {
         threadId: "thread-1",
         providerThreadId: "provider-thread-1",
         input: [{ type: "text", text: "normal turn" }],
-        options: fullAdapterOptions,
+        options: fullProviderExecutionContext,
       },
     })).toEqual([]);
     expect(adapter.translateAcceptedCommand({
@@ -70,39 +82,53 @@ describe("codex provider adapter", () => {
         threadId: "thread-1",
         providerThreadId: "provider-thread-1",
         expectedTurnId: "turn-1",
+        clientRequestSequence: 17,
         input: [{ type: "text", text: "steer turn" }],
-        options: fullAdapterOptions,
+        options: fullProviderExecutionContext,
       },
     })).toEqual([
       {
-        type: "item/completed",
+        type: "turn/input/accepted",
         threadId: "thread-1",
         providerThreadId: "provider-thread-1",
         turnId: "turn-1",
-        item: {
-          type: "userMessage",
-          id: "codex-user-1",
-          content: [{ type: "text", text: "steer turn" }],
-        },
+        clientRequestSequence: 17,
       },
     ]);
   });
 
-  it("attaches client request sequence to native turn user-message acks", () => {
+  it("emits input accepted when a queued turn starts and suppresses later user-message echoes", () => {
     const adapter = createCodexProviderAdapter();
 
-    expect(adapter.translateAcceptedCommand({
-      command: {
-        type: "turn/start",
-        threadId: "thread-1",
-        providerThreadId: "provider-thread-1",
-        clientRequestSequence: 42,
-        input: [{ type: "text", text: "normal turn" }],
-        options: fullAdapterOptions,
-      },
-    })).toEqual([]);
+    prepareTurnStart(adapter, {
+      type: "turn/start",
+      threadId: "thread-1",
+      providerThreadId: "provider-thread-1",
+      clientRequestSequence: 42,
+      input: [{ type: "text", text: "normal turn" }],
+      options: fullProviderExecutionContext,
+    });
 
-    const events = adapter.translateEvent(codexEvent("item/completed", {
+    expect(adapter.translateEvent(codexEvent("turn/started", {
+      threadId: "provider-thread-1",
+      turn: { id: "turn-1", items: [], status: "inProgress", error: null },
+    }))).toEqual([
+      {
+        type: "turn/started",
+        threadId: "provider-thread-1",
+        providerThreadId: "provider-thread-1",
+        turnId: "turn-1",
+      },
+      {
+        type: "turn/input/accepted",
+        threadId: "provider-thread-1",
+        providerThreadId: "provider-thread-1",
+        turnId: "turn-1",
+        clientRequestSequence: 42,
+      },
+    ]);
+
+    const echoEvents = adapter.translateEvent(codexEvent("item/completed", {
       threadId: "provider-thread-1",
       turnId: "turn-1",
       item: {
@@ -112,27 +138,83 @@ describe("codex provider adapter", () => {
       },
     }));
 
-    expect(events).toEqual([
+    expect(echoEvents).toEqual([]);
+  });
+
+  it("uses the command thread id when queuing input before provider identity exists", () => {
+    const adapter = createCodexProviderAdapter();
+
+    prepareTurnStart(adapter, {
+      type: "turn/start",
+      threadId: "thread-1",
+      clientRequestSequence: 42,
+      input: [{ type: "text", text: "normal turn" }],
+      options: fullProviderExecutionContext,
+    });
+
+    expect(adapter.translateEvent(codexEvent("turn/started", {
+      threadId: "thread-1",
+      turn: { id: "turn-1", items: [], status: "inProgress", error: null },
+    }))).toContainEqual({
+      type: "turn/input/accepted",
+      threadId: "thread-1",
+      providerThreadId: "thread-1",
+      turnId: "turn-1",
+      clientRequestSequence: 42,
+    });
+  });
+
+  it("rolls back queued input acceptance when turn/start dispatch fails", () => {
+    const adapter = createCodexProviderAdapter();
+
+    const prepared = adapter.prepareTurnStart({
+      type: "turn/start",
+      threadId: "thread-1",
+      providerThreadId: "provider-thread-1",
+      clientRequestSequence: 42,
+      input: [{ type: "text", text: "normal turn" }],
+      options: fullProviderExecutionContext,
+    });
+    expect(prepared).not.toBeNull();
+    if (!prepared) {
+      throw new Error("Expected prepared turn/start state");
+    }
+    prepared.rollback();
+
+    expect(adapter.translateEvent(codexEvent("turn/started", {
+      threadId: "provider-thread-1",
+      turn: { id: "turn-1", items: [], status: "inProgress", error: null },
+    }))).toEqual([
       {
-        type: "item/completed",
+        type: "turn/started",
         threadId: "provider-thread-1",
         providerThreadId: "provider-thread-1",
         turnId: "turn-1",
-        item: {
-          type: "userMessage",
-          id: "provider-user-1",
-          clientRequestSequence: 42,
-          content: [{ type: "text", text: "normal turn" }],
-        },
       },
     ]);
+  });
+
+  it("suppresses native user-message echoes without a queued client request", () => {
+    const adapter = createCodexProviderAdapter();
+
+    const events = adapter.translateEvent(codexEvent("item/completed", {
+      threadId: "provider-thread-1",
+      turnId: "turn-1",
+      item: {
+        type: "userMessage",
+        id: "provider-user-1",
+        content: [{ type: "text", text: "provider echo", text_elements: [] }],
+      },
+    }));
+
+    expect(events).toEqual([]);
   });
 
   // -- buildCommand --------------------------------------------------------
 
   it("buildCommand returns codex initialize with experimental API", () => {
     const adapter = createCodexProviderAdapter();
-    const cmd = adapter.buildCommand({ type: "initialize" });
+    const cmd = adapter.buildCommandPlan({ type: "initialize" });
     expect(cmd).toMatchObject({
       method: "initialize",
       params: {
@@ -144,10 +226,10 @@ describe("codex provider adapter", () => {
 
   it("buildCommand model/list maps to the codex protocol", () => {
     const adapter = createCodexProviderAdapter();
-    const cmd = adapter.buildCommand({ type: "model/list" });
+    const cmd = adapter.buildCommandPlan({ type: "model/list" });
 
     expect(cmd).toEqual({
-      jsonrpc: "2.0",
+      kind: "request",
       method: "model/list",
       params: {},
     });
@@ -155,13 +237,13 @@ describe("codex provider adapter", () => {
 
   it("buildCommand thread/start defaults to full permissions", () => {
     const adapter = createCodexProviderAdapter();
-    const cmd = adapter.buildCommand({
+    const cmd = adapter.buildCommandPlan({
       type: "thread/start",
       cwd: "/tmp/worktree",
       threadId: "t1",
       input: [{ type: "text", text: "hello" }],
       instructionMode: "append",
-      options: fullAdapterOptions,
+      options: fullProviderExecutionContext,
     });
     expect(cmd).toMatchObject({
       method: "thread/start",
@@ -176,13 +258,13 @@ describe("codex provider adapter", () => {
 
   it("buildCommand thread/start maps workspace-write permissions to on-request approvals", () => {
     const adapter = createCodexProviderAdapter();
-    const cmd = adapter.buildCommand({
+    const cmd = adapter.buildCommandPlan({
       type: "thread/start",
       cwd: "/tmp/worktree",
       threadId: "t1",
       input: [{ type: "text", text: "hello" }],
       instructionMode: "append",
-      options: workspaceWriteAskAdapterOptions,
+      options: workspaceWriteAskProviderExecutionContext,
     });
 
     expect(cmd).toMatchObject({
@@ -196,7 +278,7 @@ describe("codex provider adapter", () => {
 
   it("buildCommand thread/start maps deny escalation to no approval prompts", () => {
     const adapter = createCodexProviderAdapter();
-    const cmd = adapter.buildCommand({
+    const cmd = adapter.buildCommandPlan({
       type: "thread/start",
       cwd: "/tmp/worktree",
       threadId: "t1",
@@ -219,7 +301,7 @@ describe("codex provider adapter", () => {
 
   it("buildCommand thread/start ignores escalation in full permission mode", () => {
     const adapter = createCodexProviderAdapter();
-    const cmd = adapter.buildCommand({
+    const cmd = adapter.buildCommandPlan({
       type: "thread/start",
       cwd: "/tmp/worktree",
       threadId: "t1",
@@ -242,13 +324,13 @@ describe("codex provider adapter", () => {
 
   it("buildCommand thread/start disables provider user-input requests", () => {
     const adapter = createCodexProviderAdapter();
-    const cmd = adapter.buildCommand({
+    const cmd = adapter.buildCommandPlan({
       type: "thread/start",
       cwd: "/tmp/worktree",
       threadId: "bb-thread-1",
       input: [{ type: "text", text: "hello" }],
       instructionMode: "append",
-      options: fullAdapterOptions,
+      options: fullProviderExecutionContext,
     });
 
     expect(cmd).toMatchObject({
@@ -263,14 +345,14 @@ describe("codex provider adapter", () => {
 
   it("buildCommand thread/start passes through model, service tier, env vars, instructions, and dynamic tools", () => {
     const adapter = createCodexProviderAdapter();
-    const cmd = adapter.buildCommand({
+    const cmd = adapter.buildCommandPlan({
       type: "thread/start",
       cwd: "/tmp/worktree",
       threadId: "bb-thread-1",
       input: [{ type: "text", text: "hello" }],
       instructionMode: "append",
       options: {
-        ...fullAdapterOptions,
+        ...fullProviderExecutionContext,
         model: "gpt-5.4",
         serviceTier: "fast",
         instructions: "Focus on the failing tests first.",
@@ -330,13 +412,13 @@ describe("codex provider adapter", () => {
 
   it("buildCommand thread/resume routes to provider thread id", () => {
     const adapter = createCodexProviderAdapter();
-    const cmd = adapter.buildCommand({
+    const cmd = adapter.buildCommandPlan({
       type: "thread/resume",
       cwd: "/tmp/worktree",
       threadId: "bb-t1",
       providerThreadId: "codex-uuid-1",
       instructionMode: "append",
-      options: fullAdapterOptions,
+      options: fullProviderExecutionContext,
     });
     expect(cmd).toMatchObject({
       method: "thread/resume",
@@ -350,13 +432,13 @@ describe("codex provider adapter", () => {
 
   it("buildCommand thread/resume falls back to context threadId", () => {
     const adapter = createCodexProviderAdapter();
-    const cmd = adapter.buildCommand({
+    const cmd = adapter.buildCommandPlan({
       type: "thread/resume",
       cwd: "/tmp/worktree",
       threadId: "bb-t1",
       providerThreadId: undefined,
       instructionMode: "append",
-      options: fullAdapterOptions,
+      options: fullProviderExecutionContext,
     });
     expect(cmd).toMatchObject({
       method: "thread/resume",
@@ -369,7 +451,7 @@ describe("codex provider adapter", () => {
 
   it("buildCommand thread/stop maps active turns to turn/interrupt", () => {
     const adapter = createCodexProviderAdapter();
-    const cmd = adapter.buildCommand({
+    const cmd = adapter.buildCommandPlan({
       type: "thread/stop",
       threadId: "bb-t1",
       providerThreadId: "codex-thread-1",
@@ -384,25 +466,28 @@ describe("codex provider adapter", () => {
     });
   });
 
-  it("buildCommand thread/stop returns null without an active turn id", () => {
+  it("buildCommand thread/stop returns a no-op without an active turn id", () => {
     const adapter = createCodexProviderAdapter();
-    const cmd = adapter.buildCommand({
+    const cmd = adapter.buildCommandPlan({
       type: "thread/stop",
       threadId: "bb-t1",
       providerThreadId: "codex-thread-1",
       activeTurnId: null,
     });
-    expect(cmd).toBeNull();
+    expect(cmd).toEqual({
+      kind: "noop",
+      reason: "no active turn to interrupt",
+    });
   });
 
   it("buildCommand turn/start includes input and sandbox policy", () => {
     const adapter = createCodexProviderAdapter();
-    const cmd = adapter.buildCommand({
+    const cmd = adapter.buildCommandPlan({
       type: "turn/start",
       threadId: "t1",
       providerThreadId: "codex-1",
       input: [{ type: "text", text: "do it" }],
-      options: fullAdapterOptions,
+      options: fullProviderExecutionContext,
     });
     expect(cmd).toMatchObject({
       method: "turn/start",
@@ -416,12 +501,12 @@ describe("codex provider adapter", () => {
 
   it("buildCommand turn/start maps workspace-write permissions to on-request approvals", () => {
     const adapter = createCodexProviderAdapter();
-    const cmd = adapter.buildCommand({
+    const cmd = adapter.buildCommandPlan({
       type: "turn/start",
       threadId: "t1",
       providerThreadId: "codex-1",
       input: [{ type: "text", text: "do it" }],
-      options: workspaceWriteAskAdapterOptions,
+      options: workspaceWriteAskProviderExecutionContext,
     });
 
     expect(cmd).toMatchObject({
@@ -434,12 +519,12 @@ describe("codex provider adapter", () => {
 
   it("buildCommand turn/start maps workspace-write permissions to workspace-write sandbox policy", () => {
     const adapter = createCodexProviderAdapter();
-    const cmd = adapter.buildCommand({
+    const cmd = adapter.buildCommandPlan({
       type: "turn/start",
       threadId: "t1",
       providerThreadId: "codex-1",
       input: [{ type: "text", text: "edit it" }],
-      options: workspaceWriteAskAdapterOptions,
+      options: workspaceWriteAskProviderExecutionContext,
     });
     expect(cmd).toMatchObject({
       method: "turn/start",
@@ -458,7 +543,7 @@ describe("codex provider adapter", () => {
 
   it("buildCommand turn/start maps readonly permissions to a read-only sandbox policy", () => {
     const adapter = createCodexProviderAdapter();
-    const cmd = adapter.buildCommand({
+    const cmd = adapter.buildCommandPlan({
       type: "turn/start",
       threadId: "t1",
       providerThreadId: "codex-1",
@@ -480,7 +565,7 @@ describe("codex provider adapter", () => {
 
   it("buildCommand turn/start maps readonly deny escalation to no approval prompts", () => {
     const adapter = createCodexProviderAdapter();
-    const cmd = adapter.buildCommand({
+    const cmd = adapter.buildCommandPlan({
       type: "turn/start",
       threadId: "t1",
       providerThreadId: "codex-1",
@@ -500,13 +585,13 @@ describe("codex provider adapter", () => {
 
   it("buildCommand turn/steer includes expectedTurnId", () => {
     const adapter = createCodexProviderAdapter();
-    const cmd = adapter.buildCommand({
+    const cmd = adapter.buildCommandPlan({
       type: "turn/steer",
       threadId: "t1",
       providerThreadId: "codex-1",
       expectedTurnId: "turn-3",
       input: [{ type: "text", text: "steer it" }],
-      options: fullAdapterOptions,
+      options: fullProviderExecutionContext,
     });
     expect(cmd).toMatchObject({
       method: "turn/steer",
@@ -520,7 +605,7 @@ describe("codex provider adapter", () => {
 
   it("buildCommand thread/name/set returns command when rename supported", () => {
     const adapter = createCodexProviderAdapter();
-    const cmd = adapter.buildCommand({
+    const cmd = adapter.buildCommandPlan({
       type: "thread/name/set",
       threadId: "t1",
       providerThreadId: "codex-1",
@@ -695,6 +780,7 @@ describe("codex provider adapter", () => {
       type: "thread/compacted",
       threadId: "t1",
       providerThreadId: "t1",
+      turnId: "turn-1",
     });
   });
 
@@ -718,7 +804,7 @@ describe("codex provider adapter", () => {
     });
   });
 
-  it("translateEvent item/started with userMessage preserves supported content", () => {
+  it("translateEvent item/started with userMessage is suppressed as a provider echo", () => {
     const adapter = createCodexProviderAdapter();
     const events = adapter.translateEvent(
       codexEvent("item/started", {
@@ -736,22 +822,7 @@ describe("codex provider adapter", () => {
         },
       }),
     );
-    expect(events).toContainEqual({
-      type: "item/started",
-      threadId: "t1",
-      providerThreadId: "t1",
-      turnId: "turn-1",
-      item: {
-        type: "userMessage",
-        id: "user-1",
-        content: [
-          { type: "text", text: "hello" },
-          { type: "image", url: "https://example.com/image.png" },
-          { type: "localImage", path: "/tmp/image.png" },
-          { type: "text", text: "[skill: repo-research]" },
-        ],
-      },
-    });
+    expect(events).toEqual([]);
   });
 
   it("translateEvent item/started with unsupported item type falls back to provider/unhandled", () => {
@@ -1551,7 +1622,6 @@ describe("codex provider adapter", () => {
     const adapter = createCodexProviderAdapter();
     expect(
       adapter.decodeToolCallRequest({
-        jsonrpc: "2.0",
         id: 7,
         method: "item/tool/call",
         params: {
@@ -1576,7 +1646,6 @@ describe("codex provider adapter", () => {
     const adapter = createCodexProviderAdapter();
     expect(
       adapter.decodeToolCallRequest({
-        jsonrpc: "2.0",
         method: "item/tool/call",
         params: {
           threadId: "t1",
@@ -1593,7 +1662,6 @@ describe("codex provider adapter", () => {
     const adapter = createCodexProviderAdapter();
     expect(
       adapter.decodeInteractiveRequest?.({
-        jsonrpc: "2.0",
         id: 8,
         method: "item/commandExecution/requestApproval",
         params: {
@@ -1649,7 +1717,6 @@ describe("codex provider adapter", () => {
     const adapter = createCodexProviderAdapter();
     expect(
       adapter.decodeInteractiveRequest?.({
-        jsonrpc: "2.0",
         id: 80,
         method: "item/commandExecution/requestApproval",
         params: {
@@ -1687,7 +1754,6 @@ describe("codex provider adapter", () => {
     const adapter = createCodexProviderAdapter();
     expect(
       () => adapter.decodeInteractiveRequest?.({
-        jsonrpc: "2.0",
         id: 8,
         method: "item/commandExecution/requestApproval",
         params: {
@@ -1708,7 +1774,6 @@ describe("codex provider adapter", () => {
     const adapter = createCodexProviderAdapter();
     expect(
       adapter.decodeInteractiveRequest?.({
-        jsonrpc: "2.0",
         id: 8,
         method: "item/commandExecution/requestApproval",
         params: {
@@ -1732,7 +1797,6 @@ describe("codex provider adapter", () => {
   it("decodeInteractiveRequest rejects unsupported macOS permissions in command session grants", () => {
     const adapter = createCodexProviderAdapter();
     expect(() => adapter.decodeInteractiveRequest?.({
-        jsonrpc: "2.0",
         id: 8,
         method: "item/commandExecution/requestApproval",
         params: {
@@ -1766,7 +1830,6 @@ describe("codex provider adapter", () => {
   it("decodeInteractiveRequest rejects macOS automation none in command approvals", () => {
     const adapter = createCodexProviderAdapter();
     expect(() => adapter.decodeInteractiveRequest?.({
-        jsonrpc: "2.0",
         id: 81,
         method: "item/commandExecution/requestApproval",
         params: {
@@ -1798,7 +1861,6 @@ describe("codex provider adapter", () => {
   it("decodeInteractiveRequest rejects unsupported macOS automation grants from command session grants", () => {
     const adapter = createCodexProviderAdapter();
     expect(() => adapter.decodeInteractiveRequest?.({
-        jsonrpc: "2.0",
         id: 82,
         method: "item/commandExecution/requestApproval",
         params: {
@@ -1831,7 +1893,6 @@ describe("codex provider adapter", () => {
     const adapter = createCodexProviderAdapter();
     expect(
       adapter.decodeInteractiveRequest?.({
-        jsonrpc: "2.0",
         id: 9,
         method: "item/commandExecution/requestApproval",
         params: {
@@ -1875,7 +1936,6 @@ describe("codex provider adapter", () => {
   it("decodeInteractiveRequest rejects policy-amendment-only command approval decisions", () => {
     const adapter = createCodexProviderAdapter();
     expect(() => adapter.decodeInteractiveRequest?.({
-      jsonrpc: "2.0",
       id: 90,
       method: "item/commandExecution/requestApproval",
       params: {
@@ -1910,7 +1970,6 @@ describe("codex provider adapter", () => {
     const adapter = createCodexProviderAdapter();
     expect(
       adapter.decodeInteractiveRequest?.({
-        jsonrpc: "2.0",
         id: 91,
         method: "item/commandExecution/requestApproval",
         params: {
@@ -1946,7 +2005,6 @@ describe("codex provider adapter", () => {
     const adapter = createCodexProviderAdapter();
     expect(
       adapter.decodeInteractiveRequest?.({
-        jsonrpc: "2.0",
         id: 10,
         method: "item/fileChange/requestApproval",
         params: {
@@ -1985,7 +2043,6 @@ describe("codex provider adapter", () => {
     const adapter = createCodexProviderAdapter();
     expect(
       adapter.decodeInteractiveRequest?.({
-        jsonrpc: "2.0",
         id: 11,
         method: "item/fileChange/requestApproval",
         params: {
@@ -2018,7 +2075,6 @@ describe("codex provider adapter", () => {
     const adapter = createCodexProviderAdapter();
     expect(
       adapter.decodeInteractiveRequest?.({
-        jsonrpc: "2.0",
         id: 11,
         method: "item/permissions/requestApproval",
         params: {

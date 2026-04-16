@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import type { AgentRuntimeOptions } from "@bb/agent-runtime";
 import { afterEach, describe, expect, it } from "vitest";
-import { dispatchCommand } from "../../src/command-dispatch.js";
+import { dispatchCommand, noopEventSink } from "../../src/command-dispatch.js";
 import { RuntimeManager } from "../../src/runtime-manager.js";
 import {
   cleanupTempDirs,
@@ -70,7 +70,7 @@ describe("thread command dispatch", () => {
     expect(harness.manager.listActiveThreads()).toEqual([]);
   });
 
-  it("covers turn.run and turn.steer", async () => {
+  it("covers turn.submit start and auto targets", async () => {
     const harness = createHarness();
     await harness.manager.ensureEnvironment({
       environmentId: "env-1",
@@ -80,7 +80,7 @@ describe("thread command dispatch", () => {
 
     const runResult = await dispatchCommand(
       {
-        type: "turn.run",
+        type: "turn.submit",
         environmentId: "env-1",
         threadId: "thread-1",
         eventSequence: 3,
@@ -101,16 +101,16 @@ describe("thread command dispatch", () => {
           dynamicTools: [],
           instructionMode: "append",
         },
+        target: { mode: "start" },
       },
       harness.dispatchOptions(),
     );
     const steerResult = await dispatchCommand(
       {
-        type: "turn.steer",
+        type: "turn.submit",
         environmentId: "env-1",
         threadId: "thread-1",
         eventSequence: 4,
-        expectedTurnId: "turn-1",
         input: [{ type: "text", text: "adjust" }],
         options: {
           model: "gpt-5",
@@ -128,12 +128,13 @@ describe("thread command dispatch", () => {
           dynamicTools: [],
           instructionMode: "append",
         },
+        target: { mode: "auto", expectedTurnId: "turn-1" },
       },
       harness.dispatchOptions(),
     );
 
-    expect(runResult).toEqual({});
-    expect(steerResult).toEqual({});
+    expect(runResult).toEqual({ appliedAs: "new-turn" });
+    expect(steerResult).toEqual({ appliedAs: "steer" });
     expect(harness.runtimeState.ranTurnText).toBe("hello");
     expect(harness.runtimeState.ranTurnClientRequestSequence).toBe(3);
     expect(harness.runtimeState.steeredTurnId).toBe("turn-1");
@@ -175,7 +176,7 @@ describe("thread command dispatch", () => {
 
     await dispatchCommand(
       {
-        type: "turn.run",
+        type: "turn.submit",
         environmentId: "env-1",
         threadId: "thread-1",
         eventSequence: 4,
@@ -196,15 +197,20 @@ describe("thread command dispatch", () => {
           dynamicTools: [],
           instructionMode: "append",
         },
+        target: { mode: "start" },
       },
-      { runtimeManager: manager, threadStorageRootPath: "/tmp/bb-test-thread-storage" },
+      {
+        eventSink: noopEventSink,
+        runtimeManager: manager,
+        threadStorageRootPath: "/tmp/bb-test-thread-storage",
+      },
     );
 
     expect(manager.listActiveThreads()).toEqual([]);
 
     const result = await dispatchCommand(
       {
-        type: "turn.run",
+        type: "turn.submit",
         environmentId: "env-1",
         threadId: "thread-1",
         eventSequence: 5,
@@ -225,11 +231,16 @@ describe("thread command dispatch", () => {
           dynamicTools: [],
           instructionMode: "append",
         },
+        target: { mode: "start" },
       },
-      { runtimeManager: manager, threadStorageRootPath: "/tmp/bb-test-thread-storage" },
+      {
+        eventSink: noopEventSink,
+        runtimeManager: manager,
+        threadStorageRootPath: "/tmp/bb-test-thread-storage",
+      },
     );
 
-    expect(result).toEqual({});
+    expect(result).toEqual({ appliedAs: "new-turn" });
     expect(state.ranTurnText).toBe("resume work");
     expect(manager.listActiveThreads()).toEqual([
       {
@@ -238,7 +249,7 @@ describe("thread command dispatch", () => {
     ]);
   });
 
-  it("marks known idle threads active when dispatching turn.steer", async () => {
+  it("marks known idle threads active when dispatching auto turn.submit", async () => {
     const harness = createHarness();
     await harness.manager.ensureEnvironment({
       environmentId: "env-1",
@@ -250,11 +261,10 @@ describe("thread command dispatch", () => {
 
     const result = await dispatchCommand(
       {
-        type: "turn.steer",
+        type: "turn.submit",
         environmentId: "env-1",
         threadId: "thread-1",
         eventSequence: 5,
-        expectedTurnId: "turn-1",
         input: [{ type: "text", text: "adjust course" }],
         options: {
           model: "gpt-5",
@@ -272,11 +282,12 @@ describe("thread command dispatch", () => {
           dynamicTools: [],
           instructionMode: "append",
         },
+        target: { mode: "auto", expectedTurnId: "turn-1" },
       },
       harness.dispatchOptions(),
     );
 
-    expect(result).toEqual({});
+    expect(result).toEqual({ appliedAs: "steer" });
     expect(harness.runtimeState.steeredTurnId).toBe("turn-1");
     expect(harness.manager.listActiveThreads()).toEqual([
       {
@@ -285,12 +296,151 @@ describe("thread command dispatch", () => {
     ]);
   });
 
-  it("lazily resumes a missing thread runtime before turn.run", async () => {
+  it("falls back to a new turn when auto turn.submit sees a stale turn", async () => {
+    const harness = createHarness();
+    await harness.manager.ensureEnvironment({
+      environmentId: "env-1",
+      workspacePath: "/tmp/env-1",
+    });
+    harness.manager.markThreadActive("env-1", "thread-1", "provider-1");
+    harness.runtime.steerTurn = async (args) => {
+      harness.runtimeState.steeredTurnId = args.expectedTurnId;
+      harness.runtimeState.steeredClientRequestSequence =
+        args.clientRequestSequence;
+      return {
+        status: "stale",
+        activeTurnId: null,
+      };
+    };
+
+    const result = await dispatchCommand(
+      {
+        type: "turn.submit",
+        environmentId: "env-1",
+        threadId: "thread-1",
+        eventSequence: 6,
+        input: [{ type: "text", text: "send anyway" }],
+        options: {
+          model: "gpt-5",
+          serviceTier: "default",
+          reasoningLevel: "medium",
+          permissionMode: "full",
+          permissionEscalation: null,
+        },
+        resumeContext: {
+          workspaceContext: { workspacePath: "/tmp/env-1", workspaceProvisionType: "unmanaged" },
+          projectId: "project-1",
+          providerId: "fake",
+          providerThreadId: "provider-1",
+          instructions: "Be a helpful coding agent.",
+          dynamicTools: [],
+          instructionMode: "append",
+        },
+        target: { mode: "auto", expectedTurnId: "turn-old" },
+      },
+      harness.dispatchOptions(),
+    );
+
+    expect(result).toEqual({ appliedAs: "new-turn" });
+    expect(harness.runtimeState.steeredTurnId).toBe("turn-old");
+    expect(harness.runtimeState.steeredClientRequestSequence).toBe(6);
+    expect(harness.runtimeState.ranTurnText).toBe("send anyway");
+    expect(harness.runtimeState.ranTurnClientRequestSequence).toBe(6);
+  });
+
+  it("falls back to a new turn when explicit steer sees a stale turn", async () => {
+    const harness = createHarness();
+    await harness.manager.ensureEnvironment({
+      environmentId: "env-1",
+      workspacePath: "/tmp/env-1",
+    });
+    harness.manager.markThreadActive("env-1", "thread-1", "provider-1");
+    harness.runtime.steerTurn = async (args) => ({
+      status: "stale",
+      activeTurnId: args.expectedTurnId,
+    });
+
+    const result = await dispatchCommand(
+      {
+        type: "turn.submit",
+        environmentId: "env-1",
+        threadId: "thread-1",
+        eventSequence: 7,
+        input: [{ type: "text", text: "strict steer" }],
+        options: {
+          model: "gpt-5",
+          serviceTier: "default",
+          reasoningLevel: "medium",
+          permissionMode: "full",
+          permissionEscalation: null,
+        },
+        resumeContext: {
+          workspaceContext: { workspacePath: "/tmp/env-1", workspaceProvisionType: "unmanaged" },
+          projectId: "project-1",
+          providerId: "fake",
+          providerThreadId: "provider-1",
+          instructions: "Be a helpful coding agent.",
+          dynamicTools: [],
+          instructionMode: "append",
+        },
+        target: { mode: "steer", expectedTurnId: "turn-old" },
+      },
+      harness.dispatchOptions(),
+    );
+
+    expect(result).toEqual({ appliedAs: "new-turn" });
+    expect(harness.runtimeState.ranTurnText).toBe("strict steer");
+    expect(harness.runtimeState.ranTurnClientRequestSequence).toBe(7);
+  });
+
+  it("starts a new turn when explicit steer has no expected turn", async () => {
+    const harness = createHarness();
+    await harness.manager.ensureEnvironment({
+      environmentId: "env-1",
+      workspacePath: "/tmp/env-1",
+    });
+    harness.manager.markThreadActive("env-1", "thread-1", "provider-1");
+
+    const result = await dispatchCommand(
+      {
+        type: "turn.submit",
+        environmentId: "env-1",
+        threadId: "thread-1",
+        eventSequence: 8,
+        input: [{ type: "text", text: "send without active turn" }],
+        options: {
+          model: "gpt-5",
+          serviceTier: "default",
+          reasoningLevel: "medium",
+          permissionMode: "full",
+          permissionEscalation: null,
+        },
+        resumeContext: {
+          workspaceContext: { workspacePath: "/tmp/env-1", workspaceProvisionType: "unmanaged" },
+          projectId: "project-1",
+          providerId: "fake",
+          providerThreadId: "provider-1",
+          instructions: "Be a helpful coding agent.",
+          dynamicTools: [],
+          instructionMode: "append",
+        },
+        target: { mode: "steer", expectedTurnId: null },
+      },
+      harness.dispatchOptions(),
+    );
+
+    expect(result).toEqual({ appliedAs: "new-turn" });
+    expect(harness.runtimeState.ranTurnText).toBe("send without active turn");
+    expect(harness.runtimeState.ranTurnClientRequestSequence).toBe(8);
+    expect(harness.runtimeState.steeredTurnId).toBeUndefined();
+  });
+
+  it("lazily resumes a missing thread runtime before turn.submit", async () => {
     const harness = createHarness({ workspacePath: "/tmp/env-lazy" });
 
     const result = await dispatchCommand(
       {
-        type: "turn.run",
+        type: "turn.submit",
         environmentId: "env-lazy",
         threadId: "thread-1",
         eventSequence: 1,
@@ -311,11 +461,12 @@ describe("thread command dispatch", () => {
           dynamicTools: [],
           instructionMode: "append",
         },
+        target: { mode: "start" },
       },
       harness.dispatchOptions(),
     );
 
-    expect(result).toEqual({});
+    expect(result).toEqual({ appliedAs: "new-turn" });
     expect(harness.provisions).toEqual([
       {
         workspaceProvisionType: "unmanaged",
@@ -360,7 +511,7 @@ describe("thread command dispatch", () => {
 
     const result = await dispatchCommand(
       {
-        type: "turn.run",
+        type: "turn.submit",
         environmentId: "env-exit",
         threadId: "thread-1",
         eventSequence: 2,
@@ -381,11 +532,16 @@ describe("thread command dispatch", () => {
           dynamicTools: [],
           instructionMode: "append",
         },
+        target: { mode: "start" },
       },
-      { runtimeManager: manager, threadStorageRootPath: "/tmp/bb-test-thread-storage" },
+      {
+        eventSink: noopEventSink,
+        runtimeManager: manager,
+        threadStorageRootPath: "/tmp/bb-test-thread-storage",
+      },
     );
 
-    expect(result).toEqual({});
+    expect(result).toEqual({ appliedAs: "new-turn" });
     expect(state.resumedThreadId).toBe("thread-1");
     expect(state.ranTurnText).toBe("after exit");
   });

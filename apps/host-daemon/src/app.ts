@@ -14,7 +14,10 @@ import {
 import { startLocalApiServer, type LocalApiServer } from "./local-api.js";
 import type { HostDaemonLocalApiConfig } from "./local-api-config.js";
 import type { HostDaemonLogger } from "./logger.js";
-import { RuntimeManager } from "./runtime-manager.js";
+import {
+  RuntimeManager,
+  type RuntimeManagerOptions,
+} from "./runtime-manager.js";
 import { createServerClient } from "./server-client.js";
 import {
   ServerConnection,
@@ -100,8 +103,8 @@ export interface CreateHostDaemonAppOptions {
   logger: HostDaemonLogger;
   releaseLock: () => Promise<void>;
   localApiConfig: HostDaemonLocalApiConfig | null;
+  createRuntime?: RuntimeManagerOptions["createRuntime"];
   runtimeShellEnv?: AgentRuntimeOptions["shellEnv"];
-  adapterFactory?: AgentRuntimeOptions["adapterFactory"];
   hostWatcher?: HostWatcher;
   onToolCall?: (request: ToolCallRequest) => Promise<ToolCallResponse>;
   openPath?: (path: string) => Promise<void>;
@@ -261,8 +264,8 @@ export async function createHostDaemonApp(
   });
 
   const runtimeManager = new RuntimeManager({
-    adapterFactory: options.adapterFactory,
     bridgeBundleDir: options.bridgeBundleDir,
+    createRuntime: options.createRuntime,
     hostWatcher: options.hostWatcher,
     shellEnv: options.runtimeShellEnv,
     onEvent: ({ environmentId, event }) => {

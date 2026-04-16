@@ -133,7 +133,7 @@ describe("public thread manager and ownership routes", () => {
       const draftCommand = await waitForQueuedCommand(
         harness,
         ({ command }) =>
-          command.type === "turn.run" && command.threadId === thread.id,
+          command.type === "turn.submit" && command.threadId === thread.id,
       );
       expect(draftCommand.command).toMatchObject({
         environmentId: environment.id,
@@ -297,7 +297,7 @@ describe("public thread manager and ownership routes", () => {
         harness,
         preferencesReadCommand.row.cursor,
         ({ command }) =>
-          command.type === "turn.run" && command.threadId === managerThread.id,
+          command.type === "turn.submit" && command.threadId === managerThread.id,
       );
       expect(queuedCommand.command).toMatchObject({
         environmentId: environment.id,
@@ -399,7 +399,7 @@ describe("public thread manager and ownership routes", () => {
         harness,
         preferencesReadCommand.row.cursor,
         ({ command }) =>
-          command.type === "turn.run" && command.threadId === managerThread.id,
+          command.type === "turn.submit" && command.threadId === managerThread.id,
       );
       expect(queuedCommand.command).toMatchObject({
         environmentId: environment.id,

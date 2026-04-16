@@ -42,14 +42,15 @@ describe("internal authorization regressions", () => {
       appendClientTurnEvent(harness.deps, {
         threadId: thread.id,
         environmentId: environment.id,
-        type: "client/thread/start",
+        type: "client/turn/requested",
         input: [{ type: "text", text: "Start after provisioning" }],
+        target: { kind: "thread-start" },
         execution: {
           model: "gpt-5",
           serviceTier: "default",
           reasoningLevel: "medium",
           permissionMode: "full",
-          source: "client/thread/start",
+          source: "client/turn/requested",
         },
         initiator: "user",
         requestMethod: "thread/start",

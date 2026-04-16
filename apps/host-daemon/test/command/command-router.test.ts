@@ -9,9 +9,17 @@ import {
 import type { HostWorkspace } from "@bb/host-workspace";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CommandRouter } from "../../src/command-router.js";
+import { noopEventSink } from "../../src/command-dispatch-support.js";
 import { RuntimeManager } from "../../src/runtime-manager.js";
 
 const tempDirs: string[] = [];
+
+type StartThreadArgs = Parameters<AgentRuntime["startThread"]>[0];
+type ResumeThreadArgs = Parameters<AgentRuntime["resumeThread"]>[0];
+type RunTurnArgs = Parameters<AgentRuntime["runTurn"]>[0];
+type SteerTurnArgs = Parameters<AgentRuntime["steerTurn"]>[0];
+type StopThreadArgs = Parameters<AgentRuntime["stopThread"]>[0];
+type RenameThreadArgs = Parameters<AgentRuntime["renameThread"]>[0];
 
 async function makeTempDir(prefix: string): Promise<string> {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), prefix));
@@ -93,16 +101,16 @@ function createFakeWorkspace(path: string): FakeWorkspace {
 function createFakeRuntime(): AgentRuntime {
   return {
     ensureProvider: vi.fn(async () => undefined),
-    startThread: vi.fn(async ({ threadId }: { threadId: string }) => ({
+    startThread: vi.fn(async ({ threadId }: StartThreadArgs) => ({
       providerThreadId: `provider-${threadId}`,
     })),
-    resumeThread: vi.fn(async ({ providerThreadId }: { providerThreadId?: string }) => ({
+    resumeThread: vi.fn(async ({ providerThreadId }: ResumeThreadArgs) => ({
       providerThreadId: providerThreadId ?? "provider-resumed",
     })),
-    runTurn: vi.fn(async (_args: { threadId: string }) => undefined),
-    steerTurn: vi.fn(async (_args: unknown) => undefined),
-    stopThread: vi.fn(async (_args: unknown) => undefined),
-    renameThread: vi.fn(async (_args: unknown) => undefined),
+    runTurn: vi.fn(async (_args: RunTurnArgs) => undefined),
+    steerTurn: vi.fn(async (_args: SteerTurnArgs) => ({ status: "steered" as const })),
+    stopThread: vi.fn(async (_args: StopThreadArgs) => undefined),
+    renameThread: vi.fn(async (_args: RenameThreadArgs) => undefined),
     listModels: vi.fn(async () => []),
     listRunningProviders: vi.fn(() => []),
     shutdown: vi.fn(async () => undefined),
@@ -187,6 +195,7 @@ describe("CommandRouter", () => {
         writeRuntimeMaterialState(dataDir, nextSnapshot),
       reportResult,
       runtimeManager: manager,
+      eventSink: noopEventSink,
       logger: createLogger(),
     });
 
@@ -253,6 +262,7 @@ describe("CommandRouter", () => {
       readPersistedRuntimeMaterial: vi.fn(async () => null),
       persistRuntimeMaterial: vi.fn(async () => undefined),
       runtimeManager: manager,
+      eventSink: noopEventSink,
       logger: createLogger(),
     });
 
@@ -311,6 +321,7 @@ describe("CommandRouter", () => {
       fetchRuntimeMaterial: vi.fn(),
       readPersistedRuntimeMaterial: vi.fn(async () => null),
       runtimeManager: manager,
+      eventSink: noopEventSink,
       threadStorageRootPath: "/tmp/bb-test-thread-storage",
       logger: createLogger(),
     });
@@ -374,6 +385,7 @@ describe("CommandRouter", () => {
       fetchRuntimeMaterial: vi.fn(),
       readPersistedRuntimeMaterial: vi.fn(async () => null),
       runtimeManager: manager,
+      eventSink: noopEventSink,
       threadStorageRootPath: "/tmp/bb-test-thread-storage",
       logger: createLogger(),
     });
@@ -382,7 +394,7 @@ describe("CommandRouter", () => {
         id: "run-a",
         cursor: 1,
         command: {
-          type: "turn.run",
+          type: "turn.submit",
           environmentId: "env-1",
           threadId: "thread-a",
           eventSequence: 1,
@@ -403,13 +415,14 @@ describe("CommandRouter", () => {
             dynamicTools: [],
             instructionMode: "append" as const,
           },
+          target: { mode: "start" },
         },
       },
       {
         id: "run-b",
         cursor: 2,
         command: {
-          type: "turn.run",
+          type: "turn.submit",
           environmentId: "env-1",
           threadId: "thread-b",
           eventSequence: 2,
@@ -430,6 +443,7 @@ describe("CommandRouter", () => {
             dynamicTools: [],
             instructionMode: "append" as const,
           },
+          target: { mode: "start" },
         },
       },
     ]);
@@ -462,6 +476,7 @@ describe("CommandRouter", () => {
       fetchRuntimeMaterial: vi.fn(),
       readPersistedRuntimeMaterial: vi.fn(async () => null),
       runtimeManager: manager,
+      eventSink: noopEventSink,
       threadStorageRootPath: "/tmp/bb-test-thread-storage",
       logger: createLogger(),
       reportResult: async (result) => {
@@ -550,6 +565,7 @@ describe("CommandRouter", () => {
       fetchRuntimeMaterial: vi.fn(),
       readPersistedRuntimeMaterial: vi.fn(async () => null),
       runtimeManager: manager,
+      eventSink: noopEventSink,
       threadStorageRootPath: "/tmp/bb-test-thread-storage",
       logger: createLogger(),
       now: () => nowValue,
@@ -629,6 +645,7 @@ describe("CommandRouter", () => {
       fetchRuntimeMaterial: vi.fn(),
       readPersistedRuntimeMaterial: vi.fn(async () => null),
       runtimeManager: manager,
+      eventSink: noopEventSink,
       threadStorageRootPath: "/tmp/bb-test-thread-storage",
       logger: createLogger(),
     });
@@ -682,6 +699,7 @@ describe("CommandRouter", () => {
       fetchRuntimeMaterial: vi.fn(),
       readPersistedRuntimeMaterial: vi.fn(async () => null),
       runtimeManager: manager,
+      eventSink: noopEventSink,
       threadStorageRootPath: "/tmp/bb-test-thread-storage",
       logger,
       reportResult: async (result) => {

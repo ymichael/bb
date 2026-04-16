@@ -3,18 +3,18 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { ThreadEvent } from "@bb/domain";
-import { createAgentRuntime } from "./runtime.js";
+import { createAgentRuntimeWithAdapters } from "./runtime.js";
 import {
   createFakeAdapter,
   fakeProviderScriptPath,
 } from "./test/index.js";
 import {
   fullRuntimeOptions,
+  wait,
   waitForThreadTurnStarted,
-  waitForThreadUserMessageText,
 } from "./test/runtime-test-harness.js";
 
-describe("createAgentRuntime provider user-message acks", () => {
+describe("createAgentRuntime input accepted events", () => {
   let tmpDir: string;
   let scriptPath: string;
 
@@ -27,9 +27,9 @@ describe("createAgentRuntime provider user-message acks", () => {
     rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it("forwards provider-emitted user acks for turns and steers", async () => {
+  it("suppresses provider-emitted user message echoes for turns and steers", async () => {
     const events: ThreadEvent[] = [];
-    const runtime = createAgentRuntime({
+    const runtime = createAgentRuntimeWithAdapters({
       workspacePath: tmpDir,
       onEvent: (event) => events.push(event),
       onToolCall: async () => ({
@@ -51,38 +51,31 @@ describe("createAgentRuntime provider user-message acks", () => {
       input: [{ type: "text", text: "delay:500 first input" }],
       options: fullRuntimeOptions,
     });
-    await waitForThreadUserMessageText({
+    await waitForThreadTurnStarted({
       events,
       providerId: "fake",
       runtime,
-      text: "delay:500 first input",
       threadId: "t1",
+      turnId: "turn-1",
     });
 
-    const activeTurn = events.find(
-      (event) => event.type === "turn/started" && event.turnId === "turn-1",
-    );
-    expect(activeTurn?.type).toBe("turn/started");
     await runtime.steerTurn({
       threadId: "t1",
       expectedTurnId: "turn-1",
       input: [{ type: "text", text: "steer input" }],
       options: fullRuntimeOptions,
     });
+    await wait(50);
 
-    await waitForThreadUserMessageText({
-      events,
-      providerId: "fake",
-      runtime,
-      text: "steer input",
-      threadId: "t1",
-      turnId: "turn-1",
-    });
+    expect(events.some(
+      (event) =>
+        event.type === "item/completed" && event.item.type === "userMessage",
+    )).toBe(false);
 
     await runtime.shutdown();
   });
 
-  it("emits provider accepted-command events only after accepted commands", async () => {
+  it("emits input accepted events only after accepted commands", async () => {
     const events: ThreadEvent[] = [];
     const acceptedCommandScriptPath = join(tmpDir, "accepted-command-provider.cjs");
     writeFileSync(
@@ -131,7 +124,7 @@ rl.on("line", (line) => {
       "utf8",
     );
     const baseAdapter = createFakeAdapter({ scriptPath: acceptedCommandScriptPath });
-    const runtime = createAgentRuntime({
+    const runtime = createAgentRuntimeWithAdapters({
       workspacePath: tmpDir,
       onEvent: (event) => events.push(event),
       onToolCall: async () => ({
@@ -144,19 +137,15 @@ rl.on("line", (line) => {
           if (command.type !== "turn/steer") {
             return [];
           }
+          if (command.clientRequestSequence === undefined) {
+            return [];
+          }
           return [{
-            type: "item/completed",
+            type: "turn/input/accepted",
             threadId: command.threadId,
             providerThreadId: command.providerThreadId ?? "",
             turnId: command.expectedTurnId,
-            item: {
-              type: "userMessage",
-              id: "provider-user-1",
-              ...(command.clientRequestSequence !== undefined
-                ? { clientRequestSequence: command.clientRequestSequence }
-                : {}),
-              content: [{ type: "text", text: "accepted steer" }],
-            },
+            clientRequestSequence: command.clientRequestSequence,
           }];
         },
       }),
@@ -192,10 +181,9 @@ rl.on("line", (line) => {
     expect(
       events.some(
         (event) =>
-          event.type === "item/completed" &&
-          event.item.type === "userMessage" &&
-          event.item.id === "provider-user-1" &&
-          event.item.clientRequestSequence === 12,
+          event.type === "turn/input/accepted" &&
+          event.clientRequestSequence === 12 &&
+          event.turnId === "turn-1",
       ),
     ).toBe(true);
 
@@ -255,7 +243,7 @@ rl.on("line", (line) => {
       "utf8",
     );
     const baseAdapter = createFakeAdapter({ scriptPath: rejectingSteerScriptPath });
-    const runtime = createAgentRuntime({
+    const runtime = createAgentRuntimeWithAdapters({
       workspacePath: tmpDir,
       onEvent: (event) => events.push(event),
       onToolCall: async () => ({
@@ -302,16 +290,8 @@ rl.on("line", (line) => {
       }),
     ).rejects.toThrow(/No active session/);
 
-    expect(
-      events.some(
-        (event) =>
-          event.type === "item/completed" &&
-          event.item.type === "userMessage" &&
-          event.item.content.some((content) =>
-            content.type === "text" && content.text === "rejected steer",
-          ),
-      ),
-    ).toBe(false);
+    expect(events.some((event) => event.type === "turn/input/accepted"))
+      .toBe(false);
 
     await runtime.shutdown();
   });

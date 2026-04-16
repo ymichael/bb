@@ -46,7 +46,7 @@ import {
   buildThreadStartCommand,
   buildThreadStopCommand,
   queueThreadDeletedCommand,
-  queueTurnRunCommand,
+  queueTurnSubmitCommand,
   type QueueThreadStartCommandArgs,
   type QueueThreadStopCommandArgs,
 } from "./thread-commands.js";
@@ -54,7 +54,7 @@ import { ensureHostSessionReadyForWork } from "../hosts/host-lifecycle.js";
 import { parseJsonWithSchema } from "../lib/json-parsing.js";
 import { isPreStartThreadStatus } from "./thread-status.js";
 
-type QueueReadyThreadTurnCommandResult = "thread.start" | "turn.run";
+type QueueReadyThreadTurnCommandResult = "thread.start" | "turn.submit";
 
 export interface AdvanceThreadOperationArgs {
   hostId: string;
@@ -401,7 +401,7 @@ export async function queueReadyThreadTurnCommand(
 ): Promise<QueueReadyThreadTurnCommandResult> {
   const providerThreadId = getLastProviderThreadId(deps, args.thread.id);
   if (providerThreadId) {
-    await queueTurnRunCommand(deps, {
+    await queueTurnSubmitCommand(deps, {
       thread: args.thread,
       input: args.input,
       eventSequence: args.eventSequence,
@@ -409,8 +409,9 @@ export async function queueReadyThreadTurnCommand(
       permissionEscalation: args.permissionEscalation,
       environment: args.environment,
       providerThreadId,
+      target: { mode: "start" },
     });
-    return "turn.run";
+    return "turn.submit";
   }
 
   await requestThreadStart(deps, {

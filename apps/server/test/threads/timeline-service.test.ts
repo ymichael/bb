@@ -364,19 +364,20 @@ describe("buildThreadTimeline", () => {
       threadId: thread.id,
       environmentId: environment.id,
       sequence: 1,
-      type: "client/thread/start",
+      type: "client/turn/requested",
       data: {
         direction: "outbound",
         source: "spawn",
         initiator: "system",
         input: [{ type: "text", text: "[bb system] Welcome!" }],
+        target: { kind: "thread-start" },
         request: { method: "thread/start", params: {} },
         execution: {
           model: "gpt-5",
           serviceTier: "default",
           reasoningLevel: "medium",
           permissionMode: "full",
-          source: "client/thread/start",
+          source: "client/turn/requested",
         },
       },
     });
@@ -478,6 +479,7 @@ describe("buildThreadTimeline", () => {
         source: "tell",
         initiator: "user",
         input: [{ type: "text", text: "Thanks, do the thing" }],
+        target: { kind: "new-turn" },
         request: { method: "turn/start", params: {} },
         execution: {
           model: "gpt-5",

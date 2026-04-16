@@ -11,45 +11,10 @@ import type {
   ServiceTier,
   ThreadEvent,
 } from "@bb/domain";
-
-// ---------------------------------------------------------------------------
-// JSON-RPC 2.0 message
-// ---------------------------------------------------------------------------
-
-export interface JsonRpcMessage {
-  jsonrpc: "2.0";
-  id?: string | number;
-  method: string;
-  params?: unknown;
-}
-
-export type JsonValue =
-  | boolean
-  | number
-  | string
-  | null
-  | JsonValue[]
-  | { [key: string]: JsonValue | undefined };
-
-export const JSON_RPC_INVALID_PARAMS_CODE = -32602;
-
-export class ProviderRequestDecodeError extends Error {
-  readonly code = JSON_RPC_INVALID_PARAMS_CODE;
-
-  constructor(message: string) {
-    super(message);
-    this.name = "ProviderRequestDecodeError";
-  }
-}
-
-export class ProviderResponseEncodeError extends Error {
-  readonly code = JSON_RPC_INVALID_PARAMS_CODE;
-
-  constructor(message: string) {
-    super(message);
-    this.name = "ProviderResponseEncodeError";
-  }
-}
+import type {
+  ProviderInboundRequest,
+  ProviderRuntimeEvent,
+} from "./runtime-json-rpc.js";
 
 export interface ProviderTranslationContext {
   threadId?: string;
@@ -65,7 +30,35 @@ export interface ProviderAdapterFactoryOptions {
   turnIdPrefix?: string;
 }
 
-export type ProviderThreadStopBehavior = "keep-provider" | "restart-provider";
+export type ProviderAdapterFactory = (providerId: string) => ProviderAdapter;
+
+export type ProviderCommandProcessEffect = "restart-provider";
+
+export interface ProviderRequestCommandPlan {
+  kind: "request";
+  method: string;
+  params?: object;
+  processEffect?: ProviderCommandProcessEffect;
+}
+
+export interface ProviderNoopCommandPlan {
+  kind: "noop";
+  method?: never;
+  params?: never;
+  reason: string;
+}
+
+export type ProviderCommandPlan =
+  | ProviderRequestCommandPlan
+  | ProviderNoopCommandPlan;
+
+export type ProviderInteractiveResponse =
+  | boolean
+  | number
+  | string
+  | null
+  | ProviderInteractiveResponse[]
+  | { [key: string]: ProviderInteractiveResponse | undefined };
 
 export interface DecodedToolCallRequest {
   requestId: string | number;
@@ -90,7 +83,7 @@ export interface DecodedInteractiveRequest {
 // AdapterCommand — what the runtime asks the adapter to build
 // ---------------------------------------------------------------------------
 
-export type AdapterOptions = {
+export type ProviderExecutionContext = {
   model?: string;
   serviceTier?: ServiceTier;
   reasoningLevel?: ReasoningLevel;
@@ -106,7 +99,7 @@ export type AdapterCommand =
       threadId: string;
       cwd: string;
       input?: PromptInput[];
-      options: AdapterOptions;
+      options: ProviderExecutionContext;
       dynamicTools?: DynamicTool[];
       instructionMode: InstructionMode;
     }
@@ -115,8 +108,7 @@ export type AdapterCommand =
       threadId: string;
       cwd: string;
       providerThreadId?: string;
-      options: AdapterOptions;
-      resumePath?: string;
+      options: ProviderExecutionContext;
       dynamicTools?: DynamicTool[];
       instructionMode: InstructionMode;
     }
@@ -126,7 +118,7 @@ export type AdapterCommand =
       providerThreadId?: string;
       input: PromptInput[];
       clientRequestSequence?: number;
-      options: AdapterOptions;
+      options: ProviderExecutionContext;
     }
   | {
       type: "turn/steer";
@@ -135,7 +127,7 @@ export type AdapterCommand =
       expectedTurnId: string;
       input: PromptInput[];
       clientRequestSequence?: number;
-      options: AdapterOptions;
+      options: ProviderExecutionContext;
     }
   | {
       type: "thread/stop";
@@ -150,6 +142,18 @@ export type AdapterCommand =
       title: string;
     };
 
+export type TurnStartAdapterCommand = Extract<AdapterCommand, { type: "turn/start" }>;
+
+export interface PreparedProviderCommandDispatch {
+  rollback(): void;
+}
+
+export function noPreparedProviderCommandDispatch(
+  _command: TurnStartAdapterCommand,
+): null {
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 // ProviderAdapter — internal extension contract
 // ---------------------------------------------------------------------------
@@ -158,13 +162,20 @@ export interface ProviderAdapter {
   id: string;
   displayName: string;
   capabilities: ProviderCapabilities;
-  threadStopBehavior: ProviderThreadStopBehavior;
   process: { command: string; args: string[] };
 
-  buildCommand(command: AdapterCommand): JsonRpcMessage | null;
+  buildCommandPlan(command: AdapterCommand): ProviderCommandPlan;
+  /**
+   * Called immediately before a turn/start request is sent. Some providers
+   * emit turn/started before the request promise resolves, so adapters that
+   * need command-to-event correlation must prepare that state before dispatch.
+   */
+  prepareTurnStart(
+    command: TurnStartAdapterCommand,
+  ): PreparedProviderCommandDispatch | null;
   parseModelListResult(result: unknown): AvailableModel[];
   translateEvent(
-    event: unknown,
+    event: ProviderRuntimeEvent,
     context?: ProviderTranslationContext,
   ): ThreadEvent[];
   /**
@@ -173,9 +184,9 @@ export interface ProviderAdapter {
    * their own notifications, such as accepted user input missing a userMessage.
    */
   translateAcceptedCommand(args: ProviderAcceptedCommandTranslationArgs): ThreadEvent[];
-  decodeToolCallRequest(request: JsonRpcMessage): DecodedToolCallRequest | null;
-  decodeInteractiveRequest?(request: JsonRpcMessage): DecodedInteractiveRequest | null;
-  buildInteractiveResponse?(args: BuildInteractiveResponseArgs): JsonValue;
+  decodeToolCallRequest(request: ProviderInboundRequest): DecodedToolCallRequest | null;
+  decodeInteractiveRequest?(request: ProviderInboundRequest): DecodedInteractiveRequest | null;
+  buildInteractiveResponse?(args: BuildInteractiveResponseArgs): ProviderInteractiveResponse;
 }
 
 export interface BuildInteractiveResponseArgs {

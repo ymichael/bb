@@ -3,7 +3,10 @@ import { randomUUID } from "node:crypto";
 import { createInterface } from "node:readline";
 import { spawnPortablePipedProcess } from "@bb/process-utils";
 import type { AgentRuntimeCaptureEntry } from "./capture-types.js";
-import type { ProviderAdapter } from "./provider-adapter.js";
+import type {
+  ProviderAdapter,
+  ProviderAdapterFactory,
+} from "./provider-adapter.js";
 import { createProviderForId } from "./provider-registry.js";
 import {
   ignoredJsonRpcResultSchema,
@@ -28,7 +31,7 @@ export interface RuntimeProviderProcessLineArgs {
 }
 
 export interface RuntimeProviderProcessManagerArgs {
-  adapterFactory: AgentRuntimeOptions["adapterFactory"];
+  adapterFactory?: ProviderAdapterFactory;
   bridgeBundleDir: string | undefined;
   createProviderIdentityState: (providerId: string) => RuntimeProviderIdentityState;
   emitCapture: (entry: AgentRuntimeCaptureEntry) => void;
@@ -90,8 +93,8 @@ export class RuntimeProviderProcessManager {
         );
       }
 
-      const initCmd = adapter.buildCommand({ type: "initialize" });
-      if (initCmd) {
+      const initCmd = adapter.buildCommandPlan({ type: "initialize" });
+      if (initCmd.kind === "request") {
         await sendJsonRpcRequest({
           child: providerProcess.child,
           message: initCmd,

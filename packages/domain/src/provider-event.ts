@@ -7,6 +7,7 @@ import {
   systemThreadProvisioningEventDataSchema,
   systemEventTypeValues,
   systemThreadInterruptedEventDataSchema,
+  clientTurnLifecycleEventDataSchema,
   turnRequestEventDataSchema,
 } from "./thread-events.js";
 import { jsonValueSchema } from "./json-value.js";
@@ -248,6 +249,13 @@ export const providerEventSchema = z.discriminatedUnion("type", [
     error: z.object({ message: z.string() }).optional(),
   }),
   z.object({
+    type: z.literal("turn/input/accepted"),
+    threadId: z.string(),
+    providerThreadId: z.string(),
+    turnId: z.string(),
+    clientRequestSequence: z.number().int().nonnegative(),
+  }),
+  z.object({
     type: z.literal("thread/name/updated"),
     threadId: z.string(),
     providerThreadId: z.string(),
@@ -257,6 +265,7 @@ export const providerEventSchema = z.discriminatedUnion("type", [
     type: z.literal("thread/compacted"),
     threadId: z.string(),
     providerThreadId: z.string(),
+    turnId: z.string(),
   }),
   z.object({
     type: z.literal("item/started"),
@@ -403,7 +412,7 @@ export const systemEventSchema = z.union([
   z.object({
     type: z.literal("client/thread/start"),
     threadId: z.string(),
-  }).merge(turnRequestEventDataSchema),
+  }).merge(clientTurnLifecycleEventDataSchema),
   z.object({
     type: z.literal("client/turn/requested"),
     threadId: z.string(),
@@ -411,7 +420,7 @@ export const systemEventSchema = z.union([
   z.object({
     type: z.literal("client/turn/start"),
     threadId: z.string(),
-  }).merge(turnRequestEventDataSchema),
+  }).merge(clientTurnLifecycleEventDataSchema),
   z.object({
     type: z.literal("system/error"),
     threadId: z.string(),

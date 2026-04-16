@@ -1,27 +1,19 @@
-import type { PromptInput, ThreadEvent, ThreadEventItem } from "@bb/domain";
-import { buildUserMessageAckItem } from "./adapter-utils.js";
+import type { ThreadEvent } from "@bb/domain";
 
 export interface AcceptedUserMessageState {
   pendingAcceptedUserMessages: AcceptedUserMessage[];
-  userMessageCounter: number;
 }
 
 export interface AcceptedUserMessage {
-  item: Extract<ThreadEventItem, { type: "userMessage" }>;
+  clientRequestSequence: number;
 }
 
-export interface CreateAcceptedUserMessageArgs<
-  TState extends AcceptedUserMessageState,
-> {
+export interface CreateAcceptedUserMessageArgs {
   clientRequestSequence?: number;
-  input: PromptInput[];
-  itemIdPrefix: string;
-  state: TState;
 }
 
-export interface BuildAcceptedUserMessageEventArgs<
-  TState extends AcceptedUserMessageState,
-> extends CreateAcceptedUserMessageArgs<TState> {
+export interface BuildAcceptedUserMessageEventArgs
+  extends CreateAcceptedUserMessageArgs {
   providerThreadId: string;
   threadId: string;
   turnId: string;
@@ -29,7 +21,9 @@ export interface BuildAcceptedUserMessageEventArgs<
 
 export interface QueueAcceptedUserMessageArgs<
   TState extends AcceptedUserMessageState,
-> extends CreateAcceptedUserMessageArgs<TState> {}
+> extends CreateAcceptedUserMessageArgs {
+  state: TState;
+}
 
 export interface DrainAcceptedUserMessagesArgs<
   TState extends AcceptedUserMessageState,
@@ -41,38 +35,28 @@ export interface DrainAcceptedUserMessagesArgs<
   turnId: string;
 }
 
-function createAcceptedUserMessage<TState extends AcceptedUserMessageState>(
-  args: CreateAcceptedUserMessageArgs<TState>,
+function createAcceptedUserMessage(
+  args: CreateAcceptedUserMessageArgs,
 ): AcceptedUserMessage | null {
-  if (args.input.length === 0) {
+  if (args.clientRequestSequence === undefined) {
     return null;
   }
-  const nextCounter = args.state.userMessageCounter + 1;
-  const item = buildUserMessageAckItem(
-    args.input,
-    `${args.itemIdPrefix}-${nextCounter}`,
-    args.clientRequestSequence,
-  );
-  if (!item) {
-    return null;
-  }
-  args.state.userMessageCounter = nextCounter;
-  return { item };
+  return { clientRequestSequence: args.clientRequestSequence };
 }
 
-export function buildAcceptedUserMessageEvent<
-  TState extends AcceptedUserMessageState,
->(args: BuildAcceptedUserMessageEventArgs<TState>): ThreadEvent[] {
+export function buildAcceptedUserMessageEvent(
+  args: BuildAcceptedUserMessageEventArgs,
+): ThreadEvent[] {
   const accepted = createAcceptedUserMessage(args);
   if (!accepted) {
     return [];
   }
   return [{
-    type: "item/completed",
+    type: "turn/input/accepted",
     threadId: args.threadId,
     providerThreadId: args.providerThreadId,
     turnId: args.turnId,
-    item: accepted.item,
+    clientRequestSequence: accepted.clientRequestSequence,
   }];
 }
 
@@ -95,11 +79,11 @@ export function drainAcceptedUserMessages<
       return;
     }
     args.events.push({
-      type: "item/completed",
+      type: "turn/input/accepted",
       threadId: args.threadId,
       providerThreadId: args.providerThreadId,
       turnId: args.turnId,
-      item: accepted.item,
+      clientRequestSequence: accepted.clientRequestSequence,
     });
   }
 }

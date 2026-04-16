@@ -17,11 +17,11 @@ import {
   getLastProviderThreadId,
 } from "../threads/thread-events.js";
 import {
-  addEventSequenceToTurnRunCommandPayload,
+  addEventSequenceToTurnSubmitCommandPayload,
   buildExecutionOptions,
-  prepareTurnRunCommandPayload,
-  type PreparedTurnRunCommandPayload,
-  queueTurnRunCommandInTransaction,
+  prepareTurnSubmitCommandPayload,
+  type PreparedTurnSubmitCommandPayload,
+  queueTurnSubmitCommandInTransaction,
 } from "../threads/thread-commands.js";
 import { resolvePermissionEscalation } from "../threads/thread-runtime-config.js";
 import { ensureHostSessionReadyForWork } from "../hosts/host-lifecycle.js";
@@ -37,14 +37,14 @@ export const DUE_NUDGE_BATCH_SIZE = 100;
 export type DueManagerThreadNudgeRow =
   ReturnType<typeof listDueManagerThreadNudges>[number];
 
-interface PendingTurnRunCommandArgs {
+interface PendingTurnSubmitCommandArgs {
   hostId: string;
   threadId: string;
 }
 
 export interface NudgeSweepCache {
   environmentById: Map<string, ReturnType<typeof getEnvironment>>;
-  pendingTurnRunByThreadId: Map<string, boolean>;
+  pendingTurnSubmitByThreadId: Map<string, boolean>;
   providerThreadIdByThreadId: Map<string, string | null>;
 }
 
@@ -65,7 +65,7 @@ interface QueueDueNudgePreparation {
   execution: ResolvedThreadExecutionOptions;
   input: PromptInput[];
   kind: "queue";
-  preparedCommand: PreparedTurnRunCommandPayload;
+  preparedCommand: PreparedTurnSubmitCommandPayload;
   sessionId: string;
   thread: NudgeThread;
 }
@@ -75,8 +75,8 @@ type DueNudgePreparation =
   | SkipDueNudgePreparation
   | QueueDueNudgePreparation;
 
-interface PendingTurnRunNudgeResult {
-  kind: "pending-turn-run";
+interface PendingTurnSubmitNudgeResult {
+  kind: "pending-turn-submit";
 }
 
 interface QueuedNudgeResult {
@@ -89,7 +89,7 @@ interface LostRaceNudgeResult {
 
 type QueueDueNudgeResult =
   | LostRaceNudgeResult
-  | PendingTurnRunNudgeResult
+  | PendingTurnSubmitNudgeResult
   | QueuedNudgeResult;
 
 function buildScheduledNudgeInput(name: string): PromptInput[] {
@@ -165,21 +165,21 @@ function computeNextFireAt(
 export function createNudgeSweepCache(): NudgeSweepCache {
   return {
     environmentById: new Map(),
-    pendingTurnRunByThreadId: new Map(),
+    pendingTurnSubmitByThreadId: new Map(),
     providerThreadIdByThreadId: new Map(),
   };
 }
 
 export function resetNudgeSweepBatchCache(cache: NudgeSweepCache): void {
-  cache.pendingTurnRunByThreadId.clear();
+  cache.pendingTurnSubmitByThreadId.clear();
 }
 
-function hasPendingTurnRunCommand(
+function hasPendingTurnSubmitCommand(
   db: DbConnection | DbTransaction,
-  args: PendingTurnRunCommandArgs,
+  args: PendingTurnSubmitCommandArgs,
   cache?: NudgeSweepCache,
 ): boolean {
-  const cached = cache?.pendingTurnRunByThreadId.get(args.threadId);
+  const cached = cache?.pendingTurnSubmitByThreadId.get(args.threadId);
   if (cached !== undefined) {
     return cached;
   }
@@ -187,9 +187,9 @@ function hasPendingTurnRunCommand(
   const hasPending = hasPendingHostCommandForThread(db, {
     hostId: args.hostId,
     threadId: args.threadId,
-    type: "turn.run",
+    type: "turn.submit",
   });
-  cache?.pendingTurnRunByThreadId.set(args.threadId, hasPending);
+  cache?.pendingTurnSubmitByThreadId.set(args.threadId, hasPending);
   return hasPending;
 }
 
@@ -271,13 +271,13 @@ async function prepareDueNudge(
     };
   }
 
-  if (hasPendingTurnRunCommand(deps.db, {
+  if (hasPendingTurnSubmitCommand(deps.db, {
     hostId: environment.hostId,
     threadId: thread.id,
   }, cache)) {
     return {
       kind: "skip",
-      reason: "pending-turn-run",
+      reason: "pending-turn-submit",
     };
   }
 
@@ -291,7 +291,7 @@ async function prepareDueNudge(
       { threadId: thread.id },
       "client/turn/requested",
     );
-    const preparedCommand = await prepareTurnRunCommandPayload(deps, {
+    const preparedCommand = await prepareTurnSubmitCommandPayload(deps, {
       environment: {
         id: environment.id,
         hostId: environment.hostId,
@@ -305,6 +305,7 @@ async function prepareDueNudge(
       }),
       input,
       providerThreadId,
+      target: { mode: "start" },
       thread,
     });
 
@@ -342,7 +343,7 @@ function queueDueNudgeInTransaction(
     preparation: QueueDueNudgePreparation;
   },
 ): QueueDueNudgeResult {
-  if (hasPendingTurnRunCommand(tx, {
+  if (hasPendingTurnSubmitCommand(tx, {
     hostId: args.preparation.environment.hostId,
     threadId: args.preparation.thread.id,
   })) {
@@ -354,7 +355,7 @@ function queueDueNudgeInTransaction(
     });
 
     return advanced
-      ? { kind: "pending-turn-run" }
+      ? { kind: "pending-turn-submit" }
       : { kind: "lost-race" };
   }
 
@@ -378,10 +379,11 @@ function queueDueNudgeInTransaction(
     initiator: "system",
     requestMethod: "turn/start",
     source: "tell",
+    target: { kind: "new-turn" },
   });
 
-  queueTurnRunCommandInTransaction(tx, {
-    command: addEventSequenceToTurnRunCommandPayload({
+  queueTurnSubmitCommandInTransaction(tx, {
+    command: addEventSequenceToTurnSubmitCommandPayload({
       eventSequence,
       preparedCommand: args.preparation.preparedCommand,
     }),
@@ -444,13 +446,13 @@ export async function runDueNudge(
     return;
   }
 
-  if (transactionResult.kind === "pending-turn-run") {
-    cache.pendingTurnRunByThreadId.set(preparation.thread.id, true);
+  if (transactionResult.kind === "pending-turn-submit") {
+    cache.pendingTurnSubmitByThreadId.set(preparation.thread.id, true);
     deps.hub.notifyProject(nudge.projectId, ["nudges-changed"]);
     deps.logger.info(
       {
         nudgeId: nudge.id,
-        reason: "pending-turn-run",
+        reason: "pending-turn-submit",
         threadId: preparation.thread.id,
       },
       "Skipped due manager nudge",
@@ -458,7 +460,7 @@ export async function runDueNudge(
     return;
   }
 
-  cache.pendingTurnRunByThreadId.set(preparation.thread.id, true);
+  cache.pendingTurnSubmitByThreadId.set(preparation.thread.id, true);
   deps.hub.notifyProject(nudge.projectId, ["nudges-changed"]);
   deps.hub.notifyThread(preparation.thread.id, ["events-appended"]);
   deps.hub.notifyCommand(preparation.environment.hostId);

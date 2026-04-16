@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { ThreadEvent } from "@bb/domain";
 import type { AgentRuntimeCaptureEntry } from "./capture-types.js";
-import { createAgentRuntime } from "./runtime.js";
+import { createAgentRuntimeWithAdapters } from "./runtime.js";
 import { fakeProviderScriptPath } from "./test/index.js";
 import {
   createFakeAdapter,
@@ -30,7 +30,7 @@ describe("createAgentRuntime tool calls", () => {
   it("routes provider-scoped tool calls through onToolCall and sends response back", async () => {
     const toolCalls: Array<{ threadId: string; providerThreadId: string; tool: string }> = [];
     const events: ThreadEvent[] = [];
-    const runtime = createAgentRuntime({
+    const runtime = createAgentRuntimeWithAdapters({
       workspacePath: tmpDir,
       onEvent: (event) => events.push(event),
       onToolCall: async (req) => {
@@ -81,7 +81,7 @@ describe("createAgentRuntime tool calls", () => {
   it("rejects tool calls whose BB thread hint disagrees with the provider-thread mapping", async () => {
     const toolCalls: string[] = [];
     const events: ThreadEvent[] = [];
-    const runtime = createAgentRuntime({
+    const runtime = createAgentRuntimeWithAdapters({
       workspacePath: tmpDir,
       onEvent: (event) => events.push(event),
       onToolCall: async (req) => {
@@ -119,7 +119,7 @@ describe("createAgentRuntime tool calls", () => {
 
   it("sends JSON-RPC error back when onToolCall throws", async () => {
     const events: ThreadEvent[] = [];
-    const runtime = createAgentRuntime({
+    const runtime = createAgentRuntimeWithAdapters({
       workspacePath: tmpDir,
       onEvent: (e) => events.push(e),
       onToolCall: async () => {
@@ -153,7 +153,7 @@ describe("createAgentRuntime tool calls", () => {
 
   it("captures correlated raw provider events, translated events, and tool call results", async () => {
     const captures: AgentRuntimeCaptureEntry[] = [];
-    const runtime = createAgentRuntime({
+    const runtime = createAgentRuntimeWithAdapters({
       workspacePath: tmpDir,
       onEvent: () => {},
       onCapture: (entry) => captures.push(entry),

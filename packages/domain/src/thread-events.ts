@@ -55,11 +55,39 @@ export type ThreadEnvironmentStartReason = z.infer<
 export const turnRequestOptionsSchema = resolvedThreadExecutionOptionsSchema;
 export type TurnRequestOptions = z.infer<typeof turnRequestOptionsSchema>;
 
+export const turnRequestTargetSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("thread-start") }),
+  z.object({ kind: z.literal("new-turn") }),
+  z.object({
+    kind: z.literal("auto"),
+    expectedTurnId: z.string().nullable(),
+  }),
+  z.object({
+    kind: z.literal("steer"),
+    expectedTurnId: z.string().nullable(),
+  }),
+]);
+export type TurnRequestTarget = z.infer<typeof turnRequestTargetSchema>;
+
+export const clientTurnLifecycleEventDataSchema = z.object({
+  direction: z.literal("outbound"),
+  source: z.enum(["spawn", "tell"]),
+  initiator: threadTurnInitiatorSchema.optional(),
+  request: z.object({
+    method: z.enum(["thread/start", "turn/start"]),
+    params: z.record(z.string(), z.unknown()),
+  }),
+});
+export type ClientTurnLifecycleEventData = z.infer<
+  typeof clientTurnLifecycleEventDataSchema
+>;
+
 export const turnRequestEventDataSchema = z.object({
   direction: z.literal("outbound"),
   source: z.enum(["spawn", "tell"]),
   initiator: threadTurnInitiatorSchema.optional(),
-  input: z.array(promptInputSchema).optional(),
+  input: z.array(promptInputSchema),
+  target: turnRequestTargetSchema,
   request: z.object({
     method: z.enum(["thread/start", "turn/start"]),
     params: z.record(z.string(), z.unknown()),
@@ -157,9 +185,9 @@ export type TurnLifecycleEventData = z.infer<
 >;
 
 export type ThreadEventDataByType = {
-  "client/thread/start": TurnRequestEventData;
+  "client/thread/start": ClientTurnLifecycleEventData;
   "client/turn/requested": TurnRequestEventData;
-  "client/turn/start": TurnRequestEventData;
+  "client/turn/start": ClientTurnLifecycleEventData;
   "system/error": SystemErrorEventData;
   "system/manager/user_message": SystemManagerUserMessageEventData;
   "system/thread/interrupted": SystemThreadInterruptedEventData;

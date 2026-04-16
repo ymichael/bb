@@ -694,7 +694,7 @@ describe("public thread interaction routes", () => {
       const queued = await waitForQueuedCommand(
         harness,
         ({ command }) =>
-          command.type === "turn.run" &&
+          command.type === "turn.submit" &&
           command.threadId === thread.id,
       );
       expect(queued.command.options).toMatchObject({

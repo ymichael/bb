@@ -170,11 +170,16 @@ function resolveProviderIdentifiers(
       return { providerThreadId: null, turnId: null };
     case "thread/identity":
     case "thread/name/updated":
-    case "thread/compacted":
     case "warning":
       return { providerThreadId: event.providerThreadId, turnId: null };
+    case "thread/compacted":
+      return {
+        providerThreadId: event.providerThreadId,
+        turnId: event.turnId,
+      };
     case "turn/started":
     case "turn/completed":
+    case "turn/input/accepted":
     case "item/started":
     case "item/completed":
     case "item/agentMessage/delta":

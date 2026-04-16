@@ -450,8 +450,7 @@ function handleThreadCommandFailure(
   const command = parseCommand(commandRow);
   if (
     command.type !== "thread.start" &&
-    command.type !== "turn.run" &&
-    command.type !== "turn.steer"
+    command.type !== "turn.submit"
   ) {
     return;
   }
@@ -577,8 +576,7 @@ export async function handleCommandResultSideEffects(
         handleThreadCommandFailure(deps, report, commandRow);
       }
       return;
-    case "turn.run":
-    case "turn.steer":
+    case "turn.submit":
       if (!report.ok) {
         handleThreadCommandFailure(deps, report, commandRow);
       }

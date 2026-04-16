@@ -18,20 +18,16 @@ import {
   createTestRuntime,
   createToken,
   expectWriteApprovalRequest,
-  fullRuntimeOptions,
   getAgentText,
   getFirstNonEmptyLine,
   getStreamedText,
   getThreadText,
   hasDeniedCommandExecution,
   newThreadId,
-  readonlyAskRuntimeOptions,
-  readonlyDenyRuntimeOptions,
+  resolveRuntimeOptions,
   waitForInteractiveRequestBeforeTurnCompletion,
   waitForThreadTurnCompleted,
   waitForThreadTurnCompletedCount,
-  workspaceWriteAskRuntimeOptions,
-  workspaceWriteDenyRuntimeOptions,
 } from "./test/runtime-integration-harness.js";
 
 describe("interactive request scenarios", () => {
@@ -45,12 +41,17 @@ describe("interactive request scenarios", () => {
 
     try {
       const threadId = newThreadId();
+      const options = await resolveRuntimeOptions({
+        ctx,
+        providerId: "claude-code",
+        preset: "full",
+      });
       await ctx.runtime.startThread({
         environmentId: "env-1",
         threadId,
         projectId: "test-project",
         providerId: "claude-code",
-        options: fullRuntimeOptions,
+        options,
       });
 
       await ctx.runtime.runTurn({
@@ -59,7 +60,7 @@ describe("interactive request scenarios", () => {
           type: "text",
           text: "What is the repo validation phrase? Reply with only that phrase.",
         }],
-        options: fullRuntimeOptions,
+        options,
       });
 
       await waitForThreadTurnCompleted({
@@ -97,12 +98,17 @@ describe("interactive request scenarios", () => {
 
     try {
       const threadId = newThreadId();
+      const options = await resolveRuntimeOptions({
+        ctx,
+        providerId: "claude-code",
+        preset: "workspace-write-ask",
+      });
       await ctx.runtime.startThread({
         environmentId: "env-1",
         threadId,
         projectId: "test-project",
         providerId: "claude-code",
-        options: workspaceWriteAskRuntimeOptions,
+        options,
         instructions:
           "Use the Read tool when the user explicitly asks for it. Do not substitute Bash.",
       });
@@ -116,7 +122,7 @@ describe("interactive request scenarios", () => {
               "Use the Read tool to read /etc/hosts, then reply with exactly the first non-empty line from the file and nothing else.",
           },
         ],
-        options: workspaceWriteAskRuntimeOptions,
+        options,
       });
 
       await waitForInteractiveRequestBeforeTurnCompletion({
@@ -159,19 +165,24 @@ describe("interactive request scenarios", () => {
 
     try {
       const threadId = newThreadId();
+      const options = await resolveRuntimeOptions({
+        ctx,
+        providerId: "claude-code",
+        preset: "workspace-write-ask",
+      });
       await ctx.runtime.startThread({
         environmentId: "env-1",
         threadId,
         projectId: "test-project",
         providerId: "claude-code",
-        options: workspaceWriteAskRuntimeOptions,
+        options,
         instructions:
           "Use the Write tool when the user explicitly asks for Write. Do not substitute Bash.",
       });
 
       await ctx.runtime.runTurn({
         threadId,
-        options: workspaceWriteAskRuntimeOptions,
+        options,
         input: [{
           type: "text",
           text:
@@ -205,19 +216,24 @@ describe("interactive request scenarios", () => {
 
     try {
       const threadId = newThreadId();
+      const options = await resolveRuntimeOptions({
+        ctx,
+        providerId: "claude-code",
+        preset: "workspace-write-ask",
+      });
       await ctx.runtime.startThread({
         environmentId: "env-1",
         threadId,
         projectId: "test-project",
         providerId: "claude-code",
-        options: workspaceWriteAskRuntimeOptions,
+        options,
         instructions:
           "Use the Bash tool when the user explicitly asks for Bash. Do not substitute Write.",
       });
 
       await ctx.runtime.runTurn({
         threadId,
-        options: workspaceWriteAskRuntimeOptions,
+        options,
         input: [{
           type: "text",
           text:
@@ -250,19 +266,24 @@ describe("interactive request scenarios", () => {
 
     try {
       const threadId = newThreadId();
+      const options = await resolveRuntimeOptions({
+        ctx,
+        providerId: "claude-code",
+        preset: "workspace-write-deny",
+      });
       await ctx.runtime.startThread({
         environmentId: "env-1",
         threadId,
         projectId: "test-project",
         providerId: "claude-code",
-        options: workspaceWriteDenyRuntimeOptions,
+        options,
         instructions:
           "Use the Bash tool when the user explicitly asks for Bash. Do not substitute Write.",
       });
 
       await ctx.runtime.runTurn({
         threadId,
-        options: workspaceWriteDenyRuntimeOptions,
+        options,
         input: [{
           type: "text",
           text:
@@ -296,25 +317,24 @@ describe("interactive request scenarios", () => {
 
     try {
       const threadId = newThreadId();
+      const options = await resolveRuntimeOptions({
+        ctx,
+        providerId: "codex",
+        preset: "workspace-write-ask",
+      });
       await ctx.runtime.startThread({
         environmentId: "env-1",
         threadId,
         projectId: "test-project",
         providerId: "codex",
-        options: {
-          permissionEscalation: "ask",
-          permissionMode: "workspace-write",
-        },
+        options,
         instructions:
           "When the user asks you to run an exact shell command, run that shell command exactly once and then report DONE.",
       });
 
       await ctx.runtime.runTurn({
         threadId,
-        options: {
-          permissionEscalation: "ask",
-          permissionMode: "workspace-write",
-        },
+        options,
         input: [{
           type: "text",
           text:
@@ -349,25 +369,24 @@ describe("interactive request scenarios", () => {
 
     try {
       const threadId = newThreadId();
+      const options = await resolveRuntimeOptions({
+        ctx,
+        providerId: "codex",
+        preset: "workspace-write-ask",
+      });
       await ctx.runtime.startThread({
         environmentId: "env-1",
         threadId,
         projectId: "test-project",
         providerId: "codex",
-        options: {
-          permissionEscalation: "ask",
-          permissionMode: "workspace-write",
-        },
+        options,
         instructions:
           "When the user asks you to run an exact shell command, run that shell command exactly once. If approval is needed, request approval; it will be approved. Then report DONE.",
       });
 
       await ctx.runtime.runTurn({
         threadId,
-        options: {
-          permissionEscalation: "ask",
-          permissionMode: "workspace-write",
-        },
+        options,
         input: [{
           type: "text",
           text:
@@ -410,19 +429,24 @@ describe("interactive request scenarios", () => {
 
     try {
       const threadId = newThreadId();
+      const options = await resolveRuntimeOptions({
+        ctx,
+        providerId: "codex",
+        preset: "readonly-ask",
+      });
       await ctx.runtime.startThread({
         environmentId: "env-1",
         threadId,
         projectId: "test-project",
         providerId: "codex",
-        options: readonlyAskRuntimeOptions,
+        options,
         instructions:
           "When the user asks you to run an exact shell command, run that shell command exactly once. If approval is needed, request approval; it will be approved. Then report DONE.",
       });
 
       await ctx.runtime.runTurn({
         threadId,
-        options: readonlyAskRuntimeOptions,
+        options,
         input: [{
           type: "text",
           text:
@@ -464,19 +488,24 @@ describe("interactive request scenarios", () => {
 
     try {
       const threadId = newThreadId();
+      const options = await resolveRuntimeOptions({
+        ctx,
+        providerId: "codex",
+        preset: "readonly-ask",
+      });
       await ctx.runtime.startThread({
         environmentId: "env-1",
         threadId,
         projectId: "test-project",
         providerId: "codex",
-        options: readonlyAskRuntimeOptions,
+        options,
         instructions:
           "When the user asks you to edit a file, use your file editing capability. Do not run shell commands for file edits. If approval is needed, request approval; it will be approved.",
       });
 
       await ctx.runtime.runTurn({
         threadId,
-        options: readonlyAskRuntimeOptions,
+        options,
         input: [{
           type: "text",
           text:
@@ -551,19 +580,24 @@ describe("interactive request scenarios", () => {
 
     try {
       const threadId = newThreadId();
+      const options = await resolveRuntimeOptions({
+        ctx,
+        providerId: "codex",
+        preset: "readonly-ask",
+      });
       await ctx.runtime.startThread({
         environmentId: "env-1",
         threadId,
         projectId: "test-project",
         providerId: "codex",
-        options: readonlyAskRuntimeOptions,
+        options,
         instructions:
           "When the user asks you to run an exact shell command, run that shell command exactly once. If approval is denied, say DENIED.",
       });
 
       await ctx.runtime.runTurn({
         threadId,
-        options: readonlyAskRuntimeOptions,
+        options,
         input: [{
           type: "text",
           text:
@@ -605,19 +639,24 @@ describe("interactive request scenarios", () => {
 
     try {
       const threadId = newThreadId();
+      const options = await resolveRuntimeOptions({
+        ctx,
+        providerId: "codex",
+        preset: "readonly-deny",
+      });
       await ctx.runtime.startThread({
         environmentId: "env-1",
         threadId,
         projectId: "test-project",
         providerId: "codex",
-        options: readonlyDenyRuntimeOptions,
+        options,
         instructions:
           "When the user asks you to run an exact shell command, run that shell command exactly once and then report DONE.",
       });
 
       await ctx.runtime.runTurn({
         threadId,
-        options: readonlyDenyRuntimeOptions,
+        options,
         input: [{
           type: "text",
           text:
@@ -649,19 +688,24 @@ describe("interactive request scenarios", () => {
 
     try {
       const threadId = newThreadId();
+      const options = await resolveRuntimeOptions({
+        ctx,
+        providerId: "codex",
+        preset: "readonly-ask",
+      });
       await ctx.runtime.startThread({
         environmentId: "env-1",
         threadId,
         projectId: "test-project",
         providerId: "codex",
-        options: readonlyAskRuntimeOptions,
+        options,
         instructions:
           "When the user asks you to run an exact shell command, run that shell command exactly once. If approval is needed, request approval; it will be approved. Then report DONE.",
       });
 
       await ctx.runtime.runTurn({
         threadId,
-        options: readonlyAskRuntimeOptions,
+        options,
         input: [{
           type: "text",
           text:
@@ -714,19 +758,24 @@ describe("interactive request scenarios", () => {
 
     try {
       const threadId = newThreadId();
+      const options = await resolveRuntimeOptions({
+        ctx,
+        providerId: "claude-code",
+        preset: "readonly-ask",
+      });
       await ctx.runtime.startThread({
         environmentId: "env-1",
         threadId,
         projectId: "test-project",
         providerId: "claude-code",
-        options: readonlyAskRuntimeOptions,
+        options,
         instructions:
           "Use the Bash tool when the user explicitly asks for Bash. Do not use another tool.",
       });
 
       await ctx.runtime.runTurn({
         threadId,
-        options: readonlyAskRuntimeOptions,
+        options,
         input: [{
           type: "text",
           text:
@@ -785,19 +834,24 @@ describe("interactive request scenarios", () => {
 
     try {
       const threadId = newThreadId();
+      const options = await resolveRuntimeOptions({
+        ctx,
+        providerId: "claude-code",
+        preset: "readonly-ask",
+      });
       await ctx.runtime.startThread({
         environmentId: "env-1",
         threadId,
         projectId: "test-project",
         providerId: "claude-code",
-        options: readonlyAskRuntimeOptions,
+        options,
         instructions:
           "Use the Write tool when the user explicitly asks for Write. Do not substitute Bash.",
       });
 
       await ctx.runtime.runTurn({
         threadId,
-        options: readonlyAskRuntimeOptions,
+        options,
         input: [{
           type: "text",
           text:
@@ -852,19 +906,24 @@ describe("interactive request scenarios", () => {
 
     try {
       const threadId = newThreadId();
+      const options = await resolveRuntimeOptions({
+        ctx,
+        providerId: "claude-code",
+        preset: "readonly-ask",
+      });
       await ctx.runtime.startThread({
         environmentId: "env-1",
         threadId,
         projectId: "test-project",
         providerId: "claude-code",
-        options: readonlyAskRuntimeOptions,
+        options,
         instructions:
           "Use the WebFetch tool when the user explicitly asks for WebFetch. Do not substitute Bash or any other tool.",
       });
 
       await ctx.runtime.runTurn({
         threadId,
-        options: readonlyAskRuntimeOptions,
+        options,
         input: [{
           type: "text",
           text:
@@ -900,7 +959,7 @@ describe("interactive request scenarios", () => {
 
       await ctx.runtime.runTurn({
         threadId,
-        options: readonlyAskRuntimeOptions,
+        options,
         input: [{
           type: "text",
           text:
@@ -939,19 +998,24 @@ describe("interactive request scenarios", () => {
 
     try {
       const threadId = newThreadId();
+      const options = await resolveRuntimeOptions({
+        ctx,
+        providerId: "claude-code",
+        preset: "readonly-ask",
+      });
       await ctx.runtime.startThread({
         environmentId: "env-1",
         threadId,
         projectId: "test-project",
         providerId: "claude-code",
-        options: readonlyAskRuntimeOptions,
+        options,
         instructions:
           "Use the Bash tool when the user explicitly asks for Bash. Do not use another tool.",
       });
 
       await ctx.runtime.runTurn({
         threadId,
-        options: readonlyAskRuntimeOptions,
+        options,
         input: [{
           type: "text",
           text:
@@ -992,19 +1056,24 @@ describe("interactive request scenarios", () => {
 
     try {
       const threadId = newThreadId();
+      const options = await resolveRuntimeOptions({
+        ctx,
+        providerId: "claude-code",
+        preset: "readonly-deny",
+      });
       await ctx.runtime.startThread({
         environmentId: "env-1",
         threadId,
         projectId: "test-project",
         providerId: "claude-code",
-        options: readonlyDenyRuntimeOptions,
+        options,
         instructions:
           "Use the Bash tool when the user explicitly asks for Bash. Do not use another tool.",
       });
 
       await ctx.runtime.runTurn({
         threadId,
-        options: readonlyDenyRuntimeOptions,
+        options,
         input: [{
           type: "text",
           text:

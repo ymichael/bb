@@ -1,6 +1,6 @@
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { randomUUID } from "node:crypto";
-import { homedir, tmpdir } from "node:os";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect } from "vitest";
 import type {
@@ -24,7 +24,7 @@ import {
 
 export type ThreadIdentityEvent = Extract<ThreadEvent, { type: "thread/identity" }>;
 export type TurnStartedEvent = Extract<ThreadEvent, { type: "turn/started" }>;
-export type UserMessageAckEvent = Extract<ThreadEvent, { type: "item/completed" }>;
+export type InputAcceptedEvent = Extract<ThreadEvent, { type: "turn/input/accepted" }>;
 export type ErrorThreadEvent = Extract<ThreadEvent, { type: "error" | "system/error" }>;
 export type WaitPredicate = RuntimeWaitPredicate;
 export type WaitFailureDescription = RuntimeWaitFailureDescription;
@@ -64,30 +64,63 @@ export interface InteractiveRequestWaitArgs extends ThreadWaitArgs {
   count: number;
 }
 
-export const fullRuntimeOptions = {
+export type RuntimeOptionsTemplate = Omit<AgentRuntimeExecutionOptions, "model">;
+
+export type RuntimeOptionsPreset =
+  | "full"
+  | "readonly-ask"
+  | "readonly-deny"
+  | "workspace-write-ask"
+  | "workspace-write-deny";
+
+export interface ResolveRuntimeOptionsArgs {
+  ctx: TestContext;
+  providerId: string;
+  preset: RuntimeOptionsPreset;
+}
+
+export const fullRuntimeOptionsTemplate = {
+  serviceTier: "default",
+  reasoningLevel: "medium",
   permissionMode: "full",
   permissionEscalation: null,
-} satisfies AgentRuntimeExecutionOptions;
+} satisfies RuntimeOptionsTemplate;
 
-export const workspaceWriteAskRuntimeOptions = {
+export const workspaceWriteAskRuntimeOptionsTemplate = {
+  serviceTier: "default",
+  reasoningLevel: "medium",
   permissionMode: "workspace-write",
   permissionEscalation: "ask",
-} satisfies AgentRuntimeExecutionOptions;
+} satisfies RuntimeOptionsTemplate;
 
-export const workspaceWriteDenyRuntimeOptions = {
+export const workspaceWriteDenyRuntimeOptionsTemplate = {
+  serviceTier: "default",
+  reasoningLevel: "medium",
   permissionMode: "workspace-write",
   permissionEscalation: "deny",
-} satisfies AgentRuntimeExecutionOptions;
+} satisfies RuntimeOptionsTemplate;
 
-export const readonlyAskRuntimeOptions = {
+export const readonlyAskRuntimeOptionsTemplate = {
+  serviceTier: "default",
+  reasoningLevel: "medium",
   permissionMode: "readonly",
   permissionEscalation: "ask",
-} satisfies AgentRuntimeExecutionOptions;
+} satisfies RuntimeOptionsTemplate;
 
-export const readonlyDenyRuntimeOptions = {
+export const readonlyDenyRuntimeOptionsTemplate = {
+  serviceTier: "default",
+  reasoningLevel: "medium",
   permissionMode: "readonly",
   permissionEscalation: "deny",
-} satisfies AgentRuntimeExecutionOptions;
+} satisfies RuntimeOptionsTemplate;
+
+export const runtimeOptionsTemplates = {
+  full: fullRuntimeOptionsTemplate,
+  "readonly-ask": readonlyAskRuntimeOptionsTemplate,
+  "readonly-deny": readonlyDenyRuntimeOptionsTemplate,
+  "workspace-write-ask": workspaceWriteAskRuntimeOptionsTemplate,
+  "workspace-write-deny": workspaceWriteDenyRuntimeOptionsTemplate,
+} satisfies Record<RuntimeOptionsPreset, RuntimeOptionsTemplate>;
 
 export function turnCompletedCount(events: ThreadEvent[]): number {
   return events.filter((e) => e.type === "turn/completed").length;
@@ -119,29 +152,24 @@ export interface ResolveProviderThreadIdArgs {
   threadId: string;
 }
 
-export interface ResolveResumePathArgs {
-  providerId: string;
-  threadId: string;
-}
-
 export function providerUsesRuntimeTurnIds(providerId: string): boolean {
   return providerId === "claude-code" || providerId === "pi";
 }
 
-export function getUserMessageAckEvents(
+export function getInputAcceptedEvents(
   events: ThreadEvent[],
-): UserMessageAckEvent[] {
+): InputAcceptedEvent[] {
   return events.filter(
-    (event): event is UserMessageAckEvent =>
-      event.type === "item/completed" && event.item.type === "userMessage",
+    (event): event is InputAcceptedEvent =>
+      event.type === "turn/input/accepted",
   );
 }
 
-export function expectUserMessageAckCount(
+export function expectInputAcceptedCount(
   events: ThreadEvent[],
   count: number,
 ): void {
-  expect(getUserMessageAckEvents(events)).toHaveLength(count);
+  expect(getInputAcceptedEvents(events)).toHaveLength(count);
 }
 
 export function getEventsForThread(
@@ -166,27 +194,24 @@ export function findLatestTurnStartedForThread(
   return null;
 }
 
-export function findUserMessageAckTextForThread(
+export function findInputAcceptedForThread(
   events: ThreadEvent[],
   threadId: string,
-  text: string,
-): UserMessageAckEvent | null {
-  const ack = getUserMessageAckEvents(getEventsForThread(events, threadId)).find(
-    (event) =>
-      event.item.type === "userMessage" &&
-      event.item.content.some((content) =>
-        content.type === "text" && content.text === text,
-      ),
+  clientRequestSequence: number,
+): InputAcceptedEvent | null {
+  const event = getInputAcceptedEvents(getEventsForThread(events, threadId)).find(
+    (inputAcceptedEvent) =>
+      inputAcceptedEvent.clientRequestSequence === clientRequestSequence,
   );
-  return ack ?? null;
+  return event ?? null;
 }
 
-export function hasUserMessageAckTextForThread(
+export function hasInputAcceptedForThread(
   events: ThreadEvent[],
   threadId: string,
-  text: string,
+  clientRequestSequence: number,
 ): boolean {
-  return findUserMessageAckTextForThread(events, threadId, text) !== null;
+  return findInputAcceptedForThread(events, threadId, clientRequestSequence) !== null;
 }
 
 export function turnStartedCountForThread(
@@ -232,14 +257,6 @@ export function resolveProviderThreadId(args: ResolveProviderThreadIdArgs): stri
     throw new Error(`No provider thread id captured for ${args.threadId}`);
   }
   return identityEvent.providerThreadId;
-}
-
-export function resolveResumePath(args: ResolveResumePathArgs): string | undefined {
-  if (args.providerId !== "pi") {
-    return undefined;
-  }
-  const sanitized = args.threadId.replace(/[^A-Za-z0-9._-]/g, "_");
-  return join(homedir(), ".bb", "pi-bridge-sessions", `${sanitized}.jsonl`);
 }
 
 export function expectNoSharedRuntimeTurnIds(
@@ -550,10 +567,26 @@ export function hasDeniedCommandExecution(events: ThreadEvent[]): boolean {
   );
 }
 
-export function resolveDefaultModel(providerId: string, ctx: TestContext): Promise<string | undefined> {
-  return ctx.runtime.listModels({ providerId }).then((models) =>
-    models.find((model) => model.isDefault)?.model ?? models[0]?.model,
-  );
+export async function resolveDefaultModel(
+  providerId: string,
+  ctx: TestContext,
+): Promise<string> {
+  const models = await ctx.runtime.listModels({ providerId });
+  const model = models.find((availableModel) => availableModel.isDefault)?.model
+    ?? models[0]?.model;
+  if (!model) {
+    throw new Error(`Provider "${providerId}" returned no available models`);
+  }
+  return model;
+}
+
+export async function resolveRuntimeOptions(
+  args: ResolveRuntimeOptionsArgs,
+): Promise<AgentRuntimeExecutionOptions> {
+  return {
+    ...runtimeOptionsTemplates[args.preset],
+    model: await resolveDefaultModel(args.providerId, args.ctx),
+  };
 }
 
 export function newThreadId(): string {

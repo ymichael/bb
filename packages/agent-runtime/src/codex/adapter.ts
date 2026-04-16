@@ -33,7 +33,6 @@ import {
 } from "../shared/adapter-utils.js";
 import {
   buildAcceptedUserMessageEvent,
-  type AcceptedUserMessageState,
 } from "../shared/accepted-user-messages.js";
 import {
   decodeNativeProviderToolCallRequest,
@@ -41,11 +40,16 @@ import {
 import { resolveAdapterPermissionPolicy } from "../shared/permission-policy.js";
 import type {
   AdapterCommand,
-  AdapterOptions,
   DecodedToolCallRequest,
-  JsonRpcMessage,
+  PreparedProviderCommandDispatch,
   ProviderAdapter,
+  ProviderCommandPlan,
+  ProviderExecutionContext,
 } from "../provider-adapter.js";
+import type {
+  ProviderInboundRequest,
+  ProviderRuntimeEvent,
+} from "../runtime-json-rpc.js";
 import { translateCodexEvent } from "./event-translation.js";
 import {
   buildCodexInteractiveResponse,
@@ -92,7 +96,7 @@ function toEscalationApprovalPolicy(
 }
 
 function toCodexPermissionSettings(
-  options: AdapterOptions,
+  options: ProviderExecutionContext,
 ): CodexPermissionSettings {
   const permissionPolicy = resolveAdapterPermissionPolicy(options);
   switch (permissionPolicy.permissionMode) {
@@ -147,7 +151,7 @@ function toCodexUserInput(input: PromptInput[]): CodexUserInput[] {
 
 function buildCodexConfig(
   threadId: string,
-  options?: AdapterOptions,
+  options?: ProviderExecutionContext,
 ): { [key in string]?: JsonValue } | undefined {
   const config: { [key in string]?: JsonValue } = {};
   if (threadId) {
@@ -186,7 +190,6 @@ function toCodexDynamicTools(
 export interface CreateCodexProviderAdapterOptions {
   processCommand?: string;
   processArgs?: string[];
-  launchEnv?: Record<string, string>;
 }
 
 export function createCodexProviderAdapter(
@@ -198,50 +201,75 @@ export function createCodexProviderAdapter(
     supportsServiceTier: providerInfo.capabilities.supportsServiceTier,
     supportedPermissionModes: providerInfo.capabilities.supportedPermissionModes,
   };
-  const acceptedUserMessageStateByThreadId =
-    new Map<string, AcceptedUserMessageState>();
-  const nativeUserMessageClientRequestSequencesByProviderThreadId =
+  const nativeTurnStartClientRequestSequencesByProviderThreadId =
     new Map<string, number[]>();
 
-  function getAcceptedUserMessageState(threadId: string): AcceptedUserMessageState {
-    const existing = acceptedUserMessageStateByThreadId.get(threadId);
-    if (existing) {
-      return existing;
-    }
-    const state: AcceptedUserMessageState = {
-      pendingAcceptedUserMessages: [],
-      userMessageCounter: 0,
-    };
-    acceptedUserMessageStateByThreadId.set(threadId, state);
-    return state;
-  }
-
-  function queueNativeUserMessageClientRequestSequence(args: {
+  function queueNativeTurnStartClientRequestSequence(args: {
     clientRequestSequence: number | undefined;
     providerThreadId: string | undefined;
-  }): void {
+  }): PreparedProviderCommandDispatch | null {
     if (
       args.clientRequestSequence === undefined ||
       args.providerThreadId === undefined
     ) {
+      return null;
+    }
+    const clientRequestSequence = args.clientRequestSequence;
+    const providerThreadId = args.providerThreadId;
+    nativeTurnStartClientRequestSequencesByProviderThreadId.set(
+      providerThreadId,
+      [
+        ...(nativeTurnStartClientRequestSequencesByProviderThreadId.get(
+          providerThreadId,
+        ) ?? []),
+        clientRequestSequence,
+      ],
+    );
+
+    return {
+      rollback: () => {
+        removeNativeTurnStartClientRequestSequence({
+          clientRequestSequence,
+          providerThreadId,
+        });
+      },
+    };
+  }
+
+  function removeNativeTurnStartClientRequestSequence(args: {
+    clientRequestSequence: number;
+    providerThreadId: string;
+  }): void {
+    const sequences =
+      nativeTurnStartClientRequestSequencesByProviderThreadId.get(
+        args.providerThreadId,
+      );
+    if (!sequences || sequences.length === 0) {
       return;
     }
-    nativeUserMessageClientRequestSequencesByProviderThreadId.set(
+    const nextSequences = [...sequences];
+    const sequenceIndex = nextSequences.indexOf(args.clientRequestSequence);
+    if (sequenceIndex === -1) {
+      return;
+    }
+    nextSequences.splice(sequenceIndex, 1);
+    if (nextSequences.length === 0) {
+      nativeTurnStartClientRequestSequencesByProviderThreadId.delete(
+        args.providerThreadId,
+      );
+      return;
+    }
+    nativeTurnStartClientRequestSequencesByProviderThreadId.set(
       args.providerThreadId,
-      [
-        ...(nativeUserMessageClientRequestSequencesByProviderThreadId.get(
-          args.providerThreadId,
-        ) ?? []),
-        args.clientRequestSequence,
-      ],
+      nextSequences,
     );
   }
 
-  function shiftNativeUserMessageClientRequestSequence(
+  function shiftNativeTurnStartClientRequestSequence(
     providerThreadId: string,
   ): number | undefined {
     const sequences =
-      nativeUserMessageClientRequestSequencesByProviderThreadId.get(
+      nativeTurnStartClientRequestSequencesByProviderThreadId.get(
         providerThreadId,
       );
     if (!sequences || sequences.length === 0) {
@@ -249,11 +277,11 @@ export function createCodexProviderAdapter(
     }
     const [clientRequestSequence, ...remainingSequences] = sequences;
     if (remainingSequences.length === 0) {
-      nativeUserMessageClientRequestSequencesByProviderThreadId.delete(
+      nativeTurnStartClientRequestSequencesByProviderThreadId.delete(
         providerThreadId,
       );
     } else {
-      nativeUserMessageClientRequestSequencesByProviderThreadId.set(
+      nativeTurnStartClientRequestSequencesByProviderThreadId.set(
         providerThreadId,
         remainingSequences,
       );
@@ -263,34 +291,41 @@ export function createCodexProviderAdapter(
 
   function attachAcceptedUserMessageCorrelation(
     event: ThreadEvent,
-  ): ThreadEvent {
+  ): ThreadEvent[] {
     if (event.type === "turn/completed") {
-      nativeUserMessageClientRequestSequencesByProviderThreadId.delete(
+      nativeTurnStartClientRequestSequencesByProviderThreadId.delete(
         event.providerThreadId,
       );
-      return event;
+      return [event];
+    }
+
+    if (event.type === "turn/started") {
+      const clientRequestSequence = shiftNativeTurnStartClientRequestSequence(
+        event.providerThreadId,
+      );
+      if (clientRequestSequence === undefined) {
+        return [event];
+      }
+      return [
+        event,
+        {
+          type: "turn/input/accepted",
+          threadId: event.threadId,
+          providerThreadId: event.providerThreadId,
+          turnId: event.turnId,
+          clientRequestSequence,
+        },
+      ];
     }
 
     if (
-      event.type !== "item/completed" ||
+      (event.type !== "item/started" && event.type !== "item/completed") ||
       event.item.type !== "userMessage"
     ) {
-      return event;
+      return [event];
     }
 
-    const clientRequestSequence = shiftNativeUserMessageClientRequestSequence(
-      event.providerThreadId,
-    );
-    if (clientRequestSequence === undefined) {
-      return event;
-    }
-    return {
-      ...event,
-      item: {
-        ...event.item,
-        clientRequestSequence,
-      },
-    };
+    return [];
   }
 
   return {
@@ -301,17 +336,16 @@ export function createCodexProviderAdapter(
     // next turn can sit idle for ~30s while the interrupted session drains.
     // Restarting forces the next command through thread/resume on a fresh
     // app-server process.
-    threadStopBehavior: "restart-provider",
     process: {
       command: opts?.processCommand ?? "codex",
       args: opts?.processArgs ?? ["app-server"],
     },
 
-    buildCommand(command: AdapterCommand): JsonRpcMessage | null {
+    buildCommandPlan(command: AdapterCommand): ProviderCommandPlan {
       switch (command.type) {
         case "initialize":
           return {
-            jsonrpc: "2.0",
+            kind: "request",
             method: "initialize",
             params: {
               clientInfo: { name: "bb", version: "1.0.0", title: null },
@@ -320,7 +354,7 @@ export function createCodexProviderAdapter(
           };
         case "model/list":
           return {
-            jsonrpc: "2.0",
+            kind: "request",
             method: "model/list",
             params: {},
           };
@@ -342,7 +376,7 @@ export function createCodexProviderAdapter(
             ...(dynamicTools && dynamicTools.length > 0 ? { dynamicTools } : {}),
           };
           return {
-            jsonrpc: "2.0",
+            kind: "request",
             method: "thread/start",
             params,
           };
@@ -365,7 +399,7 @@ export function createCodexProviderAdapter(
             ...(dynamicTools && dynamicTools.length > 0 ? { dynamicTools } : {}),
           };
           return {
-            jsonrpc: "2.0",
+            kind: "request",
             method: "thread/resume",
             params,
           };
@@ -373,7 +407,7 @@ export function createCodexProviderAdapter(
         case "turn/start": {
           const permissionSettings = toCodexPermissionSettings(command.options);
           return {
-            jsonrpc: "2.0",
+            kind: "request",
             method: "turn/start",
             params: {
               threadId: command.providerThreadId ?? command.threadId,
@@ -387,7 +421,7 @@ export function createCodexProviderAdapter(
         }
         case "turn/steer":
           return {
-            jsonrpc: "2.0",
+            kind: "request",
             method: "turn/steer",
             params: {
               threadId: command.providerThreadId ?? command.threadId,
@@ -397,10 +431,10 @@ export function createCodexProviderAdapter(
           };
         case "thread/name/set":
           if (!capabilities.supportsRename) {
-            return null;
+            return { kind: "noop", reason: "rename unsupported" };
           }
           return {
-            jsonrpc: "2.0",
+            kind: "request",
             method: "thread/name/set",
             params: {
               threadId: command.providerThreadId ?? command.threadId,
@@ -409,11 +443,12 @@ export function createCodexProviderAdapter(
           };
         case "thread/stop":
           if (command.activeTurnId === null) {
-            return null;
+            return { kind: "noop", reason: "no active turn to interrupt" };
           }
           return {
-            jsonrpc: "2.0",
+            kind: "request",
             method: "turn/interrupt",
+            processEffect: "restart-provider",
             params: {
               threadId: command.providerThreadId,
               turnId: command.activeTurnId,
@@ -422,34 +457,30 @@ export function createCodexProviderAdapter(
       }
     },
 
-    translateEvent(event: unknown) {
-      return translateCodexEvent(event).map(attachAcceptedUserMessageCorrelation);
+    prepareTurnStart(command) {
+      return queueNativeTurnStartClientRequestSequence({
+        clientRequestSequence: command.clientRequestSequence,
+        providerThreadId: command.providerThreadId ?? command.threadId,
+      });
+    },
+
+    translateEvent(event: ProviderRuntimeEvent) {
+      return translateCodexEvent(event).flatMap(attachAcceptedUserMessageCorrelation);
     },
 
     translateAcceptedCommand({ command }) {
-      if (command.type === "turn/start") {
-        queueNativeUserMessageClientRequestSequence({
-          clientRequestSequence: command.clientRequestSequence,
-          providerThreadId: command.providerThreadId,
-        });
-        return [];
-      }
-
       if (command.type !== "turn/steer") {
         return [];
       }
       return buildAcceptedUserMessageEvent({
         clientRequestSequence: command.clientRequestSequence,
-        input: command.input,
-        itemIdPrefix: "codex-user",
         providerThreadId: command.providerThreadId ?? command.threadId,
-        state: getAcceptedUserMessageState(command.threadId),
         threadId: command.threadId,
         turnId: command.expectedTurnId,
       });
     },
 
-    decodeToolCallRequest(request: JsonRpcMessage): DecodedToolCallRequest | null {
+    decodeToolCallRequest(request: ProviderInboundRequest): DecodedToolCallRequest | null {
       if (typeof request.id !== "string" && typeof request.id !== "number") {
         return null;
       }
@@ -460,7 +491,7 @@ export function createCodexProviderAdapter(
       );
     },
 
-    decodeInteractiveRequest(request: JsonRpcMessage) {
+    decodeInteractiveRequest(request: ProviderInboundRequest) {
       return decodeCodexInteractiveRequest(request);
     },
 

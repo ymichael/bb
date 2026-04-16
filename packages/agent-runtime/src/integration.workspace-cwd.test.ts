@@ -50,9 +50,11 @@ for (const providerId of providers) {
           projectId: "test-project",
           providerId,
           options: {
+            model,
+            serviceTier: "default",
+            reasoningLevel: "medium",
             permissionMode: "full",
             permissionEscalation: null,
-            ...(model ? { model } : {}),
           },
           instructions:
             "When the user asks you to run exact shell commands, use your shell or command execution tool and preserve the command output.",
@@ -61,9 +63,11 @@ for (const providerId of providers) {
         await ctx.runtime.runTurn({
           threadId,
           options: {
+            model,
+            serviceTier: "default",
+            reasoningLevel: "medium",
             permissionMode: "full",
             permissionEscalation: null,
-            ...(model ? { model } : {}),
           },
           input: [{
             type: "text",

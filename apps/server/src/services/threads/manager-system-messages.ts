@@ -5,14 +5,13 @@ import type {
   Thread,
 } from "@bb/domain";
 import type { PendingInteractionWorkSessionDeps } from "../../types.js";
-import { ApiError } from "../../errors.js";
 import { requireThreadEnvironment } from "../lib/entity-lookup.js";
-import { buildExecutionOptions, queueTurnSteerCommand } from "./thread-commands.js";
+import { buildExecutionOptions, queueTurnSubmitCommand } from "./thread-commands.js";
 import {
   ensureThreadCanQueueStartRequest,
   queueReadyThreadTurnCommand,
 } from "./thread-lifecycle.js";
-import { appendClientTurnEvent, requireActiveTurnId } from "./thread-events.js";
+import { appendClientTurnEvent, getActiveTurnId } from "./thread-events.js";
 import {
   queueTurnDuringReprovision,
   requireReadyThreadEnvironment,
@@ -44,7 +43,7 @@ async function queueReadyManagerSystemMessage(
   args: QueueReadyManagerSystemMessageArgs,
 ): Promise<void> {
   const expectedSteerTurnId = args.thread.status === "active"
-    ? requireActiveTurnId(deps, args.thread.id)
+    ? getActiveTurnId(deps, args.thread.id)
     : null;
 
   const eventSequence = appendClientTurnEvent(deps, {
@@ -56,6 +55,12 @@ async function queueReadyManagerSystemMessage(
     initiator: "system",
     requestMethod: "turn/start",
     source: MANAGER_SYSTEM_MESSAGE_SOURCE,
+    target: args.thread.status === "active"
+      ? {
+          kind: "auto",
+          expectedTurnId: expectedSteerTurnId,
+        }
+      : { kind: "new-turn" },
   });
   const permissionEscalation = resolvePermissionEscalation({
     thread: args.thread,
@@ -63,16 +68,16 @@ async function queueReadyManagerSystemMessage(
   });
 
   if (args.thread.status === "active") {
-    if (expectedSteerTurnId === null) {
-      throw new ApiError(409, "invalid_request", "No active turn to steer");
-    }
-    await queueTurnSteerCommand(deps, {
+    await queueTurnSubmitCommand(deps, {
       thread: args.thread,
       input: args.input,
       eventSequence,
       execution: args.execution,
       permissionEscalation,
-      expectedTurnId: expectedSteerTurnId,
+      target: {
+        mode: "auto",
+        expectedTurnId: expectedSteerTurnId,
+      },
       environment: {
         id: args.environment.id,
         hostId: args.environment.hostId,
@@ -97,7 +102,7 @@ async function queueReadyManagerSystemMessage(
       workspaceProvisionType: args.environment.workspaceProvisionType,
     },
   });
-  if (queuedMode === "turn.run") {
+  if (queuedMode === "turn.submit") {
     tryTransition(deps.db, deps.hub, args.thread.id, "active");
   }
 }

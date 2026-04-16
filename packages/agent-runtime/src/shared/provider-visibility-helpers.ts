@@ -1,4 +1,4 @@
-import type { JsonRpcMessage } from "../provider-adapter.js";
+import type { JsonRpcMessage } from "../runtime-json-rpc.js";
 
 export interface StringRecord {
   [key: string]: unknown;

@@ -5,7 +5,7 @@ import type {
   ToolCallRequest,
   ToolCallResponse,
 } from "@bb/domain";
-import type { JsonRpcMessage } from "./provider-adapter.js";
+import type { JsonRpcMessage } from "./runtime-json-rpc.js";
 
 interface AgentRuntimeCaptureEntryBase {
   capturedAt: number;

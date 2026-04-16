@@ -10,12 +10,15 @@ import {
 import {
   parseStoredThreadEvent,
   systemErrorEventDataSchema,
+  turnRequestEventDataSchema,
 } from "@bb/domain";
 import type {
+  ClientTurnLifecycleEventData,
   PromptInput,
   ProvisioningTranscriptEntry,
   SystemThreadProvisioningStatus,
   TurnRequestEventData,
+  TurnRequestTarget,
   ThreadEventType,
   ResolvedThreadExecutionOptions,
   SystemErrorEventData,
@@ -26,16 +29,30 @@ import type { AppDeps } from "../../types.js";
 import type { DbTransaction } from "@bb/db";
 import type { AppendStoredThreadEventArgs as AppendThreadEventArgs } from "@bb/db";
 
-export interface ClientTurnEventArgs {
+export interface ClientTurnRequestedEventArgs {
   environmentId: string | null;
   execution: ResolvedThreadExecutionOptions;
   initiator: ThreadTurnInitiator;
   input: PromptInput[];
   requestMethod: "thread/start" | "turn/start";
   source: "spawn" | "tell";
+  target: TurnRequestTarget;
   threadId: string;
-  type: "client/thread/start" | "client/turn/requested" | "client/turn/start";
+  type: "client/turn/requested";
 }
+
+export interface ClientTurnLifecycleEventArgs {
+  environmentId: string | null;
+  initiator: ThreadTurnInitiator;
+  requestMethod: "thread/start" | "turn/start";
+  source: "spawn" | "tell";
+  threadId: string;
+  type: "client/thread/start" | "client/turn/start";
+}
+
+export type ClientTurnEventArgs =
+  | ClientTurnLifecycleEventArgs
+  | ClientTurnRequestedEventArgs;
 
 export type ThreadOwnershipChangeAction = "assign" | "release" | "transfer";
 
@@ -73,18 +90,49 @@ export interface AppendThreadInterruptedEventArgs {
 
 const storedEventPayloadSchema = z.record(z.unknown());
 
+const LEGACY_THREAD_START_TARGET = {
+  kind: "thread-start",
+} satisfies TurnRequestTarget;
+const LEGACY_NEW_TURN_TARGET = { kind: "new-turn" } satisfies TurnRequestTarget;
+type LegacyTurnRequestEventType = "client/thread/start" | "client/turn/start";
+const LEGACY_TURN_REQUEST_TARGET_BY_TYPE = {
+  "client/thread/start": LEGACY_THREAD_START_TARGET,
+  "client/turn/start": LEGACY_NEW_TURN_TARGET,
+} satisfies Record<LegacyTurnRequestEventType, TurnRequestTarget>;
+
+function legacyTurnRequestTargetForType(
+  type: LegacyTurnRequestEventType,
+): TurnRequestTarget {
+  return LEGACY_TURN_REQUEST_TARGET_BY_TYPE[type];
+}
+
+function buildClientTurnEventData(
+  args: ClientTurnRequestedEventArgs,
+): TurnRequestEventData;
+function buildClientTurnEventData(
+  args: ClientTurnLifecycleEventArgs,
+): ClientTurnLifecycleEventData;
 function buildClientTurnEventData(
   args: ClientTurnEventArgs,
-) {
-  return {
-    direction: "outbound" as const,
+): ClientTurnLifecycleEventData | TurnRequestEventData {
+  const base: ClientTurnLifecycleEventData = {
+    direction: "outbound",
     source: args.source,
     initiator: args.initiator,
-    input: args.input,
     request: {
       method: args.requestMethod,
       params: {},
     },
+  };
+
+  if (args.type !== "client/turn/requested") {
+    return base;
+  }
+
+  return {
+    ...base,
+    input: args.input,
+    target: args.target,
     execution: args.execution,
   };
 }
@@ -115,24 +163,58 @@ export function appendClientTurnEvent(
   deps: Pick<AppDeps, "db" | "hub">,
   args: ClientTurnEventArgs,
 ): number {
-  return appendThreadEvent(deps, {
-    threadId: args.threadId,
-    environmentId: args.environmentId,
-    type: args.type,
-    data: buildClientTurnEventData(args),
-  });
+  switch (args.type) {
+    case "client/thread/start":
+      return appendThreadEvent(deps, {
+        threadId: args.threadId,
+        environmentId: args.environmentId,
+        type: args.type,
+        data: buildClientTurnEventData(args),
+      });
+    case "client/turn/start":
+      return appendThreadEvent(deps, {
+        threadId: args.threadId,
+        environmentId: args.environmentId,
+        type: args.type,
+        data: buildClientTurnEventData(args),
+      });
+    case "client/turn/requested":
+      return appendThreadEvent(deps, {
+        threadId: args.threadId,
+        environmentId: args.environmentId,
+        type: args.type,
+        data: buildClientTurnEventData(args),
+      });
+  }
 }
 
 export function appendClientTurnEventInTransaction(
   db: DbTransaction,
   args: ClientTurnEventArgs,
 ): number {
-  return appendThreadEventInTransaction(db, {
-    threadId: args.threadId,
-    environmentId: args.environmentId,
-    type: args.type,
-    data: buildClientTurnEventData(args),
-  });
+  switch (args.type) {
+    case "client/thread/start":
+      return appendThreadEventInTransaction(db, {
+        threadId: args.threadId,
+        environmentId: args.environmentId,
+        type: args.type,
+        data: buildClientTurnEventData(args),
+      });
+    case "client/turn/start":
+      return appendThreadEventInTransaction(db, {
+        threadId: args.threadId,
+        environmentId: args.environmentId,
+        type: args.type,
+        data: buildClientTurnEventData(args),
+      });
+    case "client/turn/requested":
+      return appendThreadEventInTransaction(db, {
+        threadId: args.threadId,
+        environmentId: args.environmentId,
+        type: args.type,
+        data: buildClientTurnEventData(args),
+      });
+  }
 }
 
 export function parseStoredTurnRequestEvent(
@@ -173,27 +255,33 @@ export function parseStoredTurnRequestEvent(
     );
   }
 
-  switch (event.type) {
-    case "client/thread/start":
-    case "client/turn/requested":
-    case "client/turn/start":
-      return event.execution
-        ? {
-            direction: event.direction,
-            source: event.source,
-            ...(event.initiator ? { initiator: event.initiator } : {}),
-            ...(event.input ? { input: event.input } : {}),
-            request: event.request,
-            execution: event.execution,
-          }
-        : event;
-    default:
-      throw new ApiError(
-        500,
-        "internal_error",
-        `Stored ${row.type} event #${row.sequence} for thread ${row.threadId} is malformed`,
-      );
+  if (event.type === "client/turn/requested") {
+    return {
+      direction: event.direction,
+      source: event.source,
+      ...(event.initiator ? { initiator: event.initiator } : {}),
+      input: event.input,
+      target: event.target,
+      request: event.request,
+      execution: event.execution,
+    };
   }
+
+  if (row.type === "client/thread/start" || row.type === "client/turn/start") {
+    const legacyTurnRequest = turnRequestEventDataSchema.safeParse({
+      ...parsedEventData.data,
+      target: legacyTurnRequestTargetForType(row.type),
+    });
+    if (legacyTurnRequest.success) {
+      return legacyTurnRequest.data;
+    }
+  }
+
+  throw new ApiError(
+    500,
+    "internal_error",
+    `Stored ${row.type} event #${row.sequence} for thread ${row.threadId} is malformed`,
+  );
 }
 
 export function appendThreadProvisioningEvent(
@@ -340,17 +428,6 @@ export function getActiveTurnId(
   threadId: string,
 ): string | null {
   return getActiveStoredTurnId(deps.db, threadId);
-}
-
-export function requireActiveTurnId(
-  deps: Pick<AppDeps, "db">,
-  threadId: string,
-): string {
-  const activeTurnId = getActiveTurnId(deps, threadId);
-  if (activeTurnId === null) {
-    throw new ApiError(409, "invalid_request", "No active turn to steer");
-  }
-  return activeTurnId;
 }
 
 export function getLastProviderThreadId(

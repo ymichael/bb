@@ -252,6 +252,7 @@ describe("public thread data routes", () => {
         data: {
           direction: "outbound",
           input: [{ type: "text", text: "Explain the result" }],
+          target: { kind: "new-turn" },
           execution: {
             model: "gpt-4o-mini",
             reasoningLevel: "medium",
@@ -456,16 +457,17 @@ describe("public thread data routes", () => {
         threadId: thread.id,
         environmentId: environment.id,
         sequence: 1,
-        type: "client/thread/start",
+        type: "client/turn/requested",
         data: {
           direction: "outbound",
           input: [{ type: "text", text: "Initial request" }],
+          target: { kind: "thread-start" },
           execution: {
             model: "gpt-5",
             reasoningLevel: "medium",
             permissionMode: "full",
             serviceTier: "default",
-            source: "client/thread/start",
+            source: "client/turn/requested",
           },
           initiator: "user",
           request: {
@@ -483,6 +485,7 @@ describe("public thread data routes", () => {
         data: {
           direction: "outbound",
           input: [{ type: "text", text: "Follow up request" }],
+          target: { kind: "new-turn" },
           execution: {
             model: "gpt-5-mini",
             reasoningLevel: "high",
@@ -537,6 +540,7 @@ describe("public thread data routes", () => {
         data: {
           direction: "outbound",
           input: [{ type: "text", text: "Earlier valid request" }],
+          target: { kind: "new-turn" },
           execution: {
             model: "gpt-5",
             serviceTier: "default",
@@ -647,6 +651,7 @@ describe("public thread data routes", () => {
         data: {
           direction: "outbound",
           input: [{ type: "text", text: "Earlier work" }],
+          target: { kind: "new-turn" },
           execution: {
             model: "gpt-5",
             serviceTier: "default",
@@ -774,6 +779,7 @@ describe("public thread data routes", () => {
         data: {
           direction: "outbound",
           input: [{ type: "text", text: "Earlier work" }],
+          target: { kind: "new-turn" },
           execution: {
             model: "gpt-5",
             serviceTier: "default",
@@ -996,7 +1002,7 @@ describe("public thread data routes", () => {
         .where(eq(events.threadId, createdThread.id))
         .all()
         .filter((event) => event.type === "client/turn/requested");
-      expect(requestedEvents).toHaveLength(0);
+      expect(requestedEvents).toHaveLength(1);
       expect(
         harness.db
           .select({ id: queuedThreadMessages.id })

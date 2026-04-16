@@ -5,20 +5,18 @@ import { describe, expect, it } from "vitest";
 import {
   cleanup,
   createTestRuntime,
-  expectUserMessageAckCount,
+  expectInputAcceptedCount,
+  findInputAcceptedForThread,
   findLatestTurnStartedForThread,
-  findUserMessageAckTextForThread,
-  fullRuntimeOptions,
   getAgentText,
   getAgentTextAfterIndex,
   getEventsForThread,
   getStreamedText,
-  getUserMessageAckEvents,
-  hasUserMessageAckTextForThread,
+  getInputAcceptedEvents,
+  hasInputAcceptedForThread,
   newThreadId,
-  resolveDefaultModel,
   resolveProviderThreadId,
-  resolveResumePath,
+  resolveRuntimeOptions,
   turnCompletedCount,
   turnCompletedCountForThread,
   turnStartedCountForThread,
@@ -28,7 +26,6 @@ import {
   waitForThreadTurnStarted,
   waitForToolCallBeforeTurnCompletion,
 } from "./test/runtime-integration-harness.js";
-import type { AgentRuntimeExecutionOptions } from "./types.js";
 
 const providers = ["codex", "claude-code", "pi"];
 
@@ -59,26 +56,23 @@ for (const providerId of providers) {
       const ctx = createTestRuntime(providerId);
       try {
         const threadId = newThreadId();
-        const model = await resolveDefaultModel(providerId, ctx);
+        const options = await resolveRuntimeOptions({
+          ctx,
+          providerId,
+          preset: "full",
+        });
         await ctx.runtime.startThread({
           environmentId: "env-1",
           threadId,
           projectId: "test-project",
           providerId,
-          options: {
-            permissionMode: "full",
-            permissionEscalation: null,
-            ...(model ? { model } : {}),
-          },
+          options,
         });
 
         await ctx.runtime.runTurn({
           threadId,
-          options: {
-            permissionMode: "full",
-            permissionEscalation: null,
-            ...(model ? { model } : {}),
-          },
+          clientRequestSequence: 1,
+          options,
           input: [{ type: "text", text: "Reply with exactly: PONG" }],
         });
 
@@ -91,7 +85,7 @@ for (const providerId of providers) {
 
         expect(ctx.events.some((e) => e.type === "turn/started")).toBe(true);
         expect(ctx.events.some((e) => e.type === "turn/completed")).toBe(true);
-        expectUserMessageAckCount(ctx.events, 1);
+        expectInputAcceptedCount(ctx.events, 1);
 
         // Should have some content (agent message or streamed text)
         const text = getAgentText(ctx.events) || getStreamedText(ctx.events);
@@ -108,19 +102,25 @@ for (const providerId of providers) {
       const ctx = createTestRuntime(providerId);
       try {
         const threadId = newThreadId();
+        const options = await resolveRuntimeOptions({
+          ctx,
+          providerId,
+          preset: "full",
+        });
         await ctx.runtime.startThread({
           environmentId: "env-1",
           threadId,
           projectId: "test-project",
           providerId,
-          options: fullRuntimeOptions,
+          options,
         });
 
         // Turn 1
         await ctx.runtime.runTurn({
           threadId,
+          clientRequestSequence: 1,
           input: [{ type: "text", text: "Say hello in one word." }],
-          options: fullRuntimeOptions,
+          options,
         });
 
         await waitForThreadTurnCompletedCount({
@@ -134,8 +134,9 @@ for (const providerId of providers) {
         // Turn 2
         await ctx.runtime.runTurn({
           threadId,
+          clientRequestSequence: 2,
           input: [{ type: "text", text: "Now say goodbye in one word." }],
-          options: fullRuntimeOptions,
+          options,
         });
 
         await waitForThreadTurnCompletedCount({
@@ -150,7 +151,7 @@ for (const providerId of providers) {
         const turnEnds = ctx.events.filter((e) => e.type === "turn/completed");
         expect(turnStarts.length).toBeGreaterThanOrEqual(2);
         expect(turnEnds.length).toBeGreaterThanOrEqual(2);
-        expectUserMessageAckCount(ctx.events, 2);
+        expectInputAcceptedCount(ctx.events, 2);
       } finally {
         await ctx.runtime.shutdown();
         cleanup(ctx);
@@ -163,12 +164,11 @@ for (const providerId of providers) {
       const ctx = createTestRuntime(providerId);
       try {
         const threadId = newThreadId();
-        const model = await resolveDefaultModel(providerId, ctx);
-        const options = {
-          permissionMode: "full",
-          permissionEscalation: null,
-          ...(model ? { model } : {}),
-        } satisfies AgentRuntimeExecutionOptions;
+        const options = await resolveRuntimeOptions({
+          ctx,
+          providerId,
+          preset: "full",
+        });
         await ctx.runtime.startThread({
           environmentId: "env-1",
           threadId,
@@ -179,6 +179,7 @@ for (const providerId of providers) {
 
         await ctx.runtime.runTurn({
           threadId,
+          clientRequestSequence: 1,
           input: [{
             type: "text",
             text:
@@ -203,6 +204,7 @@ for (const providerId of providers) {
         await ctx.runtime.steerTurn({
           threadId,
           expectedTurnId: activeTurn.turnId,
+          clientRequestSequence: 2,
           input: [{ type: "text", text: steerText }],
           options,
         });
@@ -210,28 +212,25 @@ for (const providerId of providers) {
         await waitForRuntimeCondition({
           ctx,
           threadId,
-          predicate: () => hasUserMessageAckTextForThread(
+          predicate: () => hasInputAcceptedForThread(
             ctx.events,
             threadId,
-            steerText,
+            2,
           ),
           timeoutMs: 30_000,
-          label: "steer user-message ack",
+          label: "steer input accepted",
         });
 
-        const steerAck = findUserMessageAckTextForThread(
+        const steerInputAccepted = findInputAcceptedForThread(
           ctx.events,
           threadId,
-          steerText,
+          2,
         );
-        expect(steerAck?.type).toBe("item/completed");
-        if (
-          steerAck?.type !== "item/completed" ||
-          steerAck.item.type !== "userMessage"
-        ) {
-          throw new Error("Expected steer user-message ack");
+        expect(steerInputAccepted?.type).toBe("turn/input/accepted");
+        if (steerInputAccepted?.type !== "turn/input/accepted") {
+          throw new Error("Expected steer input accepted event");
         }
-        expect(steerAck.turnId).toBe(activeTurn.turnId);
+        expect(steerInputAccepted.turnId).toBe(activeTurn.turnId);
 
         await ctx.runtime.stopThread({ threadId });
       } finally {
@@ -246,12 +245,11 @@ for (const providerId of providers) {
       const ctx = createTestRuntime(providerId);
       try {
         const threadId = newThreadId();
-        const model = await resolveDefaultModel(providerId, ctx);
-        const options = {
-          permissionMode: "full",
-          permissionEscalation: null,
-          ...(model ? { model } : {}),
-        } satisfies AgentRuntimeExecutionOptions;
+        const options = await resolveRuntimeOptions({
+          ctx,
+          providerId,
+          preset: "full",
+        });
         const startResult = await ctx.runtime.startThread({
           environmentId: "env-1",
           threadId,
@@ -262,6 +260,7 @@ for (const providerId of providers) {
 
         await ctx.runtime.runTurn({
           threadId,
+          clientRequestSequence: 1,
           input: [{
             type: "text",
             text:
@@ -295,13 +294,13 @@ for (const providerId of providers) {
           providerThreadId,
           providerId,
           options,
-          resumePath: resolveResumePath({ providerId, threadId }),
         });
 
         const recoveryStartIndex = ctx.events.length;
         const completedBeforeRecovery = turnCompletedCountForThread(ctx.events, threadId);
         await ctx.runtime.runTurn({
           threadId,
+          clientRequestSequence: 2,
           input: [{
             type: "text",
             text: "Reply with a short confirmation that you are ready for the next task.",
@@ -322,13 +321,9 @@ for (const providerId of providers) {
         expect(turnStartedCountForThread(ctx.events, threadId)).toBeGreaterThanOrEqual(2);
         expect(getAgentTextAfterIndex(ctx.events, recoveryStartIndex, threadId).length)
           .toBeGreaterThan(0);
-        const userMessageAckCount =
-          getUserMessageAckEvents(getEventsForThread(ctx.events, threadId)).length;
-        if (providerId === "codex") {
-          expect(userMessageAckCount).toBeGreaterThanOrEqual(1);
-        } else {
-          expect(userMessageAckCount).toBe(2);
-        }
+        const inputAcceptedCount =
+          getInputAcceptedEvents(getEventsForThread(ctx.events, threadId)).length;
+        expect(inputAcceptedCount).toBe(2);
       } finally {
         await ctx.runtime.shutdown();
         cleanup(ctx);
@@ -341,19 +336,24 @@ for (const providerId of providers) {
       const ctx = createTestRuntime(providerId);
       try {
         const threadId = newThreadId();
+        const options = await resolveRuntimeOptions({
+          ctx,
+          providerId,
+          preset: "full",
+        });
         await ctx.runtime.startThread({
           environmentId: "env-1",
           threadId,
           projectId: "test-project",
           providerId,
-          options: fullRuntimeOptions,
+          options,
           instructions: "IMPORTANT: End every single response with exactly [TEST_TAG]. Never omit this tag.",
         });
 
         await ctx.runtime.runTurn({
           threadId,
           input: [{ type: "text", text: "What is 2+2?" }],
-          options: fullRuntimeOptions,
+          options,
         });
 
         await waitForThreadTurnCompleted({
@@ -377,19 +377,24 @@ for (const providerId of providers) {
       const ctx = createTestRuntime(providerId);
       try {
         const threadId = newThreadId();
+        const options = await resolveRuntimeOptions({
+          ctx,
+          providerId,
+          preset: "full",
+        });
         await ctx.runtime.startThread({
           environmentId: "env-1",
           threadId,
           projectId: "test-project",
           providerId,
-          options: fullRuntimeOptions,
+          options,
         });
 
         // Good turn 1
         await ctx.runtime.runTurn({
           threadId,
           input: [{ type: "text", text: "Say hello in one word." }],
-          options: fullRuntimeOptions,
+          options,
         });
 
         await waitForThreadTurnCompleted({
@@ -406,7 +411,7 @@ for (const providerId of providers) {
           await ctx.runtime.runTurn({
             threadId: badThreadId,
             input: [{ type: "text", text: "This should fail." }],
-            options: fullRuntimeOptions,
+            options,
           });
         } catch {
           badRequestFailed = true;
@@ -417,7 +422,7 @@ for (const providerId of providers) {
         await ctx.runtime.runTurn({
           threadId,
           input: [{ type: "text", text: "Say goodbye in one word." }],
-          options: fullRuntimeOptions,
+          options,
         });
 
         await waitForThreadTurnCompletedCount({
@@ -457,12 +462,17 @@ for (const providerId of providers) {
 
       try {
         const threadId = newThreadId();
+        const options = await resolveRuntimeOptions({
+          ctx,
+          providerId,
+          preset: "full",
+        });
         await ctx.runtime.startThread({
           environmentId: "env-1",
           threadId,
           projectId: "test-project",
           providerId,
-          options: fullRuntimeOptions,
+          options,
           dynamicTools: [
             {
               name: "bb_test_ping",
@@ -483,7 +493,7 @@ for (const providerId of providers) {
               text: "Call the bb_test_ping tool right now and report what it returns.",
             },
           ],
-          options: fullRuntimeOptions,
+          options,
         });
 
         await waitForToolCallBeforeTurnCompletion({

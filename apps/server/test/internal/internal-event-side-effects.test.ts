@@ -188,7 +188,7 @@ describe("internal event side effects", () => {
       const queuedCommand = await waitForQueuedCommand(
         harness,
         ({ command }) =>
-          command.type === "turn.run" && command.threadId === thread.id,
+          command.type === "turn.submit" && command.threadId === thread.id,
       );
       expect(queuedCommand.command).toMatchObject({
         input: [{ type: "text", text: "Queued follow-up" }],
@@ -347,7 +347,7 @@ describe("internal event side effects", () => {
       const queuedCommand = await waitForQueuedCommand(
         harness,
         ({ command }) =>
-          command.type === "turn.run" && command.threadId === childThread.id,
+          command.type === "turn.submit" && command.threadId === childThread.id,
       );
       expect(queuedCommand.command).toMatchObject({
         input: [
@@ -455,7 +455,7 @@ describe("internal event side effects", () => {
         harness,
         preferencesReadCommand.row.cursor,
         ({ command }) =>
-          command.type === "turn.run" && command.threadId === managerThread.id,
+          command.type === "turn.submit" && command.threadId === managerThread.id,
       );
       expect(queuedCommand.command).toMatchObject({
         environmentId: environment.id,
@@ -646,7 +646,7 @@ describe("internal event side effects", () => {
         harness,
         preferencesReadCommand.row.cursor,
         ({ command }) =>
-          command.type === "turn.run" && command.threadId === managerThread.id,
+          command.type === "turn.submit" && command.threadId === managerThread.id,
       );
       expect(queuedCommand.command).toMatchObject({
         environmentId: environment.id,
@@ -763,7 +763,7 @@ describe("internal event side effects", () => {
         harness,
         preferencesReadCommand.row.cursor,
         ({ command }) =>
-          command.type === "turn.run" && command.threadId === managerThread.id,
+          command.type === "turn.submit" && command.threadId === managerThread.id,
       );
       expect(queuedCommand.command).toMatchObject({
         environmentId: environment.id,
@@ -1223,9 +1223,9 @@ describe("internal event side effects", () => {
       const queuedCommand = await waitForQueuedCommand(
         harness,
         ({ command }) =>
-          command.type === "turn.run" && command.threadId === thread.id,
+          command.type === "turn.submit" && command.threadId === thread.id,
       );
-      expect(queuedCommand.command.type).toBe("turn.run");
+      expect(queuedCommand.command.type).toBe("turn.submit");
 
       const duplicateResponse = await harness.app.request("/internal/session/events", {
         method: "POST",
@@ -1342,7 +1342,7 @@ describe("internal event side effects", () => {
       const firstQueuedCommand = await waitForQueuedCommand(
         harness,
         ({ command }) =>
-          command.type === "turn.run" && command.threadId === threadA.id,
+          command.type === "turn.submit" && command.threadId === threadA.id,
       );
 
       const mixedResponse = await harness.app.request("/internal/session/events", {
@@ -1386,7 +1386,7 @@ describe("internal event side effects", () => {
         harness,
         firstQueuedCommand.row.cursor,
         ({ command }) =>
-          command.type === "turn.run" && command.threadId === threadB.id,
+          command.type === "turn.submit" && command.threadId === threadB.id,
       );
 
       expect(listDrafts(harness.db, threadA.id)).toHaveLength(1);

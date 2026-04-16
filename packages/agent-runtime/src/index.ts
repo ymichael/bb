@@ -5,25 +5,21 @@ export {
   listAvailableProviderInfos as listAvailableProviders,
 } from "./provider-registry.js";
 export type {
-  AgentRuntimeCaptureEntry,
-  AgentRuntimeInteractiveRequestCaptureEntry,
-  AgentRuntimeInteractiveResultCaptureEntry,
-  AgentRuntimeProviderProcessErrorCaptureEntry,
-  AgentRuntimeProviderProcessExitCaptureEntry,
-  AgentRuntimeProviderStderrCaptureEntry,
-  AgentRuntimeRawProviderEventCaptureEntry,
-  AgentRuntimeToolCallRequestCaptureEntry,
-  AgentRuntimeToolCallResultCaptureEntry,
-  AgentRuntimeTranslatedThreadEventCaptureEntry,
-} from "./capture-types.js";
-export type {
   AgentRuntime,
+  AgentRuntimeExecutionOptions,
   AgentRuntimeOptions,
-  ProviderInfo,
+  AgentRuntimeProcessExitInfo,
+  EnsureProviderArgs,
+  ListModelsArgs,
+  RenameThreadArgs,
+  ResumeThreadArgs,
+  ResumeThreadResult,
+  RunTurnArgs,
+  StartThreadArgs,
+  StartThreadResult,
+  SteerTurnArgs,
+  StopThreadArgs,
 } from "./types.js";
-export type {
-  ProviderAdapter,
-} from "./provider-adapter.js";
 export type {
   ProviderObservedToolCall,
   ProviderObservedToolCallCoverage,

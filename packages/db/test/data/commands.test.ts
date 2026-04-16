@@ -126,9 +126,9 @@ describe("commands", () => {
 
     queueCommand(db, noopNotifier, {
       hostId: host.id,
-      type: "turn.run",
+      type: "turn.submit",
       payload: JSON.stringify({
-        type: "turn.run",
+        type: "turn.submit",
         threadId: "thr_target",
       }),
     });
@@ -144,7 +144,7 @@ describe("commands", () => {
     expect(hasPendingHostCommandForThread(db, {
       hostId: host.id,
       threadId: "thr_target",
-      type: "turn.run",
+      type: "turn.submit",
     })).toBe(true);
     expect(hasPendingHostCommandForThread(db, {
       hostId: host.id,
@@ -154,7 +154,7 @@ describe("commands", () => {
     expect(hasPendingHostCommandForThread(db, {
       hostId: host.id,
       threadId: "thr_missing",
-      type: "turn.run",
+      type: "turn.submit",
     })).toBe(false);
   });
 

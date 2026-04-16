@@ -28,6 +28,11 @@ export interface EventSink {
   flush: () => Promise<void>;
 }
 
+export const noopEventSink: EventSink = {
+  emit: () => undefined,
+  flush: async () => undefined,
+};
+
 export interface CommandDispatchOptions {
   fetchRuntimeMaterial: (
     version: string,
@@ -41,7 +46,7 @@ export interface CommandDispatchOptions {
     sequence: number;
     threadId: string;
   }) => void;
-  eventSink?: EventSink;
+  eventSink: EventSink;
   listModels?: (providerId: string) => Promise<AvailableModel[]>;
   listProviders?: () => ProviderInfo[];
   resolveInteractiveRequest?: (

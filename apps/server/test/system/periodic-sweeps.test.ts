@@ -480,6 +480,7 @@ describe("periodic sweeps", () => {
         threadId: thread.id,
         kind: "provision",
         payload: JSON.stringify({
+          clientRequestSequence: 1,
           environmentIntent: {
             type: "reuse",
             environmentId: environment.id,
@@ -490,7 +491,7 @@ describe("periodic sweeps", () => {
             reasoningLevel: "medium",
             permissionMode: "full",
             permissionEscalation: null,
-            source: "client/thread/start",
+            source: "client/turn/requested",
           },
           input: [{ type: "text", text: "short" }],
           stage: "metadata-pending",

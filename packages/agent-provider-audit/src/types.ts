@@ -1,5 +1,6 @@
 import type {
   DynamicTool,
+  TurnRequestTarget,
   ThreadExecutionOptions,
   ThreadEvent,
   ThreadEventRow,
@@ -8,10 +9,10 @@ import type {
   ToolCallResponse,
 } from "@bb/domain";
 import type {
-  AgentRuntimeCaptureEntry,
   ProviderObservedToolCallCoverage,
   ProviderRawEventCoverage,
 } from "@bb/agent-runtime";
+import type { AgentRuntimeCaptureEntry } from "@bb/agent-runtime/capture";
 
 export interface ProviderAuditScenarioExecutionOptions {
   permissionMode?: ThreadExecutionOptions["permissionMode"];
@@ -105,7 +106,8 @@ export interface ProviderAuditManifest {
 export interface ProviderAuditClientRequest {
   id: string;
   turnIndex: number;
-  type: "client/thread/start" | "client/turn/requested";
+  type: "client/turn/requested";
+  target: TurnRequestTarget;
   requestMethod: "thread/start" | "turn/start";
   text: string;
   createdAt: number;

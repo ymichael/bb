@@ -563,7 +563,13 @@ export function getLastStoredTurnRequestEvent(
     .from(events)
     .where(
       sql`${events.threadId} = ${threadId}
-        AND ${events.type} IN ('client/thread/start', 'client/turn/requested', 'client/turn/start')`,
+        AND (
+          ${events.type} = 'client/turn/requested'
+          OR (
+            ${events.type} IN ('client/thread/start', 'client/turn/start')
+            AND json_type(${events.data}, '$.input') IS NOT NULL
+          )
+        )`,
     )
     .orderBy(sql`${events.sequence} DESC`)
     .limit(1)

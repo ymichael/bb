@@ -67,12 +67,18 @@ import {
 } from "../shared/json-rpc-envelope.js";
 import type {
   AdapterCommand,
-  AdapterOptions,
   DecodedToolCallRequest,
-  JsonRpcMessage,
-  ProviderTranslationContext,
   ProviderAdapter,
+  ProviderCommandPlan,
+  ProviderExecutionContext,
+  ProviderTranslationContext,
 } from "../provider-adapter.js";
+import { noPreparedProviderCommandDispatch } from "../provider-adapter.js";
+import type {
+  JsonRpcMessage,
+  ProviderInboundRequest,
+  ProviderRuntimeEvent,
+} from "../runtime-json-rpc.js";
 import { toCanonicalPiModelId } from "./model-list.js";
 import { piVisibilityMetadata } from "./visibility.js";
 
@@ -437,7 +443,7 @@ function translatePiToolResultItem(
   }
 }
 
-function buildPiConfig(threadId: string, options?: AdapterOptions): Record<string, unknown> | undefined {
+function buildPiConfig(threadId: string, options?: ProviderExecutionContext): Record<string, unknown> | undefined {
   const config: Record<string, unknown> = {};
   if (threadId) config["shell_environment_policy.set.BB_THREAD_ID"] = threadId;
   const shellEnvironmentConfig = buildShellEnvironmentPolicyConfig(options?.envVars);
@@ -501,8 +507,6 @@ export interface CreatePiProviderAdapterOptions {
   processArgs?: string[];
   /** Override the directory containing bundled bridge files. */
   bridgeBundleDir?: string;
-  /** Extra environment variables for the bridge process. */
-  launchEnv?: Record<string, string>;
   /** Override context-window resolution. Used by unit tests to avoid real catalogs. */
   resolveModelContextWindow?: PiModelContextWindowResolver;
   /** Prefix for bb-owned turn ids emitted by this adapter instance. */
@@ -519,7 +523,6 @@ interface PiTurnState {
   pendingAcceptedUserMessages: AcceptedUserMessageState["pendingAcceptedUserMessages"];
   reasoningItemCounter: number;
   toolItemsByCallId: Map<string, ThreadEventItem>;
-  userMessageCounter: number;
 }
 
 interface EnsurePiTurnStartedArgs {
@@ -592,7 +595,6 @@ export function createPiProviderAdapter(
       pendingAcceptedUserMessages: [],
       reasoningItemCounter: 0,
       toolItemsByCallId: new Map(),
-      userMessageCounter: 0,
     }),
     turnIdPrefix: opts?.turnIdPrefix,
   });
@@ -736,10 +738,15 @@ export function createPiProviderAdapter(
         if (!piAutoCompactionEndEventSchema.safeParse(event).success) {
           return buildUnexpectedPiSdkEvent(event, context);
         }
+        const turnId = turnState.getCurrentOrLastTurnId({ state });
+        if (turnId.length === 0) {
+          return buildUnexpectedPiSdkEvent(event, context);
+        }
         events.push({
           type: "thread/compacted",
           threadId,
           providerThreadId: "",
+          turnId,
         });
         break;
       }
@@ -967,7 +974,6 @@ export function createPiProviderAdapter(
     id: providerInfo.id,
     displayName: providerInfo.displayName,
     capabilities,
-    threadStopBehavior: "keep-provider",
     process: {
       command: opts?.processCommand ?? "node",
       args: opts?.processArgs ?? [resolveBridgePath({
@@ -980,17 +986,17 @@ export function createPiProviderAdapter(
 
     // -- Unified command builder -------------------------------------------
 
-    buildCommand(command: AdapterCommand): JsonRpcMessage | null {
+    buildCommandPlan(command: AdapterCommand): ProviderCommandPlan {
       switch (command.type) {
         case "initialize":
           return {
-            jsonrpc: "2.0" as const,
+            kind: "request",
             method: "initialize",
             params: { clientInfo: { name: "bb", version: "1.0.0" } },
           };
         case "model/list":
           return {
-            jsonrpc: "2.0",
+            kind: "request",
             method: "model/list",
             params: {},
           };
@@ -1008,7 +1014,7 @@ export function createPiProviderAdapter(
             inputSchema: JSON.parse(JSON.stringify(t.inputSchema)),
           }));
           return {
-            jsonrpc: "2.0" as const,
+            kind: "request",
             method: "thread/start",
             params: {
               threadId: command.threadId,
@@ -1035,7 +1041,7 @@ export function createPiProviderAdapter(
             inputSchema: JSON.parse(JSON.stringify(t.inputSchema)),
           }));
           return {
-            jsonrpc: "2.0" as const,
+            kind: "request",
             method: "thread/resume",
             params: {
               threadId,
@@ -1043,14 +1049,13 @@ export function createPiProviderAdapter(
               baseInstructions,
               ...(Object.keys(finalConfig).length > 0 ? { config: finalConfig } : {}),
               ...(command.options?.model ? { model: command.options.model } : {}),
-              ...(command.resumePath ? { sessionPath: command.resumePath } : {}),
               ...(dynamicTools && dynamicTools.length > 0 ? { dynamicTools } : {}),
             },
           };
         }
         case "turn/start":
           return {
-            jsonrpc: "2.0" as const,
+            kind: "request",
             method: "turn/start",
             params: {
               threadId: command.providerThreadId ?? command.threadId,
@@ -1060,7 +1065,7 @@ export function createPiProviderAdapter(
           };
         case "turn/steer":
           return {
-            jsonrpc: "2.0" as const,
+            kind: "request",
             method: "turn/steer",
             params: {
               threadId: command.providerThreadId ?? command.threadId,
@@ -1071,25 +1076,27 @@ export function createPiProviderAdapter(
         case "thread/stop":
           finishOpenProviderTurn({ registry: turnState, threadId: command.threadId });
           return {
-            jsonrpc: "2.0",
+            kind: "request",
             method: "thread/stop",
             params: {
               threadId: command.providerThreadId,
             },
           };
         case "thread/name/set":
-          return null; // Pi doesn't support rename
+          return { kind: "noop", reason: "rename unsupported" };
       }
     },
 
     // -- Unified event translator ------------------------------------------
 
     translateEvent(
-      event: unknown,
+      event: ProviderRuntimeEvent,
       context?: ProviderTranslationContext,
     ): ThreadEvent[] {
       return translatePiEvent(event, context);
     },
+
+    prepareTurnStart: noPreparedProviderCommandDispatch,
 
     translateAcceptedCommand({ command }) {
       if (
@@ -1108,30 +1115,21 @@ export function createPiProviderAdapter(
         if (turnId) {
           return buildAcceptedUserMessageEvent({
             clientRequestSequence: command.clientRequestSequence,
-            input: command.input,
-            itemIdPrefix: "pi-user",
             providerThreadId: command.providerThreadId ?? command.threadId,
-            state,
             threadId: command.threadId,
             turnId,
           });
         }
         queueAcceptedUserMessage({
           clientRequestSequence: command.clientRequestSequence,
-          input: command.input,
-          itemIdPrefix: "pi-user",
           state,
         });
       }
 
       if (command.type === "turn/steer") {
-        const state = turnState.getOrCreate({ threadId: command.threadId });
         return buildAcceptedUserMessageEvent({
           clientRequestSequence: command.clientRequestSequence,
-          input: command.input,
-          itemIdPrefix: "pi-user",
           providerThreadId: command.providerThreadId ?? command.threadId,
-          state,
           threadId: command.threadId,
           turnId: command.expectedTurnId,
         });
@@ -1146,7 +1144,7 @@ export function createPiProviderAdapter(
 
     // -- Tool call codec ---------------------------------------------------
 
-    decodeToolCallRequest(request: JsonRpcMessage): DecodedToolCallRequest | null {
+    decodeToolCallRequest(request: ProviderInboundRequest): DecodedToolCallRequest | null {
       if (typeof request.id !== "string" && typeof request.id !== "number") {
         return null;
       }

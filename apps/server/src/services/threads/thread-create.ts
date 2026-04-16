@@ -150,7 +150,7 @@ async function createProvisioningThread(
         ...(args.executionDefaults ? { projectDefaults: args.executionDefaults } : {}),
         threadId: thread.id,
       },
-      "client/thread/start",
+      "client/turn/requested",
     );
     requestThreadProvision(deps, {
       thread,

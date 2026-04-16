@@ -385,18 +385,19 @@ describe("events", () => {
 
     const firstSequence = appendStoredThreadEvent(db, noopNotifier, {
       threadId: thread.id,
-      type: "client/thread/start",
+      type: "client/turn/requested",
       data: {
         direction: "outbound",
         source: "spawn",
         initiator: "user",
         input: [{ type: "text", text: "start" }],
+        target: { kind: "thread-start" },
         request: { method: "thread/start", params: {} },
         execution: {
           model: "gpt-5",
           reasoningLevel: "medium",
           permissionMode: "workspace-write",
-          source: "client/thread/start",
+          source: "client/turn/requested",
           serviceTier: "auto",
         },
       },
@@ -422,7 +423,7 @@ describe("events", () => {
     expect(getLastStoredTurnRequestEvent(db, thread.id)).toMatchObject({
       threadId: thread.id,
       sequence: 1,
-      type: "client/thread/start",
+      type: "client/turn/requested",
     });
 
     appendStoredThreadEvent(db, noopNotifier, {

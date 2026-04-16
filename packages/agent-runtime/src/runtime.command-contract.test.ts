@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { ThreadEvent } from "@bb/domain";
-import { createAgentRuntime } from "./runtime.js";
+import { createAgentRuntimeWithAdapters } from "./runtime.js";
 import { fakeProviderScriptPath } from "./test/index.js";
 import {
   createFakeAdapter,
@@ -24,9 +24,9 @@ describe("createAgentRuntime command contracts", () => {
     rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it("rejects required adapter commands that return null", async () => {
+  it("rejects required adapter commands that return no-op plans", async () => {
     const baseAdapter = createFakeAdapter(scriptPath);
-    const runtime = createAgentRuntime({
+    const runtime = createAgentRuntimeWithAdapters({
       workspacePath: tmpDir,
       onEvent: () => {},
       onToolCall: async () => ({
@@ -35,11 +35,11 @@ describe("createAgentRuntime command contracts", () => {
       }),
       adapterFactory: () => ({
         ...baseAdapter,
-        buildCommand(command) {
+        buildCommandPlan(command) {
           if (command.type === "turn/start") {
-            return null;
+            return { kind: "noop", reason: "turn start unsupported" };
           }
-          return baseAdapter.buildCommand(command);
+          return baseAdapter.buildCommandPlan(command);
         },
       }),
     });
@@ -57,14 +57,14 @@ describe("createAgentRuntime command contracts", () => {
         input: [{ type: "text", text: "hello" }],
         options: fullRuntimeOptions,
       }),
-    ).rejects.toThrow(/returned null for turn\/start/);
+    ).rejects.toThrow(/returned no provider request for turn\/start/);
     await runtime.shutdown();
   });
 
-  it("rejects null steer commands instead of silently dropping them", async () => {
+  it("rejects no-op steer commands instead of silently dropping them", async () => {
     const events: ThreadEvent[] = [];
     const baseAdapter = createFakeAdapter(scriptPath);
-    const runtime = createAgentRuntime({
+    const runtime = createAgentRuntimeWithAdapters({
       workspacePath: tmpDir,
       onEvent: (event) => events.push(event),
       onToolCall: async () => ({
@@ -73,11 +73,11 @@ describe("createAgentRuntime command contracts", () => {
       }),
       adapterFactory: () => ({
         ...baseAdapter,
-        buildCommand(command) {
+        buildCommandPlan(command) {
           if (command.type === "turn/steer") {
-            return null;
+            return { kind: "noop", reason: "steer unsupported" };
           }
-          return baseAdapter.buildCommand(command);
+          return baseAdapter.buildCommandPlan(command);
         },
       }),
     });
@@ -108,13 +108,13 @@ describe("createAgentRuntime command contracts", () => {
         input: [{ type: "text", text: "steer" }],
         options: fullRuntimeOptions,
       }),
-    ).rejects.toThrow(/returned null for turn\/steer/);
+    ).rejects.toThrow(/returned no provider request for turn\/steer/);
     await runtime.shutdown();
   });
 
   it("rejects unsupported thread rename instead of silently succeeding", async () => {
     const baseAdapter = createFakeAdapter(scriptPath);
-    const runtime = createAgentRuntime({
+    const runtime = createAgentRuntimeWithAdapters({
       workspacePath: tmpDir,
       onEvent: () => {},
       onToolCall: async () => ({
@@ -144,7 +144,7 @@ describe("createAgentRuntime command contracts", () => {
   });
 
   it("rejects unsupported execution options before they reach adapters", async () => {
-    const runtime = createAgentRuntime({
+    const runtime = createAgentRuntimeWithAdapters({
       workspacePath: tmpDir,
       onEvent: () => {},
       onToolCall: async () => ({
@@ -169,10 +169,10 @@ describe("createAgentRuntime command contracts", () => {
     await runtime.shutdown();
   });
 
-  it("rejects null stop commands for active turns but allows explicit idle no-ops", async () => {
+  it("rejects no-op stop commands for active turns but allows explicit idle no-ops", async () => {
     const events: ThreadEvent[] = [];
     const baseAdapter = createFakeAdapter(scriptPath);
-    const runtime = createAgentRuntime({
+    const runtime = createAgentRuntimeWithAdapters({
       workspacePath: tmpDir,
       onEvent: (event) => events.push(event),
       onToolCall: async () => ({
@@ -181,11 +181,11 @@ describe("createAgentRuntime command contracts", () => {
       }),
       adapterFactory: () => ({
         ...baseAdapter,
-        buildCommand(command) {
+        buildCommandPlan(command) {
           if (command.type === "thread/stop") {
-            return null;
+            return { kind: "noop", reason: "no active turn to stop" };
           }
-          return baseAdapter.buildCommand(command);
+          return baseAdapter.buildCommandPlan(command);
         },
       }),
     });
@@ -212,7 +212,7 @@ describe("createAgentRuntime command contracts", () => {
       turnId: "turn-1",
     });
     await expect(runtime.stopThread({ threadId: "t1" }))
-      .rejects.toThrow(/returned null for thread\/stop with active turn/);
+      .rejects.toThrow(/returned no provider request for thread\/stop with active turn/);
 
     await runtime.shutdown();
   });

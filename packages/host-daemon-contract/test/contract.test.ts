@@ -331,7 +331,7 @@ describe("host-daemon command schemas", () => {
 
     expect(() =>
       hostDaemonCommandSchema.parse({
-        type: "turn.run",
+        type: "turn.submit",
         threadId: "thr_123",
         eventSequence: 1,
         input: [{ type: "text", text: "follow up" }],
@@ -354,6 +354,7 @@ describe("host-daemon command schemas", () => {
           dynamicTools: [],
           instructionMode: "append",
         },
+        target: { mode: "start" },
       }),
     ).toThrow();
   });
@@ -416,10 +417,10 @@ describe("host-daemon command schemas", () => {
     ).toBe(true);
   });
 
-  it("requires eventSequence and resumeContext for turn.run and turn.steer", () => {
+  it("requires eventSequence, resumeContext, and target for turn.submit", () => {
     expect(
       hostDaemonCommandSchema.parse({
-        type: "turn.run",
+        type: "turn.submit",
         environmentId: "env_123",
         threadId: "thr_123",
         eventSequence: 12,
@@ -440,22 +441,23 @@ describe("host-daemon command schemas", () => {
           dynamicTools: [],
           instructionMode: "append",
         },
+        target: { mode: "start" },
       }),
     ).toMatchObject({
-      type: "turn.run",
+      type: "turn.submit",
       eventSequence: 12,
       resumeContext: {
         workspaceContext: { workspacePath: "/tmp/workspace", workspaceProvisionType: "unmanaged" },
       },
+      target: { mode: "start" },
     });
 
     expect(
       hostDaemonCommandSchema.parse({
-        type: "turn.steer",
+        type: "turn.submit",
         environmentId: "env_123",
         threadId: "thr_123",
         eventSequence: 13,
-        expectedTurnId: "turn_123",
         input: [{ type: "text", text: "adjust" }],
         options: {
           model: "gpt-5",
@@ -473,16 +475,17 @@ describe("host-daemon command schemas", () => {
           dynamicTools: [],
           instructionMode: "append",
         },
+        target: { mode: "auto", expectedTurnId: "turn_123" },
       }),
     ).toMatchObject({
-      type: "turn.steer",
+      type: "turn.submit",
       eventSequence: 13,
-      expectedTurnId: "turn_123",
+      target: { mode: "auto", expectedTurnId: "turn_123" },
     });
 
     expect(() =>
       hostDaemonCommandSchema.parse({
-        type: "turn.run",
+        type: "turn.submit",
         environmentId: "env_123",
         threadId: "thr_123",
         input: [{ type: "text", text: "hello" }],
@@ -500,6 +503,7 @@ describe("host-daemon command schemas", () => {
           instructions: "Be a helpful coding agent.",
           dynamicTools: [],
         },
+        target: { mode: "start" },
       }),
     ).toThrow();
 

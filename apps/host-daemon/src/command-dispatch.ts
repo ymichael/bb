@@ -17,6 +17,7 @@ import {
   ensureThreadRuntime,
   handleThreadDeleted,
   startThread,
+  submitTurn,
 } from "./command-handlers/thread.js";
 import { WorkspaceError } from "@bb/host-workspace";
 import { demoteWorkspace, promoteWorkspace, squashMerge } from "./command-handlers/workspace.js";
@@ -29,14 +30,14 @@ const SYSTEM_MAX_FILE_LIST_BYTES = 256 * 1024; // 256 KB
 export {
   CommandDispatchError,
   getErrorCode,
+  noopEventSink,
   type CommandDispatchOptions,
 } from "./command-dispatch-support.js";
 
 function seedThreadHighWaterMarkIfPresent(
   command:
     | Extract<HostDaemonCommand, { type: "thread.start" }>
-    | Extract<HostDaemonCommand, { type: "turn.run" }>
-    | Extract<HostDaemonCommand, { type: "turn.steer" }>,
+    | Extract<HostDaemonCommand, { type: "turn.submit" }>,
   options: CommandDispatchOptions,
 ): void {
   if (command.eventSequence === undefined) {
@@ -56,30 +57,12 @@ export async function dispatchCommand<TCommand extends HostDaemonCommand>(
     case "thread.start":
       seedThreadHighWaterMarkIfPresent(command, options);
       return startThread(command, options) as Promise<HostDaemonCommandResult<TCommand["type"]>>;
-    case "turn.run": {
+    case "turn.submit": {
       seedThreadHighWaterMarkIfPresent(command, options);
       const entry = await ensureThreadRuntime(command, options);
-      await entry.runtime.runTurn({
-        threadId: command.threadId,
-        input: command.input,
-        clientRequestSequence: command.eventSequence,
-        options: command.options,
-        instructions: command.resumeContext.instructions,
-      });
-      return {} as HostDaemonCommandResult<TCommand["type"]>;
-    }
-    case "turn.steer": {
-      seedThreadHighWaterMarkIfPresent(command, options);
-      const entry = await ensureThreadRuntime(command, options);
-      await entry.runtime.steerTurn({
-        threadId: command.threadId,
-        expectedTurnId: command.expectedTurnId,
-        input: command.input,
-        clientRequestSequence: command.eventSequence,
-        options: command.options,
-        instructions: command.resumeContext.instructions,
-      });
-      return {} as HostDaemonCommandResult<TCommand["type"]>;
+      return submitTurn(command, entry) as Promise<
+        HostDaemonCommandResult<TCommand["type"]>
+      >;
     }
     case "thread.stop": {
       const entry = await requireExistingEnvironment(
@@ -89,7 +72,7 @@ export async function dispatchCommand<TCommand extends HostDaemonCommand>(
       await entry.runtime.stopThread({ threadId: command.threadId });
       // Stop completion finalizes server-side thread state. Flush provider
       // events first so buffered lifecycle events cannot arrive after that.
-      await options.eventSink?.flush();
+      await options.eventSink.flush();
       options.runtimeManager.forgetThread(
         command.environmentId,
         command.threadId,

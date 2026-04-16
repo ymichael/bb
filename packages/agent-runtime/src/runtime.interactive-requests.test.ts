@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { ThreadEvent } from "@bb/domain";
-import { createAgentRuntime } from "./runtime.js";
+import { createAgentRuntimeWithAdapters } from "./runtime.js";
 import {
   createInteractiveRequestAdapter,
   createInvalidInteractiveRequestAdapter,
@@ -132,7 +132,7 @@ rl.on("line", (line) => {
 
     const requests: Array<{ threadId: string; providerThreadId: string }> = [];
     const events: ThreadEvent[] = [];
-    const runtime = createAgentRuntime({
+    const runtime = createAgentRuntimeWithAdapters({
       workspacePath: tmpDir,
       onEvent: (event) => events.push(event),
       onToolCall: async () => ({
@@ -300,7 +300,7 @@ rl.on("line", (line) => {
 
     const requests: string[] = [];
     const events: ThreadEvent[] = [];
-    const runtime = createAgentRuntime({
+    const runtime = createAgentRuntimeWithAdapters({
       workspacePath: tmpDir,
       onEvent: (event) => events.push(event),
       onToolCall: async () => ({
@@ -322,12 +322,20 @@ rl.on("line", (line) => {
       threadId: "t1",
       projectId: "p1",
       providerId: "fake",
-      options: { permissionMode: "readonly", permissionEscalation: "deny" },
+      options: {
+        ...fullRuntimeOptions,
+        permissionMode: "readonly",
+        permissionEscalation: "deny",
+      },
     });
     await runtime.runTurn({
       threadId: "t1",
       input: [{ type: "text", text: "trigger denied interactive request" }],
-      options: { permissionMode: "readonly", permissionEscalation: "deny" },
+      options: {
+        ...fullRuntimeOptions,
+        permissionMode: "readonly",
+        permissionEscalation: "deny",
+      },
     });
     await waitForThreadAgentMessageText({
       events,
@@ -445,7 +453,7 @@ rl.on("line", (line) => {
     );
 
     const events: ThreadEvent[] = [];
-    const runtime = createAgentRuntime({
+    const runtime = createAgentRuntimeWithAdapters({
       workspacePath: tmpDir,
       onEvent: (event) => events.push(event),
       onToolCall: async () => ({
@@ -582,7 +590,7 @@ rl.on("line", (line) => {
     );
 
     const events: ThreadEvent[] = [];
-    const runtime = createAgentRuntime({
+    const runtime = createAgentRuntimeWithAdapters({
       workspacePath: tmpDir,
       onEvent: (event) => events.push(event),
       onToolCall: async () => ({
@@ -707,7 +715,7 @@ rl.on("line", (line) => {
     );
 
     const events: ThreadEvent[] = [];
-    const runtime = createAgentRuntime({
+    const runtime = createAgentRuntimeWithAdapters({
       workspacePath: tmpDir,
       onEvent: (event) => events.push(event),
       onToolCall: async () => ({

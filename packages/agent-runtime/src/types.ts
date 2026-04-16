@@ -5,25 +5,23 @@ import type {
   PendingInteractionCreate,
   PendingInteractionResolution,
   PromptInput,
-  ProviderInfo as DomainProviderInfo,
-  ReasoningLevel,
-  RuntimePermissionPolicy,
-  ServiceTier,
+  RuntimeThreadExecutionOptions,
   ThreadEvent,
   ToolCallRequest,
   ToolCallResponse,
 } from "@bb/domain";
 import type { AgentRuntimeCaptureEntry } from "./capture-types.js";
 
-export type ProviderInfo = DomainProviderInfo;
-
 export type AgentRuntimeShellEnvironment = Record<string, string>;
 
-export type AgentRuntimeExecutionOptions = {
-  model?: string;
-  serviceTier?: ServiceTier;
-  reasoningLevel?: ReasoningLevel;
-} & RuntimePermissionPolicy;
+export type AgentRuntimeExecutionOptions = RuntimeThreadExecutionOptions;
+
+export interface AgentRuntimeProcessExitInfo {
+  providerId: string;
+  threadIds: string[];
+  code: number | null;
+  signal: string | null;
+}
 
 // ---------------------------------------------------------------------------
 // Runtime options
@@ -63,81 +61,107 @@ export interface AgentRuntimeOptions {
   onStderr?: (line: string, threadId?: string) => void;
 
   /** Called when a provider process exits unexpectedly. */
-  onProcessExit?: (info: {
-    providerId: string;
-    threadIds: string[];
-    code: number | null;
-    signal: string | null;
-  }) => void;
-
-  /**
-   * Optional factory for creating provider adapters.
-   * Used for testing with fake adapters.
-   * If not provided, the built-in adapter registry is used.
-   */
-  adapterFactory?: (providerId: string) => import("./provider-adapter.js").ProviderAdapter;
+  onProcessExit?: (info: AgentRuntimeProcessExitInfo) => void;
 }
 
 // ---------------------------------------------------------------------------
 // Runtime interface
 // ---------------------------------------------------------------------------
 
+export interface EnsureProviderArgs {
+  providerId: string;
+  forThreadId?: string;
+}
+
+export interface StartThreadArgs {
+  environmentId: string;
+  threadId: string;
+  projectId: string;
+  providerId: string;
+  input?: PromptInput[];
+  options: AgentRuntimeExecutionOptions;
+  instructions?: string;
+  dynamicTools?: DynamicTool[];
+  instructionMode?: InstructionMode;
+}
+
+export interface StartThreadResult {
+  providerThreadId: string;
+}
+
+export interface ResumeThreadArgs {
+  environmentId: string;
+  threadId: string;
+  projectId?: string;
+  providerThreadId?: string;
+  providerId: string;
+  options: AgentRuntimeExecutionOptions;
+  instructions?: string;
+  dynamicTools?: DynamicTool[];
+  instructionMode?: InstructionMode;
+}
+
+export interface ResumeThreadResult {
+  providerThreadId: string;
+}
+
+export interface RunTurnArgs {
+  threadId: string;
+  input: PromptInput[];
+  clientRequestSequence?: number;
+  options: AgentRuntimeExecutionOptions;
+  instructions?: string;
+}
+
+export interface SteerTurnArgs {
+  threadId: string;
+  expectedTurnId: string;
+  input: PromptInput[];
+  clientRequestSequence?: number;
+  options: AgentRuntimeExecutionOptions;
+  instructions?: string;
+}
+
+export interface SteerTurnAppliedResult {
+  status: "steered";
+}
+
+export interface SteerTurnStaleResult {
+  status: "stale";
+  activeTurnId: string | null;
+}
+
+export type SteerTurnResult = SteerTurnAppliedResult | SteerTurnStaleResult;
+
+export interface StopThreadArgs {
+  threadId: string;
+}
+
+export interface RenameThreadArgs {
+  threadId: string;
+  title: string;
+}
+
+export interface ListModelsArgs {
+  providerId: string;
+}
+
 export interface AgentRuntime {
-  ensureProvider(args: {
-    providerId: string;
-    forThreadId?: string;
-  }): Promise<void>;
+  ensureProvider(args: EnsureProviderArgs): Promise<void>;
 
-  startThread(args: {
-    environmentId: string;
-    threadId: string;
-    projectId: string;
-    providerId?: string;
-    input?: PromptInput[];
-    options: AgentRuntimeExecutionOptions;
-    instructions?: string;
-    dynamicTools?: DynamicTool[];
-    instructionMode?: InstructionMode;
-  }): Promise<{ providerThreadId: string }>;
+  startThread(args: StartThreadArgs): Promise<StartThreadResult>;
 
-  resumeThread(args: {
-    environmentId: string;
-    threadId: string;
-    projectId?: string;
-    providerThreadId?: string;
-    providerId?: string;
-    options: AgentRuntimeExecutionOptions;
-    instructions?: string;
-    resumePath?: string;
-    dynamicTools?: DynamicTool[];
-    instructionMode?: InstructionMode;
-  }): Promise<{ providerThreadId: string }>;
+  resumeThread(args: ResumeThreadArgs): Promise<ResumeThreadResult>;
 
-  runTurn(args: {
-    threadId: string;
-    input: PromptInput[];
-    clientRequestSequence?: number;
-    options: AgentRuntimeExecutionOptions;
-    instructions?: string;
-  }): Promise<void>;
+  runTurn(args: RunTurnArgs): Promise<void>;
 
-  steerTurn(args: {
-    threadId: string;
-    expectedTurnId: string;
-    input: PromptInput[];
-    clientRequestSequence?: number;
-    options: AgentRuntimeExecutionOptions;
-    instructions?: string;
-  }): Promise<void>;
+  steerTurn(args: SteerTurnArgs): Promise<SteerTurnResult>;
 
-  stopThread(args: { threadId: string }): Promise<void>;
+  stopThread(args: StopThreadArgs): Promise<void>;
 
-  renameThread(args: {
-    threadId: string;
-    title: string;
-  }): Promise<void>;
+  renameThread(args: RenameThreadArgs): Promise<void>;
 
-  listModels(args: { providerId: string }): Promise<AvailableModel[]>;
+  listModels(args: ListModelsArgs): Promise<AvailableModel[]>;
 
   listRunningProviders(): string[];
 

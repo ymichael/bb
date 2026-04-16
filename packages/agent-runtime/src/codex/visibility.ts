@@ -1,4 +1,4 @@
-import type { JsonRpcMessage } from "../provider-adapter.js";
+import type { JsonRpcMessage } from "../runtime-json-rpc.js";
 import {
   createProviderVisibilityMetadata,
   type ProviderObservedToolCall,
@@ -205,6 +205,13 @@ function describeParsedCodexRawEvent(
       return { kind: "mcpServer/startupStatus/updated", coverage: "unknown" };
 
     case "notification":
+      if (
+        (event.method === "item/started" || event.method === "item/completed") &&
+        isCodexUserMessageItemEvent(event)
+      ) {
+        // User prompts render from client/turn/requested; Codex echoes are intentionally suppressed.
+        return { kind: event.method, coverage: "noise" };
+      }
       if (event.method === "item/commandExecution/terminalInteraction") {
         if (isRecord(event.params)) {
           const stdin = getStringProperty(event.params, "stdin");
@@ -225,6 +232,16 @@ function describeParsedCodexRawEvent(
     default:
       return assertNever(event);
   }
+}
+
+function isCodexUserMessageItemEvent(
+  event: CodexNotificationRawEvent,
+): boolean {
+  if (!isRecord(event.params)) {
+    return false;
+  }
+  const item = getRecordProperty(event.params, "item");
+  return item ? getStringProperty(item, "type") === "userMessage" : false;
 }
 
 function classifyCodexToolCallCoverage(

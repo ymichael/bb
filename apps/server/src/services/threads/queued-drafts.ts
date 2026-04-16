@@ -13,7 +13,7 @@ import { toQueuedMessage } from "./drafts.js";
 import { requireThreadEnvironment } from "../lib/entity-lookup.js";
 import {
   buildExecutionOptions,
-  queueTurnSteerCommand,
+  queueTurnSubmitCommand,
 } from "./thread-commands.js";
 import {
   ensureThreadCanQueueStartRequest,
@@ -25,7 +25,7 @@ import {
 } from "./thread-turn-dispatch.js";
 import {
   appendClientTurnEvent,
-  requireActiveTurnId,
+  getActiveTurnId,
 } from "./thread-events.js";
 import { resolvePermissionEscalation } from "./thread-runtime-config.js";
 import { tryTransition } from "./thread-transitions.js";
@@ -39,9 +39,9 @@ type ClaimedDraft = Exclude<ReturnType<typeof claimDraft>, null>;
 
 function resolveQueuedDraftSendMode(
   threadStatus: Thread["status"],
-): "start" | "steer" {
+): "start" | "auto" {
   if (threadStatus === "active") {
-    return "steer";
+    return "auto";
   }
 
   return "start";
@@ -82,8 +82,8 @@ async function sendClaimedDraft(
   if (sendMode === "start") {
     ensureThreadCanQueueStartRequest(deps, thread);
   }
-  const expectedSteerTurnId = sendMode === "steer"
-    ? requireActiveTurnId(deps, thread.id)
+  const expectedSteerTurnId = sendMode === "auto"
+    ? getActiveTurnId(deps, thread.id)
     : null;
   const execution = await buildExecutionOptions(
     deps,
@@ -124,6 +124,12 @@ async function sendClaimedDraft(
     initiator: "user",
     requestMethod: "turn/start",
     source: "tell",
+    target: sendMode === "auto"
+      ? {
+          kind: "auto",
+          expectedTurnId: expectedSteerTurnId,
+        }
+      : { kind: "new-turn" },
   });
 
   if (sendMode === "start") {
@@ -140,20 +146,20 @@ async function sendClaimedDraft(
         workspaceProvisionType: readyEnvironment.workspaceProvisionType,
       },
     });
-    if (queuedMode === "turn.run") {
-      tryTransition(deps.db, deps.hub, thread.id, "active");
-    }
-  } else {
-    if (expectedSteerTurnId === null) {
-      throw new ApiError(409, "invalid_request", "No active turn to steer");
-    }
-    await queueTurnSteerCommand(deps, {
+      if (queuedMode === "turn.submit") {
+        tryTransition(deps.db, deps.hub, thread.id, "active");
+      }
+    } else {
+    await queueTurnSubmitCommand(deps, {
       thread,
       input: queuedMessage.content,
       eventSequence,
       execution,
       permissionEscalation,
-      expectedTurnId: expectedSteerTurnId,
+      target: {
+        mode: "auto",
+        expectedTurnId: expectedSteerTurnId,
+      },
       environment: {
         id: readyEnvironment.id,
         hostId: readyEnvironment.hostId,

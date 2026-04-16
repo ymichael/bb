@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import type { JsonRpcMessage } from "./provider-adapter.js";
+import type { JsonRpcMessage } from "./runtime-json-rpc.js";
 import {
   createProviderForId,
   getProviderVisibilityMetadata,

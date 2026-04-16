@@ -5,6 +5,8 @@ import { resolveContainedPath } from "@bb/process-utils";
 import type { RuntimeEntry } from "../runtime-manager.js";
 import { CommandDispatchError, type CommandDispatchOptions, type CommandOf } from "../command-dispatch-support.js";
 
+type TurnSubmitCommand = CommandOf<"turn.submit">;
+
 function requireConfinedPath(rootPath: string, candidatePath: string): string {
   const resolved = resolveContainedPath({
     rootPath,
@@ -67,7 +69,7 @@ export async function startThread(
 
 
 export async function ensureThreadRuntime(
-  command: CommandOf<"turn.run"> | CommandOf<"turn.steer">,
+  command: TurnSubmitCommand,
   options: CommandDispatchOptions,
 ): Promise<RuntimeEntry> {
   const { resumeContext } = command;
@@ -107,6 +109,69 @@ export async function ensureThreadRuntime(
     providerThreadId,
   );
   return entry;
+}
+
+async function runSubmittedTurn(
+  command: TurnSubmitCommand,
+  entry: RuntimeEntry,
+): Promise<HostDaemonCommandResult<"turn.submit">> {
+  await entry.runtime.runTurn({
+    threadId: command.threadId,
+    input: command.input,
+    clientRequestSequence: command.eventSequence,
+    options: command.options,
+    instructions: command.resumeContext.instructions,
+  });
+  return { appliedAs: "new-turn" };
+}
+
+async function steerSubmittedTurn(
+  command: TurnSubmitCommand,
+  entry: RuntimeEntry,
+  expectedTurnId: string,
+): Promise<HostDaemonCommandResult<"turn.submit">> {
+  const result = await entry.runtime.steerTurn({
+    threadId: command.threadId,
+    expectedTurnId,
+    input: command.input,
+    clientRequestSequence: command.eventSequence,
+    options: command.options,
+    instructions: command.resumeContext.instructions,
+  });
+
+  if (result.status === "steered") {
+    return { appliedAs: "steer" };
+  }
+  // A stale steer still represents a user send intent. If the target turn
+  // ended before dispatch reached the daemon, preserve the message as a new turn.
+  if (command.target.mode === "auto" || command.target.mode === "steer") {
+    return runSubmittedTurn(command, entry);
+  }
+
+  throw new CommandDispatchError(
+    "stale_turn",
+    `Expected active turn ${expectedTurnId} for thread ${command.threadId}, but active turn is ${result.activeTurnId ?? "none"}`,
+  );
+}
+
+export async function submitTurn(
+  command: TurnSubmitCommand,
+  entry: RuntimeEntry,
+): Promise<HostDaemonCommandResult<"turn.submit">> {
+  switch (command.target.mode) {
+    case "start":
+      return runSubmittedTurn(command, entry);
+    case "auto":
+      return command.target.expectedTurnId
+        ? steerSubmittedTurn(command, entry, command.target.expectedTurnId)
+        : runSubmittedTurn(command, entry);
+    case "steer":
+      if (!command.target.expectedTurnId) {
+        // The server saw no active turn, but the user's intent is still "send".
+        return runSubmittedTurn(command, entry);
+      }
+      return steerSubmittedTurn(command, entry, command.target.expectedTurnId);
+  }
 }
 
 export async function handleThreadDeleted(

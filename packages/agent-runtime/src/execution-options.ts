@@ -1,6 +1,6 @@
 import type { ProviderAdapter } from "./provider-adapter.js";
 import type { AgentRuntimeExecutionOptions } from "./types.js";
-import type { AdapterOptions } from "./provider-adapter.js";
+import type { ProviderExecutionContext } from "./provider-adapter.js";
 import { resolveAdapterPermissionPolicy } from "./shared/permission-policy.js";
 
 interface AssertProviderSupportsExecutionOptionsArgs {
@@ -9,7 +9,7 @@ interface AssertProviderSupportsExecutionOptionsArgs {
   providerId: string;
 }
 
-interface ToAdapterOptionsArgs {
+interface ToProviderExecutionContextArgs {
   envVars: Record<string, string>;
   execOpts: AgentRuntimeExecutionOptions;
   instructions: string | undefined;
@@ -56,7 +56,7 @@ export function sameExecutionSettings(
   );
 }
 
-export function toAdapterOptions(args: ToAdapterOptionsArgs): AdapterOptions {
+export function toProviderExecutionContext(args: ToProviderExecutionContextArgs): ProviderExecutionContext {
   const permissionPolicy = resolveAdapterPermissionPolicy(args.execOpts);
   return {
     model: args.execOpts.model,

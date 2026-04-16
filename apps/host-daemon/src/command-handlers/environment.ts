@@ -88,7 +88,7 @@ export async function provisionEnvironment(
     // Flush buffered progress events before reporting the command result so
     // streamed transcript entries stay ordered ahead of the terminal outcome.
     if (command.initiator) {
-      await options.eventSink?.flush();
+      await options.eventSink.flush();
     }
   }
 }
@@ -97,7 +97,7 @@ function buildOnProgress(args: BuildOnProgressArgs): ProvisionProgressCallback {
   const { command, options, transcript } = args;
   const threadId = command.initiator?.threadId;
   const eventSink = options.eventSink;
-  if (!threadId || !eventSink) {
+  if (!threadId) {
     return (entry) => {
       transcript.push(entry);
     };

@@ -10,6 +10,7 @@ import type {
 } from "@bb/host-workspace";
 import { RuntimeManager } from "../../src/runtime-manager.js";
 import { listFilesRecursively } from "../../src/command-handlers/file-list.js";
+import { noopEventSink } from "../../src/command-dispatch-support.js";
 
 const tempDirs: string[] = [];
 
@@ -211,6 +212,7 @@ export function createFakeRuntime() {
       state.steeredClientRequestSequence = args.clientRequestSequence;
       state.steeredTurnOptions = args.options;
       state.steeredTurnInstructions = args.instructions;
+      return { status: "steered" as const };
     },
     async stopThread(args: { threadId: string }) {
       state.stoppedThreadId = args.threadId;
@@ -262,12 +264,14 @@ export function createHarness(args: {
   return {
     manager,
     provisions,
+    runtime,
     runtimeState,
     workspaceState,
     workspace,
     /** Default dispatch options with threadStorageRootPath for tests. */
     dispatchOptions(overrides: { threadStorageRootPath?: string } = {}) {
       return {
+        eventSink: noopEventSink,
         runtimeManager: manager,
         threadStorageRootPath: overrides.threadStorageRootPath ?? "/tmp/bb-test-thread-storage",
       };

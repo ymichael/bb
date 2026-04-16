@@ -6,12 +6,11 @@ import {
   cleanup,
   createTestRuntime,
   expectNoSharedRuntimeTurnIds,
-  fullRuntimeOptions,
   getAgentText,
   getStreamedText,
   getThreadText,
   newThreadId,
-  resolveResumePath,
+  resolveRuntimeOptions,
   waitForThreadTurnCompleted,
   waitForToolCallBeforeTurnCompletion,
 } from "./test/runtime-integration-harness.js";
@@ -25,18 +24,22 @@ for (const providerId of providers) {
     it("resumes a thread across process lifetimes", async () => {
       const ctx1 = createTestRuntime(providerId);
       let providerThreadId: string | undefined;
-      let resumePath: string | undefined;
       let firstRuntimeEvents: ThreadEvent[] = [];
       const firstThreadId = newThreadId();
       let ctx1Shutdown = false;
 
       try {
+        const options = await resolveRuntimeOptions({
+          ctx: ctx1,
+          providerId,
+          preset: "full",
+        });
         const startResult = await ctx1.runtime.startThread({
           environmentId: "env-1",
           threadId: firstThreadId,
           projectId: "test-project",
           providerId,
-          options: fullRuntimeOptions,
+          options,
         });
 
         providerThreadId = startResult.providerThreadId || undefined;
@@ -44,7 +47,7 @@ for (const providerId of providers) {
         await ctx1.runtime.runTurn({
           threadId: firstThreadId,
           input: [{ type: "text", text: "Remember the secret word STRAWBERRY. Just confirm you will remember it." }],
-          options: fullRuntimeOptions,
+          options,
         });
 
         await waitForThreadTurnCompleted({
@@ -66,12 +69,6 @@ for (const providerId of providers) {
           }
         }
 
-        // For pi, the resume path is the session file
-        resumePath = resolveResumePath({
-          providerId,
-          threadId: firstThreadId,
-        });
-
         // Shutdown first runtime (simulates process death)
         await ctx1.runtime.shutdown();
         ctx1Shutdown = true;
@@ -86,14 +83,13 @@ for (const providerId of providers) {
             threadId,
             providerThreadId,
             providerId,
-            resumePath,
-            options: fullRuntimeOptions,
+            options,
           });
 
           await ctx2.runtime.runTurn({
             threadId,
             input: [{ type: "text", text: "What was the secret word I told you to remember? Reply with just the word." }],
-            options: fullRuntimeOptions,
+            options,
           });
 
           await waitForThreadTurnCompleted({
@@ -161,12 +157,17 @@ describe("codex resume scenarios", () => {
     const firstThreadId = newThreadId();
 
     try {
+      const options = await resolveRuntimeOptions({
+        ctx: ctx1,
+        providerId,
+        preset: "full",
+      });
       const startResult = await ctx1.runtime.startThread({
         environmentId: "env-1",
         threadId: firstThreadId,
         projectId: "test-project",
         providerId,
-        options: fullRuntimeOptions,
+        options,
         dynamicTools,
       });
 
@@ -175,7 +176,7 @@ describe("codex resume scenarios", () => {
       await ctx1.runtime.runTurn({
         threadId: firstThreadId,
         input: [{ type: "text", text: "Call the bb_test_ping tool right now." }],
-        options: fullRuntimeOptions,
+        options,
       });
 
       await waitForToolCallBeforeTurnCompletion({
@@ -223,19 +224,24 @@ describe("codex resume scenarios", () => {
 
     try {
       const threadId = newThreadId();
+      const options = await resolveRuntimeOptions({
+        ctx: ctx2,
+        providerId,
+        preset: "full",
+      });
       await ctx2.runtime.resumeThread({
         environmentId: "env-1",
         threadId,
         providerThreadId,
         providerId,
         dynamicTools,
-        options: fullRuntimeOptions,
+        options,
       });
 
       await ctx2.runtime.runTurn({
         threadId,
         input: [{ type: "text", text: "Call the bb_test_ping tool again right now." }],
-        options: fullRuntimeOptions,
+        options,
       });
 
       await waitForToolCallBeforeTurnCompletion({
@@ -264,12 +270,17 @@ describe("codex resume scenarios", () => {
     const firstThreadId = newThreadId();
 
     try {
+      const options = await resolveRuntimeOptions({
+        ctx: ctx1,
+        providerId,
+        preset: "full",
+      });
       const startResult = await ctx1.runtime.startThread({
         environmentId: "env-1",
         threadId: firstThreadId,
         projectId: "test-project",
         providerId,
-        options: fullRuntimeOptions,
+        options,
       });
 
       providerThreadId = startResult.providerThreadId || undefined;
@@ -277,7 +288,7 @@ describe("codex resume scenarios", () => {
       await ctx1.runtime.runTurn({
         threadId: firstThreadId,
         input: [{ type: "text", text: "Remember the word STRAWBERRY. Just confirm you will remember it." }],
-        options: fullRuntimeOptions,
+        options,
       });
 
       await waitForThreadTurnCompleted({
@@ -303,18 +314,23 @@ describe("codex resume scenarios", () => {
     const ctx2 = createTestRuntime(providerId);
     try {
       const threadId = newThreadId();
+      const options = await resolveRuntimeOptions({
+        ctx: ctx2,
+        providerId,
+        preset: "full",
+      });
       await ctx2.runtime.resumeThread({
         environmentId: "env-1",
         threadId,
         providerThreadId,
         providerId,
-        options: fullRuntimeOptions,
+        options,
       });
 
       await ctx2.runtime.runTurn({
         threadId,
         input: [{ type: "text", text: "What was the word I asked you to remember? Reply with just the word." }],
-        options: fullRuntimeOptions,
+        options,
       });
 
       await waitForThreadTurnCompleted({
@@ -368,12 +384,17 @@ describe("codex resume scenarios", () => {
     const firstThreadId = newThreadId();
 
     try {
+      const options = await resolveRuntimeOptions({
+        ctx: ctx1,
+        providerId,
+        preset: "full",
+      });
       const startResult = await ctx1.runtime.startThread({
         environmentId: "env-1",
         threadId: firstThreadId,
         projectId: "test-project",
         providerId,
-        options: fullRuntimeOptions,
+        options,
         dynamicTools,
       });
 
@@ -387,7 +408,7 @@ describe("codex resume scenarios", () => {
             text: "Remember the word BANANA. Also call the bb_test_ping tool right now.",
           },
         ],
-        options: fullRuntimeOptions,
+        options,
       });
 
       await waitForToolCallBeforeTurnCompletion({
@@ -434,13 +455,18 @@ describe("codex resume scenarios", () => {
 
     try {
       const threadId = newThreadId();
+      const options = await resolveRuntimeOptions({
+        ctx: ctx2,
+        providerId,
+        preset: "full",
+      });
       await ctx2.runtime.resumeThread({
         environmentId: "env-1",
         threadId,
         providerThreadId,
         providerId,
         dynamicTools,
-        options: fullRuntimeOptions,
+        options,
       });
 
       await ctx2.runtime.runTurn({
@@ -451,7 +477,7 @@ describe("codex resume scenarios", () => {
             text: "What did I ask you to remember? Also call the bb_test_ping tool right now.",
           },
         ],
-        options: fullRuntimeOptions,
+        options,
       });
 
       await waitForToolCallBeforeTurnCompletion({

@@ -529,21 +529,21 @@ describe("server integration", () => {
       });
       expect(sendResponse.status).toBe(200);
 
-      const turnRunCommand = await fetchSingleCommand(
+      const turnSubmitCommand = await fetchSingleCommand(
         daemonClient,
         session.sessionId,
         initialThreadStartCommand.cursor,
       );
-      expect(turnRunCommand.command.type).toBe("turn.run");
+      expect(turnSubmitCommand.command.type).toBe("turn.submit");
 
       await daemonClient.session["command-result"].$post({
         json: {
           sessionId: session.sessionId,
-          commandId: turnRunCommand.id,
+          commandId: turnSubmitCommand.id,
           completedAt: Date.now(),
-          type: "turn.run",
+          type: "turn.submit",
           ok: true,
-          result: {},
+          result: { appliedAs: "new-turn" },
         },
       });
 

@@ -433,6 +433,7 @@ export const codexHandledEventSchema = z.discriminatedUnion("method", [
   }).passthrough()),
   createCodexEventSchema("thread/compacted", z.object({
     threadId: z.string(),
+    turnId: z.string(),
   }).passthrough()),
   createCodexEventSchema("item/started", z.object({
     threadId: z.string(),

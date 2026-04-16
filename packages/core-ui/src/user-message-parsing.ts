@@ -1,11 +1,10 @@
-import type { PromptInput, ThreadEvent, ThreadEventUserContent } from "@bb/domain";
+import type { PromptInput, ThreadEvent } from "@bb/domain";
 import type { EventMeta } from "./event-decode.js";
 import type { ToViewMessagesOptions, ViewAssistantTextMessage, ViewUserMessage } from "@bb/domain";
 import { messageId } from "./format-helpers.js";
 import { assertNever } from "./assert-never.js";
 
-/** Accepts both PromptInput[] (from client start events) and ThreadEventUserContent[] (from item events). */
-export function parsePromptInput(input: ReadonlyArray<PromptInput | ThreadEventUserContent> | undefined): {
+export function parsePromptInput(input: ReadonlyArray<PromptInput> | undefined): {
   text: string;
   webImages: number;
   localImages: number;
@@ -68,17 +67,7 @@ export function parsePromptInput(input: ReadonlyArray<PromptInput | ThreadEventU
   };
 }
 
-export function userMessageSignature(value: {
-  text: string;
-  webImages: number;
-  localImages: number;
-  localFiles: number;
-}): string {
-  const totalImages = value.webImages + value.localImages;
-  return `${value.text}\u0000${totalImages}\u0000${value.localFiles}`;
-}
-
-export function shouldRenderThreadStartInput(
+export function shouldRenderClientRequestedInput(
   threadStatus: ToViewMessagesOptions["threadStatus"] | undefined,
 ): boolean {
   if (!threadStatus) return false;
@@ -122,47 +111,18 @@ function buildAttachments(parsed: NonNullable<ReturnType<typeof parsePromptInput
   };
 }
 
-export function parseUserFromItemEvent(
-  decoded: ThreadEvent,
-  meta: EventMeta,
-): ViewUserMessage | null {
-  if (decoded.type !== "item/started" && decoded.type !== "item/completed") {
-    return null;
-  }
-  if (decoded.item.type !== "userMessage") return null;
-
-  const parsedContent = parsePromptInput(decoded.item.content);
-  if (!parsedContent) return null;
-
-  const { turnId } = decoded;
-  const itemId = decoded.item.id ?? `${meta.seq}`;
-
-  return {
-    kind: "user",
-    id: messageId(decoded.threadId, "user", itemId),
-    threadId: decoded.threadId,
-    sourceSeqStart: meta.seq,
-    sourceSeqEnd: meta.seq,
-    createdAt: meta.createdAt,
-    ...(turnId ? { turnId } : {}),
-    ...(decoded.item.parentToolCallId
-      ? { parentToolCallId: decoded.item.parentToolCallId }
-      : {}),
-    text: parsedContent.text,
-    attachments: buildAttachments(parsedContent),
-  };
+export interface ParseUserFromClientRequestArgs {
+  decoded: ThreadEvent;
+  meta: EventMeta;
+  options?: ToViewMessagesOptions;
+  resolvedTurnId?: string;
 }
 
-export function parseUserFromClientStart(
-  decoded: ThreadEvent,
-  meta: EventMeta,
-  options?: ToViewMessagesOptions,
+export function parseUserFromClientRequest(
+  args: ParseUserFromClientRequestArgs,
 ): ViewUserMessage | null {
-  if (
-    decoded.type !== "client/thread/start" &&
-    decoded.type !== "client/turn/requested" &&
-    decoded.type !== "client/turn/start"
-  ) {
+  const { decoded, meta, options, resolvedTurnId } = args;
+  if (decoded.type !== "client/turn/requested") {
     return null;
   }
 
@@ -174,9 +134,13 @@ export function parseUserFromClientStart(
   }
   const parsedInput = parsePromptInput(decoded.input);
   if (!parsedInput) return null;
-  if (!shouldRenderThreadStartInput(options?.threadStatus)) {
+  if (!shouldRenderClientRequestedInput(options?.threadStatus)) {
     return null;
   }
+
+  const targetTurnId =
+    resolvedTurnId ??
+    ("expectedTurnId" in decoded.target ? decoded.target.expectedTurnId : null);
 
   return {
     kind: "user",
@@ -185,6 +149,7 @@ export function parseUserFromClientStart(
     sourceSeqStart: meta.seq,
     sourceSeqEnd: meta.seq,
     createdAt: meta.createdAt,
+    ...(targetTurnId ? { turnId: targetTurnId } : {}),
     text: parsedInput.text,
     attachments: buildAttachments(parsedInput),
   };

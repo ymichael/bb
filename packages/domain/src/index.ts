@@ -254,6 +254,7 @@ export {
   systemThreadProvisioningStatusSchema,
   systemThreadProvisioningStatusValues,
   systemThreadInterruptedEventDataSchema,
+  clientTurnLifecycleEventDataSchema,
   threadEnvironmentStartReasonSchema,
   threadEnvironmentStartReasonValues,
   threadProvisioningReasonSchema,
@@ -262,6 +263,7 @@ export {
   threadTurnInitiatorValues,
   turnRequestEventDataSchema,
   turnRequestOptionsSchema,
+  turnRequestTargetSchema,
   turnLifecycleEventDataSchema,
 } from "./thread-events.js";
 export type {
@@ -274,6 +276,7 @@ export type {
   SystemThreadProvisioningEventData,
   SystemThreadProvisioningStatus,
   SystemThreadInterruptedEventData,
+  ClientTurnLifecycleEventData,
   ThreadEnvironmentStartReason,
   ThreadEventData,
   ThreadEventDataByType,
@@ -282,6 +285,7 @@ export type {
   ThreadTurnInitiator,
   TurnRequestEventData,
   TurnRequestOptions,
+  TurnRequestTarget,
   TurnLifecycleEventData,
 } from "./thread-events.js";
 

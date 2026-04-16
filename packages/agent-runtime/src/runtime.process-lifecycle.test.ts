@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ThreadEvent } from "@bb/domain";
 import type { ProviderAdapter } from "./provider-adapter.js";
-import { createAgentRuntime } from "./runtime.js";
+import { createAgentRuntimeWithAdapters } from "./runtime.js";
 import { fakeProviderScriptPath } from "./test/index.js";
 import {
   createFakeAdapter,
@@ -27,7 +27,7 @@ describe("createAgentRuntime process lifecycle", () => {
 
   it("handles JSON-RPC error responses from provider", async () => {
     const events: ThreadEvent[] = [];
-    const runtime = createAgentRuntime({
+    const runtime = createAgentRuntimeWithAdapters({
       workspacePath: tmpDir,
       onEvent: (e) => events.push(e),
       onToolCall: async () => ({
@@ -53,15 +53,15 @@ describe("createAgentRuntime process lifecycle", () => {
     // Instead, test with a custom adapter that always returns errors:
     const errorAdapter: ProviderAdapter = {
       ...createFakeAdapter(scriptPath),
-      buildCommand(cmd) {
+      buildCommandPlan(cmd) {
         if (cmd.type === "turn/start") {
-          return { jsonrpc: "2.0", method: "bad_method", params: {} };
+          return { kind: "request", method: "bad_method", params: {} };
         }
-        return createFakeAdapter(scriptPath).buildCommand(cmd);
+        return createFakeAdapter(scriptPath).buildCommandPlan(cmd);
       },
     };
 
-    const runtime2 = createAgentRuntime({
+    const runtime2 = createAgentRuntimeWithAdapters({
       workspacePath: tmpDir,
       onEvent: () => {},
       onToolCall: async () => ({
@@ -103,7 +103,7 @@ describe("createAgentRuntime process lifecycle", () => {
       });`,
     );
 
-    const runtime = createAgentRuntime({
+    const runtime = createAgentRuntimeWithAdapters({
       workspacePath: tmpDir,
       onEvent: () => {},
       onToolCall: async () => ({
@@ -127,7 +127,7 @@ describe("createAgentRuntime process lifecycle", () => {
   });
 
   it("shutdown kills processes and rejects pending requests", async () => {
-    const runtime = createAgentRuntime({
+    const runtime = createAgentRuntimeWithAdapters({
       workspacePath: tmpDir,
       onEvent: () => {},
       onToolCall: async () => ({
@@ -156,7 +156,7 @@ describe("createAgentRuntime process lifecycle", () => {
       process: { command: "nonexistent-binary-that-does-not-exist", args: [] },
     };
 
-    const runtime = createAgentRuntime({
+    const runtime = createAgentRuntimeWithAdapters({
       workspacePath: tmpDir,
       onEvent: () => {},
       onToolCall: async () => ({
@@ -179,7 +179,7 @@ describe("createAgentRuntime process lifecycle", () => {
       `process.exit(1);`, // exits immediately, never responds to init
     );
 
-    const runtime = createAgentRuntime({
+    const runtime = createAgentRuntimeWithAdapters({
       workspacePath: tmpDir,
       onEvent: () => {},
       onToolCall: async () => ({
@@ -221,7 +221,7 @@ describe("createAgentRuntime process lifecycle", () => {
     );
 
     const exitInfo = vi.fn();
-    const runtime = createAgentRuntime({
+    const runtime = createAgentRuntimeWithAdapters({
       workspacePath: tmpDir,
       onEvent: () => {},
       onToolCall: async () => ({
@@ -275,7 +275,7 @@ describe("createAgentRuntime process lifecycle", () => {
       });`,
     );
 
-    const runtime = createAgentRuntime({
+    const runtime = createAgentRuntimeWithAdapters({
       workspacePath: tmpDir,
       onEvent: () => {},
       onToolCall: async () => ({
@@ -310,7 +310,7 @@ describe("createAgentRuntime process lifecycle", () => {
       },
     };
 
-    const runtime = createAgentRuntime({
+    const runtime = createAgentRuntimeWithAdapters({
       workspacePath: tmpDir,
       onEvent: () => {},
       onToolCall: async () => ({

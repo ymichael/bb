@@ -4,8 +4,12 @@ import {
   threadEventSchema,
   threadEventTypeSchema,
 } from "./provider-event.js";
-import { turnRequestEventDataSchema } from "./thread-events.js";
+import {
+  turnRequestEventDataSchema,
+  turnRequestTargetSchema,
+} from "./thread-events.js";
 import type { ThreadEvent, ThreadEventType } from "./provider-event.js";
+import type { TurnRequestTarget } from "./thread-events.js";
 
 type ThreadEventByType = {
   [TType in ThreadEventType]: Extract<ThreadEvent, { type: TType }>;
@@ -74,12 +78,15 @@ const threadEventRowInputSchema = z.object({
 });
 
 const storedTurnRequestTypeSet = new Set<ThreadEventType>([
-  "client/thread/start",
   "client/turn/requested",
-  "client/turn/start",
 ]);
 
+const LEGACY_TURN_REQUEST_TARGET = {
+  kind: "new-turn",
+} satisfies TurnRequestTarget;
+
 const storedTurnRequestEventDataSchema = turnRequestEventDataSchema.extend({
+  target: turnRequestTargetSchema.default(LEGACY_TURN_REQUEST_TARGET),
   execution: resolvedThreadExecutionOptionsSchema,
 });
 

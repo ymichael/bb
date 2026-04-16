@@ -9,7 +9,10 @@ import type {
 } from "@bb/domain";
 import { toOptionalRecord } from "../shared/adapter-utils.js";
 import { createUnhandledProviderEvent } from "../shared/provider-unhandled-event.js";
-import type { JsonRpcMessage } from "../provider-adapter.js";
+import type {
+  JsonRpcMessage,
+  ProviderRuntimeEvent,
+} from "../runtime-json-rpc.js";
 import {
   codexBridgeEnvelopeSchema,
   codexHandledEventSchema,
@@ -289,7 +292,7 @@ function translateCodexItem(
   }
 }
 
-export function translateCodexEvent(event: unknown): ThreadEvent[] {
+export function translateCodexEvent(event: ProviderRuntimeEvent): ThreadEvent[] {
   const envelope = codexBridgeEnvelopeSchema.safeParse(event);
   if (!envelope.success) {
     return [];
@@ -364,6 +367,7 @@ export function translateCodexEvent(event: unknown): ThreadEvent[] {
         type: "thread/compacted",
         threadId: handledEvent.params.threadId,
         providerThreadId: handledEvent.params.threadId,
+        turnId: handledEvent.params.turnId,
       }];
     case "item/started":
     case "item/completed": {

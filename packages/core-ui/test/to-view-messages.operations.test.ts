@@ -337,8 +337,53 @@ describe("toViewMessages operations", () => {
     expect(ops[0]?.sourceSeqEnd).toBe(2);
   });
 
+  it("coalesces compaction start and compacted events by turn id", () => {
+    const events: ThreadEventRow[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "item/started",
+        data: {
+          providerThreadId: "thread-1",
+          turnId: "turn-1",
+          item: {
+            id: "compact-1",
+            type: "contextCompaction",
+          },
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "thread/compacted",
+        data: {
+          providerThreadId: "thread-1",
+          threadId: "thread-1",
+          turnId: "turn-1",
+        },
+        createdAt: 2,
+      },
+    ];
 
-  it("projects legacy compaction events as operations", () => {
+    const projected = toViewMessages(fromRows(events));
+    const ops = projected.filter(
+      (message): message is Extract<ViewMessage, { kind: "operation" }> =>
+        message.kind === "operation",
+    );
+
+    expect(ops).toHaveLength(1);
+    expect(ops[0]?.opType).toBe("compaction");
+    expect(ops[0]?.title).toBe("Context compacted");
+    expect(ops[0]?.status).toBe("completed");
+    expect(ops[0]?.turnId).toBe("turn-1");
+    expect(ops[0]?.sourceSeqStart).toBe(1);
+    expect(ops[0]?.sourceSeqEnd).toBe(2);
+  });
+
+  it("projects compacted events with turn ids as operations", () => {
     const events: ThreadEventRow[] = [
       {
         id: "evt-1",
@@ -608,12 +653,13 @@ describe("toViewMessages operations", () => {
         id: "evt-1",
         threadId: "thread-1",
         seq: 1,
-        type: "client/thread/start",
+        type: "client/turn/requested",
         data: {
           direction: "outbound",
           source: "spawn",
           initiator: "agent",
           input: [{ type: "text", text: "Check the docker environment" }],
+          target: { kind: "thread-start" },
           request: {
             method: "thread/start",
             params: {},
@@ -623,7 +669,7 @@ describe("toViewMessages operations", () => {
             serviceTier: "default",
             reasoningLevel: "medium",
             permissionMode: "full",
-            source: "client/thread/start",
+            source: "client/turn/requested",
           },
         },
         createdAt: 1,

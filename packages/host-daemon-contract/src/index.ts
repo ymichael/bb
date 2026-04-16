@@ -72,8 +72,8 @@ export {
   threadRenameCommandSchema,
   threadStartCommandSchema,
   threadStopCommandSchema,
-  turnRunCommandSchema,
-  turnSteerCommandSchema,
+  turnSubmitCommandSchema,
+  turnSubmitTargetSchema,
   workspaceCommitCommandSchema,
   workspaceDiffCommandSchema,
   workspaceDemoteCommandSchema,
@@ -92,6 +92,7 @@ export type {
   HostDaemonCommandResultReport,
   HostDaemonCommandType,
   HostDaemonExecutionOptions,
+  TurnSubmitTarget,
   WorkspaceContext,
 } from "./commands.js";
 

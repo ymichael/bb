@@ -4,11 +4,11 @@ import { describe, expect, it } from "vitest";
 import {
   cleanup,
   createTestRuntime,
-  fullRuntimeOptions,
   getAgentText,
   getStreamedText,
   getThreadText,
   newThreadId,
+  resolveRuntimeOptions,
   turnCompletedCount,
   waitForTurnCompletedCount,
 } from "./test/runtime-integration-harness.js";
@@ -21,13 +21,18 @@ describe.concurrent("cross-provider and multi-thread scenarios", () => {
       try {
         const threadA = newThreadId();
         const threadB = newThreadId();
+        const options = await resolveRuntimeOptions({
+          ctx,
+          providerId: "codex",
+          preset: "full",
+        });
 
         await ctx.runtime.startThread({
           environmentId: "env-1",
           threadId: threadA,
           projectId: "test-project",
           providerId: "codex",
-          options: fullRuntimeOptions,
+          options,
         });
 
         await ctx.runtime.startThread({
@@ -35,7 +40,7 @@ describe.concurrent("cross-provider and multi-thread scenarios", () => {
           threadId: threadB,
           projectId: "test-project",
           providerId: "codex",
-          options: fullRuntimeOptions,
+          options,
         });
 
         // Run turns concurrently
@@ -43,12 +48,12 @@ describe.concurrent("cross-provider and multi-thread scenarios", () => {
           ctx.runtime.runTurn({
             threadId: threadA,
             input: [{ type: "text", text: "Reply with exactly: THREAD_A_OK" }],
-            options: fullRuntimeOptions,
+            options,
           }),
           ctx.runtime.runTurn({
             threadId: threadB,
             input: [{ type: "text", text: "Reply with exactly: THREAD_B_OK" }],
-            options: fullRuntimeOptions,
+            options,
           }),
         ]);
 
@@ -76,13 +81,23 @@ describe.concurrent("cross-provider and multi-thread scenarios", () => {
       try {
         const codexThread = newThreadId();
         const claudeThread = newThreadId();
+        const codexOptions = await resolveRuntimeOptions({
+          ctx,
+          providerId: "codex",
+          preset: "full",
+        });
+        const claudeOptions = await resolveRuntimeOptions({
+          ctx,
+          providerId: "claude-code",
+          preset: "full",
+        });
 
         await ctx.runtime.startThread({
           environmentId: "env-1",
           threadId: codexThread,
           projectId: "test-project",
           providerId: "codex",
-          options: fullRuntimeOptions,
+          options: codexOptions,
         });
 
         await ctx.runtime.startThread({
@@ -90,7 +105,7 @@ describe.concurrent("cross-provider and multi-thread scenarios", () => {
           threadId: claudeThread,
           projectId: "test-project",
           providerId: "claude-code",
-          options: fullRuntimeOptions,
+          options: claudeOptions,
         });
 
         // Run turns concurrently on both providers
@@ -98,12 +113,12 @@ describe.concurrent("cross-provider and multi-thread scenarios", () => {
           ctx.runtime.runTurn({
             threadId: codexThread,
             input: [{ type: "text", text: "Reply with exactly: CODEX_OK" }],
-            options: fullRuntimeOptions,
+            options: codexOptions,
           }),
           ctx.runtime.runTurn({
             threadId: claudeThread,
             input: [{ type: "text", text: "Reply with exactly: CLAUDE_OK" }],
-            options: fullRuntimeOptions,
+            options: claudeOptions,
           }),
         ]);
 
@@ -141,20 +156,30 @@ describe("multi-provider resume scenarios", () => {
     let ctx1Shutdown = false;
 
     try {
+      const codexOptions = await resolveRuntimeOptions({
+        ctx: ctx1,
+        providerId: "codex",
+        preset: "full",
+      });
+      const claudeOptions = await resolveRuntimeOptions({
+        ctx: ctx1,
+        providerId: "claude-code",
+        preset: "full",
+      });
       const [codexStart, claudeStart] = await Promise.all([
         ctx1.runtime.startThread({
           environmentId: "env-1",
           threadId: codexThreadId1,
           projectId: "test-project",
           providerId: "codex",
-          options: fullRuntimeOptions,
+          options: codexOptions,
         }),
         ctx1.runtime.startThread({
           environmentId: "env-1",
           threadId: claudeThreadId1,
           projectId: "test-project",
           providerId: "claude-code",
-          options: fullRuntimeOptions,
+          options: claudeOptions,
         }),
       ]);
 
@@ -166,12 +191,12 @@ describe("multi-provider resume scenarios", () => {
         ctx1.runtime.runTurn({
           threadId: codexThreadId1,
           input: [{ type: "text", text: "Remember the fruit APPLE. Just confirm you will remember it." }],
-          options: fullRuntimeOptions,
+          options: codexOptions,
         }),
         ctx1.runtime.runTurn({
           threadId: claudeThreadId1,
           input: [{ type: "text", text: "Remember the fruit ORANGE. Just confirm you will remember it." }],
-          options: fullRuntimeOptions,
+          options: claudeOptions,
         }),
       ]);
 
@@ -215,14 +240,14 @@ describe("multi-provider resume scenarios", () => {
             threadId: codexThreadId2,
             providerThreadId: codexProviderThreadId,
             providerId: "codex",
-            options: fullRuntimeOptions,
+            options: codexOptions,
           }),
           ctx2.runtime.resumeThread({
             environmentId: "env-1",
             threadId: claudeThreadId2,
             providerThreadId: claudeProviderThreadId,
             providerId: "claude-code",
-            options: fullRuntimeOptions,
+            options: claudeOptions,
           }),
         ]);
 
@@ -230,12 +255,12 @@ describe("multi-provider resume scenarios", () => {
           ctx2.runtime.runTurn({
             threadId: codexThreadId2,
             input: [{ type: "text", text: "What fruit did I ask you to remember? Reply with just the fruit name." }],
-            options: fullRuntimeOptions,
+            options: codexOptions,
           }),
           ctx2.runtime.runTurn({
             threadId: claudeThreadId2,
             input: [{ type: "text", text: "What fruit did I ask you to remember? Reply with just the fruit name." }],
-            options: fullRuntimeOptions,
+            options: claudeOptions,
           }),
         ]);
 

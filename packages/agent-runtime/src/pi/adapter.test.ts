@@ -7,7 +7,7 @@ import {
   createPiProviderAdapter,
 } from "./adapter.js";
 import { buildPiAvailableModels } from "./model-list.js";
-import type { AdapterOptions } from "../provider-adapter.js";
+import type { ProviderExecutionContext } from "../provider-adapter.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FIXTURES = resolve(__dirname, "../__fixtures__/pi");
@@ -16,10 +16,10 @@ function loadFixture(name: string): AgentSessionEvent {
   return JSON.parse(readFileSync(resolve(FIXTURES, name), "utf8")) as AgentSessionEvent;
 }
 
-const fullAdapterOptions = {
+const fullProviderExecutionContext = {
   permissionMode: "full",
   permissionEscalation: null,
-} satisfies AdapterOptions;
+} satisfies ProviderExecutionContext;
 
 describe("pi provider adapter", () => {
   // -- Identity & capabilities ---------------------------------------------
@@ -28,11 +28,6 @@ describe("pi provider adapter", () => {
     const adapter = createPiProviderAdapter();
     expect(adapter.id).toBe("pi");
     expect(adapter.displayName).toBe("Pi");
-  });
-
-  it("keeps the provider process alive after thread stop", () => {
-    const adapter = createPiProviderAdapter();
-    expect(adapter.threadStopBehavior).toBe("keep-provider");
   });
 
   it("has correct process config", () => {
@@ -58,17 +53,41 @@ describe("pi provider adapter", () => {
     });
   });
 
+  it("translates accepted steers to input accepted events", () => {
+    const adapter = createPiProviderAdapter();
+
+    expect(adapter.translateAcceptedCommand({
+      command: {
+        type: "turn/steer",
+        threadId: "thread-1",
+        providerThreadId: "provider-thread-1",
+        expectedTurnId: "turn-1",
+        clientRequestSequence: 9,
+        input: [{ type: "text", text: "steer turn" }],
+        options: fullProviderExecutionContext,
+      },
+    })).toEqual([
+      {
+        type: "turn/input/accepted",
+        threadId: "thread-1",
+        providerThreadId: "provider-thread-1",
+        turnId: "turn-1",
+        clientRequestSequence: 9,
+      },
+    ]);
+  });
+
   // -- buildCommand --------------------------------------------------------
 
   it("buildCommand thread/start includes threadId and baseInstructions", () => {
     const adapter = createPiProviderAdapter();
-    const cmd = adapter.buildCommand({
+    const cmd = adapter.buildCommandPlan({
       type: "thread/start",
       cwd: "/tmp/worktree",
       threadId: "t1",
       input: [{ type: "text", text: "hello" }],
       instructionMode: "append",
-      options: fullAdapterOptions,
+      options: fullProviderExecutionContext,
     });
     expect(cmd).toMatchObject({
       method: "thread/start",
@@ -82,14 +101,14 @@ describe("pi provider adapter", () => {
 
   it("buildCommand thread/start passes through model, env vars, instructions, reasoning level, and dynamic tools", () => {
     const adapter = createPiProviderAdapter();
-    const cmd = adapter.buildCommand({
+    const cmd = adapter.buildCommandPlan({
       type: "thread/start",
       cwd: "/tmp/worktree",
       threadId: "bb-thread-1",
       input: [{ type: "text", text: "hello" }],
       instructionMode: "append",
       options: {
-        ...fullAdapterOptions,
+        ...fullProviderExecutionContext,
         model: "anthropic/claude-sonnet-4-20250514",
         instructions: "Focus on the failing tests first.",
         reasoningLevel: "high",
@@ -146,13 +165,13 @@ describe("pi provider adapter", () => {
 
   it("buildCommand thread/resume routes to provider thread id", () => {
     const adapter = createPiProviderAdapter();
-    const cmd = adapter.buildCommand({
+    const cmd = adapter.buildCommandPlan({
       type: "thread/resume",
       cwd: "/tmp/worktree",
       threadId: "bb-t1",
       providerThreadId: "pi-session-1",
       instructionMode: "append",
-      options: fullAdapterOptions,
+      options: fullProviderExecutionContext,
     });
     expect(cmd).toMatchObject({
       method: "thread/resume",
@@ -165,14 +184,14 @@ describe("pi provider adapter", () => {
 
   it("buildCommand thread/stop maps to the bridge stop command", () => {
     const adapter = createPiProviderAdapter();
-    const cmd = adapter.buildCommand({
+    const cmd = adapter.buildCommandPlan({
       type: "thread/stop",
       threadId: "bb-t1",
       providerThreadId: "pi-session-1",
       activeTurnId: "turn-1",
     });
     expect(cmd).toEqual({
-      jsonrpc: "2.0",
+      kind: "request",
       method: "thread/stop",
       params: {
         threadId: "pi-session-1",
@@ -182,12 +201,12 @@ describe("pi provider adapter", () => {
 
   it("buildCommand turn/start includes input", () => {
     const adapter = createPiProviderAdapter();
-    const cmd = adapter.buildCommand({
+    const cmd = adapter.buildCommandPlan({
       type: "turn/start",
       threadId: "t1",
       providerThreadId: "pi-1",
       input: [{ type: "text", text: "do it" }],
-      options: fullAdapterOptions,
+      options: fullProviderExecutionContext,
     });
     expect(cmd).toMatchObject({
       method: "turn/start",
@@ -197,13 +216,13 @@ describe("pi provider adapter", () => {
 
   it("buildCommand turn/steer includes expectedTurnId", () => {
     const adapter = createPiProviderAdapter();
-    const cmd = adapter.buildCommand({
+    const cmd = adapter.buildCommandPlan({
       type: "turn/steer",
       threadId: "t1",
       providerThreadId: "pi-1",
       expectedTurnId: "turn-1",
       input: [{ type: "text", text: "steer" }],
-      options: fullAdapterOptions,
+      options: fullProviderExecutionContext,
     });
     expect(cmd).toMatchObject({
       method: "turn/steer",
@@ -214,23 +233,25 @@ describe("pi provider adapter", () => {
     });
   });
 
-  it("buildCommand thread/name/set returns null (unsupported)", () => {
+  it("buildCommand thread/name/set returns an unsupported no-op", () => {
     const adapter = createPiProviderAdapter();
     expect(
-      adapter.buildCommand({
+      adapter.buildCommandPlan({
         type: "thread/name/set",
         threadId: "t1",
         providerThreadId: "p1",
         title: "hi",
       }),
-    ).toBeNull();
+    ).toEqual({
+      kind: "noop",
+      reason: "rename unsupported",
+    });
   });
 
   it("decodeToolCallRequest preserves string request ids", () => {
     const adapter = createPiProviderAdapter();
     expect(
       adapter.decodeToolCallRequest({
-        jsonrpc: "2.0",
         id: "req-1",
         method: "item/tool/call",
         params: {
@@ -343,7 +364,26 @@ describe("pi provider adapter", () => {
       type: "thread/compacted",
       threadId: "",
       providerThreadId: "",
+      turnId: "turn-1",
     });
+  });
+
+  it("translateEvent auto_compaction_end without a known turn is unhandled", () => {
+    const adapter = createPiProviderAdapter();
+    const event = {
+      type: "auto_compaction_end",
+      result: undefined,
+      aborted: false,
+      willRetry: false,
+    } satisfies AgentSessionEvent;
+
+    const events = adapter.translateEvent(event);
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "provider/unhandled",
+      }),
+    );
   });
 
   it("translateEvent auto_compaction_start reuses the last completed turn id without opening a new turn", () => {

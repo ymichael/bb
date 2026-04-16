@@ -9,6 +9,9 @@ export interface CompactionLifecycleEvent {
 }
 
 export function getCompactionKey(decoded: ThreadEvent, meta: EventMeta): string {
+  if (decoded.type === "thread/compacted") {
+    return decoded.turnId;
+  }
   const turnId = getEventTurnId(decoded);
   if (decoded.type === "item/started" || decoded.type === "item/completed") {
     return turnId ?? decoded.item.id ?? `seq-${meta.seq}`;

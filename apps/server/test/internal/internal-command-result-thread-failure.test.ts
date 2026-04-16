@@ -94,7 +94,7 @@ describe("thread command failure side effects", () => {
     }
   });
 
-  it("transitions thread to error when turn.run fails", async () => {
+  it("transitions thread to error when turn.submit fails", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host, session } = seedHostSession(harness.deps, {
@@ -116,9 +116,9 @@ describe("thread command failure side effects", () => {
       const command = queueCommand(harness.db, harness.hub, {
         hostId: host.id,
         sessionId: session.id,
-        type: "turn.run",
+        type: "turn.submit",
         payload: JSON.stringify({
-          type: "turn.run",
+          type: "turn.submit",
           environmentId: environment.id,
           threadId: thread.id,
           eventSequence: 1,
@@ -142,6 +142,7 @@ describe("thread command failure side effects", () => {
             dynamicTools: [],
             instructionMode: "append",
           },
+          target: { mode: "start" },
         }),
       });
 

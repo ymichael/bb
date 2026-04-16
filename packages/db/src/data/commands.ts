@@ -17,7 +17,7 @@ type CommandReadConnection = DbConnection | DbTransaction;
 export interface HasPendingHostCommandForThreadArgs {
   hostId: string;
   threadId: string;
-  type: "thread.stop" | "turn.run";
+  type: "thread.stop" | "turn.submit";
 }
 
 export interface GetPendingEnvironmentCommandArgs {

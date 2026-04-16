@@ -8,7 +8,7 @@ import type { CommandExecutionRequestApprovalResponse } from "./generated/codex-
 import type { FileChangeRequestApprovalResponse } from "./generated/codex-app-server/schema/v2/FileChangeRequestApprovalResponse.js";
 import type { PermissionsRequestApprovalResponse } from "./generated/codex-app-server/schema/v2/PermissionsRequestApprovalResponse.js";
 import { normalizePendingInteractionRequestedPermissionProfile } from "../shared/pending-interaction-normalization.js";
-import { ProviderRequestDecodeError } from "../provider-adapter.js";
+import { ProviderRequestDecodeError } from "../runtime-json-rpc.js";
 import type {
   CodexAdditionalPermissions,
   CodexCommandApprovalDecision,

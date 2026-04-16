@@ -19,7 +19,7 @@ export interface CommandRouterOptions {
   runtimeManager: RuntimeManager;
   reportResult?: (result: CommandResultReport) => Promise<void>;
   seedThreadHighWaterMark?: CommandDispatchOptions["seedThreadHighWaterMark"];
-  eventSink?: CommandDispatchOptions["eventSink"];
+  eventSink: CommandDispatchOptions["eventSink"];
   listModels?: CommandDispatchOptions["listModels"];
   resolveInteractiveRequest?: CommandDispatchOptions["resolveInteractiveRequest"];
   threadStorageRootPath: string;

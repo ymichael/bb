@@ -16,12 +16,11 @@ import {
 import { z } from "zod";
 import { hostRuntimeMaterialSnapshotSchema } from "./local-state.js";
 
-export const HOST_DAEMON_PROTOCOL_VERSION = 8 as const;
+export const HOST_DAEMON_PROTOCOL_VERSION = 9 as const;
 
 export const HOST_DAEMON_COMMAND_TYPES = [
   "thread.start",
-  "turn.run",
-  "turn.steer",
+  "turn.submit",
   "thread.stop",
   "thread.rename",
   "thread.deleted",
@@ -97,22 +96,32 @@ export const threadStartCommandSchema = hostDaemonThreadTargetSchema.merge(
   threadStoragePath: z.string().min(1).optional(),
 });
 
-/** Run a conversation turn with user input. Used for every message after the first. */
-export const turnRunCommandSchema = hostDaemonThreadTargetSchema.extend({
-  type: z.literal("turn.run"),
-  eventSequence: z.number().int().nonnegative(),
-  input: z.array(promptInputSchema).min(1),
-  options: hostDaemonExecutionOptionsSchema,
-  resumeContext: turnResumeContextSchema,
-});
+export const turnSubmitTargetSchema = z.discriminatedUnion("mode", [
+  z.object({
+    mode: z.literal("start"),
+  }),
+  z.object({
+    mode: z.literal("auto"),
+    expectedTurnId: z.string().min(1).nullable(),
+  }),
+  z.object({
+    mode: z.literal("steer"),
+    expectedTurnId: z.string().min(1).nullable(),
+  }),
+]);
+export type TurnSubmitTarget = z.infer<typeof turnSubmitTargetSchema>;
 
-export const turnSteerCommandSchema = hostDaemonThreadTargetSchema.extend({
-  type: z.literal("turn.steer"),
+/**
+ * Submit input for an existing provider thread. The daemon chooses whether
+ * auto-targeted input steers the expected active turn or starts a new turn.
+ */
+export const turnSubmitCommandSchema = hostDaemonThreadTargetSchema.extend({
+  type: z.literal("turn.submit"),
   eventSequence: z.number().int().nonnegative(),
-  expectedTurnId: z.string().min(1),
   input: z.array(promptInputSchema).min(1),
   options: hostDaemonExecutionOptionsSchema,
   resumeContext: turnResumeContextSchema,
+  target: turnSubmitTargetSchema,
 });
 
 export const threadStopCommandSchema = hostDaemonThreadTargetSchema.extend({
@@ -294,8 +303,7 @@ export const workspaceListBranchesCommandSchema = hostDaemonWorkspaceTargetSchem
 
 const hostDaemonNonProvisionCommandSchema = z.discriminatedUnion("type", [
   threadStartCommandSchema,
-  turnRunCommandSchema,
-  turnSteerCommandSchema,
+  turnSubmitCommandSchema,
   threadStopCommandSchema,
   threadRenameCommandSchema,
   threadDeletedCommandSchema,
@@ -338,8 +346,9 @@ export const hostDaemonCommandResultSchemaByType = {
   "thread.start": z.object({
     providerThreadId: z.string().min(1),
   }),
-  "turn.run": z.object({}),
-  "turn.steer": z.object({}),
+  "turn.submit": z.object({
+    appliedAs: z.enum(["new-turn", "steer"]),
+  }),
   "thread.stop": z.object({}),
   "thread.rename": z.object({}),
   "thread.deleted": z.object({}),

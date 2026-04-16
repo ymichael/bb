@@ -2,8 +2,11 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import type { ProviderAdapter } from "@bb/agent-runtime";
-import { createFakeAdapter } from "@bb/agent-runtime/test";
+import {
+  createAgentRuntimeWithAdapters,
+  createFakeAdapter,
+  type ProviderAdapter,
+} from "@bb/agent-runtime/test";
 import { jsonValueSchema, type JsonValue } from "@bb/domain";
 import {
   HOST_AUTH_FILE_NAME,
@@ -267,7 +270,7 @@ function createStandardThreadStartCommand(args: {
   };
 }
 
-function createTurnRunCommand(args: {
+function createTurnSubmitCommand(args: {
   environmentId: string;
   eventSequence: number;
   input: Array<{ text: string; type: "text" }>;
@@ -278,7 +281,7 @@ function createTurnRunCommand(args: {
   workspacePath: string;
 }) {
   return {
-    type: "turn.run" as const,
+    type: "turn.submit" as const,
     environmentId: args.environmentId,
     threadId: args.threadId,
     eventSequence: args.eventSequence,
@@ -299,6 +302,7 @@ function createTurnRunCommand(args: {
       dynamicTools: [],
       instructionMode: "append" as const,
     },
+    target: { mode: "start" as const },
   };
 }
 
@@ -322,7 +326,11 @@ async function setupDaemonHarness(args: {
     serverUrl: server.baseUrl,
     enableLocalApi: false,
     createInstanceId: () => "instance-1",
-    adapterFactory: args.adapterFactory ?? (() => createFakeAdapter()),
+    createRuntime: (options) =>
+      createAgentRuntimeWithAdapters({
+        ...options,
+        adapterFactory: args.adapterFactory ?? (() => createFakeAdapter()),
+      }),
   });
 
   await waitFor(() => server.sessionOpenCalls.length === 1);
@@ -399,7 +407,7 @@ describe("host daemon integration", () => {
       await waitFor(() => harness.server.commandResults.length === 1);
 
       harness.server.queueCommand({
-        ...createTurnRunCommand({
+        ...createTurnSubmitCommand({
           environmentId: "env-a",
           threadId: "thread-a",
           workspacePath: harness.envAPath,
@@ -460,7 +468,7 @@ describe("host daemon integration", () => {
       await waitFor(() => harness.server.commandResults.length === 1);
 
       harness.server.queueCommand({
-        ...createTurnRunCommand({
+        ...createTurnSubmitCommand({
           environmentId: "env-a",
           threadId: "thread-a",
           workspacePath: harness.envAPath,
@@ -525,7 +533,7 @@ describe("host daemon integration", () => {
 
       expect(
         harness.server.commandResults.some(
-          (result) => result.type === "turn.run" && result.ok,
+          (result) => result.type === "turn.submit" && result.ok,
         ),
       ).toBe(true);
     } finally {
@@ -607,7 +615,7 @@ describe("host daemon integration", () => {
       await waitFor(() => harness.server.commandResults.length === 2);
 
       harness.server.queueCommand({
-        ...createTurnRunCommand({
+        ...createTurnSubmitCommand({
           environmentId: "env-a",
           threadId: "thread-a",
           workspacePath: harness.envAPath,
@@ -619,7 +627,7 @@ describe("host daemon integration", () => {
         }),
       });
       harness.server.queueCommand({
-        ...createTurnRunCommand({
+        ...createTurnSubmitCommand({
           environmentId: "env-b",
           threadId: "thread-b",
           workspacePath: harness.envBPath,
@@ -675,7 +683,11 @@ describe("host daemon integration", () => {
       dataDir,
       enableLocalApi: false,
       createInstanceId: () => "instance-local-bootstrap",
-      adapterFactory: () => createFakeAdapter(),
+      createRuntime: (options) =>
+        createAgentRuntimeWithAdapters({
+          ...options,
+          adapterFactory: () => createFakeAdapter(),
+        }),
       enrollKey: server.enrollKey,
       loadIdentity: async () => ({
         hostId,

@@ -19,7 +19,7 @@ describe("environment command dispatch", () => {
         workspaceProvisionType: "unmanaged",
         path: sourcePath,
       },
-      { runtimeManager: harness.manager },
+      harness.dispatchOptions(),
     );
 
     expect(result).toMatchObject({
@@ -62,7 +62,7 @@ describe("environment command dispatch", () => {
         branchName: "bb/test",
         setupTimeoutMs: 900000,
       },
-      { runtimeManager: harness.manager },
+      harness.dispatchOptions(),
     );
 
     expect(result).toMatchObject({
@@ -239,7 +239,7 @@ describe("environment command dispatch", () => {
         workspaceProvisionType: "unmanaged",
         path: sourcePath,
       },
-      { runtimeManager: harness.manager },
+      harness.dispatchOptions(),
     );
 
     // Second provision — same environment
@@ -251,7 +251,7 @@ describe("environment command dispatch", () => {
         workspaceProvisionType: "unmanaged",
         path: sourcePath,
       },
-      { runtimeManager: harness.manager },
+      harness.dispatchOptions(),
     );
 
     expect(result.transcript).toEqual([]);

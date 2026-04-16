@@ -3,8 +3,10 @@ import type {
   DecodedInteractiveRequest,
   DecodedToolCallRequest,
   ProviderAdapter,
+  ProviderCommandPlan,
 } from "../provider-adapter.js";
-import { ProviderRequestDecodeError } from "../provider-adapter.js";
+import { noPreparedProviderCommandDispatch } from "../provider-adapter.js";
+import { ProviderRequestDecodeError } from "../runtime-json-rpc.js";
 import { parseAvailableModelList } from "../shared/available-models.js";
 import type { AgentRuntimeExecutionOptions } from "../types.js";
 import { createFakeAdapter as createSharedFakeAdapter } from "./index.js";
@@ -14,10 +16,12 @@ export {
   waitForThreadAgentMessageText,
   waitForThreadTurnCompleted,
   waitForThreadTurnStarted,
-  waitForThreadUserMessageText,
 } from "./runtime-wait-helpers.js";
 
 export const fullRuntimeOptions = {
+  model: "test-model",
+  serviceTier: "default",
+  reasoningLevel: "medium",
   permissionMode: "full",
   permissionEscalation: null,
 } satisfies AgentRuntimeExecutionOptions;
@@ -35,6 +39,10 @@ export function wait(ms: number): Promise<void> {
 
 function isRecord(value: unknown): value is RuntimeTestRecord {
   return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function unsupportedRuntimeTestCommand(command: AdapterCommand): ProviderCommandPlan {
+  return { kind: "noop", reason: `${command.type} unsupported` };
 }
 
 export function findLastRecordedCommand(
@@ -59,9 +67,9 @@ export function createRecordingAdapter(
   const adapter = createFakeAdapter(args.scriptPath);
   return {
     ...adapter,
-    buildCommand(command) {
+    buildCommandPlan(command) {
       args.recordedCommands.push(command);
-      return adapter.buildCommand(command);
+      return adapter.buildCommandPlan(command);
     },
   };
 }
@@ -188,27 +196,26 @@ export function createWarningEventAdapter(scriptPath: string): ProviderAdapter {
       supportsServiceTier: false,
       supportedPermissionModes: ["full", "workspace-write", "readonly"],
     },
-    threadStopBehavior: "keep-provider",
     process: {
       command: "node",
       args: [scriptPath],
     },
-    buildCommand(command) {
+    buildCommandPlan(command) {
       switch (command.type) {
         case "initialize":
           return {
-            jsonrpc: "2.0",
+            kind: "request",
             method: "initialize",
           };
         case "model/list":
           return {
-            jsonrpc: "2.0",
+            kind: "request",
             method: "model/list",
             params: {},
           };
         case "thread/start":
           return {
-            jsonrpc: "2.0",
+            kind: "request",
             method: "thread/start",
             params: {
               threadId: command.threadId,
@@ -216,7 +223,7 @@ export function createWarningEventAdapter(scriptPath: string): ProviderAdapter {
           };
         case "turn/start":
           return {
-            jsonrpc: "2.0",
+            kind: "request",
             method: "turn/start",
             params: {
               threadId: command.providerThreadId ?? command.threadId,
@@ -226,9 +233,10 @@ export function createWarningEventAdapter(scriptPath: string): ProviderAdapter {
         case "turn/steer":
         case "thread/stop":
         case "thread/name/set":
-          return null;
+          return unsupportedRuntimeTestCommand(command);
       }
     },
+    prepareTurnStart: noPreparedProviderCommandDispatch,
     translateEvent(event) {
       if (!isRuntimeTestEvent(event)) {
         return [];
@@ -289,27 +297,26 @@ export function createStartedEventAdapter(scriptPath: string): ProviderAdapter {
       supportsServiceTier: false,
       supportedPermissionModes: ["full", "workspace-write", "readonly"],
     },
-    threadStopBehavior: "keep-provider",
     process: {
       command: "node",
       args: [scriptPath],
     },
-    buildCommand(command) {
+    buildCommandPlan(command) {
       switch (command.type) {
         case "initialize":
           return {
-            jsonrpc: "2.0",
+            kind: "request",
             method: "initialize",
           };
         case "model/list":
           return {
-            jsonrpc: "2.0",
+            kind: "request",
             method: "model/list",
             params: {},
           };
         case "thread/start":
           return {
-            jsonrpc: "2.0",
+            kind: "request",
             method: "thread/start",
             params: {
               threadId: command.threadId,
@@ -320,9 +327,10 @@ export function createStartedEventAdapter(scriptPath: string): ProviderAdapter {
         case "turn/steer":
         case "thread/stop":
         case "thread/name/set":
-          return null;
+          return unsupportedRuntimeTestCommand(command);
       }
     },
+    prepareTurnStart: noPreparedProviderCommandDispatch,
     translateEvent(event) {
       if (!isStartedThreadEvent(event)) {
         return [];

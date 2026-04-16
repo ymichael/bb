@@ -85,14 +85,15 @@ function seedRunnableManagerThread(args: {
   appendClientTurnEvent(args.harness.deps, {
     threadId: thread.id,
     environmentId: args.environmentId,
-    type: "client/thread/start",
+    type: "client/turn/requested",
     input: [{ type: "text", text: "Bootstrap manager" }],
+    target: { kind: "thread-start" },
     execution: {
       model: "gpt-5",
       reasoningLevel: "medium",
       permissionMode: "full",
       serviceTier: "default",
-      source: "client/thread/start",
+      source: "client/turn/requested",
     },
     initiator: "user",
     requestMethod: "thread/start",
@@ -107,7 +108,7 @@ describe("nudge sweep", () => {
     resumeHostMock.mockReset();
   });
 
-  it("queues turn.run for due manager nudges", async () => {
+  it("queues turn.submit for due manager nudges", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps, {
@@ -152,13 +153,13 @@ describe("nudge sweep", () => {
 
       await sweepPromise;
 
-      const queuedTurnRun = await waitForQueuedCommand(
+      const queuedTurnSubmit = await waitForQueuedCommand(
         harness,
         ({ command }) =>
-          command.type === "turn.run" &&
+          command.type === "turn.submit" &&
           command.threadId === thread.id,
       );
-      expect(queuedTurnRun.command.input).toEqual([
+      expect(queuedTurnSubmit.command.input).toEqual([
         {
           type: "text",
           text: "[bb system] Scheduled nudge: daily-recap. Check ASYNC.md.",
@@ -259,13 +260,13 @@ describe("nudge sweep", () => {
 
       expect(resumeHostMock).toHaveBeenCalledTimes(1);
       expect(sandboxHost.resume).not.toHaveBeenCalled();
-      const queuedTurnRun = await waitForQueuedCommand(
+      const queuedTurnSubmit = await waitForQueuedCommand(
         harness,
         ({ command }) =>
-          command.type === "turn.run"
+          command.type === "turn.submit"
           && command.threadId === thread.id,
       );
-      expect(queuedTurnRun.command.input).toEqual([
+      expect(queuedTurnSubmit.command.input).toEqual([
         {
           type: "text",
           text: "[bb system] Scheduled nudge: resume-recap. Check ASYNC.md.",
@@ -276,7 +277,7 @@ describe("nudge sweep", () => {
     }
   });
 
-  it("skips due nudges that already have a pending turn.run command", async () => {
+  it("skips due nudges that already have a pending turn.submit command", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host, session } = seedHostSession(harness.deps, {
@@ -306,13 +307,13 @@ describe("nudge sweep", () => {
 
       harness.db.insert(hostDaemonCommands)
         .values({
-          id: "cmd_pending_turn_run",
+          id: "cmd_pending_turn_submit",
           hostId: host.id,
           sessionId: session.id,
           cursor: 1,
-          type: "turn.run",
+          type: "turn.submit",
           payload: JSON.stringify({
-            type: "turn.run",
+            type: "turn.submit",
             environmentId: environment.id,
             threadId: thread.id,
             eventSequence: 2,
@@ -336,6 +337,7 @@ describe("nudge sweep", () => {
               dynamicTools: [],
               instructionMode: "append",
             },
+            target: { mode: "start" },
           }),
           state: "pending",
           retryCount: 0,
@@ -572,7 +574,7 @@ describe("nudge sweep", () => {
         harness.db
           .select()
           .from(hostDaemonCommands)
-          .where(eq(hostDaemonCommands.type, "turn.run"))
+          .where(eq(hostDaemonCommands.type, "turn.submit"))
           .all(),
       ).toHaveLength(0);
       expect(getManagerThreadNudge(harness.db, nudge.id)).toMatchObject({

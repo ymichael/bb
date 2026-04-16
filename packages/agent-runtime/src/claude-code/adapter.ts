@@ -70,11 +70,17 @@ import type {
   AdapterCommand,
   DecodedInteractiveRequest,
   DecodedToolCallRequest,
-  JsonRpcMessage,
+  ProviderCommandPlan,
   ProviderTranslationContext,
   ProviderAdapter,
 } from "../provider-adapter.js";
-import { ProviderResponseEncodeError } from "../provider-adapter.js";
+import { noPreparedProviderCommandDispatch } from "../provider-adapter.js";
+import {
+  type JsonRpcMessage,
+  type ProviderInboundRequest,
+  type ProviderRuntimeEvent,
+  ProviderResponseEncodeError,
+} from "../runtime-json-rpc.js";
 import {
   buildClaudeSessionPermissionUpdates,
   CLAUDE_PERMISSION_REQUEST_APPROVAL_METHOD,
@@ -473,8 +479,6 @@ export interface CreateClaudeCodeProviderAdapterOptions {
   processArgs?: string[];
   /** Override the directory containing bundled bridge files. */
   bridgeBundleDir?: string;
-  /** Extra environment variables for the bridge process. */
-  launchEnv?: Record<string, string>;
   /** Prefix for bb-owned turn ids emitted by this adapter instance. */
   turnIdPrefix?: string;
 }
@@ -491,7 +495,6 @@ interface ClaudeTurnState {
   reasoningItemCounter: number;
   selectedModelContextWindow: number | null;
   toolItemsByCallId: Map<string, ThreadEventItem>;
-  userMessageCounter: number;
 }
 
 interface ClaudeContextWindowUsageArgs {
@@ -526,7 +529,6 @@ export function createClaudeCodeProviderAdapter(
       reasoningItemCounter: 0,
       selectedModelContextWindow: null,
       toolItemsByCallId: new Map(),
-      userMessageCounter: 0,
     }),
     turnIdPrefix: opts?.turnIdPrefix,
   });
@@ -671,7 +673,11 @@ export function createClaudeCodeProviderAdapter(
         const compactBoundaryMessage =
           claudeCompactBoundarySystemMessageSchema.safeParse(event);
         if (compactBoundaryMessage.success) {
-          events.push(buildClaudeCompactedEvent(threadId));
+          const turnId = turnState.getCurrentOrLastTurnId({ state });
+          if (turnId.length === 0) {
+            return buildUnexpectedClaudeSdkEvent({ event, context });
+          }
+          events.push(buildClaudeCompactedEvent({ threadId, turnId }));
           return events;
         }
 
@@ -922,7 +928,6 @@ export function createClaudeCodeProviderAdapter(
     id: providerInfo.id,
     displayName: providerInfo.displayName,
     capabilities,
-    threadStopBehavior: "keep-provider",
     process: {
       command: opts?.processCommand ?? "node",
       args: opts?.processArgs ?? [resolveBridgePath({
@@ -935,17 +940,17 @@ export function createClaudeCodeProviderAdapter(
 
     // -- Unified command builder -------------------------------------------
 
-    buildCommand(command: AdapterCommand): JsonRpcMessage | null {
+    buildCommandPlan(command: AdapterCommand): ProviderCommandPlan {
       switch (command.type) {
         case "initialize":
           return {
-            jsonrpc: "2.0",
+            kind: "request",
             method: "initialize",
             params: { clientInfo: { name: "bb", version: "1.0.0" } },
           };
         case "model/list":
           return {
-            jsonrpc: "2.0",
+            kind: "request",
             method: "model/list",
             params: {},
           };
@@ -970,7 +975,7 @@ export function createClaudeCodeProviderAdapter(
           }));
           const permissionPolicy = resolveAdapterPermissionPolicy(command.options);
           return {
-            jsonrpc: "2.0",
+            kind: "request",
             method: "thread/start",
             params: {
               baseInstructions,
@@ -1006,7 +1011,7 @@ export function createClaudeCodeProviderAdapter(
           }));
           const permissionPolicy = resolveAdapterPermissionPolicy(command.options);
           return {
-            jsonrpc: "2.0",
+            kind: "request",
             method: "thread/resume",
             params: {
               baseInstructions,
@@ -1030,7 +1035,7 @@ export function createClaudeCodeProviderAdapter(
             );
           }
           return {
-            jsonrpc: "2.0",
+            kind: "request",
             method: "turn/start",
             params: {
               threadId: command.threadId,
@@ -1042,7 +1047,7 @@ export function createClaudeCodeProviderAdapter(
           };
         case "turn/steer":
           return {
-            jsonrpc: "2.0",
+            kind: "request",
             method: "turn/steer",
             params: {
               threadId: command.threadId,
@@ -1054,25 +1059,27 @@ export function createClaudeCodeProviderAdapter(
         case "thread/stop":
           finishOpenProviderTurn({ registry: turnState, threadId: command.threadId });
           return {
-            jsonrpc: "2.0",
+            kind: "request",
             method: "thread/stop",
             params: {
               threadId: command.threadId,
             },
           };
         case "thread/name/set":
-          return null; // Claude Code doesn't support rename
+          return { kind: "noop", reason: "rename unsupported" };
       }
     },
 
     // -- Unified event translator ------------------------------------------
 
     translateEvent(
-      event: unknown,
+      event: ProviderRuntimeEvent,
       context?: ProviderTranslationContext,
     ): ThreadEvent[] {
       return translateClaudeEvent(event, context);
     },
+
+    prepareTurnStart: noPreparedProviderCommandDispatch,
 
     translateAcceptedCommand({ command }) {
       if (
@@ -1091,30 +1098,21 @@ export function createClaudeCodeProviderAdapter(
         if (turnId) {
           return buildAcceptedUserMessageEvent({
             clientRequestSequence: command.clientRequestSequence,
-            input: command.input,
-            itemIdPrefix: "claude-user",
             providerThreadId: command.providerThreadId ?? "",
-            state,
             threadId: command.threadId,
             turnId,
           });
         }
         queueAcceptedUserMessage({
           clientRequestSequence: command.clientRequestSequence,
-          input: command.input,
-          itemIdPrefix: "claude-user",
           state,
         });
       }
 
       if (command.type === "turn/steer") {
-        const state = turnState.getOrCreate({ threadId: command.threadId });
         return buildAcceptedUserMessageEvent({
           clientRequestSequence: command.clientRequestSequence,
-          input: command.input,
-          itemIdPrefix: "claude-user",
           providerThreadId: command.providerThreadId ?? "",
-          state,
           threadId: command.threadId,
           turnId: command.expectedTurnId,
         });
@@ -1129,7 +1127,7 @@ export function createClaudeCodeProviderAdapter(
 
     // -- Tool call codec ---------------------------------------------------
 
-    decodeToolCallRequest(request: JsonRpcMessage): DecodedToolCallRequest | null {
+    decodeToolCallRequest(request: ProviderInboundRequest): DecodedToolCallRequest | null {
       if (typeof request.id !== "string" && typeof request.id !== "number") {
         return null;
       }
@@ -1140,7 +1138,9 @@ export function createClaudeCodeProviderAdapter(
       );
     },
 
-    decodeInteractiveRequest(request: JsonRpcMessage): DecodedInteractiveRequest | null {
+    decodeInteractiveRequest(
+      request: ProviderInboundRequest,
+    ): DecodedInteractiveRequest | null {
       if (typeof request.id !== "string" && typeof request.id !== "number") {
         return null;
       }
@@ -1295,13 +1295,19 @@ interface ClaudeUnexpectedSdkEventArgs {
   context?: ProviderTranslationContext;
 }
 
+interface BuildClaudeCompactedEventArgs {
+  threadId: string;
+  turnId: string;
+}
+
 function buildClaudeCompactedEvent(
-  threadId: string,
+  args: BuildClaudeCompactedEventArgs,
 ): ThreadEvent {
   return {
     type: "thread/compacted",
-    threadId,
+    threadId: args.threadId,
     providerThreadId: "",
+    turnId: args.turnId,
   };
 }
 

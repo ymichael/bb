@@ -55,7 +55,7 @@ function createRuntime(): AgentRuntime {
     startThread: vi.fn(async () => ({ providerThreadId: "provider-thread-1" })),
     resumeThread: vi.fn(async () => ({ providerThreadId: "provider-thread-1" })),
     runTurn: vi.fn(async () => undefined),
-    steerTurn: vi.fn(async () => undefined),
+    steerTurn: vi.fn(async () => ({ status: "steered" as const })),
     stopThread: vi.fn(async () => undefined),
     renameThread: vi.fn(async () => undefined),
     listModels: vi.fn(async () => []),

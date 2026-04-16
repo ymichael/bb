@@ -19,7 +19,7 @@ import type {
 import type {
   CreateThreadRequest,
 } from "@bb/server-contract";
-import type { HostDaemonCommand } from "@bb/host-daemon-contract";
+import type { HostDaemonCommand, TurnSubmitTarget } from "@bb/host-daemon-contract";
 import type { AppDeps, SandboxWorkSessionDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
 import { ensureHostSessionReadyForWork } from "../hosts/host-lifecycle.js";
@@ -67,7 +67,7 @@ export interface QueueThreadStartCommandArgs {
   thread: Thread;
 }
 
-export interface TurnRunCommandPayloadArgs {
+export interface TurnSubmitCommandPayloadArgs {
   environmentId: string;
   eventSequence: number;
   execution: ResolvedThreadExecutionOptions;
@@ -75,32 +75,34 @@ export interface TurnRunCommandPayloadArgs {
   input: PromptInput[];
   providerThreadId: string;
   runtimeContext: ResolvedThreadRuntimeCommandConfig;
+  target: TurnSubmitTarget;
   threadId: string;
 }
 
-export interface PrepareTurnRunCommandPayloadArgs {
+export interface PrepareTurnSubmitCommandPayloadArgs {
   environment: ThreadRuntimeCommandEnvironment;
   execution: ResolvedThreadExecutionOptions;
   permissionEscalation: PermissionEscalation;
   input: PromptInput[];
   providerThreadId?: string;
+  target: TurnSubmitTarget;
   thread: Thread;
 }
 
-export interface CreateTurnRunCommandPayloadArgs extends PrepareTurnRunCommandPayloadArgs {
+export interface CreateTurnSubmitCommandPayloadArgs extends PrepareTurnSubmitCommandPayloadArgs {
   eventSequence: number;
 }
 
-export interface FinalizeTurnRunCommandPayloadArgs {
+export interface FinalizeTurnSubmitCommandPayloadArgs {
   eventSequence: number;
-  preparedCommand: PreparedTurnRunCommandPayload;
+  preparedCommand: PreparedTurnSubmitCommandPayload;
 }
 
-export type PreparedTurnRunCommandPayload = Omit<
-  Extract<HostDaemonCommand, { type: "turn.run" }>,
+export type PreparedTurnSubmitCommandPayload = Omit<
+  Extract<HostDaemonCommand, { type: "turn.submit" }>,
   "eventSequence"
 >;
-type PreparedTurnRunCommandBuildArgs = Omit<TurnRunCommandPayloadArgs, "eventSequence">;
+type PreparedTurnSubmitCommandBuildArgs = Omit<TurnSubmitCommandPayloadArgs, "eventSequence">;
 
 interface RuntimeExecutionOptionsArgs {
   execution: ResolvedThreadExecutionOptions;
@@ -117,15 +119,14 @@ type BuildExecutionOptionsSource =
   | "client/turn/requested"
   | "client/turn/start";
 
-interface QueueTurnRunCommandInTransactionArgs {
-  command: Extract<HostDaemonCommand, { type: "turn.run" }>;
+interface QueueTurnSubmitCommandInTransactionArgs {
+  command: Extract<HostDaemonCommand, { type: "turn.submit" }>;
   hostId: string;
   sessionId: string | null;
 }
 
-export interface QueueTurnSteerCommandArgs extends PrepareTurnRunCommandPayloadArgs {
+export interface QueueTurnSubmitCommandArgs extends PrepareTurnSubmitCommandPayloadArgs {
   eventSequence: number;
-  expectedTurnId: string;
 }
 
 export interface QueueThreadRenameCommandArgs {
@@ -209,15 +210,16 @@ export async function buildThreadStartCommand(
   };
 }
 
-function buildPreparedTurnRunCommandPayload(
-  args: PreparedTurnRunCommandBuildArgs,
-): PreparedTurnRunCommandPayload {
+function buildPreparedTurnSubmitCommandPayload(
+  args: PreparedTurnSubmitCommandBuildArgs,
+): PreparedTurnSubmitCommandPayload {
   return {
-    type: "turn.run",
+    type: "turn.submit",
     environmentId: args.environmentId,
     threadId: args.threadId,
     input: args.input,
     options: toRuntimeExecutionOptions(args),
+    target: args.target,
     resumeContext: {
       workspaceContext: {
         workspacePath: args.runtimeContext.workspacePath,
@@ -233,19 +235,19 @@ function buildPreparedTurnRunCommandPayload(
   };
 }
 
-export function addEventSequenceToTurnRunCommandPayload(
-  args: FinalizeTurnRunCommandPayloadArgs,
-): Extract<HostDaemonCommand, { type: "turn.run" }> {
+export function addEventSequenceToTurnSubmitCommandPayload(
+  args: FinalizeTurnSubmitCommandPayloadArgs,
+): Extract<HostDaemonCommand, { type: "turn.submit" }> {
   return {
     ...args.preparedCommand,
     eventSequence: args.eventSequence,
   };
 }
 
-export async function prepareTurnRunCommandPayload(
+export async function prepareTurnSubmitCommandPayload(
   deps: SandboxWorkSessionDeps,
-  args: PrepareTurnRunCommandPayloadArgs,
-): Promise<PreparedTurnRunCommandPayload> {
+  args: PrepareTurnSubmitCommandPayloadArgs,
+): Promise<PreparedTurnSubmitCommandPayload> {
   const providerThreadId = requireProviderThreadId(
     args.providerThreadId ?? getLastProviderThreadId(deps, args.thread.id),
     args.thread.id,
@@ -254,101 +256,59 @@ export async function prepareTurnRunCommandPayload(
     thread: args.thread,
     environment: args.environment,
   });
-  return buildPreparedTurnRunCommandPayload({
+  return buildPreparedTurnSubmitCommandPayload({
     environmentId: args.environment.id,
     execution: args.execution,
     permissionEscalation: args.permissionEscalation,
     input: args.input,
     providerThreadId,
     runtimeContext,
+    target: args.target,
     threadId: args.thread.id,
   });
 }
 
-async function createTurnRunCommandPayload(
+async function createTurnSubmitCommandPayload(
   deps: SandboxWorkSessionDeps,
-  args: CreateTurnRunCommandPayloadArgs,
-): Promise<Extract<HostDaemonCommand, { type: "turn.run" }>> {
-  const preparedCommand = await prepareTurnRunCommandPayload(deps, args);
-  return addEventSequenceToTurnRunCommandPayload({
+  args: CreateTurnSubmitCommandPayloadArgs,
+): Promise<Extract<HostDaemonCommand, { type: "turn.submit" }>> {
+  const preparedCommand = await prepareTurnSubmitCommandPayload(deps, args);
+  return addEventSequenceToTurnSubmitCommandPayload({
     eventSequence: args.eventSequence,
     preparedCommand,
   });
 }
 
-export function queueTurnRunCommandInTransaction(
+export function queueTurnSubmitCommandInTransaction(
   db: DbTransaction,
-  args: QueueTurnRunCommandInTransactionArgs,
+  args: QueueTurnSubmitCommandInTransactionArgs,
 ) {
   return queueCommandInTransaction(db, {
     hostId: args.hostId,
     sessionId: args.sessionId,
-    type: "turn.run",
+    type: "turn.submit",
     payload: JSON.stringify(args.command),
   });
 }
 
-export async function queueTurnRunCommand(
+export async function queueTurnSubmitCommand(
   deps: SandboxWorkSessionDeps,
-  args: CreateTurnRunCommandPayloadArgs,
+  args: QueueTurnSubmitCommandArgs,
 ): Promise<void> {
   const session = await ensureHostSessionReadyForWork(deps, {
     hostId: args.environment.hostId,
   });
-  const command = await createTurnRunCommandPayload(deps, args);
+  const command = await createTurnSubmitCommandPayload(deps, args);
   queueCommand(deps.db, deps.hub, {
     hostId: args.environment.hostId,
     sessionId: session.id,
-    type: "turn.run",
+    type: "turn.submit",
     payload: JSON.stringify(command),
   });
 
   if (args.thread.status === "idle") {
     transitionThreadStatus(deps.db, deps.hub, args.thread.id, "active");
   }
-}
-
-export async function queueTurnSteerCommand(
-  deps: SandboxWorkSessionDeps,
-  args: QueueTurnSteerCommandArgs,
-): Promise<void> {
-  const session = await ensureHostSessionReadyForWork(deps, {
-    hostId: args.environment.hostId,
-  });
-  const providerThreadId = requireProviderThreadId(
-    args.providerThreadId ?? getLastProviderThreadId(deps, args.thread.id),
-    args.thread.id,
-  );
-  const runtimeContext = await resolveThreadRuntimeCommandConfig(deps, {
-    thread: args.thread,
-    environment: args.environment,
-  });
-  queueCommand(deps.db, deps.hub, {
-    hostId: args.environment.hostId,
-    sessionId: session.id,
-    type: "turn.steer",
-    payload: JSON.stringify({
-      type: "turn.steer",
-      environmentId: args.environment.id,
-      threadId: args.thread.id,
-      eventSequence: args.eventSequence,
-      expectedTurnId: args.expectedTurnId,
-      input: args.input,
-      options: toRuntimeExecutionOptions(args),
-      resumeContext: {
-        workspaceContext: {
-          workspacePath: runtimeContext.workspacePath,
-          workspaceProvisionType: runtimeContext.workspaceProvisionType,
-        },
-        projectId: runtimeContext.projectId,
-        providerId: runtimeContext.providerId,
-        providerThreadId,
-        instructions: runtimeContext.instructions,
-        dynamicTools: runtimeContext.dynamicTools,
-        instructionMode: runtimeContext.instructionMode,
-      },
-    }),
-  });
 }
 
 function requireProviderThreadId(

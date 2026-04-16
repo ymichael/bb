@@ -27,7 +27,7 @@ function renderActiveTimeline(events: ReturnType<TimelineEventFactory[keyof Time
 }
 
 describe("timeline CLI rendering snapshots", () => {
-  it("shows an unacknowledged active-turn steer after durable timeline rows", () => {
+  it("shows an unacknowledged active-turn steer from the client request", () => {
     const event = createTimelineEventFactory({ threadId: "thread-1" });
     const timeline = renderIdleTimeline([
       event.turnStarted(),
@@ -35,46 +35,8 @@ describe("timeline CLI rendering snapshots", () => {
         itemId: "tool-before-steer",
         arguments: { cmd: "pnpm test" },
       }),
-      event.clientTurnRequested({ text: "Please account for the restart" }),
-      event.toolCallCompleted({
-        itemId: "tool-after-steer",
-        arguments: { cmd: "sqlite3 ~/.bb-dev/bb.db '.tables'" },
-      }),
-      event.assistantCompleted({ itemId: "assistant-1", text: "Done." }),
-      event.turnCompleted(),
-    ]);
-
-    expect(messageKinds(timeline.messages)).toEqual([
-      "assistant-text",
-      "user",
-    ]);
-    const steerMessage = timeline.messages.find(
-      (message) => message.kind === "user",
-    );
-    expect(steerMessage?.sourceSeqStart).toBe(7);
-    expect(timeline.text).toMatchInlineSnapshot(`
-      "── Worked on 2 items ───────────────────────────────────────
-
-      ── Assistant ───────────────────────────────────────────────
-      Done.
-
-      ── User ────────────────────────────────────────────────────
-      Please account for the restart"
-    `);
-  });
-
-  it("shows an active-turn steer at the provider ack position once acknowledged", () => {
-    const event = createTimelineEventFactory({ threadId: "thread-1" });
-    const timeline = renderIdleTimeline([
-      event.turnStarted(),
-      event.toolCallCompleted({
-        itemId: "tool-before-steer",
-        arguments: { cmd: "pnpm test" },
-      }),
-      event.clientTurnRequested({ text: "Please account for the restart" }),
-      event.userMessageAck({
-        clientRequestSequence: 3,
-        itemId: "provider-user-1",
+      event.clientTurnRequested({
+        target: { kind: "auto", expectedTurnId: "turn-1" },
         text: "Please account for the restart",
       }),
       event.toolCallCompleted({
@@ -94,7 +56,56 @@ describe("timeline CLI rendering snapshots", () => {
     const steerMessage = timeline.messages.find(
       (message) => message.kind === "user",
     );
-    expect(steerMessage?.sourceSeqStart).toBe(4);
+    expect(steerMessage?.sourceSeqStart).toBe(3);
+    expect(timeline.text).toMatchInlineSnapshot(`
+      "── Tool Call: exec_command ─────────────────────────────────
+        ✓ exec_command { cmd: pnpm test }
+
+      ── User ────────────────────────────────────────────────────
+      Please account for the restart
+
+      ── Worked on 1 item ────────────────────────────────────────
+        ── Tool Call: exec_command ─────────────────────────────────
+          ✓ exec_command { cmd: sqlite3 ~/.bb-dev/bb.db '.tables' }
+
+      ── Assistant ───────────────────────────────────────────────
+      Done."
+    `);
+  });
+
+  it("uses active-turn input acceptance only as request correlation", () => {
+    const event = createTimelineEventFactory({ threadId: "thread-1" });
+    const timeline = renderIdleTimeline([
+      event.turnStarted(),
+      event.toolCallCompleted({
+        itemId: "tool-before-steer",
+        arguments: { cmd: "pnpm test" },
+      }),
+      event.clientTurnRequested({
+        target: { kind: "auto", expectedTurnId: "turn-1" },
+        text: "Please account for the restart",
+      }),
+      event.inputAccepted({
+        clientRequestSequence: 3,
+      }),
+      event.toolCallCompleted({
+        itemId: "tool-after-steer",
+        arguments: { cmd: "sqlite3 ~/.bb-dev/bb.db '.tables'" },
+      }),
+      event.assistantCompleted({ itemId: "assistant-1", text: "Done." }),
+      event.turnCompleted(),
+    ]);
+
+    expect(messageKinds(timeline.messages)).toEqual([
+      "tool-call",
+      "user",
+      "tool-call",
+      "assistant-text",
+    ]);
+    const steerMessage = timeline.messages.find(
+      (message) => message.kind === "user",
+    );
+    expect(steerMessage?.sourceSeqStart).toBe(3);
     expect(timeline.text).toMatchInlineSnapshot(`
       "── Tool Call: exec_command ─────────────────────────────────
         ✓ exec_command { cmd: pnpm test }
@@ -115,7 +126,12 @@ describe("timeline CLI rendering snapshots", () => {
     const event = createTimelineEventFactory({ threadId: "thread-1" });
     const timeline = renderTimelineFixture({
       events: [
-        event.clientThreadStart({ text: "Start the failing workspace" }),
+        event.clientTurnRequested({
+          requestMethod: "thread/start",
+          source: "spawn",
+          target: { kind: "thread-start" },
+          text: "Start the failing workspace",
+        }),
         event.threadProvisioning({
           status: "active",
           entries: [

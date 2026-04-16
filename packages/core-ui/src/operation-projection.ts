@@ -1,12 +1,10 @@
 import type {
-  ThreadEvent,
   ViewFileEditChange,
   ViewFileEditMessage,
   ViewMessage,
   ViewOperationMessage,
 } from "@bb/domain";
 import type { CompactionLifecycleEvent } from "./compaction-lifecycle.js";
-import { getEventTurnId } from "./event-decode.js";
 import type { EventMeta } from "./event-decode.js";
 import type { FileEditPartial } from "./file-edit-parsing.js";
 import { messageId } from "./format-helpers.js";
@@ -20,7 +18,6 @@ export interface OperationProjectionState {
   fileEditsByCallId: Map<string, ViewFileEditMessage>;
   openCompactionsByKey: Map<string, ViewOperationMessage>;
   finalizedCompactionKeys: Set<string>;
-  lastCompletedCompactionKeyByThreadId: Map<string, string>;
 }
 
 function mergeFileChanges(
@@ -178,7 +175,6 @@ export function onCompactionEnd(
     existing.detail = payload.detail ?? existing.detail;
     state.openCompactionsByKey.delete(payload.key);
     state.finalizedCompactionKeys.add(payload.key);
-    state.lastCompletedCompactionKeyByThreadId.set(threadId, payload.key);
     return;
   }
 
@@ -201,36 +197,4 @@ export function onCompactionEnd(
     status: "completed",
   });
   state.finalizedCompactionKeys.add(payload.key);
-  state.lastCompletedCompactionKeyByThreadId.set(threadId, payload.key);
-}
-
-export function resolveProjectedCompactionEvent(
-  state: OperationProjectionState,
-  decoded: ThreadEvent,
-  payload: CompactionLifecycleEvent,
-): CompactionLifecycleEvent {
-  if (
-    decoded.type === "thread/compacted" &&
-    getEventTurnId(decoded) === undefined
-  ) {
-    if (state.openCompactionsByKey.size === 1) {
-      const [onlyOpenKey] = state.openCompactionsByKey.keys();
-      if (onlyOpenKey) {
-        return {
-          ...payload,
-          key: onlyOpenKey,
-        };
-      }
-    }
-    const lastCompletedKey = state.lastCompletedCompactionKeyByThreadId.get(
-      decoded.threadId,
-    );
-    if (lastCompletedKey) {
-      return {
-        ...payload,
-        key: lastCompletedKey,
-      };
-    }
-  }
-  return payload;
 }
