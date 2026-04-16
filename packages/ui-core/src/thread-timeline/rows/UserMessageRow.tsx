@@ -174,20 +174,37 @@ export function UserMessageRow({
 
 // 15 clamped lines × ~50 chars/line ≈ 750 chars — sized for narrow viewports
 // (mobile, split panes) where the bubble is ~300px. Messages below this length
-// can't overflow the clamp even when wrapped tightly, so we skip the observer.
+// usually can't overflow the clamp even when wrapped tightly, so we skip the
+// observer unless explicit line breaks can exceed the collapsed line count.
+const COLLAPSED_MESSAGE_LINE_COUNT = 15;
 const OVERFLOW_MEASURE_MIN_LENGTH = 800;
 
-function CollapsibleMessageText({ text }: { text: string }) {
+interface CollapsibleMessageTextProps {
+  text: string;
+}
+
+interface CountPreWrappedLinesInput {
+  text: string;
+}
+
+function countPreWrappedLines({ text }: CountPreWrappedLinesInput): number {
+  return text.split(/\r\n|\r|\n/).length;
+}
+
+function CollapsibleMessageText({ text }: CollapsibleMessageTextProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const textRef = useRef<HTMLParagraphElement>(null);
-  const canOverflow = text.length >= OVERFLOW_MEASURE_MIN_LENGTH;
+  const exceedsCollapsedLineCount =
+    countPreWrappedLines({ text }) > COLLAPSED_MESSAGE_LINE_COUNT;
+  const canOverflow =
+    text.length >= OVERFLOW_MEASURE_MIN_LENGTH || exceedsCollapsedLineCount;
   const isOverflowing = useIsOverflowing(
     textRef,
     canOverflow && !isExpanded,
     [text],
   );
 
-  const showToggle = isExpanded || isOverflowing;
+  const showToggle = isExpanded || exceedsCollapsedLineCount || isOverflowing;
 
   return (
     <>
