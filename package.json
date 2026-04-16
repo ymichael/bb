@@ -26,6 +26,7 @@
     "qa:standalone:start": "node tests/qa/scripts/run-root-command.mjs standalone:start",
     "qa:standalone:stop": "node tests/qa/scripts/run-root-command.mjs standalone:stop",
     "qa:standalone:cleanup": "node tests/qa/scripts/run-root-command.mjs standalone:cleanup",
+    "codex:archive-tmp-bb-sessions": "pnpm run --silent scripts:prepare && node packages/scripts/dist/commands/archive-codex-tmp-bb-sessions.js",
     "bb": "cross-env NODE_ENV=production pnpm run --silent scripts:prepare && cross-env NODE_ENV=production node packages/scripts/dist/commands/run-cli.js",
     "bb:dev": "cross-env NODE_ENV=development pnpm run --silent scripts:prepare && cross-env NODE_ENV=development node packages/scripts/dist/commands/run-cli.js",
     "server": "pnpm --filter @bb/server start",

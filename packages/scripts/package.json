@@ -31,6 +31,10 @@
     "./reset-bb-data": {
       "import": "./dist/commands/reset-bb-data.js",
       "types": "./dist/commands/reset-bb-data.d.ts"
+    },
+    "./archive-codex-tmp-bb-sessions": {
+      "import": "./dist/commands/archive-codex-tmp-bb-sessions.js",
+      "types": "./dist/commands/archive-codex-tmp-bb-sessions.d.ts"
     }
   },
   "files": ["dist"],
@@ -45,6 +49,7 @@
     "dev:restart-host-daemon": "node dist/commands/request-dev-restart.js host-daemon",
     "dev:restart-server": "node dist/commands/request-dev-restart.js server",
     "reset": "node dist/commands/reset-bb-data.js",
+    "codex:archive-tmp-bb-sessions": "node dist/commands/archive-codex-tmp-bb-sessions.js",
     "start": "node dist/commands/start-bb.js",
     "start:host-daemon": "node dist/commands/start-host-daemon.js"
   },
