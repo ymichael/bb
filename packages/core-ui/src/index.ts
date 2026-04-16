@@ -67,6 +67,7 @@ export {
 
 export { extractThreadContextWindowUsage } from "./thread-context-window-usage.js";
 export { mergeProvisioningOperations } from "./provisioning-helpers.js";
+export { extractActiveThinking } from "./active-thinking.js";
 
 export {
   buildTimelineRows,

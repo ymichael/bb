@@ -7,6 +7,7 @@ import type {
 import {
   findLastTerminalTimelineMessage,
   isTimelineUngroupableMessage,
+  toTimelineVisibleMessages,
 } from "./timeline-message-helpers.js";
 
 export function findProjectionTerminalMessage(
@@ -29,8 +30,18 @@ export function getProjectionSummaryCount(
   messages: ViewMessage[],
   terminalMessage: ViewMessage | undefined,
 ): number {
+  return getVisibleProjectionSummaryCount(
+    toTimelineVisibleMessages(messages),
+    terminalMessage,
+  );
+}
+
+function getVisibleProjectionSummaryCount(
+  visibleMessages: ViewMessage[],
+  terminalMessage: ViewMessage | undefined,
+): number {
   let count = 0;
-  for (const message of messages) {
+  for (const message of visibleMessages) {
     if (terminalMessage && message.id === terminalMessage.id) {
       break;
     }
@@ -43,11 +54,11 @@ export function getProjectionSummaryCount(
 }
 
 function shouldIncludeSummaryTurnMessages(
-  messages: ViewMessage[],
+  visibleMessages: ViewMessage[],
   terminalMessage: ViewMessage | undefined,
 ): boolean {
   let foundTerminalMessage = false;
-  for (const message of messages) {
+  for (const message of visibleMessages) {
     if (terminalMessage && message.id === terminalMessage.id) {
       foundTerminalMessage = true;
       continue;
@@ -97,11 +108,15 @@ function applyTurnMessageDetail(
     withChildProjectionDetail(message)
   );
   const terminalMessage = findProjectionTerminalMessage(messages);
-  const summaryCount = getProjectionSummaryCount(messages, terminalMessage);
+  const visibleMessages = toTimelineVisibleMessages(messages);
+  const summaryCount = getVisibleProjectionSummaryCount(
+    visibleMessages,
+    terminalMessage,
+  );
   const includeMessages =
     turn.status === "pending" ||
     turnMessageDetail === "full" ||
-    shouldIncludeSummaryTurnMessages(messages, terminalMessage);
+    shouldIncludeSummaryTurnMessages(visibleMessages, terminalMessage);
 
   const detailedTurn: ViewTurn = {
     ...turn,

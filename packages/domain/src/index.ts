@@ -365,6 +365,7 @@ export {
 } from "./number-utils.js";
 
 export {
+  timelineActiveThinkingSchema,
   timelineMessageRowSchema,
   timelineRowSchema,
   timelineToolGroupRowSchema,
@@ -372,6 +373,7 @@ export {
   timelineToolGroupStatusValues,
 } from "./thread-detail-rows.js";
 export type {
+  TimelineActiveThinking,
   TimelineMessageRow,
   TimelineRow,
   TimelineToolGroupRow,

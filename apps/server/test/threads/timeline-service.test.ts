@@ -141,6 +141,150 @@ describe("buildThreadTimeline", () => {
     });
   });
 
+  it("returns streaming thinking separately without rendering a timeline reasoning row", async () => {
+    const harness = await createTestAppHarness();
+    harnesses.push(harness);
+
+    const host = seedHost(harness.deps);
+    const { project } = seedProjectWithSource(harness.deps, {
+      hostId: host.id,
+    });
+    const environment = seedEnvironment(harness.deps, {
+      hostId: host.id,
+      projectId: project.id,
+    });
+    const thread = seedThread(harness.deps, {
+      projectId: project.id,
+      environmentId: environment.id,
+      status: "active",
+    });
+
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-thread-1",
+      turnId: "turn-1",
+      sequence: 1,
+      type: "turn/started",
+      data: {},
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-thread-1",
+      turnId: "turn-1",
+      sequence: 2,
+      type: "item/reasoning/textDelta",
+      data: {
+        itemId: "reasoning-1",
+        delta: "Looking through the workspace.",
+      },
+    });
+
+    const timeline = buildThreadTimeline(harness.db, thread, {});
+
+    expect(timeline.activeThinking).toMatchObject({
+      text: "Looking through the workspace.",
+      startedAt: expect.any(Number),
+      updatedAt: expect.any(Number),
+    });
+    expect(timeline.rows).toEqual([]);
+  });
+
+  it("removes completed thinking from summary rows", async () => {
+    const harness = await createTestAppHarness();
+    harnesses.push(harness);
+
+    const host = seedHost(harness.deps);
+    const { project } = seedProjectWithSource(harness.deps, {
+      hostId: host.id,
+    });
+    const environment = seedEnvironment(harness.deps, {
+      hostId: host.id,
+      projectId: project.id,
+    });
+    const thread = seedThread(harness.deps, {
+      projectId: project.id,
+      environmentId: environment.id,
+    });
+
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-thread-1",
+      turnId: "turn-1",
+      sequence: 1,
+      type: "turn/started",
+      data: {},
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-thread-1",
+      turnId: "turn-1",
+      sequence: 2,
+      type: "item/reasoning/textDelta",
+      data: {
+        itemId: "reasoning-1",
+        delta: "Thinking through the answer.",
+      },
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-thread-1",
+      turnId: "turn-1",
+      sequence: 3,
+      type: "item/completed",
+      data: {
+        item: {
+          type: "reasoning",
+          id: "reasoning-1",
+          summary: [],
+          content: ["Thinking through the answer."],
+        },
+      },
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-thread-1",
+      turnId: "turn-1",
+      sequence: 4,
+      type: "item/completed",
+      data: {
+        item: {
+          type: "agentMessage",
+          id: "assistant-1",
+          text: "Done.",
+        },
+      },
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-thread-1",
+      turnId: "turn-1",
+      sequence: 5,
+      type: "turn/completed",
+      data: {
+        status: "completed",
+      },
+    });
+
+    const timeline = buildThreadTimeline(harness.db, thread, {});
+
+    expect(timeline.activeThinking).toBeNull();
+    expect(timeline.rows).toHaveLength(1);
+    expect(timeline.rows[0]).toMatchObject({
+      kind: "message",
+      message: {
+        kind: "assistant-text",
+        text: "Done.",
+      },
+    });
+  });
+
   it("keeps the last non-null modelContextWindow when the newest context-usage row omits it", async () => {
     const harness = await createTestAppHarness();
     harnesses.push(harness);

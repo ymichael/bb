@@ -11,6 +11,7 @@ import { mergeProvisioningOperations } from "./provisioning-helpers.js";
 import {
   findLastTerminalTimelineMessageIndex,
   isTimelineUngroupableMessage,
+  toTimelineVisibleMessages,
   toIndexedTimelineMessages,
   type IndexedTimelineMessage,
 } from "./timeline-message-helpers.js";
@@ -309,7 +310,8 @@ interface BuildTurnToolGroupRowArgs {
 }
 
 function prepareTimelineMessages(messages: ViewMessage[]): ViewMessage[] {
-  const provisioningMergedMessages = mergeProvisioningOperations(messages);
+  const visibleMessages = toTimelineVisibleMessages(messages);
+  const provisioningMergedMessages = mergeProvisioningOperations(visibleMessages);
   const reconnectMergedMessages = mergeConsecutiveReconnectErrors(
     provisioningMergedMessages,
   );

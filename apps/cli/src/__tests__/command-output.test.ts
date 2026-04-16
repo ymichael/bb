@@ -2440,6 +2440,7 @@ describe("CLI JSON output contracts", () => {
   it("bb thread log renders merged timeline rows for human output", async () => {
     const getEvents = vi.fn(async () => []);
     const getTimeline = vi.fn(async () => ({
+      activeThinking: null,
       rows: [
         {
           kind: "message",
@@ -2517,6 +2518,7 @@ describe("CLI JSON output contracts", () => {
   it("bb thread log renders approval state on command and file-change rows", async () => {
     const getEvents = vi.fn(async () => []);
     const getTimeline = vi.fn(async () => ({
+      activeThinking: null,
       rows: [
         {
           kind: "message",
@@ -2587,7 +2589,7 @@ describe("CLI JSON output contracts", () => {
   it("bb thread log --self resolves from BB_THREAD_ID", async () => {
     process.env.BB_THREAD_ID = "thread-log-self";
     const getEvents = vi.fn(async () => []);
-    const getTimeline = vi.fn(async () => ({ rows: [] }));
+    const getTimeline = vi.fn(async () => ({ rows: [], activeThinking: null }));
     createClientMock.mockReturnValue(asServerClient({
       api: {
         v1: {

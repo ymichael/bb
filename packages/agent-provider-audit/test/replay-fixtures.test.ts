@@ -167,12 +167,12 @@ describe("@bb/agent-provider-audit fixture replay", () => {
   });
 
   it("snapshots verbose CLI timeline output for every fixture", () => {
-    const verboseTimelines = checkedInReplay.fixtures.map(({ fixture, bundle }) => ({
-      fixture: `${fixture.corpusId}/${fixture.providerId}/${fixture.taskId}`,
-      timeline: trimTrailingWhitespace(bundle.timelineVerboseText),
-    }));
-
-    expect(verboseTimelines).toMatchSnapshot();
+    for (const { fixture, bundle } of checkedInReplay.fixtures) {
+      const fixtureId = `${fixture.corpusId}/${fixture.providerId}/${fixture.taskId}`;
+      expect(trimTrailingWhitespace(bundle.timelineVerboseText)).toMatchSnapshot(
+        fixtureId,
+      );
+    }
   });
 
   it("summarizes raw-event and tool-call coverage across the checked-in fixtures", () => {

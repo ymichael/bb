@@ -159,6 +159,7 @@ describe("resolveThreadPlaceholder", () => {
 describe("resolveThreadTimelinePlaceholder", () => {
   it("keeps previous timeline rows when the same thread query refreshes", () => {
     const previousTimeline: ThreadTimelineResponse = {
+      activeThinking: null,
       rows: [
         {
           kind: "message",
@@ -188,6 +189,7 @@ describe("resolveThreadTimelinePlaceholder", () => {
 
   it("drops previous timeline rows when switching to a different thread", () => {
     const previousTimeline: ThreadTimelineResponse = {
+      activeThinking: null,
       rows: [],
     };
 

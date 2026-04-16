@@ -28,7 +28,7 @@ export function flattenProjectionMessages(
 }
 
 export function flattenViewMessagesDeep(
-  rootMessages: ViewMessage[],
+  rootMessages: readonly ViewMessage[],
 ): ViewMessage[] {
   const messages: ViewMessage[] = [];
   for (const message of rootMessages) {

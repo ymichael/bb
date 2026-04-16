@@ -429,7 +429,7 @@ function formatTimelineRow(row: TimelineRow, verbose: boolean, color: boolean): 
  * Format timeline rows as human-readable terminal text.
  *
  * - `minimal`: Compact view — grouped tool work stays collapsed, reasoning hidden
- * - `verbose`: Expanded view — grouped rows are expanded, reasoning included, diffs shown
+ * - `verbose`: Expanded view — grouped rows are expanded, diffs shown
  */
 export function formatTimelineAsText(
   rows: TimelineRow[],

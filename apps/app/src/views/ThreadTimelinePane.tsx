@@ -1,5 +1,10 @@
 import { type ReactNode } from "react";
-import type { TimelineRow, TimelineToolGroupRow, ViewMessage } from "@bb/domain";
+import type {
+  TimelineActiveThinking,
+  TimelineRow,
+  TimelineToolGroupRow,
+  ViewMessage,
+} from "@bb/domain";
 import {
   ConversationEmptyState,
   ConversationTimeline,
@@ -11,9 +16,9 @@ import { usePreferredTheme } from "@/hooks/useTheme";
 import { toUserAttachmentImageSrc } from "@/lib/user-attachment-images";
 
 interface ThreadTimelinePaneProps {
+  activeThinking: TimelineActiveThinking | null;
   footer: ReactNode;
   header: ReactNode;
-  isReasoningBlockActive: boolean;
   isThreadTimelinePending: boolean;
   timelineError: boolean;
   latestActivityRowId: string | null;
@@ -31,9 +36,9 @@ interface ThreadTimelinePaneProps {
 }
 
 export function ThreadTimelinePane({
+  activeThinking,
   footer,
   header,
-  isReasoningBlockActive,
   isThreadTimelinePending,
   timelineError,
   latestActivityRowId,
@@ -50,6 +55,16 @@ export function ThreadTimelinePane({
   toolGroupMessagesById,
 }: ThreadTimelinePaneProps) {
   const preferredTheme = usePreferredTheme();
+  const showActiveThinking = activeThinking !== null && ongoingIndicatorLabel === undefined;
+  const activeThinkingText = activeThinking?.text.trim() ?? "";
+  const activeThinkingDetails =
+    showActiveThinking && activeThinkingText.length > 0
+      ? activeThinking?.text
+      : undefined;
+  const ongoingIndicatorKey =
+    showActiveThinking && activeThinking
+      ? activeThinking.id
+      : (ongoingIndicatorLabel ?? "working");
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
@@ -86,7 +101,9 @@ export function ThreadTimelinePane({
         </ConversationTimeline>
         {showOngoingIndicator ? (
           <ConversationWorkingIndicator
-            isThinking={isReasoningBlockActive}
+            key={ongoingIndicatorKey}
+            details={activeThinkingDetails}
+            isThinking={showActiveThinking}
             label={ongoingIndicatorLabel}
           />
         ) : null}

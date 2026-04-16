@@ -14,6 +14,7 @@ import {
   serviceTierSchema,
   threadListEntrySchema,
   threadTypeSchema,
+  timelineActiveThinkingSchema,
   timelineRowSchema,
   threadQueuedMessageSchema,
   viewMessageSchema,
@@ -734,6 +735,7 @@ export type TimelineToolDetailsResponse = z.infer<typeof timelineToolDetailsResp
 
 export const threadTimelineResponseSchema = z.object({
   rows: z.array(timelineRowSchema),
+  activeThinking: timelineActiveThinkingSchema.nullable(),
   contextWindowUsage: threadContextWindowUsageSchema.optional(),
 });
 export type ThreadTimelineResponse = z.infer<typeof threadTimelineResponseSchema>;

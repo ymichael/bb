@@ -11,8 +11,8 @@ import type {
 } from "@bb/domain";
 import {
   findLastTerminalTimelineMessage,
-  isTimelineUngroupableMessage,
 } from "./timeline-message-helpers.js";
+import { getProjectionSummaryCount } from "./apply-turn-message-detail.js";
 import { isDelegationToolName } from "./tool-call-parsing.js";
 
 interface MessageTimingSource {
@@ -242,33 +242,6 @@ function getDurationMs(
     return undefined;
   }
   return Math.max(0, completedAt - startedAt);
-}
-
-function getProjectionMessageSummaryCount(message: ViewMessage): number {
-  if (message.kind === "tool-exploring") {
-    return Math.max(1, message.calls.length);
-  }
-  if (message.kind === "file-edit") {
-    return Math.max(1, message.changes.length);
-  }
-  return 1;
-}
-
-function getProjectionSummaryCount(
-  messages: ViewMessage[],
-  terminalMessage: ViewMessage | undefined,
-): number {
-  let count = 0;
-  for (const message of messages) {
-    if (terminalMessage && message.id === terminalMessage.id) {
-      break;
-    }
-    if (isTimelineUngroupableMessage(message)) {
-      continue;
-    }
-    count += getProjectionMessageSummaryCount(message);
-  }
-  return count;
 }
 
 function buildScopedTurn(

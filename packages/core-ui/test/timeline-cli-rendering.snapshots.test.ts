@@ -217,6 +217,54 @@ describe("timeline CLI rendering snapshots", () => {
     `);
   });
 
+  it("omits completed reasoning from timeline rows", () => {
+    const event = createTimelineEventFactory({ threadId: "thread-1" });
+    const timeline = renderIdleTimeline([
+      event.turnStarted(),
+      event.reasoningDelta({
+        itemId: "reasoning-1",
+        delta: "I should inspect the nearby files first.",
+      }),
+      event.reasoningCompleted({
+        itemId: "reasoning-1",
+        text: "I should inspect the nearby files first.",
+      }),
+      event.toolCallCompleted({
+        itemId: "tool-1",
+        arguments: { cmd: "sed -n '1,80p' packages/core-ui/src/index.ts" },
+      }),
+      event.assistantCompleted({
+        itemId: "assistant-1",
+        text: "The extension point is the timeline row builder.",
+      }),
+      event.turnCompleted(),
+    ]);
+
+    expect(timeline.toolGroups).toHaveLength(1);
+    expect(timeline.toolGroups[0]?.summaryCount).toBe(1);
+    expect(timeline.text).not.toContain("Reasoning");
+    expect(timeline.text).toMatchInlineSnapshot(`
+      "── Worked on 1 item ────────────────────────────────────────
+
+      ── Assistant ───────────────────────────────────────────────
+      The extension point is the timeline row builder."
+    `);
+  });
+
+  it("omits active reasoning from timeline rows", () => {
+    const event = createTimelineEventFactory({ threadId: "thread-1" });
+    const timeline = renderActiveTimeline([
+      event.turnStarted(),
+      event.reasoningDelta({
+        itemId: "reasoning-1",
+        delta: "Checking the current state.",
+      }),
+    ]);
+
+    expect(timeline.rows).toEqual([]);
+    expect(timeline.text).toMatchInlineSnapshot(`""`);
+  });
+
   it("shows tasks, web search, file edit, and assistant output", () => {
     const event = createTimelineEventFactory({ threadId: "thread-1" });
     const timeline = renderActiveTimeline([

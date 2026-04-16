@@ -13,6 +13,16 @@ export function isTimelineUngroupableMessage(message: ViewMessage): boolean {
   return message.kind === "user" || message.kind === "debug/raw-event";
 }
 
+export function isTimelineHiddenMessage(message: ViewMessage): boolean {
+  return message.kind === "assistant-reasoning";
+}
+
+export function toTimelineVisibleMessages(
+  messages: readonly ViewMessage[],
+): ViewMessage[] {
+  return messages.filter((message) => !isTimelineHiddenMessage(message));
+}
+
 export function toIndexedTimelineMessages(
   messages: readonly ViewMessage[],
 ): IndexedTimelineMessage[] {

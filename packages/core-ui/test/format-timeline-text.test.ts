@@ -293,7 +293,7 @@ describe("formatTimelineAsText", () => {
     expect(text).toContain("Provider unavailable");
   });
 
-  it("hides reasoning in minimal, shows in verbose", () => {
+  it("omits reasoning from timeline rows", () => {
     const messages: ViewMessage[] = [
       {
         kind: "assistant-reasoning",
@@ -311,8 +311,7 @@ describe("formatTimelineAsText", () => {
     expect(minimal).toBe("");
 
     const verbose = formatMessagesAsText(messages, { color: false, verbose: true });
-    expect(verbose).toContain("Reasoning");
-    expect(verbose).toContain("Let me think about this");
+    expect(verbose).toBe("");
   });
 
   it("collapses grouped tool activity in minimal mode and expands it in verbose mode", () => {

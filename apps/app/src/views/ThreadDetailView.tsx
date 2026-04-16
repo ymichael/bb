@@ -110,6 +110,7 @@ export function ThreadDetailView() {
   const updateThread = useUpdateThread();
   const captureTimelineScrollPositionRef = useRef<() => void>(() => {});
   const threadDetailRows = useMemo(() => timeline?.rows ?? [], [timeline?.rows]);
+  const activeThinking = timeline?.activeThinking ?? null;
   const contextWindowUsage = timeline?.contextWindowUsage ?? undefined;
   const latestActivityRowId = useMemo(
     () => findLatestActivityRowId(threadDetailRows),
@@ -168,7 +169,6 @@ export function ThreadDetailView() {
     ),
   });
   const { data: environmentHost } = useHost(environment?.hostId);
-  const isReasoningBlockActive = false;
   const isThreadTimelinePending = timelineLoading && threadDetailRows.length === 0;
   const {
     captureTimelineScrollPosition,
@@ -536,7 +536,7 @@ export function ThreadDetailView() {
         }}
         showThreadMetadata={showThreadMetadata}
         timeline={{
-          isReasoningBlockActive,
+          activeThinking,
           isThreadTimelinePending,
           timelineError: Boolean(timelineError),
           latestActivityRowId,

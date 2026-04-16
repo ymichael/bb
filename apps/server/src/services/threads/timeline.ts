@@ -1,5 +1,6 @@
 import {
   buildTimelineRows,
+  extractActiveThinking,
   extractThreadContextWindowUsage,
   flattenProjectionMessages,
   flattenViewMessagesDeep,
@@ -196,6 +197,13 @@ export function buildThreadTimeline(
   const isDefaultManagerView =
     thread.type === "manager" && !options.showAllManagerEvents;
   const decodedEvents = eventRows.map((row) => toThreadEventWithMeta(row));
+  const activeThinking = extractActiveThinking(
+    toViewMessages(decodedEvents, {
+      includeInternalSystemMessages: options.showAllManagerEvents,
+      threadStatus: thread.status,
+      threadType: thread.type,
+    }),
+  );
   const rows = isDefaultManagerView
     ? buildManagerConversationRows(
         toViewMessages(decodedEvents, {
@@ -221,6 +229,7 @@ export function buildThreadTimeline(
 
   return {
     rows,
+    activeThinking,
     contextWindowUsage:
       extractThreadContextWindowUsage(
         contextWindowUsageRows.map((row) => parseStoredEventRow(row)),

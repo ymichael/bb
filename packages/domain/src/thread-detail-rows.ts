@@ -34,6 +34,13 @@ export interface TimelineToolGroupRow {
   messages: ViewMessage[];
 }
 
+export interface TimelineActiveThinking {
+  id: string;
+  text: string;
+  startedAt: number;
+  updatedAt: number;
+}
+
 export type TimelineRow = TimelineMessageRow | TimelineToolGroupRow;
 
 export const timelineMessageRowSchema = z.object({
@@ -58,3 +65,9 @@ export const timelineRowSchema = z.discriminatedUnion("kind", [
   timelineMessageRowSchema,
   timelineToolGroupRowSchema,
 ]);
+export const timelineActiveThinkingSchema = z.object({
+  id: z.string(),
+  text: z.string(),
+  startedAt: z.number(),
+  updatedAt: z.number(),
+});

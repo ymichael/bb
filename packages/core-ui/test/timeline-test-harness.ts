@@ -86,6 +86,16 @@ interface AssistantCompletedArgs extends ProviderTurnEventOptions {
   text: string;
 }
 
+interface ReasoningCompletedArgs extends ProviderTurnEventOptions {
+  itemId?: string;
+  text: string;
+}
+
+interface ReasoningDeltaArgs extends ProviderTurnEventOptions {
+  delta: string;
+  itemId?: string;
+}
+
 interface ToolCallCompletedArgs extends ProviderTurnEventOptions {
   arguments?: Record<string, JsonValue>;
   itemId?: string;
@@ -165,6 +175,8 @@ export interface TimelineEventFactory {
   managerUserMessage(args: ManagerUserMessageArgs): ThreadEventRowOfType<"system/manager/user_message">;
   permissionGrantLifecycle(args?: PermissionGrantLifecycleArgs): ThreadEventRowOfType<"system/permissionGrant/lifecycle">;
   providerUserMessage(args: ProviderUserMessageArgs): ThreadEventRowOfType<"item/completed">;
+  reasoningCompleted(args: ReasoningCompletedArgs): ThreadEventRowOfType<"item/completed">;
+  reasoningDelta(args: ReasoningDeltaArgs): ThreadEventRowOfType<"item/reasoning/textDelta">;
   systemError(args: SystemErrorArgs): ThreadEventRowOfType<"system/error">;
   threadProvisioning(args: ThreadProvisioningArgs): ThreadEventRowOfType<"system/thread-provisioning">;
   toolCallCompleted(args: ToolCallCompletedArgs): ThreadEventRowOfType<"item/completed">;
@@ -489,6 +501,34 @@ export function createTimelineEventFactory(
             id: args.itemId ?? `user-${base.seq}`,
             content: args.content ?? [{ type: "text", text: args.text }],
           },
+        },
+      };
+    },
+    reasoningCompleted(args) {
+      const base = nextRowBase("reasoning-completed", args);
+      return {
+        ...base,
+        type: "item/completed",
+        data: {
+          ...providerFields(args),
+          item: {
+            type: "reasoning",
+            id: args.itemId ?? `reasoning-${base.seq}`,
+            summary: [],
+            content: [args.text],
+          },
+        },
+      };
+    },
+    reasoningDelta(args) {
+      const base = nextRowBase("reasoning-delta", args);
+      return {
+        ...base,
+        type: "item/reasoning/textDelta",
+        data: {
+          ...providerFields(args),
+          itemId: args.itemId ?? `reasoning-${base.seq}`,
+          delta: args.delta,
         },
       };
     },
