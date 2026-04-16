@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import type { Thread } from "@bb/domain";
+import { isThreadRead } from "@/lib/thread-read-state";
 import { useMarkThreadRead } from "../hooks/mutations/thread-state-mutations";
 
 interface UseThreadReadTrackingParams {
@@ -17,11 +18,11 @@ export function useThreadReadTracking({
     if (!thread) {
       return;
     }
-    if ((thread.lastReadAt ?? 0) >= thread.updatedAt) {
+    if (isThreadRead(thread)) {
       return;
     }
 
-    const marker = `${thread.id}:${thread.updatedAt}`;
+    const marker = `${thread.id}:${thread.latestAttentionAt}`;
     if (markedReadKeysRef.current.has(marker)) {
       return;
     }

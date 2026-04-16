@@ -42,6 +42,7 @@ function makeThread(overrides: Partial<Thread> = {}): Thread {
     environmentId: "environment-1",
     id: "thread-1",
     lastReadAt: null,
+    latestAttentionAt: 10,
     parentThreadId: null,
     projectId: "project-1",
     providerId: "provider-1",
@@ -186,8 +187,8 @@ describe("ThreadActionsProvider", () => {
   });
 
   it("toggleRead picks mark-read vs mark-unread based on last-read state", async () => {
-    const unreadThread = makeThread({ id: "thread-unread", lastReadAt: 2, updatedAt: 10 });
-    const readThread = makeThread({ id: "thread-read", lastReadAt: 10, updatedAt: 10 });
+    const unreadThread = makeThread({ id: "thread-unread", lastReadAt: 2, latestAttentionAt: 10 });
+    const readThread = makeThread({ id: "thread-read", lastReadAt: 10, latestAttentionAt: 10 });
     vi.mocked(api.markThreadRead).mockResolvedValue(
       makeThread({ id: unreadThread.id, lastReadAt: 10 }),
     );

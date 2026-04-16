@@ -15,7 +15,7 @@ describe("thread-activity", () => {
     expect(
       isUnreadDoneThread({
         status: "idle",
-        updatedAt: 20,
+        latestAttentionAt: 20,
         lastReadAt: 10,
         parentThreadId: null,
       }),
@@ -23,7 +23,7 @@ describe("thread-activity", () => {
     expect(
       isUnreadDoneThread({
         status: "idle",
-        updatedAt: 20,
+        latestAttentionAt: 20,
         lastReadAt: 10,
         parentThreadId: "manager-1",
       }),
@@ -31,7 +31,7 @@ describe("thread-activity", () => {
     expect(
       isUnreadDoneThread({
         status: "error",
-        updatedAt: 20,
+        latestAttentionAt: 20,
         lastReadAt: 10,
         parentThreadId: null,
       }),
@@ -39,7 +39,7 @@ describe("thread-activity", () => {
     expect(
       isUnreadDoneThread({
         status: "active",
-        updatedAt: 20,
+        latestAttentionAt: 20,
         lastReadAt: null,
         parentThreadId: null,
       }),

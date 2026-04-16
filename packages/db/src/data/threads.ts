@@ -66,6 +66,8 @@ export function createThread(
       titleFallback: input.titleFallback ?? null,
       status: input.status ?? "created",
       parentThreadId: input.parentThreadId ?? null,
+      lastReadAt: now,
+      latestAttentionAt: now,
       createdAt: now,
       updatedAt: now,
     })
@@ -146,15 +148,6 @@ const THREAD_STATUSES_ALLOWING_ERROR: ThreadStatus[] = [
   "idle",
   "active",
 ];
-
-interface ThreadReadState {
-  lastReadAt: number | null;
-  updatedAt: number;
-}
-
-function isThreadRead(thread: ThreadReadState): boolean {
-  return (thread.lastReadAt ?? 0) >= thread.updatedAt;
-}
 
 interface StatusTransition {
   currentStatus: ThreadStatus;
@@ -369,8 +362,6 @@ export function updateThread(
   if ("environmentId" in input) set.environmentId = input.environmentId;
   if ("lastReadAt" in input) {
     set.lastReadAt = input.lastReadAt;
-  } else if (isThreadRead(existing)) {
-    set.lastReadAt = now;
   }
   if ("parentThreadId" in input) set.parentThreadId = input.parentThreadId;
 
@@ -520,11 +511,8 @@ export function transitionThreadStatus(
     status: newStatus,
     updatedAt: now,
   };
-  if (
-    isThreadRead(thread)
-    && !statusTransitionNeedsAttention({ currentStatus, newStatus })
-  ) {
-    set.lastReadAt = now;
+  if (statusTransitionNeedsAttention({ currentStatus, newStatus })) {
+    set.latestAttentionAt = now;
   }
 
   const updated = db.update(threads)
@@ -549,9 +537,7 @@ export function transitionThreadsToError(
   const now = args.now ?? Date.now();
   const eligibleThreads = db.select({
     id: threads.id,
-    lastReadAt: threads.lastReadAt,
     status: threads.status,
-    updatedAt: threads.updatedAt,
   })
     .from(threads)
     .where(
@@ -578,13 +564,12 @@ export function transitionThreadsToError(
       updatedAt: now,
     };
     if (
-      isThreadRead(thread)
-      && !statusTransitionNeedsAttention({
+      statusTransitionNeedsAttention({
         currentStatus: thread.status,
         newStatus: "error",
       })
     ) {
-      set.lastReadAt = now;
+      set.latestAttentionAt = now;
     }
 
     db.update(threads)

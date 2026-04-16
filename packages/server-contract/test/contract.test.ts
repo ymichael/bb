@@ -272,6 +272,7 @@ describe("server-contract canonical schemas", () => {
           stopRequestedAt: null,
           deletedAt: null,
           lastReadAt: null,
+          latestAttentionAt: 2,
           createdAt: 1,
           updatedAt: 2,
           hasPendingInteraction: true,

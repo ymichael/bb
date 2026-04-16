@@ -612,7 +612,9 @@ describe("public thread data routes", () => {
       expect(readResponse.status).toBe(200);
       const readThread = threadReadResponseSchema.parse(await readJson(readResponse));
       expect(readThread.lastReadAt).toBeTypeOf("number");
-      expect(getThread(harness.db, thread.id)?.lastReadAt).toBeTypeOf("number");
+      const threadAfterRead = getThread(harness.db, thread.id);
+      expect(threadAfterRead?.lastReadAt).toBeTypeOf("number");
+      expect(threadAfterRead?.latestAttentionAt).toBe(thread.latestAttentionAt);
 
       const unreadResponse = await harness.app.request(
         `/api/v1/threads/${thread.id}/unread`,
@@ -624,7 +626,9 @@ describe("public thread data routes", () => {
       await expect(readJson(unreadResponse)).resolves.toMatchObject({
         lastReadAt: null,
       });
-      expect(getThread(harness.db, thread.id)?.lastReadAt).toBeNull();
+      const threadAfterUnread = getThread(harness.db, thread.id);
+      expect(threadAfterUnread?.lastReadAt).toBeNull();
+      expect(threadAfterUnread?.latestAttentionAt).toBe(thread.latestAttentionAt);
     } finally {
       await harness.cleanup();
     }

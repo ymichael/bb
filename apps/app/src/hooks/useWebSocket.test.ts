@@ -138,6 +138,7 @@ function createThread(args: {
     stopRequestedAt: null,
     deletedAt: null,
     lastReadAt: null,
+    latestAttentionAt: 1,
     createdAt: 1,
     updatedAt: 1,
   };

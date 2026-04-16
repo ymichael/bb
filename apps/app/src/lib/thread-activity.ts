@@ -1,9 +1,10 @@
 import { assertNever } from "@bb/core-ui"
 import type { Thread, ThreadStatus } from "@bb/domain"
+import { isThreadRead } from "@/lib/thread-read-state"
 
 type ThreadStatusShape = Pick<
   Thread,
-  "status" | "lastReadAt" | "updatedAt" | "parentThreadId"
+  "status" | "lastReadAt" | "latestAttentionAt" | "parentThreadId"
 >
 
 export function isRunningThreadStatus(status: ThreadStatus): boolean {
@@ -32,7 +33,7 @@ export function isUnreadDoneThread(thread: ThreadStatusShape): boolean {
   switch (thread.status) {
     case "error":
     case "idle":
-      return (thread.lastReadAt ?? 0) < thread.updatedAt
+      return !isThreadRead(thread)
     case "active":
     case "created":
     case "provisioning":

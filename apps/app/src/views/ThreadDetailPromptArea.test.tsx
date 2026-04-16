@@ -46,6 +46,7 @@ function createThread(overrides: Partial<Thread> = {}): Thread {
     stopRequestedAt: null,
     deletedAt: null,
     lastReadAt: null,
+    latestAttentionAt: 2,
     createdAt: 1,
     updatedAt: 2,
     ...overrides,

@@ -114,6 +114,7 @@ describe("db rebuild schema", () => {
       providerId: "codex",
       type: "standard",
       status: "idle",
+      latestAttentionAt: now,
       createdAt: now,
       updatedAt: now,
     }).run();
@@ -283,6 +284,7 @@ describe("db rebuild schema", () => {
       providerId: "codex",
       type: "standard",
       status: "idle",
+      latestAttentionAt: now,
       createdAt: now,
       updatedAt: now,
     }).run();
@@ -340,6 +342,7 @@ describe("db rebuild schema", () => {
       providerId: "codex",
       type: "standard",
       status: "idle",
+      latestAttentionAt: now,
       createdAt: now,
       updatedAt: now,
     }).run();
@@ -382,6 +385,7 @@ describe("db rebuild schema", () => {
       providerId: "codex",
       type: "manager",
       status: "idle",
+      latestAttentionAt: now,
       createdAt: now,
       updatedAt: now,
     }).run();
@@ -576,6 +580,7 @@ describe("db rebuild schema", () => {
       providerId: "codex",
       type: "standard",
       status: "idle",
+      latestAttentionAt: now,
       createdAt: now,
       updatedAt: now,
     }).run();
@@ -617,6 +622,7 @@ describe("db rebuild schema", () => {
       providerId: "codex",
       type: "standard",
       status: "idle",
+      latestAttentionAt: now,
       createdAt: now,
       updatedAt: now,
     }).run();
@@ -668,6 +674,7 @@ describe("db rebuild schema", () => {
       providerId: "codex",
       type: "standard",
       status: "idle",
+      latestAttentionAt: now,
       createdAt: now,
       updatedAt: now,
     }).run();

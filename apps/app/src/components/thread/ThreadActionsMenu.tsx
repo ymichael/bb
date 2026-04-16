@@ -11,6 +11,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { threadTypeLabel } from "@/lib/thread-title"
+import { isThreadRead } from "@/lib/thread-read-state"
 import { useThreadActions } from "./ThreadActionsProvider"
 
 interface ThreadActionsMenuProps {
@@ -47,7 +48,7 @@ export function ThreadActionsMenu({
   } = useThreadActions()
   const label = threadTypeLabel(thread.type)
   const capitalizedLabel = label.charAt(0).toUpperCase() + label.slice(1)
-  const isRead = (thread.lastReadAt ?? 0) >= thread.updatedAt
+  const isRead = isThreadRead(thread)
   const isArchived = thread.archivedAt != null
 
   return (

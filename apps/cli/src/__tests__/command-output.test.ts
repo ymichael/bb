@@ -56,6 +56,7 @@ function makeThread(overrides: Partial<Thread> & { id: string; projectId: string
     stopRequestedAt: null,
     deletedAt: null,
     lastReadAt: null,
+    latestAttentionAt: Date.now(),
     createdAt: Date.now(),
     updatedAt: Date.now(),
     ...overrides,

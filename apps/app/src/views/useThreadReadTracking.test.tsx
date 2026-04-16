@@ -29,6 +29,7 @@ function makeThread(overrides: ThreadOverrides = {}): Thread {
     environmentId: "environment-1",
     id: "thread-1",
     lastReadAt: null,
+    latestAttentionAt: 10,
     parentThreadId: null,
     projectId: "project-1",
     providerId: "provider-1",
@@ -64,7 +65,7 @@ afterEach(() => {
 });
 
 describe("useThreadReadTracking", () => {
-  it("marks unread threads once per thread id and updatedAt marker", async () => {
+  it("marks unread threads once per thread id and latestAttentionAt marker", async () => {
     vi.mocked(api.markThreadRead).mockImplementation(async (id) =>
       makeThread({
         id,
@@ -79,7 +80,7 @@ describe("useThreadReadTracking", () => {
         initialProps: {
           thread: makeThread({
             lastReadAt: null,
-            updatedAt: 10,
+            latestAttentionAt: 10,
           }),
         },
         wrapper,
@@ -94,7 +95,7 @@ describe("useThreadReadTracking", () => {
     rerender({
       thread: makeThread({
         lastReadAt: null,
-        updatedAt: 10,
+        latestAttentionAt: 10,
       }),
     });
 
@@ -105,7 +106,7 @@ describe("useThreadReadTracking", () => {
     rerender({
       thread: makeThread({
         lastReadAt: null,
-        updatedAt: 11,
+        latestAttentionAt: 11,
       }),
     });
 
@@ -123,7 +124,7 @@ describe("useThreadReadTracking", () => {
         useThreadReadTrackingHarness(
           makeThread({
             lastReadAt: 10,
-            updatedAt: 10,
+            latestAttentionAt: 10,
           }),
         ),
       { wrapper },
@@ -150,7 +151,7 @@ describe("useThreadReadTracking", () => {
         initialProps: {
           thread: makeThread({
             lastReadAt: null,
-            updatedAt: 10,
+            latestAttentionAt: 10,
           }),
         },
         wrapper,
@@ -165,7 +166,7 @@ describe("useThreadReadTracking", () => {
     rerender({
       thread: makeThread({
         lastReadAt: null,
-        updatedAt: 10,
+        latestAttentionAt: 10,
       }),
     });
 

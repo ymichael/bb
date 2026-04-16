@@ -252,6 +252,7 @@ function interruptThreadsForDisconnectedHost(
       const updatedThreads = tx.update(threads)
         .set({
           status: "error",
+          latestAttentionAt: now,
           updatedAt: now,
         })
         .where(

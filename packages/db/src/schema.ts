@@ -291,6 +291,7 @@ export const threads = sqliteTable(
     stopRequestedAt: integer("stop_requested_at"),
     deletedAt: integer("deleted_at"),
     lastReadAt: integer("last_read_at"),
+    latestAttentionAt: integer("latest_attention_at").notNull(),
     createdAt: integer("created_at").notNull(),
     updatedAt: integer("updated_at").notNull(),
   },

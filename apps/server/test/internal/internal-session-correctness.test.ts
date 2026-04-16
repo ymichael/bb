@@ -455,7 +455,11 @@ describe("internal session correctness", () => {
         .where(eq(hostDaemonSessions.id, session.id))
         .get();
       expect(closedSession?.closeReason).toBe("daemon-disconnect");
-      expect(getThread(harness.db, thread.id)?.status).toBe("error");
+      const interruptedThread = getThread(harness.db, thread.id);
+      expect(interruptedThread?.status).toBe("error");
+      expect(interruptedThread?.latestAttentionAt).toBeGreaterThan(
+        thread.latestAttentionAt,
+      );
 
       const errorEvent = listEvents(harness.db, { threadId: thread.id }).find(
         (event) => event.type === "system/error",

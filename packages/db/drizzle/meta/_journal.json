@@ -239,6 +239,13 @@
       "when": 1775861081000,
       "tag": "0034_permission_mode",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "6",
+      "when": 1775864681000,
+      "tag": "0035_thread_latest_attention",
+      "breakpoints": true
     }
   ]
 }

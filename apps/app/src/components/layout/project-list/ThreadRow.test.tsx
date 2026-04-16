@@ -31,6 +31,7 @@ function createThread(overrides: Partial<ThreadListEntry> = {}): ThreadListEntry
     stopRequestedAt: null,
     deletedAt: null,
     lastReadAt: 0,
+    latestAttentionAt: 2,
     createdAt: 1,
     updatedAt: 2,
     hasPendingInteraction: false,

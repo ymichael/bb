@@ -51,6 +51,7 @@ describe("threads", () => {
     expect(thread.projectId).toBe(project.id);
     expect(thread.stopRequestedAt).toBeNull();
     expect(thread.deletedAt).toBeNull();
+    expect(thread.lastReadAt).toBe(thread.latestAttentionAt);
 
     const fetched = getThread(db, thread.id);
     expect(fetched).toMatchObject({ id: thread.id });
@@ -174,7 +175,7 @@ describe("threads", () => {
         providerId: "codex",
       });
       updateThread(db, noopNotifier, thread.id, {
-        lastReadAt: thread.updatedAt,
+        lastReadAt: thread.latestAttentionAt,
       });
 
       vi.setSystemTime(2_000);
@@ -184,7 +185,8 @@ describe("threads", () => {
 
       expect(updated?.title).toBe("New title");
       expect(updated?.updatedAt).toBe(2_000);
-      expect(updated?.lastReadAt).toBe(2_000);
+      expect(updated?.lastReadAt).toBe(1_000);
+      expect(updated?.latestAttentionAt).toBe(1_000);
     } finally {
       vi.useRealTimers();
     }
@@ -199,6 +201,9 @@ describe("threads", () => {
         projectId: project.id,
         providerId: "codex",
       });
+      updateThread(db, noopNotifier, thread.id, {
+        lastReadAt: null,
+      });
 
       vi.setSystemTime(2_000);
       const updated = updateThread(db, noopNotifier, thread.id, {
@@ -207,6 +212,7 @@ describe("threads", () => {
 
       expect(updated?.updatedAt).toBe(2_000);
       expect(updated?.lastReadAt).toBeNull();
+      expect(updated?.latestAttentionAt).toBe(1_000);
     } finally {
       vi.useRealTimers();
     }
@@ -259,6 +265,7 @@ describe("threads", () => {
 
     const unarchived = unarchiveThread(db, noopNotifier, thread.id);
     expect(unarchived?.archivedAt).toBeNull();
+    expect(unarchived?.latestAttentionAt).toBe(thread.latestAttentionAt);
   });
 
   it("tracks stop requests independently from runtime status", () => {
@@ -548,7 +555,7 @@ describe("transitionThreadStatus", () => {
         status: "active",
       });
       updateThread(db, noopNotifier, activeThread.id, {
-        lastReadAt: activeThread.updatedAt,
+        lastReadAt: activeThread.latestAttentionAt,
       });
 
       vi.setSystemTime(2_000);
@@ -559,10 +566,11 @@ describe("transitionThreadStatus", () => {
         "idle",
       );
       expect(idleThread.updatedAt).toBe(2_000);
+      expect(idleThread.latestAttentionAt).toBe(2_000);
       expect(idleThread.lastReadAt).toBe(1_000);
 
       updateThread(db, noopNotifier, activeThread.id, {
-        lastReadAt: idleThread.updatedAt,
+        lastReadAt: idleThread.latestAttentionAt,
       });
       vi.setSystemTime(3_000);
       const activeAgainThread = transitionThreadStatus(
@@ -572,7 +580,8 @@ describe("transitionThreadStatus", () => {
         "active",
       );
       expect(activeAgainThread.updatedAt).toBe(3_000);
-      expect(activeAgainThread.lastReadAt).toBe(3_000);
+      expect(activeAgainThread.latestAttentionAt).toBe(2_000);
+      expect(activeAgainThread.lastReadAt).toBe(2_000);
     } finally {
       vi.useRealTimers();
     }
@@ -589,7 +598,7 @@ describe("transitionThreadStatus", () => {
         status: "created",
       });
       updateThread(db, noopNotifier, createdThread.id, {
-        lastReadAt: createdThread.updatedAt,
+        lastReadAt: createdThread.latestAttentionAt,
       });
 
       vi.setSystemTime(2_000);
@@ -600,7 +609,8 @@ describe("transitionThreadStatus", () => {
         "error",
       );
       expect(erroredThread.updatedAt).toBe(2_000);
-      expect(erroredThread.lastReadAt).toBe(2_000);
+      expect(erroredThread.latestAttentionAt).toBe(1_000);
+      expect(erroredThread.lastReadAt).toBe(1_000);
     } finally {
       vi.useRealTimers();
     }

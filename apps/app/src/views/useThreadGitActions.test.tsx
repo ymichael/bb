@@ -49,6 +49,7 @@ function makeThread(overrides: ThreadOverrides = {}): Thread {
     environmentId: "environment-1",
     id: "thread-1",
     lastReadAt: null,
+    latestAttentionAt: 10,
     parentThreadId: null,
     projectId: "project-1",
     providerId: "provider-1",
