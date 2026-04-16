@@ -249,9 +249,9 @@ bb thread wait "$PROMOTE_THREAD_ID" --status idle --timeout 120
 PROMOTE_ENV_ID=$(curl -fsS "$BB_SERVER_URL/api/v1/threads/$PROMOTE_THREAD_ID" | jq -r '.environmentId')
 
 curl -fsS "$BB_SERVER_URL/api/v1/environments/$PROMOTE_ENV_ID/status" | jq
-bb environment commit "$PROMOTE_ENV_ID" --thread "$PROMOTE_THREAD_ID"
-bb environment promote "$PROMOTE_ENV_ID" --thread "$PROMOTE_THREAD_ID"
-bb environment demote "$PROMOTE_ENV_ID" --thread "$PROMOTE_THREAD_ID"
+bb environment commit "$PROMOTE_ENV_ID"
+bb environment promote "$PROMOTE_ENV_ID"
+bb environment demote "$PROMOTE_ENV_ID"
 ```
 
 Expected result:
