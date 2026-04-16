@@ -276,6 +276,129 @@ describe("buildThreadTimeline", () => {
     ).toThrow(/could not match tool group range 1-5/);
   });
 
+  it("matches tool detail ranges whose end depends on the following input-accepted event", async () => {
+    const harness = await createTestAppHarness();
+    harnesses.push(harness);
+
+    const host = seedHost(harness.deps);
+    const { project } = seedProjectWithSource(harness.deps, {
+      hostId: host.id,
+    });
+    const environment = seedEnvironment(harness.deps, {
+      hostId: host.id,
+      projectId: project.id,
+    });
+    const thread = seedThread(harness.deps, {
+      projectId: project.id,
+      environmentId: environment.id,
+    });
+
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-thread-1",
+      turnId: "turn-1",
+      sequence: 1,
+      type: "turn/started",
+      data: {},
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-thread-1",
+      turnId: "turn-1",
+      sequence: 2,
+      type: "item/completed",
+      data: {
+        item: {
+          type: "toolCall",
+          id: "tool-1",
+          tool: "exec_command",
+          arguments: { cmd: "pnpm test" },
+          status: "completed",
+        },
+      },
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-thread-1",
+      turnId: "turn-1",
+      sequence: 3,
+      type: "item/completed",
+      data: {
+        item: {
+          type: "agentMessage",
+          id: "assistant-1",
+          text: "Done.",
+        },
+      },
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-thread-1",
+      turnId: "turn-1",
+      sequence: 4,
+      type: "turn/completed",
+      data: {
+        status: "completed",
+      },
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      sequence: 5,
+      type: "client/turn/requested",
+      data: {
+        direction: "outbound",
+        source: "tell",
+        initiator: "user",
+        request: { method: "turn/start", params: {} },
+        input: [{ type: "text", text: "Follow-up" }],
+        target: { kind: "new-turn" },
+        execution: {
+          model: "gpt-5",
+          serviceTier: "default",
+          reasoningLevel: "medium",
+          permissionMode: "full",
+          source: "client/turn/requested",
+        },
+      },
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-thread-1",
+      turnId: "turn-1",
+      sequence: 8,
+      type: "turn/input/accepted",
+      data: {
+        clientRequestSequence: 5,
+      },
+    });
+
+    const timeline = buildThreadTimeline(harness.db, thread, {});
+    const toolGroup = timeline.rows.find((row) => row.kind === "tool-group");
+
+    expect(toolGroup).toMatchObject({
+      sourceSeqStart: 1,
+      sourceSeqEnd: 5,
+    });
+
+    const details = buildTimelineToolDetails(harness.db, thread, {
+      sourceSeqStart: 1,
+      sourceSeqEnd: 5,
+    });
+
+    expect(details.messages).toHaveLength(1);
+    expect(details.messages[0]).toMatchObject({
+      kind: "tool-call",
+      sourceSeqStart: 2,
+      sourceSeqEnd: 2,
+    });
+  });
+
   it("returns flattened tool details when the selected range has no tool groups", async () => {
     const harness = await createTestAppHarness();
     harnesses.push(harness);

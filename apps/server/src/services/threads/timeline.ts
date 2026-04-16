@@ -23,6 +23,7 @@ import type {
 import {
   listContextWindowUsageRows,
   listRecentStoredEventRows,
+  listStoredEventRows,
   listStoredEventRowsInRange,
 } from "@bb/db";
 import type { DbConnection, StoredEventRow } from "@bb/db";
@@ -232,14 +233,25 @@ export function buildTimelineToolDetails(
   thread: Thread,
   options: BuildTimelineToolDetailsOptions,
 ): TimelineToolDetailsResponse {
-  const eventRows = listStoredEventRowsInRange(db, {
+  const exactEventRows = listStoredEventRowsInRange(db, {
     threadId: thread.id,
     seqStart: options.sourceSeqStart,
     seqEnd: options.sourceSeqEnd,
   });
 
+  const lookaheadEventRows = listStoredEventRows(db, {
+    threadId: thread.id,
+    afterSequence: options.sourceSeqEnd,
+    limit: 1,
+  });
+  // A client/turn/requested event can only be assigned to its turn after the
+  // immediately following turn/input/accepted event is decoded. Summary rows
+  // are built from the full event stream, so include one lookahead row here to
+  // reconstruct the same tool-group bounds for expansion.
+  const eventRowsWithLookahead = [...exactEventRows, ...lookaheadEventRows];
+
   const projection = toViewProjection(
-    eventRows.map((row) => toThreadEventWithMeta(row)),
+    eventRowsWithLookahead.map((row) => toThreadEventWithMeta(row)),
     {
       includeInternalSystemMessages: options.showAllManagerEvents,
       threadStatus: thread.status,
@@ -251,10 +263,20 @@ export function buildTimelineToolDetails(
     includeToolGroupMessages: true,
   });
 
+  const exactProjection = toViewProjection(
+    exactEventRows.map((row) => toThreadEventWithMeta(row)),
+    {
+      includeInternalSystemMessages: options.showAllManagerEvents,
+      threadStatus: thread.status,
+      threadType: thread.type,
+      turnMessageDetail: "full",
+    },
+  );
+
   return {
     messages: resolveTimelineToolDetailsMessages(
       rows,
-      projection,
+      exactProjection,
       {
         sourceSeqStart: options.sourceSeqStart,
         sourceSeqEnd: options.sourceSeqEnd,
