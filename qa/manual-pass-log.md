@@ -203,3 +203,80 @@ Residual notes:
 
 - `claude-code` remains blocked by a local expired OAuth token in this environment. Pi managers still routed work to `claude-code` correctly, but the live pass had to rely on codex fallbacks to complete those tasks.
 - No tight completion-polling loop was observed in the Pi reruns. Managers still used occasional inspection commands while reviewing child output, but completion itself came from manager system messages rather than repeated polling.
+
+## Full Manual QA Pass
+
+Date: 2026-04-16
+Operator: Codex
+Status: passed after critical fixes
+Standalone workflow: `pnpm qa:standalone:start` / `pnpm qa:standalone:stop`
+Primary standalone state path: `/var/folders/lr/f3ynv4xj6p77kvx_rz7zgzg00000gn/T/bb-standalone-z2RVe2/standalone-state.json`
+Fixed restart/Pi rerun state path: `/var/folders/lr/f3ynv4xj6p77kvx_rz7zgzg00000gn/T/bb-standalone-0C0WIF/standalone-state.json`
+Resolved models: `codex=gpt-5.4`, `claude-code=haiku`, `pi=openai/gpt-5.4`
+
+Smoke:
+
+- Codex smoke thread: `thr_pesazetcww`
+- Codex worktree thread: `thr_6zbc9pc3qe`
+- Codex worktree environment: `env_tdrjhktwfx`
+
+Multi-thread and shared environment:
+
+- Thread A: `thr_rekefdkm2k`
+- Thread B: `thr_cht9if5nxn`
+- Shared direct environment: `env_4ji9ce59ua`
+- Claude mixed-provider thread: `thr_i9ft232pzw`
+- Claude mixed-provider environment: `env_swzu5w7pwx`
+- Pi mixed-provider thread: `thr_4d9pwj4hpu`
+- Pi mixed-provider environment: `env_hcphu3pd6k`
+- Promote/demote thread: `thr_vjwg24zidc`
+- Promote/demote environment: `env_mhqq4xrcuj`
+
+Recovery:
+
+- Recovery smoke thread: `thr_pesazetcww`
+- Graceful restart daemon PID: `22493`
+- Interrupted restart daemon PID: `22840`
+- Thread state after interrupted restart: `idle`
+- Fixed restart smoke thread: `thr_z3g63i9i8b`
+- Fixed restart daemon PID: `41789`
+
+Provider-specific pass:
+
+- Codex chat thread: `thr_abhfxsvsh4`
+- Codex worktree thread: `thr_ajhwrhyp6r`
+- Codex worktree environment: `env_nfu772x7ux`
+- Claude chat thread: `thr_4pqj6t7mtt`
+- Claude worktree thread: `thr_kcsmgijef5`
+- Claude worktree environment: `env_a9yr4u9w7j`
+- Pi chat thread after fixed restart: `thr_6whmwuw8hv`
+- Pi worktree thread after fixed restart: `thr_nfwsugtfyw`
+- Pi worktree environment after fixed restart: `env_frcj64ef74`
+
+Validated:
+
+- Standalone health checks passed: server config, hosts, `bb status`, provider list, and provider model discovery.
+- Codex smoke reached `idle`, produced output, accepted a follow-up, created a managed worktree file, and exposed environment status/diff routes.
+- Archive rejected `bb thread tell` while archived; unarchive restored follow-up operation.
+- Thread A and B reused the same direct environment, and alternating follow-ups stayed distinct.
+- Archiving Thread A did not block Thread B.
+- Mixed-provider worktree threads reached `idle` in separate environments with no observed event cross-contamination.
+- `bb environment commit`, `bb environment promote`, and `bb environment demote` succeeded on the managed worktree using the current CLI syntax.
+- Graceful daemon restart left the server reachable, host status recovered to `connected`, and the smoke thread accepted a follow-up.
+- Mid-turn daemon loss left the thread inspectable; after restart it was `idle` and accepted a `recovery ok` follow-up.
+- Codex, Claude Code, and Pi provider-specific chat flows completed hello, uppercase follow-up, active-turn stop, and worktree `hello.txt` creation with readable environment status.
+- The fixed restart command reloaded `.env` for the replacement daemon; Pi provider-specific checks passed after that restart.
+
+Critical issues fixed during the pass:
+
+- `qa/manual-runbook.md` hard-coded stale provider model IDs. The runbook now resolves current models through `bb provider models` and uses `CODEX_MODEL`, `CLAUDE_MODEL`, and `PI_MODEL`.
+- `qa/manual-runbook.md` still documented removed `--thread` flags for `bb environment commit/promote/demote`; those commands now match the current CLI.
+- Bare bridge error notifications from Pi/Claude could leave threads stuck in `provisioning` because no terminal turn event was emitted. Bridge adapters now synthesize a failed turn for thread-scoped bridge errors, with regression coverage in `@bb/agent-runtime`.
+- The standalone daemon restart command did not reload the `.env` used by the original daemon, which dropped provider credentials after restart. The generated restart command now sources the env file without embedding secrets in state, with `@bb/qa` regression coverage.
+
+Residual notes:
+
+- The first Codex smoke attempt failed before the runbook model fix because `gpt-5` is rejected for the local ChatGPT-backed Codex account.
+- The first Pi provider-specific attempt after the old restart command exposed the stuck-provisioning bug as `thr_9mk73wn3af`; after the bridge-error and restart-env fixes, the targeted Pi rerun passed.
+- The mixed Claude worktree thread reached `idle` but returned a generic acknowledgement instead of the exact requested text. The isolated Claude provider-specific pass later returned the exact hello/uppercase responses and created `hello.txt`.
+- Host-daemon logs still include expected warnings for unsupported `thread.rename` on `claude-code` and `pi`; these did not block thread completion.
