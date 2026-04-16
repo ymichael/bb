@@ -50,7 +50,6 @@ interface ThreadGitActionDialogProps {
   mergeBaseBranchOptions?: string[];
   mergeBaseBranchOptionsLoading?: boolean;
   onMergeBaseBranchChange?: (branch: string) => void;
-  onMergeBaseBranchPickerOpenChange?: (open: boolean) => void;
   onOpenChange: (open: boolean) => void;
   onCommit: () => Promise<void>;
   onSquashMerge: (args: { mergeBaseBranch: string }) => Promise<void>;
@@ -103,7 +102,6 @@ export function ThreadGitActionDialog({
   mergeBaseBranchOptions,
   mergeBaseBranchOptionsLoading = false,
   onMergeBaseBranchChange,
-  onMergeBaseBranchPickerOpenChange,
   onOpenChange,
   onCommit,
   onSquashMerge,
@@ -131,7 +129,6 @@ export function ThreadGitActionDialog({
             mergeBaseBranchOptions={mergeBaseBranchOptions}
             mergeBaseBranchOptionsLoading={mergeBaseBranchOptionsLoading}
             onMergeBaseBranchChange={onMergeBaseBranchChange}
-            onMergeBaseBranchPickerOpenChange={onMergeBaseBranchPickerOpenChange}
             onOpenChange={onOpenChange}
             onCommit={onCommit}
             onSquashMerge={onSquashMerge}
@@ -158,7 +155,6 @@ function ThreadGitActionDialogContent({
   mergeBaseBranchOptions,
   mergeBaseBranchOptionsLoading,
   onMergeBaseBranchChange,
-  onMergeBaseBranchPickerOpenChange,
   onOpenChange,
   onCommit,
   onSquashMerge,
@@ -283,7 +279,6 @@ function ThreadGitActionDialogContent({
                     loading={mergeBaseBranchOptionsLoading}
                     disabled={pending}
                     onChange={(branch) => onMergeBaseBranchChange?.(branch)}
-                    onOpenChange={onMergeBaseBranchPickerOpenChange}
                     className="max-w-full"
                   />
                 ) : (

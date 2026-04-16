@@ -324,3 +324,13 @@ body.sidebar-resizing [data-sidebar="panel"] {
     background-position: -200% 0%;
   }
 }
+
+/*
+ * During an active panel-resize drag, suppress flex transitions on sibling
+ * panels so their size snaps to each pointer position instead of animating
+ * through 220ms of intermediate layouts per frame. Opacity/visibility
+ * transitions are preserved for open/close animations.
+ */
+[data-panel-group]:has([data-resize-handle-active]) [data-panel] {
+  transition-property: opacity;
+}

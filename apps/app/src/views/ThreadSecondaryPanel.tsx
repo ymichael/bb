@@ -1,8 +1,10 @@
 import {
   type CSSProperties,
   type ReactNode,
-  type Ref,
+  memo,
+  useMemo,
 } from "react";
+import { useAtomValue } from "jotai";
 import {
   Check,
   ChevronDown,
@@ -20,7 +22,6 @@ import {
 } from "lucide-react";
 import { FileDiff as DiffView } from "@pierre/diffs/react";
 import {
-  type ImperativePanelHandle,
   Panel,
   PanelResizeHandle,
 } from "react-resizable-panels";
@@ -43,6 +44,20 @@ import {
   summarizeGitDiffFile,
   type ParsedGitDiffFile,
 } from "./threadDetailGitDiff";
+import { usePreferredTheme } from "@/hooks/useTheme";
+import { useActiveSecondaryPanel, useIsSecondaryPanelOpen } from "@/lib/thread-secondary-panel";
+import { useGitDiffPanelState } from "./useGitDiffPanelState";
+import { useResponsiveGitDiffPanelDisplay } from "./useResponsiveGitDiffPanelDisplay";
+import {
+  gitDiffCollapsedFileKeysAtom,
+  gitDiffLoadingFileKeysAtom,
+  threadSecondaryPanelResizingAtom,
+} from "./threadSecondaryPanelAtoms";
+
+const GIT_DIFF_VIEW_BASE_OPTIONS = {
+  overflow: "scroll",
+  disableFileHeader: false,
+} as const;
 
 const THREAD_SECONDARY_PANEL_MIN_SIZE_PERCENT = 24;
 const THREAD_SECONDARY_PANEL_MAX_SIZE_PERCENT = 70;
@@ -52,6 +67,11 @@ const GIT_DIFF_VIEW_STYLE = {
   "--diffs-font-size": "12px",
   "--diffs-line-height": "18px",
 } as CSSProperties;
+const GIT_DIFF_CARD_BODY_STYLE: CSSProperties = {
+  contain: "layout paint style",
+  contentVisibility: "auto",
+  containIntrinsicSize: "0 600px",
+};
 const THREAD_SECONDARY_PANEL_TRANSITION_CLASS =
   "duration-[220ms] ease-[cubic-bezier(0.32,0.72,0,1)]";
 
@@ -60,16 +80,6 @@ export interface GitDiffSelectionOption {
   label: string;
   /** When set, rendered in monospace before the label (e.g. a short commit SHA). */
   monoPrefix?: string;
-}
-
-interface ParsedGitDiffFileEntry {
-  key: string;
-  fileDiff: ParsedGitDiffFile;
-}
-
-interface ThreadGitDiffData {
-  diff: string;
-  truncated?: boolean;
 }
 
 function ThreadDiffSkeleton({
@@ -200,32 +210,38 @@ function useIsStuck(): StuckState {
   };
 }
 
-function GitDiffFileCard({
-  fileKey,
-  fileDiff,
-  threadId,
-  isCollapsed,
-  isRendering,
-  setGitDiffFileRef,
-  onToggleGitDiffFileCollapsed,
-  gitDiffViewOptions,
-  onOpenFile,
-}: {
+interface GitDiffFileCardProps {
   fileKey: string;
   fileDiff: ParsedGitDiffFile;
   threadId: string;
   isCollapsed: boolean;
   isRendering: boolean;
   setGitDiffFileRef: (fileKey: string, element: HTMLDivElement | null) => void;
-  onToggleGitDiffFileCollapsed: (fileKey: string) => void;
+  toggleGitDiffFileCollapsed: (fileKey: string) => void;
   gitDiffViewOptions: Record<string, string | boolean>;
   onOpenFile?: (path: string) => void;
-}) {
+}
+
+const GitDiffFileCard = memo(function GitDiffFileCard({
+  fileKey,
+  fileDiff,
+  threadId,
+  isCollapsed,
+  isRendering,
+  setGitDiffFileRef,
+  toggleGitDiffFileCollapsed,
+  gitDiffViewOptions,
+  onOpenFile,
+}: GitDiffFileCardProps) {
   const { isStuck: isHeaderStuck, sentinelRef } = useIsStuck();
-  const fileDiffStats = summarizeGitDiffFile(fileDiff);
-  const fileDiffLabel = formatGitDiffFileLabel(fileDiff);
-  const openablePath = getOpenableGitDiffPath(fileDiff);
+  const fileDiffStats = useMemo(() => summarizeGitDiffFile(fileDiff), [fileDiff]);
+  const fileDiffLabel = useMemo(() => formatGitDiffFileLabel(fileDiff), [fileDiff]);
+  const openablePath = useMemo(() => getOpenableGitDiffPath(fileDiff), [fileDiff]);
   const canOpenFile = Boolean(openablePath);
+  const diffViewOptions = useMemo(
+    () => ({ ...gitDiffViewOptions, disableFileHeader: true }),
+    [gitDiffViewOptions],
+  );
 
   return (
     <div
@@ -248,7 +264,7 @@ function GitDiffFileCard({
             <button
               type="button"
               className="inline-flex size-5 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent/70 hover:text-foreground"
-              onClick={() => onToggleGitDiffFileCollapsed(fileKey)}
+              onClick={() => toggleGitDiffFileCollapsed(fileKey)}
               aria-label={`${isCollapsed ? "Expand" : "Collapse"} ${fileDiffLabel}`}
               aria-expanded={!isCollapsed}
             >
@@ -283,7 +299,10 @@ function GitDiffFileCard({
         </div>
       </div>
       {!isCollapsed ? (
-        <div className="overflow-hidden rounded-b-lg bg-background">
+        <div
+          className="overflow-hidden rounded-b-lg bg-background"
+          style={GIT_DIFF_CARD_BODY_STYLE}
+        >
           {isRendering ? (
             <div className="space-y-1.5 px-3 py-3">
               <Skeleton className="h-3 w-full rounded-sm" />
@@ -301,10 +320,7 @@ function GitDiffFileCard({
               >
                 <DiffView
                   fileDiff={fileDiff}
-                  options={{
-                    ...gitDiffViewOptions,
-                    disableFileHeader: true,
-                  }}
+                  options={diffViewOptions}
                 />
               </div>
             </div>
@@ -313,99 +329,101 @@ function GitDiffFileCard({
       ) : null}
     </div>
   );
-}
+});
 
 export interface ThreadSecondaryPanelProps {
-  activePanel: ThreadSecondaryPanelTab | null;
+  canUseGitUi: boolean;
+  defaultMergeBaseBranch?: string;
+  environmentId?: string;
+  isManagerThread: boolean;
   metadataContent: ReactNode;
   threadStorageContent?: ReactNode;
   showThreadStorageTab?: boolean;
   showGitDiffTab?: boolean;
   onPanelChange: (panel: ThreadSecondaryPanelTab) => void;
   threadId: string;
-  panelRef: Ref<HTMLElement>;
-  resizablePanelRef: Ref<ImperativePanelHandle>;
-  isOpen: boolean;
-  isResizing: boolean;
   onCollapse: () => void;
   onClose: () => void;
-  onDragging: (isDragging: boolean) => void;
-  onResize: (size: number) => void;
+  onOpenFile?: (path: string) => void;
   /**
    * When true, render only the aside content — skip the PanelResizeHandle +
    * Panel wrappers that are only meaningful inside a desktop PanelGroup.
    * Caller is responsible for wrapping the content in a Drawer on mobile.
    */
   isMobile?: boolean;
-  gitDiffSelectValue: string;
-  gitDiffSelectOptions: readonly GitDiffSelectionOption[];
-  onGitDiffSelectionChange: (value: string) => void;
-  isGitDiffLoading: boolean;
-  gitDiffError: unknown;
-  threadGitDiff?: ThreadGitDiffData;
-  currentGitDiff: string;
-  isPreparingGitDiff: boolean;
-  isParsingGitDiffFiles: boolean;
-  gitDiffStatsLabel: string;
-  hasParsedGitDiffFiles: boolean;
-  areAllGitDiffFilesCollapsed: boolean;
-  onToggleAllFiles: () => void;
-  gitDiffDisplayMode: "unified" | "split";
-  onGitDiffDisplayModeChange: (value: "unified" | "split") => void;
-  parsedGitDiffFileEntries: readonly ParsedGitDiffFileEntry[];
-  collapsedGitDiffFileKeys: ReadonlySet<string>;
-  queuedGitDiffFileRenderKeys: ReadonlySet<string>;
-  loadingGitDiffFileKeys: ReadonlySet<string>;
-  setGitDiffFileRef: (fileKey: string, element: HTMLDivElement | null) => void;
-  onToggleGitDiffFileCollapsed: (fileKey: string) => void;
-  gitDiffViewOptions: Record<string, string | boolean>;
-  onOpenFile?: (path: string) => void;
 }
 
 export function ThreadSecondaryPanel({
-  activePanel,
+  canUseGitUi,
+  defaultMergeBaseBranch,
+  environmentId,
+  isManagerThread,
   metadataContent,
   threadStorageContent,
   showThreadStorageTab = false,
   showGitDiffTab = true,
   onPanelChange,
   threadId,
-  panelRef,
-  resizablePanelRef,
-  isOpen,
-  isResizing,
   onCollapse,
   onClose,
-  onDragging,
-  onResize,
-  gitDiffSelectValue,
-  gitDiffSelectOptions,
-  onGitDiffSelectionChange,
-  isGitDiffLoading,
-  gitDiffError,
-  threadGitDiff,
-  currentGitDiff,
-  isPreparingGitDiff,
-  isParsingGitDiffFiles,
-  gitDiffStatsLabel,
-  hasParsedGitDiffFiles,
-  areAllGitDiffFilesCollapsed,
-  onToggleAllFiles,
-  gitDiffDisplayMode,
-  onGitDiffDisplayModeChange,
-  parsedGitDiffFileEntries,
-  collapsedGitDiffFileKeys,
-  queuedGitDiffFileRenderKeys,
-  loadingGitDiffFileKeys,
-  setGitDiffFileRef,
-  onToggleGitDiffFileCollapsed,
-  gitDiffViewOptions,
   onOpenFile,
   isMobile = false,
 }: ThreadSecondaryPanelProps) {
+  const rawActivePanel = useActiveSecondaryPanel();
+  const isOpen = useIsSecondaryPanelOpen();
+  const {
+    gitDiffDisplayMode,
+    handleGitDiffDisplayModeChange,
+    handleSecondaryPanelDragging,
+    handleSecondaryPanelResize,
+    secondaryPanelRef: panelRef,
+    secondaryResizablePanelRef: resizablePanelRef,
+  } = useResponsiveGitDiffPanelDisplay({ isSecondaryPanelOpen: isOpen });
+  const activePanel =
+    !canUseGitUi && rawActivePanel === "git-diff"
+      ? "thread-info"
+      : !isManagerThread && rawActivePanel === "thread-storage"
+        ? "thread-info"
+        : rawActivePanel;
   const isDiffPanelActive = activePanel === "git-diff";
   const isThreadStoragePanelActive = activePanel === "thread-storage";
+  const {
+    currentGitDiff,
+    gitDiffError,
+    gitDiffSelectOptions,
+    gitDiffSelectValue,
+    gitDiffStatsLabel,
+    hasParsedGitDiffFiles,
+    isGitDiffLoading,
+    isParsingGitDiffFiles,
+    isPreparingGitDiff,
+    onGitDiffSelectionChange,
+    parsedGitDiffFileEntries,
+    queuedGitDiffFileRenderKeys,
+    setGitDiffFileRef,
+    threadGitDiff,
+    toggleAllGitDiffFilesCollapsed,
+    toggleGitDiffFileCollapsed,
+  } = useGitDiffPanelState({
+    environmentId,
+    isDiffPanelActive,
+    defaultMergeBaseBranch,
+  });
   const hasCurrentGitDiff = currentGitDiff.trim().length > 0;
+  const collapsedGitDiffFileKeys = useAtomValue(gitDiffCollapsedFileKeysAtom);
+  const loadingGitDiffFileKeys = useAtomValue(gitDiffLoadingFileKeysAtom);
+  const areAllGitDiffFilesCollapsed =
+    hasParsedGitDiffFiles &&
+    parsedGitDiffFileEntries.every(({ key }) => collapsedGitDiffFileKeys.has(key));
+  const preferredTheme = usePreferredTheme();
+  const gitDiffViewOptions = useMemo(
+    () => ({
+      ...GIT_DIFF_VIEW_BASE_OPTIONS,
+      diffStyle: gitDiffDisplayMode,
+      themeType: preferredTheme,
+    }),
+    [gitDiffDisplayMode, preferredTheme],
+  );
 
   const asideMarkup = (
     <aside
@@ -524,7 +542,7 @@ export function ThreadSecondaryPanel({
                   variant="ghost"
                   size="sm"
                   className="h-7 w-7 rounded-md p-0 text-muted-foreground hover:bg-accent/70 hover:text-foreground"
-                  onClick={onToggleAllFiles}
+                  onClick={toggleAllGitDiffFilesCollapsed}
                   disabled={!hasParsedGitDiffFiles || isGitDiffLoading}
                   aria-label={
                     areAllGitDiffFilesCollapsed ? "Expand all files" : "Collapse all files"
@@ -554,7 +572,7 @@ export function ThreadSecondaryPanel({
                         ? "bg-accent/35 text-foreground hover:bg-accent/45"
                         : "text-muted-foreground hover:bg-muted/45 hover:text-foreground",
                     )}
-                    onClick={() => onGitDiffDisplayModeChange("unified")}
+                    onClick={() => handleGitDiffDisplayModeChange("unified")}
                     aria-label="Stacked diff view"
                     aria-pressed={gitDiffDisplayMode === "unified"}
                     title="Stacked diff view"
@@ -571,7 +589,7 @@ export function ThreadSecondaryPanel({
                         ? "bg-accent/35 text-foreground hover:bg-accent/45"
                         : "text-muted-foreground hover:bg-muted/45 hover:text-foreground",
                     )}
-                    onClick={() => onGitDiffDisplayModeChange("split")}
+                    onClick={() => handleGitDiffDisplayModeChange("split")}
                     aria-label="Split diff view"
                     aria-pressed={gitDiffDisplayMode === "split"}
                     title="Split diff view"
@@ -618,7 +636,7 @@ export function ThreadSecondaryPanel({
                         isCollapsed={isCollapsed}
                         isRendering={isRendering}
                         setGitDiffFileRef={setGitDiffFileRef}
-                        onToggleGitDiffFileCollapsed={onToggleGitDiffFileCollapsed}
+                        toggleGitDiffFileCollapsed={toggleGitDiffFileCollapsed}
                         gitDiffViewOptions={gitDiffViewOptions}
                         onOpenFile={onOpenFile}
                       />
@@ -668,35 +686,7 @@ export function ThreadSecondaryPanel({
 
   return (
     <>
-      <PanelResizeHandle
-        id="thread-detail-secondary-panel-handle"
-        disabled={!isOpen}
-        onDragging={onDragging}
-        className={cn(
-          "group relative shrink-0 cursor-col-resize overflow-visible bg-transparent transition-[width,opacity,background-color] before:absolute before:inset-y-0 before:-left-1.5 before:-right-1.5 before:content-['']",
-          THREAD_SECONDARY_PANEL_TRANSITION_CLASS,
-          isOpen ? "w-px opacity-100" : "pointer-events-none w-0 opacity-0",
-          isResizing && "bg-accent/20",
-        )}
-        aria-label="Resize thread and secondary panels"
-      >
-        <span
-          className={cn(
-            "pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border/70 transition-colors",
-            isResizing
-              ? "bg-accent-foreground/50"
-              : "group-hover:bg-accent-foreground/35",
-          )}
-        />
-        <span
-          className={cn(
-            "pointer-events-none absolute left-1/2 top-1/2 flex h-8 w-1.5 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-border/70 bg-background/95 opacity-0 shadow-sm transition-opacity",
-            isResizing ? "opacity-100" : "group-hover:opacity-100",
-          )}
-        >
-          <GripVertical className="size-3 text-muted-foreground" />
-        </span>
-      </PanelResizeHandle>
+      <SecondaryPanelResizeHandle isOpen={isOpen} onDragging={handleSecondaryPanelDragging} />
       <Panel
         ref={resizablePanelRef}
         id="thread-detail-secondary-panel"
@@ -706,7 +696,7 @@ export function ThreadSecondaryPanel({
         minSize={THREAD_SECONDARY_PANEL_MIN_SIZE_PERCENT}
         maxSize={THREAD_SECONDARY_PANEL_MAX_SIZE_PERCENT}
         onCollapse={onCollapse}
-        onResize={onResize}
+        onResize={handleSecondaryPanelResize}
         order={2}
         className={cn(
           "min-w-0 overflow-hidden transition-[flex-grow,flex-basis,opacity]",
@@ -717,5 +707,46 @@ export function ThreadSecondaryPanel({
         {asideMarkup}
       </Panel>
     </>
+  );
+}
+
+function SecondaryPanelResizeHandle({
+  isOpen,
+  onDragging,
+}: {
+  isOpen: boolean;
+  onDragging: (isDragging: boolean) => void;
+}) {
+  const isResizing = useAtomValue(threadSecondaryPanelResizingAtom);
+  return (
+    <PanelResizeHandle
+      id="thread-detail-secondary-panel-handle"
+      disabled={!isOpen}
+      onDragging={onDragging}
+      className={cn(
+        "group relative shrink-0 cursor-col-resize overflow-visible bg-transparent transition-[width,opacity,background-color] before:absolute before:inset-y-0 before:-left-1.5 before:-right-1.5 before:content-['']",
+        THREAD_SECONDARY_PANEL_TRANSITION_CLASS,
+        isOpen ? "w-px opacity-100" : "pointer-events-none w-0 opacity-0",
+        isResizing && "bg-accent/20",
+      )}
+      aria-label="Resize thread and secondary panels"
+    >
+      <span
+        className={cn(
+          "pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border/70 transition-colors",
+          isResizing
+            ? "bg-accent-foreground/50"
+            : "group-hover:bg-accent-foreground/35",
+        )}
+      />
+      <span
+        className={cn(
+          "pointer-events-none absolute left-1/2 top-1/2 flex h-8 w-1.5 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-border/70 bg-background/95 opacity-0 shadow-sm transition-opacity",
+          isResizing ? "opacity-100" : "group-hover:opacity-100",
+        )}
+      >
+        <GripVertical className="size-3 text-muted-foreground" />
+      </span>
+    </PanelResizeHandle>
   );
 }

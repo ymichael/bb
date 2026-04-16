@@ -16,6 +16,7 @@ import {
 import { WorkspaceChangesList } from "@/components/shared/WorkspaceChangesList";
 import { ArchiveTimestampAction } from "@/components/shared/ArchiveTimestampAction";
 import { MergeBaseBranchPicker } from "@/components/thread/MergeBaseBranchPicker";
+import { useIsSecondaryPanelOpen } from "@/lib/thread-secondary-panel";
 import { ThreadSecondaryPanel } from "./ThreadSecondaryPanel";
 import { ThreadTimelinePane } from "./ThreadTimelinePane";
 import { DetailCard, DetailRow, LocalhostBadge } from "@bb/ui-core";
@@ -56,7 +57,6 @@ interface ThreadDetailMetadataProps {
   onAssignManager: (parentThreadId: string | null) => void;
   onCopyThreadBranch: () => void;
   onMergeBaseBranchChange: (branch: string) => void;
-  onMergeBaseBranchPickerOpenChange: (open: boolean) => void;
   onUnarchive: () => void;
   parentThreadId?: string;
   projectId: string;
@@ -94,7 +94,6 @@ interface ThreadDetailThreadStorageProps {
 interface ThreadDetailSecondaryContentProps {
   footer: ReactNode;
   header: ReactNode;
-  isSecondaryPanelOpen: boolean;
   threadStorage?: ThreadDetailThreadStorageProps;
   metadata: ThreadDetailMetadataProps;
   secondaryPanel: ThreadSecondaryPanelProps;
@@ -213,7 +212,6 @@ function ThreadMetadataContent({
   onAssignManager,
   onCopyThreadBranch,
   onMergeBaseBranchChange,
-  onMergeBaseBranchPickerOpenChange,
   onUnarchive,
   parentThreadId,
   projectId,
@@ -313,7 +311,6 @@ function ThreadMetadataContent({
                 variant="minimal"
                 loading={isLoadingMergeBaseBranchOptions}
                 onChange={onMergeBaseBranchChange}
-                onOpenChange={onMergeBaseBranchPickerOpenChange}
                 className="max-w-full text-foreground"
               />
             ) : (
@@ -456,7 +453,6 @@ function ThreadStorageContent({
 export function ThreadDetailSecondaryContent({
   footer,
   header,
-  isSecondaryPanelOpen,
   threadStorage,
   metadata,
   secondaryPanel,
@@ -464,6 +460,7 @@ export function ThreadDetailSecondaryContent({
   timeline,
 }: ThreadDetailSecondaryContentProps) {
   const isMobile = useIsMobile();
+  const isSecondaryPanelOpen = useIsSecondaryPanelOpen();
   const didResetOnMobileRef = useRef(false);
 
   useEffect(() => {

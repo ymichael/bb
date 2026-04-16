@@ -24,7 +24,7 @@ import {
   PromptPermissionModePicker,
 } from "@/components/promptbox/PromptExecutionControls";
 import { Button } from "@/components/ui/button";
-import { ScrollToBottomButton } from "@/components/shared/ScrollToBottomButton";
+import { ThreadTimelineScrollToBottomButton } from "./ThreadTimelineScrollToBottomButton";
 import { WorkspaceChangesList } from "@/components/shared/WorkspaceChangesList";
 import {
   getMergeBaseBranchCandidates,
@@ -230,7 +230,6 @@ export interface ComposerQueueProps {
   onSendQueuedImmediately: (messageId: string) => void;
   onScrollToBottom: () => void;
   queuedMessages: readonly ThreadQueuedMessage[];
-  showScrollToBottom: boolean;
 }
 
 export interface ThreadFollowUpComposerProps {
@@ -266,10 +265,7 @@ export function ThreadFollowUpComposer({
   return (
     <div ref={composer.composerRef}>
       <div className="space-y-2">
-        <ScrollToBottomButton
-          visible={queue.showScrollToBottom}
-          onClick={queue.onScrollToBottom}
-        />
+        <ThreadTimelineScrollToBottomButton onClick={queue.onScrollToBottom} />
         {banner.showPromptGitStatsBanner ? (
           <div
             className={cn(

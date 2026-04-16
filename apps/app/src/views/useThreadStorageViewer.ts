@@ -58,8 +58,6 @@ export function useThreadStorageViewer({
   }, [isManagerThread, threadStorageFiles?.files]);
 
   return {
-    effectiveThreadStoragePath,
-    isManagerThread,
     isThreadStorageFilePreviewLoading,
     threadStorageFilePreview,
     threadStorageFilePreviewError,

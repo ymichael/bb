@@ -1,4 +1,5 @@
 import { useCallback, useState, type ComponentType, type ReactNode, type RefObject } from "react";
+import { useActiveSecondaryPanel } from "@/lib/thread-secondary-panel";
 import type {
   PendingInteraction,
   PermissionMode,
@@ -51,12 +52,10 @@ interface ThreadDetailPromptAreaProps {
   environmentHostConnected?: boolean;
   environmentIcon?: ComponentType<{ className?: string }>;
   environmentLabel?: ReactNode;
-  isDiffPanelActive: boolean;
   isEnvironmentActionPending: boolean;
   isLoadingMergeBaseBranchOptions: boolean;
   mergeBaseBranchOptions?: readonly string[];
   onMergeBaseBranchChange?: (branch: string) => void;
-  onMergeBaseBranchPickerOpenChange?: (open: boolean) => void;
   pendingInteractions: readonly PendingInteraction[];
   openDiffFile: (path: string) => void;
   openThreadDiffPanel: () => void;
@@ -69,7 +68,6 @@ interface ThreadDetailPromptAreaProps {
   sendMessage: SendMessageMutationLike;
   showBranchComparisonUi: boolean;
   showPromptGitStatsBanner: boolean;
-  showScrollToBottom: boolean;
   thread: Thread;
   threadDetailRows: TimelineRow[];
   workspaceStatus?: WorkspaceStatus;
@@ -83,12 +81,10 @@ export function ThreadDetailPromptArea({
   environmentHostConnected,
   environmentIcon,
   environmentLabel,
-  isDiffPanelActive,
   isEnvironmentActionPending,
   isLoadingMergeBaseBranchOptions,
   mergeBaseBranchOptions,
   onMergeBaseBranchChange,
-  onMergeBaseBranchPickerOpenChange,
   pendingInteractions,
   openDiffFile,
   openThreadDiffPanel,
@@ -101,11 +97,11 @@ export function ThreadDetailPromptArea({
   sendMessage,
   showBranchComparisonUi,
   showPromptGitStatsBanner,
-  showScrollToBottom,
   thread,
   threadDetailRows,
   workspaceStatus,
 }: ThreadDetailPromptAreaProps) {
+  const isDiffPanelActive = useActiveSecondaryPanel() === "git-diff";
   const { data: defaultExecutionOptions } = useThreadDefaultExecutionOptions(thread.id);
   const { data: queuedMessages = [] } = useThreadDrafts(thread.id);
   const createDraft = useCreateThreadDraft();
@@ -430,9 +426,6 @@ export function ThreadDetailPromptArea({
         onPromptBannerMergeBaseBranchChange: showBranchComparisonUi
           ? onMergeBaseBranchChange
           : undefined,
-        onPromptBannerMergeBaseBranchPickerOpenChange: showBranchComparisonUi
-          ? onMergeBaseBranchPickerOpenChange
-          : undefined,
         onPromptGitStatsBannerClick: canUseGitUi ? openThreadDiffPanel : () => {},
         onToggleChangeListExpanded: () => {
           setIsChangeListExpanded((previousValue) => !previousValue);
@@ -504,7 +497,6 @@ export function ThreadDetailPromptArea({
         onScrollToBottom: scrollToBottom,
         onSendQueuedImmediately: handleSendQueuedImmediately,
         queuedMessages,
-        showScrollToBottom,
       }}
     />
   );

@@ -69,13 +69,9 @@ describe("useThreadStorageViewer", () => {
       expect(result.current.threadStorageFiles?.files).toHaveLength(2);
     });
     await waitFor(() => {
-      expect(result.current.effectiveThreadStoragePath).toBe("docs/alpha.txt");
-    });
-    await waitFor(() => {
       expect(result.current.threadStorageFilePreview?.path).toBe("docs/alpha.txt");
     });
 
-    expect(result.current.isManagerThread).toBe(true);
     expect(api.listThreadStorageFiles).toHaveBeenCalledWith("thread-1");
     expect(api.getThreadStorageFilePreview).toHaveBeenCalledWith(
       "thread-1",
@@ -103,7 +99,7 @@ describe("useThreadStorageViewer", () => {
     );
 
     await waitFor(() => {
-      expect(result.current.effectiveThreadStoragePath).toBe("docs/alpha.txt");
+      expect(result.current.threadStorageFilePreview?.path).toBe("docs/alpha.txt");
     });
 
     act(() => {
@@ -111,7 +107,7 @@ describe("useThreadStorageViewer", () => {
     });
 
     await waitFor(() => {
-      expect(result.current.effectiveThreadStoragePath).toBe("docs/beta.txt");
+      expect(result.current.threadStorageFilePreview?.path).toBe("docs/beta.txt");
     });
 
     act(() => {
@@ -124,7 +120,7 @@ describe("useThreadStorageViewer", () => {
     await waitFor(() => {
       expect(result.current.selectedThreadStoragePath).toBe("docs/beta.txt");
     });
-    expect(result.current.effectiveThreadStoragePath).toBe("docs/beta.txt");
+    expect(result.current.threadStorageFilePreview?.path).toBe("docs/beta.txt");
   });
 
   it("clears invalid selections when the file list no longer includes them", async () => {
@@ -146,7 +142,7 @@ describe("useThreadStorageViewer", () => {
     );
 
     await waitFor(() => {
-      expect(result.current.effectiveThreadStoragePath).toBe("docs/alpha.txt");
+      expect(result.current.threadStorageFilePreview?.path).toBe("docs/alpha.txt");
     });
 
     act(() => {
@@ -167,7 +163,9 @@ describe("useThreadStorageViewer", () => {
     await waitFor(() => {
       expect(result.current.selectedThreadStoragePath).toBeNull();
     });
-    expect(result.current.effectiveThreadStoragePath).toBe("docs/gamma.txt");
+    await waitFor(() => {
+      expect(result.current.threadStorageFilePreview?.path).toBe("docs/gamma.txt");
+    });
   });
 
   it("disables storage queries for standard threads", async () => {
@@ -188,11 +186,6 @@ describe("useThreadStorageViewer", () => {
       { wrapper },
     );
 
-    await waitFor(() => {
-      expect(result.current.isManagerThread).toBe(false);
-    });
-
-    expect(result.current.effectiveThreadStoragePath).toBeNull();
     expect(result.current.selectedThreadStoragePath).toBeNull();
     expect(result.current.threadStorageFiles).toBeUndefined();
     expect(result.current.threadStorageFilePreview).toBeUndefined();

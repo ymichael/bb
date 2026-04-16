@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useRef, type ReactNode } from "react";
-import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
+import { useThreadSecondaryPanelUrlSync } from "@/lib/thread-secondary-panel";
 import { useRequestEnvironmentAction } from "../hooks/mutations/environment-mutations";
 import {
   useMarkThreadRead,
@@ -29,7 +30,6 @@ import { findLatestActivityRowId } from "@bb/ui-core";
 import { useHostDaemon } from "@/hooks/useHostDaemon";
 import { useWorkspaceOpenTargets } from "@/hooks/useWorkspaceOpenTargets";
 import { useHost } from "@/hooks/queries/system-queries";
-import { usePreferredTheme } from "@/hooks/useTheme";
 import { getEnvironmentWorkspaceDisplayIcon } from "@/lib/environment-workspace-display";
 import { useStoredShowAllEvents } from "@/lib/show-all-events-preference";
 import { getGitStatusDisplay } from "@/lib/workspace-status";
@@ -61,8 +61,7 @@ export function ThreadDetailView() {
     projectId: string;
     threadId: string;
   }>();
-  const location = useLocation();
-  const navigate = useNavigate();
+  useThreadSecondaryPanelUrlSync();
   const { data: thread, isLoading, error } = useThread(threadId ?? "", {
     refetchOnMount: "always",
   });
@@ -110,7 +109,6 @@ export function ThreadDetailView() {
   const updateEnvironment = useUpdateEnvironment();
   const updateThread = useUpdateThread();
   const captureTimelineScrollPositionRef = useRef<() => void>(() => {});
-  const preferredTheme = usePreferredTheme();
   const threadDetailRows = useMemo(() => timeline?.rows ?? [], [timeline?.rows]);
   const contextWindowUsage = timeline?.contextWindowUsage ?? undefined;
   const latestActivityRowId = useMemo(
@@ -120,52 +118,20 @@ export function ThreadDetailView() {
   const environmentQuery = useEnvironment(thread?.environmentId);
   const environment = environmentQuery.data;
   const {
-    activeSecondaryPanel,
-    areAllGitDiffFilesCollapsed,
     closeThreadSecondaryPanel,
-    collapsedGitDiffFileKeys,
-    currentGitDiff,
-    gitDiffDisplayMode,
-    gitDiffError,
-    gitDiffSelectOptions,
-    gitDiffSelectValue,
-    gitDiffStatsLabel,
-    gitDiffViewOptions,
-    handleGitDiffDisplayModeChange,
-    handleSecondaryPanelDragging,
-    handleSecondaryPanelResize,
-    isDiffPanelActive,
-    isGitDiffLoading,
+    defaultMergeBaseBranch: resolvedDefaultMergeBaseBranch,
     isLoadingMergeBaseBranchOptions,
-    isSecondaryPanelOpen,
-    isSecondaryPanelResizing,
-    isParsingGitDiffFiles,
-    isPreparingGitDiff,
-    loadingGitDiffFileKeys,
     mergeBaseBranchOptions,
-    onGitDiffSelectionChange,
-    onMergeBaseBranchPickerOpenChange,
     openDiffFile,
     openThreadDiffPanel,
     openThreadSecondaryPanel,
-    parsedGitDiffFileEntries,
-    queuedGitDiffFileRenderKeys,
-    secondaryPanelRef,
-    secondaryResizablePanelRef,
     selectedMergeBaseBranch,
-    setGitDiffFileRef,
     setSelectedMergeBaseBranch,
-    threadGitDiff,
-    toggleAllGitDiffFilesCollapsed,
-    toggleGitDiffFileCollapsed,
     toggleThreadSecondaryPanel,
   } = useGitDiffPanel({
-    location,
-    navigate,
     onBeforePanelChange: () => {
       captureTimelineScrollPositionRef.current();
     },
-    preferredTheme,
     defaultMergeBaseBranch:
       environment?.mergeBaseBranch ?? environment?.defaultBranch ?? undefined,
     environmentId: thread?.environmentId ?? undefined,
@@ -212,13 +178,11 @@ export function ThreadDetailView() {
     promptComposerRef,
     scrollToBottom,
     setContainerRef,
-    showScrollToBottom,
     toolGroupMessagesById,
   } = useThreadTimelineController({
     threadId,
     threadDetailRows,
     threadStatus: thread?.status,
-    isSecondaryPanelOpen,
     loadToolGroupMessages: (args) =>
       timelineToolDetails.mutateAsync({
         ...args,
@@ -425,13 +389,6 @@ export function ThreadDetailView() {
       }
     />
   );
-  const effectiveSecondaryPanel =
-    !canUseGitUi && activeSecondaryPanel === "git-diff"
-      ? "thread-info"
-      : !isManagerThread && activeSecondaryPanel === "thread-storage"
-        ? "thread-info"
-        : activeSecondaryPanel;
-  const hasParsedGitDiffFiles = parsedGitDiffFileEntries.length > 0;
   const workspaceOpenPath = resolveThreadWorkspaceOpenPath({
     canOpenWorkspace: openWorkspace !== null,
     environment,
@@ -455,7 +412,6 @@ export function ThreadDetailView() {
       actionsMenu={threadActionsMenu}
       isManagedThread={Boolean(parentThreadId)}
       isManagerThread={isManagerThread}
-      isSecondaryPanelOpen={isSecondaryPanelOpen}
       isThreadGitActionPending={gitActions.isThreadGitActionPending}
       onOpenThreadGitAction={gitActions.threadGitActionDialog.onOpen}
       onToggleSecondaryPanel={toggleThreadSecondaryPanel}
@@ -473,15 +429,11 @@ export function ThreadDetailView() {
       environmentHostConnected={environmentHost ? environmentHost.status === "connected" : undefined}
       environmentIcon={threadEnvironmentIcon ?? undefined}
       environmentLabel={threadEnvironmentValue}
-      isDiffPanelActive={isDiffPanelActive}
       isEnvironmentActionPending={requestEnvironmentAction.isPending}
       isLoadingMergeBaseBranchOptions={isLoadingMergeBaseBranchOptions}
       mergeBaseBranchOptions={mergeBaseBranchOptions}
       onMergeBaseBranchChange={
         showBranchComparisonUi ? handleMergeBaseBranchChange : undefined
-      }
-      onMergeBaseBranchPickerOpenChange={
-        showBranchComparisonUi ? onMergeBaseBranchPickerOpenChange : undefined
       }
       openDiffFile={openDiffFile}
       openThreadDiffPanel={openThreadDiffPanel}
@@ -494,7 +446,6 @@ export function ThreadDetailView() {
       sendMessage={sendMessage}
       showBranchComparisonUi={showBranchComparisonUi}
       showPromptGitStatsBanner={showPromptGitStatsBanner}
-      showScrollToBottom={showScrollToBottom}
       pendingInteractions={pendingInteractions}
       thread={thread}
       threadDetailRows={threadDetailRows}
@@ -522,7 +473,6 @@ export function ThreadDetailView() {
       <ThreadDetailSecondaryContent
         footer={composerFooter}
         header={timelineHeader}
-        isSecondaryPanelOpen={isSecondaryPanelOpen}
         threadStorage={threadStorage}
         metadata={{
           canAssignToManager,
@@ -537,7 +487,6 @@ export function ThreadDetailView() {
             void handleCopyThreadBranch();
           },
           onMergeBaseBranchChange: handleMergeBaseBranchChange,
-          onMergeBaseBranchPickerOpenChange: onMergeBaseBranchPickerOpenChange,
           onUnarchive: () => {
             unarchiveThread.mutate({ id: thread.id });
           },
@@ -567,28 +516,12 @@ export function ThreadDetailView() {
           workspaceStatusFilesLabel: workspaceChangedFilesSection?.label,
         }}
         secondaryPanel={{
-          activePanel: effectiveSecondaryPanel,
-          areAllGitDiffFilesCollapsed: canUseGitUi ? areAllGitDiffFilesCollapsed : true,
-          collapsedGitDiffFileKeys,
-          currentGitDiff: canUseGitUi ? currentGitDiff : "",
-          gitDiffDisplayMode,
-          gitDiffError: canUseGitUi ? gitDiffError : undefined,
-          gitDiffSelectOptions,
-          gitDiffSelectValue,
-          gitDiffStatsLabel: canUseGitUi ? gitDiffStatsLabel : "",
-          gitDiffViewOptions,
-          hasParsedGitDiffFiles: canUseGitUi ? hasParsedGitDiffFiles : false,
-          isGitDiffLoading: canUseGitUi ? isGitDiffLoading : false,
-          isOpen: isSecondaryPanelOpen,
-          isParsingGitDiffFiles: canUseGitUi ? isParsingGitDiffFiles : false,
-          isPreparingGitDiff: canUseGitUi ? isPreparingGitDiff : false,
-          isResizing: isSecondaryPanelResizing,
-          loadingGitDiffFileKeys,
+          canUseGitUi,
+          defaultMergeBaseBranch: resolvedDefaultMergeBaseBranch,
+          environmentId: thread.environmentId ?? undefined,
+          isManagerThread,
           onClose: closeThreadSecondaryPanel,
           onCollapse: closeThreadSecondaryPanel,
-          onDragging: handleSecondaryPanelDragging,
-          onGitDiffDisplayModeChange: handleGitDiffDisplayModeChange,
-          onGitDiffSelectionChange: onGitDiffSelectionChange,
           onOpenFile:
             environment?.path && threadEnvironmentIsLocal
               ? (relativePath: string) => {
@@ -597,17 +530,8 @@ export function ThreadDetailView() {
                 }
               : undefined,
           onPanelChange: openThreadSecondaryPanel,
-          onResize: handleSecondaryPanelResize,
-          onToggleAllFiles: toggleAllGitDiffFilesCollapsed,
-          onToggleGitDiffFileCollapsed: toggleGitDiffFileCollapsed,
-          panelRef: secondaryPanelRef,
-          parsedGitDiffFileEntries: canUseGitUi ? parsedGitDiffFileEntries : [],
-          queuedGitDiffFileRenderKeys,
-          resizablePanelRef: secondaryResizablePanelRef,
-          setGitDiffFileRef,
           showGitDiffTab: canUseGitUi,
           showThreadStorageTab: thread.type === "manager",
-          threadGitDiff: canUseGitUi ? threadGitDiff : undefined,
           threadId: thread.id,
         }}
         showThreadMetadata={showThreadMetadata}
@@ -651,13 +575,9 @@ export function ThreadDetailView() {
           onMergeBaseBranchChange={
             showBranchComparisonUi ? handleMergeBaseBranchChange : undefined
           }
-          onMergeBaseBranchPickerOpenChange={
-            showBranchComparisonUi ? onMergeBaseBranchPickerOpenChange : undefined
-          }
           onOpenChange={(open) => {
             if (!open) {
               gitActions.threadGitActionDialog.onClose();
-              onMergeBaseBranchPickerOpenChange(false);
             }
           }}
           onCommit={gitActions.handleCommitThread}

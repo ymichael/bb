@@ -154,7 +154,6 @@ describe("ThreadDetailPromptArea", () => {
       <ThreadDetailPromptArea
         canExpandPromptChangeList={false}
         canUseGitUi={false}
-        isDiffPanelActive={false}
         isEnvironmentActionPending={false}
         isLoadingMergeBaseBranchOptions={false}
         pendingInteractions={[createPendingInteraction()]}
@@ -170,7 +169,6 @@ describe("ThreadDetailPromptArea", () => {
         }}
         showBranchComparisonUi={false}
         showPromptGitStatsBanner={false}
-        showScrollToBottom={false}
         thread={createThread()}
         threadDetailRows={[]}
       />,

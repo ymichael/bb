@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { PanelBottom, PanelRight } from "lucide-react";
+import { useIsSecondaryPanelOpen } from "@/lib/thread-secondary-panel";
 import { Button } from "@/components/ui/button";
 import { SplitButton } from "@/components/ui/split-button";
 import { AppPageHeader, HEADER_ICON_BUTTON_CLASS } from "@/components/layout/AppPageHeader";
@@ -20,7 +21,6 @@ interface ThreadDetailHeaderProps {
   actionsMenu: ReactNode;
   isManagedThread: boolean;
   isManagerThread: boolean;
-  isSecondaryPanelOpen: boolean;
   isThreadGitActionPending: boolean;
   onOpenThreadGitAction: (target: ThreadGitActionDialogTarget) => void;
   onToggleSecondaryPanel: () => void;
@@ -33,7 +33,6 @@ export function ThreadDetailHeader({
   actionsMenu,
   isManagedThread,
   isManagerThread,
-  isSecondaryPanelOpen,
   isThreadGitActionPending,
   onOpenThreadGitAction,
   onToggleSecondaryPanel,
@@ -43,6 +42,7 @@ export function ThreadDetailHeader({
 }: ThreadDetailHeaderProps) {
   const [primaryAction, ...secondaryActions] = threadHeaderGitActions;
   const isMobile = useIsMobile();
+  const isSecondaryPanelOpen = useIsSecondaryPanelOpen();
   const SecondaryPanelIcon = isMobile ? PanelBottom : PanelRight;
 
   const center = (

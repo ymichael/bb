@@ -5,6 +5,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { useSetAtom } from "jotai";
 import type {
   ThreadStatus,
   TimelineRow,
@@ -12,6 +13,7 @@ import type {
   ViewMessage,
 } from "@bb/domain";
 import { useResizeObserver } from "usehooks-ts";
+import { threadTimelineShowScrollToBottomAtom } from "./threadTimelineAtoms";
 import {
   captureTimelineScrollAnchorFromViewport,
   getTimelineAnchorOffsetDelta,
@@ -55,7 +57,6 @@ interface UseThreadTimelineControllerParams {
   threadId?: string;
   threadDetailRows: TimelineRow[];
   threadStatus?: ThreadStatus;
-  isSecondaryPanelOpen: boolean;
   loadToolGroupMessages: (
     args: LoadToolGroupMessagesArgs,
   ) => Promise<{ messages: ViewMessage[] }>;
@@ -154,7 +155,6 @@ export function useThreadTimelineController({
   threadId,
   threadDetailRows,
   threadStatus,
-  isSecondaryPanelOpen,
   loadToolGroupMessages,
 }: UseThreadTimelineControllerParams) {
   const [loadingToolGroupIds, setLoadingToolGroupIds] = useState<Set<string>>(
@@ -166,8 +166,7 @@ export function useThreadTimelineController({
   const [containerElement, setContainerElement] = useState<HTMLDivElement | null>(
     null,
   );
-  const [isStickingToBottom, setIsStickingToBottom] = useState(true);
-  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
+  const setShowScrollToBottom = useSetAtom(threadTimelineShowScrollToBottomAtom);
   const containerRef = useRef<HTMLDivElement>(null!);
   const promptComposerRef = useRef<HTMLDivElement>(null!);
   const modeRef = useRef<TimelineScrollMode>("pinned_bottom");
@@ -177,7 +176,6 @@ export function useThreadTimelineController({
   const layoutTransitionUntilRef = useRef(0);
   const userScrollIntentUntilRef = useRef(0);
   const previousThreadStatusRef = useRef<ThreadStatus | undefined>(undefined);
-  const previousSecondaryPanelOpenRef = useRef<boolean | null>(null);
   const previousComposerHeightRef = useRef<number | null>(null);
   const previousContainerSizeRef = useRef<{
     width: number;
@@ -201,11 +199,6 @@ export function useThreadTimelineController({
       preserveReadingHistoryDuringReconcile,
       source,
     });
-    const nextIsStickingToBottom = nextMode === "pinned_bottom";
-
-    setIsStickingToBottom((current) =>
-      current === nextIsStickingToBottom ? current : nextIsStickingToBottom,
-    );
     setShowScrollToBottom((current) => {
       const next = shouldShowTimelineScrollToBottom(snapshot);
       return current === next ? current : next;
@@ -307,7 +300,6 @@ export function useThreadTimelineController({
   const scrollToBottom = useCallback(() => {
     const container = containerElement;
     modeRef.current = "pinned_bottom";
-    setIsStickingToBottom(true);
     setShowScrollToBottom(false);
     if (container) {
       scrollContainerToBottom(container);
@@ -380,7 +372,6 @@ export function useThreadTimelineController({
     layoutTransitionUntilRef.current = 0;
     userScrollIntentUntilRef.current = 0;
     previousThreadStatusRef.current = undefined;
-    previousSecondaryPanelOpenRef.current = null;
     previousComposerHeightRef.current = null;
     previousContainerSizeRef.current = null;
     scrollToBottom();
@@ -395,25 +386,14 @@ export function useThreadTimelineController({
       previousStatus: previousThreadStatusRef.current,
       nextStatus: threadStatus,
     });
-    const secondaryPanelChanged =
-      previousSecondaryPanelOpenRef.current !== null &&
-      previousSecondaryPanelOpenRef.current !== isSecondaryPanelOpen;
-    // Always advance these snapshots before the guard below so the next render
-    // compares against the latest observed status/panel state.
     previousThreadStatusRef.current = threadStatus;
-    previousSecondaryPanelOpenRef.current = isSecondaryPanelOpen;
 
-    const shouldTrackLayoutTransition =
-      shouldTrackStatusTransition || secondaryPanelChanged;
-    if (shouldTrackLayoutTransition) {
-      layoutTransitionUntilRef.current =
-        Date.now() + TIMELINE_LAYOUT_TRANSITION_SETTLE_MS;
-    }
-
-    if (!shouldTrackLayoutTransition) {
+    if (!shouldTrackStatusTransition) {
       return;
     }
 
+    layoutTransitionUntilRef.current =
+      Date.now() + TIMELINE_LAYOUT_TRANSITION_SETTLE_MS;
     reconcileScrollPosition();
 
     if (typeof window === "undefined") {
@@ -431,7 +411,6 @@ export function useThreadTimelineController({
     reconcileScrollPosition,
     scheduleReconcile,
     threadStatus,
-    isSecondaryPanelOpen,
   ]);
 
   useLayoutEffect(() => {
@@ -552,12 +531,10 @@ export function useThreadTimelineController({
     captureTimelineScrollPosition,
     handleLoadToolGroupMessages,
     handleTimelineScroll,
-    isStickingToBottom,
     loadingToolGroupIds,
     promptComposerRef,
     scrollToBottom,
     setContainerRef,
-    showScrollToBottom,
     toolGroupMessagesById,
   };
 }
