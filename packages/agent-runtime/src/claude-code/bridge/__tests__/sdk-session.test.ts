@@ -124,6 +124,29 @@ describe("SdkSession", () => {
     );
   });
 
+  it("forwards reasoning effort to the SDK when configured", () => {
+    const onMessage = vi.fn();
+    const onDone = vi.fn();
+    const session = new SdkSession(
+      {
+        ...defaultOptions,
+        effort: "xhigh",
+      },
+      onMessage,
+      onDone,
+    );
+
+    session.start();
+
+    expect(queryMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        options: expect.objectContaining({
+          effort: "xhigh",
+        }),
+      }),
+    );
+  });
+
   it("passes non-bypass permission modes through without the dangerous skip flag", () => {
     const onMessage = vi.fn();
     const onDone = vi.fn();

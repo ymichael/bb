@@ -605,7 +605,7 @@ describe("CLI command output contracts", () => {
         "--provider",
         "claude-code",
         "--model",
-        "claude-opus-4-6",
+        "claude-opus-4-7",
         "--reasoning-level",
         "high",
       ],
@@ -618,7 +618,7 @@ describe("CLI command output contracts", () => {
       json: {
         environment: { type: "host", hostId: "host-test-001" },
         origin: "cli",
-        model: "claude-opus-4-6",
+        model: "claude-opus-4-7",
         name: "Manager",
         providerId: "claude-code",
         reasoningLevel: "high",
@@ -661,7 +661,7 @@ describe("CLI command output contracts", () => {
         "--provider",
         "claude-code",
         "--model",
-        "claude-opus-4-6",
+        "claude-opus-4-7",
       ],
       (program) =>
         registerManagerCommands(program, () => "http://server"),
@@ -672,7 +672,7 @@ describe("CLI command output contracts", () => {
       json: {
         environment: { type: "host", hostId: "host-test-001" },
         origin: "cli",
-        model: "claude-opus-4-6",
+        model: "claude-opus-4-7",
         name: "Manager",
         providerId: "claude-code",
       },
@@ -1270,6 +1270,33 @@ describe("CLI command output contracts", () => {
       "Model  Name   Default\n-----  -----  -------\ngpt-5  GPT-5  *",
       "",
     ]);
+  });
+
+  it("bb provider models forwards the selected model context", async () => {
+    const get = vi.fn(async () => []);
+    createClientMock.mockReturnValue(asServerClient({
+      api: {
+        v1: {
+          system: {
+            models: {
+              $get: get,
+            },
+          },
+        },
+      },
+    }));
+
+    await runCommand(
+      ["provider", "models", "claude-code", "--selected-model", "claude-opus-4-6"],
+      (program) => registerProviderCommands(program, () => "http://server"),
+    );
+
+    expect(get).toHaveBeenCalledWith({
+      query: {
+        providerId: "claude-code",
+        selectedModel: "claude-opus-4-6",
+      },
+    });
   });
 
   it("bb thread spawn --json prints the raw thread", async () => {

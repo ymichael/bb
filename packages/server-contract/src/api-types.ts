@@ -490,6 +490,7 @@ export const systemModelsQuerySchema = z.object({
   providerId: z.string().min(1),
   hostId: z.string().min(1),
   environmentId: z.string().min(1),
+  selectedModel: z.string().min(1),
 }).partial();
 export type SystemModelsQuery = z.infer<typeof systemModelsQuerySchema>;
 

@@ -373,8 +373,8 @@ export async function createHostDaemonApp(
     readPersistedRuntimeMaterial: () =>
       readRuntimeMaterialState(options.dataDir),
     runtimeManager,
-    listModels: (providerId) =>
-      defaultListModels(providerId, {
+    listModels: (args) =>
+      defaultListModels(args, {
         bridgeBundleDir: options.bridgeBundleDir,
       }),
     resolveInteractiveRequest: async (request) => {

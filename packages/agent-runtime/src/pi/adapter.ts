@@ -200,8 +200,8 @@ const piEventTypeSchema = z.object({
   type: z.enum([
     "agent_end",
     "agent_start",
-    "auto_compaction_end",
-    "auto_compaction_start",
+    "compaction_end",
+    "compaction_start",
     "message_update",
     "tool_execution_end",
     "tool_execution_start",
@@ -246,12 +246,12 @@ const piAgentEndEventSchema = z.object({
   messages: z.array(piConversationMessageSchema),
 }).passthrough();
 
-const piAutoCompactionStartEventSchema = z.object({
-  type: z.literal("auto_compaction_start"),
+const piCompactionStartEventSchema = z.object({
+  type: z.literal("compaction_start"),
 }).passthrough();
 
-const piAutoCompactionEndEventSchema = z.object({
-  type: z.literal("auto_compaction_end"),
+const piCompactionEndEventSchema = z.object({
+  type: z.literal("compaction_end"),
 }).passthrough();
 
 const piMessageUpdateEventSchema = z.object({
@@ -486,7 +486,7 @@ type PiModelContextWindowResolver = (
 ) => number | null;
 
 function createPiModelRegistry(): ModelRegistry {
-  return new ModelRegistry(AuthStorage.create());
+  return ModelRegistry.create(AuthStorage.create());
 }
 
 function buildPiModelContextWindowLookup(
@@ -755,8 +755,8 @@ export function createPiProviderAdapter(
         break;
       }
 
-      case "auto_compaction_start": {
-        if (!piAutoCompactionStartEventSchema.safeParse(event).success) {
+      case "compaction_start": {
+        if (!piCompactionStartEventSchema.safeParse(event).success) {
           return buildUnexpectedPiSdkEvent(event, context);
         }
         const turnId = turnState.getCurrentOrLastTurnId({ state });
@@ -773,8 +773,8 @@ export function createPiProviderAdapter(
         break;
       }
 
-      case "auto_compaction_end": {
-        if (!piAutoCompactionEndEventSchema.safeParse(event).success) {
+      case "compaction_end": {
+        if (!piCompactionEndEventSchema.safeParse(event).success) {
           return buildUnexpectedPiSdkEvent(event, context);
         }
         const turnId = turnState.getCurrentOrLastTurnId({ state });
@@ -1037,15 +1037,13 @@ export function createPiProviderAdapter(
           return {
             kind: "request",
             method: "model/list",
-            params: {},
+            params: command.selectedModel
+              ? { selectedModel: command.selectedModel }
+              : {},
           };
         case "thread/start": {
           finishOpenProviderTurn({ registry: turnState, threadId: command.threadId });
           const config = buildPiConfig(command.threadId, command.options);
-          const finalConfig: Record<string, unknown> = config ? { ...config } : {};
-          if (command.options?.reasoningLevel) {
-            finalConfig.model_reasoning_effort = command.options.reasoningLevel;
-          }
           const dynamicTools = command.dynamicTools?.map((t) => ({
             name: t.name,
             description: t.description,
@@ -1058,8 +1056,11 @@ export function createPiProviderAdapter(
               threadId: command.threadId,
               cwd: command.cwd,
               ...resolvePiInstructionOverrides(command),
-              ...(Object.keys(finalConfig).length > 0 ? { config: finalConfig } : {}),
+              ...(config ? { config } : {}),
               ...(command.options?.model ? { model: command.options.model } : {}),
+              ...(command.options?.reasoningLevel
+                ? { reasoningLevel: command.options.reasoningLevel }
+                : {}),
               ...(dynamicTools && dynamicTools.length > 0 ? { dynamicTools } : {}),
             },
           };
@@ -1068,10 +1069,6 @@ export function createPiProviderAdapter(
           finishOpenProviderTurn({ registry: turnState, threadId: command.threadId });
           const threadId = command.providerThreadId ?? command.threadId;
           const config = buildPiConfig(command.threadId, command.options);
-          const finalConfig: Record<string, unknown> = config ? { ...config } : {};
-          if (command.options?.reasoningLevel) {
-            finalConfig.model_reasoning_effort = command.options.reasoningLevel;
-          }
           const dynamicTools = command.dynamicTools?.map((t) => ({
             name: t.name,
             description: t.description,
@@ -1084,8 +1081,11 @@ export function createPiProviderAdapter(
               threadId,
               cwd: command.cwd,
               ...resolvePiInstructionOverrides(command),
-              ...(Object.keys(finalConfig).length > 0 ? { config: finalConfig } : {}),
+              ...(config ? { config } : {}),
               ...(command.options?.model ? { model: command.options.model } : {}),
+              ...(command.options?.reasoningLevel
+                ? { reasoningLevel: command.options.reasoningLevel }
+                : {}),
               ...(dynamicTools && dynamicTools.length > 0 ? { dynamicTools } : {}),
             },
           };

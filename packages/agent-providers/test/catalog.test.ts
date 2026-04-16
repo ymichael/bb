@@ -88,7 +88,7 @@ describe("agent provider catalog", () => {
 
   it("exposes pi default model declarations", () => {
     expect(PI_DEFAULT_MODEL_PER_PROVIDER["openai-codex"]).toBe("gpt-5.4");
-    expect(resolvePiDefaultModelId("anthropic")).toBe("claude-opus-4-6");
+    expect(resolvePiDefaultModelId("anthropic")).toBe("claude-opus-4-7");
     expect(getCloudAuthProvider("claude-code").runtimeConsumers).toContainEqual({
       authConsumerId: "anthropic",
       runtimeProviderId: "pi",

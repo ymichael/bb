@@ -919,13 +919,14 @@ describe("public environment and system routes", () => {
       });
 
       const modelsPromise = harness.app.request(
-        `/api/v1/system/models?hostId=${host.id}&providerId=codex`,
+        `/api/v1/system/models?hostId=${host.id}&providerId=codex&selectedModel=legacy-model`,
       );
       const modelsCommand = await waitForQueuedCommand(
         harness,
         ({ command }) =>
           command.type === "provider.list_models" &&
-          command.providerId === "codex",
+          command.providerId === "codex" &&
+          command.selectedModel === "legacy-model",
       );
       await reportQueuedCommandSuccess(harness, modelsCommand, {
         models: [

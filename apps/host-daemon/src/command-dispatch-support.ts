@@ -47,7 +47,7 @@ export interface CommandDispatchOptions {
     threadId: string;
   }) => void;
   eventSink: EventSink;
-  listModels?: (providerId: string) => Promise<AvailableModel[]>;
+  listModels?: (args: ListModelsDispatchArgs) => Promise<AvailableModel[]>;
   listProviders?: () => ProviderInfo[];
   resolveInteractiveRequest?: (
     request: InteractiveResolveCommandInput,
@@ -101,13 +101,18 @@ export async function shutdownDefaultListModelsRuntimes(): Promise<void> {
   );
 }
 
+export interface ListModelsDispatchArgs {
+  providerId: string;
+  selectedModel?: string;
+}
+
 export async function defaultListModels(
-  providerId: string,
+  args: ListModelsDispatchArgs,
   options: DefaultListModelsOptions = {},
 ): Promise<AvailableModel[]> {
   const runtime = getDefaultModelListRuntime(options);
   try {
-    return await runtime.listModels({ providerId });
+    return await runtime.listModels(args);
   } catch (error) {
     if (error instanceof Error && error.message.startsWith("Unsupported provider")) {
       throw new CommandDispatchError("unknown_provider", error.message);

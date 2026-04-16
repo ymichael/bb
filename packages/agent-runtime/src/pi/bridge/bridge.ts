@@ -13,8 +13,10 @@ import {
   jsonRpcEnvelopeSchema,
   type BridgeToolCallRequest,
 } from "../../shared/bridge-tool-calls.js";
-import type {
-  ThreadEventContextWindowUsage,
+import {
+  reasoningLevelValues,
+  type ReasoningLevel,
+  type ThreadEventContextWindowUsage,
 } from "@bb/domain";
 import type {
   AgentSessionEvent,
@@ -38,6 +40,13 @@ interface PiInstructionOverrideParams {
   appendSystemPrompt?: string;
 }
 
+interface BuildPiSessionOptionsParams extends PiInstructionOverrideParams {
+  cwd: string;
+  model?: string;
+  sessionPath?: string;
+  thinkingLevel?: ReasoningLevel;
+}
+
 function hasAtMostOnePiInstructionOverride(
   params: PiInstructionOverrideParams,
 ): boolean {
@@ -52,6 +61,8 @@ const piInstructionOverrideSchemaOptions = {
   path: ["appendSystemPrompt"],
 };
 
+const piReasoningLevelSchema = z.enum(reasoningLevelValues);
+
 const piThreadStartParamsSchema = z.object({
   threadId: z.string().optional(),
   cwd: z.string(),
@@ -59,6 +70,7 @@ const piThreadStartParamsSchema = z.object({
   appendSystemPrompt: z.string().optional(),
   config: z.record(z.string(), z.unknown()).optional(),
   model: z.string().optional(),
+  reasoningLevel: piReasoningLevelSchema.optional(),
   input: z.array(z.unknown()).optional(),
   dynamicTools: z.array(z.object({
     name: z.string(),
@@ -75,6 +87,7 @@ const piThreadResumeParamsSchema = z.object({
   appendSystemPrompt: z.string().optional(),
   config: z.record(z.string(), z.unknown()).optional(),
   model: z.string().optional(),
+  reasoningLevel: piReasoningLevelSchema.optional(),
   dynamicTools: z.array(z.object({
     name: z.string(),
     description: z.string(),
@@ -91,7 +104,9 @@ const piCommandSchema = z.discriminatedUnion("method", [
   }),
   z.object({
     method: z.literal("model/list"),
-    params: z.object({}),
+    params: z.object({
+      selectedModel: z.string().min(1).optional(),
+    }),
   }),
   z.object({
     method: z.literal("thread/start"),
@@ -411,13 +426,7 @@ function buildSessionEnv(envOverrides: Record<string, string>): NodeJS.ProcessEn
 }
 
 function buildSessionOptions(
-  params: {
-    cwd: string;
-    model?: string;
-    baseInstructions?: string;
-    appendSystemPrompt?: string;
-    sessionPath?: string;
-  },
+  params: BuildPiSessionOptionsParams,
   env: NodeJS.ProcessEnv,
   threadId: string,
 ): PiSdkSessionOptions {
@@ -430,6 +439,7 @@ function buildSessionOptions(
     sessionFilePath,
     systemPrompt: params.baseInstructions,
     appendSystemPrompt: params.appendSystemPrompt,
+    ...(params.thinkingLevel ? { thinkingLevel: params.thinkingLevel } : {}),
   };
 }
 
@@ -472,7 +482,7 @@ async function handleRequest(request: PiCommand & { id: string | number }): Prom
       sendResult(request.id, { ok: true });
       break;
     case "model/list":
-      await handleModelList(request.id);
+      await handleModelList(request.id, request.params);
       break;
     case "thread/start":
       await handleThreadStart(request.id, request.params);
@@ -497,10 +507,32 @@ type ThreadResumeParams = Extract<PiCommand, { method: "thread/resume" }>["param
 type TurnStartParams = Extract<PiCommand, { method: "turn/start" }>["params"];
 type TurnSteerParams = Extract<PiCommand, { method: "turn/steer" }>["params"];
 type ThreadStopParams = Extract<PiCommand, { method: "thread/stop" }>["params"];
+type ModelListParams = Extract<PiCommand, { method: "model/list" }>["params"];
+type PiSessionParams = ThreadStartParams | ThreadResumeParams;
 
-async function handleModelList(id: string | number): Promise<void> {
+function buildPiSessionParams(
+  params: PiSessionParams,
+): BuildPiSessionOptionsParams {
+  return {
+    cwd: params.cwd,
+    ...(params.model ? { model: params.model } : {}),
+    ...("sessionPath" in params && params.sessionPath
+      ? { sessionPath: params.sessionPath }
+      : {}),
+    ...(params.baseInstructions ? { baseInstructions: params.baseInstructions } : {}),
+    ...(params.appendSystemPrompt ? { appendSystemPrompt: params.appendSystemPrompt } : {}),
+    ...(params.reasoningLevel ? { thinkingLevel: params.reasoningLevel } : {}),
+  };
+}
+
+async function handleModelList(
+  id: string | number,
+  params: ModelListParams,
+): Promise<void> {
   try {
-    sendResult(id, await listPiBridgeModels());
+    sendResult(id, await listPiBridgeModels({
+      selectedModel: params.selectedModel,
+    }));
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     sendError(id, -32000, message);
@@ -524,7 +556,11 @@ async function handleThreadStart(
 
   const envOverrides = extractEnvOverrides(params.config);
   const sessionEnv = buildSessionEnv(envOverrides);
-  const sessionOptions = buildSessionOptions(params, sessionEnv, threadId);
+  const sessionOptions = buildSessionOptions(
+    buildPiSessionParams(params),
+    sessionEnv,
+    threadId,
+  );
   applyDynamicTools(sessionOptions, params.dynamicTools, threadId);
 
   const sessionSerial = nextSessionSerial();
@@ -569,7 +605,11 @@ async function handleThreadResume(
 
   const envOverrides = extractEnvOverrides(params.config);
   const sessionEnv = buildSessionEnv(envOverrides);
-  const sessionOptions = buildSessionOptions(params, sessionEnv, threadId);
+  const sessionOptions = buildSessionOptions(
+    buildPiSessionParams(params),
+    sessionEnv,
+    threadId,
+  );
   applyDynamicTools(sessionOptions, params.dynamicTools, threadId);
 
   const sessionSerial = nextSessionSerial();

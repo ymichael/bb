@@ -9,6 +9,7 @@ import {
   MEDIUM_REASONING_EFFORT,
   XHIGH_REASONING_EFFORT,
 } from "../shared/adapter-utils.js";
+import { includeSelectedOnlyModels } from "../shared/model-list-visibility.js";
 
 export interface PiCatalogModel {
   id: string;
@@ -23,6 +24,7 @@ export interface BuildPiAvailableModelsArgs<TProvider extends string> {
   providers: TProvider[];
   getModels: (provider: TProvider) => PiCatalogModel[];
   hasAuth: (provider: TProvider) => boolean;
+  selectedModel?: string;
 }
 
 /**
@@ -34,6 +36,51 @@ export interface BuildPiAvailableModelsArgs<TProvider extends string> {
  * https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/src/core/model-resolver.ts
  */
 const DATE_SUFFIX_PATTERN = /-\d{8}$/;
+
+const LEGACY_OPUS_REASONING_EFFORTS: ModelReasoningEffort[] = [
+  LOW_REASONING_EFFORT,
+  MEDIUM_REASONING_EFFORT,
+  HIGH_REASONING_EFFORT,
+];
+
+const PI_SELECTED_ONLY_MODELS: readonly AvailableModel[] = [
+  {
+    id: "anthropic/claude-opus-4-6",
+    model: "anthropic/claude-opus-4-6",
+    displayName: "Claude Opus 4.6 (Legacy)",
+    description: "Legacy Anthropic model via Pi retained for existing selections",
+    supportedReasoningEfforts: LEGACY_OPUS_REASONING_EFFORTS,
+    defaultReasoningEffort: "medium",
+    isDefault: false,
+  },
+  {
+    id: "anthropic/claude-opus-4-6[1m]",
+    model: "anthropic/claude-opus-4-6[1m]",
+    displayName: "Claude Opus 4.6 (1M, Legacy)",
+    description: "Legacy Anthropic 1M model via Pi retained for existing selections",
+    supportedReasoningEfforts: LEGACY_OPUS_REASONING_EFFORTS,
+    defaultReasoningEffort: "medium",
+    isDefault: false,
+  },
+  {
+    id: "amazon-bedrock/us.anthropic.claude-opus-4-6",
+    model: "amazon-bedrock/us.anthropic.claude-opus-4-6",
+    displayName: "Claude Opus 4.6 (Legacy)",
+    description: "Legacy Amazon Bedrock model via Pi retained for existing selections",
+    supportedReasoningEfforts: LEGACY_OPUS_REASONING_EFFORTS,
+    defaultReasoningEffort: "medium",
+    isDefault: false,
+  },
+  {
+    id: "vercel-ai-gateway/anthropic/claude-opus-4.6",
+    model: "vercel-ai-gateway/anthropic/claude-opus-4.6",
+    displayName: "Claude Opus 4.6 (Legacy)",
+    description: "Legacy Vercel AI Gateway model via Pi retained for existing selections",
+    supportedReasoningEfforts: LEGACY_OPUS_REASONING_EFFORTS,
+    defaultReasoningEffort: "medium",
+    isDefault: false,
+  },
+];
 
 function isModelAlias(id: string): boolean {
   if (id.endsWith("-latest")) return true;
@@ -49,10 +96,10 @@ export function buildPiAvailableModels<TProvider extends string>(
       continue;
     }
     for (const model of args.getModels(provider)) {
-      if (!isModelAlias(model.id)) {
+      const canonicalId = toCanonicalPiModelId(provider, model.id);
+      if (!isModelAlias(model.id) && canonicalId !== args.selectedModel) {
         continue;
       }
-      const canonicalId = toCanonicalPiModelId(provider, model.id);
       const supportedReasoningEfforts = getPiReasoningEfforts(model);
       models.push({
         id: canonicalId,
@@ -67,9 +114,14 @@ export function buildPiAvailableModels<TProvider extends string>(
   }
 
   const defaultId = resolveDefaultPiModelId(models);
-  return models.map((model) =>
+  const activeModels = models.map((model) =>
     model.id === defaultId ? { ...model, isDefault: true } : model,
   );
+  return includeSelectedOnlyModels({
+    activeModels,
+    selectedModel: args.selectedModel,
+    selectedOnlyModels: PI_SELECTED_ONLY_MODELS,
+  });
 }
 
 export function toCanonicalPiModelId(provider: string, modelId: string): string {

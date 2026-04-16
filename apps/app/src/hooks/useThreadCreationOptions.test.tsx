@@ -414,4 +414,69 @@ describe("useThreadCreationOptions", () => {
       },
     ]);
   });
+
+  it("passes the current model to provider lookup for selected-only runtime models", async () => {
+    vi.mocked(api.listSystemProviders).mockResolvedValue([
+      makeProvider({
+        displayName: "Codex",
+        id: "codex",
+      }),
+      makeProvider({
+        displayName: "Claude Code",
+        id: "claude-code",
+      }),
+    ]);
+    vi.mocked(api.getAvailableModels).mockImplementation(async (providerId, selectedModel) => {
+      if (providerId === "claude-code" && selectedModel === "opus[1m]") {
+        return [
+          makeModel({
+            displayName: "Opus Alias (1M, Legacy)",
+            id: "opus[1m]",
+            isDefault: false,
+            model: "opus[1m]",
+          }),
+          makeModel({
+            defaultReasoningEffort: "xhigh",
+            displayName: "Claude Opus 4.7 (1M)",
+            id: "claude-opus-4-7[1m]",
+            isDefault: true,
+            model: "claude-opus-4-7[1m]",
+          }),
+        ];
+      }
+      return [
+        makeModel({
+          displayName: "gpt-5.4",
+          id: "gpt-5.4",
+          model: "gpt-5.4",
+        }),
+      ];
+    });
+
+    const { wrapper } = createQueryClientTestHarness();
+    const { result } = renderHook(
+      () =>
+        useThreadCreationOptions({
+          initialModel: "opus[1m]",
+          initialProviderId: "claude-code",
+          projectId: "project-selected-only",
+          scope: "thread",
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => {
+      expect(api.getAvailableModels).toHaveBeenCalledWith(
+        "claude-code",
+        "opus[1m]",
+      );
+    });
+    await waitFor(() => {
+      expect(result.current.modelOptions[0]).toEqual({
+        label: "Opus Alias (1M, Legacy)",
+        value: "opus[1m]",
+      });
+    });
+    expect(result.current.selectedModel).toBe("opus[1m]");
+  });
 });

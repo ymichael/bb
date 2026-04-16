@@ -1,8 +1,8 @@
-import type { AvailableModel } from "@bb/domain";
+import type { AvailableModel, ReasoningLevel } from "@bb/domain";
 import type { SystemProviderInfo } from "@bb/server-contract";
 
 const MANAGER_DEFAULT_PROVIDER_ID = "claude-code";
-const MANAGER_DEFAULT_MODEL = "claude-opus-4-6";
+const MANAGER_DEFAULT_MODEL = "claude-opus-4-7[1m]";
 
 export function resolvePreferredManagerProviderId(
   providers: readonly SystemProviderInfo[],
@@ -23,4 +23,10 @@ export function resolvePreferredManagerModel(
     models[0]?.model ??
     ""
   );
+}
+
+export function resolvePreferredManagerReasoningLevel(
+  model: AvailableModel | undefined,
+): ReasoningLevel | "" {
+  return model?.defaultReasoningEffort ?? "";
 }

@@ -17,6 +17,7 @@ import type { ImageContent } from "@mariozechner/pi-ai";
 export interface PiSdkSessionOptions {
   cwd: string;
   model?: string;
+  thinkingLevel?: CreateAgentSessionOptions["thinkingLevel"];
   env?: NodeJS.ProcessEnv;
   customTools?: ToolDefinition[];
   sessionFilePath?: string;
@@ -127,6 +128,9 @@ export class PiSdkSession {
       if (model) {
         sessionOptions.model = model;
       }
+    }
+    if (this.options.thinkingLevel) {
+      sessionOptions.thinkingLevel = this.options.thinkingLevel;
     }
 
     // Register custom tools

@@ -110,6 +110,14 @@ describe("claude-code provider adapter", () => {
       method: "model/list",
       params: {},
     });
+    expect(adapter.buildCommandPlan({
+      type: "model/list",
+      selectedModel: "claude-opus-4-6",
+    })).toEqual({
+      kind: "request",
+      method: "model/list",
+      params: { selectedModel: "claude-opus-4-6" },
+    });
   });
 
   it("buildCommand thread/start routes threadId from command", () => {
@@ -167,6 +175,7 @@ describe("claude-code provider adapter", () => {
       params: {
         threadId: "bb-thread-1",
         model: "claude-sonnet-4-5",
+        reasoningLevel: "high",
         permissionMode: "acceptEdits",
         permissionEscalation: "ask",
         baseInstructions: expect.stringContaining("Focus on the failing tests first."),
@@ -186,7 +195,6 @@ describe("claude-code provider adapter", () => {
     expect(cmd?.params).toMatchObject({
       config: {
         "shell_environment_policy.set.TEST_VAR": "123",
-        model_reasoning_effort: "high",
       },
     });
     expect(cmd).not.toMatchObject({
@@ -346,6 +354,7 @@ describe("claude-code provider adapter", () => {
         threadId: "bb-thread-1",
         providerThreadId: "claude-session-1",
         model: "claude-sonnet-4-5",
+        reasoningLevel: "high",
         baseInstructions: "Reopen the thread and continue carefully.",
         dynamicTools: [{
           name: "bb_test_ping",
@@ -363,7 +372,6 @@ describe("claude-code provider adapter", () => {
     expect(cmd?.params).toMatchObject({
       config: {
         "shell_environment_policy.set.TEST_VAR": "123",
-        model_reasoning_effort: "high",
       },
     });
     expect(cmd).not.toMatchObject({
@@ -2238,7 +2246,7 @@ describe("claude-code provider adapter", () => {
         output_tokens: 2_544,
       },
       modelUsage: {
-        "claude-opus-4-6": {
+        "claude-opus-4-7": {
           contextWindow: 1_000_000,
         },
       },
@@ -2365,7 +2373,7 @@ describe("claude-code provider adapter", () => {
       instructionMode: "append",
       options: {
         ...fullProviderExecutionContext,
-        model: "claude-opus-4-6[1m]",
+        model: "claude-opus-4-7[1m]",
       },
     });
     adapter.translateEvent(loadFixture("assistant-text.json"), {

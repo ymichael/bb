@@ -144,6 +144,7 @@ export function registerSystemRoutes(app: Hono, deps: AppDeps): void {
         command: {
           type: "provider.list_models",
           providerId: query.providerId,
+          selectedModel: query.selectedModel,
         },
       });
       return context.json(
@@ -167,6 +168,7 @@ export function registerSystemRoutes(app: Hono, deps: AppDeps): void {
             command: {
               type: "provider.list_models",
               providerId: provider.id,
+              selectedModel: query.selectedModel,
             },
           }),
         ).models,

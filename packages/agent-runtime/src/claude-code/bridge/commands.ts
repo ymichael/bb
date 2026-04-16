@@ -1,6 +1,7 @@
 import {
   instructionModeValues,
   permissionEscalationValues,
+  reasoningLevelValues,
 } from "@bb/domain";
 import { z } from "zod";
 import {
@@ -13,6 +14,7 @@ import {
 const bridgeInstructionModeSchema = z.enum(instructionModeValues);
 const bridgePermissionEscalationSchema =
   z.enum(permissionEscalationValues).nullable();
+const bridgeReasoningLevelSchema = z.enum(reasoningLevelValues);
 
 const dynamicToolSchema = z.object({
   name: z.string(),
@@ -29,7 +31,9 @@ const claudeCodeCommandSchema = z.discriminatedUnion("method", [
   }),
   z.object({
     method: z.literal("model/list"),
-    params: z.object({}),
+    params: z.object({
+      selectedModel: z.string().min(1).optional(),
+    }),
   }),
   z.object({
     method: z.literal("thread/start"),
@@ -41,6 +45,7 @@ const claudeCodeCommandSchema = z.discriminatedUnion("method", [
       permissionEscalation: bridgePermissionEscalationSchema,
       config: z.record(z.string(), z.unknown()).optional(),
       model: z.string().optional(),
+      reasoningLevel: bridgeReasoningLevelSchema.optional(),
       instructionMode: bridgeInstructionModeSchema,
       dynamicTools: z.array(dynamicToolSchema).optional(),
     }),
@@ -56,6 +61,7 @@ const claudeCodeCommandSchema = z.discriminatedUnion("method", [
       permissionEscalation: bridgePermissionEscalationSchema,
       config: z.record(z.string(), z.unknown()).optional(),
       model: z.string().optional(),
+      reasoningLevel: bridgeReasoningLevelSchema.optional(),
       instructionMode: bridgeInstructionModeSchema,
       dynamicTools: z.array(dynamicToolSchema).optional(),
     }),

@@ -6,6 +6,7 @@ export {
   permissionModeSchema,
   permissionModeValues,
   reasoningLevelSchema,
+  reasoningLevelValues,
   serviceTierSchema,
   promptInputSchema,
   projectExecutionDefaultsSchema,

@@ -966,7 +966,9 @@ export function createClaudeCodeProviderAdapter(
           return {
             kind: "request",
             method: "model/list",
-            params: {},
+            params: command.selectedModel
+              ? { selectedModel: command.selectedModel }
+              : {},
           };
         case "thread/start": {
           finishOpenProviderTurn({ registry: turnState, threadId: command.threadId });
@@ -978,10 +980,6 @@ export function createClaudeCodeProviderAdapter(
             );
           }
           const config = buildClaudeCodeConfig(command.options?.envVars);
-          const finalConfig: Record<string, unknown> = config ? { ...config } : {};
-          if (command.options?.reasoningLevel) {
-            finalConfig.model_reasoning_effort = command.options.reasoningLevel;
-          }
           const dynamicTools = command.dynamicTools?.map((t) => ({
             name: t.name,
             description: t.description,
@@ -998,8 +996,11 @@ export function createClaudeCodeProviderAdapter(
               instructionMode: command.instructionMode,
               permissionMode: toClaudePermissionMode(permissionPolicy),
               permissionEscalation: permissionPolicy.permissionEscalation,
-              ...(Object.keys(finalConfig).length > 0 ? { config: finalConfig } : {}),
+              ...(config ? { config } : {}),
               ...(command.options?.model ? { model: command.options.model } : {}),
+              ...(command.options?.reasoningLevel
+                ? { reasoningLevel: command.options.reasoningLevel }
+                : {}),
               ...(dynamicTools && dynamicTools.length > 0 ? { dynamicTools } : {}),
             },
           };
@@ -1014,10 +1015,6 @@ export function createClaudeCodeProviderAdapter(
             );
           }
           const resumeConfig = buildClaudeCodeConfig(command.options?.envVars);
-          const finalResumeConfig: Record<string, unknown> = resumeConfig ? { ...resumeConfig } : {};
-          if (command.options?.reasoningLevel) {
-            finalResumeConfig.model_reasoning_effort = command.options.reasoningLevel;
-          }
           const dynamicTools = command.dynamicTools?.map((t) => ({
             name: t.name,
             description: t.description,
@@ -1035,8 +1032,11 @@ export function createClaudeCodeProviderAdapter(
               instructionMode: command.instructionMode,
               permissionMode: toClaudePermissionMode(permissionPolicy),
               permissionEscalation: permissionPolicy.permissionEscalation,
-              ...(Object.keys(finalResumeConfig).length > 0 ? { config: finalResumeConfig } : {}),
+              ...(resumeConfig ? { config: resumeConfig } : {}),
               ...(command.options?.model ? { model: command.options.model } : {}),
+              ...(command.options?.reasoningLevel
+                ? { reasoningLevel: command.options.reasoningLevel }
+                : {}),
               ...(dynamicTools && dynamicTools.length > 0 ? { dynamicTools } : {}),
             },
           };
@@ -1056,7 +1056,6 @@ export function createClaudeCodeProviderAdapter(
               providerThreadId: command.providerThreadId ?? null,
               input: command.input,
               ...(command.options?.model ? { model: command.options.model } : {}),
-              ...(command.options?.reasoningLevel ? { config: { model_reasoning_effort: command.options.reasoningLevel } } : {}),
             },
           };
         case "turn/steer":

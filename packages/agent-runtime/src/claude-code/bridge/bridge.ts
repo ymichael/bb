@@ -233,7 +233,7 @@ function createOnSdkMessage(
       threadId: args.threadIdRef.current,
     });
     if (!threadSession) return;
-    const providerThreadId = message.session_id.trim();
+    const providerThreadId = message.session_id?.trim() ?? "";
     if (
       providerThreadId.length > 0
       && threadSession.providerThreadId !== providerThreadId
@@ -619,7 +619,12 @@ async function handleRequest(request: ClaudeCodeJsonRpcRequest): Promise<void> {
       sendResult(request.id, { ok: true });
       break;
     case "model/list":
-      sendResult(request.id, await listClaudeCodeBridgeModels());
+      sendResult(
+        request.id,
+        await listClaudeCodeBridgeModels({
+          selectedModel: request.params.selectedModel,
+        }),
+      );
       break;
     case "thread/start":
       await handleThreadStart(request.id, request.params);

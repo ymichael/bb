@@ -26,7 +26,7 @@ const testDaemonArtifacts = {
   piPackageManifest: JSON.stringify({
     name: "@mariozechner/pi-coding-agent",
     piConfig: { configDir: ".pi", name: "pi" },
-    version: "0.58.3",
+    version: "0.67.5",
   }),
   piBridge: "console.log('pi bridge');",
 };

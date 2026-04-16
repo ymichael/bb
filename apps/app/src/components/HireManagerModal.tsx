@@ -27,6 +27,7 @@ import { HostPicker } from "@/components/promptbox/HostPicker";
 import {
   resolvePreferredManagerModel,
   resolvePreferredManagerProviderId,
+  resolvePreferredManagerReasoningLevel,
 } from "@/lib/manager-hire-defaults";
 
 const REASONING_LABELS: Record<ReasoningLevel, string> = {
@@ -127,11 +128,7 @@ export function HireManagerModal({
 
   // Reset reasoning level when model changes.
   useEffect(() => {
-    if (selectedModelData?.defaultReasoningEffort) {
-      setSelectedReasoningLevel(selectedModelData.defaultReasoningEffort);
-    } else {
-      setSelectedReasoningLevel("");
-    }
+    setSelectedReasoningLevel(resolvePreferredManagerReasoningLevel(selectedModelData));
   }, [selectedModelData]);
   const effectiveReasoningLevel = reasoningOptions.some(
     (option) => option.value === selectedReasoningLevel,

@@ -49,10 +49,10 @@ type PiMessageBoundaryRole =
 type PiSdkEventType =
   | "agent_end"
   | "agent_start"
-  | "auto_compaction_end"
-  | "auto_compaction_start"
   | "auto_retry_end"
   | "auto_retry_start"
+  | "compaction_end"
+  | "compaction_start"
   | "message_end"
   | "message_start"
   | "message_update"
@@ -132,10 +132,10 @@ function toPiSdkEventType(
   switch (type) {
     case "agent_end":
     case "agent_start":
-    case "auto_compaction_end":
-    case "auto_compaction_start":
     case "auto_retry_end":
     case "auto_retry_start":
+    case "compaction_end":
+    case "compaction_start":
     case "message_end":
     case "message_start":
     case "message_update":
@@ -270,10 +270,10 @@ function parsePiRawEvent(event: JsonRpcMessage): PiRawEvent {
 
     case "agent_end":
     case "agent_start":
-    case "auto_compaction_end":
-    case "auto_compaction_start":
     case "auto_retry_end":
     case "auto_retry_start":
+    case "compaction_end":
+    case "compaction_start":
     case "tool_execution_end":
     case "tool_execution_update":
     case "turn_end":
@@ -314,8 +314,8 @@ function describeParsedPiRawEvent(
       switch (event.sdkType) {
         case "agent_end":
         case "agent_start":
-        case "auto_compaction_end":
-        case "auto_compaction_start":
+        case "compaction_end":
+        case "compaction_start":
         case "tool_execution_end":
         case "tool_execution_update":
           return { kind: `sdk/${event.sdkType}`, coverage: "normalized" };

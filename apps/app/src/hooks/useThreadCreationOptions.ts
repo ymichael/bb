@@ -362,6 +362,7 @@ export function useThreadCreationOptions(options?: UsePromptModelReasoningOption
 
   const availableModelsQuery = useAvailableModels(
     hasMultipleProviders ? effectiveProviderId || undefined : undefined,
+    rawSelectedModel || undefined,
   );
 
   const activeProviderCapabilities = selectedProviderInfo?.capabilities;

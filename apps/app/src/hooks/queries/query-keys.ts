@@ -116,6 +116,7 @@ export type EnvironmentGitDiffQueryKeyPrefix = readonly [
 export type AvailableModelsQueryKey = readonly [
   typeof AVAILABLE_MODELS_QUERY_KEY,
   string | null,
+  string | null,
 ];
 export type AllAvailableModelsQueryKeyPrefix = readonly [
   typeof AVAILABLE_MODELS_QUERY_KEY,
@@ -294,8 +295,9 @@ export function environmentGitDiffQueryKeyPrefix(
 
 export function availableModelsQueryKey(
   providerId: string | null,
+  selectedModel: string | null,
 ): AvailableModelsQueryKey {
-  return [AVAILABLE_MODELS_QUERY_KEY, providerId];
+  return [AVAILABLE_MODELS_QUERY_KEY, providerId, selectedModel];
 }
 
 export function allAvailableModelsQueryKeyPrefix(): AllAvailableModelsQueryKeyPrefix {

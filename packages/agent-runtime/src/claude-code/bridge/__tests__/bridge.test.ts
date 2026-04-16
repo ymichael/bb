@@ -60,28 +60,28 @@ describe("bridge", () => {
           {
             value: "default",
             displayName: "Default (recommended)",
-            description: "Opus 4.6 with 1M context [NEW] · Most capable for complex work",
+            description: "Opus 4.7 with 1M context [NEW] · Most capable for complex work",
             supportsEffort: true,
-            supportedEffortLevels: ["low", "medium", "high", "max"],
+            supportedEffortLevels: ["low", "medium", "high", "xhigh", "max"],
           },
           {
-            value: "sonnet",
+            value: "claude-haiku-4-5",
+            displayName: "Haiku",
+            description: "Haiku 4.5",
+          },
+          {
+            value: "claude-sonnet-4-6",
             displayName: "Sonnet",
             description: "Sonnet 4.6 · Best for everyday tasks",
             supportsEffort: true,
             supportedEffortLevels: ["low", "medium", "high"],
           },
           {
-            value: "sonnet[1m]",
+            value: "claude-sonnet-4-6[1m]",
             displayName: "Sonnet (1M context)",
             description: "Sonnet 4.6 with 1M context · Billed as extra usage",
             supportsEffort: true,
             supportedEffortLevels: ["low", "medium", "high"],
-          },
-          {
-            value: "haiku",
-            displayName: "Haiku",
-            description: "Haiku 4.5",
           },
         ],
       }),
@@ -112,6 +112,7 @@ describe("bridge", () => {
         baseInstructions: "You are a coder.",
         cwd: "/tmp/worktree",
         instructionMode: "append",
+        reasoningLevel: "xhigh",
         permissionEscalation: "ask",
         permissionMode: "default",
       },
@@ -125,6 +126,7 @@ describe("bridge", () => {
       preset: "claude_code",
       append: "You are a coder.",
     });
+    expect(options.effort).toBe("xhigh");
   });
 
   it("passes the resolved Claude permission mode through to the session", () => {
@@ -244,37 +246,87 @@ describe("bridge", () => {
   it("returns the bridge-owned Claude model list from the SDK probe", async () => {
     await expect(listClaudeCodeBridgeModels()).resolves.toEqual([
       expect.objectContaining({
-        id: "opus[1m]",
-        model: "opus[1m]",
-        displayName: "Opus 4.6 (1M)",
+        id: "claude-opus-4-7[1m]",
+        model: "claude-opus-4-7[1m]",
+        displayName: "Opus 4.7 (1M)",
         isDefault: true,
       }),
       expect.objectContaining({
-        id: "opus",
-        model: "opus",
+        id: "claude-opus-4-7",
+        model: "claude-opus-4-7",
+        displayName: "Opus 4.7",
+        isDefault: false,
+      }),
+      expect.objectContaining({
+        id: "claude-opus-4-6[1m]",
+        model: "claude-opus-4-6[1m]",
+        displayName: "Opus 4.6 (1M)",
+        isDefault: false,
+      }),
+      expect.objectContaining({
+        id: "claude-opus-4-6",
+        model: "claude-opus-4-6",
         displayName: "Opus 4.6",
         isDefault: false,
       }),
       expect.objectContaining({
-        id: "sonnet[1m]",
-        model: "sonnet[1m]",
+        id: "claude-sonnet-4-6[1m]",
+        model: "claude-sonnet-4-6[1m]",
         displayName: "Sonnet 4.6 (1M)",
         isDefault: false,
       }),
       expect.objectContaining({
-        id: "sonnet",
-        model: "sonnet",
+        id: "claude-sonnet-4-6",
+        model: "claude-sonnet-4-6",
         displayName: "Sonnet 4.6",
         isDefault: false,
       }),
       expect.objectContaining({
-        id: "haiku",
-        model: "haiku",
+        id: "claude-haiku-4-5",
+        model: "claude-haiku-4-5",
         displayName: "Haiku 4.5",
         isDefault: false,
       }),
     ]);
     expect(queryMock).not.toHaveBeenCalled();
+  });
+
+  it("passes thread/start reasoningLevel through to Claude SDK effort", async () => {
+    const bridge = createBridgeJsonRpcTestHarness(handleLine);
+    const queries: ControlledClaudeQuery[] = [];
+    queryMock.mockImplementation(() => {
+      const query = createControlledClaudeQuery();
+      queries.push(query);
+      return query;
+    });
+
+    try {
+      bridge.sendRequest(1, "thread/start", {
+        baseInstructions: "test",
+        cwd: "/tmp/worktree",
+        instructionMode: "append",
+        permissionEscalation: "ask",
+        permissionMode: "default",
+        reasoningLevel: "xhigh",
+        threadId: "thread-reasoning",
+      });
+      await bridge.waitForResponse(1);
+
+      expect(queryMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          options: expect.objectContaining({
+            effort: "xhigh",
+          }),
+        }),
+      );
+
+      bridge.sendRequest(2, "thread/stop", { threadId: "thread-reasoning" });
+      await bridge.flushWork();
+      queries[0]?.finish();
+      await bridge.waitForResponse(2);
+    } finally {
+      bridge.restore();
+    }
   });
 
   it("holds thread stop open until the Claude SDK stream closes", async () => {

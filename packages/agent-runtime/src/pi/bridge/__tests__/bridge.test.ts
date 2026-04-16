@@ -166,6 +166,30 @@ describe("pi bridge", () => {
     }
   });
 
+  it("passes thread/start reasoningLevel through to Pi thinkingLevel", async () => {
+    const bridge = createBridgeJsonRpcTestHarness(handleLine);
+    mockCreateAgentSession.mockImplementation(async () => ({
+      session: createControlledPiAgentSession(),
+    }));
+
+    try {
+      bridge.sendRequest(3, "thread/start", {
+        cwd: "/tmp/worktree",
+        threadId: "thread-reasoning",
+        reasoningLevel: "high",
+      });
+      await bridge.waitForResponse(3);
+
+      expect(mockCreateAgentSession).toHaveBeenCalledWith(
+        expect.objectContaining({
+          thinkingLevel: "high",
+        }),
+      );
+    } finally {
+      bridge.restore();
+    }
+  });
+
   it("rejects requests that combine replacement and append instructions", async () => {
     const bridge = createBridgeJsonRpcTestHarness(handleLine);
     mockCreateAgentSession.mockImplementation(async () => ({

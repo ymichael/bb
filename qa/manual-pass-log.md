@@ -142,7 +142,7 @@ Validated:
 - Provider-routing preferences worked in a live parallel request:
   - backend child used `providerId: codex`
   - frontend child used `providerId: claude-code`
-- Pi manager smoke passed with `anthropic/claude-opus-4-6` / `medium`; the Pi manager reached `idle` and produced a visible hatch message.
+- Pi manager smoke passed with `anthropic/claude-opus-4-7` / `medium`; the Pi manager reached `idle` and produced a visible hatch message.
 - Reminder scheduling passed after tightening the manager instructions:
   - `ASYNC.md` contained `cron: "17 0 * * *"`
   - `manager_thread_nudges` contained `thr_c9gaer9gz4|backend-port-cleanup-check|17 0 * * *|America/Los_Angeles|1775546220000`
@@ -212,7 +212,7 @@ Status: passed after critical fixes
 Standalone workflow: `pnpm qa:standalone:start` / `pnpm qa:standalone:stop`
 Primary standalone state path: `/var/folders/lr/f3ynv4xj6p77kvx_rz7zgzg00000gn/T/bb-standalone-z2RVe2/standalone-state.json`
 Fixed restart/Pi rerun state path: `/var/folders/lr/f3ynv4xj6p77kvx_rz7zgzg00000gn/T/bb-standalone-0C0WIF/standalone-state.json`
-Resolved models: `codex=gpt-5.4`, `claude-code=haiku`, `pi=openai/gpt-5.4`
+Resolved models: `codex=gpt-5.4`, `claude-code=claude-haiku-4-5`, `pi=openai/gpt-5.4`
 
 Smoke:
 
@@ -307,7 +307,7 @@ Fixed-prompt rerun:
 
 - Artifact directory: `/tmp/bb-mixed-claude-rerun-fixed-prompt-2026-04-16-081317`
 - Standalone state path: `/var/folders/lr/f3ynv4xj6p77kvx_rz7zgzg00000gn/T/bb-standalone-qp8qrb/standalone-state.json`
-- Resolved models: `claude-code=haiku`, `pi=openai/gpt-5.4`
+- Resolved models: `claude-code=claude-haiku-4-5`, `pi=openai/gpt-5.4`
 - Claude thread: `thr_8wcamxbmq5`
 - Claude environment: `env_e35pvs46vj`
 - Pi thread: `thr_vi4aw6u2s4`
@@ -328,14 +328,14 @@ Model-list check:
 
 - Artifact directory: `/tmp/bb-pi-model-list-check-2026-04-16-103917`
 - Standalone state path: `/var/folders/lr/f3ynv4xj6p77kvx_rz7zgzg00000gn/T/bb-standalone-aAIrGn/standalone-state.json`
-- Current runbook selector result after correction: `anthropic/claude-opus-4-6`
+- Current runbook selector result after correction: `anthropic/claude-opus-4-7`
 
 Subscription-backed smoke:
 
 - Artifact directory: `/tmp/bb-pi-subscription-smoke-2026-04-16-104215`
 - Standalone state path: `/var/folders/lr/f3ynv4xj6p77kvx_rz7zgzg00000gn/T/bb-standalone-6s1E9C/standalone-state.json`
 - Pi thread: `thr_w2jfs9razh`
-- Model: `anthropic/claude-opus-4-6`
+- Model: `anthropic/claude-opus-4-7`
 - Output: `PI SUBSCRIPTION OK`
 
 Forced generic-OpenAI error check:
@@ -350,5 +350,5 @@ Findings:
 
 - The earlier full-pass log recorded `pi=openai/gpt-5.4`, which is the generic OpenAI API-key provider path.
 - Pi subscription-backed auth material is written for `anthropic` from Claude subscription auth and `openai-codex` from Codex subscription auth.
-- The runbook now prefers subscription-backed Pi models, first `anthropic/claude-opus-4-6`, then `openai-codex/gpt-5.4`, before falling back to generic provider defaults.
+- The runbook now prefers subscription-backed Pi models, first `anthropic/claude-opus-4-7`, then `openai-codex/gpt-5.4`, before falling back to generic provider defaults.
 - The Pi bridge now resolves `openai-codex/...` model IDs that it can advertise through model listing, so Codex subscription-backed Pi runs do not silently fall back to the Pi SDK default.

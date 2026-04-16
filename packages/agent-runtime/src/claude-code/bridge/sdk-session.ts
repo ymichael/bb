@@ -13,6 +13,7 @@ export interface SdkSessionOptions {
   cwd: string;
   systemPrompt: Exclude<Options["systemPrompt"], undefined>;
   model?: string;
+  effort?: Options["effort"];
   sessionId?: string;
   permissionMode?: ClaudePermissionMode;
   sandbox?: Options["sandbox"];
@@ -98,6 +99,7 @@ export class SdkSession {
         ? { sessionId: this.options.sessionId }
         : {}),
       ...(this.options.model ? { model: this.options.model } : {}),
+      ...(this.options.effort ? { effort: this.options.effort } : {}),
     };
 
     this.query = query({
@@ -227,8 +229,9 @@ export class SdkSession {
 
   private captureSessionId(message: SDKMessage): void {
     const { session_id } = message;
-    if (session_id.trim().length > 0) {
-      this.sessionId = session_id;
+    const providerThreadId = session_id?.trim() ?? "";
+    if (providerThreadId.length > 0) {
+      this.sessionId = providerThreadId;
     }
   }
 

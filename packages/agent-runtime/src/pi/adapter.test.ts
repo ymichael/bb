@@ -180,6 +180,7 @@ describe("pi provider adapter", () => {
       params: {
         threadId: "bb-thread-1",
         model: "anthropic/claude-sonnet-4-20250514",
+        reasoningLevel: "high",
         appendSystemPrompt: "Focus on the failing tests first.",
         dynamicTools: [{
           name: "bb_test_ping",
@@ -202,7 +203,6 @@ describe("pi provider adapter", () => {
     expect((cmd as { params: { config?: Record<string, unknown> } }).params.config).toMatchObject({
       "shell_environment_policy.set.BB_THREAD_ID": "bb-thread-1",
       "shell_environment_policy.set.TEST_VAR": "123",
-      model_reasoning_effort: "high",
     });
     expect(cmd).not.toMatchObject({
       params: {
@@ -434,13 +434,15 @@ describe("pi provider adapter", () => {
     );
   });
 
-  it("translateEvent auto_compaction_start emits a compaction item", () => {
+  it("translateEvent compaction_start emits a compaction item", () => {
     const adapter = createPiProviderAdapter();
     adapter.translateEvent(loadFixture("agent-start.json"));
 
-    const events = adapter.translateEvent({
-      type: "auto_compaction_start",
-    } as AgentSessionEvent);
+    const event = {
+      type: "compaction_start",
+      reason: "threshold",
+    } satisfies AgentSessionEvent;
+    const events = adapter.translateEvent(event);
 
     expect(events).toContainEqual({
       type: "item/started",
@@ -454,16 +456,23 @@ describe("pi provider adapter", () => {
     });
   });
 
-  it("translateEvent auto_compaction_end emits thread/compacted", () => {
+  it("translateEvent compaction_end emits thread/compacted", () => {
     const adapter = createPiProviderAdapter();
     adapter.translateEvent(loadFixture("agent-start.json"));
-    adapter.translateEvent({
-      type: "auto_compaction_start",
-    } as AgentSessionEvent);
+    const startEvent = {
+      type: "compaction_start",
+      reason: "threshold",
+    } satisfies AgentSessionEvent;
+    adapter.translateEvent(startEvent);
 
-    const events = adapter.translateEvent({
-      type: "auto_compaction_end",
-    } as AgentSessionEvent);
+    const endEvent = {
+      type: "compaction_end",
+      reason: "threshold",
+      result: undefined,
+      aborted: false,
+      willRetry: false,
+    } satisfies AgentSessionEvent;
+    const events = adapter.translateEvent(endEvent);
 
     expect(events).toContainEqual({
       type: "thread/compacted",
@@ -473,10 +482,11 @@ describe("pi provider adapter", () => {
     });
   });
 
-  it("translateEvent auto_compaction_end without a known turn is unhandled", () => {
+  it("translateEvent compaction_end without a known turn is unhandled", () => {
     const adapter = createPiProviderAdapter();
     const event = {
-      type: "auto_compaction_end",
+      type: "compaction_end",
+      reason: "threshold",
       result: undefined,
       aborted: false,
       willRetry: false,
@@ -491,14 +501,16 @@ describe("pi provider adapter", () => {
     );
   });
 
-  it("translateEvent auto_compaction_start reuses the last completed turn id without opening a new turn", () => {
+  it("translateEvent compaction_start reuses the last completed turn id without opening a new turn", () => {
     const adapter = createPiProviderAdapter();
     adapter.translateEvent(loadFixture("agent-start.json"));
     adapter.translateEvent(loadFixture("agent-end-with-message.json"));
 
-    const events = adapter.translateEvent({
-      type: "auto_compaction_start",
-    } as AgentSessionEvent);
+    const event = {
+      type: "compaction_start",
+      reason: "threshold",
+    } satisfies AgentSessionEvent;
+    const events = adapter.translateEvent(event);
 
     expect(events).toEqual([{
       type: "item/started",
@@ -1217,6 +1229,72 @@ describe("pi provider adapter", () => {
     expect(ids).not.toContain("google/gemini-2.5-pro");
     expect(models.find((model) => model.isDefault)?.id).toBe(
       "anthropic/claude-sonnet-4",
+    );
+  });
+
+  it("uses active Pi catalog entries for Opus 4.6 when still available", () => {
+    const models = buildPiAvailableModels({
+      providers: ["anthropic"],
+      getModels: () => [
+        {
+          id: "claude-opus-4-7",
+          name: "Claude Opus 4.7",
+          provider: "anthropic",
+          reasoning: true,
+          input: ["text"],
+          supportsXhigh: true,
+        },
+        {
+          id: "claude-opus-4-6",
+          name: "Claude Opus 4.6",
+          provider: "anthropic",
+          reasoning: true,
+          input: ["text"],
+          supportsXhigh: false,
+        },
+      ],
+      hasAuth: () => true,
+      selectedModel: "anthropic/claude-opus-4-6",
+    });
+
+    expect(models.map((model) => model.id)).toEqual([
+      "anthropic/claude-opus-4-7",
+      "anthropic/claude-opus-4-6",
+    ]);
+    expect(models[1]).toEqual(
+      expect.objectContaining({
+        displayName: "Claude Opus 4.6",
+        isDefault: false,
+      }),
+    );
+  });
+
+  it("includes selected-only Pi fallback models only when already selected", () => {
+    const models = buildPiAvailableModels({
+      providers: ["anthropic"],
+      getModels: () => [
+        {
+          id: "claude-opus-4-7",
+          name: "Claude Opus 4.7",
+          provider: "anthropic",
+          reasoning: true,
+          input: ["text"],
+          supportsXhigh: true,
+        },
+      ],
+      hasAuth: () => true,
+      selectedModel: "anthropic/claude-opus-4-6",
+    });
+
+    expect(models.map((model) => model.id)).toEqual([
+      "anthropic/claude-opus-4-6",
+      "anthropic/claude-opus-4-7",
+    ]);
+    expect(models[0]).toEqual(
+      expect.objectContaining({
+        displayName: "Claude Opus 4.6 (Legacy)",
+        isDefault: false,
+      }),
     );
   });
 

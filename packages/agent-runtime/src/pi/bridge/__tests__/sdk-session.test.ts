@@ -133,6 +133,25 @@ describe("PiSdkSession", () => {
     );
   });
 
+  it("forwards thinking level to the SDK when configured", async () => {
+    const session = new PiSdkSession(
+      {
+        cwd: "/tmp/project",
+        thinkingLevel: "xhigh",
+      },
+      vi.fn(),
+      vi.fn(),
+    );
+
+    await session.start();
+
+    expect(mockCreateAgentSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        thinkingLevel: "xhigh",
+      }),
+    );
+  });
+
   it("re-activates missing custom tools before later prompts", async () => {
     mockGetActiveToolNames
       .mockReturnValueOnce(["read", "bash"])

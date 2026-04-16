@@ -642,11 +642,15 @@ export async function getEnvironmentDiff(
   );
 }
 
-export async function getAvailableModels(providerId?: string): Promise<AvailableModel[]> {
+export async function getAvailableModels(
+  providerId?: string,
+  selectedModel?: string,
+): Promise<AvailableModel[]> {
   return request<AvailableModel[]>(
     apiClient.system.models.$get({
       query: {
         ...(providerId ? { providerId } : {}),
+        ...(selectedModel ? { selectedModel } : {}),
       },
     }),
   );

@@ -144,6 +144,7 @@ export interface RenameThreadArgs {
 
 export interface ListModelsArgs {
   providerId: string;
+  selectedModel?: string;
 }
 
 export interface AgentRuntime {

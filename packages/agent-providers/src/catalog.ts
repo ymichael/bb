@@ -149,15 +149,15 @@ const cloudAuthProviderById = new Map(
  * https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/src/core/model-resolver.ts
  */
 export const PI_DEFAULT_MODEL_PER_PROVIDER: PiDefaultModelPerProvider = {
-  anthropic: "claude-opus-4-6",
+  anthropic: "claude-opus-4-7",
   openai: "gpt-5.4",
   "openai-codex": "gpt-5.4",
-  "amazon-bedrock": "us.anthropic.claude-opus-4-6-v1",
+  "amazon-bedrock": "us.anthropic.claude-opus-4-7",
   google: "gemini-2.5-pro",
   "google-gemini-cli": "gemini-2.5-pro",
   "google-vertex": "gemini-3-pro-preview",
   openrouter: "openai/gpt-5.1-codex",
-  "vercel-ai-gateway": "anthropic/claude-opus-4-6",
+  "vercel-ai-gateway": "anthropic/claude-opus-4.7",
   xai: "grok-4-fast-non-reasoning",
   mistral: "devstral-medium-latest",
 };

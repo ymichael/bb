@@ -28,6 +28,7 @@ const INTENTIONAL_OPTIONAL_HOST_DAEMON_FIELDS: Record<string, string> = {
   "hostDaemonCommandSchema.maxFileListBytes": "workspace.diff may omit maxFileListBytes to use the system default cap.",
   "hostDaemonCommandSchema.mergeBaseBranch": "workspace.status may omit mergeBaseBranch when the caller only needs working-tree state.",
   "hostDaemonCommandSchema.query": "host.list_files and workspace.list_files may omit a search string to list files without filtering.",
+  "hostDaemonCommandSchema.selectedModel": "provider.list_models may omit selectedModel to list only active provider models.",
   "hostDaemonCommandSchema.threadStoragePath": "thread.start may include a storage path for manager threads so the daemon creates the directory before the agent starts.",
 };
 

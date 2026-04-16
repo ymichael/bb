@@ -49,10 +49,10 @@ export function useHost(hostId: HostQueryId) {
   });
 }
 
-export function useAvailableModels(providerId?: string) {
+export function useAvailableModels(providerId?: string, selectedModel?: string) {
   return useQuery<AvailableModel[]>({
-    queryKey: availableModelsQueryKey(providerId ?? null),
-    queryFn: () => api.getAvailableModels(providerId),
+    queryKey: availableModelsQueryKey(providerId ?? null, selectedModel ?? null),
+    queryFn: () => api.getAvailableModels(providerId, selectedModel),
     staleTime: 60_000,
   });
 }

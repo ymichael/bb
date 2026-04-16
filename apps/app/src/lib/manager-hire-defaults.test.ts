@@ -4,6 +4,7 @@ import type { SystemProviderInfo } from "@bb/server-contract";
 import {
   resolvePreferredManagerModel,
   resolvePreferredManagerProviderId,
+  resolvePreferredManagerReasoningLevel,
 } from "./manager-hire-defaults";
 
 function makeProvider(id: string): SystemProviderInfo {
@@ -28,7 +29,11 @@ function makeModel(
     model,
     displayName: model,
     description: model,
-    supportedReasoningEfforts: [],
+    supportedReasoningEfforts: [
+      { reasoningEffort: "low", description: "Low reasoning effort" },
+      { reasoningEffort: "medium", description: "Medium reasoning effort" },
+      { reasoningEffort: "high", description: "High reasoning effort" },
+    ],
     defaultReasoningEffort: "medium",
     isDefault: false,
     ...overrides,
@@ -50,14 +55,40 @@ describe("resolvePreferredManagerProviderId", () => {
   });
 });
 
+describe("resolvePreferredManagerReasoningLevel", () => {
+  it("uses the model default for the preferred Opus 4.7 1M manager model", () => {
+    expect(
+      resolvePreferredManagerReasoningLevel(
+        makeModel("claude-opus-4-7[1m]", {
+          defaultReasoningEffort: "xhigh",
+          supportedReasoningEfforts: [
+            { reasoningEffort: "medium", description: "Medium reasoning effort" },
+            { reasoningEffort: "xhigh", description: "Extra high reasoning effort" },
+          ],
+        }),
+      ),
+    ).toBe("xhigh");
+  });
+
+  it("falls back to the model default for non-manager-preferred models", () => {
+    expect(
+      resolvePreferredManagerReasoningLevel(
+        makeModel("claude-sonnet-4-6", {
+          defaultReasoningEffort: "high",
+        }),
+      ),
+    ).toBe("high");
+  });
+});
+
 describe("resolvePreferredManagerModel", () => {
-  it("prefers claude-opus-4-6 when available", () => {
+  it("prefers claude-opus-4-7 1M when available", () => {
     expect(
       resolvePreferredManagerModel([
         makeModel("claude-sonnet-4-6", { isDefault: true }),
-        makeModel("claude-opus-4-6"),
+        makeModel("claude-opus-4-7[1m]"),
       ]),
-    ).toBe("claude-opus-4-6");
+    ).toBe("claude-opus-4-7[1m]");
   });
 
   it("falls back to the provider default model", () => {

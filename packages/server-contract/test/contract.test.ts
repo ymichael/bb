@@ -78,6 +78,7 @@ const INTENTIONAL_OPTIONAL_SERVER_FIELDS: Record<string, string> = {
   "systemModelsQuerySchema.environmentId": "System model lookup may target a host indirectly through an environment id.",
   "systemModelsQuerySchema.hostId": "System model lookup may target a specific host directly.",
   "systemModelsQuerySchema.providerId": "System model lookup may omit provider id to list models for every provider on the chosen host.",
+  "systemModelsQuerySchema.selectedModel": "System model lookup may omit selectedModel to list only active provider models.",
   "systemProvidersQuerySchema.environmentId": "System provider lookup may target a host indirectly through an environment id.",
   "systemProvidersQuerySchema.hostId": "System provider lookup may target a specific host directly.",
   "threadEventsQuerySchema.afterSeq": "Thread event listing may omit afterSeq to start from the beginning.",
@@ -359,7 +360,7 @@ describe("server-contract canonical schemas", () => {
 
     expect(
       createManagerThreadRequestSchema.parse({
-        model: "claude-opus-4-6",
+        model: "claude-opus-4-7",
         providerId: "codex",
         origin: "app",
         reasoningLevel: "high",

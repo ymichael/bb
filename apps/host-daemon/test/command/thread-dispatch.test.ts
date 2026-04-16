@@ -647,7 +647,7 @@ describe("thread command dispatch", () => {
         eventSequence: 1,
         input: [{ type: "text", text: "hello" }],
         options: {
-          model: "claude-opus-4-6",
+          model: "claude-opus-4-7",
           serviceTier: "default",
           reasoningLevel: "medium",
           permissionMode: "full",

@@ -116,7 +116,10 @@ export async function dispatchCommand<TCommand extends HostDaemonCommand>(
       } as HostDaemonCommandResult<TCommand["type"]>;
     case "provider.list_models":
       return {
-        models: await (options.listModels ?? defaultListModels)(command.providerId),
+        models: await (options.listModels ?? defaultListModels)({
+          providerId: command.providerId,
+          selectedModel: command.selectedModel,
+        }),
       } as HostDaemonCommandResult<TCommand["type"]>;
     case "environment.provision":
       return provisionEnvironment(command, options) as Promise<

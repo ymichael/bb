@@ -93,7 +93,7 @@ export type ProviderExecutionContext = {
 
 export type AdapterCommand =
   | { type: "initialize" }
-  | { type: "model/list" }
+  | { type: "model/list"; selectedModel?: string }
   | {
       type: "thread/start";
       threadId: string;

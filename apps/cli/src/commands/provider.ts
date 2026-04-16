@@ -12,6 +12,7 @@ interface ProviderListCommandOptions {
 
 interface ProviderModelsCommandOptions {
   json?: boolean;
+  selectedModel?: string;
 }
 
 export function registerProviderCommands(program: Command, getUrl: () => string): void {
@@ -38,6 +39,7 @@ export function registerProviderCommands(program: Command, getUrl: () => string)
     .command("models [providerId]")
     .description("List available models for a provider")
     .option("--json", "Print machine-readable JSON output")
+    .option("--selected-model <model>", "Include a selected-only model if it matches")
     .action(action(async (
       providerId: string | undefined,
       opts: ProviderModelsCommandOptions,
@@ -45,7 +47,10 @@ export function registerProviderCommands(program: Command, getUrl: () => string)
       const client = createClient(getUrl());
       const models = await unwrap<AvailableModel[]>(
         client.api.v1.system.models.$get({
-          query: providerId ? { providerId } : {},
+          query: {
+            ...(providerId ? { providerId } : {}),
+            ...(opts.selectedModel ? { selectedModel: opts.selectedModel } : {}),
+          },
         }),
       );
       if (outputJson(opts, models)) return;

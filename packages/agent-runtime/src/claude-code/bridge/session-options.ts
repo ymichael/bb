@@ -2,6 +2,7 @@ import type { Options } from "@anthropic-ai/claude-agent-sdk";
 import type {
   InstructionMode,
   PermissionEscalation,
+  ReasoningLevel,
 } from "@bb/domain";
 import type { ClaudePermissionMode } from "../interactive-contract.js";
 import type { SdkSessionOptions } from "./sdk-session.js";
@@ -13,6 +14,7 @@ export interface BuildSessionOptionsArgs {
   model?: string;
   permissionEscalation: PermissionEscalation | null;
   permissionMode: ClaudePermissionMode;
+  reasoningLevel?: ReasoningLevel;
 }
 
 const READONLY_ALLOWED_TOOLS = new Set([
@@ -113,6 +115,7 @@ export function buildSessionOptions(
     model,
     env,
     permissionMode: params.permissionMode,
+    ...(params.reasoningLevel ? { effort: params.reasoningLevel } : {}),
     ...(sandbox ? { sandbox } : {}),
     ...(hooks ? { hooks } : {}),
   };

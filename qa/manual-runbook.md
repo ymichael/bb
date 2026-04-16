@@ -52,10 +52,10 @@ Resolve current provider models before spawning real-provider threads:
 
 ```bash
 CODEX_MODEL=$(bb provider models codex --json | jq -er '([.[] | select(.isDefault)][0].model // .[0].model)')
-CLAUDE_MODEL=$(bb provider models claude-code --json | jq -er '([.[] | select(.model == "haiku")][0].model // [.[] | select(.isDefault)][0].model // .[0].model)')
+CLAUDE_MODEL=$(bb provider models claude-code --json | jq -er '([.[] | select(.model == "claude-haiku-4-5")][0].model // [.[] | select(.isDefault)][0].model // .[0].model)')
 PI_MODELS_JSON=$(bb provider models pi --json)
 PI_MODEL=$(printf '%s\n' "$PI_MODELS_JSON" | jq -er '
-  [.[] | select(.model == "anthropic/claude-opus-4-6")][0].model
+  [.[] | select(.model == "anthropic/claude-opus-4-7")][0].model
   // [.[] | select(.model == "openai-codex/gpt-5.4")][0].model
   // [.[] | select(.model | startswith("anthropic/")) | select(.isDefault)][0].model
   // [.[] | select(.model | startswith("openai-codex/")) | select(.isDefault)][0].model

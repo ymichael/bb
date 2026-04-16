@@ -9,7 +9,7 @@ coverage in [qa/manual-runbook.md](/Users/michael/.codex/worktrees/dc39/bb/qa/ma
 Manager providers under test:
 
 - `codex` with `gpt-5.4` / `medium`
-- `pi` with `anthropic/claude-opus-4-6` / `medium`
+- `pi` with `anthropic/claude-opus-4-7` / `medium`
 - Pi fallback: `openai/gpt-5.4` / `medium`
 
 Worker providers under test:
@@ -390,7 +390,7 @@ Run a smaller provider regression with Pi as the manager:
 ```bash
 PI_MANAGER_ID=$(bb manager hire "$BB_PROJECT_ID" \
   --provider pi \
-  --model anthropic/claude-opus-4-6 \
+  --model anthropic/claude-opus-4-7 \
   --reasoning-level medium \
   --json | jq -r '.id')
 

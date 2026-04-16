@@ -24,38 +24,38 @@ describe("HireManagerModal helpers", () => {
     ).toBe("openai");
   });
 
-  it("prefers claude-opus-4-6 over the provider default model", () => {
+  it("prefers claude-opus-4-7 1M over the provider default model", () => {
     expect(
       resolvePreferredManagerModel([
         {
-          id: "claude-sonnet-4",
-          model: "claude-sonnet-4",
-          displayName: "Claude Sonnet 4",
+          id: "claude-sonnet-4-6",
+          model: "claude-sonnet-4-6",
+          displayName: "Claude Sonnet 4.6",
           description: "",
           supportedReasoningEfforts: [],
           defaultReasoningEffort: "medium",
           isDefault: true,
         },
         {
-          id: "claude-opus-4-6",
-          model: "claude-opus-4-6",
-          displayName: "Claude Opus 4.6",
+          id: "claude-opus-4-7[1m]",
+          model: "claude-opus-4-7[1m]",
+          displayName: "Claude Opus 4.7 (1M)",
           description: "",
           supportedReasoningEfforts: [],
-          defaultReasoningEffort: "medium",
+          defaultReasoningEffort: "xhigh",
           isDefault: false,
         },
       ]),
-    ).toBe("claude-opus-4-6");
+    ).toBe("claude-opus-4-7[1m]");
   });
 
   it("falls back to the provider default model when opus is unavailable", () => {
     expect(
       resolvePreferredManagerModel([
         {
-          id: "claude-sonnet-4",
-          model: "claude-sonnet-4",
-          displayName: "Claude Sonnet 4",
+          id: "claude-sonnet-4-6",
+          model: "claude-sonnet-4-6",
+          displayName: "Claude Sonnet 4.6",
           description: "",
           supportedReasoningEfforts: [],
           defaultReasoningEffort: "medium",
@@ -71,6 +71,6 @@ describe("HireManagerModal helpers", () => {
           isDefault: false,
         },
       ]),
-    ).toBe("claude-sonnet-4");
+    ).toBe("claude-sonnet-4-6");
   });
 });
