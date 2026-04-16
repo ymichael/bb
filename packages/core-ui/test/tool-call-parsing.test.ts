@@ -5,6 +5,7 @@ import {
   formatToolCallOutput,
   isExploringCall,
   isExploringIntent,
+  isShellToolName,
   parseShellCommandIntents,
   tokenizeShellWords,
 } from "../src/tool-call-parsing.js";
@@ -657,6 +658,10 @@ describe("formatToolCallCommand", () => {
     expect(formatToolCallCommand("Bash", { command: "npm test" })).toBe("npm test");
   });
 
+  it("formats lowercase bash with command", () => {
+    expect(formatToolCallCommand("bash", { command: "npm test" })).toBe("npm test");
+  });
+
   it("formats TodoWrite with todo counts and active step", () => {
     expect(
       formatToolCallCommand("TodoWrite", {
@@ -713,6 +718,19 @@ describe("formatToolCallCommand", () => {
     const longValue = "a".repeat(50);
     const result = formatToolCallCommand("MyTool", { key: longValue });
     expect(result).toContain("...");
+  });
+});
+
+describe("isShellToolName", () => {
+  it("classifies shell timeline tool names", () => {
+    expect(isShellToolName("exec_command")).toBe(true);
+    expect(isShellToolName("Bash")).toBe(true);
+    expect(isShellToolName("bash")).toBe(true);
+  });
+
+  it("does not classify shell wrapper command names as timeline tool names", () => {
+    expect(isShellToolName("sh")).toBe(false);
+    expect(isShellToolName("zsh")).toBe(false);
   });
 });
 

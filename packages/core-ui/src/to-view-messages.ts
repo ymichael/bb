@@ -55,8 +55,10 @@ import {
   type ToolActivityState,
 } from "./tool-activity-projection.js";
 import {
+  finalizeOpenCompactionsForTurn,
   onCompactionBegin,
   onCompactionEnd,
+  type CompactionTurnFinalizationStatus,
   upsertFileEdit,
 } from "./operation-projection.js";
 import {
@@ -80,6 +82,11 @@ import type {
 // --- Projection state machine ---
 
 type ProjectedUserMessage = Extract<ViewMessage, { kind: "user" }>;
+
+interface CompactionTurnFinalization {
+  status: CompactionTurnFinalizationStatus;
+  detail: string | undefined;
+}
 
 interface ProjectionState {
   messages: ViewMessage[];
@@ -161,6 +168,30 @@ function getToolCallReceiverThreadIds(decoded: ThreadEvent): string[] {
   );
 }
 
+function getCompactionTurnFinalization(
+  decoded: ThreadEvent,
+): CompactionTurnFinalization | undefined {
+  if (decoded.type === "error") {
+    return {
+      status: "error",
+      detail: decoded.detail ?? decoded.message,
+    };
+  }
+  if (decoded.type === "turn/completed" && decoded.status === "failed") {
+    return {
+      status: "error",
+      detail: decoded.error?.message,
+    };
+  }
+  if (decoded.type === "turn/completed" && decoded.status === "interrupted") {
+    return {
+      status: "interrupted",
+      detail: decoded.error?.message,
+    };
+  }
+  return undefined;
+}
+
 function finalizePendingMessages(
   state: ProjectionState,
   options: ToViewMessagesOptions | undefined,
@@ -221,6 +252,18 @@ function buildFlatViewMessages(
       (eventProviderThreadId
         ? state.delegationParentToolCallIdsByProviderThreadId.get(eventProviderThreadId)
         : undefined);
+
+    const compactionTurnFinalization = getCompactionTurnFinalization(decoded);
+    if (compactionTurnFinalization) {
+      finalizeOpenCompactionsForTurn({
+        state,
+        meta,
+        threadId: decoded.threadId,
+        turnId: eventTurnId,
+        status: compactionTurnFinalization.status,
+        detail: compactionTurnFinalization.detail,
+      });
+    }
 
     if (state.openAssistantByTurn.size > 0 && isTerminalAssistantFlushEvent(eventType)) {
       flushBufferedAssistantMessages(state);

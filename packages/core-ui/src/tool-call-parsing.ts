@@ -85,6 +85,14 @@ export function baseToolName(toolName: string): string {
   return segments[segments.length - 1] ?? toolName;
 }
 
+// Timeline tool names that represent shell command execution. This is separate
+// from SHELL_WRAPPER_NAMES, which are executables inside a command string.
+const SHELL_TOOL_NAMES = new Set(["exec_command", "Bash", "bash"]);
+
+export function isShellToolName(toolName: string): boolean {
+  return SHELL_TOOL_NAMES.has(baseToolName(toolName));
+}
+
 const TOOL_TABLE: Record<string, ToolDescriptor> = {
   Read: { argKeys: ["file_path", "file", "path"], intentKind: "read" },
   read: { argKeys: ["file_path", "file", "path"], intentKind: "read" },
@@ -803,8 +811,8 @@ export function formatToolCallCommand(toolName: string, args: Record<string, unk
 
   const primary = getFirstStringField(args, desc.argKeys) ?? "";
 
-  // Bash is special: display the command itself, not "Bash <command>"
-  if (toolName === "Bash" || toolName === "bash") {
+  // Shell tools are special: display the command itself, not "Bash <command>".
+  if (isShellToolName(toolName)) {
     return primary || toolName;
   }
 

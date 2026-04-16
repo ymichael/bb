@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ThreadEventRow } from "@bb/domain";
+import type { ThreadEventRow, ViewMessage } from "@bb/domain";
 import {
   toViewMessages,
   toViewProjection,
@@ -367,7 +367,6 @@ describe("toViewMessages operations", () => {
         createdAt: 2,
       },
     ];
-
     const projected = toViewMessages(fromRows(events));
     const ops = projected.filter(
       (message): message is Extract<ViewMessage, { kind: "operation" }> =>
@@ -381,6 +380,159 @@ describe("toViewMessages operations", () => {
     expect(ops[0]?.turnId).toBe("turn-1");
     expect(ops[0]?.sourceSeqStart).toBe(1);
     expect(ops[0]?.sourceSeqEnd).toBe(2);
+  });
+
+  it("closes failed compactions before active follow-up renders", () => {
+    const events: ThreadEventRow[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "item/started",
+        data: {
+          providerThreadId: "provider-thread-1",
+          turnId: "turn-failed",
+          item: {
+            id: "compact-failed",
+            type: "contextCompaction",
+          },
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "error",
+        data: {
+          providerThreadId: "provider-thread-1",
+          turnId: "turn-failed",
+          message: "Provider error",
+          detail: "Remote compaction failed",
+        },
+        createdAt: 2,
+      },
+      {
+        id: "evt-3",
+        threadId: "thread-1",
+        seq: 3,
+        type: "turn/completed",
+        data: {
+          providerThreadId: "provider-thread-1",
+          turnId: "turn-failed",
+          status: "failed",
+          error: {
+            message: "Remote compaction failed",
+          },
+        },
+        createdAt: 3,
+      },
+      {
+        id: "evt-4",
+        threadId: "thread-1",
+        seq: 4,
+        type: "item/started",
+        data: {
+          providerThreadId: "provider-thread-1",
+          turnId: "turn-success",
+          item: {
+            id: "compact-success",
+            type: "contextCompaction",
+          },
+        },
+        createdAt: 4,
+      },
+      {
+        id: "evt-5",
+        threadId: "thread-1",
+        seq: 5,
+        type: "item/completed",
+        data: {
+          providerThreadId: "provider-thread-1",
+          turnId: "turn-success",
+          item: {
+            id: "compact-success",
+            type: "contextCompaction",
+          },
+        },
+        createdAt: 5,
+      },
+      {
+        id: "evt-6",
+        threadId: "thread-1",
+        seq: 6,
+        type: "thread/compacted",
+        data: {
+          providerThreadId: "provider-thread-1",
+          threadId: "thread-1",
+          turnId: "turn-success",
+        },
+        createdAt: 6,
+      },
+    ];
+
+    const projected = toViewMessages(fromRows(events), { threadStatus: "active" });
+    const ops = projected.filter(
+      (message): message is Extract<ViewMessage, { kind: "operation" }> =>
+        message.kind === "operation",
+    );
+
+    expect(ops).toHaveLength(2);
+    expect(ops[0]?.title).toBe("Context compaction failed");
+    expect(ops[0]?.status).toBe("error");
+    expect(ops[0]?.detail).toContain("Remote compaction failed");
+    expect(ops[1]?.title).toBe("Context compacted");
+    expect(ops[1]?.status).toBe("completed");
+    expect(ops[1]?.sourceSeqStart).toBe(4);
+    expect(ops[1]?.sourceSeqEnd).toBe(5);
+  });
+
+  it("interrupts open compactions when their turn is interrupted", () => {
+    const events: ThreadEventRow[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "item/started",
+        data: {
+          providerThreadId: "provider-thread-1",
+          turnId: "turn-interrupted",
+          item: {
+            id: "compact-interrupted",
+            type: "contextCompaction",
+          },
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "turn/completed",
+        data: {
+          providerThreadId: "provider-thread-1",
+          turnId: "turn-interrupted",
+          status: "interrupted",
+          error: {
+            message: "User interrupted",
+          },
+        },
+        createdAt: 2,
+      },
+    ];
+
+    const projected = toViewMessages(fromRows(events), { threadStatus: "active" });
+    const op = projected.find(
+      (message): message is Extract<ViewMessage, { kind: "operation" }> =>
+        message.kind === "operation",
+    );
+
+    expect(op).toBeDefined();
+    expect(op?.title).toBe("Context compaction interrupted");
+    expect(op?.status).toBe("interrupted");
+    expect(op?.detail).toBe("User interrupted");
+    expect(op?.sourceSeqStart).toBe(1);
+    expect(op?.sourceSeqEnd).toBe(2);
   });
 
   it("projects compacted events with turn ids as operations", () => {

@@ -20,6 +20,20 @@ export interface OperationProjectionState {
   finalizedCompactionKeys: Set<string>;
 }
 
+export type CompactionTurnFinalizationStatus = Extract<
+  ViewOperationMessage["status"],
+  "error" | "interrupted"
+>;
+
+interface FinalizeOpenCompactionsForTurnArgs {
+  state: OperationProjectionState;
+  meta: EventMeta;
+  threadId: string;
+  turnId: string | undefined;
+  status: CompactionTurnFinalizationStatus;
+  detail: string | undefined;
+}
+
 function mergeFileChanges(
   existing: ViewFileEditChange[],
   incoming: ViewFileEditChange[],
@@ -197,4 +211,29 @@ export function onCompactionEnd(
     status: "completed",
   });
   state.finalizedCompactionKeys.add(payload.key);
+}
+
+export function finalizeOpenCompactionsForTurn(
+  args: FinalizeOpenCompactionsForTurnArgs,
+): void {
+  if (!args.turnId) return;
+
+  for (const [key, message] of args.state.openCompactionsByKey) {
+    if (
+      message.threadId !== args.threadId ||
+      message.turnId !== args.turnId
+    ) {
+      continue;
+    }
+
+    message.sourceSeqEnd = Math.max(message.sourceSeqEnd, args.meta.seq);
+    message.createdAt = Math.max(message.createdAt, args.meta.createdAt);
+    message.status = args.status;
+    message.title = args.status === "error"
+      ? "Context compaction failed"
+      : "Context compaction interrupted";
+    message.detail = args.detail ?? message.detail;
+    args.state.openCompactionsByKey.delete(key);
+    args.state.finalizedCompactionKeys.add(key);
+  }
 }

@@ -53,7 +53,10 @@ export {
 } from "./timeline-render-helpers.js";
 export type { ExploringCounts } from "./timeline-render-helpers.js";
 
-export { extractShellCommandFromString } from "./tool-call-parsing.js";
+export {
+  extractShellCommandFromString,
+  isShellToolName,
+} from "./tool-call-parsing.js";
 
 export { taskStatusGlyph } from "./task-status.js";
 
