@@ -124,6 +124,7 @@ async function main() {
       daemonPort,
       dataDir: bbRoot,
       entrypoint: path.join(repoRoot, "apps/host-daemon/dist/index.js"),
+      envFilePath: envFile.path,
       logPath: daemonLogPath,
       parentPid,
       serverUrl,

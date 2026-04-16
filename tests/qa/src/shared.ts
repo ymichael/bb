@@ -697,6 +697,7 @@ export function buildDaemonRestartCommand(args: {
   daemonPort: number;
   dataDir: string;
   entrypoint: string;
+  envFilePath: string | null;
   logPath: string;
   parentPid: number;
   serverUrl: string;
@@ -708,13 +709,19 @@ export function buildDaemonRestartCommand(args: {
       ]
     : [];
 
-  const startCommand = [
+  const envFileCommand = args.envFilePath
+    ? `[ ! -f ${shellQuote(args.envFilePath)} ] || . ${shellQuote(args.envFilePath)}`
+    : ":";
+  const daemonEnv = [
     `BB_DATA_DIR=${shellQuote(args.dataDir)}`,
     `BB_HOST_DAEMON_PORT=${shellQuote(String(args.daemonPort))}`,
     `BB_SERVER_URL=${shellQuote(args.serverUrl)}`,
     `BB_STANDALONE_PARENT_PID=${shellQuote(String(args.parentPid))}`,
-    `node ${shellQuote(args.entrypoint)} >> ${shellQuote(args.logPath)} 2>&1 &`,
   ].join(" ");
+  const startCommand =
+    `(set -a; ${envFileCommand}; set +a; ` +
+    `${daemonEnv} exec node ${shellQuote(args.entrypoint)} ` +
+    `>> ${shellQuote(args.logPath)} 2>&1) &`;
 
   return [...shutdownCommand, startCommand].join("; ");
 }
