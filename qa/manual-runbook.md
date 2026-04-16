@@ -33,7 +33,7 @@ Start an isolated server + daemon pair and load the exported QA environment:
 eval "$(pnpm --silent qa:standalone:start --format env)"
 jq . "$STATE_PATH"
 
-alias bb="node apps/cli/dist/index.js"
+bb() { node apps/cli/dist/index.js "$@"; }
 ```
 
 The machine-facing contract is the exported env block. The state file at `$STATE_PATH`
@@ -46,6 +46,16 @@ curl -fsS "$BB_SERVER_URL/api/v1/system/config" | jq
 curl -fsS "$BB_SERVER_URL/api/v1/hosts" | jq
 bb status
 bb provider list
+```
+
+Resolve current provider models before spawning real-provider threads:
+
+```bash
+CODEX_MODEL=$(bb provider models codex --json | jq -er '([.[] | select(.isDefault)][0].model // .[0].model)')
+CLAUDE_MODEL=$(bb provider models claude-code --json | jq -er '([.[] | select(.model == "haiku")][0].model // [.[] | select(.isDefault)][0].model // .[0].model)')
+PI_MODEL=$(bb provider models pi --json | jq -er '([.[] | select(.isDefault)][0].model // .[0].model)')
+
+printf 'codex: %s\nclaude-code: %s\npi: %s\n' "$CODEX_MODEL" "$CLAUDE_MODEL" "$PI_MODEL"
 ```
 
 Teardown:
@@ -63,7 +73,7 @@ Spawn an unmanaged Codex thread and wait for it to finish:
 SMOKE_THREAD_ID=$(bb thread spawn \
   --project "$BB_PROJECT_ID" \
   --provider codex \
-  --model gpt-5 \
+  --model "$CODEX_MODEL" \
   --reasoning-level low \
   --service-tier fast \
   --prompt "Say hello from the smoke pass" \
@@ -89,7 +99,7 @@ Create a managed worktree thread and inspect workspace status:
 WORKTREE_THREAD_ID=$(bb thread spawn \
   --project "$BB_PROJECT_ID" \
   --provider codex \
-  --model gpt-5 \
+  --model "$CODEX_MODEL" \
   --reasoning-level low \
   --service-tier fast \
   --new-environment worktree \
@@ -134,7 +144,7 @@ Create thread A and capture its environment:
 THREAD_A_ID=$(bb thread spawn \
   --project "$BB_PROJECT_ID" \
   --provider codex \
-  --model gpt-5 \
+  --model "$CODEX_MODEL" \
   --reasoning-level low \
   --service-tier fast \
   --prompt "Reply only in chat with the exact text THREAD A HELLO. Do not modify any files." \
@@ -151,7 +161,7 @@ Create thread B in the same project source path and let the server reuse the rea
 THREAD_B_ID=$(bb thread spawn \
   --project "$BB_PROJECT_ID" \
   --provider codex \
-  --model gpt-5 \
+  --model "$CODEX_MODEL" \
   --reasoning-level low \
   --service-tier fast \
   --prompt "Reply only in chat with the exact text THREAD B WORLD. Do not modify any files." \
@@ -195,7 +205,7 @@ Run a mixed-provider pass in separate environments:
 CLAUDE_THREAD_ID=$(bb thread spawn \
   --project "$BB_PROJECT_ID" \
   --provider claude-code \
-  --model claude-haiku-4-5 \
+  --model "$CLAUDE_MODEL" \
   --reasoning-level low \
   --new-environment worktree \
   --prompt "Reply only in chat with CLAUDE THREAD. Do not modify files." \
@@ -204,7 +214,7 @@ CLAUDE_THREAD_ID=$(bb thread spawn \
 PI_THREAD_ID=$(bb thread spawn \
   --project "$BB_PROJECT_ID" \
   --provider pi \
-  --model openai/codex-mini \
+  --model "$PI_MODEL" \
   --reasoning-level low \
   --new-environment worktree \
   --prompt "Reply only in chat with PI THREAD. Do not modify files." \
@@ -228,7 +238,7 @@ Promotion requires both the managed worktree and the primary checkout to be clea
 PROMOTE_THREAD_ID=$(bb thread spawn \
   --project "$BB_PROJECT_ID" \
   --provider codex \
-  --model gpt-5 \
+  --model "$CODEX_MODEL" \
   --reasoning-level low \
   --service-tier fast \
   --new-environment worktree \
@@ -313,11 +323,11 @@ Expected result:
 
 Repeat this section for `codex`, `claude-code`, and `pi`:
 
-Use an explicit model for each provider:
+Use the resolved model for each provider:
 
-- `codex`: `--model gpt-5 --service-tier fast`
-- `claude-code`: `--model claude-haiku-4-5`
-- `pi`: `--model openai/codex-mini`
+- `codex`: `--model "$CODEX_MODEL" --service-tier fast`
+- `claude-code`: `--model "$CLAUDE_MODEL"`
+- `pi`: `--model "$PI_MODEL"`
 
 ```bash
 PROVIDER_THREAD_ID=$(bb thread spawn \
