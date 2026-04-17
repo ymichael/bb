@@ -1,6 +1,6 @@
 # Manual QA Runbook
 
-This runbook covers the standalone persistent-host QA pass for Phase 7. It is written against the current CLI and API surface.
+This runbook covers the standalone persistent-host CLI/API smoke pass for general threads and managed worktrees. It is written against the current CLI and API surface.
 
 ## Prerequisites
 
@@ -129,9 +129,26 @@ WORKTREE_ENV_ID=$(curl -fsS "$BB_SERVER_URL/api/v1/threads/$WORKTREE_THREAD_ID" 
 
 bb thread show "$WORKTREE_THREAD_ID"
 bb thread output "$WORKTREE_THREAD_ID"
+bb thread show "$WORKTREE_THREAD_ID" --work-status
+bb thread show "$WORKTREE_THREAD_ID" --git-diff --diff-target uncommitted
+bb thread show "$WORKTREE_THREAD_ID" --git-diff --diff-target branch_committed
+bb thread show "$WORKTREE_THREAD_ID" --git-diff --diff-target all
 curl -fsS "$BB_SERVER_URL/api/v1/environments/$WORKTREE_ENV_ID" | jq
 curl -fsS "$BB_SERVER_URL/api/v1/environments/$WORKTREE_ENV_ID/status" | jq
 curl -fsS "$BB_SERVER_URL/api/v1/environments/$WORKTREE_ENV_ID/diff/branches" | jq
+```
+
+Verify merge-base environment metadata:
+
+```bash
+MERGE_BASE_BRANCH=$(curl -fsS "$BB_SERVER_URL/api/v1/environments/$WORKTREE_ENV_ID" | jq -er '.defaultBranch // "main"')
+
+bb environment update "$WORKTREE_ENV_ID" --merge-base-branch "$MERGE_BASE_BRANCH"
+bb environment show "$WORKTREE_ENV_ID" --json | jq -e --arg branch "$MERGE_BASE_BRANCH" '.mergeBaseBranch == $branch'
+bb thread show "$WORKTREE_THREAD_ID" --work-status --git-diff --diff-target all
+
+bb environment update "$WORKTREE_ENV_ID" --clear-merge-base-branch
+bb environment show "$WORKTREE_ENV_ID" --json | jq -e '.mergeBaseBranch == null'
 ```
 
 Archive and unarchive the smoke thread:
@@ -140,7 +157,12 @@ Archive and unarchive the smoke thread:
 bb thread archive "$SMOKE_THREAD_ID"
 curl -fsS "$BB_SERVER_URL/api/v1/threads/$SMOKE_THREAD_ID" | jq
 
-bb thread tell "$SMOKE_THREAD_ID" "This should fail while archived"
+if bb thread tell "$SMOKE_THREAD_ID" "This should fail while archived"; then
+  echo "expected archived thread tell to fail"
+  false
+else
+  echo "archived thread tell was blocked"
+fi
 
 bb thread unarchive "$SMOKE_THREAD_ID"
 bb thread tell "$SMOKE_THREAD_ID" "Say something after unarchive"
@@ -148,11 +170,43 @@ bb thread wait "$SMOKE_THREAD_ID" --status idle --timeout 120
 bb thread output "$SMOKE_THREAD_ID"
 ```
 
+Verify archive safety for a dirty managed worktree:
+
+```bash
+DIRTY_ARCHIVE_THREAD_ID=$(bb thread spawn \
+  --project "$BB_PROJECT_ID" \
+  --provider codex \
+  --model "$CODEX_MODEL" \
+  --reasoning-level low \
+  --service-tier fast \
+  --new-environment worktree \
+  --prompt "Say exactly: dirty archive setup" \
+  --json | jq -r '.id')
+
+bb thread wait "$DIRTY_ARCHIVE_THREAD_ID" --status idle --timeout 120
+DIRTY_ARCHIVE_ENV_ID=$(curl -fsS "$BB_SERVER_URL/api/v1/threads/$DIRTY_ARCHIVE_THREAD_ID" | jq -r '.environmentId')
+DIRTY_ARCHIVE_ENV_PATH=$(curl -fsS "$BB_SERVER_URL/api/v1/environments/$DIRTY_ARCHIVE_ENV_ID" | jq -er '.path')
+printf 'dirty archive safety\n' > "$DIRTY_ARCHIVE_ENV_PATH/dirty-archive.txt"
+bb thread show "$DIRTY_ARCHIVE_THREAD_ID" --work-status
+
+if bb thread archive "$DIRTY_ARCHIVE_THREAD_ID"; then
+  echo "expected dirty managed worktree archive to require --force"
+  false
+else
+  echo "dirty managed worktree archive was blocked without --force"
+fi
+
+bb thread archive "$DIRTY_ARCHIVE_THREAD_ID" --force
+curl -fsS "$BB_SERVER_URL/api/v1/threads/$DIRTY_ARCHIVE_THREAD_ID" | jq
+```
+
 Expected result:
 
 - The unmanaged thread reaches `idle`, shows output, and accepts a follow-up.
-- The worktree thread reaches `idle`, the environment reports `isWorktree: true`, and workspace status/diff routes return data.
+- The worktree thread reaches `idle`, the environment reports `isWorktree: true`, and workspace status/diff routes return data for uncommitted, branch-committed, and combined targets.
+- Environment merge-base metadata can be set, reflected by `bb environment show`, used by thread status/diff output, and cleared.
 - Archiving blocks `bb thread tell`; unarchiving restores normal operation.
+- Dirty isolated managed worktree archive is blocked without `--force` and succeeds with `--force`.
 
 ## Multi-Thread and Shared Environment
 
@@ -250,7 +304,7 @@ bb thread output "$PI_THREAD_ID"
 
 Promote and demote a managed worktree.
 
-Promotion requires both the managed worktree and the primary checkout to be clean. Commit the worktree change before promoting, and run this step from a clean primary checkout:
+Promotion requires both the managed worktree and the primary checkout to be clean. The primary checkout is `$PROJECT_ROOT`, the local project source, not the operator's current shell directory. Commit the worktree change before promoting, and verify `$PROJECT_ROOT` is clean:
 
 ```bash
 PROMOTE_THREAD_ID=$(bb thread spawn \
@@ -265,11 +319,32 @@ PROMOTE_THREAD_ID=$(bb thread spawn \
 
 bb thread wait "$PROMOTE_THREAD_ID" --status idle --timeout 120
 PROMOTE_ENV_ID=$(curl -fsS "$BB_SERVER_URL/api/v1/threads/$PROMOTE_THREAD_ID" | jq -r '.environmentId')
+PROMOTE_ENV_JSON=$(curl -fsS "$BB_SERVER_URL/api/v1/environments/$PROMOTE_ENV_ID")
+PROMOTE_BRANCH=$(printf '%s\n' "$PROMOTE_ENV_JSON" | jq -er '.branchName')
+PROMOTE_DEFAULT_BRANCH=$(printf '%s\n' "$PROMOTE_ENV_JSON" | jq -er '.defaultBranch')
+PROJECT_SOURCE_ID=$(bb project show "$BB_PROJECT_ID" --json | jq -er '
+  ([.sources[] | select(.type == "local_path" and .isDefault)][0]
+    // [.sources[] | select(.type == "local_path")][0]).id
+')
 
+curl -fsS "$BB_SERVER_URL/api/v1/projects/$BB_PROJECT_ID/sources/$PROJECT_SOURCE_ID/status" \
+  | jq -e '.workspace.workingTree.hasUncommittedChanges == false'
 curl -fsS "$BB_SERVER_URL/api/v1/environments/$PROMOTE_ENV_ID/status" | jq
 bb environment commit "$PROMOTE_ENV_ID"
+curl -fsS "$BB_SERVER_URL/api/v1/environments/$PROMOTE_ENV_ID/promotion" \
+  | jq -e '.state.isPromoted == false and .actions.promote.enabled == true'
+
 bb environment promote "$PROMOTE_ENV_ID"
+curl -fsS "$BB_SERVER_URL/api/v1/environments/$PROMOTE_ENV_ID/promotion" \
+  | jq -e '.state.isPromoted == true and .actions.demote.enabled == true'
+curl -fsS "$BB_SERVER_URL/api/v1/projects/$BB_PROJECT_ID/sources/$PROJECT_SOURCE_ID/status" \
+  | jq -e --arg branch "$PROMOTE_BRANCH" '.workspace.branch.currentBranch == $branch'
+
 bb environment demote "$PROMOTE_ENV_ID"
+curl -fsS "$BB_SERVER_URL/api/v1/environments/$PROMOTE_ENV_ID/promotion" \
+  | jq -e '.state.isPromoted == false and .actions.demote.enabled == false'
+curl -fsS "$BB_SERVER_URL/api/v1/projects/$BB_PROJECT_ID/sources/$PROJECT_SOURCE_ID/status" \
+  | jq -e --arg branch "$PROMOTE_DEFAULT_BRANCH" '.workspace.branch.currentBranch == $branch'
 ```
 
 Expected result:
@@ -278,7 +353,8 @@ Expected result:
 - Alternating follow-ups complete and return the requested exact outputs.
 - Archiving one sibling does not break the other.
 - Mixed-provider threads succeed without event cross-contamination.
-- Promote/demote succeeds on the managed worktree environment.
+- Promotion availability reports promote enabled before promote, promoted state and demote enabled after promote, then unpromoted state after demote.
+- The project source status route shows the primary checkout branch change during promote/demote.
 
 ## Recovery
 
@@ -389,6 +465,115 @@ PROVIDER_WORKTREE_ENV_ID=$(curl -fsS "$BB_SERVER_URL/api/v1/threads/$PROVIDER_WO
 bb thread output "$PROVIDER_WORKTREE_THREAD_ID"
 curl -fsS "$BB_SERVER_URL/api/v1/environments/$PROVIDER_WORKTREE_ENV_ID/status" | jq
 ```
+
+Run a pending-interaction pass with permission-restricted turns:
+
+```bash
+APPROVAL_THREAD_ID=$(bb thread spawn \
+  --project "$BB_PROJECT_ID" \
+  --provider codex \
+  --model "$CODEX_MODEL" \
+  --reasoning-level low \
+  --service-tier fast \
+  --new-environment worktree \
+  --permission-mode readonly \
+  --prompt "Run this exact shell command: printf 'APPROVED' > approval-smoke.txt. If approval is needed, request approval. After the command finishes, reply with exactly DONE." \
+  --json | jq -r '.id')
+
+APPROVAL_INTERACTION_ID=
+for _ in {1..60}; do
+  APPROVAL_INTERACTION_ID=$(bb thread interactions list "$APPROVAL_THREAD_ID" --json | jq -r '.[0].id // empty')
+  if [ -n "$APPROVAL_INTERACTION_ID" ]; then
+    break
+  fi
+  sleep 2
+done
+test -n "$APPROVAL_INTERACTION_ID"
+
+bb thread interactions show "$APPROVAL_INTERACTION_ID" "$APPROVAL_THREAD_ID"
+
+if bb thread tell "$APPROVAL_THREAD_ID" "This should be blocked while an interaction is pending"; then
+  echo "expected tell to be blocked while the interaction is pending"
+  false
+else
+  echo "tell was blocked while the interaction was pending"
+fi
+
+bb thread interactions approve "$APPROVAL_INTERACTION_ID" "$APPROVAL_THREAD_ID"
+bb thread wait "$APPROVAL_THREAD_ID" --status idle --timeout 180
+bb thread output "$APPROVAL_THREAD_ID"
+bb thread interactions list "$APPROVAL_THREAD_ID" --json | jq
+```
+
+Verify denial handling with a separate interaction:
+
+```bash
+DENY_THREAD_ID=$(bb thread spawn \
+  --project "$BB_PROJECT_ID" \
+  --provider codex \
+  --model "$CODEX_MODEL" \
+  --reasoning-level low \
+  --service-tier fast \
+  --new-environment worktree \
+  --permission-mode readonly \
+  --prompt "Run this exact shell command: printf 'DENIED' > denied-smoke.txt. If approval is denied, reply with exactly DENIED." \
+  --json | jq -r '.id')
+
+DENY_INTERACTION_ID=
+for _ in {1..60}; do
+  DENY_INTERACTION_ID=$(bb thread interactions list "$DENY_THREAD_ID" --json | jq -r '.[0].id // empty')
+  if [ -n "$DENY_INTERACTION_ID" ]; then
+    break
+  fi
+  sleep 2
+done
+test -n "$DENY_INTERACTION_ID"
+
+bb thread interactions show "$DENY_INTERACTION_ID" "$DENY_THREAD_ID"
+bb thread interactions deny "$DENY_INTERACTION_ID" "$DENY_THREAD_ID"
+if bb thread wait "$DENY_THREAD_ID" --status idle --timeout 180; then
+  bb thread output "$DENY_THREAD_ID"
+else
+  bb thread show "$DENY_THREAD_ID"
+fi
+bb thread log "$DENY_THREAD_ID" --format json | jq '.[-12:]'
+```
+
+For `claude-code`, also verify grant semantics with a permission-grant interaction:
+
+```bash
+GRANT_THREAD_ID=$(bb thread spawn \
+  --project "$BB_PROJECT_ID" \
+  --provider claude-code \
+  --model "$CLAUDE_MODEL" \
+  --reasoning-level low \
+  --new-environment worktree \
+  --permission-mode workspace-write \
+  --prompt "Use the Read tool to read /etc/hosts, then reply with exactly the first non-empty line from the file and nothing else." \
+  --json | jq -r '.id')
+
+GRANT_INTERACTION_ID=
+for _ in {1..60}; do
+  GRANT_INTERACTION_ID=$(bb thread interactions list "$GRANT_THREAD_ID" --json | jq -r '.[0].id // empty')
+  if [ -n "$GRANT_INTERACTION_ID" ]; then
+    break
+  fi
+  sleep 2
+done
+test -n "$GRANT_INTERACTION_ID"
+
+bb thread interactions show "$GRANT_INTERACTION_ID" "$GRANT_THREAD_ID"
+bb thread interactions grant "$GRANT_INTERACTION_ID" "$GRANT_THREAD_ID" --scope turn
+bb thread wait "$GRANT_THREAD_ID" --status idle --timeout 180
+bb thread output "$GRANT_THREAD_ID"
+```
+
+Expected result:
+
+- Permission-restricted turns surface pending interactions through `bb thread interactions list/show`.
+- `bb thread tell` is rejected while the thread is awaiting user interaction.
+- `approve`, `deny`, and `grant` resolve their matching interaction kinds.
+- Approved/granted threads continue to `idle`; denied threads either reply with the denial handling text or clearly record the denied approval in the log.
 
 ## Recording Results
 
