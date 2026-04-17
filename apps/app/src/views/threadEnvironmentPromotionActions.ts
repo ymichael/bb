@@ -37,6 +37,7 @@ interface ResolveHeaderActionArgs {
 const PROMOTION_UNAVAILABLE_COPY: Record<EnvironmentPromotionUnavailableReason, string> = {
   already_promoted: "This environment is already promoted.",
   different_host_or_source: "Promotion is only available for local worktree environments on this host.",
+  environment_branch_mismatch: "Check out the environment branch before promoting.",
   environment_dirty: "Clean the environment worktree before continuing.",
   environment_not_ready: "Promotion is available after the environment is ready.",
   environment_status_unavailable: "Environment status is unavailable.",

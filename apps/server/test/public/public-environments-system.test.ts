@@ -242,6 +242,86 @@ describe("public environment and system routes", () => {
     }
   });
 
+  it("disables promotion when the environment worktree is on another branch", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-environment-promotion-branch-mismatch",
+      });
+      const { project, source } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/environment-promotion-branch-mismatch",
+      });
+      const sourceEnvironment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: source.path,
+        managed: false,
+        workspaceProvisionType: "unmanaged",
+        branchName: "main",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/environment-promotion-branch-mismatch/.bb-worktrees/thread",
+        managed: true,
+        workspaceProvisionType: "managed-worktree",
+        branchName: "bb/thread",
+        defaultBranch: "main",
+      });
+
+      const responsePromise = harness.app.request(
+        `/api/v1/environments/${environment.id}/promotion`,
+      );
+
+      const primaryStatusCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "workspace.status" &&
+          command.environmentId === sourceEnvironment.id,
+      );
+      await reportQueuedCommandSuccess(harness, primaryStatusCommand, {
+        workspaceStatus: makeWorkspaceStatus({
+          branch: { currentBranch: "main", defaultBranch: "main" },
+        }),
+      });
+
+      const environmentStatusCommand = await waitForQueuedCommandAfter(
+        harness,
+        primaryStatusCommand.row.cursor,
+        ({ command }) =>
+          command.type === "workspace.status" &&
+          command.environmentId === environment.id,
+      );
+      await reportQueuedCommandSuccess(harness, environmentStatusCommand, {
+        workspaceStatus: makeWorkspaceStatus({
+          branch: { currentBranch: "bb/other", defaultBranch: "main" },
+        }),
+      });
+
+      const response = await responsePromise;
+      expect(response.status).toBe(200);
+      await expect(readJson(response)).resolves.toMatchObject({
+        state: {
+          isPromoted: false,
+          branchName: "bb/thread",
+        },
+        actions: {
+          promote: {
+            enabled: false,
+            unavailableReason: "environment_branch_mismatch",
+          },
+          demote: {
+            enabled: false,
+            unavailableReason: "not_promoted",
+          },
+        },
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("returns environment details and queues status, diff, and branch queries", async () => {
     const harness = await createTestAppHarness();
     try {

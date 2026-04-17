@@ -201,6 +201,9 @@ function buildPromoteAvailability(
   if (state.isPromoted) {
     return unavailable("already_promoted");
   }
+  if (facts.environmentStatus.branch.currentBranch !== state.branchName) {
+    return unavailable("environment_branch_mismatch");
+  }
   return available();
 }
 

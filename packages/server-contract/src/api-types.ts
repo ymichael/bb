@@ -710,6 +710,7 @@ export type EnvironmentPromotionState = z.infer<
 export const environmentPromotionUnavailableReasonSchema = z.enum([
   "already_promoted",
   "different_host_or_source",
+  "environment_branch_mismatch",
   "environment_dirty",
   "environment_not_ready",
   "environment_status_unavailable",

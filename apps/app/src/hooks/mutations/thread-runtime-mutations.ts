@@ -9,6 +9,7 @@ import * as api from "@/lib/api";
 import { wsManager } from "@/lib/ws";
 import type { SendThreadMessageMutationRequest } from "./mutation-request-types";
 import {
+  getPrimaryCheckoutWorkspaceStateInvalidationQueryKeys,
   optimisticallyInsertThread,
   updateCachedThread,
 } from "../queries/query-cache";
@@ -111,6 +112,9 @@ export function useSendThreadMessage() {
       queryClient.invalidateQueries({
         queryKey: threadDefaultExecutionOptionsQueryKey(variables.id),
       });
+      for (const queryKey of getPrimaryCheckoutWorkspaceStateInvalidationQueryKeys()) {
+        queryClient.invalidateQueries({ queryKey });
+      }
       if (wsManager.getConnectionState() !== "connected") {
         queryClient.invalidateQueries({ queryKey: threadQueryKey(variables.id) });
         queryClient.invalidateQueries({
@@ -172,6 +176,9 @@ export function useSendThreadDraft() {
       queryClient.invalidateQueries({ queryKey: threadTimelineQueryKeyPrefix(variables.id) });
       queryClient.invalidateQueries({ queryKey: threadsQueryKey() });
       queryClient.invalidateQueries({ queryKey: statusQueryKey() });
+      for (const queryKey of getPrimaryCheckoutWorkspaceStateInvalidationQueryKeys()) {
+        queryClient.invalidateQueries({ queryKey });
+      }
     },
   });
 }
