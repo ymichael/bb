@@ -44,7 +44,12 @@
     "rimraf": "^6.1.0",
     "turbo": "^2.4.0",
     "typescript": "^5.7.0",
-    "vitest": "^4.0.18"
+    "vitest": "^4.1.1"
   },
-  "packageManager": "pnpm@9.15.0"
+  "packageManager": "pnpm@9.15.0",
+  "pnpm": {
+    "overrides": {
+      "zod": "4.3.6"
+    }
+  }
 }

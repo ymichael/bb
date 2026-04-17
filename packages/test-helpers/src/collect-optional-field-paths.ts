@@ -1,32 +1,40 @@
 import { z } from "zod";
 
-function unwrapSchema(schema: z.ZodTypeAny): z.ZodTypeAny {
+type ZodSchema = z.core.$ZodType;
+type ZodSchemaMap = Record<string, ZodSchema>;
+
+function unwrapSchema(schema: ZodSchema): ZodSchema {
   if (
     schema instanceof z.ZodOptional ||
+    schema instanceof z.ZodExactOptional ||
     schema instanceof z.ZodNullable ||
-    schema instanceof z.ZodDefault
+    schema instanceof z.ZodDefault ||
+    schema instanceof z.ZodPrefault ||
+    schema instanceof z.ZodCatch ||
+    schema instanceof z.ZodReadonly
   ) {
-    return unwrapSchema(schema._def.innerType);
+    return unwrapSchema(schema.unwrap());
   }
-  if (schema instanceof z.ZodEffects) {
-    return unwrapSchema(schema._def.schema);
+  if (schema instanceof z.ZodPipe) {
+    return unwrapSchema(schema.in);
   }
   return schema;
 }
 
-export function collectOptionalFieldPaths(
-  schemas: Record<string, z.ZodTypeAny>,
-): string[] {
+export function collectOptionalFieldPaths(schemas: ZodSchemaMap): string[] {
   const paths = new Set<string>();
 
-  function walk(schema: z.ZodTypeAny, prefix: string): void {
+  function walk(schema: ZodSchema, prefix: string): void {
     const unwrapped = unwrapSchema(schema);
     if (unwrapped instanceof z.ZodObject) {
       const shape = unwrapped.shape;
-      for (const key of Object.keys(shape)) {
+      for (const key in shape) {
         const value = shape[key];
         const path = `${prefix}.${key}`;
-        if (value instanceof z.ZodOptional) {
+        if (
+          value instanceof z.ZodOptional ||
+          value instanceof z.ZodExactOptional
+        ) {
           paths.add(path);
         }
         walk(value, path);
@@ -40,14 +48,14 @@ export function collectOptionalFieldPaths(
       return;
     }
     if (unwrapped instanceof z.ZodUnion) {
-      for (const option of unwrapped._def.options) {
+      for (const option of unwrapped.options) {
         walk(option, prefix);
       }
       return;
     }
     if (unwrapped instanceof z.ZodIntersection) {
-      walk(unwrapped._def.left, prefix);
-      walk(unwrapped._def.right, prefix);
+      walk(unwrapped.def.left, prefix);
+      walk(unwrapped.def.right, prefix);
     }
   }
 

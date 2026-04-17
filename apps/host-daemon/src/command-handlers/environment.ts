@@ -1,7 +1,7 @@
 import type { ProvisioningTranscriptEntry } from "@bb/domain";
 import type {
+  EnvironmentProvisionCommand,
   HostDaemonCommandResult,
-  environmentProvisionCommandSchema,
 } from "@bb/host-daemon-contract";
 import type { ProvisionWorkspaceArgs } from "@bb/host-workspace";
 import {
@@ -127,7 +127,7 @@ function buildOnProgress(args: BuildOnProgressArgs): ProvisionProgressCallback {
 }
 
 export function toProvisionWorkspaceOptions(
-  command: typeof environmentProvisionCommandSchema._type,
+  command: EnvironmentProvisionCommand,
   onProgress?: ProvisionProgressCallback,
 ): ProvisionWorkspaceArgs {
   switch (command.workspaceProvisionType) {

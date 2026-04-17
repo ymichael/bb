@@ -197,6 +197,9 @@ export type PendingInteractionPayload = z.infer<
   typeof pendingInteractionPayloadSchema
 >;
 
+const approvalDecisionDiscriminatorError =
+  "Invalid discriminator value. Expected 'allow_once' | 'allow_for_session' | 'deny'";
+
 export const approvalPendingInteractionResolutionSchema = z.discriminatedUnion(
   "decision",
   [
@@ -214,6 +217,7 @@ export const approvalPendingInteractionResolutionSchema = z.discriminatedUnion(
       decision: z.literal("deny"),
     }),
   ],
+  approvalDecisionDiscriminatorError,
 );
 export type ApprovalPendingInteractionResolution = z.infer<
   typeof approvalPendingInteractionResolutionSchema

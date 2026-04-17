@@ -1,6 +1,6 @@
 import type {
   HostDaemonCommandEnvelope,
-  HostDaemonCommandResultReport,
+  HostDaemonCommandResultReportWithoutSession,
 } from "@bb/host-daemon-contract";
 import {
   dispatchCommand,
@@ -10,7 +10,7 @@ import {
 import type { HostDaemonLogger } from "./logger.js";
 import { RuntimeManager } from "./runtime-manager.js";
 
-type CommandResultReport = Omit<HostDaemonCommandResultReport, "sessionId">;
+type CommandResultReport = HostDaemonCommandResultReportWithoutSession;
 
 export interface CommandRouterOptions {
   dataDir: CommandDispatchOptions["dataDir"];
@@ -135,7 +135,7 @@ export class CommandRouter {
   private async executeCommand(
     envelope: HostDaemonCommandEnvelope,
   ): Promise<CommandResultReport> {
-    const baseReport: Pick<CommandResultReport, "commandId" | "type"> = {
+    const baseReport = {
       commandId: envelope.id,
       type: envelope.command.type,
     };

@@ -88,11 +88,13 @@ export {
   workspaceStatusCommandSchema,
 } from "./commands.js";
 export type {
+  EnvironmentProvisionCommand,
   HostDaemonCommand,
   HostDaemonCommandEnvelope,
   HostDaemonCommandResult,
   HostDaemonCommandResultByType,
   HostDaemonCommandResultReport,
+  HostDaemonCommandResultReportWithoutSession,
   HostDaemonCommandType,
   HostDaemonExecutionOptions,
   TurnSubmitTarget,

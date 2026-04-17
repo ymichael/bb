@@ -446,7 +446,7 @@ export type ProjectDefaultExecutionOptionsQuery = z.infer<
 >;
 
 const mergeBaseBranchQuerySchema = z
-  .string({ required_error: "A merge base branch is required" })
+  .string("A merge base branch is required")
   .min(1, "A merge base branch is required");
 
 export const environmentStatusQuerySchema = z.object({

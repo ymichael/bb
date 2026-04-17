@@ -75,7 +75,7 @@ const threadEventRowInputSchema = z.object({
   threadId: z.string(),
   seq: z.number(),
   type: threadEventTypeSchema,
-  data: z.record(z.unknown()),
+  data: z.record(z.string(), z.unknown()),
   createdAt: z.number(),
 });
 

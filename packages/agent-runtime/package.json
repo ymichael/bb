@@ -41,12 +41,12 @@
     "@bb/process-utils": "workspace:*",
     "@mariozechner/pi-ai": "^0.67.5",
     "@mariozechner/pi-coding-agent": "^0.67.5",
-    "zod": "^4.0.0"
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@bb/tsconfig": "workspace:*",
     "@types/node": "^22.0.0",
     "typescript": "^5.7.0",
-    "vitest": "^4.0.0"
+    "vitest": "^4.1.1"
   }
 }

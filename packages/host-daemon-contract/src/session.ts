@@ -11,10 +11,10 @@ import {
 } from "@bb/domain";
 import { z } from "zod";
 import type { Endpoint } from "./common.js";
+import type { HostDaemonCommandResultReport } from "./commands.js";
 import {
   HOST_DAEMON_PROTOCOL_VERSION,
   hostDaemonCommandEnvelopeSchema,
-  hostDaemonCommandResultReportSchema,
 } from "./commands.js";
 import { hostRuntimeMaterialSnapshotSchema } from "./local-state.js";
 
@@ -294,10 +294,7 @@ export type HostDaemonInternalSchema = {
   };
   "/session/command-result": {
     /** Used by the daemon to report that a command has completed (success or error). */
-    $post: Endpoint<
-      { json: z.infer<typeof hostDaemonCommandResultReportSchema> },
-      { ok: true }
-    >;
+    $post: Endpoint<{ json: HostDaemonCommandResultReport }, { ok: true }>;
   };
   "/session/events": {
     /** Used by the daemon to stream provider events (turn progress, completions, errors) back to the server. */

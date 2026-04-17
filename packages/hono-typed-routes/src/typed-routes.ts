@@ -141,6 +141,29 @@ interface TypedRoutesOptions {
   onValidationError?: (message: string) => Error;
 }
 
+type ValidationMessageFromZodError = (error: ZodError) => string;
+
+const zodV4MissingInputMessagePrefix = "Invalid input: expected ";
+const zodV4MissingInputMessageSuffix = ", received undefined";
+
+const validationMessageFromZodError: ValidationMessageFromZodError = (
+  error,
+) => {
+  const issue = error.issues[0];
+  if (!issue) {
+    return "Invalid request";
+  }
+  if (
+    issue.code === "invalid_type" &&
+    issue.input === undefined &&
+    issue.message.startsWith(zodV4MissingInputMessagePrefix) &&
+    issue.message.endsWith(zodV4MissingInputMessageSuffix)
+  ) {
+    return "Required";
+  }
+  return issue.message;
+};
+
 export function typedRoutes<Schema>(
   app: Hono<any, any, any>,
   options?: TypedRoutesOptions,
@@ -178,7 +201,7 @@ export function typedRoutes<Schema>(
           parsed = schema.parse(input);
         } catch (error) {
           if (error instanceof ZodError) {
-            throw makeError(error.issues[0]?.message ?? "Invalid request");
+            throw makeError(validationMessageFromZodError(error));
           }
           throw error;
         }

@@ -88,7 +88,7 @@ export interface AppendThreadInterruptedEventArgs {
   threadId: string;
 }
 
-const storedEventPayloadSchema = z.record(z.unknown());
+const storedEventPayloadSchema = z.record(z.string(), z.unknown());
 
 const LEGACY_THREAD_START_TARGET = {
   kind: "thread-start",

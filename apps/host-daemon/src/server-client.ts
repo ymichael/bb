@@ -22,7 +22,7 @@ import {
   type HostDaemonInteractiveRequestResponse,
   type HostDaemonActiveThread,
   type HostDaemonCommandEnvelope,
-  type HostDaemonCommandResultReport,
+  type HostDaemonCommandResultReportWithoutSession,
   type HostDaemonEventEnvelope,
   type HostDaemonEnvironmentChangePayload,
   type HostRuntimeMaterialSnapshot,
@@ -99,7 +99,7 @@ export interface ServerClient {
     version: string;
   }): Promise<HostRuntimeMaterialSnapshot>;
   reportCommandResult(
-    report: Omit<HostDaemonCommandResultReport, "sessionId">,
+    report: HostDaemonCommandResultReportWithoutSession,
   ): Promise<void>;
   postEnvironmentChange(
     args: HostDaemonEnvironmentChangePayload,
@@ -343,7 +343,7 @@ export function createServerClient(
     },
 
     async reportCommandResult(
-      report: Omit<HostDaemonCommandResultReport, "sessionId">,
+      report: HostDaemonCommandResultReportWithoutSession,
     ): Promise<void> {
       await pRetry(
         async () => {

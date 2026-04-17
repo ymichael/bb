@@ -9,6 +9,7 @@ import { parseJsonWithSchema } from "../lib/json-parsing.js";
 
 const EXPIRED_COMMAND_ERROR_CODE = "command_expired";
 const EXPIRED_COMMAND_ERROR_MESSAGE = "Command expired after retry";
+const EXPIRED_COMMAND_SESSION_ID = "expired";
 
 type LifecycleFailureReport =
   | Extract<
@@ -46,6 +47,7 @@ function buildExpiredLifecycleFailureReport(args: {
     errorCode: EXPIRED_COMMAND_ERROR_CODE,
     errorMessage: EXPIRED_COMMAND_ERROR_MESSAGE,
     ok: false,
+    sessionId: EXPIRED_COMMAND_SESSION_ID,
     type: args.type,
   };
 }

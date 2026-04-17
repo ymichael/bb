@@ -280,6 +280,9 @@ export const environmentProvisionCommandSchema = z.discriminatedUnion(
     managedCloneEnvironmentProvisionCommandSchema,
   ],
 );
+export type EnvironmentProvisionCommand = z.infer<
+  typeof environmentProvisionCommandSchema
+>;
 
 export const environmentDestroyCommandSchema =
   hostDaemonWorkspaceTargetSchema.extend({
@@ -473,6 +476,57 @@ const hostDaemonCommandResultReportBaseSchema = z.object({
   commandId: z.string().min(1),
   completedAt: z.number().int().nonnegative(),
 });
+type HostDaemonCommandResultReportBase = z.infer<
+  typeof hostDaemonCommandResultReportBaseSchema
+>;
+type HostDaemonCommandSuccessResultReportByType = {
+  [TType in HostDaemonCommandType]: HostDaemonCommandResultReportBase & {
+    type: TType;
+    ok: true;
+    result: HostDaemonCommandResult<TType>;
+  };
+};
+type HostDaemonCommandSuccessResultReport =
+  HostDaemonCommandSuccessResultReportByType[HostDaemonCommandType];
+type HostDaemonKnownCommandErrorResultReportByType = {
+  [TType in HostDaemonCommandType]: HostDaemonCommandResultReportBase & {
+    type: TType;
+    ok: false;
+    errorCode: string;
+    errorMessage: string;
+  };
+};
+type HostDaemonUnknownCommandErrorResultReport =
+  HostDaemonCommandResultReportBase & {
+    type: string;
+    ok: false;
+    errorCode: string;
+    errorMessage: string;
+  };
+type HostDaemonCommandErrorResultReport =
+  HostDaemonKnownCommandErrorResultReportByType[HostDaemonCommandType];
+type HostDaemonCommandErrorResultReportWithoutSession =
+  | {
+      [TType in HostDaemonCommandType]: Omit<
+        HostDaemonKnownCommandErrorResultReportByType[TType],
+        "sessionId"
+      >;
+    }[HostDaemonCommandType]
+  | Omit<HostDaemonUnknownCommandErrorResultReport, "sessionId">;
+type HostDaemonCommandSuccessResultReportWithoutSession = Omit<
+  HostDaemonCommandResultReportBase,
+  "sessionId"
+> & {
+  type: HostDaemonCommandType;
+  ok: true;
+  result: HostDaemonCommandResult;
+};
+export type HostDaemonCommandResultReport =
+  | HostDaemonCommandSuccessResultReport
+  | HostDaemonCommandErrorResultReport;
+export type HostDaemonCommandResultReportWithoutSession =
+  | HostDaemonCommandSuccessResultReportWithoutSession
+  | HostDaemonCommandErrorResultReportWithoutSession;
 
 function createHostDaemonCommandResultReportSchemasForType<
   TType extends HostDaemonCommandType,
@@ -519,10 +573,13 @@ const unknownCommandErrorSchema =
  * Error reports (`ok: false`) include `errorCode` and `errorMessage`.
  * Unknown command types use errorCode `"unknown_command"`.
  */
-export const hostDaemonCommandResultReportSchema = z.union([
+const hostDaemonCommandResultReportValidationSchema = z.union([
   ...hostDaemonCommandResultReportSchemas,
   unknownCommandErrorSchema,
 ] as unknown as [z.ZodTypeAny, z.ZodTypeAny, ...z.ZodTypeAny[]]);
-export type HostDaemonCommandResultReport = z.infer<
-  typeof hostDaemonCommandResultReportSchema
->;
+export const hostDaemonCommandResultReportSchema =
+  z.custom<HostDaemonCommandResultReport>(
+    (value) =>
+      hostDaemonCommandResultReportValidationSchema.safeParse(value).success,
+    "Invalid command result report",
+  );

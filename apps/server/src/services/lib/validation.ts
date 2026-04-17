@@ -1,11 +1,11 @@
-import type { ZodTypeAny } from "zod";
+import type { output, ZodType } from "zod";
 import { ZodError } from "zod";
 import { ApiError } from "../../errors.js";
 
-export function parseValue<TSchema extends ZodTypeAny>(
+export function parseValue<TSchema extends ZodType>(
   value: unknown,
   schema: TSchema,
-): ReturnType<TSchema["parse"]> {
+): output<TSchema> {
   try {
     return schema.parse(value);
   } catch (error) {

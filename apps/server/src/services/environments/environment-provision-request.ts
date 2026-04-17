@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { environmentProvisionCommandSchema } from "@bb/host-daemon-contract";
+import type { EnvironmentProvisionCommand } from "@bb/host-daemon-contract";
 
 export const directEnvironmentProvisionRequestSchema = z.object({
   mode: z.literal("direct"),
@@ -28,7 +29,7 @@ export type EnvironmentProvisionRequest =
   | SandboxHostEnvironmentProvisionRequest;
 
 export function buildDirectEnvironmentProvisionRequest(
-  command: typeof environmentProvisionCommandSchema._type,
+  command: EnvironmentProvisionCommand,
 ): DirectEnvironmentProvisionRequest {
   return {
     mode: "direct",
@@ -37,7 +38,7 @@ export function buildDirectEnvironmentProvisionRequest(
 }
 
 export function buildSandboxHostEnvironmentProvisionRequest(args: {
-  command: typeof environmentProvisionCommandSchema._type;
+  command: EnvironmentProvisionCommand;
   sandboxType: string;
 }): SandboxHostEnvironmentProvisionRequest {
   return {

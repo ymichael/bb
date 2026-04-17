@@ -28,7 +28,7 @@
     "@bb/core-ui": "workspace:*",
     "@bb/domain": "workspace:*",
     "@bb/ui-core": "workspace:*",
-    "zod": "^3.24.0"
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@bb/tsconfig": "workspace:*",
@@ -42,6 +42,6 @@
     "tailwindcss": "^4.0.0",
     "typescript": "^5.7.0",
     "vite": "^7.3.1",
-    "vitest": "^4.0.18"
+    "vitest": "^4.1.1"
   }
 }

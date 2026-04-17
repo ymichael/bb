@@ -24,7 +24,7 @@
   },
   "dependencies": {
     "e2b": "^2.18.0",
-    "zod": "^4.0.0"
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@bb/tsconfig": "workspace:*",
