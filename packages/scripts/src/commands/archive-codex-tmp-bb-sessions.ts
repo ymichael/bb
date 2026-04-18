@@ -8,7 +8,12 @@ import readline from "node:readline/promises";
 import type { ChildProcessByStdio } from "node:child_process";
 import { bold, cyan, dim, green, yellow, log } from "../lib/script-helpers.js";
 
-const DEFAULT_TMP_BB_PATTERN = "/tmp/bb-*";
+const DEFAULT_TMP_BB_PATTERNS: readonly string[] = [
+  "*/bb-standalone-*",
+  "*/bb-integration-*",
+  "*/bb-integ-*",
+  "*/bb-e2b-smoke-*",
+];
 const DEFAULT_ARCHIVE_CONCURRENCY = 25;
 const DEFAULT_PROGRESS_INTERVAL = 100;
 const ARCHIVE_TIMEOUT_MS = 5 * 60 * 1000;
@@ -27,7 +32,7 @@ interface ArchiveTmpBbSessionsOptions {
   codexHome: string;
   concurrency: number;
   dryRun: boolean;
-  pattern: string;
+  patterns: readonly string[];
   yes: boolean;
 }
 
@@ -235,11 +240,12 @@ export function parseArchiveTmpBbSessionsArgs(
     codexHome: resolveDefaultCodexHome(env, homeDirectory),
     concurrency: DEFAULT_ARCHIVE_CONCURRENCY,
     dryRun: false,
-    pattern: DEFAULT_TMP_BB_PATTERN,
+    patterns: [...DEFAULT_TMP_BB_PATTERNS],
     yes: false,
   };
 
   let help = false;
+  const userPatterns: string[] = [];
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index] ?? "";
@@ -265,7 +271,7 @@ export function parseArchiveTmpBbSessionsArgs(
 
     if (arg === "--pattern" || arg.startsWith("--pattern=")) {
       const parsedOption = readOptionValue(argv, index, "--pattern");
-      options.pattern = parsedOption.value;
+      userPatterns.push(parsedOption.value);
       index = parsedOption.nextIndex;
       continue;
     }
@@ -297,10 +303,15 @@ export function parseArchiveTmpBbSessionsArgs(
     throw new Error(`Unknown option: ${arg}`);
   }
 
+  if (userPatterns.length > 0) {
+    options.patterns = userPatterns;
+  }
+
   return { help, options };
 }
 
 export function renderHelpText(): string {
+  const defaultPatterns = DEFAULT_TMP_BB_PATTERNS.join(", ");
   return `
   ${bold("codex archive tmp bb sessions")}
 
@@ -310,13 +321,15 @@ export function renderHelpText(): string {
   ${dim("Options")}
     --dry-run             Show matching sessions without archiving
     --yes, -y             Skip the interactive confirmation prompt
-    --pattern <glob>      SQLite GLOB for session cwd values ${dim("(default: /tmp/bb-*)")}
+    --pattern <glob>      SQLite GLOB for session cwd values ${dim(`(repeatable; default: ${defaultPatterns})`)}
     --codex-home <path>   Codex home directory ${dim("(default: $CODEX_HOME or ~/.codex)")}
     --codex-bin <path>    Codex CLI binary ${dim("(default: $CODEX_BIN, Codex.app, or codex on PATH)")}
     --concurrency <n>     App-server archive request concurrency ${dim("(default: 25)")}
 
   ${dim("Notes")}
-    Archives Codex threads whose recorded cwd matches the pattern.
+    Archives Codex threads whose recorded cwd matches any of the patterns.
+    Passing --pattern one or more times replaces the default list.
+    Defaults cover the bb test temp dirs (QA standalone, integration, agent-runtime providers).
     Creates a backup of the active state_<n>.sqlite DB before modifying anything.
     Uses Codex app-server's thread/archive API so rollout files move to archived_sessions.
 \n`;
@@ -330,15 +343,20 @@ function quotedSqlString(value: string): string {
   return `'${escapeSqlString(value)}'`;
 }
 
-function buildWhereClause(pattern: string): string {
-  return `archived=0 AND cwd GLOB ${quotedSqlString(pattern)}`;
+function buildWhereClause(patterns: readonly string[]): string {
+  const globClauses = patterns
+    .map((pattern) => `cwd GLOB ${quotedSqlString(pattern)}`)
+    .join(" OR ");
+  return `archived=0 AND (${globClauses})`;
 }
 
-export function buildMatchingThreadIdsSql(pattern: string): string {
-  return `SELECT id FROM threads WHERE ${buildWhereClause(pattern)} ORDER BY updated_at DESC;`;
+export function buildMatchingThreadIdsSql(patterns: readonly string[]): string {
+  return `SELECT id FROM threads WHERE ${buildWhereClause(patterns)} ORDER BY updated_at DESC;`;
 }
 
-export function buildMatchingThreadPreviewSql(pattern: string): string {
+export function buildMatchingThreadPreviewSql(
+  patterns: readonly string[],
+): string {
   const separator = quotedSqlString(SQLITE_FIELD_SEPARATOR);
   return [
     "SELECT id ||",
@@ -346,7 +364,7 @@ export function buildMatchingThreadPreviewSql(pattern: string): string {
     "|| datetime(updated_at,'unixepoch','localtime') ||",
     separator,
     "|| cwd FROM threads WHERE",
-    buildWhereClause(pattern),
+    buildWhereClause(patterns),
     "ORDER BY updated_at DESC LIMIT 10;",
   ].join(" ");
 }
@@ -410,9 +428,9 @@ async function runSqlite(dbPath: string, sql: string): Promise<string> {
 
 async function readMatchingThreadIds(
   dbPath: string,
-  pattern: string,
+  patterns: readonly string[],
 ): Promise<string[]> {
-  const output = await runSqlite(dbPath, buildMatchingThreadIdsSql(pattern));
+  const output = await runSqlite(dbPath, buildMatchingThreadIdsSql(patterns));
   const trimmedOutput = output.trim();
   if (trimmedOutput.length === 0) {
     return [];
@@ -423,11 +441,11 @@ async function readMatchingThreadIds(
 
 async function readMatchingThreadPreviews(
   dbPath: string,
-  pattern: string,
+  patterns: readonly string[],
 ): Promise<MatchingThreadPreview[]> {
   const output = await runSqlite(
     dbPath,
-    buildMatchingThreadPreviewSql(pattern),
+    buildMatchingThreadPreviewSql(patterns),
   );
   return parseThreadPreviewRows(output);
 }
@@ -656,6 +674,10 @@ export function archiveThreadsViaAppServer(
   });
 }
 
+function formatPatternList(patterns: readonly string[]): string {
+  return patterns.map((pattern) => cyan(pattern)).join(", ");
+}
+
 async function confirmArchive(
   options: ArchiveTmpBbSessionsOptions,
   previews: MatchingThreadPreview[],
@@ -676,7 +698,7 @@ async function confirmArchive(
     process.stdout.write("\n");
     log(
       yellow("!"),
-      `This will archive ${bold(String(total))} Codex session(s) matching ${cyan(options.pattern)}.`,
+      `This will archive ${bold(String(total))} Codex session(s) matching ${formatPatternList(options.patterns)}.`,
     );
     log(" ", `${dim("Codex home:")} ${options.codexHome}`);
     process.stdout.write("\n");
@@ -717,13 +739,13 @@ export async function main(
 
   process.stdout.write(`\n  ${bold("codex archive tmp bb sessions")}\n\n`);
 
-  const threadIds = await readMatchingThreadIds(dbPath, options.pattern);
-  const previews = await readMatchingThreadPreviews(dbPath, options.pattern);
+  const threadIds = await readMatchingThreadIds(dbPath, options.patterns);
+  const previews = await readMatchingThreadPreviews(dbPath, options.patterns);
 
   if (threadIds.length === 0) {
     log(
       green("●"),
-      `No unarchived Codex sessions matched ${cyan(options.pattern)}`,
+      `No unarchived Codex sessions matched ${formatPatternList(options.patterns)}`,
     );
     process.stdout.write("\n");
     return;
@@ -731,7 +753,7 @@ export async function main(
 
   log(
     dim("●"),
-    `Found ${bold(String(threadIds.length))} unarchived Codex session(s) matching ${cyan(options.pattern)}`,
+    `Found ${bold(String(threadIds.length))} unarchived Codex session(s) matching ${formatPatternList(options.patterns)}`,
   );
 
   if (options.dryRun) {

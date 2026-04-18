@@ -21,7 +21,7 @@ afterEach(() => {
 });
 
 describe("archive-codex-tmp-bb-sessions", () => {
-  it("defaults to archiving /tmp/bb-* sessions from ~/.codex", () => {
+  it("defaults to archiving bb test temp dirs from ~/.codex", () => {
     const parsedArgs = parseArchiveTmpBbSessionsArgs(
       [],
       { CODEX_BIN: "/custom/codex" },
@@ -34,7 +34,12 @@ describe("archive-codex-tmp-bb-sessions", () => {
       codexHome: path.join("/Users/tester", ".codex"),
       concurrency: 25,
       dryRun: false,
-      pattern: "/tmp/bb-*",
+      patterns: [
+        "*/bb-standalone-*",
+        "*/bb-integration-*",
+        "*/bb-integ-*",
+        "*/bb-e2b-smoke-*",
+      ],
       yes: false,
     });
   });
@@ -61,9 +66,22 @@ describe("archive-codex-tmp-bb-sessions", () => {
       codexHome: path.join("/Users/tester", "custom-codex"),
       concurrency: 7,
       dryRun: true,
-      pattern: "/tmp/custom-bb-*",
+      patterns: ["/tmp/custom-bb-*"],
       yes: true,
     });
+  });
+
+  it("accumulates repeated --pattern flags and replaces the defaults", () => {
+    const parsedArgs = parseArchiveTmpBbSessionsArgs(
+      ["--pattern", "*/bb-foo-*", "--pattern=*/bb-bar-*"],
+      {},
+      "/Users/tester",
+    );
+
+    expect(parsedArgs.options.patterns).toEqual([
+      "*/bb-foo-*",
+      "*/bb-bar-*",
+    ]);
   });
 
   it("rejects unknown or incomplete options", () => {
@@ -79,9 +97,14 @@ describe("archive-codex-tmp-bb-sessions", () => {
   });
 
   it("documents the command and default pattern", () => {
-    expect(renderHelpText()).toContain("pnpm codex:archive-tmp-bb-sessions");
-    expect(renderHelpText()).toContain("/tmp/bb-*");
-    expect(renderHelpText()).toContain("state_<n>.sqlite");
+    const help = renderHelpText();
+    expect(help).toContain("pnpm codex:archive-tmp-bb-sessions");
+    expect(help).toContain("*/bb-standalone-*");
+    expect(help).toContain("*/bb-integration-*");
+    expect(help).toContain("*/bb-integ-*");
+    expect(help).toContain("*/bb-e2b-smoke-*");
+    expect(help).toContain("repeatable");
+    expect(help).toContain("state_<n>.sqlite");
   });
 
   it("resolves the highest numbered Codex state DB", () => {
@@ -108,11 +131,22 @@ describe("archive-codex-tmp-bb-sessions", () => {
 
   it("escapes SQLite string values used in generated queries", () => {
     expect(escapeSqlString("/tmp/bb-o'clock-*")).toBe("/tmp/bb-o''clock-*");
-    expect(buildMatchingThreadIdsSql("/tmp/bb-o'clock-*")).toContain(
-      "cwd GLOB '/tmp/bb-o''clock-*'",
+    expect(buildMatchingThreadIdsSql(["/tmp/bb-o'clock-*"])).toContain(
+      "archived=0 AND (cwd GLOB '/tmp/bb-o''clock-*')",
     );
-    expect(buildMatchingThreadPreviewSql("/tmp/bb-*")).toContain(
+    expect(buildMatchingThreadPreviewSql(["/tmp/bb-*"])).toContain(
       "ORDER BY updated_at DESC LIMIT 10",
+    );
+  });
+
+  it("ORs multiple GLOB patterns in the WHERE clause", () => {
+    const sql = buildMatchingThreadIdsSql([
+      "*/bb-standalone-*",
+      "*/bb-integration-*",
+      "*/bb-integ-*",
+    ]);
+    expect(sql).toContain(
+      "archived=0 AND (cwd GLOB '*/bb-standalone-*' OR cwd GLOB '*/bb-integration-*' OR cwd GLOB '*/bb-integ-*')",
     );
   });
 
