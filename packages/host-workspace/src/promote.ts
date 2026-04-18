@@ -1,6 +1,13 @@
 import { hasUncommittedChanges, WorkspaceError } from "./git.js";
 import { Workspace } from "./workspace.js";
 
+export type DemoteWorkspaceArgs = {
+  source: Workspace;
+  primary: Workspace;
+  defaultBranch: string;
+  envBranch: string;
+};
+
 async function assertWorkspaceClean(
   workspace: Workspace,
   label: string,
@@ -24,37 +31,38 @@ export async function promoteWorkspace(
   source: Workspace,
   primary: Workspace,
 ): Promise<void> {
-  await assertWorkspaceClean(source, "promote source");
-  await assertWorkspaceClean(primary, "promote primary");
+  await Workspace.withMutations([source, primary], async () => {
+    await assertWorkspaceClean(source, "promote source");
+    await assertWorkspaceClean(primary, "promote primary");
 
-  const branch = await source.currentBranch;
-  if (!branch)
-    throw new WorkspaceError(
-      "detached_head",
-      "source has no branch (detached HEAD)",
-    );
+    const branch = await source.currentBranch;
+    if (!branch)
+      throw new WorkspaceError(
+        "detached_head",
+        "source has no branch (detached HEAD)",
+      );
 
-  // Detach source HEAD to free the branch (same-host worktree constraint)
-  await source.detachHead();
+    // Detach source HEAD to free the branch (same-host worktree constraint)
+    await source.detachHead();
 
-  await primary.checkoutBranch(branch);
+    await primary.checkoutBranch(branch);
+  });
 }
 
 /**
  * Demote: switch primary checkout back to default branch, reattach source.
  * Primary must be clean. Fails loudly if dirty.
  */
-export async function demoteWorkspace(args: {
-  source: Workspace;
-  primary: Workspace;
-  defaultBranch: string;
-  envBranch: string;
-}): Promise<void> {
-  await assertWorkspaceClean(args.primary, "demote primary");
-  await assertWorkspaceClean(args.source, "demote source");
+export async function demoteWorkspace(
+  args: DemoteWorkspaceArgs,
+): Promise<void> {
+  await Workspace.withMutations([args.source, args.primary], async () => {
+    await assertWorkspaceClean(args.primary, "demote primary");
+    await assertWorkspaceClean(args.source, "demote source");
 
-  await args.primary.checkoutBranch(args.defaultBranch);
+    await args.primary.checkoutBranch(args.defaultBranch);
 
-  // Reattach source to its branch
-  await args.source.checkoutBranch(args.envBranch);
+    // Reattach source to its branch
+    await args.source.checkoutBranch(args.envBranch);
+  });
 }

@@ -555,7 +555,7 @@ function buildInteractiveRequestParams(
   return {
     threadId: args.threadId,
     providerThreadId: args.providerThreadId,
-    turnId: "",
+    turnId: null,
     itemId: args.toolUseId,
     toolName: args.toolName,
     input: args.input,

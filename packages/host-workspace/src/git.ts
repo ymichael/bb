@@ -116,6 +116,30 @@ export async function runGit(
   }
 }
 
+export async function getAbsoluteGitDir(cwd: string): Promise<string> {
+  const result = await runGit(["rev-parse", "--absolute-git-dir"], { cwd });
+  const gitDir = result.stdout.trim();
+  if (!gitDir) {
+    throw new WorkspaceError(
+      "git_command_failed",
+      `git rev-parse --absolute-git-dir returned no path for ${cwd}`,
+    );
+  }
+  return path.resolve(gitDir);
+}
+
+export async function getGitCommonDir(cwd: string): Promise<string> {
+  const result = await runGit(["rev-parse", "--git-common-dir"], { cwd });
+  const commonDir = result.stdout.trim();
+  if (!commonDir) {
+    throw new WorkspaceError(
+      "git_command_failed",
+      `git rev-parse --git-common-dir returned no path for ${cwd}`,
+    );
+  }
+  return path.resolve(cwd, commonDir);
+}
+
 /**
  * Run a POSIX shell pipeline and capture stdout. Arguments are passed as
  * positional shell parameters (`$1`, `$2`, ...) so interpolation doesn't

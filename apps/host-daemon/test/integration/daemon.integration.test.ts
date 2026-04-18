@@ -10,7 +10,10 @@ import {
 import { jsonValueSchema, type JsonValue } from "@bb/domain";
 import { HOST_AUTH_FILE_NAME } from "@bb/host-daemon-contract";
 import { startHostDaemon } from "../../src/index.js";
-import { createTestServer } from "../helpers/test-server.js";
+import {
+  createTestServer,
+  type CreateTestServerOptions,
+} from "../helpers/test-server.js";
 
 const tempDirs: string[] = [];
 const INTERACTIVE_PROVIDER_TEST_TIMEOUT_MS = 15_000;
@@ -316,6 +319,7 @@ function createTurnSubmitCommand(args: {
 async function setupDaemonHarness(
   args: {
     adapterFactory?: () => ProviderAdapter;
+    serverOptions?: CreateTestServerOptions;
   } = {},
 ) {
   const dataDir = await makeTempDir("bb-host-daemon-data-");
@@ -328,6 +332,7 @@ async function setupDaemonHarness(
 
   const server = await createTestServer({
     threadHighWaterMarks: {},
+    ...args.serverOptions,
   });
   const daemon = await startHostDaemon({
     dataDir,
@@ -455,6 +460,73 @@ describe("host daemon integration", () => {
     }
   });
 
+  it("rebases provider event sequences from command-result high-water marks", async () => {
+    const harness = await setupDaemonHarness({
+      serverOptions: {
+        commandResultThreadHighWaterMarks: {
+          "thread-a": 10,
+        },
+      },
+    });
+
+    try {
+      harness.server.queueCommand({
+        ...createStandardThreadStartCommand({
+          environmentId: "env-a",
+          threadId: "thread-a",
+          workspacePath: harness.envAPath,
+          projectId: "project-1",
+          providerId: "fake",
+          eventSequence: 1,
+          input: [{ type: "text", text: "start" }],
+        }),
+      });
+      harness.server.sendWebSocketMessage({ type: "commands-available" });
+      await waitFor(() => harness.server.commandResults.length === 1);
+      const startResult = harness.server.commandResults.find(
+        (result) => result.type === "thread.start",
+      );
+      if (!startResult || !startResult.ok) {
+        throw new Error("Expected thread.start to succeed");
+      }
+
+      const eventCountBeforeFollowUp = harness.server.events.length;
+      harness.server.queueCommand({
+        ...createTurnSubmitCommand({
+          environmentId: "env-a",
+          threadId: "thread-a",
+          workspacePath: harness.envAPath,
+          projectId: "project-1",
+          providerId: "fake",
+          providerThreadId: startResult.result.providerThreadId,
+          eventSequence: 1,
+          input: [{ type: "text", text: "follow up" }],
+        }),
+      });
+      harness.server.sendWebSocketMessage({ type: "commands-available" });
+
+      await waitFor(() =>
+        harness.server.events
+          .slice(eventCountBeforeFollowUp)
+          .some(
+            (event) =>
+              event.threadId === "thread-a" &&
+              event.event.type === "turn/completed",
+          ),
+      );
+      const followUpEvents = harness.server.events
+        .slice(eventCountBeforeFollowUp)
+        .filter((event) => event.threadId === "thread-a");
+      expect(followUpEvents.length).toBeGreaterThan(0);
+      expect(
+        Math.min(...followUpEvents.map((event) => event.sequence)),
+      ).toBeGreaterThan(10);
+    } finally {
+      await harness.daemon.shutdown("test");
+      await harness.server.close();
+    }
+  });
+
   it(
     "persists provider approvals on the server and resolves them through queued commands",
     async () => {
@@ -545,11 +617,11 @@ describe("host daemon integration", () => {
             ),
         );
 
-        expect(
+        await waitFor(() =>
           harness.server.commandResults.some(
             (result) => result.type === "turn.submit" && result.ok,
           ),
-        ).toBe(true);
+        );
       } finally {
         await harness.daemon.shutdown("test");
         await harness.server.close();

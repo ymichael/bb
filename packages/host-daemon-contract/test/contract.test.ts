@@ -7,6 +7,7 @@ import {
   hostDaemonEnrollRequestSchema,
   hostDaemonEnrollResponseSchema,
   hostDaemonCommandEnvelopeSchema,
+  hostDaemonCommandResultResponseSchema,
   hostDaemonCommandResultSchemaByType,
   hostDaemonCommandsQuerySchema,
   hostDaemonCommandSchema,
@@ -788,6 +789,20 @@ describe("host-daemon session schemas", () => {
     ).toEqual({
       threadHighWaterMarks: {
         thr_123: 42,
+      },
+    });
+
+    expect(
+      hostDaemonCommandResultResponseSchema.parse({
+        ok: true,
+        threadHighWaterMarks: {
+          thr_123: 43,
+        },
+      }),
+    ).toEqual({
+      ok: true,
+      threadHighWaterMarks: {
+        thr_123: 43,
       },
     });
 

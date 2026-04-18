@@ -30,6 +30,12 @@ export interface EventBuffer {
   push(event: BufferedEventInput): BufferedEvent;
   ack(threadHighWaterMarks: Record<string, number>): void;
   seed(threadHighWaterMarks: Record<string, number>): void;
+  /**
+   * Move still-buffered events above server-originated sequence advances.
+   * Unlike ack(), this preserves buffered events because the server did not
+   * confirm that those specific events were persisted.
+   */
+  rebase(threadHighWaterMarks: Record<string, number>): void;
   flush(): Promise<void>;
   depth(): number;
   snapshot(): BufferedEvent[];
@@ -134,6 +140,43 @@ export function createEventBuffer(
     ack(threadHighWaterMarks);
   }
 
+  function rebase(threadHighWaterMarks: Record<string, number>): void {
+    if (Object.keys(threadHighWaterMarks).length === 0) {
+      return;
+    }
+
+    for (const [threadId, highWaterMark] of Object.entries(
+      threadHighWaterMarks,
+    )) {
+      const shouldReassign = buffer.some(
+        (event) =>
+          event.threadId === threadId && event.sequence <= highWaterMark,
+      );
+      if (!shouldReassign) {
+        const nextValue = nextSequenceByThread.get(threadId) ?? 1;
+        nextSequenceByThread.set(
+          threadId,
+          Math.max(nextValue, highWaterMark + 1),
+        );
+        continue;
+      }
+
+      let nextValue = highWaterMark + 1;
+      buffer = buffer.map((event) => {
+        if (event.threadId !== threadId) {
+          return event;
+        }
+        const nextEvent = {
+          ...event,
+          sequence: nextValue,
+        };
+        nextValue++;
+        return nextEvent;
+      });
+      nextSequenceByThread.set(threadId, nextValue);
+    }
+  }
+
   async function flush(): Promise<void> {
     while (true) {
       if (flushPromise) {
@@ -193,6 +236,7 @@ export function createEventBuffer(
     push,
     ack,
     seed,
+    rebase,
     flush,
     depth(): number {
       return buffer.length;

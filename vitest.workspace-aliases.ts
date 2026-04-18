@@ -39,6 +39,10 @@ export const workspaceTestAliases = {
   ),
   "@bb/domain": path.resolve(repoRoot, "packages/domain/src/index.ts"),
   "@bb/templates": path.resolve(repoRoot, "packages/templates/src/index.ts"),
+  "@bb/test-helpers": path.resolve(
+    repoRoot,
+    "packages/test-helpers/src/index.ts",
+  ),
   "@bb/db/internal-lifecycle": path.resolve(
     repoRoot,
     "packages/db/src/internal-lifecycle.ts",

@@ -77,6 +77,46 @@ describe("event buffer", () => {
     buffer.dispose();
   });
 
+  it("rebases buffered events above a server-originated high-water mark", async () => {
+    const buffer = createEventBuffer({
+      logger: createLogger(),
+      postEvents: async () => undefined,
+      flushAtCount: 1_000,
+    });
+
+    const first = buffer.push({
+      environmentId: "env-1",
+      threadId: "threadA",
+      event: createEvent("threadA"),
+    });
+    const second = buffer.push({
+      environmentId: "env-1",
+      threadId: "threadA",
+      event: createEvent("threadA"),
+    });
+    const other = buffer.push({
+      environmentId: "env-2",
+      threadId: "threadB",
+      event: createEvent("threadB"),
+    });
+
+    buffer.rebase({ threadA: first.sequence });
+
+    expect(buffer.snapshot()).toEqual([
+      { ...first, sequence: 2 },
+      { ...second, sequence: 3 },
+      other,
+    ]);
+
+    const next = buffer.push({
+      environmentId: "env-1",
+      threadId: "threadA",
+      event: createEvent("threadA"),
+    });
+    expect(next.sequence).toBe(4);
+    buffer.dispose();
+  });
+
   it("retries failed flushes and keeps events until they are acknowledged", async () => {
     vi.useFakeTimers();
     const postEvents = vi

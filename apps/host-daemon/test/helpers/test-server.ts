@@ -86,6 +86,7 @@ function getRawCommandId(rawCommand: unknown): string | null {
 export interface CreateTestServerOptions {
   commandResultFailures?: number;
   commandResultFailureStatus?: number;
+  commandResultThreadHighWaterMarks?: Record<string, number>;
   heartbeatIntervalMs?: number;
   leaseTimeoutMs?: number;
   trackedThreadTargets?: HostDaemonTrackedThreadTarget[];
@@ -246,7 +247,11 @@ export async function createTestServer(
     }
 
     completedCommandIds.add(payload.commandId);
-    return context.json({ ok: true });
+    return context.json({
+      ok: true,
+      threadHighWaterMarks:
+        options.commandResultThreadHighWaterMarks ?? threadHighWaterMarks,
+    });
   });
   app.post("/internal/session/events", async (context) => {
     const payload = hostDaemonEventBatchRequestSchema.parse(

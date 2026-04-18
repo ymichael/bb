@@ -25,6 +25,7 @@ import {
   completeEnvironmentProvisioning,
 } from "../environments/environment-provisioning.js";
 import { handleExpiredCommands } from "../hosts/expired-commands.js";
+import { failActiveLifecycleOperationsWithSettledCommands } from "../../internal/command-result-side-effect-failures.js";
 import {
   destroyHost,
   maybeSuspendIdleSandbox,
@@ -332,6 +333,7 @@ export async function runPeriodicSweeps(
         commandIds: expired.erroredCommandIds,
       });
     }
+    await failActiveLifecycleOperationsWithSettledCommands(deps);
     const expiredLeases = sweepExpiredLeases(deps.db, deps.hub);
     if (expiredLeases.expiredSessionIds.length > 0) {
       deps.pendingInteractions.interruptPendingInteractionsForSessionIds({

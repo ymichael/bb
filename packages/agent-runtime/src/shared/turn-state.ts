@@ -32,6 +32,7 @@ export interface CreateProviderTurnStateRegistryOptions<
 export interface ProviderTurnStateRegistry<TState extends ProviderTurnState> {
   ensureTurnStarted(args: EnsureProviderTurnStartedArgs<TState>): string;
   finishTurn(args: FinishProviderTurnArgs<TState>): void;
+  get(args: GetProviderTurnStateArgs): TState | null;
   getCurrentOrLastTurnId(
     args: GetCurrentOrLastProviderTurnIdArgs<TState>,
   ): string;
@@ -170,6 +171,10 @@ export function createProviderTurnStateRegistry<
       args.state.currentTurnId = undefined;
       touchEntry({ threadId: args.threadId });
       pruneInactiveEntries();
+    },
+
+    get(args) {
+      return touchEntry(args)?.state ?? null;
     },
 
     getCurrentOrLastTurnId(args) {

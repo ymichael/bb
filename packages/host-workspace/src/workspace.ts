@@ -28,6 +28,11 @@ import {
   WorkspaceError,
 } from "./git.js";
 import fs from "node:fs/promises";
+import {
+  withCheckoutMutationLock,
+  withCheckoutMutationLocks,
+} from "./checkout-mutation-lock.js";
+import { runGitWithWorktreeMetadataLock } from "./worktree-metadata-lock.js";
 
 export interface DiffOptions {
   target?: WorkspaceDiffTarget;
@@ -108,16 +113,15 @@ type ReadDiffArtifactsArgs = {
   numstatArgs: string[];
 };
 
+type WorkspaceMutationTargets = Workspace[];
+type WorkspaceMutationWork<T> = () => Promise<T>;
+
 interface ListWorkspaceFilesRecursivelyArgs {
   dir: string;
   root: string;
 }
 
 const UNTRACKED_DIFF_BATCH_SIZE = 10;
-
-function countWorktrees(porcelainOutput: string): number {
-  return parseWorktreeList(porcelainOutput).length;
-}
 
 function parseWorktreeList(porcelainOutput: string): WorktreeEntry[] {
   const entries: WorktreeEntry[] = [];
@@ -344,6 +348,20 @@ export class Workspace {
     this.path = path;
   }
 
+  static withMutations<T>(
+    workspaces: WorkspaceMutationTargets,
+    work: WorkspaceMutationWork<T>,
+  ): Promise<T> {
+    return withCheckoutMutationLocks(
+      workspaces.map((workspace) => workspace.path),
+      work,
+    );
+  }
+
+  withMutation<T>(work: WorkspaceMutationWork<T>): Promise<T> {
+    return withCheckoutMutationLock(this.path, work);
+  }
+
   get exists(): Promise<boolean> {
     return pathExists(this.path);
   }
@@ -508,24 +526,28 @@ export class Workspace {
   async commit(options: CommitOptions): Promise<CommitResult> {
     await ensureGitRepo(this.path);
 
-    await runGit(["add", "-A"], { cwd: this.path });
-    const commitArgs = ["commit", "-m", options.message];
-    if (options.noVerify) {
-      commitArgs.push("--no-verify");
-    }
-    await runGit(commitArgs, { cwd: this.path });
-    const commitSha = await revParse(this.path, "HEAD");
-    const commitSubject = (
-      await runGit(["log", "-1", "--pretty=%s"], { cwd: this.path })
-    ).stdout.trim();
+    return this.withMutation(async () => {
+      await runGit(["add", "-A"], { cwd: this.path });
+      const commitArgs = ["commit", "-m", options.message];
+      if (options.noVerify) {
+        commitArgs.push("--no-verify");
+      }
+      await runGit(commitArgs, { cwd: this.path });
+      const commitSha = await revParse(this.path, "HEAD");
+      const commitSubject = (
+        await runGit(["log", "-1", "--pretty=%s"], { cwd: this.path })
+      ).stdout.trim();
 
-    return { commitSha, commitSubject };
+      return { commitSha, commitSubject };
+    });
   }
 
   async reset(): Promise<void> {
     await ensureGitRepo(this.path);
-    await runGit(["reset", "--hard", "HEAD"], { cwd: this.path });
-    await runGit(["clean", "-fd"], { cwd: this.path });
+    await this.withMutation(async () => {
+      await runGit(["reset", "--hard", "HEAD"], { cwd: this.path });
+      await runGit(["clean", "-fd"], { cwd: this.path });
+    });
   }
 
   async fetch(options: FetchOptions = {}): Promise<void> {
@@ -543,53 +565,59 @@ export class Workspace {
   async checkoutBranch(branchName: string): Promise<void> {
     await ensureGitRepo(this.path);
 
-    if ((await this.currentBranch) === branchName) {
-      return;
-    }
+    await this.withMutation(async () => {
+      if ((await this.currentBranch) === branchName) {
+        return;
+      }
 
-    if (await hasRef(this.path, `refs/heads/${branchName}`)) {
-      await runGit(["checkout", branchName], { cwd: this.path });
-      return;
-    }
+      if (await hasRef(this.path, `refs/heads/${branchName}`)) {
+        await runGit(["checkout", branchName], { cwd: this.path });
+        return;
+      }
 
-    if (await hasRef(this.path, `refs/remotes/origin/${branchName}`)) {
-      await runGit(["checkout", "-B", branchName, `origin/${branchName}`], {
-        cwd: this.path,
-      });
-      await runGit(
-        ["branch", "--set-upstream-to", `origin/${branchName}`, branchName],
-        { cwd: this.path },
-      );
-      return;
-    }
+      if (await hasRef(this.path, `refs/remotes/origin/${branchName}`)) {
+        await runGit(["checkout", "-B", branchName, `origin/${branchName}`], {
+          cwd: this.path,
+        });
+        await runGit(
+          ["branch", "--set-upstream-to", `origin/${branchName}`, branchName],
+          { cwd: this.path },
+        );
+        return;
+      }
 
-    await runGit(["checkout", "-B", branchName], { cwd: this.path });
+      await runGit(["checkout", "-B", branchName], { cwd: this.path });
+    });
   }
 
   async detachHead(): Promise<void> {
     await ensureGitRepo(this.path);
 
-    if ((await this.currentBranch) === undefined) {
-      return;
-    }
+    await this.withMutation(async () => {
+      if ((await this.currentBranch) === undefined) {
+        return;
+      }
 
-    await runGit(["checkout", "--detach"], { cwd: this.path });
+      await runGit(["checkout", "--detach"], { cwd: this.path });
+    });
   }
 
   async stash(message = "bb-workspace-stash"): Promise<string | null> {
     await ensureGitRepo(this.path);
 
-    if (!(await hasUncommittedChanges(this.path))) {
-      return null;
-    }
+    return this.withMutation(async () => {
+      if (!(await hasUncommittedChanges(this.path))) {
+        return null;
+      }
 
-    await runGit(["stash", "push", "--include-untracked", "-m", message], {
-      cwd: this.path,
+      await runGit(["stash", "push", "--include-untracked", "-m", message], {
+        cwd: this.path,
+      });
+      const ref = await runGit(["stash", "list", "-1", "--format=%gd"], {
+        cwd: this.path,
+      });
+      return ref.stdout.trim() || null;
     });
-    const ref = await runGit(["stash", "list", "-1", "--format=%gd"], {
-      cwd: this.path,
-    });
-    return ref.stdout.trim() || null;
   }
 
   async stashPop(ref?: string): Promise<void> {
@@ -599,7 +627,9 @@ export class Workspace {
     if (ref) {
       args.push(ref);
     }
-    await runGit(args, { cwd: this.path });
+    await this.withMutation(async () => {
+      await runGit(args, { cwd: this.path });
+    });
   }
 
   async squashMergeInto(
@@ -617,22 +647,20 @@ export class Workspace {
 
     const target = await this.resolveSquashMergeTarget(options.targetBranch);
     const tempDir = await createTempDir("bb-squash-");
-    const worktreeCountBefore = await runGit(
-      ["worktree", "list", "--porcelain"],
-      {
-        cwd: this.path,
-      },
-    );
+    const tempDirPath = path.resolve(tempDir);
 
     try {
-      await runGit(["worktree", "add", "--detach", tempDir, target.baseRef], {
-        cwd: this.path,
+      await runGitWithWorktreeMetadataLock(
+        ["worktree", "add", "--detach", tempDir, target.baseRef],
+        { cwd: this.path },
+      );
+      const commitSha = await new Workspace(tempDir).withMutation(async () => {
+        await runGit(["merge", "--squash", sourceBranch], { cwd: tempDir });
+        await runGit(["commit", "--no-verify", "-m", options.commitMessage], {
+          cwd: tempDir,
+        });
+        return revParse(tempDir, "HEAD");
       });
-      await runGit(["merge", "--squash", sourceBranch], { cwd: tempDir });
-      await runGit(["commit", "--no-verify", "-m", options.commitMessage], {
-        cwd: tempDir,
-      });
-      const commitSha = await revParse(tempDir, "HEAD");
       await this.publishSquashMergeCommit({
         targetBranch: options.targetBranch,
         target,
@@ -645,20 +673,19 @@ export class Workspace {
         targetBranch: options.targetBranch,
       };
     } finally {
-      await runGit(["worktree", "remove", tempDir, "--force"], {
-        cwd: this.path,
-        allowFailure: true,
-      });
+      await runGitWithWorktreeMetadataLock(
+        ["worktree", "remove", tempDir, "--force"],
+        {
+          cwd: this.path,
+          allowFailure: true,
+        },
+      );
       await fs.rm(tempDir, { recursive: true, force: true });
 
-      const worktreeCountAfter = await runGit(
-        ["worktree", "list", "--porcelain"],
-        { cwd: this.path },
+      const remainingTempWorktree = (await this.listWorktrees()).find(
+        (entry) => path.resolve(entry.path) === tempDirPath,
       );
-      if (
-        countWorktrees(worktreeCountBefore.stdout) !==
-        countWorktrees(worktreeCountAfter.stdout)
-      ) {
+      if (remainingTempWorktree) {
         throw new WorkspaceError(
           "worktree_cleanup_failed",
           "Temporary worktree cleanup failed",
@@ -700,15 +727,17 @@ export class Workspace {
       args.targetBranch,
     );
     if (checkedOutTargetPath !== null) {
-      if (await hasUncommittedChanges(checkedOutTargetPath)) {
-        throw new WorkspaceError(
-          "dirty_target_branch",
-          `Cannot squash merge into ${args.targetBranch}: target branch is checked out at ${checkedOutTargetPath} with uncommitted changes`,
-        );
-      }
+      await new Workspace(checkedOutTargetPath).withMutation(async () => {
+        if (await hasUncommittedChanges(checkedOutTargetPath)) {
+          throw new WorkspaceError(
+            "dirty_target_branch",
+            `Cannot squash merge into ${args.targetBranch}: target branch is checked out at ${checkedOutTargetPath} with uncommitted changes`,
+          );
+        }
 
-      await runGit(["merge", "--ff-only", args.commitSha], {
-        cwd: checkedOutTargetPath,
+        await runGit(["merge", "--ff-only", args.commitSha], {
+          cwd: checkedOutTargetPath,
+        });
       });
       return;
     }

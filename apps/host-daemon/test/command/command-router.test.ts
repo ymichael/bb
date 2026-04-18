@@ -244,6 +244,42 @@ describe("CommandRouter", () => {
     );
   });
 
+  it("flushes buffered events before reporting command results", async () => {
+    const calls: string[] = [];
+    const eventSink = {
+      emit: vi.fn(),
+      flush: vi.fn(async () => {
+        calls.push("flush");
+      }),
+    };
+    const reportResult = vi.fn(async () => {
+      calls.push("report");
+    });
+    const router = new CommandRouter({
+      dataDir: "/tmp/bb-test-data",
+      fetchRuntimeMaterial: vi.fn(),
+      readPersistedRuntimeMaterial: async () => null,
+      persistRuntimeMaterial: async () => undefined,
+      reportResult,
+      runtimeManager: new RuntimeManager({}),
+      eventSink,
+      logger: createLogger(),
+    });
+
+    await router.handleCommands([
+      {
+        id: "provider-list",
+        cursor: 1,
+        command: {
+          type: "provider.list",
+        },
+      },
+    ]);
+
+    expect(calls).toEqual(["flush", "report"]);
+    expect(eventSink.flush).toHaveBeenCalledTimes(1);
+  });
+
   it("serializes host runtime material commands", async () => {
     const manager = new RuntimeManager({
       provisionWorkspace: vi.fn(async () => createFakeWorkspace("/tmp/env-1")),

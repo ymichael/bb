@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { DEFAULT_ENV_SETUP_SCRIPT_NAME } from "@bb/domain";
+import { shellSingleQuote, waitForSetupMarkerCount } from "@bb/test-helpers";
 import { Workspace } from "../src/workspace.js";
 import {
   buildSetupScriptCommand,
@@ -92,6 +93,60 @@ describe("workspace provisioning", () => {
 
     await expect(fs.stat(targetPath)).rejects.toThrow();
   });
+
+  it("runs worktree setup scripts concurrently after creating worktrees", async () => {
+    const coordinationDir = await makeTempDir("bb-worktree-setup-concurrency-");
+    const markerDir = path.join(coordinationDir, "markers");
+    const releaseFile = path.join(coordinationDir, "release");
+    const sourceRepo = await initRepoWithOptionalSetup(
+      [
+        "set -euo pipefail",
+        `marker_dir=${shellSingleQuote(markerDir)}`,
+        `release_file=${shellSingleQuote(releaseFile)}`,
+        'marker_name="$(basename "$(dirname "$PWD")")-$(basename "$PWD")"',
+        'mkdir -p "$marker_dir"',
+        'touch "$marker_dir/started-$marker_name"',
+        'while [ ! -f "$release_file" ]; do sleep 0.05; done',
+        "echo setup released",
+      ].join("\n") + "\n",
+    );
+    const parentDir = await makeTempDir("bb-worktree-concurrent-parent-");
+    const firstTargetPath = path.join(parentDir, "feature-a");
+    const secondTargetPath = path.join(parentDir, "feature-b");
+
+    const provisions = Promise.all([
+      createWorktree({
+        sourcePath: sourceRepo,
+        targetPath: firstTargetPath,
+        branchName: "feature-a",
+        timeoutMs: 900000,
+      }),
+      createWorktree({
+        sourcePath: sourceRepo,
+        targetPath: secondTargetPath,
+        branchName: "feature-b",
+        timeoutMs: 900000,
+      }),
+    ]);
+    void provisions.catch(() => undefined);
+
+    try {
+      await expect(
+        waitForSetupMarkerCount({
+          markerDir,
+          expectedCount: 2,
+          timeoutMs: 10000,
+        }),
+      ).resolves.toHaveLength(2);
+    } finally {
+      await fs.writeFile(releaseFile, "release\n", "utf8");
+    }
+
+    await expect(provisions).resolves.toEqual([
+      { path: firstTargetPath },
+      { path: secondTargetPath },
+    ]);
+  }, 15000);
 
   it("creates clones and checks out the requested branch", async () => {
     const sourceRepo = await initRepoWithOptionalSetup();

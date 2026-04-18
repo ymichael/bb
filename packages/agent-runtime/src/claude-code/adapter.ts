@@ -551,6 +551,11 @@ interface TranslateClaudeErrorEnvelopeArgs {
   detail: string;
 }
 
+interface ResolveClaudeInteractiveRequestTurnIdArgs {
+  threadId: string;
+  turnId: string | null;
+}
+
 const DEFAULT_CLAUDE_CONTEXT_WINDOW = 200_000;
 const LARGE_CLAUDE_CONTEXT_WINDOW = 1_000_000;
 
@@ -626,6 +631,21 @@ export function createClaudeCodeProviderAdapter(
       ensureTurnStarted: ensureClaudeTurnStarted,
       registry: turnState,
     });
+  }
+
+  function resolveClaudeInteractiveRequestTurnId(
+    args: ResolveClaudeInteractiveRequestTurnIdArgs,
+  ): string | null {
+    if (args.turnId !== null) {
+      return args.turnId;
+    }
+
+    const state = turnState.get({ threadId: args.threadId });
+    if (state === null) {
+      return null;
+    }
+    const currentTurnId = turnState.getCurrentOrLastTurnId({ state });
+    return currentTurnId.length > 0 ? currentTurnId : null;
   }
 
   function translateClaudeEvent(
@@ -1250,12 +1270,19 @@ export function createClaudeCodeProviderAdapter(
           if (!parsed.success) {
             return null;
           }
+          const turnId = resolveClaudeInteractiveRequestTurnId({
+            threadId: parsed.data.threadId,
+            turnId: parsed.data.turnId,
+          });
+          if (turnId === null) {
+            return null;
+          }
           return {
             requestId: request.id,
             method: request.method,
             threadId: parsed.data.threadId,
             providerThreadId: parsed.data.providerThreadId,
-            turnId: parsed.data.turnId,
+            turnId,
             payload: {
               subject: buildClaudeApprovalSubject(parsed.data),
               reason: parsed.data.reason,

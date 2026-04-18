@@ -269,7 +269,7 @@ describe("ServerConnection", () => {
     const { connection, serverClient } = createConnection(testServer);
 
     await connection.start();
-    await serverClient.reportCommandResult({
+    const threadHighWaterMarks = await serverClient.reportCommandResult({
       commandId: "cmd-1",
       completedAt: 1,
       type: "turn.submit",
@@ -278,6 +278,7 @@ describe("ServerConnection", () => {
     });
 
     expect(testServer.commandResultAttemptCount).toBe(2);
+    expect(threadHighWaterMarks).toEqual({ threadA: 4 });
     expect(testServer.commandResultReports).toEqual([
       hostDaemonCommandResultReportSchema.parse({
         sessionId: "session-1",

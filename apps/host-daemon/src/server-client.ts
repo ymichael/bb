@@ -3,6 +3,7 @@ import {
   HOST_DAEMON_COMMAND_TYPES,
   HOST_DAEMON_PROTOCOL_VERSION,
   hostDaemonCommandEnvelopeSchema,
+  hostDaemonCommandResultResponseSchema,
   hostDaemonCommandResultReportSchema,
   hostDaemonCommandsQuerySchema,
   hostDaemonEnvironmentChangeRequestSchema,
@@ -100,7 +101,7 @@ export interface ServerClient {
   }): Promise<HostRuntimeMaterialSnapshot>;
   reportCommandResult(
     report: HostDaemonCommandResultReportWithoutSession,
-  ): Promise<void>;
+  ): Promise<Record<string, number>>;
   postEnvironmentChange(
     args: HostDaemonEnvironmentChangePayload,
   ): Promise<void>;
@@ -344,8 +345,8 @@ export function createServerClient(
 
     async reportCommandResult(
       report: HostDaemonCommandResultReportWithoutSession,
-    ): Promise<void> {
-      await pRetry(
+    ): Promise<Record<string, number>> {
+      return pRetry(
         async () => {
           const payload = hostDaemonCommandResultReportSchema.parse({
             ...report,
@@ -363,6 +364,10 @@ export function createServerClient(
           if (!response.ok) {
             throw createResponseError("report command result", response);
           }
+
+          return hostDaemonCommandResultResponseSchema.parse(
+            await response.json(),
+          ).threadHighWaterMarks;
         },
         {
           retries: commandResultRetryOptions.retries,

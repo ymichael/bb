@@ -185,7 +185,7 @@ function getDestroyOperationPayload(
     kind: "destroy",
   });
 
-  if (operation) {
+  if (operation && isActiveLifecycleOperationState(operation.state)) {
     return parseJsonWithSchema(
       operation.payload,
       destroyOperationPayloadSchema,

@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   internalAuthHeaders,
   reportQueuedCommandError,
+  reportQueuedCommandSuccess,
   waitForQueuedCommand,
 } from "../helpers/commands.js";
 import {
@@ -157,8 +158,111 @@ describe("thread command failure side effects", () => {
       });
       expect(response.status).toBe(200);
 
+      const retryResponse = await reportQueuedCommandError(harness, queued, {
+        errorCode: "provider_error",
+        errorMessage: "Provider process crashed",
+      });
+      expect(retryResponse.status).toBe(200);
+
       const updated = getThread(harness.db, thread.id);
       expect(updated?.status).toBe("error");
+
+      const errorEvents = harness.db
+        .select()
+        .from(events)
+        .where(eq(events.threadId, thread.id))
+        .all()
+        .filter((e) => e.type === "system/error");
+      expect(errorEvents).toHaveLength(1);
+      const errorEvent = errorEvents[0];
+      if (!errorEvent) {
+        throw new Error("Expected a thread error event");
+      }
+      expect(JSON.parse(errorEvent.data)).toMatchObject({
+        code: "thread_command_failed",
+        message: "Command turn.submit failed",
+        detail: "Provider process crashed",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("keeps thread active when a successful turn.submit result is retried", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-turn-success-retry",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "active",
+      });
+
+      const command = queueCommand(harness.db, harness.hub, {
+        hostId: host.id,
+        sessionId: session.id,
+        type: "turn.submit",
+        payload: JSON.stringify({
+          type: "turn.submit",
+          environmentId: environment.id,
+          threadId: thread.id,
+          eventSequence: 1,
+          input: [{ type: "text", text: "Continue" }],
+          options: {
+            model: "gpt-5",
+            serviceTier: "default",
+            reasoningLevel: "medium",
+            permissionMode: "full",
+            permissionEscalation: null,
+          },
+          resumeContext: {
+            workspaceContext: {
+              workspacePath: "/tmp/test",
+              workspaceProvisionType: "unmanaged",
+            },
+            projectId: project.id,
+            providerId: "codex",
+            providerThreadId: "provider-thread-1",
+            instructions: "You are a helpful assistant.",
+            dynamicTools: [],
+            instructionMode: "append",
+          },
+          target: { mode: "start" },
+        }),
+      });
+
+      const queued = await waitForQueuedCommand(
+        harness,
+        ({ row }) => row.id === command.id,
+      );
+
+      const response = await reportQueuedCommandSuccess(harness, queued, {
+        appliedAs: "new-turn",
+      });
+      expect(response.status).toBe(200);
+
+      const retryResponse = await reportQueuedCommandSuccess(harness, queued, {
+        appliedAs: "new-turn",
+      });
+      expect(retryResponse.status).toBe(200);
+
+      expect(getThread(harness.db, thread.id)?.status).toBe("active");
+      const errorEvents = harness.db
+        .select()
+        .from(events)
+        .where(eq(events.threadId, thread.id))
+        .all()
+        .filter((e) => e.type === "system/error");
+      expect(errorEvents).toHaveLength(0);
     } finally {
       await harness.cleanup();
     }

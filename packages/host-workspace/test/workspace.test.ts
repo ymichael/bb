@@ -5,8 +5,36 @@ import { afterEach, describe, expect, it } from "vitest";
 import { Workspace } from "../src/workspace.js";
 import { WorkspaceError } from "../src/git.js";
 import { runGit } from "../src/git.js";
+import {
+  withCheckoutMutationLock,
+  withCheckoutMutationLocks,
+} from "../src/checkout-mutation-lock.js";
+import {
+  ProcessLocalQueuedLockTimeoutError,
+  withProcessLocalQueuedLocks,
+} from "../src/process-local-queued-lock.js";
 
 const tempDirs: string[] = [];
+
+type Deferred = {
+  promise: Promise<void>;
+  resolve: () => void;
+};
+
+function createDeferred(): Deferred {
+  let resolveDeferred = (): void => undefined;
+  const promise = new Promise<void>((resolve) => {
+    resolveDeferred = resolve;
+  });
+  return {
+    promise,
+    resolve: resolveDeferred,
+  };
+}
+
+function waitForLockContention(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 100));
+}
 
 async function makeTempDir(prefix: string): Promise<string> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), prefix));
@@ -489,6 +517,200 @@ describe("Workspace", () => {
 
     expect((await workspace.getStatus()).workingTree.state).toBe("clean");
     await expect(fs.stat(path.join(repoPath, "temp.txt"))).rejects.toThrow();
+  });
+
+  it("serializes same-checkout mutations", async () => {
+    const repoPath = await initRepo();
+    const workspace = new Workspace(repoPath);
+    await fs.writeFile(path.join(repoPath, "README.md"), "pending\n", "utf8");
+
+    const lockEntered = createDeferred();
+    const releaseLock = createDeferred();
+    const heldLock = withCheckoutMutationLock(repoPath, async () => {
+      lockEntered.resolve();
+      await releaseLock.promise;
+    });
+    await lockEntered.promise;
+
+    let resetCompleted = false;
+    const reset = workspace.reset().then(() => {
+      resetCompleted = true;
+    });
+    await waitForLockContention();
+
+    expect(resetCompleted).toBe(false);
+
+    releaseLock.resolve();
+    await Promise.all([heldLock, reset]);
+
+    expect(resetCompleted).toBe(true);
+    expect((await workspace.getStatus()).workingTree.state).toBe("clean");
+  });
+
+  it("keeps real concurrent reset and checkout mutations coherent", async () => {
+    const repoPath = await initRepo();
+    const workspace = new Workspace(repoPath);
+    const fileNames = Array.from(
+      { length: 40 },
+      (_, index) => `file-${index}.txt`,
+    );
+
+    await Promise.all(
+      fileNames.map((fileName, index) =>
+        fs.writeFile(path.join(repoPath, fileName), `main ${index}\n`, "utf8"),
+      ),
+    );
+    await runGit(["add", "."], { cwd: repoPath });
+    await runGit(["commit", "-m", "Add checkout stress files"], {
+      cwd: repoPath,
+    });
+
+    await runGit(["checkout", "-b", "feature"], { cwd: repoPath });
+    await Promise.all(
+      fileNames.map((fileName, index) =>
+        fs.writeFile(
+          path.join(repoPath, fileName),
+          `feature ${index}\n`,
+          "utf8",
+        ),
+      ),
+    );
+    await runGit(["add", "."], { cwd: repoPath });
+    await runGit(["commit", "-m", "Update feature files"], { cwd: repoPath });
+
+    await runGit(["checkout", "main"], { cwd: repoPath });
+
+    const mutations = Array.from({ length: 12 }, (_, index) =>
+      index % 2 === 0 ? workspace.reset() : workspace.checkoutBranch("feature"),
+    );
+    await Promise.all(mutations);
+
+    const firstFileName = fileNames[0];
+    if (!firstFileName) {
+      throw new Error("Expected checkout stress files");
+    }
+
+    expect(await workspace.currentBranch).toBe("feature");
+    expect((await workspace.getStatus()).workingTree.state).toBe("clean");
+    await expect(fs.readFile(path.join(repoPath, firstFileName), "utf8"))
+      .resolves.toBe("feature 0\n");
+
+    const fsck = await runGit(["fsck", "--no-progress"], {
+      cwd: repoPath,
+      allowFailure: true,
+    });
+    expect(fsck.exitCode).toBe(0);
+  });
+
+  it("does not serialize different linked worktree checkout mutations", async () => {
+    const repoPath = await initRepo();
+    const worktreeParent = await makeTempDir("bb-workspace-lock-worktrees-");
+    const worktreePath = path.join(worktreeParent, "feature");
+    await runGit(["worktree", "add", "-b", "feature", worktreePath, "main"], {
+      cwd: repoPath,
+    });
+
+    const primaryLockEntered = createDeferred();
+    const releasePrimaryLock = createDeferred();
+    const primaryLock = withCheckoutMutationLock(repoPath, async () => {
+      primaryLockEntered.resolve();
+      await releasePrimaryLock.promise;
+    });
+    await primaryLockEntered.promise;
+
+    let worktreeLockEntered = false;
+    await withCheckoutMutationLock(worktreePath, async () => {
+      worktreeLockEntered = true;
+    });
+
+    releasePrimaryLock.resolve();
+    await primaryLock;
+
+    expect(worktreeLockEntered).toBe(true);
+  });
+
+  it("acquires multi-checkout mutation locks in stable order", async () => {
+    const repoPath = await initRepo();
+    const worktreeParent = await makeTempDir("bb-workspace-multi-lock-");
+    const worktreePath = path.join(worktreeParent, "feature");
+    await runGit(["worktree", "add", "-b", "feature", worktreePath, "main"], {
+      cwd: repoPath,
+    });
+
+    const firstLockEntered = createDeferred();
+    const releaseFirstLock = createDeferred();
+    const firstLock = withCheckoutMutationLocks(
+      [repoPath, worktreePath],
+      async () => {
+        firstLockEntered.resolve();
+        await releaseFirstLock.promise;
+      },
+    );
+    await firstLockEntered.promise;
+
+    let secondLockEntered = false;
+    const secondLock = withCheckoutMutationLocks(
+      [worktreePath, repoPath],
+      async () => {
+        secondLockEntered = true;
+      },
+    );
+    await waitForLockContention();
+
+    expect(secondLockEntered).toBe(false);
+
+    releaseFirstLock.resolve();
+    await Promise.all([firstLock, secondLock]);
+
+    expect(secondLockEntered).toBe(true);
+  });
+
+  it("times out waiters behind a stuck process-local lock", async () => {
+    const stuck = withProcessLocalQueuedLocks({
+      locks: [{ key: "stuck-lock", timeoutMs: 0 }],
+      work: () => new Promise(() => undefined),
+    });
+    void stuck.catch(() => undefined);
+
+    await expect(
+      withProcessLocalQueuedLocks({
+        locks: [{ key: "stuck-lock", timeoutMs: 10 }],
+        work: async () => "unreachable",
+      }),
+    ).rejects.toBeInstanceOf(ProcessLocalQueuedLockTimeoutError);
+  });
+
+  it("skips process-local lock waiters that time out before entry", async () => {
+    const entered = createDeferred();
+    const release = createDeferred();
+    let timedOutWorkRan = false;
+    const first = withProcessLocalQueuedLocks({
+      locks: [{ key: "timed-out-skip-lock", timeoutMs: 0 }],
+      work: async () => {
+        entered.resolve();
+        await release.promise;
+      },
+    });
+    await entered.promise;
+
+    await expect(
+      withProcessLocalQueuedLocks({
+        locks: [{ key: "timed-out-skip-lock", timeoutMs: 10 }],
+        work: async () => {
+          timedOutWorkRan = true;
+        },
+      }),
+    ).rejects.toBeInstanceOf(ProcessLocalQueuedLockTimeoutError);
+
+    release.resolve();
+    await first;
+    await expect(
+      withProcessLocalQueuedLocks({
+        locks: [{ key: "timed-out-skip-lock", timeoutMs: 1000 }],
+        work: async () => "after-timeout",
+      }),
+    ).resolves.toBe("after-timeout");
+    expect(timedOutWorkRan).toBe(false);
   });
 
   it("supports checkout, detach, stash, and stashPop", async () => {

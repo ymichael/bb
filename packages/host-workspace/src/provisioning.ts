@@ -9,12 +9,17 @@ import {
   type PortableOutputChildProcess,
 } from "@bb/process-utils";
 import { Workspace } from "./workspace.js";
+import { tryWithCheckoutMutationLock } from "./checkout-mutation-lock.js";
 import {
   pathExists,
   runGit,
   WorkspaceError,
   type GitCommandResult,
 } from "./git.js";
+import {
+  runGitWithWorktreeMetadataLock,
+  withWorktreeMetadataLock,
+} from "./worktree-metadata-lock.js";
 
 type ProgressCallback = (entry: ProvisioningTranscriptEntry) => void;
 type EmitStepArgs = {
@@ -256,7 +261,9 @@ export async function createWorktree(
   emitOutput(args.onProgress, "git-worktree-command", commandText);
   let worktreeCreated = false;
   try {
-    const result = await runGit(gitArgs, { cwd: args.sourcePath });
+    const result = await runGitWithWorktreeMetadataLock(gitArgs, {
+      cwd: args.sourcePath,
+    });
     emitGitOutput(args.onProgress, "git-worktree", result);
     emitStep({
       onProgress: args.onProgress,
@@ -537,19 +544,26 @@ export async function removeWorktree(args: RemoveWorktreeArgs): Promise<void> {
       workspacePath,
       commonDirResult.stdout.trim(),
     );
-    await runGit(
-      [
-        "--git-dir",
-        commonDir,
-        "worktree",
-        "remove",
-        workspacePath,
-        ...(force ? ["--force"] : []),
-      ],
-      {
-        cwd: path.dirname(workspacePath),
-        allowFailure: true,
-      },
+    // Lock order is checkout mutation first, worktree metadata second. Keep
+    // every path that needs both locks in this order so two callers cannot each
+    // hold one git lock domain while waiting for the other.
+    await tryWithCheckoutMutationLock(workspacePath, () =>
+      withWorktreeMetadataLock(commonDir, () =>
+        runGit(
+          [
+            "--git-dir",
+            commonDir,
+            "worktree",
+            "remove",
+            workspacePath,
+            ...(force ? ["--force"] : []),
+          ],
+          {
+            cwd: path.dirname(workspacePath),
+            allowFailure: true,
+          },
+        ),
+      ),
     );
   }
 

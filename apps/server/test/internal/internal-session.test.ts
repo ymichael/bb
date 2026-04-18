@@ -6,6 +6,7 @@ import {
   getEnvironment,
   getHost,
   getHostOperation,
+  getLatestThreadSequence,
   getThread,
   hostDaemonCommands,
   hostDaemonSessions,
@@ -20,6 +21,7 @@ import {
 import {
   HOST_DAEMON_PROTOCOL_VERSION,
   hostDaemonCommandSchema,
+  hostDaemonCommandResultResponseSchema,
   hostDaemonSessionOpenResponseSchema,
   hostRuntimeMaterialSnapshotSchema,
 } from "@bb/host-daemon-contract";
@@ -30,7 +32,10 @@ import {
 } from "@bb/domain";
 import { describe, expect, it, vi } from "vitest";
 import { appendClientTurnEvent } from "../../src/services/threads/thread-events.js";
-import { finalizeStoppedThread } from "../../src/services/threads/thread-lifecycle.js";
+import {
+  finalizeStoppedThread,
+  requestThreadStart,
+} from "../../src/services/threads/thread-lifecycle.js";
 import {
   recordThreadProvisionWorkspaceReady,
   requestThreadProvision,
@@ -378,6 +383,272 @@ describe("internal session routes", () => {
       expect(getHost(harness.db, host.id)?.lastActivityAt).toEqual(
         expect.any(Number),
       );
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("returns thread high-water marks after thread.start side effects", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-thread-start-high-water",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environmentPath = "/tmp/thread-start-high-water";
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: environmentPath,
+        status: "ready",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "provisioning",
+      });
+
+      await requestThreadStart(harness.deps, {
+        thread,
+        environment: {
+          id: environment.id,
+          hostId: environment.hostId,
+          path: environmentPath,
+          workspaceProvisionType: environment.workspaceProvisionType,
+        },
+        eventSequence: 0,
+        input: [{ type: "text", text: "start with high-water response" }],
+        execution: {
+          model: "gpt-5",
+          serviceTier: "default",
+          reasoningLevel: "medium",
+          permissionMode: "full",
+          permissionEscalation: null,
+          source: "client/turn/requested",
+        },
+        permissionEscalation: "deny",
+        projectId: project.id,
+        providerId: "codex",
+      });
+
+      const threadStartCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "thread.start" && command.threadId === thread.id,
+      );
+      const sequenceBeforeResult = getLatestThreadSequence(harness.db, {
+        threadId: thread.id,
+      });
+
+      const response = await harness.app.request(
+        "/internal/session/command-result",
+        {
+          method: "POST",
+          headers: internalAuthHeaders(harness),
+          body: JSON.stringify({
+            sessionId: threadStartCommand.row.sessionId,
+            commandId: threadStartCommand.row.id,
+            completedAt: Date.now(),
+            type: "thread.start",
+            ok: true,
+            result: {
+              providerThreadId: "provider-thread-start-high-water",
+            },
+          }),
+        },
+      );
+
+      expect(response.status).toBe(200);
+      const body = hostDaemonCommandResultResponseSchema.parse(
+        await readJson(response),
+      );
+      const sequenceAfterResult = getLatestThreadSequence(harness.db, {
+        threadId: thread.id,
+      });
+
+      expect(sequenceAfterResult).toBeGreaterThan(sequenceBeforeResult);
+      expect(body.threadHighWaterMarks).toMatchObject({
+        [thread.id]: sequenceAfterResult,
+      });
+      const provisioningEvents = harness.db
+        .select({ data: events.data })
+        .from(events)
+        .where(
+          and(
+            eq(events.threadId, thread.id),
+            eq(events.type, "system/thread-provisioning"),
+          ),
+        )
+        .all()
+        .map((row) =>
+          systemThreadProvisioningEventDataSchema.parse(JSON.parse(row.data)),
+        );
+      expect(
+        provisioningEvents.some((eventData) =>
+          eventData.entries.some(
+            (entry) => entry.key === "agent-session-completed",
+          ),
+        ),
+      ).toBe(true);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("does not drop reuser daemon events after provision side effects advance reuser sequence", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-provision-shared-high-water",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/provision-shared-high-water",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/provision-shared-high-water",
+        status: "provisioning",
+      });
+      const initiator = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "provisioning",
+      });
+      const reuser = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "idle",
+      });
+      seedEvent(harness.deps, {
+        threadId: initiator.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-initiator-before-provision",
+        sequence: 6,
+        type: "thread/identity",
+        data: {},
+      });
+      seedEvent(harness.deps, {
+        threadId: reuser.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-reuser-before-provision",
+        sequence: 3,
+        type: "thread/identity",
+        data: {},
+      });
+
+      const command = queueEnvironmentProvisionLifecycleCommand(harness, {
+        hostId: host.id,
+        sessionId: session.id,
+        environmentId: environment.id,
+        command: {
+          type: "environment.provision",
+          environmentId: environment.id,
+          initiator: {
+            threadId: initiator.id,
+            eventSequence: 6,
+          },
+          workspaceProvisionType: "unmanaged",
+          path: "/tmp/provision-shared-high-water",
+        },
+      });
+
+      const response = await harness.app.request(
+        "/internal/session/command-result",
+        {
+          method: "POST",
+          headers: internalAuthHeaders(harness),
+          body: JSON.stringify({
+            sessionId: session.id,
+            commandId: command.id,
+            completedAt: Date.now(),
+            type: "environment.provision",
+            ok: true,
+            result: {
+              path: "/tmp/provision-shared-high-water",
+              branchName: "bb/shared-high-water",
+              defaultBranch: "main",
+              isGitRepo: true,
+              isWorktree: false,
+              transcript: [],
+            },
+          }),
+        },
+      );
+
+      expect(response.status).toBe(200);
+      const body = hostDaemonCommandResultResponseSchema.parse(
+        await readJson(response),
+      );
+      const initiatorSequenceAfterResult = getLatestThreadSequence(
+        harness.db,
+        {
+          threadId: initiator.id,
+        },
+      );
+      const reuserSequenceAfterResult = getLatestThreadSequence(harness.db, {
+        threadId: reuser.id,
+      });
+      const reuserProvisioningEvents = harness.db
+        .select({ sequence: events.sequence })
+        .from(events)
+        .where(
+          and(
+            eq(events.threadId, reuser.id),
+            eq(events.type, "system/thread-provisioning"),
+          ),
+        )
+        .all();
+
+      expect(reuserProvisioningEvents).toHaveLength(1);
+      expect(reuserSequenceAfterResult).toBeGreaterThan(3);
+      expect(initiatorSequenceAfterResult).toBeGreaterThan(6);
+
+      const daemonNextReuserSequence =
+        (body.threadHighWaterMarks[reuser.id] ?? 3) + 1;
+      const daemonEventResponse = await harness.app.request(
+        "/internal/session/events",
+        {
+          method: "POST",
+          headers: internalAuthHeaders(harness),
+          body: JSON.stringify({
+            sessionId: session.id,
+            events: [
+              {
+                environmentId: environment.id,
+                threadId: reuser.id,
+                sequence: daemonNextReuserSequence,
+                createdAt: Date.now(),
+                event: {
+                  type: "thread/identity",
+                  threadId: reuser.id,
+                  providerThreadId: "provider-reuser-after-provision",
+                },
+              },
+            ],
+          }),
+        },
+      );
+
+      expect(daemonEventResponse.status).toBe(200);
+      expect(
+        harness.db
+          .select({ sequence: events.sequence })
+          .from(events)
+          .where(
+            and(
+              eq(events.threadId, reuser.id),
+              eq(events.type, "thread/identity"),
+              eq(events.sequence, daemonNextReuserSequence),
+            ),
+          )
+          .get(),
+      ).toMatchObject({
+        sequence: daemonNextReuserSequence,
+      });
     } finally {
       await harness.cleanup();
     }

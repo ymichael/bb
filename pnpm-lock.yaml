@@ -1065,6 +1065,9 @@ importers:
       '@bb/tsconfig':
         specifier: workspace:*
         version: link:../tsconfig
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.19.10
       typescript:
         specifier: ^5.7.0
         version: 5.9.3
@@ -1155,6 +1158,9 @@ importers:
       '@bb/server-contract':
         specifier: workspace:*
         version: link:../../packages/server-contract
+      '@bb/test-helpers':
+        specifier: workspace:*
+        version: link:../../packages/test-helpers
       '@hono/node-server':
         specifier: ^1.19.11
         version: 1.19.11(hono@4.11.9)

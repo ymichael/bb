@@ -131,6 +131,14 @@ export type HostDaemonEventBatchResponse = z.infer<
   typeof hostDaemonEventBatchResponseSchema
 >;
 
+export const hostDaemonCommandResultResponseSchema = z.object({
+  ok: z.literal(true),
+  threadHighWaterMarks: z.record(z.string(), z.number().int().nonnegative()),
+});
+export type HostDaemonCommandResultResponse = z.infer<
+  typeof hostDaemonCommandResultResponseSchema
+>;
+
 export const hostDaemonEnvironmentChangeSchema = z
   .enum(ENVIRONMENT_CHANGE_KINDS)
   .extract([
@@ -293,8 +301,11 @@ export type HostDaemonInternalSchema = {
     >;
   };
   "/session/command-result": {
-    /** Used by the daemon to report that a command has completed (success or error). */
-    $post: Endpoint<{ json: HostDaemonCommandResultReport }, { ok: true }>;
+    /** Used by the daemon to report command completion and receive post-side-effect event high-water marks. */
+    $post: Endpoint<
+      { json: HostDaemonCommandResultReport },
+      HostDaemonCommandResultResponse
+    >;
   };
   "/session/events": {
     /** Used by the daemon to stream provider events (turn progress, completions, errors) back to the server. */

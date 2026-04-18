@@ -30,6 +30,24 @@ function createTurnState(): TestTurnState {
 }
 
 describe("turn-state", () => {
+  it("looks up existing state without creating missing thread state", () => {
+    let createCount = 0;
+    const registry = createProviderTurnStateRegistry({
+      createState: () => {
+        createCount += 1;
+        return createTurnState();
+      },
+    });
+    const state = registry.getOrCreate({ threadId: "thread-1" });
+
+    expect(registry.get({ threadId: "thread-1" })).toBe(state);
+    expect(registry.get({ threadId: "thread-missing" })).toBeNull();
+    expect(createCount).toBe(1);
+
+    registry.getOrCreate({ threadId: "thread-missing" });
+    expect(createCount).toBe(2);
+  });
+
   it("reuses scoped assistant ids until the scope is completed", () => {
     const registry = createProviderTurnStateRegistry({
       createState: createTurnState,

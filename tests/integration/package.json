@@ -21,6 +21,7 @@
     "@bb/process-utils": "workspace:*",
     "@bb/server": "workspace:*",
     "@bb/server-contract": "workspace:*",
+    "@bb/test-helpers": "workspace:*",
     "@hono/node-server": "^1.19.11",
     "drizzle-orm": "^0.38.4"
   },

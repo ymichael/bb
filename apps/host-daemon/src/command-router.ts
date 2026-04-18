@@ -34,8 +34,8 @@ export class CommandRouter {
   private readonly reportResult;
   private readonly logger;
   private readonly now;
-  private readonly environmentLanes = new Map<string, Promise<unknown>>();
-  private hostRuntimeMaterialLane: Promise<unknown> = Promise.resolve();
+  private readonly environmentLanes = new Map<string, Promise<void>>();
+  private hostRuntimeMaterialLane: Promise<void> = Promise.resolve();
   private readonly pendingResults: CommandResultReport[] = [];
   private reportingPromise: Promise<void> = Promise.resolve();
 
@@ -83,7 +83,7 @@ export class CommandRouter {
     this.reportingPromise = this.reportingPromise
       .then(async () => {
         await this.drainPending();
-        await this.reportResult(result);
+        await this.reportCommandResult(result);
       })
       .catch((error) => {
         this.pendingResults.push(result);
@@ -110,9 +110,16 @@ export class CommandRouter {
       if (!result) {
         return;
       }
-      await this.reportResult(result);
+      await this.reportCommandResult(result);
       this.pendingResults.shift();
     }
+  }
+
+  private async reportCommandResult(
+    result: CommandResultReport,
+  ): Promise<void> {
+    await this.options.eventSink.flush();
+    await this.reportResult(result);
   }
 
   private runInEnvironmentLane<T>(

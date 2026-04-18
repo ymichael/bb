@@ -13,6 +13,7 @@ export interface QueueCommandInput {
 
 type CommandWriteConnection = DbConnection | DbTransaction;
 type CommandReadConnection = DbConnection | DbTransaction;
+export type HostDaemonCommandRow = typeof hostDaemonCommands.$inferSelect;
 
 export interface HasPendingHostCommandForThreadArgs {
   hostId: string;

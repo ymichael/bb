@@ -270,7 +270,8 @@ const managedCloneEnvironmentProvisionCommandSchema =
  *
  * Result: `{ path, isGitRepo, isWorktree, branchName, transcript }`.
  *
- * Lane-serialized per environmentId.
+ * Lane-serialized per environmentId. Git worktree metadata mutations are
+ * protected by the workspace implementation.
  */
 export const environmentProvisionCommandSchema = z.discriminatedUnion(
   "workspaceProvisionType",

@@ -277,6 +277,7 @@ export type {
   QueueCommandInput,
   FetchCommandsOptions,
   HasPendingHostCommandForThreadArgs,
+  HostDaemonCommandRow,
   ReportCommandResultInput,
 } from "./commands.js";
 

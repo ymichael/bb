@@ -183,7 +183,7 @@ export function shouldRequestClaudePermissionApproval(
 export const claudePermissionRequestApprovalParamsSchema = z.object({
   threadId: z.string(),
   providerThreadId: z.string(),
-  turnId: z.string(),
+  turnId: z.string().min(1).nullable(),
   itemId: z.string(),
   toolName: z.string(),
   input: z.record(z.string(), z.unknown()),

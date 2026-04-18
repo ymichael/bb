@@ -499,7 +499,7 @@ describe("claude-code provider adapter", () => {
         params: {
           threadId: "thr_1",
           providerThreadId: "claude-session-1",
-          turnId: "",
+          turnId: "turn-provider",
           itemId: "toolu_1",
           toolName: "WebFetch",
           input: { url: "https://example.com" },
@@ -515,7 +515,7 @@ describe("claude-code provider adapter", () => {
       method: CLAUDE_PERMISSION_REQUEST_APPROVAL_METHOD,
       threadId: "thr_1",
       providerThreadId: "claude-session-1",
-      turnId: "",
+      turnId: "turn-provider",
       payload: {
         subject: {
           kind: "permission_grant",
@@ -532,6 +532,82 @@ describe("claude-code provider adapter", () => {
     });
   });
 
+  it("fills missing Claude permission approval turn ids from the active turn", () => {
+    const adapter = createClaudeCodeProviderAdapter();
+    adapter.translateEvent(
+      {
+        type: "assistant",
+        message: {
+          id: "msg-1",
+          role: "assistant",
+          content: [
+            {
+              type: "tool_use",
+              id: "toolu_1",
+              name: "Read",
+              input: { file_path: "/etc/hosts" },
+            },
+          ],
+        },
+        session_id: "sess-1",
+      },
+      { threadId: "thr_1" },
+    );
+
+    expect(
+      adapter.decodeInteractiveRequest?.({
+        id: "req-2",
+        method: CLAUDE_PERMISSION_REQUEST_APPROVAL_METHOD,
+        params: {
+          threadId: "thr_1",
+          providerThreadId: "claude-session-1",
+          turnId: null,
+          itemId: "toolu_1",
+          toolName: "Read",
+          input: { file_path: "/etc/hosts" },
+          reason: "Needs approval",
+          permissions: {
+            network: null,
+            fileSystem: { read: ["/etc/hosts"], write: [] },
+          },
+        },
+      }),
+    ).toMatchObject({
+      turnId: "turn-1",
+      payload: {
+        subject: {
+          kind: "permission_grant",
+          itemId: "toolu_1",
+          toolName: "Read",
+        },
+      },
+    });
+  });
+
+  it("rejects missing Claude permission approval turn ids without an active turn", () => {
+    const adapter = createClaudeCodeProviderAdapter();
+
+    expect(
+      adapter.decodeInteractiveRequest?.({
+        id: "req-missing-turn",
+        method: CLAUDE_PERMISSION_REQUEST_APPROVAL_METHOD,
+        params: {
+          threadId: "thr_1",
+          providerThreadId: "claude-session-1",
+          turnId: null,
+          itemId: "toolu_1",
+          toolName: "Read",
+          input: { file_path: "/etc/hosts" },
+          reason: "Needs approval",
+          permissions: {
+            network: null,
+            fileSystem: { read: ["/etc/hosts"], write: [] },
+          },
+        },
+      }),
+    ).toBeNull();
+  });
+
   it("decodes Claude Bash approvals with command execution scope", () => {
     const adapter = createClaudeCodeProviderAdapter();
 
@@ -542,7 +618,7 @@ describe("claude-code provider adapter", () => {
         params: {
           threadId: "thr_1",
           providerThreadId: "claude-session-1",
-          turnId: "",
+          turnId: "turn-bash",
           itemId: "toolu_bash",
           toolName: "Bash",
           input: { command: "git status", cwd: "/tmp/project" },
@@ -586,7 +662,7 @@ describe("claude-code provider adapter", () => {
         params: {
           threadId: "thr_1",
           providerThreadId: "claude-session-1",
-          turnId: "",
+          turnId: "turn-edit",
           itemId: "toolu_edit",
           toolName: "Edit",
           input: {
@@ -632,7 +708,7 @@ describe("claude-code provider adapter", () => {
         params: {
           threadId: "thr_1",
           providerThreadId: "claude-session-1",
-          turnId: "",
+          turnId: null,
           itemId: "toolu_1",
           toolName: "WebFetch",
           input: { url: "https://example.com" },
@@ -656,7 +732,7 @@ describe("claude-code provider adapter", () => {
           method: CLAUDE_PERMISSION_REQUEST_APPROVAL_METHOD,
           threadId: "thr_1",
           providerThreadId: "claude-session-1",
-          turnId: "",
+          turnId: "turn-1",
           payload: {
             subject: {
               kind: "permission_grant",
@@ -704,7 +780,7 @@ describe("claude-code provider adapter", () => {
           method: CLAUDE_PERMISSION_REQUEST_APPROVAL_METHOD,
           threadId: "thr_1",
           providerThreadId: "claude-session-1",
-          turnId: "",
+          turnId: "turn-1",
           payload: {
             subject: {
               kind: "command",
@@ -759,7 +835,7 @@ describe("claude-code provider adapter", () => {
           method: CLAUDE_PERMISSION_REQUEST_APPROVAL_METHOD,
           threadId: "thr_1",
           providerThreadId: "claude-session-1",
-          turnId: "",
+          turnId: "turn-1",
           payload: {
             subject: {
               kind: "file_change",
@@ -812,7 +888,7 @@ describe("claude-code provider adapter", () => {
           method: CLAUDE_PERMISSION_REQUEST_APPROVAL_METHOD,
           threadId: "thr_1",
           providerThreadId: "claude-session-1",
-          turnId: "",
+          turnId: "turn-1",
           payload: {
             subject: {
               kind: "file_change",
@@ -842,7 +918,7 @@ describe("claude-code provider adapter", () => {
           method: CLAUDE_PERMISSION_REQUEST_APPROVAL_METHOD,
           threadId: "thr_1",
           providerThreadId: "claude-session-1",
-          turnId: "",
+          turnId: "turn-1",
           payload: {
             subject: {
               kind: "command",
