@@ -23,8 +23,7 @@
     "test:image": "cross-env SANDBOX_IMAGE_TEST=1 vitest run --config vitest.config.ts test/image.test.ts"
   },
   "dependencies": {
-    "e2b": "^2.18.0",
-    "zod": "^4.3.6"
+    "e2b": "^2.18.0"
   },
   "devDependencies": {
     "@bb/tsconfig": "workspace:*",

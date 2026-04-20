@@ -16,15 +16,12 @@
   "dependencies": {
     "@bb/agent-provider-auth": "workspace:*",
     "@bb/agent-providers": "workspace:*",
-    "@bb/core-ui": "workspace:*",
     "@bb/db": "workspace:*",
     "@bb/domain": "workspace:*",
     "@bb/host-daemon-contract": "workspace:*",
     "@bb/host-runtime-material": "workspace:*",
-    "@bb/logger": "workspace:*",
     "@bb/sandbox-host": "workspace:*",
     "@bb/sandbox-image": "workspace:*",
-    "@bb/server": "workspace:*",
     "@bb/server-contract": "workspace:*",
     "zod": "^4.3.6"
   },

@@ -2,10 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   createLatestInitialExpandedState,
   reduceLatestInitialExpandedState,
-} from "./latestInitialExpanded";
+} from "../src/thread-timeline/latestInitialExpanded.js";
 
 describe("latestInitialExpanded", () => {
-  it("auto-expands when initialExpanded transitions false -> true", () => {
+  it("auto-expands when initialExpanded changes from false to true", () => {
     let state = createLatestInitialExpandedState(false);
     state = reduceLatestInitialExpandedState(state, {
       type: "sync",
@@ -15,9 +15,10 @@ describe("latestInitialExpanded", () => {
     expect(state.isExpanded).toBe(true);
     expect(state.isAutoExpanded).toBe(true);
     expect(state.wasUserToggled).toBe(false);
+    expect(state.prevInitialExpanded).toBe(true);
   });
 
-  it("auto-collapses when initialExpanded transitions true -> false and row was auto-expanded", () => {
+  it("collapses auto-expanded content when initialExpanded returns to false", () => {
     let state = createLatestInitialExpandedState(false);
     state = reduceLatestInitialExpandedState(state, {
       type: "sync",
@@ -30,9 +31,11 @@ describe("latestInitialExpanded", () => {
 
     expect(state.isExpanded).toBe(false);
     expect(state.isAutoExpanded).toBe(false);
+    expect(state.wasUserToggled).toBe(false);
+    expect(state.prevInitialExpanded).toBe(false);
   });
 
-  it("preserves user collapse while initialExpanded stays true", () => {
+  it("preserves a user toggle when auto-expanded content becomes inactive", () => {
     let state = createLatestInitialExpandedState(false);
     state = reduceLatestInitialExpandedState(state, {
       type: "sync",
@@ -41,11 +44,12 @@ describe("latestInitialExpanded", () => {
     state = reduceLatestInitialExpandedState(state, { type: "toggle" });
     state = reduceLatestInitialExpandedState(state, {
       type: "sync",
-      initialExpanded: true,
+      initialExpanded: false,
     });
 
     expect(state.isExpanded).toBe(false);
     expect(state.isAutoExpanded).toBe(false);
-    expect(state.wasUserToggled).toBe(true);
+    expect(state.wasUserToggled).toBe(false);
+    expect(state.prevInitialExpanded).toBe(false);
   });
 });

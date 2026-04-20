@@ -21,7 +21,6 @@
   },
   "dependencies": {
     "@bb/sandbox-image": "workspace:*",
-    "@bb/domain": "workspace:*",
     "@bb/host-daemon-contract": "workspace:*",
     "e2b": "^2.18.0",
     "p-retry": "^6.2.1"

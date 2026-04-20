@@ -20,8 +20,7 @@
     "@bb/server-contract": "workspace:*",
     "@bb/templates": "workspace:*",
     "cli-table3": "^0.6.5",
-    "commander": "^13.0.0",
-    "hono": "^4.7.0"
+    "commander": "^13.0.0"
   },
   "devDependencies": {
     "@bb/tsconfig": "workspace:*",

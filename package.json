@@ -37,7 +37,6 @@
   },
   "devDependencies": {
     "cross-env": "^10.1.0",
-    "cross-spawn": "^7.0.6",
     "dotenv-cli": "^11.0.0",
     "open": "^10.2.0",
     "prettier": "^3.8.3",

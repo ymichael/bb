@@ -95,6 +95,7 @@ async function main(): Promise<void> {
     githubPat: smokeGithubPat,
     hostDaemonPort: 3_001,
     inferenceModel: "gpt-5",
+    isDevelopment: false,
     openAiApiKey: "",
     appUrl: "https://placeholder.example.test",
     externalUrl: "https://placeholder.example.test",
