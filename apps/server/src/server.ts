@@ -4,7 +4,7 @@ import { extname, join, resolve } from "node:path";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import type { AppDeps } from "./types.js";
-import { errorToResponse } from "./errors.js";
+import { ApiError, errorToResponse } from "./errors.js";
 import { registerAutomationRoutes } from "./routes/automations.js";
 import { registerEnvironmentRoutes } from "./routes/environments.js";
 import { registerHostRoutes } from "./routes/hosts.js";
@@ -142,6 +142,12 @@ export function createApp(
   );
   app.onError((error) => errorToResponse(error));
   app.get("/health", (context) => context.json({ ok: true }));
+  app.use("/api/v1/development-only/*", async (_context, next) => {
+    if (!deps.config.isDevelopment) {
+      throw new ApiError(404, "not_found", "Not found");
+    }
+    return next();
+  });
   app.use("/internal/*", async (context, next) => {
     const normalizedPath = normalizeInternalAuthPath(context.req.path);
     if (normalizedPath === "/internal/hosts/enroll") {

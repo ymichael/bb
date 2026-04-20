@@ -38,10 +38,9 @@ async function main(): Promise<void> {
 
   const selfDir = dirname(fileURLToPath(import.meta.url));
   const appDistDir = resolve(selfDir, "../../app/dist");
+  const isProduction = process.env.NODE_ENV === "production";
   const staticDir =
-    process.env.NODE_ENV === "production" && existsSync(appDistDir)
-      ? appDistDir
-      : undefined;
+    isProduction && existsSync(appDistDir) ? appDistDir : undefined;
   const runtimeConfig: ServerRuntimeConfig = {
     anthropicApiKey: serverConfig.ANTHROPIC_API_KEY,
     dataDir: commonConfig.BB_DATA_DIR,
@@ -50,6 +49,7 @@ async function main(): Promise<void> {
     githubPat: serverConfig.BB_GITHUB_PAT,
     hostDaemonPort: serverConfig.BB_HOST_DAEMON_PORT,
     inferenceModel: serverConfig.BB_INFERENCE_MODEL,
+    isDevelopment: !isProduction,
     openAiApiKey: serverConfig.OPENAI_API_KEY,
     sandboxActivityExtensionDebounceMs:
       serverConfig.BB_SANDBOX_ACTIVITY_EXTENSION_DEBOUNCE_MS,

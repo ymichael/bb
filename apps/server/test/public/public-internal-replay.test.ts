@@ -156,6 +156,23 @@ describe("public development-only replay routes", () => {
     }
   });
 
+  it("returns 404 when the server is not running in development mode", async () => {
+    const harness = await createTestAppHarness({ isDevelopment: false });
+    try {
+      const response = await harness.app.request(REPLAY_CAPTURE_ROUTE);
+
+      expect(response.status).toBe(404);
+      await expect(readJson(response)).resolves.toMatchObject({
+        code: "not_found",
+      });
+      expect(harness.db.select().from(hostDaemonCommands).all()).toHaveLength(
+        0,
+      );
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("rejects malformed capture ids before queueing daemon commands", async () => {
     const harness = await createTestAppHarness();
     try {

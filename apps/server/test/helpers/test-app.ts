@@ -134,6 +134,7 @@ export async function createTestAppHarness(
     githubPat: "",
     hostDaemonPort: 3001,
     inferenceModel: "test/mock-model",
+    isDevelopment: true,
     openAiApiKey: "test-openai-key",
     appUrl: "https://bb.example.test",
     externalUrl: "https://bb.example.test",

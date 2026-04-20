@@ -18,6 +18,7 @@ export interface ServerRuntimeConfig {
   githubPat: string;
   hostDaemonPort: number;
   inferenceModel: string;
+  isDevelopment: boolean;
   openAiApiKey: string;
   appUrl?: string;
   externalUrl?: string;
