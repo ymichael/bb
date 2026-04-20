@@ -1,7 +1,33 @@
 import { describe, expect, it } from "vitest";
-import { buildDaemonRestartCommand } from "../src/shared.js";
+import {
+  buildDaemonRestartCommand,
+  resolveStandaloneParentPid,
+  STANDALONE_PARENT_PID_ENV,
+} from "../src/shared.js";
 
 describe("standalone restart command", () => {
+  it("prefers a caller-provided parent pid for orphan cleanup ownership", () => {
+    expect(
+      resolveStandaloneParentPid({
+        env: {
+          [STANDALONE_PARENT_PID_ENV]: "4242",
+        },
+        fallbackPid: 1111,
+      }),
+    ).toBe(4242);
+  });
+
+  it("falls back to the current parent pid when the configured owner is absent", () => {
+    expect(
+      resolveStandaloneParentPid({
+        env: {
+          [STANDALONE_PARENT_PID_ENV]: "not-a-pid",
+        },
+        fallbackPid: 1111,
+      }),
+    ).toBe(1111);
+  });
+
   it("reloads the env file without embedding provider secrets", () => {
     const command = buildDaemonRestartCommand({
       daemonPid: 123,

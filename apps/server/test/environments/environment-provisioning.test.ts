@@ -48,6 +48,7 @@ describe("environment reprovisioning", () => {
           environment,
           projectId: thread.projectId,
           provisionEventSequence: 1,
+          provisioningId: "tpv-reprovision-once-first",
           threadId: thread.id,
         },
       );
@@ -57,6 +58,7 @@ describe("environment reprovisioning", () => {
           environment,
           projectId: thread.projectId,
           provisionEventSequence: 2,
+          provisioningId: "tpv-reprovision-once-second",
           threadId: thread.id,
         },
       );
@@ -117,6 +119,7 @@ describe("environment reprovisioning", () => {
         environment,
         projectId: thread.projectId,
         provisionEventSequence: 1,
+        provisioningId: "tpv-reprovision-branch",
         threadId: thread.id,
       });
 
@@ -162,6 +165,7 @@ describe("environment reprovisioning", () => {
           environment,
           projectId: thread.projectId,
           provisionEventSequence: 1,
+          provisioningId: "tpv-reprovision-offline",
           threadId: thread.id,
         });
       } catch (error) {

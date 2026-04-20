@@ -3,6 +3,8 @@ import { spawnSync } from "node:child_process";
 
 const [, , command, ...args] = process.argv;
 
+const STANDALONE_PARENT_PID_ENV = "BB_STANDALONE_PARENT_PID";
+
 const commandConfig = {
   "auth:e2b-smoke": {
     packageScript: "auth:e2b-smoke",
@@ -30,8 +32,26 @@ const commandConfig = {
   },
 };
 
-function run(commandName, commandArgs, stdio) {
+function readParentPid(pid) {
+  const result = spawnSync("ps", ["-o", "ppid=", "-p", String(pid)], {
+    encoding: "utf8",
+    shell: false,
+    stdio: ["ignore", "pipe", "ignore"],
+  });
+  if (result.status !== 0 || !result.stdout) {
+    return null;
+  }
+  const parentPid = Number.parseInt(result.stdout.trim(), 10);
+  return Number.isInteger(parentPid) && parentPid > 0 ? parentPid : null;
+}
+
+function resolveStandaloneParentPid() {
+  return readParentPid(process.ppid) ?? process.ppid;
+}
+
+function run(commandName, commandArgs, stdio, env = process.env) {
   const result = spawnSync(commandName, commandArgs, {
+    env,
     shell: false,
     stdio,
   });
@@ -73,10 +93,19 @@ function main() {
     }
   }
 
+  const packageEnv =
+    command === "standalone:start"
+      ? {
+          ...process.env,
+          [STANDALONE_PARENT_PID_ENV]: String(resolveStandaloneParentPid()),
+        }
+      : process.env;
+
   return run(
     "pnpm",
     ["--silent", "--filter", "@bb/qa", config.packageScript, ...args],
     "inherit",
+    packageEnv,
   );
 }
 

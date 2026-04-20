@@ -13,6 +13,7 @@ import {
   loadDotEnv,
   repoRoot,
   reservePort,
+  resolveStandaloneParentPid,
   shellQuote,
   startQaServer,
   STANDALONE_INSTANCE_ENV,
@@ -50,7 +51,10 @@ async function main() {
   await cleanupStandaloneOrphans();
   const envFile = await loadDotEnv();
   const instanceId = randomUUID();
-  const parentPid = process.ppid;
+  const parentPid = resolveStandaloneParentPid({
+    env: process.env,
+    fallbackPid: process.ppid,
+  });
 
   const tmpRoot = await fs.mkdtemp(path.join(tmpdir(), "bb-standalone-"));
   const logsDir = path.join(tmpRoot, "logs");

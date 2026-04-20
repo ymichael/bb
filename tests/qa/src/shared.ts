@@ -102,6 +102,11 @@ interface LoadDotEnvResult {
   path: string | null;
 }
 
+export interface ResolveStandaloneParentPidArgs {
+  env: NodeJS.ProcessEnv;
+  fallbackPid: number;
+}
+
 interface WaitForOptions {
   description: string;
   intervalMs?: number;
@@ -165,6 +170,18 @@ export function readStandaloneStateRuntime(
 
 export function parseStandaloneState(raw: string): StandaloneState {
   return standaloneStateSchema.parse(JSON.parse(raw));
+}
+
+export function resolveStandaloneParentPid(
+  args: ResolveStandaloneParentPidArgs,
+): number {
+  const configuredPid = Number.parseInt(
+    args.env[STANDALONE_PARENT_PID_ENV] ?? "",
+    10,
+  );
+  return Number.isInteger(configuredPid) && configuredPid > 0
+    ? configuredPid
+    : args.fallbackPid;
 }
 
 async function resolveProjectEnvCandidates(): Promise<string[]> {
