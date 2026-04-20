@@ -19,6 +19,7 @@ import {
   RuntimeManager,
   type RuntimeManagerOptions,
 } from "./runtime-manager.js";
+import { hostDaemonConfig } from "@bb/config/host-daemon";
 import { createReplayCaptureService } from "@bb/replay-capture/writer";
 import { createServerClient } from "./server-client.js";
 import {
@@ -435,7 +436,7 @@ export async function createHostDaemonApp(
   }
   const replayCapture = createReplayCaptureService({
     dataDir: options.dataDir,
-    enabled: process.env.BB_REPLAY_CAPTURE === "1",
+    enabled: hostDaemonConfig.BB_DEV_REPLAY_CAPTURE,
     logger: options.logger,
   });
 

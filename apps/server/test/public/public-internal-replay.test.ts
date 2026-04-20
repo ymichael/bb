@@ -141,10 +141,7 @@ async function waitForReplayRunCommand(
 describe("public development-only replay routes", () => {
   it("serves replay routes without requiring capture recording to be enabled", async () => {
     const harness = await createTestAppHarness();
-    const previousReplayCaptureEnv = process.env.BB_REPLAY_CAPTURE;
     try {
-      delete process.env.BB_REPLAY_CAPTURE;
-
       const response = await harness.app.request(REPLAY_CAPTURE_ROUTE);
 
       expect(response.status).toBe(200);
@@ -155,11 +152,6 @@ describe("public development-only replay routes", () => {
         0,
       );
     } finally {
-      if (previousReplayCaptureEnv === undefined) {
-        delete process.env.BB_REPLAY_CAPTURE;
-      } else {
-        process.env.BB_REPLAY_CAPTURE = previousReplayCaptureEnv;
-      }
       await harness.cleanup();
     }
   });
