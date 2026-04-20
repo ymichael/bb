@@ -1,7 +1,6 @@
 import { Command } from "commander";
 import {
   replaySpeedSchema,
-  type ReplayCaptureDetail,
   type ReplayCaptureHostSummary,
   type ReplayCaptureListResponse,
   type ReplayRunResponse,
@@ -13,10 +12,6 @@ import { renderBorderlessTable } from "../table.js";
 import { outputJson } from "./helpers.js";
 
 interface ReplayListOptions {
-  json?: boolean;
-}
-
-interface ReplayShowOptions {
   json?: boolean;
 }
 
@@ -51,9 +46,7 @@ function formatDate(timestamp: number): string {
   return new Date(timestamp).toISOString();
 }
 
-function replayUrl(captureId: string): string {
-  return `http://localhost:5173/development-only/replay/${captureId}`;
-}
+const REPLAY_LIST_URL = "http://localhost:5173/development-only/replay";
 
 function printCaptureTable(captures: ReplayCaptureHostSummary[]): void {
   if (captures.length === 0) {
@@ -88,22 +81,6 @@ function printCaptureTable(captures: ReplayCaptureHostSummary[]): void {
   );
 }
 
-function printCaptureDetail(capture: ReplayCaptureDetail): void {
-  console.log(`Capture: ${capture.captureId}`);
-  console.log(`Host: ${capture.hostId}`);
-  console.log(`Provider: ${capture.providerId}`);
-  console.log(`Project: ${capture.projectId}`);
-  console.log(`Environment: ${capture.environmentId}`);
-  console.log(`Original thread: ${capture.threadId}`);
-  console.log(`Provider thread: ${capture.providerThreadId ?? "<unknown>"}`);
-  console.log(`Captured: ${formatDate(capture.capturedAt)}`);
-  console.log(
-    `Completed: ${capture.completedAt ? formatDate(capture.completedAt) : "<pending>"}`,
-  );
-  console.log(`Raw provider events: ${capture.eventCounts.rawProviderEvents}`);
-  console.log(`Replay URL: ${replayUrl(capture.captureId)}`);
-}
-
 function printReplayRun(result: ReplayRunResponse): void {
   console.log(`Replay thread: ${result.replayThreadId}`);
   console.log(`Project: ${result.projectId}`);
@@ -134,23 +111,6 @@ export function registerReplayCommands(
     );
 
   replay
-    .command("show <captureId>")
-    .description("Show a dev replay capture")
-    .option("--json", "Print machine-readable JSON output")
-    .action(
-      action(async (captureId: string, opts: ReplayShowOptions) => {
-        const client = createClient(getUrl());
-        const result = await unwrap<ReplayCaptureDetail>(
-          client.api.v1["development-only"].replay.captures[":id"].$get({
-            param: { id: captureId },
-          }),
-        );
-        if (outputJson(opts, result)) return;
-        printCaptureDetail(result);
-      }),
-    );
-
-  replay
     .command("run <captureId>")
     .description("Start a new replay thread from a capture")
     .option("--json", "Print machine-readable JSON output")
@@ -175,12 +135,29 @@ export function registerReplayCommands(
     );
 
   replay
-    .command("open <captureId>")
-    .description("Print the app URL for a replay capture")
+    .command("delete <captureId>")
+    .description("Delete a dev replay capture")
     .option("--json", "Print machine-readable JSON output")
     .action(
-      action(async (captureId: string, opts: ReplayOpenOptions) => {
-        const payload: ReplayOpenPayload = { url: replayUrl(captureId) };
+      action(async (captureId: string, opts: ReplayListOptions) => {
+        const client = createClient(getUrl());
+        const result = await unwrap<{ ok: true }>(
+          client.api.v1["development-only"].replay.captures[":id"].$delete({
+            param: { id: captureId },
+          }),
+        );
+        if (outputJson(opts, result)) return;
+        console.log(`Deleted replay capture ${captureId}`);
+      }),
+    );
+
+  replay
+    .command("open")
+    .description("Print the app URL for the replay captures list")
+    .option("--json", "Print machine-readable JSON output")
+    .action(
+      action(async (opts: ReplayOpenOptions) => {
+        const payload: ReplayOpenPayload = { url: REPLAY_LIST_URL };
         if (outputJson(opts, payload)) return;
         console.log(payload.url);
       }),

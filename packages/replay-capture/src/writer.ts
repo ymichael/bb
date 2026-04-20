@@ -468,7 +468,7 @@ export function createReplayCaptureService(
           captureId: capture.captureId,
           threadId: capture.threadId,
         },
-        `Replay capture saved: http://localhost:5173/development-only/replay/${capture.captureId}`,
+        `Replay capture saved (${capture.captureId}): http://localhost:5173/development-only/replay`,
       );
       await pruneOldCaptures();
     });
