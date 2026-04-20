@@ -1,5 +1,5 @@
 import { createReadStream } from "node:fs";
-import { readdir, readFile, stat } from "node:fs/promises";
+import { readdir, readFile, rm, stat } from "node:fs/promises";
 import { createInterface } from "node:readline";
 import {
   isReplayCaptureId,
@@ -236,4 +236,18 @@ export async function* streamRawProviderRecords(
     filePath: replayRawProviderEventsPath(args.dataDir, args.captureId),
     parse: parseRawProviderRecord,
   });
+}
+
+export async function deleteReplayCapture(
+  args: ReplayCaptureReadArgs,
+): Promise<void> {
+  requireCaptureId(args.captureId);
+  const dir = replayCaptureDir(args.dataDir, args.captureId);
+  if (!(await pathIsDirectory(dir))) {
+    throw new ReplayCaptureReadError(
+      "replay_capture_not_found",
+      `Replay capture not found: ${args.captureId}`,
+    );
+  }
+  await rm(dir, { force: true, recursive: true });
 }

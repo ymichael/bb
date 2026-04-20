@@ -88,7 +88,6 @@ import type {
   UpsertSandboxEnvVarRequest,
   UploadedPromptAttachment,
   WorkspaceFileListResponse,
-  ReplayCaptureDetail,
   ReplayCaptureListResponse,
   ReplayRunRequest,
   ReplayRunResponse,
@@ -104,7 +103,7 @@ export type PublicApiSchema = {
     $get: Endpoint<EmptyInput, ReplayCaptureListResponse>;
   };
   "/development-only/replay/captures/:id": {
-    $get: Endpoint<PathId, ReplayCaptureDetail>;
+    $delete: Endpoint<PathId, { ok: true }>;
   };
   "/development-only/replay/captures/:id/runs": {
     $post: Endpoint<

@@ -51,7 +51,6 @@ import type {
   UploadedPromptAttachment,
   UpsertSandboxEnvVarRequest,
   WorkspaceFileListResponse,
-  ReplayCaptureDetail,
   ReplayCaptureListResponse,
   ReplayRunRequest,
   ReplayRunResponse,
@@ -266,16 +265,6 @@ export async function listReplayCaptures(): Promise<ReplayCaptureListResponse> {
   );
 }
 
-export async function getReplayCapture(
-  id: string,
-): Promise<ReplayCaptureDetail> {
-  return request<ReplayCaptureDetail>(
-    apiClient["development-only"].replay.captures[":id"].$get({
-      param: { id },
-    }),
-  );
-}
-
 export async function startReplayRun(
   id: string,
   req: ReplayRunRequest,
@@ -284,6 +273,14 @@ export async function startReplayRun(
     apiClient["development-only"].replay.captures[":id"].runs.$post({
       param: { id },
       json: req,
+    }),
+  );
+}
+
+export async function deleteReplayCapture(id: string): Promise<void> {
+  await requestVoid(
+    apiClient["development-only"].replay.captures[":id"].$delete({
+      param: { id },
     }),
   );
 }

@@ -47,6 +47,7 @@ export const HOST_DAEMON_COMMAND_TYPES = [
   "workspace.list_branches",
   "replay.capture_list",
   "replay.capture_get",
+  "replay.capture_delete",
   "replay.run",
 ] as const;
 export const hostDaemonCommandTypeSchema = z.enum(HOST_DAEMON_COMMAND_TYPES);
@@ -154,6 +155,11 @@ export const replayCaptureListCommandSchema = z.object({
 
 export const replayCaptureGetCommandSchema = z.object({
   type: z.literal("replay.capture_get"),
+  captureId: z.string().min(1),
+});
+
+export const replayCaptureDeleteCommandSchema = z.object({
+  type: z.literal("replay.capture_delete"),
   captureId: z.string().min(1),
 });
 
@@ -353,6 +359,7 @@ const hostDaemonNonProvisionCommandSchema = z.discriminatedUnion("type", [
   threadDeletedCommandSchema,
   replayCaptureListCommandSchema,
   replayCaptureGetCommandSchema,
+  replayCaptureDeleteCommandSchema,
   replayRunCommandSchema,
   interactiveResolveCommandSchema,
   hostSyncRuntimeMaterialCommandSchema,
@@ -401,6 +408,7 @@ export const hostDaemonCommandResultSchemaByType = {
   "thread.deleted": z.object({}),
   "replay.capture_list": replayCaptureDaemonListResponseSchema,
   "replay.capture_get": replayCaptureManifestSchema,
+  "replay.capture_delete": z.object({}),
   "replay.run": z.object({}),
   "interactive.resolve": z.object({}),
   "host.sync_runtime_material": z.object({

@@ -3,6 +3,7 @@ import { type ThreadEvent, type ThreadEventTurnStatus } from "@bb/domain";
 import type { HostDaemonCommandResult } from "@bb/host-daemon-contract";
 import { replayRawProviderEventsPath } from "@bb/replay-capture";
 import {
+  deleteReplayCapture,
   listReplayCaptureSummaries,
   readReplayCaptureManifest,
   requireReplayCaptureFile,
@@ -63,6 +64,17 @@ export async function getReplayCapture(
     captureId: command.captureId,
     dataDir: options.dataDir,
   });
+}
+
+export async function removeReplayCapture(
+  command: CommandOf<"replay.capture_delete">,
+  options: ReplayCommandOptions,
+): Promise<HostDaemonCommandResult<"replay.capture_delete">> {
+  await deleteReplayCapture({
+    captureId: command.captureId,
+    dataDir: options.dataDir,
+  });
+  return {};
 }
 
 function terminalEvent(args: {

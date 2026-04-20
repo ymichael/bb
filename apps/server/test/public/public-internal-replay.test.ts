@@ -49,6 +49,10 @@ type ReplayCaptureListCommand = Extract<
   HostDaemonCommand,
   { type: "replay.capture_list" }
 >;
+type ReplayCaptureDeleteCommand = Extract<
+  HostDaemonCommand,
+  { type: "replay.capture_delete" }
+>;
 type ReplayRunCommand = Extract<HostDaemonCommand, { type: "replay.run" }>;
 
 function captureManifest(args: {
@@ -123,6 +127,21 @@ async function waitForReplayCaptureGetCommand(
   return { command: queued.command, row: queued.row };
 }
 
+async function waitForReplayCaptureDeleteCommand(
+  harness: TestAppHarness,
+  hostId: string,
+): Promise<QueuedCommand<ReplayCaptureDeleteCommand>> {
+  const queued = await waitForQueuedCommand(
+    harness,
+    ({ command, row }) =>
+      row.hostId === hostId && command.type === "replay.capture_delete",
+  );
+  if (queued.command.type !== "replay.capture_delete") {
+    throw new Error("Expected replay.capture_delete command");
+  }
+  return { command: queued.command, row: queued.row };
+}
+
 async function waitForReplayRunCommand(
   harness: TestAppHarness,
   hostId: string,
@@ -178,6 +197,7 @@ describe("public development-only replay routes", () => {
     try {
       const response = await harness.app.request(
         `${REPLAY_CAPTURE_ROUTE}/not-a-cap`,
+        { method: "DELETE" },
       );
 
       expect(response.status).toBe(400);
@@ -288,38 +308,26 @@ describe("public development-only replay routes", () => {
     }
   });
 
-  it("loads a capture detail from the host that owns it", async () => {
+  it("deletes a capture on the host that owns it", async () => {
     const harness = await createTestAppHarness();
     try {
-      const { host } = seedHostSession(harness.deps, { id: "host-replay-get" });
-      const { project } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
-        path: "/tmp/replay-get",
-      });
-      const environment = seedEnvironment(harness.deps, {
-        hostId: host.id,
-        projectId: project.id,
-        path: "/tmp/replay-get",
-      });
-      const thread = seedThread(harness.deps, {
-        environmentId: environment.id,
-        projectId: project.id,
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-replay-delete",
       });
       const captureId = createReplayCaptureId(1_000, "abc123zz");
-      const manifest = captureManifest({
-        captureId,
-        environmentId: environment.id,
-        projectId: project.id,
-        threadId: thread.id,
-      });
       const responsePromise = harness.app.request(
         `${REPLAY_CAPTURE_ROUTE}/${captureId}`,
+        { method: "DELETE" },
       );
-      const queued = await waitForReplayCaptureGetCommand(harness, host.id);
+      const queued = await waitForReplayCaptureDeleteCommand(harness, host.id);
+      expect(queued.command).toEqual({
+        type: "replay.capture_delete",
+        captureId,
+      });
       const reportResponse = await reportQueuedCommandSuccess(
         harness,
         queued,
-        manifest,
+        {},
         {
           hostId: host.id,
         },
@@ -329,14 +337,24 @@ describe("public development-only replay routes", () => {
       const response = await responsePromise;
 
       expect(response.status).toBe(200);
+      await expect(readJson(response)).resolves.toEqual({ ok: true });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("returns 404 when no connected host owns the capture", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const captureId = createReplayCaptureId(1_000, "abc123zz");
+      const response = await harness.app.request(
+        `${REPLAY_CAPTURE_ROUTE}/${captureId}`,
+        { method: "DELETE" },
+      );
+
+      expect(response.status).toBe(404);
       await expect(readJson(response)).resolves.toMatchObject({
-        captureId,
-        hostId: host.id,
-        projectId: project.id,
-        environmentId: environment.id,
-        threadId: thread.id,
-        title: "Test Thread",
-        projectName: "Test Project",
+        code: "replay_capture_not_found",
       });
     } finally {
       await harness.cleanup();

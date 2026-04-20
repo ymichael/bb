@@ -215,11 +215,60 @@ async function findCapture(
   );
 }
 
+async function deleteCapture(
+  deps: AppDeps,
+  captureId: string,
+): Promise<void> {
+  requireReplayCaptureId(captureId);
+
+  let firstUnexpectedError: Error | null = null;
+  let deleted = false;
+  for (const hostId of new Set(listConnectedHostIds(deps.db))) {
+    try {
+      await queueCommandAndWait(deps, {
+        hostId,
+        timeoutMs: COMMAND_TIMEOUT_MS,
+        command: {
+          type: "replay.capture_delete",
+          captureId,
+        },
+      });
+      deleted = true;
+    } catch (error) {
+      if (isReplayCaptureNotFound(error)) {
+        continue;
+      }
+      deps.logger.warn(
+        { err: error, captureId, hostId },
+        "Failed to delete replay capture on host",
+      );
+      if (!firstUnexpectedError) {
+        firstUnexpectedError =
+          error instanceof Error
+            ? error
+            : new Error("Unexpected replay capture delete failure");
+      }
+    }
+  }
+
+  if (deleted) {
+    return;
+  }
+  if (firstUnexpectedError) {
+    throw firstUnexpectedError;
+  }
+  throw new ApiError(
+    404,
+    "replay_capture_not_found",
+    "Replay capture not found",
+  );
+}
+
 export function registerDevelopmentOnlyReplayRoutes(
   app: Hono,
   deps: AppDeps,
 ): void {
-  const { get, post } = typedRoutes<PublicApiSchema>(app, {
+  const { del, get, post } = typedRoutes<PublicApiSchema>(app, {
     onValidationError: (msg) => new ApiError(400, "invalid_request", msg),
   });
 
@@ -227,8 +276,9 @@ export function registerDevelopmentOnlyReplayRoutes(
     return context.json({ captures: await listCaptures(deps) });
   });
 
-  get("/development-only/replay/captures/:id", async (context) => {
-    return context.json(await findCapture(deps, context.req.param("id")));
+  del("/development-only/replay/captures/:id", async (context) => {
+    await deleteCapture(deps, context.req.param("id"));
+    return context.json({ ok: true as const });
   });
 
   post(

@@ -16,6 +16,7 @@ import { resolveInteractiveRequest } from "./command-handlers/interactive.js";
 import {
   getReplayCapture,
   listReplayCaptures,
+  removeReplayCapture,
   runReplay,
 } from "./command-handlers/replay.js";
 import {
@@ -141,6 +142,10 @@ export async function dispatchCommand<TCommand extends HostDaemonCommand>(
       >;
     case "replay.capture_get":
       return getReplayCapture(command, options) as Promise<
+        HostDaemonCommandResult<TCommand["type"]>
+      >;
+    case "replay.capture_delete":
+      return removeReplayCapture(command, options) as Promise<
         HostDaemonCommandResult<TCommand["type"]>
       >;
     case "replay.run":
