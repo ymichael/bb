@@ -49,7 +49,7 @@ function SplitButton({
         disabled={disabled}
         className={cn(
           base,
-          "rounded-r-none border-r-0 pr-0.5 focus-visible:z-10",
+          "rounded-r-none border-r-0 pr-1 focus-visible:z-10",
         )}
         aria-label={primaryAction.label}
         title={primaryAction.label}
@@ -64,7 +64,8 @@ function SplitButton({
             disabled={disabled}
             className={cn(
               base,
-              "rounded-l-none border-l-0 px-1 pl-0.5 focus-visible:z-10",
+              "rounded-l-none border-l-0 px-1 pl-0 focus-visible:z-10",
+              "data-[state=open]:bg-accent data-[state=open]:text-accent-foreground",
             )}
             aria-label={triggerLabel}
             title={triggerLabel}
