@@ -241,12 +241,13 @@ describe("CLI command output contracts", () => {
     readlineState.question.mockReset();
     readlineState.close.mockReset();
 
-    delete process.env.BB_PROJECT_ID;
-    delete process.env.BB_THREAD_ID;
+    vi.stubEnv("BB_PROJECT_ID", undefined);
+    vi.stubEnv("BB_THREAD_ID", undefined);
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllEnvs();
   });
 
   it("bb project list --json prints raw projects", async () => {
@@ -938,8 +939,8 @@ describe("CLI command output contracts", () => {
   });
 
   it("bb status prints project/thread context", async () => {
-    process.env.BB_PROJECT_ID = "proj-1";
-    process.env.BB_THREAD_ID = "thread-1";
+    vi.stubEnv("BB_PROJECT_ID", "proj-1");
+    vi.stubEnv("BB_THREAD_ID", "thread-1");
 
     await runCommand(["status"], (program) =>
       registerStatusCommand(program, () => "http://server"),
@@ -951,8 +952,8 @@ describe("CLI command output contracts", () => {
   });
 
   it("bb status fetches the environment host by id", async () => {
-    process.env.BB_PROJECT_ID = "proj-1";
-    process.env.BB_THREAD_ID = "thread-1";
+    vi.stubEnv("BB_PROJECT_ID", "proj-1");
+    vi.stubEnv("BB_THREAD_ID", "thread-1");
 
     const getProject = vi.fn(async () => ({
       id: "proj-1",
@@ -1024,7 +1025,7 @@ describe("CLI command output contracts", () => {
   });
 
   it("bb thread spawn omits provider and model when the user relies on project defaults", async () => {
-    process.env.BB_PROJECT_ID = "proj-1";
+    vi.stubEnv("BB_PROJECT_ID", "proj-1");
     const thread: Thread = makeThread({
       id: "thread-1",
       projectId: "proj-1",
@@ -1066,7 +1067,7 @@ describe("CLI command output contracts", () => {
   });
 
   it("bb thread spawn forwards explicit execution overrides", async () => {
-    process.env.BB_PROJECT_ID = "proj-1";
+    vi.stubEnv("BB_PROJECT_ID", "proj-1");
     const thread: Thread = makeThread({
       id: "thread-overrides",
       projectId: "proj-1",
@@ -1152,7 +1153,7 @@ describe("CLI command output contracts", () => {
   });
 
   it("bb thread spawn reports invalid permission mode choices", async () => {
-    process.env.BB_PROJECT_ID = "proj-1";
+    vi.stubEnv("BB_PROJECT_ID", "proj-1");
 
     await expect(
       runCommand(
@@ -1225,7 +1226,7 @@ describe("CLI command output contracts", () => {
       }),
     );
 
-    process.env.BB_PROJECT_ID = "proj-1";
+    vi.stubEnv("BB_PROJECT_ID", "proj-1");
     await runCommand(["thread", "list"], (program) =>
       registerThreadCommands(program, () => "http://server"),
     );
@@ -1399,7 +1400,7 @@ describe("CLI command output contracts", () => {
   });
 
   it("bb thread spawn --json prints the raw thread", async () => {
-    process.env.BB_PROJECT_ID = "proj-1";
+    vi.stubEnv("BB_PROJECT_ID", "proj-1");
     const thread: Thread = makeThread({
       id: "thread-json-spawn",
       projectId: "proj-1",
@@ -1443,7 +1444,7 @@ describe("CLI command output contracts", () => {
   });
 
   it("bb thread spawn prefixes missing-project-default failures with context", async () => {
-    process.env.BB_PROJECT_ID = "proj-1";
+    vi.stubEnv("BB_PROJECT_ID", "proj-1");
     const post = vi.fn(async () => {
       throw new Error(
         "HTTP 400: Provider is required when project proj-1 has no stored execution defaults for thread type standard",
@@ -1473,7 +1474,7 @@ describe("CLI command output contracts", () => {
   });
 
   it("bb thread spawn with --parent-thread forwards parent thread id", async () => {
-    process.env.BB_PROJECT_ID = "proj-1";
+    vi.stubEnv("BB_PROJECT_ID", "proj-1");
     const thread: Thread = makeThread({
       id: "thread-2",
       projectId: "proj-1",
@@ -1531,7 +1532,7 @@ describe("CLI command output contracts", () => {
   });
 
   it("bb thread spawn forwards --environment", async () => {
-    process.env.BB_PROJECT_ID = "proj-1";
+    vi.stubEnv("BB_PROJECT_ID", "proj-1");
     const thread: Thread = makeThread({
       id: "thread-env-1",
       projectId: "proj-1",
@@ -1584,7 +1585,7 @@ describe("CLI command output contracts", () => {
   });
 
   it("bb thread spawn forwards --new-environment", async () => {
-    process.env.BB_PROJECT_ID = "proj-1";
+    vi.stubEnv("BB_PROJECT_ID", "proj-1");
     const thread: Thread = makeThread({
       id: "thread-env-1",
       projectId: "proj-1",
@@ -1672,7 +1673,7 @@ describe("CLI command output contracts", () => {
   });
 
   it("bb thread archive --self resolves from BB_THREAD_ID and forwards --force", async () => {
-    process.env.BB_THREAD_ID = "thread-archive-2";
+    vi.stubEnv("BB_THREAD_ID", "thread-archive-2");
     const archivePost = vi.fn(async () => ({ ok: true }));
     createClientMock.mockReturnValue(
       asServerClient({
@@ -1736,7 +1737,7 @@ describe("CLI command output contracts", () => {
   });
 
   it("bb thread unarchive --self resolves from BB_THREAD_ID", async () => {
-    process.env.BB_THREAD_ID = "thread-unarchive-1";
+    vi.stubEnv("BB_THREAD_ID", "thread-unarchive-1");
     const unarchivePost = vi.fn(async () => ({ ok: true }));
     createClientMock.mockReturnValue(
       asServerClient({
@@ -2075,7 +2076,7 @@ describe("CLI command output contracts", () => {
   });
 
   it("bb thread show --self resolves from BB_THREAD_ID", async () => {
-    process.env.BB_THREAD_ID = "thread-show-self";
+    vi.stubEnv("BB_THREAD_ID", "thread-show-self");
     const thread: Thread = makeThread({
       id: "thread-show-self",
       projectId: "proj-1",
@@ -2111,7 +2112,7 @@ describe("CLI command output contracts", () => {
   });
 
   it("bb thread show rejects combining a thread id with --self", async () => {
-    process.env.BB_THREAD_ID = "thread-show-self";
+    vi.stubEnv("BB_THREAD_ID", "thread-show-self");
 
     await expect(
       runCommand(["thread", "show", "thread-explicit", "--self"], (program) =>
@@ -2144,10 +2145,14 @@ describe("CLI JSON output contracts", () => {
     unwrapMock.mockImplementation(async (responsePromise: Promise<unknown>) => {
       return responsePromise;
     });
+
+    vi.stubEnv("BB_PROJECT_ID", undefined);
+    vi.stubEnv("BB_THREAD_ID", undefined);
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllEnvs();
   });
 
   it("bb thread show --json prints the thread in status payload format", async () => {
@@ -2234,7 +2239,7 @@ describe("CLI JSON output contracts", () => {
   });
 
   it("bb thread update clears the parent thread id", async () => {
-    process.env.BB_THREAD_ID = "thread-update-2";
+    vi.stubEnv("BB_THREAD_ID", "thread-update-2");
     const thread: Thread = makeThread({
       id: "thread-update-2",
       projectId: "proj-1",
@@ -2903,7 +2908,7 @@ describe("CLI JSON output contracts", () => {
   });
 
   it("bb thread log --self resolves from BB_THREAD_ID", async () => {
-    process.env.BB_THREAD_ID = "thread-log-self";
+    vi.stubEnv("BB_THREAD_ID", "thread-log-self");
     const getEvents = vi.fn(async () => []);
     const getTimeline = vi.fn(async () => ({ rows: [], activeThinking: null }));
     createClientMock.mockReturnValue(
@@ -3020,7 +3025,7 @@ describe("CLI JSON output contracts", () => {
   });
 
   it("bb thread interactions show prints interaction details", async () => {
-    process.env.BB_THREAD_ID = "thread-show-interaction";
+    vi.stubEnv("BB_THREAD_ID", "thread-show-interaction");
     const getInteraction = vi.fn(async () =>
       makePendingInteraction({
         id: "int-show",
@@ -3080,6 +3085,7 @@ describe("CLI JSON output contracts", () => {
   });
 
   it("bb thread interactions show indicates when resolution delivery is in progress", async () => {
+    vi.stubEnv("BB_THREAD_ID", "thread-show-resolving");
     const getInteraction = vi.fn(async () =>
       makePendingInteraction({
         id: "int-show-resolving",

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   requireProjectId,
   requireThreadId,
@@ -8,28 +8,14 @@ import {
   resolveThreadId,
 } from "../context-env.js";
 
-const ENV_KEYS = ["BB_PROJECT_ID", "BB_THREAD_ID"] as const;
-
 describe("context-env", () => {
-  const originalEnv: Partial<
-    Record<(typeof ENV_KEYS)[number], string | undefined>
-  > = {};
-
   beforeEach(() => {
-    for (const key of ENV_KEYS) {
-      originalEnv[key] = process.env[key];
-      delete process.env[key];
-    }
+    vi.stubEnv("BB_PROJECT_ID", undefined);
+    vi.stubEnv("BB_THREAD_ID", undefined);
   });
 
   afterEach(() => {
-    for (const key of ENV_KEYS) {
-      if (originalEnv[key] === undefined) {
-        delete process.env[key];
-      } else {
-        process.env[key] = originalEnv[key];
-      }
-    }
+    vi.unstubAllEnvs();
   });
 
   it("requires project and thread context when missing", () => {
@@ -42,24 +28,24 @@ describe("context-env", () => {
   });
 
   it("reads BB_PROJECT_ID and BB_THREAD_ID defaults", () => {
-    process.env.BB_PROJECT_ID = "proj-env";
-    process.env.BB_THREAD_ID = "thread-env";
+    vi.stubEnv("BB_PROJECT_ID", "proj-env");
+    vi.stubEnv("BB_THREAD_ID", "thread-env");
 
     expect(resolveProjectId(undefined)).toBe("proj-env");
     expect(resolveThreadId(undefined)).toBe("thread-env");
   });
 
   it("normalizes empty values as undefined", () => {
-    process.env.BB_PROJECT_ID = "";
-    process.env.BB_THREAD_ID = "   ";
+    vi.stubEnv("BB_PROJECT_ID", "");
+    vi.stubEnv("BB_THREAD_ID", "   ");
 
     expect(resolveProjectId(undefined)).toBeUndefined();
     expect(resolveThreadId(undefined)).toBeUndefined();
   });
 
   it("captures a consistent context snapshot", () => {
-    process.env.BB_PROJECT_ID = "proj-1";
-    process.env.BB_THREAD_ID = "thread-1";
+    vi.stubEnv("BB_PROJECT_ID", "proj-1");
+    vi.stubEnv("BB_THREAD_ID", "thread-1");
 
     const snapshot = resolveContextSnapshot();
     expect(snapshot.projectId).toBe("proj-1");
@@ -68,7 +54,7 @@ describe("context-env", () => {
   });
 
   it("resolves --self from BB_THREAD_ID for read-only thread commands", () => {
-    process.env.BB_THREAD_ID = "thread-self";
+    vi.stubEnv("BB_THREAD_ID", "thread-self");
 
     expect(requireThreadIdWithLabelOrSelf(undefined, { self: true })).toEqual({
       id: "thread-self",
@@ -77,7 +63,7 @@ describe("context-env", () => {
   });
 
   it("rejects combining a thread id with --self for read-only thread commands", () => {
-    process.env.BB_THREAD_ID = "thread-self";
+    vi.stubEnv("BB_THREAD_ID", "thread-self");
 
     expect(() =>
       requireThreadIdWithLabelOrSelf("thread-explicit", { self: true }),
