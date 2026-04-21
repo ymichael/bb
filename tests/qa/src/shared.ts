@@ -370,6 +370,9 @@ export function spawnLoggedProcess(
   try {
     const child = spawn(options.command, options.args, {
       cwd: options.cwd,
+      // Standalone QA commands return after startup, so the child must leave the
+      // wrapper's process group or pnpm tears the stack down immediately.
+      detached: true,
       env: options.env,
       stdio: ["ignore", logFd, logFd],
     });
