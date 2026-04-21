@@ -187,7 +187,7 @@ export function InternalReplayListView() {
                     </Button>
                   </div>
                   {isExpanded ? (
-                    <div className="space-y-2 pb-3">
+                    <div className="space-y-2 pb-3 pt-2">
                       <DetailCard>
                         <DetailRow
                           label="Capture"
