@@ -1,7 +1,7 @@
 import { Fragment, type ReactNode } from "react";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { buttonVariants, type ButtonProps } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -10,6 +10,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+
+const SPLIT_BUTTON_TOOLBAR_CLASS =
+  "h-9 rounded-md border-border/70 bg-background/70 px-2 text-xs font-medium text-foreground/85 shadow-none hover:bg-muted/45 hover:text-foreground md:h-8";
 
 interface SplitButtonAction {
   groupLabel?: string;
@@ -21,10 +24,8 @@ interface SplitButtonAction {
 interface SplitButtonProps {
   primaryAction: SplitButtonAction;
   secondaryActions: SplitButtonAction[];
-  variant?: ButtonProps["variant"];
-  size?: ButtonProps["size"];
   disabled?: boolean;
-  /** Applied to both the primary and trigger buttons (on top of variant/size). */
+  /** Escape hatch for targeted overrides (e.g. tighter padding for icon-only primaries). Applied to both buttons. */
   className?: string;
   triggerLabel?: string;
   mobileTitle?: string;
@@ -33,14 +34,16 @@ interface SplitButtonProps {
 function SplitButton({
   primaryAction,
   secondaryActions,
-  variant = "outline",
-  size = "sm",
   disabled = false,
   className,
   triggerLabel = "More actions",
   mobileTitle,
 }: SplitButtonProps) {
-  const base = cn(buttonVariants({ variant, size }), className);
+  const base = cn(
+    buttonVariants({ variant: "outline", size: "sm" }),
+    SPLIT_BUTTON_TOOLBAR_CLASS,
+    className,
+  );
 
   return (
     <div className="inline-flex items-center">

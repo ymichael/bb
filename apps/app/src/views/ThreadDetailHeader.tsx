@@ -97,10 +97,7 @@ export function ThreadDetailHeader({
       ) : null}
       {primaryAction && secondaryActions.length > 0 ? (
         <SplitButton
-          variant="outline"
-          size="sm"
           disabled={isThreadGitActionPending}
-          className={THREAD_HEADER_ACTION_BUTTON_CLASS}
           primaryAction={{
             label: primaryAction.label,
             onSelect: () => onOpenThreadGitAction(primaryAction.target),

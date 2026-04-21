@@ -1,14 +1,24 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronRight, Info, LoaderCircle, Play, Trash2 } from "lucide-react";
+import { ChevronRight, Info, LoaderCircle, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { DetailCard, DetailRow } from "@bb/ui-core";
+import type { ReplayRunSpeed } from "@bb/server-contract";
 import { PageShell } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/button";
+import {
+  SplitButton,
+  type SplitButtonAction,
+} from "@/components/ui/split-button";
 import { cn } from "@/lib/utils";
 import * as api from "@/lib/api";
 
-const DEFAULT_REPLAY_SPEED = 1;
+const DEFAULT_REPLAY_SPEED: ReplayRunSpeed = 1;
+const REPLAY_SPEEDS: readonly ReplayRunSpeed[] = [0.5, 1, 2, 5, 10];
+
+function formatSpeed(speed: ReplayRunSpeed): string {
+  return `${speed}×`;
+}
 
 function formatDate(timestamp: number): string {
   return new Date(timestamp).toLocaleString();
@@ -47,8 +57,13 @@ export function InternalReplayListView() {
     },
   });
   const startReplay = useMutation({
-    mutationFn: (captureId: string) =>
-      api.startReplayRun(captureId, { speed: DEFAULT_REPLAY_SPEED }),
+    mutationFn: ({
+      captureId,
+      speed,
+    }: {
+      captureId: string;
+      speed: ReplayRunSpeed;
+    }) => api.startReplayRun(captureId, { speed }),
     onSuccess: (result) => {
       navigate(
         `/projects/${result.projectId}/threads/${result.replayThreadId}`,
@@ -93,10 +108,38 @@ export function InternalReplayListView() {
                 deleteCapture.variables === capture.captureId;
               const isStarting =
                 startReplay.isPending &&
-                startReplay.variables === capture.captureId;
+                startReplay.variables?.captureId === capture.captureId;
               const startFailedForThis =
                 startReplay.isError &&
-                startReplay.variables === capture.captureId;
+                startReplay.variables?.captureId === capture.captureId;
+              const noEvents = capture.eventCounts.rawProviderEvents === 0;
+              const primaryAction: SplitButtonAction = {
+                label: `Start replay at ${formatSpeed(DEFAULT_REPLAY_SPEED)}`,
+                onSelect: () =>
+                  startReplay.mutate({
+                    captureId: capture.captureId,
+                    speed: DEFAULT_REPLAY_SPEED,
+                  }),
+                content: (
+                  <>
+                    {isStarting ? (
+                      <LoaderCircle className="size-3 animate-spin" />
+                    ) : null}
+                    Replay
+                  </>
+                ),
+              };
+              const secondaryActions: SplitButtonAction[] = REPLAY_SPEEDS.map(
+                (speed) => ({
+                  label: `Start replay at ${formatSpeed(speed)}`,
+                  onSelect: () =>
+                    startReplay.mutate({
+                      captureId: capture.captureId,
+                      speed,
+                    }),
+                  content: <span>{formatSpeed(speed)}</span>,
+                }),
+              );
               return (
                 <div key={`${capture.hostId}:${capture.captureId}`}>
                   <div className="flex h-9 items-center gap-3 text-sm">
@@ -119,25 +162,13 @@ export function InternalReplayListView() {
                         </span>
                       </span>
                     </button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      aria-label="Start replay"
-                      title="Start replay"
-                      disabled={
-                        isStarting ||
-                        capture.eventCounts.rawProviderEvents === 0
-                      }
-                      onClick={() => startReplay.mutate(capture.captureId)}
-                      className="size-6"
-                    >
-                      {isStarting ? (
-                        <LoaderCircle className="size-3 animate-spin" />
-                      ) : (
-                        <Play className="size-3" />
-                      )}
-                    </Button>
+                    <SplitButton
+                      disabled={isStarting || noEvents}
+                      primaryAction={primaryAction}
+                      secondaryActions={secondaryActions}
+                      triggerLabel="Choose replay speed"
+                      mobileTitle="Replay speed"
+                    />
                     <Button
                       type="button"
                       variant="ghost"
