@@ -26,7 +26,9 @@ import { bashArgsSchema, textBlockSchema } from "../shared/tool-arg-schemas.js";
 import {
   buildEditDiff,
   buildShellEnvironmentPolicyConfig,
+  diffCumulativeText,
   extractResultText,
+  normalizeProviderCommandOutput,
   toNonNegativeNumber,
   toOptionalRecord,
   toOptionalString,
@@ -342,6 +344,19 @@ interface PiToolResultTranslationInput {
   startedItem?: ThreadEventItem;
 }
 
+interface PiCommandExecutionOutputDeltaArgs {
+  event: PiToolExecutionUpdateEvent;
+  previousOutput?: string;
+}
+
+interface PiCommandExecutionOutputDelta {
+  delta: string;
+  reset: boolean;
+  snapshot: string;
+}
+
+const PI_EMPTY_BASH_OUTPUT_PLACEHOLDERS = ["(no output)"] as const;
+
 function buildPiFileChangeItem(
   args: PiFileEditArgs,
 ): PiPendingFileChangeItem | null {
@@ -435,6 +450,10 @@ function translatePiToolResultItem(
   const outputText = extractResultText(input.content);
   const status = input.isError ? "failed" : "completed";
   const startedItem = input.startedItem;
+  const commandOutputText =
+    input.toolName === "bash" || startedItem?.type === "commandExecution"
+      ? extractPiCommandExecutionOutput(input.content)
+      : undefined;
 
   if (startedItem) {
     switch (startedItem.type) {
@@ -445,7 +464,9 @@ function translatePiToolResultItem(
             id: input.callId,
             command: startedItem.command,
             cwd: startedItem.cwd,
-            aggregatedOutput: outputText,
+            ...(commandOutputText === undefined
+              ? {}
+              : { aggregatedOutput: commandOutputText }),
             exitCode: input.isError ? 1 : 0,
             status,
             approvalStatus: startedItem.approvalStatus,
@@ -488,7 +509,9 @@ function translatePiToolResultItem(
           id: input.callId,
           command: "",
           cwd: "",
-          aggregatedOutput: outputText,
+          ...(commandOutputText === undefined
+            ? {}
+            : { aggregatedOutput: commandOutputText }),
           exitCode: input.isError ? 1 : 0,
           status,
           approvalStatus: null,
@@ -600,6 +623,7 @@ export interface CreatePiProviderAdapterOptions {
 
 interface PiTurnState {
   assistantMessageCounter: number;
+  commandOutputSnapshotsByCallId: Map<string, string>;
   counter: number;
   currentTurnId: string | undefined;
   cumulativeTokens: ThreadEventTokenUsageBreakdown;
@@ -656,6 +680,10 @@ function resolveCompletedPiReasoningItemId(
   });
 }
 
+function resetPiCommandOutputSnapshots(state: PiTurnState): void {
+  state.commandOutputSnapshotsByCallId.clear();
+}
+
 export function createPiProviderAdapter(
   opts?: CreatePiProviderAdapterOptions,
 ): ProviderAdapter {
@@ -672,6 +700,7 @@ export function createPiProviderAdapter(
   const turnState = createProviderTurnStateRegistry<PiTurnState>({
     createState: () => ({
       assistantMessageCounter: 0,
+      commandOutputSnapshotsByCallId: new Map(),
       counter: 0,
       currentTurnId: undefined,
       cumulativeTokens: {
@@ -692,6 +721,9 @@ export function createPiProviderAdapter(
 
   function ensurePiTurnStarted(args: EnsurePiTurnStartedArgs): string {
     const hadOpenTurn = args.state.currentTurnId !== undefined;
+    if (!hadOpenTurn) {
+      resetPiCommandOutputSnapshots(args.state);
+    }
     const turnId = turnState.ensureTurnStarted({
       events: args.events,
       state: args.state,
@@ -898,6 +930,7 @@ export function createPiProviderAdapter(
           turnId: currentTurnId,
           status: "completed",
         });
+        resetPiCommandOutputSnapshots(state);
         turnState.finishTurn({ state, threadId: stateKey });
         break;
       }
@@ -1040,6 +1073,7 @@ export function createPiProviderAdapter(
           }),
         });
         state.toolItemsByCallId.delete(piEvent.data.toolCallId);
+        state.commandOutputSnapshotsByCallId.delete(piEvent.data.toolCallId);
         break;
       }
 
@@ -1051,17 +1085,47 @@ export function createPiProviderAdapter(
         if (!state.currentTurnId) {
           return buildUnexpectedPiSdkEvent(piEvent.data, context);
         }
-        events.push({
-          type: "item/toolCall/progress",
-          threadId,
-          providerThreadId: "",
-          turnId: state.currentTurnId,
-          itemId: piEvent.data.toolCallId,
-          message: extractPiToolProgressText(piEvent.data),
-          ...(context?.parentToolCallId
-            ? { parentToolCallId: context.parentToolCallId }
-            : {}),
-        });
+        if (piEvent.data.toolName === "bash") {
+          const outputDelta = extractPiCommandExecutionOutputDelta({
+            event: piEvent.data,
+            previousOutput: state.commandOutputSnapshotsByCallId.get(
+              piEvent.data.toolCallId,
+            ),
+          });
+          if (outputDelta) {
+            state.commandOutputSnapshotsByCallId.set(
+              piEvent.data.toolCallId,
+              outputDelta.snapshot,
+            );
+            events.push({
+              type: "item/commandExecution/outputDelta",
+              threadId,
+              providerThreadId: "",
+              turnId: state.currentTurnId,
+              itemId: piEvent.data.toolCallId,
+              delta: outputDelta.delta,
+              ...(outputDelta.reset ? { reset: true } : {}),
+              ...(context?.parentToolCallId
+                ? { parentToolCallId: context.parentToolCallId }
+                : {}),
+            });
+          }
+          break;
+        }
+        const progressMessage = extractPiToolProgressText(piEvent.data);
+        if (progressMessage) {
+          events.push({
+            type: "item/toolCall/progress",
+            threadId,
+            providerThreadId: "",
+            turnId: state.currentTurnId,
+            itemId: piEvent.data.toolCallId,
+            message: progressMessage,
+            ...(context?.parentToolCallId
+              ? { parentToolCallId: context.parentToolCallId }
+              : {}),
+          });
+        }
         break;
       }
 
@@ -1113,6 +1177,9 @@ export function createPiProviderAdapter(
             registry: turnState,
             threadId: command.threadId,
           });
+          resetPiCommandOutputSnapshots(
+            turnState.getOrCreate({ threadId: command.threadId }),
+          );
           const config = buildPiConfig(command.threadId, command.options);
           const dynamicTools = command.dynamicTools?.map((t) => ({
             name: t.name,
@@ -1144,6 +1211,9 @@ export function createPiProviderAdapter(
             registry: turnState,
             threadId: command.threadId,
           });
+          resetPiCommandOutputSnapshots(
+            turnState.getOrCreate({ threadId: command.threadId }),
+          );
           const threadId = command.providerThreadId ?? command.threadId;
           const config = buildPiConfig(command.threadId, command.options);
           const dynamicTools = command.dynamicTools?.map((t) => ({
@@ -1198,6 +1268,9 @@ export function createPiProviderAdapter(
             registry: turnState,
             threadId: command.threadId,
           });
+          resetPiCommandOutputSnapshots(
+            turnState.getOrCreate({ threadId: command.threadId }),
+          );
           return {
             kind: "request",
             method: "thread/stop",
@@ -1359,12 +1432,38 @@ function resolvePiModelContextWindow(
   return modelContextWindowLookup.get(canonicalId) ?? null;
 }
 
-function extractPiToolProgressText(event: PiToolExecutionUpdateEvent): string {
-  const text = extractResultText(event.partialResult).trim();
-  if (text.length > 0) {
-    return text;
+function extractPiCommandExecutionOutput(content: unknown): string | undefined {
+  return normalizeProviderCommandOutput({
+    text: extractResultText(content),
+    emptyPlaceholders: PI_EMPTY_BASH_OUTPUT_PLACEHOLDERS,
+  });
+}
+
+function extractPiCommandExecutionOutputDelta(
+  args: PiCommandExecutionOutputDeltaArgs,
+): PiCommandExecutionOutputDelta | null {
+  const nextOutput = extractPiCommandExecutionOutput(args.event.partialResult);
+  if (nextOutput === undefined) {
+    return null;
   }
-  return `${event.toolName} progress update`;
+  const delta = diffCumulativeText({
+    previousText: args.previousOutput,
+    nextText: nextOutput,
+  });
+  return delta
+    ? {
+        delta: delta.delta,
+        reset: delta.reset,
+        snapshot: delta.nextText,
+      }
+    : null;
+}
+
+function extractPiToolProgressText(
+  event: PiToolExecutionUpdateEvent,
+): string {
+  const text = extractResultText(event.partialResult).trim();
+  return text.length > 0 ? text : `${event.toolName} progress update`;
 }
 
 function toAssistantUsageBreakdown(

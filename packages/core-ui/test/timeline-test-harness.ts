@@ -168,6 +168,7 @@ type CommandStartedArgs = CommandCompletedArgs;
 interface CommandOutputDeltaArgs extends ProviderTurnEventOptions {
   delta: string;
   itemId: string;
+  reset?: boolean;
 }
 
 interface WebSearchCompletedArgs extends ProviderTurnEventOptions {
@@ -550,6 +551,7 @@ export function createTimelineEventFactory(
           ...providerFields(args),
           itemId: args.itemId,
           delta: args.delta,
+          ...(args.reset ? { reset: true } : {}),
         },
       };
     },

@@ -130,8 +130,57 @@ describe("formatTimelineAsText", () => {
       { verbose: true },
     );
 
-    expect(text).toContain("Waiting for approval to run git push");
-    expect(text).toContain("git push");
+    expect(text).toContain("Tool Call: exec_command");
+    expect(text).toContain("[waiting] git push");
+  });
+
+  it("renders silent successful commands with exit code 0 and no placeholder output", () => {
+    const text = formatMessagesAsText(
+      [
+        {
+          kind: "tool-call",
+          id: "silent-success-1",
+          threadId: "t1",
+          sourceSeqStart: 1,
+          sourceSeqEnd: 1,
+          createdAt: 1,
+          toolName: "Bash",
+          callId: "call-1",
+          command: "true",
+          exitCode: 0,
+          status: "completed",
+          approvalStatus: null,
+        },
+      ],
+      { verbose: true },
+    );
+
+    expect(text).toContain("[completed] true");
+    expect(text).toContain("exit code 0");
+    expect(text).not.toContain("no output");
+  });
+
+  it("renders explicit lifecycle labels for non-command rows", () => {
+    const text = formatMessagesAsText(
+      [
+        {
+          kind: "web-search",
+          id: "web-1",
+          threadId: "t1",
+          sourceSeqStart: 1,
+          sourceSeqEnd: 1,
+          createdAt: 1,
+          callId: "call-1",
+          query: "React suspense docs",
+          output: "Found the React Suspense docs",
+          status: "completed",
+        },
+      ],
+      { verbose: true },
+    );
+
+    expect(text).toContain("Web Search");
+    expect(text).toContain("[completed] React suspense docs");
   });
 
   it("renders user + assistant + tool-call in minimal mode", () => {

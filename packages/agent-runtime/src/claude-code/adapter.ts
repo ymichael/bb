@@ -30,6 +30,7 @@ import {
   buildEditDiff,
   buildShellEnvironmentPolicyConfig,
   extractResultText,
+  normalizeProviderCommandOutput,
   toNonNegativeNumber,
   toOptionalRecord,
   toOptionalString,
@@ -111,6 +112,7 @@ import {
   type ClaudeResultMessage,
   type ClaudeSdkUsage,
   type ClaudeStreamEventMessage,
+  type ClaudeToolUseResult,
   type ClaudeUserMessage,
 } from "./schemas.js";
 import { claudeCodeVisibilityMetadata } from "./visibility.js";
@@ -160,7 +162,22 @@ interface ClaudeToolResultTranslationInput {
   isError: boolean;
   parentToolCallId?: string;
   startedItem?: ThreadEventItem;
+  toolUseResult: ClaudeToolUseResult | null;
 }
+
+interface ClaudeProcessOutputStreams {
+  stderr: string;
+  stdout: string;
+}
+
+interface ClaudeCommandExecutionOutputArgs {
+  content: unknown;
+  toolUseResult: ClaudeToolUseResult | null;
+}
+
+const CLAUDE_EMPTY_BASH_OUTPUT_PLACEHOLDERS = [
+  "(Bash completed with no output)",
+] as const;
 
 function parseClaudeBashCommand(input: unknown): ClaudeBashCommand | null {
   const parsed = bashArgsSchema.safeParse(input);
@@ -375,7 +392,13 @@ function translateClaudeToolUseItem(
 function translateClaudeToolResultItem(
   input: ClaudeToolResultTranslationInput,
 ): ThreadEventItem {
-  const outputText = extractResultText(input.content);
+  const outputText =
+    input.toolName === "Bash" || input.startedItem?.type === "commandExecution"
+      ? extractClaudeCommandExecutionOutput({
+          content: input.content,
+          toolUseResult: input.toolUseResult,
+        })
+      : extractResultText(input.content);
   const startedItem = input.startedItem;
   const itemStatus = input.isError ? "failed" : "completed";
   const bashExitCode = input.isError ? 1 : 0;
@@ -389,7 +412,9 @@ function translateClaudeToolResultItem(
             id: input.callId,
             command: startedItem.command,
             cwd: startedItem.cwd,
-            aggregatedOutput: outputText,
+            ...(outputText === undefined
+              ? {}
+              : { aggregatedOutput: outputText }),
             exitCode: bashExitCode,
             status: itemStatus,
             approvalStatus: startedItem.approvalStatus,
@@ -454,7 +479,9 @@ function translateClaudeToolResultItem(
           id: input.callId,
           command: "",
           cwd: "",
-          aggregatedOutput: outputText,
+          ...(outputText === undefined
+            ? {}
+            : { aggregatedOutput: outputText }),
           exitCode: bashExitCode,
           status: itemStatus,
           approvalStatus: null,
@@ -925,6 +952,7 @@ export function createClaudeCodeProviderAdapter(
               content: result.content,
               isError: result.isError,
               toolName: result.toolName,
+              toolUseResult: result.toolUseResult,
               startedItem,
               parentToolCallId,
             }),
@@ -1360,6 +1388,7 @@ interface ClaudeToolResultBlockData {
   isError: boolean;
   toolName?: string;
   toolUseId: string;
+  toolUseResult: ClaudeToolUseResult | null;
 }
 
 interface ParseClaudeMessageContentArgs {
@@ -1561,10 +1590,51 @@ function extractToolResults(
         toolName: result.data.tool_name,
         content: result.data.content,
         isError: result.data.is_error ?? false,
+        toolUseResult: result.data.tool_use_result ?? null,
       });
     }
   }
   return results;
+}
+
+function combineClaudeProcessOutput(
+  streams: ClaudeProcessOutputStreams,
+): string | undefined {
+  if (streams.stdout.length === 0) {
+    return streams.stderr.length > 0 ? streams.stderr : undefined;
+  }
+  if (streams.stderr.length === 0) {
+    return streams.stdout;
+  }
+  return streams.stdout.endsWith("\n")
+    ? `${streams.stdout}${streams.stderr}`
+    : `${streams.stdout}\n${streams.stderr}`;
+}
+
+function extractClaudeCommandExecutionOutput(
+  args: ClaudeCommandExecutionOutputArgs,
+): string | undefined {
+  const normalizedContentOutput = normalizeProviderCommandOutput({
+    text: extractResultText(args.content),
+    emptyPlaceholders: CLAUDE_EMPTY_BASH_OUTPUT_PLACEHOLDERS,
+  });
+  if (args.toolUseResult !== null) {
+    if (typeof args.toolUseResult === "string") {
+      return (
+        normalizeProviderCommandOutput({
+          text: args.toolUseResult,
+          emptyPlaceholders: CLAUDE_EMPTY_BASH_OUTPUT_PLACEHOLDERS,
+        }) ?? normalizedContentOutput
+      );
+    }
+    return (
+      combineClaudeProcessOutput({
+        stdout: args.toolUseResult.stdout ?? "",
+        stderr: args.toolUseResult.stderr ?? "",
+      }) ?? normalizedContentOutput
+    );
+  }
+  return normalizedContentOutput;
 }
 
 function extractTokenUsage(

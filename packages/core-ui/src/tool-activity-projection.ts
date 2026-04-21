@@ -55,6 +55,7 @@ export interface ToolActivityState {
 
 interface MergeCallSummaryOptions {
   appendOutput?: boolean;
+  replaceOutput?: boolean;
 }
 
 export function createToolActivityState(): ToolActivityState {
@@ -308,7 +309,7 @@ function mergeCallSummary(
   incoming: ExecCallPartial,
   options: MergeCallSummaryOptions = {},
 ): void {
-  const { appendOutput } = options;
+  const { appendOutput, replaceOutput } = options;
   if (
     incoming.command &&
     (!target.command || incoming.command.length > target.command.length)
@@ -322,7 +323,9 @@ function mergeCallSummary(
   );
   if (incoming.source && !target.source) target.source = incoming.source;
   if (incoming.output && incoming.output.length > 0) {
-    if (appendOutput) {
+    if (replaceOutput) {
+      target.output = incoming.output;
+    } else if (appendOutput) {
       target.output = `${target.output ?? ""}${incoming.output}`;
     } else if (
       !target.output ||
@@ -558,6 +561,7 @@ export function onExecOutput(
   meta: EventMeta,
   incoming: ExecCallPartial,
   appendOutput?: boolean,
+  replaceOutput?: boolean,
 ): void {
   const existingRunning = state.toolActivity.runningCallsById.get(
     incoming.callId,
@@ -566,7 +570,10 @@ export function onExecOutput(
     if (appendOutput) {
       appendExecOutputDelta(existingRunning, incoming.output);
     } else {
-      mergeCallSummary(existingRunning, incoming, { appendOutput });
+      mergeCallSummary(existingRunning, incoming, {
+        appendOutput,
+        replaceOutput,
+      });
     }
     existingRunning.sourceSeqEnd = Math.max(
       existingRunning.sourceSeqEnd,
@@ -583,7 +590,7 @@ export function onExecOutput(
     incoming.callId,
   );
   if (activeCall) {
-    mergeCallSummary(activeCall, incoming, { appendOutput });
+    mergeCallSummary(activeCall, incoming, { appendOutput, replaceOutput });
     if (state.toolActivity.activeCell?.kind === "tool-exploring") {
       state.toolActivity.activeCell.sourceSeqEnd = Math.max(
         state.toolActivity.activeCell.sourceSeqEnd,
@@ -608,7 +615,10 @@ export function onExecOutput(
   const historyMatch = findCallInHistoryCells(state, incoming.callId);
   if (!historyMatch) return;
 
-  mergeCallSummary(historyMatch.call, incoming, { appendOutput });
+  mergeCallSummary(historyMatch.call, incoming, {
+    appendOutput,
+    replaceOutput,
+  });
   historyMatch.cell.sourceSeqEnd = Math.max(
     historyMatch.cell.sourceSeqEnd,
     meta.seq,

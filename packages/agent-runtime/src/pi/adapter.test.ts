@@ -21,6 +21,115 @@ const fullProviderExecutionContext = {
   permissionEscalation: null,
 } satisfies ProviderExecutionContext;
 
+type PiProviderAdapter = ReturnType<typeof createPiProviderAdapter>;
+
+interface PiTestThreadContext {
+  threadId: string;
+}
+
+interface PiBashStartEventArgs {
+  command: string;
+  cwd?: string;
+  toolCallId: string;
+}
+
+function createPiBashStartEvent(args: PiBashStartEventArgs): AgentSessionEvent {
+  return {
+    type: "tool_execution_start",
+    toolCallId: args.toolCallId,
+    toolName: "bash",
+    args: {
+      command: args.command,
+      cwd: args.cwd ?? "/repo",
+    },
+  };
+}
+
+interface PiBashUpdateEventArgs {
+  text: string;
+  threadId: string;
+  toolCallId: string;
+}
+
+function createPiBashUpdateEvent(args: PiBashUpdateEventArgs) {
+  return {
+    jsonrpc: "2.0" as const,
+    method: "sdk/message",
+    params: {
+      threadId: args.threadId,
+      message: {
+        type: "tool_execution_update" as const,
+        toolCallId: args.toolCallId,
+        toolName: "bash" as const,
+        partialResult: {
+          content: [{ type: "text" as const, text: args.text }],
+        },
+      },
+    },
+  };
+}
+
+interface SeedPiBashSnapshotArgs {
+  adapter: PiProviderAdapter;
+  context: PiTestThreadContext;
+  toolCallId: string;
+}
+
+function seedPiBashOutputSnapshot(args: SeedPiBashSnapshotArgs): void {
+  args.adapter.translateEvent(loadFixture("agent-start.json"), args.context);
+  args.adapter.translateEvent(
+    createPiBashStartEvent({
+      toolCallId: args.toolCallId,
+      command: "printf 'FIRST\\n'",
+    }),
+    args.context,
+  );
+  args.adapter.translateEvent(
+    createPiBashUpdateEvent({
+      threadId: args.context.threadId,
+      toolCallId: args.toolCallId,
+      text: "FIRST\n",
+    }),
+    args.context,
+  );
+}
+
+interface ExpectPiBashSnapshotResetArgs {
+  adapter: PiProviderAdapter;
+  context: PiTestThreadContext;
+  reset: () => void;
+  toolCallId: string;
+}
+
+function expectPiBashSnapshotReset(args: ExpectPiBashSnapshotResetArgs): void {
+  args.reset();
+  args.adapter.translateEvent(loadFixture("agent-start.json"), args.context);
+  args.adapter.translateEvent(
+    createPiBashStartEvent({
+      toolCallId: args.toolCallId,
+      command: "printf 'FIRST\\nSECOND\\n'",
+    }),
+    args.context,
+  );
+
+  const events = args.adapter.translateEvent(
+    createPiBashUpdateEvent({
+      threadId: args.context.threadId,
+      toolCallId: args.toolCallId,
+      text: "FIRST\nSECOND\n",
+    }),
+    args.context,
+  );
+
+  expect(events).toContainEqual(
+    expect.objectContaining({
+      type: "item/commandExecution/outputDelta",
+      itemId: args.toolCallId,
+      delta: "FIRST\nSECOND\n",
+    }),
+  );
+}
+
 describe("pi provider adapter", () => {
   // -- Identity & capabilities ---------------------------------------------
 
@@ -1020,7 +1129,204 @@ describe("pi provider adapter", () => {
     );
   });
 
-  it("translateEvent maps tool execution updates to shared tool progress", () => {
+  it("translateEvent maps bash tool execution updates to command output deltas", () => {
+    const adapter = createPiProviderAdapter();
+    adapter.translateEvent(loadFixture("agent-start.json"));
+    adapter.translateEvent({
+      type: "tool_execution_start",
+      toolCallId: "tool-bash-1",
+      toolName: "bash",
+      args: {
+        command: "printf 'FIRST\\nSECOND\\n'",
+        cwd: "/repo",
+      },
+    } as AgentSessionEvent);
+
+    const firstEvents = adapter.translateEvent({
+      jsonrpc: "2.0",
+      method: "sdk/message",
+      params: {
+        threadId: "pi-thread-1",
+        message: {
+          type: "tool_execution_update",
+          toolCallId: "tool-bash-1",
+          toolName: "bash",
+          partialResult: {
+            content: [{ type: "text", text: "FIRST\n" }],
+          },
+        },
+      },
+    });
+
+    expect(firstEvents).toContainEqual(
+      expect.objectContaining({
+        type: "item/commandExecution/outputDelta",
+        itemId: "tool-bash-1",
+        delta: "FIRST\n",
+      }),
+    );
+
+    const secondEvents = adapter.translateEvent({
+      jsonrpc: "2.0",
+      method: "sdk/message",
+      params: {
+        threadId: "pi-thread-1",
+        message: {
+          type: "tool_execution_update",
+          toolCallId: "tool-bash-1",
+          toolName: "bash",
+          partialResult: {
+            content: [{ type: "text", text: "FIRST\nSECOND\n" }],
+          },
+        },
+      },
+    });
+
+    expect(secondEvents).toContainEqual(
+      expect.objectContaining({
+        type: "item/commandExecution/outputDelta",
+        itemId: "tool-bash-1",
+        delta: "SECOND\n",
+      }),
+    );
+  });
+
+  it("translateEvent emits the full bash delta when Pi resets cumulative output", () => {
+    const adapter = createPiProviderAdapter();
+    adapter.translateEvent(loadFixture("agent-start.json"));
+    adapter.translateEvent(
+      createPiBashStartEvent({
+        toolCallId: "tool-bash-1",
+        command: "printf 'FIRST\\nSECOND\\n'",
+      }),
+    );
+
+    adapter.translateEvent(
+      createPiBashUpdateEvent({
+        threadId: "pi-thread-1",
+        toolCallId: "tool-bash-1",
+        text: "FIRST\nSECOND\n",
+      }),
+    );
+
+    const resetEvents = adapter.translateEvent(
+      createPiBashUpdateEvent({
+        threadId: "pi-thread-1",
+        toolCallId: "tool-bash-1",
+        text: "RESET\n",
+      }),
+    );
+
+    expect(resetEvents).toContainEqual(
+      expect.objectContaining({
+        type: "item/commandExecution/outputDelta",
+        itemId: "tool-bash-1",
+        delta: "RESET\n",
+        reset: true,
+      }),
+    );
+  });
+
+  it("translateEvent clears bash output snapshots when a turn completes", () => {
+    const adapter = createPiProviderAdapter();
+    const context = { threadId: "bb-thread-1" };
+
+    seedPiBashOutputSnapshot({
+      adapter,
+      context,
+      toolCallId: "tool-bash-1",
+    });
+
+    expectPiBashSnapshotReset({
+      adapter,
+      context,
+      toolCallId: "tool-bash-1",
+      reset: () => {
+        adapter.translateEvent(loadFixture("agent-end-with-message.json"), context);
+      },
+    });
+  });
+
+  it("buildCommand thread/start clears stale bash output snapshots", () => {
+    const adapter = createPiProviderAdapter();
+    const context = { threadId: "bb-thread-1" };
+
+    seedPiBashOutputSnapshot({
+      adapter,
+      context,
+      toolCallId: "tool-bash-1",
+    });
+
+    expectPiBashSnapshotReset({
+      adapter,
+      context,
+      toolCallId: "tool-bash-1",
+      reset: () => {
+        adapter.buildCommandPlan({
+          type: "thread/start",
+          cwd: "/tmp/worktree",
+          threadId: "bb-thread-1",
+          input: [{ type: "text", text: "hello" }],
+          instructionMode: "append",
+          options: fullProviderExecutionContext,
+        });
+      },
+    });
+  });
+
+  it("buildCommand thread/resume clears stale bash output snapshots", () => {
+    const adapter = createPiProviderAdapter();
+    const context = { threadId: "bb-thread-1" };
+
+    seedPiBashOutputSnapshot({
+      adapter,
+      context,
+      toolCallId: "tool-bash-1",
+    });
+
+    expectPiBashSnapshotReset({
+      adapter,
+      context,
+      toolCallId: "tool-bash-1",
+      reset: () => {
+        adapter.buildCommandPlan({
+          type: "thread/resume",
+          cwd: "/tmp/worktree",
+          threadId: "bb-thread-1",
+          providerThreadId: "pi-thread-1",
+          instructionMode: "append",
+          options: fullProviderExecutionContext,
+        });
+      },
+    });
+  });
+
+  it("buildCommand thread/stop clears stale bash output snapshots", () => {
+    const adapter = createPiProviderAdapter();
+    const context = { threadId: "bb-thread-1" };
+
+    seedPiBashOutputSnapshot({
+      adapter,
+      context,
+      toolCallId: "tool-bash-1",
+    });
+
+    expectPiBashSnapshotReset({
+      adapter,
+      context,
+      toolCallId: "tool-bash-1",
+      reset: () => {
+        adapter.buildCommandPlan({
+          type: "thread/stop",
+          threadId: "bb-thread-1",
+          providerThreadId: "pi-thread-1",
+          activeTurnId: "turn-1",
+        });
+      },
+    });
+  });
+
+  it("translateEvent skips empty bash updates with no content", () => {
     const adapter = createPiProviderAdapter();
     adapter.translateEvent(loadFixture("agent-start.json"));
 
@@ -1034,6 +1340,52 @@ describe("pi provider adapter", () => {
           toolCallId: "tool-bash-1",
           toolName: "bash",
           partialResult: {
+            content: [],
+          },
+        },
+      },
+    });
+
+    expect(events).toEqual([]);
+  });
+
+  it("translateEvent skips Pi bash update placeholders", () => {
+    const adapter = createPiProviderAdapter();
+    adapter.translateEvent(loadFixture("agent-start.json"));
+
+    const events = adapter.translateEvent({
+      jsonrpc: "2.0",
+      method: "sdk/message",
+      params: {
+        threadId: "pi-thread-1",
+        message: {
+          type: "tool_execution_update",
+          toolCallId: "tool-bash-1",
+          toolName: "bash",
+          partialResult: {
+            content: [{ type: "text", text: "(no output)" }],
+          },
+        },
+      },
+    });
+
+    expect(events).toEqual([]);
+  });
+
+  it("translateEvent keeps non-bash tool execution updates as shared tool progress", () => {
+    const adapter = createPiProviderAdapter();
+    adapter.translateEvent(loadFixture("agent-start.json"));
+
+    const events = adapter.translateEvent({
+      jsonrpc: "2.0",
+      method: "sdk/message",
+      params: {
+        threadId: "pi-thread-1",
+        message: {
+          type: "tool_execution_update",
+          toolCallId: "tool-read-1",
+          toolName: "read",
+          partialResult: {
             content: [{ type: "text", text: "partial output" }],
           },
         },
@@ -1043,10 +1395,83 @@ describe("pi provider adapter", () => {
     expect(events).toContainEqual(
       expect.objectContaining({
         type: "item/toolCall/progress",
-        itemId: "tool-bash-1",
+        itemId: "tool-read-1",
         message: "partial output",
       }),
     );
+  });
+
+  it("translateEvent falls back to legacy non-bash progress text when partial output is empty", () => {
+    const adapter = createPiProviderAdapter();
+    adapter.translateEvent(loadFixture("agent-start.json"));
+
+    const events = adapter.translateEvent({
+      jsonrpc: "2.0",
+      method: "sdk/message",
+      params: {
+        threadId: "pi-thread-1",
+        message: {
+          type: "tool_execution_update",
+          toolCallId: "tool-read-1",
+          toolName: "read",
+          partialResult: {
+            content: [],
+          },
+        },
+      },
+    });
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "item/toolCall/progress",
+        itemId: "tool-read-1",
+        message: "read progress update",
+      }),
+    );
+  });
+
+  it("translateEvent strips Pi no-output placeholders from bash completions", () => {
+    const adapter = createPiProviderAdapter();
+    adapter.translateEvent(loadFixture("agent-start.json"));
+    adapter.translateEvent({
+      type: "tool_execution_start",
+      toolCallId: "tool-bash-1",
+      toolName: "bash",
+      args: {
+        command: "true",
+        cwd: "/repo",
+      },
+    } as AgentSessionEvent);
+
+    const events = adapter.translateEvent({
+      type: "tool_execution_end",
+      toolCallId: "tool-bash-1",
+      toolName: "bash",
+      isError: false,
+      result: {
+        content: [{ type: "text", text: "(no output)" }],
+      },
+    } as AgentSessionEvent);
+
+    const completedEvent = events.find(
+      (
+        event,
+      ): event is Extract<(typeof events)[number], { type: "item/completed" }> =>
+        event.type === "item/completed",
+    );
+
+    expect(completedEvent?.item).toMatchObject({
+      type: "commandExecution",
+      id: "tool-bash-1",
+      command: "true",
+      cwd: "/repo",
+      status: "completed",
+      exitCode: 0,
+    });
+    if (completedEvent?.item.type !== "commandExecution") {
+      throw new Error("Expected commandExecution completion");
+    }
+    expect(completedEvent.item.aggregatedOutput).toBeUndefined();
   });
 
   it("translateEvent surfaces tool events without an active turn as provider/unhandled", () => {

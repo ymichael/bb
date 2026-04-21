@@ -21,7 +21,7 @@ export function TerminalOutputBlock({
   maxHeightClassName = EVENT_DETAIL_MAX_HEIGHT_CLASS,
 }: {
   command?: string;
-  outputText: string;
+  outputText?: string;
   isExpanded: boolean;
   className?: string;
   maxHeightClassName?: string;
@@ -29,9 +29,15 @@ export function TerminalOutputBlock({
   const { elementRef: outputRef, handleScroll: handleOutputScroll } =
     useStickyBottomAutoScroll<HTMLPreElement>({
       isExpanded,
-      scrollDep: outputText,
+      scrollDep: outputText ?? "",
     });
-  const renderedOutput = useMemo(() => ansiToHtml(outputText), [outputText]);
+  const renderedOutput = useMemo(
+    () => (outputText ? ansiToHtml(outputText) : undefined),
+    [outputText],
+  );
+  if (!command && !renderedOutput) {
+    return null;
+  }
 
   return (
     <div
@@ -54,16 +60,18 @@ export function TerminalOutputBlock({
             $ {command}
           </ExpandableLine>
         ) : null}
-        <pre
-          ref={outputRef}
-          onScroll={handleOutputScroll}
-          className={cn(
-            command && "mt-1.5",
-            maxHeightClassName,
-            "overflow-auto whitespace-pre leading-tight text-foreground",
-          )}
-          dangerouslySetInnerHTML={{ __html: renderedOutput }}
-        ></pre>
+        {renderedOutput ? (
+          <pre
+            ref={outputRef}
+            onScroll={handleOutputScroll}
+            className={cn(
+              command && "mt-1.5",
+              maxHeightClassName,
+              "overflow-auto whitespace-pre leading-tight text-foreground",
+            )}
+            dangerouslySetInnerHTML={{ __html: renderedOutput }}
+          ></pre>
+        ) : null}
       </div>
     </div>
   );

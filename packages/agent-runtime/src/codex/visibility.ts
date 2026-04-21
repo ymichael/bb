@@ -135,7 +135,7 @@ const CODEX_NOTIFICATION_COVERAGE = {
   "item/started": "normalized",
   "mcpServer/oauthLogin/completed": "unknown",
   "model/rerouted": "unknown",
-  "rawResponseItem/completed": "unknown",
+  "rawResponseItem/completed": "noise",
   "serverRequest/resolved": "unknown",
   "skills/changed": "unknown",
   "thread/archived": "unknown",

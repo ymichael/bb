@@ -271,6 +271,7 @@ describe("codex provider adapter", () => {
         approvalPolicy: "never",
         sandbox: "danger-full-access",
         cwd: "/tmp/worktree",
+        experimentalRawEvents: true,
       },
     });
     expect(JSON.stringify(cmd)).not.toContain("baseInstructions");
@@ -1040,6 +1041,603 @@ describe("codex provider adapter", () => {
         status: "completed",
         exitCode: 0,
         durationMs: 150,
+      }),
+    });
+  });
+
+  it("translateEvent repairs completed commandExecution output from raw shell tool output", () => {
+    const adapter = createCodexProviderAdapter();
+
+    expect(
+      adapter.translateEvent(
+        codexEvent("rawResponseItem/completed", {
+          threadId: "t1",
+          turnId: "turn-1",
+          item: {
+            type: "function_call",
+            name: "exec_command",
+            arguments: "{\"cmd\":\"echo hi\"}",
+            call_id: "cmd-1",
+          },
+        }),
+      ),
+    ).toEqual([]);
+
+    expect(
+      adapter.translateEvent(
+        codexEvent("rawResponseItem/completed", {
+          threadId: "t1",
+          turnId: "turn-1",
+          item: {
+            type: "function_call_output",
+            call_id: "cmd-1",
+            output: [
+              "Chunk ID: abc123",
+              "Wall time: 3.6 seconds",
+              "Process exited with code 0",
+              "Original token count: 8",
+              "Output:",
+              "OUT-1",
+              "OUT-2",
+              "OUT-3",
+              "",
+            ].join("\n"),
+          },
+        }),
+      ),
+    ).toEqual([]);
+
+    const events = adapter.translateEvent(
+      codexEvent("item/completed", {
+        threadId: "t1",
+        turnId: "turn-1",
+        item: {
+          type: "commandExecution",
+          id: "cmd-1",
+          command: "echo hi",
+          cwd: "/tmp",
+          processId: null,
+          status: "completed",
+          commandActions: [],
+          aggregatedOutput: "OUT-2\nOUT-3\n",
+          exitCode: 0,
+          durationMs: 150,
+        },
+      }),
+    );
+
+    expect(events).toContainEqual({
+      type: "item/completed",
+      threadId: "t1",
+      providerThreadId: "t1",
+      turnId: "turn-1",
+      item: expect.objectContaining({
+        type: "commandExecution",
+        id: "cmd-1",
+        aggregatedOutput: "OUT-1\nOUT-2\nOUT-3\n",
+      }),
+    });
+  });
+
+  it("translateEvent preserves literal Output lines in recovered command output", () => {
+    const adapter = createCodexProviderAdapter();
+
+    adapter.translateEvent(
+      codexEvent("rawResponseItem/completed", {
+        threadId: "t1",
+        turnId: "turn-1",
+        item: {
+          type: "function_call",
+          name: "exec_command",
+          arguments: "{\"cmd\":\"printf 'prefix\\\\nOutput:\\\\nsuffix\\\\n'\"}",
+          call_id: "cmd-1",
+        },
+      }),
+    );
+    adapter.translateEvent(
+      codexEvent("rawResponseItem/completed", {
+        threadId: "t1",
+        turnId: "turn-1",
+        item: {
+          type: "function_call_output",
+          call_id: "cmd-1",
+          output: [
+            "Chunk ID: abc123",
+            "Wall time: 1.2 seconds",
+            "Process exited with code 0",
+            "Original token count: 5",
+            "Output:",
+            "prefix",
+            "Output:",
+            "suffix",
+            "",
+          ].join("\n"),
+        },
+      }),
+    );
+
+    const events = adapter.translateEvent(
+      codexEvent("item/completed", {
+        threadId: "t1",
+        turnId: "turn-1",
+        item: {
+          type: "commandExecution",
+          id: "cmd-1",
+          command: "printf 'prefix\\nOutput:\\nsuffix\\n'",
+          cwd: "/tmp",
+          processId: null,
+          status: "completed",
+          commandActions: [],
+          aggregatedOutput: "Output:\nsuffix\n",
+          exitCode: 0,
+          durationMs: 150,
+        },
+      }),
+    );
+
+    expect(events).toContainEqual({
+      type: "item/completed",
+      threadId: "t1",
+      providerThreadId: "t1",
+      turnId: "turn-1",
+      item: expect.objectContaining({
+        type: "commandExecution",
+        id: "cmd-1",
+        aggregatedOutput: "prefix\nOutput:\nsuffix\n",
+      }),
+    });
+  });
+
+  it("translateEvent repairs completed commandExecution output for raw Bash shell aliases", () => {
+    const adapter = createCodexProviderAdapter();
+    const shellToolNames = ["Bash", "bash"];
+
+    for (const [index, toolName] of shellToolNames.entries()) {
+      const callId = `cmd-${index + 1}`;
+      const fullOutput = `OUT-${index + 1}\n`;
+
+      adapter.translateEvent(
+        codexEvent("rawResponseItem/completed", {
+          threadId: "t1",
+          turnId: "turn-1",
+          item: {
+            type: "function_call",
+            name: toolName,
+            arguments: "{\"cmd\":\"echo alias\"}",
+            call_id: callId,
+          },
+        }),
+      );
+      adapter.translateEvent(
+        codexEvent("rawResponseItem/completed", {
+          threadId: "t1",
+          turnId: "turn-1",
+          item: {
+            type: "function_call_output",
+            call_id: callId,
+            output: `Output:\n${fullOutput}`,
+          },
+        }),
+      );
+
+      const events = adapter.translateEvent(
+        codexEvent("item/completed", {
+          threadId: "t1",
+          turnId: "turn-1",
+          item: {
+            type: "commandExecution",
+            id: callId,
+            command: "echo alias",
+            cwd: "/tmp",
+            processId: null,
+            status: "completed",
+            commandActions: [],
+            aggregatedOutput: "",
+            exitCode: 0,
+            durationMs: 150,
+          },
+        }),
+      );
+
+      expect(events).toContainEqual({
+        type: "item/completed",
+        threadId: "t1",
+        providerThreadId: "t1",
+        turnId: "turn-1",
+        item: expect.objectContaining({
+          type: "commandExecution",
+          id: callId,
+          aggregatedOutput: fullOutput,
+        }),
+      });
+    }
+  });
+
+  it("translateEvent preserves raw command output that starts with metadata-like text", () => {
+    const adapter = createCodexProviderAdapter();
+
+    adapter.translateEvent(
+      codexEvent("rawResponseItem/completed", {
+        threadId: "t1",
+        turnId: "turn-1",
+        item: {
+          type: "function_call",
+          name: "exec_command",
+          arguments: "{\"cmd\":\"printf 'Chunk ID: abc\\\\nactual stdout\\\\n'\"}",
+          call_id: "cmd-1",
+        },
+      }),
+    );
+    adapter.translateEvent(
+      codexEvent("rawResponseItem/completed", {
+        threadId: "t1",
+        turnId: "turn-1",
+        item: {
+          type: "function_call_output",
+          call_id: "cmd-1",
+          output: ["Chunk ID: abc", "actual stdout", ""].join("\n"),
+        },
+      }),
+    );
+
+    const events = adapter.translateEvent(
+      codexEvent("item/completed", {
+        threadId: "t1",
+        turnId: "turn-1",
+        item: {
+          type: "commandExecution",
+          id: "cmd-1",
+          command: "printf 'Chunk ID: abc\\nactual stdout\\n'",
+          cwd: "/tmp",
+          processId: null,
+          status: "completed",
+          commandActions: [],
+          aggregatedOutput: "actual stdout\n",
+          exitCode: 0,
+          durationMs: 150,
+        },
+      }),
+    );
+
+    expect(events).toContainEqual({
+      type: "item/completed",
+      threadId: "t1",
+      providerThreadId: "t1",
+      turnId: "turn-1",
+      item: expect.objectContaining({
+        type: "commandExecution",
+        id: "cmd-1",
+        aggregatedOutput: "Chunk ID: abc\nactual stdout\n",
+      }),
+    });
+  });
+
+  it("translateEvent ignores raw metadata wrappers that do not include an Output marker", () => {
+    const adapter = createCodexProviderAdapter();
+
+    adapter.translateEvent(
+      codexEvent("rawResponseItem/completed", {
+        threadId: "t1",
+        turnId: "turn-1",
+        item: {
+          type: "function_call",
+          name: "exec_command",
+          arguments: "{\"cmd\":\"echo hi\"}",
+          call_id: "cmd-1",
+        },
+      }),
+    );
+    adapter.translateEvent(
+      codexEvent("rawResponseItem/completed", {
+        threadId: "t1",
+        turnId: "turn-1",
+        item: {
+          type: "function_call_output",
+          call_id: "cmd-1",
+          output: [
+            "Chunk ID: abc123",
+            "Wall time: 1.2 seconds",
+            "Process exited with code 0",
+            "Original token count: 5",
+          ].join("\n"),
+        },
+      }),
+    );
+
+    const events = adapter.translateEvent(
+      codexEvent("item/completed", {
+        threadId: "t1",
+        turnId: "turn-1",
+        item: {
+          type: "commandExecution",
+          id: "cmd-1",
+          command: "echo hi",
+          cwd: "/tmp",
+          processId: null,
+          status: "completed",
+          commandActions: [],
+          aggregatedOutput: "provider output\n",
+          exitCode: 0,
+          durationMs: 150,
+        },
+      }),
+    );
+
+    expect(events).toContainEqual({
+      type: "item/completed",
+      threadId: "t1",
+      providerThreadId: "t1",
+      turnId: "turn-1",
+      item: expect.objectContaining({
+        type: "commandExecution",
+        id: "cmd-1",
+        aggregatedOutput: "provider output\n",
+      }),
+    });
+  });
+
+  it("translateEvent repairs concurrent commandExecution outputs independently", () => {
+    const adapter = createCodexProviderAdapter();
+
+    adapter.translateEvent(
+      codexEvent("rawResponseItem/completed", {
+        threadId: "t1",
+        turnId: "turn-1",
+        item: {
+          type: "function_call",
+          name: "exec_command",
+          arguments: "{\"cmd\":\"first\"}",
+          call_id: "cmd-a",
+        },
+      }),
+    );
+    adapter.translateEvent(
+      codexEvent("rawResponseItem/completed", {
+        threadId: "t1",
+        turnId: "turn-1",
+        item: {
+          type: "function_call",
+          name: "exec_command",
+          arguments: "{\"cmd\":\"second\"}",
+          call_id: "cmd-b",
+        },
+      }),
+    );
+    adapter.translateEvent(
+      codexEvent("rawResponseItem/completed", {
+        threadId: "t1",
+        turnId: "turn-1",
+        item: {
+          type: "function_call_output",
+          call_id: "cmd-a",
+          output: "Output:\nA-1\nA-2\nA-3\n",
+        },
+      }),
+    );
+    adapter.translateEvent(
+      codexEvent("rawResponseItem/completed", {
+        threadId: "t1",
+        turnId: "turn-1",
+        item: {
+          type: "function_call_output",
+          call_id: "cmd-b",
+          output: "Output:\nB-1\nB-2\nB-3\n",
+        },
+      }),
+    );
+
+    const firstEvents = adapter.translateEvent(
+      codexEvent("item/completed", {
+        threadId: "t1",
+        turnId: "turn-1",
+        item: {
+          type: "commandExecution",
+          id: "cmd-a",
+          command: "first",
+          cwd: "/tmp",
+          processId: null,
+          status: "completed",
+          commandActions: [],
+          aggregatedOutput: "A-2\nA-3\n",
+          exitCode: 0,
+          durationMs: 150,
+        },
+      }),
+    );
+    const secondEvents = adapter.translateEvent(
+      codexEvent("item/completed", {
+        threadId: "t1",
+        turnId: "turn-1",
+        item: {
+          type: "commandExecution",
+          id: "cmd-b",
+          command: "second",
+          cwd: "/tmp",
+          processId: null,
+          status: "completed",
+          commandActions: [],
+          aggregatedOutput: "B-2\nB-3\n",
+          exitCode: 0,
+          durationMs: 150,
+        },
+      }),
+    );
+
+    expect(firstEvents).toContainEqual({
+      type: "item/completed",
+      threadId: "t1",
+      providerThreadId: "t1",
+      turnId: "turn-1",
+      item: expect.objectContaining({
+        type: "commandExecution",
+        id: "cmd-a",
+        aggregatedOutput: "A-1\nA-2\nA-3\n",
+      }),
+    });
+    expect(secondEvents).toContainEqual({
+      type: "item/completed",
+      threadId: "t1",
+      providerThreadId: "t1",
+      turnId: "turn-1",
+      item: expect.objectContaining({
+        type: "commandExecution",
+        id: "cmd-b",
+        aggregatedOutput: "B-1\nB-2\nB-3\n",
+      }),
+    });
+  });
+
+  it("translateEvent keeps another thread's recovered command output after a different thread completes", () => {
+    const adapter = createCodexProviderAdapter();
+
+    adapter.translateEvent(
+      codexEvent("rawResponseItem/completed", {
+        threadId: "thread-a",
+        turnId: "turn-a",
+        item: {
+          type: "function_call",
+          name: "exec_command",
+          arguments: "{\"cmd\":\"first\"}",
+          call_id: "cmd-a",
+        },
+      }),
+    );
+    adapter.translateEvent(
+      codexEvent("rawResponseItem/completed", {
+        threadId: "thread-a",
+        turnId: "turn-a",
+        item: {
+          type: "function_call_output",
+          call_id: "cmd-a",
+          output: "Output:\nA-1\nA-2\n",
+        },
+      }),
+    );
+    adapter.translateEvent(
+      codexEvent("rawResponseItem/completed", {
+        threadId: "thread-b",
+        turnId: "turn-b",
+        item: {
+          type: "function_call",
+          name: "exec_command",
+          arguments: "{\"cmd\":\"second\"}",
+          call_id: "cmd-b",
+        },
+      }),
+    );
+    adapter.translateEvent(
+      codexEvent("rawResponseItem/completed", {
+        threadId: "thread-b",
+        turnId: "turn-b",
+        item: {
+          type: "function_call_output",
+          call_id: "cmd-b",
+          output: "Output:\nB-1\nB-2\n",
+        },
+      }),
+    );
+
+    adapter.translateEvent(
+      codexEvent("turn/completed", {
+        threadId: "thread-a",
+        turn: { id: "turn-a", items: [], status: "completed", error: null },
+      }),
+    );
+
+    const events = adapter.translateEvent(
+      codexEvent("item/completed", {
+        threadId: "thread-b",
+        turnId: "turn-b",
+        item: {
+          type: "commandExecution",
+          id: "cmd-b",
+          command: "second",
+          cwd: "/tmp",
+          processId: null,
+          status: "completed",
+          commandActions: [],
+          aggregatedOutput: "B-2\n",
+          exitCode: 0,
+          durationMs: 150,
+        },
+      }),
+    );
+
+    expect(events).toContainEqual({
+      type: "item/completed",
+      threadId: "thread-b",
+      providerThreadId: "thread-b",
+      turnId: "turn-b",
+      item: expect.objectContaining({
+        type: "commandExecution",
+        id: "cmd-b",
+        aggregatedOutput: "B-1\nB-2\n",
+      }),
+    });
+  });
+
+  it("translateEvent clears recovered raw command output state when a thread closes", () => {
+    const adapter = createCodexProviderAdapter();
+
+    adapter.translateEvent(
+      codexEvent("rawResponseItem/completed", {
+        threadId: "thread-a",
+        turnId: "turn-a",
+        item: {
+          type: "function_call",
+          name: "exec_command",
+          arguments: "{\"cmd\":\"echo hi\"}",
+          call_id: "cmd-a",
+        },
+      }),
+    );
+
+    adapter.translateEvent(
+      codexEvent("thread/closed", {
+        threadId: "thread-a",
+      }),
+    );
+
+    adapter.translateEvent(
+      codexEvent("rawResponseItem/completed", {
+        threadId: "thread-a",
+        turnId: "turn-a",
+        item: {
+          type: "function_call_output",
+          call_id: "cmd-a",
+          output: "Output:\nSTALE\n",
+        },
+      }),
+    );
+
+    const events = adapter.translateEvent(
+      codexEvent("item/completed", {
+        threadId: "thread-a",
+        turnId: "turn-a",
+        item: {
+          type: "commandExecution",
+          id: "cmd-a",
+          command: "echo hi",
+          cwd: "/tmp",
+          processId: null,
+          status: "completed",
+          commandActions: [],
+          aggregatedOutput: "provider output\n",
+          exitCode: 0,
+          durationMs: 150,
+        },
+      }),
+    );
+
+    expect(events).toContainEqual({
+      type: "item/completed",
+      threadId: "thread-a",
+      providerThreadId: "thread-a",
+      turnId: "turn-a",
+      item: expect.objectContaining({
+        type: "commandExecution",
+        id: "cmd-a",
+        aggregatedOutput: "provider output\n",
       }),
     });
   });

@@ -490,6 +490,170 @@ const codexWarningParamsSchema = z
   })
   .passthrough();
 
+const codexFunctionCallOutputContentItemSchema = z.discriminatedUnion("type", [
+  z
+    .object({
+      type: z.literal("input_text"),
+      text: z.string(),
+    })
+    .passthrough(),
+  z
+    .object({
+      type: z.literal("input_image"),
+      image_url: z.string(),
+    })
+    .passthrough(),
+]);
+
+const codexFunctionCallOutputBodySchema = z.union([
+  z.string(),
+  z.array(codexFunctionCallOutputContentItemSchema),
+]);
+
+const codexRawMessageResponseItemSchema = z
+  .object({
+    type: z.literal("message"),
+  })
+  .passthrough();
+
+const codexRawReasoningResponseItemSchema = z
+  .object({
+    type: z.literal("reasoning"),
+  })
+  .passthrough();
+
+const codexRawLocalShellCallResponseItemSchema = z
+  .object({
+    type: z.literal("local_shell_call"),
+    call_id: z.string().nullable(),
+    status: z.enum(["completed", "in_progress", "incomplete"]),
+    action: z
+      .object({
+        type: z.literal("exec"),
+        command: z.array(z.string()),
+        timeout_ms: z.number().int().nullable(),
+        working_directory: z.string().nullable(),
+        env: z.record(z.string(), z.string()).nullable(),
+        user: z.string().nullable(),
+      })
+      .passthrough(),
+  })
+  .passthrough();
+
+const codexRawFunctionCallResponseItemSchema = z
+  .object({
+    type: z.literal("function_call"),
+    name: z.string(),
+    arguments: z.string(),
+    call_id: z.string(),
+  })
+  .passthrough();
+
+const codexRawFunctionCallOutputResponseItemSchema = z
+  .object({
+    type: z.literal("function_call_output"),
+    call_id: z.string(),
+    output: codexFunctionCallOutputBodySchema,
+  })
+  .passthrough();
+
+const codexRawCustomToolCallResponseItemSchema = z
+  .object({
+    type: z.literal("custom_tool_call"),
+    call_id: z.string(),
+    name: z.string(),
+    input: z.string(),
+  })
+  .passthrough();
+
+const codexRawCustomToolCallOutputResponseItemSchema = z
+  .object({
+    type: z.literal("custom_tool_call_output"),
+    call_id: z.string(),
+    output: codexFunctionCallOutputBodySchema,
+  })
+  .passthrough();
+
+const codexRawToolSearchCallResponseItemSchema = z
+  .object({
+    type: z.literal("tool_search_call"),
+  })
+  .passthrough();
+
+const codexRawToolSearchOutputResponseItemSchema = z
+  .object({
+    type: z.literal("tool_search_output"),
+  })
+  .passthrough();
+
+const codexRawWebSearchCallResponseItemSchema = z
+  .object({
+    type: z.literal("web_search_call"),
+  })
+  .passthrough();
+
+const codexRawImageGenerationCallResponseItemSchema = z
+  .object({
+    type: z.literal("image_generation_call"),
+  })
+  .passthrough();
+
+const codexRawGhostSnapshotResponseItemSchema = z
+  .object({
+    type: z.literal("ghost_snapshot"),
+  })
+  .passthrough();
+
+const codexRawCompactionResponseItemSchema = z
+  .object({
+    type: z.literal("compaction"),
+  })
+  .passthrough();
+
+const codexRawOtherResponseItemSchema = z
+  .object({
+    type: z.literal("other"),
+  })
+  .passthrough();
+
+export const codexRawResponseItemSchema = z.discriminatedUnion("type", [
+  codexRawMessageResponseItemSchema,
+  codexRawReasoningResponseItemSchema,
+  codexRawLocalShellCallResponseItemSchema,
+  codexRawFunctionCallResponseItemSchema,
+  codexRawFunctionCallOutputResponseItemSchema,
+  codexRawToolSearchCallResponseItemSchema,
+  codexRawCustomToolCallResponseItemSchema,
+  codexRawCustomToolCallOutputResponseItemSchema,
+  codexRawToolSearchOutputResponseItemSchema,
+  codexRawWebSearchCallResponseItemSchema,
+  codexRawImageGenerationCallResponseItemSchema,
+  codexRawGhostSnapshotResponseItemSchema,
+  codexRawCompactionResponseItemSchema,
+  codexRawOtherResponseItemSchema,
+]);
+export type CodexRawResponseItem = z.infer<typeof codexRawResponseItemSchema>;
+
+export const codexRawResponseItemCompletedParamsSchema = z
+  .object({
+    threadId: z.string(),
+    turnId: z.string(),
+    item: codexRawResponseItemSchema,
+  })
+  .passthrough();
+export type CodexRawResponseItemCompletedParams = z.infer<
+  typeof codexRawResponseItemCompletedParamsSchema
+>;
+
+export const codexThreadClosedParamsSchema = z
+  .object({
+    threadId: z.string(),
+  })
+  .passthrough();
+export type CodexThreadClosedParams = z.infer<
+  typeof codexThreadClosedParamsSchema
+>;
+
 export const codexBridgeEnvelopeSchema = z.union([
   jsonRpcEnvelopeSchema,
   z

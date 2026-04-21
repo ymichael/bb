@@ -599,7 +599,13 @@ function buildFlatViewMessages(
       if (execEvent.kind === "begin") {
         onExecBegin(state, meta, decoded.threadId, eventTurnId, execEvent.call);
       } else if (execEvent.kind === "output") {
-        onExecOutput(state, meta, execEvent.call, execEvent.appendOutput);
+        onExecOutput(
+          state,
+          meta,
+          execEvent.call,
+          execEvent.appendOutput,
+          execEvent.replaceOutput,
+        );
       } else {
         onExecEnd(state, meta, decoded.threadId, eventTurnId, execEvent.call);
       }
@@ -671,6 +677,7 @@ function buildFlatViewMessages(
           meta,
           toolCallEvent.call,
           toolCallEvent.appendOutput,
+          toolCallEvent.replaceOutput,
         );
       } else {
         onExecEnd(

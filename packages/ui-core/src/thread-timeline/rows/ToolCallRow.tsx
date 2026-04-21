@@ -1,5 +1,10 @@
 import { useEffect, useState } from "react";
-import { isShellToolName } from "@bb/core-ui";
+import {
+  formatCommandOutputText,
+  getTimelineDisplayStatus,
+  getTimelineDisplayStatusInfo,
+  isShellToolName,
+} from "@bb/core-ui";
 import type { ViewToolCallMessage } from "@bb/domain";
 import { ExpandablePanel } from "../../disclosure.js";
 import { useLatestInitialExpanded } from "../latestInitialExpanded.js";
@@ -24,22 +29,6 @@ function getToolCallTone(
   // non-shell tool rows that may still need stronger emphasis.
   if (isShellToolName(message.toolName)) return "default";
   return message.status === "error" ? "destructive" : "default";
-}
-
-function toolCallActionLabel(
-  message: ViewToolCallMessage,
-  preferRunningLabel: boolean,
-): string {
-  if (message.approvalStatus === "waiting_for_approval") {
-    return "Waiting for approval to run";
-  }
-  if (message.approvalStatus === "denied") {
-    return "Permission denied:";
-  }
-  if (message.status === "error") return "Failed";
-  if (message.status === "interrupted") return "Interrupted";
-  if (message.status === "pending" || preferRunningLabel) return "Running";
-  return "Ran";
 }
 
 function useLiveNow(enabled: boolean): number | undefined {
@@ -82,27 +71,6 @@ function getSummaryDurationMs(
   return message.durationMs;
 }
 
-function formatExitCodeLine(message: ViewToolCallMessage): string | undefined {
-  if (message.exitCode === undefined || message.exitCode === 0)
-    return undefined;
-  return `exit code ${message.exitCode}`;
-}
-
-function formatOutputText(message: ViewToolCallMessage): string {
-  const output =
-    message.output && message.output.length > 0 ? message.output : undefined;
-  const exitCodeLine = formatExitCodeLine(message);
-
-  if (output && exitCodeLine) {
-    const trimmedOutput = output.trimEnd();
-    return trimmedOutput.length > 0
-      ? `${trimmedOutput}\n\n${exitCodeLine}`
-      : exitCodeLine;
-  }
-  if (output) return output;
-  return exitCodeLine ?? "(no output)";
-}
-
 export function ToolCallRow({
   message,
   initialExpanded = false,
@@ -112,13 +80,22 @@ export function ToolCallRow({
   const command = message.command ?? message.toolName;
   const titleDetail =
     isExpanded && isShellToolName(message.toolName) ? "command" : command;
-  const outputText = formatOutputText(message);
   const preferRunningLabel =
     preferOngoingLabels && message.status === "completed";
-  const actionLabel = toolCallActionLabel(message, preferRunningLabel);
-  const isRunning =
-    message.approvalStatus !== "denied" &&
-    (message.status === "pending" || preferRunningLabel);
+  const displayStatus = getTimelineDisplayStatus({
+    approvalStatus: message.approvalStatus,
+    preferRunningLabel,
+    status: message.status,
+  });
+  const outputText = formatCommandOutputText({
+    displayStatus,
+    exitCode: message.exitCode,
+    output: message.output,
+  });
+  const actionLabel = getTimelineDisplayStatusInfo(displayStatus).reactLabel;
+  const isVisuallyActive =
+    message.status === "pending" && message.approvalStatus !== "denied";
+  const isRunning = displayStatus === "running";
   const liveNow = useLiveNow(isRunning && message.status === "pending");
   const duration = formatSummaryDuration(
     getSummaryDurationMs(message, preferRunningLabel, liveNow),
@@ -130,7 +107,7 @@ export function ToolCallRow({
       detail={titleDetail}
       suffix={duration}
       tone={tone}
-      shimmerPrefix={isRunning}
+      shimmerPrefix={isVisuallyActive}
     />
   );
   const headerToneClass = getEventHeaderToneClass(isExpanded, tone);

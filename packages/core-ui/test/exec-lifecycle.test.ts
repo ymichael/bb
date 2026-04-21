@@ -96,6 +96,21 @@ describe("parseExecLifecycleEvent", () => {
     expect(result?.appendOutput).toBe(true);
   });
 
+  it("parses reset output delta events as replacement updates", () => {
+    const decoded = {
+      type: "item/commandExecution/outputDelta" as const,
+      threadId: "t-1",
+      itemId: "call-1",
+      delta: "replacement output",
+      reset: true,
+    };
+    const result = parseExecLifecycleEvent(decoded, meta);
+    expect(result?.kind).toBe("output");
+    expect(result?.call.output).toBe("replacement output");
+    expect(result?.replaceOutput).toBe(true);
+    expect(result?.appendOutput).toBeUndefined();
+  });
+
   it("returns null for non-exec item events", () => {
     const decoded = {
       type: "item/started" as const,

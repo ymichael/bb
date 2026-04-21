@@ -1,0 +1,1312 @@
+[
+  {
+    "kind": "raw-provider-event",
+    "captureId": "capture-1",
+    "capturedAt": 1776807039735,
+    "providerId": "codex",
+    "rawLine": "{\"method\":\"mcpServer/startupStatus/updated\",\"params\":{\"name\":\"codex_apps\",\"status\":\"starting\",\"error\":null}}",
+    "rawEvent": {
+      "jsonrpc": "2.0",
+      "method": "mcpServer/startupStatus/updated",
+      "params": {
+        "name": "codex_apps",
+        "status": "starting",
+        "error": null
+      }
+    }
+  },
+  {
+    "kind": "raw-provider-event",
+    "captureId": "capture-2",
+    "capturedAt": 1776807039737,
+    "providerId": "codex",
+    "rawLine": "{\"method\":\"thread/started\",\"params\":{\"thread\":{\"id\":\"019db1f3-d2e6-76d2-99a5-3eb4645eae2d\",\"forkedFromId\":null,\"preview\":\"\",\"ephemeral\":false,\"modelProvider\":\"openai\",\"createdAt\":1776807039,\"updatedAt\":1776807039,\"status\":{\"type\":\"idle\"},\"path\":\"$HOME/.codex/sessions/2026/04/21/rollout-2026-04-21T14-30-39-019db1f3-d2e6-76d2-99a5-3eb4645eae2d.jsonl\",\"cwd\":\"$EXCALIDRAW_REPO\",\"cliVersion\":\"0.122.0\",\"source\":\"vscode\",\"agentNickname\":null,\"agentRole\":null,\"gitInfo\":null,\"name\":null,\"turns\":[]}}}",
+    "rawEvent": {
+      "jsonrpc": "2.0",
+      "method": "thread/started",
+      "params": {
+        "thread": {
+          "id": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d",
+          "forkedFromId": null,
+          "preview": "",
+          "ephemeral": false,
+          "modelProvider": "openai",
+          "createdAt": 1776807039,
+          "updatedAt": 1776807039,
+          "status": {
+            "type": "idle"
+          },
+          "path": "$HOME/.codex/sessions/2026/04/21/rollout-2026-04-21T14-30-39-019db1f3-d2e6-76d2-99a5-3eb4645eae2d.jsonl",
+          "cwd": "$EXCALIDRAW_REPO",
+          "cliVersion": "0.122.0",
+          "source": "vscode",
+          "agentNickname": null,
+          "agentRole": null,
+          "gitInfo": null,
+          "name": null,
+          "turns": []
+        }
+      }
+    }
+  },
+  {
+    "kind": "raw-provider-event",
+    "captureId": "capture-3",
+    "capturedAt": 1776807039742,
+    "providerId": "codex",
+    "rawLine": "{\"method\":\"thread/status/changed\",\"params\":{\"threadId\":\"019db1f3-d2e6-76d2-99a5-3eb4645eae2d\",\"status\":{\"type\":\"active\",\"activeFlags\":[]}}}",
+    "rawEvent": {
+      "jsonrpc": "2.0",
+      "method": "thread/status/changed",
+      "params": {
+        "threadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d",
+        "status": {
+          "type": "active",
+          "activeFlags": []
+        }
+      }
+    },
+    "sourceThreadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d"
+  },
+  {
+    "kind": "raw-provider-event",
+    "captureId": "capture-4",
+    "capturedAt": 1776807039742,
+    "providerId": "codex",
+    "rawLine": "{\"method\":\"turn/started\",\"params\":{\"threadId\":\"019db1f3-d2e6-76d2-99a5-3eb4645eae2d\",\"turn\":{\"id\":\"019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76\",\"items\":[],\"status\":\"inProgress\",\"error\":null,\"startedAt\":1776807039,\"completedAt\":null,\"durationMs\":null}}}",
+    "rawEvent": {
+      "jsonrpc": "2.0",
+      "method": "turn/started",
+      "params": {
+        "threadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d",
+        "turn": {
+          "id": "019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76",
+          "items": [],
+          "status": "inProgress",
+          "error": null,
+          "startedAt": 1776807039,
+          "completedAt": null,
+          "durationMs": null
+        }
+      }
+    },
+    "sourceThreadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d"
+  },
+  {
+    "kind": "raw-provider-event",
+    "captureId": "capture-5",
+    "capturedAt": 1776807040383,
+    "providerId": "codex",
+    "rawLine": "{\"method\":\"mcpServer/startupStatus/updated\",\"params\":{\"name\":\"codex_apps\",\"status\":\"ready\",\"error\":null}}",
+    "rawEvent": {
+      "jsonrpc": "2.0",
+      "method": "mcpServer/startupStatus/updated",
+      "params": {
+        "name": "codex_apps",
+        "status": "ready",
+        "error": null
+      }
+    }
+  },
+  {
+    "kind": "raw-provider-event",
+    "captureId": "capture-6",
+    "capturedAt": 1776807042555,
+    "providerId": "codex",
+    "rawLine": "{\"method\":\"rawResponseItem/completed\",\"params\":{\"threadId\":\"019db1f3-d2e6-76d2-99a5-3eb4645eae2d\",\"turnId\":\"019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76\",\"item\":{\"type\":\"message\",\"role\":\"developer\",\"content\":[{\"type\":\"input_text\",\"text\":\"<permissions instructions>\\nFilesystem sandboxing defines which files can be read or written. `sandbox_mode` is `danger-full-access`: No filesystem sandboxing - all commands are permitted. Network access is enabled.\\nApproval policy is currently never. Do not provide the `sandbox_permissions` for any reason, commands will be rejected.\\n</permissions instructions>\"},{\"type\":\"input_text\",\"text\":\"<skills_instructions>\\n## Skills\\nA skill is a set of local instructions to follow that is stored in a `SKILL.md` file. Below is the list of skills that can be used. Each entry includes a name, description, and file path so you can open the source for full instructions when using a specific skill.\\n### Available skills\\n- imagegen: Generate or edit raster images when the task benefits from AI-created bitmap visuals such as photos, illustrations, textures, sprites, mockups, or transparent-background cutouts. Use when Codex should create a brand-new image, transform an existing image, or derive visual variants from references, and the output should be a bitmap asset rather than repo-native code or vector. Do not use when the task is better handled by editing existing SVG/vector/code-native assets, extending an established icon or logo system, or building the visual directly in HTML/CSS/canvas. (file: $HOME/.codex/skills/.system/imagegen/SKILL.md)\\n- openai-docs: Use when the user asks how to build with OpenAI products or APIs and needs up-to-date official documentation with citations, help choosing the latest model for a use case, or explicit GPT-5.4 upgrade and prompt-upgrade guidance; prioritize OpenAI docs MCP tools, use bundled references only as helper context, and restrict any fallback browsing to official OpenAI domains. (file: $HOME/.codex/skills/.system/openai-docs/SKILL.md)\\n- plugin-creator: Create and scaffold plugin directories for Codex with a required `.codex-plugin/plugin.json`, optional plugin folders/files, and baseline placeholders you can edit before publishing or testing. Use when Codex needs to create a new local plugin, add optional plugin structure, or generate or update repo-root `.agents/plugins/marketplace.json` entries for plugin ordering and availability metadata. (file: $HOME/.codex/skills/.system/plugin-creator/SKILL.md)\\n- skill-creator: Guide for creating effective skills. This skill should be used when users want to create a new skill (or update an existing skill) that extends Codex's capabilities with specialized knowledge, workflows, or tool integrations. (file: $HOME/.codex/skills/.system/skill-creator/SKILL.md)\\n- skill-installer: Install Codex skills into $CODEX_HOME/skills from a curated list or a GitHub repo path. Use when a user asks to list installable skills, install a curated skill, or install a skill from another repo (including private repos). (file: $HOME/.codex/skills/.system/skill-installer/SKILL.md)\\n- Excel: Use this skill when a user requests to create, modify, analyze, visualize, or work with spreadsheet files (`.xlsx`, `.xls`, `.csv`, `.tsv`) with formulas, formatting, charts, tables, and recalculation. (file: $HOME/.codex/skills/codex-primary-runtime/spreadsheets/SKILL.md)\\n- PowerPoint: Create, edit, render, verify, and export PowerPoint slide decks. Use when Codex needs to build or modify a deck, presentation deck, slide deck, slides, PowerPoint, PPT, or visually ambitious editable .pptx file. (file: $HOME/.codex/skills/codex-primary-runtime/slides/SKILL.md)\\n- repo-research: Research a GitHub repository to learn how it implements a feature or pattern. Use when the user wants to study, mimic, or learn from an external codebase. Triggers on requests like \\\"How does X repo implement Y?\\\", \\\"Show me how Z project handles this\\\", \\\"I want to learn from this repo\\\", or when the user provides a GitHub URL with a question. (file: $HOME/.agents/skills/repo-research/SKILL.md)\\n- skill-creator: Guide for creating effective agent skills. Use when the user wants to create a new skill, update an existing skill, or learn best practices for skill design. Triggers on requests like \\\"create a skill for X\\\", \\\"build a new skill\\\", \\\"help me make a skill\\\", \\\"update this skill\\\", or \\\"how should I structure a skill\\\". (file: $HOME/.agents/skills/skill-creator/SKILL.md)\\n- update-agents-md: Review the current session for learnings and update AGENTS.md to save time in future sessions. Only use when the user explicitly asks to update AGENTS.md. (file: $HOME/.agents/skills/update-agents-md/SKILL.md)\\n- vercel-react-best-practices: React and Next.js performance optimization guidelines from Vercel Engineering. This skill should be used when writing, reviewing, or refactoring React/Next.js code to ensure optimal performance patterns. Triggers on tasks involving React components, Next.js pages, data fetching, bundle optimization, or performance improvements. (file: $HOME/.agents/skills/vercel-react-best-practices/SKILL.md)\\n### How to use skills\\n- Discovery: The list above is the skills available in this session (name + description + file path). Skill bodies live on disk at the listed paths.\\n- Trigger rules: If the user names a skill (with `$SkillName` or plain text) OR the task clearly matches a skill's description shown above, you must use that skill for that turn. Multiple mentions mean use them all. Do not carry skills across turns unless re-mentioned.\\n- Missing/blocked: If a named skill isn't in the list or the path can't be read, say so briefly and continue with the best fallback.\\n- How to use a skill (progressive disclosure):\\n  1) After deciding to use a skill, open its `SKILL.md`. Read only enough to follow the workflow.\\n  2) When `SKILL.md` references relative paths (e.g., `scripts/foo.py`), resolve them relative to the skill directory listed above first, and only consider other paths if needed.\\n  3) If `SKILL.md` points to extra folders such as `references/`, load only the specific files needed for the request; don't bulk-load everything.\\n  4) If `scripts/` exist, prefer running or patching them instead of retyping large code blocks.\\n  5) If `assets/` or templates exist, reuse them instead of recreating from scratch.\\n- Coordination and sequencing:\\n  - If multiple skills apply, choose the minimal set that covers the request and state the order you'll use them.\\n  - Announce which skill(s) you're using and why (one short line). If you skip an obvious skill, say why.\\n- Context hygiene:\\n  - Keep context small: summarize long sections instead of pasting them; only load extra files when needed.\\n  - Avoid deep reference-chasing: prefer opening only files directly linked from `SKILL.md` unless you're blocked.\\n  - When variants exist (frameworks, providers, domains), pick only the relevant reference file(s) and note that choice.\\n- Safety and fallback: If a skill can't be applied cleanly (missing files, unclear instructions), state the issue, pick the next-best approach, and continue.\\n</skills_instructions>\"}]}}}",
+    "rawEvent": {
+      "jsonrpc": "2.0",
+      "method": "rawResponseItem/completed",
+      "params": {
+        "threadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d",
+        "turnId": "019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76",
+        "item": {
+          "type": "message",
+          "role": "developer",
+          "content": [
+            {
+              "type": "input_text",
+              "text": "<permissions instructions>\nFilesystem sandboxing defines which files can be read or written. `sandbox_mode` is `danger-full-access`: No filesystem sandboxing - all commands are permitted. Network access is enabled.\nApproval policy is currently never. Do not provide the `sandbox_permissions` for any reason, commands will be rejected.\n</permissions instructions>"
+            },
+            {
+              "type": "input_text",
+              "text": "<skills_instructions>\n## Skills\nA skill is a set of local instructions to follow that is stored in a `SKILL.md` file. Below is the list of skills that can be used. Each entry includes a name, description, and file path so you can open the source for full instructions when using a specific skill.\n### Available skills\n- imagegen: Generate or edit raster images when the task benefits from AI-created bitmap visuals such as photos, illustrations, textures, sprites, mockups, or transparent-background cutouts. Use when Codex should create a brand-new image, transform an existing image, or derive visual variants from references, and the output should be a bitmap asset rather than repo-native code or vector. Do not use when the task is better handled by editing existing SVG/vector/code-native assets, extending an established icon or logo system, or building the visual directly in HTML/CSS/canvas. (file: $HOME/.codex/skills/.system/imagegen/SKILL.md)\n- openai-docs: Use when the user asks how to build with OpenAI products or APIs and needs up-to-date official documentation with citations, help choosing the latest model for a use case, or explicit GPT-5.4 upgrade and prompt-upgrade guidance; prioritize OpenAI docs MCP tools, use bundled references only as helper context, and restrict any fallback browsing to official OpenAI domains. (file: $HOME/.codex/skills/.system/openai-docs/SKILL.md)\n- plugin-creator: Create and scaffold plugin directories for Codex with a required `.codex-plugin/plugin.json`, optional plugin folders/files, and baseline placeholders you can edit before publishing or testing. Use when Codex needs to create a new local plugin, add optional plugin structure, or generate or update repo-root `.agents/plugins/marketplace.json` entries for plugin ordering and availability metadata. (file: $HOME/.codex/skills/.system/plugin-creator/SKILL.md)\n- skill-creator: Guide for creating effective skills. This skill should be used when users want to create a new skill (or update an existing skill) that extends Codex's capabilities with specialized knowledge, workflows, or tool integrations. (file: $HOME/.codex/skills/.system/skill-creator/SKILL.md)\n- skill-installer: Install Codex skills into $CODEX_HOME/skills from a curated list or a GitHub repo path. Use when a user asks to list installable skills, install a curated skill, or install a skill from another repo (including private repos). (file: $HOME/.codex/skills/.system/skill-installer/SKILL.md)\n- Excel: Use this skill when a user requests to create, modify, analyze, visualize, or work with spreadsheet files (`.xlsx`, `.xls`, `.csv`, `.tsv`) with formulas, formatting, charts, tables, and recalculation. (file: $HOME/.codex/skills/codex-primary-runtime/spreadsheets/SKILL.md)\n- PowerPoint: Create, edit, render, verify, and export PowerPoint slide decks. Use when Codex needs to build or modify a deck, presentation deck, slide deck, slides, PowerPoint, PPT, or visually ambitious editable .pptx file. (file: $HOME/.codex/skills/codex-primary-runtime/slides/SKILL.md)\n- repo-research: Research a GitHub repository to learn how it implements a feature or pattern. Use when the user wants to study, mimic, or learn from an external codebase. Triggers on requests like \"How does X repo implement Y?\", \"Show me how Z project handles this\", \"I want to learn from this repo\", or when the user provides a GitHub URL with a question. (file: $HOME/.agents/skills/repo-research/SKILL.md)\n- skill-creator: Guide for creating effective agent skills. Use when the user wants to create a new skill, update an existing skill, or learn best practices for skill design. Triggers on requests like \"create a skill for X\", \"build a new skill\", \"help me make a skill\", \"update this skill\", or \"how should I structure a skill\". (file: $HOME/.agents/skills/skill-creator/SKILL.md)\n- update-agents-md: Review the current session for learnings and update AGENTS.md to save time in future sessions. Only use when the user explicitly asks to update AGENTS.md. (file: $HOME/.agents/skills/update-agents-md/SKILL.md)\n- vercel-react-best-practices: React and Next.js performance optimization guidelines from Vercel Engineering. This skill should be used when writing, reviewing, or refactoring React/Next.js code to ensure optimal performance patterns. Triggers on tasks involving React components, Next.js pages, data fetching, bundle optimization, or performance improvements. (file: $HOME/.agents/skills/vercel-react-best-practices/SKILL.md)\n### How to use skills\n- Discovery: The list above is the skills available in this session (name + description + file path). Skill bodies live on disk at the listed paths.\n- Trigger rules: If the user names a skill (with `$SkillName` or plain text) OR the task clearly matches a skill's description shown above, you must use that skill for that turn. Multiple mentions mean use them all. Do not carry skills across turns unless re-mentioned.\n- Missing/blocked: If a named skill isn't in the list or the path can't be read, say so briefly and continue with the best fallback.\n- How to use a skill (progressive disclosure):\n  1) After deciding to use a skill, open its `SKILL.md`. Read only enough to follow the workflow.\n  2) When `SKILL.md` references relative paths (e.g., `scripts/foo.py`), resolve them relative to the skill directory listed above first, and only consider other paths if needed.\n  3) If `SKILL.md` points to extra folders such as `references/`, load only the specific files needed for the request; don't bulk-load everything.\n  4) If `scripts/` exist, prefer running or patching them instead of retyping large code blocks.\n  5) If `assets/` or templates exist, reuse them instead of recreating from scratch.\n- Coordination and sequencing:\n  - If multiple skills apply, choose the minimal set that covers the request and state the order you'll use them.\n  - Announce which skill(s) you're using and why (one short line). If you skip an obvious skill, say why.\n- Context hygiene:\n  - Keep context small: summarize long sections instead of pasting them; only load extra files when needed.\n  - Avoid deep reference-chasing: prefer opening only files directly linked from `SKILL.md` unless you're blocked.\n  - When variants exist (frameworks, providers, domains), pick only the relevant reference file(s) and note that choice.\n- Safety and fallback: If a skill can't be applied cleanly (missing files, unclear instructions), state the issue, pick the next-best approach, and continue.\n</skills_instructions>"
+            }
+          ]
+        }
+      }
+    },
+    "sourceThreadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d"
+  },
+  {
+    "kind": "raw-provider-event",
+    "captureId": "capture-7",
+    "capturedAt": 1776807042556,
+    "providerId": "codex",
+    "rawLine": "{\"method\":\"rawResponseItem/completed\",\"params\":{\"threadId\":\"019db1f3-d2e6-76d2-99a5-3eb4645eae2d\",\"turnId\":\"019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76\",\"item\":{\"type\":\"message\",\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"# AGENTS.md instructions for $EXCALIDRAW_REPO\\n\\n<INSTRUCTIONS>\\n# Codebase Guidelines\\n\\n## Type Safety\\n\\n- No `unknown`, no `as X` casts unless the type is genuinely unknowable (e.g., freeform tool input). Our boundaries validate and parse; everything inside the system is strongly typed.\\n- Never inline types in function signatures. Define them in the appropriate shared package.\\n- When renaming a domain type, search project-wide for the old name in variables, functions, files, query keys, and constants — not just type references. TypeScript only validates types; stale identifiers compile fine. Rename everything in the same commit.\\n\\n## Code Quality\\n\\n- Prefer maintainability and readability over speed. No one-off hacks — ask whether it would pass code review. We are never in a rush.\\n- Reuse before duplicating. If a pattern exists N times, extract a shared component or utility so consistency is structural, not aspirational. When fixing a bug, check whether the same pattern is repeated elsewhere.\\n- Leave the code better than you found it. When a change touches code with a weak abstraction, fix or improve it in the same change — don't add another caller to a pattern you wouldn't design today.\\n- Separate concerns. When a concern is better handled by a well-known, battle-tested library, install and use it.\\n- Prefer a single object argument over multiple positional arguments, especially when a function takes 3+ parameters of the same type.\\n- No inline dynamic imports unless for genuine performance reasons. If it's working around a circular dependency, fix the dependency graph instead.\\n- Never load all rows and filter in JS when a targeted query with WHERE/JOIN is possible. Use the indexes defined in the schema.\\n\\n## UI Consistency\\n\\n- Reuse shared primitives before introducing view-local class bundles (page shell, detail card/rows, collapsible headers, status pill).\\n- Avoid arbitrary `text-[Npx]` classes; prefer sanctioned typography tokens.\\n- Keep one canonical rendering path per concept; remove or deprecate parallel/legacy surfaces.\\n\\n## Build and Typecheck\\n\\n- Always use Turbo: `pnpm exec turbo run <task> --filter=@bb/<pkg>`. Turbo ensures upstream `^build` dependencies run first. Running package scripts directly (e.g., `pnpm --filter @bb/foo test`) or raw `npx tsc` skips these and will often fail with spurious module-not-found errors.\\n- Typecheck: `pnpm exec turbo run typecheck --filter=@bb/<pkg>`. Do not run `npx tsc --noEmit` directly — cross-package references require upstream builds.\\n\\n## Testing\\n\\n- Quality over quantity. Tests that pass when the package is broken are worse than no tests — they create false confidence. Every test should be able to catch a real bug.\\n- Test real behavior and outcomes — resulting state, return values, persisted data, response bodies. Not call sequences.\\n- Never mock the database. Use in-memory SQLite via `createConnection(\\\":memory:\\\")` + `migrate(db)`.\\n- Almost never mock our own code. Mock only at true external boundaries: network calls to third-party providers, timers, and similar unpredictable externals.\\n- Never mock the module under test or its private methods.\\n- Pipe slow test output to a file, then read the file. Never grep or tail inline on slow tests — if the pattern misses, you've wasted an entire run. Example: `pnpm exec turbo run test --filter=@bb/integration-tests --force > /tmp/test-out.txt 2>&1`, then read `/tmp/test-out.txt`.\\n\\n## Debugging Tips\\n\\n- Don't assume — instrument and observe. Add logging, read logs, inspect the database, repeat.\\n- Prefer server API, CLI, direct SQL queries, or log files over browser-based debugging. Use the browser only for browser-specific issues.\\n\\n  | -           | Dev            | Prod           |\\n  | ----------- | -------------- | -------------- |\\n  | Frontend    | `:5173`        | `:3000`        |\\n  | Server API  | `:3334`        | `:3000`        |\\n  | Host daemon | `:3002`        | `:3001`        |\\n  | Data dir    | `~/.bb-dev/`   | `~/.bb/`       |\\n  | Database    | `<data>/bb.db` | `<data>/bb.db` |\\n  | Logs        | `<data>/logs/` | `<data>/logs/` |\\n\\n- Entity IDs in URLs (`proj_*`, `thr_*`) are primary keys. Query them directly: `sqlite3 ~/.bb-dev/bb.db \\\"SELECT * FROM threads WHERE id = 'thr_xxx';\\\"`.\\n- API routes are under `/api/v1/` — e.g. `GET /api/v1/threads/:id`. `curl` the server directly to isolate frontend vs server bugs.\\n- Use the CLI to inspect state: `pnpm bb thread show <id>`, `pnpm bb project list`, `pnpm bb status`. From source: `pnpm bb:dev`.\\n\\n## Contract Documentation\\n\\n- Routes and commands that are self-evident from their name and type signature don't need comments. Add JSDoc only when the behavior is non-obvious — side effects, multi-step flows, guards, or context that the type signature doesn't convey.\\n- When adding a new route or command type with non-obvious behavior, add the documentation in the same commit.\\n- When changing a route's behavior, update any existing documentation to match.\\n\\n## Contracts And Boundaries\\n\\n- Optional contract fields are allowed only when leaving the field out has its own real semantic meaning. Do not use optional fields to hide defaults.\\n- Use `required + nullable` only when `null` has a distinct meaning such as “clear this value” or “unknown”. Do not use nullable as a stand-in for defaulting.\\n- If a field has a default, fill it in once at the server boundary, then pass an explicit value through internal routes, commands, and persisted events.\\n- Accepted-but-ignored route or command fields are forbidden. Delete them or implement them end to end in the same change.\\n- For new APIs and commands, answer “why is this optional?” during design and review.\\n\\n## Async Lifecycle Ownership\\n\\n- `status` fields represent current resource state only. Do not grow them into queue-state ladders like `requested`, `queued`, or `fetched`.\\n- Durable async lifecycles belong to server-owned lifecycle modules. Routes may request lifecycle work, but only lifecycle owners may advance it, mark it in progress, handle command results, or reconcile it after reconnect.\\n- Generic metadata update helpers must not accept lifecycle fields such as `status`, `stopRequestedAt`, `cleanupRequestedAt`, `cleanupMode`, or similar workflow state.\\n- Model lifecycle intent and progress explicitly. Do not rely on a resource `status` field alone to represent requested work, queued work, and recovery state.\\n- Every new async lifecycle must define how it handles lost daemon results, expired commands, reconnect reconciliation, and repeated requests.\\n\\n## Server And Daemon Ownership\\n\\n- The server owns product policy: defaults, instructions, manager behavior, tool lists, and thread behavior.\\n- The host daemon owns host-local primitives, provider translation, runtime/session management, and workspace execution.\\n- If the server needs host-local data, the daemon should return the raw data and the server should assemble the final behavior.\\n- When changing a server/daemon boundary, ask “should this decision live on the server instead?”\\n\\n## Reuse Discipline\\n\\n- Do not add optional function, component, route, or helper arguments just to support a new caller without first considering a wrapper, a new object type, or a separate helper.\\n\\n## Planning Workflow\\n\\n- When asked to \\\"make a plan\\\", create or update a Markdown file under `plans/`.\\n- Plans must have clear exit criteria and concrete validation instructions.\\n- Delete plan files once completed or superseded.\\n\\n</INSTRUCTIONS>\"},{\"type\":\"input_text\",\"text\":\"<environment_context>\\n  <cwd>$EXCALIDRAW_REPO</cwd>\\n  <shell>zsh</shell>\\n  <current_date>2026-04-21</current_date>\\n  <timezone>America/Los_Angeles</timezone>\\n</environment_context>\"}]}}}",
+    "rawEvent": {
+      "jsonrpc": "2.0",
+      "method": "rawResponseItem/completed",
+      "params": {
+        "threadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d",
+        "turnId": "019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76",
+        "item": {
+          "type": "message",
+          "role": "user",
+          "content": [
+            {
+              "type": "input_text",
+              "text": "# AGENTS.md instructions for $EXCALIDRAW_REPO\n\n<INSTRUCTIONS>\n# Codebase Guidelines\n\n## Type Safety\n\n- No `unknown`, no `as X` casts unless the type is genuinely unknowable (e.g., freeform tool input). Our boundaries validate and parse; everything inside the system is strongly typed.\n- Never inline types in function signatures. Define them in the appropriate shared package.\n- When renaming a domain type, search project-wide for the old name in variables, functions, files, query keys, and constants — not just type references. TypeScript only validates types; stale identifiers compile fine. Rename everything in the same commit.\n\n## Code Quality\n\n- Prefer maintainability and readability over speed. No one-off hacks — ask whether it would pass code review. We are never in a rush.\n- Reuse before duplicating. If a pattern exists N times, extract a shared component or utility so consistency is structural, not aspirational. When fixing a bug, check whether the same pattern is repeated elsewhere.\n- Leave the code better than you found it. When a change touches code with a weak abstraction, fix or improve it in the same change — don't add another caller to a pattern you wouldn't design today.\n- Separate concerns. When a concern is better handled by a well-known, battle-tested library, install and use it.\n- Prefer a single object argument over multiple positional arguments, especially when a function takes 3+ parameters of the same type.\n- No inline dynamic imports unless for genuine performance reasons. If it's working around a circular dependency, fix the dependency graph instead.\n- Never load all rows and filter in JS when a targeted query with WHERE/JOIN is possible. Use the indexes defined in the schema.\n\n## UI Consistency\n\n- Reuse shared primitives before introducing view-local class bundles (page shell, detail card/rows, collapsible headers, status pill).\n- Avoid arbitrary `text-[Npx]` classes; prefer sanctioned typography tokens.\n- Keep one canonical rendering path per concept; remove or deprecate parallel/legacy surfaces.\n\n## Build and Typecheck\n\n- Always use Turbo: `pnpm exec turbo run <task> --filter=@bb/<pkg>`. Turbo ensures upstream `^build` dependencies run first. Running package scripts directly (e.g., `pnpm --filter @bb/foo test`) or raw `npx tsc` skips these and will often fail with spurious module-not-found errors.\n- Typecheck: `pnpm exec turbo run typecheck --filter=@bb/<pkg>`. Do not run `npx tsc --noEmit` directly — cross-package references require upstream builds.\n\n## Testing\n\n- Quality over quantity. Tests that pass when the package is broken are worse than no tests — they create false confidence. Every test should be able to catch a real bug.\n- Test real behavior and outcomes — resulting state, return values, persisted data, response bodies. Not call sequences.\n- Never mock the database. Use in-memory SQLite via `createConnection(\":memory:\")` + `migrate(db)`.\n- Almost never mock our own code. Mock only at true external boundaries: network calls to third-party providers, timers, and similar unpredictable externals.\n- Never mock the module under test or its private methods.\n- Pipe slow test output to a file, then read the file. Never grep or tail inline on slow tests — if the pattern misses, you've wasted an entire run. Example: `pnpm exec turbo run test --filter=@bb/integration-tests --force > /tmp/test-out.txt 2>&1`, then read `/tmp/test-out.txt`.\n\n## Debugging Tips\n\n- Don't assume — instrument and observe. Add logging, read logs, inspect the database, repeat.\n- Prefer server API, CLI, direct SQL queries, or log files over browser-based debugging. Use the browser only for browser-specific issues.\n\n  | -           | Dev            | Prod           |\n  | ----------- | -------------- | -------------- |\n  | Frontend    | `:5173`        | `:3000`        |\n  | Server API  | `:3334`        | `:3000`        |\n  | Host daemon | `:3002`        | `:3001`        |\n  | Data dir    | `~/.bb-dev/`   | `~/.bb/`       |\n  | Database    | `<data>/bb.db` | `<data>/bb.db` |\n  | Logs        | `<data>/logs/` | `<data>/logs/` |\n\n- Entity IDs in URLs (`proj_*`, `thr_*`) are primary keys. Query them directly: `sqlite3 ~/.bb-dev/bb.db \"SELECT * FROM threads WHERE id = 'thr_xxx';\"`.\n- API routes are under `/api/v1/` — e.g. `GET /api/v1/threads/:id`. `curl` the server directly to isolate frontend vs server bugs.\n- Use the CLI to inspect state: `pnpm bb thread show <id>`, `pnpm bb project list`, `pnpm bb status`. From source: `pnpm bb:dev`.\n\n## Contract Documentation\n\n- Routes and commands that are self-evident from their name and type signature don't need comments. Add JSDoc only when the behavior is non-obvious — side effects, multi-step flows, guards, or context that the type signature doesn't convey.\n- When adding a new route or command type with non-obvious behavior, add the documentation in the same commit.\n- When changing a route's behavior, update any existing documentation to match.\n\n## Contracts And Boundaries\n\n- Optional contract fields are allowed only when leaving the field out has its own real semantic meaning. Do not use optional fields to hide defaults.\n- Use `required + nullable` only when `null` has a distinct meaning such as “clear this value” or “unknown”. Do not use nullable as a stand-in for defaulting.\n- If a field has a default, fill it in once at the server boundary, then pass an explicit value through internal routes, commands, and persisted events.\n- Accepted-but-ignored route or command fields are forbidden. Delete them or implement them end to end in the same change.\n- For new APIs and commands, answer “why is this optional?” during design and review.\n\n## Async Lifecycle Ownership\n\n- `status` fields represent current resource state only. Do not grow them into queue-state ladders like `requested`, `queued`, or `fetched`.\n- Durable async lifecycles belong to server-owned lifecycle modules. Routes may request lifecycle work, but only lifecycle owners may advance it, mark it in progress, handle command results, or reconcile it after reconnect.\n- Generic metadata update helpers must not accept lifecycle fields such as `status`, `stopRequestedAt`, `cleanupRequestedAt`, `cleanupMode`, or similar workflow state.\n- Model lifecycle intent and progress explicitly. Do not rely on a resource `status` field alone to represent requested work, queued work, and recovery state.\n- Every new async lifecycle must define how it handles lost daemon results, expired commands, reconnect reconciliation, and repeated requests.\n\n## Server And Daemon Ownership\n\n- The server owns product policy: defaults, instructions, manager behavior, tool lists, and thread behavior.\n- The host daemon owns host-local primitives, provider translation, runtime/session management, and workspace execution.\n- If the server needs host-local data, the daemon should return the raw data and the server should assemble the final behavior.\n- When changing a server/daemon boundary, ask “should this decision live on the server instead?”\n\n## Reuse Discipline\n\n- Do not add optional function, component, route, or helper arguments just to support a new caller without first considering a wrapper, a new object type, or a separate helper.\n\n## Planning Workflow\n\n- When asked to \"make a plan\", create or update a Markdown file under `plans/`.\n- Plans must have clear exit criteria and concrete validation instructions.\n- Delete plan files once completed or superseded.\n\n</INSTRUCTIONS>"
+            },
+            {
+              "type": "input_text",
+              "text": "<environment_context>\n  <cwd>$EXCALIDRAW_REPO</cwd>\n  <shell>zsh</shell>\n  <current_date>2026-04-21</current_date>\n  <timezone>America/Los_Angeles</timezone>\n</environment_context>"
+            }
+          ]
+        }
+      }
+    },
+    "sourceThreadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d"
+  },
+  {
+    "kind": "raw-provider-event",
+    "captureId": "capture-8",
+    "capturedAt": 1776807042584,
+    "providerId": "codex",
+    "rawLine": "{\"method\":\"rawResponseItem/completed\",\"params\":{\"threadId\":\"019db1f3-d2e6-76d2-99a5-3eb4645eae2d\",\"turnId\":\"019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76\",\"item\":{\"type\":\"message\",\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Run this shell command exactly once from the current working directory: `printf 'FIRST\\\\n'; sleep 1; printf 'SECOND\\\\n'; sleep 1; printf 'THIRD\\\\n'`. Use your real shell tool, preserve the full command output on the completed command item, and then reply with exactly DONE.\"}]}}}",
+    "rawEvent": {
+      "jsonrpc": "2.0",
+      "method": "rawResponseItem/completed",
+      "params": {
+        "threadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d",
+        "turnId": "019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76",
+        "item": {
+          "type": "message",
+          "role": "user",
+          "content": [
+            {
+              "type": "input_text",
+              "text": "Run this shell command exactly once from the current working directory: `printf 'FIRST\\n'; sleep 1; printf 'SECOND\\n'; sleep 1; printf 'THIRD\\n'`. Use your real shell tool, preserve the full command output on the completed command item, and then reply with exactly DONE."
+            }
+          ]
+        }
+      }
+    },
+    "sourceThreadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d"
+  },
+  {
+    "kind": "raw-provider-event",
+    "captureId": "capture-9",
+    "capturedAt": 1776807042584,
+    "providerId": "codex",
+    "rawLine": "{\"method\":\"item/started\",\"params\":{\"item\":{\"type\":\"userMessage\",\"id\":\"8cc3dc36-25fe-4929-9b76-01659a9e3333\",\"content\":[{\"type\":\"text\",\"text\":\"Run this shell command exactly once from the current working directory: `printf 'FIRST\\\\n'; sleep 1; printf 'SECOND\\\\n'; sleep 1; printf 'THIRD\\\\n'`. Use your real shell tool, preserve the full command output on the completed command item, and then reply with exactly DONE.\",\"text_elements\":[]}]},\"threadId\":\"019db1f3-d2e6-76d2-99a5-3eb4645eae2d\",\"turnId\":\"019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76\"}}",
+    "rawEvent": {
+      "jsonrpc": "2.0",
+      "method": "item/started",
+      "params": {
+        "item": {
+          "type": "userMessage",
+          "id": "8cc3dc36-25fe-4929-9b76-01659a9e3333",
+          "content": [
+            {
+              "type": "text",
+              "text": "Run this shell command exactly once from the current working directory: `printf 'FIRST\\n'; sleep 1; printf 'SECOND\\n'; sleep 1; printf 'THIRD\\n'`. Use your real shell tool, preserve the full command output on the completed command item, and then reply with exactly DONE.",
+              "text_elements": []
+            }
+          ]
+        },
+        "threadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d",
+        "turnId": "019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76"
+      }
+    },
+    "sourceThreadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d"
+  },
+  {
+    "kind": "raw-provider-event",
+    "captureId": "capture-10",
+    "capturedAt": 1776807042585,
+    "providerId": "codex",
+    "rawLine": "{\"method\":\"item/completed\",\"params\":{\"item\":{\"type\":\"userMessage\",\"id\":\"8cc3dc36-25fe-4929-9b76-01659a9e3333\",\"content\":[{\"type\":\"text\",\"text\":\"Run this shell command exactly once from the current working directory: `printf 'FIRST\\\\n'; sleep 1; printf 'SECOND\\\\n'; sleep 1; printf 'THIRD\\\\n'`. Use your real shell tool, preserve the full command output on the completed command item, and then reply with exactly DONE.\",\"text_elements\":[]}]},\"threadId\":\"019db1f3-d2e6-76d2-99a5-3eb4645eae2d\",\"turnId\":\"019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76\"}}",
+    "rawEvent": {
+      "jsonrpc": "2.0",
+      "method": "item/completed",
+      "params": {
+        "item": {
+          "type": "userMessage",
+          "id": "8cc3dc36-25fe-4929-9b76-01659a9e3333",
+          "content": [
+            {
+              "type": "text",
+              "text": "Run this shell command exactly once from the current working directory: `printf 'FIRST\\n'; sleep 1; printf 'SECOND\\n'; sleep 1; printf 'THIRD\\n'`. Use your real shell tool, preserve the full command output on the completed command item, and then reply with exactly DONE.",
+              "text_elements": []
+            }
+          ]
+        },
+        "threadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d",
+        "turnId": "019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76"
+      }
+    },
+    "sourceThreadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d"
+  },
+  {
+    "kind": "raw-provider-event",
+    "captureId": "capture-11",
+    "capturedAt": 1776807042758,
+    "providerId": "codex",
+    "rawLine": "{\"method\":\"account/rateLimits/updated\",\"params\":{\"rateLimits\":{\"limitId\":\"codex\",\"limitName\":null,\"primary\":{\"usedPercent\":14,\"windowDurationMins\":300,\"resetsAt\":1776814045},\"secondary\":{\"usedPercent\":3,\"windowDurationMins\":10080,\"resetsAt\":1777400845},\"credits\":null,\"planType\":\"pro\",\"rateLimitReachedType\":null}}}",
+    "rawEvent": {
+      "jsonrpc": "2.0",
+      "method": "account/rateLimits/updated",
+      "params": {
+        "rateLimits": {
+          "limitId": "codex",
+          "limitName": null,
+          "primary": {
+            "usedPercent": 14,
+            "windowDurationMins": 300,
+            "resetsAt": 1776814045
+          },
+          "secondary": {
+            "usedPercent": 3,
+            "windowDurationMins": 10080,
+            "resetsAt": 1777400845
+          },
+          "credits": null,
+          "planType": "pro",
+          "rateLimitReachedType": null
+        }
+      }
+    }
+  },
+  {
+    "kind": "raw-provider-event",
+    "captureId": "capture-12",
+    "capturedAt": 1776807043382,
+    "providerId": "codex",
+    "rawLine": "{\"method\":\"item/started\",\"params\":{\"item\":{\"type\":\"reasoning\",\"id\":\"rs_080ad74c3b912f880169e7ec83612c819a8922e8bab66b80fa\",\"summary\":[],\"content\":[]},\"threadId\":\"019db1f3-d2e6-76d2-99a5-3eb4645eae2d\",\"turnId\":\"019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76\"}}",
+    "rawEvent": {
+      "jsonrpc": "2.0",
+      "method": "item/started",
+      "params": {
+        "item": {
+          "type": "reasoning",
+          "id": "rs_080ad74c3b912f880169e7ec83612c819a8922e8bab66b80fa",
+          "summary": [],
+          "content": []
+        },
+        "threadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d",
+        "turnId": "019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76"
+      }
+    },
+    "sourceThreadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d"
+  },
+  {
+    "kind": "raw-provider-event",
+    "captureId": "capture-13",
+    "capturedAt": 1776807044306,
+    "providerId": "codex",
+    "rawLine": "{\"method\":\"item/completed\",\"params\":{\"item\":{\"type\":\"reasoning\",\"id\":\"rs_080ad74c3b912f880169e7ec83612c819a8922e8bab66b80fa\",\"summary\":[],\"content\":[]},\"threadId\":\"019db1f3-d2e6-76d2-99a5-3eb4645eae2d\",\"turnId\":\"019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76\"}}",
+    "rawEvent": {
+      "jsonrpc": "2.0",
+      "method": "item/completed",
+      "params": {
+        "item": {
+          "type": "reasoning",
+          "id": "rs_080ad74c3b912f880169e7ec83612c819a8922e8bab66b80fa",
+          "summary": [],
+          "content": []
+        },
+        "threadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d",
+        "turnId": "019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76"
+      }
+    },
+    "sourceThreadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d"
+  },
+  {
+    "kind": "raw-provider-event",
+    "captureId": "capture-14",
+    "capturedAt": 1776807044307,
+    "providerId": "codex",
+    "rawLine": "{\"method\":\"rawResponseItem/completed\",\"params\":{\"threadId\":\"019db1f3-d2e6-76d2-99a5-3eb4645eae2d\",\"turnId\":\"019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76\",\"item\":{\"type\":\"reasoning\",\"summary\":[],\"content\":null,\"encrypted_content\":\"gAAAAABp5-yEGNBx77gz7tFrEojempqmpzjB19Dhs6JxKYjdOG111GSYo_UIVVl7kRy0__HF9d3y7mKF8lAnnrlS4jM4RknHT-pbUmjhd9VD6pjnkZj0wNdPlgUe0zHDrzk86jcUAT2Xh7aVZhKpVzw5cf53DLG3eMY7tbuEpwcu3vltPq3Kpmzd8RE47fyhWXPPZPngaHV4-rdyK-07e9ZKD77u51yMD-Fo6u8g4TcOUkNkTG21ttCGQV5J_l-b41UtSjK2UuwGX52BaUKZt_aSrKqjkVZK_CHtvaF4Vgop7t5O8Liambhg52u-1B0nU1Pcg5acQqv5hwSIQ75FdzH2T3P5UscPHrjXCN8REIb8y5t4Gxu6j-zThpFADa-s_2VkI_PEypUfazMI7ypU-vLFN0kP3lLjKVsQZPED93yISB4C3axWJ916mEHfG_D7Z82XXG0R404nAf0wOkLskqExcg95chSuFFTvv0y_HDD1wWMKrToVruslvcxvSXncuKCQasUQK7Lay1M_1CgNPST3wdEUEfED5WpaytC404ZJX5MNFpzzQF5UM1F9KVgsjDuXT0X_GFz3D8aH795Tkn_fX33rZ-I05ZZplH6o2-QpRCzTbgYNf1_o4VRwz0ywjfKnQ0gTGz7Ddn9l1hp-tkX2bW1q_om6LOXXL0YnB6AJt9btFLyTc1UobgubmXi-jqyzWKW4wfLyVUrpds3et1xlFldJY5BAOojfAbGc45G3-LZkaBnzorEjmfv_Eb_TLGFkogrioa5kSTR4XSXKZTHbDxvtI_KgIOVXbmi_5_zPdp-LEtbrFnYOk4brVm2SxG4VRb1lNNzcBkY582yW2gIBt1Y8z407c5D05HqQsyeraym-iX9KDrTHn3sMLLLv5CT4gzP8S0EV_Xj6RLkE2VLSeO_46IMuByu9ZLlBCf25zmAixLPPRQJybc_SMmO1Wl2GSo-tA6WM9Uvg2MirLYd3THGw_CyssIBLtg1F_WYMtef7vpRWuQ0Lyc5S6JIcsALHJa8SuilnoDQemmsyjm3O055gQYdskAI-b0yLcT0KCNriIJWKILwiIDSw98kn2ocMWMhXICTbtBUUhqQoYfBkeMUVymkiDPFLiCm9B4Gz0sDZT3F7-qWrwn6Sg4Uf_gIC4C8KEWtyPniHHWbVNchoXERjI5s0QK89tzYzNoaOKnKyJtEM9pi-6gdyJpjKtDYZJivo5RwsNUyY21l9gWI9DbnlTanFihTYFCuRb7QTimk4FG7Wc1I=\"}}}",
+    "rawEvent": {
+      "jsonrpc": "2.0",
+      "method": "rawResponseItem/completed",
+      "params": {
+        "threadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d",
+        "turnId": "019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76",
+        "item": {
+          "type": "reasoning",
+          "summary": [],
+          "content": null,
+          "encrypted_content": "gAAAAABp5-yEGNBx77gz7tFrEojempqmpzjB19Dhs6JxKYjdOG111GSYo_UIVVl7kRy0__HF9d3y7mKF8lAnnrlS4jM4RknHT-pbUmjhd9VD6pjnkZj0wNdPlgUe0zHDrzk86jcUAT2Xh7aVZhKpVzw5cf53DLG3eMY7tbuEpwcu3vltPq3Kpmzd8RE47fyhWXPPZPngaHV4-rdyK-07e9ZKD77u51yMD-Fo6u8g4TcOUkNkTG21ttCGQV5J_l-b41UtSjK2UuwGX52BaUKZt_aSrKqjkVZK_CHtvaF4Vgop7t5O8Liambhg52u-1B0nU1Pcg5acQqv5hwSIQ75FdzH2T3P5UscPHrjXCN8REIb8y5t4Gxu6j-zThpFADa-s_2VkI_PEypUfazMI7ypU-vLFN0kP3lLjKVsQZPED93yISB4C3axWJ916mEHfG_D7Z82XXG0R404nAf0wOkLskqExcg95chSuFFTvv0y_HDD1wWMKrToVruslvcxvSXncuKCQasUQK7Lay1M_1CgNPST3wdEUEfED5WpaytC404ZJX5MNFpzzQF5UM1F9KVgsjDuXT0X_GFz3D8aH795Tkn_fX33rZ-I05ZZplH6o2-QpRCzTbgYNf1_o4VRwz0ywjfKnQ0gTGz7Ddn9l1hp-tkX2bW1q_om6LOXXL0YnB6AJt9btFLyTc1UobgubmXi-jqyzWKW4wfLyVUrpds3et1xlFldJY5BAOojfAbGc45G3-LZkaBnzorEjmfv_Eb_TLGFkogrioa5kSTR4XSXKZTHbDxvtI_KgIOVXbmi_5_zPdp-LEtbrFnYOk4brVm2SxG4VRb1lNNzcBkY582yW2gIBt1Y8z407c5D05HqQsyeraym-iX9KDrTHn3sMLLLv5CT4gzP8S0EV_Xj6RLkE2VLSeO_46IMuByu9ZLlBCf25zmAixLPPRQJybc_SMmO1Wl2GSo-tA6WM9Uvg2MirLYd3THGw_CyssIBLtg1F_WYMtef7vpRWuQ0Lyc5S6JIcsALHJa8SuilnoDQemmsyjm3O055gQYdskAI-b0yLcT0KCNriIJWKILwiIDSw98kn2ocMWMhXICTbtBUUhqQoYfBkeMUVymkiDPFLiCm9B4Gz0sDZT3F7-qWrwn6Sg4Uf_gIC4C8KEWtyPniHHWbVNchoXERjI5s0QK89tzYzNoaOKnKyJtEM9pi-6gdyJpjKtDYZJivo5RwsNUyY21l9gWI9DbnlTanFihTYFCuRb7QTimk4FG7Wc1I="
+        }
+      }
+    },
+    "sourceThreadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d"
+  },
+  {
+    "kind": "raw-provider-event",
+    "captureId": "capture-15",
+    "capturedAt": 1776807044307,
+    "providerId": "codex",
+    "rawLine": "{\"method\":\"item/started\",\"params\":{\"item\":{\"type\":\"agentMessage\",\"id\":\"msg_080ad74c3b912f880169e7ec8448e4819a9980df40dd1d5cbe\",\"text\":\"\",\"phase\":\"commentary\",\"memoryCitation\":null},\"threadId\":\"019db1f3-d2e6-76d2-99a5-3eb4645eae2d\",\"turnId\":\"019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76\"}}",
+    "rawEvent": {
+      "jsonrpc": "2.0",
+      "method": "item/started",
+      "params": {
+        "item": {
+          "type": "agentMessage",
+          "id": "msg_080ad74c3b912f880169e7ec8448e4819a9980df40dd1d5cbe",
+          "text": "",
+          "phase": "commentary",
+          "memoryCitation": null
+        },
+        "threadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d",
+        "turnId": "019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76"
+      }
+    },
+    "sourceThreadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d"
+  },
+  {
+    "kind": "raw-provider-event",
+    "captureId": "capture-16",
+    "capturedAt": 1776807044307,
+    "providerId": "codex",
+    "rawLine": "{\"method\":\"item/agentMessage/delta\",\"params\":{\"threadId\":\"019db1f3-d2e6-76d2-99a5-3eb4645eae2d\",\"turnId\":\"019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76\",\"itemId\":\"msg_080ad74c3b912f880169e7ec8448e4819a9980df40dd1d5cbe\",\"delta\":\"Running\"}}",
+    "rawEvent": {
+      "jsonrpc": "2.0",
+      "method": "item/agentMessage/delta",
+      "params": {
+        "threadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d",
+        "turnId": "019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76",
+        "itemId": "msg_080ad74c3b912f880169e7ec8448e4819a9980df40dd1d5cbe",
+        "delta": "Running"
+      }
+    },
+    "sourceThreadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d"
+  },
+  {
+    "kind": "raw-provider-event",
+    "captureId": "capture-17",
+    "capturedAt": 1776807044308,
+    "providerId": "codex",
+    "rawLine": "{\"method\":\"item/agentMessage/delta\",\"params\":{\"threadId\":\"019db1f3-d2e6-76d2-99a5-3eb4645eae2d\",\"turnId\":\"019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76\",\"itemId\":\"msg_080ad74c3b912f880169e7ec8448e4819a9980df40dd1d5cbe\",\"delta\":\" the\"}}",
+    "rawEvent": {
+      "jsonrpc": "2.0",
+      "method": "item/agentMessage/delta",
+      "params": {
+        "threadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d",
+        "turnId": "019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76",
+        "itemId": "msg_080ad74c3b912f880169e7ec8448e4819a9980df40dd1d5cbe",
+        "delta": " the"
+      }
+    },
+    "sourceThreadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d"
+  },
+  {
+    "kind": "raw-provider-event",
+    "captureId": "capture-18",
+    "capturedAt": 1776807044308,
+    "providerId": "codex",
+    "rawLine": "{\"method\":\"item/agentMessage/delta\",\"params\":{\"threadId\":\"019db1f3-d2e6-76d2-99a5-3eb4645eae2d\",\"turnId\":\"019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76\",\"itemId\":\"msg_080ad74c3b912f880169e7ec8448e4819a9980df40dd1d5cbe\",\"delta\":\" exact\"}}",
+    "rawEvent": {
+      "jsonrpc": "2.0",
+      "method": "item/agentMessage/delta",
+      "params": {
+        "threadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d",
+        "turnId": "019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76",
+        "itemId": "msg_080ad74c3b912f880169e7ec8448e4819a9980df40dd1d5cbe",
+        "delta": " exact"
+      }
+    },
+    "sourceThreadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d"
+  },
+  {
+    "kind": "raw-provider-event",
+    "captureId": "capture-19",
+    "capturedAt": 1776807044308,
+    "providerId": "codex",
+    "rawLine": "{\"method\":\"item/agentMessage/delta\",\"params\":{\"threadId\":\"019db1f3-d2e6-76d2-99a5-3eb4645eae2d\",\"turnId\":\"019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76\",\"itemId\":\"msg_080ad74c3b912f880169e7ec8448e4819a9980df40dd1d5cbe\",\"delta\":\" command\"}}",
+    "rawEvent": {
+      "jsonrpc": "2.0",
+      "method": "item/agentMessage/delta",
+      "params": {
+        "threadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d",
+        "turnId": "019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76",
+        "itemId": "msg_080ad74c3b912f880169e7ec8448e4819a9980df40dd1d5cbe",
+        "delta": " command"
+      }
+    },
+    "sourceThreadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d"
+  },
+  {
+    "kind": "raw-provider-event",
+    "captureId": "capture-20",
+    "capturedAt": 1776807044308,
+    "providerId": "codex",
+    "rawLine": "{\"method\":\"item/agentMessage/delta\",\"params\":{\"threadId\":\"019db1f3-d2e6-76d2-99a5-3eb4645eae2d\",\"turnId\":\"019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76\",\"itemId\":\"msg_080ad74c3b912f880169e7ec8448e4819a9980df40dd1d5cbe\",\"delta\":\" once\"}}",
+    "rawEvent": {
+      "jsonrpc": "2.0",
+      "method": "item/agentMessage/delta",
+      "params": {
+        "threadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d",
+        "turnId": "019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76",
+        "itemId": "msg_080ad74c3b912f880169e7ec8448e4819a9980df40dd1d5cbe",
+        "delta": " once"
+      }
+    },
+    "sourceThreadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d"
+  },
+  {
+    "kind": "raw-provider-event",
+    "captureId": "capture-21",
+    "capturedAt": 1776807044308,
+    "providerId": "codex",
+    "rawLine": "{\"method\":\"item/agentMessage/delta\",\"params\":{\"threadId\":\"019db1f3-d2e6-76d2-99a5-3eb4645eae2d\",\"turnId\":\"019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76\",\"itemId\":\"msg_080ad74c3b912f880169e7ec8448e4819a9980df40dd1d5cbe\",\"delta\":\" from\"}}",
+    "rawEvent": {
+      "jsonrpc": "2.0",
+      "method": "item/agentMessage/delta",
+      "params": {
+        "threadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d",
+        "turnId": "019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76",
+        "itemId": "msg_080ad74c3b912f880169e7ec8448e4819a9980df40dd1d5cbe",
+        "delta": " from"
+      }
+    },
+    "sourceThreadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d"
+  },
+  {
+    "kind": "raw-provider-event",
+    "captureId": "capture-22",
+    "capturedAt": 1776807044612,
+    "providerId": "codex",
+    "rawLine": "{\"method\":\"item/agentMessage/delta\",\"params\":{\"threadId\":\"019db1f3-d2e6-76d2-99a5-3eb4645eae2d\",\"turnId\":\"019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76\",\"itemId\":\"msg_080ad74c3b912f880169e7ec8448e4819a9980df40dd1d5cbe\",\"delta\":\" `/\"}}",
+    "rawEvent": {
+      "jsonrpc": "2.0",
+      "method": "item/agentMessage/delta",
+      "params": {
+        "threadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d",
+        "turnId": "019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76",
+        "itemId": "msg_080ad74c3b912f880169e7ec8448e4819a9980df40dd1d5cbe",
+        "delta": " `/"
+      }
+    },
+    "sourceThreadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d"
+  },
+  {
+    "kind": "raw-provider-event",
+    "captureId": "capture-23",
+    "capturedAt": 1776807044613,
+    "providerId": "codex",
+    "rawLine": "{\"method\":\"item/agentMessage/delta\",\"params\":{\"threadId\":\"019db1f3-d2e6-76d2-99a5-3eb4645eae2d\",\"turnId\":\"019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76\",\"itemId\":\"msg_080ad74c3b912f880169e7ec8448e4819a9980df40dd1d5cbe\",\"delta\":\"tmp\"}}",
+    "rawEvent": {
+      "jsonrpc": "2.0",
+      "method": "item/agentMessage/delta",
+      "params": {
+        "threadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d",
+        "turnId": "019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76",
+        "itemId": "msg_080ad74c3b912f880169e7ec8448e4819a9980df40dd1d5cbe",
+        "delta": "tmp"
+      }
+    },
+    "sourceThreadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d"
+  },
+  {
+    "kind": "raw-provider-event",
+    "captureId": "capture-24",
+    "capturedAt": 1776807044613,
+    "providerId": "codex",
+    "rawLine": "{\"method\":\"item/agentMessage/delta\",\"params\":{\"threadId\":\"019db1f3-d2e6-76d2-99a5-3eb4645eae2d\",\"turnId\":\"019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76\",\"itemId\":\"msg_080ad74c3b912f880169e7ec8448e4819a9980df40dd1d5cbe\",\"delta\":\"/b\"}}",
+    "rawEvent": {
+      "jsonrpc": "2.0",
+      "method": "item/agentMessage/delta",
+      "params": {
+        "threadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d",
+        "turnId": "019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76",
+        "itemId": "msg_080ad74c3b912f880169e7ec8448e4819a9980df40dd1d5cbe",
+        "delta": "/b"
+      }
+    },
+    "sourceThreadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d"
+  },
+  {
+    "kind": "raw-provider-event",
+    "captureId": "capture-25",
+    "capturedAt": 1776807044614,
+    "providerId": "codex",
+    "rawLine": "{\"method\":\"item/agentMessage/delta\",\"params\":{\"threadId\":\"019db1f3-d2e6-76d2-99a5-3eb4645eae2d\",\"turnId\":\"019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76\",\"itemId\":\"msg_080ad74c3b912f880169e7ec8448e4819a9980df40dd1d5cbe\",\"delta\":\"b\"}}",
+    "rawEvent": {
+      "jsonrpc": "2.0",
+      "method": "item/agentMessage/delta",
+      "params": {
+        "threadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d",
+        "turnId": "019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76",
+        "itemId": "msg_080ad74c3b912f880169e7ec8448e4819a9980df40dd1d5cbe",
+        "delta": "b"
+      }
+    },
+    "sourceThreadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d"
+  },
+  {
+    "kind": "raw-provider-event",
+    "captureId": "capture-26",
+    "capturedAt": 1776807044614,
+    "providerId": "codex",
+    "rawLine": "{\"method\":\"item/agentMessage/delta\",\"params\":{\"threadId\":\"019db1f3-d2e6-76d2-99a5-3eb4645eae2d\",\"turnId\":\"019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76\",\"itemId\":\"msg_080ad74c3b912f880169e7ec8448e4819a9980df40dd1d5cbe\",\"delta\":\"-a\"}}",
+    "rawEvent": {
+      "jsonrpc": "2.0",
+      "method": "item/agentMessage/delta",
+      "params": {
+        "threadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d",
+        "turnId": "019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76",
+        "itemId": "msg_080ad74c3b912f880169e7ec8448e4819a9980df40dd1d5cbe",
+        "delta": "-a"
+      }
+    },
+    "sourceThreadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d"
+  },
+  {
+    "kind": "raw-provider-event",
+    "captureId": "capture-27",
+    "capturedAt": 1776807044614,
+    "providerId": "codex",
+    "rawLine": "{\"method\":\"item/agentMessage/delta\",\"params\":{\"threadId\":\"019db1f3-d2e6-76d2-99a5-3eb4645eae2d\",\"turnId\":\"019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76\",\"itemId\":\"msg_080ad74c3b912f880169e7ec8448e4819a9980df40dd1d5cbe\",\"delta\":\"udit\"}}",
+    "rawEvent": {
+      "jsonrpc": "2.0",
+      "method": "item/agentMessage/delta",
+      "params": {
+        "threadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d",
+        "turnId": "019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76",
+        "itemId": "msg_080ad74c3b912f880169e7ec8448e4819a9980df40dd1d5cbe",
+        "delta": "udit"
+      }
+    },
+    "sourceThreadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d"
+  },
+  {
+    "kind": "raw-provider-event",
+    "captureId": "capture-28",
+    "capturedAt": 1776807044614,
+    "providerId": "codex",
+    "rawLine": "{\"method\":\"item/agentMessage/delta\",\"params\":{\"threadId\":\"019db1f3-d2e6-76d2-99a5-3eb4645eae2d\",\"turnId\":\"019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76\",\"itemId\":\"msg_080ad74c3b912f880169e7ec8448e4819a9980df40dd1d5cbe\",\"delta\":\"-clean\"}}",
+    "rawEvent": {
+      "jsonrpc": "2.0",
+      "method": "item/agentMessage/delta",
+      "params": {
+        "threadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d",
+        "turnId": "019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76",
+        "itemId": "msg_080ad74c3b912f880169e7ec8448e4819a9980df40dd1d5cbe",
+        "delta": "-clean"
+      }
+    },
+    "sourceThreadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d"
+  },
+  {
+    "kind": "raw-provider-event",
+    "captureId": "capture-29",
+    "capturedAt": 1776807044614,
+    "providerId": "codex",
+    "rawLine": "{\"method\":\"item/agentMessage/delta\",\"params\":{\"threadId\":\"019db1f3-d2e6-76d2-99a5-3eb4645eae2d\",\"turnId\":\"019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76\",\"itemId\":\"msg_080ad74c3b912f880169e7ec8448e4819a9980df40dd1d5cbe\",\"delta\":\"`\"}}",
+    "rawEvent": {
+      "jsonrpc": "2.0",
+      "method": "item/agentMessage/delta",
+      "params": {
+        "threadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d",
+        "turnId": "019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76",
+        "itemId": "msg_080ad74c3b912f880169e7ec8448e4819a9980df40dd1d5cbe",
+        "delta": "`"
+      }
+    },
+    "sourceThreadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d"
+  },
+  {
+    "kind": "raw-provider-event",
+    "captureId": "capture-30",
+    "capturedAt": 1776807044614,
+    "providerId": "codex",
+    "rawLine": "{\"method\":\"item/agentMessage/delta\",\"params\":{\"threadId\":\"019db1f3-d2e6-76d2-99a5-3eb4645eae2d\",\"turnId\":\"019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76\",\"itemId\":\"msg_080ad74c3b912f880169e7ec8448e4819a9980df40dd1d5cbe\",\"delta\":\" and\"}}",
+    "rawEvent": {
+      "jsonrpc": "2.0",
+      "method": "item/agentMessage/delta",
+      "params": {
+        "threadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d",
+        "turnId": "019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76",
+        "itemId": "msg_080ad74c3b912f880169e7ec8448e4819a9980df40dd1d5cbe",
+        "delta": " and"
+      }
+    },
+    "sourceThreadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d"
+  },
+  {
+    "kind": "raw-provider-event",
+    "captureId": "capture-31",
+    "capturedAt": 1776807044614,
+    "providerId": "codex",
+    "rawLine": "{\"method\":\"item/agentMessage/delta\",\"params\":{\"threadId\":\"019db1f3-d2e6-76d2-99a5-3eb4645eae2d\",\"turnId\":\"019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76\",\"itemId\":\"msg_080ad74c3b912f880169e7ec8448e4819a9980df40dd1d5cbe\",\"delta\":\" waiting\"}}",
+    "rawEvent": {
+      "jsonrpc": "2.0",
+      "method": "item/agentMessage/delta",
+      "params": {
+        "threadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d",
+        "turnId": "019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76",
+        "itemId": "msg_080ad74c3b912f880169e7ec8448e4819a9980df40dd1d5cbe",
+        "delta": " waiting"
+      }
+    },
+    "sourceThreadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d"
+  },
+  {
+    "kind": "raw-provider-event",
+    "captureId": "capture-32",
+    "capturedAt": 1776807044614,
+    "providerId": "codex",
+    "rawLine": "{\"method\":\"item/agentMessage/delta\",\"params\":{\"threadId\":\"019db1f3-d2e6-76d2-99a5-3eb4645eae2d\",\"turnId\":\"019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76\",\"itemId\":\"msg_080ad74c3b912f880169e7ec8448e4819a9980df40dd1d5cbe\",\"delta\":\" for\"}}",
+    "rawEvent": {
+      "jsonrpc": "2.0",
+      "method": "item/agentMessage/delta",
+      "params": {
+        "threadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d",
+        "turnId": "019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76",
+        "itemId": "msg_080ad74c3b912f880169e7ec8448e4819a9980df40dd1d5cbe",
+        "delta": " for"
+      }
+    },
+    "sourceThreadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d"
+  },
+  {
+    "kind": "raw-provider-event",
+    "captureId": "capture-33",
+    "capturedAt": 1776807044614,
+    "providerId": "codex",
+    "rawLine": "{\"method\":\"item/agentMessage/delta\",\"params\":{\"threadId\":\"019db1f3-d2e6-76d2-99a5-3eb4645eae2d\",\"turnId\":\"019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76\",\"itemId\":\"msg_080ad74c3b912f880169e7ec8448e4819a9980df40dd1d5cbe\",\"delta\":\" it\"}}",
+    "rawEvent": {
+      "jsonrpc": "2.0",
+      "method": "item/agentMessage/delta",
+      "params": {
+        "threadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d",
+        "turnId": "019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76",
+        "itemId": "msg_080ad74c3b912f880169e7ec8448e4819a9980df40dd1d5cbe",
+        "delta": " it"
+      }
+    },
+    "sourceThreadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d"
+  },
+  {
+    "kind": "raw-provider-event",
+    "captureId": "capture-34",
+    "capturedAt": 1776807044614,
+    "providerId": "codex",
+    "rawLine": "{\"method\":\"item/agentMessage/delta\",\"params\":{\"threadId\":\"019db1f3-d2e6-76d2-99a5-3eb4645eae2d\",\"turnId\":\"019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76\",\"itemId\":\"msg_080ad74c3b912f880169e7ec8448e4819a9980df40dd1d5cbe\",\"delta\":\" to\"}}",
+    "rawEvent": {
+      "jsonrpc": "2.0",
+      "method": "item/agentMessage/delta",
+      "params": {
+        "threadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d",
+        "turnId": "019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76",
+        "itemId": "msg_080ad74c3b912f880169e7ec8448e4819a9980df40dd1d5cbe",
+        "delta": " to"
+      }
+    },
+    "sourceThreadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d"
+  },
+  {
+    "kind": "raw-provider-event",
+    "captureId": "capture-35",
+    "capturedAt": 1776807044614,
+    "providerId": "codex",
+    "rawLine": "{\"method\":\"item/agentMessage/delta\",\"params\":{\"threadId\":\"019db1f3-d2e6-76d2-99a5-3eb4645eae2d\",\"turnId\":\"019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76\",\"itemId\":\"msg_080ad74c3b912f880169e7ec8448e4819a9980df40dd1d5cbe\",\"delta\":\" complete\"}}",
+    "rawEvent": {
+      "jsonrpc": "2.0",
+      "method": "item/agentMessage/delta",
+      "params": {
+        "threadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d",
+        "turnId": "019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76",
+        "itemId": "msg_080ad74c3b912f880169e7ec8448e4819a9980df40dd1d5cbe",
+        "delta": " complete"
+      }
+    },
+    "sourceThreadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d"
+  },
+  {
+    "kind": "raw-provider-event",
+    "captureId": "capture-36",
+    "capturedAt": 1776807044614,
+    "providerId": "codex",
+    "rawLine": "{\"method\":\"item/agentMessage/delta\",\"params\":{\"threadId\":\"019db1f3-d2e6-76d2-99a5-3eb4645eae2d\",\"turnId\":\"019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76\",\"itemId\":\"msg_080ad74c3b912f880169e7ec8448e4819a9980df40dd1d5cbe\",\"delta\":\" so\"}}",
+    "rawEvent": {
+      "jsonrpc": "2.0",
+      "method": "item/agentMessage/delta",
+      "params": {
+        "threadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d",
+        "turnId": "019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76",
+        "itemId": "msg_080ad74c3b912f880169e7ec8448e4819a9980df40dd1d5cbe",
+        "delta": " so"
+      }
+    },
+    "sourceThreadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d"
+  },
+  {
+    "kind": "raw-provider-event",
+    "captureId": "capture-37",
+    "capturedAt": 1776807044614,
+    "providerId": "codex",
+    "rawLine": "{\"method\":\"item/agentMessage/delta\",\"params\":{\"threadId\":\"019db1f3-d2e6-76d2-99a5-3eb4645eae2d\",\"turnId\":\"019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76\",\"itemId\":\"msg_080ad74c3b912f880169e7ec8448e4819a9980df40dd1d5cbe\",\"delta\":\" the\"}}",
+    "rawEvent": {
+      "jsonrpc": "2.0",
+      "method": "item/agentMessage/delta",
+      "params": {
+        "threadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d",
+        "turnId": "019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76",
+        "itemId": "msg_080ad74c3b912f880169e7ec8448e4819a9980df40dd1d5cbe",
+        "delta": " the"
+      }
+    },
+    "sourceThreadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d"
+  },
+  {
+    "kind": "raw-provider-event",
+    "captureId": "capture-38",
+    "capturedAt": 1776807044614,
+    "providerId": "codex",
+    "rawLine": "{\"method\":\"item/agentMessage/delta\",\"params\":{\"threadId\":\"019db1f3-d2e6-76d2-99a5-3eb4645eae2d\",\"turnId\":\"019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76\",\"itemId\":\"msg_080ad74c3b912f880169e7ec8448e4819a9980df40dd1d5cbe\",\"delta\":\" full\"}}",
+    "rawEvent": {
+      "jsonrpc": "2.0",
+      "method": "item/agentMessage/delta",
+      "params": {
+        "threadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d",
+        "turnId": "019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76",
+        "itemId": "msg_080ad74c3b912f880169e7ec8448e4819a9980df40dd1d5cbe",
+        "delta": " full"
+      }
+    },
+    "sourceThreadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d"
+  },
+  {
+    "kind": "raw-provider-event",
+    "captureId": "capture-39",
+    "capturedAt": 1776807044614,
+    "providerId": "codex",
+    "rawLine": "{\"method\":\"item/agentMessage/delta\",\"params\":{\"threadId\":\"019db1f3-d2e6-76d2-99a5-3eb4645eae2d\",\"turnId\":\"019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76\",\"itemId\":\"msg_080ad74c3b912f880169e7ec8448e4819a9980df40dd1d5cbe\",\"delta\":\" output\"}}",
+    "rawEvent": {
+      "jsonrpc": "2.0",
+      "method": "item/agentMessage/delta",
+      "params": {
+        "threadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d",
+        "turnId": "019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76",
+        "itemId": "msg_080ad74c3b912f880169e7ec8448e4819a9980df40dd1d5cbe",
+        "delta": " output"
+      }
+    },
+    "sourceThreadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d"
+  },
+  {
+    "kind": "raw-provider-event",
+    "captureId": "capture-40",
+    "capturedAt": 1776807044616,
+    "providerId": "codex",
+    "rawLine": "{\"method\":\"item/agentMessage/delta\",\"params\":{\"threadId\":\"019db1f3-d2e6-76d2-99a5-3eb4645eae2d\",\"turnId\":\"019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76\",\"itemId\":\"msg_080ad74c3b912f880169e7ec8448e4819a9980df40dd1d5cbe\",\"delta\":\" is\"}}",
+    "rawEvent": {
+      "jsonrpc": "2.0",
+      "method": "item/agentMessage/delta",
+      "params": {
+        "threadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d",
+        "turnId": "019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76",
+        "itemId": "msg_080ad74c3b912f880169e7ec8448e4819a9980df40dd1d5cbe",
+        "delta": " is"
+      }
+    },
+    "sourceThreadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d"
+  },
+  {
+    "kind": "raw-provider-event",
+    "captureId": "capture-41",
+    "capturedAt": 1776807044620,
+    "providerId": "codex",
+    "rawLine": "{\"method\":\"item/agentMessage/delta\",\"params\":{\"threadId\":\"019db1f3-d2e6-76d2-99a5-3eb4645eae2d\",\"turnId\":\"019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76\",\"itemId\":\"msg_080ad74c3b912f880169e7ec8448e4819a9980df40dd1d5cbe\",\"delta\":\" captured\"}}",
+    "rawEvent": {
+      "jsonrpc": "2.0",
+      "method": "item/agentMessage/delta",
+      "params": {
+        "threadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d",
+        "turnId": "019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76",
+        "itemId": "msg_080ad74c3b912f880169e7ec8448e4819a9980df40dd1d5cbe",
+        "delta": " captured"
+      }
+    },
+    "sourceThreadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d"
+  },
+  {
+    "kind": "raw-provider-event",
+    "captureId": "capture-42",
+    "capturedAt": 1776807044622,
+    "providerId": "codex",
+    "rawLine": "{\"method\":\"item/agentMessage/delta\",\"params\":{\"threadId\":\"019db1f3-d2e6-76d2-99a5-3eb4645eae2d\",\"turnId\":\"019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76\",\"itemId\":\"msg_080ad74c3b912f880169e7ec8448e4819a9980df40dd1d5cbe\",\"delta\":\".\"}}",
+    "rawEvent": {
+      "jsonrpc": "2.0",
+      "method": "item/agentMessage/delta",
+      "params": {
+        "threadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d",
+        "turnId": "019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76",
+        "itemId": "msg_080ad74c3b912f880169e7ec8448e4819a9980df40dd1d5cbe",
+        "delta": "."
+      }
+    },
+    "sourceThreadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d"
+  },
+  {
+    "kind": "raw-provider-event",
+    "captureId": "capture-43",
+    "capturedAt": 1776807044637,
+    "providerId": "codex",
+    "rawLine": "{\"method\":\"item/completed\",\"params\":{\"item\":{\"type\":\"agentMessage\",\"id\":\"msg_080ad74c3b912f880169e7ec8448e4819a9980df40dd1d5cbe\",\"text\":\"Running the exact command once from `$EXCALIDRAW_REPO` and waiting for it to complete so the full output is captured.\",\"phase\":\"commentary\",\"memoryCitation\":null},\"threadId\":\"019db1f3-d2e6-76d2-99a5-3eb4645eae2d\",\"turnId\":\"019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76\"}}",
+    "rawEvent": {
+      "jsonrpc": "2.0",
+      "method": "item/completed",
+      "params": {
+        "item": {
+          "type": "agentMessage",
+          "id": "msg_080ad74c3b912f880169e7ec8448e4819a9980df40dd1d5cbe",
+          "text": "Running the exact command once from `$EXCALIDRAW_REPO` and waiting for it to complete so the full output is captured.",
+          "phase": "commentary",
+          "memoryCitation": null
+        },
+        "threadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d",
+        "turnId": "019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76"
+      }
+    },
+    "sourceThreadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d"
+  },
+  {
+    "kind": "raw-provider-event",
+    "captureId": "capture-44",
+    "capturedAt": 1776807044637,
+    "providerId": "codex",
+    "rawLine": "{\"method\":\"rawResponseItem/completed\",\"params\":{\"threadId\":\"019db1f3-d2e6-76d2-99a5-3eb4645eae2d\",\"turnId\":\"019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76\",\"item\":{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"Running the exact command once from `$EXCALIDRAW_REPO` and waiting for it to complete so the full output is captured.\"}],\"phase\":\"commentary\"}}}",
+    "rawEvent": {
+      "jsonrpc": "2.0",
+      "method": "rawResponseItem/completed",
+      "params": {
+        "threadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d",
+        "turnId": "019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76",
+        "item": {
+          "type": "message",
+          "role": "assistant",
+          "content": [
+            {
+              "type": "output_text",
+              "text": "Running the exact command once from `$EXCALIDRAW_REPO` and waiting for it to complete so the full output is captured."
+            }
+          ],
+          "phase": "commentary"
+        }
+      }
+    },
+    "sourceThreadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d"
+  },
+  {
+    "kind": "raw-provider-event",
+    "captureId": "capture-45",
+    "capturedAt": 1776807045351,
+    "providerId": "codex",
+    "rawLine": "{\"method\":\"rawResponseItem/completed\",\"params\":{\"threadId\":\"019db1f3-d2e6-76d2-99a5-3eb4645eae2d\",\"turnId\":\"019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76\",\"item\":{\"type\":\"function_call\",\"name\":\"exec_command\",\"arguments\":\"{\\\"cmd\\\":\\\"printf 'FIRST\\\\n'; sleep 1; printf 'SECOND\\\\n'; sleep 1; printf 'THIRD\\\\n'\\\",\\\"workdir\\\":\\\"$EXCALIDRAW_REPO\\\",\\\"yield_time_ms\\\":2500,\\\"max_output_tokens\\\":2000}\",\"call_id\":\"call_MDOuovZ1ZpGqJFr7vjglktrS\"}}}",
+    "rawEvent": {
+      "jsonrpc": "2.0",
+      "method": "rawResponseItem/completed",
+      "params": {
+        "threadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d",
+        "turnId": "019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76",
+        "item": {
+          "type": "function_call",
+          "name": "exec_command",
+          "arguments": "{\"cmd\":\"printf 'FIRST\\n'; sleep 1; printf 'SECOND\\n'; sleep 1; printf 'THIRD\\n'\",\"workdir\":\"$EXCALIDRAW_REPO\",\"yield_time_ms\":2500,\"max_output_tokens\":2000}",
+          "call_id": "call_MDOuovZ1ZpGqJFr7vjglktrS"
+        }
+      }
+    },
+    "sourceThreadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d"
+  },
+  {
+    "kind": "raw-provider-event",
+    "captureId": "capture-46",
+    "capturedAt": 1776807045370,
+    "providerId": "codex",
+    "rawLine": "{\"method\":\"thread/tokenUsage/updated\",\"params\":{\"threadId\":\"019db1f3-d2e6-76d2-99a5-3eb4645eae2d\",\"turnId\":\"019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76\",\"tokenUsage\":{\"total\":{\"totalTokens\":14637,\"inputTokens\":14482,\"cachedInputTokens\":3456,\"outputTokens\":155,\"reasoningOutputTokens\":53},\"last\":{\"totalTokens\":14637,\"inputTokens\":14482,\"cachedInputTokens\":3456,\"outputTokens\":155,\"reasoningOutputTokens\":53},\"modelContextWindow\":258400}}}",
+    "rawEvent": {
+      "jsonrpc": "2.0",
+      "method": "thread/tokenUsage/updated",
+      "params": {
+        "threadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d",
+        "turnId": "019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76",
+        "tokenUsage": {
+          "total": {
+            "totalTokens": 14637,
+            "inputTokens": 14482,
+            "cachedInputTokens": 3456,
+            "outputTokens": 155,
+            "reasoningOutputTokens": 53
+          },
+          "last": {
+            "totalTokens": 14637,
+            "inputTokens": 14482,
+            "cachedInputTokens": 3456,
+            "outputTokens": 155,
+            "reasoningOutputTokens": 53
+          },
+          "modelContextWindow": 258400
+        }
+      }
+    },
+    "sourceThreadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d"
+  },
+  {
+    "kind": "raw-provider-event",
+    "captureId": "capture-47",
+    "capturedAt": 1776807045370,
+    "providerId": "codex",
+    "rawLine": "{\"method\":\"account/rateLimits/updated\",\"params\":{\"rateLimits\":{\"limitId\":\"codex\",\"limitName\":null,\"primary\":{\"usedPercent\":14,\"windowDurationMins\":300,\"resetsAt\":1776814045},\"secondary\":{\"usedPercent\":3,\"windowDurationMins\":10080,\"resetsAt\":1777400845},\"credits\":null,\"planType\":\"pro\",\"rateLimitReachedType\":null}}}",
+    "rawEvent": {
+      "jsonrpc": "2.0",
+      "method": "account/rateLimits/updated",
+      "params": {
+        "rateLimits": {
+          "limitId": "codex",
+          "limitName": null,
+          "primary": {
+            "usedPercent": 14,
+            "windowDurationMins": 300,
+            "resetsAt": 1776814045
+          },
+          "secondary": {
+            "usedPercent": 3,
+            "windowDurationMins": 10080,
+            "resetsAt": 1777400845
+          },
+          "credits": null,
+          "planType": "pro",
+          "rateLimitReachedType": null
+        }
+      }
+    }
+  },
+  {
+    "kind": "raw-provider-event",
+    "captureId": "capture-48",
+    "capturedAt": 1776807045520,
+    "providerId": "codex",
+    "rawLine": "{\"method\":\"item/started\",\"params\":{\"item\":{\"type\":\"commandExecution\",\"id\":\"call_MDOuovZ1ZpGqJFr7vjglktrS\",\"command\":\"/bin/zsh -lc \\\"printf 'FIRST\\n'; sleep 1; printf 'SECOND\\n'; sleep 1; printf 'THIRD\\n'\\\"\",\"cwd\":\"$EXCALIDRAW_REPO\",\"processId\":\"77557\",\"source\":\"unifiedExecStartup\",\"status\":\"inProgress\",\"commandActions\":[{\"type\":\"unknown\",\"command\":\"printf 'FIRST\\n'; sleep 1; printf 'SECOND\\n'; sleep 1; printf 'THIRD\\n'\"}],\"aggregatedOutput\":null,\"exitCode\":null,\"durationMs\":null},\"threadId\":\"019db1f3-d2e6-76d2-99a5-3eb4645eae2d\",\"turnId\":\"019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76\"}}",
+    "rawEvent": {
+      "jsonrpc": "2.0",
+      "method": "item/started",
+      "params": {
+        "item": {
+          "type": "commandExecution",
+          "id": "call_MDOuovZ1ZpGqJFr7vjglktrS",
+          "command": "/bin/zsh -lc \"printf 'FIRST\n'; sleep 1; printf 'SECOND\n'; sleep 1; printf 'THIRD\n'\"",
+          "cwd": "$EXCALIDRAW_REPO",
+          "processId": "77557",
+          "source": "unifiedExecStartup",
+          "status": "inProgress",
+          "commandActions": [
+            {
+              "type": "unknown",
+              "command": "printf 'FIRST\n'; sleep 1; printf 'SECOND\n'; sleep 1; printf 'THIRD\n'"
+            }
+          ],
+          "aggregatedOutput": null,
+          "exitCode": null,
+          "durationMs": null
+        },
+        "threadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d",
+        "turnId": "019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76"
+      }
+    },
+    "sourceThreadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d"
+  },
+  {
+    "kind": "raw-provider-event",
+    "captureId": "capture-49",
+    "capturedAt": 1776807046393,
+    "providerId": "codex",
+    "rawLine": "{\"method\":\"item/commandExecution/outputDelta\",\"params\":{\"threadId\":\"019db1f3-d2e6-76d2-99a5-3eb4645eae2d\",\"turnId\":\"019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76\",\"itemId\":\"call_MDOuovZ1ZpGqJFr7vjglktrS\",\"delta\":\"SECOND\\n\"}}",
+    "rawEvent": {
+      "jsonrpc": "2.0",
+      "method": "item/commandExecution/outputDelta",
+      "params": {
+        "threadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d",
+        "turnId": "019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76",
+        "itemId": "call_MDOuovZ1ZpGqJFr7vjglktrS",
+        "delta": "SECOND\n"
+      }
+    },
+    "sourceThreadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d"
+  },
+  {
+    "kind": "raw-provider-event",
+    "captureId": "capture-50",
+    "capturedAt": 1776807047405,
+    "providerId": "codex",
+    "rawLine": "{\"method\":\"item/commandExecution/outputDelta\",\"params\":{\"threadId\":\"019db1f3-d2e6-76d2-99a5-3eb4645eae2d\",\"turnId\":\"019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76\",\"itemId\":\"call_MDOuovZ1ZpGqJFr7vjglktrS\",\"delta\":\"THIRD\\n\"}}",
+    "rawEvent": {
+      "jsonrpc": "2.0",
+      "method": "item/commandExecution/outputDelta",
+      "params": {
+        "threadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d",
+        "turnId": "019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76",
+        "itemId": "call_MDOuovZ1ZpGqJFr7vjglktrS",
+        "delta": "THIRD\n"
+      }
+    },
+    "sourceThreadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d"
+  },
+  {
+    "kind": "raw-provider-event",
+    "captureId": "capture-51",
+    "capturedAt": 1776807047406,
+    "providerId": "codex",
+    "rawLine": "{\"method\":\"rawResponseItem/completed\",\"params\":{\"threadId\":\"019db1f3-d2e6-76d2-99a5-3eb4645eae2d\",\"turnId\":\"019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76\",\"item\":{\"type\":\"function_call_output\",\"call_id\":\"call_MDOuovZ1ZpGqJFr7vjglktrS\",\"output\":\"Chunk ID: c8ad21\\nWall time: 1.8866 seconds\\nProcess exited with code 0\\nOriginal token count: 5\\nOutput:\\nFIRST\\nSECOND\\nTHIRD\\n\"}}}",
+    "rawEvent": {
+      "jsonrpc": "2.0",
+      "method": "rawResponseItem/completed",
+      "params": {
+        "threadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d",
+        "turnId": "019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76",
+        "item": {
+          "type": "function_call_output",
+          "call_id": "call_MDOuovZ1ZpGqJFr7vjglktrS",
+          "output": "Chunk ID: c8ad21\nWall time: 1.8866 seconds\nProcess exited with code 0\nOriginal token count: 5\nOutput:\nFIRST\nSECOND\nTHIRD\n"
+        }
+      }
+    },
+    "sourceThreadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d"
+  },
+  {
+    "kind": "raw-provider-event",
+    "captureId": "capture-52",
+    "capturedAt": 1776807047508,
+    "providerId": "codex",
+    "rawLine": "{\"method\":\"item/completed\",\"params\":{\"item\":{\"type\":\"commandExecution\",\"id\":\"call_MDOuovZ1ZpGqJFr7vjglktrS\",\"command\":\"/bin/zsh -lc \\\"printf 'FIRST\\n'; sleep 1; printf 'SECOND\\n'; sleep 1; printf 'THIRD\\n'\\\"\",\"cwd\":\"$EXCALIDRAW_REPO\",\"processId\":\"77557\",\"source\":\"unifiedExecStartup\",\"status\":\"completed\",\"commandActions\":[{\"type\":\"unknown\",\"command\":\"printf 'FIRST\\n'; sleep 1; printf 'SECOND\\n'; sleep 1; printf 'THIRD\\n'\"}],\"aggregatedOutput\":\"SECOND\\nTHIRD\\n\",\"exitCode\":0,\"durationMs\":1988},\"threadId\":\"019db1f3-d2e6-76d2-99a5-3eb4645eae2d\",\"turnId\":\"019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76\"}}",
+    "rawEvent": {
+      "jsonrpc": "2.0",
+      "method": "item/completed",
+      "params": {
+        "item": {
+          "type": "commandExecution",
+          "id": "call_MDOuovZ1ZpGqJFr7vjglktrS",
+          "command": "/bin/zsh -lc \"printf 'FIRST\n'; sleep 1; printf 'SECOND\n'; sleep 1; printf 'THIRD\n'\"",
+          "cwd": "$EXCALIDRAW_REPO",
+          "processId": "77557",
+          "source": "unifiedExecStartup",
+          "status": "completed",
+          "commandActions": [
+            {
+              "type": "unknown",
+              "command": "printf 'FIRST\n'; sleep 1; printf 'SECOND\n'; sleep 1; printf 'THIRD\n'"
+            }
+          ],
+          "aggregatedOutput": "SECOND\nTHIRD\n",
+          "exitCode": 0,
+          "durationMs": 1988
+        },
+        "threadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d",
+        "turnId": "019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76"
+      }
+    },
+    "sourceThreadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d"
+  },
+  {
+    "kind": "raw-provider-event",
+    "captureId": "capture-53",
+    "capturedAt": 1776807048099,
+    "providerId": "codex",
+    "rawLine": "{\"method\":\"item/started\",\"params\":{\"item\":{\"type\":\"agentMessage\",\"id\":\"msg_080ad74c3b912f880169e7ec87fc04819a9128a82c391b5ef5\",\"text\":\"\",\"phase\":\"final_answer\",\"memoryCitation\":null},\"threadId\":\"019db1f3-d2e6-76d2-99a5-3eb4645eae2d\",\"turnId\":\"019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76\"}}",
+    "rawEvent": {
+      "jsonrpc": "2.0",
+      "method": "item/started",
+      "params": {
+        "item": {
+          "type": "agentMessage",
+          "id": "msg_080ad74c3b912f880169e7ec87fc04819a9128a82c391b5ef5",
+          "text": "",
+          "phase": "final_answer",
+          "memoryCitation": null
+        },
+        "threadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d",
+        "turnId": "019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76"
+      }
+    },
+    "sourceThreadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d"
+  },
+  {
+    "kind": "raw-provider-event",
+    "captureId": "capture-54",
+    "capturedAt": 1776807048099,
+    "providerId": "codex",
+    "rawLine": "{\"method\":\"item/agentMessage/delta\",\"params\":{\"threadId\":\"019db1f3-d2e6-76d2-99a5-3eb4645eae2d\",\"turnId\":\"019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76\",\"itemId\":\"msg_080ad74c3b912f880169e7ec87fc04819a9128a82c391b5ef5\",\"delta\":\"DONE\"}}",
+    "rawEvent": {
+      "jsonrpc": "2.0",
+      "method": "item/agentMessage/delta",
+      "params": {
+        "threadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d",
+        "turnId": "019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76",
+        "itemId": "msg_080ad74c3b912f880169e7ec87fc04819a9128a82c391b5ef5",
+        "delta": "DONE"
+      }
+    },
+    "sourceThreadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d"
+  },
+  {
+    "kind": "raw-provider-event",
+    "captureId": "capture-55",
+    "capturedAt": 1776807048099,
+    "providerId": "codex",
+    "rawLine": "{\"method\":\"item/completed\",\"params\":{\"item\":{\"type\":\"agentMessage\",\"id\":\"msg_080ad74c3b912f880169e7ec87fc04819a9128a82c391b5ef5\",\"text\":\"DONE\",\"phase\":\"final_answer\",\"memoryCitation\":null},\"threadId\":\"019db1f3-d2e6-76d2-99a5-3eb4645eae2d\",\"turnId\":\"019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76\"}}",
+    "rawEvent": {
+      "jsonrpc": "2.0",
+      "method": "item/completed",
+      "params": {
+        "item": {
+          "type": "agentMessage",
+          "id": "msg_080ad74c3b912f880169e7ec87fc04819a9128a82c391b5ef5",
+          "text": "DONE",
+          "phase": "final_answer",
+          "memoryCitation": null
+        },
+        "threadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d",
+        "turnId": "019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76"
+      }
+    },
+    "sourceThreadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d"
+  },
+  {
+    "kind": "raw-provider-event",
+    "captureId": "capture-56",
+    "capturedAt": 1776807048099,
+    "providerId": "codex",
+    "rawLine": "{\"method\":\"rawResponseItem/completed\",\"params\":{\"threadId\":\"019db1f3-d2e6-76d2-99a5-3eb4645eae2d\",\"turnId\":\"019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76\",\"item\":{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"DONE\"}],\"phase\":\"final_answer\"}}}",
+    "rawEvent": {
+      "jsonrpc": "2.0",
+      "method": "rawResponseItem/completed",
+      "params": {
+        "threadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d",
+        "turnId": "019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76",
+        "item": {
+          "type": "message",
+          "role": "assistant",
+          "content": [
+            {
+              "type": "output_text",
+              "text": "DONE"
+            }
+          ],
+          "phase": "final_answer"
+        }
+      }
+    },
+    "sourceThreadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d"
+  },
+  {
+    "kind": "raw-provider-event",
+    "captureId": "capture-57",
+    "capturedAt": 1776807048099,
+    "providerId": "codex",
+    "rawLine": "{\"method\":\"thread/tokenUsage/updated\",\"params\":{\"threadId\":\"019db1f3-d2e6-76d2-99a5-3eb4645eae2d\",\"turnId\":\"019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76\",\"tokenUsage\":{\"total\":{\"totalTokens\":29331,\"inputTokens\":29171,\"cachedInputTokens\":17920,\"outputTokens\":160,\"reasoningOutputTokens\":53},\"last\":{\"totalTokens\":14694,\"inputTokens\":14689,\"cachedInputTokens\":14464,\"outputTokens\":5,\"reasoningOutputTokens\":0},\"modelContextWindow\":258400}}}",
+    "rawEvent": {
+      "jsonrpc": "2.0",
+      "method": "thread/tokenUsage/updated",
+      "params": {
+        "threadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d",
+        "turnId": "019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76",
+        "tokenUsage": {
+          "total": {
+            "totalTokens": 29331,
+            "inputTokens": 29171,
+            "cachedInputTokens": 17920,
+            "outputTokens": 160,
+            "reasoningOutputTokens": 53
+          },
+          "last": {
+            "totalTokens": 14694,
+            "inputTokens": 14689,
+            "cachedInputTokens": 14464,
+            "outputTokens": 5,
+            "reasoningOutputTokens": 0
+          },
+          "modelContextWindow": 258400
+        }
+      }
+    },
+    "sourceThreadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d"
+  },
+  {
+    "kind": "raw-provider-event",
+    "captureId": "capture-58",
+    "capturedAt": 1776807048100,
+    "providerId": "codex",
+    "rawLine": "{\"method\":\"account/rateLimits/updated\",\"params\":{\"rateLimits\":{\"limitId\":\"codex\",\"limitName\":null,\"primary\":{\"usedPercent\":14,\"windowDurationMins\":300,\"resetsAt\":1776814045},\"secondary\":{\"usedPercent\":3,\"windowDurationMins\":10080,\"resetsAt\":1777400845},\"credits\":null,\"planType\":\"pro\",\"rateLimitReachedType\":null}}}",
+    "rawEvent": {
+      "jsonrpc": "2.0",
+      "method": "account/rateLimits/updated",
+      "params": {
+        "rateLimits": {
+          "limitId": "codex",
+          "limitName": null,
+          "primary": {
+            "usedPercent": 14,
+            "windowDurationMins": 300,
+            "resetsAt": 1776814045
+          },
+          "secondary": {
+            "usedPercent": 3,
+            "windowDurationMins": 10080,
+            "resetsAt": 1777400845
+          },
+          "credits": null,
+          "planType": "pro",
+          "rateLimitReachedType": null
+        }
+      }
+    }
+  },
+  {
+    "kind": "raw-provider-event",
+    "captureId": "capture-59",
+    "capturedAt": 1776807048100,
+    "providerId": "codex",
+    "rawLine": "{\"method\":\"thread/status/changed\",\"params\":{\"threadId\":\"019db1f3-d2e6-76d2-99a5-3eb4645eae2d\",\"status\":{\"type\":\"idle\"}}}",
+    "rawEvent": {
+      "jsonrpc": "2.0",
+      "method": "thread/status/changed",
+      "params": {
+        "threadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d",
+        "status": {
+          "type": "idle"
+        }
+      }
+    },
+    "sourceThreadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d"
+  },
+  {
+    "kind": "raw-provider-event",
+    "captureId": "capture-60",
+    "capturedAt": 1776807048100,
+    "providerId": "codex",
+    "rawLine": "{\"method\":\"turn/completed\",\"params\":{\"threadId\":\"019db1f3-d2e6-76d2-99a5-3eb4645eae2d\",\"turn\":{\"id\":\"019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76\",\"items\":[],\"status\":\"completed\",\"error\":null,\"startedAt\":1776807039,\"completedAt\":1776807048,\"durationMs\":8357}}}",
+    "rawEvent": {
+      "jsonrpc": "2.0",
+      "method": "turn/completed",
+      "params": {
+        "threadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d",
+        "turn": {
+          "id": "019db1f3-d2fa-7c02-b8e8-bd2a42c9cc76",
+          "items": [],
+          "status": "completed",
+          "error": null,
+          "startedAt": 1776807039,
+          "completedAt": 1776807048,
+          "durationMs": 8357
+        }
+      }
+    },
+    "sourceThreadId": "019db1f3-d2e6-76d2-99a5-3eb4645eae2d"
+  }
+]

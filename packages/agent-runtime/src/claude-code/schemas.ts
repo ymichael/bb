@@ -29,12 +29,29 @@ export const toolUseBlockSchema = z.object({
   input: z.unknown(),
 });
 
+export const claudeToolUseProcessResultSchema = z
+  .object({
+    stdout: z.string().optional(),
+    stderr: z.string().optional(),
+  })
+  .passthrough();
+export type ClaudeToolUseProcessResult = z.infer<
+  typeof claudeToolUseProcessResultSchema
+>;
+
+export const claudeToolUseResultSchema = z.union([
+  claudeToolUseProcessResultSchema,
+  z.string(),
+]);
+export type ClaudeToolUseResult = z.infer<typeof claudeToolUseResultSchema>;
+
 export const toolResultBlockSchema = z.object({
   type: z.literal("tool_result"),
   tool_use_id: z.string(),
   tool_name: z.string().optional(),
   content: z.unknown(),
   is_error: z.boolean().optional(),
+  tool_use_result: claudeToolUseResultSchema.nullish(),
 });
 
 export const thinkingBlockSchema = z

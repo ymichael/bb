@@ -4,6 +4,7 @@ import type { ViewToolCallMessage } from "@bb/domain";
 import { ToolCallRow } from "../src/thread-timeline/rows/ToolCallRow.js";
 
 interface BuildToolCallMessageArgs {
+  approvalStatus?: ViewToolCallMessage["approvalStatus"];
   status: ViewToolCallMessage["status"];
   createdAt?: number;
   durationMs?: number;
@@ -30,7 +31,7 @@ function buildToolCallMessage(
     ...(args.output !== undefined ? { output: args.output } : {}),
     ...(args.exitCode !== undefined ? { exitCode: args.exitCode } : {}),
     ...(args.durationMs !== undefined ? { durationMs: args.durationMs } : {}),
-    approvalStatus: null,
+    approvalStatus: args.approvalStatus ?? null,
     status: args.status,
   };
 }
@@ -56,6 +57,68 @@ describe("ToolCallRow rendering", () => {
 
     expect(html).toContain("exit code 1");
     expect(html).not.toContain("(no output)");
+  });
+
+  it("shows exit code 0 when a successful command completes silently", () => {
+    const html = renderToStaticMarkup(
+      <ToolCallRow
+        message={buildToolCallMessage({ status: "completed", exitCode: 0 })}
+        initialExpanded
+      />,
+    );
+
+    expect(html).toContain("Completed");
+    expect(html).toContain("exit code 0");
+    expect(html).not.toContain("(no output)");
+  });
+
+  it("uses denied approval state instead of a completed label", () => {
+    const html = renderToStaticMarkup(
+      <ToolCallRow
+        message={buildToolCallMessage({
+          approvalStatus: "denied",
+          status: "completed",
+        })}
+      />,
+    );
+
+    expect(html).toContain("Permission denied:");
+    expect(html).not.toContain("Completed");
+  });
+
+  it("renders no output block while approval is still waiting", () => {
+    const html = renderToStaticMarkup(
+      <ToolCallRow
+        message={buildToolCallMessage({
+          approvalStatus: "waiting_for_approval",
+          status: "pending",
+        })}
+        initialExpanded
+      />,
+    );
+
+    expect(html).toContain("Waiting for approval to run");
+    expect(html).toContain("$ echo hello");
+    expect(html).not.toContain("<pre");
+    expect(html).not.toContain("(no output)");
+  });
+
+  it("keeps waiting-for-approval rows visually active without showing a running duration", () => {
+    const html = renderToStaticMarkup(
+      <ToolCallRow
+        message={buildToolCallMessage({
+          approvalStatus: "waiting_for_approval",
+          status: "pending",
+          startedAt: 1_000,
+          createdAt: 3_500,
+        })}
+      />,
+    );
+
+    expect(html).toContain("Waiting for approval to run");
+    expect(html).toContain("animate-shine");
+    expect(html).not.toContain("2s");
+    expect(html).not.toContain("3s");
   });
 
   it("omits pending command duration before the live clock starts", () => {

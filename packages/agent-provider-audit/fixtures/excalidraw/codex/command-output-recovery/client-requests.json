@@ -1,0 +1,13 @@
+[
+  {
+    "id": "audit-client-row-1",
+    "turnIndex": 0,
+    "type": "client/turn/requested",
+    "target": {
+      "kind": "thread-start"
+    },
+    "requestMethod": "thread/start",
+    "text": "Run this shell command exactly once from the current working directory: `printf 'FIRST\\n'; sleep 1; printf 'SECOND\\n'; sleep 1; printf 'THIRD\\n'`. Use your real shell tool, preserve the full command output on the completed command item, and then reply with exactly DONE.",
+    "createdAt": 1776807039738
+  }
+]

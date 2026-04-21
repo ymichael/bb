@@ -809,6 +809,79 @@ describe("toViewMessages tool activity", () => {
     expect(toolMessage?.output).toContain("second");
   });
 
+  it("replaces command output when a provider emits a reset delta", () => {
+    const events: ThreadEventRow[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "item/started",
+        data: {
+          providerThreadId: "thread-1",
+          item: {
+            type: "commandExecution",
+            id: "call-1",
+            command: "/bin/zsh -lc 'printf first second'",
+            cwd: "/repo",
+            status: "pending",
+          },
+          turnId: "turn-1",
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "item/commandExecution/outputDelta",
+        data: {
+          providerThreadId: "thread-1",
+          threadId: "thread-1",
+          turnId: "turn-1",
+          itemId: "call-1",
+          delta: "first\nsecond\n",
+        },
+        createdAt: 2,
+      },
+      {
+        id: "evt-3",
+        threadId: "thread-1",
+        seq: 3,
+        type: "item/commandExecution/outputDelta",
+        data: {
+          providerThreadId: "thread-1",
+          threadId: "thread-1",
+          turnId: "turn-1",
+          itemId: "call-1",
+          delta: "reset\n",
+          reset: true,
+        },
+        createdAt: 3,
+      },
+    ];
+
+    const projected = toViewMessages(fromRows(events), {
+      threadStatus: "active",
+    });
+    const toolMessage = projected.find(
+      (
+        message,
+      ): message is Extract<
+        ViewMessage,
+        { kind: "tool-call" | "tool-exploring" }
+      > => message.kind === "tool-call" || message.kind === "tool-exploring",
+    );
+
+    expect(toolMessage).toBeDefined();
+    if (toolMessage?.kind === "tool-exploring") {
+      expect(toolMessage.calls).toHaveLength(1);
+      expect(toolMessage.calls[0]?.output).toBe("reset\n");
+      return;
+    }
+
+    expect(toolMessage?.output).toBe("reset\n");
+  });
+
   it("coalesces consecutive exploring toolCall calls into one exploring cell", () => {
     const events: ThreadEventRow[] = [
       {

@@ -203,6 +203,15 @@ const BUILT_IN_SCENARIOS: Record<string, ProviderAuditScenario> = {
       },
     ],
   },
+  "excalidraw-command-output-recovery": {
+    id: "excalidraw-command-output-recovery",
+    description:
+      "Provider-targeted delayed shell output task against the real Excalidraw repo",
+    workspaceMode: "repo",
+    turns: [
+      "Run this shell command exactly once from the current working directory: `printf 'FIRST\\n'; sleep 1; printf 'SECOND\\n'; sleep 1; printf 'THIRD\\n'`. Use your real shell tool, preserve the full command output on the completed command item, and then reply with exactly DONE.",
+    ],
+  },
 };
 
 interface PreparedAuditWorkspace {

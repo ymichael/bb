@@ -18,6 +18,14 @@ import type {
 import { durationToCompactString } from "./format-helpers.js";
 import { taskStatusGlyph } from "./task-status.js";
 import { buildTimelineRows } from "./thread-detail-rows.js";
+import {
+  getCommandExitCodeLine,
+  getPermissionGrantDisplayStatus,
+  getTimelineDisplayStatus,
+  getTimelineDisplayStatusInfo,
+  getVisibleCommandOutput,
+  type TimelineDisplayStatus,
+} from "./timeline-display-status.js";
 import { buildToolGroupSummaryParts } from "./timeline-summary.js";
 import {
   buildExploringDetailLines,
@@ -73,19 +81,19 @@ function indentBlock(text: string, prefix: string): string {
     .join("\n");
 }
 
-function statusBadge(status: string, color: boolean): string {
-  switch (status) {
-    case "completed":
-      return green("✓", color);
-    case "error":
-      return red("✗", color);
-    case "pending":
-    case "streaming":
-      return yellow("⋯", color);
-    case "interrupted":
-      return yellow("⊘", color);
-    default:
-      return status;
+function formatLifecycleLabel(
+  displayStatus: TimelineDisplayStatus,
+  color: boolean,
+): string {
+  const statusInfo = getTimelineDisplayStatusInfo(displayStatus);
+
+  switch (statusInfo.cliTone) {
+    case "success":
+      return green(statusInfo.cliLabel, color);
+    case "danger":
+      return red(statusInfo.cliLabel, color);
+    case "warning":
+      return yellow(statusInfo.cliLabel, color);
   }
 }
 
@@ -109,23 +117,66 @@ function formatDurationLine(
   return dim(`  ${duration ?? `${durationMs}ms`}`, color);
 }
 
-function formatApprovalLifecycleTitle(
-  approvalStatus: "waiting_for_approval" | "denied" | null | undefined,
-  labels: {
-    pending: string;
-    denied: string;
-    fallback: string;
-  },
-): string {
-  switch (approvalStatus) {
-    case "waiting_for_approval":
-      return labels.pending;
-    case "denied":
-      return labels.denied;
-    case null:
-    case undefined:
-      return labels.fallback;
+function formatToolCallOutputLine(
+  output: string,
+  verbose: boolean,
+  color: boolean,
+): string | undefined {
+  const maxOut = verbose ? output.length : 200;
+  const formattedOutput = truncate(output.trim(), maxOut);
+  if (formattedOutput.length === 0) {
+    return undefined;
   }
+  return dim(`  ${formattedOutput.split("\n").join("\n  ")}`, color);
+}
+
+function formatCommandExitCodeLine(
+  displayStatus: TimelineDisplayStatus,
+  exitCode: number | undefined,
+  hasVisibleOutput: boolean,
+  color: boolean,
+): string | undefined {
+  const exitCodeLine = getCommandExitCodeLine({
+    displayStatus,
+    exitCode,
+    hasVisibleOutput,
+  });
+
+  if (!exitCodeLine) {
+    return undefined;
+  }
+
+  if (exitCode !== undefined && exitCode !== 0) {
+    return red(`  ${exitCodeLine}`, color);
+  }
+
+  return dim(`  ${exitCodeLine}`, color);
+}
+
+function formatPermissionLifecycleLabel(
+  msg: ViewPermissionGrantLifecycleMessage,
+  color: boolean,
+): string {
+  return formatLifecycleLabel(
+    getPermissionGrantDisplayStatus(msg.status),
+    color,
+  );
+}
+
+function formatOperationLifecycleLabel(
+  msg: ViewOperationMessage,
+  color: boolean,
+): string | undefined {
+  if (!msg.status || msg.opType === "warning" || msg.opType === "deprecation") {
+    return undefined;
+  }
+
+  return formatLifecycleLabel(
+    getTimelineDisplayStatus({
+      status: msg.status,
+    }),
+    color,
+  );
 }
 
 function formatUser(
@@ -176,32 +227,40 @@ function formatToolCall(
   color: boolean,
 ): string {
   const lines: string[] = [];
-  const badge = statusBadge(msg.status, color);
   const name = msg.toolName ?? "exec_command";
   const cmd = msg.command ?? "";
-  const title = formatApprovalLifecycleTitle(msg.approvalStatus, {
-    pending: `Waiting for approval to run ${cmd || name}`,
-    denied: `Permission denied: ${cmd || name}`,
-    fallback: `Tool Call: ${name}`,
+  const displayStatus = getTimelineDisplayStatus({
+    approvalStatus: msg.approvalStatus,
+    status: msg.status,
   });
-  lines.push(separator(title, color));
-  lines.push(`  ${badge} ${cyan(cmd || name, color)}`);
+  lines.push(separator(`Tool Call: ${name}`, color));
+  lines.push(
+    `  ${formatLifecycleLabel(displayStatus, color)} ${cyan(cmd || name, color)}`,
+  );
 
   const durationLine = formatDurationLine(msg.durationMs, msg.duration, color);
   if (durationLine) {
     lines.push(durationLine);
   }
 
-  if (msg.output) {
-    const maxOut = verbose ? msg.output.length : 200;
-    const output = truncate(msg.output.trim(), maxOut);
-    if (output) {
-      lines.push(dim(`  ${output.split("\n").join("\n  ")}`, color));
+  const output = getVisibleCommandOutput(msg.output);
+  if (output) {
+    const outputLine = formatToolCallOutputLine(output, verbose, color);
+    if (outputLine) {
+      lines.push(outputLine);
     }
   }
-  if (msg.exitCode !== undefined && msg.exitCode !== 0) {
-    lines.push(red(`  exit code ${msg.exitCode}`, color));
+
+  const exitCodeLine = formatCommandExitCodeLine(
+    displayStatus,
+    msg.exitCode,
+    output !== undefined,
+    color,
+  );
+  if (exitCodeLine) {
+    lines.push(exitCodeLine);
   }
+
   return lines.join("\n");
 }
 
@@ -240,20 +299,21 @@ function formatFileEdit(
   color: boolean,
 ): string {
   const lines: string[] = [];
-  const badge = statusBadge(msg.status, color);
-  const title = formatApprovalLifecycleTitle(msg.approvalStatus, {
-    pending: "Waiting for approval to edit files",
-    denied: "Permission denied: file changes",
-    fallback: "File Edit",
-  });
-  lines.push(separator(title, color));
+  const lifecycleLabel = formatLifecycleLabel(
+    getTimelineDisplayStatus({
+      approvalStatus: msg.approvalStatus,
+      status: msg.status,
+    }),
+    color,
+  );
+  lines.push(separator("File Edit", color));
   if (msg.changes.length === 0) {
-    lines.push(`  ${badge} ${cyan("file changes", color)}`);
+    lines.push(`  ${lifecycleLabel} ${cyan("file changes", color)}`);
   }
   for (const change of msg.changes) {
     const kindLabel = change.kind ? ` (${change.kind})` : "";
     lines.push(
-      `  ${badge} ${cyan(change.path, color)}${dim(kindLabel, color)}`,
+      `  ${lifecycleLabel} ${cyan(change.path, color)}${dim(kindLabel, color)}`,
     );
     if (verbose && change.diff) {
       const diff = truncate(change.diff.trim(), 2_000);
@@ -272,10 +332,15 @@ function formatWebSearch(
   color: boolean,
 ): string {
   const lines: string[] = [];
-  const badge = statusBadge(msg.status, color);
+  const lifecycleLabel = formatLifecycleLabel(
+    getTimelineDisplayStatus({
+      status: msg.status,
+    }),
+    color,
+  );
   lines.push(separator("Web Search", color));
   const query = msg.query ?? msg.action ?? "";
-  lines.push(`  ${badge} ${cyan(query, color)}`);
+  lines.push(`  ${lifecycleLabel} ${cyan(query, color)}`);
   if (verbose && msg.output) {
     lines.push(dim(`  ${truncate(msg.output.trim(), 500)}`, color));
   }
@@ -289,10 +354,11 @@ function formatOperation(
 ): string {
   const lines: string[] = [];
   lines.push(separator(`Operation: ${msg.title}`, color));
-  if (msg.detail) lines.push(dim(`  ${msg.detail}`, color));
-  if (msg.status && msg.opType !== "warning" && msg.opType !== "deprecation") {
-    lines.push(`  ${statusBadge(msg.status, color)}`);
+  const lifecycleLabel = formatOperationLifecycleLabel(msg, color);
+  if (lifecycleLabel) {
+    lines.push(`  ${lifecycleLabel}`);
   }
+  if (msg.detail) lines.push(dim(`  ${msg.detail}`, color));
   return lines.join("\n");
 }
 
@@ -303,7 +369,7 @@ function formatPermissionGrantLifecycle(
 ): string {
   const lines: string[] = [];
   lines.push(separator(msg.title, color));
-  lines.push(`  ${statusBadge(msg.status, color)}`);
+  lines.push(`  ${formatPermissionLifecycleLabel(msg, color)}`);
   if (verbose) {
     lines.push(`  item: ${msg.approvalTarget.itemId}`);
     if (msg.approvalTarget.toolName) {

@@ -63,14 +63,14 @@ describe("timeline CLI rendering snapshots", () => {
     expect(steerMessage?.sourceSeqStart).toBe(3);
     expect(timeline.text).toMatchInlineSnapshot(`
       "── Tool Call: exec_command ─────────────────────────────────
-        ✓ exec_command { cmd: pnpm test }
+        [completed] exec_command { cmd: pnpm test }
 
       ── User ────────────────────────────────────────────────────
       Please account for the restart
 
       ── Worked on 1 item ────────────────────────────────────────
         ── Tool Call: exec_command ─────────────────────────────────
-          ✓ exec_command { cmd: sqlite3 ~/.bb-dev/bb.db '.tables' }
+          [completed] exec_command { cmd: sqlite3 ~/.bb-dev/bb.db '.tables' }
 
       ── Assistant ───────────────────────────────────────────────
       Done."
@@ -112,14 +112,14 @@ describe("timeline CLI rendering snapshots", () => {
     expect(steerMessage?.sourceSeqStart).toBe(3);
     expect(timeline.text).toMatchInlineSnapshot(`
       "── Tool Call: exec_command ─────────────────────────────────
-        ✓ exec_command { cmd: pnpm test }
+        [completed] exec_command { cmd: pnpm test }
 
       ── User ────────────────────────────────────────────────────
       Please account for the restart
 
       ── Worked on 1 item ────────────────────────────────────────
         ── Tool Call: exec_command ─────────────────────────────────
-          ✓ exec_command { cmd: sqlite3 ~/.bb-dev/bb.db '.tables' }
+          [completed] exec_command { cmd: sqlite3 ~/.bb-dev/bb.db '.tables' }
 
       ── Assistant ───────────────────────────────────────────────
       Done."
@@ -180,7 +180,7 @@ describe("timeline CLI rendering snapshots", () => {
       Start the failing workspace
 
       ── Operation: Provisioning thread failed ───────────────────
-        ✗
+        [failed]
 
       ── Error ───────────────────────────────────────────────────
         Provisioning thread failed - pnpm install failed"
@@ -314,11 +314,11 @@ describe("timeline CLI rendering snapshots", () => {
         □ Run focused tests
 
       ── Web Search ──────────────────────────────────────────────
-        ✓ React suspense docs
+        [completed] React suspense docs
         Found the React Suspense docs
 
       ── File Edit ───────────────────────────────────────────────
-        ✓ /repo/packages/core-ui/src/timeline.ts (update)
+        [completed] /repo/packages/core-ui/src/timeline.ts (update)
         @@ -1 +1 @@
         -before
         +after
@@ -346,12 +346,12 @@ describe("timeline CLI rendering snapshots", () => {
     ]);
     expect(timeline.text).toMatchInlineSnapshot(`
       "── Waiting for approval to grant Bash ──────────────────────
-        ⋯
+        [waiting]
         item: item_123
         tool: Bash
 
-      ── Permission denied: git push ─────────────────────────────
-        ✓ git push"
+      ── Tool Call: exec_command ─────────────────────────────────
+        [denied] git push"
     `);
   });
 

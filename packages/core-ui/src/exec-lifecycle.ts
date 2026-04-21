@@ -97,6 +97,7 @@ export interface ExecLifecycleEvent {
   kind: "begin" | "end" | "output";
   call: ExecCallPartial;
   appendOutput?: boolean;
+  replaceOutput?: boolean;
 }
 
 function toExecDefaultStatus(
@@ -257,7 +258,9 @@ export function parseExecLifecycleEvent(
         status: "pending",
         ...(parentToolCallId ? { parentToolCallId } : {}),
       },
-      appendOutput: true,
+      ...(decoded.reset
+        ? { replaceOutput: true }
+        : { appendOutput: true }),
     };
   }
 

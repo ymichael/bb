@@ -1,0 +1,30 @@
+{
+  "providerId": "codex",
+  "scenarioId": "excalidraw-command-output-recovery",
+  "scenarioDescription": "Provider-targeted delayed shell output task against the real Excalidraw repo",
+  "model": "gpt-5.4",
+  "source": "live-capture",
+  "capturedAt": 1776807039614,
+  "completedAt": 1776807048141,
+  "gitSha": "792275053c7d418a397bc017d120bcf864872597",
+  "workspacePath": "$EXCALIDRAW_REPO",
+  "runtimeWorkspacePath": "$EXCALIDRAW_REPO",
+  "envWorkspacePath": "$EXCALIDRAW_REPO",
+  "outputDir": "$FIXTURE_ROOT/excalidraw/codex/command-output-recovery",
+  "threadId": "provider-audit-thread",
+  "projectId": "provider-audit",
+  "turns": [
+    "Run this shell command exactly once from the current working directory: `printf 'FIRST\\n'; sleep 1; printf 'SECOND\\n'; sleep 1; printf 'THIRD\\n'`. Use your real shell tool, preserve the full command output on the completed command item, and then reply with exactly DONE."
+  ],
+  "gitResetRef": null,
+  "runtimeWorkspaceGitStart": {
+    "headSha": "792275053c7d418a397bc017d120bcf864872597",
+    "isClean": true,
+    "statusLines": []
+  },
+  "runtimeWorkspaceGitEnd": {
+    "headSha": "792275053c7d418a397bc017d120bcf864872597",
+    "isClean": true,
+    "statusLines": []
+  }
+}

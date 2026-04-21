@@ -2016,6 +2016,276 @@ describe("claude-code provider adapter", () => {
     );
   });
 
+  it("translateEvent prefers Claude stdout/stderr over placeholder Bash content", () => {
+    const adapter = createClaudeCodeProviderAdapter();
+
+    adapter.translateEvent({
+      type: "assistant",
+      message: {
+        role: "assistant",
+        content: [
+          {
+            type: "tool_use",
+            id: "tool-1",
+            name: "Bash",
+            input: { command: "printf hi", cwd: "/repo" },
+          },
+        ],
+      },
+      session_id: "sess-1",
+    });
+
+    const events = adapter.translateEvent({
+      type: "user",
+      message: {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: "tool-1",
+            tool_name: "Bash",
+            content: "(Bash completed with no output)",
+            tool_use_result: {
+              stdout: "hi\n",
+              stderr: "",
+            },
+          },
+        ],
+      },
+      session_id: "sess-1",
+    });
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "item/completed",
+        item: expect.objectContaining({
+          type: "commandExecution",
+          id: "tool-1",
+          command: "printf hi",
+          cwd: "/repo",
+          aggregatedOutput: "hi\n",
+          status: "completed",
+        }),
+      }),
+    );
+  });
+
+  it("translateEvent strips Claude no-output placeholders when stdout/stderr are empty", () => {
+    const adapter = createClaudeCodeProviderAdapter();
+
+    adapter.translateEvent({
+      type: "assistant",
+      message: {
+        role: "assistant",
+        content: [
+          {
+            type: "tool_use",
+            id: "tool-1",
+            name: "Bash",
+            input: { command: "true", cwd: "/repo" },
+          },
+        ],
+      },
+      session_id: "sess-1",
+    });
+
+    const events = adapter.translateEvent({
+      type: "user",
+      message: {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: "tool-1",
+            tool_name: "Bash",
+            content: "(Bash completed with no output)",
+            tool_use_result: {
+              stdout: "",
+              stderr: "",
+            },
+          },
+        ],
+      },
+      session_id: "sess-1",
+    });
+
+    const completedEvent = events.find(
+      (
+        event,
+      ): event is Extract<(typeof events)[number], { type: "item/completed" }> =>
+        event.type === "item/completed",
+    );
+
+    expect(completedEvent?.item).toMatchObject({
+      type: "commandExecution",
+      id: "tool-1",
+      command: "true",
+      cwd: "/repo",
+      status: "completed",
+      exitCode: 0,
+    });
+    if (completedEvent?.item.type !== "commandExecution") {
+      throw new Error("Expected commandExecution completion");
+    }
+    expect(completedEvent.item.aggregatedOutput).toBeUndefined();
+  });
+
+  it("translateEvent inserts a newline between Claude stdout and stderr", () => {
+    const adapter = createClaudeCodeProviderAdapter();
+
+    adapter.translateEvent({
+      type: "assistant",
+      message: {
+        role: "assistant",
+        content: [
+          {
+            type: "tool_use",
+            id: "tool-1",
+            name: "Bash",
+            input: { command: "printf hi; printf warn >&2", cwd: "/repo" },
+          },
+        ],
+      },
+      session_id: "sess-1",
+    });
+
+    const events = adapter.translateEvent({
+      type: "user",
+      message: {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: "tool-1",
+            tool_name: "Bash",
+            content: "(Bash completed with no output)",
+            tool_use_result: {
+              stdout: "hi",
+              stderr: "warn\n",
+            },
+          },
+        ],
+      },
+      session_id: "sess-1",
+    });
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "item/completed",
+        item: expect.objectContaining({
+          type: "commandExecution",
+          id: "tool-1",
+          aggregatedOutput: "hi\nwarn\n",
+          status: "completed",
+        }),
+      }),
+    );
+  });
+
+  it("translateEvent falls back to Claude content when tool_use_result streams are empty", () => {
+    const adapter = createClaudeCodeProviderAdapter();
+
+    adapter.translateEvent({
+      type: "assistant",
+      message: {
+        role: "assistant",
+        content: [
+          {
+            type: "tool_use",
+            id: "tool-1",
+            name: "Bash",
+            input: { command: "cat output.txt", cwd: "/repo" },
+          },
+        ],
+      },
+      session_id: "sess-1",
+    });
+
+    const events = adapter.translateEvent({
+      type: "user",
+      message: {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: "tool-1",
+            tool_name: "Bash",
+            content: "file output\n",
+            tool_use_result: {},
+          },
+        ],
+      },
+      session_id: "sess-1",
+    });
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "item/completed",
+        item: expect.objectContaining({
+          type: "commandExecution",
+          id: "tool-1",
+          command: "cat output.txt",
+          cwd: "/repo",
+          aggregatedOutput: "file output\n",
+          status: "completed",
+        }),
+      }),
+    );
+  });
+
+  it("translateEvent preserves string tool_use_result errors for Bash completions", () => {
+    const adapter = createClaudeCodeProviderAdapter();
+
+    adapter.translateEvent({
+      type: "assistant",
+      message: {
+        role: "assistant",
+        content: [
+          {
+            type: "tool_use",
+            id: "tool-1",
+            name: "Bash",
+            input: { command: "grep '(' file.txt", cwd: "/repo" },
+          },
+        ],
+      },
+      session_id: "sess-1",
+    });
+
+    const events = adapter.translateEvent({
+      type: "user",
+      message: {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: "tool-1",
+            tool_name: "Bash",
+            content: "(Bash completed with no output)",
+            is_error: true,
+            tool_use_result: "Error: Exit code 2\ngrep: parentheses not balanced",
+          },
+        ],
+      },
+      session_id: "sess-1",
+    });
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "item/completed",
+        item: expect.objectContaining({
+          type: "commandExecution",
+          id: "tool-1",
+          command: "grep '(' file.txt",
+          cwd: "/repo",
+          aggregatedOutput: "Error: Exit code 2\ngrep: parentheses not balanced",
+          exitCode: 1,
+          status: "failed",
+        }),
+      }),
+    );
+  });
+
   it("translateEvent recovers missing tool names from prior tool uses", () => {
     const adapter = createClaudeCodeProviderAdapter();
 

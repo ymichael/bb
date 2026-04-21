@@ -167,6 +167,10 @@ export const threadEventItemSchema = z.discriminatedUnion("type", [
     cwd: z.string(),
     status: threadEventItemStatusSchema,
     approvalStatus: threadEventItemApprovalStatusSchema,
+    /**
+     * Omitted when the process produced no stdout/stderr. Adapters should omit
+     * this field instead of emitting an empty string placeholder.
+     */
     aggregatedOutput: z.string().optional(),
     exitCode: z.number().optional(),
     durationMs: z.number().optional(),
@@ -299,6 +303,11 @@ export const providerEventSchema = z.discriminatedUnion("type", [
     turnId: z.string(),
     itemId: z.string(),
     delta: z.string(),
+    /**
+     * When true, this delta replaces previously accumulated command output
+     * instead of appending to it. Omission means the delta appends.
+     */
+    reset: z.boolean().optional(),
     parentToolCallId: z.string().optional(),
   }),
   z.object({

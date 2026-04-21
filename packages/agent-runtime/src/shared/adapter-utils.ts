@@ -31,6 +31,22 @@ export const XHIGH_REASONING_EFFORT: ModelReasoningEffort = {
   description: "Extra high reasoning effort",
 };
 
+export interface NormalizeProviderCommandOutputArgs {
+  emptyPlaceholders: readonly string[];
+  text: string;
+}
+
+export interface DiffCumulativeTextArgs {
+  nextText: string;
+  previousText?: string;
+}
+
+export interface DiffCumulativeTextResult {
+  delta: string;
+  nextText: string;
+  reset: boolean;
+}
+
 const shellEnvironmentVariableKeySchema = z
   .string()
   .regex(/^[A-Z_][A-Z0-9_]*$/i);
@@ -133,6 +149,49 @@ export function toNonNegativeNumber(value: unknown): number {
   return typeof value === "number" && Number.isFinite(value) && value >= 0
     ? value
     : 0;
+}
+
+export function normalizeProviderCommandOutput(
+  args: NormalizeProviderCommandOutputArgs,
+): string | undefined {
+  // Compare placeholders against trimmed provider text, but preserve the
+  // original bytes for real process output so downstream rendering stays exact.
+  const trimmedText = args.text.trim();
+  if (args.emptyPlaceholders.some((placeholder) => placeholder === trimmedText)) {
+    return undefined;
+  }
+  return args.text.length > 0 ? args.text : undefined;
+}
+
+export function diffCumulativeText(
+  args: DiffCumulativeTextArgs,
+): DiffCumulativeTextResult | null {
+  const previousText = args.previousText ?? "";
+  if (args.nextText.length === 0 || args.nextText === previousText) {
+    return null;
+  }
+  if (previousText.length === 0) {
+    return {
+      delta: args.nextText,
+      nextText: args.nextText,
+      reset: false,
+    };
+  }
+  if (args.nextText.startsWith(previousText)) {
+    const delta = args.nextText.slice(previousText.length);
+    return delta.length > 0
+      ? {
+          delta,
+          nextText: args.nextText,
+          reset: false,
+        }
+      : null;
+  }
+  return {
+    delta: args.nextText,
+    nextText: args.nextText,
+    reset: true,
+  };
 }
 
 /**
