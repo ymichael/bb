@@ -96,7 +96,8 @@ export function ProjectRow({
     localHostId !== null &&
     promotedBranchName !== null &&
     thread.environmentHostId === localHostId &&
-    thread.environmentBranchName === promotedBranchName;
+    thread.environmentBranchName === promotedBranchName &&
+    thread.environmentWorkspaceDisplayKind !== "other";
 
   return (
     <SidebarMenuItem className="space-y-1">

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { ThreadListEntry } from "@bb/domain";
+import { Pill } from "@bb/ui-core";
 import {
   ChevronDown,
   ChevronRight,
@@ -203,9 +204,9 @@ export function ThreadRow({
       )}
       <span className="min-w-0 flex-1 truncate">{threadTitle}</span>
       {isPromoted ? (
-        <SidebarMenuBadge className="relative z-10 rounded-full bg-sidebar-foreground/10 px-1.5 text-sidebar-foreground/80">
+        <Pill variant="emphasis" className="relative z-10">
           promoted
-        </SidebarMenuBadge>
+        </Pill>
       ) : null}
       <span className="flex h-9 shrink-0 items-center justify-end md:h-7">
         {isManager && managedChildCount > 0 ? (
