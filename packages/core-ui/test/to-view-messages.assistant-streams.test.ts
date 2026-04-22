@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ThreadEventRow } from "@bb/domain";
+import type { ThreadEventRow, ViewMessage } from "@bb/domain";
 import { toViewMessages } from "../src/to-view-messages.js";
 import { fromRows } from "./timeline-test-harness.js";
 
@@ -83,24 +83,12 @@ describe("toViewMessages assistant streams", () => {
     expect(assistantMessages[0]?.text).toBe("Hello");
   });
 
-  it("reconciles streamed assistant text with a later final message that uses a different item id key", () => {
+  it("keeps later-turn assistant messages when the same item id is reused across turns", () => {
     const events: ThreadEventRow[] = [
       {
         id: "evt-1",
         threadId: "thread-1",
         seq: 1,
-        type: "item/agentMessage/delta",
-        data: {
-          providerThreadId: "thread-1",
-          turnId: "turn-1",
-          delta: "PONG",
-        },
-        createdAt: 1,
-      },
-      {
-        id: "evt-2",
-        threadId: "thread-1",
-        seq: 2,
         type: "item/completed",
         data: {
           providerThreadId: "thread-1",
@@ -108,10 +96,39 @@ describe("toViewMessages assistant streams", () => {
           item: {
             type: "agentMessage",
             id: "assistant-1",
-            text: "PONG",
+            text: "First answer",
           },
         },
+        createdAt: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "item/agentMessage/delta",
+        data: {
+          providerThreadId: "thread-1",
+          turnId: "turn-2",
+          itemId: "assistant-1",
+          delta: "Second",
+        },
         createdAt: 2,
+      },
+      {
+        id: "evt-3",
+        threadId: "thread-1",
+        seq: 3,
+        type: "item/completed",
+        data: {
+          providerThreadId: "thread-1",
+          turnId: "turn-2",
+          item: {
+            type: "agentMessage",
+            id: "assistant-1",
+            text: "Second answer",
+          },
+        },
+        createdAt: 3,
       },
     ];
 
@@ -123,9 +140,231 @@ describe("toViewMessages assistant streams", () => {
         message.kind === "assistant-text",
     );
 
-    expect(assistantMessages).toHaveLength(1);
-    expect(assistantMessages[0]?.text).toBe("PONG");
-    expect(assistantMessages[0]?.status).toBe("completed");
+    expect(assistantMessages).toHaveLength(2);
+    expect(assistantMessages.map((message) => message.text)).toEqual([
+      "First answer",
+      "Second answer",
+    ]);
+    expect(assistantMessages.map((message) => message.turnId)).toEqual([
+      "turn-1",
+      "turn-2",
+    ]);
+  });
+
+  it("keeps later-turn reasoning messages when the same item id is reused across turns", () => {
+    const events: ThreadEventRow[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "item/completed",
+        data: {
+          providerThreadId: "thread-1",
+          turnId: "turn-1",
+          item: {
+            type: "reasoning",
+            id: "reasoning-1",
+            summary: ["First reasoning"],
+            content: [],
+          },
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "item/reasoning/summaryTextDelta",
+        data: {
+          providerThreadId: "thread-1",
+          turnId: "turn-2",
+          itemId: "reasoning-1",
+          delta: "Second reasoning",
+        },
+        createdAt: 2,
+      },
+      {
+        id: "evt-3",
+        threadId: "thread-1",
+        seq: 3,
+        type: "item/completed",
+        data: {
+          providerThreadId: "thread-1",
+          turnId: "turn-2",
+          item: {
+            type: "reasoning",
+            id: "reasoning-1",
+            summary: ["Second reasoning"],
+            content: [],
+          },
+        },
+        createdAt: 3,
+      },
+    ];
+
+    const projected = toViewMessages(fromRows(events), {
+      threadStatus: "idle",
+    });
+    const reasoningMessages = projected.filter(
+      (
+        message,
+      ): message is Extract<ViewMessage, { kind: "assistant-reasoning" }> =>
+        message.kind === "assistant-reasoning",
+    );
+
+    expect(reasoningMessages).toHaveLength(2);
+    expect(reasoningMessages.map((message) => message.text)).toEqual([
+      "First reasoning",
+      "Second reasoning",
+    ]);
+    expect(reasoningMessages.map((message) => message.turnId)).toEqual([
+      "turn-1",
+      "turn-2",
+    ]);
+  });
+
+  it("keeps same-turn assistant messages when the same item id is reused under different parent tool calls", () => {
+    const events: ThreadEventRow[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "item/completed",
+        data: {
+          providerThreadId: "thread-1",
+          turnId: "turn-1",
+          item: {
+            type: "agentMessage",
+            id: "assistant-1",
+            text: "Child A",
+            parentToolCallId: "tool-1",
+          },
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "item/agentMessage/delta",
+        data: {
+          providerThreadId: "thread-1",
+          turnId: "turn-1",
+          itemId: "assistant-1",
+          parentToolCallId: "tool-2",
+          delta: "Child B",
+        },
+        createdAt: 2,
+      },
+      {
+        id: "evt-3",
+        threadId: "thread-1",
+        seq: 3,
+        type: "item/completed",
+        data: {
+          providerThreadId: "thread-1",
+          turnId: "turn-1",
+          item: {
+            type: "agentMessage",
+            id: "assistant-1",
+            text: "Child B",
+            parentToolCallId: "tool-2",
+          },
+        },
+        createdAt: 3,
+      },
+    ];
+
+    const projected = toViewMessages(fromRows(events), {
+      threadStatus: "idle",
+    });
+    const assistantMessages = projected.filter(
+      (message): message is Extract<ViewMessage, { kind: "assistant-text" }> =>
+        message.kind === "assistant-text",
+    );
+
+    expect(assistantMessages).toHaveLength(2);
+    expect(assistantMessages.map((message) => message.text)).toEqual([
+      "Child A",
+      "Child B",
+    ]);
+    expect(
+      assistantMessages.map((message) => message.parentToolCallId ?? null),
+    ).toEqual(["tool-1", "tool-2"]);
+  });
+
+  it("keeps same-turn reasoning messages when the same item id is reused under different parent tool calls", () => {
+    const events: ThreadEventRow[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "item/completed",
+        data: {
+          providerThreadId: "thread-1",
+          turnId: "turn-1",
+          item: {
+            type: "reasoning",
+            id: "reasoning-1",
+            summary: ["Child reasoning A"],
+            content: [],
+            parentToolCallId: "tool-1",
+          },
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "item/reasoning/summaryTextDelta",
+        data: {
+          providerThreadId: "thread-1",
+          turnId: "turn-1",
+          itemId: "reasoning-1",
+          parentToolCallId: "tool-2",
+          delta: "Child reasoning B",
+        },
+        createdAt: 2,
+      },
+      {
+        id: "evt-3",
+        threadId: "thread-1",
+        seq: 3,
+        type: "item/completed",
+        data: {
+          providerThreadId: "thread-1",
+          turnId: "turn-1",
+          item: {
+            type: "reasoning",
+            id: "reasoning-1",
+            summary: ["Child reasoning B"],
+            content: [],
+            parentToolCallId: "tool-2",
+          },
+        },
+        createdAt: 3,
+      },
+    ];
+
+    const projected = toViewMessages(fromRows(events), {
+      threadStatus: "idle",
+    });
+    const reasoningMessages = projected.filter(
+      (
+        message,
+      ): message is Extract<ViewMessage, { kind: "assistant-reasoning" }> =>
+        message.kind === "assistant-reasoning",
+    );
+
+    expect(reasoningMessages).toHaveLength(2);
+    expect(reasoningMessages.map((message) => message.text)).toEqual([
+      "Child reasoning A",
+      "Child reasoning B",
+    ]);
+    expect(
+      reasoningMessages.map((message) => message.parentToolCallId ?? null),
+    ).toEqual(["tool-1", "tool-2"]);
   });
 
   it("finalizes streaming assistant and reasoning messages when thread is idle", () => {

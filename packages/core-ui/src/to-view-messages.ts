@@ -81,11 +81,9 @@ import {
 } from "./operation-projection.js";
 import {
   completeOpenReasoningMessages,
-  finalizeProjectionKeys,
+  finalizeProjectionKey,
   flushBufferedAssistantMessages,
   flushBufferedReasoningMessages,
-  hasFinalizedProjectionKey,
-  resolveOpenProjectionKey,
   syncBufferedTextMessage,
 } from "./assistant-stream-projection.js";
 import {
@@ -95,6 +93,7 @@ import {
   type VisibleTextBuffer,
 } from "./visible-text-buffer.js";
 import type {
+  BufferedTextInstanceIdentity,
   ToViewMessagesOptions,
   ToViewProjectionOptions,
   ViewAssistantReasoningMessage,
@@ -103,6 +102,10 @@ import type {
   ViewMessage,
   ViewOperationMessage,
   ViewProjection,
+} from "@bb/domain";
+import {
+  createBufferedTextInstanceKey,
+  resolveBufferedTextIdentity,
 } from "@bb/domain";
 
 // --- Projection state machine ---
@@ -117,12 +120,6 @@ interface CompactionTurnFinalization {
   detail: string | undefined;
 }
 
-interface BufferedTextProjectionKeys {
-  fallbackTurnKey: string | undefined;
-  primaryTurnKey: string;
-  turnKey: string;
-}
-
 interface BufferedTextProjectionRefs<TMessage extends BufferedTextViewMessage> {
   finalizedKeys: Set<string>;
   openMessages: Map<string, TMessage>;
@@ -133,10 +130,8 @@ interface BufferedTextProjectionRefs<TMessage extends BufferedTextViewMessage> {
 interface ProjectBufferedTextEventArgs<
   TMessage extends BufferedTextViewMessage,
 > {
-  createMessage: (turnKey: string) => TMessage;
-  decodedItemId: string | undefined;
-  eventParentToolCallId: string | undefined;
-  eventTurnId: string | undefined;
+  createMessage: (messageKey: string) => TMessage;
+  identity: BufferedTextInstanceIdentity | null;
   meta: EventMeta;
   mode: "delta" | "final";
   refs: BufferedTextProjectionRefs<TMessage>;
@@ -147,14 +142,14 @@ interface ProjectBufferedTextEventArgs<
 interface ProjectionState {
   messages: ViewMessage[];
   seenUserKeys: Set<string>;
-  openAssistantByTurn: Map<string, ViewAssistantTextMessage>;
-  assistantTextBuffersByTurn: Map<string, VisibleTextBuffer>;
-  visibleAssistantTurnKeys: Set<string>;
-  finalizedAssistantTurnKeys: Set<string>;
-  openReasoningByTurn: Map<string, ViewAssistantReasoningMessage>;
-  reasoningTextBuffersByTurn: Map<string, VisibleTextBuffer>;
-  visibleReasoningTurnKeys: Set<string>;
-  finalizedReasoningTurnKeys: Set<string>;
+  openAssistantMessagesByKey: Map<string, ViewAssistantTextMessage>;
+  assistantTextBuffersByKey: Map<string, VisibleTextBuffer>;
+  visibleAssistantMessageKeys: Set<string>;
+  finalizedAssistantMessageKeys: Set<string>;
+  openReasoningMessagesByKey: Map<string, ViewAssistantReasoningMessage>;
+  reasoningTextBuffersByKey: Map<string, VisibleTextBuffer>;
+  visibleReasoningMessageKeys: Set<string>;
+  finalizedReasoningMessageKeys: Set<string>;
   openCompactionsByKey: Map<string, ViewOperationMessage>;
   finalizedCompactionKeys: Set<string>;
   provisioningOperationsByKey: Map<string, ViewOperationMessage>;
@@ -173,14 +168,14 @@ function createProjectionState(): ProjectionState {
   return {
     messages: [],
     seenUserKeys: new Set(),
-    openAssistantByTurn: new Map(),
-    assistantTextBuffersByTurn: new Map(),
-    visibleAssistantTurnKeys: new Set(),
-    finalizedAssistantTurnKeys: new Set(),
-    openReasoningByTurn: new Map(),
-    reasoningTextBuffersByTurn: new Map(),
-    visibleReasoningTurnKeys: new Set(),
-    finalizedReasoningTurnKeys: new Set(),
+    openAssistantMessagesByKey: new Map(),
+    assistantTextBuffersByKey: new Map(),
+    visibleAssistantMessageKeys: new Set(),
+    finalizedAssistantMessageKeys: new Set(),
+    openReasoningMessagesByKey: new Map(),
+    reasoningTextBuffersByKey: new Map(),
+    visibleReasoningMessageKeys: new Set(),
+    finalizedReasoningMessageKeys: new Set(),
     openCompactionsByKey: new Map(),
     finalizedCompactionKeys: new Set(),
     provisioningOperationsByKey: new Map(),
@@ -270,59 +265,41 @@ function getCompactionTurnFinalization(
   return undefined;
 }
 
-function resolveBufferedTextProjectionKeys<
+function resolveBufferedTextMessageKey<
   TMessage extends BufferedTextViewMessage,
 >(
-  args: Omit<ProjectBufferedTextEventArgs<TMessage>, "createMessage" | "mode" | "state" | "text">,
-): BufferedTextProjectionKeys | null {
-  const turnKeyPrefix = args.eventParentToolCallId
-    ? `parent:${args.eventParentToolCallId}:`
-    : "";
-  const primaryTurnKey = `${turnKeyPrefix}${args.decodedItemId ?? args.eventTurnId ?? `seq-${args.meta.seq}`}`;
-  const fallbackTurnKey =
-    args.decodedItemId && args.eventTurnId
-      ? `${turnKeyPrefix}${args.eventTurnId}`
-      : undefined;
-
-  if (
-    hasFinalizedProjectionKey(
-      args.refs.finalizedKeys,
-      primaryTurnKey,
-      fallbackTurnKey,
-    )
-  ) {
+  args: Omit<
+    ProjectBufferedTextEventArgs<TMessage>,
+    "createMessage" | "mode" | "state" | "text"
+  >,
+): string | null {
+  if (!args.identity) {
     return null;
   }
 
-  return {
-    fallbackTurnKey,
-    primaryTurnKey,
-    turnKey: resolveOpenProjectionKey(
-      args.refs.openMessages,
-      primaryTurnKey,
-      fallbackTurnKey,
-    ),
-  };
+  const messageKey = createBufferedTextInstanceKey(args.identity);
+  if (args.refs.finalizedKeys.has(messageKey)) {
+    return null;
+  }
+
+  return messageKey;
 }
 
 function upsertBufferedTextMessage<TMessage extends BufferedTextViewMessage>(
   args: Pick<
     ProjectBufferedTextEventArgs<TMessage>,
-    "createMessage" | "eventParentToolCallId" | "meta" | "refs"
-  > & { turnKey: string },
+    "createMessage" | "meta" | "refs"
+  > & { messageKey: string },
 ): TMessage {
-  let existing = args.refs.openMessages.get(args.turnKey);
+  let existing = args.refs.openMessages.get(args.messageKey);
   if (!existing) {
-    existing = args.createMessage(args.turnKey);
-    args.refs.openMessages.set(args.turnKey, existing);
+    existing = args.createMessage(args.messageKey);
+    args.refs.openMessages.set(args.messageKey, existing);
     return existing;
   }
 
   existing.sourceSeqEnd = args.meta.seq;
   existing.createdAt = args.meta.createdAt;
-  if (!existing.parentToolCallId && args.eventParentToolCallId) {
-    existing.parentToolCallId = args.eventParentToolCallId;
-  }
   return existing;
 }
 
@@ -333,30 +310,29 @@ function projectBufferedTextEvent<TMessage extends BufferedTextViewMessage>(
     return false;
   }
 
-  const keys = resolveBufferedTextProjectionKeys(args);
-  if (!keys) {
+  const messageKey = resolveBufferedTextMessageKey(args);
+  if (!messageKey) {
     return true;
   }
 
   const message = upsertBufferedTextMessage({
     createMessage: args.createMessage,
-    eventParentToolCallId: args.eventParentToolCallId,
     meta: args.meta,
     refs: args.refs,
-    turnKey: keys.turnKey,
+    messageKey,
   });
   const buffer =
-    args.refs.textBuffers.get(keys.turnKey) ?? createVisibleTextBuffer();
-  args.refs.textBuffers.set(keys.turnKey, buffer);
+    args.refs.textBuffers.get(messageKey) ?? createVisibleTextBuffer();
+  args.refs.textBuffers.set(messageKey, buffer);
 
   if (args.mode === "delta") {
     appendVisibleTextBuffer(buffer, args.text);
     syncBufferedTextMessage({
       buffer,
+      messageKey,
       message,
       state: args.state,
       status: "streaming",
-      turnKey: keys.turnKey,
       visibleKeys: args.refs.visibleKeys,
     });
     return true;
@@ -365,16 +341,16 @@ function projectBufferedTextEvent<TMessage extends BufferedTextViewMessage>(
   setVisibleTextBuffer(buffer, args.text, true);
   syncBufferedTextMessage({
     buffer,
+    messageKey,
     message,
     state: args.state,
     status: "completed",
-    turnKey: keys.turnKey,
     visibleKeys: args.refs.visibleKeys,
   });
-  args.refs.openMessages.delete(keys.turnKey);
-  args.refs.textBuffers.delete(keys.turnKey);
-  args.refs.visibleKeys.delete(keys.turnKey);
-  finalizeProjectionKeys(args.refs.finalizedKeys, [keys.primaryTurnKey]);
+  args.refs.openMessages.delete(messageKey);
+  args.refs.textBuffers.delete(messageKey);
+  args.refs.visibleKeys.delete(messageKey);
+  finalizeProjectionKey(args.refs.finalizedKeys, messageKey);
   return true;
 }
 
@@ -489,23 +465,24 @@ function buildFlatViewMessages(
       continue;
     }
 
-    // Extract itemId from decoded for delta/final event grouping
-    const decodedItemId =
-      decoded.type === "item/agentMessage/delta" ||
-      decoded.type === "item/reasoning/summaryTextDelta" ||
-      decoded.type === "item/reasoning/textDelta"
-        ? decoded.itemId
-        : decoded.type === "item/completed" &&
-            (decoded.item.type === "agentMessage" ||
-              decoded.item.type === "reasoning")
-          ? decoded.item.id
-          : undefined;
+    const assistantIdentity = resolveBufferedTextIdentity({
+      decoded,
+      kind: "assistant",
+      parentToolCallId: eventParentToolCallId,
+      turnId: eventTurnId,
+    });
+    const reasoningIdentity = resolveBufferedTextIdentity({
+      decoded,
+      kind: "reasoning",
+      parentToolCallId: eventParentToolCallId,
+      turnId: eventTurnId,
+    });
 
     if (
       projectBufferedTextEvent({
-        createMessage: (turnKey) => ({
+        createMessage: (messageKey) => ({
           kind: "assistant-text",
-          id: messageId(decoded.threadId, "assistant", turnKey),
+          id: messageId(decoded.threadId, "assistant", messageKey),
           threadId: decoded.threadId,
           sourceSeqStart: meta.seq,
           sourceSeqEnd: meta.seq,
@@ -518,16 +495,14 @@ function buildFlatViewMessages(
           text: "",
           status: "streaming",
         }),
-        decodedItemId,
-        eventParentToolCallId,
-        eventTurnId,
+        identity: assistantIdentity,
         meta,
         mode: "delta",
         refs: {
-          finalizedKeys: state.finalizedAssistantTurnKeys,
-          openMessages: state.openAssistantByTurn,
-          textBuffers: state.assistantTextBuffersByTurn,
-          visibleKeys: state.visibleAssistantTurnKeys,
+          finalizedKeys: state.finalizedAssistantMessageKeys,
+          openMessages: state.openAssistantMessagesByKey,
+          textBuffers: state.assistantTextBuffersByKey,
+          visibleKeys: state.visibleAssistantMessageKeys,
         },
         state,
         text:
@@ -541,9 +516,9 @@ function buildFlatViewMessages(
 
     if (
       projectBufferedTextEvent({
-        createMessage: (turnKey) => ({
+        createMessage: (messageKey) => ({
           kind: "assistant-text",
-          id: messageId(decoded.threadId, "assistant", turnKey),
+          id: messageId(decoded.threadId, "assistant", messageKey),
           threadId: decoded.threadId,
           sourceSeqStart: meta.seq,
           sourceSeqEnd: meta.seq,
@@ -556,16 +531,14 @@ function buildFlatViewMessages(
           text: "",
           status: "streaming",
         }),
-        decodedItemId,
-        eventParentToolCallId,
-        eventTurnId,
+        identity: assistantIdentity,
         meta,
         mode: "final",
         refs: {
-          finalizedKeys: state.finalizedAssistantTurnKeys,
-          openMessages: state.openAssistantByTurn,
-          textBuffers: state.assistantTextBuffersByTurn,
-          visibleKeys: state.visibleAssistantTurnKeys,
+          finalizedKeys: state.finalizedAssistantMessageKeys,
+          openMessages: state.openAssistantMessagesByKey,
+          textBuffers: state.assistantTextBuffersByKey,
+          visibleKeys: state.visibleAssistantMessageKeys,
         },
         state,
         text:
@@ -579,9 +552,9 @@ function buildFlatViewMessages(
 
     if (
       projectBufferedTextEvent({
-        createMessage: (turnKey) => ({
+        createMessage: (messageKey) => ({
           kind: "assistant-reasoning",
-          id: messageId(decoded.threadId, "reasoning", turnKey),
+          id: messageId(decoded.threadId, "reasoning", messageKey),
           threadId: decoded.threadId,
           sourceSeqStart: meta.seq,
           sourceSeqEnd: meta.seq,
@@ -594,16 +567,14 @@ function buildFlatViewMessages(
           text: "",
           status: "streaming",
         }),
-        decodedItemId,
-        eventParentToolCallId,
-        eventTurnId,
+        identity: reasoningIdentity,
         meta,
         mode: "delta",
         refs: {
-          finalizedKeys: state.finalizedReasoningTurnKeys,
-          openMessages: state.openReasoningByTurn,
-          textBuffers: state.reasoningTextBuffersByTurn,
-          visibleKeys: state.visibleReasoningTurnKeys,
+          finalizedKeys: state.finalizedReasoningMessageKeys,
+          openMessages: state.openReasoningMessagesByKey,
+          textBuffers: state.reasoningTextBuffersByKey,
+          visibleKeys: state.visibleReasoningMessageKeys,
         },
         state,
         text:
@@ -617,9 +588,9 @@ function buildFlatViewMessages(
 
     if (
       projectBufferedTextEvent({
-        createMessage: (turnKey) => ({
+        createMessage: (messageKey) => ({
           kind: "assistant-reasoning",
-          id: messageId(decoded.threadId, "reasoning", turnKey),
+          id: messageId(decoded.threadId, "reasoning", messageKey),
           threadId: decoded.threadId,
           sourceSeqStart: meta.seq,
           sourceSeqEnd: meta.seq,
@@ -632,16 +603,14 @@ function buildFlatViewMessages(
           text: "",
           status: "streaming",
         }),
-        decodedItemId,
-        eventParentToolCallId,
-        eventTurnId,
+        identity: reasoningIdentity,
         meta,
         mode: "final",
         refs: {
-          finalizedKeys: state.finalizedReasoningTurnKeys,
-          openMessages: state.openReasoningByTurn,
-          textBuffers: state.reasoningTextBuffersByTurn,
-          visibleKeys: state.visibleReasoningTurnKeys,
+          finalizedKeys: state.finalizedReasoningMessageKeys,
+          openMessages: state.openReasoningMessagesByKey,
+          textBuffers: state.reasoningTextBuffersByKey,
+          visibleKeys: state.visibleReasoningMessageKeys,
         },
         state,
         text:

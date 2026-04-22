@@ -15,14 +15,14 @@ import {
 
 export interface AssistantStreamProjectionState extends ToolActivityProjectionState {
   messages: ViewMessage[];
-  openAssistantByTurn: Map<string, ViewAssistantTextMessage>;
-  assistantTextBuffersByTurn: Map<string, VisibleTextBuffer>;
-  visibleAssistantTurnKeys: Set<string>;
-  finalizedAssistantTurnKeys: Set<string>;
-  openReasoningByTurn: Map<string, ViewAssistantReasoningMessage>;
-  reasoningTextBuffersByTurn: Map<string, VisibleTextBuffer>;
-  visibleReasoningTurnKeys: Set<string>;
-  finalizedReasoningTurnKeys: Set<string>;
+  openAssistantMessagesByKey: Map<string, ViewAssistantTextMessage>;
+  assistantTextBuffersByKey: Map<string, VisibleTextBuffer>;
+  visibleAssistantMessageKeys: Set<string>;
+  finalizedAssistantMessageKeys: Set<string>;
+  openReasoningMessagesByKey: Map<string, ViewAssistantReasoningMessage>;
+  reasoningTextBuffersByKey: Map<string, VisibleTextBuffer>;
+  visibleReasoningMessageKeys: Set<string>;
+  finalizedReasoningMessageKeys: Set<string>;
 }
 
 type BufferedAssistantMessage =
@@ -33,10 +33,10 @@ interface SyncBufferedTextMessageArgs<
   TMessage extends BufferedAssistantMessage,
 > {
   buffer: VisibleTextBuffer;
+  messageKey: string;
   message: TMessage;
   state: AssistantStreamProjectionState;
   status: TMessage["status"];
-  turnKey: string;
   visibleKeys: Set<string>;
 }
 
@@ -50,40 +50,11 @@ interface FlushBufferedTextMessagesArgs<
   visibleKeys: Set<string>;
 }
 
-export function hasFinalizedProjectionKey(
+export function finalizeProjectionKey(
   finalizedKeys: Set<string>,
-  primaryKey: string,
-  fallbackKey: string | undefined,
-): boolean {
-  return (
-    finalizedKeys.has(primaryKey) ||
-    (fallbackKey !== undefined && finalizedKeys.has(fallbackKey))
-  );
-}
-
-export function resolveOpenProjectionKey<TMessage>(
-  openMessages: Map<string, TMessage>,
-  primaryKey: string,
-  fallbackKey: string | undefined,
-): string {
-  if (
-    fallbackKey !== undefined &&
-    openMessages.has(fallbackKey) &&
-    !openMessages.has(primaryKey)
-  ) {
-    return fallbackKey;
-  }
-  return primaryKey;
-}
-
-export function finalizeProjectionKeys(
-  finalizedKeys: Set<string>,
-  keys: Array<string | undefined>,
+  messageKey: string,
 ): void {
-  for (const key of keys) {
-    if (!key) continue;
-    finalizedKeys.add(key);
-  }
+  finalizedKeys.add(messageKey);
 }
 
 export function syncBufferedTextMessage<
@@ -99,18 +70,18 @@ export function syncBufferedTextMessage<
 
   args.message.text = text;
   args.message.status = args.status;
-  if (args.visibleKeys.has(args.turnKey)) {
+  if (args.visibleKeys.has(args.messageKey)) {
     return;
   }
 
   flushToolActivityBeforeNonToolMessage(args.state);
   args.state.messages.push(args.message);
-  args.visibleKeys.add(args.turnKey);
+  args.visibleKeys.add(args.messageKey);
 }
 
-function flushBufferedTextMessages<
-  TMessage extends BufferedAssistantMessage,
->(args: FlushBufferedTextMessagesArgs<TMessage>): void {
+function flushBufferedTextMessages<TMessage extends BufferedAssistantMessage>(
+  args: FlushBufferedTextMessagesArgs<TMessage>,
+): void {
   const pendingMessages = Array.from(args.openMessages.entries()).sort(
     (left, right) =>
       left[1].sourceSeqStart - right[1].sourceSeqStart ||
@@ -118,22 +89,22 @@ function flushBufferedTextMessages<
       left[1].createdAt - right[1].createdAt,
   );
 
-  for (const [turnKey, message] of pendingMessages) {
-    const buffer = args.buffers.get(turnKey);
+  for (const [messageKey, message] of pendingMessages) {
+    const buffer = args.buffers.get(messageKey);
     if (buffer) {
       flushVisibleTextBuffer(buffer);
       syncBufferedTextMessage({
         buffer,
+        messageKey,
         message,
         state: args.state,
         status: "completed",
-        turnKey,
         visibleKeys: args.visibleKeys,
       });
     } else {
       message.status = "completed";
     }
-    args.finalizedKeys.add(turnKey);
+    args.finalizedKeys.add(messageKey);
   }
 
   args.openMessages.clear();
@@ -145,11 +116,11 @@ export function flushBufferedAssistantMessages(
   state: AssistantStreamProjectionState,
 ): void {
   flushBufferedTextMessages({
-    buffers: state.assistantTextBuffersByTurn,
-    finalizedKeys: state.finalizedAssistantTurnKeys,
-    openMessages: state.openAssistantByTurn,
+    buffers: state.assistantTextBuffersByKey,
+    finalizedKeys: state.finalizedAssistantMessageKeys,
+    openMessages: state.openAssistantMessagesByKey,
     state,
-    visibleKeys: state.visibleAssistantTurnKeys,
+    visibleKeys: state.visibleAssistantMessageKeys,
   });
 }
 
@@ -157,23 +128,23 @@ export function flushBufferedReasoningMessages(
   state: AssistantStreamProjectionState,
 ): void {
   flushBufferedTextMessages({
-    buffers: state.reasoningTextBuffersByTurn,
-    finalizedKeys: state.finalizedReasoningTurnKeys,
-    openMessages: state.openReasoningByTurn,
+    buffers: state.reasoningTextBuffersByKey,
+    finalizedKeys: state.finalizedReasoningMessageKeys,
+    openMessages: state.openReasoningMessagesByKey,
     state,
-    visibleKeys: state.visibleReasoningTurnKeys,
+    visibleKeys: state.visibleReasoningMessageKeys,
   });
 }
 
 export function completeOpenReasoningMessages(
   state: AssistantStreamProjectionState,
 ): void {
-  for (const reasoning of state.openReasoningByTurn.values()) {
+  for (const reasoning of state.openReasoningMessagesByKey.values()) {
     if (reasoning.status === "streaming") {
       reasoning.status = "completed";
     }
   }
-  state.openReasoningByTurn.clear();
-  state.reasoningTextBuffersByTurn.clear();
-  state.visibleReasoningTurnKeys.clear();
+  state.openReasoningMessagesByKey.clear();
+  state.reasoningTextBuffersByKey.clear();
+  state.visibleReasoningMessageKeys.clear();
 }

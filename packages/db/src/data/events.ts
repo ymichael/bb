@@ -734,23 +734,30 @@ export function pruneResolvedItemDeltas(
             'item/reasoning/textDelta'
           )
           AND ${events.itemId} IS NOT NULL
+          AND ${events.turnId} IS NOT NULL
           AND EXISTS (
             SELECT 1
             FROM events completed
             WHERE completed.thread_id = ${events.threadId}
+              AND completed.turn_id = ${events.turnId}
               AND completed.type = 'item/completed'
               AND completed.item_kind = CASE
                 WHEN ${events.type} = 'item/agentMessage/delta' THEN 'agentMessage'
                 ELSE 'reasoning'
               END
               AND completed.item_id = ${events.itemId}
+              AND COALESCE(json_extract(completed.data, '$.item.parentToolCallId'), '') =
+                COALESCE(json_extract(${events.data}, '$.parentToolCallId'), '')
           )
           AND EXISTS (
             SELECT 1
             FROM events earlier_delta
             WHERE earlier_delta.thread_id = ${events.threadId}
+              AND earlier_delta.turn_id = ${events.turnId}
               AND earlier_delta.type = ${events.type}
               AND earlier_delta.item_id = ${events.itemId}
+              AND COALESCE(json_extract(earlier_delta.data, '$.parentToolCallId'), '') =
+                COALESCE(json_extract(${events.data}, '$.parentToolCallId'), '')
               AND earlier_delta.sequence < ${events.sequence}
           )`,
   );

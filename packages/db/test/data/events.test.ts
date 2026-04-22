@@ -817,6 +817,7 @@ describe("events", () => {
       {
         threadId: thread.id,
         sequence: 1,
+        turnId: "turn-1",
         type: "item/agentMessage/delta",
         itemId: "msg-1",
         itemKind: null,
@@ -825,6 +826,7 @@ describe("events", () => {
       {
         threadId: thread.id,
         sequence: 2,
+        turnId: "turn-1",
         type: "item/agentMessage/delta",
         itemId: "msg-1",
         itemKind: null,
@@ -833,6 +835,7 @@ describe("events", () => {
       {
         threadId: thread.id,
         sequence: 3,
+        turnId: "turn-1",
         type: "item/agentMessage/delta",
         itemId: "msg-1",
         itemKind: null,
@@ -841,6 +844,7 @@ describe("events", () => {
       {
         threadId: thread.id,
         sequence: 4,
+        turnId: "turn-1",
         type: "item/completed",
         itemId: "msg-1",
         itemKind: "agentMessage",
@@ -871,6 +875,7 @@ describe("events", () => {
       {
         threadId: thread.id,
         sequence: 1,
+        turnId: "turn-1",
         type: "item/agentMessage/delta",
         itemId: "msg-1",
         itemKind: null,
@@ -879,6 +884,7 @@ describe("events", () => {
       {
         threadId: thread.id,
         sequence: 2,
+        turnId: "turn-1",
         type: "item/agentMessage/delta",
         itemId: "msg-1",
         itemKind: null,
@@ -896,6 +902,157 @@ describe("events", () => {
     ).toEqual([1, 2]);
   });
 
+  it("does not prune later-turn assistant deltas when the same item id is reused", () => {
+    const { db, thread } = setup();
+
+    insertEvents(db, noopNotifier, [
+      {
+        threadId: thread.id,
+        sequence: 1,
+        turnId: "turn-1",
+        type: "item/agentMessage/delta",
+        itemId: "msg-1",
+        itemKind: null,
+        data: JSON.stringify({ itemId: "msg-1", delta: "Hel" }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 2,
+        turnId: "turn-1",
+        type: "item/agentMessage/delta",
+        itemId: "msg-1",
+        itemKind: null,
+        data: JSON.stringify({ itemId: "msg-1", delta: "lo" }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 3,
+        turnId: "turn-1",
+        type: "item/completed",
+        itemId: "msg-1",
+        itemKind: "agentMessage",
+        data: JSON.stringify({
+          item: {
+            id: "msg-1",
+            type: "agentMessage",
+            text: "Hello",
+          },
+        }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 4,
+        turnId: "turn-2",
+        type: "item/agentMessage/delta",
+        itemId: "msg-1",
+        itemKind: null,
+        data: JSON.stringify({ itemId: "msg-1", delta: "New " }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 5,
+        turnId: "turn-2",
+        type: "item/agentMessage/delta",
+        itemId: "msg-1",
+        itemKind: null,
+        data: JSON.stringify({ itemId: "msg-1", delta: "answer" }),
+      },
+    ]);
+
+    const removed = pruneResolvedItemDeltas(db, {
+      threadId: thread.id,
+    });
+
+    expect(removed).toBe(1);
+    expect(
+      listEvents(db, { threadId: thread.id }).map((event) => event.sequence),
+    ).toEqual([1, 3, 4, 5]);
+  });
+
+  it("does not prune same-turn assistant deltas for a different parent tool call", () => {
+    const { db, thread } = setup();
+
+    insertEvents(db, noopNotifier, [
+      {
+        threadId: thread.id,
+        sequence: 1,
+        turnId: "turn-1",
+        type: "item/agentMessage/delta",
+        itemId: "msg-1",
+        itemKind: null,
+        data: JSON.stringify({
+          itemId: "msg-1",
+          parentToolCallId: "tool-1",
+          delta: "Hel",
+        }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 2,
+        turnId: "turn-1",
+        type: "item/agentMessage/delta",
+        itemId: "msg-1",
+        itemKind: null,
+        data: JSON.stringify({
+          itemId: "msg-1",
+          parentToolCallId: "tool-1",
+          delta: "lo",
+        }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 3,
+        turnId: "turn-1",
+        type: "item/completed",
+        itemId: "msg-1",
+        itemKind: "agentMessage",
+        data: JSON.stringify({
+          item: {
+            id: "msg-1",
+            type: "agentMessage",
+            text: "Hello",
+            parentToolCallId: "tool-1",
+          },
+        }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 4,
+        turnId: "turn-1",
+        type: "item/agentMessage/delta",
+        itemId: "msg-1",
+        itemKind: null,
+        data: JSON.stringify({
+          itemId: "msg-1",
+          parentToolCallId: "tool-2",
+          delta: "New ",
+        }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 5,
+        turnId: "turn-1",
+        type: "item/agentMessage/delta",
+        itemId: "msg-1",
+        itemKind: null,
+        data: JSON.stringify({
+          itemId: "msg-1",
+          parentToolCallId: "tool-2",
+          delta: "answer",
+        }),
+      },
+    ]);
+
+    const removed = pruneResolvedItemDeltas(db, {
+      threadId: thread.id,
+    });
+
+    expect(removed).toBe(1);
+    expect(
+      listEvents(db, { threadId: thread.id }).map((event) => event.sequence),
+    ).toEqual([1, 3, 4, 5]);
+  });
+
   it("prunes resolved reasoning deltas but preserves the first delta row per stream type", () => {
     const { db, thread } = setup();
 
@@ -903,6 +1060,7 @@ describe("events", () => {
       {
         threadId: thread.id,
         sequence: 1,
+        turnId: "turn-1",
         type: "item/reasoning/textDelta",
         itemId: "reasoning-1",
         itemKind: null,
@@ -911,6 +1069,7 @@ describe("events", () => {
       {
         threadId: thread.id,
         sequence: 2,
+        turnId: "turn-1",
         type: "item/reasoning/textDelta",
         itemId: "reasoning-1",
         itemKind: null,
@@ -919,6 +1078,7 @@ describe("events", () => {
       {
         threadId: thread.id,
         sequence: 3,
+        turnId: "turn-1",
         type: "item/reasoning/summaryTextDelta",
         itemId: "reasoning-1",
         itemKind: null,
@@ -927,6 +1087,7 @@ describe("events", () => {
       {
         threadId: thread.id,
         sequence: 4,
+        turnId: "turn-1",
         type: "item/reasoning/summaryTextDelta",
         itemId: "reasoning-1",
         itemKind: null,
@@ -935,6 +1096,7 @@ describe("events", () => {
       {
         threadId: thread.id,
         sequence: 5,
+        turnId: "turn-1",
         type: "item/completed",
         itemId: "reasoning-1",
         itemKind: "reasoning",
@@ -966,6 +1128,7 @@ describe("events", () => {
       {
         threadId: thread.id,
         sequence: 1,
+        turnId: "turn-1",
         type: "item/reasoning/textDelta",
         itemId: "reasoning-1",
         itemKind: null,
@@ -974,6 +1137,7 @@ describe("events", () => {
       {
         threadId: thread.id,
         sequence: 2,
+        turnId: "turn-1",
         type: "item/reasoning/textDelta",
         itemId: "reasoning-1",
         itemKind: null,

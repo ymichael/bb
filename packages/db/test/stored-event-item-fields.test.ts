@@ -57,7 +57,7 @@ describe("deriveStoredEventItemFields", () => {
     });
   });
 
-  it("derives optional item ids from agent-message delta events", () => {
+  it("derives item ids from agent-message delta events", () => {
     expect(
       deriveStoredEventItemFields({
         type: "item/agentMessage/delta",
@@ -69,21 +69,6 @@ describe("deriveStoredEventItemFields", () => {
       }),
     ).toEqual({
       itemId: "msg-1",
-      itemKind: null,
-    });
-  });
-
-  it("returns a null item id when an agent-message delta omits it", () => {
-    expect(
-      deriveStoredEventItemFields({
-        type: "item/agentMessage/delta",
-        threadId: "thread-1",
-        providerThreadId: "provider-1",
-        turnId: "turn-1",
-        delta: "hel",
-      }),
-    ).toEqual({
-      itemId: null,
       itemKind: null,
     });
   });

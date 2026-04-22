@@ -168,9 +168,7 @@ function userLogicalRow(row: TimelineRow): LogicalTimelineRow | null {
   };
 }
 
-function providerNoticeLogicalRow(
-  row: TimelineRow,
-): LogicalTimelineRow | null {
+function providerNoticeLogicalRow(row: TimelineRow): LogicalTimelineRow | null {
   if (row.kind !== "message") {
     return null;
   }
@@ -202,8 +200,7 @@ function completedReasoningMessages(
     (
       message,
     ): message is Extract<ViewMessage, { kind: "assistant-reasoning" }> =>
-      message.kind === "assistant-reasoning" &&
-      message.status === "completed",
+      message.kind === "assistant-reasoning" && message.status === "completed",
   );
 }
 
@@ -266,9 +263,9 @@ describe("timeline prefix stability", () => {
     });
 
     expect(
-      completedPrefix.rows.map((row) => provisioningLogicalRow(row)).filter(
-        (row): row is LogicalTimelineRow => row !== null,
-      ),
+      completedPrefix.rows
+        .map((row) => provisioningLogicalRow(row))
+        .filter((row): row is LogicalTimelineRow => row !== null),
     ).toEqual([
       {
         key: "provisioning:tpv-prefix",
@@ -277,9 +274,9 @@ describe("timeline prefix stability", () => {
       },
     ]);
     expect(
-      contentPrefix.rows.map((row) => provisioningLogicalRow(row)).filter(
-        (row): row is LogicalTimelineRow => row !== null,
-      ),
+      contentPrefix.rows
+        .map((row) => provisioningLogicalRow(row))
+        .filter((row): row is LogicalTimelineRow => row !== null),
     ).toEqual([
       {
         key: "provisioning:tpv-prefix",
@@ -394,9 +391,9 @@ describe("timeline prefix stability", () => {
     });
 
     expect(
-      contentPrefix.rows.map((row) => operationLogicalRow(row)).filter(
-        (row): row is LogicalTimelineRow => row !== null,
-      ),
+      contentPrefix.rows
+        .map((row) => operationLogicalRow(row))
+        .filter((row): row is LogicalTimelineRow => row !== null),
     ).toEqual([
       {
         key: "operation:op-prefix",
@@ -450,9 +447,9 @@ describe("timeline prefix stability", () => {
     });
 
     expect(
-      contentPrefix.rows.map((row) => permissionGrantLogicalRow(row)).filter(
-        (row): row is LogicalTimelineRow => row !== null,
-      ),
+      contentPrefix.rows
+        .map((row) => permissionGrantLogicalRow(row))
+        .filter((row): row is LogicalTimelineRow => row !== null),
     ).toEqual([
       {
         key: "permission-grant:pi-prefix",
@@ -509,9 +506,9 @@ describe("timeline prefix stability", () => {
     });
 
     expect(
-      completedPrefix.rows.map((row) => compactionLogicalRow(row)).filter(
-        (row): row is LogicalTimelineRow => row !== null,
-      ),
+      completedPrefix.rows
+        .map((row) => compactionLogicalRow(row))
+        .filter((row): row is LogicalTimelineRow => row !== null),
     ).toEqual([
       {
         key: "thread-1:op:compaction:turn-1",
@@ -930,7 +927,6 @@ describe("timeline prefix stability", () => {
 
     expect(completedReasoningMessages(finalPrefix.messages)).toMatchObject([
       {
-        id: "thread-1:reasoning:reasoning-prefix",
         status: "completed",
         text: "Done thinking.",
       },

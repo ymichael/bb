@@ -118,11 +118,14 @@ function seedResolvedAssistantMessage(
     deltaSequences: readonly number[];
     itemId: string;
     threadId: string;
+    turnId?: string;
   },
 ): void {
+  const turnId = args.turnId ?? "turn-1";
   for (const sequence of args.deltaSequences) {
     seedStoredEvent(harness.deps, {
       threadId: args.threadId,
+      turnId,
       sequence,
       type: "item/agentMessage/delta",
       itemId: args.itemId,
@@ -136,6 +139,7 @@ function seedResolvedAssistantMessage(
 
   seedStoredEvent(harness.deps, {
     threadId: args.threadId,
+    turnId,
     sequence: args.completedSequence,
     type: "item/completed",
     itemId: args.itemId,
@@ -447,6 +451,7 @@ describe("thread event pruning", () => {
       for (const sequence of [1_004, 1_005]) {
         seedStoredEvent(harness.deps, {
           threadId: thread.id,
+          turnId: "turn-active",
           sequence,
           type: "item/agentMessage/delta",
           itemId: "msg-active",

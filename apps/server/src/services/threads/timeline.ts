@@ -16,6 +16,10 @@ import type {
   ViewMessage,
   ViewProjection,
 } from "@bb/domain";
+import {
+  createBufferedTextInstanceKey,
+  resolveBufferedTextIdentity,
+} from "@bb/domain";
 import type {
   ThreadTimelineResponse,
   TimelineToolDetailsResponse,
@@ -132,49 +136,82 @@ export function toThreadEventWithMeta(
   };
 }
 
-export function compactSummaryStoredEventRows(
-  rows: readonly StoredEventRow[],
-): readonly StoredEventRow[] {
+function compactSummaryThreadEvents(
+  events: ThreadEventWithMeta[],
+): ThreadEventWithMeta[] {
   let agentMessageDeltaCount = 0;
-  const completedAgentMessageItemIds = new Set<string>();
-  for (const row of rows) {
-    if (row.type === "item/agentMessage/delta") {
+  const completedAssistantKeys = new Set<string>();
+  for (const eventWithMeta of events) {
+    const { event } = eventWithMeta;
+    if (event.type === "item/agentMessage/delta") {
       agentMessageDeltaCount += 1;
       continue;
     }
-    if (
-      row.type === "item/completed" &&
-      row.itemKind === "agentMessage" &&
-      row.itemId
-    ) {
-      completedAgentMessageItemIds.add(row.itemId);
+    if (event.type === "item/completed" && event.item.type === "agentMessage") {
+      const identity = resolveBufferedTextIdentity({
+        decoded: event,
+        kind: "assistant",
+      });
+      if (identity) {
+        completedAssistantKeys.add(createBufferedTextInstanceKey(identity));
+      }
     }
   }
 
   if (
     agentMessageDeltaCount < MIN_AGENT_MESSAGE_DELTAS_FOR_SUMMARY_COMPACTION ||
-    completedAgentMessageItemIds.size === 0
+    completedAssistantKeys.size === 0
   ) {
+    return events;
+  }
+
+  const retainedCompletedDeltaKeys = new Set<string>();
+  const compactedEvents: ThreadEventWithMeta[] = [];
+
+  for (const eventWithMeta of events) {
+    const { event } = eventWithMeta;
+    if (event.type !== "item/agentMessage/delta") {
+      compactedEvents.push(eventWithMeta);
+      continue;
+    }
+
+    const identity = resolveBufferedTextIdentity({
+      decoded: event,
+      kind: "assistant",
+    });
+    if (!identity) {
+      compactedEvents.push(eventWithMeta);
+      continue;
+    }
+
+    const assistantKey = createBufferedTextInstanceKey(identity);
+    if (!completedAssistantKeys.has(assistantKey)) {
+      compactedEvents.push(eventWithMeta);
+      continue;
+    }
+    if (retainedCompletedDeltaKeys.has(assistantKey)) {
+      continue;
+    }
+    retainedCompletedDeltaKeys.add(assistantKey);
+    compactedEvents.push(eventWithMeta);
+  }
+
+  return compactedEvents;
+}
+
+export function compactSummaryStoredEventRows(
+  rows: readonly StoredEventRow[],
+): readonly StoredEventRow[] {
+  const events = rows.map((row) => toThreadEventWithMeta(row));
+  const compactedEvents = compactSummaryThreadEvents(events);
+  if (compactedEvents === events) {
     return rows;
   }
 
-  const retainedCompletedDeltaItemIds = new Set<string>();
-  const compactedRows: StoredEventRow[] = [];
-
-  for (const row of rows) {
-    const itemId = row.type === "item/agentMessage/delta" ? row.itemId : null;
-    if (!itemId || !completedAgentMessageItemIds.has(itemId)) {
-      compactedRows.push(row);
-      continue;
-    }
-    if (retainedCompletedDeltaItemIds.has(itemId)) {
-      continue;
-    }
-    retainedCompletedDeltaItemIds.add(itemId);
-    compactedRows.push(row);
-  }
-
-  return compactedRows;
+  const retainedEventIds = new Set(
+    compactedEvents.map((eventWithMeta) => eventWithMeta.meta.id),
+  );
+  return rows.filter((row) => retainedEventIds.has(row.id));
 }
 
 export function buildThreadTimeline(
@@ -188,10 +225,12 @@ export function buildThreadTimeline(
       ? {}
       : { excludedTypes: TIMELINE_NOISE_EVENT_TYPES }),
   });
-  const eventRows = compactSummaryStoredEventRows(rawEventRows);
+  const decodedRawEvents = rawEventRows.map((row) =>
+    toThreadEventWithMeta(row),
+  );
+  const decodedEvents = compactSummaryThreadEvents(decodedRawEvents);
   const isDefaultManagerView =
     thread.type === "manager" && !options.showAllManagerEvents;
-  const decodedEvents = eventRows.map((row) => toThreadEventWithMeta(row));
   const activeThinking = extractActiveThinking(
     toViewMessages(decodedEvents, {
       includeInternalSystemMessages: options.showAllManagerEvents,

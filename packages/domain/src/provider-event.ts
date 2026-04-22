@@ -310,7 +310,7 @@ export const providerEventSchema = z.discriminatedUnion("type", [
     threadId: z.string(),
     providerThreadId: z.string(),
     turnId: z.string(),
-    itemId: z.string().optional(),
+    itemId: z.string(),
     delta: z.string(),
     parentToolCallId: z.string().optional(),
   }),

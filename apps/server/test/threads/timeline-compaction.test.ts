@@ -6,21 +6,50 @@ import { compactSummaryStoredEventRows } from "../../src/services/threads/timeli
 interface BuildStoredEventRowArgs {
   itemId?: string | null;
   itemKind?: ThreadEventItemType | null;
+  parentToolCallId?: string;
   sequence: number;
+  turnId?: string | null;
   type: ThreadEventType;
+}
+
+function buildStoredEventRowData(args: BuildStoredEventRowArgs): string {
+  if (args.type === "item/agentMessage/delta") {
+    return JSON.stringify({
+      ...(args.itemId ? { itemId: args.itemId } : {}),
+      ...(args.parentToolCallId
+        ? { parentToolCallId: args.parentToolCallId }
+        : {}),
+      delta: `chunk-${args.sequence}`,
+    });
+  }
+
+  if (args.type === "item/completed" && args.itemKind === "agentMessage") {
+    return JSON.stringify({
+      item: {
+        id: args.itemId ?? `msg-${args.sequence}`,
+        type: "agentMessage",
+        text: `message-${args.sequence}`,
+        ...(args.parentToolCallId
+          ? { parentToolCallId: args.parentToolCallId }
+          : {}),
+      },
+    });
+  }
+
+  return "{}";
 }
 
 function buildStoredEventRow(args: BuildStoredEventRowArgs): StoredEventRow {
   return {
     createdAt: args.sequence,
-    data: "{}",
+    data: buildStoredEventRowData(args),
     id: `event-${args.sequence}`,
     itemId: args.itemId ?? null,
     itemKind: args.itemKind ?? null,
-    providerThreadId: null,
+    providerThreadId: "provider-thread-1",
     sequence: args.sequence,
     threadId: "thread-1",
-    turnId: null,
+    turnId: args.turnId ?? "turn-1",
     type: args.type,
   };
 }
@@ -133,21 +162,30 @@ describe("compactSummaryStoredEventRows", () => {
     ]);
   });
 
-  it("retains delta rows without an itemId even when compaction is enabled", () => {
-    const completedMessageDeltas = Array.from({ length: 1000 }, (_, index) =>
+  it("does not compact later-turn deltas when the same item id is reused across turns", () => {
+    const completedTurnDeltas = Array.from({ length: 1000 }, (_, index) =>
       buildStoredEventRow({
         sequence: index + 1,
+        turnId: "turn-1",
         type: "item/agentMessage/delta",
         itemId: "msg-1",
       }),
     );
-    const missingItemIdDelta = buildStoredEventRow({
+    const laterTurnDeltaOne = buildStoredEventRow({
       sequence: 1001,
+      turnId: "turn-2",
       type: "item/agentMessage/delta",
-      itemId: null,
+      itemId: "msg-1",
     });
-    const completedMessage = buildStoredEventRow({
+    const laterTurnDeltaTwo = buildStoredEventRow({
       sequence: 1002,
+      turnId: "turn-2",
+      type: "item/agentMessage/delta",
+      itemId: "msg-1",
+    });
+    const completedTurnMessage = buildStoredEventRow({
+      sequence: 1003,
+      turnId: "turn-1",
       type: "item/completed",
       itemId: "msg-1",
       itemKind: "agentMessage",
@@ -155,13 +193,59 @@ describe("compactSummaryStoredEventRows", () => {
 
     expect(
       compactSummaryStoredEventRows([
-        ...completedMessageDeltas,
-        missingItemIdDelta,
+        ...completedTurnDeltas,
+        laterTurnDeltaOne,
+        laterTurnDeltaTwo,
+        completedTurnMessage,
+      ]),
+    ).toEqual([
+      completedTurnDeltas[0],
+      laterTurnDeltaOne,
+      laterTurnDeltaTwo,
+      completedTurnMessage,
+    ]);
+  });
+
+  it("keeps same-turn deltas for a different parent tool call even when item ids match", () => {
+    const completedParentDeltas = Array.from({ length: 1000 }, (_, index) =>
+      buildStoredEventRow({
+        sequence: index + 1,
+        type: "item/agentMessage/delta",
+        itemId: "msg-1",
+        parentToolCallId: "tool-1",
+      }),
+    );
+    const siblingParentDeltaOne = buildStoredEventRow({
+      sequence: 1001,
+      type: "item/agentMessage/delta",
+      itemId: "msg-1",
+      parentToolCallId: "tool-2",
+    });
+    const siblingParentDeltaTwo = buildStoredEventRow({
+      sequence: 1002,
+      type: "item/agentMessage/delta",
+      itemId: "msg-1",
+      parentToolCallId: "tool-2",
+    });
+    const completedMessage = buildStoredEventRow({
+      sequence: 1003,
+      type: "item/completed",
+      itemId: "msg-1",
+      itemKind: "agentMessage",
+      parentToolCallId: "tool-1",
+    });
+
+    expect(
+      compactSummaryStoredEventRows([
+        ...completedParentDeltas,
+        siblingParentDeltaOne,
+        siblingParentDeltaTwo,
         completedMessage,
       ]),
     ).toEqual([
-      completedMessageDeltas[0],
-      missingItemIdDelta,
+      completedParentDeltas[0],
+      siblingParentDeltaOne,
+      siblingParentDeltaTwo,
       completedMessage,
     ]);
   });

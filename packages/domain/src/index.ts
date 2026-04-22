@@ -1,4 +1,15 @@
 export {
+  bufferedTextInstanceKindValues,
+  createBufferedTextInstanceKey,
+  resolveBufferedTextIdentity,
+} from "./buffered-text-identity.js";
+export type {
+  BufferedTextInstanceIdentity,
+  BufferedTextInstanceKind,
+  ResolveBufferedTextIdentityArgs,
+} from "./buffered-text-identity.js";
+
+export {
   instructionModeValues,
   instructionModeSchema,
   permissionEscalationSchema,
