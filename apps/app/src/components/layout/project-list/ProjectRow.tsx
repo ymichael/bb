@@ -100,7 +100,7 @@ export function ProjectRow({
     thread.environmentWorkspaceDisplayKind !== "other";
 
   return (
-    <SidebarMenuItem className="space-y-1">
+    <SidebarMenuItem className="space-y-0.5">
       <div
         className={cn(
           "group/project-row relative flex h-10 w-full items-center rounded-md text-sm transition-colors md:h-8",
@@ -172,14 +172,14 @@ export function ProjectRow({
             <SidebarMenuSkeleton />
           </div>
         ) : projectThreads.length > 0 ? (
-          <div className="space-y-1 group-data-[collapsible=icon]:hidden">
+          <div className="space-y-0.5 group-data-[collapsible=icon]:hidden">
             {managerThreads.map((thread) => {
               const managedChildren =
                 managedThreadsByManagerId.get(thread.id) ?? [];
               const isManagerCollapsed = collapsedManagerIds.has(thread.id);
 
               return (
-                <div key={thread.id} className="space-y-1">
+                <div key={thread.id} className="space-y-0.5">
                   <ThreadRow
                     projectId={project.id}
                     thread={thread}
