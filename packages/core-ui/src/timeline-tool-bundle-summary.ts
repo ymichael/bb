@@ -17,6 +17,11 @@ interface FormatToolBundleSummaryLabelArgs {
   summary: TimelineToolBundleSummary;
 }
 
+export interface ToolBundleSummaryParts {
+  prefix: string;
+  emphasis: string;
+}
+
 function pluralize(count: number, singular: string, plural: string): string {
   return `${count} ${count === 1 ? singular : plural}`;
 }
@@ -39,41 +44,46 @@ function getVerbPair(
   };
 }
 
-function formatWebResearchSummary(
+function formatWebResearchSummaryParts(
   summary: Extract<TimelineToolBundleSummary, { kind: "web-research" }>,
   status: TimelineGroupedRowStatus,
-  capitalize: boolean,
-): string {
-  const parts: string[] = [];
+): ToolBundleSummaryParts {
   const searchVerb = getVerbPair(status, "Ran", "Running");
   const readVerb = getVerbPair(status, "Read", "Reading");
 
-  if (summary.webSearches > 0) {
-    parts.push(
-      `${capitalize ? searchVerb.uppercase : searchVerb.lowercase} ${pluralize(
+  if (summary.webSearches > 0 && summary.webPagesRead > 0) {
+    return {
+      prefix: searchVerb.uppercase,
+      emphasis: `${pluralize(
         summary.webSearches,
         "web search",
         "web searches",
-      )}`,
-    );
-  }
-  if (summary.webPagesRead > 0) {
-    parts.push(
-      `${parts.length === 0 && capitalize ? readVerb.uppercase : readVerb.lowercase} ${pluralize(
+      )}, ${readVerb.lowercase} ${pluralize(
         summary.webPagesRead,
         "web page",
         "web pages",
       )}`,
-    );
+    };
   }
-
-  return parts.join(", ");
+  if (summary.webSearches > 0) {
+    return {
+      prefix: searchVerb.uppercase,
+      emphasis: pluralize(summary.webSearches, "web search", "web searches"),
+    };
+  }
+  return {
+    prefix: readVerb.uppercase,
+    emphasis: pluralize(summary.webPagesRead, "web page", "web pages"),
+  };
 }
 
-export function formatToolBundleSummaryLabel(
-  args: FormatToolBundleSummaryLabelArgs,
-): string {
-  const { capitalize, status, summary } = args;
+function formatToolBundleSummaryParts({
+  status,
+  summary,
+}: {
+  status: TimelineGroupedRowStatus;
+  summary: TimelineToolBundleSummary;
+}): ToolBundleSummaryParts {
   switch (summary.kind) {
     case "exploration": {
       const countsLabel = formatExploringCountsLabel({
@@ -82,24 +92,41 @@ export function formatToolBundleSummaryLabel(
         lists: summary.lists,
       });
       const verb = getVerbPair(status, "Explored", "Exploring");
-      const formattedVerb = capitalize ? verb.uppercase : verb.lowercase;
-      return countsLabel.length > 0
-        ? `${formattedVerb} ${countsLabel}`
-        : `${formattedVerb} workspace`;
+      return {
+        prefix: verb.uppercase,
+        emphasis: countsLabel.length > 0 ? countsLabel : "workspace",
+      };
     }
     case "file-edits": {
       const verb = getVerbPair(status, "Edited", "Editing");
-      return `${capitalize ? verb.uppercase : verb.lowercase} ${pluralize(summary.filesEdited, "file", "files")}`;
+      return {
+        prefix: verb.uppercase,
+        emphasis: pluralize(summary.filesEdited, "file", "files"),
+      };
     }
     case "commands": {
       const verb = getVerbPair(status, "Ran", "Running");
-      return `${capitalize ? verb.uppercase : verb.lowercase} ${pluralize(summary.commands, "command", "commands")}`;
+      return {
+        prefix: verb.uppercase,
+        emphasis: pluralize(summary.commands, "command", "commands"),
+      };
     }
     case "web-research":
-      return formatWebResearchSummary(summary, status, capitalize);
+      return formatWebResearchSummaryParts(summary, status);
     default:
       return assertNever(summary);
   }
+}
+
+export function formatToolBundleSummaryLabel(
+  args: FormatToolBundleSummaryLabelArgs,
+): string {
+  const parts = formatToolBundleSummaryParts({
+    status: args.status,
+    summary: args.summary,
+  });
+  const prefix = args.capitalize ? parts.prefix : parts.prefix.toLowerCase();
+  return `${prefix} ${parts.emphasis}`;
 }
 
 export function buildToolBundleSummaryLabel(
@@ -107,6 +134,15 @@ export function buildToolBundleSummaryLabel(
 ): string {
   return formatToolBundleSummaryLabel({
     capitalize: true,
+    status: row.status,
+    summary: row.summary,
+  });
+}
+
+export function buildToolBundleSummaryParts(
+  row: Pick<TimelineToolBundleRow, "status" | "summary">,
+): ToolBundleSummaryParts {
+  return formatToolBundleSummaryParts({
     status: row.status,
     summary: row.summary,
   });

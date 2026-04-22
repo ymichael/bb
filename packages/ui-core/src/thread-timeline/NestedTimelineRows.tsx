@@ -3,6 +3,7 @@ import {
   buildTimelineAssistantStepSummaryLabel,
   buildTimelineRowActivityInfoMap,
   buildToolBundleSummaryLabel,
+  buildToolBundleSummaryParts,
   buildTurnSummaryParts,
   shouldPreferOngoingLabelsForRow,
   type TimelineRowActivityInfo,
@@ -18,13 +19,13 @@ import type {
 } from "@bb/domain";
 import { ExpandablePanel } from "../disclosure.js";
 import { useLatestInitialExpanded } from "./latestInitialExpanded.js";
-import { shouldDeEmphasizeGroupedSummary } from "./grouped-summary-presentation.js";
 import { ToolBundleBody } from "./rows/ToolBundleBody.js";
 import {
   EventTitle,
   GroupedSummaryText,
   formatSummaryDuration,
   getEventHeaderToneClass,
+  getExpandableRowWrapperClassName,
   type EventTitleTone,
 } from "./rows/shared.js";
 
@@ -104,6 +105,8 @@ interface ToolBundleMessageRowRenderer {
 interface NestedTimelineRowsContentProps extends NestedTimelineRowsProps {
   rowState: NestedTimelineRowState;
 }
+
+const NESTED_ROW_CONTAINER_CLASS = "";
 
 export function shouldPreferNestedOngoingLabels({
   latestActivityRowId,
@@ -246,7 +249,9 @@ function ToolBundleEntry({
     shouldAutoExpandTimelineRow(entry, rowState),
   );
   const tone: EventTitleTone = "default";
-  const summary = buildToolBundleSummaryLabel(entry);
+  const isStepSummaryPlaceholder =
+    entry.presentation === "assistant-step-summary-placeholder";
+  const summaryParts = buildToolBundleSummaryParts(entry);
   const renderMessageRow: ToolBundleMessageRowRenderer = (messageRow) => {
     const rowPreferOngoingLabels = shouldPreferNestedOngoingLabels({
       latestActivityRowId,
@@ -266,22 +271,31 @@ function ToolBundleEntry({
   };
 
   return (
-    <div className="group w-full" style={{ overflowAnchor: "none" }}>
+    <div
+      className={getExpandableRowWrapperClassName(isExpanded)}
+      style={{ overflowAnchor: "none" }}
+    >
       <div className="mr-auto w-full">
         <ExpandablePanel
           isExpanded={isExpanded}
           onToggle={onToggle}
           headerToneClass={getEventHeaderToneClass(isExpanded, tone)}
           summaryContent={
-            <GroupedSummaryText
-              emphasized={!shouldDeEmphasizeGroupedSummary(entry)}
-              isWorking={getRowIsWorking(
-                entry,
-                presentationOptions,
-                preferOngoingLabels,
-              )}
-              text={summary}
-            />
+            isStepSummaryPlaceholder ? (
+              <GroupedSummaryText text={buildToolBundleSummaryLabel(entry)} />
+            ) : (
+              <EventTitle
+                prefix={summaryParts.prefix}
+                emphasis={summaryParts.emphasis}
+                shimmerPrefix={getRowIsWorking(
+                  entry,
+                  presentationOptions,
+                  preferOngoingLabels,
+                )}
+                suffixClassName="truncate"
+                tone={tone}
+              />
+            )
           }
           bodyClassName="duration-300"
           contentClassName="pb-1 duration-300"
@@ -312,7 +326,10 @@ function AssistantStepSummaryEntry({
   const tone: EventTitleTone = "default";
 
   return (
-    <div className="group w-full" style={{ overflowAnchor: "none" }}>
+    <div
+      className={getExpandableRowWrapperClassName(isExpanded)}
+      style={{ overflowAnchor: "none" }}
+    >
       <div className="mr-auto w-full">
         <ExpandablePanel
           isExpanded={isExpanded}
@@ -320,8 +337,6 @@ function AssistantStepSummaryEntry({
           headerToneClass={getEventHeaderToneClass(isExpanded, tone)}
           summaryContent={
             <GroupedSummaryText
-              emphasized={!shouldDeEmphasizeGroupedSummary(entry)}
-              isWorking={false}
               text={buildTimelineAssistantStepSummaryLabel(entry.rows)}
             />
           }
@@ -333,7 +348,7 @@ function AssistantStepSummaryEntry({
               latestActivityRowId={latestActivityRowId}
               presentationOptions={presentationOptions}
               renderMessage={renderMessage}
-              rowContainerClassName={rowContainerClassName}
+              rowContainerClassName={NESTED_ROW_CONTAINER_CLASS}
               rowState={rowState}
               rows={entry.rows}
               turnSummaryRowsController={turnSummaryRowsController}
@@ -350,7 +365,6 @@ function TurnSummaryEntry({
   latestActivityRowId,
   presentationOptions,
   renderMessage,
-  rowContainerClassName,
   rowState,
   turnSummaryRowsController,
 }: TurnSummaryEntryProps) {
@@ -380,7 +394,10 @@ function TurnSummaryEntry({
   };
 
   return (
-    <div className="group w-full" style={{ overflowAnchor: "none" }}>
+    <div
+      className={getExpandableRowWrapperClassName(isExpanded)}
+      style={{ overflowAnchor: "none" }}
+    >
       <div className="mr-auto w-full">
         <ExpandablePanel
           isExpanded={isExpanded}
@@ -413,7 +430,7 @@ function TurnSummaryEntry({
                 latestActivityRowId={latestActivityRowId}
                 presentationOptions={presentationOptions}
                 renderMessage={renderMessage}
-                rowContainerClassName={rowContainerClassName}
+                rowContainerClassName={NESTED_ROW_CONTAINER_CLASS}
                 rowState={rowState}
                 rows={rows}
                 turnSummaryRowsController={turnSummaryRowsController}

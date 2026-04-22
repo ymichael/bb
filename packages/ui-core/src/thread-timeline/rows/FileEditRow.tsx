@@ -11,7 +11,11 @@ import { getDetailScrollMaxHeightClass } from "../../detail-scroll-size.js";
 import { cn } from "../../cn.js";
 import { CollapsibleHeader, ExpandablePanel } from "../../disclosure.js";
 import { useLatestInitialExpanded } from "../latestInitialExpanded.js";
-import { EventTitle, getEventHeaderToneClass } from "./shared.js";
+import {
+  EventTitle,
+  getEventHeaderToneClass,
+  getExpandableRowWrapperClassName,
+} from "./shared.js";
 import type { ThreadTimelineTheme } from "../types.js";
 
 type FileChangeAction = "created" | "deleted" | "renamed" | "edited";
@@ -369,7 +373,10 @@ export function FileEditRow({
   const headerToneClass = getEventHeaderToneClass(isExpanded, tone);
 
   return (
-    <div className="group w-full" style={{ overflowAnchor: "none" }}>
+    <div
+      className={getExpandableRowWrapperClassName(isExpanded)}
+      style={{ overflowAnchor: "none" }}
+    >
       <div className="mr-auto w-full">
         <ExpandablePanel
           isExpanded={isExpanded}
@@ -412,7 +419,10 @@ export function FileEditRow({
               return (
                 <div
                   key={`${change.path}:${change.movePath ?? ""}:${index}`}
-                  className={index === 0 ? "" : "mt-0.5"}
+                  className={cn(
+                    index === 0 ? null : "mt-0.5",
+                    isChangeExpanded ? null : "group",
+                  )}
                 >
                   <div className="overflow-hidden rounded-lg border border-border/60 bg-background/70">
                     <div className="px-2.5 py-1">

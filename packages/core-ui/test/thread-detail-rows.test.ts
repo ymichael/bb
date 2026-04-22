@@ -1326,6 +1326,59 @@ describe("buildTimelineRows tool group collapsing", () => {
     }
   });
 
+  it("marks a single pre-assistant tool bundle as an assistant-step-summary placeholder inside a turn summary", () => {
+    const rows = buildRowsFromMessages(
+      [
+        {
+          kind: "tool-call",
+          id: "tool-1",
+          threadId: "thread-1",
+          sourceSeqStart: 1,
+          sourceSeqEnd: 1,
+          createdAt: 1,
+          turnId: "turn-1",
+          toolName: "exec_command",
+          callId: "call-1",
+          command: "git status",
+          status: "completed",
+        },
+        {
+          kind: "tool-call",
+          id: "tool-2",
+          threadId: "thread-1",
+          sourceSeqStart: 2,
+          sourceSeqEnd: 2,
+          createdAt: 2,
+          turnId: "turn-1",
+          toolName: "exec_command",
+          callId: "call-2",
+          command: "git diff",
+          status: "completed",
+        },
+        {
+          kind: "assistant-text",
+          id: "assistant-1",
+          threadId: "thread-1",
+          sourceSeqStart: 3,
+          sourceSeqEnd: 3,
+          createdAt: 3,
+          turnId: "turn-1",
+          text: "Here's the summary of my work.",
+          status: "completed",
+        },
+      ],
+      { includeNestedRows: true },
+    );
+
+    expect(rows.map((row) => row.kind)).toEqual(["turn-summary", "message"]);
+    const turnSummary = expectTurnSummaryRow(rows[0]);
+    const nested = turnSummary.rows ?? [];
+    expect(nested.map((row) => row.kind)).toEqual(["tool-bundle"]);
+    const bundle = expectToolBundleRow(nested[0]);
+    expect(bundle.bundleKind).toBe("commands");
+    expect(bundle.presentation).toBe("assistant-step-summary-placeholder");
+  });
+
   it("does not collapse an active turn with pending tool work", () => {
     const rows = buildRowsFromMessages([
       {

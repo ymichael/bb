@@ -22,16 +22,18 @@ export function ToolBundleBody({
     [entry],
   );
 
+  if (entry.bundleKind === "exploration" && detailLines.length > 0) {
+    return (
+      <ExplorationDetailList
+        detailLines={detailLines}
+        isExpanded={isExpanded}
+      />
+    );
+  }
+
   return (
     <div className="overflow-hidden rounded-md border border-border/60 bg-background/40">
-      {entry.bundleKind === "exploration" && detailLines.length > 0 ? (
-        <ExplorationDetailList
-          detailLines={detailLines}
-          isExpanded={isExpanded}
-        />
-      ) : (
-        entry.rows.map((messageRow) => renderMessageRow(messageRow))
-      )}
+      {entry.rows.map((messageRow) => renderMessageRow(messageRow))}
     </div>
   );
 }

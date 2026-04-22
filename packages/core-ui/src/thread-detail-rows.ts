@@ -699,7 +699,7 @@ function buildAssistantStepSummaryRows(
   for (const row of rows) {
     if (isAssistantBoundaryRow(row)) {
       if (bufferedRows.length > 0) {
-        if (hasSeenAssistantMessage) {
+        if (hasSeenAssistantMessage || mode === "completed") {
           groupedRows.push(...materializeAssistantStepSummaryRows(bufferedRows));
         } else {
           groupedRows.push(...bufferedRows);

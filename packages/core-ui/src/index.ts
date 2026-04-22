@@ -50,8 +50,10 @@ export type { ChangedFileNamesSummary } from "./file-change-summary.js";
 export {
   buildToolBundleDetailLines,
   buildToolBundleSummaryLabel,
+  buildToolBundleSummaryParts,
   formatToolBundleSummaryLabel,
 } from "./timeline-tool-bundle-summary.js";
+export type { ToolBundleSummaryParts } from "./timeline-tool-bundle-summary.js";
 export {
   buildTurnSummaryParts,
   formatTurnSummaryCountLabel,

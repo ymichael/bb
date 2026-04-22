@@ -43,8 +43,6 @@ interface EventTitleProps {
 }
 
 interface GroupedSummaryTextProps {
-  emphasized: boolean;
-  isWorking?: boolean;
   text: string;
 }
 
@@ -84,6 +82,15 @@ export function getStaticEventToneClass(
 ): string {
   if (tone === "destructive") return "text-destructive/90";
   return "text-muted-foreground/90";
+}
+
+/**
+ * When a row is expanded, drop `.group` from its wrapper so hovers over its
+ * body don't cascade into nested `group-hover:` consumers (chevrons, tone
+ * classes) via the ancestor selector.
+ */
+export function getExpandableRowWrapperClassName(isExpanded: boolean): string {
+  return isExpanded ? "w-full" : "group w-full";
 }
 
 export function EventTitle({
@@ -146,21 +153,9 @@ export function EventTitle({
   );
 }
 
-export function GroupedSummaryText({
-  emphasized,
-  isWorking = false,
-  text,
-}: GroupedSummaryTextProps) {
+export function GroupedSummaryText({ text }: GroupedSummaryTextProps) {
   return (
-    <span
-      className={cx(
-        "truncate text-foreground/95",
-        emphasized ? "font-semibold" : null,
-        isWorking ? "animate-shine" : null,
-      )}
-    >
-      {text}
-    </span>
+    <span className="truncate text-muted-foreground/90">{text}</span>
   );
 }
 

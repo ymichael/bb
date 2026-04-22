@@ -93,7 +93,7 @@ export function ThreadTimelineRows({
       latestActivityRowId={latestActivityRowId}
       presentationOptions={getPresentationOptions(threadStatus)}
       renderMessage={renderMessage}
-      rowContainerClassName="pt-2"
+      rowContainerClassName="pt-1"
       rows={threadDetailRows}
       turnSummaryRowsController={turnSummaryRowsController}
     />
