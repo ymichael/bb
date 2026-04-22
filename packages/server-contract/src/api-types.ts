@@ -17,7 +17,6 @@ import {
   timelineActiveThinkingSchema,
   timelineRowSchema,
   threadQueuedMessageSchema,
-  viewMessageSchema,
   workspaceStatusSchema,
 } from "@bb/domain";
 import { apiErrorSchema } from "./errors.js";
@@ -486,18 +485,18 @@ export type ThreadListQuery = z.infer<typeof threadListQuerySchema>;
 export const threadTimelineQuerySchema = z
   .object({
     showAllManagerEvents: z.enum(["true", "false"]),
-    includeToolGroupMessages: z.enum(["true", "false"]),
+    includeNestedRows: z.enum(["true", "false"]),
   })
   .partial();
 export type ThreadTimelineQuery = z.infer<typeof threadTimelineQuerySchema>;
 
-export const timelineToolDetailsQuerySchema = z.object({
+export const timelineTurnSummaryDetailsQuerySchema = z.object({
   sourceSeqStart: z.string().regex(/^\d+$/),
   sourceSeqEnd: z.string().regex(/^\d+$/),
   showAllManagerEvents: z.enum(["true", "false"]).optional(),
 });
-export type TimelineToolDetailsQuery = z.infer<
-  typeof timelineToolDetailsQuerySchema
+export type TimelineTurnSummaryDetailsQuery = z.infer<
+  typeof timelineTurnSummaryDetailsQuerySchema
 >;
 
 export const threadEventsQuerySchema = z
@@ -882,21 +881,21 @@ export type EnvironmentActionApiError = z.infer<
   typeof environmentActionApiErrorSchema
 >;
 
-export const timelineToolDetailsRequestSchema = z.object({
+export const timelineTurnSummaryDetailsRequestSchema = z.object({
   turnId: z.string(),
   sourceSeqStart: z.number(),
   sourceSeqEnd: z.number(),
   showAllManagerEvents: z.boolean().optional(),
 });
-export type TimelineToolDetailsRequest = z.infer<
-  typeof timelineToolDetailsRequestSchema
+export type TimelineTurnSummaryDetailsRequest = z.infer<
+  typeof timelineTurnSummaryDetailsRequestSchema
 >;
 
-export const timelineToolDetailsResponseSchema = z.object({
-  messages: z.array(viewMessageSchema),
+export const timelineTurnSummaryDetailsResponseSchema = z.object({
+  rows: z.array(timelineRowSchema),
 });
-export type TimelineToolDetailsResponse = z.infer<
-  typeof timelineToolDetailsResponseSchema
+export type TimelineTurnSummaryDetailsResponse = z.infer<
+  typeof timelineTurnSummaryDetailsResponseSchema
 >;
 
 export const threadTimelineResponseSchema = z.object({

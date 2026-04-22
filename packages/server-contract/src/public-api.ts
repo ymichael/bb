@@ -77,8 +77,8 @@ import type {
   ThreadPendingInteractionsResponse,
   ThreadTimelineQuery,
   ThreadTimelineResponse,
-  TimelineToolDetailsQuery,
-  TimelineToolDetailsResponse,
+  TimelineTurnSummaryDetailsQuery,
+  TimelineTurnSummaryDetailsResponse,
   UpdateAutomationRequest,
   UpdateEnvironmentRequest,
   UpdateHostRequest,
@@ -375,11 +375,11 @@ export type PublicApiSchema = {
       ThreadTimelineResponse
     >;
   };
-  "/threads/:id/timeline/tool-details": {
-    /** Get tool call details for a turn. Used by the UI to lazy-load expanded tool information. */
+  "/threads/:id/timeline/turn-summary-details": {
+    /** Get nested turn-summary rows for a turn. Used by the UI to lazy-load expanded timeline detail. */
     $get: Endpoint<
-      PathId & { query: TimelineToolDetailsQuery },
-      TimelineToolDetailsResponse
+      PathId & { query: TimelineTurnSummaryDetailsQuery },
+      TimelineTurnSummaryDetailsResponse
     >;
   };
   "/threads/:id/output": {

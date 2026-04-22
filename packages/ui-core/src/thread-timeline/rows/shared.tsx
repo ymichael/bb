@@ -14,14 +14,54 @@ import {
   getScrollAnimationBehavior,
 } from "../../scroll.js";
 import { cx } from "../../utils.js";
+import {
+  getDetailScrollMaxHeightClass,
+  type DetailScrollSize,
+} from "../../detail-scroll-size.js";
 
-export const EVENT_DETAIL_MAX_HEIGHT_CLASS = "max-h-[220px]";
-export const EVENT_LARGE_DETAIL_MAX_HEIGHT_CLASS = "max-h-[320px]";
 export const DEBUG_EVENT_EXPANDED_MAX_LENGTH = 4000;
 
 export type EventTitleTone = "default" | "destructive";
 
-function OngoingEventLabel({ children }: { children: ReactNode }) {
+interface OngoingEventLabelProps {
+  children: ReactNode;
+}
+
+interface EventTitleProps {
+  className?: string;
+  detail?: ReactNode;
+  detailClassName?: string;
+  emphasis?: ReactNode;
+  emphasisAs?: "span" | "em";
+  emphasisClassName?: string;
+  prefix: ReactNode;
+  prefixClassName?: string;
+  shimmerPrefix?: boolean;
+  suffix?: ReactNode;
+  suffixClassName?: string;
+  tone?: EventTitleTone;
+}
+
+interface GroupedSummaryTextProps {
+  emphasized: boolean;
+  isWorking?: boolean;
+  text: string;
+}
+
+interface ExpandableDetailScrollAreaProps {
+  children: ReactNode;
+  className?: string;
+  onScroll?: (event: UIEvent<HTMLDivElement>) => void;
+  scrollRef?: Ref<HTMLDivElement>;
+  size?: DetailScrollSize;
+}
+
+interface StickyBottomAutoScrollArgs {
+  isExpanded: boolean;
+  scrollDep: unknown;
+}
+
+function OngoingEventLabel({ children }: OngoingEventLabelProps) {
   return <span className="animate-shine">{children}</span>;
 }
 
@@ -59,20 +99,7 @@ export function EventTitle({
   emphasisClassName,
   suffixClassName,
   emphasisAs: EmphasisTag = "span",
-}: {
-  prefix: ReactNode;
-  detail?: ReactNode;
-  emphasis?: ReactNode;
-  suffix?: ReactNode;
-  tone?: EventTitleTone;
-  shimmerPrefix?: boolean;
-  className?: string;
-  prefixClassName?: string;
-  detailClassName?: string;
-  emphasisClassName?: string;
-  suffixClassName?: string;
-  emphasisAs?: "span" | "em";
-}) {
+}: EventTitleProps) {
   const prefixToneClass =
     tone === "destructive" ? "text-destructive/85" : "text-muted-foreground/90";
   const detailToneClass =
@@ -119,24 +146,40 @@ export function EventTitle({
   );
 }
 
+export function GroupedSummaryText({
+  emphasized,
+  isWorking = false,
+  text,
+}: GroupedSummaryTextProps) {
+  return (
+    <span
+      className={cx(
+        "truncate text-foreground/95",
+        emphasized ? "font-semibold" : null,
+        isWorking ? "animate-shine" : null,
+      )}
+    >
+      {text}
+    </span>
+  );
+}
+
 export function ExpandableDetailScrollArea({
   children,
   className,
-  maxHeightClassName = EVENT_DETAIL_MAX_HEIGHT_CLASS,
   onScroll,
   scrollRef,
-}: {
-  children: ReactNode;
-  className?: string;
-  maxHeightClassName?: string;
-  onScroll?: (event: UIEvent<HTMLDivElement>) => void;
-  scrollRef?: Ref<HTMLDivElement>;
-}) {
+  size = "regular",
+}: ExpandableDetailScrollAreaProps) {
   return (
     <div
       ref={scrollRef}
       onScroll={onScroll}
-      className={cx(maxHeightClassName, "overflow-auto", className)}
+      className={cx(
+        getDetailScrollMaxHeightClass(size),
+        "overflow-auto",
+        className,
+      )}
     >
       {children}
     </div>
@@ -201,10 +244,7 @@ export function useIsOverflowing(
 export function useStickyBottomAutoScroll<ElementType extends HTMLElement>({
   isExpanded,
   scrollDep,
-}: {
-  isExpanded: boolean;
-  scrollDep: unknown;
-}) {
+}: StickyBottomAutoScrollArgs) {
   const elementRef = useRef<ElementType | null>(null);
   const shouldStickToBottomRef = useRef(true);
 

@@ -312,6 +312,8 @@ export interface ViewErrorMessage extends ViewMessageBase {
   kind: "error";
   message: string;
   rawType: string;
+  reconnectAttempt?: number;
+  reconnectTotal?: number;
 }
 
 export interface ViewDebugRawEventMessage extends ViewMessageBase {

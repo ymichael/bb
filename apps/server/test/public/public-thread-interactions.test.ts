@@ -865,15 +865,21 @@ describe("public thread interaction routes", () => {
         expect.objectContaining({
           rows: expect.arrayContaining([
             expect.objectContaining({
-              kind: "message",
-              message: expect.objectContaining({
-                kind: "tool-call",
-                callId: "item-timeline",
-                command: "git push",
-                cwd: "/tmp/project",
-                status: "pending",
-                approvalStatus: "waiting_for_approval",
-              }),
+              kind: "tool-bundle",
+              bundleKind: "commands",
+              rows: expect.arrayContaining([
+                expect.objectContaining({
+                  kind: "message",
+                  message: expect.objectContaining({
+                    kind: "tool-call",
+                    callId: "item-timeline",
+                    command: "git push",
+                    cwd: "/tmp/project",
+                    status: "pending",
+                    approvalStatus: "waiting_for_approval",
+                  }),
+                }),
+              ]),
             }),
           ]),
         }),
@@ -962,15 +968,21 @@ describe("public thread interaction routes", () => {
         expect.objectContaining({
           rows: expect.arrayContaining([
             expect.objectContaining({
-              kind: "message",
-              message: expect.objectContaining({
-                kind: "tool-call",
-                callId: "item-denied-timeline",
-                command: "rm -rf build",
-                cwd: "/tmp/project",
-                status: "interrupted",
-                approvalStatus: "denied",
-              }),
+              kind: "tool-bundle",
+              bundleKind: "commands",
+              rows: expect.arrayContaining([
+                expect.objectContaining({
+                  kind: "message",
+                  message: expect.objectContaining({
+                    kind: "tool-call",
+                    callId: "item-denied-timeline",
+                    command: "rm -rf build",
+                    cwd: "/tmp/project",
+                    status: "interrupted",
+                    approvalStatus: "denied",
+                  }),
+                }),
+              ]),
             }),
           ]),
         }),
@@ -1040,14 +1052,20 @@ describe("public thread interaction routes", () => {
         expect.objectContaining({
           rows: expect.arrayContaining([
             expect.objectContaining({
-              kind: "message",
-              message: expect.objectContaining({
-                kind: "file-edit",
-                callId: "item-file-timeline",
-                changes: [],
-                status: "pending",
-                approvalStatus: "waiting_for_approval",
-              }),
+              kind: "tool-bundle",
+              bundleKind: "file-edits",
+              rows: expect.arrayContaining([
+                expect.objectContaining({
+                  kind: "message",
+                  message: expect.objectContaining({
+                    kind: "file-edit",
+                    callId: "item-file-timeline",
+                    changes: [],
+                    status: "pending",
+                    approvalStatus: "waiting_for_approval",
+                  }),
+                }),
+              ]),
             }),
           ]),
         }),

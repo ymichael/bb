@@ -1,42 +1,37 @@
 import { useMemo } from "react";
-import { cn } from "../../cn.js";
 import {
   buildExploringDetailLines,
   formatExploringCountsLabel,
   summarizeExploringCounts,
 } from "@bb/core-ui";
 import type { ViewToolExploringMessage } from "@bb/domain";
+import { cn } from "../../cn.js";
 import { ExpandablePanel } from "../../disclosure.js";
 import { useLatestInitialExpanded } from "../latestInitialExpanded.js";
-import { ExpandableLine } from "./ExpandableLine.js";
+import { ExplorationDetailList } from "./ExplorationDetailList.js";
 import {
-  ExpandableDetailScrollArea,
   EventTitle,
   getEventHeaderToneClass,
   getStaticEventToneClass,
-  useStickyBottomAutoScroll,
 } from "./shared.js";
+
+interface ToolExploringRowProps {
+  initialExpanded?: boolean;
+  message: ViewToolExploringMessage;
+  preferOngoingLabels?: boolean;
+}
 
 export function ToolExploringRow({
   message,
   initialExpanded = false,
   preferOngoingLabels = false,
-}: {
-  message: ViewToolExploringMessage;
-  initialExpanded?: boolean;
-  preferOngoingLabels?: boolean;
-}) {
+}: ToolExploringRowProps) {
   const { isExpanded, onToggle } = useLatestInitialExpanded(initialExpanded);
   const detailLines = useMemo(
     () =>
       buildExploringDetailLines(message.calls, { readPathStyle: "basename" }),
     [message.calls],
   );
-  const { elementRef: detailRef, handleScroll: handleDetailScroll } =
-    useStickyBottomAutoScroll<HTMLDivElement>({
-      isExpanded,
-      scrollDep: detailLines,
-    });
   const counts = useMemo(
     () => summarizeExploringCounts(message.calls),
     [message.calls],
@@ -80,22 +75,10 @@ export function ToolExploringRow({
           headerToneClass={headerToneClass}
           onToggle={onToggle}
         >
-          <ExpandableDetailScrollArea
-            scrollRef={detailRef}
-            onScroll={handleDetailScroll}
-            className="mt-0.5 space-y-0.5"
-          >
-            {detailLines.map((line, index) => (
-              <ExpandableLine
-                key={`${message.id}:${index}`}
-                fullText={line}
-                className="min-w-0 font-mono text-xs text-foreground/80"
-                collapsedClassName="truncate"
-              >
-                {line}
-              </ExpandableLine>
-            ))}
-          </ExpandableDetailScrollArea>
+          <ExplorationDetailList
+            detailLines={detailLines}
+            isExpanded={isExpanded}
+          />
         </ExpandablePanel>
       </div>
     </div>

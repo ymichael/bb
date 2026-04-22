@@ -3,6 +3,7 @@ import type {
   ViewToolParsedIntent,
 } from "@bb/domain";
 import { assertNever } from "./assert-never.js";
+import { fileNameFromPath } from "./file-change-summary.js";
 
 interface DelegationSummaryInput {
   subagentType?: string;
@@ -32,13 +33,6 @@ function formatSearchDetail(
   if (query && intent.path) return `${query} in ${intent.path}`;
   if (query) return query;
   return intent.cmd;
-}
-
-function fileNameFromPath(path: string): string {
-  const normalizedPath = path.replaceAll("\\", "/");
-  const segments = normalizedPath.split("/");
-  const candidate = segments[segments.length - 1];
-  return candidate && candidate.length > 0 ? candidate : path;
 }
 
 function getReadDisplayName(

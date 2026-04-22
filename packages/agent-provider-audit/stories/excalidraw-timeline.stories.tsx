@@ -1,9 +1,10 @@
 import type { Story } from "@ladle/react";
+import type { TimelineRow } from "@bb/domain";
 import { ConversationTimeline, ThreadTimelineRows } from "@bb/ui-core";
-import { fixtureStoryData } from "../.ladle/fixture-story-data";
+import { fixtureStoryData } from "../.ladle/fixture-story-data.js";
 
 const EMPTY_LOADING_IDS = new Set<string>();
-const EMPTY_TOOL_GROUP_MESSAGES: Record<string, never[]> = {};
+const EMPTY_TURN_SUMMARY_ROWS_BY_ID: Record<string, TimelineRow[]> = {};
 
 type FixtureStoryId = string;
 
@@ -37,12 +38,12 @@ function FixtureTimeline({ fixtureId }: { fixtureId: FixtureStoryId }) {
       <ConversationTimeline className="gap-2">
         <ThreadTimelineRows
           latestActivityRowId={fixture.latestActivityRowId}
-          loadingToolGroupIds={EMPTY_LOADING_IDS}
-          onLoadToolGroupMessages={() => {}}
+          loadingTurnSummaryIds={EMPTY_LOADING_IDS}
+          onLoadTurnSummaryRows={() => {}}
           themeType="dark"
           threadDetailRows={fixture.timelineRows}
           threadStatus={fixture.threadStatus}
-          toolGroupMessagesById={EMPTY_TOOL_GROUP_MESSAGES}
+          turnSummaryRowsById={EMPTY_TURN_SUMMARY_ROWS_BY_ID}
         />
       </ConversationTimeline>
     </div>

@@ -1,6 +1,8 @@
 import type {
+  TimelineAssistantStepSummaryRow,
   TimelineRow,
-  TimelineToolGroupRow,
+  TimelineToolBundleRow,
+  TimelineTurnSummaryRow,
   ViewAssistantReasoningMessage,
   ViewAssistantTextMessage,
   ViewPermissionGrantLifecycleMessage,
@@ -16,9 +18,10 @@ import type {
   ViewWebFetchMessage,
   ViewWebSearchMessage,
 } from "@bb/domain";
+import { buildTimelineAssistantStepSummaryLabel } from "./timeline-assistant-step-summary.js";
 import { durationToCompactString } from "./format-helpers.js";
 import { taskStatusGlyph } from "./task-status.js";
-import { buildTimelineRows } from "./thread-detail-rows.js";
+import { buildCollapsedTimelineRows } from "./thread-detail-rows.js";
 import {
   getCommandExitCodeLine,
   getPermissionGrantDisplayStatus,
@@ -27,7 +30,11 @@ import {
   getVisibleCommandOutput,
   type TimelineDisplayStatus,
 } from "./timeline-display-status.js";
-import { buildToolGroupSummaryParts } from "./timeline-summary.js";
+import {
+  buildToolBundleDetailLines,
+  buildToolBundleSummaryLabel,
+} from "./timeline-tool-bundle-summary.js";
+import { buildTurnSummaryParts } from "./timeline-turn-summary.js";
 import {
   buildExploringDetailLines,
   formatDelegationSummary,
@@ -436,9 +443,7 @@ function formatDelegation(
     return lines.join("\n");
   }
 
-  for (const row of buildTimelineRows(msg.childProjection, {
-    grouping: "collapse-all",
-  })) {
+  for (const row of buildCollapsedTimelineRows(msg.childProjection)) {
     const block = formatTimelineRow(row, true, color);
     if (block) {
       lines.push(indentBlock(block, "  "));
@@ -505,14 +510,102 @@ function formatMessage(
   }
 }
 
-function formatToolGroupSummary(entry: TimelineToolGroupRow): string {
+function formatTurnSummary(entry: TimelineTurnSummaryRow): string {
   const duration = formatSummaryDuration(entry.durationMs);
-  const parts = buildToolGroupSummaryParts({
+  const parts = buildTurnSummaryParts({
     duration,
     status: entry.status,
     summaryCount: entry.summaryCount,
   });
-  return [parts.prefix, parts.emphasis, parts.suffix].filter(Boolean).join(" ");
+  return [parts.prefix, parts.emphasis].join(" ");
+}
+
+function formatNestedTimelineRows(
+  rows: TimelineRow[],
+  verbose: boolean,
+  color: boolean,
+): string {
+  const blocks: string[] = [];
+  for (const row of rows) {
+    const block = formatTimelineRow(row, verbose, color);
+    if (block.length > 0) {
+      blocks.push(block);
+    }
+  }
+  return blocks.join("\n\n");
+}
+
+function formatAssistantStepSummaryRow(
+  row: TimelineAssistantStepSummaryRow,
+  verbose: boolean,
+  color: boolean,
+): string {
+  const lines: string[] = [];
+  lines.push(
+    separator(buildTimelineAssistantStepSummaryLabel(row.rows), color),
+  );
+
+  if (!verbose) {
+    return lines.join("\n");
+  }
+
+  const body = formatNestedTimelineRows(row.rows, true, color);
+  if (body.length > 0) {
+    lines.push(indentBlock(body, "  "));
+  }
+
+  return lines.join("\n");
+}
+
+function formatToolBundleRow(
+  row: TimelineToolBundleRow,
+  verbose: boolean,
+  color: boolean,
+): string {
+  const lines: string[] = [];
+  lines.push(separator(buildToolBundleSummaryLabel(row), color));
+
+  if (!verbose) {
+    return lines.join("\n");
+  }
+
+  if (row.bundleKind === "exploration") {
+    for (const line of buildToolBundleDetailLines(row, {
+      readPathStyle: "full",
+    })) {
+      lines.push(`  ${line}`);
+    }
+    return lines.join("\n");
+  }
+
+  for (const messageRow of row.rows) {
+    const block = formatMessage(messageRow.message, true, color);
+    if (block.length > 0) {
+      lines.push(indentBlock(block, "  "));
+    }
+  }
+
+  return lines.join("\n");
+}
+
+function formatTurnSummaryRow(
+  row: TimelineTurnSummaryRow,
+  verbose: boolean,
+  color: boolean,
+): string {
+  const lines: string[] = [];
+  lines.push(separator(formatTurnSummary(row), color));
+
+  if (!verbose || !row.rows) {
+    return lines.join("\n");
+  }
+
+  const body = formatNestedTimelineRows(row.rows, true, color);
+  if (body.length > 0) {
+    lines.push(indentBlock(body, "  "));
+  }
+
+  return lines.join("\n");
 }
 
 function formatTimelineRow(
@@ -520,25 +613,18 @@ function formatTimelineRow(
   verbose: boolean,
   color: boolean,
 ): string {
-  if (row.kind === "message") {
-    return formatMessage(row.message, verbose, color);
+  switch (row.kind) {
+    case "message":
+      return formatMessage(row.message, verbose, color);
+    case "assistant-step-summary":
+      return formatAssistantStepSummaryRow(row, verbose, color);
+    case "tool-bundle":
+      return formatToolBundleRow(row, verbose, color);
+    case "turn-summary":
+      return formatTurnSummaryRow(row, verbose, color);
+    default:
+      return "";
   }
-
-  const lines: string[] = [];
-  lines.push(separator(formatToolGroupSummary(row), color));
-
-  if (!verbose) {
-    return lines.join("\n");
-  }
-
-  for (const message of row.messages) {
-    const block = formatMessage(message, true, color);
-    if (block.length > 0) {
-      lines.push(indentBlock(block, "  "));
-    }
-  }
-
-  return lines.join("\n");
 }
 
 /**
@@ -554,12 +640,5 @@ export function formatTimelineAsText(
   const verbose = options?.verbose ?? false;
   const color = options?.color ?? false;
 
-  const blocks: string[] = [];
-  for (const row of rows) {
-    const formatted = formatTimelineRow(row, verbose, color);
-    if (formatted) {
-      blocks.push(formatted);
-    }
-  }
-  return blocks.join("\n\n");
+  return formatNestedTimelineRows(rows, verbose, color);
 }

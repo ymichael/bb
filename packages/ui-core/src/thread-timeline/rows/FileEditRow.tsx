@@ -1,7 +1,14 @@
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { PatchDiff } from "@pierre/diffs/react";
+import {
+  fileChangeIdentity,
+  fileNameFromPath,
+  summarizeChangedFileNames,
+} from "@bb/core-ui";
 import type { ViewFileEditMessage } from "@bb/domain";
 import { DiffStatsTally } from "../../diff-stats-tally.js";
+import { getDetailScrollMaxHeightClass } from "../../detail-scroll-size.js";
+import { cn } from "../../cn.js";
 import { CollapsibleHeader, ExpandablePanel } from "../../disclosure.js";
 import { useLatestInitialExpanded } from "../latestInitialExpanded.js";
 import { EventTitle, getEventHeaderToneClass } from "./shared.js";
@@ -16,45 +23,16 @@ interface RenderablePatch {
 
 type SyntheticFileEditPatchAction = "created" | "deleted";
 
-function fileNameFromPath(path: string): string {
-  const normalized = path.replaceAll("\\", "/");
-  const segments = normalized.split("/");
-  const candidate = segments[segments.length - 1];
-  return candidate && candidate.length > 0 ? candidate : path;
+interface DiffStats {
+  added: number;
+  removed: number;
 }
 
-function fileChangeIdentity(
-  change: ViewFileEditMessage["changes"][number],
-): string {
-  return (change.movePath ?? change.path).replaceAll("\\", "/");
-}
-
-function formatFileChangeName(
-  change: ViewFileEditMessage["changes"][number],
-): string {
-  const sourceName = fileNameFromPath(change.path);
-  if (!change.movePath) return sourceName;
-  const destinationName = fileNameFromPath(change.movePath);
-  return `${sourceName} → ${destinationName}`;
-}
-
-function summarizeChangedFileNames(
-  changes: ViewFileEditMessage["changes"],
-  maxNames: number,
-): { names: string[]; totalUniqueFiles: number; extraCount: number } {
-  const seenFiles = new Set<string>();
-  const names: string[] = [];
-  for (const change of changes) {
-    const identity = fileChangeIdentity(change);
-    if (seenFiles.has(identity)) continue;
-    seenFiles.add(identity);
-    if (names.length < maxNames) names.push(formatFileChangeName(change));
-  }
-  return {
-    names,
-    totalUniqueFiles: seenFiles.size,
-    extraCount: Math.max(0, seenFiles.size - names.length),
-  };
+interface FileEditRowProps {
+  initialExpanded?: boolean;
+  message: ViewFileEditMessage;
+  preferOngoingLabels?: boolean;
+  themeType?: ThreadTimelineTheme;
 }
 
 function normalizeToken(value: string | undefined): string {
@@ -79,10 +57,7 @@ function fileChangeActionLabel(action: FileChangeAction): string {
   return "Edited";
 }
 
-function diffStats(change: ViewFileEditMessage["changes"][number]): {
-  added: number;
-  removed: number;
-} {
+function diffStats(change: ViewFileEditMessage["changes"][number]): DiffStats {
   const diff = change.diff;
   if (!diff) return { added: 0, removed: 0 };
   let added = 0;
@@ -276,12 +251,7 @@ export function FileEditRow({
   initialExpanded = false,
   preferOngoingLabels = false,
   themeType = "light",
-}: {
-  message: ViewFileEditMessage;
-  initialExpanded?: boolean;
-  preferOngoingLabels?: boolean;
-  themeType?: ThreadTimelineTheme;
-}) {
+}: FileEditRowProps) {
   const { isExpanded, onToggle } = useLatestInitialExpanded(initialExpanded);
   const diffViewOptions = useMemo(
     () => ({
@@ -485,7 +455,12 @@ export function FileEditRow({
                     </div>
                     {isChangeExpanded && renderablePatch ? (
                       <div className="animate-in fade-in-0 slide-in-from-top-1 duration-200">
-                        <div className="max-h-[240px] overflow-auto border-t border-border/60 pb-1">
+                        <div
+                          className={cn(
+                            getDetailScrollMaxHeightClass("regular"),
+                            "overflow-auto border-t border-border/60 pb-1",
+                          )}
+                        >
                           <div className="min-w-fit">
                             <div style={DIFF_VIEW_STYLE}>
                               <PatchDiff
@@ -503,7 +478,12 @@ export function FileEditRow({
                     ) : null}
                     {isChangeExpanded && plainDiff ? (
                       <div className="animate-in fade-in-0 slide-in-from-top-1 duration-200">
-                        <pre className="max-h-[240px] overflow-auto border-t border-border/60 bg-background/80 px-3 py-2 font-mono text-xs whitespace-pre-wrap text-foreground/90">
+                        <pre
+                          className={cn(
+                            getDetailScrollMaxHeightClass("regular"),
+                            "overflow-auto border-t border-border/60 bg-background/80 px-3 py-2 font-mono text-xs whitespace-pre-wrap text-foreground/90",
+                          )}
+                        >
                           {plainDiff}
                         </pre>
                       </div>

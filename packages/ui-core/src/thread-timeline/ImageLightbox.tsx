@@ -18,6 +18,19 @@ export interface ImageLightboxKeyActionInput {
   hasNavigation: boolean;
 }
 
+interface WrappedImageIndexInput {
+  currentIndex: number;
+  direction: "next" | "previous";
+  itemCount: number;
+}
+
+interface IconButtonProps {
+  children: ReactNode;
+  className?: string;
+  label: string;
+  onClick: () => void;
+}
+
 export function getImageLightboxKeyAction({
   event,
   hasNavigation,
@@ -54,11 +67,7 @@ export function getWrappedImageIndex({
   currentIndex,
   direction,
   itemCount,
-}: {
-  currentIndex: number;
-  direction: "next" | "previous";
-  itemCount: number;
-}): number {
+}: WrappedImageIndexInput): number {
   if (itemCount <= 0) return currentIndex;
   if (direction === "previous") {
     return currentIndex === 0 ? itemCount - 1 : currentIndex - 1;
@@ -81,12 +90,7 @@ function IconButton({
   className,
   label,
   onClick,
-}: {
-  children: ReactNode;
-  className?: string;
-  label: string;
-  onClick: () => void;
-}) {
+}: IconButtonProps) {
   return (
     <button
       type="button"

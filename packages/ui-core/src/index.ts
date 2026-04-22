@@ -46,6 +46,10 @@ export {
   getScrollAnimationBehavior,
 } from "./scroll.js";
 export { EventCodeBlock, type EventCodeBlockProps } from "./event-content.js";
+export {
+  getDetailScrollMaxHeightClass,
+  type DetailScrollSize,
+} from "./detail-scroll-size.js";
 export { ConversationEntry } from "./thread-timeline/ConversationEntry.js";
 export { ExpandableLine } from "./thread-timeline/rows/ExpandableLine.js";
 export type { ExpandableLineProps } from "./thread-timeline/rows/ExpandableLine.js";

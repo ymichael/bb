@@ -30,9 +30,9 @@ export interface TimelineContainerSize {
   height: number;
 }
 
-export interface ToolGroupLoadState {
-  cachedMessageCount: number;
-  inlineMessageCount: number;
+export interface NestedRowLoadState {
+  cachedRowCount: number;
+  inlineRowCount: number;
   isLoading: boolean;
   threadId?: string;
 }
@@ -150,13 +150,13 @@ export function hasMeaningfulComposerHeightChange(
   );
 }
 
-export function shouldLoadToolGroupMessages(
-  state: ToolGroupLoadState,
+export function shouldLoadNestedRows(
+  state: NestedRowLoadState,
 ): boolean {
   return (
     Boolean(state.threadId) &&
-    state.inlineMessageCount === 0 &&
-    state.cachedMessageCount === 0 &&
+    state.inlineRowCount === 0 &&
+    state.cachedRowCount === 0 &&
     !state.isLoading
   );
 }

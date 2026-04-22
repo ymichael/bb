@@ -9,7 +9,11 @@ import {
   type PendingInteraction,
   type PendingInteractionResolution,
 } from "@bb/domain";
-import { ExpandableLine, StatusPill } from "@bb/ui-core";
+import {
+  ExpandableLine,
+  StatusPill,
+  getDetailScrollMaxHeightClass,
+} from "@bb/ui-core";
 import { useResolveThreadPendingInteraction } from "@/hooks/mutations/thread-interaction-mutations";
 import { getMutationErrorMessage } from "@/lib/mutation-errors";
 import { cn } from "@/lib/utils";
@@ -177,7 +181,12 @@ function buildBannerModel(interaction: PendingInteraction): BannerModel {
       ).filter((line) => !line.startsWith("Command: "));
       const subject = command ? (
         <div className="overflow-hidden rounded-lg border border-border bg-card">
-          <pre className="max-h-[220px] overflow-auto whitespace-pre px-4 py-3 font-mono ui-text-sm leading-tight text-foreground">
+          <pre
+            className={cn(
+              getDetailScrollMaxHeightClass("regular"),
+              "overflow-auto whitespace-pre px-4 py-3 font-mono ui-text-sm leading-tight text-foreground",
+            )}
+          >
             $ {command}
           </pre>
           {detailLines.length > 0 ? (

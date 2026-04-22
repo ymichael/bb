@@ -54,7 +54,7 @@ describe("toViewMessages operations", () => {
         threadStatus: "provisioning",
         turnMessageDetail: "full",
       }),
-      { includeToolGroupMessages: false },
+      { includeNestedRows: false },
     );
     const messageRows = rows.filter(
       (row): row is Extract<(typeof rows)[number], { kind: "message" }> =>
@@ -1053,7 +1053,7 @@ describe("toViewMessages operations", () => {
         threadStatus: "idle",
         turnMessageDetail: "full",
       }),
-      { includeToolGroupMessages: false },
+      { includeNestedRows: false },
     );
     const messageRows = rows.filter(
       (row): row is Extract<(typeof rows)[number], { kind: "message" }> =>
@@ -1102,5 +1102,35 @@ describe("toViewMessages operations", () => {
     expect(error).toBeDefined();
     expect(error?.message).toContain("Project folder not found");
     expect(error?.message).toContain("Update the project path and retry");
+  });
+
+  it("projects reconnect metadata from system error events", () => {
+    const events: ThreadEventRow[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "system/error",
+        data: {
+          code: "provider_reconnect",
+          message: "Reconnecting... 2/5",
+          reconnectAttempt: 2,
+          reconnectTotal: 5,
+        },
+        createdAt: 1,
+      },
+    ];
+
+    const projected = toViewMessages(fromRows(events), {
+      threadStatus: "active",
+    });
+    const error = projected.find(
+      (message): message is Extract<ViewMessage, { kind: "error" }> =>
+        message.kind === "error",
+    );
+
+    expect(error).toBeDefined();
+    expect(error?.reconnectAttempt).toBe(2);
+    expect(error?.reconnectTotal).toBe(5);
   });
 });

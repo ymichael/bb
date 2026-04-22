@@ -23,7 +23,7 @@ import {
   sendMessageRequestSchema,
   threadListResponseSchema,
   threadPendingInteractionsResponseSchema,
-  timelineToolDetailsResponseSchema,
+  timelineTurnSummaryDetailsResponseSchema,
   updateEnvironmentRequestSchema,
   updateAutomationRequestSchema,
 } from "../src/index.js";
@@ -149,14 +149,14 @@ const INTENTIONAL_OPTIONAL_SERVER_FIELDS: Record<string, string> = {
     "Thread listing may omit type when not filtering by thread type.",
   "threadTimelineQuerySchema.showAllManagerEvents":
     "Timeline queries may omit showAllManagerEvents unless explicitly requested.",
-  "threadTimelineQuerySchema.includeToolGroupMessages":
-    "Timeline queries may omit grouped tool messages unless explicitly requested.",
+  "threadTimelineQuerySchema.includeNestedRows":
+    "Timeline queries may omit nested rows unless explicitly requested.",
   "threadTimelineResponseSchema.contextWindowUsage":
     "Timeline responses omit context window usage when the provider did not report it.",
-  "timelineToolDetailsQuerySchema.showAllManagerEvents":
-    "Timeline tool detail queries may omit showAllManagerEvents unless explicitly requested.",
-  "timelineToolDetailsRequestSchema.showAllManagerEvents":
-    "Timeline tool detail requests may omit showAllManagerEvents unless explicitly requested.",
+  "timelineTurnSummaryDetailsQuerySchema.showAllManagerEvents":
+    "Turn summary detail queries may omit showAllManagerEvents unless explicitly requested.",
+  "timelineTurnSummaryDetailsRequestSchema.showAllManagerEvents":
+    "Turn summary detail requests may omit showAllManagerEvents unless explicitly requested.",
   "updateProjectRequestSchema.name":
     "Project PATCH requests omit name when leaving it unchanged.",
   "updateProjectSourceRequestSchema.isDefault":
@@ -540,8 +540,8 @@ describe("server-contract canonical schemas", () => {
       }),
     ).toThrow("Project path must be an absolute path.");
 
-    expect(timelineToolDetailsResponseSchema.parse({ messages: [] })).toEqual({
-      messages: [],
+    expect(timelineTurnSummaryDetailsResponseSchema.parse({ rows: [] })).toEqual({
+      rows: [],
     });
 
     expect(PROJECT_CHANGE_KINDS).toEqual([
@@ -633,14 +633,14 @@ describe("server-contract clients", () => {
       }).pathname,
     ).toBe("/api/v1/projects/proj_123/automations/auto_123");
     expect(
-      publicClient.threads[":id"].timeline["tool-details"].$url({
+      publicClient.threads[":id"].timeline["turn-summary-details"].$url({
         param: { id: "thr_123" },
         query: {
           sourceSeqStart: "1",
           sourceSeqEnd: "2",
         },
       }).pathname,
-    ).toBe("/api/v1/threads/thr_123/timeline/tool-details");
+    ).toBe("/api/v1/threads/thr_123/timeline/turn-summary-details");
     expect(
       publicClient.threads[":id"]["thread-storage"].files.$url({
         param: { id: "thr_123" },
@@ -701,9 +701,10 @@ describe("server-contract clients", () => {
         contract.threadPendingInteractionsResponseSchema,
       threadTimelineQuerySchema: contract.threadTimelineQuerySchema,
       threadTimelineResponseSchema: contract.threadTimelineResponseSchema,
-      timelineToolDetailsQuerySchema: contract.timelineToolDetailsQuerySchema,
-      timelineToolDetailsRequestSchema:
-        contract.timelineToolDetailsRequestSchema,
+      timelineTurnSummaryDetailsQuerySchema:
+        contract.timelineTurnSummaryDetailsQuerySchema,
+      timelineTurnSummaryDetailsRequestSchema:
+        contract.timelineTurnSummaryDetailsRequestSchema,
       resolvePendingInteractionRequestSchema:
         contract.resolvePendingInteractionRequestSchema,
       updateAutomationRequestSchema: contract.updateAutomationRequestSchema,

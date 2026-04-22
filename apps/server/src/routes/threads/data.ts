@@ -8,7 +8,7 @@ import {
   threadEventWaitQuerySchema,
   threadEventsQuerySchema,
   threadTimelineQuerySchema,
-  timelineToolDetailsQuerySchema,
+  timelineTurnSummaryDetailsQuerySchema,
   typedRoutes,
   type PublicApiSchema,
 } from "@bb/server-contract";
@@ -28,7 +28,7 @@ import { requireThreadStoragePath } from "../../services/threads/thread-storage.
 import { toQueuedMessage } from "../../services/threads/drafts.js";
 import {
   buildThreadTimeline,
-  buildTimelineToolDetails,
+  buildTimelineTurnSummaryDetails,
 } from "../../services/threads/timeline.js";
 import {
   findThreadEvent,
@@ -102,18 +102,18 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
         requirePublicThread(deps.db, context.req.param("id")),
         {
           showAllManagerEvents: query.showAllManagerEvents === "true",
-          includeToolGroupMessages: query.includeToolGroupMessages === "true",
+          includeNestedRows: query.includeNestedRows === "true",
         },
       ),
     ),
   );
 
   get(
-    "/threads/:id/timeline/tool-details",
-    timelineToolDetailsQuerySchema,
+    "/threads/:id/timeline/turn-summary-details",
+    timelineTurnSummaryDetailsQuerySchema,
     (context, query) =>
       context.json(
-        buildTimelineToolDetails(
+        buildTimelineTurnSummaryDetails(
           deps.db,
           requirePublicThread(deps.db, context.req.param("id")),
           {

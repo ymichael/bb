@@ -2,7 +2,6 @@ import {
   buildTimelineRows,
   extractActiveThinking,
   extractThreadContextWindowUsage,
-  flattenProjectionMessages,
   flattenViewMessagesDeep,
   TIMELINE_NOISE_EVENT_TYPES,
   toViewMessages,
@@ -12,7 +11,6 @@ import {
 import type {
   Thread,
   TimelineRow,
-  TimelineToolGroupRow,
   ViewMessage,
   ViewProjection,
 } from "@bb/domain";
@@ -22,7 +20,7 @@ import {
 } from "@bb/domain";
 import type {
   ThreadTimelineResponse,
-  TimelineToolDetailsResponse,
+  TimelineTurnSummaryDetailsResponse,
 } from "@bb/server-contract";
 import {
   listContextWindowUsageRows,
@@ -34,6 +32,8 @@ import type { DbConnection, StoredEventRow } from "@bb/db";
 import { parseStoredEvent, parseStoredEventRow } from "./thread-data.js";
 
 const MIN_AGENT_MESSAGE_DELTAS_FOR_SUMMARY_COMPACTION = 1000;
+const TURN_SUMMARY_DETAILS_LOOKAHEAD_BATCH_SIZE = 25;
+const TURN_SUMMARY_DETAILS_MAX_LOOKAHEAD_ROWS = 100;
 
 interface TimelineSourceSeqRange {
   sourceSeqEnd: number;
@@ -44,12 +44,25 @@ type TimelineMessageRow = Extract<TimelineRow, { kind: "message" }>;
 
 interface BuildThreadTimelineOptions {
   showAllManagerEvents?: boolean;
-  includeToolGroupMessages?: boolean;
+  includeNestedRows?: boolean;
 }
 
-interface BuildTimelineToolDetailsOptions extends TimelineSourceSeqRange {
+interface BuildTimelineTurnSummaryDetailsOptions extends TimelineSourceSeqRange {
   showAllManagerEvents?: boolean;
 }
+
+type TimelineTurnSummaryDetailsResolution =
+  | {
+      kind: "matched";
+      rows: TimelineRow[];
+    }
+  | {
+      kind: "missing-match";
+    }
+  | {
+      kind: "ungrouped";
+      rows: TimelineRow[];
+    };
 
 /**
  * For manager threads in the default (non-debug) view, only show user messages,
@@ -86,41 +99,51 @@ function buildManagerConversationRows(
   return visibleMessages.map((message) => toTimelineMessageRow(message));
 }
 
-function findMatchingToolGroupRow(
+type TimelineTurnSummaryRow = Extract<TimelineRow, { kind: "turn-summary" }>;
+
+function findMatchingTurnSummaryRow(
   rows: TimelineRow[],
   options: TimelineSourceSeqRange,
-): TimelineToolGroupRow | null {
+): TimelineTurnSummaryRow | null {
   return (
     rows.find(
-      (row): row is TimelineToolGroupRow =>
-        row.kind === "tool-group" &&
+      (row): row is TimelineTurnSummaryRow =>
+        row.kind === "turn-summary" &&
         row.sourceSeqStart === options.sourceSeqStart &&
         row.sourceSeqEnd === options.sourceSeqEnd,
     ) ?? null
   );
 }
 
-function hasToolGroupRows(rows: TimelineRow[]): boolean {
-  return rows.some((row) => row.kind === "tool-group");
+function hasTurnSummaryRows(rows: TimelineRow[]): boolean {
+  return rows.some((row) => row.kind === "turn-summary");
 }
 
-function resolveTimelineToolDetailsMessages(
-  rows: TimelineRow[],
+function resolveTimelineTurnSummaryDetailsRows(
   projection: ViewProjection,
   options: TimelineSourceSeqRange,
-): ViewMessage[] {
-  const matchingToolGroup = findMatchingToolGroupRow(rows, options);
-  if (matchingToolGroup) {
-    return matchingToolGroup.messages;
+): TimelineTurnSummaryDetailsResolution {
+  const nestedRows = buildTimelineRows(projection, {
+    includeNestedRows: true,
+  });
+  const matchingTurnSummary = findMatchingTurnSummaryRow(nestedRows, options);
+  if (matchingTurnSummary) {
+    return {
+      kind: "matched",
+      rows: matchingTurnSummary.rows ?? [],
+    };
   }
 
-  if (hasToolGroupRows(rows)) {
-    throw new Error(
-      `Timeline tool details could not match tool group range ${options.sourceSeqStart}-${options.sourceSeqEnd}`,
-    );
+  if (hasTurnSummaryRows(nestedRows)) {
+    return {
+      kind: "missing-match",
+    };
   }
 
-  return flattenProjectionMessages(projection);
+  return {
+    kind: "ungrouped",
+    rows: nestedRows,
+  };
 }
 
 export function toThreadEventWithMeta(
@@ -219,6 +242,7 @@ export function buildThreadTimeline(
   thread: Thread,
   options: BuildThreadTimelineOptions,
 ): ThreadTimelineResponse {
+  const includeNestedRows = options.includeNestedRows ?? false;
   const rawEventRows = listRecentStoredEventRows(db, {
     threadId: thread.id,
     ...(options.showAllManagerEvents === true
@@ -254,7 +278,7 @@ export function buildThreadTimeline(
           turnMessageDetail: "summary",
         }),
         {
-          includeToolGroupMessages: options.includeToolGroupMessages ?? false,
+          includeNestedRows,
         },
       );
   const contextWindowUsageRows = listContextWindowUsageRows(db, {
@@ -271,55 +295,69 @@ export function buildThreadTimeline(
   };
 }
 
-export function buildTimelineToolDetails(
+export function buildTimelineTurnSummaryDetails(
   db: DbConnection,
   thread: Thread,
-  options: BuildTimelineToolDetailsOptions,
-): TimelineToolDetailsResponse {
+  options: BuildTimelineTurnSummaryDetailsOptions,
+): TimelineTurnSummaryDetailsResponse {
   const exactEventRows = listStoredEventRowsInRange(db, {
     threadId: thread.id,
     seqStart: options.sourceSeqStart,
     seqEnd: options.sourceSeqEnd,
   });
+  const lookaheadEventRows: StoredEventRow[] = [];
+  let afterSequence = options.sourceSeqEnd;
 
-  const lookaheadEventRows = listStoredEventRows(db, {
-    threadId: thread.id,
-    afterSequence: options.sourceSeqEnd,
-    limit: 1,
-  });
-  // A client/turn/requested event can only be assigned to its turn after the
-  // immediately following turn/input/accepted event is decoded. Summary rows
-  // are built from the full event stream, so include one lookahead row here to
-  // reconstruct the same tool-group bounds for expansion.
-  const eventRowsWithLookahead = [...exactEventRows, ...lookaheadEventRows];
-
-  const projection = toViewProjection(
-    eventRowsWithLookahead.map((row) => toThreadEventWithMeta(row)),
-    {
-      includeInternalSystemMessages: options.showAllManagerEvents,
-      threadStatus: thread.status,
-      threadType: thread.type,
-      turnMessageDetail: "full",
-    },
-  );
-  const rows = buildTimelineRows(projection, {
-    includeToolGroupMessages: true,
-  });
-
-  const exactProjection = toViewProjection(
-    exactEventRows.map((row) => toThreadEventWithMeta(row)),
-    {
-      includeInternalSystemMessages: options.showAllManagerEvents,
-      threadStatus: thread.status,
-      threadType: thread.type,
-      turnMessageDetail: "full",
-    },
-  );
-
-  return {
-    messages: resolveTimelineToolDetailsMessages(rows, exactProjection, {
+  for (;;) {
+    const projection = toViewProjection(
+      [...exactEventRows, ...lookaheadEventRows].map((row) =>
+        toThreadEventWithMeta(row),
+      ),
+      {
+        includeInternalSystemMessages: options.showAllManagerEvents,
+        threadStatus: thread.status,
+        threadType: thread.type,
+        turnMessageDetail: "full",
+      },
+    );
+    const resolution = resolveTimelineTurnSummaryDetailsRows(projection, {
       sourceSeqStart: options.sourceSeqStart,
       sourceSeqEnd: options.sourceSeqEnd,
-    }),
-  };
+    });
+
+    if (resolution.kind !== "missing-match") {
+      return {
+        rows: resolution.rows,
+      };
+    }
+
+    const remainingLookaheadRows =
+      TURN_SUMMARY_DETAILS_MAX_LOOKAHEAD_ROWS - lookaheadEventRows.length;
+    if (remainingLookaheadRows <= 0) {
+      break;
+    }
+
+    // A client/turn/requested event can only be assigned to its turn after a
+    // later turn/input/accepted event is decoded. Fetch post-range rows in
+    // batches so unrelated stored events between those two do not break
+    // turn-summary expansion.
+    const nextLookaheadRows = listStoredEventRows(db, {
+      threadId: thread.id,
+      afterSequence,
+      limit: Math.min(
+        TURN_SUMMARY_DETAILS_LOOKAHEAD_BATCH_SIZE,
+        remainingLookaheadRows,
+      ),
+    });
+    if (nextLookaheadRows.length === 0) {
+      break;
+    }
+
+    lookaheadEventRows.push(...nextLookaheadRows);
+    afterSequence = nextLookaheadRows[nextLookaheadRows.length - 1]!.sequence;
+  }
+
+  throw new Error(
+    `Timeline turn summary details could not match range ${options.sourceSeqStart}-${options.sourceSeqEnd}`,
+  );
 }

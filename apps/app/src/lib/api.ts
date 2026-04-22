@@ -42,7 +42,7 @@ import type {
   ThreadDraftListResponse,
   ThreadListResponse,
   ThreadTimelineResponse,
-  TimelineToolDetailsResponse,
+  TimelineTurnSummaryDetailsResponse,
   ResolvePendingInteractionRequest,
   UpdateEnvironmentRequest,
   UpdateProjectRequest,
@@ -662,15 +662,15 @@ export async function requestEnvironmentAction(
 
 export async function getThreadTimeline(
   id: string,
-  includeToolGroupMessages: boolean = false,
+  includeNestedRows: boolean = false,
   includeAllEvents: boolean = false,
 ): Promise<ThreadTimelineResponse> {
   return request<ThreadTimelineResponse>(
     apiClient.threads[":id"].timeline.$get({
       param: { id },
       query: {
-        ...(includeToolGroupMessages
-          ? { includeToolGroupMessages: "true" }
+        ...(includeNestedRows
+          ? { includeNestedRows: "true" }
           : {}),
         ...(includeAllEvents ? { showAllManagerEvents: "true" } : {}),
       },
@@ -678,14 +678,14 @@ export async function getThreadTimeline(
   );
 }
 
-export async function getThreadTimelineToolDetails(
+export async function getThreadTimelineTurnSummaryDetails(
   id: string,
   sourceSeqStart: number,
   sourceSeqEnd: number,
   includeAllEvents: boolean = false,
-): Promise<TimelineToolDetailsResponse> {
-  return request<TimelineToolDetailsResponse>(
-    apiClient.threads[":id"].timeline["tool-details"].$get({
+): Promise<TimelineTurnSummaryDetailsResponse> {
+  return request<TimelineTurnSummaryDetailsResponse>(
+    apiClient.threads[":id"].timeline["turn-summary-details"].$get({
       param: { id },
       query: {
         sourceSeqStart: String(sourceSeqStart),

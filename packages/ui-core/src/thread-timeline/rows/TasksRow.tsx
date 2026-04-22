@@ -8,6 +8,11 @@ import {
   getEventHeaderToneClass,
 } from "./shared.js";
 
+interface TasksRowProps {
+  initialExpanded?: boolean;
+  message: ViewTasksMessage;
+}
+
 function statusLabel(message: ViewTasksMessage): string {
   switch (message.status) {
     case "pending":
@@ -24,10 +29,7 @@ function statusLabel(message: ViewTasksMessage): string {
 export function TasksRow({
   message,
   initialExpanded = false,
-}: {
-  message: ViewTasksMessage;
-  initialExpanded?: boolean;
-}) {
+}: TasksRowProps) {
   const { isExpanded, onToggle } = useLatestInitialExpanded(initialExpanded);
   const summaryContent = (
     <EventTitle

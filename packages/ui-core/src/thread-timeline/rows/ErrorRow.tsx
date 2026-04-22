@@ -1,8 +1,19 @@
 import { CollapsibleHeader, ExpandablePanel } from "../../disclosure.js";
+import { getDetailScrollMaxHeightClass } from "../../detail-scroll-size.js";
 import { EventCodeBlock } from "../../event-content.js";
 import type { ViewErrorMessage } from "@bb/domain";
 import { useLatestInitialExpanded } from "../latestInitialExpanded.js";
-import { EVENT_LARGE_DETAIL_MAX_HEIGHT_CLASS } from "./shared.js";
+
+interface ErrorDisplay {
+  detail?: string;
+  hint?: string;
+  title: string;
+}
+
+interface ErrorRowProps {
+  initialExpanded?: boolean;
+  message: ViewErrorMessage;
+}
 
 function normalizeErrorMessageText(value: string): string {
   const normalized = value.replaceAll("\r\n", "\n");
@@ -44,11 +55,7 @@ function normalizeErrorDetailForDisplay(
   return normalizeErrorMessageText(normalized).trim();
 }
 
-function parseErrorDisplay(message: ViewErrorMessage): {
-  title: string;
-  detail?: string;
-  hint?: string;
-} {
+function parseErrorDisplay(message: ViewErrorMessage): ErrorDisplay {
   const trimmed = normalizeErrorMessageText(message.message).trim();
   if (!trimmed) {
     return { title: "Error event" };
@@ -110,10 +117,7 @@ function parseErrorDisplay(message: ViewErrorMessage): {
 export function ErrorRow({
   message,
   initialExpanded = false,
-}: {
-  message: ViewErrorMessage;
-  initialExpanded?: boolean;
-}) {
+}: ErrorRowProps) {
   const { isExpanded, onToggle } = useLatestInitialExpanded(initialExpanded);
   const display = parseErrorDisplay(message);
   const isExpandable = Boolean(display.detail?.trim() || display.hint?.trim());
@@ -165,7 +169,7 @@ export function ErrorRow({
               hasMultilineDetail ? (
                 <EventCodeBlock
                   className="px-1 py-0.5"
-                  maxHeightClassName={EVENT_LARGE_DETAIL_MAX_HEIGHT_CLASS}
+                  maxHeightClassName={getDetailScrollMaxHeightClass("large")}
                   tone="danger"
                 >
                   {detailText}

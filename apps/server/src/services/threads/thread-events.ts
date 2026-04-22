@@ -69,6 +69,8 @@ export interface AppendSystemErrorEventArgs {
   detail?: string;
   environmentId?: string | null;
   message: string;
+  reconnectAttempt?: number;
+  reconnectTotal?: number;
   threadId: string;
 }
 
@@ -102,10 +104,59 @@ const LEGACY_TURN_REQUEST_TARGET_BY_TYPE = {
   "client/turn/start": LEGACY_NEW_TURN_TARGET,
 } satisfies Record<LegacyTurnRequestEventType, TurnRequestTarget>;
 
+interface ReconnectProgress {
+  attempt: number;
+  total: number;
+}
+
 function legacyTurnRequestTargetForType(
   type: LegacyTurnRequestEventType,
 ): TurnRequestTarget {
   return LEGACY_TURN_REQUEST_TARGET_BY_TYPE[type];
+}
+
+function parseReconnectProgress(message: string): ReconnectProgress | null {
+  const match = message.trim().match(/^Reconnecting\.\.\.\s+(\d+)\/(\d+)$/);
+  if (!match) {
+    return null;
+  }
+
+  const attempt = Number.parseInt(match[1] ?? "", 10);
+  const total = Number.parseInt(match[2] ?? "", 10);
+  if (
+    !Number.isFinite(attempt) ||
+    !Number.isFinite(total) ||
+    attempt <= 0 ||
+    total <= 0 ||
+    attempt > total
+  ) {
+    return null;
+  }
+
+  return { attempt, total };
+}
+
+function resolveReconnectProgress(
+  args: Pick<
+    AppendSystemErrorEventArgs,
+    "code" | "message" | "reconnectAttempt" | "reconnectTotal"
+  >,
+): ReconnectProgress | null {
+  if (
+    args.reconnectAttempt !== undefined &&
+    args.reconnectTotal !== undefined
+  ) {
+    return {
+      attempt: args.reconnectAttempt,
+      total: args.reconnectTotal,
+    };
+  }
+
+  if (args.code !== "provider_reconnect") {
+    return null;
+  }
+
+  return parseReconnectProgress(args.message);
 }
 
 function buildClientTurnEventData(
@@ -358,12 +409,22 @@ export function appendSystemErrorEvent(
 }
 
 export function buildSystemErrorEventData(
-  args: Pick<AppendSystemErrorEventArgs, "code" | "detail" | "message">,
+  args: Pick<
+    AppendSystemErrorEventArgs,
+    "code" | "detail" | "message" | "reconnectAttempt" | "reconnectTotal"
+  >,
 ): SystemErrorEventData {
+  const reconnectProgress = resolveReconnectProgress(args);
   return systemErrorEventDataSchema.parse({
     code: args.code,
     message: args.message,
     ...(args.detail ? { detail: args.detail } : {}),
+    ...(reconnectProgress
+      ? { reconnectAttempt: reconnectProgress.attempt }
+      : {}),
+    ...(reconnectProgress
+      ? { reconnectTotal: reconnectProgress.total }
+      : {}),
   });
 }
 

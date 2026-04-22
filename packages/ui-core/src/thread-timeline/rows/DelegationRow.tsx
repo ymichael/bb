@@ -1,106 +1,61 @@
 import { useMemo, type ReactNode } from "react";
-import { cn } from "../../cn.js";
 import {
+  buildCollapsedTimelineRows,
   buildTimelineRows,
-  buildToolGroupSummaryParts,
   findLatestActivityRowId,
   formatDelegationSummary,
-  shouldPreferOngoingLabelsForRow,
 } from "@bb/core-ui";
 import type {
   TimelineRow,
-  TimelineToolGroupRow,
+  TimelineTurnSummaryRow,
   ViewDelegationMessage,
   ViewMessage,
 } from "@bb/domain";
+import { getDetailScrollMaxHeightClass } from "../../detail-scroll-size.js";
+import { cn } from "../../cn.js";
 import { ExpandablePanel } from "../../disclosure.js";
 import { ConversationMarkdown } from "../ConversationMarkdown.js";
-import { useLatestInitialExpanded } from "../latestInitialExpanded.js";
+import { NestedTimelineRows } from "../NestedTimelineRows.js";
 import {
-  EVENT_LARGE_DETAIL_MAX_HEIGHT_CLASS,
-  EventTitle,
-  formatSummaryDuration,
-  getEventHeaderToneClass,
-} from "./shared.js";
+  type NestedTimelineMessageRenderOptions,
+  type NestedTimelineRowPresentationOptions,
+  type NestedTimelineTurnSummaryRowsController,
+} from "../NestedTimelineRows.js";
+import { useLatestInitialExpanded } from "../latestInitialExpanded.js";
+import { EventTitle, formatSummaryDuration, getEventHeaderToneClass } from "./shared.js";
 
-interface NestedRenderOptions {
+export { shouldPreferNestedOngoingLabels } from "../NestedTimelineRows.js";
+
+interface DelegationRowProps {
   initialExpanded?: boolean;
-  preferOngoingLabels?: boolean;
-}
-
-interface NestedToolGroupProps {
-  entry: TimelineToolGroupRow;
+  message: ViewDelegationMessage;
   preferOngoingLabels?: boolean;
   renderMessage: (
     message: ViewMessage,
-    options?: NestedRenderOptions,
+    options?: NestedTimelineMessageRenderOptions,
   ) => ReactNode;
 }
 
-interface NestedRowOngoingLabelInput {
-  latestActivityRowId: string | null;
-  preferOngoingLabels: boolean;
-  row: TimelineRow;
+function getNestedPresentationOptions(
+  preferOngoingLabels: boolean,
+): NestedTimelineRowPresentationOptions {
+  return {
+    expandErrors: true,
+    groupedRowsUseOngoingLabels: true,
+    preferOngoingLabels,
+  };
 }
 
-export function shouldPreferNestedOngoingLabels({
-  latestActivityRowId,
-  preferOngoingLabels,
-  row,
-}: NestedRowOngoingLabelInput): boolean {
-  return (
-    preferOngoingLabels &&
-    shouldPreferOngoingLabelsForRow(row, latestActivityRowId)
-  );
-}
-
-function NestedToolGroup({
-  entry,
-  preferOngoingLabels = false,
-  renderMessage,
-}: NestedToolGroupProps) {
-  const { isExpanded, onToggle } = useLatestInitialExpanded(false);
-  const duration = formatSummaryDuration(entry.durationMs);
-  const isWorking = entry.status === "pending" || preferOngoingLabels;
-  const tone = "default";
-  const summary = buildToolGroupSummaryParts({
-    duration,
-    status: isWorking ? "pending" : entry.status,
-    summaryCount: entry.summaryCount,
-  });
-  const summaryContent = (
-    <EventTitle
-      prefix={summary.prefix}
-      emphasis={summary.emphasis}
-      suffix={summary.suffix}
-      shimmerPrefix={isWorking}
-      tone={tone}
-    />
-  );
-
-  return (
-    <ExpandablePanel
-      isExpanded={isExpanded}
-      summaryContent={summaryContent}
-      headerToneClass={getEventHeaderToneClass(isExpanded, tone)}
-      onToggle={onToggle}
-    >
-      <div className="overflow-hidden rounded-md border border-border/60 bg-background/40">
-        {entry.messages.map((message, index) => {
-          const isLastMessage = index === entry.messages.length - 1;
-          const shouldAutoExpand = isLastMessage && entry.status === "pending";
-          return (
-            <div key={message.id}>
-              {renderMessage(message, {
-                initialExpanded: shouldAutoExpand,
-                preferOngoingLabels: preferOngoingLabels && isLastMessage,
-              })}
-            </div>
-          );
-        })}
-      </div>
-    </ExpandablePanel>
-  );
+function createTurnSummaryRowsController(): NestedTimelineTurnSummaryRowsController {
+  return {
+    getRows(row: TimelineTurnSummaryRow): TimelineRow[] | null {
+      return row.rows;
+    },
+    isLoading(): boolean {
+      return false;
+    },
+    loadRows(): void {},
+  };
 }
 
 export function DelegationRow({
@@ -108,45 +63,40 @@ export function DelegationRow({
   initialExpanded = false,
   preferOngoingLabels = false,
   renderMessage,
-}: {
-  message: ViewDelegationMessage;
-  initialExpanded?: boolean;
-  preferOngoingLabels?: boolean;
-  renderMessage: (
-    message: ViewMessage,
-    options?: NestedRenderOptions,
-  ) => ReactNode;
-}) {
+}: DelegationRowProps) {
   const { isExpanded, onToggle } = useLatestInitialExpanded(initialExpanded);
   const isSubagentPending = message.status === "pending";
   const nestedRows = useMemo(
     () =>
-      buildTimelineRows(message.childProjection, {
-        grouping: isSubagentPending ? "ungrouped" : "collapse-all",
-      }),
+      isSubagentPending
+        ? buildTimelineRows(message.childProjection)
+        : buildCollapsedTimelineRows(message.childProjection),
     [message.childProjection, isSubagentPending],
   );
   const nestedLatestActivityRowId = useMemo(
     () => findLatestActivityRowId(nestedRows),
     [nestedRows],
   );
-  const isWorking = message.status === "pending" || preferOngoingLabels;
-  const summaryContent = (
-    <EventTitle
-      prefix="Subagent"
-      emphasis={formatDelegationSummary(message)}
-      suffix={formatSummaryDuration(message.durationMs)}
-      tone={message.status === "error" ? "destructive" : "default"}
-      shimmerPrefix={isWorking}
-    />
+  const turnSummaryRowsController = useMemo(
+    () => createTurnSummaryRowsController(),
+    [],
   );
+  const isWorking = message.status === "pending" || preferOngoingLabels;
 
   return (
     <div className="group w-full" style={{ overflowAnchor: "none" }}>
       <div className="mr-auto w-full">
         <ExpandablePanel
           isExpanded={isExpanded}
-          summaryContent={summaryContent}
+          summaryContent={
+            <EventTitle
+              prefix="Subagent"
+              emphasis={formatDelegationSummary(message)}
+              suffix={formatSummaryDuration(message.durationMs)}
+              tone={message.status === "error" ? "destructive" : "default"}
+              shimmerPrefix={isWorking}
+            />
+          }
           summaryContentClassName="min-w-0"
           headerToneClass={getEventHeaderToneClass(
             isExpanded,
@@ -157,37 +107,18 @@ export function DelegationRow({
           <div
             className={cn(
               "overflow-auto rounded-md border border-border/60 bg-background/40",
-              EVENT_LARGE_DETAIL_MAX_HEIGHT_CLASS,
+              getDetailScrollMaxHeightClass("large"),
             )}
           >
-            {nestedRows.map((row, index) => {
-              const isLastRow =
-                index === nestedRows.length - 1 && !message.output;
-              const shouldAutoExpand = isLastRow && isWorking;
-              const rowPreferOngoingLabels = shouldPreferNestedOngoingLabels({
-                latestActivityRowId: nestedLatestActivityRowId,
+            <NestedTimelineRows
+              latestActivityRowId={nestedLatestActivityRowId}
+              presentationOptions={getNestedPresentationOptions(
                 preferOngoingLabels,
-                row,
-              });
-              if (row.kind === "tool-group") {
-                return (
-                  <NestedToolGroup
-                    key={row.id}
-                    entry={row}
-                    preferOngoingLabels={rowPreferOngoingLabels}
-                    renderMessage={renderMessage}
-                  />
-                );
-              }
-              return (
-                <div key={row.id}>
-                  {renderMessage(row.message, {
-                    initialExpanded: shouldAutoExpand,
-                    preferOngoingLabels: rowPreferOngoingLabels,
-                  })}
-                </div>
-              );
-            })}
+              )}
+              renderMessage={renderMessage}
+              rows={nestedRows}
+              turnSummaryRowsController={turnSummaryRowsController}
+            />
             {message.output ? (
               <div className="px-2 py-2 text-sm leading-relaxed">
                 <ConversationMarkdown content={message.output} />

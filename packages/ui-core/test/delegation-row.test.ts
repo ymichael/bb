@@ -65,7 +65,7 @@ describe("DelegationRow nested ongoing labels", () => {
     ).toBe(true);
   });
 
-  it("applies the ongoing-label hint to a nested tool group only when it is the latest activity", () => {
+  it("applies the ongoing-label hint to a nested tool group only when it is pending and the latest activity", () => {
     const earlierRow: TimelineRow = {
       kind: "message",
       id: "tool-1",
@@ -80,33 +80,46 @@ describe("DelegationRow nested ongoing labels", () => {
       },
     };
     const toolGroupRow: TimelineRow = {
-      kind: "tool-group",
+      kind: "tool-bundle",
       id: "group-1",
+      bundleKind: "commands",
+      presentation: "default",
       turnId: "turn-1",
-      summaryCount: 2,
       sourceSeqStart: 2,
       sourceSeqEnd: 3,
       startedAt: 2,
       createdAt: 3,
-      status: "completed",
-      messages: [
+      status: "pending",
+      summary: {
+        kind: "commands",
+        commands: 2,
+      },
+      rows: [
         {
-          ...baseMessage("search-1", 2),
-          kind: "tool-call",
-          turnId: "turn-1",
-          toolName: "exec_command",
-          callId: "call-2",
-          command: "rg TODO src",
-          status: "completed",
+          kind: "message",
+          id: "search-1",
+          message: {
+            ...baseMessage("search-1", 2),
+            kind: "tool-call",
+            turnId: "turn-1",
+            toolName: "exec_command",
+            callId: "call-2",
+            command: "rg TODO src",
+            status: "completed",
+          },
         },
         {
-          ...baseMessage("test-1", 3),
-          kind: "tool-call",
-          turnId: "turn-1",
-          toolName: "exec_command",
-          callId: "call-3",
-          command: "pnpm vitest",
-          status: "completed",
+          kind: "message",
+          id: "test-1",
+          message: {
+            ...baseMessage("test-1", 3),
+            kind: "tool-call",
+            turnId: "turn-1",
+            toolName: "exec_command",
+            callId: "call-3",
+            command: "pnpm vitest",
+            status: "pending",
+          },
         },
       ],
     };

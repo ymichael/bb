@@ -2,8 +2,7 @@ import { type ReactNode } from "react";
 import type {
   TimelineActiveThinking,
   TimelineRow,
-  TimelineToolGroupRow,
-  ViewMessage,
+  TimelineTurnSummaryRow,
 } from "@bb/domain";
 import {
   ConversationEmptyState,
@@ -22,8 +21,8 @@ interface ThreadTimelinePaneProps {
   isThreadTimelinePending: boolean;
   timelineError: boolean;
   latestActivityRowId: string | null;
-  loadingToolGroupIds: ReadonlySet<string>;
-  onLoadToolGroupMessages: (entry: TimelineToolGroupRow) => void;
+  loadingTurnSummaryIds: ReadonlySet<string>;
+  onLoadTurnSummaryRows: (entry: TimelineTurnSummaryRow) => void;
   onScroll: () => void;
   projectId?: string;
   scrollRef: (element: HTMLDivElement | null) => void;
@@ -32,7 +31,7 @@ interface ThreadTimelinePaneProps {
   threadDetailRows: TimelineRow[];
   threadId: string;
   threadStatus: string;
-  toolGroupMessagesById: Record<string, ViewMessage[]>;
+  turnSummaryRowsById: Record<string, TimelineRow[]>;
 }
 
 export function ThreadTimelinePane({
@@ -42,8 +41,8 @@ export function ThreadTimelinePane({
   isThreadTimelinePending,
   timelineError,
   latestActivityRowId,
-  loadingToolGroupIds,
-  onLoadToolGroupMessages,
+  loadingTurnSummaryIds,
+  onLoadTurnSummaryRows,
   onScroll,
   projectId,
   scrollRef,
@@ -52,7 +51,7 @@ export function ThreadTimelinePane({
   threadDetailRows,
   threadId,
   threadStatus,
-  toolGroupMessagesById,
+  turnSummaryRowsById,
 }: ThreadTimelinePaneProps) {
   const preferredTheme = usePreferredTheme();
   const showActiveThinking =
@@ -94,14 +93,14 @@ export function ThreadTimelinePane({
           ) : (
             <ThreadTimelineRows
               latestActivityRowId={latestActivityRowId}
-              loadingToolGroupIds={loadingToolGroupIds}
-              onLoadToolGroupMessages={onLoadToolGroupMessages}
+              loadingTurnSummaryIds={loadingTurnSummaryIds}
+              onLoadTurnSummaryRows={onLoadTurnSummaryRows}
               projectId={projectId}
               resolveUserAttachmentImageSrc={toUserAttachmentImageSrc}
               themeType={preferredTheme}
               threadDetailRows={threadDetailRows}
               threadStatus={threadStatus}
-              toolGroupMessagesById={toolGroupMessagesById}
+              turnSummaryRowsById={turnSummaryRowsById}
             />
           )}
         </ConversationTimeline>

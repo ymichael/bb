@@ -12,19 +12,30 @@ import type {
 } from "@bb/domain";
 
 type TimelineMessageRow = Extract<TimelineRow, { kind: "message" }>;
-type TimelineToolGroupRow = Extract<TimelineRow, { kind: "tool-group" }>;
+type TimelineToolBundleRow = Extract<TimelineRow, { kind: "tool-bundle" }>;
+type TimelineTurnSummaryRow = Extract<TimelineRow, { kind: "turn-summary" }>;
 type ViewAssistantTextMessage = Extract<
   ViewMessage,
   { kind: "assistant-text" }
 >;
 type ViewErrorMessage = Extract<ViewMessage, { kind: "error" }>;
 
-function expectToolGroupRow(
+function expectToolBundleRow(
   row: TimelineRow | undefined,
-): TimelineToolGroupRow {
-  expect(row?.kind).toBe("tool-group");
-  if (!row || row.kind !== "tool-group") {
-    throw new Error("Expected a tool-group row");
+): TimelineToolBundleRow {
+  expect(row?.kind).toBe("tool-bundle");
+  if (!row || row.kind !== "tool-bundle") {
+    throw new Error("Expected a tool-bundle row");
+  }
+  return row;
+}
+
+function expectTurnSummaryRow(
+  row: TimelineRow | undefined,
+): TimelineTurnSummaryRow {
+  expect(row?.kind).toBe("turn-summary");
+  if (!row || row.kind !== "turn-summary") {
+    throw new Error("Expected a turn-summary row");
   }
   return row;
 }
@@ -59,6 +70,29 @@ function expectErrorMessage(
 
 function getStartedAt(message: ViewMessage): number {
   return message.startedAt ?? message.createdAt;
+}
+
+function collectLeafMessages(rows: readonly TimelineRow[]): ViewMessage[] {
+  const messages: ViewMessage[] = [];
+  for (const row of rows) {
+    switch (row.kind) {
+      case "message":
+        messages.push(row.message);
+        break;
+      case "tool-bundle":
+      case "assistant-step-summary":
+        messages.push(...collectLeafMessages(row.rows));
+        break;
+      case "turn-summary":
+        if (row.rows) {
+          messages.push(...collectLeafMessages(row.rows));
+        }
+        break;
+      default:
+        break;
+    }
+  }
+  return messages;
 }
 
 function getTurnStatus(messages: ViewMessage[]): ViewTurnStatus {
@@ -203,9 +237,14 @@ describe("buildTimelineRows projection turn lifecycle", () => {
 
     expect(
       rows.map((row) => (row.kind === "message" ? row.message.id : row.id)),
-    ).toEqual(["command-waiting", "command-completed"]);
-    const approvalRow = expectMessageRow(rows[0]);
-    expect(approvalRow.message).toMatchObject({
+    ).toEqual(["command-waiting:tool-bundle:1:commands"]);
+    const approvalRow = expectToolBundleRow(rows[0]);
+    const approvalMessages = collectLeafMessages(approvalRow.rows);
+    expect(approvalMessages.map((message) => message.id)).toEqual([
+      "command-waiting",
+      "command-completed",
+    ]);
+    expect(approvalMessages[0]).toMatchObject({
       kind: "tool-call",
       command: "git push",
       approvalStatus: "waiting_for_approval",
@@ -232,9 +271,11 @@ describe("buildTimelineRows projection turn lifecycle", () => {
 
     expect(
       rows.map((row) => (row.kind === "message" ? row.message.id : row.id)),
-    ).toEqual(["command-denied"]);
-    const deniedRow = expectMessageRow(rows[0]);
-    expect(deniedRow.message).toMatchObject({
+    ).toEqual(["command-denied:tool-bundle:1:commands"]);
+    const deniedRow = expectToolBundleRow(rows[0]);
+    const deniedMessages = collectLeafMessages(deniedRow.rows);
+    expect(deniedMessages).toHaveLength(1);
+    expect(deniedMessages[0]).toMatchObject({
       kind: "tool-call",
       command: "git push",
       approvalStatus: "denied",
@@ -300,16 +341,16 @@ describe("buildTimelineRows projection turn lifecycle", () => {
     };
 
     const rows = buildTimelineRows(projection, {
-      includeToolGroupMessages: true,
+      includeNestedRows: true,
     });
 
-    expect(rows.map((row) => row.kind)).toEqual(["tool-group", "message"]);
-    const toolGroup = expectToolGroupRow(rows[0]);
+    expect(rows.map((row) => row.kind)).toEqual(["turn-summary", "message"]);
+    const toolGroup = expectTurnSummaryRow(rows[0]);
     expect(toolGroup.status).toBe("completed");
     expect(toolGroup.sourceSeqStart).toBe(1);
     expect(toolGroup.sourceSeqEnd).toBe(4);
-    expect(toolGroup.messages).toHaveLength(1);
-    expect(toolGroup.messages[0]?.kind).toBe("tool-call");
+    expect(collectLeafMessages(toolGroup.rows ?? [])).toHaveLength(1);
+    expect(collectLeafMessages(toolGroup.rows ?? [])[0]?.kind).toBe("tool-call");
   });
 
   it("keeps a pending turn expanded even when all current messages are terminal", () => {
@@ -436,16 +477,16 @@ describe("buildTimelineRows projection turn lifecycle", () => {
     };
 
     const rows = buildTimelineRows(projection, {
-      includeToolGroupMessages: true,
+      includeNestedRows: true,
     });
 
     expect(rows.map((row) => row.kind)).toEqual([
-      "tool-group",
+      "turn-summary",
       "message",
       "message",
     ]);
-    const toolGroup = expectToolGroupRow(rows[0]);
-    expect(toolGroup.messages.map((message) => message.id)).toEqual(["tool-1"]);
+    const toolGroup = expectTurnSummaryRow(rows[0]);
+    expect(collectLeafMessages(toolGroup.rows ?? []).map((message) => message.id)).toEqual(["tool-1"]);
     const terminalRow = expectMessageRow(rows[1]);
     expect(terminalRow.message.id).toBe("assistant-1");
     const operationRow = expectMessageRow(rows[2]);
@@ -534,19 +575,19 @@ describe("buildTimelineRows projection turn lifecycle", () => {
     };
 
     const rows = buildTimelineRows(projection, {
-      includeToolGroupMessages: true,
+      includeNestedRows: true,
     });
 
     expect(rows.map((row) => row.kind)).toEqual([
+      "tool-bundle",
       "message",
-      "message",
-      "tool-group",
+      "turn-summary",
       "message",
     ]);
-    expect(expectMessageRow(rows[0]).message.id).toBe("tool-1");
+    expect(collectLeafMessages([expectToolBundleRow(rows[0])]).map((message) => message.id)).toEqual(["tool-1"]);
     expect(expectMessageRow(rows[1]).message.id).toBe("user-1");
-    const toolGroup = expectToolGroupRow(rows[2]);
-    expect(toolGroup.messages.map((message) => message.id)).toEqual(["tool-2"]);
+    const toolGroup = expectTurnSummaryRow(rows[2]);
+    expect(collectLeafMessages(toolGroup.rows ?? []).map((message) => message.id)).toEqual(["tool-2"]);
     expect(expectMessageRow(rows[3]).message.id).toBe("assistant-1");
   });
 });
@@ -590,7 +631,7 @@ describe("buildTimelineRows tool group collapsing", () => {
 
     expect(rows.map((row) => row.kind)).toEqual([
       "message",
-      "tool-group",
+      "turn-summary",
       "message",
     ]);
   });
@@ -642,14 +683,14 @@ describe("buildTimelineRows tool group collapsing", () => {
       },
     ]);
 
-    expect(rows.map((row) => row.kind)).toEqual(["tool-group", "message"]);
-    expect(rows[0]?.kind).toBe("tool-group");
-    if (rows[0]?.kind === "tool-group") {
+    expect(rows.map((row) => row.kind)).toEqual(["turn-summary", "message"]);
+    expect(rows[0]?.kind).toBe("turn-summary");
+    if (rows[0]?.kind === "turn-summary") {
       expect(rows[0].summaryCount).toBe(2);
       expect(rows[0].status).toBe("completed");
-      expect(rows[0].messages).toHaveLength(2);
-      expect(rows[0].messages[0]?.kind).toBe("delegation");
-      expect(rows[0].messages[1]?.kind).toBe("tasks");
+      expect(collectLeafMessages(rows[0].rows ?? [])).toHaveLength(2);
+      expect(collectLeafMessages(rows[0].rows ?? [])[0]?.kind).toBe("delegation");
+      expect(collectLeafMessages(rows[0].rows ?? [])[1]?.kind).toBe("tasks");
     }
     expect(rows[1]?.kind).toBe("message");
     if (rows[1]?.kind === "message") {
@@ -709,11 +750,11 @@ describe("buildTimelineRows tool group collapsing", () => {
 
     expect(rows.map((row) => row.kind)).toEqual([
       "message",
-      "tool-group",
+      "turn-summary",
       "message",
     ]);
-    const toolGroup = expectToolGroupRow(rows[1]);
-    expect(toolGroup.messages.map((message) => message.kind)).toEqual([
+    const toolGroup = expectTurnSummaryRow(rows[1]);
+    expect(collectLeafMessages(toolGroup.rows ?? []).map((message) => message.kind)).toEqual([
       "assistant-text",
       "tool-call",
     ]);
@@ -762,11 +803,11 @@ describe("buildTimelineRows tool group collapsing", () => {
       },
     ]);
 
-    expect(rows.map((row) => row.kind)).toEqual(["tool-group", "message"]);
-    const toolGroup = expectToolGroupRow(rows[0]);
+    expect(rows.map((row) => row.kind)).toEqual(["turn-summary", "message"]);
+    const toolGroup = expectTurnSummaryRow(rows[0]);
     expect(toolGroup.summaryCount).toBe(2);
     expect(toolGroup.status).toBe("error");
-    expect(toolGroup.messages.map((message) => message.kind)).toEqual([
+    expect(collectLeafMessages(toolGroup.rows ?? []).map((message) => message.kind)).toEqual([
       "tasks",
       "error",
     ]);
@@ -811,10 +852,10 @@ describe("buildTimelineRows tool group collapsing", () => {
       },
     ]);
 
-    expect(rows.map((row) => row.kind)).toEqual(["tool-group", "message"]);
-    const toolGroup = expectToolGroupRow(rows[0]);
+    expect(rows.map((row) => row.kind)).toEqual(["turn-summary", "message"]);
+    const toolGroup = expectTurnSummaryRow(rows[0]);
     expect(toolGroup.summaryCount).toBe(2);
-    expect(toolGroup.messages.map((m) => m.kind)).toEqual([
+    expect(collectLeafMessages(toolGroup.rows ?? []).map((m) => m.kind)).toEqual([
       "assistant-text",
       "tool-call",
     ]);
@@ -861,8 +902,8 @@ describe("buildTimelineRows tool group collapsing", () => {
 
     // Last terminal is assistant-2, so assistant-1 + tool-1 get grouped; assistant-2 stays standalone
     expect(rows).toHaveLength(2);
-    const toolGroup = expectToolGroupRow(rows[0]);
-    expect(toolGroup.messages.map((message) => message.kind)).toEqual([
+    const toolGroup = expectTurnSummaryRow(rows[0]);
+    expect(collectLeafMessages(toolGroup.rows ?? []).map((message) => message.kind)).toEqual([
       "assistant-text",
       "tool-call",
     ]);
@@ -907,6 +948,8 @@ describe("buildTimelineRows tool group collapsing", () => {
         turnId: "turn-1",
         rawType: "error",
         message: "Reconnecting... 2/5",
+        reconnectAttempt: 2,
+        reconnectTotal: 5,
       },
       {
         kind: "assistant-text",
@@ -921,9 +964,9 @@ describe("buildTimelineRows tool group collapsing", () => {
       },
     ]);
 
-    expect(rows.map((row) => row.kind)).toEqual(["tool-group", "message"]);
-    const toolGroup = expectToolGroupRow(rows[0]);
-    expect(toolGroup.messages.map((message) => message.kind)).toEqual([
+    expect(rows.map((row) => row.kind)).toEqual(["turn-summary", "message"]);
+    const toolGroup = expectTurnSummaryRow(rows[0]);
+    expect(collectLeafMessages(toolGroup.rows ?? []).map((message) => message.kind)).toEqual([
       "delegation",
       "tasks",
       "error",
@@ -1030,15 +1073,15 @@ describe("buildTimelineRows tool group collapsing", () => {
 
     expect(rows.map((row) => row.kind)).toEqual([
       "message",
-      "tool-group",
+      "turn-summary",
       "message",
       "message",
-      "tool-group",
+      "turn-summary",
       "message",
     ]);
     const toolGroups = rows.filter(
-      (row): row is Extract<TimelineRow, { kind: "tool-group" }> =>
-        row.kind === "tool-group",
+      (row): row is Extract<TimelineRow, { kind: "turn-summary" }> =>
+        row.kind === "turn-summary",
     );
     expect(toolGroups).toHaveLength(2);
     expect(toolGroups[0]?.turnId).toBe("turn-1");
@@ -1072,7 +1115,7 @@ describe("buildTimelineRows tool group collapsing", () => {
       },
     ]);
 
-    expect(rows.map((row) => row.kind)).toEqual(["message", "message"]);
+    expect(rows.map((row) => row.kind)).toEqual(["message", "tool-bundle"]);
   });
 
   it("does not collapse an active turn before a streaming assistant message", () => {
@@ -1129,9 +1172,69 @@ describe("buildTimelineRows tool group collapsing", () => {
     expect(rows.map((row) => row.kind)).toEqual([
       "message",
       "message",
-      "message",
+      "tool-bundle",
       "message",
     ]);
+  });
+
+  it("does not wrap a single tool bundle between assistant messages in an assistant-step-summary", () => {
+    const rows = buildRowsFromMessages([
+      {
+        kind: "assistant-text",
+        id: "assistant-1",
+        threadId: "thread-1",
+        sourceSeqStart: 1,
+        sourceSeqEnd: 1,
+        createdAt: 1,
+        turnId: "turn-1",
+        text: "I am exploring the codebase.",
+        status: "completed",
+      },
+      {
+        kind: "tool-exploring",
+        id: "explore-1",
+        threadId: "thread-1",
+        sourceSeqStart: 2,
+        sourceSeqEnd: 2,
+        createdAt: 2,
+        turnId: "turn-1",
+        status: "completed",
+        calls: [
+          {
+            callId: "call-1",
+            command: "Read /src/main.ts",
+            parsedCmd: [
+              {
+                type: "read",
+                cmd: "Read /src/main.ts",
+                name: "Read",
+                path: "/src/main.ts",
+              },
+            ],
+            output: "contents",
+            status: "completed",
+          },
+        ],
+      },
+      {
+        kind: "assistant-text",
+        id: "assistant-2",
+        threadId: "thread-1",
+        sourceSeqStart: 3,
+        sourceSeqEnd: 3,
+        createdAt: 3,
+        turnId: "turn-1",
+        text: "I found the relevant file.",
+        status: "streaming",
+      },
+    ]);
+
+    expect(rows.map((row) => row.kind)).toEqual([
+      "message",
+      "tool-bundle",
+      "message",
+    ]);
+    expect(expectToolBundleRow(rows[1]).summary.kind).toBe("exploration");
   });
 
   it("does not collapse an active turn with pending tool work", () => {
@@ -1188,7 +1291,7 @@ describe("buildTimelineRows tool group collapsing", () => {
     expect(rows.map((row) => row.kind)).toEqual([
       "message",
       "message",
-      "message",
+      "tool-bundle",
       "message",
     ]);
   });
@@ -1249,13 +1352,11 @@ describe("buildTimelineRows tool group collapsing", () => {
     expect(rows.map((row) => row.kind)).toEqual([
       "message",
       "message",
-      "message",
-      "message",
+      "tool-bundle",
     ]);
     expect(expectMessageRow(rows[0]).message.kind).toBe("user");
     expect(expectMessageRow(rows[1]).message.kind).toBe("assistant-text");
-    expect(expectMessageRow(rows[2]).message.kind).toBe("tool-call");
-    expect(expectMessageRow(rows[3]).message.kind).toBe("tool-call");
+    expect(expectToolBundleRow(rows[2]).summary.kind).toBe("commands");
   });
 
   it("leaves messages standalone when the only terminal is first and nothing non-ungroupable precedes it", () => {
@@ -1301,11 +1402,11 @@ describe("buildTimelineRows tool group collapsing", () => {
     expect(rows.map((row) => row.kind)).toEqual([
       "message",
       "message",
-      "message",
+      "tool-bundle",
     ]);
     expect(expectMessageRow(rows[0]).message.kind).toBe("user");
     expect(expectMessageRow(rows[1]).message.kind).toBe("assistant-text");
-    expect(expectMessageRow(rows[2]).message.kind).toBe("tool-call");
+    expect(expectToolBundleRow(rows[2]).summary.kind).toBe("commands");
   });
 });
 
@@ -1322,6 +1423,8 @@ describe("buildTimelineRows reconnect error collapsing", () => {
         turnId: "turn-1",
         rawType: "error",
         message: "Reconnecting... 2/5",
+        reconnectAttempt: 2,
+        reconnectTotal: 5,
       },
       {
         kind: "error",
@@ -1333,6 +1436,8 @@ describe("buildTimelineRows reconnect error collapsing", () => {
         turnId: "turn-1",
         rawType: "error",
         message: "Reconnecting... 3/5",
+        reconnectAttempt: 3,
+        reconnectTotal: 5,
       },
       {
         kind: "error",
@@ -1344,12 +1449,15 @@ describe("buildTimelineRows reconnect error collapsing", () => {
         turnId: "turn-1",
         rawType: "error",
         message: "Reconnecting... 4/5",
+        reconnectAttempt: 4,
+        reconnectTotal: 5,
       },
     ]);
 
     expect(rows).toHaveLength(1);
     const messageRow = expectMessageRow(rows[0]);
     const errorMessage = expectErrorMessage(messageRow.message);
+    expect(errorMessage.id).toBe("error-1");
     expect(errorMessage.message).toBe("Reconnecting... 4/5");
     expect(errorMessage.sourceSeqStart).toBe(10);
     expect(errorMessage.sourceSeqEnd).toBe(12);
@@ -1369,6 +1477,8 @@ describe("buildTimelineRows reconnect error collapsing", () => {
         turnId: "turn-1",
         rawType: "error",
         message: "Reconnecting... 2/5",
+        reconnectAttempt: 2,
+        reconnectTotal: 5,
       },
       {
         kind: "tool-call",
@@ -1392,6 +1502,8 @@ describe("buildTimelineRows reconnect error collapsing", () => {
         turnId: "turn-1",
         rawType: "error",
         message: "Reconnecting... 3/4",
+        reconnectAttempt: 3,
+        reconnectTotal: 4,
       },
       {
         kind: "error",
@@ -1403,12 +1515,14 @@ describe("buildTimelineRows reconnect error collapsing", () => {
         turnId: "turn-1",
         rawType: "error",
         message: "Reconnecting... 4/5",
+        reconnectAttempt: 4,
+        reconnectTotal: 5,
       },
     ]);
 
     // Last terminal is error-3; error-1, tool-1, error-2 are grouped before it; error-3 stays standalone
     expect(rows).toHaveLength(2);
-    expect(rows[0]?.kind).toBe("tool-group");
+    expect(rows[0]?.kind).toBe("turn-summary");
     expect(rows[1]?.kind).toBe("message");
   });
 });

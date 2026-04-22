@@ -11,7 +11,7 @@ import { threadSchema, type TimelineRow } from "@bb/domain";
 import {
   threadDraftListResponseSchema,
   threadTimelineResponseSchema,
-  timelineToolDetailsResponseSchema,
+  timelineTurnSummaryDetailsResponseSchema,
 } from "@bb/server-contract";
 import { z } from "zod";
 import { describe, expect, it } from "vitest";
@@ -45,7 +45,7 @@ const threadEventWaitResponseSchema = z.object({
   type: z.string(),
 });
 
-type TimelineToolGroupRow = Extract<TimelineRow, { kind: "tool-group" }>;
+type TimelineTurnSummaryRow = Extract<TimelineRow, { kind: "turn-summary" }>;
 
 describe("public thread data routes", () => {
   it("returns timeline rows and timeline tool details from thread events", async () => {
@@ -94,23 +94,26 @@ describe("public thread data routes", () => {
       );
 
       const toolDetailsResponse = await harness.app.request(
-        `/api/v1/threads/${thread.id}/timeline/tool-details?sourceSeqStart=2&sourceSeqEnd=2`,
+        `/api/v1/threads/${thread.id}/timeline/turn-summary-details?sourceSeqStart=2&sourceSeqEnd=2`,
       );
       expect(toolDetailsResponse.status).toBe(200);
-      const toolDetails = timelineToolDetailsResponseSchema.parse(
+      const toolDetails = timelineTurnSummaryDetailsResponseSchema.parse(
         await readJson(toolDetailsResponse),
       );
-      expect(toolDetails.messages).toHaveLength(1);
-      expect(toolDetails.messages[0]?.kind).toBe("assistant-text");
-      if (toolDetails.messages[0]?.kind === "assistant-text") {
-        expect(toolDetails.messages[0].text).toBe("Manager note two");
+      expect(toolDetails.rows).toHaveLength(1);
+      expect(toolDetails.rows[0]?.kind).toBe("message");
+      if (toolDetails.rows[0]?.kind === "message") {
+        expect(toolDetails.rows[0].message.kind).toBe("assistant-text");
+        if (toolDetails.rows[0].message.kind === "assistant-text") {
+          expect(toolDetails.rows[0].message.text).toBe("Manager note two");
+        }
       }
     } finally {
       await harness.cleanup();
     }
   });
 
-  it("hydrates timeline tool-group details from the summary row range", async () => {
+  it("hydrates timeline turn-summary details from the summary row range", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps);
@@ -187,28 +190,34 @@ describe("public thread data routes", () => {
         await readJson(timelineResponse),
       );
       const toolGroup = timeline.rows.find(
-        (row): row is TimelineToolGroupRow => row.kind === "tool-group",
+        (row): row is TimelineTurnSummaryRow => row.kind === "turn-summary",
       );
       expect(toolGroup).toBeDefined();
       if (!toolGroup) {
-        throw new Error("Expected a tool-group row");
+        throw new Error("Expected a turn-summary row");
       }
-      expect(toolGroup.messages).toHaveLength(0);
+      expect(toolGroup.rows).toBeNull();
 
       const toolDetailsResponse = await harness.app.request(
-        `/api/v1/threads/${thread.id}/timeline/tool-details?sourceSeqStart=${toolGroup.sourceSeqStart}&sourceSeqEnd=${toolGroup.sourceSeqEnd}`,
+        `/api/v1/threads/${thread.id}/timeline/turn-summary-details?sourceSeqStart=${toolGroup.sourceSeqStart}&sourceSeqEnd=${toolGroup.sourceSeqEnd}`,
       );
       expect(toolDetailsResponse.status).toBe(200);
-      const toolDetails = timelineToolDetailsResponseSchema.parse(
+      const toolDetails = timelineTurnSummaryDetailsResponseSchema.parse(
         await readJson(toolDetailsResponse),
       );
 
-      expect(toolDetails.messages.map((message) => message.kind)).toEqual([
-        "tool-call",
+      expect(toolDetails.rows.map((row) => row.kind)).toEqual([
+        "tool-bundle",
       ]);
-      expect(toolDetails.messages[0]?.kind).toBe("tool-call");
-      if (toolDetails.messages[0]?.kind === "tool-call") {
-        expect(toolDetails.messages[0].callId).toBe("tool-1");
+      expect(toolDetails.rows[0]?.kind).toBe("tool-bundle");
+      if (toolDetails.rows[0]?.kind === "tool-bundle") {
+        expect(toolDetails.rows[0].rows[0]?.kind).toBe("message");
+        if (toolDetails.rows[0].rows[0]?.kind === "message") {
+          expect(toolDetails.rows[0].rows[0].message.kind).toBe("tool-call");
+          if (toolDetails.rows[0].rows[0].message.kind === "tool-call") {
+            expect(toolDetails.rows[0].rows[0].message.callId).toBe("tool-1");
+          }
+        }
       }
     } finally {
       await harness.cleanup();
@@ -232,7 +241,7 @@ describe("public thread data routes", () => {
       });
 
       const response = await harness.app.request(
-        `/api/v1/threads/${thread.id}/timeline/tool-details?sourceSeqStart=oops&sourceSeqEnd=2`,
+        `/api/v1/threads/${thread.id}/timeline/turn-summary-details?sourceSeqStart=oops&sourceSeqEnd=2`,
       );
       expect(response.status).toBe(400);
       await expect(readJson(response)).resolves.toMatchObject({

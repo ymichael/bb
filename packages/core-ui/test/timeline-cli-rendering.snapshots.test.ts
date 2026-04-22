@@ -62,15 +62,17 @@ describe("timeline CLI rendering snapshots", () => {
     );
     expect(steerMessage?.sourceSeqStart).toBe(3);
     expect(timeline.text).toMatchInlineSnapshot(`
-      "── Tool Call: exec_command ─────────────────────────────────
-        [completed] exec_command { cmd: pnpm test }
+      "── Ran 1 command ───────────────────────────────────────────
+        ── Tool Call: exec_command ─────────────────────────────────
+          [completed] exec_command { cmd: pnpm test }
 
       ── User ────────────────────────────────────────────────────
       Please account for the restart
 
       ── Worked on 1 item ────────────────────────────────────────
-        ── Tool Call: exec_command ─────────────────────────────────
-          [completed] exec_command { cmd: sqlite3 ~/.bb-dev/bb.db '.tables' }
+        ── Ran 1 command ───────────────────────────────────────────
+          ── Tool Call: exec_command ─────────────────────────────────
+            [completed] exec_command { cmd: sqlite3 ~/.bb-dev/bb.db '.tables' }
 
       ── Assistant ───────────────────────────────────────────────
       Done."
@@ -111,15 +113,17 @@ describe("timeline CLI rendering snapshots", () => {
     );
     expect(steerMessage?.sourceSeqStart).toBe(3);
     expect(timeline.text).toMatchInlineSnapshot(`
-      "── Tool Call: exec_command ─────────────────────────────────
-        [completed] exec_command { cmd: pnpm test }
+      "── Ran 1 command ───────────────────────────────────────────
+        ── Tool Call: exec_command ─────────────────────────────────
+          [completed] exec_command { cmd: pnpm test }
 
       ── User ────────────────────────────────────────────────────
       Please account for the restart
 
       ── Worked on 1 item ────────────────────────────────────────
-        ── Tool Call: exec_command ─────────────────────────────────
-          [completed] exec_command { cmd: sqlite3 ~/.bb-dev/bb.db '.tables' }
+        ── Ran 1 command ───────────────────────────────────────────
+          ── Tool Call: exec_command ─────────────────────────────────
+            [completed] exec_command { cmd: sqlite3 ~/.bb-dev/bb.db '.tables' }
 
       ── Assistant ───────────────────────────────────────────────
       Done."
@@ -312,15 +316,17 @@ describe("timeline CLI rendering snapshots", () => {
         ◼ Patch the projection
         □ Run focused tests
 
-      ── Searched React suspense docs ────────────────────────────
-        [completed] React suspense docs
-        Found the React Suspense docs
+      ── Ran 1 web search ────────────────────────────────────────
+        ── Searched React suspense docs ────────────────────────────
+          [completed] React suspense docs
+          Found the React Suspense docs
 
-      ── File Edit ───────────────────────────────────────────────
-        [completed] /repo/packages/core-ui/src/timeline.ts (update)
-        @@ -1 +1 @@
-        -before
-        +after
+      ── Edited 1 file ───────────────────────────────────────────
+        ── File Edit ───────────────────────────────────────────────
+          [completed] /repo/packages/core-ui/src/timeline.ts (update)
+          @@ -1 +1 @@
+          -before
+          +after
 
       ── Assistant ───────────────────────────────────────────────
       I patched the projection and verified it."
@@ -349,8 +355,9 @@ describe("timeline CLI rendering snapshots", () => {
         item: item_123
         tool: Bash
 
-      ── Tool Call: exec_command ─────────────────────────────────
-        [denied] git push"
+      ── Ran 1 command ───────────────────────────────────────────
+        ── Tool Call: exec_command ─────────────────────────────────
+          [denied] git push"
     `);
   });
 

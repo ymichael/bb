@@ -1,24 +1,24 @@
-import type { TimelineToolGroupStatus } from "@bb/domain";
+import type { TimelineGroupedRowStatus } from "@bb/domain";
+import { assertNever } from "./assert-never.js";
 
-export interface ToolGroupSummaryParts {
+export interface TurnSummaryParts {
   prefix: string;
   emphasis: string;
-  suffix?: string;
 }
 
-export function formatToolGroupCountLabel(summaryCount: number): string {
+export function formatTurnSummaryCountLabel(summaryCount: number): string {
   return `${summaryCount} item${summaryCount === 1 ? "" : "s"}`;
 }
 
-export function buildToolGroupSummaryParts({
+export function buildTurnSummaryParts({
   duration,
   status,
   summaryCount,
 }: {
   duration: string | undefined;
-  status: TimelineToolGroupStatus;
+  status: TimelineGroupedRowStatus;
   summaryCount: number;
-}): ToolGroupSummaryParts {
+}): TurnSummaryParts {
   const prefix = (() => {
     switch (status) {
       case "pending":
@@ -29,9 +29,11 @@ export function buildToolGroupSummaryParts({
         return duration ? "Stopped after" : "Stopped while working on";
       case "completed":
         return duration ? "Worked for" : "Worked on";
+      default:
+        return assertNever(status);
     }
   })();
-  const countLabel = formatToolGroupCountLabel(summaryCount);
+  const countLabel = formatTurnSummaryCountLabel(summaryCount);
 
   if (duration) {
     return {

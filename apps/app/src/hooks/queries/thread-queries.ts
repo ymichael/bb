@@ -9,7 +9,7 @@ import type {
   ThreadListResponse,
   ThreadPendingInteractionsResponse,
   ThreadTimelineResponse,
-  TimelineToolDetailsResponse,
+  TimelineTurnSummaryDetailsResponse,
   WorkspaceFileListResponse,
 } from "@bb/server-contract";
 import type { ThreadListFilters, FilePreview } from "@/lib/api";
@@ -45,7 +45,7 @@ export interface UseThreadsFilters extends Omit<
   projectId?: string;
 }
 
-interface ThreadTimelineToolDetailsRequest {
+interface ThreadTimelineTurnSummaryDetailsRequest {
   id: string;
   sourceSeqStart: number;
   sourceSeqEnd: number;
@@ -190,10 +190,10 @@ export function useThreadTimeline(
   });
 }
 
-export function useThreadTimelineToolDetails() {
+export function useThreadTimelineTurnSummaryDetails() {
   return useMutation({
     meta: {
-      errorMessage: "Failed to load tool details.",
+      errorMessage: "Failed to load turn summary details.",
       showErrorToast: false,
     },
     mutationFn: ({
@@ -201,8 +201,8 @@ export function useThreadTimelineToolDetails() {
       sourceSeqStart,
       sourceSeqEnd,
       includeAllEvents,
-    }: ThreadTimelineToolDetailsRequest): Promise<TimelineToolDetailsResponse> =>
-      api.getThreadTimelineToolDetails(
+    }: ThreadTimelineTurnSummaryDetailsRequest): Promise<TimelineTurnSummaryDetailsResponse> =>
+      api.getThreadTimelineTurnSummaryDetails(
         id,
         sourceSeqStart,
         sourceSeqEnd,

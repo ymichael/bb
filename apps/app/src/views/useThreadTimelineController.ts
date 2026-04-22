@@ -9,8 +9,7 @@ import { useSetAtom } from "jotai";
 import type {
   ThreadStatus,
   TimelineRow,
-  TimelineToolGroupRow,
-  ViewMessage,
+  TimelineTurnSummaryRow,
 } from "@bb/domain";
 import { useResizeObserver } from "usehooks-ts";
 import { threadTimelineShowScrollToBottomAtom } from "./threadTimelineAtoms";
@@ -21,7 +20,7 @@ import {
   hasMeaningfulTimelineContainerResize,
   isTimelineNearBottom,
   resolveTimelineScrollMode,
-  shouldLoadToolGroupMessages,
+  shouldLoadNestedRows,
   shouldShowTimelineScrollToBottom,
   type TimelineScrollAnchor,
   type TimelineScrollMode,
@@ -46,7 +45,7 @@ const TIMELINE_SCROLL_INTENT_KEYS = new Set([
   " ",
 ]);
 
-interface LoadToolGroupMessagesArgs {
+interface LoadTurnSummaryRowsArgs {
   id: string;
   sourceSeqStart: number;
   sourceSeqEnd: number;
@@ -57,9 +56,9 @@ interface UseThreadTimelineControllerParams {
   threadId?: string;
   threadDetailRows: TimelineRow[];
   threadStatus?: ThreadStatus;
-  loadToolGroupMessages: (
-    args: LoadToolGroupMessagesArgs,
-  ) => Promise<{ messages: ViewMessage[] }>;
+  loadTurnSummaryRows: (
+    args: LoadTurnSummaryRowsArgs,
+  ) => Promise<{ rows: TimelineRow[] }>;
 }
 
 interface SyncScrollStateArgs {
@@ -160,13 +159,13 @@ export function useThreadTimelineController({
   threadId,
   threadDetailRows,
   threadStatus,
-  loadToolGroupMessages,
+  loadTurnSummaryRows,
 }: UseThreadTimelineControllerParams) {
-  const [loadingToolGroupIds, setLoadingToolGroupIds] = useState<Set<string>>(
+  const [loadingTurnSummaryIds, setLoadingTurnSummaryIds] = useState<Set<string>>(
     new Set(),
   );
-  const [toolGroupMessagesById, setToolGroupMessagesById] = useState<
-    Record<string, ViewMessage[]>
+  const [turnSummaryRowsById, setTurnSummaryRowsById] = useState<
+    Record<string, TimelineRow[]>
   >({});
   const [containerElement, setContainerElement] =
     useState<HTMLDivElement | null>(null);
@@ -338,15 +337,15 @@ export function useThreadTimelineController({
     }
   }, [containerElement, scheduleReconcile, setShowScrollToBottom]);
 
-  const handleLoadToolGroupMessages = useCallback(
-    (entry: TimelineToolGroupRow) => {
+  const handleLoadTurnSummaryRows = useCallback(
+    (entry: TimelineTurnSummaryRow) => {
       const currentThreadId = threadId;
 
       if (
-        !shouldLoadToolGroupMessages({
-          cachedMessageCount: toolGroupMessagesById[entry.id]?.length ?? 0,
-          inlineMessageCount: entry.messages.length,
-          isLoading: loadingToolGroupIds.has(entry.id),
+        !shouldLoadNestedRows({
+          cachedRowCount: turnSummaryRowsById[entry.id]?.length ?? 0,
+          inlineRowCount: entry.rows?.length ?? 0,
+          isLoading: loadingTurnSummaryIds.has(entry.id),
           threadId: currentThreadId,
         })
       ) {
@@ -356,20 +355,20 @@ export function useThreadTimelineController({
         return;
       }
 
-      setLoadingToolGroupIds((prev) => new Set(prev).add(entry.id));
-      void loadToolGroupMessages({
+      setLoadingTurnSummaryIds((prev) => new Set(prev).add(entry.id));
+      void loadTurnSummaryRows({
         id: currentThreadId,
         sourceSeqStart: entry.sourceSeqStart,
         sourceSeqEnd: entry.sourceSeqEnd,
       })
         .then((response) => {
-          setToolGroupMessagesById((prev) => ({
+          setTurnSummaryRowsById((prev) => ({
             ...prev,
-            [entry.id]: response.messages,
+            [entry.id]: response.rows,
           }));
         })
         .finally(() => {
-          setLoadingToolGroupIds((prev) => {
+          setLoadingTurnSummaryIds((prev) => {
             const next = new Set(prev);
             next.delete(entry.id);
             return next;
@@ -377,16 +376,16 @@ export function useThreadTimelineController({
         });
     },
     [
-      loadToolGroupMessages,
-      loadingToolGroupIds,
+      loadTurnSummaryRows,
+      loadingTurnSummaryIds,
       threadId,
-      toolGroupMessagesById,
+      turnSummaryRowsById,
     ],
   );
 
   useEffect(() => {
-    setLoadingToolGroupIds(new Set());
-    setToolGroupMessagesById({});
+    setLoadingTurnSummaryIds(new Set());
+    setTurnSummaryRowsById({});
   }, [threadId]);
 
   useEffect(() => {
@@ -558,12 +557,12 @@ export function useThreadTimelineController({
 
   return {
     captureTimelineScrollPosition,
-    handleLoadToolGroupMessages,
+    handleLoadTurnSummaryRows,
     handleTimelineScroll,
-    loadingToolGroupIds,
+    loadingTurnSummaryIds,
     promptComposerRef,
     scrollToBottom,
     setContainerRef,
-    toolGroupMessagesById,
+    turnSummaryRowsById,
   };
 }

@@ -1,11 +1,13 @@
 import type { ViewAssistantTextMessage } from "@bb/domain";
 import { ConversationMarkdown } from "../ConversationMarkdown.js";
 
+interface AssistantMessageRowProps {
+  message: ViewAssistantTextMessage;
+}
+
 export function AssistantMessageRow({
   message,
-}: {
-  message: ViewAssistantTextMessage;
-}) {
+}: AssistantMessageRowProps) {
   return (
     <div className="group w-full" style={{ overflowAnchor: "none" }}>
       <div className="mr-auto w-full">

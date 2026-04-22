@@ -18,7 +18,7 @@ import {
   useThread,
   useThreadPendingInteractions,
   useThreadTimeline,
-  useThreadTimelineToolDetails,
+  useThreadTimelineTurnSummaryDetails,
   useThreads,
 } from "../hooks/queries/thread-queries";
 import { ThreadGitActionDialog } from "@/components/thread/ThreadGitActionDialog";
@@ -119,7 +119,7 @@ export function ThreadDetailView() {
     refetchOnMount: "always",
     includeAllEvents: showAllEvents,
   });
-  const timelineToolDetails = useThreadTimelineToolDetails();
+  const timelineTurnSummaryDetails = useThreadTimelineTurnSummaryDetails();
   const sendMessage = useSendThreadMessage();
   const requestEnvironmentAction = useRequestEnvironmentAction();
   const unarchiveThread = useUnarchiveThread();
@@ -192,19 +192,19 @@ export function ThreadDetailView() {
     timelineLoading && threadDetailRows.length === 0;
   const {
     captureTimelineScrollPosition,
-    handleLoadToolGroupMessages,
+    handleLoadTurnSummaryRows,
     handleTimelineScroll,
-    loadingToolGroupIds,
+    loadingTurnSummaryIds,
     promptComposerRef,
     scrollToBottom,
     setContainerRef,
-    toolGroupMessagesById,
+    turnSummaryRowsById,
   } = useThreadTimelineController({
     threadId,
     threadDetailRows,
     threadStatus: thread?.status,
-    loadToolGroupMessages: (args) =>
-      timelineToolDetails.mutateAsync({
+    loadTurnSummaryRows: (args) =>
+      timelineTurnSummaryDetails.mutateAsync({
         ...args,
         includeAllEvents: showAllEvents,
       }),
@@ -598,8 +598,8 @@ export function ThreadDetailView() {
           isThreadTimelinePending,
           timelineError: Boolean(timelineError),
           latestActivityRowId,
-          loadingToolGroupIds,
-          onLoadToolGroupMessages: handleLoadToolGroupMessages,
+          loadingTurnSummaryIds,
+          onLoadTurnSummaryRows: handleLoadTurnSummaryRows,
           onScroll: handleTimelineScroll,
           projectId,
           scrollRef: setContainerRef,
@@ -611,7 +611,7 @@ export function ThreadDetailView() {
           threadDetailRows,
           threadId: thread.id,
           threadStatus: thread.status,
-          toolGroupMessagesById,
+          turnSummaryRowsById,
         }}
       />
       {canUseGitUi ? (

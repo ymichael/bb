@@ -9,12 +9,61 @@ import type {
   ViewMessage,
 } from "@bb/domain";
 
+interface ReconnectState {
+  attempt: number;
+  total: number;
+}
+
 function formatErrorDetail(
   message: string,
   detail: string | undefined,
 ): string {
   if (detail && detail !== message) return `${message} - ${detail}`;
   return message || "Error event";
+}
+
+function parseLegacyReconnectState(message: string): ReconnectState | null {
+  const match = message.trim().match(/^Reconnecting\.\.\.\s+(\d+)\/(\d+)$/);
+  if (!match) {
+    return null;
+  }
+
+  const attempt = Number.parseInt(match[1] ?? "", 10);
+  const total = Number.parseInt(match[2] ?? "", 10);
+  if (
+    !Number.isFinite(attempt) ||
+    !Number.isFinite(total) ||
+    attempt <= 0 ||
+    total <= 0 ||
+    attempt > total
+  ) {
+    return null;
+  }
+
+  return { attempt, total };
+}
+
+function getReconnectState(decoded: ThreadEvent): ReconnectState | null {
+  if (decoded.type !== "system/error") {
+    return null;
+  }
+
+  if (
+    decoded.reconnectAttempt !== undefined &&
+    decoded.reconnectTotal !== undefined
+  ) {
+    return {
+      attempt: decoded.reconnectAttempt,
+      total: decoded.reconnectTotal,
+    };
+  }
+
+  if (decoded.code !== "provider_reconnect") {
+    return null;
+  }
+
+  // Legacy events only carried reconnect progress in the display message.
+  return parseLegacyReconnectState(decoded.message);
 }
 
 export function parseErrorMessage(
@@ -24,6 +73,7 @@ export function parseErrorMessage(
   if (decoded.type !== "error" && decoded.type !== "system/error") return null;
 
   const { message, detail } = decoded;
+  const reconnectState = getReconnectState(decoded);
   return {
     kind: "error",
     id: messageId(decoded.threadId, "error", `${meta.seq}`),
@@ -34,6 +84,12 @@ export function parseErrorMessage(
     turnId: getEventTurnId(decoded),
     rawType: decoded.type,
     message: formatErrorDetail(message, detail),
+    ...(reconnectState
+      ? {
+          reconnectAttempt: reconnectState.attempt,
+          reconnectTotal: reconnectState.total,
+        }
+      : {}),
   };
 }
 

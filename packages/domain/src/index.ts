@@ -379,18 +379,37 @@ export { toPositiveNumber } from "./number-utils.js";
 
 export {
   timelineActiveThinkingSchema,
+  timelineAssistantStepSummaryRowSchema,
+  timelineCommandsToolBundleSummarySchema,
+  timelineExplorationToolBundleSummarySchema,
+  timelineFileEditsToolBundleSummarySchema,
   timelineMessageRowSchema,
   timelineRowSchema,
-  timelineToolGroupRowSchema,
-  timelineToolGroupStatusSchema,
-  timelineToolGroupStatusValues,
+  timelineGroupedRowStatusSchema,
+  timelineGroupedRowStatusValues,
+  timelineToolBundleKindSchema,
+  timelineToolBundleKindValues,
+  timelineToolBundleRowSchema,
+  timelineToolBundleSummarySchema,
+  timelineTurnSummaryRowSchema,
+  timelineWebResearchToolBundleSummarySchema,
 } from "./thread-detail-rows.js";
 export type {
   TimelineActiveThinking,
+  TimelineAssistantStepSummaryChildRow,
+  TimelineAssistantStepSummaryRow,
+  TimelineCommandsToolBundleSummary,
+  TimelineExplorationToolBundleSummary,
+  TimelineFileEditsToolBundleSummary,
+  TimelineGroupedRowStatus,
   TimelineMessageRow,
   TimelineRow,
-  TimelineToolGroupRow,
-  TimelineToolGroupStatus,
+  TimelineToolBundleKind,
+  TimelineToolBundleRow,
+  TimelineToolBundleSummary,
+  TimelineTurnSummaryChildRow,
+  TimelineTurnSummaryRow,
+  TimelineWebResearchToolBundleSummary,
 } from "./thread-detail-rows.js";
 
 export {

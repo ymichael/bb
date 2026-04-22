@@ -13,7 +13,6 @@ import type {
   ThreadTurnInitiator,
   TurnRequestTarget,
   TimelineRow,
-  TimelineToolGroupRow,
   ViewMessage,
   ViewProjection,
 } from "@bb/domain";
@@ -40,7 +39,7 @@ export interface RenderedTimelineFixture {
   projection: ViewProjection;
   rows: TimelineRow[];
   text: string;
-  toolGroups: TimelineToolGroupRow[];
+  toolGroups: Extract<TimelineRow, { kind: "turn-summary" }>[];
 }
 
 export interface RenderTimelinePrefixesArgs extends RenderTimelineFixtureArgs {
@@ -994,7 +993,7 @@ export function renderTimelineFixture(
   const decodedEvents = args.events.map((row) => decodeRow(row));
   const projection = toViewProjection(decodedEvents, args.projectionOptions);
   const rows = buildTimelineRows(projection, {
-    includeToolGroupMessages: args.includeToolGroupMessages ?? true,
+    includeNestedRows: args.includeToolGroupMessages ?? true,
   });
   const messages = flattenProjectionMessagesDeep(projection);
   const text = formatTimelineAsText(rows, {
@@ -1002,7 +1001,8 @@ export function renderTimelineFixture(
     verbose: args.verbose ?? true,
   });
   const toolGroups = rows.filter(
-    (row): row is TimelineToolGroupRow => row.kind === "tool-group",
+    (row): row is Extract<TimelineRow, { kind: "turn-summary" }> =>
+      row.kind === "turn-summary",
   );
 
   return {
@@ -1043,30 +1043,51 @@ function appendResolvedLogicalRow(args: AppendResolvedLogicalRowArgs): void {
   }
 }
 
+function appendLogicalRowsFromTimelineRow(
+  args: AppendResolvedLogicalRowArgs,
+): void {
+  appendResolvedLogicalRow(args);
+
+  switch (args.timelineRow.kind) {
+    case "message":
+      return;
+    case "tool-bundle":
+    case "assistant-step-summary":
+      for (const childRow of args.timelineRow.rows) {
+        appendLogicalRowsFromTimelineRow({
+          rows: args.rows,
+          timelineRow: childRow,
+          resolveRow: args.resolveRow,
+        });
+      }
+      return;
+    case "turn-summary":
+      if (!args.timelineRow.rows) {
+        return;
+      }
+      for (const childRow of args.timelineRow.rows) {
+        appendLogicalRowsFromTimelineRow({
+          rows: args.rows,
+          timelineRow: childRow,
+          resolveRow: args.resolveRow,
+        });
+      }
+      return;
+    default:
+      return;
+  }
+}
+
 export function collectLogicalTimelineRows(
   args: CollectLogicalTimelineRowsArgs,
 ): LogicalTimelineRow[] {
   const logicalRows: LogicalTimelineRow[] = [];
   for (const row of args.rows) {
-    appendResolvedLogicalRow({
+    appendLogicalRowsFromTimelineRow({
       rows: logicalRows,
       timelineRow: row,
       resolveRow: args.resolveRow,
     });
-    if (row.kind !== "tool-group") {
-      continue;
-    }
-    for (const message of row.messages) {
-      appendResolvedLogicalRow({
-        rows: logicalRows,
-        timelineRow: {
-          kind: "message",
-          id: message.id,
-          message,
-        },
-        resolveRow: args.resolveRow,
-      });
-    }
   }
   return logicalRows;
 }

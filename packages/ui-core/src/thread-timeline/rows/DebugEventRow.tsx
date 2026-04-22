@@ -3,15 +3,21 @@ import type { ViewDebugRawEventMessage } from "@bb/domain";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { DEBUG_EVENT_EXPANDED_MAX_LENGTH } from "./shared.js";
 
+interface DebugEventDataOptions {
+  maxLength: number;
+  pretty?: boolean;
+}
+
+interface DebugEventRowProps {
+  message: ViewDebugRawEventMessage;
+}
+
 function formatDebugEventData(
   data: unknown,
   {
     maxLength,
     pretty = false,
-  }: {
-    maxLength: number;
-    pretty?: boolean;
-  },
+  }: DebugEventDataOptions,
 ): string {
   if (data === undefined) return "(no data)";
   try {
@@ -28,9 +34,7 @@ function formatDebugEventData(
 
 export function DebugEventRow({
   message,
-}: {
-  message: ViewDebugRawEventMessage;
-}) {
+}: DebugEventRowProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const event = message.rawEvent;
   const expandedContent = formatDebugEventData(event.data, {

@@ -11,7 +11,7 @@ import {
 import { getTimelineBenchmarkScenarios } from "../helpers/timeline-benchmark.js";
 import {
   buildThreadTimeline,
-  buildTimelineToolDetails,
+  buildTimelineTurnSummaryDetails,
 } from "../../src/services/threads/timeline.js";
 
 type TimelineMessageRow = Extract<TimelineRow, { kind: "message" }>;
@@ -388,7 +388,7 @@ describe("buildThreadTimeline", () => {
     });
   });
 
-  it("fails loudly when tool details cannot match a projected tool-group range", async () => {
+  it("fails loudly when turn-summary details cannot match a projected turn-summary range", async () => {
     const harness = await createTestAppHarness();
     harnesses.push(harness);
 
@@ -459,11 +459,11 @@ describe("buildThreadTimeline", () => {
     });
 
     expect(() =>
-      buildTimelineToolDetails(harness.db, thread, {
+      buildTimelineTurnSummaryDetails(harness.db, thread, {
         sourceSeqStart: 1,
         sourceSeqEnd: 5,
       }),
-    ).toThrow(/could not match tool group range 1-5/);
+    ).toThrow(/turn summary details could not match range 1-5/);
   });
 
   it("matches tool detail ranges whose end depends on the following input-accepted event", async () => {
@@ -569,27 +569,186 @@ describe("buildThreadTimeline", () => {
     });
 
     const timeline = buildThreadTimeline(harness.db, thread, {});
-    const toolGroup = timeline.rows.find((row) => row.kind === "tool-group");
+    const turnSummary = timeline.rows.find((row) => row.kind === "turn-summary");
 
-    expect(toolGroup).toMatchObject({
+    expect(turnSummary).toMatchObject({
       sourceSeqStart: 1,
       sourceSeqEnd: 5,
     });
 
-    const details = buildTimelineToolDetails(harness.db, thread, {
+    const details = buildTimelineTurnSummaryDetails(harness.db, thread, {
       sourceSeqStart: 1,
       sourceSeqEnd: 5,
     });
 
-    expect(details.messages).toHaveLength(1);
-    expect(details.messages[0]).toMatchObject({
-      kind: "tool-call",
-      sourceSeqStart: 2,
-      sourceSeqEnd: 2,
-    });
+    expect(details.rows).toEqual([
+      expect.objectContaining({
+        kind: "tool-bundle",
+        bundleKind: "commands",
+        rows: [
+          expect.objectContaining({
+            kind: "message",
+            message: expect.objectContaining({
+              kind: "tool-call",
+              sourceSeqStart: 2,
+              sourceSeqEnd: 2,
+            }),
+          }),
+        ],
+      }),
+    ]);
   });
 
-  it("returns flattened tool details when the selected range has no tool groups", async () => {
+  it("keeps scanning past unrelated stored events when resolving turn-summary details", async () => {
+    const harness = await createTestAppHarness();
+    harnesses.push(harness);
+
+    const host = seedHost(harness.deps);
+    const { project } = seedProjectWithSource(harness.deps, {
+      hostId: host.id,
+    });
+    const environment = seedEnvironment(harness.deps, {
+      hostId: host.id,
+      projectId: project.id,
+    });
+    const thread = seedThread(harness.deps, {
+      projectId: project.id,
+      environmentId: environment.id,
+    });
+
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-thread-1",
+      turnId: "turn-1",
+      sequence: 1,
+      type: "turn/started",
+      data: {},
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-thread-1",
+      turnId: "turn-1",
+      sequence: 2,
+      type: "item/completed",
+      data: {
+        item: {
+          type: "toolCall",
+          id: "tool-1",
+          tool: "exec_command",
+          arguments: { cmd: "pnpm test" },
+          status: "completed",
+        },
+      },
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-thread-1",
+      turnId: "turn-1",
+      sequence: 3,
+      type: "item/completed",
+      data: {
+        item: {
+          type: "agentMessage",
+          id: "assistant-1",
+          text: "Done.",
+        },
+      },
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-thread-1",
+      turnId: "turn-1",
+      sequence: 4,
+      type: "turn/completed",
+      data: {
+        status: "completed",
+      },
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      sequence: 5,
+      type: "client/turn/requested",
+      data: {
+        direction: "outbound",
+        source: "tell",
+        initiator: "user",
+        request: { method: "turn/start", params: {} },
+        input: [{ type: "text", text: "Follow-up" }],
+        target: { kind: "new-turn" },
+        execution: {
+          model: "gpt-5",
+          serviceTier: "default",
+          reasoningLevel: "medium",
+          permissionMode: "full",
+          source: "client/turn/requested",
+        },
+      },
+    });
+
+    for (let sequence = 6; sequence < 36; sequence += 1) {
+      seedEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        sequence,
+        type: "system/thread-provisioning",
+        data: {
+          provisioningId: `tpv-${sequence}`,
+          status: "completed",
+          environmentId: environment.id,
+          entries: [],
+        },
+      });
+    }
+
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-thread-1",
+      turnId: "turn-1",
+      sequence: 36,
+      type: "turn/input/accepted",
+      data: {
+        clientRequestSequence: 5,
+      },
+    });
+
+    const timeline = buildThreadTimeline(harness.db, thread, {});
+    const turnSummary = timeline.rows.find((row) => row.kind === "turn-summary");
+
+    expect(turnSummary).toMatchObject({
+      sourceSeqStart: 1,
+      sourceSeqEnd: 5,
+    });
+
+    const details = buildTimelineTurnSummaryDetails(harness.db, thread, {
+      sourceSeqStart: 1,
+      sourceSeqEnd: 5,
+    });
+
+    expect(details.rows).toEqual([
+      expect.objectContaining({
+        kind: "tool-bundle",
+        bundleKind: "commands",
+        rows: [
+          expect.objectContaining({
+            kind: "message",
+            message: expect.objectContaining({
+              kind: "tool-call",
+              sourceSeqStart: 2,
+              sourceSeqEnd: 2,
+            }),
+          }),
+        ],
+      }),
+    ]);
+  });
+
+  it("returns flattened turn-summary details rows when the selected range has no turn summaries", async () => {
     const harness = await createTestAppHarness();
     harnesses.push(harness);
 
@@ -642,15 +801,23 @@ describe("buildThreadTimeline", () => {
       },
     });
 
-    const details = buildTimelineToolDetails(harness.db, thread, {
+    const details = buildTimelineTurnSummaryDetails(harness.db, thread, {
       sourceSeqStart: 1,
       sourceSeqEnd: 3,
     });
 
-    expect(details.messages).toHaveLength(1);
-    expect(details.messages[0]?.kind).toBe("assistant-text");
-    if (details.messages[0]?.kind === "assistant-text") {
-      expect(details.messages[0].text).toBe("Nothing to expand.");
+    expect(details.rows).toEqual([
+      expect.objectContaining({
+        kind: "message",
+        message: expect.objectContaining({
+          kind: "assistant-text",
+          text: "Nothing to expand.",
+        }),
+      }),
+    ]);
+    const detailRow = details.rows[0];
+    if (detailRow?.kind === "message" && detailRow.message.kind === "assistant-text") {
+      expect(detailRow.message.text).toBe("Nothing to expand.");
     }
   });
 

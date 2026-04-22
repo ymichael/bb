@@ -1,11 +1,12 @@
 import { useMemo, type CSSProperties } from "react";
+import {
+  getDetailScrollMaxHeightClass,
+  type DetailScrollSize,
+} from "../../detail-scroll-size.js";
 import { cn } from "../../cn.js";
 import { ansiToHtml } from "../ansi.js";
 import { ExpandableLine } from "./ExpandableLine.js";
-import {
-  EVENT_DETAIL_MAX_HEIGHT_CLASS,
-  useStickyBottomAutoScroll,
-} from "./shared.js";
+import { useStickyBottomAutoScroll } from "./shared.js";
 
 const COMMAND_LINE_CLAMP_STYLE: CSSProperties = {
   display: "-webkit-box",
@@ -13,19 +14,21 @@ const COMMAND_LINE_CLAMP_STYLE: CSSProperties = {
   WebkitLineClamp: 2,
 };
 
+interface TerminalOutputBlockProps {
+  className?: string;
+  command?: string;
+  isExpanded: boolean;
+  outputText?: string;
+  size?: DetailScrollSize;
+}
+
 export function TerminalOutputBlock({
   command,
   outputText,
   isExpanded,
   className,
-  maxHeightClassName = EVENT_DETAIL_MAX_HEIGHT_CLASS,
-}: {
-  command?: string;
-  outputText?: string;
-  isExpanded: boolean;
-  className?: string;
-  maxHeightClassName?: string;
-}) {
+  size = "regular",
+}: TerminalOutputBlockProps) {
   const { elementRef: outputRef, handleScroll: handleOutputScroll } =
     useStickyBottomAutoScroll<HTMLPreElement>({
       isExpanded,
@@ -54,7 +57,7 @@ export function TerminalOutputBlock({
             collapsedStyle={COMMAND_LINE_CLAMP_STYLE}
             expandedClassName={cn(
               "whitespace-pre-wrap break-words overflow-auto",
-              EVENT_DETAIL_MAX_HEIGHT_CLASS,
+              getDetailScrollMaxHeightClass(size),
             )}
           >
             $ {command}
@@ -66,7 +69,7 @@ export function TerminalOutputBlock({
             onScroll={handleOutputScroll}
             className={cn(
               command && "mt-1.5",
-              maxHeightClassName,
+              getDetailScrollMaxHeightClass(size),
               "overflow-auto whitespace-pre leading-tight text-foreground",
             )}
             dangerouslySetInnerHTML={{ __html: renderedOutput }}

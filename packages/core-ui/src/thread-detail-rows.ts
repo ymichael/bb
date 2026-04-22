@@ -1,31 +1,52 @@
 import type {
+  TimelineAssistantStepSummaryChildRow,
+  TimelineAssistantStepSummaryRow,
+  TimelineGroupedRowStatus,
+  TimelineMessageRow,
   TimelineRow,
-  TimelineToolGroupRow,
+  TimelineToolBundleKind,
+  TimelineToolBundleRow,
+  TimelineTurnSummaryChildRow,
+  TimelineTurnSummaryRow,
   ViewMessage,
   ViewProjection,
   ViewTurn,
 } from "@bb/domain";
 import { assertNever } from "./assert-never.js";
+import { fileChangeIdentity } from "./file-change-summary.js";
 import { getMessageStartedAt } from "./format-helpers.js";
 import {
   findLastTerminalTimelineMessageIndex,
   isTimelineUngroupableMessage,
-  toTimelineVisibleMessages,
   toIndexedTimelineMessages,
+  toTimelineVisibleMessages,
   type IndexedTimelineMessage,
 } from "./timeline-message-helpers.js";
-
-export type TimelineRowGrouping =
-  /** Smart grouping: collapse pre-terminal activity into a tool-group, keep the terminal message standalone. */
-  | "terminal-aware"
-  /** Collapse every turn's non-ungroupable messages into a single tool-group, ignoring terminal detection. */
-  | "collapse-all"
-  /** Render every turn's messages as individual rows, with no tool-group wrapping. */
-  | "ungrouped";
+import { mergeGroupedRowStatus } from "./timeline-grouped-row-status.js";
+import { summarizeExploringCounts } from "./timeline-render-helpers.js";
+import { isShellToolName } from "./tool-call-parsing.js";
 
 export interface BuildTimelineRowsOptions {
-  includeToolGroupMessages?: boolean;
-  grouping?: TimelineRowGrouping;
+  includeNestedRows?: boolean;
+}
+
+type TimelineRowsBuildMode = "default" | "collapsed";
+
+interface ResolvedBuildTimelineRowsOptions {
+  includeNestedRows: boolean;
+  mode: TimelineRowsBuildMode;
+}
+
+interface TimelineMessageRange {
+  createdAt: number;
+  sourceSeqEnd: number;
+  sourceSeqStart: number;
+  startedAt: number;
+}
+
+interface ToolBundleAccumulator {
+  bundleKind: TimelineToolBundleKind;
+  messages: ViewMessage[];
 }
 
 function isToolExploringMessage(
@@ -40,73 +61,97 @@ function isFileEditMessage(
   return message.kind === "file-edit";
 }
 
-function getGroupDurationMs(
-  messages: readonly Pick<ViewMessage, "createdAt" | "startedAt">[],
+function getTimelineRange(
+  messages: readonly Pick<ViewMessage, "createdAt" | "startedAt" | "sourceSeqEnd" | "sourceSeqStart">[],
+): TimelineMessageRange | null {
+  if (messages.length === 0) {
+    return null;
+  }
+
+  return {
+    createdAt: Math.max(...messages.map((message) => message.createdAt)),
+    sourceSeqEnd: Math.max(...messages.map((message) => message.sourceSeqEnd)),
+    sourceSeqStart: Math.min(
+      ...messages.map((message) => message.sourceSeqStart),
+    ),
+    startedAt: Math.min(
+      ...messages.map((message) => getMessageStartedAt(message)),
+    ),
+  };
+}
+
+function getDurationMs(
+  range: TimelineMessageRange | null,
 ): number | undefined {
-  if (messages.length === 0) return undefined;
-  const startedAt = Math.min(
-    ...messages.map((message) => getMessageStartedAt(message)),
-  );
-  const endedAt = Math.max(...messages.map((message) => message.createdAt));
-  const durationMs = endedAt - startedAt;
+  if (!range) {
+    return undefined;
+  }
+
+  const durationMs = range.createdAt - range.startedAt;
   return durationMs > 0 ? durationMs : undefined;
 }
 
-type TerminalStatus = "pending" | "completed" | "error" | "interrupted";
-
-interface ReconnectAttempt {
-  attempt: number;
-  total: number;
-}
-
-function statusPriority(status: TerminalStatus): number {
-  switch (status) {
-    case "completed":
-      return 0;
-    case "interrupted":
-      return 1;
-    case "pending":
-      return 2;
+function getGroupMessageStatus(message: ViewMessage): TimelineGroupedRowStatus {
+  switch (message.kind) {
+    case "tool-exploring":
+    case "tool-call":
+    case "web-search":
+    case "web-fetch":
+    case "file-edit":
+    case "tasks":
+    case "delegation":
+    case "permission-grant-lifecycle":
+      return message.status;
+    case "assistant-reasoning":
+    case "assistant-text":
+      return message.status === "streaming" ? "pending" : message.status;
+    case "operation":
+      return message.status ?? "completed";
     case "error":
-      return 3;
+      return "error";
+    case "user":
+    case "debug/raw-event":
+      return "completed";
     default:
-      return assertNever(status);
+      return assertNever(message);
   }
 }
 
-function mergeStatus<T extends TerminalStatus>(left: T, right: T): T {
-  return statusPriority(left) >= statusPriority(right) ? left : right;
-}
-
-function parseReconnectAttempt(
+function getReconnectAttempt(
   message: Extract<ViewMessage, { kind: "error" }>,
-): ReconnectAttempt | null {
-  const match = message.message
-    .trim()
-    .match(/^Reconnecting\.\.\.\s+(\d+)\/(\d+)$/);
-  if (!match) return null;
-
-  const attempt = Number.parseInt(match[1] ?? "", 10);
-  const total = Number.parseInt(match[2] ?? "", 10);
-  if (!Number.isFinite(attempt) || !Number.isFinite(total)) {
-    return null;
-  }
-  if (attempt <= 0 || total <= 0 || attempt > total) {
+): { attempt: number; total: number } | null {
+  if (
+    message.reconnectAttempt === undefined ||
+    message.reconnectTotal === undefined
+  ) {
     return null;
   }
 
-  return { attempt, total };
+  if (
+    message.reconnectAttempt <= 0 ||
+    message.reconnectTotal <= 0 ||
+    message.reconnectAttempt > message.reconnectTotal
+  ) {
+    return null;
+  }
+
+  return {
+    attempt: message.reconnectAttempt,
+    total: message.reconnectTotal,
+  };
 }
 
 function mergeConsecutiveReconnectErrors(
-  messages: ViewMessage[],
+  messages: readonly ViewMessage[],
 ): ViewMessage[] {
   const merged: ViewMessage[] = [];
   let active: Extract<ViewMessage, { kind: "error" }> | null = null;
-  let activeReconnect: ReconnectAttempt | null = null;
+  let activeReconnect: { attempt: number; total: number } | null = null;
 
   const flush = () => {
-    if (!active) return;
+    if (!active) {
+      return;
+    }
     merged.push(active);
     active = null;
     activeReconnect = null;
@@ -119,7 +164,7 @@ function mergeConsecutiveReconnectErrors(
       continue;
     }
 
-    const reconnect = parseReconnectAttempt(message);
+    const reconnect = getReconnectAttempt(message);
     if (!reconnect) {
       flush();
       merged.push(message);
@@ -147,7 +192,7 @@ function mergeConsecutiveReconnectErrors(
     ) {
       active = {
         ...message,
-        id: `${active.id}:reconnect:${message.id}`,
+        id: active.id,
         sourceSeqStart: Math.min(active.sourceSeqStart, message.sourceSeqStart),
         sourceSeqEnd: Math.max(active.sourceSeqEnd, message.sourceSeqEnd),
         createdAt: Math.max(active.createdAt, message.createdAt),
@@ -171,7 +216,7 @@ function mergeConsecutiveReconnectErrors(
 }
 
 function mergeConsecutiveToolActivityMessages(
-  messages: ViewMessage[],
+  messages: readonly ViewMessage[],
 ): ViewMessage[] {
   const merged: ViewMessage[] = [];
   let active:
@@ -180,7 +225,9 @@ function mergeConsecutiveToolActivityMessages(
     | null = null;
 
   const flush = () => {
-    if (!active) return;
+    if (!active) {
+      return;
+    }
     merged.push(active);
     active = null;
   };
@@ -268,7 +315,7 @@ function mergeConsecutiveToolActivityMessages(
       if (!active.turnId && message.turnId) {
         active.turnId = message.turnId;
       }
-      active.status = mergeStatus(active.status, message.status);
+      active.status = mergeGroupedRowStatus(active.status, message.status);
       if (message.stdout) {
         active.stdout = message.stdout;
       }
@@ -294,7 +341,7 @@ function mergeConsecutiveToolActivityMessages(
   return merged;
 }
 
-function getToolGroupSummaryCount(messages: ViewMessage[]): number {
+function getTurnSummaryCount(messages: readonly ViewMessage[]): number {
   return messages.reduce((count, message) => {
     if (message.kind === "tool-exploring") {
       return count + Math.max(1, message.calls.length);
@@ -306,62 +353,14 @@ function getToolGroupSummaryCount(messages: ViewMessage[]): number {
   }, 0);
 }
 
-function getGroupMessageStatus(
-  message: ViewMessage,
-): TimelineToolGroupRow["status"] {
-  switch (message.kind) {
-    case "tool-exploring":
-    case "tool-call":
-    case "web-search":
-    case "web-fetch":
-    case "file-edit":
-    case "tasks":
-    case "delegation":
-    case "permission-grant-lifecycle":
-      return message.status;
-    case "assistant-reasoning":
-    case "assistant-text":
-      return message.status === "streaming" ? "pending" : message.status;
-    case "operation":
-      return message.status ?? "completed";
-    case "error":
-      return "error";
-    case "user":
-    case "debug/raw-event":
-      return "completed";
-    default:
-      return assertNever(message);
-  }
-}
-
-type IndexedTurnMessage = IndexedTimelineMessage;
-
-function isLossyActiveTurn(messages: IndexedTurnMessage[]): boolean {
-  return messages.some(
-    ({ message }) => getGroupMessageStatus(message) === "pending",
-  );
-}
-
-interface BuildTurnToolGroupRowArgs {
-  durationMs: number | undefined;
-  includeToolGroupMessages: boolean;
-  messages: ViewMessage[];
-  summaryCount: number;
-  turn: ViewTurn;
-}
-
-function prepareTimelineMessages(messages: ViewMessage[]): ViewMessage[] {
+function prepareTimelineMessages(messages: readonly ViewMessage[]): ViewMessage[] {
   const visibleMessages = toTimelineVisibleMessages(messages);
   const reconnectMergedMessages =
     mergeConsecutiveReconnectErrors(visibleMessages);
   return mergeConsecutiveToolActivityMessages(reconnectMergedMessages);
 }
 
-function getTurnToolGroupRowId(turn: ViewTurn): string {
-  return `${turn.turnId}:tool-group:${turn.sourceSeqStart}`;
-}
-
-function toMessageRow(message: ViewMessage): TimelineRow {
+function toMessageRow(message: ViewMessage): TimelineMessageRow {
   return {
     kind: "message",
     id: message.id,
@@ -369,8 +368,379 @@ function toMessageRow(message: ViewMessage): TimelineRow {
   };
 }
 
+function getRowStatus(row: TimelineAssistantStepSummaryChildRow): TimelineGroupedRowStatus {
+  switch (row.kind) {
+    case "message":
+      return getGroupMessageStatus(row.message);
+    case "tool-bundle":
+      return row.status;
+    default:
+      return assertNever(row);
+  }
+}
+
+function getToolBundleKind(
+  message: ViewMessage,
+): TimelineToolBundleKind | null {
+  switch (message.kind) {
+    case "tool-exploring":
+      return "exploration";
+    case "file-edit":
+      return "file-edits";
+    case "tool-call":
+      return isShellToolName(message.toolName) ? "commands" : null;
+    case "web-search":
+    case "web-fetch":
+      return "web-research";
+    case "assistant-reasoning":
+    case "assistant-text":
+    case "debug/raw-event":
+    case "delegation":
+    case "error":
+    case "operation":
+    case "permission-grant-lifecycle":
+    case "tasks":
+    case "user":
+      return null;
+    default:
+      return assertNever(message);
+  }
+}
+
+function canAppendToToolBundle(
+  active: ToolBundleAccumulator,
+  message: ViewMessage,
+): boolean {
+  switch (active.bundleKind) {
+    case "exploration":
+      return message.kind === "tool-exploring";
+    case "file-edits":
+      return (
+        message.kind === "file-edit" &&
+        active.messages[0]?.kind === "file-edit" &&
+        active.messages[0].callId === message.callId
+      );
+    case "commands":
+      return (
+        message.kind === "tool-call" && isShellToolName(message.toolName)
+      );
+    case "web-research":
+      return message.kind === "web-search" || message.kind === "web-fetch";
+    default:
+      return assertNever(active.bundleKind);
+  }
+}
+
+function buildToolBundleSummary(
+  bundleKind: TimelineToolBundleKind,
+  messages: readonly ViewMessage[],
+): TimelineToolBundleRow["summary"] {
+  switch (bundleKind) {
+    case "exploration": {
+      const calls = messages.flatMap((message) => {
+        if (message.kind !== "tool-exploring") {
+          throw new Error("Exploration bundles require tool-exploring messages");
+        }
+        return message.calls;
+      });
+      const counts = summarizeExploringCounts(calls);
+      return {
+        kind: "exploration",
+        filesRead: counts.filesRead,
+        searches: counts.searches,
+        lists: counts.lists,
+      };
+    }
+    case "file-edits": {
+      const filesChanged = new Set<string>();
+      for (const message of messages) {
+        if (message.kind !== "file-edit") {
+          throw new Error("File edit bundles require file-edit messages");
+        }
+        for (const change of message.changes) {
+          filesChanged.add(fileChangeIdentity(change));
+        }
+      }
+      return {
+        kind: "file-edits",
+        filesEdited: filesChanged.size,
+      };
+    }
+    case "commands":
+      return {
+        kind: "commands",
+        commands: messages.length,
+      };
+    case "web-research": {
+      let webPagesRead = 0;
+      let webSearches = 0;
+      for (const message of messages) {
+        switch (message.kind) {
+          case "web-search":
+            webSearches += Math.max(1, message.queries.length);
+            break;
+          case "web-fetch":
+            webPagesRead += 1;
+            break;
+          default:
+            throw new Error(
+              "Web research bundles require web-search or web-fetch messages",
+            );
+        }
+      }
+      return {
+        kind: "web-research",
+        webPagesRead,
+        webSearches,
+      };
+    }
+    default:
+      return assertNever(bundleKind);
+  }
+}
+
+function buildToolBundleRow(
+  accumulator: ToolBundleAccumulator,
+): TimelineToolBundleRow {
+  const range = getTimelineRange(accumulator.messages);
+  if (!range) {
+    throw new Error("tool-bundle requires at least one message");
+  }
+
+  const status = accumulator.messages.reduce<TimelineGroupedRowStatus>(
+    (current, message) =>
+      mergeGroupedRowStatus(current, getGroupMessageStatus(message)),
+    "completed",
+  );
+  const row: TimelineToolBundleRow = {
+    kind: "tool-bundle",
+    bundleKind: accumulator.bundleKind,
+    id: `${accumulator.messages[0]!.id}:tool-bundle:${range.sourceSeqStart}:${accumulator.bundleKind}`,
+    presentation: "default",
+    turnId: accumulator.messages[0]?.turnId ?? null,
+    sourceSeqStart: range.sourceSeqStart,
+    sourceSeqEnd: range.sourceSeqEnd,
+    startedAt: range.startedAt,
+    createdAt: range.createdAt,
+    status,
+    summary: buildToolBundleSummary(
+      accumulator.bundleKind,
+      accumulator.messages,
+    ),
+    rows: accumulator.messages.map((message) => toMessageRow(message)),
+  };
+  const durationMs = getDurationMs(range);
+  if (durationMs !== undefined) {
+    row.durationMs = durationMs;
+  }
+  return row;
+}
+
+function buildToolBundleRows(
+  messages: readonly ViewMessage[],
+): TimelineAssistantStepSummaryChildRow[] {
+  const rows: TimelineAssistantStepSummaryChildRow[] = [];
+  let active: ToolBundleAccumulator | null = null;
+
+  const flush = () => {
+    if (!active) {
+      return;
+    }
+    rows.push(buildToolBundleRow(active));
+    active = null;
+  };
+
+  for (const message of messages) {
+    const bundleKind = getToolBundleKind(message);
+    if (!bundleKind) {
+      flush();
+      rows.push(toMessageRow(message));
+      continue;
+    }
+
+    if (!active) {
+      active = {
+        bundleKind,
+        messages: [message],
+      };
+      continue;
+    }
+
+    if (
+      active.bundleKind !== bundleKind ||
+      !canAppendToToolBundle(active, message)
+    ) {
+      flush();
+      active = {
+        bundleKind,
+        messages: [message],
+      };
+      continue;
+    }
+
+    active.messages.push(message);
+  }
+
+  flush();
+  return rows;
+}
+
+function isAssistantBoundaryRow(
+  row: TimelineAssistantStepSummaryChildRow,
+): boolean {
+  return row.kind === "message" && row.message.kind === "assistant-text";
+}
+
+function getRowRange(
+  rows: readonly TimelineAssistantStepSummaryChildRow[],
+): TimelineMessageRange | null {
+  if (rows.length === 0) {
+    return null;
+  }
+
+  return {
+    createdAt: Math.max(
+      ...rows.map((row) =>
+        row.kind === "message" ? row.message.createdAt : row.createdAt,
+      ),
+    ),
+    sourceSeqEnd: Math.max(
+      ...rows.map((row) =>
+        row.kind === "message" ? row.message.sourceSeqEnd : row.sourceSeqEnd,
+      ),
+    ),
+    sourceSeqStart: Math.min(
+      ...rows.map((row) =>
+        row.kind === "message" ? row.message.sourceSeqStart : row.sourceSeqStart,
+      ),
+    ),
+    startedAt: Math.min(
+      ...rows.map((row) =>
+        row.kind === "message" ? getMessageStartedAt(row.message) : row.startedAt,
+      ),
+    ),
+  };
+}
+
+function findFirstRowTurnId(
+  rows: readonly TimelineAssistantStepSummaryChildRow[],
+): string | null {
+  for (const entry of rows) {
+    if (entry.kind === "message") {
+      if (entry.message.turnId !== undefined) {
+        return entry.message.turnId;
+      }
+      continue;
+    }
+
+    if (entry.turnId !== null) {
+      return entry.turnId;
+    }
+  }
+
+  return null;
+}
+
+function buildAssistantStepSummaryRow(
+  rows: TimelineAssistantStepSummaryChildRow[],
+): TimelineAssistantStepSummaryRow {
+  const range = getRowRange(rows);
+  if (!range) {
+    throw new Error("assistant-step-summary requires at least one child row");
+  }
+
+  const status = rows.reduce<TimelineGroupedRowStatus>(
+    (current, row) => mergeGroupedRowStatus(current, getRowStatus(row)),
+    "completed",
+  );
+  const row: TimelineAssistantStepSummaryRow = {
+    kind: "assistant-step-summary",
+    id: `${rows[0]!.id}:assistant-step-summary:${range.sourceSeqStart}`,
+    turnId: findFirstRowTurnId(rows),
+    sourceSeqStart: range.sourceSeqStart,
+    sourceSeqEnd: range.sourceSeqEnd,
+    startedAt: range.startedAt,
+    createdAt: range.createdAt,
+    status,
+    rows,
+  };
+  const durationMs = getDurationMs(range);
+  if (durationMs !== undefined) {
+    row.durationMs = durationMs;
+  }
+  return row;
+}
+
+function materializeAssistantStepSummaryRows(
+  rows: TimelineAssistantStepSummaryChildRow[],
+): TimelineTurnSummaryChildRow[] {
+  if (rows.length === 1 && rows[0]?.kind === "tool-bundle") {
+    return [
+      {
+        ...rows[0],
+        presentation: "assistant-step-summary-placeholder",
+      },
+    ];
+  }
+
+  return [buildAssistantStepSummaryRow(rows)];
+}
+
+type AssistantStepSummaryMode = "active" | "completed";
+
+function buildAssistantStepSummaryRows(
+  rows: readonly TimelineAssistantStepSummaryChildRow[],
+  mode: AssistantStepSummaryMode,
+): TimelineTurnSummaryChildRow[] {
+  const groupedRows: TimelineTurnSummaryChildRow[] = [];
+  let bufferedRows: TimelineAssistantStepSummaryChildRow[] = [];
+  let hasSeenAssistantMessage = false;
+
+  const flushBufferedRows = (flushMode: AssistantStepSummaryMode) => {
+    if (bufferedRows.length === 0) {
+      return;
+    }
+
+    if (!hasSeenAssistantMessage || flushMode === "active") {
+      groupedRows.push(...bufferedRows);
+    } else {
+      groupedRows.push(...materializeAssistantStepSummaryRows(bufferedRows));
+    }
+
+    bufferedRows = [];
+  };
+
+  for (const row of rows) {
+    if (isAssistantBoundaryRow(row)) {
+      if (bufferedRows.length > 0) {
+        if (hasSeenAssistantMessage) {
+          groupedRows.push(...materializeAssistantStepSummaryRows(bufferedRows));
+        } else {
+          groupedRows.push(...bufferedRows);
+        }
+        bufferedRows = [];
+      }
+
+      hasSeenAssistantMessage = true;
+      groupedRows.push(row);
+      continue;
+    }
+
+    bufferedRows.push(row);
+  }
+
+  flushBufferedRows(mode);
+  return groupedRows;
+}
+
+function isLossyActiveTurn(messages: readonly IndexedTimelineMessage[]): boolean {
+  return messages.some(
+    ({ message }) => getGroupMessageStatus(message) === "pending",
+  );
+}
+
 function findLastUngroupableIndexBeforeTerminal(
-  messages: IndexedTimelineMessage[],
+  messages: readonly IndexedTimelineMessage[],
   terminalIndex: number,
 ): number {
   let boundaryIndex = -1;
@@ -386,7 +756,7 @@ function findLastUngroupableIndexBeforeTerminal(
 }
 
 function getGroupedTerminalTurnMessages(
-  messages: IndexedTimelineMessage[],
+  messages: readonly IndexedTimelineMessage[],
 ): IndexedTimelineMessage[] {
   const terminalIndex = findLastTerminalTimelineMessageIndex(messages);
   if (terminalIndex === null) {
@@ -404,15 +774,30 @@ function getGroupedTerminalTurnMessages(
   });
 }
 
-function buildTurnToolGroupRow(
-  args: BuildTurnToolGroupRowArgs,
-): TimelineToolGroupRow {
-  const groupMessages = args.includeToolGroupMessages
-    ? mergeConsecutiveToolActivityMessages(args.messages)
-    : [];
-  const row: TimelineToolGroupRow = {
-    kind: "tool-group",
-    id: getTurnToolGroupRowId(args.turn),
+function buildTurnSummaryRows(
+  messages: readonly ViewMessage[],
+): TimelineTurnSummaryChildRow[] {
+  return buildAssistantStepSummaryRows(buildToolBundleRows(messages), "completed");
+}
+
+function getTurnSummaryRowId(turn: ViewTurn): string {
+  return `${turn.turnId}:turn-summary:${turn.sourceSeqStart}`;
+}
+
+interface BuildTurnSummaryRowArgs {
+  durationMs: number | undefined;
+  includeNestedRows: boolean;
+  messages: ViewMessage[];
+  summaryCount: number;
+  turn: ViewTurn;
+}
+
+function buildTurnSummaryRow(
+  args: BuildTurnSummaryRowArgs,
+): TimelineTurnSummaryRow {
+  const row: TimelineTurnSummaryRow = {
+    kind: "turn-summary",
+    id: getTurnSummaryRowId(args.turn),
     turnId: args.turn.turnId,
     summaryCount: args.summaryCount,
     sourceSeqStart: args.turn.sourceSeqStart,
@@ -420,7 +805,7 @@ function buildTurnToolGroupRow(
     startedAt: args.turn.startedAt,
     createdAt: args.turn.createdAt,
     status: args.turn.status,
-    messages: groupMessages,
+    rows: args.includeNestedRows ? buildTurnSummaryRows(args.messages) : null,
   };
   if (args.durationMs !== undefined) {
     row.durationMs = args.durationMs;
@@ -428,24 +813,26 @@ function buildTurnToolGroupRow(
   return row;
 }
 
-function buildPendingTurnRows(turn: ViewTurn): TimelineRow[] {
-  return prepareTimelineMessages(turn.messages ?? []).map((message) =>
-    toMessageRow(message),
+function buildActiveTurnRows(turn: ViewTurn): TimelineRow[] {
+  return buildAssistantStepSummaryRows(
+    buildToolBundleRows(prepareTimelineMessages(turn.messages ?? [])),
+    "active",
   );
 }
 
 function buildTerminalTurnRows(
   turn: ViewTurn,
-  includeToolGroupMessages: boolean,
-  collapseAll: boolean,
+  includeNestedRows: boolean,
+  mode: TimelineRowsBuildMode,
 ): TimelineRow[] {
+  const collapseAll = mode === "collapsed";
   if (!turn.messages) {
     const rows: TimelineRow[] = [];
     if (turn.summaryCount > 0) {
       rows.push(
-        buildTurnToolGroupRow({
+        buildTurnSummaryRow({
           durationMs: turn.durationMs,
-          includeToolGroupMessages,
+          includeNestedRows,
           messages: [],
           summaryCount: turn.summaryCount,
           turn,
@@ -461,15 +848,18 @@ function buildTerminalTurnRows(
   const mergedMessages = prepareTimelineMessages(turn.messages);
   const indexedMessages = toIndexedTimelineMessages(mergedMessages);
   if (collapseAll && isLossyActiveTurn(indexedMessages)) {
-    return mergedMessages.map((message) => toMessageRow(message));
+    return buildAssistantStepSummaryRows(
+      buildToolBundleRows(mergedMessages),
+      "active",
+    );
   }
 
-  const collapsedMessageIndices = new Set<number>();
   const groupedTurnMessages = collapseAll
     ? indexedMessages.filter(
         ({ message }) => !isTimelineUngroupableMessage(message),
       )
     : getGroupedTerminalTurnMessages(indexedMessages);
+  const collapsedMessageIndices = new Set<number>();
   const collapsedByFirstIndex = new Map<number, ViewMessage[]>();
 
   if (groupedTurnMessages.length > 0) {
@@ -483,17 +873,27 @@ function buildTerminalTurnRows(
   }
 
   const rows: TimelineRow[] = [];
+  let segmentMessages: ViewMessage[] = [];
+  const flushSegmentMessages = () => {
+    if (segmentMessages.length === 0) {
+      return;
+    }
+    rows.push(...buildToolBundleRows(segmentMessages));
+    segmentMessages = [];
+  };
+
   for (const [index, message] of mergedMessages.entries()) {
     const collapseGroup = collapsedByFirstIndex.get(index);
     if (collapseGroup) {
+      flushSegmentMessages();
       rows.push(
-        buildTurnToolGroupRow({
+        buildTurnSummaryRow({
           durationMs: collapseAll
-            ? getGroupDurationMs(collapseGroup)
-            : (turn.durationMs ?? getGroupDurationMs(collapseGroup)),
-          includeToolGroupMessages,
+            ? getDurationMs(getTimelineRange(collapseGroup))
+            : (turn.durationMs ?? getDurationMs(getTimelineRange(collapseGroup))),
+          includeNestedRows,
           messages: collapseGroup,
-          summaryCount: getToolGroupSummaryCount(collapseGroup),
+          summaryCount: getTurnSummaryCount(collapseGroup),
           turn,
         }),
       );
@@ -501,42 +901,49 @@ function buildTerminalTurnRows(
     if (collapsedMessageIndices.has(index)) {
       continue;
     }
-    rows.push(toMessageRow(message));
+    segmentMessages.push(message);
   }
+
+  flushSegmentMessages();
   return rows;
 }
 
 function buildTurnRows(
   turn: ViewTurn,
-  options: BuildTimelineRowsOptions | undefined,
+  options: ResolvedBuildTimelineRowsOptions,
 ): TimelineRow[] {
-  const includeToolGroupMessages = options?.includeToolGroupMessages ?? true;
-  const grouping = options?.grouping ?? "terminal-aware";
-  if (grouping === "ungrouped") {
-    return buildPendingTurnRows(turn);
+  if (turn.status === "pending" && options.mode === "default") {
+    return buildActiveTurnRows(turn);
   }
-  const collapseAll = grouping === "collapse-all";
-  if (turn.status === "pending" && !collapseAll) {
-    return buildPendingTurnRows(turn);
-  }
-  return buildTerminalTurnRows(turn, includeToolGroupMessages, collapseAll);
+  return buildTerminalTurnRows(
+    turn,
+    options.includeNestedRows,
+    options.mode,
+  );
 }
 
-export function buildTimelineRows(
+function resolveBuildTimelineRowsOptions(
+  options: BuildTimelineRowsOptions | undefined,
+  mode: TimelineRowsBuildMode,
+): ResolvedBuildTimelineRowsOptions {
+  return {
+    includeNestedRows: options?.includeNestedRows ?? true,
+    mode,
+  };
+}
+
+function buildTimelineRowsWithMode(
   projection: ViewProjection,
-  options?: BuildTimelineRowsOptions,
+  options: ResolvedBuildTimelineRowsOptions,
 ): TimelineRow[] {
   const rows: TimelineRow[] = [];
   const standaloneMessages: ViewMessage[] = [];
+
   const flushStandaloneMessages = () => {
     if (standaloneMessages.length === 0) {
       return;
     }
-    rows.push(
-      ...prepareTimelineMessages(standaloneMessages).map((message) =>
-        toMessageRow(message),
-      ),
-    );
+    rows.push(...buildToolBundleRows(prepareTimelineMessages(standaloneMessages)));
     standaloneMessages.length = 0;
   };
 
@@ -548,6 +955,27 @@ export function buildTimelineRows(
     flushStandaloneMessages();
     rows.push(...buildTurnRows(entry.turn, options));
   }
+
   flushStandaloneMessages();
   return rows;
+}
+
+export function buildTimelineRows(
+  projection: ViewProjection,
+  options?: BuildTimelineRowsOptions,
+): TimelineRow[] {
+  return buildTimelineRowsWithMode(
+    projection,
+    resolveBuildTimelineRowsOptions(options, "default"),
+  );
+}
+
+export function buildCollapsedTimelineRows(
+  projection: ViewProjection,
+  options?: BuildTimelineRowsOptions,
+): TimelineRow[] {
+  return buildTimelineRowsWithMode(
+    projection,
+    resolveBuildTimelineRowsOptions(options, "collapsed"),
+  );
 }

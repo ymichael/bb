@@ -32,16 +32,39 @@ export type {
 } from "./format-timeline-text.js";
 export { durationToCompactString, timeAgo } from "./format-helpers.js";
 export {
-  buildToolGroupSummaryParts,
-  formatToolGroupCountLabel,
-} from "./timeline-summary.js";
-export type { ToolGroupSummaryParts } from "./timeline-summary.js";
+  buildTimelineAssistantStepSummary,
+  buildTimelineAssistantStepSummaryLabel,
+  formatTimelineAssistantStepSummary,
+} from "./timeline-assistant-step-summary.js";
+export type {
+  TimelineAssistantStepSummary,
+} from "./timeline-assistant-step-summary.js";
 export {
+  countUniqueChangedFiles,
+  fileChangeIdentity,
+  fileNameFromPath,
+  formatFileChangeName,
+  summarizeChangedFileNames,
+} from "./file-change-summary.js";
+export type { ChangedFileNamesSummary } from "./file-change-summary.js";
+export {
+  buildToolBundleDetailLines,
+  buildToolBundleSummaryLabel,
+  formatToolBundleSummaryLabel,
+} from "./timeline-tool-bundle-summary.js";
+export {
+  buildTurnSummaryParts,
+  formatTurnSummaryCountLabel,
+} from "./timeline-turn-summary.js";
+export type { TurnSummaryParts } from "./timeline-turn-summary.js";
+export {
+  buildTimelineRowActivityInfoMap,
   findLatestActivityMessageId,
   findLatestActivityRowId,
   shouldHighlightLatestActivity,
   shouldPreferOngoingLabelsForRow,
 } from "./thread-detail-activity.js";
+export type { TimelineRowActivityInfo } from "./thread-detail-activity.js";
 export {
   isIgnoredNoiseType,
   TIMELINE_NOISE_EVENT_TYPES,
@@ -85,7 +108,10 @@ export {
 export { extractThreadContextWindowUsage } from "./thread-context-window-usage.js";
 export { extractActiveThinking } from "./active-thinking.js";
 
-export { buildTimelineRows } from "./thread-detail-rows.js";
+export {
+  buildCollapsedTimelineRows,
+  buildTimelineRows,
+} from "./thread-detail-rows.js";
 export type { BuildTimelineRowsOptions } from "./thread-detail-rows.js";
 export {
   flattenProjectionMessages,

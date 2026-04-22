@@ -381,7 +381,7 @@ describe("toViewProjection turn lifecycle", () => {
 
     const rows = buildTimelineRows(projection);
     expect(rows).toHaveLength(1);
-    expect(rows[0]?.kind).toBe("tool-group");
+    expect(rows[0]?.kind).toBe("turn-summary");
   });
 
   it("retains completed no-terminal turns when they contain standalone-only messages", () => {

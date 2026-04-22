@@ -6,7 +6,7 @@ import {
   hasMeaningfulTimelineContainerResize,
   isTimelineNearBottom,
   resolveTimelineScrollMode,
-  shouldLoadToolGroupMessages,
+  shouldLoadNestedRows,
   shouldShowTimelineScrollToBottom,
 } from "./threadTimelineControllerHelpers";
 
@@ -91,27 +91,27 @@ describe("threadTimelineControllerHelpers", () => {
     expect(hasMeaningfulComposerHeightChange(64, 64.2)).toBe(false);
   });
 
-  it("computes tool-group loading eligibility", () => {
+  it("computes nested row loading eligibility", () => {
     expect(
-      shouldLoadToolGroupMessages({
-        cachedMessageCount: 0,
-        inlineMessageCount: 0,
+      shouldLoadNestedRows({
+        cachedRowCount: 0,
+        inlineRowCount: 0,
         isLoading: false,
         threadId: "thread-1",
       }),
     ).toBe(true);
     expect(
-      shouldLoadToolGroupMessages({
-        cachedMessageCount: 1,
-        inlineMessageCount: 0,
+      shouldLoadNestedRows({
+        cachedRowCount: 1,
+        inlineRowCount: 0,
         isLoading: false,
         threadId: "thread-1",
       }),
     ).toBe(false);
     expect(
-      shouldLoadToolGroupMessages({
-        cachedMessageCount: 0,
-        inlineMessageCount: 0,
+      shouldLoadNestedRows({
+        cachedRowCount: 0,
+        inlineRowCount: 0,
         isLoading: true,
         threadId: "thread-1",
       }),

@@ -16,6 +16,11 @@ type LatestInitialExpandedAction =
       type: "toggle";
     };
 
+interface LatestInitialExpandedResult {
+  isExpanded: boolean;
+  onToggle: () => void;
+}
+
 export function createLatestInitialExpandedState(
   initialExpanded: boolean,
 ): LatestInitialExpandedState {
@@ -70,10 +75,9 @@ export function reduceLatestInitialExpandedState(
   };
 }
 
-export function useLatestInitialExpanded(initialExpanded: boolean): {
-  isExpanded: boolean;
-  onToggle: () => void;
-} {
+export function useLatestInitialExpanded(
+  initialExpanded: boolean,
+): LatestInitialExpandedResult {
   const [state, dispatch] = useReducer(
     reduceLatestInitialExpandedState,
     initialExpanded,

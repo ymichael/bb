@@ -1,5 +1,9 @@
 import { type ReactNode, type Ref, type UIEvent } from "react";
 import { durationToCompactString } from "@bb/core-ui";
+import {
+  getDetailScrollMaxHeightClass,
+  type DetailScrollSize,
+} from "../../detail-scroll-size.js";
 import { ExpandablePanel } from "../../disclosure.js";
 import { EventCodeBlock } from "../../event-content.js";
 import type {
@@ -11,7 +15,6 @@ import type {
 import { cx } from "../../utils.js";
 import { ExpandableLine } from "./ExpandableLine.js";
 import {
-  EVENT_DETAIL_MAX_HEIGHT_CLASS,
   ExpandableDetailScrollArea,
   EventTitle,
   getEventHeaderToneClass,
@@ -19,6 +22,50 @@ import {
   useStickyBottomAutoScroll,
 } from "./shared.js";
 import { useLatestInitialExpanded } from "../latestInitialExpanded.js";
+
+type OperationTone = "default" | "destructive";
+
+interface ExtractPromptSectionsResult {
+  operationDetailText?: string;
+  promptText?: string;
+}
+
+interface StaticOperationRowProps {
+  className?: string;
+  summaryContent: ReactNode;
+  tone?: OperationTone;
+}
+
+interface ExpandableOperationRowProps {
+  children: ReactNode;
+  isExpanded: boolean;
+  onToggle: () => void;
+  summaryContent: ReactNode;
+  summaryContentClassName?: string;
+  tone?: OperationTone;
+}
+
+interface OperationDetailLinesProps {
+  lines: string[];
+  onScroll?: (event: UIEvent<HTMLDivElement>) => void;
+  scrollRef?: Ref<HTMLDivElement>;
+  size?: DetailScrollSize;
+  truncateLines?: boolean;
+}
+
+interface ProvisioningTranscript {
+  lines: string[];
+}
+
+interface OperationRowProps {
+  initialExpanded?: boolean;
+  message: ViewOperationMessage;
+}
+
+interface PermissionGrantLifecycleRowProps {
+  initialExpanded?: boolean;
+  message: ViewPermissionGrantLifecycleMessage;
+}
 
 function splitNonEmptyLines(value: string | undefined): string[] {
   if (!value) return [];
@@ -44,10 +91,9 @@ function formatProvisioningTranscriptEntry(
   return entry.text;
 }
 
-function extractPromptSections(detailText: string | undefined): {
-  operationDetailText?: string;
-  promptText?: string;
-} {
+function extractPromptSections(
+  detailText: string | undefined,
+): ExtractPromptSectionsResult {
   const normalizedDetail = detailText?.trim();
   if (!normalizedDetail) return {};
   const promptLabel = "Prompt:\n";
@@ -99,7 +145,7 @@ function isPendingOperation(message: ViewOperationMessage): boolean {
 
 function getOperationTone(
   message: ViewOperationMessage,
-): "default" | "destructive" {
+): OperationTone {
   return message.status === "error" ? "destructive" : "default";
 }
 
@@ -107,11 +153,7 @@ function StaticOperationRow({
   summaryContent,
   tone = "default",
   className,
-}: {
-  summaryContent: ReactNode;
-  tone?: "default" | "destructive";
-  className?: string;
-}) {
+}: StaticOperationRowProps) {
   return (
     <div className="group w-full" style={{ overflowAnchor: "none" }}>
       <div className="mr-auto w-full">
@@ -134,14 +176,7 @@ function ExpandableOperationRow({
   tone = "default",
   summaryContentClassName = "min-w-0",
   children,
-}: {
-  isExpanded: boolean;
-  onToggle: () => void;
-  summaryContent: ReactNode;
-  tone?: "default" | "destructive";
-  summaryContentClassName?: string;
-  children: ReactNode;
-}) {
+}: ExpandableOperationRowProps) {
   return (
     <div className="group w-full" style={{ overflowAnchor: "none" }}>
       <div className="mr-auto w-full">
@@ -162,23 +197,17 @@ function ExpandableOperationRow({
 function OperationDetailLines({
   lines,
   truncateLines = false,
-  maxHeightClassName = EVENT_DETAIL_MAX_HEIGHT_CLASS,
   scrollRef,
   onScroll,
-}: {
-  lines: string[];
-  truncateLines?: boolean;
-  maxHeightClassName?: string;
-  scrollRef?: Ref<HTMLDivElement>;
-  onScroll?: (event: UIEvent<HTMLDivElement>) => void;
-}) {
+  size = "regular",
+}: OperationDetailLinesProps) {
   const baseLineClassName = "font-mono text-xs text-foreground/80";
   return (
     <ExpandableDetailScrollArea
       className="mt-0.5 space-y-0.5"
-      maxHeightClassName={maxHeightClassName}
       scrollRef={scrollRef}
       onScroll={onScroll}
+      size={size}
     >
       {lines.map((line, index) => {
         const key = `${line}:${index}`;
@@ -206,7 +235,7 @@ function OperationDetailLines({
 
 function buildProvisioningSummary(
   message: ViewOperationMessage,
-  tone: "default" | "destructive",
+  tone: OperationTone,
 ): ReactNode {
   const isPending = isPendingOperation(message);
   switch (message.title) {
@@ -279,9 +308,9 @@ function buildProvisioningSummary(
   }
 }
 
-function buildProvisioningTranscript(message: ViewOperationMessage): {
-  lines: string[];
-} {
+function buildProvisioningTranscript(
+  message: ViewOperationMessage,
+): ProvisioningTranscript {
   const provisioning = message.provisioning;
   const transcriptLines = provisioning?.transcript
     ?.map((entry) => formatProvisioningTranscriptEntry(entry))
@@ -315,7 +344,7 @@ function capitalizeFirst(value: string): string {
 
 function buildOperationSummary(
   message: ViewOperationMessage,
-  tone: "default" | "destructive",
+  tone: OperationTone,
 ): ReactNode {
   const metadata = message.threadOperation;
   if (!metadata) return <span>{message.title}</span>;
@@ -409,10 +438,7 @@ function buildGenericSummary(title: ReactNode): ReactNode {
 export function OperationRow({
   message,
   initialExpanded = false,
-}: {
-  message: ViewOperationMessage;
-  initialExpanded?: boolean;
-}) {
+}: OperationRowProps) {
   const { isExpanded, onToggle } = useLatestInitialExpanded(initialExpanded);
   const {
     elementRef: provisioningScrollRef,
@@ -500,7 +526,9 @@ export function OperationRow({
             />
           ) : null}
           {promptText ? (
-            <EventCodeBlock maxHeightClassName={EVENT_DETAIL_MAX_HEIGHT_CLASS}>
+            <EventCodeBlock
+              maxHeightClassName={getDetailScrollMaxHeightClass("regular")}
+            >
               {promptText}
             </EventCodeBlock>
           ) : null}
@@ -534,10 +562,7 @@ export function OperationRow({
 export function PermissionGrantLifecycleRow({
   message,
   initialExpanded = false,
-}: {
-  message: ViewPermissionGrantLifecycleMessage;
-  initialExpanded?: boolean;
-}) {
+}: PermissionGrantLifecycleRowProps) {
   const { isExpanded, onToggle } = useLatestInitialExpanded(initialExpanded);
   const tone = message.status === "error" ? "destructive" : "default";
   const detailLines = [

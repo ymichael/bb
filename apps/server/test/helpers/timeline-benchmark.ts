@@ -183,7 +183,7 @@ function createTimelineBenchmarkScenario(
         turnMessageDetail: "full",
       }),
       {
-        includeToolGroupMessages: true,
+        includeNestedRows: true,
       },
     );
   const buildSummaryRowsOnly = () =>
@@ -194,7 +194,7 @@ function createTimelineBenchmarkScenario(
         turnMessageDetail: "summary",
       }),
       {
-        includeToolGroupMessages: false,
+        includeNestedRows: false,
       },
     );
   const summaryBytes = Buffer.byteLength(buildAndSerializeSummary(), "utf8");

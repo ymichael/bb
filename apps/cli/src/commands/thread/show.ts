@@ -353,7 +353,7 @@ export function registerShowCommand(
         const timeline = await unwrap<ThreadTimelineResponse>(
           client.api.v1.threads[":id"].timeline.$get({
             param: { id: threadId },
-            query: {},
+            query: format === "verbose" ? { includeNestedRows: "true" } : {},
           }),
         );
         const color = process.stdout.isTTY === true && !process.env.NO_COLOR;

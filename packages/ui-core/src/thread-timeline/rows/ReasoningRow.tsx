@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { type DetailScrollSize } from "../../detail-scroll-size.js";
 import { cn } from "../../cn.js";
 import {
   COLLAPSIBLE_HEADER_STATIC_TONE_CLASS,
@@ -8,10 +9,14 @@ import {
 import type { ViewAssistantReasoningMessage } from "@bb/domain";
 import { ConversationMarkdown } from "../ConversationMarkdown.js";
 import { useLatestInitialExpanded } from "../latestInitialExpanded.js";
-import {
-  EVENT_LARGE_DETAIL_MAX_HEIGHT_CLASS,
-  ExpandableDetailScrollArea,
-} from "./shared.js";
+import { ExpandableDetailScrollArea } from "./shared.js";
+
+interface ReasoningRowProps {
+  initialExpanded?: boolean;
+  message: ViewAssistantReasoningMessage;
+}
+
+const REASONING_DETAIL_SIZE: DetailScrollSize = "large";
 
 function getReasoningTitle(reasoning: string): string {
   const match = reasoning.match(/^\*\*(.*?)\*\*/);
@@ -41,10 +46,7 @@ function isReasoningExpandable(reasoning: string, title: string): boolean {
 export function ReasoningRow({
   message,
   initialExpanded = false,
-}: {
-  message: ViewAssistantReasoningMessage;
-  initialExpanded?: boolean;
-}) {
+}: ReasoningRowProps) {
   const isStreaming = message.status === "streaming";
   const title = useMemo(() => getReasoningTitle(message.text), [message.text]);
   const expandable = useMemo(
@@ -88,7 +90,7 @@ export function ReasoningRow({
         >
           <ExpandableDetailScrollArea
             className="italic text-muted-foreground"
-            maxHeightClassName={EVENT_LARGE_DETAIL_MAX_HEIGHT_CLASS}
+            size={REASONING_DETAIL_SIZE}
           >
             <ConversationMarkdown
               content={message.text}

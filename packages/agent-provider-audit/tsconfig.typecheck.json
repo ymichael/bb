@@ -1,0 +1,17 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "noEmit": true,
+    "rootDir": "."
+  },
+  "include": [
+    "src",
+    "stories",
+    "test",
+    ".ladle/**/*.tsx",
+    ".ladle/**/*.d.ts",
+    "vite.config.ts",
+    "vitest.config.ts"
+  ]
+}

@@ -26,7 +26,7 @@ describe("threadDetailActivity", () => {
   it("does not highlight latest activity when there is a trailing non-activity row", () => {
     const rows: TimelineRow[] = [
       {
-        kind: "tool-group",
+        kind: "turn-summary",
         id: "group-1",
         turnId: "turn-1",
         summaryCount: 2,
@@ -35,7 +35,7 @@ describe("threadDetailActivity", () => {
         startedAt: 1,
         createdAt: 1,
         status: "completed",
-        messages: [],
+        rows: null,
       },
       {
         kind: "message",
@@ -71,7 +71,7 @@ describe("threadDetailActivity", () => {
         },
       },
       {
-        kind: "tool-group",
+        kind: "turn-summary",
         id: "group-1",
         turnId: "turn-1",
         summaryCount: 1,
@@ -80,7 +80,7 @@ describe("threadDetailActivity", () => {
         startedAt: 2,
         createdAt: 2,
         status: "completed",
-        messages: [],
+        rows: null,
       },
     ];
 
