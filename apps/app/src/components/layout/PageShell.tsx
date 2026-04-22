@@ -16,7 +16,7 @@ interface PageShellProps {
 
 const SHELL_BLEED_CLASS =
   "-mx-4 -mt-4 flex h-full min-h-0 flex-1 flex-col overflow-hidden md:-mx-5 md:-mt-5";
-const DEFAULT_MAX_WIDTH_CLASS = "max-w-[800px]";
+const DEFAULT_MAX_WIDTH_CLASS = "max-w-[760px]";
 
 export function PageShell({
   children,

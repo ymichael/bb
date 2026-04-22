@@ -307,11 +307,17 @@ body.sidebar-resizing [data-sidebar="panel"] {
 }
 
 @layer utilities {
-  /* Bump Tailwind's small text tokens on narrow viewports so dense UI copy
-     lands at ~14–15px instead of 12–14px. Breakpoint matches Tailwind's md:
-     (≥768px), which is where the sidebar switches to a drawer and where the
-     rest of the app's responsive sizing fires — keeping these in sync avoids
-     a jarring intermediate state where icons have grown but text hasn't. */
+  /* Tighten text-sm on desktop for denser UI copy (~13px). On narrow
+     viewports, bump text-xs and text-sm up so dense copy lands at ~14–15px
+     instead of 12–14px. Breakpoint matches Tailwind's md: (≥768px), which
+     is where the sidebar switches to a drawer and where the rest of the
+     app's responsive sizing fires — keeping these in sync avoids a jarring
+     intermediate state where icons have grown but text hasn't. */
+  .text-sm {
+    font-size: 0.8125rem;
+    line-height: 1.25rem;
+  }
+
   @media (max-width: 767px) {
     .text-xs {
       font-size: 0.875rem;
