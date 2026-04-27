@@ -97,7 +97,7 @@ export const templateDefinitions = [
   },
   {
     "id": "generateThreadMetadata",
-    "body": "You create concise titles for coding tasks.\nCall the `result` tool with:\n- title: short, clear, 4-5 words maximum, Title Case\n- branchSlug: short, lowercase kebab-case, git-branch-safe\n\nTask:\n{{cleanedPrompt}}",
+    "body": "You create concise titles for coding tasks.\nCall the `result` tool with:\n- title: short, clear, 4-5 words maximum, Title Case\n\nTask:\n{{cleanedPrompt}}",
     "fileName": "generate-thread-metadata.md",
     "kind": "prompt",
     "title": "Thread Metadata Generator",

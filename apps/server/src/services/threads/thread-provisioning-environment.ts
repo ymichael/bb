@@ -51,6 +51,7 @@ import {
   inferThreadMetadata,
   MANAGED_THREAD_METADATA_TIMEOUT_MS,
 } from "./thread-metadata-inference.js";
+import { deriveBranchSlugFromTitle } from "./title-generation.js";
 import {
   attachedEnvironmentIdForContext,
   createEnvironmentAttachedContext,
@@ -439,10 +440,23 @@ async function resolveMetadataIfNeeded(
     return resolvedContext;
   }
 
+  if (args.context.request.titleProvided) {
+    const resolvedContext = createEnvironmentPendingContext(args.context, {
+      branchSlug: args.thread.title
+        ? deriveBranchSlugFromTitle(args.thread.title)
+        : null,
+    });
+    saveThreadProvisionContext(deps, {
+      threadId: args.thread.id,
+      context: resolvedContext,
+    });
+    return resolvedContext;
+  }
+
   const metadata = await inferThreadMetadata(deps, {
     environmentId: null,
     generateBranchName: needsBranch,
-    generateTitle: !args.context.request.titleProvided,
+    generateTitle: true,
     input: args.context.request.input,
     provisioningId: args.context.state.provisioningId,
     threadId: args.thread.id,

@@ -107,6 +107,10 @@ export function sanitizeGeneratedBranchSlug(value: string): string | null {
   return slug.length > 0 ? slug : null;
 }
 
+export function deriveBranchSlugFromTitle(title: string): string | null {
+  return sanitizeGeneratedBranchSlug(title);
+}
+
 const threadMetadataSchema = Type.Object({
   branchSlug: Type.Optional(Type.String()),
   title: Type.Optional(Type.String()),
@@ -120,9 +124,7 @@ function normalizeGeneratedThreadMetadata(
   }
 
   const title = parsed.title ? sanitizeGeneratedTitle(parsed.title) : null;
-  const branchSlug = parsed.branchSlug
-    ? sanitizeGeneratedBranchSlug(parsed.branchSlug)
-    : null;
+  const branchSlug = title ? deriveBranchSlugFromTitle(title) : null;
   if (!title && !branchSlug) {
     return null;
   }

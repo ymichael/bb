@@ -251,6 +251,7 @@ describe("public thread creation routes", () => {
         ({ command }) => command.type === "environment.provision",
       );
       expect(queued.command).toMatchObject({
+        branchName: `bb/managed-thread-${createdThread.id}`,
         sourcePath: source.path,
         workspaceProvisionType: "managed-worktree",
         setupTimeoutMs: 900000,
@@ -319,6 +320,7 @@ describe("public thread creation routes", () => {
           command.environmentId === environment.id,
       );
       expect(queued.command).toMatchObject({
+        branchName: `bb/secondary-host-thread-${createdThread.id}`,
         sourcePath: secondarySource.path,
         workspaceProvisionType: "managed-worktree",
       });

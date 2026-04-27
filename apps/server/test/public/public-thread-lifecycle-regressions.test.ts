@@ -201,8 +201,12 @@ describe("public thread lifecycle regressions", () => {
         throw new Error("Thread creation response shape was invalid");
       }
 
-      expect(firstProvision.command.branchName).toBe(`bb/${firstThread.id}`);
-      expect(secondProvision.command.branchName).toBe(`bb/${secondThread.id}`);
+      expect(firstProvision.command.branchName).toBe(
+        `bb/worker-thread-${firstThread.id}`,
+      );
+      expect(secondProvision.command.branchName).toBe(
+        `bb/worker-thread-${secondThread.id}`,
+      );
       expect(firstProvision.command.branchName).not.toBe(
         secondProvision.command.branchName,
       );

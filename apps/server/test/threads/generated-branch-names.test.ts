@@ -52,7 +52,7 @@ describe("generated managed branch names", () => {
 
   it("uses generated branch slugs for managed worktree provisioning", async () => {
     mockThreadMetadata({
-      branchSlug: "Improve Branch Names!",
+      branchSlug: "unrelated-slug",
       title: "Improve Branch Names",
     });
     const harness = await createTestAppHarness();
@@ -111,7 +111,7 @@ describe("generated managed branch names", () => {
 
   it("queues a daemon rename after a generated title thread starts", async () => {
     mockThreadMetadata({
-      branchSlug: "Generated Rename Branch",
+      branchSlug: "generated-rename-branch",
       title: "Generated Rename Title",
     });
     const harness = await createTestAppHarness();
@@ -159,7 +159,7 @@ describe("generated managed branch names", () => {
         provision,
         {
           path: "/tmp/generated-title-rename-project/.bb-worktrees/thread",
-          branchName: `bb/generated-rename-branch-${thread.id}`,
+          branchName: `bb/generated-rename-title-${thread.id}`,
           defaultBranch: "main",
           isGitRepo: true,
           isWorktree: true,
@@ -238,12 +238,15 @@ describe("generated managed branch names", () => {
       if (provision.command.type !== "environment.provision") {
         throw new Error("Expected environment.provision command");
       }
+      expect(provision.command.branchName).toBe(
+        `bb/user-picked-title-${thread.id}`,
+      );
       await reportQueuedCommandSuccess(
         harness,
         provision,
         {
           path: "/tmp/user-title-no-rename-project/.bb-worktrees/thread",
-          branchName: `bb/${thread.id}`,
+          branchName: `bb/user-picked-title-${thread.id}`,
           defaultBranch: "main",
           isGitRepo: true,
           isWorktree: true,
@@ -278,7 +281,7 @@ describe("generated managed branch names", () => {
     }
   });
 
-  it("uses generated branch slugs without retrying title inference when no title is returned", async () => {
+  it("falls back to the thread ID when no title is returned", async () => {
     mockThreadMetadata({
       branchSlug: "Slug Only Branch",
     });
@@ -324,9 +327,7 @@ describe("generated managed branch names", () => {
       if (queued.command.type !== "environment.provision") {
         throw new Error("Expected environment.provision command");
       }
-      expect(queued.command.branchName).toBe(
-        `bb/slug-only-branch-${thread.id}`,
-      );
+      expect(queued.command.branchName).toBe(`bb/${thread.id}`);
       expect(piAiMocks.complete).toHaveBeenCalledTimes(1);
     } finally {
       await harness.cleanup();
@@ -385,10 +386,10 @@ describe("generated managed branch names", () => {
     }
   });
 
-  it("falls back to thread ID branch names for invalid generated slugs", async () => {
+  it("ignores independently generated branch slugs when a title is available", async () => {
     mockThreadMetadata({
-      branchSlug: "!!!",
-      title: "Invalid Slug Title",
+      branchSlug: "wrong-slug",
+      title: "Canonical Generated Title",
     });
     const harness = await createTestAppHarness();
     try {
@@ -429,12 +430,14 @@ describe("generated managed branch names", () => {
         ({ command }) => command.type === "environment.provision",
       );
       expect(getThread(harness.db, thread.id)?.title).toBe(
-        "Invalid Slug Title",
+        "Canonical Generated Title",
       );
       if (queued.command.type !== "environment.provision") {
         throw new Error("Expected environment.provision command");
       }
-      expect(queued.command.branchName).toBe(`bb/${thread.id}`);
+      expect(queued.command.branchName).toBe(
+        `bb/canonical-generated-title-${thread.id}`,
+      );
       expect(piAiMocks.complete).toHaveBeenCalledTimes(1);
     } finally {
       await harness.cleanup();
