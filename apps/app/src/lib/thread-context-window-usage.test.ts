@@ -1,5 +1,6 @@
 import {
   buildThreadEventRow,
+  turnScope,
   type ThreadEventContextWindowUsage,
   type ThreadEventRow,
 } from "@bb/domain";
@@ -19,8 +20,10 @@ function buildProviderEvent({
   seq: number;
   turnId: string;
 }): ThreadEventRow {
+  const scope = turnScope(turnId);
   return buildThreadEventRow({
     id: `event-${seq}`,
+    scope,
     threadId: "thread-1",
     seq,
     createdAt: seq,
@@ -29,6 +32,7 @@ function buildProviderEvent({
       threadId: "thread-1",
       providerThreadId: "provider-thread",
       turnId,
+      scope,
       contextWindowUsage,
     },
   });

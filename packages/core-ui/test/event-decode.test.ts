@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseThreadEventRow } from "@bb/domain";
+import { parseThreadEventRow, turnScope } from "@bb/domain";
 import { decodeRow } from "../src/event-decode.js";
 
 describe("decodeRow", () => {
@@ -8,6 +8,7 @@ describe("decodeRow", () => {
       id: "row-1",
       threadId: "thread-1",
       seq: 1,
+      scope: turnScope("turn-1"),
       type: "item/completed",
       data: {
         providerThreadId: "provider-thread-1",
@@ -26,8 +27,8 @@ describe("decodeRow", () => {
       event: {
         type: "item/completed",
         threadId: "thread-1",
+        scope: turnScope("turn-1"),
         providerThreadId: "provider-thread-1",
-        turnId: "turn-1",
         item: {
           type: "toolCall",
           id: "tool-1",
@@ -48,6 +49,7 @@ describe("decodeRow", () => {
       id: "row-1",
       threadId: "thread-1",
       seq: 1,
+      scope: turnScope("turn-1"),
       type: "item/completed",
       data: {
         providerThreadId: "provider-thread-1",
@@ -70,6 +72,7 @@ describe("decodeRow", () => {
       id: "row-turn-status-missing",
       threadId: "thread-1",
       seq: 2,
+      scope: turnScope("turn-1"),
       type: "turn/completed",
       data: {
         providerThreadId: "provider-thread-1",
@@ -86,6 +89,7 @@ describe("decodeRow", () => {
       id: "row-web-search-action",
       threadId: "thread-1",
       seq: 3,
+      scope: turnScope("turn-1"),
       type: "item/completed",
       data: {
         providerThreadId: "provider-thread-1",

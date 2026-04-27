@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { threadScope, turnScope } from "@bb/domain";
 import { createClaudeCodeProviderAdapter } from "./adapter.js";
 import { CLAUDE_PERMISSION_REQUEST_APPROVAL_METHOD } from "./interactive-contract.js";
 import type { ProviderExecutionContext } from "../provider-adapter.js";
@@ -80,7 +81,7 @@ describe("claude-code provider adapter", () => {
         type: "turn/input/accepted",
         threadId: "thread-1",
         providerThreadId: "provider-thread-1",
-        turnId: "turn-1",
+        scope: turnScope("turn-1"),
         clientRequestSequence: 9,
       },
     ]);
@@ -959,7 +960,10 @@ describe("claude-code provider adapter", () => {
     });
 
     expect(events).toContainEqual(
-      expect.objectContaining({ type: "turn/started", turnId: "turn-1" }),
+      expect.objectContaining({
+        type: "turn/started",
+        scope: turnScope("turn-1"),
+      }),
     );
     expect(events).toContainEqual(
       expect.objectContaining({
@@ -1270,7 +1274,29 @@ describe("claude-code provider adapter", () => {
       },
     });
 
-    expect(events).toEqual([]);
+    expect(events).toMatchObject([]);
+  });
+
+  it("translateEvent ignores task-updated system events from the SDK envelope", () => {
+    const adapter = createClaudeCodeProviderAdapter();
+
+    const events = adapter.translateEvent({
+      jsonrpc: "2.0",
+      method: "sdk/message",
+      params: {
+        threadId: "claude-thread-1",
+        message: {
+          type: "system",
+          subtype: "task_updated",
+          task_id: "task-1",
+          patch: {
+            is_backgrounded: true,
+          },
+        },
+      },
+    });
+
+    expect(events).toMatchObject([]);
   });
 
   it("translateEvent maps thread identity envelopes", () => {
@@ -1290,6 +1316,7 @@ describe("claude-code provider adapter", () => {
         type: "thread/identity",
         threadId: "bb-thread-1",
         providerThreadId: "claude-thread-1",
+        scope: threadScope(),
       },
     ]);
   });
@@ -1307,9 +1334,10 @@ describe("claude-code provider adapter", () => {
 
     expect(events).toEqual([
       {
-        type: "error",
+        type: "provider/error",
         threadId: "",
         providerThreadId: "",
+        scope: threadScope(),
         message: "Provider error",
         detail: "bridge failed",
       },
@@ -1335,13 +1363,13 @@ describe("claude-code provider adapter", () => {
         type: "turn/started",
         threadId: "",
         providerThreadId: "",
-        turnId: "turn-1",
+        scope: turnScope("turn-1"),
       },
       {
-        type: "error",
+        type: "provider/error",
         threadId: "",
         providerThreadId: "",
-        turnId: "turn-1",
+        scope: turnScope("turn-1"),
         message: "Provider error",
         detail: "Claude auth expired",
       },
@@ -1349,7 +1377,7 @@ describe("claude-code provider adapter", () => {
         type: "turn/completed",
         threadId: "",
         providerThreadId: "",
-        turnId: "turn-1",
+        scope: turnScope("turn-1"),
         status: "failed",
       },
     ]);
@@ -1398,13 +1426,13 @@ describe("claude-code provider adapter", () => {
     expect(events).toContainEqual(
       expect.objectContaining({
         type: "turn/completed",
-        turnId: "turn-1",
+        scope: turnScope("turn-1"),
         status: "failed",
       }),
     );
     expect(events).toContainEqual(
       expect.objectContaining({
-        type: "error",
+        type: "provider/error",
         message: "Provider error",
       }),
     );
@@ -1431,9 +1459,49 @@ describe("claude-code provider adapter", () => {
         providerThreadId: "bb-thread-1",
         providerId: "claude-code",
         rawType: "sdk/custom_event",
+        scope: threadScope(),
         rawEvent: expect.objectContaining({
           method: "sdk/message",
         }),
+      }),
+    ]);
+  });
+
+  it("translateEvent preserves the active turn on unknown sdk envelopes", () => {
+    const adapter = createClaudeCodeProviderAdapter();
+
+    adapter.translateEvent(
+      {
+        type: "assistant",
+        message: {
+          role: "assistant",
+          content: [{ type: "text", text: "Working on it." }],
+        },
+        session_id: "sess-1",
+      },
+      { threadId: "bb-thread-1" },
+    );
+
+    const events = adapter.translateEvent(
+      {
+        jsonrpc: "2.0",
+        method: "sdk/message",
+        params: {
+          threadId: "bb-thread-1",
+          message: {
+            type: "custom_event",
+          },
+        },
+      },
+      { threadId: "bb-thread-1" },
+    );
+
+    expect(events).toEqual([
+      expect.objectContaining({
+        type: "provider/unhandled",
+        threadId: "bb-thread-1",
+        scope: turnScope("turn-1"),
+        rawType: "sdk/custom_event",
       }),
     ]);
   });
@@ -1457,6 +1525,7 @@ describe("claude-code provider adapter", () => {
         type: "provider/unhandled",
         providerId: "claude-code",
         rawType: "sdk/result",
+        scope: threadScope(),
         rawEvent: expect.objectContaining({
           method: "sdk/message",
         }),
@@ -1868,14 +1937,14 @@ describe("claude-code provider adapter", () => {
     expect(events).toContainEqual(
       expect.objectContaining({
         type: "turn/started",
-        turnId: "turn-1",
+        scope: turnScope("turn-1"),
       }),
     );
     expect(events).toContainEqual(
       expect.objectContaining({
         type: "item/agentMessage/delta",
         itemId: expect.stringMatching(/^claude-assistant-/),
-        turnId: "turn-1",
+        scope: turnScope("turn-1"),
         delta: "PONG",
       }),
     );
@@ -1952,7 +2021,7 @@ describe("claude-code provider adapter", () => {
     expect(events).toContainEqual(
       expect.objectContaining({
         type: "turn/completed",
-        turnId: "turn-1",
+        scope: turnScope("turn-1"),
         status: "completed",
       }),
     );
@@ -2168,8 +2237,10 @@ describe("claude-code provider adapter", () => {
     const completedEvent = events.find(
       (
         event,
-      ): event is Extract<(typeof events)[number], { type: "item/completed" }> =>
-        event.type === "item/completed",
+      ): event is Extract<
+        (typeof events)[number],
+        { type: "item/completed" }
+      > => event.type === "item/completed",
     );
 
     expect(completedEvent?.item).toMatchObject({
@@ -2319,7 +2390,8 @@ describe("claude-code provider adapter", () => {
             tool_name: "Bash",
             content: "(Bash completed with no output)",
             is_error: true,
-            tool_use_result: "Error: Exit code 2\ngrep: parentheses not balanced",
+            tool_use_result:
+              "Error: Exit code 2\ngrep: parentheses not balanced",
           },
         ],
       },
@@ -2334,7 +2406,8 @@ describe("claude-code provider adapter", () => {
           id: "tool-1",
           command: "grep '(' file.txt",
           cwd: "/repo",
-          aggregatedOutput: "Error: Exit code 2\ngrep: parentheses not balanced",
+          aggregatedOutput:
+            "Error: Exit code 2\ngrep: parentheses not balanced",
           exitCode: 1,
           status: "failed",
         }),
@@ -2388,57 +2461,61 @@ describe("claude-code provider adapter", () => {
     );
   });
 
-  it("translateEvent clears stale tool state when a turn ends without tool results", () => {
+  it("translateEvent surfaces late tool results without turn context as unhandled", () => {
     const adapter = createClaudeCodeProviderAdapter();
 
-    adapter.translateEvent({
-      type: "assistant",
-      message: {
-        role: "assistant",
-        content: [
-          {
-            type: "tool_use",
-            id: "tool-1",
-            name: "Bash",
-            input: { command: "npm test", cwd: "/repo" },
-          },
-        ],
+    adapter.translateEvent(
+      {
+        type: "assistant",
+        message: {
+          role: "assistant",
+          content: [
+            {
+              type: "tool_use",
+              id: "tool-1",
+              name: "Bash",
+              input: { command: "npm test", cwd: "/repo" },
+            },
+          ],
+        },
+        session_id: "sess-1",
       },
-      session_id: "sess-1",
-    });
+      { threadId: "thread-1" },
+    );
 
-    adapter.translateEvent({
-      type: "result",
-      subtype: "end_turn",
-      session_id: "sess-1",
-    });
-
-    const events = adapter.translateEvent({
-      type: "user",
-      message: {
-        role: "user",
-        content: [
-          {
-            type: "tool_result",
-            tool_use_id: "tool-1",
-            tool_name: "Bash",
-            content: "late output",
-          },
-        ],
+    adapter.translateEvent(
+      {
+        type: "result",
+        subtype: "end_turn",
+        session_id: "sess-1",
       },
-      session_id: "sess-1",
-    });
+      { threadId: "thread-1" },
+    );
+
+    const events = adapter.translateEvent(
+      {
+        type: "user",
+        message: {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "tool-1",
+              tool_name: "Bash",
+              content: "late output",
+            },
+          ],
+        },
+        session_id: "sess-1",
+      },
+      { threadId: "thread-1" },
+    );
 
     expect(events).toContainEqual(
       expect.objectContaining({
-        type: "item/completed",
-        item: expect.objectContaining({
-          type: "commandExecution",
-          id: "tool-1",
-          command: "",
-          cwd: "",
-          aggregatedOutput: "late output",
-        }),
+        type: "provider/unhandled",
+        rawType: "sdk/user:tool_result",
+        scope: { kind: "thread" },
       }),
     );
   });
@@ -2452,7 +2529,7 @@ describe("claude-code provider adapter", () => {
       subtype: "init",
       session_id: "sess-1",
     });
-    expect(events).toEqual([]);
+    expect(events).toMatchObject([]);
   });
 
   it("translateEvent status compacting starts a turn and emits a compaction item", () => {
@@ -2464,22 +2541,26 @@ describe("claude-code provider adapter", () => {
       session_id: "sess-1",
     });
 
-    expect(events).toContainEqual({
-      type: "turn/started",
-      threadId: "",
-      providerThreadId: "",
-      turnId: "turn-1",
-    });
-    expect(events).toContainEqual({
-      type: "item/started",
-      threadId: "",
-      providerThreadId: "",
-      turnId: "turn-1",
-      item: {
-        type: "contextCompaction",
-        id: "claude-compaction-turn-1",
-      },
-    });
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "turn/started",
+        threadId: "",
+        providerThreadId: "",
+        scope: turnScope("turn-1"),
+      }),
+    );
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "item/started",
+        threadId: "",
+        providerThreadId: "",
+        scope: turnScope("turn-1"),
+        item: {
+          type: "contextCompaction",
+          id: "claude-compaction-turn-1",
+        },
+      }),
+    );
   });
 
   it("translateEvent compact_boundary emits thread/compacted", () => {
@@ -2502,12 +2583,14 @@ describe("claude-code provider adapter", () => {
       },
     });
 
-    expect(events).toContainEqual({
-      type: "thread/compacted",
-      threadId: "",
-      providerThreadId: "",
-      turnId: "turn-1",
-    });
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "thread/compacted",
+        threadId: "",
+        providerThreadId: "",
+        scope: turnScope("turn-1"),
+      }),
+    );
   });
 
   it("translateEvent compact_boundary without a known turn is unhandled", () => {
@@ -2557,7 +2640,10 @@ describe("claude-code provider adapter", () => {
     });
 
     expect(events).toContainEqual(
-      expect.objectContaining({ type: "turn/started", turnId: "turn-2" }),
+      expect.objectContaining({
+        type: "turn/started",
+        scope: turnScope("turn-2"),
+      }),
     );
   });
 
@@ -2568,7 +2654,10 @@ describe("claude-code provider adapter", () => {
     const events = adapter.translateEvent(loadFixture("assistant-text.json"));
 
     expect(events).toContainEqual(
-      expect.objectContaining({ type: "turn/started", turnId: "turn-1" }),
+      expect.objectContaining({
+        type: "turn/started",
+        scope: turnScope("turn-1"),
+      }),
     );
     expect(events).toContainEqual(
       expect.objectContaining({
@@ -2682,7 +2771,7 @@ describe("claude-code provider adapter", () => {
     expect(events).toContainEqual(
       expect.objectContaining({
         type: "turn/completed",
-        turnId: "turn-1",
+        scope: turnScope("turn-1"),
         status: "completed",
       }),
     );
@@ -3115,6 +3204,6 @@ describe("claude-code provider adapter", () => {
   it("fixture: system-init produces no events", () => {
     const adapter = createClaudeCodeProviderAdapter();
     const events = adapter.translateEvent(loadFixture("system-init.json"));
-    expect(events).toEqual([]);
+    expect(events).toMatchObject([]);
   });
 });

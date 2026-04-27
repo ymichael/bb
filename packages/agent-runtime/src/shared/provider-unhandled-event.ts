@@ -5,6 +5,8 @@
 
 import {
   providerRawEventSchema,
+  threadScope,
+  turnScope,
   type ProviderRawEvent,
   type ThreadEvent,
 } from "@bb/domain";
@@ -12,6 +14,7 @@ import type { ProviderUnhandledEvent } from "@bb/domain";
 import type { ProviderVisibilityMetadata } from "../provider-visibility.js";
 import type { JsonRpcMessage } from "../runtime-json-rpc.js";
 import { getStringProperty, isRecord } from "./provider-visibility-helpers.js";
+import { UNSTAMPED_THREAD_ID } from "./unstamped-thread-id.js";
 
 export interface CreateUnhandledProviderEventArgs {
   providerId: string;
@@ -30,6 +33,7 @@ export interface BuildUnhandledProviderEventsArgs {
     ProviderVisibilityMetadata,
     "describeParsedRawEvent" | "parseRawEvent"
   >;
+  turnId?: string;
   parentToolCallId?: string;
 }
 
@@ -52,9 +56,9 @@ function toProviderRawEvent(rawEvent: JsonRpcMessage): ProviderRawEvent {
 
 function getThreadIdFromRawEvent(rawEvent: JsonRpcMessage): string {
   if (!isRecord(rawEvent.params)) {
-    return "";
+    return UNSTAMPED_THREAD_ID;
   }
-  return getStringProperty(rawEvent.params, "threadId") ?? "";
+  return getStringProperty(rawEvent.params, "threadId") ?? UNSTAMPED_THREAD_ID;
 }
 
 function getTurnIdFromRawEvent(rawEvent: JsonRpcMessage): string | undefined {
@@ -78,7 +82,7 @@ export function createUnhandledProviderEvent(
     providerId: args.providerId,
     rawType: args.rawType,
     rawEvent: toProviderRawEvent(args.rawEvent),
-    ...(turnId ? { turnId } : {}),
+    scope: turnId ? turnScope(turnId) : threadScope(),
     ...(args.parentToolCallId
       ? { parentToolCallId: args.parentToolCallId }
       : {}),
@@ -100,6 +104,7 @@ export function buildUnhandledProviderEvents(
       providerId: args.providerId,
       rawEvent: args.rawEvent,
       rawType: description.kind,
+      ...(args.turnId ? { turnId: args.turnId } : {}),
       ...(args.parentToolCallId
         ? { parentToolCallId: args.parentToolCallId }
         : {}),

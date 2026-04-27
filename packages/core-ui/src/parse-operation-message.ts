@@ -8,7 +8,6 @@ import type {
 } from "@bb/domain";
 import { getCompactionKey } from "./compaction-lifecycle.js";
 import type { EventMeta } from "./event-decode.js";
-import { getEventTurnId } from "./event-decode.js";
 import { capitalize, messageId } from "./format-helpers.js";
 import { buildProviderUnhandledDetail } from "./provider-unhandled-detail.js";
 import { readProvisioningTranscript } from "./provisioning-helpers.js";
@@ -162,6 +161,7 @@ function op(
     sourceSeqEnd: meta.seq,
     createdAt: meta.createdAt,
     startedAt: meta.createdAt,
+    scope: decoded.scope,
     ...fields,
   };
 }
@@ -175,6 +175,8 @@ type ViewOperationFields = Omit<
   | "sourceSeqEnd"
   | "createdAt"
   | "startedAt"
+  | "scope"
+  | "turnId"
 >;
 
 function formatPlanStepStatus(
@@ -199,8 +201,6 @@ export function parseOperationMessage(
   meta: EventMeta,
   options?: { includeOptionalOperations?: boolean },
 ): ViewOperationMessage | ViewPermissionGrantLifecycleMessage | null {
-  const eventTurnId = getEventTurnId(decoded);
-
   if (decoded.type === "turn/plan/updated") {
     const steps = decoded.plan
       .map((entry) => {
@@ -220,7 +220,6 @@ export function parseOperationMessage(
           (steps.length > 0 ? steps.join("\n") : undefined));
 
     return op(decoded, meta, "plan", {
-      turnId: decoded.turnId,
       opType: "plan-updated",
       title: "Plan updated",
       detail,
@@ -230,7 +229,6 @@ export function parseOperationMessage(
 
   if (decoded.type === "provider/unhandled") {
     return op(decoded, meta, "provider-unhandled", {
-      turnId: eventTurnId,
       opType: "provider-unhandled",
       title: `Unhandled ${providerDisplayName(decoded.providerId)} event`,
       detail: buildProviderUnhandledDetail(decoded),
@@ -238,7 +236,7 @@ export function parseOperationMessage(
     });
   }
 
-  if (decoded.type === "warning") {
+  if (decoded.type === "provider/warning") {
     const category = decoded.category ?? "general";
     const isDeprecation = category === "deprecation";
     const isConfig = category === "config";
@@ -255,7 +253,6 @@ export function parseOperationMessage(
       .filter((line): line is string => Boolean(line))
       .join("\n");
     return op(decoded, meta, isDeprecation ? "deprecation" : "warning", {
-      turnId: eventTurnId,
       opType: isDeprecation ? "deprecation" : "warning",
       title,
       detail: detail.length > 0 ? detail : undefined,
@@ -265,7 +262,6 @@ export function parseOperationMessage(
 
   if (decoded.type === "system/thread/interrupted") {
     return op(decoded, meta, "thread-interrupted", {
-      turnId: eventTurnId,
       opType: "thread-interrupted",
       title: "Stopped by user",
       detail: decoded.message || undefined,
@@ -289,7 +285,6 @@ export function parseOperationMessage(
       }
     })();
     return op(decoded, meta, "thread-provisioning", {
-      turnId: eventTurnId,
       opType: "thread-provisioning",
       title,
       status: provisioningOperationStatus(status),
@@ -319,7 +314,6 @@ export function parseOperationMessage(
     ].filter((value): value is string => Boolean(value));
 
     return op(decoded, meta, "operation", {
-      turnId: eventTurnId,
       opType: "operation",
       title,
       detail: detailParts.length > 0 ? detailParts.join(" • ") : undefined,
@@ -337,7 +331,7 @@ export function parseOperationMessage(
       sourceSeqEnd: meta.seq,
       createdAt: meta.createdAt,
       startedAt: meta.createdAt,
-      turnId: eventTurnId,
+      scope: decoded.scope,
       interactionId: decoded.interactionId,
       title: decoded.message,
       status: permissionGrantLifecycleStatus(decoded.status),
@@ -351,7 +345,6 @@ export function parseOperationMessage(
   if (decoded.type === "thread/compacted") {
     return {
       ...op(decoded, meta, `compaction`, {
-        turnId: eventTurnId,
         opType: "compaction",
         title: "Context compacted",
         status: "completed",
@@ -369,7 +362,6 @@ export function parseOperationMessage(
     decoded.type === "turn/diff/updated"
   ) {
     return op(decoded, meta, "turn-diff", {
-      turnId: decoded.turnId,
       opType: "turn-diff",
       title: "Turn diff updated",
       detail: decoded.diff,

@@ -1,4 +1,5 @@
 import type {
+  ThreadEventScope,
   ViewApprovalLifecycleStatus,
   ViewWebFetchMessage,
   ViewMessage,
@@ -11,6 +12,11 @@ import type {
 import type { EventMeta } from "./event-decode.js";
 import type { ExecCallPartial } from "./exec-lifecycle.js";
 import { messageId } from "./format-helpers.js";
+import {
+  areThreadEventScopesEqual,
+  viewMessageThreadScopeFields,
+  viewMessageTurnScopeFields,
+} from "./message-scope.js";
 import { isExploringCall } from "./tool-call-parsing.js";
 import {
   appendVisibleTextBuffer,
@@ -24,7 +30,7 @@ import {
 import type { WebActivityLifecycleEvent } from "./web-activity-lifecycle.js";
 
 interface ExploringCompatibilityContext {
-  turnId?: string;
+  scope: ThreadEventScope;
   source?: string;
   parentToolCallId?: string;
 }
@@ -43,8 +49,8 @@ export interface ToolActivityProjectionState {
 
 interface RunningExecCall extends ViewToolCallSummary {
   threadId: string;
+  scope: ThreadEventScope;
   toolName?: string;
-  turnId?: string;
   parentToolCallId?: string;
   sourceSeqStart: number;
   sourceSeqEnd: number;
@@ -173,6 +179,9 @@ function upsertRunningExecCall(
   threadId: string,
   turnId: string | undefined,
 ): RunningExecCall {
+  const scopeFields = turnId
+    ? viewMessageTurnScopeFields(turnId)
+    : viewMessageThreadScopeFields();
   if (!existing) {
     const outputBuffer = createVisibleTextBuffer();
     if (incoming.output && incoming.output.length > 0) {
@@ -191,6 +200,7 @@ function upsertRunningExecCall(
       cwd: incoming.cwd,
       parsedCmd: incoming.parsedCmd,
       source: incoming.source,
+      scope: scopeFields.scope,
       subagentType: incoming.subagentType,
       description: incoming.description,
       output: getVisibleTextBufferText(outputBuffer),
@@ -199,7 +209,6 @@ function upsertRunningExecCall(
       durationMs: incoming.durationMs,
       approvalStatus: incoming.approvalStatus ?? null,
       status: incoming.status ?? "pending",
-      turnId,
       parentToolCallId: incoming.parentToolCallId,
       sourceSeqStart: meta.seq,
       sourceSeqEnd: meta.seq,
@@ -215,6 +224,11 @@ function upsertRunningExecCall(
   //   "keep latest"  — terminal state from the last event wins
 
   // keep first
+  if (!areThreadEventScopesEqual(existing.scope, scopeFields.scope)) {
+    throw new Error(
+      `Cannot merge tool-call messages with different scopes for call ${incoming.callId}`,
+    );
+  }
   if (incoming.toolName && !existing.toolName)
     existing.toolName = incoming.toolName;
   if (incoming.cwd && !existing.cwd) existing.cwd = incoming.cwd;
@@ -230,7 +244,6 @@ function upsertRunningExecCall(
   if (incoming.description && !existing.description) {
     existing.description = incoming.description;
   }
-  if (!existing.turnId && turnId) existing.turnId = turnId;
   if (!existing.parentToolCallId && incoming.parentToolCallId) {
     existing.parentToolCallId = incoming.parentToolCallId;
   }
@@ -287,11 +300,11 @@ function areExploringCallsCompatible(
   a: ExploringCompatibilityContext,
   b: ExploringCompatibilityContext,
 ): boolean {
-  const sameTurn = a.turnId === b.turnId;
+  const sameScope = areThreadEventScopesEqual(a.scope, b.scope);
   const sameSource = (a.source ?? "agent") === (b.source ?? "agent");
   const sameParent =
     (a.parentToolCallId ?? null) === (b.parentToolCallId ?? null);
-  return sameTurn && sameSource && sameParent;
+  return sameScope && sameSource && sameParent;
 }
 
 function syncExploringStatus(cell: ViewToolExploringMessage): void {
@@ -570,7 +583,7 @@ function createToolCallMessage(call: RunningExecCall): ViewToolCallMessage {
     sourceSeqEnd: call.sourceSeqEnd,
     createdAt: call.createdAt,
     startedAt: call.startedAt,
-    ...(call.turnId ? { turnId: call.turnId } : {}),
+    scope: call.scope,
     ...(call.parentToolCallId
       ? { parentToolCallId: call.parentToolCallId }
       : {}),
@@ -624,7 +637,7 @@ function createExploringMessage(
     sourceSeqEnd: call.sourceSeqEnd,
     createdAt: call.createdAt,
     startedAt: call.startedAt,
-    ...(call.turnId ? { turnId: call.turnId } : {}),
+    scope: call.scope,
     ...(call.parentToolCallId
       ? { parentToolCallId: call.parentToolCallId }
       : {}),
@@ -681,7 +694,7 @@ export function onExecBegin(
       lastCall &&
       areExploringCallsCompatible(
         {
-          turnId: active.turnId,
+          scope: active.scope,
           source: lastCall.source,
           parentToolCallId: active.parentToolCallId,
         },
@@ -928,7 +941,9 @@ function createWebActivityMessage(
       sourceSeqEnd: meta.seq,
       createdAt: meta.createdAt,
       startedAt: meta.createdAt,
-      ...(turnId ? { turnId } : {}),
+      ...(turnId
+        ? viewMessageTurnScopeFields(turnId)
+        : viewMessageThreadScopeFields()),
       ...(payload.parentToolCallId
         ? { parentToolCallId: payload.parentToolCallId }
         : {}),
@@ -947,7 +962,9 @@ function createWebActivityMessage(
     sourceSeqEnd: meta.seq,
     createdAt: meta.createdAt,
     startedAt: meta.createdAt,
-    ...(turnId ? { turnId } : {}),
+    ...(turnId
+      ? viewMessageTurnScopeFields(turnId)
+      : viewMessageThreadScopeFields()),
     ...(payload.parentToolCallId
       ? { parentToolCallId: payload.parentToolCallId }
       : {}),
@@ -966,11 +983,16 @@ function mergeWebActivityMessage(
   turnId: string | undefined,
   payload: WebActivityLifecycleEvent,
 ): void {
+  const scopeFields = turnId
+    ? viewMessageTurnScopeFields(turnId)
+    : viewMessageThreadScopeFields();
+  if (!areThreadEventScopesEqual(target.scope, scopeFields.scope)) {
+    throw new Error(
+      `Cannot merge ${target.kind} messages with different scopes for call ${payload.callId}`,
+    );
+  }
   target.sourceSeqEnd = Math.max(target.sourceSeqEnd, meta.seq);
   target.createdAt = Math.max(target.createdAt, meta.createdAt);
-  if (!target.turnId && turnId) {
-    target.turnId = turnId;
-  }
   if (!target.parentToolCallId && payload.parentToolCallId) {
     target.parentToolCallId = payload.parentToolCallId;
   }

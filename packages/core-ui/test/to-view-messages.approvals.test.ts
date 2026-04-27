@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ThreadEventRow } from "@bb/domain";
+import { turnScope } from "@bb/domain";
 import { toViewMessages } from "../src/to-view-messages.js";
 import { fromRows } from "./timeline-test-harness.js";
 
@@ -31,6 +32,7 @@ describe("toViewMessages approval projection", () => {
           },
         },
         createdAt: 1,
+        scope: turnScope("turn-1"),
       },
     ];
 
@@ -72,6 +74,7 @@ describe("toViewMessages approval projection", () => {
           },
         },
         createdAt: 1,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-command-started",
@@ -91,6 +94,7 @@ describe("toViewMessages approval projection", () => {
           },
         },
         createdAt: 2,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-command-completed",
@@ -112,6 +116,7 @@ describe("toViewMessages approval projection", () => {
           },
         },
         createdAt: 3,
+        scope: turnScope("turn-1"),
       },
     ];
 
@@ -151,6 +156,7 @@ describe("toViewMessages approval projection", () => {
           },
         },
         createdAt: 1,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-approval-2",
@@ -170,6 +176,7 @@ describe("toViewMessages approval projection", () => {
           },
         },
         createdAt: 2,
+        scope: turnScope("turn-1"),
       },
     ];
 
@@ -207,6 +214,7 @@ describe("toViewMessages approval projection", () => {
           },
         },
         createdAt: 1,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-file-completed",
@@ -231,6 +239,7 @@ describe("toViewMessages approval projection", () => {
           },
         },
         createdAt: 2,
+        scope: turnScope("turn-1"),
       },
     ];
 

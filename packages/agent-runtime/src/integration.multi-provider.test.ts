@@ -4,14 +4,15 @@ import { describe, expect, it } from "vitest";
 import {
   cleanup,
   createTestRuntime,
-  getAgentText,
-  getStreamedText,
   getThreadText,
   newThreadId,
   resolveRuntimeOptions,
   turnCompletedCount,
+  waitForThreadTurnCompleted,
   waitForTurnCompletedCount,
 } from "./test/runtime-integration-harness.js";
+
+const CODEX_CONCURRENT_TURN_TIMEOUT_MS = 60_000;
 
 describe.concurrent("cross-provider and multi-thread scenarios", () => {
   // Multi-thread: single provider, single runtime
@@ -57,21 +58,29 @@ describe.concurrent("cross-provider and multi-thread scenarios", () => {
           }),
         ]);
 
-        await waitForTurnCompletedCount({
-          ctx,
-          count: 2,
-          timeoutMs: 30_000,
-          label: "both threads turn/completed",
-        });
+        await Promise.all([
+          waitForThreadTurnCompleted({
+            ctx,
+            threadId: threadA,
+            timeoutMs: CODEX_CONCURRENT_TURN_TIMEOUT_MS,
+            label: "thread A turn/completed",
+          }),
+          waitForThreadTurnCompleted({
+            ctx,
+            threadId: threadB,
+            timeoutMs: CODEX_CONCURRENT_TURN_TIMEOUT_MS,
+            label: "thread B turn/completed",
+          }),
+        ]);
 
         expect(turnCompletedCount(ctx.events)).toBeGreaterThanOrEqual(2);
-        const text = getAgentText(ctx.events) || getStreamedText(ctx.events);
-        expect(text.length).toBeGreaterThan(0);
+        expect(getThreadText(ctx.events, threadA)).toContain("THREAD_A_OK");
+        expect(getThreadText(ctx.events, threadB)).toContain("THREAD_B_OK");
       } finally {
         await ctx.runtime.shutdown();
         cleanup(ctx);
       }
-    }, 60_000);
+    }, 90_000);
   });
 
   // Multi-provider: single runtime

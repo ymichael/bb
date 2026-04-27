@@ -85,6 +85,10 @@ describe("thread command failure side effects", () => {
         .all()
         .filter((e) => e.type === "system/error");
       expect(errorEvents).toHaveLength(1);
+      expect(errorEvents[0]).toMatchObject({
+        scopeKind: "thread",
+        turnId: null,
+      });
       expect(JSON.parse(errorEvents[0]!.data)).toMatchObject({
         code: "thread_command_failed",
         message: "Command thread.start failed",
@@ -143,7 +147,7 @@ describe("thread command failure side effects", () => {
             dynamicTools: [],
             instructionMode: "append",
           },
-          target: { mode: "start" },
+          target: { mode: "steer", expectedTurnId: "turn-active" },
         }),
       });
 
@@ -178,6 +182,10 @@ describe("thread command failure side effects", () => {
       if (!errorEvent) {
         throw new Error("Expected a thread error event");
       }
+      expect(errorEvent).toMatchObject({
+        scopeKind: "turn",
+        turnId: "turn-active",
+      });
       expect(JSON.parse(errorEvent.data)).toMatchObject({
         code: "thread_command_failed",
         message: "Command turn.submit failed",

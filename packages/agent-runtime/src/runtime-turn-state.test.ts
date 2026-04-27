@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ThreadEvent } from "@bb/domain";
+import { turnScope } from "@bb/domain";
 import { RuntimeTurnReplayFilter } from "./runtime-turn-replay-filter.js";
 import { RuntimeTurnState } from "./runtime-turn-state.js";
 
@@ -8,7 +9,7 @@ function turnStarted(turnId: string): ThreadEvent {
     type: "turn/started",
     threadId: "t1",
     providerThreadId: "p1",
-    turnId,
+    scope: turnScope(turnId),
   };
 }
 
@@ -17,7 +18,7 @@ function turnCompleted(turnId: string): ThreadEvent {
     type: "turn/completed",
     threadId: "t1",
     providerThreadId: "p1",
-    turnId,
+    scope: turnScope(turnId),
     status: "completed",
   };
 }

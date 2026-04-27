@@ -1,4 +1,5 @@
 import type { ThreadEvent } from "./provider-event.js";
+import { getThreadEventScopeTurnId } from "./thread-event-scope.js";
 
 export const bufferedTextInstanceKindValues = [
   "assistant",
@@ -34,7 +35,7 @@ export function createBufferedTextInstanceKey(
 }
 
 function getThreadEventTurnId(decoded: ThreadEvent): string | undefined {
-  return "turnId" in decoded ? decoded.turnId : undefined;
+  return getThreadEventScopeTurnId(decoded.scope);
 }
 
 function getThreadEventParentToolCallId(

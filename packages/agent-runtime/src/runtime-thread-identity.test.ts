@@ -1,4 +1,5 @@
 import type { ThreadEvent } from "@bb/domain";
+import { turnScope } from "@bb/domain";
 import { describe, expect, it } from "vitest";
 import {
   RuntimeThreadIdentityRegistry,
@@ -132,7 +133,7 @@ describe("RuntimeThreadIdentityRegistry", () => {
       type: "turn/started",
       threadId: "provider-thread-1",
       providerThreadId: "provider-thread-1",
-      turnId: "turn-1",
+      scope: turnScope("turn-1"),
     };
 
     expect(
@@ -145,7 +146,7 @@ describe("RuntimeThreadIdentityRegistry", () => {
       type: "turn/started",
       threadId: "thread-1",
       providerThreadId: "provider-thread-1",
-      turnId: "turn-1",
+      scope: turnScope("turn-1"),
     });
   });
 });

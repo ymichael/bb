@@ -1,4 +1,5 @@
 import { expect } from "vitest";
+import { threadScope, turnScope } from "@bb/domain";
 import type {
   PromptInput,
   ProviderRawEvent,
@@ -317,7 +318,9 @@ export interface TimelineEventFactory {
   permissionGrantLifecycle(
     args?: PermissionGrantLifecycleArgs,
   ): ThreadEventRowOfType<"system/permissionGrant/lifecycle">;
-  providerError(args: ProviderErrorArgs): ThreadEventRowOfType<"error">;
+  providerError(
+    args: ProviderErrorArgs,
+  ): ThreadEventRowOfType<"provider/error">;
   providerUnhandled(
     args?: ProviderUnhandledArgs,
   ): ThreadEventRowOfType<"provider/unhandled">;
@@ -369,7 +372,7 @@ export interface TimelineEventFactory {
   webFetchStarted(
     args: WebFetchStartedArgs,
   ): ThreadEventRowOfType<"item/started">;
-  warning(args?: WarningArgs): ThreadEventRowOfType<"warning">;
+  warning(args?: WarningArgs): ThreadEventRowOfType<"provider/warning">;
 }
 
 export function fromRows(rows: ThreadEventRow[]): ThreadEventWithMeta[] {
@@ -463,19 +466,57 @@ export function createTimelineEventFactory(
     };
   }
 
+  function nextThreadScopedRowBase(
+    typePrefix: string,
+    options: EventFactoryRowOptions | undefined,
+  ) {
+    return {
+      ...nextRowBase(typePrefix, options),
+      scope: threadScope(),
+    };
+  }
+
+  function defaultTurnId(): string {
+    return defaults.turnId ?? "turn-1";
+  }
+
+  function providerTurnId(args: ProviderTurnEventOptions | undefined): string {
+    return args?.turnId ?? defaultTurnId();
+  }
+
+  function nextProviderTurnScopedRowBase(
+    typePrefix: string,
+    options: ProviderTurnEventOptions | undefined,
+  ) {
+    return {
+      ...nextRowBase(typePrefix, options),
+      scope: turnScope(providerTurnId(options)),
+    };
+  }
+
+  function nextDefaultTurnScopedRowBase(
+    typePrefix: string,
+    options: EventFactoryRowOptions | undefined,
+  ) {
+    return {
+      ...nextRowBase(typePrefix, options),
+      scope: turnScope(defaultTurnId()),
+    };
+  }
+
   function providerFields(args: ProviderTurnEventOptions | undefined) {
     return {
       providerThreadId:
         args?.providerThreadId ??
         defaults.providerThreadId ??
         "provider-thread-1",
-      turnId: args?.turnId ?? defaults.turnId ?? "turn-1",
+      turnId: providerTurnId(args),
     };
   }
 
   return {
     assistantDelta(args) {
-      const base = nextRowBase("assistant-delta", args);
+      const base = nextProviderTurnScopedRowBase("assistant-delta", args);
       return {
         ...base,
         type: "item/agentMessage/delta",
@@ -487,7 +528,7 @@ export function createTimelineEventFactory(
       };
     },
     assistantCompleted(args) {
-      const base = nextRowBase("assistant-completed", args);
+      const base = nextProviderTurnScopedRowBase("assistant-completed", args);
       return {
         ...base,
         type: "item/completed",
@@ -502,7 +543,7 @@ export function createTimelineEventFactory(
       };
     },
     clientThreadStart(args) {
-      const base = nextRowBase("client-thread-start", args);
+      const base = nextThreadScopedRowBase("client-thread-start", args);
       return {
         ...base,
         type: "client/thread/start",
@@ -518,7 +559,7 @@ export function createTimelineEventFactory(
       };
     },
     clientTurnRequested(args) {
-      const base = nextRowBase("client-turn-requested", args);
+      const base = nextThreadScopedRowBase("client-turn-requested", args);
       return {
         ...base,
         type: "client/turn/requested",
@@ -537,7 +578,7 @@ export function createTimelineEventFactory(
       };
     },
     commandCompleted(args) {
-      const base = nextRowBase("command-completed", args);
+      const base = nextProviderTurnScopedRowBase("command-completed", args);
       return {
         ...base,
         type: "item/completed",
@@ -557,7 +598,7 @@ export function createTimelineEventFactory(
       };
     },
     commandOutputDelta(args) {
-      const base = nextRowBase("command-output-delta", args);
+      const base = nextProviderTurnScopedRowBase("command-output-delta", args);
       return {
         ...base,
         type: "item/commandExecution/outputDelta",
@@ -570,7 +611,7 @@ export function createTimelineEventFactory(
       };
     },
     commandStarted(args) {
-      const base = nextRowBase("command-started", args);
+      const base = nextProviderTurnScopedRowBase("command-started", args);
       return {
         ...base,
         type: "item/started",
@@ -590,7 +631,10 @@ export function createTimelineEventFactory(
       };
     },
     contextCompactionCompleted(args = {}) {
-      const base = nextRowBase("context-compaction-completed", args);
+      const base = nextProviderTurnScopedRowBase(
+        "context-compaction-completed",
+        args,
+      );
       return {
         ...base,
         type: "item/completed",
@@ -604,7 +648,10 @@ export function createTimelineEventFactory(
       };
     },
     contextCompactionStarted(args = {}) {
-      const base = nextRowBase("context-compaction-started", args);
+      const base = nextProviderTurnScopedRowBase(
+        "context-compaction-started",
+        args,
+      );
       return {
         ...base,
         type: "item/started",
@@ -618,7 +665,7 @@ export function createTimelineEventFactory(
       };
     },
     fileChangeCompleted(args) {
-      const base = nextRowBase("file-change-completed", args);
+      const base = nextProviderTurnScopedRowBase("file-change-completed", args);
       return {
         ...base,
         type: "item/completed",
@@ -635,7 +682,10 @@ export function createTimelineEventFactory(
       };
     },
     fileChangeOutputDelta(args) {
-      const base = nextRowBase("file-change-output-delta", args);
+      const base = nextProviderTurnScopedRowBase(
+        "file-change-output-delta",
+        args,
+      );
       return {
         ...base,
         type: "item/fileChange/outputDelta",
@@ -647,7 +697,7 @@ export function createTimelineEventFactory(
       };
     },
     fileChangeStarted(args) {
-      const base = nextRowBase("file-change-started", args);
+      const base = nextProviderTurnScopedRowBase("file-change-started", args);
       return {
         ...base,
         type: "item/started",
@@ -664,7 +714,7 @@ export function createTimelineEventFactory(
       };
     },
     inputAccepted(args) {
-      const base = nextRowBase("input-accepted", args);
+      const base = nextProviderTurnScopedRowBase("input-accepted", args);
       return {
         ...base,
         type: "turn/input/accepted",
@@ -675,18 +725,24 @@ export function createTimelineEventFactory(
       };
     },
     managerUserMessage(args) {
-      const base = nextRowBase("manager-user-message", args);
+      const base = {
+        ...nextRowBase("manager-user-message", args),
+        scope: turnScope(args.turnId ?? defaultTurnId()),
+      };
       return {
         ...base,
         type: "system/manager/user_message",
         data: {
           text: args.text,
-          turnId: args.turnId ?? defaults.turnId ?? "turn-1",
+          turnId: args.turnId ?? defaultTurnId(),
         },
       };
     },
     permissionGrantLifecycle(args = {}) {
-      const base = nextRowBase("permission-grant-lifecycle", args);
+      const base = nextDefaultTurnScopedRowBase(
+        "permission-grant-lifecycle",
+        args,
+      );
       return {
         ...base,
         type: "system/permissionGrant/lifecycle",
@@ -714,10 +770,10 @@ export function createTimelineEventFactory(
       };
     },
     providerError(args) {
-      const base = nextRowBase("provider-error", args);
+      const base = nextProviderTurnScopedRowBase("provider-error", args);
       return {
         ...base,
-        type: "error",
+        type: "provider/error",
         data: {
           ...providerFields(args),
           message: args.message,
@@ -727,7 +783,7 @@ export function createTimelineEventFactory(
       };
     },
     providerUnhandled(args = {}) {
-      const base = nextRowBase("provider-unhandled", args);
+      const base = nextProviderTurnScopedRowBase("provider-unhandled", args);
       return {
         ...base,
         type: "provider/unhandled",
@@ -743,7 +799,7 @@ export function createTimelineEventFactory(
       };
     },
     systemError(args) {
-      const base = nextRowBase("system-error", args);
+      const base = nextThreadScopedRowBase("system-error", args);
       return {
         ...base,
         type: "system/error",
@@ -755,7 +811,7 @@ export function createTimelineEventFactory(
       };
     },
     systemOperation(args) {
-      const base = nextRowBase("system-operation", args);
+      const base = nextThreadScopedRowBase("system-operation", args);
       return {
         ...base,
         type: "system/operation",
@@ -769,7 +825,7 @@ export function createTimelineEventFactory(
       };
     },
     threadProvisioning(args) {
-      const base = nextRowBase("thread-provisioning", args);
+      const base = nextThreadScopedRowBase("thread-provisioning", args);
       return {
         ...base,
         type: "system/thread-provisioning",
@@ -782,7 +838,7 @@ export function createTimelineEventFactory(
       };
     },
     toolCallCompleted(args) {
-      const base = nextRowBase("tool-call-completed", args);
+      const base = nextProviderTurnScopedRowBase("tool-call-completed", args);
       return {
         ...base,
         type: "item/completed",
@@ -801,7 +857,7 @@ export function createTimelineEventFactory(
       };
     },
     toolCallStarted(args) {
-      const base = nextRowBase("tool-call-started", args);
+      const base = nextProviderTurnScopedRowBase("tool-call-started", args);
       return {
         ...base,
         type: "item/started",
@@ -820,7 +876,7 @@ export function createTimelineEventFactory(
       };
     },
     threadCompacted(args = {}) {
-      const base = nextRowBase("thread-compacted", args);
+      const base = nextProviderTurnScopedRowBase("thread-compacted", args);
       return {
         ...base,
         type: "thread/compacted",
@@ -831,7 +887,7 @@ export function createTimelineEventFactory(
       };
     },
     turnCompleted(args) {
-      const base = nextRowBase("turn-completed", args);
+      const base = nextProviderTurnScopedRowBase("turn-completed", args);
       return {
         ...base,
         type: "turn/completed",
@@ -842,7 +898,7 @@ export function createTimelineEventFactory(
       };
     },
     turnPlanUpdated(args) {
-      const base = nextRowBase("turn-plan-updated", args);
+      const base = nextProviderTurnScopedRowBase("turn-plan-updated", args);
       return {
         ...base,
         type: "turn/plan/updated",
@@ -853,7 +909,7 @@ export function createTimelineEventFactory(
       };
     },
     turnStarted(args) {
-      const base = nextRowBase("turn-started", args);
+      const base = nextProviderTurnScopedRowBase("turn-started", args);
       return {
         ...base,
         type: "turn/started",
@@ -861,7 +917,7 @@ export function createTimelineEventFactory(
       };
     },
     providerUserMessage(args) {
-      const base = nextRowBase("provider-user-message", args);
+      const base = nextProviderTurnScopedRowBase("provider-user-message", args);
       return {
         ...base,
         type: "item/completed",
@@ -876,7 +932,7 @@ export function createTimelineEventFactory(
       };
     },
     reasoningCompleted(args) {
-      const base = nextRowBase("reasoning-completed", args);
+      const base = nextProviderTurnScopedRowBase("reasoning-completed", args);
       return {
         ...base,
         type: "item/completed",
@@ -892,7 +948,7 @@ export function createTimelineEventFactory(
       };
     },
     reasoningDelta(args) {
-      const base = nextRowBase("reasoning-delta", args);
+      const base = nextProviderTurnScopedRowBase("reasoning-delta", args);
       return {
         ...base,
         type: "item/reasoning/textDelta",
@@ -904,7 +960,7 @@ export function createTimelineEventFactory(
       };
     },
     webSearchStarted(args) {
-      const base = nextRowBase("web-search-started", args);
+      const base = nextProviderTurnScopedRowBase("web-search-started", args);
       return {
         ...base,
         type: "item/started",
@@ -920,7 +976,7 @@ export function createTimelineEventFactory(
       };
     },
     webSearchCompleted(args) {
-      const base = nextRowBase("web-search-completed", args);
+      const base = nextProviderTurnScopedRowBase("web-search-completed", args);
       return {
         ...base,
         type: "item/completed",
@@ -936,7 +992,7 @@ export function createTimelineEventFactory(
       };
     },
     webFetchStarted(args) {
-      const base = nextRowBase("web-fetch-started", args);
+      const base = nextProviderTurnScopedRowBase("web-fetch-started", args);
       return {
         ...base,
         type: "item/started",
@@ -954,7 +1010,7 @@ export function createTimelineEventFactory(
       };
     },
     webFetchCompleted(args) {
-      const base = nextRowBase("web-fetch-completed", args);
+      const base = nextProviderTurnScopedRowBase("web-fetch-completed", args);
       return {
         ...base,
         type: "item/completed",
@@ -972,10 +1028,10 @@ export function createTimelineEventFactory(
       };
     },
     warning(args = {}) {
-      const base = nextRowBase("warning", args);
+      const base = nextThreadScopedRowBase("warning", args);
       return {
         ...base,
-        type: "warning",
+        type: "provider/warning",
         data: {
           providerThreadId: defaults.providerThreadId ?? "provider-thread-1",
           category: args.category ?? "general",

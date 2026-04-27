@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
 import { events, getHost, openSession, threads, upsertHost } from "@bb/db";
+import { turnScope } from "@bb/domain";
 import { HOST_DAEMON_PROTOCOL_VERSION } from "@bb/host-daemon-contract";
 import { describe, expect, it } from "vitest";
 import { internalAuthHeaders } from "../helpers/commands.js";
@@ -48,6 +49,7 @@ describe("internal event and tool-call routes", () => {
                 threadId: thread.id,
                 providerThreadId: "provider-1",
                 turnId: "turn-1",
+                scope: turnScope("turn-1"),
               },
             },
             {
@@ -60,6 +62,7 @@ describe("internal event and tool-call routes", () => {
                 threadId: thread.id,
                 providerThreadId: "provider-1",
                 turnId: "turn-1",
+                scope: turnScope("turn-1"),
               },
             },
           ],
@@ -113,6 +116,7 @@ describe("internal event and tool-call routes", () => {
                 threadId: thread.id,
                 providerThreadId: "provider-thread",
                 turnId: "turn-1",
+                scope: turnScope("turn-1"),
               },
             },
             {
@@ -125,6 +129,7 @@ describe("internal event and tool-call routes", () => {
                 threadId: thread.id,
                 providerThreadId: "provider-thread",
                 turnId: "turn-1",
+                scope: turnScope("turn-1"),
                 status: "completed",
               },
             },
@@ -192,6 +197,7 @@ describe("internal event and tool-call routes", () => {
                 threadId: thread.id,
                 providerThreadId: "provider-event-activity",
                 turnId: "turn-event-activity",
+                scope: turnScope("turn-event-activity"),
               },
             },
           ],
@@ -237,6 +243,7 @@ describe("internal event and tool-call routes", () => {
               threadId: thread.id,
               providerThreadId: "provider-thread",
               turnId: "turn-1",
+              scope: turnScope("turn-1"),
             },
           },
           {
@@ -249,6 +256,7 @@ describe("internal event and tool-call routes", () => {
               threadId: thread.id,
               providerThreadId: "provider-thread",
               turnId: "turn-1",
+              scope: turnScope("turn-1"),
               status: "completed",
             },
           },

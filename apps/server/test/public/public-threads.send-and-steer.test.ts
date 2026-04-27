@@ -10,7 +10,7 @@ import {
   hostDaemonCommands,
   threads,
 } from "@bb/db";
-import { threadSchema } from "@bb/domain";
+import { threadScope, threadSchema, turnScope } from "@bb/domain";
 import { waitForQueuedCommand } from "../helpers/commands.js";
 import { readJson } from "../helpers/json.js";
 import {
@@ -148,6 +148,7 @@ describe("public thread send and steer routes", () => {
         providerThreadId: "provider-idle",
         sequence: 1,
         type: "thread/identity",
+        scope: threadScope(),
         data: {},
       });
       seedEvent(harness.deps, {
@@ -156,6 +157,7 @@ describe("public thread send and steer routes", () => {
         providerThreadId: "provider-idle",
         sequence: 2,
         type: "client/turn/requested",
+        scope: threadScope(),
         data: {
           direction: "outbound",
           input: [{ type: "text", text: "Prior task" }],
@@ -179,7 +181,7 @@ describe("public thread send and steer routes", () => {
         threadId: activeThread.id,
         environmentId: environment.id,
         providerThreadId: "provider-turn",
-        turnId: "turn-1",
+        scope: turnScope("turn-1"),
         sequence: 3,
         type: "turn/started",
         data: {},
@@ -190,6 +192,7 @@ describe("public thread send and steer routes", () => {
         providerThreadId: "provider-turn",
         sequence: 4,
         type: "client/turn/requested",
+        scope: threadScope(),
         data: {
           direction: "outbound",
           input: [{ type: "text", text: "Prior task" }],
@@ -322,6 +325,7 @@ describe("public thread send and steer routes", () => {
         providerThreadId: "provider-closed-turn",
         sequence: 1,
         type: "client/turn/requested",
+        scope: threadScope(),
         data: {
           direction: "outbound",
           input: [{ type: "text", text: "Prior task" }],
@@ -345,7 +349,7 @@ describe("public thread send and steer routes", () => {
         threadId: activeThread.id,
         environmentId: environment.id,
         providerThreadId: "provider-closed-turn",
-        turnId: "turn-closed",
+        scope: turnScope("turn-closed"),
         sequence: 2,
         type: "turn/started",
         data: {},
@@ -354,7 +358,7 @@ describe("public thread send and steer routes", () => {
         threadId: activeThread.id,
         environmentId: environment.id,
         providerThreadId: "provider-closed-turn",
-        turnId: "turn-closed",
+        scope: turnScope("turn-closed"),
         sequence: 3,
         type: "turn/completed",
         data: { status: "completed" },
@@ -492,6 +496,7 @@ describe("public thread send and steer routes", () => {
         providerThreadId: "provider-draft-steer",
         sequence: 1,
         type: "thread/identity",
+        scope: threadScope(),
         data: {},
       });
       seedEvent(harness.deps, {
@@ -501,7 +506,7 @@ describe("public thread send and steer routes", () => {
         sequence: 2,
         type: "turn/started",
         data: {},
-        turnId: "turn-draft-steer",
+        scope: turnScope("turn-draft-steer"),
       });
       const draft = seedDraft(harness.deps, {
         threadId: thread.id,

@@ -274,6 +274,13 @@
       "when": 1775879081000,
       "tag": "0039_trim_thread_provisioning_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "6",
+      "when": 1777311951000,
+      "tag": "0040_thread_event_scope",
+      "breakpoints": true
     }
   ]
 }

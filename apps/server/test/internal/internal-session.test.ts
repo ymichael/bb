@@ -29,7 +29,9 @@ import {
 import {
   type ProvisioningTranscriptEntry,
   systemThreadProvisioningEventDataSchema,
+  threadScope,
   threadSchema,
+  turnScope,
 } from "@bb/domain";
 import { describe, expect, it, vi } from "vitest";
 import { appendClientTurnEvent } from "../../src/services/threads/thread-events.js";
@@ -96,7 +98,7 @@ describe("internal session routes", () => {
         threadId: thread.id,
         environmentId: environment.id,
         providerThreadId: "provider-open",
-        turnId: "turn-1",
+        scope: turnScope("turn-1"),
         sequence: 4,
         type: "turn/started",
         data: {},
@@ -543,6 +545,7 @@ describe("internal session routes", () => {
         providerThreadId: "provider-initiator-before-provision",
         sequence: 6,
         type: "thread/identity",
+        scope: threadScope(),
         data: {},
       });
       seedEvent(harness.deps, {
@@ -551,6 +554,7 @@ describe("internal session routes", () => {
         providerThreadId: "provider-reuser-before-provision",
         sequence: 3,
         type: "thread/identity",
+        scope: threadScope(),
         data: {},
       });
 
@@ -641,6 +645,7 @@ describe("internal session routes", () => {
                   type: "thread/identity",
                   threadId: reuser.id,
                   providerThreadId: "provider-reuser-after-provision",
+                  scope: threadScope(),
                 },
               },
             ],
@@ -1417,6 +1422,7 @@ describe("internal session routes", () => {
         environmentId: environment.id,
         sequence: 11,
         type: "system/thread-provisioning",
+        scope: threadScope(),
         data: {
           provisioningId: "tpv-1",
           status: "active",
@@ -1623,6 +1629,7 @@ describe("internal session routes", () => {
         providerThreadId: "provider-old",
         sequence: 1,
         type: "thread/identity",
+        scope: threadScope(),
         data: {},
       });
       requestThreadReprovision(harness.deps, {
@@ -1767,6 +1774,7 @@ describe("internal session routes", () => {
         environmentId: environment.id,
         sequence: 1,
         type: "client/turn/requested",
+        scope: threadScope(),
         data: {
           direction: "outbound",
           input: [{ type: "text", text: "Valid earlier request" }],
@@ -1791,6 +1799,7 @@ describe("internal session routes", () => {
         environmentId: environment.id,
         sequence: 2,
         type: "client/turn/requested",
+        scope: threadScope(),
         data: {
           direction: "outbound",
           input: [{ type: "text", text: "Malformed latest request" }],

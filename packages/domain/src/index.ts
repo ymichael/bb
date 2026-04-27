@@ -325,6 +325,34 @@ export { jsonValueSchema } from "./json-value.js";
 export type { JsonValue } from "./json-value.js";
 
 export {
+  assertThreadEventScope,
+  getThreadEventScopeTurnId,
+  requireThreadEventScopeTurnId,
+  threadEventScopeDefinitionByType,
+  threadEventScopeKindSchema,
+  threadEventScopeKindValues,
+  threadEventScopePolicyByType,
+  threadEventScopePolicySchema,
+  threadEventScopePolicyValues,
+  threadScopeRationaleByType,
+  threadEventScopeSchema,
+  threadOnlyThreadEventTypes,
+  threadOrTurnThreadEventTypes,
+  threadScope,
+  turnOnlyThreadEventTypes,
+  turnScope,
+  validateThreadEventScope,
+} from "./thread-event-scope.js";
+export type {
+  ThreadEventScope,
+  ThreadEventScopeKind,
+  ThreadEventScopePolicy,
+  RequireThreadEventScopeTurnIdArgs,
+  ValidateThreadEventScopeArgs,
+  ValidateThreadEventScopeResult,
+} from "./thread-event-scope.js";
+
+export {
   providerEventSchema,
   providerEventTypeSchema,
   providerEventTypeValues,

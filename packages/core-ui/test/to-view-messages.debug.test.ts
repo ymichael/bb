@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ThreadEventRow } from "@bb/domain";
+import { turnScope } from "@bb/domain";
 import { toViewMessages } from "../src/to-view-messages.js";
 import { fromRows } from "./timeline-test-harness.js";
 
@@ -16,6 +17,7 @@ describe("toViewMessages debug projection", () => {
           turnId: "turn-1",
         },
         createdAt: 1,
+        scope: turnScope("turn-1"),
       },
     ];
 
@@ -37,6 +39,7 @@ describe("toViewMessages debug projection", () => {
           turnId: "turn-1",
         },
         createdAt: 1,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-2",
@@ -48,6 +51,7 @@ describe("toViewMessages debug projection", () => {
           turnId: "turn-1",
         },
         createdAt: 2,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-3",
@@ -60,6 +64,7 @@ describe("toViewMessages debug projection", () => {
           status: "completed",
         },
         createdAt: 3,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-4",
@@ -72,6 +77,7 @@ describe("toViewMessages debug projection", () => {
           status: "completed",
         },
         createdAt: 4,
+        scope: turnScope("turn-1"),
       },
     ];
 
@@ -94,6 +100,7 @@ describe("toViewMessages debug projection", () => {
           turnId: "turn-1",
         },
         createdAt: 1,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-2",
@@ -106,6 +113,7 @@ describe("toViewMessages debug projection", () => {
           turnId: "turn-1",
         },
         createdAt: 2,
+        scope: turnScope("turn-1"),
       },
     ];
 
@@ -128,6 +136,7 @@ describe("toViewMessages debug projection", () => {
           turnId: "turn-1",
         },
         createdAt: 1,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-2",
@@ -140,6 +149,7 @@ describe("toViewMessages debug projection", () => {
           turnId: "turn-1",
         },
         createdAt: 2,
+        scope: turnScope("turn-1"),
       },
     ];
 

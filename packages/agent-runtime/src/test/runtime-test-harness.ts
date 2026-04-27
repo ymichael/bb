@@ -1,3 +1,4 @@
+import { threadScope, turnScope } from "@bb/domain";
 import type {
   AdapterCommand,
   DecodedInteractiveRequest,
@@ -251,9 +252,10 @@ export function createWarningEventAdapter(scriptPath: string): ProviderAdapter {
         case "warning":
           return [
             {
-              type: "warning",
+              type: "provider/warning",
               threadId: "",
               providerThreadId: "",
+              scope: threadScope(),
               category: "config",
               summary: "provider warning",
             },
@@ -265,6 +267,7 @@ export function createWarningEventAdapter(scriptPath: string): ProviderAdapter {
               threadId: stringParam(event, "threadId"),
               providerThreadId: stringParam(event, "providerThreadId"),
               turnId: stringParam(event, "turnId"),
+              scope: turnScope(stringParam(event, "turnId")),
             },
           ];
         case "turn/completed":
@@ -274,6 +277,7 @@ export function createWarningEventAdapter(scriptPath: string): ProviderAdapter {
               threadId: stringParam(event, "threadId"),
               providerThreadId: stringParam(event, "providerThreadId"),
               turnId: stringParam(event, "turnId"),
+              scope: turnScope(stringParam(event, "turnId")),
               status: "completed",
             },
           ];
@@ -345,11 +349,13 @@ export function createStartedEventAdapter(scriptPath: string): ProviderAdapter {
         {
           type: "thread/started",
           threadId: event.params.thread.id,
+          scope: threadScope(),
         },
         {
           type: "thread/identity",
           threadId: event.params.thread.id,
           providerThreadId: event.params.thread.id,
+          scope: threadScope(),
         },
       ];
     },

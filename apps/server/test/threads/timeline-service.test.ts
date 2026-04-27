@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import type { TimelineRow } from "@bb/domain";
+import { threadScope, turnScope, type TimelineRow } from "@bb/domain";
 import { createTestAppHarness } from "../helpers/test-app.js";
 import {
   seedEnvironment,
@@ -59,7 +59,7 @@ describe("buildThreadTimeline", () => {
       environmentId: environment.id,
       sequence: 1,
       providerThreadId: "provider-thread-1",
-      turnId: "turn-1",
+      scope: turnScope("turn-1"),
       type: "turn/started",
       data: {},
     });
@@ -69,7 +69,7 @@ describe("buildThreadTimeline", () => {
         threadId: thread.id,
         environmentId: environment.id,
         providerThreadId: "provider-thread-1",
-        turnId: "turn-1",
+        scope: turnScope("turn-1"),
         sequence: index + 2,
         type: "item/agentMessage/delta",
         data: {
@@ -83,7 +83,7 @@ describe("buildThreadTimeline", () => {
       threadId: thread.id,
       environmentId: environment.id,
       providerThreadId: "provider-thread-1",
-      turnId: "turn-1",
+      scope: turnScope("turn-1"),
       sequence: 1002,
       type: "item/completed",
       data: {
@@ -98,7 +98,7 @@ describe("buildThreadTimeline", () => {
       threadId: thread.id,
       environmentId: environment.id,
       providerThreadId: "provider-thread-1",
-      turnId: "turn-1",
+      scope: turnScope("turn-1"),
       sequence: 1003,
       type: "turn/completed",
       data: {
@@ -109,7 +109,7 @@ describe("buildThreadTimeline", () => {
       threadId: thread.id,
       environmentId: environment.id,
       providerThreadId: "provider-thread-1",
-      turnId: "turn-1",
+      scope: turnScope("turn-1"),
       sequence: 1004,
       type: "thread/contextWindowUsage/updated",
       data: {
@@ -163,7 +163,7 @@ describe("buildThreadTimeline", () => {
       threadId: thread.id,
       environmentId: environment.id,
       providerThreadId: "provider-thread-1",
-      turnId: "turn-1",
+      scope: turnScope("turn-1"),
       sequence: 1,
       type: "turn/started",
       data: {},
@@ -172,7 +172,7 @@ describe("buildThreadTimeline", () => {
       threadId: thread.id,
       environmentId: environment.id,
       providerThreadId: "provider-thread-1",
-      turnId: "turn-1",
+      scope: turnScope("turn-1"),
       sequence: 2,
       type: "item/reasoning/textDelta",
       data: {
@@ -209,7 +209,7 @@ describe("buildThreadTimeline", () => {
       threadId: thread.id,
       environmentId: environment.id,
       providerThreadId: "provider-thread-1",
-      turnId: "turn-1",
+      scope: turnScope("turn-1"),
       sequence: 1,
       type: "turn/started",
       data: {},
@@ -218,7 +218,7 @@ describe("buildThreadTimeline", () => {
       threadId: thread.id,
       environmentId: environment.id,
       providerThreadId: "provider-thread-1",
-      turnId: "turn-1",
+      scope: turnScope("turn-1"),
       sequence: 2,
       type: "item/reasoning/textDelta",
       data: {
@@ -258,7 +258,7 @@ describe("buildThreadTimeline", () => {
       threadId: thread.id,
       environmentId: environment.id,
       providerThreadId: "provider-thread-1",
-      turnId: "turn-1",
+      scope: turnScope("turn-1"),
       sequence: 1,
       type: "turn/started",
       data: {},
@@ -267,7 +267,7 @@ describe("buildThreadTimeline", () => {
       threadId: thread.id,
       environmentId: environment.id,
       providerThreadId: "provider-thread-1",
-      turnId: "turn-1",
+      scope: turnScope("turn-1"),
       sequence: 2,
       type: "item/reasoning/textDelta",
       data: {
@@ -279,7 +279,7 @@ describe("buildThreadTimeline", () => {
       threadId: thread.id,
       environmentId: environment.id,
       providerThreadId: "provider-thread-1",
-      turnId: "turn-1",
+      scope: turnScope("turn-1"),
       sequence: 3,
       type: "item/completed",
       data: {
@@ -295,7 +295,7 @@ describe("buildThreadTimeline", () => {
       threadId: thread.id,
       environmentId: environment.id,
       providerThreadId: "provider-thread-1",
-      turnId: "turn-1",
+      scope: turnScope("turn-1"),
       sequence: 4,
       type: "item/completed",
       data: {
@@ -310,7 +310,7 @@ describe("buildThreadTimeline", () => {
       threadId: thread.id,
       environmentId: environment.id,
       providerThreadId: "provider-thread-1",
-      turnId: "turn-1",
+      scope: turnScope("turn-1"),
       sequence: 5,
       type: "turn/completed",
       data: {
@@ -352,7 +352,7 @@ describe("buildThreadTimeline", () => {
       threadId: thread.id,
       environmentId: environment.id,
       providerThreadId: "provider-thread-1",
-      turnId: "turn-1",
+      scope: turnScope("turn-1"),
       sequence: 1,
       type: "thread/contextWindowUsage/updated",
       data: {
@@ -367,7 +367,7 @@ describe("buildThreadTimeline", () => {
       threadId: thread.id,
       environmentId: environment.id,
       providerThreadId: "provider-thread-1",
-      turnId: "turn-2",
+      scope: turnScope("turn-2"),
       sequence: 2,
       type: "thread/contextWindowUsage/updated",
       data: {
@@ -409,7 +409,7 @@ describe("buildThreadTimeline", () => {
       threadId: thread.id,
       environmentId: environment.id,
       providerThreadId: "provider-thread-1",
-      turnId: "turn-1",
+      scope: turnScope("turn-1"),
       sequence: 1,
       type: "turn/started",
       data: {},
@@ -418,7 +418,7 @@ describe("buildThreadTimeline", () => {
       threadId: thread.id,
       environmentId: environment.id,
       providerThreadId: "provider-thread-1",
-      turnId: "turn-1",
+      scope: turnScope("turn-1"),
       sequence: 2,
       type: "item/completed",
       data: {
@@ -435,7 +435,7 @@ describe("buildThreadTimeline", () => {
       threadId: thread.id,
       environmentId: environment.id,
       providerThreadId: "provider-thread-1",
-      turnId: "turn-1",
+      scope: turnScope("turn-1"),
       sequence: 3,
       type: "item/completed",
       data: {
@@ -450,7 +450,7 @@ describe("buildThreadTimeline", () => {
       threadId: thread.id,
       environmentId: environment.id,
       providerThreadId: "provider-thread-1",
-      turnId: "turn-1",
+      scope: turnScope("turn-1"),
       sequence: 4,
       type: "turn/completed",
       data: {
@@ -487,7 +487,7 @@ describe("buildThreadTimeline", () => {
       threadId: thread.id,
       environmentId: environment.id,
       providerThreadId: "provider-thread-1",
-      turnId: "turn-1",
+      scope: turnScope("turn-1"),
       sequence: 1,
       type: "turn/started",
       data: {},
@@ -496,7 +496,7 @@ describe("buildThreadTimeline", () => {
       threadId: thread.id,
       environmentId: environment.id,
       providerThreadId: "provider-thread-1",
-      turnId: "turn-1",
+      scope: turnScope("turn-1"),
       sequence: 2,
       type: "item/completed",
       data: {
@@ -513,7 +513,7 @@ describe("buildThreadTimeline", () => {
       threadId: thread.id,
       environmentId: environment.id,
       providerThreadId: "provider-thread-1",
-      turnId: "turn-1",
+      scope: turnScope("turn-1"),
       sequence: 3,
       type: "item/completed",
       data: {
@@ -528,7 +528,7 @@ describe("buildThreadTimeline", () => {
       threadId: thread.id,
       environmentId: environment.id,
       providerThreadId: "provider-thread-1",
-      turnId: "turn-1",
+      scope: turnScope("turn-1"),
       sequence: 4,
       type: "turn/completed",
       data: {
@@ -540,6 +540,7 @@ describe("buildThreadTimeline", () => {
       environmentId: environment.id,
       sequence: 5,
       type: "client/turn/requested",
+      scope: threadScope(),
       data: {
         direction: "outbound",
         source: "tell",
@@ -560,7 +561,7 @@ describe("buildThreadTimeline", () => {
       threadId: thread.id,
       environmentId: environment.id,
       providerThreadId: "provider-thread-1",
-      turnId: "turn-1",
+      scope: turnScope("turn-1"),
       sequence: 8,
       type: "turn/input/accepted",
       data: {
@@ -620,7 +621,7 @@ describe("buildThreadTimeline", () => {
       threadId: thread.id,
       environmentId: environment.id,
       providerThreadId: "provider-thread-1",
-      turnId: "turn-1",
+      scope: turnScope("turn-1"),
       sequence: 1,
       type: "turn/started",
       data: {},
@@ -629,7 +630,7 @@ describe("buildThreadTimeline", () => {
       threadId: thread.id,
       environmentId: environment.id,
       providerThreadId: "provider-thread-1",
-      turnId: "turn-1",
+      scope: turnScope("turn-1"),
       sequence: 2,
       type: "item/completed",
       data: {
@@ -646,7 +647,7 @@ describe("buildThreadTimeline", () => {
       threadId: thread.id,
       environmentId: environment.id,
       providerThreadId: "provider-thread-1",
-      turnId: "turn-1",
+      scope: turnScope("turn-1"),
       sequence: 3,
       type: "item/completed",
       data: {
@@ -661,7 +662,7 @@ describe("buildThreadTimeline", () => {
       threadId: thread.id,
       environmentId: environment.id,
       providerThreadId: "provider-thread-1",
-      turnId: "turn-1",
+      scope: turnScope("turn-1"),
       sequence: 4,
       type: "turn/completed",
       data: {
@@ -673,6 +674,7 @@ describe("buildThreadTimeline", () => {
       environmentId: environment.id,
       sequence: 5,
       type: "client/turn/requested",
+      scope: threadScope(),
       data: {
         direction: "outbound",
         source: "tell",
@@ -696,6 +698,7 @@ describe("buildThreadTimeline", () => {
         environmentId: environment.id,
         sequence,
         type: "system/thread-provisioning",
+        scope: threadScope(),
         data: {
           provisioningId: `tpv-${sequence}`,
           status: "completed",
@@ -709,7 +712,7 @@ describe("buildThreadTimeline", () => {
       threadId: thread.id,
       environmentId: environment.id,
       providerThreadId: "provider-thread-1",
-      turnId: "turn-1",
+      scope: turnScope("turn-1"),
       sequence: 36,
       type: "turn/input/accepted",
       data: {
@@ -769,7 +772,7 @@ describe("buildThreadTimeline", () => {
       threadId: thread.id,
       environmentId: environment.id,
       providerThreadId: "provider-thread-1",
-      turnId: "turn-1",
+      scope: turnScope("turn-1"),
       sequence: 1,
       type: "turn/started",
       data: {},
@@ -778,7 +781,7 @@ describe("buildThreadTimeline", () => {
       threadId: thread.id,
       environmentId: environment.id,
       providerThreadId: "provider-thread-1",
-      turnId: "turn-1",
+      scope: turnScope("turn-1"),
       sequence: 2,
       type: "item/completed",
       data: {
@@ -793,7 +796,7 @@ describe("buildThreadTimeline", () => {
       threadId: thread.id,
       environmentId: environment.id,
       providerThreadId: "provider-thread-1",
-      turnId: "turn-1",
+      scope: turnScope("turn-1"),
       sequence: 3,
       type: "turn/completed",
       data: {
@@ -845,6 +848,7 @@ describe("buildThreadTimeline", () => {
       environmentId: environment.id,
       sequence: 1,
       type: "client/turn/requested",
+      scope: threadScope(),
       data: {
         direction: "outbound",
         source: "spawn",
@@ -868,6 +872,7 @@ describe("buildThreadTimeline", () => {
       environmentId: environment.id,
       sequence: 2,
       type: "system/thread-provisioning",
+      scope: threadScope(),
       data: {
           provisioningId: "tpv-1",
         status: "completed",
@@ -887,7 +892,7 @@ describe("buildThreadTimeline", () => {
       threadId: thread.id,
       environmentId: environment.id,
       providerThreadId: "provider-1",
-      turnId: "turn-1",
+      scope: turnScope("turn-1"),
       sequence: 3,
       type: "turn/started",
       data: {},
@@ -898,7 +903,7 @@ describe("buildThreadTimeline", () => {
       threadId: thread.id,
       environmentId: environment.id,
       providerThreadId: "provider-1",
-      turnId: "turn-1",
+      scope: turnScope("turn-1"),
       sequence: 4,
       type: "item/completed",
       data: {
@@ -915,7 +920,7 @@ describe("buildThreadTimeline", () => {
       threadId: thread.id,
       environmentId: environment.id,
       providerThreadId: "provider-1",
-      turnId: "turn-1",
+      scope: turnScope("turn-1"),
       sequence: 5,
       type: "item/completed",
       data: {
@@ -935,6 +940,7 @@ describe("buildThreadTimeline", () => {
       environmentId: environment.id,
       sequence: 6,
       type: "system/manager/user_message",
+      scope: threadScope(),
       data: {
         text: "Hello from manager",
         toolCallId: "tool-2",
@@ -946,7 +952,7 @@ describe("buildThreadTimeline", () => {
       threadId: thread.id,
       environmentId: environment.id,
       providerThreadId: "provider-1",
-      turnId: "turn-1",
+      scope: turnScope("turn-1"),
       sequence: 7,
       type: "turn/completed",
       data: {
@@ -960,6 +966,7 @@ describe("buildThreadTimeline", () => {
       environmentId: environment.id,
       sequence: 8,
       type: "client/turn/requested",
+      scope: threadScope(),
       data: {
         direction: "outbound",
         source: "tell",
@@ -1028,7 +1035,7 @@ describe("buildThreadTimeline", () => {
       threadId: thread.id,
       environmentId: environment.id,
       providerThreadId: "provider-1",
-      turnId: "turn-1",
+      scope: turnScope("turn-1"),
       sequence: 1,
       type: "turn/started",
       data: {},
@@ -1037,7 +1044,7 @@ describe("buildThreadTimeline", () => {
       threadId: thread.id,
       environmentId: environment.id,
       providerThreadId: "provider-1",
-      turnId: "turn-1",
+      scope: turnScope("turn-1"),
       sequence: 2,
       type: "item/started",
       data: {
@@ -1051,7 +1058,7 @@ describe("buildThreadTimeline", () => {
       threadId: thread.id,
       environmentId: environment.id,
       providerThreadId: "provider-1",
-      turnId: "turn-1",
+      scope: turnScope("turn-1"),
       sequence: 3,
       type: "item/completed",
       data: {
@@ -1066,6 +1073,7 @@ describe("buildThreadTimeline", () => {
       environmentId: environment.id,
       sequence: 4,
       type: "system/manager/user_message",
+      scope: threadScope(),
       data: {
         text: "Visible manager update",
         toolCallId: "tool-1",
@@ -1076,7 +1084,7 @@ describe("buildThreadTimeline", () => {
       threadId: thread.id,
       environmentId: environment.id,
       providerThreadId: "provider-1",
-      turnId: "turn-1",
+      scope: turnScope("turn-1"),
       sequence: 5,
       type: "item/completed",
       data: {
@@ -1091,7 +1099,7 @@ describe("buildThreadTimeline", () => {
       threadId: thread.id,
       environmentId: environment.id,
       providerThreadId: "provider-1",
-      turnId: "turn-1",
+      scope: turnScope("turn-1"),
       sequence: 6,
       type: "turn/completed",
       data: {

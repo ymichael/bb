@@ -32,7 +32,7 @@ export function describeThreadEvent(event: ThreadEventRow): string {
   if (event.type === "item/started") {
     return `${event.seq}:${event.type}:${event.data.item.type}`;
   }
-  if (event.type === "error" || event.type === "system/error") {
+  if (event.type === "provider/error" || event.type === "system/error") {
     const detail = event.data.detail ? ` ${event.data.detail}` : "";
     return `${event.seq}:${event.type}:${event.data.message}${detail}`;
   }

@@ -14981,13 +14981,6 @@ exports[`@bb/agent-provider-audit fixture replay > summarizes raw-event and tool
       "translatedEventTypes": [
         {
           "fixtureIds": [
-            "excalidraw/claude-code/collab-startup-explanation",
-            "excalidraw/claude-code/eyedropper-preview-bugfix",
-          ],
-          "type": "error",
-        },
-        {
-          "fixtureIds": [
             "excalidraw/claude-code/eyedropper-browser-compat",
             "excalidraw/claude-code/eyedropper-preview-bugfix",
             "excalidraw/claude-code/magicframe-feature",
@@ -15030,6 +15023,13 @@ exports[`@bb/agent-provider-audit fixture replay > summarizes raw-event and tool
             "excalidraw/claude-code/ttd-explanation",
           ],
           "type": "item/started",
+        },
+        {
+          "fixtureIds": [
+            "excalidraw/claude-code/collab-startup-explanation",
+            "excalidraw/claude-code/eyedropper-preview-bugfix",
+          ],
+          "type": "provider/error",
         },
         {
           "fixtureIds": [

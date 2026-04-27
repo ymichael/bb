@@ -8,6 +8,7 @@ import {
   type HostDaemonCommandEnvelope,
 } from "@bb/host-daemon-contract";
 import { createPublicApiClient } from "@bb/server-contract";
+import { turnScope } from "@bb/domain";
 import { describe, expect, it } from "vitest";
 import {
   createTestDaemonHostKey,
@@ -393,6 +394,7 @@ describe("server integration", () => {
                 threadId: thread.id,
                 providerThreadId: "provider-thread",
                 turnId: "turn-1",
+                scope: turnScope("turn-1"),
               },
             },
           ],
@@ -520,6 +522,7 @@ describe("server integration", () => {
                 threadId: thread.id,
                 providerThreadId: "provider-thread",
                 turnId: "turn-initial",
+                scope: turnScope("turn-initial"),
               },
             },
             {
@@ -532,6 +535,7 @@ describe("server integration", () => {
                 threadId: thread.id,
                 providerThreadId: "provider-thread",
                 turnId: "turn-initial",
+                scope: turnScope("turn-initial"),
                 status: "completed",
               },
             },
@@ -587,6 +591,7 @@ describe("server integration", () => {
                 threadId: thread.id,
                 providerThreadId: "provider-thread",
                 turnId: "turn-1",
+                scope: turnScope("turn-1"),
               },
             },
             {
@@ -599,6 +604,7 @@ describe("server integration", () => {
                 threadId: thread.id,
                 providerThreadId: "provider-thread",
                 turnId: "turn-1",
+                scope: turnScope("turn-1"),
                 status: "completed",
               },
             },

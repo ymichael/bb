@@ -20,9 +20,12 @@ import {
 } from "@bb/host-daemon-contract";
 import {
   isActiveLifecycleOperationState,
+  threadScope,
+  turnScope,
   type ProvisioningTranscriptEntry,
   systemThreadProvisioningEventDataSchema,
 } from "@bb/domain";
+import type { ThreadEventScope } from "@bb/domain";
 import type {
   InteractiveLifecycleCoordinationDeps,
   LifecycleCoordinationDeps,
@@ -151,6 +154,18 @@ interface CommandResultOwner<TType extends ParsedCommandType> {
     args: FailCommandResultSideEffectsArgs<TType>,
   ): Promise<boolean> | boolean;
   replaySettledSideEffects: boolean;
+}
+
+function getThreadFailureCommandErrorScope(
+  command: ThreadFailureCommand,
+): ThreadEventScope {
+  if (command.type !== "turn.submit") {
+    return threadScope();
+  }
+
+  return command.target.mode !== "start" && command.target.expectedTurnId
+    ? turnScope(command.target.expectedTurnId)
+    : threadScope();
 }
 
 type CommandResultOwnerRegistry = {
@@ -422,6 +437,7 @@ function handleThreadCommandFailure(
     code: "thread_command_failed",
     message: `Command ${report.type} failed`,
     detail: report.errorMessage,
+    scope: getThreadFailureCommandErrorScope(command),
   });
   tryTransition(deps.db, deps.hub, thread.id, "error");
 }
@@ -650,6 +666,7 @@ function failThreadStartSideEffects(
       code: COMMAND_RESULT_SIDE_EFFECT_FAILURE_CODE,
       message: "Thread start failed",
       detail: args.failureReason,
+      scope: threadScope(),
     });
     tryTransition(args.deps.db, args.deps.hub, thread.id, "error");
   }
@@ -681,6 +698,7 @@ function failThreadStopSideEffects(
       code: COMMAND_RESULT_SIDE_EFFECT_FAILURE_CODE,
       message: "Thread stop result handling failed",
       detail: args.failureReason,
+      scope: threadScope(),
     });
     tryTransition(args.deps.db, args.deps.hub, thread.id, "error");
   }
@@ -700,6 +718,7 @@ function failThreadCommandSideEffects(
     code: COMMAND_RESULT_SIDE_EFFECT_FAILURE_CODE,
     message: "Thread command result handling failed",
     detail: args.failureReason,
+    scope: getThreadFailureCommandErrorScope(args.command),
   });
   tryTransition(args.deps.db, args.deps.hub, thread.id, "error");
   return true;

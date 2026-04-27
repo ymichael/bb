@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ThreadEventRow, ViewMessage } from "@bb/domain";
+import { threadScope, turnScope } from "@bb/domain";
+import { getViewMessageScopeTurnId } from "../src/message-scope.js";
 import { toViewMessages } from "../src/to-view-messages.js";
 import { fromRows } from "./timeline-test-harness.js";
 
@@ -21,6 +23,7 @@ describe("toViewMessages assistant streams", () => {
           },
         },
         createdAt: 1,
+        scope: turnScope("turn-1"),
       },
     ];
 
@@ -31,7 +34,7 @@ describe("toViewMessages assistant streams", () => {
     expect(projected[0]?.kind).toBe("assistant-text");
     if (projected[0]?.kind === "assistant-text") {
       expect(projected[0].text).toBe("Flat output");
-      expect(projected[0].turnId).toBe("turn-1");
+      expect(getViewMessageScopeTurnId(projected[0])).toBe("turn-1");
     }
   });
 
@@ -52,6 +55,7 @@ describe("toViewMessages assistant streams", () => {
           },
         },
         createdAt: 1,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-2",
@@ -68,6 +72,7 @@ describe("toViewMessages assistant streams", () => {
           },
         },
         createdAt: 2,
+        scope: turnScope("turn-1"),
       },
     ];
 
@@ -100,6 +105,7 @@ describe("toViewMessages assistant streams", () => {
           },
         },
         createdAt: 1,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-2",
@@ -113,6 +119,7 @@ describe("toViewMessages assistant streams", () => {
           delta: "Second",
         },
         createdAt: 2,
+        scope: turnScope("turn-2"),
       },
       {
         id: "evt-3",
@@ -129,6 +136,7 @@ describe("toViewMessages assistant streams", () => {
           },
         },
         createdAt: 3,
+        scope: turnScope("turn-2"),
       },
     ];
 
@@ -145,7 +153,7 @@ describe("toViewMessages assistant streams", () => {
       "First answer",
       "Second answer",
     ]);
-    expect(assistantMessages.map((message) => message.turnId)).toEqual([
+    expect(assistantMessages.map(getViewMessageScopeTurnId)).toEqual([
       "turn-1",
       "turn-2",
     ]);
@@ -169,6 +177,7 @@ describe("toViewMessages assistant streams", () => {
           },
         },
         createdAt: 1,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-2",
@@ -182,6 +191,7 @@ describe("toViewMessages assistant streams", () => {
           delta: "Second reasoning",
         },
         createdAt: 2,
+        scope: turnScope("turn-2"),
       },
       {
         id: "evt-3",
@@ -199,6 +209,7 @@ describe("toViewMessages assistant streams", () => {
           },
         },
         createdAt: 3,
+        scope: turnScope("turn-2"),
       },
     ];
 
@@ -217,7 +228,7 @@ describe("toViewMessages assistant streams", () => {
       "First reasoning",
       "Second reasoning",
     ]);
-    expect(reasoningMessages.map((message) => message.turnId)).toEqual([
+    expect(reasoningMessages.map(getViewMessageScopeTurnId)).toEqual([
       "turn-1",
       "turn-2",
     ]);
@@ -241,6 +252,7 @@ describe("toViewMessages assistant streams", () => {
           },
         },
         createdAt: 1,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-2",
@@ -255,6 +267,7 @@ describe("toViewMessages assistant streams", () => {
           delta: "Child B",
         },
         createdAt: 2,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-3",
@@ -272,6 +285,7 @@ describe("toViewMessages assistant streams", () => {
           },
         },
         createdAt: 3,
+        scope: turnScope("turn-1"),
       },
     ];
 
@@ -312,6 +326,7 @@ describe("toViewMessages assistant streams", () => {
           },
         },
         createdAt: 1,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-2",
@@ -326,6 +341,7 @@ describe("toViewMessages assistant streams", () => {
           delta: "Child reasoning B",
         },
         createdAt: 2,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-3",
@@ -344,6 +360,7 @@ describe("toViewMessages assistant streams", () => {
           },
         },
         createdAt: 3,
+        scope: turnScope("turn-1"),
       },
     ];
 
@@ -382,6 +399,7 @@ describe("toViewMessages assistant streams", () => {
           delta: "Partial reply",
         },
         createdAt: 1,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-2",
@@ -396,6 +414,7 @@ describe("toViewMessages assistant streams", () => {
           delta: "Partial reasoning",
         },
         createdAt: 2,
+        scope: turnScope("turn-1"),
       },
     ];
 
@@ -442,6 +461,7 @@ describe("toViewMessages assistant streams", () => {
           delta: "Partial reply",
         },
         createdAt: 1,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-2",
@@ -456,6 +476,7 @@ describe("toViewMessages assistant streams", () => {
           delta: "Partial reasoning",
         },
         createdAt: 2,
+        scope: turnScope("turn-1"),
       },
     ];
 
@@ -492,6 +513,7 @@ describe("toViewMessages assistant streams", () => {
           delta: "Partial reply",
         },
         createdAt: 1,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-2",
@@ -506,6 +528,7 @@ describe("toViewMessages assistant streams", () => {
           delta: "Partial reasoning",
         },
         createdAt: 2,
+        scope: turnScope("turn-1"),
       },
     ];
 
@@ -527,6 +550,7 @@ describe("toViewMessages assistant streams", () => {
           delta: "First line\nSecond",
         },
         createdAt: 1,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-2",
@@ -541,6 +565,7 @@ describe("toViewMessages assistant streams", () => {
           delta: "Reasoning line\nTrailing",
         },
         createdAt: 2,
+        scope: turnScope("turn-1"),
       },
     ];
 
@@ -579,6 +604,7 @@ describe("toViewMessages assistant streams", () => {
           delta: "Partial reply",
         },
         createdAt: 10,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-2",
@@ -593,6 +619,7 @@ describe("toViewMessages assistant streams", () => {
           delta: " finished",
         },
         createdAt: 25,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-3",
@@ -607,6 +634,7 @@ describe("toViewMessages assistant streams", () => {
           delta: "Reasoning start",
         },
         createdAt: 30,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-4",
@@ -623,6 +651,7 @@ describe("toViewMessages assistant streams", () => {
           },
         },
         createdAt: 40,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-5",
@@ -640,6 +669,7 @@ describe("toViewMessages assistant streams", () => {
           },
         },
         createdAt: 45,
+        scope: turnScope("turn-1"),
       },
     ];
 
@@ -681,6 +711,7 @@ describe("toViewMessages assistant streams", () => {
           },
         },
         createdAt: 1,
+        scope: turnScope("turn-1"),
       },
     ];
 
@@ -712,6 +743,7 @@ describe("toViewMessages assistant streams", () => {
           delta: "Partial reply",
         },
         createdAt: 1,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-2",
@@ -725,6 +757,7 @@ describe("toViewMessages assistant streams", () => {
           status: "completed",
         },
         createdAt: 2,
+        scope: turnScope("turn-1"),
       },
     ];
 
@@ -755,6 +788,7 @@ describe("toViewMessages assistant streams", () => {
           delta: "Partial reply",
         },
         createdAt: 1,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-2",
@@ -768,6 +802,7 @@ describe("toViewMessages assistant streams", () => {
           message: "Stopped by user",
         },
         createdAt: 2,
+        scope: threadScope(),
       },
     ];
 
@@ -805,6 +840,7 @@ describe("toViewMessages assistant streams", () => {
           },
         },
         createdAt: 1,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-2",
@@ -819,6 +855,7 @@ describe("toViewMessages assistant streams", () => {
           delta: " trailing",
         },
         createdAt: 2,
+        scope: turnScope("turn-1"),
       },
     ];
 
@@ -854,6 +891,7 @@ describe("toViewMessages assistant streams", () => {
           },
         },
         createdAt: 1,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-2",
@@ -868,6 +906,7 @@ describe("toViewMessages assistant streams", () => {
           delta: " trailing",
         },
         createdAt: 2,
+        scope: turnScope("turn-1"),
       },
     ];
 
@@ -902,6 +941,7 @@ describe("toViewMessages assistant streams", () => {
           contentIndex: 0,
         },
         createdAt: 1,
+        scope: turnScope("turn-1"),
       },
     ];
 
@@ -946,6 +986,7 @@ describe("toViewMessages assistant streams", () => {
           },
         },
         createdAt: 1,
+        scope: threadScope(),
       },
       {
         id: "evt-2",
@@ -963,6 +1004,7 @@ describe("toViewMessages assistant streams", () => {
           },
         },
         createdAt: 2,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-3",
@@ -981,6 +1023,7 @@ describe("toViewMessages assistant streams", () => {
           },
         },
         createdAt: 3,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-4",
@@ -998,6 +1041,7 @@ describe("toViewMessages assistant streams", () => {
           },
         },
         createdAt: 4,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-5",
@@ -1023,6 +1067,7 @@ describe("toViewMessages assistant streams", () => {
           },
         },
         createdAt: 5,
+        scope: threadScope(),
       },
     ];
 
@@ -1034,7 +1079,7 @@ describe("toViewMessages assistant streams", () => {
       projected.some(
         (message) =>
           message.kind === "user" &&
-          message.turnId === "turn-1" &&
+          getViewMessageScopeTurnId(message) === "turn-1" &&
           message.text.includes("First question"),
       ),
     ).toBe(true);
@@ -1042,14 +1087,14 @@ describe("toViewMessages assistant streams", () => {
       projected.some(
         (message) =>
           message.kind === "assistant-text" &&
-          message.turnId === "turn-1" &&
+          getViewMessageScopeTurnId(message) === "turn-1" &&
           message.text.includes("Old assistant output"),
       ),
     ).toBe(true);
     expect(
       projected.some(
         (message) =>
-          message.turnId === "turn-1" &&
+          getViewMessageScopeTurnId(message) === "turn-1" &&
           message.kind === "assistant-reasoning" &&
           message.text.includes("More thinking"),
       ),
@@ -1058,7 +1103,7 @@ describe("toViewMessages assistant streams", () => {
       projected.some(
         (message) =>
           message.kind === "assistant-text" &&
-          message.turnId === "turn-1" &&
+          getViewMessageScopeTurnId(message) === "turn-1" &&
           message.text.includes("Latest assistant output"),
       ),
     ).toBe(true);
@@ -1066,7 +1111,7 @@ describe("toViewMessages assistant streams", () => {
       projected.some(
         (message) =>
           message.kind === "user" &&
-          message.turnId === "turn-2" &&
+          getViewMessageScopeTurnId(message) === "turn-2" &&
           message.text.includes("Second question"),
       ),
     ).toBe(true);

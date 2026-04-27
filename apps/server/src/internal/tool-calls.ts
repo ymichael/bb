@@ -4,7 +4,7 @@ import {
   type HostDaemonInternalSchema,
 } from "@bb/host-daemon-contract";
 import type { Hono } from "hono";
-import { messageUserToolArgumentsSchema } from "@bb/domain";
+import { messageUserToolArgumentsSchema, turnScope } from "@bb/domain";
 import type { AppDeps } from "../types.js";
 import { ApiError } from "../errors.js";
 import { markSandboxActivity } from "../services/hosts/host-lifecycle.js";
@@ -53,7 +53,7 @@ export function registerInternalToolCallRoutes(app: Hono, deps: AppDeps): void {
 
         appendThreadEvent(deps, {
           threadId: payload.threadId,
-          turnId: payload.turnId,
+          scope: turnScope(payload.turnId),
           type: "system/manager/user_message",
           data: {
             text: args.text,

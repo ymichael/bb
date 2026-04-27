@@ -138,7 +138,7 @@ function createTimelineBenchmarkScenario(
     replay.bundle.threadEventRows.map((row) => ({
       threadId: thread.id,
       environmentId: environment.id,
-      turnId: row.turnId ?? null,
+      scope: row.scope,
       providerThreadId: row.providerThreadId ?? null,
       sequence: row.seq,
       type: row.type,

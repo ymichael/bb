@@ -9,6 +9,7 @@ import type {
   ThreadEventItemApprovalStatus,
   ThreadEventItem,
 } from "@bb/domain";
+import { turnScope } from "@bb/domain";
 import { getThread } from "@bb/db";
 import type { AppDeps } from "../../types.js";
 import { appendThreadEvent } from "../threads/thread-events.js";
@@ -57,6 +58,7 @@ function appendPermissionGrantTimelineEvent(
     threadId: interaction.threadId,
     environmentId: thread?.environmentId ?? null,
     type: "system/permissionGrant/lifecycle",
+    scope: turnScope(interaction.turnId),
     data: {
       status: interaction.status,
       message: permissionGrantLifecycleMessage(interaction, subject),
@@ -79,10 +81,9 @@ function appendApprovalItemEvent(
     environmentId: thread?.environmentId ?? null,
     type: item.status === "pending" ? "item/started" : "item/completed",
     providerThreadId: interaction.providerThreadId,
-    turnId: interaction.turnId,
+    scope: turnScope(interaction.turnId),
     data: {
       providerThreadId: interaction.providerThreadId,
-      turnId: interaction.turnId,
       item,
     },
   });

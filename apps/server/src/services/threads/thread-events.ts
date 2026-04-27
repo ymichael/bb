@@ -11,6 +11,7 @@ import {
 import {
   parseStoredThreadEvent,
   systemErrorEventDataSchema,
+  threadScope,
   turnRequestEventDataSchema,
 } from "@bb/domain";
 import type {
@@ -23,6 +24,7 @@ import type {
   ThreadEventType,
   ResolvedThreadExecutionOptions,
   SystemErrorEventData,
+  ThreadEventScope,
   ThreadTurnInitiator,
 } from "@bb/domain";
 import { ApiError } from "../../errors.js";
@@ -71,6 +73,7 @@ export interface AppendSystemErrorEventArgs {
   message: string;
   reconnectAttempt?: number;
   reconnectTotal?: number;
+  scope: ThreadEventScope;
   threadId: string;
 }
 
@@ -167,6 +170,9 @@ function buildClientTurnEventData(
 ): ClientTurnLifecycleEventData;
 function buildClientTurnEventData(
   args: ClientTurnEventArgs,
+): ClientTurnLifecycleEventData | TurnRequestEventData;
+function buildClientTurnEventData(
+  args: ClientTurnEventArgs,
 ): ClientTurnLifecycleEventData | TurnRequestEventData {
   const base: ClientTurnLifecycleEventData = {
     direction: "outbound",
@@ -188,6 +194,33 @@ function buildClientTurnEventData(
     target: args.target,
     execution: args.execution,
   };
+}
+
+type AppendClientTurnEvent = (args: AppendThreadEventArgs) => number;
+
+function appendBuiltClientTurnEvent(
+  append: AppendClientTurnEvent,
+  args: ClientTurnEventArgs,
+): number {
+  switch (args.type) {
+    case "client/thread/start":
+    case "client/turn/start":
+      return append({
+        threadId: args.threadId,
+        environmentId: args.environmentId,
+        type: args.type,
+        scope: threadScope(),
+        data: buildClientTurnEventData(args),
+      });
+    case "client/turn/requested":
+      return append({
+        threadId: args.threadId,
+        environmentId: args.environmentId,
+        type: args.type,
+        scope: threadScope(),
+        data: buildClientTurnEventData(args),
+      });
+  }
 }
 
 export function appendThreadEvent<TType extends ThreadEventType>(
@@ -216,58 +249,20 @@ export function appendClientTurnEvent(
   deps: Pick<AppDeps, "db" | "hub">,
   args: ClientTurnEventArgs,
 ): number {
-  switch (args.type) {
-    case "client/thread/start":
-      return appendThreadEvent(deps, {
-        threadId: args.threadId,
-        environmentId: args.environmentId,
-        type: args.type,
-        data: buildClientTurnEventData(args),
-      });
-    case "client/turn/start":
-      return appendThreadEvent(deps, {
-        threadId: args.threadId,
-        environmentId: args.environmentId,
-        type: args.type,
-        data: buildClientTurnEventData(args),
-      });
-    case "client/turn/requested":
-      return appendThreadEvent(deps, {
-        threadId: args.threadId,
-        environmentId: args.environmentId,
-        type: args.type,
-        data: buildClientTurnEventData(args),
-      });
-  }
+  return appendBuiltClientTurnEvent(
+    (eventArgs) => appendThreadEvent(deps, eventArgs),
+    args,
+  );
 }
 
 export function appendClientTurnEventInTransaction(
   db: DbTransaction,
   args: ClientTurnEventArgs,
 ): number {
-  switch (args.type) {
-    case "client/thread/start":
-      return appendThreadEventInTransaction(db, {
-        threadId: args.threadId,
-        environmentId: args.environmentId,
-        type: args.type,
-        data: buildClientTurnEventData(args),
-      });
-    case "client/turn/start":
-      return appendThreadEventInTransaction(db, {
-        threadId: args.threadId,
-        environmentId: args.environmentId,
-        type: args.type,
-        data: buildClientTurnEventData(args),
-      });
-    case "client/turn/requested":
-      return appendThreadEventInTransaction(db, {
-        threadId: args.threadId,
-        environmentId: args.environmentId,
-        type: args.type,
-        data: buildClientTurnEventData(args),
-      });
-  }
+  return appendBuiltClientTurnEvent(
+    (eventArgs) => appendThreadEventInTransaction(db, eventArgs),
+    args,
+  );
 }
 
 export function parseStoredTurnRequestEvent(
@@ -299,6 +294,7 @@ export function parseStoredTurnRequestEvent(
       data: parsedEventData.data,
       threadId: row.threadId,
       type: row.type,
+      scope: threadScope(),
     });
   } catch {
     throw new ApiError(
@@ -345,6 +341,7 @@ export function appendThreadProvisioningEvent(
     threadId: args.threadId,
     environmentId: args.environmentId,
     type: "system/thread-provisioning",
+    scope: threadScope(),
     data: {
       provisioningId: args.provisioningId,
       status: args.status,
@@ -362,6 +359,7 @@ export function appendThreadProvisioningEventInTransaction(
     threadId: args.threadId,
     environmentId: args.environmentId,
     type: "system/thread-provisioning",
+    scope: threadScope(),
     data: {
       provisioningId: args.provisioningId,
       status: args.status,
@@ -404,6 +402,7 @@ export function appendSystemErrorEvent(
     threadId: args.threadId,
     environmentId: args.environmentId ?? null,
     type: "system/error",
+    scope: args.scope,
     data: buildSystemErrorEventData(args),
   });
 }
@@ -422,9 +421,7 @@ export function buildSystemErrorEventData(
     ...(reconnectProgress
       ? { reconnectAttempt: reconnectProgress.attempt }
       : {}),
-    ...(reconnectProgress
-      ? { reconnectTotal: reconnectProgress.total }
-      : {}),
+    ...(reconnectProgress ? { reconnectTotal: reconnectProgress.total } : {}),
   });
 }
 
@@ -435,6 +432,7 @@ export function appendThreadInterruptedEvent(
   return appendThreadEvent(deps, {
     threadId: args.threadId,
     type: "system/thread/interrupted",
+    scope: threadScope(),
     data: {
       reason: "user",
       ...(args.message ? { message: args.message } : {}),
@@ -487,6 +485,7 @@ export function appendThreadOwnershipChangeEvent(
     threadId: args.threadId,
     environmentId: args.environmentId ?? null,
     type: "system/operation",
+    scope: threadScope(),
     data: {
       operation: "ownership_change",
       operationId: createEventId(),

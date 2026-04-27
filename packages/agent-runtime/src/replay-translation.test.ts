@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { turnScope } from "@bb/domain";
 import type { AgentRuntimeRawProviderEventCaptureEntry } from "./capture-types.js";
 import { replayRawProviderEvents } from "./replay-translation.js";
 
@@ -55,7 +56,7 @@ describe("replayRawProviderEvents", () => {
       type: "turn/started",
       threadId: "thr-replay",
       providerThreadId: "provider-thread-1",
-      turnId: "turn-1",
+      scope: turnScope("turn-1"),
     });
   });
 

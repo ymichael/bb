@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { threadScope, turnScope } from "@bb/domain";
 import type { ThreadEventRow } from "@bb/domain";
 import { toViewProjection } from "../src/to-view-messages.js";
 import { buildTimelineRows } from "../src/thread-detail-rows.js";
@@ -21,6 +22,7 @@ describe("toViewProjection turn lifecycle", () => {
           turnId: "turn-1",
         },
         createdAt: 10,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-2",
@@ -32,6 +34,7 @@ describe("toViewProjection turn lifecycle", () => {
           turnId: "turn-1",
         },
         createdAt: 20,
+        scope: turnScope("turn-1"),
       },
     ];
 
@@ -55,6 +58,7 @@ describe("toViewProjection turn lifecycle", () => {
           turnId: "turn-1",
         },
         createdAt: 10,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-2",
@@ -73,6 +77,7 @@ describe("toViewProjection turn lifecycle", () => {
           },
         },
         createdAt: 20,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-3",
@@ -89,6 +94,7 @@ describe("toViewProjection turn lifecycle", () => {
           },
         },
         createdAt: 30,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-4",
@@ -101,6 +107,7 @@ describe("toViewProjection turn lifecycle", () => {
           status: "completed",
         },
         createdAt: 40,
+        scope: turnScope("turn-1"),
       },
     ];
 
@@ -137,6 +144,7 @@ describe("toViewProjection turn lifecycle", () => {
           turnId: "turn-1",
         },
         createdAt: 10,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-2",
@@ -153,6 +161,7 @@ describe("toViewProjection turn lifecycle", () => {
           },
         },
         createdAt: 10,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-3",
@@ -165,6 +174,7 @@ describe("toViewProjection turn lifecycle", () => {
           status: "completed",
         },
         createdAt: 10,
+        scope: turnScope("turn-1"),
       },
     ];
 
@@ -194,6 +204,7 @@ describe("toViewProjection turn lifecycle", () => {
           turnId: "turn-1",
         },
         createdAt: 1,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-2",
@@ -210,6 +221,7 @@ describe("toViewProjection turn lifecycle", () => {
           },
         },
         createdAt: 2,
+        scope: turnScope("turn-1"),
       },
     ];
 
@@ -240,6 +252,7 @@ describe("toViewProjection turn lifecycle", () => {
           turnId: "turn-1",
         },
         createdAt: 1,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-2",
@@ -258,6 +271,7 @@ describe("toViewProjection turn lifecycle", () => {
           },
         },
         createdAt: 2,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-3",
@@ -274,6 +288,7 @@ describe("toViewProjection turn lifecycle", () => {
           },
         },
         createdAt: 3,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-4",
@@ -286,6 +301,7 @@ describe("toViewProjection turn lifecycle", () => {
           diff: "M package.json",
         },
         createdAt: 4,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-5",
@@ -298,6 +314,7 @@ describe("toViewProjection turn lifecycle", () => {
           status: "completed",
         },
         createdAt: 5,
+        scope: turnScope("turn-1"),
       },
     ];
 
@@ -332,6 +349,7 @@ describe("toViewProjection turn lifecycle", () => {
           turnId: "turn-1",
         },
         createdAt: 1,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-2",
@@ -350,6 +368,7 @@ describe("toViewProjection turn lifecycle", () => {
           },
         },
         createdAt: 2,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-3",
@@ -362,6 +381,7 @@ describe("toViewProjection turn lifecycle", () => {
           status: "completed",
         },
         createdAt: 3,
+        scope: turnScope("turn-1"),
       },
     ];
 
@@ -396,6 +416,7 @@ describe("toViewProjection turn lifecycle", () => {
           turnId: "turn-1",
         },
         createdAt: 1,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-2",
@@ -421,6 +442,7 @@ describe("toViewProjection turn lifecycle", () => {
           },
         },
         createdAt: 2,
+        scope: threadScope(),
       },
       {
         id: "evt-3",
@@ -433,6 +455,7 @@ describe("toViewProjection turn lifecycle", () => {
           status: "completed",
         },
         createdAt: 3,
+        scope: turnScope("turn-1"),
       },
     ];
 
@@ -469,6 +492,7 @@ describe("toViewProjection turn lifecycle", () => {
           },
         },
         createdAt: 1,
+        scope: turnScope("missing-turn"),
       },
     ];
 
@@ -478,5 +502,43 @@ describe("toViewProjection turn lifecycle", () => {
         turnMessageDetail: "summary",
       }),
     ).toThrow(/without turn\/started/);
+  });
+
+  it("renders thread-scoped provider diagnostics standalone even if legacy data contains turnId", () => {
+    const event = createTimelineEventFactory({
+      threadId: "thread-1",
+      turnId: "turn-1",
+    });
+    const turnStarted = event.turnStarted();
+    const providerUnhandled = event.providerUnhandled();
+    const events: ThreadEventRow[] = [
+      turnStarted,
+      {
+        ...providerUnhandled,
+        scope: threadScope(),
+        data: {
+          ...providerUnhandled.data,
+          turnId: "turn-1",
+        },
+      },
+      event.assistantCompleted({ text: "Done." }),
+      event.turnCompleted(),
+    ];
+
+    const projection = toViewProjection(fromRows(events), {
+      threadStatus: "idle",
+      turnMessageDetail: "full",
+    });
+
+    expect(projection.entries.map((entry) => entry.kind)).toEqual([
+      "turn",
+      "message",
+    ]);
+    const standalone = projection.entries[1];
+    expect(standalone?.kind).toBe("message");
+    if (standalone?.kind !== "message") {
+      throw new Error("Expected standalone diagnostic message");
+    }
+    expect(standalone.message.scope).toEqual(threadScope());
   });
 });

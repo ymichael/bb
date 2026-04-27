@@ -551,7 +551,9 @@ rl.on("line", (line) => {
       }),
     ]);
 
-    expect(events.find((event) => event.type === "warning")).toBeUndefined();
+    expect(
+      events.find((event) => event.type === "provider/warning"),
+    ).toBeUndefined();
     expect(
       events.filter(
         (event) => event.type === "turn/completed" && event.threadId === "t1",

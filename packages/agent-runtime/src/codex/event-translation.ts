@@ -9,8 +9,10 @@ import type {
   ThreadEventTurnStatus,
   ThreadEventUserContent,
 } from "@bb/domain";
+import { threadScope, turnScope } from "@bb/domain";
 import { toOptionalRecord } from "../shared/adapter-utils.js";
 import { createUnhandledProviderEvent } from "../shared/provider-unhandled-event.js";
+import { UNSTAMPED_THREAD_ID } from "../shared/unstamped-thread-id.js";
 import type {
   JsonRpcMessage,
   ProviderRuntimeEvent,
@@ -37,7 +39,9 @@ interface CodexLastTokenUsage {
   totalTokens: number;
 }
 
-type CodexNormalizedWebItem = ThreadEventWebSearchItem | ThreadEventWebFetchItem;
+type CodexNormalizedWebItem =
+  | ThreadEventWebSearchItem
+  | ThreadEventWebFetchItem;
 
 type CodexItemTranslationResult =
   | { kind: "translated"; item: ThreadEventItem }
@@ -307,7 +311,11 @@ function translateCodexItem(
     case "agentMessage":
       return {
         kind: "translated",
-        item: { type: "agentMessage", id: parsedItem.id, text: parsedItem.text },
+        item: {
+          type: "agentMessage",
+          id: parsedItem.id,
+          text: parsedItem.text,
+        },
       };
     case "userMessage": {
       const content = parsedItem.content
@@ -474,7 +482,7 @@ export function translateCodexEvent(
           type: "turn/started",
           threadId: handledEvent.params.threadId,
           providerThreadId: handledEvent.params.threadId,
-          turnId: handledEvent.params.turn.id,
+          scope: turnScope(handledEvent.params.turn.id),
         },
       ];
     case "turn/completed":
@@ -483,7 +491,7 @@ export function translateCodexEvent(
           type: "turn/completed",
           threadId: handledEvent.params.threadId,
           providerThreadId: handledEvent.params.threadId,
-          turnId: handledEvent.params.turn.id,
+          scope: turnScope(handledEvent.params.turn.id),
           status: toTurnStatus(handledEvent.params.turn.status),
           ...(handledEvent.params.turn.error?.message
             ? { error: { message: handledEvent.params.turn.error.message } }
@@ -495,11 +503,13 @@ export function translateCodexEvent(
         {
           type: "thread/started",
           threadId: handledEvent.params.thread.id,
+          scope: threadScope(),
         },
         {
           type: "thread/identity",
           threadId: handledEvent.params.thread.id,
           providerThreadId: handledEvent.params.thread.id,
+          scope: threadScope(),
         },
       ];
       if (handledEvent.params.thread.preview) {
@@ -507,6 +517,7 @@ export function translateCodexEvent(
           type: "thread/name/updated",
           threadId: handledEvent.params.thread.id,
           providerThreadId: handledEvent.params.thread.id,
+          scope: threadScope(),
           threadName: handledEvent.params.thread.preview,
         });
       }
@@ -519,6 +530,7 @@ export function translateCodexEvent(
               type: "thread/name/updated",
               threadId: handledEvent.params.threadId,
               providerThreadId: handledEvent.params.threadId,
+              scope: threadScope(),
               threadName: handledEvent.params.threadName,
             },
           ]
@@ -529,7 +541,7 @@ export function translateCodexEvent(
           type: "thread/compacted",
           threadId: handledEvent.params.threadId,
           providerThreadId: handledEvent.params.threadId,
-          turnId: handledEvent.params.turnId,
+          scope: turnScope(handledEvent.params.turnId),
         },
       ];
     case "item/started":
@@ -555,7 +567,7 @@ export function translateCodexEvent(
           type: handledEvent.method,
           threadId: handledEvent.params.threadId,
           providerThreadId: handledEvent.params.threadId,
-          turnId: handledEvent.params.turnId,
+          scope: turnScope(handledEvent.params.turnId),
           item: translation.item,
         },
       ];
@@ -566,7 +578,7 @@ export function translateCodexEvent(
           type: "item/agentMessage/delta",
           threadId: handledEvent.params.threadId,
           providerThreadId: handledEvent.params.threadId,
-          turnId: handledEvent.params.turnId,
+          scope: turnScope(handledEvent.params.turnId),
           itemId: handledEvent.params.itemId,
           delta: handledEvent.params.delta,
         },
@@ -577,7 +589,7 @@ export function translateCodexEvent(
           type: "item/commandExecution/outputDelta",
           threadId: handledEvent.params.threadId,
           providerThreadId: handledEvent.params.threadId,
-          turnId: handledEvent.params.turnId,
+          scope: turnScope(handledEvent.params.turnId),
           itemId: handledEvent.params.itemId,
           delta: handledEvent.params.delta,
         },
@@ -588,7 +600,7 @@ export function translateCodexEvent(
           type: "item/fileChange/outputDelta",
           threadId: handledEvent.params.threadId,
           providerThreadId: handledEvent.params.threadId,
-          turnId: handledEvent.params.turnId,
+          scope: turnScope(handledEvent.params.turnId),
           itemId: handledEvent.params.itemId,
           delta: handledEvent.params.delta,
         },
@@ -599,7 +611,7 @@ export function translateCodexEvent(
           type: "item/reasoning/summaryTextDelta",
           threadId: handledEvent.params.threadId,
           providerThreadId: handledEvent.params.threadId,
-          turnId: handledEvent.params.turnId,
+          scope: turnScope(handledEvent.params.turnId),
           itemId: handledEvent.params.itemId,
           delta: handledEvent.params.delta,
         },
@@ -610,7 +622,7 @@ export function translateCodexEvent(
           type: "item/reasoning/textDelta",
           threadId: handledEvent.params.threadId,
           providerThreadId: handledEvent.params.threadId,
-          turnId: handledEvent.params.turnId,
+          scope: turnScope(handledEvent.params.turnId),
           itemId: handledEvent.params.itemId,
           delta: handledEvent.params.delta,
         },
@@ -621,7 +633,7 @@ export function translateCodexEvent(
           type: "item/plan/delta",
           threadId: handledEvent.params.threadId,
           providerThreadId: handledEvent.params.threadId,
-          turnId: handledEvent.params.turnId,
+          scope: turnScope(handledEvent.params.turnId),
           itemId: handledEvent.params.itemId,
           delta: handledEvent.params.delta,
         },
@@ -632,7 +644,7 @@ export function translateCodexEvent(
           type: "item/toolCall/progress",
           threadId: handledEvent.params.threadId,
           providerThreadId: handledEvent.params.threadId,
-          turnId: handledEvent.params.turnId,
+          scope: turnScope(handledEvent.params.turnId),
           itemId: handledEvent.params.itemId,
           ...(handledEvent.params.message
             ? { message: handledEvent.params.message }
@@ -645,7 +657,7 @@ export function translateCodexEvent(
           type: "thread/tokenUsage/updated",
           threadId: handledEvent.params.threadId,
           providerThreadId: handledEvent.params.threadId,
-          turnId: handledEvent.params.turnId,
+          scope: turnScope(handledEvent.params.turnId),
           tokenUsage: {
             total: {
               totalTokens: handledEvent.params.tokenUsage.total.totalTokens,
@@ -673,7 +685,7 @@ export function translateCodexEvent(
           type: "thread/contextWindowUsage/updated",
           threadId: handledEvent.params.threadId,
           providerThreadId: handledEvent.params.threadId,
-          turnId: handledEvent.params.turnId,
+          scope: turnScope(handledEvent.params.turnId),
           contextWindowUsage: toCodexContextWindowUsage(
             handledEvent.params.tokenUsage.last,
             handledEvent.params.tokenUsage.modelContextWindow,
@@ -686,7 +698,7 @@ export function translateCodexEvent(
           type: "turn/plan/updated",
           threadId: handledEvent.params.threadId,
           providerThreadId: handledEvent.params.threadId,
-          turnId: handledEvent.params.turnId,
+          scope: turnScope(handledEvent.params.turnId),
           plan: handledEvent.params.plan.map((step) => ({
             step: step.step,
             status: step.status === "inProgress" ? "active" : step.status,
@@ -702,19 +714,19 @@ export function translateCodexEvent(
           type: "turn/diff/updated",
           threadId: handledEvent.params.threadId,
           providerThreadId: handledEvent.params.threadId,
-          turnId: handledEvent.params.turnId,
+          scope: turnScope(handledEvent.params.turnId),
           diff: handledEvent.params.diff,
         },
       ];
     case "error":
       return [
         {
-          type: "error",
+          type: "provider/error",
           threadId: handledEvent.params.threadId,
           providerThreadId: handledEvent.params.threadId,
-          ...(handledEvent.params.turnId
-            ? { turnId: handledEvent.params.turnId }
-            : {}),
+          scope: handledEvent.params.turnId
+            ? turnScope(handledEvent.params.turnId)
+            : threadScope(),
           message: "Provider error",
           detail: handledEvent.params.error.additionalDetails
             ? `${handledEvent.params.error.message}\n${handledEvent.params.error.additionalDetails}`
@@ -727,9 +739,10 @@ export function translateCodexEvent(
     case "deprecationNotice":
       return [
         {
-          type: "warning",
-          threadId: "",
+          type: "provider/warning",
+          threadId: UNSTAMPED_THREAD_ID,
           providerThreadId: "",
+          scope: threadScope(),
           category: "deprecation",
           summary: handledEvent.params.summary,
           ...(handledEvent.params.details
@@ -740,9 +753,10 @@ export function translateCodexEvent(
     case "configWarning":
       return [
         {
-          type: "warning",
-          threadId: "",
+          type: "provider/warning",
+          threadId: UNSTAMPED_THREAD_ID,
           providerThreadId: "",
+          scope: threadScope(),
           category: "config",
           summary: handledEvent.params.summary,
           ...(handledEvent.params.details

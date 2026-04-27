@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { PromptInput, TimelineRow } from "@bb/domain";
+import { turnScope } from "@bb/domain";
 import {
   buildFollowUpSignatureFromInput,
   buildFollowUpSignatureFromRow,
@@ -28,7 +29,7 @@ function makeUserRow(args: {
       sourceSeqStart: 1,
       sourceSeqEnd: 1,
       createdAt: 1,
-      turnId: "turn-1",
+      scope: turnScope("turn-1"),
     },
   };
 }

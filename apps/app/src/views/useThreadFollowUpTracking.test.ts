@@ -2,6 +2,7 @@
 
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import type { PromptInput, TimelineRow } from "@bb/domain";
+import { turnScope } from "@bb/domain";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { PromptDraftState } from "@/lib/prompt-draft";
 import { useThreadFollowUpTracking } from "./useThreadFollowUpTracking";
@@ -23,7 +24,7 @@ function makeUserRow({ createdAt, text }: UserRowOptions): TimelineRow {
       sourceSeqStart: 1,
       text,
       threadId: "thread-1",
-      turnId: "turn-1",
+      scope: turnScope("turn-1"),
     },
   };
 }

@@ -9,12 +9,13 @@ import {
   upsertHost,
 } from "@bb/db";
 import { HOST_DAEMON_PROTOCOL_VERSION } from "@bb/host-daemon-contract";
-import { parseStoredThreadEvent } from "@bb/domain";
+import { parseStoredThreadEvent, threadScope } from "@bb/domain";
 import type {
   EnvironmentStatus,
   PermissionMode,
   PromptInput,
   StoredThreadEventDataForType,
+  ThreadEventScope,
   ThreadEventItemType,
   ThreadEventType,
 } from "@bb/domain";
@@ -24,9 +25,9 @@ export interface SeedEventArgs<TType extends ThreadEventType> {
   data: StoredThreadEventDataForType<TType>;
   environmentId?: string | null;
   providerThreadId?: string | null;
+  scope: ThreadEventScope;
   sequence: number;
   threadId: string;
-  turnId?: string | null;
   type: TType;
 }
 
@@ -36,9 +37,9 @@ export interface SeedStoredEventArgs {
   itemId?: string | null;
   itemKind?: ThreadEventItemType | null;
   providerThreadId?: string | null;
+  scope: ThreadEventScope;
   sequence: number;
   threadId: string;
-  turnId?: string | null;
   type: ThreadEventType;
 }
 
@@ -180,8 +181,8 @@ export function seedEvent<TType extends ThreadEventType>(
   const event = parseStoredThreadEvent({
     data: args.data,
     providerThreadId: args.providerThreadId ?? null,
+    scope: args.scope,
     threadId: args.threadId,
-    turnId: args.turnId ?? null,
     type: args.type,
   });
   insertEvents(deps.db, deps.hub, [
@@ -189,8 +190,8 @@ export function seedEvent<TType extends ThreadEventType>(
       threadId: args.threadId,
       environmentId: args.environmentId ?? null,
       providerThreadId: args.providerThreadId ?? null,
+      scope: args.scope,
       sequence: args.sequence,
-      turnId: args.turnId ?? null,
       type: args.type,
       ...deriveStoredEventItemFields(event),
       data: JSON.stringify(args.data),
@@ -219,6 +220,7 @@ export function seedThreadRuntimeState(
     providerThreadId: args.providerThreadId,
     sequence: sequenceStart,
     type: "thread/identity",
+    scope: threadScope(),
     data: {},
   });
   seedEvent(deps, {
@@ -227,6 +229,7 @@ export function seedThreadRuntimeState(
     providerThreadId: args.providerThreadId,
     sequence: sequenceStart + 1,
     type: "client/turn/requested",
+    scope: threadScope(),
     data: {
       direction: "outbound",
       input: [
@@ -262,8 +265,8 @@ export function seedStoredEvent(
       threadId: args.threadId,
       environmentId: args.environmentId ?? null,
       providerThreadId: args.providerThreadId ?? null,
+      scope: args.scope,
       sequence: args.sequence,
-      turnId: args.turnId ?? null,
       type: args.type,
       itemId: args.itemId ?? null,
       itemKind: args.itemKind ?? null,

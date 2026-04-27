@@ -14,8 +14,10 @@ import {
 import type {
   StoredThreadEventDataForType,
   ThreadEventItemType,
+  ThreadEventScope,
   ThreadEventType,
 } from "@bb/domain";
+import { getThreadEventScopeTurnId } from "@bb/domain";
 import type { DbConnection, DbTransaction } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
 import { events } from "../schema.js";
@@ -25,7 +27,7 @@ import { deriveStoredEventItemFieldsFromSource } from "../stored-event-item-fiel
 export interface InsertEventInput {
   threadId: string;
   environmentId?: string | null;
-  turnId?: string | null;
+  scope: ThreadEventScope;
   providerThreadId?: string | null;
   sequence: number;
   type: ThreadEventType;
@@ -47,8 +49,8 @@ export type AppendStoredThreadEventArgs<
     data: StoredThreadEventDataForType<TEventType>;
     environmentId?: string | null;
     providerThreadId?: string | null;
+    scope: ThreadEventScope;
     threadId: string;
-    turnId?: string | null;
     type: TEventType;
   };
 }[TType];
@@ -91,9 +93,10 @@ export function insertEvents(
   for (const [index, input] of eventInputs.entries()) {
     const id = createEventId();
     const createdAt = input.createdAt ?? Date.now();
+    const turnId = getThreadEventScopeTurnId(input.scope) ?? null;
     const result = db.run(
-      sql`INSERT OR IGNORE INTO events (id, thread_id, environment_id, turn_id, provider_thread_id, sequence, type, item_id, item_kind, data, created_at)
-          VALUES (${id}, ${input.threadId}, ${input.environmentId ?? null}, ${input.turnId ?? null}, ${input.providerThreadId ?? null}, ${input.sequence}, ${input.type}, ${input.itemId}, ${input.itemKind}, ${input.data}, ${createdAt})`,
+      sql`INSERT OR IGNORE INTO events (id, thread_id, environment_id, scope_kind, turn_id, provider_thread_id, sequence, type, item_id, item_kind, data, created_at)
+          VALUES (${id}, ${input.threadId}, ${input.environmentId ?? null}, ${input.scope.kind}, ${turnId}, ${input.providerThreadId ?? null}, ${input.sequence}, ${input.type}, ${input.itemId}, ${input.itemKind}, ${input.data}, ${createdAt})`,
     );
     if (result.changes > 0) {
       insertedCount++;
@@ -131,15 +134,17 @@ export function appendStoredThreadEventInTransaction(
     item: "item" in args.data ? args.data.item : undefined,
     itemId: "itemId" in args.data ? args.data.itemId : undefined,
   });
+  const turnId = getThreadEventScopeTurnId(args.scope) ?? null;
 
   db.run(
     sql`INSERT INTO events
-      (id, thread_id, environment_id, turn_id, provider_thread_id, sequence, type, item_id, item_kind, data, created_at)
+      (id, thread_id, environment_id, scope_kind, turn_id, provider_thread_id, sequence, type, item_id, item_kind, data, created_at)
       VALUES (
         ${createEventId()},
         ${args.threadId},
         ${args.environmentId ?? null},
-        ${args.turnId ?? null},
+        ${args.scope.kind},
+        ${turnId},
         ${args.providerThreadId ?? null},
         ${sequence},
         ${args.type},
@@ -228,6 +233,7 @@ const storedEventRowFields = {
   itemId: events.itemId,
   itemKind: events.itemKind,
   providerThreadId: events.providerThreadId,
+  scopeKind: events.scopeKind,
   sequence: events.sequence,
   threadId: events.threadId,
   turnId: events.turnId,

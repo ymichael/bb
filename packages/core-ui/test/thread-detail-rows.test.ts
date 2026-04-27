@@ -10,6 +10,7 @@ import type {
   ViewTurn,
   ViewTurnStatus,
 } from "@bb/domain";
+import { threadScope, turnScope } from "@bb/domain";
 
 type TimelineMessageRow = Extract<TimelineRow, { kind: "message" }>;
 type TimelineToolBundleRow = Extract<TimelineRow, { kind: "tool-bundle" }>;
@@ -145,7 +146,8 @@ function projectionFromMessages(messages: ViewMessage[]): ViewProjection {
   const turnMessagesById = new Map<string, ViewMessage[]>();
   const emittedTurnIds = new Set<string>();
 
-  for (const message of messages) {
+  for (const inputMessage of messages) {
+    const message = withFixtureScope(inputMessage);
     if (!message.turnId) {
       entries.push({
         kind: "message",
@@ -175,6 +177,49 @@ function projectionFromMessages(messages: ViewMessage[]): ViewProjection {
       return {
         kind: "turn",
         turn: projectionTurnFromMessages(entry.turn.turnId, messagesForTurn),
+      };
+    }),
+  };
+}
+
+function withFixtureScope(message: ViewMessage): ViewMessage {
+  if (message.scope !== undefined) {
+    return message;
+  }
+  if (message.turnId) {
+    return {
+      ...message,
+      scope: turnScope(message.turnId),
+    };
+  }
+  return {
+    ...message,
+    scope: threadScope(),
+  };
+}
+
+function withProjectionFixtureScopes(
+  projection: ViewProjection,
+): ViewProjection {
+  return {
+    entries: projection.entries.map((entry) => {
+      if (entry.kind === "message") {
+        return {
+          kind: "message",
+          message: withFixtureScope(entry.message),
+        };
+      }
+      return {
+        kind: "turn",
+        turn: {
+          ...entry.turn,
+          messages: entry.turn.messages?.map((message) =>
+            withFixtureScope(message),
+          ),
+          ...(entry.turn.terminalMessage
+            ? { terminalMessage: withFixtureScope(entry.turn.terminalMessage) }
+            : {}),
+        },
       };
     }),
   };
@@ -340,7 +385,7 @@ describe("buildTimelineRows projection turn lifecycle", () => {
       ],
     };
 
-    const rows = buildTimelineRows(projection, {
+    const rows = buildTimelineRows(withProjectionFixtureScopes(projection), {
       includeNestedRows: true,
     });
 
@@ -397,7 +442,7 @@ describe("buildTimelineRows projection turn lifecycle", () => {
       ],
     };
 
-    const rows = buildTimelineRows(projection);
+    const rows = buildTimelineRows(withProjectionFixtureScopes(projection));
 
     expect(rows.map((row) => row.kind)).toEqual(["message"]);
     const messageRow = expectMessageRow(rows[0]);
@@ -476,7 +521,7 @@ describe("buildTimelineRows projection turn lifecycle", () => {
       ],
     };
 
-    const rows = buildTimelineRows(projection, {
+    const rows = buildTimelineRows(withProjectionFixtureScopes(projection), {
       includeNestedRows: true,
     });
 
@@ -574,7 +619,7 @@ describe("buildTimelineRows projection turn lifecycle", () => {
       ],
     };
 
-    const rows = buildTimelineRows(projection, {
+    const rows = buildTimelineRows(withProjectionFixtureScopes(projection), {
       includeNestedRows: true,
     });
 

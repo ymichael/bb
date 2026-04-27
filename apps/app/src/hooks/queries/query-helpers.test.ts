@@ -4,6 +4,7 @@ import type {
   ThreadGitDiffResponse,
   WorkspaceStatus,
 } from "@bb/domain";
+import { turnScope } from "@bb/domain";
 import {
   makeWorkspaceMergeBase,
   makeWorkspaceStatus,
@@ -170,6 +171,7 @@ describe("resolveThreadTimelinePlaceholder", () => {
             sourceSeqStart: 1,
             sourceSeqEnd: 1,
             createdAt: 1,
+            scope: turnScope("turn-1"),
             status: "completed",
           },
         },

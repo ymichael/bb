@@ -7,7 +7,12 @@ import {
   getThread,
   queuedThreadMessages,
 } from "@bb/db";
-import { threadSchema, type TimelineRow } from "@bb/domain";
+import {
+  threadScope,
+  threadSchema,
+  turnScope,
+  type TimelineRow,
+} from "@bb/domain";
 import {
   threadDraftListResponseSchema,
   threadTimelineResponseSchema,
@@ -69,6 +74,7 @@ describe("public thread data routes", () => {
         environmentId: environment.id,
         sequence: 1,
         type: "system/manager/user_message",
+        scope: threadScope(),
         data: { text: "Manager note one" },
       });
       seedEvent(harness.deps, {
@@ -76,6 +82,7 @@ describe("public thread data routes", () => {
         environmentId: environment.id,
         sequence: 2,
         type: "system/manager/user_message",
+        scope: threadScope(),
         data: { text: "Manager note two" },
       });
 
@@ -133,7 +140,7 @@ describe("public thread data routes", () => {
         threadId: thread.id,
         environmentId: environment.id,
         providerThreadId: "provider-thread-1",
-        turnId: "turn-1",
+        scope: turnScope("turn-1"),
         sequence: 1,
         type: "turn/started",
         data: {},
@@ -142,7 +149,7 @@ describe("public thread data routes", () => {
         threadId: thread.id,
         environmentId: environment.id,
         providerThreadId: "provider-thread-1",
-        turnId: "turn-1",
+        scope: turnScope("turn-1"),
         sequence: 2,
         type: "item/completed",
         data: {
@@ -159,7 +166,7 @@ describe("public thread data routes", () => {
         threadId: thread.id,
         environmentId: environment.id,
         providerThreadId: "provider-thread-1",
-        turnId: "turn-1",
+        scope: turnScope("turn-1"),
         sequence: 3,
         type: "item/completed",
         data: {
@@ -174,7 +181,7 @@ describe("public thread data routes", () => {
         threadId: thread.id,
         environmentId: environment.id,
         providerThreadId: "provider-thread-1",
-        turnId: "turn-1",
+        scope: turnScope("turn-1"),
         sequence: 4,
         type: "turn/completed",
         data: {
@@ -273,6 +280,7 @@ describe("public thread data routes", () => {
         environmentId: environment.id,
         sequence: 1,
         type: "client/turn/requested",
+        scope: threadScope(),
         data: {
           direction: "outbound",
           input: [{ type: "text", text: "Explain the result" }],
@@ -296,7 +304,7 @@ describe("public thread data routes", () => {
         threadId: thread.id,
         environmentId: environment.id,
         providerThreadId: "provider-output",
-        turnId: "turn-1",
+        scope: turnScope("turn-1"),
         sequence: 2,
         type: "item/completed",
         data: {
@@ -311,7 +319,7 @@ describe("public thread data routes", () => {
         threadId: thread.id,
         environmentId: environment.id,
         providerThreadId: "provider-output",
-        turnId: "turn-2",
+        scope: turnScope("turn-2"),
         sequence: 3,
         type: "item/completed",
         data: {
@@ -368,7 +376,7 @@ describe("public thread data routes", () => {
         threadId: thread.id,
         environmentId: environment.id,
         providerThreadId: "provider-output",
-        turnId: "turn-1",
+        scope: turnScope("turn-1"),
         sequence: 1,
         type: "system/manager/user_message",
         data: {
@@ -381,7 +389,7 @@ describe("public thread data routes", () => {
         threadId: thread.id,
         environmentId: environment.id,
         providerThreadId: "provider-output",
-        turnId: "turn-1",
+        scope: turnScope("turn-1"),
         sequence: 2,
         type: "item/completed",
         data: {
@@ -425,7 +433,7 @@ describe("public thread data routes", () => {
         threadId: thread.id,
         environmentId: environment.id,
         providerThreadId: "provider-output",
-        turnId: "turn-1",
+        scope: turnScope("turn-1"),
         sequence: 1,
         type: "item/completed",
         data: {
@@ -442,7 +450,7 @@ describe("public thread data routes", () => {
         threadId: thread.id,
         environmentId: environment.id,
         providerThreadId: "provider-output",
-        turnId: "turn-2",
+        scope: turnScope("turn-2"),
         itemId: "msg-2",
         itemKind: null,
         sequence: 2,
@@ -488,6 +496,7 @@ describe("public thread data routes", () => {
         environmentId: environment.id,
         sequence: 1,
         type: "client/turn/requested",
+        scope: threadScope(),
         data: {
           direction: "outbound",
           input: [{ type: "text", text: "Initial request" }],
@@ -512,6 +521,7 @@ describe("public thread data routes", () => {
         environmentId: environment.id,
         sequence: 2,
         type: "client/turn/requested",
+        scope: threadScope(),
         data: {
           direction: "outbound",
           input: [{ type: "text", text: "Follow up request" }],
@@ -569,6 +579,7 @@ describe("public thread data routes", () => {
         environmentId: environment.id,
         sequence: 1,
         type: "client/turn/requested",
+        scope: threadScope(),
         data: {
           direction: "outbound",
           input: [{ type: "text", text: "Earlier valid request" }],
@@ -595,6 +606,7 @@ describe("public thread data routes", () => {
         itemKind: null,
         sequence: 2,
         type: "client/turn/requested",
+        scope: threadScope(),
         data: {
           direction: "outbound",
           input: [{ type: "text", text: "Malformed latest request" }],
@@ -692,6 +704,7 @@ describe("public thread data routes", () => {
         environmentId: environment.id,
         sequence: 1,
         type: "client/turn/requested",
+        scope: threadScope(),
         data: {
           direction: "outbound",
           input: [{ type: "text", text: "Earlier work" }],
@@ -830,6 +843,7 @@ describe("public thread data routes", () => {
         environmentId: environment.id,
         sequence: 1,
         type: "client/turn/requested",
+        scope: threadScope(),
         data: {
           direction: "outbound",
           input: [{ type: "text", text: "Earlier work" }],
@@ -1509,13 +1523,14 @@ describe("public thread data routes", () => {
         environmentId: environment.id,
         sequence: 1,
         type: "system/manager/user_message",
+        scope: threadScope(),
         data: { text: "A manager note" },
       });
       seedEvent(harness.deps, {
         threadId: thread.id,
         environmentId: environment.id,
         providerThreadId: "provider-thread-1",
-        turnId: "turn-1",
+        scope: turnScope("turn-1"),
         sequence: 2,
         type: "item/completed",
         data: { item: { type: "agentMessage", id: "msg-1", text: "Reply" } },
@@ -1556,6 +1571,7 @@ describe("public thread data routes", () => {
         environmentId: environment.id,
         sequence: 1,
         type: "system/manager/user_message",
+        scope: threadScope(),
         data: { text: "Unrelated event" },
       });
 
@@ -1588,7 +1604,7 @@ describe("public thread data routes", () => {
         threadId: thread.id,
         environmentId: environment.id,
         providerThreadId: "provider-thread-1",
-        turnId: "turn-1",
+        scope: turnScope("turn-1"),
         sequence: 5,
         type: "item/completed",
         data: { item: { type: "agentMessage", id: "msg-1", text: "Reply" } },

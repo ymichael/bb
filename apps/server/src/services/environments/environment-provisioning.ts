@@ -28,6 +28,7 @@ import type {
 import {
   activeLifecycleOperationStates,
   isActiveLifecycleOperationState,
+  threadScope,
 } from "@bb/domain";
 import { type HostDaemonCommand } from "@bb/host-daemon-contract";
 import type { SandboxHostProgressEvent } from "@bb/sandbox-host";
@@ -492,6 +493,7 @@ export async function failEnvironmentProvisioningDurably(
       code: "thread_provisioning_failed",
       message: "Provisioning thread failed",
       detail: args.failureReason,
+      scope: threadScope(),
     });
     tryTransition(deps.db, deps.hub, thread.id, "error");
   }

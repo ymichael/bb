@@ -9,6 +9,7 @@ import {
   upsertHost,
   updateManagerThreadNudge,
 } from "@bb/db";
+import { threadScope } from "@bb/domain";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { sweepDueNudges } from "../../src/services/scheduling/nudge-sweep.js";
 import { appendClientTurnEvent } from "../../src/services/threads/thread-events.js";
@@ -80,6 +81,7 @@ function seedRunnableManagerThread(args: {
     providerThreadId: "provider-manager-thread",
     sequence: 1,
     type: "thread/identity",
+    scope: threadScope(),
     data: {},
   });
   appendClientTurnEvent(args.harness.deps, {

@@ -10,7 +10,11 @@ import {
   hostDaemonCommands,
   threads,
 } from "@bb/db";
-import { systemOperationEventDataSchema, threadSchema } from "@bb/domain";
+import {
+  systemOperationEventDataSchema,
+  threadScope,
+  threadSchema,
+} from "@bb/domain";
 import { renderTemplate } from "@bb/templates";
 import {
   reportQueuedCommandError,
@@ -63,6 +67,7 @@ describe("public thread manager and ownership routes", () => {
         environmentId: environment.id,
         sequence: 1,
         type: "system/manager/user_message",
+        scope: threadScope(),
         data: { text: "Hello from the manager" },
       });
 
@@ -110,6 +115,7 @@ describe("public thread manager and ownership routes", () => {
         providerThreadId: "provider-draft",
         sequence: 2,
         type: "thread/identity",
+        scope: threadScope(),
         data: {},
       });
       const draftSendResponse = await harness.app.request(

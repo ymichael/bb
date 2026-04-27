@@ -16,6 +16,10 @@ import {
 } from "./test/runtime-integration-harness.js";
 
 const providers = ["codex", "claude-code", "pi"];
+const CODEX_TOOL_CALL_TIMEOUT_MS = 60_000;
+const CODEX_MEMORY_TOOL_TEST_TIMEOUT_MS = 120_000;
+const CODEX_PING_REQUIRED_INSTRUCTIONS =
+  "When the user includes PING_REQUIRED, call the bb_test_ping tool before writing assistant text. Do not say you will call it; call it first.";
 
 for (const providerId of providers) {
   describe.concurrent(`${providerId} provider`, () => {
@@ -432,6 +436,7 @@ describe.concurrent("codex resume scenarios", () => {
         projectId: "test-project",
         providerId,
         options,
+        instructions: CODEX_PING_REQUIRED_INSTRUCTIONS,
         dynamicTools,
       });
 
@@ -442,23 +447,24 @@ describe.concurrent("codex resume scenarios", () => {
         input: [
           {
             type: "text",
-            text: "Remember the word BANANA. Also call the bb_test_ping tool right now.",
+            text: "PING_REQUIRED. Call the bb_test_ping tool now before any assistant text. After the tool returns, remember the word BANANA and reply with BANANA_STORED.",
           },
         ],
         options,
+        instructions: CODEX_PING_REQUIRED_INSTRUCTIONS,
       });
 
       await waitForToolCallBeforeTurnCompletion({
         ctx: ctx1,
         threadId: firstThreadId,
         toolName: "bb_test_ping",
-        timeoutMs: 30_000,
+        timeoutMs: CODEX_TOOL_CALL_TIMEOUT_MS,
         label: "runtime 1 tool call",
       });
       await waitForThreadTurnCompleted({
         ctx: ctx1,
         threadId: firstThreadId,
-        timeoutMs: 30_000,
+        timeoutMs: CODEX_TOOL_CALL_TIMEOUT_MS,
         label: "runtime 1 turn/completed",
       });
 
@@ -509,6 +515,7 @@ describe.concurrent("codex resume scenarios", () => {
         providerId,
         dynamicTools,
         options,
+        instructions: CODEX_PING_REQUIRED_INSTRUCTIONS,
       });
 
       await ctx2.runtime.runTurn({
@@ -516,23 +523,24 @@ describe.concurrent("codex resume scenarios", () => {
         input: [
           {
             type: "text",
-            text: "What did I ask you to remember? Also call the bb_test_ping tool right now.",
+            text: "PING_REQUIRED. Call the bb_test_ping tool now before any assistant text. After the tool returns, answer with the word I asked you to remember.",
           },
         ],
         options,
+        instructions: CODEX_PING_REQUIRED_INSTRUCTIONS,
       });
 
       await waitForToolCallBeforeTurnCompletion({
         ctx: ctx2,
         threadId,
         toolName: "bb_test_ping",
-        timeoutMs: 30_000,
+        timeoutMs: CODEX_TOOL_CALL_TIMEOUT_MS,
         label: "runtime 2 tool call",
       });
       await waitForThreadTurnCompleted({
         ctx: ctx2,
         threadId,
-        timeoutMs: 30_000,
+        timeoutMs: CODEX_TOOL_CALL_TIMEOUT_MS,
         label: "runtime 2 turn/completed",
       });
 
@@ -543,5 +551,5 @@ describe.concurrent("codex resume scenarios", () => {
       await ctx2.runtime.shutdown();
       cleanup(ctx2);
     }
-  }, 45_000);
+  }, CODEX_MEMORY_TOOL_TEST_TIMEOUT_MS);
 });

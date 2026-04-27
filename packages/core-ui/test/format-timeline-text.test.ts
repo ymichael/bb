@@ -11,6 +11,7 @@ import type {
   ViewTurn,
   ViewTurnStatus,
 } from "@bb/domain";
+import { threadScope, turnScope } from "@bb/domain";
 
 function getStartedAt(message: ViewMessage): number {
   return message.startedAt ?? message.createdAt;
@@ -66,7 +67,8 @@ function projectionFromMessages(messages: ViewMessage[]): ViewProjection {
   const turnMessagesById = new Map<string, ViewMessage[]>();
   const emittedTurnIds = new Set<string>();
 
-  for (const message of messages) {
+  for (const inputMessage of messages) {
+    const message = withFixtureScope(inputMessage);
     if (!message.turnId) {
       entries.push({ kind: "message", message });
       continue;
@@ -95,6 +97,22 @@ function projectionFromMessages(messages: ViewMessage[]): ViewProjection {
         turn: projectionTurnFromMessages(entry.turn.turnId, messagesForTurn),
       };
     }),
+  };
+}
+
+function withFixtureScope(message: ViewMessage): ViewMessage {
+  if (message.scope !== undefined) {
+    return message;
+  }
+  if (message.turnId) {
+    return {
+      ...message,
+      scope: turnScope(message.turnId),
+    };
+  }
+  return {
+    ...message,
+    scope: threadScope(),
   };
 }
 

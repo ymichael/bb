@@ -4,6 +4,7 @@ import type {
   ViewTaskEntry,
   ViewTasksMessage,
 } from "@bb/domain";
+import { requireThreadEventScopeTurnId } from "@bb/domain";
 import type { EventMeta } from "./event-decode.js";
 import { getEventParentToolCallId } from "./event-decode.js";
 import { messageId } from "./format-helpers.js";
@@ -129,18 +130,22 @@ export function parseTaskMessage(
       return null;
     }
 
+    const turnId = requireThreadEventScopeTurnId({
+      type: decoded.type,
+      scope: decoded.scope,
+    });
     return {
       kind: "tasks",
       id: messageId(
         decoded.threadId,
         "tasks",
-        `plan:${decoded.turnId}:${meta.seq}`,
+        `plan:${turnId}:${meta.seq}`,
       ),
       threadId: decoded.threadId,
       sourceSeqStart: meta.seq,
       sourceSeqEnd: meta.seq,
       createdAt: meta.createdAt,
-      turnId: decoded.turnId,
+      scope: decoded.scope,
       source: "plan",
       status: "completed",
       title: "Tasks updated",
@@ -174,7 +179,7 @@ export function parseTaskMessage(
     sourceSeqStart: meta.seq,
     sourceSeqEnd: meta.seq,
     createdAt: meta.createdAt,
-    turnId: decoded.turnId,
+    scope: decoded.scope,
     source: "todo",
     callId: decoded.item.id,
     status,

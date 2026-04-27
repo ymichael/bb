@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Command } from "commander";
 import {
   buildThreadEventRow,
+  turnScope,
   type Environment,
   type PendingInteraction,
   type Thread,
@@ -2527,6 +2528,7 @@ describe("CLI JSON output contracts", () => {
           JSON.stringify({
             ...buildThreadEventRow({
               id: "evt-1",
+              scope: turnScope("turn-1"),
               threadId: "thread-t0",
               seq: 3,
               createdAt: Date.now(),
@@ -2535,6 +2537,7 @@ describe("CLI JSON output contracts", () => {
                 threadId: "thread-t0",
                 providerThreadId: "provider-thread-t0",
                 turnId: "turn-1",
+                scope: turnScope("turn-1"),
                 status: "completed",
               },
             }),

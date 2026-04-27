@@ -1,4 +1,5 @@
 import type { ThreadEvent } from "@bb/domain";
+import { turnScope } from "@bb/domain";
 
 export interface AcceptedUserMessageState {
   pendingAcceptedUserMessages: AcceptedUserMessage[];
@@ -55,7 +56,7 @@ export function buildAcceptedUserMessageEvent(
       type: "turn/input/accepted",
       threadId: args.threadId,
       providerThreadId: args.providerThreadId,
-      turnId: args.turnId,
+      scope: turnScope(args.turnId),
       clientRequestSequence: accepted.clientRequestSequence,
     },
   ];
@@ -83,7 +84,7 @@ export function drainAcceptedUserMessages<
       type: "turn/input/accepted",
       threadId: args.threadId,
       providerThreadId: args.providerThreadId,
-      turnId: args.turnId,
+      scope: turnScope(args.turnId),
       clientRequestSequence: accepted.clientRequestSequence,
     });
   }

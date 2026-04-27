@@ -5,7 +5,13 @@ import {
 } from "@bb/db";
 import type { DbConnection, StoredEventRow } from "@bb/db";
 import { buildThreadEventRow, parseStoredThreadEvent } from "@bb/domain";
-import type { ThreadEvent, ThreadEventRow, ThreadEventType } from "@bb/domain";
+import { threadScope, turnScope } from "@bb/domain";
+import type {
+  ThreadEvent,
+  ThreadEventRow,
+  ThreadEventScope,
+  ThreadEventType,
+} from "@bb/domain";
 import { ApiError } from "../../errors.js";
 
 type StoredEventPayloadRow = Pick<
@@ -59,19 +65,42 @@ function parseStoredEventPayload(
   return record;
 }
 
+function parseStoredEventScope(row: StoredEventRow): ThreadEventScope {
+  switch (row.scopeKind) {
+    case "thread":
+      return threadScope();
+    case "turn":
+      if (row.turnId === null) {
+        throw new ApiError(
+          500,
+          "internal_error",
+          `Stored ${row.type} event #${row.sequence} for thread ${row.threadId} has turn scope without turn_id`,
+        );
+      }
+      return turnScope(row.turnId);
+    default:
+      throw new ApiError(
+        500,
+        "internal_error",
+        `Stored ${row.type} event #${row.sequence} for thread ${row.threadId} has invalid scope_kind`,
+      );
+  }
+}
+
 export function parseStoredEvent(row: StoredEventRow): ThreadEvent {
   return parseStoredThreadEvent({
     type: row.type,
     data: parseStoredEventPayload(row),
     threadId: row.threadId,
     providerThreadId: row.providerThreadId,
-    turnId: row.turnId,
+    scope: parseStoredEventScope(row),
   });
 }
 
 export function parseStoredEventRow(row: StoredEventRow): ThreadEventRow {
   return buildThreadEventRow({
     id: row.id,
+    scope: parseStoredEventScope(row),
     threadId: row.threadId,
     seq: row.sequence,
     createdAt: row.createdAt,

@@ -5,6 +5,10 @@ import {
   turnRequestEventDataSchema,
   turnRequestTargetSchema,
 } from "./thread-events.js";
+import {
+  threadEventScopeSchema,
+  type ThreadEventScope,
+} from "./thread-event-scope.js";
 import type { ThreadEvent, ThreadEventType } from "./provider-event.js";
 import type { TurnRequestTarget } from "./thread-events.js";
 
@@ -17,11 +21,12 @@ type ThreadEventForType<TType extends ThreadEventType> =
 
 type StoredThreadEventDataFromEvent<TEvent extends ThreadEvent> = Omit<
   TEvent,
-  "threadId" | "type"
+  "threadId" | "type" | "scope"
 >;
 
 interface ThreadEventRowBase {
   id: string;
+  scope: ThreadEventScope;
   threadId: string;
   seq: number;
   createdAt: number;
@@ -35,8 +40,8 @@ interface ThreadEventRowInput extends ThreadEventRowBase {
 export interface StoredThreadEventParseArgs {
   data: Record<string, unknown>;
   providerThreadId?: string | null;
+  scope: ThreadEventScope;
   threadId: string;
-  turnId?: string | null;
   type: ThreadEventType;
 }
 
@@ -72,6 +77,7 @@ export type ThreadEventOfType<TType extends ThreadEventType> = Extract<
 
 const threadEventRowInputSchema = z.object({
   id: z.string(),
+  scope: threadEventScopeSchema,
   threadId: z.string(),
   seq: z.number(),
   type: threadEventTypeSchema,
@@ -101,23 +107,35 @@ function parseStoredTurnRequestEventData(
 function toStoredThreadEventData<TEvent extends ThreadEvent>(
   event: TEvent,
 ): StoredThreadEventDataFromEvent<TEvent> {
-  const { threadId: _threadId, type: _type, ...data } = event;
+  const { scope: _scope, threadId: _threadId, type: _type, ...data } = event;
   return data;
+}
+
+function omitStoredScopeFields(
+  data: Record<string, unknown>,
+): Record<string, unknown> {
+  const { scope: _scope, turnId: _turnId, ...rest } = data;
+  return rest;
 }
 
 export function parseStoredThreadEvent(
   args: StoredThreadEventParseArgs,
 ): ThreadEvent {
+  const scopeResult = threadEventScopeSchema.safeParse(args.scope);
+  if (!scopeResult.success) {
+    throw new Error("Stored thread event is missing valid scope");
+  }
+  const scope = scopeResult.data;
   const eventData = storedTurnRequestTypeSet.has(args.type)
     ? parseStoredTurnRequestEventData(args)
     : args.data;
 
   return threadEventSchema.parse({
-    ...eventData,
+    ...omitStoredScopeFields(eventData),
     ...(args.providerThreadId != null
       ? { providerThreadId: args.providerThreadId }
       : {}),
-    ...(args.turnId != null ? { turnId: args.turnId } : {}),
+    scope,
     threadId: args.threadId,
     type: args.type,
   });
@@ -145,8 +163,8 @@ export function buildThreadEvent(row: ThreadEventRow): ThreadEvent {
     data: row.data,
     providerThreadId:
       "providerThreadId" in row.data ? row.data.providerThreadId : undefined,
+    scope: row.scope,
     threadId: row.threadId,
-    turnId: "turnId" in row.data ? row.data.turnId : undefined,
     type: row.type,
   });
 }
@@ -161,6 +179,7 @@ export function isThreadEventRowOfType<TType extends ThreadEventType>(
 function parseThreadEventRowInput(row: ThreadEventRowInput): ThreadEventRow {
   return buildThreadEventRow({
     id: row.id,
+    scope: row.scope,
     threadId: row.threadId,
     seq: row.seq,
     createdAt: row.createdAt,
@@ -168,6 +187,7 @@ function parseThreadEventRowInput(row: ThreadEventRowInput): ThreadEventRow {
       type: row.type,
       data: row.data,
       threadId: row.threadId,
+      scope: row.scope,
     }),
   });
 }

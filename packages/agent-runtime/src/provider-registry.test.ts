@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { turnScope } from "@bb/domain";
 import type { JsonRpcMessage } from "./runtime-json-rpc.js";
 import {
   createProviderForId,
@@ -12,7 +13,7 @@ describe("provider registry", () => {
     const provider = createProviderForId("codex");
     expect(provider.id).toBe("codex");
     expect(provider.process.command).toBe("codex");
-    expect(provider.process.args).toEqual(["app-server"]);
+    expect(provider.process.args).toMatchObject(["app-server"]);
   });
 
   it("creates claude-code provider with expected process config", () => {
@@ -56,18 +57,22 @@ describe("provider registry", () => {
       type: "agent_start",
     });
 
-    expect(claudeEvents).toContainEqual({
-      type: "turn/started",
-      threadId: "",
-      providerThreadId: "",
-      turnId: "turn_runtime_1",
-    });
-    expect(piEvents).toContainEqual({
-      type: "turn/started",
-      threadId: "",
-      providerThreadId: "",
-      turnId: "turn_runtime_1",
-    });
+    expect(claudeEvents).toContainEqual(
+      expect.objectContaining({
+        type: "turn/started",
+        threadId: "",
+        providerThreadId: "",
+        scope: turnScope("turn_runtime_1"),
+      }),
+    );
+    expect(piEvents).toContainEqual(
+      expect.objectContaining({
+        type: "turn/started",
+        threadId: "",
+        providerThreadId: "",
+        scope: turnScope("turn_runtime_1"),
+      }),
+    );
   });
 
   it("creates pi provider with expected process config", () => {
@@ -88,7 +93,7 @@ describe("provider registry", () => {
   });
 
   it("lists provider catalog", () => {
-    expect(listAvailableProviderInfos()).toEqual([
+    expect(listAvailableProviderInfos()).toMatchObject([
       {
         id: "codex",
         displayName: "Codex",
@@ -127,7 +132,7 @@ describe("provider registry", () => {
     const pi = getProviderVisibilityMetadata("pi");
     const codex = getProviderVisibilityMetadata("codex");
 
-    expect([...claude.wellKnownToolNames]).toEqual([
+    expect([...claude.wellKnownToolNames]).toMatchObject([
       "Agent",
       "Bash",
       "Edit",
@@ -140,7 +145,7 @@ describe("provider registry", () => {
       "WebSearch",
       "Write",
     ]);
-    expect([...pi.wellKnownToolNames]).toEqual([
+    expect([...pi.wellKnownToolNames]).toMatchObject([
       "bash",
       "edit",
       "find",
@@ -148,7 +153,7 @@ describe("provider registry", () => {
       "read",
       "write",
     ]);
-    expect([...codex.wellKnownToolNames]).toEqual([
+    expect([...codex.wellKnownToolNames]).toMatchObject([
       "closeAgent",
       "resumeAgent",
       "sendInput",

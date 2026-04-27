@@ -1,4 +1,5 @@
 import { getThread, listEvents } from "@bb/db";
+import { turnScope } from "@bb/domain";
 import { describe, expect, it, vi } from "vitest";
 import { applyTurnCompletedEvent } from "../../src/internal/turn-completed-events.js";
 import {
@@ -99,7 +100,7 @@ function seedNoiseRows(
       threadId: args.threadId,
       providerThreadId: "provider-thread-1",
       sequence,
-      turnId: `turn-${sequence}`,
+      scope: turnScope(`turn-${sequence}`),
       type: "thread/tokenUsage/updated",
       itemId: null,
       itemKind: null,
@@ -125,9 +126,9 @@ function seedResolvedAssistantMessage(
   for (const sequence of args.deltaSequences) {
     seedStoredEvent(harness.deps, {
       threadId: args.threadId,
-      turnId,
       sequence,
       type: "item/agentMessage/delta",
+      scope: turnScope(turnId),
       itemId: args.itemId,
       itemKind: null,
       data: {
@@ -139,9 +140,9 @@ function seedResolvedAssistantMessage(
 
   seedStoredEvent(harness.deps, {
     threadId: args.threadId,
-    turnId,
     sequence: args.completedSequence,
     type: "item/completed",
+    scope: turnScope(turnId),
     itemId: args.itemId,
     itemKind: "agentMessage",
     data: {
@@ -232,7 +233,7 @@ describe("thread event pruning", () => {
           threadId: thread.id,
           providerThreadId: "provider-thread-1",
           sequence,
-          turnId: `turn-${sequence}`,
+          scope: turnScope(`turn-${sequence}`),
           type: "thread/contextWindowUsage/updated",
           itemId: null,
           itemKind: null,
@@ -296,6 +297,7 @@ describe("thread event pruning", () => {
       });
       seedStoredEvent(harness.deps, {
         threadId: thread.id,
+        scope: turnScope("turn-1"),
         sequence: 309,
         type: "turn/completed",
         itemId: null,
@@ -310,6 +312,7 @@ describe("thread event pruning", () => {
         threadId: thread.id,
         providerThreadId: "provider-thread-1",
         turnId: "turn-1",
+        scope: turnScope("turn-1"),
         status: "completed",
       });
 
@@ -451,7 +454,7 @@ describe("thread event pruning", () => {
       for (const sequence of [1_004, 1_005]) {
         seedStoredEvent(harness.deps, {
           threadId: thread.id,
-          turnId: "turn-active",
+          scope: turnScope("turn-active"),
           sequence,
           type: "item/agentMessage/delta",
           itemId: "msg-active",
@@ -479,6 +482,7 @@ describe("thread event pruning", () => {
                 threadId: thread.id,
                 providerThreadId: "provider-thread-1",
                 turnId: "turn-1",
+                scope: turnScope("turn-1"),
                 tokenUsage: {
                   total: {
                     totalTokens: 1,

@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { threadScope, turnScope } from "@bb/domain";
 import type { AgentSessionEvent } from "@mariozechner/pi-coding-agent";
 import { createPiProviderAdapter } from "./adapter.js";
 import { buildPiAvailableModels } from "./model-list.js";
@@ -182,7 +183,7 @@ describe("pi provider adapter", () => {
         type: "turn/input/accepted",
         threadId: "thread-1",
         providerThreadId: "provider-thread-1",
-        turnId: "turn-1",
+        scope: turnScope("turn-1"),
         clientRequestSequence: 9,
       },
     ]);
@@ -207,13 +208,13 @@ describe("pi provider adapter", () => {
         type: "turn/started",
         threadId: "",
         providerThreadId: "",
-        turnId: "turn-1",
+        scope: turnScope("turn-1"),
       },
       {
-        type: "error",
+        type: "provider/error",
         threadId: "",
         providerThreadId: "",
-        turnId: "turn-1",
+        scope: turnScope("turn-1"),
         message: "Provider error",
         detail: "No API key found for openai.",
       },
@@ -221,7 +222,7 @@ describe("pi provider adapter", () => {
         type: "turn/completed",
         threadId: "",
         providerThreadId: "",
-        turnId: "turn-1",
+        scope: turnScope("turn-1"),
         status: "failed",
       },
     ]);
@@ -515,7 +516,10 @@ describe("pi provider adapter", () => {
     const events = adapter.translateEvent(loadFixture("agent-start.json"));
 
     expect(events).toContainEqual(
-      expect.objectContaining({ type: "turn/started", turnId: "turn-1" }),
+      expect.objectContaining({
+        type: "turn/started",
+        scope: turnScope("turn-1"),
+      }),
     );
   });
 
@@ -527,7 +531,7 @@ describe("pi provider adapter", () => {
       type: "turn_start",
     } as AgentSessionEvent);
 
-    expect(events).toEqual([]);
+    expect(events).toMatchObject([]);
   });
 
   it("translateEvent agent_end emits agentMessage + turn/completed", () => {
@@ -548,7 +552,7 @@ describe("pi provider adapter", () => {
     expect(events).toContainEqual(
       expect.objectContaining({
         type: "turn/completed",
-        turnId: "turn-1",
+        scope: turnScope("turn-1"),
         status: "completed",
       }),
     );
@@ -564,16 +568,18 @@ describe("pi provider adapter", () => {
     } satisfies AgentSessionEvent;
     const events = adapter.translateEvent(event);
 
-    expect(events).toContainEqual({
-      type: "item/started",
-      threadId: "",
-      providerThreadId: "",
-      turnId: "turn-1",
-      item: {
-        type: "contextCompaction",
-        id: "pi-compaction-turn-1",
-      },
-    });
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "item/started",
+        threadId: "",
+        providerThreadId: "",
+        scope: turnScope("turn-1"),
+        item: {
+          type: "contextCompaction",
+          id: "pi-compaction-turn-1",
+        },
+      }),
+    );
   });
 
   it("translateEvent compaction_end emits thread/compacted", () => {
@@ -594,12 +600,14 @@ describe("pi provider adapter", () => {
     } satisfies AgentSessionEvent;
     const events = adapter.translateEvent(endEvent);
 
-    expect(events).toContainEqual({
-      type: "thread/compacted",
-      threadId: "",
-      providerThreadId: "",
-      turnId: "turn-1",
-    });
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "thread/compacted",
+        threadId: "",
+        providerThreadId: "",
+        scope: turnScope("turn-1"),
+      }),
+    );
   });
 
   it("translateEvent compaction_end without a known turn is unhandled", () => {
@@ -637,7 +645,7 @@ describe("pi provider adapter", () => {
         type: "item/started",
         threadId: "",
         providerThreadId: "",
-        turnId: "turn-1",
+        scope: turnScope("turn-1"),
         item: {
           type: "contextCompaction",
           id: "pi-compaction-turn-1",
@@ -815,6 +823,7 @@ describe("pi provider adapter", () => {
         type: "provider/unhandled",
         providerId: "pi",
         rawType: "sdk/message_update:thinking_delta",
+        scope: turnScope("turn-1"),
       }),
     ]);
   });
@@ -920,6 +929,72 @@ describe("pi provider adapter", () => {
         type: "provider/unhandled",
         providerId: "pi",
         rawType: "sdk/agent_end",
+        scope: threadScope(),
+        rawEvent: expect.objectContaining({
+          method: "sdk/message",
+        }),
+      }),
+    ]);
+  });
+
+  it("translateEvent scopes unknown sdk envelopes to the active turn", () => {
+    const adapter = createPiProviderAdapter();
+    const context = { threadId: "pi-thread-1" };
+    adapter.translateEvent(loadFixture("agent-start.json"), context);
+
+    const events = adapter.translateEvent(
+      {
+        jsonrpc: "2.0",
+        method: "sdk/message",
+        params: {
+          threadId: "pi-thread-1",
+          message: {
+            type: "future_event",
+            value: true,
+          },
+        },
+      },
+      context,
+    );
+
+    expect(events).toEqual([
+      expect.objectContaining({
+        type: "provider/unhandled",
+        providerId: "pi",
+        scope: turnScope("turn-1"),
+        rawEvent: expect.objectContaining({
+          method: "sdk/message",
+        }),
+      }),
+    ]);
+  });
+
+  it("translateEvent keeps late unknown sdk envelopes thread scoped", () => {
+    const adapter = createPiProviderAdapter();
+    const context = { threadId: "pi-thread-1" };
+    adapter.translateEvent(loadFixture("agent-start.json"), context);
+    adapter.translateEvent(loadFixture("agent-end-with-message.json"), context);
+
+    const events = adapter.translateEvent(
+      {
+        jsonrpc: "2.0",
+        method: "sdk/message",
+        params: {
+          threadId: "pi-thread-1",
+          message: {
+            type: "future_event",
+            value: true,
+          },
+        },
+      },
+      context,
+    );
+
+    expect(events).toEqual([
+      expect.objectContaining({
+        type: "provider/unhandled",
+        providerId: "pi",
+        scope: threadScope(),
         rawEvent: expect.objectContaining({
           method: "sdk/message",
         }),
@@ -1242,7 +1317,10 @@ describe("pi provider adapter", () => {
       context,
       toolCallId: "tool-bash-1",
       reset: () => {
-        adapter.translateEvent(loadFixture("agent-end-with-message.json"), context);
+        adapter.translateEvent(
+          loadFixture("agent-end-with-message.json"),
+          context,
+        );
       },
     });
   });
@@ -1346,7 +1424,7 @@ describe("pi provider adapter", () => {
       },
     });
 
-    expect(events).toEqual([]);
+    expect(events).toMatchObject([]);
   });
 
   it("translateEvent skips Pi bash update placeholders", () => {
@@ -1369,7 +1447,7 @@ describe("pi provider adapter", () => {
       },
     });
 
-    expect(events).toEqual([]);
+    expect(events).toMatchObject([]);
   });
 
   it("translateEvent keeps non-bash tool execution updates as shared tool progress", () => {
@@ -1456,8 +1534,10 @@ describe("pi provider adapter", () => {
     const completedEvent = events.find(
       (
         event,
-      ): event is Extract<(typeof events)[number], { type: "item/completed" }> =>
-        event.type === "item/completed",
+      ): event is Extract<
+        (typeof events)[number],
+        { type: "item/completed" }
+      > => event.type === "item/completed",
     );
 
     expect(completedEvent?.item).toMatchObject({
@@ -1522,7 +1602,7 @@ describe("pi provider adapter", () => {
       },
     });
 
-    expect(events).toEqual([]);
+    expect(events).toMatchObject([]);
   });
 
   // -- translateEvent: multiple turns --------------------------------------
@@ -1538,7 +1618,10 @@ describe("pi provider adapter", () => {
     const events = adapter.translateEvent(loadFixture("agent-start.json"));
 
     expect(events).toContainEqual(
-      expect.objectContaining({ type: "turn/started", turnId: "turn-2" }),
+      expect.objectContaining({
+        type: "turn/started",
+        scope: turnScope("turn-2"),
+      }),
     );
   });
 
@@ -1616,17 +1699,19 @@ describe("pi provider adapter", () => {
       },
     });
 
-    expect(events).toContainEqual({
-      type: "thread/contextWindowUsage/updated",
-      threadId: "bb-thread-1",
-      providerThreadId: "bb-thread-1",
-      turnId: "turn-1",
-      contextWindowUsage: {
-        usedTokens: 54321,
-        modelContextWindow: 123456,
-        estimated: true,
-      },
-    });
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "thread/contextWindowUsage/updated",
+        threadId: "bb-thread-1",
+        providerThreadId: "bb-thread-1",
+        scope: turnScope("turn-1"),
+        contextWindowUsage: {
+          usedTokens: 54321,
+          modelContextWindow: 123456,
+          estimated: true,
+        },
+      }),
+    );
   });
 
   it("translateEvent clears stale tool state when a turn ends without tool results", () => {
@@ -1746,7 +1831,7 @@ describe("pi provider adapter", () => {
       selectedModel: "anthropic/claude-opus-4-6",
     });
 
-    expect(models.map((model) => model.id)).toEqual([
+    expect(models.map((model) => model.id)).toMatchObject([
       "anthropic/claude-opus-4-7",
       "anthropic/claude-opus-4-6",
     ]);
@@ -1775,7 +1860,7 @@ describe("pi provider adapter", () => {
       selectedModel: "anthropic/claude-opus-4-6",
     });
 
-    expect(models.map((model) => model.id)).toEqual([
+    expect(models.map((model) => model.id)).toMatchObject([
       "anthropic/claude-opus-4-6",
       "anthropic/claude-opus-4-7",
     ]);

@@ -1,4 +1,5 @@
 import type { ThreadEvent } from "@bb/domain";
+import { getThreadEventScopeTurnId } from "@bb/domain";
 import type { AgentRuntime } from "../types.js";
 
 export type RuntimeWaitPredicate = () => boolean;
@@ -7,7 +8,7 @@ export type RuntimeWaitConditionConfig = number | RuntimeWaitConditionOptions;
 export type RuntimeThreadEventPredicate = (event: ThreadEvent) => boolean;
 export type RuntimeErrorEvent = Extract<
   ThreadEvent,
-  { type: "error" | "system/error" }
+  { type: "provider/error" | "system/error" }
 >;
 
 export interface RuntimeWaitConditionOptions {
@@ -78,7 +79,7 @@ function normalizeWaitConditionConfig(
 }
 
 function isRuntimeErrorEvent(event: ThreadEvent): event is RuntimeErrorEvent {
-  return event.type === "error" || event.type === "system/error";
+  return event.type === "provider/error" || event.type === "system/error";
 }
 
 function formatRuntimeErrorEvent(event: RuntimeErrorEvent): string {
@@ -111,7 +112,8 @@ function formatRuntimeEvent(event: ThreadEvent): string {
     "providerThreadId" in event
       ? ` providerThreadId=${event.providerThreadId}`
       : "";
-  const turnId = "turnId" in event ? ` turnId=${event.turnId}` : "";
+  const eventTurnId = getThreadEventScopeTurnId(event.scope);
+  const turnId = eventTurnId ? ` turnId=${eventTurnId}` : "";
   return `${event.threadId} ${event.type}${providerThreadId}${turnId}`;
 }
 
@@ -216,7 +218,7 @@ export async function waitForThreadTurnStarted(
     predicate: (event) =>
       event.type === "turn/started" &&
       event.threadId === args.threadId &&
-      (!args.turnId || event.turnId === args.turnId),
+      (!args.turnId || getThreadEventScopeTurnId(event.scope) === args.turnId),
   });
 }
 
@@ -229,7 +231,7 @@ export async function waitForThreadTurnCompleted(
     predicate: (event) =>
       event.type === "turn/completed" &&
       event.threadId === args.threadId &&
-      (!args.turnId || event.turnId === args.turnId),
+      (!args.turnId || getThreadEventScopeTurnId(event.scope) === args.turnId),
   });
 }
 

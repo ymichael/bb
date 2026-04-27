@@ -1,7 +1,9 @@
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
+  threadScope,
   threadEventItemSchema,
+  turnScope,
   type AvailableModel,
   type ThreadEvent,
 } from "@bb/domain";
@@ -172,6 +174,7 @@ function translateEventMessage(event: ProviderRuntimeEvent): ThreadEvent[] {
           type: "thread/identity",
           threadId,
           providerThreadId,
+          scope: threadScope(),
         },
       ];
     case "turn/started":
@@ -180,7 +183,7 @@ function translateEventMessage(event: ProviderRuntimeEvent): ThreadEvent[] {
           type: "turn/started",
           threadId,
           providerThreadId,
-          turnId,
+          scope: turnScope(turnId),
         },
       ];
     case "turn/completed": {
@@ -190,7 +193,7 @@ function translateEventMessage(event: ProviderRuntimeEvent): ThreadEvent[] {
           type: "turn/completed",
           threadId,
           providerThreadId,
-          turnId,
+          scope: turnScope(turnId),
           status:
             status === "failed" || status === "interrupted"
               ? status
@@ -208,7 +211,7 @@ function translateEventMessage(event: ProviderRuntimeEvent): ThreadEvent[] {
           type: "item/completed",
           threadId,
           providerThreadId,
-          turnId,
+          scope: turnScope(turnId),
           item,
         },
       ];
@@ -219,6 +222,7 @@ function translateEventMessage(event: ProviderRuntimeEvent): ThreadEvent[] {
           type: "thread/name/updated",
           threadId,
           providerThreadId,
+          scope: threadScope(),
           threadName:
             typeof message.params.threadName === "string"
               ? message.params.threadName

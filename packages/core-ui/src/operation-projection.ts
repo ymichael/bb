@@ -19,6 +19,11 @@ import {
   buildApprovalStatusDelta,
 } from "./tool-activity-projection.js";
 import {
+  haveCompatibleViewMessageScope,
+  viewMessageThreadScopeFields,
+  viewMessageTurnScopeFields,
+} from "./message-scope.js";
+import {
   appendVisibleTextBuffer,
   createVisibleTextBuffer,
   flushVisibleTextBuffer,
@@ -113,15 +118,26 @@ function upsertKeyedLifecycleMessage<TMessage extends LifecycleViewMessage>(
     return;
   }
 
-  const existing = args.index.get(args.key);
+  const scopedKey = lifecycleMessageKey(args.key, args.incoming);
+  const existing = args.index.get(scopedKey);
   if (!existing) {
-    args.index.set(args.key, args.incoming);
+    args.index.set(scopedKey, args.incoming);
     args.state.messages.push(args.incoming);
     return;
   }
 
   updateMessageBounds(existing, args.incoming);
   args.mergeExisting(existing, args.incoming);
+}
+
+function lifecycleMessageKey(
+  key: string,
+  message: LifecycleViewMessage,
+): string {
+  if (message.scope.kind === "thread") {
+    return `thread:${key}`;
+  }
+  return `turn:${message.scope.turnId}:${key}`;
 }
 
 function mergeProvisioningOperation(
@@ -160,6 +176,11 @@ function updateMessageBounds(
   existing: LifecycleViewMessage,
   incoming: LifecycleViewMessage,
 ): void {
+  if (!haveCompatibleViewMessageScope(existing, incoming)) {
+    throw new Error(
+      `Cannot merge ${existing.kind} messages with different scopes`,
+    );
+  }
   existing.sourceSeqStart = Math.min(
     existing.sourceSeqStart,
     incoming.sourceSeqStart,
@@ -173,9 +194,6 @@ function updateMessageBounds(
     existing.startedAt ?? existing.createdAt,
     incoming.startedAt ?? incoming.createdAt,
   );
-  if (!existing.turnId && incoming.turnId) {
-    existing.turnId = incoming.turnId;
-  }
 }
 
 export function upsertThreadOperationMessage(
@@ -290,6 +308,9 @@ export function upsertFileEdit(
   turnId: string | undefined,
   partial: FileEditPartial,
 ): void {
+  const scopeFields = turnId
+    ? viewMessageTurnScopeFields(turnId)
+    : viewMessageThreadScopeFields();
   const existing = state.fileEditsByCallId.get(partial.callId);
   const stdoutBuffer =
     state.fileEditStdoutBuffersByCallId.get(partial.callId) ??
@@ -319,7 +340,7 @@ export function upsertFileEdit(
       sourceSeqEnd: meta.seq,
       createdAt: meta.createdAt,
       startedAt: meta.createdAt,
-      ...(turnId ? { turnId } : {}),
+      ...scopeFields,
       ...(partial.parentToolCallId
         ? { parentToolCallId: partial.parentToolCallId }
         : {}),
@@ -335,10 +356,14 @@ export function upsertFileEdit(
     return;
   }
 
+  if (!haveCompatibleViewMessageScope(existing, scopeFields)) {
+    throw new Error(
+      `Cannot merge file-edit messages with different scopes for call ${partial.callId}`,
+    );
+  }
   existing.sourceSeqEnd = meta.seq;
   existing.createdAt = meta.createdAt;
 
-  if (!existing.turnId && turnId) existing.turnId = turnId;
   if (!existing.parentToolCallId && partial.parentToolCallId) {
     existing.parentToolCallId = partial.parentToolCallId;
   }
@@ -401,7 +426,9 @@ export function onCompactionBegin(
     sourceSeqEnd: meta.seq,
     createdAt: meta.createdAt,
     startedAt: meta.createdAt,
-    ...(turnId ? { turnId } : {}),
+    ...(turnId
+      ? viewMessageTurnScopeFields(turnId)
+      : viewMessageThreadScopeFields()),
     opType: "compaction",
     title: "Context compacting...",
     detail: payload.detail,
@@ -442,7 +469,9 @@ export function onCompactionEnd(
     sourceSeqEnd: meta.seq,
     createdAt: meta.createdAt,
     startedAt: meta.createdAt,
-    ...(turnId ? { turnId } : {}),
+    ...(turnId
+      ? viewMessageTurnScopeFields(turnId)
+      : viewMessageThreadScopeFields()),
     opType: "compaction",
     title: "Context compacted",
     detail: payload.detail,
@@ -461,7 +490,11 @@ export function finalizeOpenCompactionsForTurn(
   if (!args.turnId) return;
 
   for (const message of args.state.openCompactionsByKey.values()) {
-    if (message.threadId !== args.threadId || message.turnId !== args.turnId) {
+    if (
+      message.threadId !== args.threadId ||
+      message.scope.kind !== "turn" ||
+      message.scope.turnId !== args.turnId
+    ) {
       continue;
     }
 

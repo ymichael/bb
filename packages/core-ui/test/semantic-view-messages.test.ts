@@ -7,6 +7,7 @@ import type {
   ViewToolCallMessage,
   ViewTurn,
 } from "@bb/domain";
+import { threadScope, turnScope } from "@bb/domain";
 import {
   normalizeSemanticViewMessages,
   normalizeSemanticViewProjection,
@@ -37,6 +38,9 @@ interface TurnFixtureArgs {
 }
 
 function toolCallMessage(args: ToolCallFixtureArgs): ViewToolCallMessage {
+  const scopeFields = args.turnId
+    ? { scope: turnScope(args.turnId), turnId: args.turnId }
+    : { scope: threadScope() };
   return {
     kind: "tool-call",
     id: args.id,
@@ -44,7 +48,7 @@ function toolCallMessage(args: ToolCallFixtureArgs): ViewToolCallMessage {
     sourceSeqStart: args.seq,
     sourceSeqEnd: args.seq,
     createdAt: args.seq * 10,
-    ...(args.turnId ? { turnId: args.turnId } : {}),
+    ...scopeFields,
     ...(args.parentToolCallId
       ? { parentToolCallId: args.parentToolCallId }
       : {}),
@@ -58,6 +62,9 @@ function toolCallMessage(args: ToolCallFixtureArgs): ViewToolCallMessage {
 function assistantMessage(
   args: AssistantFixtureArgs,
 ): ViewAssistantTextMessage {
+  const scopeFields = args.turnId
+    ? { scope: turnScope(args.turnId), turnId: args.turnId }
+    : { scope: threadScope() };
   return {
     kind: "assistant-text",
     id: args.id,
@@ -65,7 +72,7 @@ function assistantMessage(
     sourceSeqStart: args.seq,
     sourceSeqEnd: args.seq,
     createdAt: args.seq * 10,
-    ...(args.turnId ? { turnId: args.turnId } : {}),
+    ...scopeFields,
     ...(args.parentToolCallId
       ? { parentToolCallId: args.parentToolCallId }
       : {}),

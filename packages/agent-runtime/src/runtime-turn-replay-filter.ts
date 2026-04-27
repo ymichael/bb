@@ -1,4 +1,5 @@
 import type { ThreadEvent } from "@bb/domain";
+import { requireThreadEventScopeTurnId } from "@bb/domain";
 
 export type RuntimeTurnReplayFilterResult =
   | { kind: "emit"; event: ThreadEvent }
@@ -22,18 +23,28 @@ export class RuntimeTurnReplayFilter {
 
   observe(event: ThreadEvent): RuntimeTurnReplayFilterResult {
     if (event.type === "turn/started") {
-      if (this.hasCompletedTurn(event.threadId, event.turnId)) {
+      const turnId = requireThreadEventScopeTurnId({
+        type: event.type,
+        scope: event.scope,
+      });
+      if (this.hasCompletedTurn(event.threadId, turnId)) {
         return {
           kind: "drop-replayed-turn-start",
           threadId: event.threadId,
-          turnId: event.turnId,
+          turnId,
         };
       }
       return { kind: "emit", event };
     }
 
     if (event.type === "turn/completed") {
-      this.recordCompletedTurn(event.threadId, event.turnId);
+      this.recordCompletedTurn(
+        event.threadId,
+        requireThreadEventScopeTurnId({
+          type: event.type,
+          scope: event.scope,
+        }),
+      );
     }
     return { kind: "emit", event };
   }

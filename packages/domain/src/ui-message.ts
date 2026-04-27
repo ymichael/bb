@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { Thread } from "./thread.js";
+import type { ThreadEventScope } from "./thread-event-scope.js";
 import type { ThreadEventRow } from "./stored-thread-event.js";
 import type { ViewProjection } from "./timeline-projection.js";
 
@@ -30,8 +31,8 @@ export interface ViewMessageBase {
   sourceSeqStart: number;
   sourceSeqEnd: number;
   createdAt: number;
+  scope: ThreadEventScope;
   startedAt?: number;
-  turnId?: string;
   parentToolCallId?: string;
 }
 

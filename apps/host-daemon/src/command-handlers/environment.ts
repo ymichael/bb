@@ -1,4 +1,4 @@
-import type { ProvisioningTranscriptEntry } from "@bb/domain";
+import { threadScope, type ProvisioningTranscriptEntry } from "@bb/domain";
 import type {
   EnvironmentProvisionCommand,
   HostDaemonCommandResult,
@@ -119,6 +119,7 @@ function buildOnProgress(args: BuildOnProgressArgs): ProvisionProgressCallback {
       event: {
         type: "system/thread-provisioning",
         threadId,
+        scope: threadScope(),
         provisioningId: initiator.provisioningId,
         status: "active",
         environmentId: command.environmentId,

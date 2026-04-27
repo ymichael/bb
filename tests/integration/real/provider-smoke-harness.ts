@@ -3,7 +3,11 @@ import { execFile as execFileCb } from "node:child_process";
 import fs from "node:fs/promises";
 import { promisify } from "node:util";
 import { expect } from "vitest";
-import type { ThreadEventRow, ThreadExecutionOptions } from "@bb/domain";
+import {
+  requireThreadEventScopeTurnId,
+  type ThreadEventRow,
+  type ThreadExecutionOptions,
+} from "@bb/domain";
 import type { ThreadTimelineResponse } from "@bb/server-contract";
 import { resolvePreferredTestModel } from "@bb/test-helpers";
 import {
@@ -183,7 +187,7 @@ function findTurnStartedAfter(
     if (event.seq > sequence && event.type === "turn/started") {
       return {
         sequence: event.seq,
-        turnId: event.data.turnId,
+        turnId: requireThreadEventScopeTurnId(event),
       };
     }
   }
@@ -211,7 +215,7 @@ function findInputAcceptedAfter(
       return {
         clientRequestSequence: requestSequence,
         sequence: event.seq,
-        turnId: event.data.turnId,
+        turnId: requireThreadEventScopeTurnId(event),
       };
     }
   }
@@ -227,7 +231,7 @@ function findErrorAfter(
     events.find(
       (event) =>
         event.seq > sequence &&
-        (event.type === "error" || event.type === "system/error"),
+        (event.type === "provider/error" || event.type === "system/error"),
     ) ?? null
   );
 }
@@ -252,7 +256,10 @@ async function buildThreadDiagnostics(
   const recentEvents = events.slice(-12).map(describeThreadEvent).join(" | ");
   const lastError = [...events]
     .reverse()
-    .find((event) => event.type === "error" || event.type === "system/error");
+    .find(
+      (event) =>
+        event.type === "provider/error" || event.type === "system/error",
+    );
   const lastTurnStarted = [...events]
     .reverse()
     .find((event) => event.type === "turn/started");
@@ -560,7 +567,10 @@ export async function sendAndWaitForIdle(args: SendAndWaitForIdleArgs) {
     const outputPreview = output?.trim().slice(0, 160) ?? "";
     const lastError = [...events]
       .reverse()
-      .find((event) => event.type === "error" || event.type === "system/error");
+      .find(
+        (event) =>
+          event.type === "provider/error" || event.type === "system/error",
+      );
     const lastTurnCompleted = [...events]
       .reverse()
       .find((event) => event.type === "turn/completed");

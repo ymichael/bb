@@ -19,6 +19,7 @@ import { ApiError } from "../errors.js";
 import { verifyAuthenticatedDaemon } from "../internal/auth.js";
 import { buildSystemErrorEventData } from "../services/threads/thread-events.js";
 import type { AppDeps } from "../types.js";
+import type { ThreadEventScopeKind } from "@bb/domain";
 import { requireAuthorizedActiveSession } from "../internal/session-state.js";
 import { decodeSocketPayload } from "./decode-payload.js";
 
@@ -222,6 +223,7 @@ function interruptThreadsForDisconnectedHost(
           .all()
           .map((row) => [row.threadId, row.maxSeq ?? 0] as const),
       );
+      const disconnectScopeKind: ThreadEventScopeKind = "thread";
 
       tx.insert(events)
         .values(
@@ -236,6 +238,7 @@ function interruptThreadsForDisconnectedHost(
               itemId: null,
               itemKind: null,
               providerThreadId: null,
+              scopeKind: disconnectScopeKind,
               sequence: nextSequence,
               threadId: thread.id,
               turnId: null,

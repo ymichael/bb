@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { ThreadEvent } from "@bb/domain";
+import { getThreadEventScopeTurnId, turnScope } from "@bb/domain";
 import { createAgentRuntimeWithAdapters } from "./runtime.js";
 import { createFakeAdapter, fakeProviderScriptPath } from "./test/index.js";
 import {
@@ -150,6 +151,7 @@ rl.on("line", (line) => {
               threadId: command.threadId,
               providerThreadId: command.providerThreadId ?? "",
               turnId: command.expectedTurnId,
+              scope: turnScope(command.expectedTurnId),
               clientRequestSequence: command.clientRequestSequence,
             },
           ];
@@ -189,7 +191,7 @@ rl.on("line", (line) => {
         (event) =>
           event.type === "turn/input/accepted" &&
           event.clientRequestSequence === 12 &&
-          event.turnId === "turn-1",
+          getThreadEventScopeTurnId(event.scope) === "turn-1",
       ),
     ).toBe(true);
 

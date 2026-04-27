@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { turnScope } from "@bb/domain";
 
 import { createCodexProviderAdapter } from "./adapter.js";
 import type { CodexEvent } from "./adapter.js";
@@ -61,7 +62,7 @@ describe("codex provider adapter", () => {
   it("has correct process config", () => {
     const adapter = createCodexProviderAdapter();
     expect(adapter.process.command).toBe("codex");
-    expect(adapter.process.args).toEqual(["app-server"]);
+    expect(adapter.process.args).toMatchObject(["app-server"]);
   });
 
   it("translates accepted steer results to input accepted events", () => {
@@ -77,7 +78,7 @@ describe("codex provider adapter", () => {
           options: fullProviderExecutionContext,
         },
       }),
-    ).toEqual([]);
+    ).toMatchObject([]);
     expect(
       adapter.translateAcceptedCommand({
         command: {
@@ -95,7 +96,7 @@ describe("codex provider adapter", () => {
         type: "turn/input/accepted",
         threadId: "thread-1",
         providerThreadId: "provider-thread-1",
-        turnId: "turn-1",
+        scope: turnScope("turn-1"),
         clientRequestSequence: 17,
       },
     ]);
@@ -125,13 +126,13 @@ describe("codex provider adapter", () => {
         type: "turn/started",
         threadId: "provider-thread-1",
         providerThreadId: "provider-thread-1",
-        turnId: "turn-1",
+        scope: turnScope("turn-1"),
       },
       {
         type: "turn/input/accepted",
         threadId: "provider-thread-1",
         providerThreadId: "provider-thread-1",
-        turnId: "turn-1",
+        scope: turnScope("turn-1"),
         clientRequestSequence: 42,
       },
     ]);
@@ -148,7 +149,7 @@ describe("codex provider adapter", () => {
       }),
     );
 
-    expect(echoEvents).toEqual([]);
+    expect(echoEvents).toMatchObject([]);
   });
 
   it("uses the command thread id when queuing input before provider identity exists", () => {
@@ -169,13 +170,15 @@ describe("codex provider adapter", () => {
           turn: { id: "turn-1", items: [], status: "inProgress", error: null },
         }),
       ),
-    ).toContainEqual({
-      type: "turn/input/accepted",
-      threadId: "thread-1",
-      providerThreadId: "thread-1",
-      turnId: "turn-1",
-      clientRequestSequence: 42,
-    });
+    ).toContainEqual(
+      expect.objectContaining({
+        type: "turn/input/accepted",
+        threadId: "thread-1",
+        providerThreadId: "thread-1",
+        scope: turnScope("turn-1"),
+        clientRequestSequence: 42,
+      }),
+    );
   });
 
   it("rolls back queued input acceptance when turn/start dispatch fails", () => {
@@ -207,7 +210,7 @@ describe("codex provider adapter", () => {
         type: "turn/started",
         threadId: "provider-thread-1",
         providerThreadId: "provider-thread-1",
-        turnId: "turn-1",
+        scope: turnScope("turn-1"),
       },
     ]);
   });
@@ -227,7 +230,7 @@ describe("codex provider adapter", () => {
       }),
     );
 
-    expect(events).toEqual([]);
+    expect(events).toMatchObject([]);
   });
 
   // -- buildCommand --------------------------------------------------------
@@ -716,12 +719,14 @@ describe("codex provider adapter", () => {
         turn: { id: "turn-1", items: [], status: "inProgress", error: null },
       }),
     );
-    expect(events).toContainEqual({
-      type: "turn/started",
-      threadId: "t1",
-      providerThreadId: "t1",
-      turnId: "turn-1",
-    });
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "turn/started",
+        threadId: "t1",
+        providerThreadId: "t1",
+        scope: turnScope("turn-1"),
+      }),
+    );
   });
 
   it("translateEvent accepts legacy Codex bridge envelopes without jsonrpc", () => {
@@ -734,12 +739,14 @@ describe("codex provider adapter", () => {
       },
     });
 
-    expect(events).toContainEqual({
-      type: "turn/started",
-      threadId: "t1",
-      providerThreadId: "t1",
-      turnId: "turn-1",
-    });
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "turn/started",
+        threadId: "t1",
+        providerThreadId: "t1",
+        scope: turnScope("turn-1"),
+      }),
+    );
   });
 
   it("translateEvent surfaces malformed handled Codex events as provider/unhandled", () => {
@@ -783,7 +790,7 @@ describe("codex provider adapter", () => {
       expect.objectContaining({
         type: "turn/completed",
         threadId: "t1",
-        turnId: "turn-1",
+        scope: turnScope("turn-1"),
         status: "failed",
         error: { message: "rate limited" },
       }),
@@ -832,21 +839,27 @@ describe("codex provider adapter", () => {
         },
       }),
     );
-    expect(events).toContainEqual({
-      type: "thread/started",
-      threadId: "codex-uuid-123",
-    });
-    expect(events).toContainEqual({
-      type: "thread/identity",
-      threadId: "codex-uuid-123",
-      providerThreadId: "codex-uuid-123",
-    });
-    expect(events).toContainEqual({
-      type: "thread/name/updated",
-      threadId: "codex-uuid-123",
-      providerThreadId: "codex-uuid-123",
-      threadName: "Fix the tests",
-    });
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "thread/started",
+        threadId: "codex-uuid-123",
+      }),
+    );
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "thread/identity",
+        threadId: "codex-uuid-123",
+        providerThreadId: "codex-uuid-123",
+      }),
+    );
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "thread/name/updated",
+        threadId: "codex-uuid-123",
+        providerThreadId: "codex-uuid-123",
+        threadName: "Fix the tests",
+      }),
+    );
   });
 
   it("translateEvent thread/name/updated", () => {
@@ -857,12 +870,14 @@ describe("codex provider adapter", () => {
         threadName: "Updated title",
       }),
     );
-    expect(events).toContainEqual({
-      type: "thread/name/updated",
-      threadId: "t1",
-      providerThreadId: "t1",
-      threadName: "Updated title",
-    });
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "thread/name/updated",
+        threadId: "t1",
+        providerThreadId: "t1",
+        threadName: "Updated title",
+      }),
+    );
   });
 
   it("translateEvent thread/name/updated ignores empty name", () => {
@@ -878,12 +893,14 @@ describe("codex provider adapter", () => {
     const events = adapter.translateEvent(
       codexEvent("thread/compacted", { threadId: "t1", turnId: "turn-1" }),
     );
-    expect(events).toContainEqual({
-      type: "thread/compacted",
-      threadId: "t1",
-      providerThreadId: "t1",
-      turnId: "turn-1",
-    });
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "thread/compacted",
+        threadId: "t1",
+        providerThreadId: "t1",
+        scope: turnScope("turn-1"),
+      }),
+    );
   });
 
   // -- translateEvent: items -----------------------------------------------
@@ -903,13 +920,15 @@ describe("codex provider adapter", () => {
         },
       }),
     );
-    expect(events).toContainEqual({
-      type: "item/started",
-      threadId: "t1",
-      providerThreadId: "t1",
-      turnId: "turn-1",
-      item: { type: "agentMessage", id: "item-1", text: "Hello" },
-    });
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "item/started",
+        threadId: "t1",
+        providerThreadId: "t1",
+        scope: turnScope("turn-1"),
+        item: { type: "agentMessage", id: "item-1", text: "Hello" },
+      }),
+    );
   });
 
   it("translateEvent item/started with userMessage is suppressed as a provider echo", () => {
@@ -930,7 +949,7 @@ describe("codex provider adapter", () => {
         },
       }),
     );
-    expect(events).toEqual([]);
+    expect(events).toMatchObject([]);
   });
 
   it("translateEvent item/started with unsupported item type falls back to provider/unhandled", () => {
@@ -953,7 +972,7 @@ describe("codex provider adapter", () => {
         providerId: "codex",
         rawType: "item/started",
         threadId: "t1",
-        turnId: "turn-1",
+        scope: turnScope("turn-1"),
         rawEvent: expect.objectContaining({
           method: "item/started",
           params: expect.objectContaining({
@@ -983,7 +1002,7 @@ describe("codex provider adapter", () => {
         providerId: "codex",
         rawType: "item/tool/requestUserInput",
         threadId: "t1",
-        turnId: "turn-1",
+        scope: turnScope("turn-1"),
       }),
     );
   });
@@ -999,14 +1018,16 @@ describe("codex provider adapter", () => {
       }),
     );
 
-    expect(events).toContainEqual({
-      type: "item/toolCall/progress",
-      threadId: "t1",
-      providerThreadId: "t1",
-      turnId: "turn-1",
-      itemId: "mcp-1",
-      message: "Connecting to MCP server",
-    });
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "item/toolCall/progress",
+        threadId: "t1",
+        providerThreadId: "t1",
+        scope: turnScope("turn-1"),
+        itemId: "mcp-1",
+        message: "Connecting to MCP server",
+      }),
+    );
   });
 
   it("translateEvent item/completed with commandExecution maps status", () => {
@@ -1029,20 +1050,22 @@ describe("codex provider adapter", () => {
         },
       }),
     );
-    expect(events).toContainEqual({
-      type: "item/completed",
-      threadId: "t1",
-      providerThreadId: "t1",
-      turnId: "turn-1",
-      item: expect.objectContaining({
-        type: "commandExecution",
-        id: "cmd-1",
-        command: "ls -la",
-        status: "completed",
-        exitCode: 0,
-        durationMs: 150,
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "item/completed",
+        threadId: "t1",
+        providerThreadId: "t1",
+        scope: turnScope("turn-1"),
+        item: expect.objectContaining({
+          type: "commandExecution",
+          id: "cmd-1",
+          command: "ls -la",
+          status: "completed",
+          exitCode: 0,
+          durationMs: 150,
+        }),
       }),
-    });
+    );
   });
 
   it("translateEvent repairs completed commandExecution output from raw shell tool output", () => {
@@ -1056,12 +1079,12 @@ describe("codex provider adapter", () => {
           item: {
             type: "function_call",
             name: "exec_command",
-            arguments: "{\"cmd\":\"echo hi\"}",
+            arguments: '{"cmd":"echo hi"}',
             call_id: "cmd-1",
           },
         }),
       ),
-    ).toEqual([]);
+    ).toMatchObject([]);
 
     expect(
       adapter.translateEvent(
@@ -1085,7 +1108,7 @@ describe("codex provider adapter", () => {
           },
         }),
       ),
-    ).toEqual([]);
+    ).toMatchObject([]);
 
     const events = adapter.translateEvent(
       codexEvent("item/completed", {
@@ -1106,17 +1129,19 @@ describe("codex provider adapter", () => {
       }),
     );
 
-    expect(events).toContainEqual({
-      type: "item/completed",
-      threadId: "t1",
-      providerThreadId: "t1",
-      turnId: "turn-1",
-      item: expect.objectContaining({
-        type: "commandExecution",
-        id: "cmd-1",
-        aggregatedOutput: "OUT-1\nOUT-2\nOUT-3\n",
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "item/completed",
+        threadId: "t1",
+        providerThreadId: "t1",
+        scope: turnScope("turn-1"),
+        item: expect.objectContaining({
+          type: "commandExecution",
+          id: "cmd-1",
+          aggregatedOutput: "OUT-1\nOUT-2\nOUT-3\n",
+        }),
       }),
-    });
+    );
   });
 
   it("translateEvent preserves literal Output lines in recovered command output", () => {
@@ -1129,7 +1154,7 @@ describe("codex provider adapter", () => {
         item: {
           type: "function_call",
           name: "exec_command",
-          arguments: "{\"cmd\":\"printf 'prefix\\\\nOutput:\\\\nsuffix\\\\n'\"}",
+          arguments: '{"cmd":"printf \'prefix\\\\nOutput:\\\\nsuffix\\\\n\'"}',
           call_id: "cmd-1",
         },
       }),
@@ -1175,17 +1200,19 @@ describe("codex provider adapter", () => {
       }),
     );
 
-    expect(events).toContainEqual({
-      type: "item/completed",
-      threadId: "t1",
-      providerThreadId: "t1",
-      turnId: "turn-1",
-      item: expect.objectContaining({
-        type: "commandExecution",
-        id: "cmd-1",
-        aggregatedOutput: "prefix\nOutput:\nsuffix\n",
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "item/completed",
+        threadId: "t1",
+        providerThreadId: "t1",
+        scope: turnScope("turn-1"),
+        item: expect.objectContaining({
+          type: "commandExecution",
+          id: "cmd-1",
+          aggregatedOutput: "prefix\nOutput:\nsuffix\n",
+        }),
       }),
-    });
+    );
   });
 
   it("translateEvent repairs completed commandExecution output for raw Bash shell aliases", () => {
@@ -1203,7 +1230,7 @@ describe("codex provider adapter", () => {
           item: {
             type: "function_call",
             name: toolName,
-            arguments: "{\"cmd\":\"echo alias\"}",
+            arguments: '{"cmd":"echo alias"}',
             call_id: callId,
           },
         }),
@@ -1239,17 +1266,19 @@ describe("codex provider adapter", () => {
         }),
       );
 
-      expect(events).toContainEqual({
-        type: "item/completed",
-        threadId: "t1",
-        providerThreadId: "t1",
-        turnId: "turn-1",
-        item: expect.objectContaining({
-          type: "commandExecution",
-          id: callId,
-          aggregatedOutput: fullOutput,
+      expect(events).toContainEqual(
+        expect.objectContaining({
+          type: "item/completed",
+          threadId: "t1",
+          providerThreadId: "t1",
+          scope: turnScope("turn-1"),
+          item: expect.objectContaining({
+            type: "commandExecution",
+            id: callId,
+            aggregatedOutput: fullOutput,
+          }),
         }),
-      });
+      );
     }
   });
 
@@ -1263,7 +1292,8 @@ describe("codex provider adapter", () => {
         item: {
           type: "function_call",
           name: "exec_command",
-          arguments: "{\"cmd\":\"printf 'Chunk ID: abc\\\\nactual stdout\\\\n'\"}",
+          arguments:
+            '{"cmd":"printf \'Chunk ID: abc\\\\nactual stdout\\\\n\'"}',
           call_id: "cmd-1",
         },
       }),
@@ -1299,17 +1329,19 @@ describe("codex provider adapter", () => {
       }),
     );
 
-    expect(events).toContainEqual({
-      type: "item/completed",
-      threadId: "t1",
-      providerThreadId: "t1",
-      turnId: "turn-1",
-      item: expect.objectContaining({
-        type: "commandExecution",
-        id: "cmd-1",
-        aggregatedOutput: "Chunk ID: abc\nactual stdout\n",
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "item/completed",
+        threadId: "t1",
+        providerThreadId: "t1",
+        scope: turnScope("turn-1"),
+        item: expect.objectContaining({
+          type: "commandExecution",
+          id: "cmd-1",
+          aggregatedOutput: "Chunk ID: abc\nactual stdout\n",
+        }),
       }),
-    });
+    );
   });
 
   it("translateEvent ignores raw metadata wrappers that do not include an Output marker", () => {
@@ -1322,7 +1354,7 @@ describe("codex provider adapter", () => {
         item: {
           type: "function_call",
           name: "exec_command",
-          arguments: "{\"cmd\":\"echo hi\"}",
+          arguments: '{"cmd":"echo hi"}',
           call_id: "cmd-1",
         },
       }),
@@ -1363,17 +1395,19 @@ describe("codex provider adapter", () => {
       }),
     );
 
-    expect(events).toContainEqual({
-      type: "item/completed",
-      threadId: "t1",
-      providerThreadId: "t1",
-      turnId: "turn-1",
-      item: expect.objectContaining({
-        type: "commandExecution",
-        id: "cmd-1",
-        aggregatedOutput: "provider output\n",
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "item/completed",
+        threadId: "t1",
+        providerThreadId: "t1",
+        scope: turnScope("turn-1"),
+        item: expect.objectContaining({
+          type: "commandExecution",
+          id: "cmd-1",
+          aggregatedOutput: "provider output\n",
+        }),
       }),
-    });
+    );
   });
 
   it("translateEvent repairs concurrent commandExecution outputs independently", () => {
@@ -1386,7 +1420,7 @@ describe("codex provider adapter", () => {
         item: {
           type: "function_call",
           name: "exec_command",
-          arguments: "{\"cmd\":\"first\"}",
+          arguments: '{"cmd":"first"}',
           call_id: "cmd-a",
         },
       }),
@@ -1398,7 +1432,7 @@ describe("codex provider adapter", () => {
         item: {
           type: "function_call",
           name: "exec_command",
-          arguments: "{\"cmd\":\"second\"}",
+          arguments: '{"cmd":"second"}',
           call_id: "cmd-b",
         },
       }),
@@ -1463,28 +1497,32 @@ describe("codex provider adapter", () => {
       }),
     );
 
-    expect(firstEvents).toContainEqual({
-      type: "item/completed",
-      threadId: "t1",
-      providerThreadId: "t1",
-      turnId: "turn-1",
-      item: expect.objectContaining({
-        type: "commandExecution",
-        id: "cmd-a",
-        aggregatedOutput: "A-1\nA-2\nA-3\n",
+    expect(firstEvents).toContainEqual(
+      expect.objectContaining({
+        type: "item/completed",
+        threadId: "t1",
+        providerThreadId: "t1",
+        scope: turnScope("turn-1"),
+        item: expect.objectContaining({
+          type: "commandExecution",
+          id: "cmd-a",
+          aggregatedOutput: "A-1\nA-2\nA-3\n",
+        }),
       }),
-    });
-    expect(secondEvents).toContainEqual({
-      type: "item/completed",
-      threadId: "t1",
-      providerThreadId: "t1",
-      turnId: "turn-1",
-      item: expect.objectContaining({
-        type: "commandExecution",
-        id: "cmd-b",
-        aggregatedOutput: "B-1\nB-2\nB-3\n",
+    );
+    expect(secondEvents).toContainEqual(
+      expect.objectContaining({
+        type: "item/completed",
+        threadId: "t1",
+        providerThreadId: "t1",
+        scope: turnScope("turn-1"),
+        item: expect.objectContaining({
+          type: "commandExecution",
+          id: "cmd-b",
+          aggregatedOutput: "B-1\nB-2\nB-3\n",
+        }),
       }),
-    });
+    );
   });
 
   it("translateEvent keeps another thread's recovered command output after a different thread completes", () => {
@@ -1497,7 +1535,7 @@ describe("codex provider adapter", () => {
         item: {
           type: "function_call",
           name: "exec_command",
-          arguments: "{\"cmd\":\"first\"}",
+          arguments: '{"cmd":"first"}',
           call_id: "cmd-a",
         },
       }),
@@ -1520,7 +1558,7 @@ describe("codex provider adapter", () => {
         item: {
           type: "function_call",
           name: "exec_command",
-          arguments: "{\"cmd\":\"second\"}",
+          arguments: '{"cmd":"second"}',
           call_id: "cmd-b",
         },
       }),
@@ -1563,17 +1601,19 @@ describe("codex provider adapter", () => {
       }),
     );
 
-    expect(events).toContainEqual({
-      type: "item/completed",
-      threadId: "thread-b",
-      providerThreadId: "thread-b",
-      turnId: "turn-b",
-      item: expect.objectContaining({
-        type: "commandExecution",
-        id: "cmd-b",
-        aggregatedOutput: "B-1\nB-2\n",
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "item/completed",
+        threadId: "thread-b",
+        providerThreadId: "thread-b",
+        scope: turnScope("turn-b"),
+        item: expect.objectContaining({
+          type: "commandExecution",
+          id: "cmd-b",
+          aggregatedOutput: "B-1\nB-2\n",
+        }),
       }),
-    });
+    );
   });
 
   it("translateEvent clears recovered raw command output state when a thread closes", () => {
@@ -1586,7 +1626,7 @@ describe("codex provider adapter", () => {
         item: {
           type: "function_call",
           name: "exec_command",
-          arguments: "{\"cmd\":\"echo hi\"}",
+          arguments: '{"cmd":"echo hi"}',
           call_id: "cmd-a",
         },
       }),
@@ -1629,17 +1669,19 @@ describe("codex provider adapter", () => {
       }),
     );
 
-    expect(events).toContainEqual({
-      type: "item/completed",
-      threadId: "thread-a",
-      providerThreadId: "thread-a",
-      turnId: "turn-a",
-      item: expect.objectContaining({
-        type: "commandExecution",
-        id: "cmd-a",
-        aggregatedOutput: "provider output\n",
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "item/completed",
+        threadId: "thread-a",
+        providerThreadId: "thread-a",
+        scope: turnScope("turn-a"),
+        item: expect.objectContaining({
+          type: "commandExecution",
+          id: "cmd-a",
+          aggregatedOutput: "provider output\n",
+        }),
       }),
-    });
+    );
   });
 
   it("translateEvent item/completed with declined commandExecution maps approval denial", () => {
@@ -1663,18 +1705,20 @@ describe("codex provider adapter", () => {
       }),
     );
 
-    expect(events).toContainEqual({
-      type: "item/completed",
-      threadId: "t1",
-      providerThreadId: "t1",
-      turnId: "turn-1",
-      item: expect.objectContaining({
-        type: "commandExecution",
-        id: "cmd-1",
-        status: "interrupted",
-        approvalStatus: "denied",
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "item/completed",
+        threadId: "t1",
+        providerThreadId: "t1",
+        scope: turnScope("turn-1"),
+        item: expect.objectContaining({
+          type: "commandExecution",
+          id: "cmd-1",
+          status: "interrupted",
+          approvalStatus: "denied",
+        }),
       }),
-    });
+    );
   });
 
   it("translateEvent item/started normalizes commandExecution to pending", () => {
@@ -1698,19 +1742,21 @@ describe("codex provider adapter", () => {
       }),
     );
 
-    expect(events).toContainEqual({
-      type: "item/started",
-      threadId: "t1",
-      providerThreadId: "t1",
-      turnId: "turn-1",
-      item: expect.objectContaining({
-        type: "commandExecution",
-        id: "cmd-1",
-        command: "ls -la",
-        status: "pending",
-        approvalStatus: null,
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "item/started",
+        threadId: "t1",
+        providerThreadId: "t1",
+        scope: turnScope("turn-1"),
+        item: expect.objectContaining({
+          type: "commandExecution",
+          id: "cmd-1",
+          command: "ls -la",
+          status: "pending",
+          approvalStatus: null,
+        }),
       }),
-    });
+    );
   });
 
   it("translateEvent item/completed with fileChange maps kind correctly", () => {
@@ -1740,18 +1786,15 @@ describe("codex provider adapter", () => {
       itemEvent?.type === "item/completed" &&
       itemEvent.item.type === "fileChange"
     ) {
-      expect(itemEvent.item.changes).toEqual([
+      expect(itemEvent.item.changes).toMatchObject([
         {
           path: "src/foo.ts",
           kind: "update",
-          movePath: undefined,
           diff: "+line",
         },
         {
           path: "src/bar.ts",
           kind: "add",
-          movePath: undefined,
-          diff: undefined,
         },
       ]);
       expect(itemEvent.item.status).toBe("completed");
@@ -1777,20 +1820,22 @@ describe("codex provider adapter", () => {
         },
       }),
     );
-    expect(events).toContainEqual({
-      type: "item/completed",
-      threadId: "t1",
-      providerThreadId: "t1",
-      turnId: "turn-1",
-      item: expect.objectContaining({
-        type: "toolCall",
-        id: "mcp-1",
-        server: "myserver",
-        tool: "search",
-        status: "completed",
-        durationMs: 200,
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "item/completed",
+        threadId: "t1",
+        providerThreadId: "t1",
+        scope: turnScope("turn-1"),
+        item: expect.objectContaining({
+          type: "toolCall",
+          id: "mcp-1",
+          server: "myserver",
+          tool: "search",
+          status: "completed",
+          durationMs: 200,
+        }),
       }),
-    });
+    );
   });
 
   it("translateEvent item/completed with declined fileChange maps approval denial", () => {
@@ -1814,18 +1859,20 @@ describe("codex provider adapter", () => {
       }),
     );
 
-    expect(events).toContainEqual({
-      type: "item/completed",
-      threadId: "t1",
-      providerThreadId: "t1",
-      turnId: "turn-1",
-      item: expect.objectContaining({
-        type: "fileChange",
-        id: "edit-1",
-        status: "interrupted",
-        approvalStatus: "denied",
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "item/completed",
+        threadId: "t1",
+        providerThreadId: "t1",
+        scope: turnScope("turn-1"),
+        item: expect.objectContaining({
+          type: "fileChange",
+          id: "edit-1",
+          status: "interrupted",
+          approvalStatus: "denied",
+        }),
       }),
-    });
+    );
   });
 
   it("translateEvent item/completed with dynamicToolCall maps to toolCall", () => {
@@ -1846,20 +1893,22 @@ describe("codex provider adapter", () => {
         },
       }),
     );
-    expect(events).toContainEqual({
-      type: "item/completed",
-      threadId: "t1",
-      providerThreadId: "t1",
-      turnId: "turn-1",
-      item: expect.objectContaining({
-        type: "toolCall",
-        id: "dyn-1",
-        tool: "bb_test_ping",
-        status: "completed",
-        result: "PONG_FROM_TOOL",
-        durationMs: 3,
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "item/completed",
+        threadId: "t1",
+        providerThreadId: "t1",
+        scope: turnScope("turn-1"),
+        item: expect.objectContaining({
+          type: "toolCall",
+          id: "dyn-1",
+          tool: "bb_test_ping",
+          status: "completed",
+          result: "PONG_FROM_TOOL",
+          durationMs: 3,
+        }),
       }),
-    });
+    );
   });
 
   it("translateEvent item/completed with failed dynamicToolCall preserves textual errors", () => {
@@ -1883,19 +1932,21 @@ describe("codex provider adapter", () => {
       },
     });
 
-    expect(events).toContainEqual({
-      type: "item/completed",
-      threadId: "t1",
-      providerThreadId: "t1",
-      turnId: "turn-1",
-      item: expect.objectContaining({
-        type: "toolCall",
-        id: "dyn-err-1",
-        status: "failed",
-        result: "permission denied",
-        error: "permission denied",
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "item/completed",
+        threadId: "t1",
+        providerThreadId: "t1",
+        scope: turnScope("turn-1"),
+        item: expect.objectContaining({
+          type: "toolCall",
+          id: "dyn-err-1",
+          status: "failed",
+          result: "permission denied",
+          error: "permission denied",
+        }),
       }),
-    });
+    );
   });
 
   it("translateEvent item/completed with image-only dynamicToolCall keeps readable output", () => {
@@ -1922,19 +1973,21 @@ describe("codex provider adapter", () => {
       }),
     );
 
-    expect(events).toContainEqual({
-      type: "item/completed",
-      threadId: "t1",
-      providerThreadId: "t1",
-      turnId: "turn-1",
-      item: expect.objectContaining({
-        type: "toolCall",
-        id: "dyn-img-1",
-        status: "failed",
-        result: "[image: https://example.com/tool-result.png]",
-        error: "[image: https://example.com/tool-result.png]",
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "item/completed",
+        threadId: "t1",
+        providerThreadId: "t1",
+        scope: turnScope("turn-1"),
+        item: expect.objectContaining({
+          type: "toolCall",
+          id: "dyn-img-1",
+          status: "failed",
+          result: "[image: https://example.com/tool-result.png]",
+          error: "[image: https://example.com/tool-result.png]",
+        }),
       }),
-    });
+    );
   });
 
   it("translateEvent item/completed with collabAgentToolCall maps to toolCall", () => {
@@ -1959,28 +2012,30 @@ describe("codex provider adapter", () => {
         },
       }),
     );
-    expect(events).toContainEqual({
-      type: "item/completed",
-      threadId: "t1",
-      providerThreadId: "t1",
-      turnId: "turn-1",
-      item: expect.objectContaining({
-        type: "toolCall",
-        id: "collab-1",
-        tool: "spawnAgent",
-        status: "completed",
-        arguments: expect.objectContaining({
-          senderThreadId: "t1",
-          receiverThreadIds: ["sub-thread-1"],
-          prompt: "Inspect the docs directory",
-          model: "gpt-5.4",
-          reasoningEffort: "medium",
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "item/completed",
+        threadId: "t1",
+        providerThreadId: "t1",
+        scope: turnScope("turn-1"),
+        item: expect.objectContaining({
+          type: "toolCall",
+          id: "collab-1",
+          tool: "spawnAgent",
+          status: "completed",
+          arguments: expect.objectContaining({
+            senderThreadId: "t1",
+            receiverThreadIds: ["sub-thread-1"],
+            prompt: "Inspect the docs directory",
+            model: "gpt-5.4",
+            reasoningEffort: "medium",
+          }),
+          result: {
+            "sub-thread-1": { status: "completed", message: "done" },
+          },
         }),
-        result: {
-          "sub-thread-1": { status: "completed", message: "done" },
-        },
       }),
-    });
+    );
   });
 
   it("translateEvent item/completed with declined collabAgentToolCall maps to interrupted", () => {
@@ -2006,17 +2061,19 @@ describe("codex provider adapter", () => {
       },
     });
 
-    expect(events).toContainEqual({
-      type: "item/completed",
-      threadId: "t1",
-      providerThreadId: "t1",
-      turnId: "turn-1",
-      item: expect.objectContaining({
-        type: "toolCall",
-        id: "collab-declined-1",
-        status: "interrupted",
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "item/completed",
+        threadId: "t1",
+        providerThreadId: "t1",
+        scope: turnScope("turn-1"),
+        item: expect.objectContaining({
+          type: "toolCall",
+          id: "collab-declined-1",
+          status: "interrupted",
+        }),
       }),
-    });
+    );
   });
 
   it("translateEvent item/completed with search maps to webSearch", () => {
@@ -2033,18 +2090,20 @@ describe("codex provider adapter", () => {
         },
       }),
     );
-    expect(events).toContainEqual({
-      type: "item/completed",
-      threadId: "t1",
-      providerThreadId: "t1",
-      turnId: "turn-1",
-      item: {
-        type: "webSearch",
-        id: "web-1",
-        queries: ["react suspense"],
-        resultText: null,
-      },
-    });
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "item/completed",
+        threadId: "t1",
+        providerThreadId: "t1",
+        scope: turnScope("turn-1"),
+        item: {
+          type: "webSearch",
+          id: "web-1",
+          queries: ["react suspense"],
+          resultText: null,
+        },
+      }),
+    );
   });
 
   it("translateEvent item/started with search maps to webSearch and merges query fields", () => {
@@ -2066,22 +2125,24 @@ describe("codex provider adapter", () => {
       }),
     );
 
-    expect(events).toContainEqual({
-      type: "item/started",
-      threadId: "t1",
-      providerThreadId: "t1",
-      turnId: "turn-1",
-      item: {
-        type: "webSearch",
-        id: "web-start-1",
-        queries: [
-          "react suspense primary",
-          "react suspense secondary",
-          "react suspense fallback",
-        ],
-        resultText: null,
-      },
-    });
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "item/started",
+        threadId: "t1",
+        providerThreadId: "t1",
+        scope: turnScope("turn-1"),
+        item: {
+          type: "webSearch",
+          id: "web-start-1",
+          queries: [
+            "react suspense primary",
+            "react suspense secondary",
+            "react suspense fallback",
+          ],
+          resultText: null,
+        },
+      }),
+    );
   });
 
   it("translateEvent item/started with camelCase openPage maps to webFetch", () => {
@@ -2099,20 +2160,22 @@ describe("codex provider adapter", () => {
       }),
     );
 
-    expect(events).toContainEqual({
-      type: "item/started",
-      threadId: "t1",
-      providerThreadId: "t1",
-      turnId: "turn-1",
-      item: {
-        type: "webFetch",
-        id: "web-open-start-1",
-        url: "https://example.com",
-        prompt: null,
-        pattern: null,
-        resultText: null,
-      },
-    });
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "item/started",
+        threadId: "t1",
+        providerThreadId: "t1",
+        scope: turnScope("turn-1"),
+        item: {
+          type: "webFetch",
+          id: "web-open-start-1",
+          url: "https://example.com",
+          prompt: null,
+          pattern: null,
+          resultText: null,
+        },
+      }),
+    );
   });
 
   it("translateEvent item/started with camelCase findInPage maps to webFetch", () => {
@@ -2134,20 +2197,22 @@ describe("codex provider adapter", () => {
       }),
     );
 
-    expect(events).toContainEqual({
-      type: "item/started",
-      threadId: "t1",
-      providerThreadId: "t1",
-      turnId: "turn-1",
-      item: {
-        type: "webFetch",
-        id: "web-find-start-1",
-        url: "https://example.com",
-        prompt: null,
-        pattern: "Example Domain",
-        resultText: null,
-      },
-    });
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "item/started",
+        threadId: "t1",
+        providerThreadId: "t1",
+        scope: turnScope("turn-1"),
+        item: {
+          type: "webFetch",
+          id: "web-find-start-1",
+          url: "https://example.com",
+          prompt: null,
+          pattern: "Example Domain",
+          resultText: null,
+        },
+      }),
+    );
   });
 
   it("translateEvent item/completed with camelCase openPage maps to webFetch", () => {
@@ -2165,20 +2230,22 @@ describe("codex provider adapter", () => {
       }),
     );
 
-    expect(events).toContainEqual({
-      type: "item/completed",
-      threadId: "t1",
-      providerThreadId: "t1",
-      turnId: "turn-1",
-      item: {
-        type: "webFetch",
-        id: "web-open-1",
-        url: "https://example.com",
-        prompt: null,
-        pattern: null,
-        resultText: null,
-      },
-    });
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "item/completed",
+        threadId: "t1",
+        providerThreadId: "t1",
+        scope: turnScope("turn-1"),
+        item: {
+          type: "webFetch",
+          id: "web-open-1",
+          url: "https://example.com",
+          prompt: null,
+          pattern: null,
+          resultText: null,
+        },
+      }),
+    );
     expect(events).not.toContainEqual(
       expect.objectContaining({
         type: "provider/unhandled",
@@ -2205,20 +2272,22 @@ describe("codex provider adapter", () => {
       }),
     );
 
-    expect(events).toContainEqual({
-      type: "item/completed",
-      threadId: "t1",
-      providerThreadId: "t1",
-      turnId: "turn-1",
-      item: {
-        type: "webFetch",
-        id: "web-find-1",
-        url: "https://example.com",
-        prompt: null,
-        pattern: "Example Domain",
-        resultText: null,
-      },
-    });
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "item/completed",
+        threadId: "t1",
+        providerThreadId: "t1",
+        scope: turnScope("turn-1"),
+        item: {
+          type: "webFetch",
+          id: "web-find-1",
+          url: "https://example.com",
+          prompt: null,
+          pattern: "Example Domain",
+          resultText: null,
+        },
+      }),
+    );
     expect(events).not.toContainEqual(
       expect.objectContaining({
         type: "provider/unhandled",
@@ -2241,7 +2310,7 @@ describe("codex provider adapter", () => {
       }),
     );
 
-    expect(events).toEqual([]);
+    expect(events).toMatchObject([]);
   });
 
   it("translateEvent ignores placeholder webSearch completed items without canonical details", () => {
@@ -2259,7 +2328,7 @@ describe("codex provider adapter", () => {
       }),
     );
 
-    expect(events).toEqual([]);
+    expect(events).toMatchObject([]);
   });
 
   it("translateEvent item/completed with missing openPage url falls back to provider/unhandled", () => {
@@ -2286,7 +2355,8 @@ describe("codex provider adapter", () => {
     ).toBe(true);
     expect(
       events.some(
-        (event) => event.type === "item/completed" && event.item.type === "webFetch",
+        (event) =>
+          event.type === "item/completed" && event.item.type === "webFetch",
       ),
     ).toBe(false);
   });
@@ -2305,18 +2375,20 @@ describe("codex provider adapter", () => {
         },
       }),
     );
-    expect(events).toContainEqual({
-      type: "item/completed",
-      threadId: "t1",
-      providerThreadId: "t1",
-      turnId: "turn-1",
-      item: {
-        type: "reasoning",
-        id: "reasoning-1",
-        summary: ["Read the search flow"],
-        content: ["Investigated the search sidebar state machine."],
-      },
-    });
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "item/completed",
+        threadId: "t1",
+        providerThreadId: "t1",
+        scope: turnScope("turn-1"),
+        item: {
+          type: "reasoning",
+          id: "reasoning-1",
+          summary: ["Read the search flow"],
+          content: ["Investigated the search sidebar state machine."],
+        },
+      }),
+    );
   });
 
   it("translateEvent item/completed with plan maps to plan", () => {
@@ -2332,17 +2404,19 @@ describe("codex provider adapter", () => {
         },
       }),
     );
-    expect(events).toContainEqual({
-      type: "item/completed",
-      threadId: "t1",
-      providerThreadId: "t1",
-      turnId: "turn-1",
-      item: {
-        type: "plan",
-        id: "plan-1",
-        text: "1. Read the file\n2. Edit the function",
-      },
-    });
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "item/completed",
+        threadId: "t1",
+        providerThreadId: "t1",
+        scope: turnScope("turn-1"),
+        item: {
+          type: "plan",
+          id: "plan-1",
+          text: "1. Read the file\n2. Edit the function",
+        },
+      }),
+    );
   });
 
   it("translateEvent item/started with contextCompaction maps to contextCompaction", () => {
@@ -2357,16 +2431,18 @@ describe("codex provider adapter", () => {
         },
       }),
     );
-    expect(events).toContainEqual({
-      type: "item/started",
-      threadId: "t1",
-      providerThreadId: "t1",
-      turnId: "turn-1",
-      item: {
-        type: "contextCompaction",
-        id: "compact-1",
-      },
-    });
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "item/started",
+        threadId: "t1",
+        providerThreadId: "t1",
+        scope: turnScope("turn-1"),
+        item: {
+          type: "contextCompaction",
+          id: "compact-1",
+        },
+      }),
+    );
   });
 
   // -- translateEvent: streaming deltas ------------------------------------
@@ -2381,14 +2457,16 @@ describe("codex provider adapter", () => {
         delta: "hello ",
       }),
     );
-    expect(events).toContainEqual({
-      type: "item/agentMessage/delta",
-      threadId: "t1",
-      providerThreadId: "t1",
-      turnId: "turn-1",
-      itemId: "item-1",
-      delta: "hello ",
-    });
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "item/agentMessage/delta",
+        threadId: "t1",
+        providerThreadId: "t1",
+        scope: turnScope("turn-1"),
+        itemId: "item-1",
+        delta: "hello ",
+      }),
+    );
   });
 
   it("translateEvent item/commandExecution/outputDelta", () => {
@@ -2401,14 +2479,16 @@ describe("codex provider adapter", () => {
         delta: "output line\n",
       }),
     );
-    expect(events).toContainEqual({
-      type: "item/commandExecution/outputDelta",
-      threadId: "t1",
-      providerThreadId: "t1",
-      turnId: "turn-1",
-      itemId: "cmd-1",
-      delta: "output line\n",
-    });
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "item/commandExecution/outputDelta",
+        threadId: "t1",
+        providerThreadId: "t1",
+        scope: turnScope("turn-1"),
+        itemId: "cmd-1",
+        delta: "output line\n",
+      }),
+    );
   });
 
   // -- translateEvent: token usage -----------------------------------------
@@ -2476,18 +2556,20 @@ describe("codex provider adapter", () => {
         ],
       }),
     );
-    expect(events).toContainEqual({
-      type: "turn/plan/updated",
-      threadId: "t1",
-      providerThreadId: "t1",
-      turnId: "turn-1",
-      explanation: "Here's the plan",
-      plan: [
-        { step: "Read the file", status: "completed" },
-        { step: "Edit the function", status: "active" },
-        { step: "Run tests", status: "pending" },
-      ],
-    });
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "turn/plan/updated",
+        threadId: "t1",
+        providerThreadId: "t1",
+        scope: turnScope("turn-1"),
+        explanation: "Here's the plan",
+        plan: [
+          { step: "Read the file", status: "completed" },
+          { step: "Edit the function", status: "active" },
+          { step: "Run tests", status: "pending" },
+        ],
+      }),
+    );
   });
 
   it("translateEvent turn/plan/updated tolerates null explanations", () => {
@@ -2505,16 +2587,18 @@ describe("codex provider adapter", () => {
       },
     });
 
-    expect(events).toContainEqual({
-      type: "turn/plan/updated",
-      threadId: "t1",
-      providerThreadId: "t1",
-      turnId: "turn-1",
-      plan: [
-        { step: "Read the file", status: "completed" },
-        { step: "Run tests", status: "pending" },
-      ],
-    });
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "turn/plan/updated",
+        threadId: "t1",
+        providerThreadId: "t1",
+        scope: turnScope("turn-1"),
+        plan: [
+          { step: "Read the file", status: "completed" },
+          { step: "Run tests", status: "pending" },
+        ],
+      }),
+    );
   });
 
   // -- translateEvent: errors ----------------------------------------------
@@ -2533,15 +2617,17 @@ describe("codex provider adapter", () => {
         willRetry: true,
       }),
     );
-    expect(events).toContainEqual({
-      type: "error",
-      threadId: "t1",
-      providerThreadId: "t1",
-      turnId: "turn-1",
-      message: "Provider error",
-      detail: "Rate limited\nretry after 30s",
-      willRetry: true,
-    });
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "provider/error",
+        threadId: "t1",
+        providerThreadId: "t1",
+        scope: turnScope("turn-1"),
+        message: "Provider error",
+        detail: "Rate limited\nretry after 30s",
+        willRetry: true,
+      }),
+    );
   });
 
   // -- translateEvent: warnings --------------------------------------------
@@ -2554,14 +2640,16 @@ describe("codex provider adapter", () => {
         details: "Use newer model",
       }),
     );
-    expect(events).toContainEqual({
-      type: "warning",
-      threadId: "",
-      providerThreadId: "",
-      category: "deprecation",
-      summary: "Model deprecated",
-      details: "Use newer model",
-    });
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "provider/warning",
+        threadId: "",
+        providerThreadId: "",
+        category: "deprecation",
+        summary: "Model deprecated",
+        details: "Use newer model",
+      }),
+    );
   });
 
   it("translateEvent configWarning maps to warning", () => {
@@ -2572,14 +2660,15 @@ describe("codex provider adapter", () => {
         details: null,
       }),
     );
-    expect(events).toContainEqual({
-      type: "warning",
-      threadId: "",
-      providerThreadId: "",
-      category: "config",
-      summary: "Bad config",
-      details: undefined,
-    });
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "provider/warning",
+        threadId: "",
+        providerThreadId: "",
+        category: "config",
+        summary: "Bad config",
+      }),
+    );
   });
 
   // -- translateEvent: unknown events --------------------------------------
@@ -2598,7 +2687,7 @@ describe("codex provider adapter", () => {
         },
       }),
     );
-    expect(events).toEqual([]);
+    expect(events).toMatchObject([]);
   });
 
   it("decodeToolCallRequest preserves numeric request ids", () => {

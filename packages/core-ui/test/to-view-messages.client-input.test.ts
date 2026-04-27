@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ThreadEventRow, ViewMessage } from "@bb/domain";
+import { getViewMessageScopeTurnId } from "../src/message-scope.js";
 import { toViewMessages, toViewProjection } from "../src/to-view-messages.js";
 import {
   createTimelineEventFactory,
@@ -48,7 +49,9 @@ describe("toViewMessages client input projection", () => {
     expect(users[0]?.id).toBe("thread-1:user-seed:3");
     expect(users[0]?.text).toBe("Please account for the restart");
     expect(users[0]?.sourceSeqStart).toBe(3);
-    expect(users[0]?.turnId).toBe("turn-1");
+    expect(users[0] ? getViewMessageScopeTurnId(users[0]) : null).toBe(
+      "turn-1",
+    );
   });
 
   it("uses input accepted events only to resolve the applied turn", () => {
@@ -77,7 +80,9 @@ describe("toViewMessages client input projection", () => {
     expect(users).toHaveLength(1);
     expect(users[0]?.id).toBe("thread-1:user-seed:1");
     expect(users[0]?.sourceSeqStart).toBe(1);
-    expect(users[0]?.turnId).toBe("turn-2");
+    expect(users[0] ? getViewMessageScopeTurnId(users[0]) : null).toBe(
+      "turn-2",
+    );
   });
 
   it("moves stale auto-send messages to the fallback turn when input acceptance references the request", () => {
@@ -109,7 +114,9 @@ describe("toViewMessages client input projection", () => {
 
     expect(users).toHaveLength(1);
     expect(users[0]?.sourceSeqStart).toBe(3);
-    expect(users[0]?.turnId).toBe("turn-2");
+    expect(users[0] ? getViewMessageScopeTurnId(users[0]) : null).toBe(
+      "turn-2",
+    );
   });
 
   it("does not render provider-native user messages without a client request", () => {
@@ -158,7 +165,7 @@ describe("toViewMessages client input projection", () => {
       }),
     );
 
-    expect(users.map((user) => [user.text, user.turnId])).toEqual([
+    expect(users.map((user) => [user.text, getViewMessageScopeTurnId(user)])).toEqual([
       ["First request", "turn-1"],
       ["Second request", "turn-2"],
     ]);
@@ -298,12 +305,12 @@ describe("toViewMessages client input projection", () => {
     expect(projected[0]?.kind).toBe("assistant-text");
     if (projected[0]?.kind === "assistant-text") {
       expect(projected[0].text).toBe("Visible manager update");
-      expect(projected[0].turnId).toBe("turn-1");
+      expect(getViewMessageScopeTurnId(projected[0])).toBe("turn-1");
       expect(projected[0].isManagerUserMessage).toBe(true);
     }
   });
 
-  it("rejects input accepted events without turnId at the decode boundary", () => {
+  it("rejects input accepted events without scope at the decode boundary", () => {
     const event = createTimelineEventFactory({
       providerThreadId: "provider-thread-1",
       threadId: "thread-1",
@@ -330,6 +337,6 @@ describe("toViewMessages client input projection", () => {
         threadStatus: "active",
         turnMessageDetail: "summary",
       }),
-    ).toThrow(/turnId/);
+    ).toThrow(/scope/);
   });
 });

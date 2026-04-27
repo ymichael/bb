@@ -24,6 +24,10 @@ import {
 import { mergeGroupedRowStatus } from "./timeline-grouped-row-status.js";
 import { summarizeExploringCounts } from "./timeline-render-helpers.js";
 import { isShellToolName } from "./tool-call-parsing.js";
+import {
+  getViewMessageScopeTurnId,
+  haveCompatibleViewMessageScope,
+} from "./message-scope.js";
 
 export interface BuildTimelineRowsOptions {
   includeNestedRows?: boolean;
@@ -176,7 +180,7 @@ function mergeConsecutiveReconnectErrors(
       continue;
     }
 
-    const isSameTurn = (active.turnId ?? null) === (message.turnId ?? null);
+    const isSameTurn = haveCompatibleViewMessageScope(active, message);
     const isSameThread = active.threadId === message.threadId;
     const isSameRawType = active.rawType === message.rawType;
     const isSameRetryBudget = activeReconnect.total === reconnect.total;
@@ -199,7 +203,6 @@ function mergeConsecutiveReconnectErrors(
           getMessageStartedAt(active),
           getMessageStartedAt(message),
         ),
-        turnId: active.turnId ?? message.turnId,
       };
       activeReconnect = reconnect;
       continue;
@@ -251,7 +254,7 @@ function mergeConsecutiveToolActivityMessages(
       continue;
     }
 
-    if ((active.turnId ?? null) !== (message.turnId ?? null)) {
+    if (!haveCompatibleViewMessageScope(active, message)) {
       flush();
       active = isToolExploringMessage(message)
         ? {
@@ -277,9 +280,6 @@ function mergeConsecutiveToolActivityMessages(
         getMessageStartedAt(active),
         getMessageStartedAt(message),
       );
-      if (!active.turnId && message.turnId) {
-        active.turnId = message.turnId;
-      }
       active.status =
         active.status === "pending" || message.status === "pending"
           ? "pending"
@@ -311,9 +311,6 @@ function mergeConsecutiveToolActivityMessages(
         getMessageStartedAt(active),
         getMessageStartedAt(message),
       );
-      if (!active.turnId && message.turnId) {
-        active.turnId = message.turnId;
-      }
       active.status = mergeGroupedRowStatus(active.status, message.status);
       if (message.stdout) {
         active.stdout = message.stdout;
@@ -494,7 +491,7 @@ function buildToolBundleRow(
     bundleKind: accumulator.bundleKind,
     id: `${accumulator.messages[0]!.id}:tool-bundle:${range.sourceSeqStart}:${accumulator.bundleKind}`,
     presentation: "default",
-    turnId: accumulator.messages[0]?.turnId ?? null,
+    turnId: getViewMessageScopeTurnId(accumulator.messages[0]!),
     sourceSeqStart: range.sourceSeqStart,
     sourceSeqEnd: range.sourceSeqEnd,
     startedAt: range.startedAt,
@@ -604,8 +601,9 @@ function findFirstRowTurnId(
 ): string | null {
   for (const entry of rows) {
     if (entry.kind === "message") {
-      if (entry.message.turnId !== undefined) {
-        return entry.message.turnId;
+      const turnId = getViewMessageScopeTurnId(entry.message);
+      if (turnId !== null) {
+        return turnId;
       }
       continue;
     }

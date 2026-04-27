@@ -26,6 +26,7 @@ import type {
   ThreadProvisioningStage,
   ThreadType,
   ThreadEventItemType,
+  ThreadEventScopeKind,
   ThreadEventType,
   WorkspaceProvisionType,
 } from "@bb/domain";
@@ -373,6 +374,7 @@ export const events = sqliteTable(
     environmentId: text("environment_id").references(() => environments.id, {
       onDelete: "set null",
     }),
+    scopeKind: text("scope_kind").$type<ThreadEventScopeKind>().notNull(),
     turnId: text("turn_id"),
     providerThreadId: text("provider_thread_id"),
     sequence: integer("sequence").notNull(),
@@ -399,6 +401,14 @@ export const events = sqliteTable(
       table.sequence,
     ),
     index("events_environment_idx").on(table.environmentId),
+    check(
+      "events_scope_shape_check",
+      sql`(
+        (${table.scopeKind} = 'turn' AND ${table.turnId} IS NOT NULL)
+        OR
+        (${table.scopeKind} = 'thread' AND ${table.turnId} IS NULL)
+      )`,
+    ),
   ],
 );
 

@@ -1,4 +1,5 @@
 import type { ThreadEvent } from "@bb/domain";
+import { threadScope, turnScope } from "@bb/domain";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createEventBuffer,
@@ -17,6 +18,7 @@ function createThreadIdentityEvent(threadId: string): ThreadEvent {
     type: "thread/identity",
     threadId,
     providerThreadId: `provider-${threadId}`,
+    scope: threadScope(),
   };
 }
 
@@ -25,7 +27,7 @@ function createCompletedAssistantEvent(threadId: string): ThreadEvent {
     type: "item/completed",
     threadId,
     providerThreadId: `provider-${threadId}`,
-    turnId: `turn-${threadId}`,
+    scope: turnScope(`turn-${threadId}`),
     item: {
       type: "agentMessage",
       id: `message-${threadId}`,
@@ -39,7 +41,7 @@ function createWaitingForApprovalEvent(threadId: string): ThreadEvent {
     type: "item/started",
     threadId,
     providerThreadId: `provider-${threadId}`,
-    turnId: `turn-${threadId}`,
+    scope: turnScope(`turn-${threadId}`),
     item: {
       type: "commandExecution",
       id: `command-${threadId}`,
@@ -51,12 +53,14 @@ function createWaitingForApprovalEvent(threadId: string): ThreadEvent {
   };
 }
 
-function createWaitingForApprovalFileChangeEvent(threadId: string): ThreadEvent {
+function createWaitingForApprovalFileChangeEvent(
+  threadId: string,
+): ThreadEvent {
   return {
     type: "item/completed",
     threadId,
     providerThreadId: `provider-${threadId}`,
-    turnId: `turn-${threadId}`,
+    scope: turnScope(`turn-${threadId}`),
     item: {
       type: "fileChange",
       id: `change-${threadId}`,
@@ -69,10 +73,10 @@ function createWaitingForApprovalFileChangeEvent(threadId: string): ThreadEvent 
 
 function createRetriableErrorEvent(threadId: string): ThreadEvent {
   return {
-    type: "error",
+    type: "provider/error",
     threadId,
     providerThreadId: `provider-${threadId}`,
-    turnId: `turn-${threadId}`,
+    scope: turnScope(`turn-${threadId}`),
     message: "retrying",
     willRetry: true,
   };
@@ -80,10 +84,10 @@ function createRetriableErrorEvent(threadId: string): ThreadEvent {
 
 function createTerminalErrorEvent(threadId: string): ThreadEvent {
   return {
-    type: "error",
+    type: "provider/error",
     threadId,
     providerThreadId: `provider-${threadId}`,
-    turnId: `turn-${threadId}`,
+    scope: turnScope(`turn-${threadId}`),
     message: "failed",
   };
 }
@@ -92,6 +96,7 @@ function createSystemErrorEvent(threadId: string): ThreadEvent {
   return {
     type: "system/error",
     threadId,
+    scope: threadScope(),
     message: "system failed",
   };
 }
@@ -100,6 +105,7 @@ function createSystemThreadInterruptedEvent(threadId: string): ThreadEvent {
   return {
     type: "system/thread/interrupted",
     threadId,
+    scope: threadScope(),
     reason: "user",
   };
 }
@@ -202,10 +208,14 @@ describe("event buffer", () => {
 
   it("classifies terminal and waiting-for-approval events for immediate flushes", () => {
     expect(
-      shouldFlushThreadEventImmediately(createCompletedAssistantEvent("threadA")),
+      shouldFlushThreadEventImmediately(
+        createCompletedAssistantEvent("threadA"),
+      ),
     ).toBe(true);
     expect(
-      shouldFlushThreadEventImmediately(createWaitingForApprovalEvent("threadA")),
+      shouldFlushThreadEventImmediately(
+        createWaitingForApprovalEvent("threadA"),
+      ),
     ).toBe(true);
     expect(
       shouldFlushThreadEventImmediately(

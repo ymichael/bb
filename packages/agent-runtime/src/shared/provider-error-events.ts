@@ -1,9 +1,11 @@
 import type { ThreadEvent } from "@bb/domain";
+import { threadScope, turnScope } from "@bb/domain";
 import type {
   EnsureProviderTurnStartedArgs,
   ProviderTurnState,
   ProviderTurnStateRegistry,
 } from "./turn-state.js";
+import { UNSTAMPED_THREAD_ID } from "./unstamped-thread-id.js";
 
 export interface BuildScopedProviderErrorEventsArgs<
   TState extends ProviderTurnState,
@@ -26,15 +28,15 @@ export function buildScopedProviderErrorEvents<
     ? args.ensureTurnStarted({
         events,
         state,
-        threadId: "",
+        threadId: UNSTAMPED_THREAD_ID,
       })
     : undefined;
 
   events.push({
-    type: "error",
-    threadId: "",
+    type: "provider/error",
+    threadId: UNSTAMPED_THREAD_ID,
     providerThreadId: "",
-    ...(turnId ? { turnId } : {}),
+    scope: turnId ? turnScope(turnId) : threadScope(),
     message: "Provider error",
     detail: args.detail,
   });
@@ -42,9 +44,9 @@ export function buildScopedProviderErrorEvents<
   if (stateKey && state && turnId) {
     events.push({
       type: "turn/completed",
-      threadId: "",
+      threadId: UNSTAMPED_THREAD_ID,
       providerThreadId: "",
-      turnId,
+      scope: turnScope(turnId),
       status: "failed",
     });
     args.registry.finishTurn({ state, threadId: stateKey });

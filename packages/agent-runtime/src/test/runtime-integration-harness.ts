@@ -11,6 +11,7 @@ import type {
   ToolCallRequest,
   ToolCallResponse,
 } from "@bb/domain";
+import { getThreadEventScopeTurnId } from "@bb/domain";
 import { resolvePreferredTestModel } from "@bb/test-helpers";
 import type { AgentRuntimeCaptureEntry } from "../capture-types.js";
 import { createAgentRuntime } from "../runtime.js";
@@ -35,7 +36,7 @@ export type InputAcceptedEvent = Extract<
 >;
 export type ErrorThreadEvent = Extract<
   ThreadEvent,
-  { type: "error" | "system/error" }
+  { type: "provider/error" | "system/error" }
 >;
 export type WaitPredicate = RuntimeWaitPredicate;
 export type WaitFailureDescription = RuntimeWaitFailureDescription;
@@ -150,8 +151,9 @@ export function turnStartedCount(events: ThreadEvent[]): number {
 export function collectTurnIds(events: ThreadEvent[]): Set<string> {
   const turnIds = new Set<string>();
   for (const event of events) {
-    if ("turnId" in event && event.turnId) {
-      turnIds.add(event.turnId);
+    const turnId = getThreadEventScopeTurnId(event.scope);
+    if (turnId) {
+      turnIds.add(turnId);
     }
   }
   return turnIds;
@@ -353,7 +355,7 @@ export function describeEventsForFailure(events: ThreadEvent[]): string {
       if (event.type === "item/started") {
         return `${threadId} ${event.type}:${event.item.type}`;
       }
-      if (event.type === "error") {
+      if (event.type === "provider/error") {
         return `${threadId} ${event.type}:${event.message}${event.detail ? ` ${event.detail}` : ""}`;
       }
       return `${threadId} ${event.type}`;
@@ -370,7 +372,7 @@ export function previewText(value: string): string {
 }
 
 export function isErrorEvent(event: ThreadEvent): event is ErrorThreadEvent {
-  return event.type === "error" || event.type === "system/error";
+  return event.type === "provider/error" || event.type === "system/error";
 }
 
 export function findLatestErrorEvent(

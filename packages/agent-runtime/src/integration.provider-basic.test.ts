@@ -2,6 +2,7 @@
 
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
+import { requireThreadEventScopeTurnId } from "@bb/domain";
 import {
   cleanup,
   createTestRuntime,
@@ -199,10 +200,14 @@ for (const providerId of providers) {
         if (!activeTurn) {
           throw new Error("Expected active turn before steering");
         }
+        const activeTurnId = requireThreadEventScopeTurnId({
+          type: activeTurn.type,
+          scope: activeTurn.scope,
+        });
         const steerText = `STEER_${providerId}_${randomUUID()}`;
         await ctx.runtime.steerTurn({
           threadId,
-          expectedTurnId: activeTurn.turnId,
+          expectedTurnId: activeTurnId,
           clientRequestSequence: 2,
           input: [{ type: "text", text: steerText }],
           options,
@@ -225,7 +230,12 @@ for (const providerId of providers) {
         if (steerInputAccepted?.type !== "turn/input/accepted") {
           throw new Error("Expected steer input accepted event");
         }
-        expect(steerInputAccepted.turnId).toBe(activeTurn.turnId);
+        expect(
+          requireThreadEventScopeTurnId({
+            type: steerInputAccepted.type,
+            scope: steerInputAccepted.scope,
+          }),
+        ).toBe(activeTurnId);
 
         await ctx.runtime.stopThread({ threadId });
       } finally {

@@ -7,6 +7,7 @@ import type {
 } from "@bb/domain";
 import { messageId } from "./format-helpers.js";
 import { assertNever } from "./assert-never.js";
+import { viewMessageTurnScopeFields } from "./message-scope.js";
 
 export function parsePromptInput(
   input: ReadonlyArray<PromptInput> | undefined,
@@ -161,7 +162,9 @@ export function parseUserFromClientRequest(
     sourceSeqStart: meta.seq,
     sourceSeqEnd: meta.seq,
     createdAt: meta.createdAt,
-    ...(targetTurnId ? { turnId: targetTurnId } : {}),
+    ...(targetTurnId
+      ? viewMessageTurnScopeFields(targetTurnId)
+      : { scope: decoded.scope }),
     text: parsedInput.text,
     attachments: buildAttachments(parsedInput),
   };
@@ -175,7 +178,7 @@ export function parseManagerUserMessage(
     return null;
   }
 
-  const { text, turnId } = decoded;
+  const { text } = decoded;
   if (!text) {
     return null;
   }
@@ -187,7 +190,7 @@ export function parseManagerUserMessage(
     sourceSeqStart: meta.seq,
     sourceSeqEnd: meta.seq,
     createdAt: meta.createdAt,
-    ...(turnId ? { turnId } : {}),
+    scope: decoded.scope,
     text,
     status: "completed",
     isManagerUserMessage: true,

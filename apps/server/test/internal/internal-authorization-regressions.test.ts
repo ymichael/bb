@@ -7,6 +7,7 @@ import {
   queueCommand,
   threads,
 } from "@bb/db";
+import { turnScope } from "@bb/domain";
 import { describe, expect, it } from "vitest";
 import { appendClientTurnEvent } from "../../src/services/threads/thread-events.js";
 import { internalAuthHeaders } from "../helpers/commands.js";
@@ -157,6 +158,7 @@ describe("internal authorization regressions", () => {
                 threadId: thread.id,
                 providerThreadId: "provider-cross-host",
                 turnId: "turn-cross-host",
+                scope: turnScope("turn-cross-host"),
               },
             },
           ],
@@ -221,6 +223,7 @@ describe("internal authorization regressions", () => {
                 threadId: thread.id,
                 providerThreadId: "provider-environment-mismatch",
                 turnId: "turn-environment-mismatch",
+                scope: turnScope("turn-environment-mismatch"),
               },
             },
           ],

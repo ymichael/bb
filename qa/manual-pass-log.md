@@ -414,3 +414,149 @@ Cleanup:
 
 - The scripted pass completed, then its zsh cleanup trap hit the read-only variable name `status`.
 - Explicit cleanup immediately after the pass succeeded: `pnpm qa:standalone:stop --state ...` killed PIDs `66108` and `66115` and removed the standalone root; `pnpm qa:standalone:cleanup` reported no remaining roots.
+
+## Full Standalone Run
+
+Date: 2026-04-27
+Operator: Codex
+Status: passed
+Standalone workflow: `pnpm qa:standalone:start` / `pnpm qa:standalone:stop`
+Run log: `/tmp/manual-runbook-final.txt`
+
+Resolved models:
+
+- `codex`: `gpt-5.5`
+- `claude-code`: `claude-haiku-4-5`
+- `pi`: `anthropic/claude-haiku-4-5`
+
+Standalone state path: `/var/folders/lr/f3ynv4xj6p77kvx_rz7zgzg00000gn/T/bb-standalone-6kk5kn/standalone-state.json`
+Smoke thread: `thr_nzaxmheubh`
+Smoke direct environment: `env_jctwzjakav`
+Smoke worktree thread: `thr_w24fp3varc`
+Smoke worktree environment: `env_7zeuhnbhvn`
+Dirty archive thread: `thr_vidx9k6cvs`
+Dirty archive environment: `env_2fu8vdcxic`
+
+Shared environment:
+
+- Thread A: `thr_99v4f4rygj`
+- Thread B: `thr_9m4a4ppxvk`
+- Shared environment: `env_jctwzjakav`
+
+Mixed-provider worktrees:
+
+- Claude thread: `thr_dkpamf8jiq`
+- Claude environment: `env_gz2erfcp5b`
+- Pi thread: `thr_7xzbvn3uy4`
+- Pi environment: `env_2cq3jsifmb`
+
+Promote/demote:
+
+- Promote thread: `thr_5icsqrdq8z`
+- Commit created by QA: `1630d51435329a202d2cf606cf43757a7473b6a5`
+
+Provider-specific pass:
+
+- Codex chat thread: `thr_vszqhmxtc2`
+- Codex worktree thread: `thr_q85cn4ggj6`
+- Claude chat thread: `thr_a4fchiwthy`
+- Claude worktree thread: `thr_cwh5yyenak`
+- Pi chat thread: `thr_8z7pthbemx`
+- Pi worktree thread: `thr_na6gm58rah`
+
+Pending interactions:
+
+- Approval thread: `thr_qh5amhcb25`, interaction `pint_hcm9xrcwdq`
+- Denial thread: `thr_kmfuxsnkrd`, interaction `pint_e62mb3xqgb`
+- Claude grant thread: `thr_wza3x7hme7`, interaction `pint_j495w5ta9y`
+
+Validated:
+
+- Smoke unmanaged and managed worktree threads reached `idle`; status, diff, merge-base update, and merge-base clear checks passed.
+- Archive safety blocked sends to archived threads and blocked dirty managed-worktree archive without `--force`.
+- Thread A and Thread B reused the same direct environment, completed alternating follow-ups, and stayed usable after archiving one sibling.
+- Mixed-provider Codex, Claude, and Pi flows completed without cross-contamination.
+- Managed worktree commit, promote, and demote all succeeded.
+- The server stayed reachable across graceful and active daemon restarts; the smoke thread recovered and accepted work after restart.
+- Each provider completed hello, uppercase follow-up, active-turn stop, and worktree file-creation checks.
+- Approval, denial, and Claude grant pending-interaction flows surfaced interactions, blocked concurrent sends while pending, and resolved correctly.
+
+Cleanup:
+
+- Teardown succeeded: `pnpm qa:standalone:stop --state ...` killed PIDs `4054` and `4108` and removed the standalone root.
+- `pnpm qa:standalone:cleanup` reported no remaining roots.
+
+## Timeline Scope Targeted Validation
+
+Date: 2026-04-27
+Operator: Codex
+Status: passed
+
+Validated:
+
+- Replayed known bad Claude thread `thr_m22cr9ggq7` from `~/.bb-dev/bb.db` through the server timeline builder. The rendered timeline had 13 rows, 6 `Unhandled Claude Code event` entries, and 0 such entries in the trailing 30 rendered lines.
+- Spot-checked all 13 unarchived development threads in `~/.bb-dev/bb.db` through `buildThreadTimeline`; 0 failed to project.
+- Re-ran malformed turn-scope projection coverage with `pnpm exec turbo run test --filter=@bb/core-ui -- --run test/to-view-messages.turn-lifecycle.test.ts`; 9 tests passed.
+
+Notes:
+
+- The local dev server was not running, so the known-thread replay used the same server timeline service directly instead of the browser route.
+
+## Full Standalone Run After Scope Contract Fixes
+
+Date: 2026-04-27
+Operator: Codex
+Status: passed
+Standalone workflow: `pnpm qa:standalone:start` / `pnpm qa:standalone:stop`
+Run log: `/tmp/manual-runbook-scope-final.log`
+
+Resolved models:
+
+- `codex`: `gpt-5.5`
+- `claude-code`: `claude-haiku-4-5`
+- `pi`: `anthropic/claude-haiku-4-5`
+
+Standalone state path: `/var/folders/lr/f3ynv4xj6p77kvx_rz7zgzg00000gn/T/bb-standalone-dhiD01/standalone-state.json`
+Smoke thread: `thr_whpyp688k8`
+Smoke worktree thread: `thr_u8tzq3ncp8`
+Dirty archive thread: `thr_yrtdiyvkg6`
+
+Shared environment:
+
+- Thread A: `thr_7nvtmi4tc3`
+- Thread B: `thr_8a87xvmvwd`
+- Shared environment: `env_25wef2ia2u`
+
+Mixed-provider worktrees:
+
+- Claude thread: `thr_dnd3qhtwnk`
+- Claude environment: `env_w4vsfnpe2h`
+- Pi thread: `thr_hdd8mshu8y`
+- Pi environment: `env_wifeaaxq9d`
+
+Promote/demote:
+
+- Promote thread: `thr_ite2uk72ay`
+- Promote environment: `env_8pw9dqsvic`
+
+Pending interactions:
+
+- Approval thread: `thr_n7rv6vxvgx`, interaction `pint_ehaq7nmnwp`
+- Denial thread: `thr_fci3dpswjf`, interaction `pint_8xk4fkbzjs`
+- Claude grant thread: `thr_8d32xtp437`, interaction `pint_79r28yzg4p`
+
+Validated:
+
+- Smoke unmanaged and managed worktree threads reached `idle`; status, diff, merge-base update, and merge-base clear checks passed.
+- Archive safety blocked sends to archived threads and blocked dirty managed-worktree archive without `--force`.
+- Thread A and Thread B reused the same direct environment, completed alternating follow-ups, and stayed usable after archiving one sibling.
+- Mixed-provider Claude and Pi worktree flows completed without cross-contamination.
+- Managed worktree commit, promote, and demote all succeeded.
+- The server stayed reachable across graceful and active daemon restarts; the smoke thread recovered and accepted work after restart.
+- Codex, Claude, and Pi each completed hello, uppercase follow-up, active-turn stop, and worktree file-creation checks.
+- Approval, denial, and Claude grant pending-interaction flows surfaced interactions, blocked concurrent sends while pending, and resolved correctly.
+
+Cleanup:
+
+- Teardown succeeded: `pnpm qa:standalone:stop --state ...` killed PIDs `66237` and `66297` and removed the standalone root.
+- `pnpm qa:standalone:cleanup` reported no remaining roots.

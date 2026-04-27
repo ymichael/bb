@@ -51,6 +51,7 @@ type ClaudeSystemSubtype =
   | "task_notification"
   | "task_progress"
   | "task_started"
+  | "task_updated"
   | "unknown";
 
 type ClaudeStreamContentType = "text" | "thinking" | "tool_use" | "unknown";
@@ -190,6 +191,7 @@ function toClaudeSystemSubtype(
     case "task_notification":
     case "task_progress":
     case "task_started":
+    case "task_updated":
       return subtype;
     default:
       return "unknown";
@@ -441,6 +443,7 @@ function describeParsedClaudeRawEvent(
         case "task_notification":
         case "task_progress":
         case "task_started":
+        case "task_updated":
           return { kind: `sdk/system:${event.subtype}`, coverage: "noise" };
         case "unknown":
           return { kind: "sdk/system", coverage: "unknown" };

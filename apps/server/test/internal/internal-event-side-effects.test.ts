@@ -13,7 +13,11 @@ import {
   markThreadStopRequested,
   threads,
 } from "@bb/db";
-import { turnRequestEventDataSchema } from "@bb/domain";
+import {
+  threadScope,
+  turnRequestEventDataSchema,
+  turnScope,
+} from "@bb/domain";
 import { renderTemplate } from "@bb/templates";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -93,6 +97,7 @@ describe("internal event side effects", () => {
                 type: "thread/name/updated",
                 threadId: renamedThread.id,
                 providerThreadId: "provider-resilience",
+                scope: threadScope(),
                 threadName: "Renamed thread",
               },
             },
@@ -106,6 +111,7 @@ describe("internal event side effects", () => {
                 threadId: startedThread.id,
                 providerThreadId: "provider-resilience",
                 turnId: "turn-resilience",
+                scope: turnScope("turn-resilience"),
               },
             },
           ],
@@ -151,6 +157,7 @@ describe("internal event side effects", () => {
         providerThreadId: "provider-auto-send",
         sequence: 1,
         type: "thread/identity",
+        scope: threadScope(),
         data: {},
       });
       seedEvent(harness.deps, {
@@ -158,7 +165,7 @@ describe("internal event side effects", () => {
         environmentId: environment.id,
         providerThreadId: "provider-auto-send",
         sequence: 2,
-        turnId: "turn-auto-send",
+        scope: turnScope("turn-auto-send"),
         type: "turn/started",
         data: {},
       });
@@ -185,6 +192,7 @@ describe("internal event side effects", () => {
                 threadId: thread.id,
                 providerThreadId: "provider-auto-send",
                 turnId: "turn-auto-send",
+                scope: turnScope("turn-auto-send"),
                 status: "completed",
               },
             },
@@ -243,6 +251,7 @@ describe("internal event side effects", () => {
         providerThreadId: "provider-auto-send-pending-interaction",
         sequence: 1,
         type: "thread/identity",
+        scope: threadScope(),
         data: {},
       });
       seedEvent(harness.deps, {
@@ -250,7 +259,7 @@ describe("internal event side effects", () => {
         environmentId: environment.id,
         providerThreadId: "provider-auto-send-pending-interaction",
         sequence: 2,
-        turnId: "turn-auto-send-pending-interaction",
+        scope: turnScope("turn-auto-send-pending-interaction"),
         type: "turn/started",
         data: {},
       });
@@ -342,6 +351,7 @@ describe("internal event side effects", () => {
                 threadId: thread.id,
                 providerThreadId: "provider-stop-requested-start",
                 turnId: "turn-stop-requested-start",
+                scope: turnScope("turn-stop-requested-start"),
               },
             },
           ],
@@ -396,6 +406,7 @@ describe("internal event side effects", () => {
         providerThreadId: "provider-manager-notify-failure",
         sequence: 1,
         type: "thread/identity",
+        scope: threadScope(),
         data: {},
       });
       seedEvent(harness.deps, {
@@ -403,7 +414,7 @@ describe("internal event side effects", () => {
         environmentId: childEnvironment.id,
         providerThreadId: "provider-manager-notify-failure",
         sequence: 2,
-        turnId: "turn-manager-notify-failure",
+        scope: turnScope("turn-manager-notify-failure"),
         type: "turn/started",
         data: {},
       });
@@ -435,6 +446,7 @@ describe("internal event side effects", () => {
                 threadId: childThread.id,
                 providerThreadId: "provider-manager-notify-failure",
                 turnId: "turn-manager-notify-failure",
+                scope: turnScope("turn-manager-notify-failure"),
                 status: "completed",
               },
             },
@@ -526,6 +538,7 @@ describe("internal event side effects", () => {
                 threadId: childThread.id,
                 providerThreadId: "provider-child-follow-up",
                 turnId: "turn-child-follow-up",
+                scope: turnScope("turn-child-follow-up"),
                 status: "completed",
               },
             },
@@ -649,6 +662,7 @@ describe("internal event side effects", () => {
                 threadId: childThread.id,
                 providerThreadId: "provider-child-deleted-manager-follow-up",
                 turnId: "turn-child-deleted-manager-follow-up",
+                scope: turnScope("turn-child-deleted-manager-follow-up"),
                 status: "completed",
               },
             },
@@ -719,6 +733,7 @@ describe("internal event side effects", () => {
                 threadId: childThread.id,
                 providerThreadId: "provider-child-failed-follow-up",
                 turnId: "turn-child-failed-follow-up",
+                scope: turnScope("turn-child-failed-follow-up"),
                 status: "failed",
               },
             },
@@ -839,6 +854,7 @@ describe("internal event side effects", () => {
                 threadId: childThread.id,
                 providerThreadId: "provider-child-interrupted-follow-up",
                 turnId: "turn-child-interrupted-follow-up",
+                scope: turnScope("turn-child-interrupted-follow-up"),
                 status: "interrupted",
               },
             },
@@ -1008,6 +1024,7 @@ describe("internal event side effects", () => {
                 threadId: thread.id,
                 providerThreadId: "provider-manager-sync",
                 turnId: "turn-manager-sync",
+                scope: turnScope("turn-manager-sync"),
                 status: "completed",
               },
             },
@@ -1118,6 +1135,7 @@ describe("internal event side effects", () => {
                 threadId: thread.id,
                 providerThreadId: "provider-auto-archive",
                 turnId: "turn-auto-archive",
+                scope: turnScope("turn-auto-archive"),
                 status: "completed",
               },
             },
@@ -1159,6 +1177,7 @@ describe("internal event side effects", () => {
                   threadId: thread.id,
                   providerThreadId: "provider-auto-archive",
                   turnId: "turn-auto-archive-2",
+                  scope: turnScope("turn-auto-archive-2"),
                   status: "completed",
                 },
               },
@@ -1241,6 +1260,7 @@ describe("internal event side effects", () => {
                 threadId: thread.id,
                 providerThreadId: "provider-no-auto-archive",
                 turnId: "turn-no-auto-archive",
+                scope: turnScope("turn-no-auto-archive"),
                 status: "completed",
               },
             },
@@ -1283,6 +1303,7 @@ describe("internal event side effects", () => {
         providerThreadId: "provider-dedupe",
         sequence: 1,
         type: "thread/identity",
+        scope: threadScope(),
         data: {},
       });
       seedEvent(harness.deps, {
@@ -1290,7 +1311,7 @@ describe("internal event side effects", () => {
         environmentId: environment.id,
         providerThreadId: "provider-dedupe",
         sequence: 2,
-        turnId: "turn-dedupe",
+        scope: turnScope("turn-dedupe"),
         type: "turn/started",
         data: {},
       });
@@ -1320,6 +1341,7 @@ describe("internal event side effects", () => {
               threadId: thread.id,
               providerThreadId: "provider-dedupe",
               turnId: "turn-dedupe",
+              scope: turnScope("turn-dedupe"),
               status: "completed",
             },
           },
@@ -1398,6 +1420,7 @@ describe("internal event side effects", () => {
           providerThreadId: `provider-${thread.id}`,
           sequence: 1,
           type: "thread/identity",
+          scope: threadScope(),
           data: {},
         });
         seedEvent(harness.deps, {
@@ -1405,7 +1428,7 @@ describe("internal event side effects", () => {
           environmentId: environment.id,
           providerThreadId: `provider-${thread.id}`,
           sequence: 2,
-          turnId: `turn-${thread.id}`,
+          scope: turnScope(`turn-${thread.id}`),
           type: "turn/started",
           data: {},
         });
@@ -1448,6 +1471,7 @@ describe("internal event side effects", () => {
                   threadId: threadA.id,
                   providerThreadId: `provider-${threadA.id}`,
                   turnId: `turn-${threadA.id}`,
+                  scope: turnScope(`turn-${threadA.id}`),
                   status: "completed",
                 },
               },
@@ -1481,6 +1505,7 @@ describe("internal event side effects", () => {
                   threadId: threadA.id,
                   providerThreadId: `provider-${threadA.id}`,
                   turnId: `turn-${threadA.id}`,
+                  scope: turnScope(`turn-${threadA.id}`),
                   status: "completed",
                 },
               },
@@ -1494,6 +1519,7 @@ describe("internal event side effects", () => {
                   threadId: threadB.id,
                   providerThreadId: `provider-${threadB.id}`,
                   turnId: `turn-${threadB.id}`,
+                  scope: turnScope(`turn-${threadB.id}`),
                   status: "completed",
                 },
               },

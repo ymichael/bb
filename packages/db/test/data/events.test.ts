@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { threadScope, turnScope } from "@bb/domain";
 import { createConnection } from "../../src/connection.js";
 import { migrate } from "../../src/migrate.js";
 import { noopNotifier } from "../../src/notifier.js";
@@ -52,6 +53,22 @@ const emptyItemFields = {
   itemId: null,
   itemKind: null,
 } as const;
+
+const threadEventFields = {
+  ...emptyItemFields,
+  scope: threadScope(),
+};
+
+interface CreateTurnEventFieldsArgs {
+  turnId: string;
+}
+
+function createTurnEventFields(args: CreateTurnEventFieldsArgs) {
+  return {
+    ...emptyItemFields,
+    scope: turnScope(args.turnId),
+  };
+}
 
 interface CreateTokenUsageDataArgs {
   modelContextWindow: number | null;
@@ -107,14 +124,14 @@ describe("events", () => {
         threadId: thread.id,
         sequence: 1,
         type: "system/error",
-        ...emptyItemFields,
+        ...threadEventFields,
         data: JSON.stringify({ message: "test" }),
       },
       {
         threadId: thread.id,
         sequence: 2,
         type: "system/error",
-        ...emptyItemFields,
+        ...threadEventFields,
         data: JSON.stringify({ message: "test2" }),
       },
     ]);
@@ -135,6 +152,7 @@ describe("events", () => {
         threadId: thread.id,
         sequence: 1,
         type: "item/completed",
+        scope: turnScope("turn-1"),
         itemId: "msg-1",
         itemKind: "agentMessage",
         data: JSON.stringify({
@@ -155,6 +173,41 @@ describe("events", () => {
     });
   });
 
+  it("rejects turn scope rows without a stored turn id", () => {
+    const { db, thread } = setup();
+
+    expect(() =>
+      db.$client
+        .prepare(
+          `INSERT INTO events (
+            id,
+            thread_id,
+            scope_kind,
+            turn_id,
+            sequence,
+            type,
+            item_id,
+            item_kind,
+            data,
+            created_at
+          )
+          VALUES (
+            'evt_bad_scope_shape',
+            ?,
+            'turn',
+            NULL,
+            1,
+            'system/error',
+            NULL,
+            NULL,
+            '{}',
+            1
+          )`,
+        )
+        .run(thread.id),
+    ).toThrow(/events_scope_shape_check|CHECK constraint failed/);
+  });
+
   it("deduplicates on (threadId, sequence)", () => {
     const { db, thread } = setup();
 
@@ -163,7 +216,7 @@ describe("events", () => {
         threadId: thread.id,
         sequence: 1,
         type: "system/error",
-        ...emptyItemFields,
+        ...threadEventFields,
         data: JSON.stringify({ message: "first" }),
       },
     ]);
@@ -178,14 +231,14 @@ describe("events", () => {
         threadId: thread.id,
         sequence: 1,
         type: "system/error",
-        ...emptyItemFields,
+        ...threadEventFields,
         data: JSON.stringify({ message: "duplicate" }),
       },
       {
         threadId: thread.id,
         sequence: 2,
         type: "system/error",
-        ...emptyItemFields,
+        ...threadEventFields,
         data: JSON.stringify({ message: "new" }),
       },
     ]);
@@ -209,7 +262,7 @@ describe("events", () => {
         threadId: thread.id,
         sequence: 1,
         type: "system/error",
-        ...emptyItemFields,
+        ...threadEventFields,
         createdAt,
         data: JSON.stringify({ message: "timestamped" }),
       },
@@ -227,21 +280,21 @@ describe("events", () => {
         threadId: thread.id,
         sequence: 1,
         type: "system/error",
-        ...emptyItemFields,
+        ...threadEventFields,
         data: JSON.stringify({ message: "first" }),
       },
       {
         threadId: thread.id,
         sequence: 2,
         type: "system/error",
-        ...emptyItemFields,
+        ...threadEventFields,
         data: JSON.stringify({ message: "second" }),
       },
       {
         threadId: thread.id,
         sequence: 3,
         type: "turn/started",
-        ...emptyItemFields,
+        ...createTurnEventFields({ turnId: "turn_1" }),
         data: JSON.stringify({ turnId: "turn_1" }),
       },
     ]);
@@ -279,13 +332,14 @@ describe("events", () => {
         threadId: thread.id,
         sequence: 1,
         type: "system/manager/user_message",
-        ...emptyItemFields,
+        ...threadEventFields,
         data: JSON.stringify({ text: "manager output" }),
       },
       {
         threadId: thread.id,
         sequence: 2,
         type: "item/completed",
+        scope: turnScope("turn-1"),
         itemId: "msg_1",
         itemKind: "agentMessage",
         data: JSON.stringify({
@@ -296,6 +350,7 @@ describe("events", () => {
         threadId: thread.id,
         sequence: 3,
         type: "item/completed",
+        scope: turnScope("turn-1"),
         itemId: "call_1",
         itemKind: "toolCall",
         data: JSON.stringify({ item: { id: "call_1", type: "toolCall" } }),
@@ -304,7 +359,7 @@ describe("events", () => {
         threadId: thread.id,
         sequence: 4,
         type: "system/error",
-        ...emptyItemFields,
+        ...threadEventFields,
         data: JSON.stringify({ message: "ignored" }),
       },
     ]);
@@ -326,13 +381,14 @@ describe("events", () => {
         threadId: thread.id,
         sequence: 1,
         type: "system/manager/user_message",
-        ...emptyItemFields,
+        ...threadEventFields,
         data: JSON.stringify({ text: "manager output" }),
       },
       {
         threadId: thread.id,
         sequence: 2,
         type: "item/completed",
+        scope: turnScope("turn-1"),
         itemId: "msg_1",
         itemKind: "agentMessage",
         data: JSON.stringify({
@@ -357,14 +413,14 @@ describe("events", () => {
         threadId: thread.id,
         sequence: 1,
         type: "system/error",
-        ...emptyItemFields,
+        ...threadEventFields,
         data: JSON.stringify({ message: "first" }),
       },
       {
         threadId: thread.id,
         sequence: 2,
         type: "thread/contextWindowUsage/updated",
-        ...emptyItemFields,
+        ...createTurnEventFields({ turnId: "turn-1" }),
         data: createContextWindowUsageData({
           modelContextWindow: 16_000,
           usedTokens: 100,
@@ -374,7 +430,7 @@ describe("events", () => {
         threadId: thread.id,
         sequence: 3,
         type: "thread/contextWindowUsage/updated",
-        ...emptyItemFields,
+        ...createTurnEventFields({ turnId: "turn-1" }),
         data: createContextWindowUsageData({
           modelContextWindow: null,
           usedTokens: 200,
@@ -409,6 +465,7 @@ describe("events", () => {
 
     const firstSequence = appendStoredThreadEvent(db, noopNotifier, {
       threadId: thread.id,
+      scope: threadScope(),
       type: "client/turn/requested",
       data: {
         direction: "outbound",
@@ -431,7 +488,7 @@ describe("events", () => {
       (tx) =>
         appendStoredThreadEventInTransaction(tx, {
           threadId: thread.id,
-          turnId: "turn_1",
+          scope: turnScope("turn_1"),
           providerThreadId: "provider_thr_1",
           type: "turn/started",
           data: {
@@ -455,7 +512,7 @@ describe("events", () => {
 
     appendStoredThreadEvent(db, noopNotifier, {
       threadId: thread.id,
-      turnId: "turn_1",
+      scope: turnScope("turn_1"),
       providerThreadId: "provider_thr_1",
       type: "turn/completed",
       data: {
@@ -467,7 +524,7 @@ describe("events", () => {
     expect(getActiveStoredTurnId(db, thread.id)).toBeNull();
     appendStoredThreadEvent(db, noopNotifier, {
       threadId: thread.id,
-      turnId: "turn_1",
+      scope: turnScope("turn_1"),
       providerThreadId: "provider_thr_1",
       type: "turn/started",
       data: {
@@ -489,7 +546,7 @@ describe("events", () => {
       {
         threadId: thread.id,
         sequence: 1,
-        turnId: "turn_a",
+        scope: turnScope("turn_a"),
         type: "turn/completed",
         itemId: null,
         itemKind: null,
@@ -502,7 +559,7 @@ describe("events", () => {
       {
         threadId: otherThread.id,
         sequence: 1,
-        turnId: "turn_b",
+        scope: turnScope("turn_b"),
         type: "turn/completed",
         itemId: null,
         itemKind: null,
@@ -534,21 +591,21 @@ describe("events", () => {
         threadId: thread.id,
         sequence: 1,
         type: "system/error",
-        ...emptyItemFields,
+        ...threadEventFields,
         data: "{}",
       },
       {
         threadId: thread.id,
         sequence: 5,
         type: "system/error",
-        ...emptyItemFields,
+        ...threadEventFields,
         data: "{}",
       },
       {
         threadId: thread2.id,
         sequence: 3,
         type: "system/error",
-        ...emptyItemFields,
+        ...threadEventFields,
         data: "{}",
       },
     ]);
@@ -570,14 +627,14 @@ describe("events", () => {
         threadId: thread.id,
         sequence: 10,
         type: "system/error",
-        ...emptyItemFields,
+        ...threadEventFields,
         data: "{}",
       },
       {
         threadId: thread2.id,
         sequence: 3,
         type: "system/error",
-        ...emptyItemFields,
+        ...threadEventFields,
         data: "{}",
       },
     ]);
@@ -595,21 +652,21 @@ describe("events", () => {
         threadId: thread.id,
         sequence: 1,
         type: "system/error",
-        ...emptyItemFields,
+        ...threadEventFields,
         data: "{}",
       },
       {
         threadId: thread.id,
         sequence: 2,
         type: "system/error",
-        ...emptyItemFields,
+        ...threadEventFields,
         data: "{}",
       },
       {
         threadId: thread.id,
         sequence: 3,
         type: "system/error",
-        ...emptyItemFields,
+        ...threadEventFields,
         data: "{}",
       },
     ]);
@@ -627,14 +684,14 @@ describe("events", () => {
         threadId: thread.id,
         sequence: 2,
         type: "system/error",
-        ...emptyItemFields,
+        ...threadEventFields,
         data: "{}",
       },
       {
         threadId: thread.id,
         sequence: 5,
         type: "system/error",
-        ...emptyItemFields,
+        ...threadEventFields,
         data: "{}",
       },
     ]);
@@ -650,35 +707,35 @@ describe("events", () => {
         threadId: thread.id,
         sequence: 1,
         type: "thread/tokenUsage/updated",
-        ...emptyItemFields,
+        ...createTurnEventFields({ turnId: "turn-1" }),
         data: "{}",
       },
       {
         threadId: thread.id,
         sequence: 2,
         type: "thread/tokenUsage/updated",
-        ...emptyItemFields,
+        ...createTurnEventFields({ turnId: "turn-1" }),
         data: "{}",
       },
       {
         threadId: thread.id,
         sequence: 3,
         type: "thread/tokenUsage/updated",
-        ...emptyItemFields,
+        ...createTurnEventFields({ turnId: "turn-1" }),
         data: "{}",
       },
       {
         threadId: thread.id,
         sequence: 4,
         type: "thread/tokenUsage/updated",
-        ...emptyItemFields,
+        ...createTurnEventFields({ turnId: "turn-1" }),
         data: "{}",
       },
       {
         threadId: thread.id,
         sequence: 5,
         type: "thread/tokenUsage/updated",
-        ...emptyItemFields,
+        ...createTurnEventFields({ turnId: "turn-1" }),
         data: "{}",
       },
     ]);
@@ -704,7 +761,7 @@ describe("events", () => {
         threadId: thread.id,
         sequence: 1,
         type: "thread/tokenUsage/updated",
-        ...emptyItemFields,
+        ...createTurnEventFields({ turnId: "turn-1" }),
         data: createTokenUsageData({
           totalTokens: 10,
           modelContextWindow: 200_000,
@@ -714,7 +771,7 @@ describe("events", () => {
         threadId: thread.id,
         sequence: 2,
         type: "thread/tokenUsage/updated",
-        ...emptyItemFields,
+        ...createTurnEventFields({ turnId: "turn-1" }),
         data: createTokenUsageData({
           totalTokens: 20,
           modelContextWindow: null,
@@ -724,7 +781,7 @@ describe("events", () => {
         threadId: thread.id,
         sequence: 3,
         type: "thread/tokenUsage/updated",
-        ...emptyItemFields,
+        ...createTurnEventFields({ turnId: "turn-1" }),
         data: createTokenUsageData({
           totalTokens: 30,
           modelContextWindow: null,
@@ -734,7 +791,7 @@ describe("events", () => {
         threadId: thread.id,
         sequence: 4,
         type: "thread/tokenUsage/updated",
-        ...emptyItemFields,
+        ...createTurnEventFields({ turnId: "turn-1" }),
         data: createTokenUsageData({
           totalTokens: 40,
           modelContextWindow: null,
@@ -761,7 +818,7 @@ describe("events", () => {
         threadId: thread.id,
         sequence: 1,
         type: "thread/contextWindowUsage/updated",
-        ...emptyItemFields,
+        ...createTurnEventFields({ turnId: "turn-1" }),
         data: createContextWindowUsageData({
           usedTokens: 10,
           modelContextWindow: 200_000,
@@ -771,7 +828,7 @@ describe("events", () => {
         threadId: thread.id,
         sequence: 2,
         type: "thread/contextWindowUsage/updated",
-        ...emptyItemFields,
+        ...createTurnEventFields({ turnId: "turn-1" }),
         data: createContextWindowUsageData({
           usedTokens: 20,
           modelContextWindow: null,
@@ -781,7 +838,7 @@ describe("events", () => {
         threadId: thread.id,
         sequence: 3,
         type: "thread/contextWindowUsage/updated",
-        ...emptyItemFields,
+        ...createTurnEventFields({ turnId: "turn-1" }),
         data: createContextWindowUsageData({
           usedTokens: 30,
           modelContextWindow: null,
@@ -791,7 +848,7 @@ describe("events", () => {
         threadId: thread.id,
         sequence: 4,
         type: "thread/contextWindowUsage/updated",
-        ...emptyItemFields,
+        ...createTurnEventFields({ turnId: "turn-1" }),
         data: createContextWindowUsageData({
           usedTokens: 40,
           modelContextWindow: null,
@@ -817,7 +874,7 @@ describe("events", () => {
       {
         threadId: thread.id,
         sequence: 1,
-        turnId: "turn-1",
+        scope: turnScope("turn-1"),
         type: "item/agentMessage/delta",
         itemId: "msg-1",
         itemKind: null,
@@ -826,7 +883,7 @@ describe("events", () => {
       {
         threadId: thread.id,
         sequence: 2,
-        turnId: "turn-1",
+        scope: turnScope("turn-1"),
         type: "item/agentMessage/delta",
         itemId: "msg-1",
         itemKind: null,
@@ -835,7 +892,7 @@ describe("events", () => {
       {
         threadId: thread.id,
         sequence: 3,
-        turnId: "turn-1",
+        scope: turnScope("turn-1"),
         type: "item/agentMessage/delta",
         itemId: "msg-1",
         itemKind: null,
@@ -844,7 +901,7 @@ describe("events", () => {
       {
         threadId: thread.id,
         sequence: 4,
-        turnId: "turn-1",
+        scope: turnScope("turn-1"),
         type: "item/completed",
         itemId: "msg-1",
         itemKind: "agentMessage",
@@ -875,7 +932,7 @@ describe("events", () => {
       {
         threadId: thread.id,
         sequence: 1,
-        turnId: "turn-1",
+        scope: turnScope("turn-1"),
         type: "item/agentMessage/delta",
         itemId: "msg-1",
         itemKind: null,
@@ -884,7 +941,7 @@ describe("events", () => {
       {
         threadId: thread.id,
         sequence: 2,
-        turnId: "turn-1",
+        scope: turnScope("turn-1"),
         type: "item/agentMessage/delta",
         itemId: "msg-1",
         itemKind: null,
@@ -909,7 +966,7 @@ describe("events", () => {
       {
         threadId: thread.id,
         sequence: 1,
-        turnId: "turn-1",
+        scope: turnScope("turn-1"),
         type: "item/agentMessage/delta",
         itemId: "msg-1",
         itemKind: null,
@@ -918,7 +975,7 @@ describe("events", () => {
       {
         threadId: thread.id,
         sequence: 2,
-        turnId: "turn-1",
+        scope: turnScope("turn-1"),
         type: "item/agentMessage/delta",
         itemId: "msg-1",
         itemKind: null,
@@ -927,7 +984,7 @@ describe("events", () => {
       {
         threadId: thread.id,
         sequence: 3,
-        turnId: "turn-1",
+        scope: turnScope("turn-1"),
         type: "item/completed",
         itemId: "msg-1",
         itemKind: "agentMessage",
@@ -942,7 +999,7 @@ describe("events", () => {
       {
         threadId: thread.id,
         sequence: 4,
-        turnId: "turn-2",
+        scope: turnScope("turn-2"),
         type: "item/agentMessage/delta",
         itemId: "msg-1",
         itemKind: null,
@@ -951,7 +1008,7 @@ describe("events", () => {
       {
         threadId: thread.id,
         sequence: 5,
-        turnId: "turn-2",
+        scope: turnScope("turn-2"),
         type: "item/agentMessage/delta",
         itemId: "msg-1",
         itemKind: null,
@@ -976,7 +1033,7 @@ describe("events", () => {
       {
         threadId: thread.id,
         sequence: 1,
-        turnId: "turn-1",
+        scope: turnScope("turn-1"),
         type: "item/agentMessage/delta",
         itemId: "msg-1",
         itemKind: null,
@@ -989,7 +1046,7 @@ describe("events", () => {
       {
         threadId: thread.id,
         sequence: 2,
-        turnId: "turn-1",
+        scope: turnScope("turn-1"),
         type: "item/agentMessage/delta",
         itemId: "msg-1",
         itemKind: null,
@@ -1002,7 +1059,7 @@ describe("events", () => {
       {
         threadId: thread.id,
         sequence: 3,
-        turnId: "turn-1",
+        scope: turnScope("turn-1"),
         type: "item/completed",
         itemId: "msg-1",
         itemKind: "agentMessage",
@@ -1018,7 +1075,7 @@ describe("events", () => {
       {
         threadId: thread.id,
         sequence: 4,
-        turnId: "turn-1",
+        scope: turnScope("turn-1"),
         type: "item/agentMessage/delta",
         itemId: "msg-1",
         itemKind: null,
@@ -1031,7 +1088,7 @@ describe("events", () => {
       {
         threadId: thread.id,
         sequence: 5,
-        turnId: "turn-1",
+        scope: turnScope("turn-1"),
         type: "item/agentMessage/delta",
         itemId: "msg-1",
         itemKind: null,
@@ -1060,7 +1117,7 @@ describe("events", () => {
       {
         threadId: thread.id,
         sequence: 1,
-        turnId: "turn-1",
+        scope: turnScope("turn-1"),
         type: "item/reasoning/textDelta",
         itemId: "reasoning-1",
         itemKind: null,
@@ -1069,7 +1126,7 @@ describe("events", () => {
       {
         threadId: thread.id,
         sequence: 2,
-        turnId: "turn-1",
+        scope: turnScope("turn-1"),
         type: "item/reasoning/textDelta",
         itemId: "reasoning-1",
         itemKind: null,
@@ -1078,7 +1135,7 @@ describe("events", () => {
       {
         threadId: thread.id,
         sequence: 3,
-        turnId: "turn-1",
+        scope: turnScope("turn-1"),
         type: "item/reasoning/summaryTextDelta",
         itemId: "reasoning-1",
         itemKind: null,
@@ -1087,7 +1144,7 @@ describe("events", () => {
       {
         threadId: thread.id,
         sequence: 4,
-        turnId: "turn-1",
+        scope: turnScope("turn-1"),
         type: "item/reasoning/summaryTextDelta",
         itemId: "reasoning-1",
         itemKind: null,
@@ -1096,7 +1153,7 @@ describe("events", () => {
       {
         threadId: thread.id,
         sequence: 5,
-        turnId: "turn-1",
+        scope: turnScope("turn-1"),
         type: "item/completed",
         itemId: "reasoning-1",
         itemKind: "reasoning",
@@ -1128,7 +1185,7 @@ describe("events", () => {
       {
         threadId: thread.id,
         sequence: 1,
-        turnId: "turn-1",
+        scope: turnScope("turn-1"),
         type: "item/reasoning/textDelta",
         itemId: "reasoning-1",
         itemKind: null,
@@ -1137,7 +1194,7 @@ describe("events", () => {
       {
         threadId: thread.id,
         sequence: 2,
-        turnId: "turn-1",
+        scope: turnScope("turn-1"),
         type: "item/reasoning/textDelta",
         itemId: "reasoning-1",
         itemKind: null,
@@ -1167,28 +1224,28 @@ describe("events", () => {
         threadId: thread.id,
         sequence: 1,
         type: "thread/tokenUsage/updated",
-        ...emptyItemFields,
+        ...createTurnEventFields({ turnId: "turn-1" }),
         data: "{}",
       },
       {
         threadId: thread.id,
         sequence: 2,
         type: "thread/tokenUsage/updated",
-        ...emptyItemFields,
+        ...createTurnEventFields({ turnId: "turn-1" }),
         data: "{}",
       },
       {
         threadId: thread2.id,
         sequence: 1,
         type: "thread/tokenUsage/updated",
-        ...emptyItemFields,
+        ...createTurnEventFields({ turnId: "turn-1" }),
         data: "{}",
       },
       {
         threadId: thread2.id,
         sequence: 2,
         type: "thread/tokenUsage/updated",
-        ...emptyItemFields,
+        ...createTurnEventFields({ turnId: "turn-1" }),
         data: "{}",
       },
     ]);
@@ -1229,14 +1286,14 @@ describe("events", () => {
         threadId: thread.id,
         sequence: 1,
         type: "system/error",
-        ...emptyItemFields,
+        ...threadEventFields,
         data: "{}",
       },
       {
         threadId: thread2.id,
         sequence: 1,
         type: "system/error",
-        ...emptyItemFields,
+        ...threadEventFields,
         data: "{}",
       },
     ]);

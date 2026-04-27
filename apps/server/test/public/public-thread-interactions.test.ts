@@ -1,4 +1,5 @@
 import { createDraft } from "@bb/db";
+import { turnScope } from "@bb/domain";
 import type { PendingInteractionCreate } from "@bb/domain";
 import { describe, expect, it } from "vitest";
 import type { PendingInteractionLifecycle } from "../../src/services/interactions/pending-interactions.js";
@@ -810,6 +811,7 @@ describe("public thread interaction routes", () => {
         type: "turn/started",
         providerThreadId: "provider-thread-timeline",
         turnId: "turn-timeline",
+        scope: turnScope("turn-timeline"),
         data: {
           providerThreadId: "provider-thread-timeline",
           turnId: "turn-timeline",
@@ -913,6 +915,7 @@ describe("public thread interaction routes", () => {
         type: "turn/started",
         providerThreadId: "provider-thread-denied-timeline",
         turnId: "turn-denied-timeline",
+        scope: turnScope("turn-denied-timeline"),
         data: {
           providerThreadId: "provider-thread-denied-timeline",
           turnId: "turn-denied-timeline",
@@ -1016,6 +1019,7 @@ describe("public thread interaction routes", () => {
         type: "turn/started",
         providerThreadId: "provider-thread-file-timeline",
         turnId: "turn-file-timeline",
+        scope: turnScope("turn-file-timeline"),
         data: {
           providerThreadId: "provider-thread-file-timeline",
           turnId: "turn-file-timeline",
@@ -1086,6 +1090,18 @@ describe("public thread interaction routes", () => {
         projectId: project.id,
         environmentId: environment.id,
         status: "active",
+      });
+      appendThreadEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        type: "turn/started",
+        providerThreadId: "provider-thread-permission-timeline",
+        turnId: "turn-permission-timeline",
+        scope: turnScope("turn-permission-timeline"),
+        data: {
+          providerThreadId: "provider-thread-permission-timeline",
+          turnId: "turn-permission-timeline",
+        },
       });
 
       const registered = registerPendingInteraction(

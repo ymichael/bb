@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ThreadEventRow, ViewMessage } from "@bb/domain";
+import { threadScope, turnScope } from "@bb/domain";
+import { getViewMessageScopeTurnId } from "../src/message-scope.js";
 import { toViewMessages, toViewProjection } from "../src/to-view-messages.js";
 import { buildTimelineRows } from "../src/thread-detail-rows.js";
 import { fromRows } from "./timeline-test-harness.js";
@@ -26,6 +28,7 @@ describe("toViewMessages operations", () => {
           ],
         },
         createdAt: 1,
+        scope: threadScope(),
       },
       {
         id: "evt-2",
@@ -46,6 +49,7 @@ describe("toViewMessages operations", () => {
           ],
         },
         createdAt: 2,
+        scope: threadScope(),
       },
     ];
 
@@ -90,6 +94,7 @@ describe("toViewMessages operations", () => {
           ],
         },
         createdAt: 1,
+        scope: turnScope("turn-1"),
       },
     ];
 
@@ -119,7 +124,7 @@ describe("toViewMessages operations", () => {
         id: "evt-1",
         threadId: "thread-1",
         seq: 1,
-        type: "warning",
+        type: "provider/warning",
         data: {
           providerThreadId: "thread-1",
           category: "deprecation",
@@ -127,12 +132,13 @@ describe("toViewMessages operations", () => {
           details: "Use v2 APIs instead",
         },
         createdAt: 1,
+        scope: threadScope(),
       },
       {
         id: "evt-2",
         threadId: "thread-1",
         seq: 2,
-        type: "warning",
+        type: "provider/warning",
         data: {
           providerThreadId: "thread-1",
           category: "config",
@@ -140,6 +146,7 @@ describe("toViewMessages operations", () => {
           details: "Remove 'legacyFlag'",
         },
         createdAt: 2,
+        scope: threadScope(),
       },
     ];
 
@@ -161,7 +168,7 @@ describe("toViewMessages operations", () => {
         id: "evt-1",
         threadId: "thread-1",
         seq: 1,
-        type: "warning",
+        type: "provider/warning",
         data: {
           providerThreadId: "thread-1",
           category: "general",
@@ -169,6 +176,7 @@ describe("toViewMessages operations", () => {
           details: "status: allowed • limit: five_hour",
         },
         createdAt: 1,
+        scope: threadScope(),
       },
     ];
 
@@ -198,6 +206,7 @@ describe("toViewMessages operations", () => {
           threadName: "Compaction summary title",
         },
         createdAt: 1,
+        scope: threadScope(),
       },
     ];
 
@@ -225,6 +234,7 @@ describe("toViewMessages operations", () => {
           threadName: "Server-assigned title",
         },
         createdAt: 1,
+        scope: threadScope(),
       },
       {
         id: "evt-2",
@@ -237,6 +247,7 @@ describe("toViewMessages operations", () => {
           threadName: "Server-assigned title",
         },
         createdAt: 2,
+        scope: threadScope(),
       },
     ];
 
@@ -267,6 +278,7 @@ describe("toViewMessages operations", () => {
           },
         },
         createdAt: 1,
+        scope: turnScope("turn-1"),
       },
     ];
 
@@ -300,6 +312,7 @@ describe("toViewMessages operations", () => {
           },
         },
         createdAt: 1,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-2",
@@ -315,6 +328,7 @@ describe("toViewMessages operations", () => {
           },
         },
         createdAt: 2,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-3",
@@ -327,6 +341,7 @@ describe("toViewMessages operations", () => {
           turnId: "turn-1",
         },
         createdAt: 3,
+        scope: turnScope("turn-1"),
       },
     ];
 
@@ -359,6 +374,7 @@ describe("toViewMessages operations", () => {
           },
         },
         createdAt: 1,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-2",
@@ -371,6 +387,7 @@ describe("toViewMessages operations", () => {
           turnId: "turn-1",
         },
         createdAt: 2,
+        scope: turnScope("turn-1"),
       },
     ];
     const projected = toViewMessages(fromRows(events));
@@ -383,7 +400,7 @@ describe("toViewMessages operations", () => {
     expect(ops[0]?.opType).toBe("compaction");
     expect(ops[0]?.title).toBe("Context compacted");
     expect(ops[0]?.status).toBe("completed");
-    expect(ops[0]?.turnId).toBe("turn-1");
+    expect(ops[0] ? getViewMessageScopeTurnId(ops[0]) : null).toBe("turn-1");
     expect(ops[0]?.sourceSeqStart).toBe(1);
     expect(ops[0]?.sourceSeqEnd).toBe(2);
   });
@@ -404,12 +421,13 @@ describe("toViewMessages operations", () => {
           },
         },
         createdAt: 1,
+        scope: turnScope("turn-failed"),
       },
       {
         id: "evt-2",
         threadId: "thread-1",
         seq: 2,
-        type: "error",
+        type: "provider/error",
         data: {
           providerThreadId: "provider-thread-1",
           turnId: "turn-failed",
@@ -417,6 +435,7 @@ describe("toViewMessages operations", () => {
           detail: "Remote compaction failed",
         },
         createdAt: 2,
+        scope: turnScope("turn-failed"),
       },
       {
         id: "evt-3",
@@ -432,6 +451,7 @@ describe("toViewMessages operations", () => {
           },
         },
         createdAt: 3,
+        scope: turnScope("turn-failed"),
       },
       {
         id: "evt-4",
@@ -447,6 +467,7 @@ describe("toViewMessages operations", () => {
           },
         },
         createdAt: 4,
+        scope: turnScope("turn-success"),
       },
       {
         id: "evt-5",
@@ -462,6 +483,7 @@ describe("toViewMessages operations", () => {
           },
         },
         createdAt: 5,
+        scope: turnScope("turn-success"),
       },
       {
         id: "evt-6",
@@ -474,6 +496,7 @@ describe("toViewMessages operations", () => {
           turnId: "turn-success",
         },
         createdAt: 6,
+        scope: turnScope("turn-success"),
       },
     ];
 
@@ -511,6 +534,7 @@ describe("toViewMessages operations", () => {
           },
         },
         createdAt: 1,
+        scope: turnScope("turn-interrupted"),
       },
       {
         id: "evt-2",
@@ -526,6 +550,7 @@ describe("toViewMessages operations", () => {
           },
         },
         createdAt: 2,
+        scope: turnScope("turn-interrupted"),
       },
     ];
 
@@ -558,6 +583,7 @@ describe("toViewMessages operations", () => {
           turnId: "turn-1",
         },
         createdAt: 1,
+        scope: turnScope("turn-1"),
       },
     ];
 
@@ -586,6 +612,7 @@ describe("toViewMessages operations", () => {
             reason: "user",
           },
           createdAt: 1,
+          scope: threadScope(),
         },
       ]),
     );
@@ -625,6 +652,7 @@ describe("toViewMessages operations", () => {
             turnId: "turn-1",
           },
           createdAt: 1,
+          scope: turnScope("turn-1"),
         },
       ]),
     );
@@ -662,6 +690,7 @@ describe("toViewMessages operations", () => {
           ],
         },
         createdAt: 1,
+        scope: threadScope(),
       },
       {
         id: "evt-2",
@@ -682,6 +711,7 @@ describe("toViewMessages operations", () => {
           ],
         },
         createdAt: 2,
+        scope: threadScope(),
       },
       {
         id: "evt-3",
@@ -702,6 +732,7 @@ describe("toViewMessages operations", () => {
           ],
         },
         createdAt: 3,
+        scope: threadScope(),
       },
     ];
 
@@ -743,6 +774,7 @@ describe("toViewMessages operations", () => {
           ],
         },
         createdAt: 1,
+        scope: threadScope(),
       },
       {
         id: "evt-2",
@@ -763,6 +795,7 @@ describe("toViewMessages operations", () => {
           ],
         },
         createdAt: 2,
+        scope: threadScope(),
       },
     ];
 
@@ -801,6 +834,7 @@ describe("toViewMessages operations", () => {
           ],
         },
         createdAt: 1,
+        scope: threadScope(),
       },
       {
         id: "evt-2",
@@ -821,6 +855,7 @@ describe("toViewMessages operations", () => {
           ],
         },
         createdAt: 2,
+        scope: threadScope(),
       },
     ];
 
@@ -861,6 +896,7 @@ describe("toViewMessages operations", () => {
           ],
         },
         createdAt: 1,
+        scope: threadScope(),
       },
     ];
 
@@ -905,6 +941,7 @@ describe("toViewMessages operations", () => {
           ],
         },
         createdAt: 1,
+        scope: threadScope(),
       },
     ];
 
@@ -952,6 +989,7 @@ describe("toViewMessages operations", () => {
           },
         },
         createdAt: 1,
+        scope: threadScope(),
       },
     ];
 
@@ -1005,6 +1043,7 @@ describe("toViewMessages operations", () => {
           },
         },
         createdAt: 1,
+        scope: threadScope(),
       },
       {
         id: "evt-2",
@@ -1025,6 +1064,7 @@ describe("toViewMessages operations", () => {
           ],
         },
         createdAt: 2,
+        scope: threadScope(),
       },
       {
         id: "evt-3",
@@ -1045,6 +1085,7 @@ describe("toViewMessages operations", () => {
           ],
         },
         createdAt: 3,
+        scope: threadScope(),
       },
     ];
 
@@ -1088,6 +1129,7 @@ describe("toViewMessages operations", () => {
             "This project points to a folder that no longer exists. Update the project path and retry.",
         },
         createdAt: 1,
+        scope: threadScope(),
       },
     ];
 
@@ -1118,6 +1160,7 @@ describe("toViewMessages operations", () => {
           reconnectTotal: 5,
         },
         createdAt: 1,
+        scope: threadScope(),
       },
     ];
 

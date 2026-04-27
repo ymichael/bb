@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ThreadEventRow, ViewMessage } from "@bb/domain";
+import { threadScope, turnScope } from "@bb/domain";
 import { toViewMessages } from "../src/to-view-messages.js";
 import {
   assertMonotonicSourceSeq,
@@ -27,6 +28,7 @@ describe("toViewMessages tool activity", () => {
           turnId: "turn-1",
         },
         createdAt: 1,
+        scope: turnScope("turn-1"),
       },
     ];
 
@@ -75,6 +77,7 @@ describe("toViewMessages tool activity", () => {
           },
         },
         createdAt: 1,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-2",
@@ -95,6 +98,7 @@ describe("toViewMessages tool activity", () => {
           },
         },
         createdAt: 2,
+        scope: turnScope("turn-1"),
       },
     ];
 
@@ -130,6 +134,7 @@ describe("toViewMessages tool activity", () => {
           },
         },
         createdAt: 100,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-2",
@@ -149,6 +154,7 @@ describe("toViewMessages tool activity", () => {
           },
         },
         createdAt: 500,
+        scope: turnScope("turn-1"),
       },
     ];
 
@@ -181,6 +187,7 @@ describe("toViewMessages tool activity", () => {
           ],
         },
         createdAt: 1,
+        scope: turnScope("turn-1"),
       },
     ];
 
@@ -232,6 +239,7 @@ describe("toViewMessages tool activity", () => {
           },
         },
         createdAt: 1,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-2",
@@ -259,6 +267,7 @@ describe("toViewMessages tool activity", () => {
           },
         },
         createdAt: 2,
+        scope: turnScope("turn-1"),
       },
     ];
 
@@ -304,6 +313,7 @@ describe("toViewMessages tool activity", () => {
           },
         },
         createdAt: 1,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-2",
@@ -325,6 +335,7 @@ describe("toViewMessages tool activity", () => {
           },
         },
         createdAt: 2,
+        scope: turnScope("turn-1"),
       },
     ];
 
@@ -358,6 +369,7 @@ describe("toViewMessages tool activity", () => {
           },
         },
         createdAt: 1,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-2",
@@ -378,6 +390,7 @@ describe("toViewMessages tool activity", () => {
           },
         },
         createdAt: 2,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-3",
@@ -401,6 +414,7 @@ describe("toViewMessages tool activity", () => {
           },
         },
         createdAt: 3,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-4",
@@ -420,6 +434,7 @@ describe("toViewMessages tool activity", () => {
           },
         },
         createdAt: 4,
+        scope: turnScope("turn-1"),
       },
     ];
 
@@ -476,6 +491,7 @@ describe("toViewMessages tool activity", () => {
           },
         },
         createdAt: 1,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-2",
@@ -503,6 +519,7 @@ describe("toViewMessages tool activity", () => {
           },
         },
         createdAt: 2,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-3",
@@ -522,6 +539,7 @@ describe("toViewMessages tool activity", () => {
           },
         },
         createdAt: 3,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-4",
@@ -544,6 +562,7 @@ describe("toViewMessages tool activity", () => {
           },
         },
         createdAt: 4,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-5",
@@ -570,6 +589,7 @@ describe("toViewMessages tool activity", () => {
           },
         },
         createdAt: 5,
+        scope: turnScope("turn-1"),
       },
     ];
 
@@ -624,6 +644,7 @@ describe("toViewMessages tool activity", () => {
           turnId: "turn-1",
         },
         createdAt: 1,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-2",
@@ -638,6 +659,7 @@ describe("toViewMessages tool activity", () => {
           delta: "opened COMMIT_EDITMSG",
         },
         createdAt: 2,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-3",
@@ -652,6 +674,7 @@ describe("toViewMessages tool activity", () => {
           delta: "thinking",
         },
         createdAt: 3,
+        scope: turnScope("turn-1"),
       },
     ];
 
@@ -688,6 +711,7 @@ describe("toViewMessages tool activity", () => {
           turnId: "turn-1",
         },
         createdAt: 1,
+        scope: turnScope("turn-1"),
       },
     ];
 
@@ -732,6 +756,7 @@ describe("toViewMessages tool activity", () => {
           turnId: "turn-1",
         },
         createdAt: 1,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-2",
@@ -746,6 +771,7 @@ describe("toViewMessages tool activity", () => {
           delta: "first\n",
         },
         createdAt: 2,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-3",
@@ -760,6 +786,7 @@ describe("toViewMessages tool activity", () => {
           delta: "second\n",
         },
         createdAt: 3,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-4",
@@ -780,6 +807,7 @@ describe("toViewMessages tool activity", () => {
           turnId: "turn-1",
         },
         createdAt: 4,
+        scope: turnScope("turn-1"),
       },
     ];
 
@@ -828,6 +856,7 @@ describe("toViewMessages tool activity", () => {
           turnId: "turn-1",
         },
         createdAt: 1,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-2",
@@ -842,6 +871,7 @@ describe("toViewMessages tool activity", () => {
           delta: "first\nsecond\n",
         },
         createdAt: 2,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-3",
@@ -857,6 +887,7 @@ describe("toViewMessages tool activity", () => {
           reset: true,
         },
         createdAt: 3,
+        scope: turnScope("turn-1"),
       },
     ];
 
@@ -901,6 +932,7 @@ describe("toViewMessages tool activity", () => {
           turnId: "turn-1",
         },
         createdAt: 1,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-2",
@@ -921,6 +953,7 @@ describe("toViewMessages tool activity", () => {
           turnId: "turn-1",
         },
         createdAt: 2,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-3",
@@ -935,6 +968,7 @@ describe("toViewMessages tool activity", () => {
           delta: "second\n",
         },
         createdAt: 3,
+        scope: turnScope("turn-1"),
       },
     ];
 
@@ -981,6 +1015,7 @@ describe("toViewMessages tool activity", () => {
           turnId: "turn-1",
         },
         createdAt: 1,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-2",
@@ -995,6 +1030,7 @@ describe("toViewMessages tool activity", () => {
           delta: "partial",
         },
         createdAt: 2,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-3",
@@ -1009,6 +1045,7 @@ describe("toViewMessages tool activity", () => {
           delta: "\ntrailing",
         },
         createdAt: 3,
+        scope: turnScope("turn-1"),
       },
     ];
 
@@ -1053,6 +1090,7 @@ describe("toViewMessages tool activity", () => {
           turnId: "turn-1",
         },
         createdAt: 1,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-2",
@@ -1067,6 +1105,7 @@ describe("toViewMessages tool activity", () => {
           delta: "partial",
         },
         createdAt: 2,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-3",
@@ -1080,6 +1119,7 @@ describe("toViewMessages tool activity", () => {
           message: "Stopped by user",
         },
         createdAt: 3,
+        scope: threadScope(),
       },
     ];
 
@@ -1114,6 +1154,7 @@ describe("toViewMessages tool activity", () => {
           },
         },
         createdAt: 1,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-2",
@@ -1133,6 +1174,7 @@ describe("toViewMessages tool activity", () => {
           },
         },
         createdAt: 2,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-3",
@@ -1151,6 +1193,7 @@ describe("toViewMessages tool activity", () => {
           },
         },
         createdAt: 3,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-4",
@@ -1170,6 +1213,7 @@ describe("toViewMessages tool activity", () => {
           },
         },
         createdAt: 4,
+        scope: turnScope("turn-1"),
       },
     ];
 
@@ -1207,6 +1251,7 @@ describe("toViewMessages tool activity", () => {
           },
         },
         createdAt: 1,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-2",
@@ -1219,6 +1264,7 @@ describe("toViewMessages tool activity", () => {
           threadName: "server restart bug",
         },
         createdAt: 2,
+        scope: threadScope(),
       },
       {
         id: "evt-3",
@@ -1238,6 +1284,7 @@ describe("toViewMessages tool activity", () => {
           },
         },
         createdAt: 3,
+        scope: turnScope("turn-1"),
       },
     ];
 
@@ -1277,6 +1324,7 @@ describe("toViewMessages tool activity", () => {
           },
         },
         createdAt: 1,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-2",
@@ -1289,6 +1337,7 @@ describe("toViewMessages tool activity", () => {
           threadName: "new thread name",
         },
         createdAt: 2,
+        scope: threadScope(),
       },
       {
         id: "evt-3",
@@ -1309,6 +1358,7 @@ describe("toViewMessages tool activity", () => {
           },
         },
         createdAt: 3,
+        scope: turnScope("turn-1"),
       },
     ];
 
@@ -1346,6 +1396,7 @@ describe("toViewMessages tool activity", () => {
           },
         },
         createdAt: 1,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-2",
@@ -1366,6 +1417,7 @@ describe("toViewMessages tool activity", () => {
           },
         },
         createdAt: 2,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-3",
@@ -1383,6 +1435,7 @@ describe("toViewMessages tool activity", () => {
           },
         },
         createdAt: 3,
+        scope: turnScope("turn-1"),
       },
     ];
 
@@ -1413,6 +1466,7 @@ describe("toViewMessages tool activity", () => {
           },
         },
         createdAt: 1,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-2",
@@ -1430,6 +1484,7 @@ describe("toViewMessages tool activity", () => {
           },
         },
         createdAt: 2,
+        scope: turnScope("turn-1"),
       },
     ];
 
@@ -1465,6 +1520,7 @@ describe("toViewMessages tool activity", () => {
           },
         },
         createdAt: 1,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-2",
@@ -1481,6 +1537,7 @@ describe("toViewMessages tool activity", () => {
           },
         },
         createdAt: 2,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-3",
@@ -1498,6 +1555,7 @@ describe("toViewMessages tool activity", () => {
           },
         },
         createdAt: 3,
+        scope: turnScope("turn-1"),
       },
     ];
 
@@ -1541,6 +1599,7 @@ describe("toViewMessages tool activity", () => {
           },
         },
         createdAt: 1,
+        scope: turnScope("turn-1"),
       },
     ];
 
@@ -1579,6 +1638,7 @@ describe("toViewMessages tool activity", () => {
           },
         },
         createdAt: 1,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-2",
@@ -1598,6 +1658,7 @@ describe("toViewMessages tool activity", () => {
           },
         },
         createdAt: 2,
+        scope: turnScope("turn-1"),
       },
     ];
 
@@ -1652,6 +1713,7 @@ describe("toViewMessages tool activity", () => {
           turnId: "turn-1",
         },
         createdAt: 1,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-2",
@@ -1666,6 +1728,7 @@ describe("toViewMessages tool activity", () => {
           delta: "patched",
         },
         createdAt: 2,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-3",
@@ -1689,6 +1752,7 @@ describe("toViewMessages tool activity", () => {
           turnId: "turn-1",
         },
         createdAt: 3,
+        scope: turnScope("turn-1"),
       },
     ];
 
@@ -1725,6 +1789,7 @@ describe("toViewMessages tool activity", () => {
           turnId: "turn-1",
         },
         createdAt: 1,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-2",
@@ -1739,6 +1804,7 @@ describe("toViewMessages tool activity", () => {
           delta: "patched",
         },
         createdAt: 2,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-3",
@@ -1753,6 +1819,7 @@ describe("toViewMessages tool activity", () => {
           delta: "\ntrailing",
         },
         createdAt: 3,
+        scope: turnScope("turn-1"),
       },
     ];
 
@@ -1787,6 +1854,7 @@ describe("toViewMessages tool activity", () => {
           turnId: "turn-1",
         },
         createdAt: 1,
+        scope: turnScope("turn-1"),
       },
     ];
 
@@ -1826,6 +1894,7 @@ describe("toViewMessages tool activity", () => {
           turnId: "turn-1",
         },
         createdAt: 1,
+        scope: turnScope("turn-1"),
       },
     ];
 
@@ -1870,6 +1939,7 @@ describe("toViewMessages tool activity", () => {
           turnId: "turn-1",
         },
         createdAt: 1,
+        scope: turnScope("turn-1"),
       },
     ];
 
@@ -1913,6 +1983,7 @@ describe("toViewMessages tool activity", () => {
             },
           },
           createdAt: 1,
+          scope: turnScope("turn-1"),
         },
         {
           id: "evt-2",
@@ -1926,6 +1997,7 @@ describe("toViewMessages tool activity", () => {
             message: "partial output",
           },
           createdAt: 2,
+          scope: turnScope("turn-1"),
         },
       ]),
       {
@@ -1962,6 +2034,7 @@ describe("toViewMessages tool activity", () => {
             },
           },
           createdAt: 1_000,
+          scope: turnScope("turn-1"),
         },
         {
           id: "evt-2",
@@ -1975,6 +2048,7 @@ describe("toViewMessages tool activity", () => {
             message: "partial output",
           },
           createdAt: 1_500,
+          scope: turnScope("turn-1"),
         },
         {
           id: "evt-3",
@@ -1995,6 +2069,7 @@ describe("toViewMessages tool activity", () => {
             },
           },
           createdAt: 3_000,
+          scope: turnScope("turn-1"),
         },
       ]),
       {
@@ -2031,6 +2106,7 @@ describe("toViewMessages tool activity", () => {
           },
         },
         createdAt: 1,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-2",
@@ -2050,6 +2126,7 @@ describe("toViewMessages tool activity", () => {
           },
         },
         createdAt: 2,
+        scope: turnScope("turn-1"),
       },
     ];
 
@@ -2085,6 +2162,7 @@ describe("toViewMessages tool activity", () => {
           },
         },
         createdAt: 1,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-2",
@@ -2104,6 +2182,7 @@ describe("toViewMessages tool activity", () => {
           },
         },
         createdAt: 2,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-3",
@@ -2122,6 +2201,7 @@ describe("toViewMessages tool activity", () => {
           },
         },
         createdAt: 3,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-4",
@@ -2141,6 +2221,7 @@ describe("toViewMessages tool activity", () => {
           },
         },
         createdAt: 4,
+        scope: turnScope("turn-1"),
       },
     ];
 
@@ -2176,6 +2257,7 @@ describe("toViewMessages tool activity", () => {
           },
         },
         createdAt: 1,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-2",
@@ -2196,6 +2278,7 @@ describe("toViewMessages tool activity", () => {
           },
         },
         createdAt: 2,
+        scope: turnScope("turn-1"),
       },
     ];
 
@@ -2241,6 +2324,7 @@ describe("toViewMessages tool activity", () => {
           },
         },
         createdAt: 1,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-2",
@@ -2260,6 +2344,7 @@ describe("toViewMessages tool activity", () => {
           },
         },
         createdAt: 2,
+        scope: turnScope("turn-1"),
       },
     ];
 
@@ -2294,6 +2379,7 @@ describe("toViewMessages tool activity", () => {
           },
         },
         createdAt: 1,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-2",
@@ -2314,6 +2400,7 @@ describe("toViewMessages tool activity", () => {
           },
         },
         createdAt: 2,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-3",
@@ -2332,6 +2419,7 @@ describe("toViewMessages tool activity", () => {
           },
         },
         createdAt: 3,
+        scope: turnScope("turn-1"),
       },
       {
         id: "evt-4",
@@ -2351,6 +2439,7 @@ describe("toViewMessages tool activity", () => {
           },
         },
         createdAt: 4,
+        scope: turnScope("turn-1"),
       },
     ];
 

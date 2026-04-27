@@ -1,5 +1,10 @@
 import { createReplayRawProviderEventTranslator } from "@bb/agent-runtime";
-import { type ThreadEvent, type ThreadEventTurnStatus } from "@bb/domain";
+import {
+  threadScope,
+  turnScope,
+  type ThreadEvent,
+  type ThreadEventTurnStatus,
+} from "@bb/domain";
 import type { HostDaemonCommandResult } from "@bb/host-daemon-contract";
 import { replayRawProviderEventsPath } from "@bb/replay-capture";
 import {
@@ -87,7 +92,7 @@ function terminalEvent(args: {
     type: "turn/completed",
     threadId: args.command.threadId,
     providerThreadId: args.terminal.providerThreadId,
-    turnId: args.terminal.turnId,
+    scope: turnScope(args.terminal.turnId),
     status: args.status,
     ...(args.errorMessage ? { error: { message: args.errorMessage } } : {}),
   };
@@ -104,6 +109,7 @@ function emitReplaySystemError(args: {
     event: {
       type: "system/error",
       threadId: args.command.threadId,
+      scope: threadScope(),
       code: "replay_failed",
       message: args.error.message,
     },

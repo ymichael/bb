@@ -15,6 +15,7 @@ import {
   type HostDaemonEventEnvelope,
   type HostDaemonInternalSchema,
 } from "@bb/host-daemon-contract";
+import { requireThreadEventScopeTurnId } from "@bb/domain";
 import { renderTemplate } from "@bb/templates";
 import type { Hono } from "hono";
 import { ApiError } from "../errors.js";
@@ -155,7 +156,6 @@ async function queueManagedThreadTurnNotificationBestEffort(
 
 function resolveProviderIdentifiers(event: HostDaemonEventEnvelope["event"]): {
   providerThreadId: string | null;
-  turnId: string | null;
 } {
   switch (event.type) {
     case "thread/started":
@@ -168,16 +168,13 @@ function resolveProviderIdentifiers(event: HostDaemonEventEnvelope["event"]): {
     case "system/operation":
     case "system/permissionGrant/lifecycle":
     case "system/thread-provisioning":
-      return { providerThreadId: null, turnId: null };
+      return { providerThreadId: null };
     case "thread/identity":
     case "thread/name/updated":
-    case "warning":
-      return { providerThreadId: event.providerThreadId, turnId: null };
+    case "provider/warning":
+      return { providerThreadId: event.providerThreadId };
     case "thread/compacted":
-      return {
-        providerThreadId: event.providerThreadId,
-        turnId: event.turnId,
-      };
+      return { providerThreadId: event.providerThreadId };
     case "turn/started":
     case "turn/completed":
     case "turn/input/accepted":
@@ -195,16 +192,10 @@ function resolveProviderIdentifiers(event: HostDaemonEventEnvelope["event"]): {
     case "thread/tokenUsage/updated":
     case "turn/plan/updated":
     case "turn/diff/updated":
-      return {
-        providerThreadId: event.providerThreadId,
-        turnId: event.turnId,
-      };
-    case "error":
+      return { providerThreadId: event.providerThreadId };
+    case "provider/error":
     case "provider/unhandled":
-      return {
-        providerThreadId: event.providerThreadId,
-        turnId: event.turnId ?? null,
-      };
+      return { providerThreadId: event.providerThreadId };
     default: {
       throw new Error("Unsupported event type");
     }
@@ -213,11 +204,12 @@ function resolveProviderIdentifiers(event: HostDaemonEventEnvelope["event"]): {
 
 function toStoredEvent(args: ToStoredEventArgs) {
   const envelope = args.envelope;
-  const { type, threadId, ...data } = envelope.event;
+  const { scope, type, threadId, ...data } = envelope.event;
   return {
     threadId: envelope.threadId,
     environmentId: args.environmentId,
     ...resolveProviderIdentifiers(envelope.event),
+    scope,
     sequence: envelope.sequence,
     type,
     // Provider events keep the daemon timestamp even though server-originated
@@ -349,7 +341,10 @@ function listCompletedTurnKeysForStartedEvents(
     startedTurnKeys.add(
       toTurnKey({
         threadId: entry.threadId,
-        turnId: entry.event.turnId,
+        turnId: requireThreadEventScopeTurnId({
+          type: entry.event.type,
+          scope: entry.event.scope,
+        }),
       }),
     );
     threadIds.add(entry.threadId);
@@ -383,7 +378,10 @@ function shouldApplyEventEffect(args: ShouldApplyEventEffectArgs): boolean {
     return !args.completedTurnKeyLookup.has(
       toTurnKey({
         threadId: entry.threadId,
-        turnId: entry.event.turnId,
+        turnId: requireThreadEventScopeTurnId({
+          type: entry.event.type,
+          scope: entry.event.scope,
+        }),
       }),
     );
   }

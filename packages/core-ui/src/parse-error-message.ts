@@ -1,7 +1,6 @@
 import { buildThreadEventRow } from "@bb/domain";
 import type { ThreadEvent, ThreadEventType } from "@bb/domain";
 import type { EventMeta } from "./event-decode.js";
-import { getEventTurnId } from "./event-decode.js";
 import { messageId } from "./format-helpers.js";
 import type {
   ViewDebugRawEventMessage,
@@ -70,7 +69,8 @@ export function parseErrorMessage(
   decoded: ThreadEvent,
   meta: EventMeta,
 ): ViewErrorMessage | null {
-  if (decoded.type !== "error" && decoded.type !== "system/error") return null;
+  if (decoded.type !== "provider/error" && decoded.type !== "system/error")
+    return null;
 
   const { message, detail } = decoded;
   const reconnectState = getReconnectState(decoded);
@@ -81,7 +81,7 @@ export function parseErrorMessage(
     sourceSeqStart: meta.seq,
     sourceSeqEnd: meta.seq,
     createdAt: meta.createdAt,
-    turnId: getEventTurnId(decoded),
+    scope: decoded.scope,
     rawType: decoded.type,
     message: formatErrorDetail(message, detail),
     ...(reconnectState
@@ -139,10 +139,11 @@ export function appendDebugEvent(
     sourceSeqStart: meta.seq,
     sourceSeqEnd: meta.seq,
     createdAt: meta.createdAt,
-    turnId: getEventTurnId(decoded),
+    scope: decoded.scope,
     rawType: decoded.type,
     rawEvent: buildThreadEventRow({
       id: meta.id,
+      scope: decoded.scope,
       threadId: decoded.threadId,
       seq: meta.seq,
       createdAt: meta.createdAt,

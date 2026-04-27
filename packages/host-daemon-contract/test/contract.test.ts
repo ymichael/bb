@@ -1,4 +1,5 @@
 import { collectOptionalFieldPaths } from "@bb/test-helpers";
+import { threadScope } from "@bb/domain";
 import { describe, expect, it } from "vitest";
 import * as contract from "../src/index.js";
 import {
@@ -766,6 +767,7 @@ describe("host-daemon session schemas", () => {
             event: {
               type: "system/error",
               threadId: "thr_123",
+              scope: threadScope(),
               message: "boom",
             },
           },

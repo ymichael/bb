@@ -1,7 +1,4 @@
-import {
-  createDebouncedCallbackScheduler,
-  type ThreadEvent,
-} from "@bb/domain";
+import { createDebouncedCallbackScheduler, type ThreadEvent } from "@bb/domain";
 import type { HostDaemonLogger } from "./logger.js";
 
 export interface BufferedEventInput {
@@ -78,7 +75,7 @@ export function shouldFlushThreadEventImmediately(event: ThreadEvent): boolean {
     return true;
   }
 
-  if (event.type === "error") {
+  if (event.type === "provider/error") {
     return event.willRetry !== true;
   }
 

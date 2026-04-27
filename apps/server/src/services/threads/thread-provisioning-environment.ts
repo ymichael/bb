@@ -20,6 +20,7 @@ import {
 import {
   activeLifecycleOperationStates,
   isActiveLifecycleOperationState,
+  threadScope,
   type Environment,
   type ProvisioningTranscriptEntry,
   type Thread,
@@ -356,6 +357,7 @@ export function failThreadProvisioning(
     code: "thread_provisioning_failed",
     message: "Provisioning thread failed",
     detail: args.detail,
+    scope: threadScope(),
   });
   tryTransition(deps.db, deps.hub, args.thread.id, "error");
 }

@@ -47,6 +47,7 @@ function buildStoredEventRow(args: BuildStoredEventRowArgs): StoredEventRow {
     itemId: args.itemId ?? null,
     itemKind: args.itemKind ?? null,
     providerThreadId: "provider-thread-1",
+    scopeKind: args.turnId === null ? "thread" : "turn",
     sequence: args.sequence,
     threadId: "thread-1",
     turnId: args.turnId ?? "turn-1",

@@ -14,7 +14,7 @@ import {
   toViewMessages,
   toViewProjection,
 } from "@bb/core-ui";
-import { buildThreadEvent, buildThreadEventRow } from "@bb/domain";
+import { buildThreadEvent, buildThreadEventRow, threadScope } from "@bb/domain";
 import type {
   ThreadEventRow,
   ToolCallRequest,
@@ -583,12 +583,14 @@ function buildClientRequestRows(args: {
   return args.clientRequests.map((request) => {
     return buildThreadEventRow({
       id: request.id,
+      scope: threadScope(),
       threadId: args.threadId,
       seq: 0,
       createdAt: request.createdAt,
       event: {
         type: request.type,
         threadId: args.threadId,
+        scope: threadScope(),
         direction: "outbound",
         source: "tell",
         initiator: "user",
@@ -627,6 +629,7 @@ function buildThreadEventRows(args: {
   const providerRows = args.translatedCaptures.map((entry, index) => {
     return buildThreadEventRow({
       id: `audit-row-${index + 1}`,
+      scope: entry.event.scope,
       threadId: entry.event.threadId,
       seq: 0,
       createdAt: entry.capturedAt,
@@ -652,6 +655,7 @@ function buildThreadEventRows(args: {
     .map((entry, index) =>
       buildThreadEventRow({
         id: entry.row.id,
+        scope: entry.row.scope,
         threadId: entry.row.threadId,
         seq: index + 1,
         createdAt: entry.row.createdAt,

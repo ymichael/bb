@@ -6,6 +6,7 @@ import type {
   ViewTurn,
   ViewTurnStatus,
 } from "@bb/domain";
+import { requireThreadEventScopeTurnId } from "@bb/domain";
 import { assertNever } from "./assert-never.js";
 import type { EventMeta } from "./event-decode.js";
 import {
@@ -95,10 +96,14 @@ function createProjectionTurn(
   event: TurnStartedEvent,
   meta: EventMeta,
 ): ProjectionTurnDraft {
+  const turnId = requireThreadEventScopeTurnId({
+    type: event.type,
+    scope: event.scope,
+  });
   return {
     messages: [],
     turn: {
-      turnId: event.turnId,
+      turnId,
       threadId: event.threadId,
       sourceSeqStart: meta.seq,
       sourceSeqEnd: meta.seq,
@@ -204,16 +209,20 @@ export function buildViewProjection(
 
   for (const { event, meta } of args.events) {
     if (event.type === "turn/started") {
-      const existing = turnsById.get(event.turnId);
+      const turnId = requireThreadEventScopeTurnId({
+        type: event.type,
+        scope: event.scope,
+      });
+      const existing = turnsById.get(turnId);
       if (existing) {
         throw new Error(
-          `Timeline projection found duplicate turn/started for ${event.turnId}`,
+          `Timeline projection found duplicate turn/started for ${turnId}`,
         );
       }
-      turnsById.set(event.turnId, createProjectionTurn(event, meta));
+      turnsById.set(turnId, createProjectionTurn(event, meta));
       entryDrafts.push({
         kind: "turn",
-        turnId: event.turnId,
+        turnId,
         sourceSeqStart: meta.seq,
         createdAt: meta.createdAt,
       });
@@ -221,10 +230,14 @@ export function buildViewProjection(
     }
 
     if (event.type === "turn/completed") {
-      const existing = turnsById.get(event.turnId);
+      const turnId = requireThreadEventScopeTurnId({
+        type: event.type,
+        scope: event.scope,
+      });
+      const existing = turnsById.get(turnId);
       if (!existing) {
         throw new Error(
-          `Timeline projection found turn/completed without turn/started for ${event.turnId}`,
+          `Timeline projection found turn/completed without turn/started for ${turnId}`,
         );
       }
       updateProjectionTurnCompletion(existing, event, meta);
@@ -232,8 +245,7 @@ export function buildViewProjection(
   }
 
   for (const message of args.messages) {
-    const turnId = message.turnId;
-    if (!turnId) {
+    if (message.scope.kind === "thread") {
       entryDrafts.push({
         kind: "message",
         message,
@@ -243,6 +255,7 @@ export function buildViewProjection(
       continue;
     }
 
+    const turnId = message.scope.turnId;
     const turnDraft = turnsById.get(turnId);
     if (!turnDraft) {
       throw new Error(

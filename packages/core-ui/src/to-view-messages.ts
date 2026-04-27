@@ -1,4 +1,5 @@
 import type { ThreadEvent } from "@bb/domain";
+import { requireThreadEventScopeTurnId } from "@bb/domain";
 import { parseCompactionLifecycleEvent } from "./compaction-lifecycle.js";
 import {
   type EventMeta,
@@ -206,7 +207,13 @@ function buildClientRequestTurnIdBySequence(
     if (event.type !== "turn/input/accepted") {
       continue;
     }
-    turnIdBySequence.set(event.clientRequestSequence, event.turnId);
+    turnIdBySequence.set(
+      event.clientRequestSequence,
+      requireThreadEventScopeTurnId({
+        type: event.type,
+        scope: event.scope,
+      }),
+    );
   }
   return turnIdBySequence;
 }
@@ -244,7 +251,7 @@ function getToolCallReceiverThreadIds(decoded: ThreadEvent): string[] {
 function getCompactionTurnFinalization(
   decoded: ThreadEvent,
 ): CompactionTurnFinalization | undefined {
-  if (decoded.type === "error") {
+  if (decoded.type === "provider/error") {
     return {
       status: "error",
       detail: decoded.detail ?? decoded.message,
@@ -488,7 +495,7 @@ function buildFlatViewMessages(
           sourceSeqEnd: meta.seq,
           createdAt: meta.createdAt,
           startedAt: meta.createdAt,
-          ...(eventTurnId ? { turnId: eventTurnId } : {}),
+          scope: decoded.scope,
           ...(eventParentToolCallId
             ? { parentToolCallId: eventParentToolCallId }
             : {}),
@@ -524,7 +531,7 @@ function buildFlatViewMessages(
           sourceSeqEnd: meta.seq,
           createdAt: meta.createdAt,
           startedAt: meta.createdAt,
-          ...(eventTurnId ? { turnId: eventTurnId } : {}),
+          scope: decoded.scope,
           ...(eventParentToolCallId
             ? { parentToolCallId: eventParentToolCallId }
             : {}),
@@ -560,7 +567,7 @@ function buildFlatViewMessages(
           sourceSeqEnd: meta.seq,
           createdAt: meta.createdAt,
           startedAt: meta.createdAt,
-          ...(eventTurnId ? { turnId: eventTurnId } : {}),
+          scope: decoded.scope,
           ...(eventParentToolCallId
             ? { parentToolCallId: eventParentToolCallId }
             : {}),
@@ -596,7 +603,7 @@ function buildFlatViewMessages(
           sourceSeqEnd: meta.seq,
           createdAt: meta.createdAt,
           startedAt: meta.createdAt,
-          ...(eventTurnId ? { turnId: eventTurnId } : {}),
+          scope: decoded.scope,
           ...(eventParentToolCallId
             ? { parentToolCallId: eventParentToolCallId }
             : {}),

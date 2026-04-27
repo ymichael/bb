@@ -7,7 +7,6 @@
  * and produces `ThreadEvent[]`.
  */
 
-import type { SDKResultMessage } from "@anthropic-ai/claude-agent-sdk";
 import { getBuiltInAgentProviderInfo } from "@bb/agent-providers";
 import type {
   ApprovalPendingInteractionPayload,
@@ -16,22 +15,17 @@ import type {
   PendingInteractionGrantedPermissionProfile,
   ProviderCapabilities,
   ThreadEvent,
-  ThreadEventContextWindowUsage,
   ThreadEventItem,
-  ThreadEventTokenUsage,
-  ThreadEventTokenUsageBreakdown,
 } from "@bb/domain";
-import { jsonValueSchema, toPositiveNumber } from "@bb/domain";
+import { jsonValueSchema, threadScope } from "@bb/domain";
 import { decodeNormalizedProviderToolCallRequest } from "../shared/provider-tool-call-contract.js";
 import { resolveAdapterPermissionPolicy } from "../shared/permission-policy.js";
 import { resolveBridgePath } from "../shared/bridge-path.js";
-import { bashArgsSchema, textBlockSchema } from "../shared/tool-arg-schemas.js";
+import { bashArgsSchema } from "../shared/tool-arg-schemas.js";
 import {
   buildEditDiff,
   buildShellEnvironmentPolicyConfig,
   extractResultText,
-  normalizeProviderCommandOutput,
-  toNonNegativeNumber,
   toOptionalRecord,
   toOptionalString,
   withParentToolCallId,
@@ -40,7 +34,6 @@ import {
   buildAcceptedUserMessageEvent,
   drainAcceptedUserMessages,
   queueAcceptedUserMessage,
-  type AcceptedUserMessageState,
 } from "../shared/accepted-user-messages.js";
 import {
   createProviderTurnStateRegistry,
@@ -48,13 +41,10 @@ import {
   type EnsureProviderTurnStartedArgs,
 } from "../shared/turn-state.js";
 import {
-  getOrCreateScopedItemId,
-  resolveCompletedScopedItemId,
-} from "../shared/scoped-item-ids.js";
-import {
   buildUnhandledProviderEvents,
   createUnhandledProviderEvent,
 } from "../shared/provider-unhandled-event.js";
+import { UNSTAMPED_THREAD_ID } from "../shared/unstamped-thread-id.js";
 import { buildScopedProviderErrorEvents } from "../shared/provider-error-events.js";
 import { parseAvailableModelList } from "../shared/available-models.js";
 import {
@@ -87,59 +77,26 @@ import {
   toClaudePermissionMode,
 } from "./interactive-contract.js";
 import {
-  claudeAssistantMessageSchema,
-  claudeAssistantUsageMessageSchema,
-  claudeCompactBoundarySystemMessageSchema,
   claudeFileEditArgsSchema,
-  claudeModelUsageSchema,
-  claudeResultMessageSchema,
-  claudeSdkMessageTypeSchema,
-  claudeStatusSystemMessageSchema,
-  claudeStreamEventMessageSchema,
-  claudeSystemMessageSchema,
-  claudeUserMessageSchema,
   claudeWebFetchArgsSchema,
   claudeWebSearchArgsSchema,
-  messageContentSchema,
-  messageIdSchema,
-  sdkUsageSchema,
-  streamEventSchema,
-  thinkingBlockSchema,
-  toolResultBlockSchema,
-  toolUseBlockSchema,
-  type ClaudeAssistantMessage,
   type ClaudeFileEditArgs,
   type ClaudeWebFetchArgs,
   type ClaudeWebSearchArgs,
-  type ClaudeMessageContentBlock,
-  type ClaudeResultMessage,
-  type ClaudeSdkUsage,
-  type ClaudeStreamEventMessage,
-  type ClaudeToolUseResult,
-  type ClaudeUserMessage,
 } from "./schemas.js";
 import { claudeCodeVisibilityMetadata } from "./visibility.js";
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-function getNestedParentToolUseId(message: unknown): string | undefined {
-  if (typeof message !== "object" || message === null) {
-    return undefined;
-  }
-  if (!("parent_tool_use_id" in message)) {
-    return undefined;
-  }
-  return typeof message.parent_tool_use_id === "string"
-    ? message.parent_tool_use_id
-    : undefined;
-}
-
-function getNestedMessageId(message: unknown): string | undefined {
-  const parsed = messageIdSchema.safeParse(message);
-  return parsed.success ? parsed.data.id : undefined;
-}
+import {
+  extractClaudeCommandExecutionOutput,
+  getNestedParentToolUseId,
+  resolveClaudeModelContextWindowHint,
+} from "./sdk-extraction.js";
+import {
+  translateClaudeSdkMessage,
+  type ClaudeToolResultTranslationInput,
+  type ClaudeToolUseTranslationInput,
+  type ClaudeTurnState,
+  type ClaudeUnexpectedSdkEventArgs,
+} from "./translate-message.js";
 
 type ClaudePendingFileChangeItem = Extract<
   ThreadEventItem,
@@ -155,37 +112,6 @@ interface ClaudeNormalizedWebFetch {
   url: string;
   prompt: string | null;
 }
-
-interface ClaudeToolUseTranslationInput {
-  callId: string;
-  toolName: string;
-  args: unknown;
-  parentToolCallId?: string;
-}
-
-interface ClaudeToolResultTranslationInput {
-  callId: string;
-  toolName?: string;
-  content: unknown;
-  isError: boolean;
-  parentToolCallId?: string;
-  startedItem?: ThreadEventItem;
-  toolUseResult: ClaudeToolUseResult | null;
-}
-
-interface ClaudeProcessOutputStreams {
-  stderr: string;
-  stdout: string;
-}
-
-interface ClaudeCommandExecutionOutputArgs {
-  content: unknown;
-  toolUseResult: ClaudeToolUseResult | null;
-}
-
-const CLAUDE_EMPTY_BASH_OUTPUT_PLACEHOLDERS = [
-  "(Bash completed with no output)",
-] as const;
 
 function parseClaudeBashCommand(input: unknown): ClaudeBashCommand | null {
   const parsed = bashArgsSchema.safeParse(input);
@@ -404,17 +330,17 @@ function translateClaudeToolUseItem(
         }
         const normalized = normalizeClaudeWebSearchArgs(parsed.data);
         if (!normalized) {
-        return withParentToolCallId(baseToolCall, input.parentToolCallId);
-      }
-      return withParentToolCallId(
-        {
-          type: "webSearch",
-          id: input.callId,
-          queries: normalized,
-          resultText: null,
-        },
-        input.parentToolCallId,
-      );
+          return withParentToolCallId(baseToolCall, input.parentToolCallId);
+        }
+        return withParentToolCallId(
+          {
+            type: "webSearch",
+            id: input.callId,
+            queries: normalized,
+            resultText: null,
+          },
+          input.parentToolCallId,
+        );
       }
 
       const parsed = claudeWebFetchArgsSchema.safeParse(input.args);
@@ -543,9 +469,7 @@ function translateClaudeToolResultItem(
           id: input.callId,
           command: "",
           cwd: "",
-          ...(outputText === undefined
-            ? {}
-            : { aggregatedOutput: outputText }),
+          ...(outputText === undefined ? {} : { aggregatedOutput: outputText }),
           exitCode: bashExitCode,
           status: itemStatus,
           approvalStatus: null,
@@ -599,26 +523,6 @@ export interface CreateClaudeCodeProviderAdapterOptions {
   turnIdPrefix?: string;
 }
 
-interface ClaudeTurnState {
-  assistantMessageCounter: number;
-  counter: number;
-  currentTurnId: string | undefined;
-  cumulativeTokens: ThreadEventTokenUsageBreakdown;
-  latestRequestContextTokens: number | undefined;
-  openAssistantMessageIdsByScope: Map<string, string>;
-  openReasoningItemIdsByScope: Map<string, string>;
-  pendingAcceptedUserMessages: AcceptedUserMessageState["pendingAcceptedUserMessages"];
-  reasoningItemCounter: number;
-  selectedModelContextWindow: number | null;
-  toolItemsByCallId: Map<string, ThreadEventItem>;
-}
-
-interface ClaudeContextWindowUsageArgs {
-  fallbackModelContextWindow: number | null;
-  latestRequestContextTokens: number | undefined;
-  message: ClaudeResultMessage | SDKResultMessage;
-}
-
 interface TranslateClaudeErrorEnvelopeArgs {
   context?: ProviderTranslationContext;
   detail: string;
@@ -628,9 +532,6 @@ interface ResolveClaudeInteractiveRequestTurnIdArgs {
   threadId: string;
   turnId: string | null;
 }
-
-const DEFAULT_CLAUDE_CONTEXT_WINDOW = 200_000;
-const LARGE_CLAUDE_CONTEXT_WINDOW = 1_000_000;
 
 export function createClaudeCodeProviderAdapter(
   opts?: CreateClaudeCodeProviderAdapterOptions,
@@ -721,6 +622,15 @@ export function createClaudeCodeProviderAdapter(
     return currentTurnId.length > 0 ? currentTurnId : null;
   }
 
+  function resolveClaudeActiveTurnId(
+    context?: ProviderTranslationContext,
+  ): string | undefined {
+    if (!context?.threadId) {
+      return undefined;
+    }
+    return turnState.get({ threadId: context.threadId })?.currentTurnId;
+  }
+
   function translateClaudeEvent(
     event: unknown,
     context?: ProviderTranslationContext,
@@ -737,6 +647,7 @@ export function createClaudeCodeProviderAdapter(
         ...context,
         ...(parentToolCallId ? { parentToolCallId } : {}),
       });
+      const fallbackTurnId = resolveClaudeActiveTurnId(context);
       return translated.length > 0
         ? translated
         : buildUnhandledProviderEvents({
@@ -747,15 +658,26 @@ export function createClaudeCodeProviderAdapter(
               params: sdkEnvelope.data.params,
             },
             visibilityMetadata: claudeCodeVisibilityMetadata,
+            ...(fallbackTurnId ? { turnId: fallbackTurnId } : {}),
             ...(parentToolCallId ? { parentToolCallId } : {}),
           });
     }
 
     const identityEnvelope = threadIdentityEnvelopeSchema.safeParse(event);
     if (identityEnvelope.success) {
-      const { threadId = "", providerThreadId } = identityEnvelope.data.params;
+      const {
+        threadId = UNSTAMPED_THREAD_ID,
+        providerThreadId,
+      } = identityEnvelope.data.params;
       return providerThreadId
-        ? [{ type: "thread/identity", threadId, providerThreadId }]
+        ? [
+            {
+              type: "thread/identity",
+              threadId,
+              providerThreadId,
+              scope: threadScope(),
+            },
+          ]
         : [];
     }
 
@@ -769,6 +691,7 @@ export function createClaudeCodeProviderAdapter(
 
     const envelope = jsonRpcEnvelopeSchema.safeParse(event);
     if (envelope.success) {
+      const fallbackTurnId = resolveClaudeActiveTurnId(context);
       return buildUnhandledProviderEvents({
         providerId: "claude-code",
         rawEvent: {
@@ -777,314 +700,22 @@ export function createClaudeCodeProviderAdapter(
           ...(envelope.data.params ? { params: envelope.data.params } : {}),
         },
         visibilityMetadata: claudeCodeVisibilityMetadata,
+        ...(fallbackTurnId ? { turnId: fallbackTurnId } : {}),
         ...(context?.parentToolCallId
           ? { parentToolCallId: context.parentToolCallId }
           : {}),
       });
     }
 
-    const messageType = claudeSdkMessageTypeSchema.safeParse(event);
-    if (!messageType.success) {
-      return [];
-    }
-    // threadId is not available from SDKMessage — the bridge/host-daemon
-    // supplies it from the session context. We use "" here; the caller
-    // overrides it.
-    const threadId = "";
-    const events: ThreadEvent[] = [];
-
-    // Resolve per-thread turn state using the context threadId.
-    const stateKey = context?.threadId ?? "";
-    const state = turnState.getOrCreate({ threadId: stateKey });
-    const parentToolCallId = context?.parentToolCallId;
-
-    switch (messageType.data.type) {
-      case "system": {
-        const parsedMessage = claudeSystemMessageSchema.safeParse(event);
-        if (!parsedMessage.success) {
-          return buildUnexpectedClaudeSdkEvent({ event, context });
-        }
-        const statusMessage = claudeStatusSystemMessageSchema.safeParse(event);
-        if (
-          statusMessage.success &&
-          statusMessage.data.status === "compacting"
-        ) {
-          const turnId = ensureClaudeTurnStarted({
-            events,
-            state,
-            threadId,
-          });
-          events.push({
-            type: "item/started",
-            threadId,
-            providerThreadId: "",
-            turnId,
-            item: {
-              type: "contextCompaction",
-              id: buildClaudeCompactionItemId(turnId),
-            },
-          });
-          return events;
-        }
-
-        const compactBoundaryMessage =
-          claudeCompactBoundarySystemMessageSchema.safeParse(event);
-        if (compactBoundaryMessage.success) {
-          const turnId = turnState.getCurrentOrLastTurnId({ state });
-          if (turnId.length === 0) {
-            return buildUnexpectedClaudeSdkEvent({ event, context });
-          }
-          events.push(buildClaudeCompactedEvent({ threadId, turnId }));
-          return events;
-        }
-
-        // System init / status reset — no events emitted
-        return [];
-      }
-
-      case "assistant": {
-        const parsedMessage = claudeAssistantMessageSchema.safeParse(event);
-        if (!parsedMessage.success) {
-          return buildUnexpectedClaudeSdkEvent({ event, context });
-        }
-        const message = parsedMessage.data;
-        const turnId = ensureClaudeTurnStarted({
-          events,
-          state,
-          threadId,
-        });
-        const requestContextTokens = extractClaudeRequestContextTokens(message);
-        if (requestContextTokens !== null) {
-          state.latestRequestContextTokens = requestContextTokens;
-        }
-        const assistantMessageId = getNestedMessageId(message.message);
-
-        const thinkingBlocks = extractThinkingBlocks(message);
-        for (const thinkingBlock of thinkingBlocks) {
-          const itemId = resolveCompletedClaudeReasoningItemId({
-            state,
-            parentToolCallId,
-            contentIndex: thinkingBlock.contentIndex,
-          });
-          events.push({
-            type: "item/completed",
-            threadId,
-            providerThreadId: "",
-            turnId,
-            item: withParentToolCallId(
-              {
-                type: "reasoning",
-                id: itemId,
-                summary: [],
-                content: [thinkingBlock.text],
-              },
-              parentToolCallId,
-            ),
-          });
-        }
-
-        const text = extractAssistantText(message);
-        if (text) {
-          const itemId = turnState.resolveCompletedAssistantMessageId({
-            assistantIdPrefix: "claude-assistant",
-            state,
-            parentToolCallId,
-            providerMessageId: assistantMessageId,
-          });
-          events.push({
-            type: "item/completed",
-            threadId,
-            providerThreadId: "",
-            turnId,
-            item: {
-              type: "agentMessage",
-              id: itemId,
-              text,
-              ...(parentToolCallId ? { parentToolCallId } : {}),
-            },
-          });
-        }
-
-        const toolUses = extractToolUses(message);
-        for (const toolUse of toolUses) {
-          const item = translateClaudeToolUseItem({
-            callId: toolUse.id,
-            toolName: toolUse.name,
-            args: toolUse.input,
-            parentToolCallId,
-          });
-          state.toolItemsByCallId.set(toolUse.id, item);
-          events.push({
-            type: "item/started",
-            threadId,
-            providerThreadId: "",
-            turnId,
-            item,
-          });
-        }
-        break;
-      }
-
-      case "stream_event": {
-        const parsedMessage = claudeStreamEventMessageSchema.safeParse(event);
-        if (!parsedMessage.success) {
-          return buildUnexpectedClaudeSdkEvent({ event, context });
-        }
-        const message = parsedMessage.data;
-        const reasoningDelta = extractStreamThinkingDelta(message);
-        if (reasoningDelta) {
-          const turnId = ensureClaudeTurnStarted({
-            events,
-            state,
-            threadId,
-          });
-          const itemId = getOrCreateClaudeReasoningItemId({
-            state,
-            parentToolCallId,
-            contentIndex: reasoningDelta.contentIndex,
-          });
-          events.push({
-            type: "item/reasoning/textDelta",
-            threadId,
-            providerThreadId: "",
-            turnId,
-            itemId,
-            delta: reasoningDelta.delta,
-            ...(parentToolCallId ? { parentToolCallId } : {}),
-          });
-        }
-
-        const textDelta = extractStreamTextDelta(message);
-        if (textDelta) {
-          const turnId = ensureClaudeTurnStarted({
-            events,
-            state,
-            threadId,
-          });
-          const itemId = turnState.getOrCreateAssistantMessageId({
-            assistantIdPrefix: "claude-assistant",
-            parentToolCallId,
-            state,
-          });
-          events.push({
-            type: "item/agentMessage/delta",
-            threadId,
-            providerThreadId: "",
-            turnId,
-            itemId,
-            delta: textDelta.delta,
-            ...(parentToolCallId ? { parentToolCallId } : {}),
-          });
-        }
-        break;
-      }
-
-      case "user": {
-        const parsedMessage = claudeUserMessageSchema.safeParse(event);
-        if (!parsedMessage.success) {
-          return buildUnexpectedClaudeSdkEvent({ event, context });
-        }
-        const message = parsedMessage.data;
-        const toolResults = extractToolResults(message);
-        for (const result of toolResults) {
-          const startedItem = state.toolItemsByCallId.get(result.toolUseId);
-          events.push({
-            type: "item/completed",
-            threadId,
-            providerThreadId: "",
-            turnId: state.currentTurnId ?? "",
-            item: translateClaudeToolResultItem({
-              callId: result.toolUseId,
-              content: result.content,
-              isError: result.isError,
-              toolName: result.toolName,
-              toolUseResult: result.toolUseResult,
-              startedItem,
-              parentToolCallId,
-            }),
-          });
-          state.toolItemsByCallId.delete(result.toolUseId);
-        }
-        break;
-      }
-
-      case "result": {
-        const parsedMessage = claudeResultMessageSchema.safeParse(event);
-        if (!parsedMessage.success) {
-          return buildUnexpectedClaudeSdkEvent({ event, context });
-        }
-        const message = parsedMessage.data;
-        if (state.currentTurnId) {
-          const resultErrorText =
-            message.is_error &&
-            "result" in message &&
-            typeof message.result === "string"
-              ? message.result
-              : null;
-          const contextWindowUsage = extractClaudeContextWindowUsage({
-            fallbackModelContextWindow: state.selectedModelContextWindow,
-            latestRequestContextTokens: state.latestRequestContextTokens,
-            message,
-          });
-          if (
-            contextWindowUsage !== undefined &&
-            contextWindowUsage.modelContextWindow !== null
-          ) {
-            state.selectedModelContextWindow =
-              contextWindowUsage.modelContextWindow;
-          }
-          const tokenUsage = extractTokenUsage(message, state.cumulativeTokens);
-          if (contextWindowUsage) {
-            events.push({
-              type: "thread/contextWindowUsage/updated",
-              threadId,
-              providerThreadId: "",
-              turnId: state.currentTurnId,
-              contextWindowUsage,
-            });
-          }
-          if (tokenUsage) {
-            events.push({
-              type: "thread/tokenUsage/updated",
-              threadId,
-              providerThreadId: "",
-              turnId: state.currentTurnId,
-              tokenUsage,
-            });
-          }
-          if (resultErrorText) {
-            events.push({
-              type: "error",
-              threadId,
-              providerThreadId: "",
-              turnId: state.currentTurnId,
-              message: "Provider error",
-              detail: resultErrorText,
-            });
-          }
-          events.push({
-            type: "turn/completed",
-            threadId,
-            providerThreadId: "",
-            turnId: state.currentTurnId,
-            status:
-              message.is_error || message.subtype.startsWith("error")
-                ? "failed"
-                : "completed",
-          });
-          turnState.finishTurn({ state, threadId: stateKey });
-        }
-        break;
-      }
-
-      case "rate_limit_event":
-        return [];
-
-      default:
-        return buildUnexpectedClaudeSdkEvent({ event, context });
-    }
-
-    return events;
+    return translateClaudeSdkMessage({
+      buildUnexpectedSdkEvent: buildUnexpectedClaudeSdkEvent,
+      context,
+      ensureTurnStarted: ensureClaudeTurnStarted,
+      event,
+      translateToolResultItem: translateClaudeToolResultItem,
+      translateToolUseItem: translateClaudeToolUseItem,
+      turnState,
+    });
   }
 
   return {
@@ -1409,105 +1040,6 @@ export function createClaudeCodeProviderAdapter(
   };
 }
 
-// ---------------------------------------------------------------------------
-// SDK message extraction helpers
-// ---------------------------------------------------------------------------
-
-interface ClaudeToolUseBlockData {
-  id: string;
-  input: unknown;
-  name: string;
-}
-
-interface ClaudeReasoningBlockData {
-  contentIndex: number;
-  text: string;
-}
-
-interface ClaudeStreamDelta {
-  contentIndex: number;
-  delta: string;
-}
-
-interface ClaudeToolResultBlockData {
-  content: unknown;
-  isError: boolean;
-  toolName?: string;
-  toolUseId: string;
-  toolUseResult: ClaudeToolUseResult | null;
-}
-
-interface ParseClaudeMessageContentArgs {
-  message: unknown;
-}
-
-function parseMessageContent(
-  message: ParseClaudeMessageContentArgs,
-): ClaudeMessageContentBlock[] {
-  const parsed = messageContentSchema.safeParse(message.message);
-  return parsed.success ? (parsed.data.content ?? []) : [];
-}
-
-function buildClaudeCompactionItemId(turnId: string): string {
-  return turnId.length > 0
-    ? `claude-compaction-${turnId}`
-    : "claude-compaction";
-}
-
-function createClaudeReasoningItemId(state: ClaudeTurnState): string {
-  state.reasoningItemCounter += 1;
-  return `claude-reasoning-${state.reasoningItemCounter}`;
-}
-
-interface ClaudeReasoningItemIdArgs {
-  contentIndex: number;
-  parentToolCallId?: string;
-  state: ClaudeTurnState;
-}
-
-function getOrCreateClaudeReasoningItemId(
-  args: ClaudeReasoningItemIdArgs,
-): string {
-  return getOrCreateScopedItemId({
-    createItemId: () => createClaudeReasoningItemId(args.state),
-    openItemIdsByScope: args.state.openReasoningItemIdsByScope,
-    parentToolCallId: args.parentToolCallId,
-    scopeId: String(args.contentIndex),
-  });
-}
-
-function resolveCompletedClaudeReasoningItemId(
-  args: ClaudeReasoningItemIdArgs,
-): string {
-  return resolveCompletedScopedItemId({
-    createItemId: () => createClaudeReasoningItemId(args.state),
-    openItemIdsByScope: args.state.openReasoningItemIdsByScope,
-    parentToolCallId: args.parentToolCallId,
-    scopeId: String(args.contentIndex),
-  });
-}
-
-interface ClaudeUnexpectedSdkEventArgs {
-  event: unknown;
-  context?: ProviderTranslationContext;
-}
-
-interface BuildClaudeCompactedEventArgs {
-  threadId: string;
-  turnId: string;
-}
-
-function buildClaudeCompactedEvent(
-  args: BuildClaudeCompactedEventArgs,
-): ThreadEvent {
-  return {
-    type: "thread/compacted",
-    threadId: args.threadId,
-    providerThreadId: "",
-    turnId: args.turnId,
-  };
-}
-
 function buildUnexpectedClaudeSdkEvent(
   args: ClaudeUnexpectedSdkEventArgs,
 ): ThreadEvent[] {
@@ -1524,295 +1056,10 @@ function buildUnexpectedClaudeSdkEvent(
       providerId: "claude-code",
       rawEvent,
       rawType: claudeCodeVisibilityMetadata.describeRawEvent(rawEvent).kind,
+      ...(args.turnId ? { turnId: args.turnId } : {}),
       ...(args.context?.parentToolCallId
         ? { parentToolCallId: args.context.parentToolCallId }
         : {}),
     }),
   ];
-}
-
-function extractAssistantText(
-  message: ClaudeAssistantMessage,
-): string | undefined {
-  const chunks: string[] = [];
-  for (const block of parseMessageContent(message)) {
-    const text = textBlockSchema.safeParse(block);
-    if (text.success) chunks.push(text.data.text);
-  }
-  const joined = chunks.join("\n").trim();
-  return joined.length > 0 ? joined : undefined;
-}
-
-function extractToolUses(
-  message: ClaudeAssistantMessage,
-): ClaudeToolUseBlockData[] {
-  const uses: ClaudeToolUseBlockData[] = [];
-  for (const block of parseMessageContent(message)) {
-    const tool = toolUseBlockSchema.safeParse(block);
-    if (tool.success)
-      uses.push({
-        id: tool.data.id,
-        name: tool.data.name,
-        input: tool.data.input,
-      });
-  }
-  return uses;
-}
-
-function extractStreamTextDelta(
-  message: ClaudeStreamEventMessage,
-): ClaudeStreamDelta | undefined {
-  const parsed = streamEventSchema.safeParse(message.event);
-  if (!parsed.success) return undefined;
-
-  if (parsed.data.type === "content_block_delta") {
-    if (parsed.data.delta.type !== "text_delta") {
-      return undefined;
-    }
-    return parsed.data.delta.text.length > 0
-      ? { contentIndex: parsed.data.index, delta: parsed.data.delta.text }
-      : undefined;
-  }
-  if (parsed.data.content_block.type !== "text") {
-    return undefined;
-  }
-  return parsed.data.content_block.text.length > 0
-    ? { contentIndex: parsed.data.index, delta: parsed.data.content_block.text }
-    : undefined;
-}
-
-function extractStreamThinkingDelta(
-  message: ClaudeStreamEventMessage,
-): ClaudeStreamDelta | undefined {
-  const parsed = streamEventSchema.safeParse(message.event);
-  if (!parsed.success) return undefined;
-
-  if (parsed.data.type === "content_block_delta") {
-    if (parsed.data.delta.type !== "thinking_delta") {
-      return undefined;
-    }
-    return parsed.data.delta.thinking.length > 0
-      ? { contentIndex: parsed.data.index, delta: parsed.data.delta.thinking }
-      : undefined;
-  }
-  if (parsed.data.content_block.type !== "thinking") {
-    return undefined;
-  }
-  return parsed.data.content_block.thinking.length > 0
-    ? {
-        contentIndex: parsed.data.index,
-        delta: parsed.data.content_block.thinking,
-      }
-    : undefined;
-}
-
-function extractThinkingBlocks(
-  message: ClaudeAssistantMessage,
-): ClaudeReasoningBlockData[] {
-  const thinkingBlocks: ClaudeReasoningBlockData[] = [];
-  const content = parseMessageContent(message);
-  for (const [contentIndex, block] of content.entries()) {
-    const thinkingBlock = thinkingBlockSchema.safeParse(block);
-    if (!thinkingBlock.success || thinkingBlock.data.thinking.length === 0) {
-      continue;
-    }
-    thinkingBlocks.push({
-      contentIndex,
-      text: thinkingBlock.data.thinking,
-    });
-  }
-  return thinkingBlocks;
-}
-
-function extractToolResults(
-  message: ClaudeUserMessage,
-): ClaudeToolResultBlockData[] {
-  const results: ClaudeToolResultBlockData[] = [];
-  for (const block of parseMessageContent(message)) {
-    const result = toolResultBlockSchema.safeParse(block);
-    if (result.success) {
-      results.push({
-        toolUseId: result.data.tool_use_id,
-        toolName: result.data.tool_name,
-        content: result.data.content,
-        isError: result.data.is_error ?? false,
-        toolUseResult: result.data.tool_use_result ?? null,
-      });
-    }
-  }
-  return results;
-}
-
-function combineClaudeProcessOutput(
-  streams: ClaudeProcessOutputStreams,
-): string | undefined {
-  if (streams.stdout.length === 0) {
-    return streams.stderr.length > 0 ? streams.stderr : undefined;
-  }
-  if (streams.stderr.length === 0) {
-    return streams.stdout;
-  }
-  return streams.stdout.endsWith("\n")
-    ? `${streams.stdout}${streams.stderr}`
-    : `${streams.stdout}\n${streams.stderr}`;
-}
-
-function extractClaudeCommandExecutionOutput(
-  args: ClaudeCommandExecutionOutputArgs,
-): string | undefined {
-  const normalizedContentOutput = normalizeProviderCommandOutput({
-    text: extractResultText(args.content),
-    emptyPlaceholders: CLAUDE_EMPTY_BASH_OUTPUT_PLACEHOLDERS,
-  });
-  if (args.toolUseResult !== null) {
-    if (typeof args.toolUseResult === "string") {
-      return (
-        normalizeProviderCommandOutput({
-          text: args.toolUseResult,
-          emptyPlaceholders: CLAUDE_EMPTY_BASH_OUTPUT_PLACEHOLDERS,
-        }) ?? normalizedContentOutput
-      );
-    }
-    return (
-      combineClaudeProcessOutput({
-        stdout: args.toolUseResult.stdout ?? "",
-        stderr: args.toolUseResult.stderr ?? "",
-      }) ?? normalizedContentOutput
-    );
-  }
-  return normalizedContentOutput;
-}
-
-function extractTokenUsage(
-  message: ClaudeResultMessage | SDKResultMessage,
-  cumulativeTokens: ThreadEventTokenUsageBreakdown,
-): ThreadEventTokenUsage | undefined {
-  const parsed = sdkUsageSchema.safeParse(message.usage);
-  const last = parsed.success ? toTokenUsageBreakdown(parsed.data) : undefined;
-  const parsedModelUsage = claudeModelUsageSchema.safeParse(message.modelUsage);
-  const modelContextWindow = parsedModelUsage.success
-    ? extractModelContextWindow(parsedModelUsage.data)
-    : null;
-
-  if (!last && modelContextWindow === null) {
-    return undefined;
-  }
-
-  const emptyBreakdown: ThreadEventTokenUsageBreakdown = {
-    totalTokens: 0,
-    inputTokens: 0,
-    cachedInputTokens: 0,
-    outputTokens: 0,
-    reasoningOutputTokens: 0,
-  };
-
-  const current = last ?? emptyBreakdown;
-
-  // Accumulate into the per-thread cumulative total
-  cumulativeTokens.totalTokens += current.totalTokens;
-  cumulativeTokens.inputTokens += current.inputTokens;
-  cumulativeTokens.cachedInputTokens += current.cachedInputTokens;
-  cumulativeTokens.outputTokens += current.outputTokens;
-  cumulativeTokens.reasoningOutputTokens += current.reasoningOutputTokens;
-
-  return {
-    total: { ...cumulativeTokens },
-    last: current,
-    modelContextWindow,
-  };
-}
-
-function extractClaudeContextWindowUsage(
-  args: ClaudeContextWindowUsageArgs,
-): ThreadEventContextWindowUsage | undefined {
-  const parsedModelUsage = claudeModelUsageSchema.safeParse(
-    args.message.modelUsage,
-  );
-  const modelContextWindow = parsedModelUsage.success
-    ? extractModelContextWindow(parsedModelUsage.data)
-    : args.fallbackModelContextWindow;
-  const usedTokens = args.latestRequestContextTokens ?? null;
-
-  if (usedTokens === null && modelContextWindow === null) {
-    return undefined;
-  }
-
-  return {
-    usedTokens,
-    modelContextWindow,
-    estimated: true,
-  };
-}
-
-function extractClaudeRequestContextTokens(
-  message: ClaudeAssistantMessage,
-): number | null {
-  const parsedMessage = claudeAssistantUsageMessageSchema.safeParse(
-    message.message,
-  );
-  if (!parsedMessage.success || !parsedMessage.data.usage) {
-    return null;
-  }
-
-  return toClaudeCurrentContextTokens(parsedMessage.data.usage);
-}
-
-function toTokenUsageBreakdown(
-  usage: ClaudeSdkUsage,
-): ThreadEventTokenUsageBreakdown {
-  const inputTokens = toNonNegativeNumber(usage.input_tokens);
-  const outputTokens = toNonNegativeNumber(usage.output_tokens);
-  const cacheReadTokens = toNonNegativeNumber(usage.cache_read_input_tokens);
-  const cacheCreationTokens = toNonNegativeNumber(
-    usage.cache_creation_input_tokens,
-  );
-  const cachedInputTokens = cacheReadTokens + cacheCreationTokens;
-
-  return {
-    totalTokens: inputTokens + outputTokens + cachedInputTokens,
-    inputTokens,
-    cachedInputTokens,
-    outputTokens,
-    reasoningOutputTokens: 0,
-  };
-}
-
-function toClaudeCurrentContextTokens(usage: ClaudeSdkUsage): number | null {
-  return (
-    toNonNegativeNumber(usage.input_tokens) +
-    toNonNegativeNumber(usage.cache_read_input_tokens) +
-    toNonNegativeNumber(usage.cache_creation_input_tokens)
-  );
-}
-
-function extractModelContextWindow(
-  modelUsage: Record<string, { contextWindow: number }> | undefined,
-): number | null {
-  if (!modelUsage) return null;
-
-  let largestContextWindow: number | null = null;
-  for (const usage of Object.values(modelUsage)) {
-    const contextWindow = toPositiveNumber(usage.contextWindow);
-    if (contextWindow === undefined) continue;
-    if (largestContextWindow === null || contextWindow > largestContextWindow) {
-      largestContextWindow = contextWindow;
-    }
-  }
-
-  return largestContextWindow;
-}
-
-function resolveClaudeModelContextWindowHint(
-  selectedModel: string,
-): number | null {
-  // The Claude SDK probe does not expose structured context-window metadata on
-  // ModelInfo, so the selected model identifier is the only fallback hint
-  // available when a result omits modelUsage.contextWindow.
-  if (selectedModel.endsWith("[1m]")) {
-    return LARGE_CLAUDE_CONTEXT_WINDOW;
-  }
-  if (selectedModel === "default") {
-    return null;
-  }
-  return DEFAULT_CLAUDE_CONTEXT_WINDOW;
 }

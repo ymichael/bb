@@ -132,7 +132,10 @@ async function buildThreadStatusFailureMessage(
   const recentEvents = events.slice(-12).map(describeThreadEvent).join(" | ");
   const lastError = [...events]
     .reverse()
-    .find((event) => event.type === "error" || event.type === "system/error");
+    .find(
+      (event) =>
+        event.type === "provider/error" || event.type === "system/error",
+    );
   const lastTurnStarted = [...events]
     .reverse()
     .find((event) => event.type === "turn/started");

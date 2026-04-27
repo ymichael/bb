@@ -1,4 +1,5 @@
 import { getThread } from "@bb/db";
+import { threadScope } from "@bb/domain";
 import { describe, expect, it } from "vitest";
 import { internalAuthHeaders } from "../helpers/commands.js";
 import {
@@ -57,6 +58,7 @@ describe("internal event envelope threadId regression", () => {
                 type: "thread/name/updated",
                 threadId: threadB.id,
                 providerThreadId: "provider-envelope",
+                scope: threadScope(),
                 threadName: "hacked",
               },
             },

@@ -9,7 +9,11 @@
  */
 
 import { getBuiltInAgentProviderInfo } from "@bb/agent-providers";
-import { jsonValueSchema } from "@bb/domain";
+import {
+  jsonValueSchema,
+  requireThreadEventScopeTurnId,
+  turnScope,
+} from "@bb/domain";
 import type {
   PermissionEscalation,
   PromptInput,
@@ -409,7 +413,10 @@ export function createCodexProviderAdapter(
     }
 
     const nextState: CodexRawCommandOutputState = {
-      capturedCommandOutputByCallId: new Map<string, CodexCapturedCommandOutput>(),
+      capturedCommandOutputByCallId: new Map<
+        string,
+        CodexCapturedCommandOutput
+      >(),
       shellToolCallIds: new Set<string>(),
     };
     rawCommandOutputStateByProviderThreadId.set(providerThreadId, nextState);
@@ -547,13 +554,17 @@ export function createCodexProviderAdapter(
       if (clientRequestSequence === undefined) {
         return [event];
       }
+      const turnId = requireThreadEventScopeTurnId({
+        type: event.type,
+        scope: event.scope,
+      });
       return [
         event,
         {
           type: "turn/input/accepted",
           threadId: event.threadId,
           providerThreadId: event.providerThreadId,
-          turnId: event.turnId,
+          scope: turnScope(turnId),
           clientRequestSequence,
         },
       ];
@@ -570,10 +581,7 @@ export function createCodexProviderAdapter(
   }
 
   function consumeCodexRawResponseItem(event: ProviderRuntimeEvent): boolean {
-    const rawEvent = toCodexRawNotification(
-      event,
-      "rawResponseItem/completed",
-    );
+    const rawEvent = toCodexRawNotification(event, "rawResponseItem/completed");
     if (!rawEvent) {
       return false;
     }
@@ -598,9 +606,8 @@ export function createCodexProviderAdapter(
     }
 
     if (item.type === "function_call_output") {
-      const rawCommandOutputState = rawCommandOutputStateByProviderThreadId.get(
-        providerThreadId,
-      );
+      const rawCommandOutputState =
+        rawCommandOutputStateByProviderThreadId.get(providerThreadId);
       if (!rawCommandOutputState) {
         return true;
       }
@@ -628,7 +635,10 @@ export function createCodexProviderAdapter(
       return true;
     }
 
-    if (item.type === "custom_tool_call" || item.type === "custom_tool_call_output") {
+    if (
+      item.type === "custom_tool_call" ||
+      item.type === "custom_tool_call_output"
+    ) {
       // TODO(codex): Keep this explicit so shell recovery does not silently
       // assume custom_tool_call traffic is equivalent to exec_command.
       return true;
@@ -656,9 +666,10 @@ export function createCodexProviderAdapter(
       return undefined;
     }
 
-    const capturedOutput = rawCommandOutputState.capturedCommandOutputByCallId.get(
-      args.commandExecutionId,
-    );
+    const capturedOutput =
+      rawCommandOutputState.capturedCommandOutputByCallId.get(
+        args.commandExecutionId,
+      );
     rawCommandOutputState.shellToolCallIds.delete(args.commandExecutionId);
     rawCommandOutputState.capturedCommandOutputByCallId.delete(
       args.commandExecutionId,
@@ -667,9 +678,7 @@ export function createCodexProviderAdapter(
     return capturedOutput;
   }
 
-  function applyRecoveredCommandOutput(
-    events: ThreadEvent[],
-  ): ThreadEvent[] {
+  function applyRecoveredCommandOutput(events: ThreadEvent[]): ThreadEvent[] {
     const repairedEvents: ThreadEvent[] = [];
     for (const event of events) {
       if (

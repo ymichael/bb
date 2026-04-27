@@ -11,6 +11,7 @@ import type {
 } from "@bb/domain";
 import { findLastTerminalTimelineMessage } from "./timeline-message-helpers.js";
 import { getProjectionSummaryCount } from "./apply-turn-message-detail.js";
+import { haveCompatibleViewMessageScope } from "./message-scope.js";
 import { isDelegationToolName } from "./tool-call-parsing.js";
 
 interface MessageTimingSource {
@@ -87,7 +88,7 @@ function canCompactTaskMessages(
   if (previous.source !== next.source) {
     return false;
   }
-  if ((previous.turnId ?? null) !== (next.turnId ?? null)) {
+  if (!haveCompatibleViewMessageScope(previous, next)) {
     return false;
   }
   if ((previous.parentToolCallId ?? null) !== (next.parentToolCallId ?? null)) {
@@ -171,6 +172,7 @@ function toDelegationMessage(
     createdAt: childBounds
       ? Math.max(message.createdAt, childBounds.createdAt)
       : message.createdAt,
+    scope: message.scope,
     toolName: message.toolName,
     callId: message.callId,
     command: message.command,
@@ -184,9 +186,6 @@ function toDelegationMessage(
   };
   if (startedAt !== undefined) {
     delegation.startedAt = startedAt;
-  }
-  if (message.turnId) {
-    delegation.turnId = message.turnId;
   }
   if (message.parentToolCallId) {
     delegation.parentToolCallId = message.parentToolCallId;

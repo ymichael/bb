@@ -3,6 +3,7 @@ import type {
   ThreadEventItem,
   ThreadEventTokenUsageBreakdown,
 } from "@bb/domain";
+import { turnScope } from "@bb/domain";
 import {
   getOrCreateScopedItemId,
   resolveCompletedScopedItemId,
@@ -160,7 +161,7 @@ export function createProviderTurnStateRegistry<
           type: "turn/started",
           threadId: args.threadId,
           providerThreadId: "",
-          turnId: args.state.currentTurnId,
+          scope: turnScope(args.state.currentTurnId),
         });
       }
       return args.state.currentTurnId;

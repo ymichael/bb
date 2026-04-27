@@ -19,7 +19,7 @@ import type {
   ThreadEventTokenUsage,
   ThreadEventTokenUsageBreakdown,
 } from "@bb/domain";
-import { toPositiveNumber } from "@bb/domain";
+import { threadScope, toPositiveNumber, turnScope } from "@bb/domain";
 import { decodeNormalizedProviderToolCallRequest } from "../shared/provider-tool-call-contract.js";
 import { resolveBridgePath } from "../shared/bridge-path.js";
 import { bashArgsSchema, textBlockSchema } from "../shared/tool-arg-schemas.js";
@@ -52,6 +52,7 @@ import {
   buildUnhandledProviderEvents,
   createUnhandledProviderEvent,
 } from "../shared/provider-unhandled-event.js";
+import { UNSTAMPED_THREAD_ID } from "../shared/unstamped-thread-id.js";
 import { buildScopedProviderErrorEvents } from "../shared/provider-error-events.js";
 import { parseAvailableModelList } from "../shared/available-models.js";
 import {
@@ -87,7 +88,14 @@ export type PiEvent = AgentSessionEvent;
 
 interface PiUnhandledEventArgs {
   rawEvent: JsonRpcMessage;
+  turnId?: string;
   parentToolCallId?: string;
+}
+
+interface BuildUnexpectedPiSdkEventArgs {
+  context?: ProviderTranslationContext;
+  rawMessage: unknown;
+  turnId?: string;
 }
 
 type PiInstructionCommand = Extract<
@@ -109,6 +117,7 @@ function buildUnhandledPiEvent(args: PiUnhandledEventArgs): ThreadEvent[] {
     providerId: "pi",
     rawEvent: args.rawEvent,
     visibilityMetadata: piVisibilityMetadata,
+    ...(args.turnId ? { turnId: args.turnId } : {}),
     ...(args.parentToolCallId
       ? { parentToolCallId: args.parentToolCallId }
       : {}),
@@ -116,15 +125,14 @@ function buildUnhandledPiEvent(args: PiUnhandledEventArgs): ThreadEvent[] {
 }
 
 function buildUnexpectedPiSdkEvent(
-  rawMessage: unknown,
-  context?: ProviderTranslationContext,
+  args: BuildUnexpectedPiSdkEventArgs,
 ): ThreadEvent[] {
   const rawEvent: JsonRpcMessage = {
     jsonrpc: "2.0",
     method: "sdk/message",
     params: {
-      ...(context?.threadId ? { threadId: context.threadId } : {}),
-      message: rawMessage,
+      ...(args.context?.threadId ? { threadId: args.context.threadId } : {}),
+      message: args.rawMessage,
     },
   };
   return [
@@ -132,8 +140,9 @@ function buildUnexpectedPiSdkEvent(
       providerId: "pi",
       rawEvent,
       rawType: piVisibilityMetadata.describeRawEvent(rawEvent).kind,
-      ...(context?.parentToolCallId
-        ? { parentToolCallId: context.parentToolCallId }
+      ...(args.turnId ? { turnId: args.turnId } : {}),
+      ...(args.context?.parentToolCallId
+        ? { parentToolCallId: args.context.parentToolCallId }
         : {}),
     }),
   ];
@@ -752,6 +761,15 @@ export function createPiProviderAdapter(
     });
   }
 
+  function resolvePiActiveTurnId(
+    context?: ProviderTranslationContext,
+  ): string | undefined {
+    if (!context?.threadId) {
+      return undefined;
+    }
+    return turnState.get({ threadId: context.threadId })?.currentTurnId;
+  }
+
   function translatePiEvent(
     event: unknown,
     context?: ProviderTranslationContext,
@@ -764,6 +782,7 @@ export function createPiProviderAdapter(
         ...context,
         ...(parentToolCallId ? { parentToolCallId } : {}),
       });
+      const fallbackTurnId = resolvePiActiveTurnId(context);
       return translated.length > 0
         ? translated
         : buildUnhandledPiEvent({
@@ -772,22 +791,33 @@ export function createPiProviderAdapter(
               method: sdkEnvelope.data.method,
               params: sdkEnvelope.data.params,
             },
+            ...(fallbackTurnId ? { turnId: fallbackTurnId } : {}),
             ...(parentToolCallId ? { parentToolCallId } : {}),
           });
     }
 
     const identityEnvelope = threadIdentityEnvelopeSchema.safeParse(event);
     if (identityEnvelope.success) {
-      const { threadId = "", providerThreadId } = identityEnvelope.data.params;
+      const {
+        threadId = UNSTAMPED_THREAD_ID,
+        providerThreadId,
+      } = identityEnvelope.data.params;
       return providerThreadId
-        ? [{ type: "thread/identity", threadId, providerThreadId }]
+        ? [
+            {
+              type: "thread/identity",
+              threadId,
+              providerThreadId,
+              scope: threadScope(),
+            },
+          ]
         : [];
     }
 
     const contextWindowUsageEnvelope =
       threadContextWindowUsageEnvelopeSchema.safeParse(event);
     if (contextWindowUsageEnvelope.success) {
-      const { threadId = "", contextWindowUsage } =
+      const { threadId = UNSTAMPED_THREAD_ID, contextWindowUsage } =
         contextWindowUsageEnvelope.data.params;
       const state = turnState.getOrCreate({ threadId });
       const turnId = turnState.getCurrentOrLastTurnId({ state });
@@ -796,7 +826,7 @@ export function createPiProviderAdapter(
           type: "thread/contextWindowUsage/updated",
           threadId,
           providerThreadId: threadId,
-          turnId,
+          scope: turnScope(turnId),
           contextWindowUsage: normalizePiContextWindowUsage(contextWindowUsage),
         },
       ];
@@ -812,12 +842,14 @@ export function createPiProviderAdapter(
 
     const envelope = jsonRpcEnvelopeSchema.safeParse(event);
     if (envelope.success) {
+      const fallbackTurnId = resolvePiActiveTurnId(context);
       return buildUnhandledPiEvent({
         rawEvent: {
           jsonrpc: "2.0",
           method: envelope.data.method,
           ...(envelope.data.params ? { params: envelope.data.params } : {}),
         },
+        ...(fallbackTurnId ? { turnId: fallbackTurnId } : {}),
         parentToolCallId: context?.parentToolCallId,
       });
     }
@@ -826,18 +858,25 @@ export function createPiProviderAdapter(
     if (!eventType.success) {
       return [];
     }
-    const threadId = "";
+    const threadId = UNSTAMPED_THREAD_ID;
     const events: ThreadEvent[] = [];
 
     // Resolve per-thread turn state using the context threadId.
     const stateKey = context?.threadId ?? "";
     const state = turnState.getOrCreate({ threadId: stateKey });
+    const fallbackTurnId = state.currentTurnId;
+    const buildUnexpectedEvent = (rawMessage: unknown): ThreadEvent[] =>
+      buildUnexpectedPiSdkEvent({
+        rawMessage,
+        context,
+        ...(fallbackTurnId ? { turnId: fallbackTurnId } : {}),
+      });
 
     switch (eventType.data.type) {
       case "agent_start": {
         const piEvent = piAgentStartEventSchema.safeParse(event);
         if (!piEvent.success) {
-          return buildUnexpectedPiSdkEvent(event, context);
+          return buildUnexpectedEvent(event);
         }
         ensurePiTurnStarted({
           events,
@@ -849,14 +888,17 @@ export function createPiProviderAdapter(
 
       case "compaction_start": {
         if (!piCompactionStartEventSchema.safeParse(event).success) {
-          return buildUnexpectedPiSdkEvent(event, context);
+          return buildUnexpectedEvent(event);
         }
         const turnId = turnState.getCurrentOrLastTurnId({ state });
+        if (turnId.length === 0) {
+          return buildUnexpectedEvent(event);
+        }
         events.push({
           type: "item/started",
           threadId,
           providerThreadId: "",
-          turnId,
+          scope: turnScope(turnId),
           item: {
             type: "contextCompaction",
             id: buildPiCompactionItemId(turnId),
@@ -867,17 +909,17 @@ export function createPiProviderAdapter(
 
       case "compaction_end": {
         if (!piCompactionEndEventSchema.safeParse(event).success) {
-          return buildUnexpectedPiSdkEvent(event, context);
+          return buildUnexpectedEvent(event);
         }
         const turnId = turnState.getCurrentOrLastTurnId({ state });
         if (turnId.length === 0) {
-          return buildUnexpectedPiSdkEvent(event, context);
+          return buildUnexpectedEvent(event);
         }
         events.push({
           type: "thread/compacted",
           threadId,
           providerThreadId: "",
-          turnId,
+          scope: turnScope(turnId),
         });
         break;
       }
@@ -885,7 +927,7 @@ export function createPiProviderAdapter(
       case "agent_end": {
         const piEvent = piAgentEndEventSchema.safeParse(event);
         if (!piEvent.success) {
-          return buildUnexpectedPiSdkEvent(event, context);
+          return buildUnexpectedEvent(event);
         }
         const currentTurnId = state.currentTurnId;
         if (!currentTurnId) {
@@ -904,7 +946,7 @@ export function createPiProviderAdapter(
               type: "item/completed",
               threadId,
               providerThreadId: "",
-              turnId: currentTurnId,
+              scope: turnScope(currentTurnId),
               item: { type: "agentMessage", id: itemId, text },
             });
           }
@@ -919,7 +961,7 @@ export function createPiProviderAdapter(
             type: "thread/tokenUsage/updated",
             threadId,
             providerThreadId: "",
-            turnId: currentTurnId,
+            scope: turnScope(currentTurnId),
             tokenUsage,
           });
         }
@@ -927,7 +969,7 @@ export function createPiProviderAdapter(
           type: "turn/completed",
           threadId,
           providerThreadId: "",
-          turnId: currentTurnId,
+          scope: turnScope(currentTurnId),
           status: "completed",
         });
         resetPiCommandOutputSnapshots(state);
@@ -938,7 +980,7 @@ export function createPiProviderAdapter(
       case "message_update": {
         const piEvent = piMessageUpdateEventSchema.safeParse(event);
         if (!piEvent.success) {
-          return buildUnexpectedPiSdkEvent(event, context);
+          return buildUnexpectedEvent(event);
         }
         const assistantEvent = piEvent.data.assistantMessageEvent;
         if (assistantEvent.type === "text_delta" && state.currentTurnId) {
@@ -953,7 +995,7 @@ export function createPiProviderAdapter(
               type: "item/agentMessage/delta",
               threadId,
               providerThreadId: "",
-              turnId: state.currentTurnId,
+              scope: turnScope(state.currentTurnId),
               itemId,
               delta,
             });
@@ -963,7 +1005,7 @@ export function createPiProviderAdapter(
           const delta = assistantEvent.delta;
           if (delta) {
             if (typeof assistantEvent.contentIndex !== "number") {
-              return buildUnexpectedPiSdkEvent(event, context);
+              return buildUnexpectedEvent(event);
             }
             const itemId = getOrCreatePiReasoningItemId({
               state,
@@ -974,7 +1016,7 @@ export function createPiProviderAdapter(
               type: "item/reasoning/textDelta",
               threadId,
               providerThreadId: "",
-              turnId: state.currentTurnId,
+              scope: turnScope(state.currentTurnId),
               itemId,
               delta,
               ...(context?.parentToolCallId
@@ -987,7 +1029,7 @@ export function createPiProviderAdapter(
           const content = assistantEvent.content;
           if (content) {
             if (typeof assistantEvent.contentIndex !== "number") {
-              return buildUnexpectedPiSdkEvent(event, context);
+              return buildUnexpectedEvent(event);
             }
             const itemId = resolveCompletedPiReasoningItemId({
               state,
@@ -998,7 +1040,7 @@ export function createPiProviderAdapter(
               type: "item/completed",
               threadId,
               providerThreadId: "",
-              turnId: state.currentTurnId,
+              scope: turnScope(state.currentTurnId),
               item: withParentToolCallId(
                 {
                   type: "reasoning",
@@ -1017,10 +1059,10 @@ export function createPiProviderAdapter(
       case "tool_execution_start": {
         const piEvent = piToolExecutionStartEventSchema.safeParse(event);
         if (!piEvent.success) {
-          return buildUnexpectedPiSdkEvent(event, context);
+          return buildUnexpectedEvent(event);
         }
         if (!state.currentTurnId) {
-          return buildUnexpectedPiSdkEvent(piEvent.data, context);
+          return buildUnexpectedEvent(piEvent.data);
         }
         // Close any open assistant message scope so the final assistant
         // text at agent_end gets a fresh ID and doesn't overwrite
@@ -1041,7 +1083,7 @@ export function createPiProviderAdapter(
           type: "item/started",
           threadId,
           providerThreadId: "",
-          turnId: state.currentTurnId,
+          scope: turnScope(state.currentTurnId),
           item,
         });
         break;
@@ -1050,10 +1092,10 @@ export function createPiProviderAdapter(
       case "tool_execution_end": {
         const piEvent = piToolExecutionEndEventSchema.safeParse(event);
         if (!piEvent.success) {
-          return buildUnexpectedPiSdkEvent(event, context);
+          return buildUnexpectedEvent(event);
         }
         if (!state.currentTurnId) {
-          return buildUnexpectedPiSdkEvent(piEvent.data, context);
+          return buildUnexpectedEvent(piEvent.data);
         }
         const startedItem = state.toolItemsByCallId.get(
           piEvent.data.toolCallId,
@@ -1062,7 +1104,7 @@ export function createPiProviderAdapter(
           type: "item/completed",
           threadId,
           providerThreadId: "",
-          turnId: state.currentTurnId,
+          scope: turnScope(state.currentTurnId),
           item: translatePiToolResultItem({
             callId: piEvent.data.toolCallId,
             toolName: piEvent.data.toolName,
@@ -1080,10 +1122,10 @@ export function createPiProviderAdapter(
       case "tool_execution_update": {
         const piEvent = piToolExecutionUpdateEventSchema.safeParse(event);
         if (!piEvent.success) {
-          return buildUnexpectedPiSdkEvent(event, context);
+          return buildUnexpectedEvent(event);
         }
         if (!state.currentTurnId) {
-          return buildUnexpectedPiSdkEvent(piEvent.data, context);
+          return buildUnexpectedEvent(piEvent.data);
         }
         if (piEvent.data.toolName === "bash") {
           const outputDelta = extractPiCommandExecutionOutputDelta({
@@ -1101,7 +1143,7 @@ export function createPiProviderAdapter(
               type: "item/commandExecution/outputDelta",
               threadId,
               providerThreadId: "",
-              turnId: state.currentTurnId,
+              scope: turnScope(state.currentTurnId),
               itemId: piEvent.data.toolCallId,
               delta: outputDelta.delta,
               ...(outputDelta.reset ? { reset: true } : {}),
@@ -1118,7 +1160,7 @@ export function createPiProviderAdapter(
             type: "item/toolCall/progress",
             threadId,
             providerThreadId: "",
-            turnId: state.currentTurnId,
+            scope: turnScope(state.currentTurnId),
             itemId: piEvent.data.toolCallId,
             message: progressMessage,
             ...(context?.parentToolCallId
@@ -1459,9 +1501,7 @@ function extractPiCommandExecutionOutputDelta(
     : null;
 }
 
-function extractPiToolProgressText(
-  event: PiToolExecutionUpdateEvent,
-): string {
+function extractPiToolProgressText(event: PiToolExecutionUpdateEvent): string {
   const text = extractResultText(event.partialResult).trim();
   return text.length > 0 ? text : `${event.toolName} progress update`;
 }
