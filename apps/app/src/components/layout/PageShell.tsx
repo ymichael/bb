@@ -76,7 +76,7 @@ function renderStickyFooter(
   return (
     <div
       className={cn(
-        "sticky bottom-0 -mx-4 bg-background px-4 pb-4",
+        "sticky bottom-0 -mx-4 mt-6 bg-background px-4 pb-4",
         footerUsesPromptPadding && "chat-prompt-box",
         footerClassName,
       )}
