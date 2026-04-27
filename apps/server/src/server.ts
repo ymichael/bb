@@ -140,7 +140,7 @@ export function createApp(
       },
     }),
   );
-  app.onError((error) => errorToResponse(error));
+  app.onError((error) => errorToResponse(error, deps.logger));
   app.get("/health", (context) => context.json({ ok: true }));
   app.use("/api/v1/development-only/*", async (_context, next) => {
     if (!deps.config.isDevelopment) {

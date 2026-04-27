@@ -1,4 +1,5 @@
 import { HTTPException } from "hono/http-exception";
+import type { ServerLogger } from "./types.js";
 
 export interface ApiErrorBody {
   code: string;
@@ -32,7 +33,10 @@ export class ApiError extends HTTPException {
   }
 }
 
-export function errorToResponse(error: unknown): Response {
+export function errorToResponse(
+  error: unknown,
+  logger: ServerLogger,
+): Response {
   if (error instanceof ApiError) {
     return error.toResponse();
   }
@@ -50,10 +54,11 @@ export function errorToResponse(error: unknown): Response {
       },
     );
   }
+  logger.error({ err: error }, "Unhandled server error");
   return new Response(
     JSON.stringify({
       code: "internal_error",
-      message: error instanceof Error ? error.message : "Internal server error",
+      message: "Internal server error",
     }),
     {
       status: 500,
