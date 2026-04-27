@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   automations,
   createConnection,
@@ -39,73 +39,6 @@ describe("db rebuild schema", () => {
     expect(() => migrate(db)).not.toThrow();
 
     closeConnection(db);
-  });
-
-  it("fails migration when turn-only legacy rows are missing turn_id", () => {
-    const db = createConnection(":memory:");
-    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-
-    db.$client.exec(`
-      CREATE TABLE events (
-        id text PRIMARY KEY NOT NULL,
-        thread_id text NOT NULL,
-        environment_id text,
-        turn_id text,
-        provider_thread_id text,
-        sequence integer NOT NULL,
-        type text NOT NULL,
-        item_id text,
-        item_kind text,
-        data text DEFAULT '{}' NOT NULL,
-        created_at integer NOT NULL
-      );
-      INSERT INTO events (
-        id,
-        thread_id,
-        environment_id,
-        turn_id,
-        provider_thread_id,
-        sequence,
-        type,
-        item_id,
-        item_kind,
-        data,
-        created_at
-      )
-      VALUES (
-        'evt_ambiguous_turn_scope',
-        'thread-1',
-        NULL,
-        NULL,
-        'provider-thread-1',
-        7,
-        'item/completed',
-        NULL,
-        NULL,
-        '{}',
-        1
-      );
-    `);
-
-    try {
-      expect(() => migrate(db)).toThrow(
-        /Cannot backfill thread event scope for 1 turn-only event row/,
-      );
-      expect(errorSpy).toHaveBeenCalledWith(
-        "Cannot migrate thread events to explicit scope because turn-only events are missing turn_id.",
-        [
-          {
-            id: "evt_ambiguous_turn_scope",
-            sequence: 7,
-            thread_id: "thread-1",
-            type: "item/completed",
-          },
-        ],
-      );
-    } finally {
-      errorSpy.mockRestore();
-      closeConnection(db);
-    }
   });
 
   it("enforces foreign keys across the rebuilt tables", () => {

@@ -1,1 +1,0 @@
-ALTER TABLE `environments` ADD `is_worktree` integer DEFAULT false NOT NULL;

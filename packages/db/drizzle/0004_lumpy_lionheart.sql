@@ -1,1 +1,0 @@
-ALTER TABLE `project_sources` ADD `is_default` integer DEFAULT false NOT NULL;

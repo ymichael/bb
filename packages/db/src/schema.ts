@@ -206,8 +206,8 @@ export const projectSources = sqliteTable(
       )`,
     ),
     // NOTE: Drizzle does not support partial/filtered unique indexes.
-    // Migration 0037 adds the database constraint for at most one default
-    // source per project.
+    // The baseline migration adds the database constraint for at most one
+    // default source per project.
   ],
 );
 
