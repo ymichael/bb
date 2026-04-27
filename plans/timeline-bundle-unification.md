@@ -13,18 +13,19 @@
 
 ### Three row shapes
 
-- **bundle** — small, same-kind, in-progress accumulator while a run is live. Tense per the labels rule below: `Running **3 commands**` when tail+active, `Ran **3 commands**` otherwise.
-- **summary-bundle** — flat, multi-kind. Created when a run closes (assistant-text lands or turn ends). Always past tense: `Ran **3 commands**, edited **2 files**`.
-- **turn-summary** — `Worked for **X**` wrapper. Created when a turn transitions to any non-pending status. Body holds the turn's summary-bundles and mid-turn assistant-text in source order. The turn's final assistant-text stays outside.
+- **bundle (phase = "live")** — small, same-kind, in-progress accumulator while a run is live. Tense per the labels rule below: `Running **3 commands**` when tail+enclosing-scope-active, `Ran **3 commands**` otherwise.
+- **bundle (phase = "summary")** — flat, multi-kind. Created when a run closes (assistant-text lands or turn ends). Always past tense: `Ran **3 commands**, edited **2 files**`.
+- **turn-summary** — `Worked for **X**` wrapper. Created when a turn transitions to any non-pending status. Body holds the turn's summary bundles and mid-turn assistant-text in source order. The turn's final assistant-text stays outside.
 
-`bundle` and `summary-bundle` share one type — distinguished by what they contain, not by row kind:
+The two bundle phases share `kind: "bundle"` and most fields; they differ on a `phase` discriminator that the builder sets at construction time. The renderer reads `phase` directly — no implicit context required.
 
 ```ts
 TimelineBundleRow {
   kind: "bundle";
+  phase: "live" | "summary";
   rows: TimelineMessageRow[];        // flat leaves, no nested bundles
-  status: TimelineGroupedRowStatus;
   // …id, sourceSeq, startedAt, createdAt, durationMs, turnId
+  // (no status — see Phase A step 6)
 }
 
 TimelineTurnSummaryRow {
@@ -34,15 +35,16 @@ TimelineTurnSummaryRow {
 }
 ```
 
-The "only assistant-text appears in `turn-summary.rows` as a `TimelineMessageRow`" invariant is enforced by the builder, not the type.
+The "only assistant-text appears in `turn-summary.rows` as a `TimelineMessageRow`" invariant is enforced by the builder, not the type. Same-kind for `phase: "live"` and multi-kind for `phase: "summary"` are also builder-enforced invariants.
 
 ### Lifecycle
 
 Three operations, applied mechanically:
 
-- **Live bundling** — adjacent same-kind rows pack into a `bundle`. Mixed-kind rows stay standalone alongside.
-- **Close-and-flatten** — when an assistant-text lands or the turn ends, every live bundle and standalone in the just-finished run fuses into one flat `summary-bundle`.
-- **Done-turn wrap** — when the turn becomes non-pending, a `turn-summary` absorbs all the turn's summary-bundles and mid-turn assistant-texts. The final assistant-text stays at the top level.
+- **Live bundling** — adjacent same-kind rows pack into a `bundle`. Mixed-kind rows stay standalone alongside. Visual fragmentation during alternating mixed-kind streams (e.g., command, edit, command, search → four separate rows) is an accepted trade-off; close-and-flatten resolves it once the run ends.
+- **Close-and-flatten** — when an assistant-text lands or the turn ends, every live bundle and standalone in the just-finished run fuses into one flat `summary-bundle`. Skipped if the buffer is empty (e.g., back-to-back assistant-texts with no tool work between them) — no empty `summary-bundle` is emitted.
+- **Done-turn wrap** — when the turn becomes non-pending, a `turn-summary` absorbs all the turn's summary-bundles and mid-turn assistant-texts. The final assistant-text stays at the top level. If the wrap would be empty (a turn that produced only the final assistant-text — no tool work, no mid-turn text), suppress the wrapper; the final assistant-text stands alone.
+- **Thread-interrupted positioning** — when the user stops a thread, `thread-interrupted` is a thread-level peer rather than absorbed into a turn-summary. The terminating turn's `turn-summary` reads `Worked for X` (interrupted status), and the `Stopped by user` row appears after it as a top-level row.
 
 Walkthrough:
 
@@ -79,14 +81,19 @@ Turn done:
 ### Labels
 
 - **Leaves** read their own event. While the event says it's running → present tense (`Running …`, `Editing …`). Once it says it's done → past tense (`Ran …`, `Edited …`). No context, no inference.
-- **Bundles** read present tense (`Running 3 commands`, `Exploring 5 files, 2 searches`) iff the bundle is the **tail of its timeline** AND the parent thread and turn are both active. Otherwise past tense. Children's status is irrelevant.
+- **Bundles** read present tense (`Running 3 commands`, `Exploring 5 files, 2 searches`) iff the bundle is the **tail of its timeline** AND **its enclosing scope is in-progress**. Otherwise past tense. Children's status is irrelevant.
 
-"Tail of its timeline" applies recursively: a delegation's inner timeline computes its own tail.
+Concrete consequence: in an active turn with multiple bundles, only the last one reads present tense. A timeline mid-stream might show `Ran **3 commands**` (non-tail bundle, past tense) above `Running **2 commands**` (tail bundle, present tense) — both during the same active turn.
+
+Both predicates apply recursively, since timelines nest:
+
+- **Tail of its timeline.** Each timeline level computes its own tail. The outer (thread) timeline has one; a delegation's inner timeline has its own; nested delegations recurse.
+- **Enclosing scope is in-progress.** For the outer timeline, this is "the thread is active AND the turn is active". For a delegation's inner timeline, it's `delegation.status === "pending"`. The pattern: each timeline level's "active" predicate is the pending state of whatever leaf encloses it. So a completed delegation's inner tail bundle reads past tense even when the outer thread+turn are still active.
 
 ### Auto-expand
 
 - **Leaves:** expanded iff the row's own status is pending or streaming.
-- **Bundles:** expanded iff the bundle is the tail of its timeline AND the parent thread and turn are both active.
+- **Bundles:** expanded iff the bundle is the tail of its timeline AND its enclosing scope is in-progress (same predicate as the Labels rule above — recursive: outer is thread+turn active, delegation inner is the delegation pending).
 - **Errors:** expanded iff the error is the tail of its timeline.
 - **User toggles override** auto-expand. Manual collapse/expand sticks.
 
@@ -106,7 +113,7 @@ Per-row copy spec, derived from the principles and rules above. **Bold** marks t
 - No red chrome or strikethrough on tool rows for error/interrupted states. The standalone `ErrorRow` is the lone exception (its purpose is to surface a problem).
 - Status enum values (`"Completed"`, `"Failed"`, `"Interrupted"`) never appear as bare copy. Verb phrases that contain them (`Failed to edit`, `Provisioning interrupted`) are fine — they're describing the action.
 
-**Cut from the timeline** (handled in Phase A step 1, never rendered): `assistant-reasoning`, `tasks`, `permission-grant-lifecycle`, Codex `turn/plan/updated` (full removal incl. adapter), `plan-updated` operation opType.
+**Cut from the timeline** (handled in Phase A step 1, never rendered): `assistant-reasoning`, `tasks` (data still parsed for the future peer surface — both Claude's `TodoWrite` and Codex's `turn/plan/updated` feed the unified `ViewTasksMessage` stream), `permission-grant-lifecycle`, the `plan-updated` operation opType (parseOperationMessage branch only — Codex's `turn/plan/updated` continues to flow into the task stream).
 
 ### Slow-tool leaves
 
@@ -199,7 +206,7 @@ No duration. The `…` suffix marks ongoing.
 | done, no detail | Error: **<title>** *(red)* |
 | done, expandable | Error: **<title>** *(red, expand affordance)* |
 
-`<title>` resolved by `code` lookup (per Phase A step 2: `KNOWN_ERROR_COPY: Record<string, {title: string, hint?: string}>`). Falls back to raw `message` for unknown codes. `detail` and optional `hint` render in body. Red chrome retained — lone exception.
+`<title>` resolved by `code` lookup (per Phase A step 3: `KNOWN_ERROR_COPY: Record<string, {title: string, hint?: string}>`). Falls back to raw `message` for unknown codes. `detail` and optional `hint` render in body. Red chrome retained — lone exception.
 
 ### Operation rows (`operation`)
 
@@ -220,7 +227,7 @@ No emphasis slot.
 |---|---|
 | done | Stopped by user |
 
-Single static state. Body shows optional reason if present.
+Single static state. Body shows optional reason if present. Positioned as a thread-level peer per the lifecycle section — not absorbed into the turn-summary.
 
 #### Compaction (`opType=compaction`)
 
@@ -235,7 +242,7 @@ No emphasis slot.
 
 #### Ownership change (`opType=operation`, `metadata.operation=ownership_change`)
 
-Always `status: completed` (instantaneous, no live/error/interrupted states). Server enriches event metadata with `previousParentName` / `nextParentName` at emit time (`routes/threads/base.ts:137`).
+Always `status: completed` (instantaneous, no live/error/interrupted states). Per Phase A step 2, the server is updated to enrich event metadata with `previousParentName` / `nextParentName` at emit time (`routes/threads/base.ts:137`); without that enrichment, the row would render raw thread IDs.
 
 | Action | Render |
 |---|---|
@@ -299,13 +306,37 @@ Turn-summary only forms when a turn ends, so duration is always available — no
 
 ## View-surface improvements
 
-These are general improvements to how rows render. Independent of the fundamentals above; they could land in any order once the model is in place.
+General improvements to how rows render. These sit on top of Phase A's structural changes — none can land before the new model is in place.
 
 ### Shared bundle/slow-tool header
 
 All bundle headers — live multi-row, summary, turn-summary — share one visual: prefix + emphasis + duration (+ shimmer when ongoing). The same primitive backs the four slow-tool leaves (shell, delegation, web-search, web-fetch). One component, one truncation rule, one duration formatter. Working name: `SlowToolHeader`. File-edits, tool-exploring, operations, and errors keep their purpose-specific chrome.
 
 Bundle bodies render tight — same density as today's exploration list (`mt-0.5 space-y-0.5`, no per-row outer padding). The container owns vertical rhythm; leaves don't.
+
+#### `SlowToolHeader` prop contract (locked)
+
+Per AGENTS.md "Reuse Discipline" — no optional args added later to support new callers. Lock the shape now:
+
+```ts
+interface SlowToolHeaderProps {
+  prefix: ReactNode;     // leading verb(s), unbold (e.g., "Running", "Ran Subagent", "Researched")
+  emphasis: ReactNode;   // bold portion (counts, names, queries — single or comma-joined)
+  duration?: string;     // pre-formatted (e.g., "12.4s"); omitted when not applicable
+  ongoing: boolean;      // drives shimmer on the prefix
+}
+```
+
+Mapping per row:
+
+- **Shell:** prefix=`"Running"|"Ran"`, emphasis=command, duration=set, ongoing=isLive.
+- **Web search/fetch:** prefix=`"Searching"|"Searched"|"Fetching"|"Fetched"`, emphasis=query/url, duration=set, ongoing=isLive.
+- **Delegation (single):** prefix=`"Running Subagent"|"Ran Subagent"`, emphasis=title, duration=set, ongoing=isLive.
+- **Bundle (live, single-kind):** prefix=`"Running"|"Ran"|"Exploring"|"Explored"|"Researching"|"Researched"|"Editing"|"Edited"|"Changing"|"Changed"`, emphasis=count detail (e.g., `"3 commands"`, `"5 files, 3 searches"`), duration=set, ongoing=isLive.
+- **Bundle (summary, multi-kind):** prefix=first contribution's verb (capitalized), emphasis=full comma-joined contribution string with mid-sentence verbs included as part of the emphasis text (e.g., `"3 commands, edited 2 files, ran 1 subagent"`), duration=set, ongoing=false.
+- **Turn-summary:** prefix=`"Worked for"`, emphasis=duration value (e.g., `"12.4s"`), duration=omitted (the duration *is* the emphasis), ongoing=false.
+
+If a future use case can't fit these four slots, that's a design signal, not a reason to add a prop.
 
 ### Delegation bundling
 
@@ -318,7 +349,7 @@ From the user's perspective, bundle headers should look consistent regardless of
 - **Live bundle, one row** — the bundle is invisible. Header = the inner row's own header. No "Ran 1 command" wrapper.
 - **Summary bundle, one row** — standard summary header (so it sits visually with multi-row summaries). Expanding shows the inner row directly, not a nested bundle.
 
-This is a render-layer decision: the builder always emits a `TimelineBundleRow`; the renderer decides whether to unwrap.
+The unwrap decision lives in one shared helper (`shouldUnwrapAsInnerRow(bundle, isLive)`) in `core-ui` so the web renderer and the CLI text formatter behave identically — neither owns its own copy of the rule. The builder always emits a `TimelineBundleRow`.
 
 ## Migration
 
@@ -328,52 +359,96 @@ Two phases. Phase A (fundamentals) lands first and end-to-end before Phase B (vi
 
 1. **Trim `ViewMessage` to timeline kinds.** Four concepts get cut from the timeline:
    - `assistant-reasoning` — already shown via the active-thinking banner. Data continues to flow for that surface.
-   - `tasks` — will move to a future peer surface (out of scope for this plan). Data continues to flow for that surface, fed by Claude's `TodoWrite` tool calls.
+   - `tasks` — will move to a future peer surface (out of scope for this plan). Data continues to flow for that surface from both providers: `parseTaskMessage` keeps parsing Claude's `TodoWrite` tool calls AND Codex's `turn/plan/updated` events into the same `ViewTasksMessage` shape, which becomes a sibling stream (no longer in `ViewMessage["kind"]`).
    - `permission-grant-lifecycle` — represents ongoing-permission grant lifecycles (distinct from per-call approval state, which lives on tool items). Not useful enough to surface as a row. Wire event continues to be recorded for replay/audit; it just stops becoming a `ViewMessage`.
-   - Codex `turn/plan/updated` (and the `plan-updated` operation row it eventually fed) — provider-specific leak with no Claude/Pi analogue. Cut at the source: the Codex adapter stops translating this event entirely, so empty and non-empty plans alike are silently ignored. Codex sessions lose the plan signal — accepted trade-off; the future tasks peer surface is fed by Claude's `TodoWrite` only.
+   - The `plan-updated` operation row — provider-specific leak with no Claude/Pi analogue, redundant with the unified task stream. Delete the `parseOperationMessage` `turn/plan/updated` branch, the `"plan-updated"` member of `ViewOperationMessage["opType"]`, and the `OperationRow` branch. The Codex adapter, the wire schema, and `parseTaskMessage`'s `turn/plan/updated` branch stay alive — they remain the data path for Codex plan signal into the (sibling) task stream. Empty plans (zero steps) cause `parseTaskMessage` to return null, which now means the event is silently ignored rather than falling through to the operation row.
 
    Make the boundary structural:
-   - Remove `assistant-reasoning`, `tasks`, and `permission-grant-lifecycle` from `ViewMessage["kind"]`. Move each to a sibling type only the relevant consumer reads, or drop it entirely if no consumer remains.
-   - Delete the `turn/plan/updated` ThreadEvent type from `provider-event.ts`, the translation in `codex/event-translation.ts:683-686`, the `turn/plan/updated` branches in `task-message-parsing.ts` and `parse-operation-message.ts`, the `"plan-updated"` member of `ViewOperationMessage["opType"]`, and the `plan-updated` branch in `OperationRow.tsx`.
+   - Remove `assistant-reasoning`, `tasks`, and `permission-grant-lifecycle` from `ViewMessage["kind"]`. Move each to a sibling type only the relevant consumer reads, or drop it entirely if no consumer remains. (For `tasks`, the consumer is the future peer surface; the sibling stream stays live.)
+   - Delete the `turn/plan/updated` branch in `parse-operation-message.ts`, the `"plan-updated"` member of `ViewOperationMessage["opType"]`, and the `plan-updated` branch in `OperationRow.tsx`.
    - Delete the `system/permissionGrant/lifecycle` parsing branch in `parse-operation-message.ts:331-348`, `PermissionGrantLifecycleRow`, and the `ConversationEntry` permission-grant-lifecycle case.
    - `to-view-messages` produces a timeline stream that excludes the cut kinds, plus separate streams for any that have a real consumer.
    - Delete `isTimelineHiddenMessage`, `toTimelineVisibleMessages`, `ReasoningRow.tsx`, `TasksRow.tsx`, the `ConversationEntry` cases for cut kinds, and the dead branches in `getMessageStatus`, `getToolBundleKind`, `thread-detail-activity.ts`, `format-timeline-text.ts`, and `timeline-assistant-step-summary.ts`.
-   - After this commit, every exhaustive switch on `ViewMessage["kind"]` handles only kinds the timeline actually renders — no filter call required, no provider-specific opType, no Codex-only ThreadEvent.
+   - After this commit, every exhaustive switch on `ViewMessage["kind"]` handles only kinds the timeline actually renders — no filter call required, no provider-specific opType.
 
-   Adjacent server-side hygiene that lands in the same Phase A step 1 diff: add `environmentId` to `PendingInteraction` (set when the interaction is created, since interaction → thread → environment is stable), and drop the `getThread` lookups inside `appendPermissionGrantTimelineEvent` and `appendApprovalItemEvent` in `pending-interaction-timeline.ts`. Emit helpers stop doing DB reads for routing scaffold; `environmentId` flows in from the caller, matching every other emit path in `thread-events.ts`. Removes the silent `thread?.environmentId ?? null` fallback that hides race-condition failures.
-2. **Stop squishing error events.** Today `parseErrorMessage` flattens the wire format's `{code, message, detail}` into a single string (`"<message> - <detail>"`), drops `code` entirely, and `ErrorRow.parseErrorDisplay` then reverses the squish — splitting on ` - ` and running regex matches against specific server-emitted message strings (`"Project folder not found"`, `"Provisioning thread failed"`) to recover a nicer title. The wire format is structured; the view layer broke its own data.
+   *Persistence note:* historical events stored in the DB (e.g., previously recorded `system/permissionGrant/lifecycle` payloads) remain on disk. Per `feedback_no_legacy_data.md`, no migration or backfill — accepted that legacy events that no longer have a parser branch are silently skipped on replay. State this assumption explicitly so future readers don't re-litigate it.
+
+2. **Server-side event hygiene.** Two related cleanups in the server layer; lands as its own diff to keep view-layer changes (step 1) and event-emit changes (here) independently revertable.
+
+   - Add `environmentId` to `PendingInteraction` (set when the interaction is created, since interaction → thread → environment is stable), and drop the `getThread` lookups inside `appendPermissionGrantTimelineEvent` and `appendApprovalItemEvent` in `pending-interaction-timeline.ts`. Emit helpers stop doing DB reads for routing scaffold; `environmentId` flows in from the caller, matching every other emit path in `thread-events.ts`. Removes the silent `thread?.environmentId ?? null` fallback that hides race-condition failures.
+   - Enrich the `system/operation` ownership-change event with `previousParentName` and `nextParentName` at emit time. The route handler at `routes/threads/base.ts:137` already has `thread` and `updated` in scope; resolve the prior and next parent thread titles there and pass them in as new metadata fields on `appendThreadOwnershipChangeEvent`. Update the metadata schema in `thread-events.ts` and the parsing branch in `parse-operation-message.ts` to read them. Without this, the ownership-change row would render raw `thr_*` IDs instead of human names.
+
+3. **Stop squishing error events.** Today `parseErrorMessage` flattens the wire format's `{code, message, detail}` into a single string (`"<message> - <detail>"`), drops `code` entirely, and `ErrorRow.parseErrorDisplay` then reverses the squish — splitting on ` - ` and running regex matches against specific server-emitted message strings (`"Project folder not found"`, `"Provisioning thread failed"`) to recover a nicer title. The wire format is structured; the view layer broke its own data.
 
    - Add `code?: string` and `detail?: string` to `ViewErrorMessage`. Preserve them as-is in `parseErrorMessage` instead of flattening.
    - Delete `formatErrorDetail` and the magic ` - ` delimiter contract between parser and display.
    - Replace `parseErrorDisplay`'s string-matching special cases (`isThreadProvisioningFailureTitle`, the `Project folder not found` regex block) with a `KNOWN_ERROR_COPY: Record<string, {title: string, hint?: string}>` table keyed on `code`. Codes already exist on the wire (`provider_reconnect`, etc.); we just stop ignoring them. Servers emitting new error classes get nicer copy by adding a code, not by hoping a regex matches their message.
    - Fall back to raw `message` for unknown codes; `detail` renders directly in the body.
 
-3. **Unified bundle type.** Add `TimelineBundleRow`; teach builders to emit it for both live and summary cases; delete `TimelineToolBundleRow`, `TimelineAssistantStepSummaryRow`, `bundleKind`, `assistant-step-summary-placeholder`, `materializeAssistantStepSummaryRows`.
-4. **Single rendering path.** Replace bundle/step-summary entries with one `BundleEntry`. Delete `ExplorationDetailList` and the bundle-kind branch in the body.
-5. **Rule simplification.** Replace the scattered ongoing-label and auto-expand helpers with the four-rule set above. Delete `containsLatestActivity`, `buildTimelineRowActivityInfoMap`, `groupedRowsUseOngoingLabels`, `shouldPreferOngoingLabelsForMessage`, `expandLatestActivity`, `expandErrors`, and `DelegationRow`'s expansion override. The auto-expand builder becomes one short function over (row, isTail, threadActive, turnActive).
+4. **Unified bundle type.** Add `TimelineBundleRow` with the `phase: "live" | "summary"` discriminator (see Model). Define it *without* a `status` field from the outset — the new rules don't read bundle status, so introducing then removing it would just churn type history. Teach builders to set `phase` correctly: `live` while accumulating, `summary` after close-and-flatten. Delete `TimelineToolBundleRow`, `TimelineAssistantStepSummaryRow`, `bundleKind`, `assistant-step-summary-placeholder`, `materializeAssistantStepSummaryRows`.
+5. **Single rendering path.** Rename `ToolBundleEntry` to `BundleEntry` and absorb the assistant-step-summary entry's logic — one component handles both `phase: "live"` and `phase: "summary"`. Delete `ExplorationDetailList` and the bundle-kind branch in the body.
+6. **Rule simplification.** Replace the scattered ongoing-label and auto-expand helpers with the four-rule set above. Delete `containsLatestActivity`, `buildTimelineRowActivityInfoMap`, `groupedRowsUseOngoingLabels`, `shouldPreferOngoingLabelsForMessage`, `expandErrors`, and `DelegationRow`'s expansion override. The auto-expand builder becomes one short function over `({ row, isTail, enclosingScopeInProgress })`.
 
-   With the new rules, the `status` field on bundle and turn-summary rows is no longer read by any renderer (label tense, auto-expand, and chrome are all driven by tail+active or the row's own state). Drop it: remove `status` from `TimelineBundleRow` and `TimelineTurnSummaryRow` (domain schema + types), stop computing it in the builders, delete `mergeGroupedRowStatus` and `getRowStatus` along with their callers, and update the bundle/turn-summary label builders (`timeline-tool-bundle-summary.ts`, `timeline-turn-summary.ts`, and the CLI's `formatTurnSummary` in `format-timeline-text.ts`) to take an `isOngoing: boolean` derived from tail+active at the call site instead of reading status. Update tests that asserted on the field. No external API consumer reads bundle status, so the wire-contract change is internal.
+   With the new rules, the `status` field on `TimelineTurnSummaryRow` is no longer read (label tense and auto-expand are driven by tail+enclosing-scope-in-progress; chrome doesn't differentiate). Drop it: remove `status` from `TimelineTurnSummaryRow` (domain schema + type), stop computing it in the builder, delete `mergeGroupedRowStatus` and `getRowStatus`, and update the bundle/turn-summary label builders (`timeline-tool-bundle-summary.ts`, `timeline-turn-summary.ts`, and the CLI's `formatTurnSummary` in `format-timeline-text.ts`) to take a single object argument `({ rows, isOngoing })` / `({ row, isOngoing })` derived from tail+enclosing-scope-in-progress at the call site. Single-object signatures match AGENTS.md "Reuse Discipline" — adding a future field doesn't break callers. Update tests that asserted on the field.
+
+   *Verification before merging:* project-wide grep for `\.status` reads against `TimelineTurnSummaryRow`, including query keys, React Query memos, telemetry, and tests. The earlier audit covered renderers only; AGENTS.md "search project-wide for the old name" rule applies here.
 
 **Phase B — view-surface**
 
-6. **Shared header primitive.** Extract `SlowToolHeader` and the duration/truncation helpers; migrate the four slow-tool leaves and the bundle/turn-summary headers onto it.
-7. **Bundle delegations and file edits.** Add `delegation` and `file-edit` to `canAppendToToolBundle`'s same-kind set. Multi-change file-edit messages stop rendering the comma-joined basename list in the title (`<a.ts, b.ts, c.ts +2 more>`) — both the bundle aggregator and a single multi-change row use the same count-based emphasis (`Editing **N files**`, `Changing **N files**` for mixed actions). Single-change messages keep the basename title (`Editing **bar.ts**`). Delete `summarizeChangedFileNames` and the expanded-vs-collapsed label switching in `FileEditRow`.
-8. **Single-row rendering.** In `BundleEntry`: live single-row bundle renders the inner row's header in place (no wrapper); summary single-row bundle wraps with the standard summary header and expands directly to the inner row.
-9. **CLI parity.** Mirror the app's structure in `format-timeline-text.ts`. The data layer is already shared (the type changes from steps 1–5 propagate automatically); this step is about updating the text formatters to match the locked copy spec. CLI has no clickable expand affordance, so collapse/expand is replaced by an existing/new verbose flag — collapsed by default renders the bundle/turn-summary headers; verbose shows the full body inline. Tail+active logic adapts naturally: in static `bb thread show` snapshots no row is "active", so all bundles render past tense; in live-streaming commands the tail bundle reads present tense.
+Phase B sits on top of Phase A — none of these can land until the model is in place. Within Phase B, steps 7/8/9 are mutually independent and can land in any order; step 10 (CLI) is genuinely last because it consumes everything.
+
+7. **Shared header primitive.** Extract `SlowToolHeader` with the locked prop contract (see View-surface section); migrate the four slow-tool leaves (shell, delegation, web-search, web-fetch) and the bundle/turn-summary headers onto it.
+8. **Bundle delegations and file edits.** Add `delegation` and `file-edit` to `canAppendToToolBundle`'s same-kind set. Multi-change file-edit messages stop rendering the comma-joined basename list in the title (`<a.ts, b.ts, c.ts +2 more>`) — both the bundle aggregator and a single multi-change row use the same count-based emphasis (`Editing **N files**`, `Changing **N files**` for mixed actions). Single-change messages keep the basename title (`Editing **bar.ts**`). Delete `summarizeChangedFileNames` and the expanded-vs-collapsed label switching in `FileEditRow`.
+9. **Single-row rendering.** Add `shouldUnwrapAsInnerRow(bundle)` to `core-ui` (reads `bundle.phase`) as the single source of the unwrap rule. In `BundleEntry`: call the helper. Live single-row bundle → renders the inner row's header in place (no wrapper). Summary single-row bundle → wraps with the standard summary header and expands directly to the inner row.
+10. **CLI parity.** Mirror the app's structure in `format-timeline-text.ts`. The data layer is already shared (type changes from steps 1–6 propagate automatically); this step updates the text formatters to match the locked copy spec, calling the same `shouldUnwrapAsInnerRow` helper from step 9 so the unwrap rule has one definition. CLI has no clickable expand affordance, so collapse/expand becomes a verbose flag — collapsed by default renders the bundle/turn-summary headers; `--verbose` shows the full body inline. The recursive "enclosing scope in-progress" predicate adapts naturally: in static `bb thread show` snapshots no scope is in-progress, so all bundles render past tense; live-streaming commands evaluate the predicate normally.
 
 ## Tests
 
-Active-state behavior is tested directly. Snapshots catch visual drift but aren't the contract.
+Behavior is tested directly. **Snapshot tests are not a substitute for assertions on row-copy spec behavior** — every row in the spec needs at least one rule-layer or builder-layer assertion. Snapshots only guard against unintended visual drift; if a row's copy is in the spec, a copy assertion must exist independently.
 
-Targeted cases — each asserted at the rule layer (label and auto-expand outputs) and the render layer (which row IDs are expanded, which prefixes read present tense):
+### Builder structural
 
-- Live tail bundle with active thread+turn → present-tense label, expanded.
-- Same bundle after the turn closes → past-tense label, collapsed.
-- Pending leaf inside a non-tail bundle → leaf is expanded, bundle is not (no bubble-up).
-- Tail error after a failed turn → expanded.
+Given an event stream, assert the exact row tree shape. The Lifecycle walkthrough is the contract.
+
+- Streaming with no assistant-text yet → mixed standalones and live `phase: "live"` bundles, no summary-bundle, no turn-summary.
+- Mid-turn assistant-text lands → all preceding live bundles + standalones fuse into a single `phase: "summary"` bundle; assistant-text follows at top level.
+- Two adjacent assistant-texts with no tool work between them → close-and-flatten skipped; no empty summary-bundle emitted.
+- Turn ends → done-turn-wrap absorbs all summary-bundles + mid-turn assistant-texts into a `turn-summary`; final assistant-text stays at top level.
+- Turn with only a final assistant-text → empty wrapper suppressed; assistant-text renders at top level alone.
+- Standalone row sandwiched between two bundles when assistant-text lands → all three fuse into one flat summary-bundle (asserts the exact transition from the walkthrough).
+- Thread-interrupted event mid-turn → terminating turn becomes turn-summary; `Stopped by user` row appears as a thread-level peer after it.
+
+### Rule layer (labels + auto-expand)
+
+Each case asserted on label outputs and auto-expand maps:
+
+- Live tail bundle with active thread+turn → present tense, expanded.
+- Same bundle after the turn closes → past tense, collapsed.
+- Mid-turn non-tail bundle in active turn → past tense (verifying tail-only-tail-tense rule).
+- Pending leaf inside a non-tail bundle → leaf expanded, bundle not (no bubble-up).
+- Tail error in a failed turn → expanded.
 - Mid-turn error followed by recovery → collapsed.
-- Done turn → `Worked for X` collapsed by default; expansion shows summary-bundles + mid-turn text.
-- Delegation in flight → delegation row expanded; inside its timeline, the tail bundle reads present tense.
+- Done turn → `Worked for X` collapsed by default.
+- Delegation in flight → delegation row expanded; its inner tail bundle reads present tense (recursive predicate).
+- Completed delegation inside an active thread → delegation's inner tail bundle reads past tense (recursive predicate's negative case).
+
+### Render layer
+
+Verify which row IDs are expanded and which prefixes read present tense for each row kind in the spec, in both live and post-close states.
+
+### Error copy (`KNOWN_ERROR_COPY` lookup)
+
+- Each known code resolves to its specced title (and hint, if present).
+- Unknown code falls back to raw `message`.
+- Error with `detail` shows it in the body, not in the title.
+
+### CLI (step 10)
+
+- Default (collapsed) output renders bundle/turn-summary headers with the locked copy spec; full bodies hidden.
+- `--verbose` flag shows full bodies inline.
+- Static `bb thread show` snapshot — no scope is in-progress, so all bundles render past tense.
+- Live-streaming command — tail bundle of the active scope reads present tense.
+- `shouldUnwrapAsInnerRow` produces the same result as the web renderer for the same input (single-source rule).
 
 ## Exit criteria
 
@@ -385,6 +460,7 @@ Targeted cases — each asserted at the rule layer (label and auto-expand output
 - Mid-turn errors don't auto-expand; tail errors do.
 - Done turn collapses to `Worked for X`; expansion shows summary-bundles + mid-turn text.
 - The auto-expand builder is one function with four cases.
+- **Project-wide grep returns zero callers of:** `containsLatestActivity`, `buildTimelineRowActivityInfoMap`, `groupedRowsUseOngoingLabels`, `shouldPreferOngoingLabelsForMessage`, `expandErrors`, `mergeGroupedRowStatus`, `getRowStatus`, `summarizeChangedFileNames`, `formatErrorDetail`, `isTimelineHiddenMessage`, `toTimelineVisibleMessages`, `materializeAssistantStepSummaryRows`, and `parseErrorDisplay`'s string-matching special cases.
 
 ## Open questions
 
