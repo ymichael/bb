@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 interface MockPiResourceLoaderOptions {
   cwd?: string;
+  agentDir?: string;
   systemPrompt?: string;
   appendSystemPromptOverride?: (base: string[]) => string[];
   noExtensions?: boolean;
@@ -49,6 +50,7 @@ const {
 vi.mock("@mariozechner/pi-coding-agent", () => ({
   createAgentSession: mockCreateAgentSession,
   DefaultResourceLoader: mockDefaultResourceLoader,
+  getAgentDir: vi.fn(() => "/tmp/pi-agent"),
   SessionManager: {
     open: mockOpen,
     inMemory: mockInMemory,
@@ -123,6 +125,10 @@ describe("pi bridge", () => {
       await bridge.waitForResponse(1);
 
       expect(mockResourceLoaders).toHaveLength(1);
+      expect(mockResourceLoaders[0]?.options).toMatchObject({
+        cwd: "/tmp/worktree",
+        agentDir: "/tmp/pi-agent",
+      });
       expect(mockResourceLoaders[0]?.options.systemPrompt).toBeUndefined();
       expect(mockResourceLoaders[0]?.options.noSkills).toBeUndefined();
       expect(
@@ -152,6 +158,7 @@ describe("pi bridge", () => {
       expect(mockResourceLoaders).toHaveLength(1);
       expect(mockResourceLoaders[0]?.options).toMatchObject({
         cwd: "/tmp/worktree",
+        agentDir: "/tmp/pi-agent",
         systemPrompt: "Replacement prompt",
         noExtensions: true,
         noSkills: true,

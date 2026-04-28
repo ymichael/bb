@@ -175,7 +175,7 @@ describe("PiSdkSession", () => {
     const session = new PiSdkSession(
       {
         cwd: "/tmp/project",
-        model: "openai-codex/gpt-5.4",
+        model: "openai-codex/gpt-5.5",
       },
       vi.fn(),
       vi.fn(),
@@ -183,11 +183,11 @@ describe("PiSdkSession", () => {
 
     await session.start();
 
-    expect(mockGetModel).toHaveBeenCalledWith("openai-codex", "gpt-5.4");
+    expect(mockGetModel).toHaveBeenCalledWith("openai-codex", "gpt-5.5");
     expect(mockCreateAgentSession).toHaveBeenCalledWith(
       expect.objectContaining({
         model: {
-          id: "gpt-5.4",
+          id: "gpt-5.5",
           provider: "openai-codex",
         },
       }),

@@ -56,7 +56,7 @@ CLAUDE_MODEL=$(bb provider models claude-code --json | jq -er '([.[] | select(.m
 PI_MODELS_JSON=$(bb provider models pi --json)
 PI_MODEL=$(printf '%s\n' "$PI_MODELS_JSON" | jq -er '
   [.[] | select(.model == "anthropic/claude-haiku-4-5")][0].model
-  // [.[] | select(.model == "openai-codex/gpt-5.4")][0].model
+  // [.[] | select(.model == "openai-codex/gpt-5.5")][0].model
   // [.[] | select(.model | startswith("anthropic/")) | select(.isDefault)][0].model
   // [.[] | select(.model | startswith("openai-codex/")) | select(.isDefault)][0].model
   // [.[] | select(.model | startswith("anthropic/"))][0].model
@@ -74,7 +74,7 @@ as a behavioral constraint rather than the expected response text.
 
 For Pi checks, prefer subscription-backed models (`anthropic/...` from Claude
 subscription auth, specifically `anthropic/claude-haiku-4-5` first, then
-`openai-codex/gpt-5.4` from Codex subscription auth) over generic `openai/...`
+`openai-codex/gpt-5.5` from Codex subscription auth) over generic `openai/...`
 API-key models.
 
 Teardown:

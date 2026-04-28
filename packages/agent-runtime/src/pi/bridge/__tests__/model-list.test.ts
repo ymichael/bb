@@ -81,9 +81,9 @@ describe("pi bridge model list", () => {
     hasAuth.mockReturnValue(true);
     getModels.mockReturnValue([
       {
-        id: "gpt-5.4",
-        input: ["text"],
-        name: "GPT-5.4",
+        id: "gpt-5.5",
+        input: ["text", "image"],
+        name: "GPT-5.5",
         provider: "openai-codex",
         reasoning: true,
       },
@@ -99,10 +99,10 @@ describe("pi bridge model list", () => {
 
     await expect(listPiBridgeModels()).resolves.toEqual([
       {
-        id: "openai-codex/gpt-5.4",
-        model: "openai-codex/gpt-5.4",
-        displayName: "GPT-5.4",
-        description: "Openai-codex reasoning model via Pi",
+        id: "openai-codex/gpt-5.5",
+        model: "openai-codex/gpt-5.5",
+        displayName: "GPT-5.5",
+        description: "Openai-codex reasoning, multimodal model via Pi",
         supportedReasoningEfforts: [
           { reasoningEffort: "low", description: "Low reasoning effort" },
           { reasoningEffort: "medium", description: "Medium reasoning effort" },

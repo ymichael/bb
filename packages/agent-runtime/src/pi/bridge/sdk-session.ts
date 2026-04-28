@@ -6,6 +6,7 @@ import {
   DefaultResourceLoader,
   SessionManager,
   SettingsManager,
+  getAgentDir,
   type AgentSession,
   type AgentSessionEvent,
   type BashSpawnHook,
@@ -157,6 +158,7 @@ export class PiSdkSession {
     if (this.options.systemPrompt || appendSystemPrompt) {
       const resourceLoader = new DefaultResourceLoader({
         cwd: this.options.cwd,
+        agentDir: getAgentDir(),
         ...(this.options.systemPrompt
           ? {
               systemPrompt: this.options.systemPrompt,

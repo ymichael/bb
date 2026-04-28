@@ -38,8 +38,8 @@
     "@bb/agent-providers": "workspace:*",
     "@bb/domain": "workspace:*",
     "@bb/process-utils": "workspace:*",
-    "@mariozechner/pi-ai": "^0.67.5",
-    "@mariozechner/pi-coding-agent": "^0.67.5",
+    "@mariozechner/pi-ai": "^0.70.5",
+    "@mariozechner/pi-coding-agent": "^0.70.5",
     "zod": "^4.3.6"
   },
   "devDependencies": {
