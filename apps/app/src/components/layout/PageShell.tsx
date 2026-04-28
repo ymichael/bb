@@ -3,15 +3,17 @@
 // machinery here. Past regressions: see git log --grep=scroll before
 // 2026-04-22.
 //
-// Browser scroll-anchoring is mostly disabled while the user is at the
-// bottom (via `[overflow-anchor:none]` toggled on the scroll container based
-// on `ctx.isAtBottom`). When at-bottom, the library is the only thing
-// driving scrollTop and there is no fight with the browser. When scrolled
-// up, browser anchoring is re-enabled so the user's reading position is
-// preserved as content above/below them reflows during a column resize.
+// Browser scroll-anchoring is left on (default `overflow-anchor: auto`) on
+// the scroll container and on every timeline row. When the user is scrolled
+// up, the browser pins to a candidate row so the reading position survives
+// column reflow. When the user is at the bottom, the library's own
+// `scrollToBottom` keeps the bottom pinned; with the markdown renderer
+// memoized (see `ConversationMarkdown`), the per-frame render cost is
+// small enough that the library's rAF-driven catch-up is not visible.
 // Do not reintroduce inline `style={{ overflowAnchor: "none" }}` on
-// individual timeline rows — that disables browser anchoring even when
-// scrolled up, and the jitter returns.
+// individual timeline rows or on the scroll container — that disables
+// browser anchoring while scrolled up and the reading-position drift
+// returns.
 import type { ReactNode } from "react";
 import { StickToBottom, type StickToBottomContext } from "use-stick-to-bottom";
 import { cn } from "@/lib/utils";
@@ -117,17 +119,11 @@ function StickyScrollArea({
   stickyFooter,
   children,
 }: StickyScrollAreaProps) {
-  // While at-bottom, opt the scroll container out of browser scroll-anchoring
-  // so the use-stick-to-bottom library is the sole driver of `scrollTop`
-  // during a column reflow. When scrolled up, leave anchoring on so the
-  // user's reading position is preserved as content reflows.
-  const disableBrowserAnchor = ctx.isAtBottom;
   return (
     <div
       ref={ctx.scrollRef}
       className={cn(
         "@container/page min-h-0 flex-1 overflow-y-auto",
-        disableBrowserAnchor && "[overflow-anchor:none]",
         scrollAreaClassName,
       )}
     >
