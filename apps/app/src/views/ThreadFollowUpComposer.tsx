@@ -475,76 +475,73 @@ export function ThreadFollowUpComposer({
             />
           }
         />
-        {environment.environmentLabel || environment.contextWindowUsage ? (
-          <div className="mt-1 flex items-center justify-between gap-2 pl-[15px] pr-3.5">
-            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
-              {environment.environmentLabel ||
-              environment.environmentHostConnected !== undefined ? (
-                <div className="flex min-w-0 items-center gap-2 pr-1.5">
-                  {environment.environmentLabel ? (
-                    <PromptOptionDisplay
-                      label="Environment"
-                      value={
-                        <span className="flex min-w-0 items-center gap-1.5">
-                          <span className="truncate">
-                            {environment.environmentLabel}
-                          </span>
-                          {environment.environmentHostConnected !==
-                          undefined ? (
-                            <HostStatusBadge
-                              connected={environment.environmentHostConnected}
-                              className="translate-y-px"
-                            />
-                          ) : null}
+        <div className="mt-1 flex min-h-6 items-center justify-between gap-2 pl-[15px] pr-3.5">
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
+            {environment.environmentLabel ||
+            environment.environmentHostConnected !== undefined ? (
+              <div className="flex min-w-0 items-center gap-2 pr-1.5">
+                {environment.environmentLabel ? (
+                  <PromptOptionDisplay
+                    label="Environment"
+                    value={
+                      <span className="flex min-w-0 items-center gap-1.5">
+                        <span className="truncate">
+                          {environment.environmentLabel}
                         </span>
-                      }
-                      icon={environment.environmentIcon}
-                      className="h-6 min-w-[80px]"
-                    />
-                  ) : environment.environmentHostConnected !== undefined ? (
-                    <HostStatusBadge
-                      connected={environment.environmentHostConnected}
-                    />
-                  ) : null}
-                  {environment.environmentBranchName ? (
-                    <button
-                      type="button"
-                      className="hidden min-w-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-xs text-muted-foreground/75 transition-colors hover:bg-accent hover:text-foreground md:flex"
-                      title={`Copy branch name: ${environment.environmentBranchName}`}
-                      onClick={() => {
-                        const branchName = environment.environmentBranchName;
-                        if (!branchName) return;
-                        void copyToClipboardWithToast(branchName, {
-                          successMessage: "Branch name copied",
-                          errorMessage: "Failed to copy branch name",
-                        });
-                      }}
-                    >
-                      <GitMerge className="size-3.5 shrink-0" />
-                      <span className="truncate">
-                        {environment.environmentBranchName}
+                        {environment.environmentHostConnected !== undefined ? (
+                          <HostStatusBadge
+                            connected={environment.environmentHostConnected}
+                            className="translate-y-px"
+                          />
+                        ) : null}
                       </span>
-                    </button>
-                  ) : null}
-                </div>
-              ) : null}
-            </div>
-            <div className="flex shrink-0 items-center gap-2">
-              <PromptPermissionModePicker
-                value={execution.permissionMode}
-                options={execution.permissionModeOptions}
-                onChange={execution.onPermissionModeChange}
-                supported={execution.supportsPermissionModeSelection}
-                className="h-6"
-              />
-              {environment.contextWindowUsage ? (
-                <ThreadContextWindowIndicator
-                  usage={environment.contextWindowUsage}
-                />
-              ) : null}
-            </div>
+                    }
+                    icon={environment.environmentIcon}
+                    className="h-6 min-w-[80px]"
+                  />
+                ) : environment.environmentHostConnected !== undefined ? (
+                  <HostStatusBadge
+                    connected={environment.environmentHostConnected}
+                  />
+                ) : null}
+                {environment.environmentBranchName ? (
+                  <button
+                    type="button"
+                    className="hidden min-w-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-xs text-muted-foreground/75 transition-colors hover:bg-accent hover:text-foreground md:flex"
+                    title={`Copy branch name: ${environment.environmentBranchName}`}
+                    onClick={() => {
+                      const branchName = environment.environmentBranchName;
+                      if (!branchName) return;
+                      void copyToClipboardWithToast(branchName, {
+                        successMessage: "Branch name copied",
+                        errorMessage: "Failed to copy branch name",
+                      });
+                    }}
+                  >
+                    <GitMerge className="size-3.5 shrink-0" />
+                    <span className="truncate">
+                      {environment.environmentBranchName}
+                    </span>
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
           </div>
-        ) : null}
+          <div className="flex shrink-0 items-center gap-2">
+            <PromptPermissionModePicker
+              value={execution.permissionMode}
+              options={execution.permissionModeOptions}
+              onChange={execution.onPermissionModeChange}
+              supported={execution.supportsPermissionModeSelection}
+              className="h-6"
+            />
+            {environment.contextWindowUsage ? (
+              <ThreadContextWindowIndicator
+                usage={environment.contextWindowUsage}
+              />
+            ) : null}
+          </div>
+        </div>
       </div>
     </>
   );

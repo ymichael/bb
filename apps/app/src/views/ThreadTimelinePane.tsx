@@ -1,4 +1,4 @@
-import { type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import type {
   TimelineActiveThinking,
   TimelineRow,
@@ -68,16 +68,13 @@ export function ThreadTimelinePane({
         key={threadId}
         scrollBehavior="stick-to-bottom"
         shellClassName="!mx-0 !mt-0 md:!mx-0 md:!mt-0"
-        contentClassName="gap-2 pt-0"
+        contentClassName="min-h-full gap-2 pt-0"
         footerUsesPromptPadding
         footer={footer}
       >
-        <ConversationTimeline>
+        <ConversationTimeline className="flex-1">
           {isThreadTimelinePending ? (
-            <ConversationWorkingIndicator
-              label="Loading thread..."
-              className="mt-6"
-            />
+            <DelayedThreadLoadingIndicator />
           ) : timelineError ? (
             <ConversationStatusIndicator
               label="Failed to load timeline"
@@ -108,5 +105,27 @@ export function ThreadTimelinePane({
         ) : null}
       </PageShell>
     </div>
+  );
+}
+
+// Delay before revealing the loading indicator so fast loads don't flash.
+const LOADING_INDICATOR_REVEAL_DELAY_MS = 200;
+
+function DelayedThreadLoadingIndicator() {
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    const id = window.setTimeout(
+      () => setVisible(true),
+      LOADING_INDICATOR_REVEAL_DELAY_MS,
+    );
+    return () => window.clearTimeout(id);
+  }, []);
+
+  if (!visible) {
+    return null;
+  }
+
+  return (
+    <ConversationWorkingIndicator label="Loading thread..." className="mt-6" />
   );
 }
