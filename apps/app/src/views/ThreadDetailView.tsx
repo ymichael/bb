@@ -1,5 +1,7 @@
 import { useCallback, useMemo, type ReactNode } from "react";
 import { useParams } from "react-router-dom";
+import type { ThreadTimelineLocalFileLink } from "@bb/ui-core";
+import { toast } from "sonner";
 import { useThreadSecondaryPanelUrlSync } from "@/lib/thread-secondary-panel";
 import { useRequestEnvironmentAction } from "../hooks/mutations/environment-mutations";
 import {
@@ -29,7 +31,7 @@ import { ThreadActionsMenu } from "@/components/thread/ThreadActionsMenu";
 import { ThreadWorkspaceOpenButton } from "@/components/thread/ThreadWorkspaceOpenButton";
 import { findLatestActivityRowId, formatEnvironmentDisplay } from "@bb/core-ui";
 import { useHostDaemon } from "@/hooks/useHostDaemon";
-import { useWorkspaceOpenTargets } from "@/hooks/useWorkspaceOpenTargets";
+import { useLocalOpenTargets } from "@/hooks/useLocalOpenTargets";
 import { useHost } from "@/hooks/queries/system-queries";
 import { getEnvironmentWorkspaceLabelIcon } from "@/lib/environment-workspace-display";
 import { useStoredShowAllEvents } from "@/lib/show-all-events-preference";
@@ -50,8 +52,12 @@ import { useEnvironmentMergeBase } from "./useEnvironmentMergeBase";
 import { useThreadGitActions } from "./useThreadGitActions";
 import { useThreadEnvironmentPromotionActions } from "./useThreadEnvironmentPromotionActions";
 import { useThreadReadTracking } from "./useThreadReadTracking";
-import { resolveThreadWorkspaceOpenPath } from "./threadWorkspaceOpenButton";
+import {
+  resolveThreadLocalWorkspaceRootPath,
+  resolveThreadWorkspaceOpenPath,
+} from "./threadWorkspaceOpenButton";
 import { copyToClipboardWithToast } from "@/lib/clipboard";
+import { resolveThreadLocalFileLink } from "@/lib/thread-local-file-links";
 
 const PROMPT_BANNER_KIND_PREFIX = {
   uncommitted: "Uncommitted",
@@ -174,14 +180,22 @@ export function ThreadDetailView() {
     () => selectWorkspaceChangedFilesSection(workspaceStatus),
     [workspaceStatus],
   );
-  const { isLocalHost, openPath } = useHostDaemon();
+  const { isLocalHost } = useHostDaemon();
   const threadEnvironmentIsLocal = environment
     ? isLocalHost(environment.hostId)
     : false;
-  const { openWorkspace, workspaceOpenTargets } = useWorkspaceOpenTargets({
-    enabled: Boolean(
-      environment && threadEnvironmentIsLocal && environment.status === "ready",
-    ),
+  const localWorkspaceRootPath = resolveThreadLocalWorkspaceRootPath({
+    environment,
+    threadEnvironmentIsLocal,
+  });
+  const {
+    canOpenPreferredTarget,
+    openPathInPreferredTarget,
+    openPathInTarget,
+    preferredTarget,
+    workspaceOpenTargets,
+  } = useLocalOpenTargets({
+    enabled: localWorkspaceRootPath !== null,
   });
   const { data: environmentHost } = useHost(environment?.hostId);
   const isThreadTimelinePending =
@@ -295,6 +309,27 @@ export function ThreadDetailView() {
       );
     },
     [setSelectedThreadStoragePath],
+  );
+  const handleOpenTimelineLocalFileLink = useCallback(
+    (link: ThreadTimelineLocalFileLink) => {
+      const resolution = resolveThreadLocalFileLink({
+        link,
+        workspaceRootPath: localWorkspaceRootPath,
+      });
+      if (resolution.kind === "app-route") {
+        return false;
+      }
+      if (resolution.kind === "error") {
+        toast.error("Could not open locally.", {
+          description: resolution.description,
+        });
+        return true;
+      }
+
+      void openPathInPreferredTarget(resolution.request);
+      return true;
+    },
+    [localWorkspaceRootPath, openPathInPreferredTarget],
   );
 
   if (!projectId || !threadId) {
@@ -428,21 +463,32 @@ export function ThreadDetailView() {
     />
   );
   const workspaceOpenPath = resolveThreadWorkspaceOpenPath({
-    canOpenWorkspace: openWorkspace !== null,
+    canOpenWorkspace: canOpenPreferredTarget,
     environment,
     hasWorkspaceOpenTargets: workspaceOpenTargets.length > 0,
     threadEnvironmentIsLocal,
   });
   const workspaceOpenButton =
-    workspaceOpenPath && openWorkspace ? (
+    workspaceOpenPath && preferredTarget ? (
       <ThreadWorkspaceOpenButton
+        preferredTarget={preferredTarget}
         targets={workspaceOpenTargets}
-        onOpenWorkspace={(targetId) =>
-          openWorkspace({
+        onOpenPreferredTarget={async () => {
+          await openPathInPreferredTarget({
+            lineNumber: null,
             path: workspaceOpenPath,
+            workspaceRootPath: workspaceOpenPath,
+          });
+        }}
+        onOpenTarget={async (targetId) => {
+          await openPathInTarget({
+            lineNumber: null,
+            path: workspaceOpenPath,
+            rememberTarget: true,
             targetId,
-          })
-        }
+            workspaceRootPath: workspaceOpenPath,
+          });
+        }}
       />
     ) : undefined;
   const timelineHeader = (
@@ -567,10 +613,14 @@ export function ThreadDetailView() {
           onClose: closeThreadSecondaryPanel,
           onCollapse: closeThreadSecondaryPanel,
           onOpenFile:
-            environment?.path && threadEnvironmentIsLocal
+            localWorkspaceRootPath
               ? (relativePath: string) => {
-                  const fullPath = `${environment.path}/${relativePath}`;
-                  void openPath?.(fullPath);
+                  const fullPath = `${localWorkspaceRootPath}/${relativePath}`;
+                  void openPathInPreferredTarget({
+                    lineNumber: null,
+                    path: fullPath,
+                    workspaceRootPath: localWorkspaceRootPath,
+                  });
                 }
               : undefined,
           onPanelChange: openThreadSecondaryPanel,
@@ -587,6 +637,7 @@ export function ThreadDetailView() {
           loadingTurnSummaryIds,
           erroredTurnSummaryIds,
           onLoadTurnSummaryRows: handleLoadTurnSummaryRows,
+          onOpenLocalFileLink: handleOpenTimelineLocalFileLink,
           projectId,
           showOngoingIndicator:
             thread.status === "active" && !isThreadTimelinePending,

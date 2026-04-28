@@ -4,34 +4,30 @@ import { promisify } from "node:util";
 import { serve } from "@hono/node-server";
 import {
   healthResponseSchema,
-  openWorkspaceRequestSchema,
-  openRequestSchema,
+  openInTargetRequestSchema,
   pathsExistRequestSchema,
   typedRoutes,
   type HostDaemonLocalSchema,
   type HostPlatform,
-  type OpenWorkspaceRequest,
+  type OpenInTargetRequest,
   type WorkspaceOpenTarget,
 } from "@bb/host-daemon-contract";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { HTTPException } from "hono/http-exception";
-import open from "open";
 import type { HostDaemonLocalApiConfig } from "./local-api-config.js";
 import {
   listWorkspaceOpenTargets,
-  openWorkspaceInTarget,
+  openPathInTarget,
   WorkspaceOpenTargetError,
 } from "./workspace-open-targets.js";
 
 const execFileAsync = promisify(execFile);
-
-export type OpenPathHandler = (path: string) => Promise<void>;
 export type WorkspaceOpenTargetListHandler = () => Promise<
   WorkspaceOpenTarget[]
 >;
-export type WorkspaceOpenHandler = (
-  request: OpenWorkspaceRequest,
+export type OpenInTargetHandler = (
+  request: OpenInTargetRequest,
 ) => Promise<void>;
 
 export interface StartLocalApiServerOptions {
@@ -40,8 +36,7 @@ export interface StartLocalApiServerOptions {
   serverUrl: string;
   getConnected: () => boolean;
   listWorkspaceOpenTargets?: WorkspaceOpenTargetListHandler;
-  openPath?: OpenPathHandler;
-  openWorkspace?: WorkspaceOpenHandler;
+  openInTarget?: OpenInTargetHandler;
   pickFolder?: () => Promise<string | null>;
 }
 
@@ -114,15 +109,6 @@ export async function startLocalApiServer(
     }),
   );
 
-  post("/open-path", openRequestSchema, async (c, payload) => {
-    const stat = await fs.stat(payload.path).catch(() => null);
-    if (!stat) {
-      throw new HTTPException(400, { message: "Path does not exist" });
-    }
-    await (options.openPath ?? openLocalPath)(payload.path);
-    return c.json({});
-  });
-
   post("/paths/exist", pathsExistRequestSchema, async (c, payload) => {
     const entries = await Promise.all(
       payload.paths.map(
@@ -140,9 +126,9 @@ export async function startLocalApiServer(
     }),
   );
 
-  post("/open-workspace", openWorkspaceRequestSchema, async (c, payload) => {
+  post("/open-in-target", openInTargetRequestSchema, async (c, payload) => {
     try {
-      await (options.openWorkspace ?? openWorkspaceInTarget)(payload);
+      await (options.openInTarget ?? openPathInTarget)(payload);
     } catch (error) {
       if (error instanceof WorkspaceOpenTargetError) {
         throw new HTTPException(400, { message: error.message });
@@ -208,14 +194,6 @@ async function pathExists(path: string): Promise<boolean> {
     // enough to error on, so don't claim it's missing.
     return true;
   }
-}
-
-async function openLocalPath(path: string): Promise<void> {
-  const child = await open(path, {
-    background: true,
-    wait: false,
-  });
-  child.unref();
 }
 
 async function pickLocalFolder(): Promise<string | null> {

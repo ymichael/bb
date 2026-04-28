@@ -1,7 +1,7 @@
 import { atom, useAtomValue } from "jotai";
 import { useMemo } from "react";
 import type {
-  OpenWorkspaceRequest,
+  OpenInTargetRequest,
   WorkspaceOpenTarget,
 } from "@bb/host-daemon-contract";
 import {
@@ -9,7 +9,7 @@ import {
   localHostIdAtom,
   localWorkspaceOpenTargetsAtom,
 } from "@/lib/atoms";
-import { openWorkspace as daemonOpenWorkspace } from "@/lib/api-host-daemon";
+import { openInTarget as daemonOpenInTarget } from "@/lib/api-host-daemon";
 
 const disabledLocalHostIdAtom = atom<string | null>(null);
 const disabledHostDaemonPortAtom = atom<number | null>(null);
@@ -20,7 +20,7 @@ export interface UseWorkspaceOpenTargetsArgs {
 }
 
 export interface UseWorkspaceOpenTargetsResult {
-  openWorkspace: ((request: OpenWorkspaceRequest) => Promise<void>) | null;
+  openWorkspace: ((request: OpenInTargetRequest) => Promise<void>) | null;
   workspaceOpenTargets: WorkspaceOpenTarget[];
 }
 
@@ -49,8 +49,7 @@ export function useWorkspaceOpenTargets(
       return null;
     }
     const port = daemonPort;
-    return (request: OpenWorkspaceRequest) =>
-      daemonOpenWorkspace(port, request);
+    return (request: OpenInTargetRequest) => daemonOpenInTarget(port, request);
   }, [args.enabled, localHostId, daemonPort, workspaceOpenTargets.length]);
 
   return {

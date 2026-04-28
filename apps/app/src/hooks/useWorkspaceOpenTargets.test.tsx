@@ -10,8 +10,8 @@ import {
   waitFor,
 } from "@testing-library/react";
 import {
-  openWorkspaceRequestSchema,
-  type OpenWorkspaceRequest,
+  openInTargetRequestSchema,
+  type OpenInTargetRequest,
   type WorkspaceOpenTarget,
 } from "@bb/host-daemon-contract";
 import type { HostDaemonStatusSnapshot } from "@/lib/api-host-daemon";
@@ -36,7 +36,7 @@ interface WorkspaceOpenTargetFetchState {
 }
 
 interface WorkspaceOpenTargetsSnapshot {
-  openWorkspace: ((request: OpenWorkspaceRequest) => Promise<void>) | null;
+  openWorkspace: ((request: OpenInTargetRequest) => Promise<void>) | null;
   workspaceOpenTargets: WorkspaceOpenTarget[];
 }
 
@@ -89,8 +89,10 @@ function createWorkspaceOpenTargetsProbe(
           disabled={value.openWorkspace == null}
           onClick={() => {
             void value.openWorkspace?.({
+              lineNumber: null,
               path: "/tmp/workspace",
               targetId: "vscode",
+              workspaceRootPath: "/tmp/workspace",
             });
           }}
         >
@@ -103,7 +105,7 @@ function createWorkspaceOpenTargetsProbe(
 
 function installWorkspaceOpenTargetFetchRoutes(
   state: WorkspaceOpenTargetFetchState,
-  openWorkspaceRequests: OpenWorkspaceRequest[] = [],
+  openTargetRequests: OpenInTargetRequest[] = [],
 ) {
   installFetchRoutes([
     {
@@ -134,11 +136,11 @@ function installWorkspaceOpenTargetFetchRoutes(
     },
     {
       method: "POST",
-      pathname: "/open-workspace",
+      pathname: "/open-in-target",
       port: 4123,
       handler: async (request) => {
-        openWorkspaceRequests.push(
-          openWorkspaceRequestSchema.parse(await request.json()),
+        openTargetRequests.push(
+          openInTargetRequestSchema.parse(await request.json()),
         );
         return jsonResponse({});
       },
@@ -221,13 +223,14 @@ describe("useWorkspaceOpenTargets", () => {
       workspaceOpenTargets: [
         {
           id: "vscode",
+          kind: "editor",
           label: "VS Code",
         },
       ],
       workspaceOpenTargetsStatus: 200,
     };
-    const openWorkspaceRequests: OpenWorkspaceRequest[] = [];
-    installWorkspaceOpenTargetFetchRoutes(state, openWorkspaceRequests);
+    const openTargetRequests: OpenInTargetRequest[] = [];
+    installWorkspaceOpenTargetFetchRoutes(state, openTargetRequests);
 
     const { useWorkspaceOpenTargets } =
       await importFreshWorkspaceOpenTargetsModules();
@@ -251,10 +254,12 @@ describe("useWorkspaceOpenTargets", () => {
     fireEvent.click(screen.getByRole("button", { name: "open workspace" }));
 
     await waitFor(() => {
-      expect(openWorkspaceRequests).toEqual([
+      expect(openTargetRequests).toEqual([
         {
+          lineNumber: null,
           path: "/tmp/workspace",
           targetId: "vscode",
+          workspaceRootPath: "/tmp/workspace",
         },
       ]);
     });
@@ -351,6 +356,7 @@ describe("useWorkspaceOpenTargets", () => {
     state.workspaceOpenTargets = [
       {
         id: "vscode",
+        kind: "editor",
         label: "VS Code",
       },
     ];

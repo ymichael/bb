@@ -1,7 +1,7 @@
 import {
   createHostDaemonLocalClient,
   workspaceOpenTargetsResponseSchema,
-  type OpenWorkspaceRequest,
+  type OpenInTargetRequest,
   type StatusResponse,
   type WorkspaceOpenTarget,
 } from "@bb/host-daemon-contract";
@@ -53,14 +53,6 @@ export async function fetchHostId(port: number): Promise<string | null> {
   return status.hostId;
 }
 
-/**
- * Open a path in the user's default editor via the host daemon.
- */
-export async function openPath(port: number, path: string): Promise<void> {
-  const daemon = getHostDaemonClient(port);
-  await daemon["open-path"].$post({ json: { path } });
-}
-
 export async function fetchWorkspaceOpenTargets(
   port: number,
 ): Promise<WorkspaceOpenTarget[]> {
@@ -77,18 +69,20 @@ export async function fetchWorkspaceOpenTargets(
   return body.targets;
 }
 
-export async function openWorkspace(
+export async function openInTarget(
   port: number,
-  request: OpenWorkspaceRequest,
+  request: OpenInTargetRequest,
 ): Promise<void> {
   const daemon = getHostDaemonClient(port);
-  const res = await daemon["open-workspace"].$post({ json: request });
+  const res = await daemon["open-in-target"].$post({
+    json: request,
+  });
   if (!res.ok) {
     const status = Number(res.status);
     throw new Error(
       await readHostDaemonErrorMessage(
         res,
-        `Failed to open workspace: HTTP ${status}`,
+        `Failed to open target: HTTP ${status}`,
       ),
     );
   }

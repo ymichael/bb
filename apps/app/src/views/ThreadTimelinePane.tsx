@@ -4,7 +4,11 @@ import type {
   TimelineRow,
   TimelineTurnSummaryRow,
 } from "@bb/domain";
-import { ConversationTimeline, ThreadTimelineRows } from "@bb/ui-core";
+import {
+  ConversationTimeline,
+  ThreadTimelineRows,
+  type ThreadTimelineLocalFileLinkHandler,
+} from "@bb/ui-core";
 import { PageShell } from "@/components/layout/PageShell";
 import { ConversationStatusIndicator } from "@/components/messages/ConversationStatusIndicator";
 import { ConversationWorkingIndicator } from "@/components/messages/ConversationWorkingIndicator";
@@ -21,6 +25,7 @@ interface ThreadTimelinePaneProps {
   loadingTurnSummaryIds: ReadonlySet<string>;
   erroredTurnSummaryIds: ReadonlySet<string>;
   onLoadTurnSummaryRows: (entry: TimelineTurnSummaryRow) => void;
+  onOpenLocalFileLink?: ThreadTimelineLocalFileLinkHandler;
   projectId?: string;
   showOngoingIndicator: boolean;
   ongoingIndicatorLabel?: string;
@@ -40,6 +45,7 @@ export function ThreadTimelinePane({
   loadingTurnSummaryIds,
   erroredTurnSummaryIds,
   onLoadTurnSummaryRows,
+  onOpenLocalFileLink,
   projectId,
   showOngoingIndicator,
   ongoingIndicatorLabel,
@@ -86,6 +92,7 @@ export function ThreadTimelinePane({
               loadingTurnSummaryIds={loadingTurnSummaryIds}
               erroredTurnSummaryIds={erroredTurnSummaryIds}
               onLoadTurnSummaryRows={onLoadTurnSummaryRows}
+              onOpenLocalFileLink={onOpenLocalFileLink}
               projectId={projectId}
               resolveUserAttachmentImageSrc={toUserAttachmentImageSrc}
               themeType={preferredTheme}

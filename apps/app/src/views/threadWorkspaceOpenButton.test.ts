@@ -1,6 +1,9 @@
 import type { Environment } from "@bb/domain";
 import { describe, expect, it } from "vitest";
-import { resolveThreadWorkspaceOpenPath } from "./threadWorkspaceOpenButton";
+import {
+  resolveThreadLocalWorkspaceRootPath,
+  resolveThreadWorkspaceOpenPath,
+} from "./threadWorkspaceOpenButton";
 
 function makeEnvironment(overrides: Partial<Environment> = {}): Environment {
   return {
@@ -25,6 +28,15 @@ function makeEnvironment(overrides: Partial<Environment> = {}): Environment {
 }
 
 describe("resolveThreadWorkspaceOpenPath", () => {
+  it("resolves the ready local workspace root path", () => {
+    expect(
+      resolveThreadLocalWorkspaceRootPath({
+        environment: makeEnvironment(),
+        threadEnvironmentIsLocal: true,
+      }),
+    ).toBe("/tmp/workspace");
+  });
+
   it("returns the ready local environment path when the capability is available", () => {
     expect(
       resolveThreadWorkspaceOpenPath({
@@ -37,6 +49,12 @@ describe("resolveThreadWorkspaceOpenPath", () => {
   });
 
   it("hides when the environment is remote", () => {
+    expect(
+      resolveThreadLocalWorkspaceRootPath({
+        environment: makeEnvironment(),
+        threadEnvironmentIsLocal: false,
+      }),
+    ).toBeNull();
     expect(
       resolveThreadWorkspaceOpenPath({
         canOpenWorkspace: true,

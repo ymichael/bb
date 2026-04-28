@@ -7,13 +7,14 @@ interface ResolveThreadWorkspaceOpenPathArgs {
   threadEnvironmentIsLocal: boolean;
 }
 
-export function resolveThreadWorkspaceOpenPath(
-  args: ResolveThreadWorkspaceOpenPathArgs,
-): string | null {
-  if (!args.canOpenWorkspace || !args.hasWorkspaceOpenTargets) {
-    return null;
-  }
+export interface ResolveThreadLocalWorkspaceRootPathArgs {
+  environment: Environment | null | undefined;
+  threadEnvironmentIsLocal: boolean;
+}
 
+export function resolveThreadLocalWorkspaceRootPath(
+  args: ResolveThreadLocalWorkspaceRootPathArgs,
+): string | null {
   if (!args.threadEnvironmentIsLocal) {
     return null;
   }
@@ -23,4 +24,17 @@ export function resolveThreadWorkspaceOpenPath(
   }
 
   return args.environment.path;
+}
+
+export function resolveThreadWorkspaceOpenPath(
+  args: ResolveThreadWorkspaceOpenPathArgs,
+): string | null {
+  if (!args.canOpenWorkspace || !args.hasWorkspaceOpenTargets) {
+    return null;
+  }
+
+  return resolveThreadLocalWorkspaceRootPath({
+    environment: args.environment,
+    threadEnvironmentIsLocal: args.threadEnvironmentIsLocal,
+  });
 }

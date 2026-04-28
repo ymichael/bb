@@ -1,5 +1,9 @@
 import { useMemo } from "react";
-import type { TimelineRow, TimelineTurnSummaryRow, ViewMessage } from "@bb/domain";
+import type {
+  TimelineRow,
+  TimelineTurnSummaryRow,
+  ViewMessage,
+} from "@bb/domain";
 import { ConversationEntry } from "./ConversationEntry.js";
 import { NestedTimelineRows } from "./NestedTimelineRows.js";
 import type {
@@ -8,15 +12,17 @@ import type {
   NestedTimelineTurnSummaryRowsController,
 } from "./NestedTimelineRows.js";
 import type {
+  ThreadTimelineLocalFileLinkHandler,
   ThreadTimelineTheme,
   UserAttachmentImageSrcResolver,
 } from "./types.js";
 
 export interface ThreadTimelineRowsProps {
+  erroredTurnSummaryIds: ReadonlySet<string>;
   latestActivityRowId: string | null;
   loadingTurnSummaryIds: ReadonlySet<string>;
-  erroredTurnSummaryIds: ReadonlySet<string>;
   onLoadTurnSummaryRows: (entry: TimelineTurnSummaryRow) => void;
+  onOpenLocalFileLink?: ThreadTimelineLocalFileLinkHandler;
   projectId?: string;
   resolveUserAttachmentImageSrc?: UserAttachmentImageSrcResolver;
   themeType?: ThreadTimelineTheme;
@@ -59,10 +65,11 @@ function createTurnSummaryRowsController(
 }
 
 export function ThreadTimelineRows({
+  erroredTurnSummaryIds,
   latestActivityRowId,
   loadingTurnSummaryIds,
-  erroredTurnSummaryIds,
   onLoadTurnSummaryRows,
+  onOpenLocalFileLink,
   projectId,
   resolveUserAttachmentImageSrc,
   themeType,
@@ -94,6 +101,7 @@ export function ThreadTimelineRows({
       message={message}
       projectId={projectId}
       initialExpanded={options?.initialExpanded}
+      onOpenLocalFileLink={onOpenLocalFileLink}
       preferOngoingLabels={options?.preferOngoingLabels}
       resolveUserAttachmentImageSrc={resolveUserAttachmentImageSrc}
       themeType={themeType}

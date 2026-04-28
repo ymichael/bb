@@ -9,16 +9,17 @@ import {
   waitFor,
 } from "@testing-library/react";
 import type { WorkspaceOpenTarget } from "@bb/host-daemon-contract";
-import { WORKSPACE_OPEN_TARGET_STORAGE_KEY } from "@/lib/workspace-open-target-preference";
 import { ThreadWorkspaceOpenButton } from "./ThreadWorkspaceOpenButton";
 
 const TARGETS: WorkspaceOpenTarget[] = [
   {
     id: "vscode",
+    kind: "editor",
     label: "VS Code",
   },
   {
     id: "finder",
+    kind: "file-browser",
     label: "Finder",
   },
 ];
@@ -45,17 +46,18 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
-  window.localStorage.clear();
   vi.restoreAllMocks();
 });
 
 describe("ThreadWorkspaceOpenButton", () => {
-  it("opens the resolved preferred target from the primary button", async () => {
-    const onOpenWorkspace = vi.fn(async () => undefined);
+  it("opens the preferred target from the primary button", async () => {
+    const onOpenPreferredTarget = vi.fn(async () => undefined);
 
     render(
       <ThreadWorkspaceOpenButton
-        onOpenWorkspace={onOpenWorkspace}
+        onOpenPreferredTarget={onOpenPreferredTarget}
+        onOpenTarget={vi.fn(async () => undefined)}
+        preferredTarget={TARGETS[0]}
         targets={TARGETS}
       />,
     );
@@ -65,16 +67,18 @@ describe("ThreadWorkspaceOpenButton", () => {
     );
 
     await waitFor(() => {
-      expect(onOpenWorkspace).toHaveBeenCalledWith("vscode");
+      expect(onOpenPreferredTarget).toHaveBeenCalledTimes(1);
     });
   });
 
-  it("opens a menu target and stores it as the next preference", async () => {
-    const onOpenWorkspace = vi.fn(async () => undefined);
+  it("opens the selected menu target", async () => {
+    const onOpenTarget = vi.fn(async () => undefined);
 
     render(
       <ThreadWorkspaceOpenButton
-        onOpenWorkspace={onOpenWorkspace}
+        onOpenPreferredTarget={vi.fn(async () => undefined)}
+        onOpenTarget={onOpenTarget}
+        preferredTarget={TARGETS[0]}
         targets={TARGETS}
       />,
     );
@@ -85,33 +89,20 @@ describe("ThreadWorkspaceOpenButton", () => {
     fireEvent.click(await screen.findByRole("menuitem", { name: "Finder" }));
 
     await waitFor(() => {
-      expect(onOpenWorkspace).toHaveBeenCalledWith("finder");
+      expect(onOpenTarget).toHaveBeenCalledWith("finder");
     });
-    expect(window.localStorage.getItem(WORKSPACE_OPEN_TARGET_STORAGE_KEY)).toBe(
-      "finder",
-    );
   });
 
-  it("falls back when the stored preference is unavailable without rewriting it", async () => {
-    window.localStorage.setItem(WORKSPACE_OPEN_TARGET_STORAGE_KEY, "cursor");
-    const onOpenWorkspace = vi.fn(async () => undefined);
-
-    render(
+  it("renders nothing when no preferred target is available", () => {
+    const { container } = render(
       <ThreadWorkspaceOpenButton
-        onOpenWorkspace={onOpenWorkspace}
-        targets={[TARGETS[0]]}
+        onOpenPreferredTarget={vi.fn(async () => undefined)}
+        onOpenTarget={vi.fn(async () => undefined)}
+        preferredTarget={null}
+        targets={TARGETS}
       />,
     );
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "Open workspace in VS Code" }),
-    );
-
-    await waitFor(() => {
-      expect(onOpenWorkspace).toHaveBeenCalledWith("vscode");
-    });
-    expect(window.localStorage.getItem(WORKSPACE_OPEN_TARGET_STORAGE_KEY)).toBe(
-      "cursor",
-    );
+    expect(container.firstChild).toBeNull();
   });
 });

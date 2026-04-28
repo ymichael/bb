@@ -1,15 +1,26 @@
-import { memo, useCallback, useMemo, useState } from "react";
+import {
+  memo,
+  useCallback,
+  useMemo,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+} from "react";
 import type { ComponentPropsWithoutRef } from "react";
 import ReactMarkdown from "react-markdown";
 import type { ExtraProps } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { cx } from "../utils.js";
 import { ImageLightbox, getWrappedImageIndex } from "./ImageLightbox.js";
+import { parseThreadTimelineLocalFileLink } from "./localFileLinks.js";
+import type { ThreadTimelineLocalFileLinkHandler } from "./types.js";
 
 interface ConversationMarkdownProps {
   content: string;
   className?: string;
+  onOpenLocalFileLink?: ThreadTimelineLocalFileLinkHandler;
 }
+
+type ConversationMarkdownAnchorEvent = ReactMouseEvent<HTMLAnchorElement>;
 
 function extractMarkdownImageUrls(markdown: string): string[] {
   const imageUrls: string[] = [];
@@ -28,6 +39,7 @@ function extractMarkdownImageUrls(markdown: string): string[] {
 function ConversationMarkdownComponent({
   content,
   className,
+  onOpenLocalFileLink,
 }: ConversationMarkdownProps) {
   const imageUrls = useMemo(() => extractMarkdownImageUrls(content), [content]);
   const [expandedImageIndex, setExpandedImageIndex] = useState<number | null>(
@@ -182,12 +194,28 @@ function ConversationMarkdownComponent({
               href,
               ...props
             }: ComponentPropsWithoutRef<"a"> & ExtraProps) {
+              const localFileLink = parseThreadTimelineLocalFileLink(href);
+              const handleLocalFileLinkClick = (
+                event: ConversationMarkdownAnchorEvent,
+              ) => {
+                if (!localFileLink || !onOpenLocalFileLink) {
+                  return;
+                }
+
+                if (!onOpenLocalFileLink(localFileLink)) {
+                  return;
+                }
+
+                event.preventDefault();
+              };
+
               return (
                 <a
                   href={href}
                   className="underline underline-offset-2 break-words"
                   target="_blank"
                   rel="noopener noreferrer"
+                  onClick={handleLocalFileLinkClick}
                   {...props}
                 >
                   {children}

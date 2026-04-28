@@ -16,6 +16,7 @@ import { ToolExploringRow } from "./rows/ToolExploringRow.js";
 import { UserMessageRow } from "./rows/UserMessageRow.js";
 import { WebFetchRow, WebSearchRow } from "./rows/WebSearchRow.js";
 import type {
+  ThreadTimelineLocalFileLinkHandler,
   ThreadTimelineRenderOptions,
   ThreadTimelineTheme,
   UserAttachmentImageSrcResolver,
@@ -27,9 +28,10 @@ type ConversationRenderableMessage = Exclude<
 >;
 
 interface ConversationEntryProps {
-  message: ViewMessage;
-  projectId?: string;
   initialExpanded?: boolean;
+  message: ViewMessage;
+  onOpenLocalFileLink?: ThreadTimelineLocalFileLinkHandler;
+  projectId?: string;
   preferOngoingLabels?: boolean;
   resolveUserAttachmentImageSrc?: UserAttachmentImageSrcResolver;
   themeType?: ThreadTimelineTheme;
@@ -53,6 +55,7 @@ function requireConversationRenderableMessage(
 
 function ConversationEntryComponent({
   message,
+  onOpenLocalFileLink,
   projectId,
   initialExpanded = false,
   preferOngoingLabels = false,
@@ -71,7 +74,12 @@ function ConversationEntryComponent({
         />
       );
     case "assistant-text":
-      return <AssistantMessageRow message={renderableMessage} />;
+      return (
+        <AssistantMessageRow
+          message={renderableMessage}
+          onOpenLocalFileLink={onOpenLocalFileLink}
+        />
+      );
     case "tool-exploring":
       return (
         <ToolExploringRow
@@ -134,6 +142,7 @@ function ConversationEntryComponent({
         <DelegationRow
           message={renderableMessage}
           initialExpanded={initialExpanded}
+          onOpenLocalFileLink={onOpenLocalFileLink}
           preferOngoingLabels={preferOngoingLabels}
           renderMessage={(
             nestedMessage: ViewMessage,
@@ -143,6 +152,7 @@ function ConversationEntryComponent({
               message={nestedMessage}
               projectId={projectId}
               initialExpanded={nestedOptions?.initialExpanded}
+              onOpenLocalFileLink={onOpenLocalFileLink}
               preferOngoingLabels={nestedOptions?.preferOngoingLabels}
               resolveUserAttachmentImageSrc={resolveUserAttachmentImageSrc}
               themeType={themeType}

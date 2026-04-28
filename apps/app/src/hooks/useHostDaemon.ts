@@ -6,13 +6,12 @@ import {
   localHostStatusAtom,
 } from "@/lib/atoms";
 import {
-  openPath as daemonOpenPath,
   pickFolder as daemonPickFolder,
 } from "@/lib/api-host-daemon";
 import { useHosts } from "./queries/system-queries";
 
 /**
- * Hook for host daemon operations (open-path, pick-folder).
+ * Hook for host daemon operations.
  *
  * Provides:
  * - `localHostId` — this machine's host ID, null if no daemon
@@ -21,7 +20,6 @@ import { useHosts } from "./queries/system-queries";
  * - `hasDaemon` — whether a daemon is reachable
  * - `supportsNativeFolderPicker` — whether the daemon can open a native folder picker
  * - `isLocalHost(hostId)` — whether the given host matches this machine
- * - `openPath(path)` — open a path in the user's editor (null if no daemon)
  * - `pickFolder()` — open native folder picker (null if no daemon)
  */
 export function useHostDaemon() {
@@ -63,12 +61,6 @@ export function useHostDaemon() {
     [localHostId],
   );
 
-  const openPath = useMemo(() => {
-    if (!localHostId || !daemonPort) return null;
-    const port = daemonPort;
-    return (path: string) => daemonOpenPath(port, path);
-  }, [localHostId, daemonPort]);
-
   const pickFolder = useMemo(() => {
     if (!localHostId || !daemonPort || !supportsNativeFolderPicker) return null;
     const port = daemonPort;
@@ -84,7 +76,6 @@ export function useHostDaemon() {
     supportsNativeFolderPicker,
     platform,
     isLocalHost,
-    openPath,
     pickFolder,
   };
 }

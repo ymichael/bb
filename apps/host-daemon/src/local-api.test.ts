@@ -84,15 +84,13 @@ describe("local API server", () => {
     expect(await healthResponse.text()).toBe("ok");
   });
 
-  it("delegates open and folder-pick operations to the provided callbacks", async () => {
-    const openPath = vi.fn(async () => undefined);
+  it("delegates folder-pick operations to the provided callback", async () => {
     const pickFolder = vi.fn(async () => "/tmp/project");
     server = await startLocalApiServer({
       hostId: "host-1",
       localApiConfig: createLocalApiConfig(),
       serverUrl: "http://server.test",
       getConnected: () => false,
-      openPath,
       pickFolder,
     });
     const client = createHostDaemonLocalClient(
@@ -100,13 +98,11 @@ describe("local API server", () => {
     );
 
     const statusResponse = await client.status.$get();
-    await client["open-path"].$post({ json: { path: "/tmp" } });
     const pickFolderResponse = await client["pick-folder"].$post({});
 
     expect(await statusResponse.json()).toMatchObject({
       supportsNativeFolderPicker: true,
     });
-    expect(openPath).toHaveBeenCalledWith("/tmp");
     expect(pickFolder).toHaveBeenCalledTimes(1);
     expect(await pickFolderResponse.json()).toEqual({ path: "/tmp/project" });
   });
@@ -219,20 +215,22 @@ describe("local API server", () => {
     }
   });
 
-  it("lists workspace open targets and delegates workspace open requests", async () => {
+  it("lists workspace open targets and delegates target-aware open requests", async () => {
     const workspacePath = await mkdtemp(path.join(tmpdir(), "bb-workspace-"));
     const targets: WorkspaceOpenTarget[] = [
       {
         id: "vscode",
+        kind: "editor",
         label: "VS Code",
       },
       {
         id: "finder",
+        kind: "file-browser",
         label: "Finder",
       },
     ];
     const listWorkspaceOpenTargets = vi.fn(async () => targets);
-    const openWorkspace = vi.fn(async () => undefined);
+    const openInTarget = vi.fn(async () => undefined);
 
     server = await startLocalApiServer({
       hostId: "host-1",
@@ -240,31 +238,35 @@ describe("local API server", () => {
       serverUrl: "http://server.test",
       getConnected: () => true,
       listWorkspaceOpenTargets,
-      openWorkspace,
+      openInTarget,
     });
     const client = createHostDaemonLocalClient(
       `http://localhost:${server.port}`,
     );
 
     const targetsResponse = await client["workspace-open-targets"].$get();
-    await client["open-workspace"].$post({
+    await client["open-in-target"].$post({
       json: {
+        lineNumber: null,
         path: workspacePath,
         targetId: "vscode",
+        workspaceRootPath: workspacePath,
       },
     });
 
     expect(await targetsResponse.json()).toEqual({ targets });
-    expect(openWorkspace).toHaveBeenCalledWith({
+    expect(openInTarget).toHaveBeenCalledWith({
+      lineNumber: null,
       path: workspacePath,
       targetId: "vscode",
+      workspaceRootPath: workspacePath,
     });
 
     await rm(workspacePath, { recursive: true, force: true });
   });
 
   it("translates workspace opener errors to bad requests", async () => {
-    const openWorkspace = vi.fn(async () => {
+    const openInTarget = vi.fn(async () => {
       throw new WorkspaceOpenTargetError({
         code: "target_unavailable",
         message: "Workspace open target is unavailable: VS Code",
@@ -275,23 +277,27 @@ describe("local API server", () => {
       localApiConfig: createLocalApiConfig(),
       serverUrl: "http://server.test",
       getConnected: () => true,
-      openWorkspace,
+      openInTarget,
     });
     const client = createHostDaemonLocalClient(
       `http://localhost:${server.port}`,
     );
 
-    const response = await client["open-workspace"].$post({
+    const response = await client["open-in-target"].$post({
       json: {
+        lineNumber: null,
         path: "/tmp/workspace",
         targetId: "vscode",
+        workspaceRootPath: "/tmp/workspace",
       },
     });
 
     expect(response.status).toBe(400);
-    expect(openWorkspace).toHaveBeenCalledWith({
+    expect(openInTarget).toHaveBeenCalledWith({
+      lineNumber: null,
       path: "/tmp/workspace",
       targetId: "vscode",
+      workspaceRootPath: "/tmp/workspace",
     });
   });
 

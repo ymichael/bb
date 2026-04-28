@@ -16,19 +16,25 @@ import { cn } from "../../cn.js";
 import { ExpandablePanel } from "../../disclosure.js";
 import { ConversationMarkdown } from "../ConversationMarkdown.js";
 import { NestedTimelineRows } from "../NestedTimelineRows.js";
-import {
-  type NestedTimelineMessageRenderOptions,
-  type NestedTimelineRowPresentationOptions,
-  type NestedTimelineTurnSummaryRowsController,
+import type {
+  NestedTimelineMessageRenderOptions,
+  NestedTimelineRowPresentationOptions,
+  NestedTimelineTurnSummaryRowsController,
 } from "../NestedTimelineRows.js";
 import { useLatestInitialExpanded } from "../latestInitialExpanded.js";
-import { EventTitle, formatSummaryDuration, getEventHeaderToneClass } from "./shared.js";
+import type { ThreadTimelineLocalFileLinkHandler } from "../types.js";
+import {
+  EventTitle,
+  formatSummaryDuration,
+  getEventHeaderToneClass,
+} from "./shared.js";
 
 export { shouldPreferNestedOngoingLabels } from "../NestedTimelineRows.js";
 
 interface DelegationRowProps {
   initialExpanded?: boolean;
   message: ViewDelegationMessage;
+  onOpenLocalFileLink?: ThreadTimelineLocalFileLinkHandler;
   preferOngoingLabels?: boolean;
   renderMessage: (
     message: ViewMessage,
@@ -64,6 +70,7 @@ function createTurnSummaryRowsController(): NestedTimelineTurnSummaryRowsControl
 export function DelegationRow({
   message,
   initialExpanded = false,
+  onOpenLocalFileLink,
   preferOngoingLabels = false,
   renderMessage,
 }: DelegationRowProps) {
@@ -124,7 +131,10 @@ export function DelegationRow({
             />
             {message.output ? (
               <div className="px-2 py-2 text-sm leading-relaxed">
-                <ConversationMarkdown content={message.output} />
+                <ConversationMarkdown
+                  content={message.output}
+                  onOpenLocalFileLink={onOpenLocalFileLink}
+                />
               </div>
             ) : null}
           </div>

@@ -4,12 +4,14 @@ import { resolvePreferredWorkspaceOpenTarget } from "./workspace-open-target-pre
 
 const TARGETS: WorkspaceOpenTarget[] = [
   {
-    id: "vscode",
-    label: "VS Code",
+    id: "finder",
+    kind: "file-browser",
+    label: "Finder",
   },
   {
-    id: "finder",
-    label: "Finder",
+    id: "vscode",
+    kind: "editor",
+    label: "VS Code",
   },
 ];
 
@@ -22,11 +24,12 @@ describe("resolvePreferredWorkspaceOpenTarget", () => {
       }),
     ).toEqual({
       id: "finder",
+      kind: "file-browser",
       label: "Finder",
     });
   });
 
-  it("falls back to the first target when no preference is stored", () => {
+  it("falls back to an editor target when no preference is stored", () => {
     expect(
       resolvePreferredWorkspaceOpenTarget({
         preferredTargetId: null,
@@ -34,11 +37,12 @@ describe("resolvePreferredWorkspaceOpenTarget", () => {
       }),
     ).toEqual({
       id: "vscode",
+      kind: "editor",
       label: "VS Code",
     });
   });
 
-  it("falls back without requiring the unavailable preference to be rewritten", () => {
+  it("falls back to an editor without requiring the unavailable preference to be rewritten", () => {
     expect(
       resolvePreferredWorkspaceOpenTarget({
         preferredTargetId: "cursor",
@@ -46,7 +50,32 @@ describe("resolvePreferredWorkspaceOpenTarget", () => {
       }),
     ).toEqual({
       id: "vscode",
+      kind: "editor",
       label: "VS Code",
+    });
+  });
+
+  it("falls back to the first target when no editor target is available", () => {
+    expect(
+      resolvePreferredWorkspaceOpenTarget({
+        preferredTargetId: null,
+        targets: [
+          {
+            id: "finder",
+            kind: "file-browser",
+            label: "Finder",
+          },
+          {
+            id: "terminal",
+            kind: "terminal",
+            label: "Terminal",
+          },
+        ],
+      }),
+    ).toEqual({
+      id: "finder",
+      kind: "file-browser",
+      label: "Finder",
     });
   });
 

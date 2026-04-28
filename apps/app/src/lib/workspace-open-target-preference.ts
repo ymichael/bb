@@ -16,6 +16,12 @@ interface ResolvePreferredWorkspaceOpenTargetArgs {
   targets: WorkspaceOpenTarget[];
 }
 
+function resolveFallbackWorkspaceOpenTarget(
+  targets: WorkspaceOpenTarget[],
+): WorkspaceOpenTarget | null {
+  return targets.find((target) => target.kind === "editor") ?? targets[0] ?? null;
+}
+
 function isStoredWorkspaceOpenTargetPreference(
   value: string,
 ): value is WorkspaceOpenTargetId {
@@ -49,7 +55,7 @@ export function resolvePreferredWorkspaceOpenTarget(
 
   // Preserve stale preferences rather than clearing them. The app may be
   // temporarily unavailable and should become primary again after reinstall.
-  return args.targets[0] ?? null;
+  return resolveFallbackWorkspaceOpenTarget(args.targets);
 }
 
 export function useWorkspaceOpenTargetPreference() {

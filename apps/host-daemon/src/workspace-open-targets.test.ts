@@ -1,10 +1,17 @@
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  realpath,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import {
   listWorkspaceOpenTargetsWithRuntime,
-  openWorkspaceInTargetWithRuntime,
+  openPathInTargetWithRuntime,
   type WorkspaceOpenTargetRuntime,
 } from "./workspace-open-targets.js";
 
@@ -13,6 +20,12 @@ type ExecFileHandler = WorkspaceOpenTargetRuntime["execFile"];
 interface ExecFileCall {
   args: string[];
   file: string;
+}
+
+interface CreateAvailableExecFileArgs {
+  availableBundleIdSubstrings?: string[];
+  availableExecutables?: string[];
+  calls?: ExecFileCall[];
 }
 
 interface CreateRuntimeArgs {
@@ -28,6 +41,39 @@ function createRuntime(
     applicationDirectories: args.applicationDirectories ?? [],
     execFile: args.execFile ?? (async () => ({ stdout: "" })),
     platform: args.platform ?? "darwin",
+  };
+}
+
+function createAvailableExecFile(
+  args: CreateAvailableExecFileArgs = {},
+): ExecFileHandler {
+  const availableBundleIdSubstrings = args.availableBundleIdSubstrings ?? [];
+  const availableExecutables = args.availableExecutables ?? [];
+
+  return async (file, commandArgs) => {
+    args.calls?.push({ file, args: commandArgs });
+
+    if (file === "mdfind") {
+      return {
+        stdout: availableBundleIdSubstrings.some((bundleId) =>
+          commandArgs.join(" ").includes(bundleId),
+        )
+          ? "/Applications/Available.app\n"
+          : "",
+      };
+    }
+
+    if (file === "which") {
+      const executable = commandArgs[0];
+      if (executable && availableExecutables.includes(executable)) {
+        return {
+          stdout: `/usr/local/bin/${executable}\n`,
+        };
+      }
+      throw new Error("Executable not found");
+    }
+
+    return { stdout: "" };
   };
 }
 
@@ -48,14 +94,10 @@ describe("workspace open targets", () => {
 
   it("discovers built-in targets and bundle-id matches", async () => {
     const calls: ExecFileCall[] = [];
-    const execFile: ExecFileHandler = async (file, args) => {
-      calls.push({ file, args });
-      return {
-        stdout: args.join(" ").includes("dev.zed.Zed")
-          ? "/Applications/Zed.app\n"
-          : "",
-      };
-    };
+    const execFile = createAvailableExecFile({
+      availableBundleIdSubstrings: ["dev.zed.Zed"],
+      calls,
+    });
 
     const targets = await listWorkspaceOpenTargetsWithRuntime(
       createRuntime({
@@ -99,10 +141,8 @@ describe("workspace open targets", () => {
   });
 
   it("discovers Antigravity with the current bundle id", async () => {
-    const execFile: ExecFileHandler = async (_file, args) => ({
-      stdout: args.join(" ").includes("com.google.antigravity")
-        ? "/Applications/Antigravity.app\n"
-        : "",
+    const execFile = createAvailableExecFile({
+      availableBundleIdSubstrings: ["com.google.antigravity"],
     });
 
     const targets = await listWorkspaceOpenTargetsWithRuntime(
@@ -117,46 +157,213 @@ describe("workspace open targets", () => {
   it("opens the workspace with an argument separator before the path", async () => {
     const workspacePath = await mkdtemp(path.join(tmpdir(), "bb-workspace-"));
     const calls: ExecFileCall[] = [];
-    const execFile: ExecFileHandler = async (file, args) => {
-      calls.push({ file, args });
-      return {
-        stdout:
-          file === "mdfind" && args.join(" ").includes("dev.zed.Zed")
-            ? "/Applications/Zed.app\n"
-            : "",
-      };
-    };
+    const execFile = createAvailableExecFile({
+      availableBundleIdSubstrings: ["dev.zed.Zed"],
+      calls,
+    });
 
     try {
-      await openWorkspaceInTargetWithRuntime(
+      const resolvedWorkspacePath = await realpath(workspacePath);
+
+      await openPathInTargetWithRuntime(
         {
+          lineNumber: null,
           path: workspacePath,
           targetId: "zed",
+          workspaceRootPath: workspacePath,
         },
         createRuntime({ execFile }),
       );
 
       expect(calls.find((call) => call.file === "open")).toEqual({
         file: "open",
-        args: ["-a", "Zed", "--", workspacePath],
+        args: ["-a", "Zed", "--", resolvedWorkspacePath],
       });
     } finally {
       await rm(workspacePath, { force: true, recursive: true });
     }
   });
 
-  it("rejects missing workspace directories", async () => {
+  it("rejects missing paths", async () => {
     await expect(
-      openWorkspaceInTargetWithRuntime(
+      openPathInTargetWithRuntime(
         {
+          lineNumber: null,
           path: path.join(tmpdir(), "bb-missing-workspace"),
           targetId: "zed",
+          workspaceRootPath: tmpdir(),
         },
-        createRuntime(),
+        createRuntime({
+          execFile: createAvailableExecFile({
+            availableBundleIdSubstrings: ["dev.zed.Zed"],
+          }),
+        }),
       ),
     ).rejects.toMatchObject({
-      code: "path_not_directory",
+      code: "path_not_found",
     });
+  });
+
+  it("opens terminal targets at the containing directory for files", async () => {
+    const workspacePath = await mkdtemp(path.join(tmpdir(), "bb-workspace-"));
+    const filePath = path.join(workspacePath, "src", "file.ts");
+    const calls: ExecFileCall[] = [];
+    const execFile = createAvailableExecFile({ calls });
+
+    try {
+      await mkdir(path.dirname(filePath), { recursive: true });
+      await writeFile(filePath, "export const value = 1;\n");
+      const resolvedFilePath = await realpath(filePath);
+
+      await openPathInTargetWithRuntime(
+        {
+          lineNumber: 22,
+          path: filePath,
+          targetId: "terminal",
+          workspaceRootPath: workspacePath,
+        },
+        createRuntime({ execFile }),
+      );
+
+      expect(calls.find((call) => call.file === "open")).toEqual({
+        file: "open",
+        args: ["-a", "Terminal", "--", path.dirname(resolvedFilePath)],
+      });
+    } finally {
+      await rm(workspacePath, { force: true, recursive: true });
+    }
+  });
+
+  it("rejects paths outside the workspace root", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "bb-workspace-root-"));
+    const workspacePath = path.join(root, "workspace");
+    const externalPath = path.join(root, "outside.ts");
+
+    try {
+      await mkdir(workspacePath);
+      await writeFile(externalPath, "export const outside = true;\n");
+
+      await expect(
+        openPathInTargetWithRuntime(
+          {
+            lineNumber: null,
+            path: externalPath,
+            targetId: "zed",
+            workspaceRootPath: workspacePath,
+          },
+          createRuntime({
+            execFile: createAvailableExecFile({
+              availableBundleIdSubstrings: ["dev.zed.Zed"],
+            }),
+          }),
+        ),
+      ).rejects.toMatchObject({
+        code: "path_outside_workspace",
+      });
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("rejects symlink escapes outside the workspace root", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "bb-workspace-root-"));
+    const workspacePath = path.join(root, "workspace");
+    const externalPath = path.join(root, "outside.ts");
+    const linkedPath = path.join(workspacePath, "linked.ts");
+
+    try {
+      await mkdir(workspacePath);
+      await writeFile(externalPath, "export const outside = true;\n");
+      await symlink(externalPath, linkedPath);
+
+      await expect(
+        openPathInTargetWithRuntime(
+          {
+            lineNumber: null,
+            path: linkedPath,
+            targetId: "zed",
+            workspaceRootPath: workspacePath,
+          },
+          createRuntime({
+            execFile: createAvailableExecFile({
+              availableBundleIdSubstrings: ["dev.zed.Zed"],
+            }),
+          }),
+        ),
+      ).rejects.toMatchObject({
+        code: "path_outside_workspace",
+      });
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("uses line-aware direct-editor commands when available", async () => {
+    const workspacePath = await mkdtemp(path.join(tmpdir(), "bb-workspace-"));
+    const filePath = path.join(workspacePath, "src", "file.ts");
+    const calls: ExecFileCall[] = [];
+    const execFile = createAvailableExecFile({
+      availableBundleIdSubstrings: ["com.todesktop.230313mzl4w4u92"],
+      availableExecutables: ["cursor"],
+      calls,
+    });
+
+    try {
+      await mkdir(path.dirname(filePath), { recursive: true });
+      await writeFile(filePath, "export const value = 1;\n");
+      const resolvedFilePath = await realpath(filePath);
+
+      await openPathInTargetWithRuntime(
+        {
+          lineNumber: 15,
+          path: filePath,
+          targetId: "cursor",
+          workspaceRootPath: workspacePath,
+        },
+        createRuntime({ execFile }),
+      );
+
+      expect(calls.find((call) => call.file === "cursor")).toEqual({
+        file: "cursor",
+        args: ["-g", `${resolvedFilePath}:15`],
+      });
+      expect(calls.some((call) => call.file === "open")).toBe(false);
+    } finally {
+      await rm(workspacePath, { force: true, recursive: true });
+    }
+  });
+
+  it("falls back to regular app opens when a line-aware executable is unavailable", async () => {
+    const workspacePath = await mkdtemp(path.join(tmpdir(), "bb-workspace-"));
+    const filePath = path.join(workspacePath, "src", "file.ts");
+    const calls: ExecFileCall[] = [];
+    const execFile = createAvailableExecFile({
+      availableBundleIdSubstrings: ["com.todesktop.230313mzl4w4u92"],
+      calls,
+    });
+
+    try {
+      await mkdir(path.dirname(filePath), { recursive: true });
+      await writeFile(filePath, "export const value = 1;\n");
+      const resolvedFilePath = await realpath(filePath);
+
+      await openPathInTargetWithRuntime(
+        {
+          lineNumber: 15,
+          path: filePath,
+          targetId: "cursor",
+          workspaceRootPath: workspacePath,
+        },
+        createRuntime({ execFile }),
+      );
+
+      expect(calls.find((call) => call.file === "open")).toEqual({
+        file: "open",
+        args: ["-a", "Cursor", "--", resolvedFilePath],
+      });
+    } finally {
+      await rm(workspacePath, { force: true, recursive: true });
+    }
   });
 
   it("rejects unavailable targets", async () => {
@@ -164,10 +371,12 @@ describe("workspace open targets", () => {
 
     try {
       await expect(
-        openWorkspaceInTargetWithRuntime(
+        openPathInTargetWithRuntime(
           {
+            lineNumber: null,
             path: workspacePath,
             targetId: "vscode",
+            workspaceRootPath: workspacePath,
           },
           createRuntime(),
         ),
@@ -184,10 +393,12 @@ describe("workspace open targets", () => {
 
     try {
       await expect(
-        openWorkspaceInTargetWithRuntime(
+        openPathInTargetWithRuntime(
           {
+            lineNumber: null,
             path: workspacePath,
             targetId: "vscode",
+            workspaceRootPath: workspacePath,
           },
           createRuntime({ platform: "linux" }),
         ),

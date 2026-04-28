@@ -127,7 +127,6 @@ function makeHostDaemonSnapshot(): HostDaemonSnapshot {
     isLocalHost: (hostId) => hostId === "host-local",
     localHost: null,
     localHostId: "host-local",
-    openPath: null,
     pickFolder: null,
     platform: null,
     supportsNativeFolderPicker: false,

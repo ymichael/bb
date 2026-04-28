@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import {
-  openWorkspaceRequestSchema,
+  openInTargetRequestSchema,
   type WorkspaceOpenTarget,
 } from "@bb/host-daemon-contract";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -153,6 +153,7 @@ describe("api-host-daemon", () => {
     const targets: WorkspaceOpenTarget[] = [
       {
         id: "vscode",
+        kind: "editor",
         label: "VS Code",
       },
     ];
@@ -213,41 +214,45 @@ describe("api-host-daemon", () => {
     await expect(fetchWorkspaceOpenTargets(3002)).rejects.toThrow();
   });
 
-  it("opens a workspace with a selected target", async () => {
-    const requests: Array<ReturnType<typeof openWorkspaceRequestSchema.parse>> =
+  it("opens a path with a selected target", async () => {
+    const requests: Array<ReturnType<typeof openInTargetRequestSchema.parse>> =
       [];
     installFetchRoutes([
       {
         method: "POST",
-        pathname: "/open-workspace",
+        pathname: "/open-in-target",
         port: 3002,
         handler: async (request) => {
-          requests.push(openWorkspaceRequestSchema.parse(await request.json()));
+          requests.push(openInTargetRequestSchema.parse(await request.json()));
           return jsonResponse({});
         },
       },
     ]);
 
-    const { openWorkspace } = await importFreshApiHostDaemon();
+    const { openInTarget } = await importFreshApiHostDaemon();
 
-    await openWorkspace(3002, {
+    await openInTarget(3002, {
+      lineNumber: null,
       path: "/tmp/workspace",
       targetId: "vscode",
+      workspaceRootPath: "/tmp/workspace",
     });
 
     expect(requests).toEqual([
       {
+        lineNumber: null,
         path: "/tmp/workspace",
         targetId: "vscode",
+        workspaceRootPath: "/tmp/workspace",
       },
     ]);
   });
 
-  it("rejects failed workspace open requests", async () => {
+  it("rejects failed target open requests", async () => {
     installFetchRoutes([
       {
         method: "POST",
-        pathname: "/open-workspace",
+        pathname: "/open-in-target",
         port: 3002,
         handler: async () =>
           jsonResponse(
@@ -257,12 +262,14 @@ describe("api-host-daemon", () => {
       },
     ]);
 
-    const { openWorkspace } = await importFreshApiHostDaemon();
+    const { openInTarget } = await importFreshApiHostDaemon();
 
     await expect(
-      openWorkspace(3002, {
+      openInTarget(3002, {
+        lineNumber: null,
         path: "/tmp/workspace",
         targetId: "vscode",
+        workspaceRootPath: "/tmp/workspace",
       }),
     ).rejects.toThrow("Workspace open target is unavailable: VS Code");
   });

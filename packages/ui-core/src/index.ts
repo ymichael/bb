@@ -56,6 +56,8 @@ export { ExpandableLine } from "./thread-timeline/rows/ExpandableLine.js";
 export type { ExpandableLineProps } from "./thread-timeline/rows/ExpandableLine.js";
 export { ThreadTimelineRows } from "./thread-timeline/ThreadTimelineRows.js";
 export type {
+  ThreadTimelineLocalFileLink,
+  ThreadTimelineLocalFileLinkHandler,
   ThreadTimelineTheme,
   ThreadTimelineRenderOptions,
   UserAttachmentImageSrcResolver,

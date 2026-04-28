@@ -14,11 +14,6 @@ export const DEFAULT_EPHEMERAL_HOST_DAEMON_LOCAL_HEALTH_VALUE =
   "bb-host-daemon";
 export const DEFAULT_EPHEMERAL_HOST_DAEMON_LOCAL_PORT = 9111;
 
-export const openRequestSchema = z.object({
-  path: z.string().min(1),
-});
-export type OpenRequest = z.infer<typeof openRequestSchema>;
-
 export const workspaceOpenTargetIdValues = [
   "vscode",
   "cursor",
@@ -35,8 +30,21 @@ export const workspaceOpenTargetIdValues = [
 export const workspaceOpenTargetIdSchema = z.enum(workspaceOpenTargetIdValues);
 export type WorkspaceOpenTargetId = z.infer<typeof workspaceOpenTargetIdSchema>;
 
+export const workspaceOpenTargetKindValues = [
+  "editor",
+  "file-browser",
+  "terminal",
+] as const;
+export const workspaceOpenTargetKindSchema = z.enum(
+  workspaceOpenTargetKindValues,
+);
+export type WorkspaceOpenTargetKind = z.infer<
+  typeof workspaceOpenTargetKindSchema
+>;
+
 export const workspaceOpenTargetSchema = z.object({
   id: workspaceOpenTargetIdSchema,
+  kind: workspaceOpenTargetKindSchema,
   label: z.string().min(1),
 });
 export type WorkspaceOpenTarget = z.infer<typeof workspaceOpenTargetSchema>;
@@ -48,11 +56,16 @@ export type WorkspaceOpenTargetsResponse = z.infer<
   typeof workspaceOpenTargetsResponseSchema
 >;
 
-export const openWorkspaceRequestSchema = z.object({
-  path: z.string().min(1),
+const openTargetPathSchema = z.string().min(1);
+const openTargetLineNumberSchema = z.number().int().positive().nullable();
+
+export const openInTargetRequestSchema = z.object({
+  lineNumber: openTargetLineNumberSchema,
+  path: openTargetPathSchema,
   targetId: workspaceOpenTargetIdSchema,
+  workspaceRootPath: openTargetPathSchema,
 });
-export type OpenWorkspaceRequest = z.infer<typeof openWorkspaceRequestSchema>;
+export type OpenInTargetRequest = z.infer<typeof openInTargetRequestSchema>;
 
 export const pickFolderResponseSchema = z.object({
   path: z.string().nullable(),
@@ -98,14 +111,11 @@ export type HostDaemonLocalSchema = {
   [DEFAULT_HOST_DAEMON_LOCAL_HEALTH_PATH]: {
     $get: Endpoint<EmptyInput, HealthResponse>;
   };
-  "/open-path": {
-    $post: Endpoint<{ json: OpenRequest }, Record<string, never>>;
-  };
   "/workspace-open-targets": {
     $get: Endpoint<EmptyInput, WorkspaceOpenTargetsResponse>;
   };
-  "/open-workspace": {
-    $post: Endpoint<{ json: OpenWorkspaceRequest }, Record<string, never>>;
+  "/open-in-target": {
+    $post: Endpoint<{ json: OpenInTargetRequest }, Record<string, never>>;
   };
   "/pick-folder": {
     $post: Endpoint<EmptyInput, PickFolderResponse>;

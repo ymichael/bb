@@ -281,7 +281,6 @@ export interface CreateHostDaemonAppOptions {
   runtimeShellEnv?: AgentRuntimeOptions["shellEnv"];
   hostWatcher?: HostWatcher;
   onToolCall?: (request: ToolCallRequest) => Promise<ToolCallResponse>;
-  openPath?: (path: string) => Promise<void>;
   pickFolder?: () => Promise<string | null>;
   fetchFn?: typeof fetch;
   createWebSocket?: CreateReconnectingWebSocket;
@@ -635,7 +634,6 @@ export async function createHostDaemonApp(
         localApiConfig: options.localApiConfig,
         serverUrl: options.serverUrl,
         getConnected: () => connection.sessionId != null,
-        openPath: options.openPath,
         pickFolder: options.pickFolder,
       })
     : null;

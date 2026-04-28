@@ -41,10 +41,12 @@ describe("host-daemon local schemas", () => {
     expect(
       contract.workspaceOpenTargetSchema.parse({
         id: "vscode",
+        kind: "editor",
         label: "VS Code",
       }),
     ).toEqual({
       id: "vscode",
+      kind: "editor",
       label: "VS Code",
     });
 
@@ -53,10 +55,12 @@ describe("host-daemon local schemas", () => {
         targets: [
           {
             id: "finder",
+            kind: "file-browser",
             label: "Finder",
           },
           {
             id: "terminal",
+            kind: "terminal",
             label: "Terminal",
           },
         ],
@@ -65,23 +69,29 @@ describe("host-daemon local schemas", () => {
       targets: [
         {
           id: "finder",
+          kind: "file-browser",
           label: "Finder",
         },
         {
           id: "terminal",
+          kind: "terminal",
           label: "Terminal",
         },
       ],
     });
 
     expect(
-      contract.openWorkspaceRequestSchema.parse({
+      contract.openInTargetRequestSchema.parse({
+        lineNumber: 12,
         path: "/tmp/workspace",
         targetId: "zed",
+        workspaceRootPath: "/tmp/workspace",
       }),
     ).toEqual({
+      lineNumber: 12,
       path: "/tmp/workspace",
       targetId: "zed",
+      workspaceRootPath: "/tmp/workspace",
     });
   });
 
@@ -89,6 +99,7 @@ describe("host-daemon local schemas", () => {
     expect(() =>
       contract.workspaceOpenTargetSchema.parse({
         id: "unknown-editor",
+        kind: "editor",
         label: "Unknown",
       }),
     ).toThrow();
@@ -105,8 +116,17 @@ describe("host-daemon local schemas", () => {
     ).toThrow();
 
     expect(() =>
-      contract.openWorkspaceRequestSchema.parse({
+      contract.openInTargetRequestSchema.parse({
         path: "/tmp/workspace",
+      }),
+    ).toThrow();
+
+    expect(() =>
+      contract.openInTargetRequestSchema.parse({
+        lineNumber: 0,
+        path: "/tmp/workspace",
+        targetId: "zed",
+        workspaceRootPath: "/tmp/workspace",
       }),
     ).toThrow();
   });

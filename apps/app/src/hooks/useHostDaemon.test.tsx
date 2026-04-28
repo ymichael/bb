@@ -10,7 +10,6 @@ import {
   waitFor,
 } from "@testing-library/react";
 import type { Host } from "@bb/domain";
-import { openRequestSchema } from "@bb/host-daemon-contract";
 import type { HostDaemonStatusSnapshot } from "@/lib/api-host-daemon";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
 import { resetFakeReconnectingWebSockets } from "@/test/fake-reconnecting-websocket";
@@ -40,7 +39,6 @@ interface HostDaemonSnapshot {
   isLocalHost: (hostId: string | null | undefined) => boolean;
   localHost: Host | null;
   localHostId: string | null;
-  openPath: ((path: string) => Promise<void>) | null;
   pickFolder: (() => Promise<string | null>) | null;
   supportsNativeFolderPicker: boolean;
   platform: "darwin" | "linux" | "wsl" | "unknown" | null;
@@ -109,14 +107,6 @@ function createHostDaemonProbe(
           {String(value.isLocalHost("host-2"))}
         </div>
         <button
-          disabled={value.openPath == null}
-          onClick={() => {
-            void value.openPath?.("/tmp/file.txt");
-          }}
-        >
-          open path
-        </button>
-        <button
           disabled={value.pickFolder == null}
           onClick={() => {
             void value.pickFolder?.();
@@ -131,7 +121,7 @@ function createHostDaemonProbe(
 
 function installHostDaemonFetchRoutes(
   state: HostDaemonFetchState,
-  openPathRequests: string[],
+  pickFolderRequests: number[],
 ) {
   installFetchRoutes([
     {
@@ -158,22 +148,14 @@ function installHostDaemonFetchRoutes(
     },
     {
       method: "POST",
-      pathname: "/open-path",
-      port: 4123,
-      handler: async (request) => {
-        const parsedBody = openRequestSchema.parse(await request.json());
-        openPathRequests.push(parsedBody.path);
-        return jsonResponse({});
-      },
-    },
-    {
-      method: "POST",
       pathname: "/pick-folder",
       port: 4123,
-      handler: async () =>
-        jsonResponse({
+      handler: async () => {
+        pickFolderRequests.push(1);
+        return jsonResponse({
           path: state.pickedFolderPath,
-        }),
+        });
+      },
     },
   ]);
 }
@@ -217,8 +199,8 @@ describe("useHostDaemon", () => {
       hosts: [makeHost()],
       pickedFolderPath: "/picked/path",
     };
-    const openPathRequests: string[] = [];
-    installHostDaemonFetchRoutes(state, openPathRequests);
+    const pickFolderRequests: number[] = [];
+    installHostDaemonFetchRoutes(state, pickFolderRequests);
 
     const latestSnapshot: { current: HostDaemonSnapshot | null } = {
       current: null,
@@ -253,11 +235,10 @@ describe("useHostDaemon", () => {
     expect(screen.getByTestId("is-local-host-2").textContent).toBe("false");
     expect(latestSnapshot.current?.localHost).toEqual(makeHost());
 
-    fireEvent.click(screen.getByRole("button", { name: "open path" }));
     fireEvent.click(screen.getByRole("button", { name: "pick folder" }));
 
     await waitFor(() => {
-      expect(openPathRequests).toEqual(["/tmp/file.txt"]);
+      expect(pickFolderRequests).toEqual([1]);
     });
   });
 
@@ -301,16 +282,10 @@ describe("useHostDaemon", () => {
     expect(screen.getByTestId("is-local-host-1").textContent).toBe("false");
     expect(
       screen
-        .getByRole("button", { name: "open path" })
-        .hasAttribute("disabled"),
-    ).toBe(true);
-    expect(
-      screen
         .getByRole("button", { name: "pick folder" })
         .hasAttribute("disabled"),
     ).toBe(true);
     expect(latestSnapshot.current?.localHost).toBeNull();
-    expect(latestSnapshot.current?.openPath).toBeNull();
     expect(latestSnapshot.current?.pickFolder).toBeNull();
   });
 

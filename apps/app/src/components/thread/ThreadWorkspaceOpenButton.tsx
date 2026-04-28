@@ -18,11 +18,6 @@ import {
   SplitButton,
   type SplitButtonAction,
 } from "@/components/ui/split-button";
-import {
-  resolvePreferredWorkspaceOpenTarget,
-  useWorkspaceOpenTargetPreference,
-} from "@/lib/workspace-open-target-preference";
-import { toast } from "sonner";
 
 const WORKSPACE_OPEN_TARGET_ICONS: Record<WorkspaceOpenTargetId, string> = {
   vscode: vscodeIcon,
@@ -39,7 +34,9 @@ const WORKSPACE_OPEN_TARGET_ICONS: Record<WorkspaceOpenTargetId, string> = {
 };
 
 interface ThreadWorkspaceOpenButtonProps {
-  onOpenWorkspace: (targetId: WorkspaceOpenTargetId) => Promise<void>;
+  onOpenPreferredTarget: () => Promise<void>;
+  onOpenTarget: (targetId: WorkspaceOpenTargetId) => Promise<void>;
+  preferredTarget: WorkspaceOpenTarget | null;
   targets: WorkspaceOpenTarget[];
 }
 
@@ -63,60 +60,48 @@ function WorkspaceOpenTargetIcon({
 }
 
 export function ThreadWorkspaceOpenButton({
-  onOpenWorkspace,
+  onOpenPreferredTarget,
+  onOpenTarget,
+  preferredTarget,
   targets,
 }: ThreadWorkspaceOpenButtonProps) {
-  const [preferredTargetId, setPreferredTargetId] =
-    useWorkspaceOpenTargetPreference();
   const [pendingTargetId, setPendingTargetId] =
     useState<WorkspaceOpenTargetId | null>(null);
-  const selectedTarget = resolvePreferredWorkspaceOpenTarget({
-    preferredTargetId,
-    targets,
-  });
   const isPending = pendingTargetId !== null;
 
   const openTarget = useCallback(
-    async (target: WorkspaceOpenTarget, storePreference: boolean) => {
+    async (target: WorkspaceOpenTarget, action: () => Promise<void>) => {
       if (pendingTargetId !== null) {
         return;
       }
 
-      if (storePreference) {
-        setPreferredTargetId(target.id);
-      }
-
       setPendingTargetId(target.id);
       try {
-        await onOpenWorkspace(target.id);
-      } catch (error) {
-        toast.error(`Could not open workspace in ${target.label}.`, {
-          description: error instanceof Error ? error.message : undefined,
-        });
+        await action();
       } finally {
         setPendingTargetId(null);
       }
     },
-    [onOpenWorkspace, pendingTargetId, setPreferredTargetId],
+    [pendingTargetId],
   );
 
-  if (!selectedTarget) {
+  if (!preferredTarget) {
     return null;
   }
 
   const primaryAction: SplitButtonAction = {
-    label: `Open workspace in ${selectedTarget.label}`,
+    label: `Open workspace in ${preferredTarget.label}`,
     onSelect: () => {
-      void openTarget(selectedTarget, false);
+      void openTarget(preferredTarget, onOpenPreferredTarget);
     },
     content: (
-      <WorkspaceOpenTargetIcon target={selectedTarget} className="size-5" />
+      <WorkspaceOpenTargetIcon target={preferredTarget} className="size-5" />
     ),
   };
   const secondaryActions: SplitButtonAction[] = targets.map((target) => ({
     label: target.label,
     onSelect: () => {
-      void openTarget(target, true);
+      void openTarget(target, () => onOpenTarget(target.id));
     },
     content: (
       <>
