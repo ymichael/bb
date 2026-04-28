@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 import type { ComponentPropsWithoutRef } from "react";
 import ReactMarkdown from "react-markdown";
 import type { ExtraProps } from "react-markdown";
@@ -25,7 +25,7 @@ function extractMarkdownImageUrls(markdown: string): string[] {
   return imageUrls;
 }
 
-export function ConversationMarkdown({
+function ConversationMarkdownComponent({
   content,
   className,
 }: ConversationMarkdownProps) {
@@ -231,3 +231,10 @@ export function ConversationMarkdown({
     </>
   );
 }
+
+// Memoized so that re-renders of ancestors (e.g. the StickToBottom subtree
+// during resize, when its internal state flips on every ResizeObserver tick)
+// do not re-run the markdown parser/renderer when `content` and `className`
+// haven't changed. ReactMarkdown's parsing + custom-component setup is the
+// hot path on resize when many messages are mounted.
+export const ConversationMarkdown = memo(ConversationMarkdownComponent);
