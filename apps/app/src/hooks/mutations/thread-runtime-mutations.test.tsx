@@ -1,11 +1,14 @@
 // @vitest-environment jsdom
 
-import { act, renderHook } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { SendDraftResponse } from "@bb/server-contract";
+import type { SendDraftResponse, ThreadTimelineResponse } from "@bb/server-contract";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
 import * as api from "@/lib/api";
-import { projectSourceWorkspaceStatusQueryKeyPrefix } from "../queries/query-keys";
+import {
+  projectSourceWorkspaceStatusQueryKeyPrefix,
+  threadTimelineQueryKey,
+} from "../queries/query-keys";
 import {
   useSendThreadDraft,
   useSendThreadMessage,
@@ -55,6 +58,80 @@ describe("thread runtime mutations", () => {
     expect(invalidateQueries).toHaveBeenCalledWith({
       queryKey: projectSourceWorkspaceStatusQueryKeyPrefix(),
     });
+  });
+
+  it("optimistically inserts a user message row into the timeline cache", async () => {
+    let resolveSend: (() => void) | null = null;
+    vi.mocked(api.sendThreadMessage).mockImplementation(
+      () =>
+        new Promise<undefined>((resolve) => {
+          resolveSend = () => resolve(undefined);
+        }),
+    );
+    const { queryClient, wrapper } = createQueryClientTestHarness();
+    queryClient.setQueryData<ThreadTimelineResponse>(
+      threadTimelineQueryKey("thread-1", false),
+      { rows: [], activeThinking: null },
+    );
+    const { result } = renderHook(() => useSendThreadMessage(), { wrapper });
+
+    let mutationPromise: Promise<unknown> | undefined;
+    act(() => {
+      mutationPromise = result.current.mutateAsync({
+        id: "thread-1",
+        input: [{ type: "text", text: "Hello there" }],
+        mode: "auto",
+      });
+    });
+
+    await waitFor(() => {
+      const timeline = queryClient.getQueryData<ThreadTimelineResponse>(
+        threadTimelineQueryKey("thread-1", false),
+      );
+      expect(timeline?.rows).toHaveLength(1);
+    });
+    const optimisticTimeline =
+      queryClient.getQueryData<ThreadTimelineResponse>(
+        threadTimelineQueryKey("thread-1", false),
+      );
+    const onlyRow = optimisticTimeline?.rows[0];
+    expect(onlyRow?.kind).toBe("message");
+    if (onlyRow?.kind === "message") {
+      expect(onlyRow.message.kind).toBe("user");
+      if (onlyRow.message.kind === "user") {
+        expect(onlyRow.message.text).toBe("Hello there");
+      }
+    }
+
+    await act(async () => {
+      resolveSend?.();
+      await mutationPromise;
+    });
+  });
+
+  it("rolls back the optimistic timeline row when send fails", async () => {
+    vi.mocked(api.sendThreadMessage).mockRejectedValue(new Error("boom"));
+    const { queryClient, wrapper } = createQueryClientTestHarness();
+    queryClient.setQueryData<ThreadTimelineResponse>(
+      threadTimelineQueryKey("thread-1", false),
+      { rows: [], activeThinking: null },
+    );
+    const { result } = renderHook(() => useSendThreadMessage(), { wrapper });
+
+    await act(async () => {
+      await expect(
+        result.current.mutateAsync({
+          id: "thread-1",
+          input: [{ type: "text", text: "Hello there" }],
+          mode: "auto",
+        }),
+      ).rejects.toThrow("boom");
+    });
+
+    const finalTimeline = queryClient.getQueryData<ThreadTimelineResponse>(
+      threadTimelineQueryKey("thread-1", false),
+    );
+    expect(finalTimeline?.rows).toHaveLength(0);
   });
 
   it("invalidates primary checkout status after sending a queued draft", async () => {

@@ -12,7 +12,6 @@ import type {
   ReasoningLevel,
   ServiceTier,
   Thread,
-  TimelineRow,
   WorkspaceFileStatus,
   WorkspaceStatus,
 } from "@bb/domain";
@@ -34,12 +33,11 @@ import {
   useThreadDrafts,
 } from "@/hooks/queries/thread-queries";
 import { getMutationErrorMessage } from "@/lib/mutation-errors";
-import { promptDraftToInput, type PromptDraftState } from "@/lib/prompt-draft";
+import { promptDraftToInput } from "@/lib/prompt-draft";
 import { toast } from "sonner";
 import { ThreadFollowUpComposer } from "./ThreadFollowUpComposer";
 import { queuedInputToDraft } from "./threadQueuedMessages";
 import type { SendMessageMutationLike } from "./threadDetailMutationTypes";
-import { useThreadFollowUpTracking } from "./useThreadFollowUpTracking";
 
 interface PromptBannerFile {
   path: string;
@@ -77,7 +75,6 @@ interface ThreadDetailPromptAreaProps {
   showBranchComparisonUi: boolean;
   showPromptGitStatsBanner: boolean;
   thread: Thread;
-  threadDetailRows: TimelineRow[];
   workspaceStatus?: WorkspaceStatus;
 }
 
@@ -104,7 +101,6 @@ export function ThreadDetailPromptArea({
   showBranchComparisonUi,
   showPromptGitStatsBanner,
   thread,
-  threadDetailRows,
   workspaceStatus,
 }: ThreadDetailPromptAreaProps) {
   const isDiffPanelActive = useActiveSecondaryPanel() === "git-diff";
@@ -160,21 +156,6 @@ export function ThreadDetailPromptArea({
     initialPermissionMode: defaultExecutionOptions?.permissionMode,
     initialEnvironmentSelectionValue: thread.environmentId ?? undefined,
   });
-  const handleFollowUpAcknowledged = useCallback(
-    (submittedDraft: PromptDraftState) => {
-      promptDraft.clearIfCurrentMatches(submittedDraft);
-    },
-    [promptDraft],
-  );
-  const {
-    beginPendingFollowUp,
-    clearPendingFollowUp,
-    pendingSubmittedFollowUp,
-  } = useThreadFollowUpTracking({
-    threadDetailRows,
-    threadId: thread.id,
-    onAcknowledged: handleFollowUpAcknowledged,
-  });
   const isCreated = thread.status === "created";
   const isProvisioning = thread.status === "provisioning";
   const isRuntimeError = thread.status === "error";
@@ -185,7 +166,6 @@ export function ThreadDetailPromptArea({
     createDraft.isPending || sendDraft.isPending || deleteDraft.isPending;
   const isFollowUpSubmitting =
     sendMessage.isPending ||
-    pendingSubmittedFollowUp !== null ||
     isEnvironmentActionPending ||
     createDraft.isPending;
   const canSendFollowUp =
@@ -273,8 +253,12 @@ export function ThreadDetailPromptArea({
       return;
     }
 
-    if (thread.status === "active") {
-      try {
+    promptDraft.clearIfCurrentMatches(submittedDraft);
+    setAttachmentError(null);
+
+    const isQueuingDraft = thread.status === "active";
+    try {
+      if (isQueuingDraft) {
         await createDraft.mutateAsync({
           id: thread.id,
           input: submittedInput,
@@ -283,46 +267,28 @@ export function ThreadDetailPromptArea({
           reasoningLevel,
           permissionMode,
         });
-        promptDraft.clearIfCurrentMatches(submittedDraft);
-        setAttachmentError(null);
-      } catch (nextError) {
-        toast.error(
-          getMutationErrorMessage({
-            error: nextError,
-            fallbackMessage: "Failed to queue follow-up.",
-          }),
-        );
+      } else {
+        await sendFollowUpInput({
+          input: submittedInput,
+          model: activeModel?.model ?? selectedModel,
+          ...(supportsServiceTier && serviceTier ? { serviceTier } : {}),
+          reasoningLevel,
+          permissionMode,
+        });
       }
-      return;
-    }
-
-    beginPendingFollowUp({
-      draft: submittedDraft,
-      input: submittedInput,
-    });
-    setAttachmentError(null);
-
-    try {
-      await sendFollowUpInput({
-        input: submittedInput,
-        model: activeModel?.model ?? selectedModel,
-        ...(supportsServiceTier && serviceTier ? { serviceTier } : {}),
-        reasoningLevel,
-        permissionMode,
-      });
     } catch (nextError) {
-      clearPendingFollowUp();
+      promptDraft.restoreIfEmpty(submittedDraft);
       toast.error(
         getMutationErrorMessage({
           error: nextError,
-          fallbackMessage: "Failed to send follow-up.",
+          fallbackMessage: isQueuingDraft
+            ? "Failed to queue follow-up."
+            : "Failed to send follow-up.",
         }),
       );
     }
   }, [
     activeModel?.model,
-    beginPendingFollowUp,
-    clearPendingFollowUp,
     createDraft,
     promptDraft,
     reasoningLevel,

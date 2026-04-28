@@ -489,7 +489,6 @@ export function ThreadDetailView() {
       showPromptGitStatsBanner={showPromptGitStatsBanner}
       pendingInteractions={pendingInteractions}
       thread={thread}
-      threadDetailRows={threadDetailRows}
       workspaceStatus={workspaceStatus}
     />
   );

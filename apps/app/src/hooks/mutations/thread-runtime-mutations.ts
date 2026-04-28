@@ -1,5 +1,10 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import type { Thread, ThreadQueuedMessage } from "@bb/domain";
+import {
+  threadScope,
+  type Thread,
+  type ThreadQueuedMessage,
+  type TimelineRow,
+} from "@bb/domain";
 import type {
   CreateDraftRequest,
   CreateThreadRequest,
@@ -7,10 +12,13 @@ import type {
 } from "@bb/server-contract";
 import * as api from "@/lib/api";
 import { wsManager } from "@/lib/ws";
+import { collectPromptAttachments } from "@/lib/prompt-attachments";
 import type { SendThreadMessageMutationRequest } from "./mutation-request-types";
 import {
   getPrimaryCheckoutWorkspaceStateInvalidationQueryKeys,
+  insertOptimisticTimelineRow,
   optimisticallyInsertThread,
+  removeOptimisticTimelineRow,
   updateCachedThread,
 } from "../queries/query-cache";
 import {
@@ -60,6 +68,43 @@ export function useCreateThread() {
   });
 }
 
+interface BuildOptimisticUserMessageRowParams {
+  threadId: string;
+  input: SendThreadMessageMutationRequest["input"];
+  createdAt: number;
+}
+
+function buildOptimisticUserMessageRow({
+  threadId,
+  input,
+  createdAt,
+}: BuildOptimisticUserMessageRowParams): TimelineRow {
+  const id = `optimistic-user-${crypto.randomUUID()}`;
+  const text = input
+    .filter(
+      (entry): entry is Extract<typeof entry, { type: "text" }> =>
+        entry.type === "text",
+    )
+    .map((entry) => entry.text)
+    .join("\n\n");
+  const attachments = collectPromptAttachments(input);
+  return {
+    kind: "message",
+    id,
+    message: {
+      kind: "user",
+      id,
+      threadId,
+      sourceSeqStart: 0,
+      sourceSeqEnd: 0,
+      createdAt,
+      scope: threadScope(),
+      text,
+      ...(attachments ? { attachments } : {}),
+    },
+  };
+}
+
 export function useSendThreadMessage() {
   const queryClient = useQueryClient();
 
@@ -86,9 +131,12 @@ export function useSendThreadMessage() {
         mode,
       }),
     onMutate: async (variables) => {
-      await queryClient.cancelQueries({
-        queryKey: threadQueryKey(variables.id),
-      });
+      await Promise.all([
+        queryClient.cancelQueries({ queryKey: threadQueryKey(variables.id) }),
+        queryClient.cancelQueries({
+          queryKey: threadTimelineQueryKeyPrefix(variables.id),
+        }),
+      ]);
 
       const previousThread = queryClient.getQueryData<Thread>(
         threadQueryKey(variables.id),
@@ -101,11 +149,26 @@ export function useSendThreadMessage() {
         updatedAt: Math.max(thread.updatedAt, optimisticCreatedAt),
       }));
 
+      const optimisticRow = buildOptimisticUserMessageRow({
+        threadId: variables.id,
+        input: variables.input,
+        createdAt: optimisticCreatedAt,
+      });
+      insertOptimisticTimelineRow(queryClient, variables.id, optimisticRow);
+
       return {
         previousThread,
+        optimisticRowId: optimisticRow.id,
       };
     },
     onError: (_error, variables, context) => {
+      if (context?.optimisticRowId) {
+        removeOptimisticTimelineRow(
+          queryClient,
+          variables.id,
+          context.optimisticRowId,
+        );
+      }
       if (!context?.previousThread) {
         return;
       }

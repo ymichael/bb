@@ -1,12 +1,32 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import type { JSX, ReactNode } from "react";
+import { StickToBottom } from "use-stick-to-bottom";
 import type { AvailableModel, PendingInteraction, Thread } from "@bb/domain";
 import type { SystemProviderInfo } from "@bb/server-contract";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as api from "@/lib/api";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
 import { ThreadDetailPromptArea } from "./ThreadDetailPromptArea";
+
+const PROMPT_DRAFT_STORAGE_KEY = "bb.promptbox.contents-proj_1-thr_1-3";
+
+function renderWithStickToBottomContext(
+  Wrapper: (props: { children: ReactNode }) => JSX.Element,
+): (props: { children: ReactNode }) => JSX.Element {
+  return ({ children }) => (
+    <Wrapper>
+      <StickToBottom>{children}</StickToBottom>
+    </Wrapper>
+  );
+}
 
 vi.mock("@/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api")>();
@@ -165,7 +185,6 @@ describe("ThreadDetailPromptArea", () => {
         showBranchComparisonUi={false}
         showPromptGitStatsBanner={false}
         thread={createThread()}
-        threadDetailRows={[]}
       />,
       { wrapper },
     );
@@ -176,5 +195,61 @@ describe("ThreadDetailPromptArea", () => {
       );
     });
     expect(screen.queryByTitle("Submit (Enter)")).toBeNull();
+  });
+
+  it("restores the composer text when sending a follow-up fails", async () => {
+    mockMatchMedia();
+    vi.mocked(api.getThreadDefaultExecutionOptions).mockResolvedValue(null);
+    vi.mocked(api.listThreadDrafts).mockResolvedValue([]);
+    vi.mocked(api.listSystemProviders).mockResolvedValue([makeProvider()]);
+    vi.mocked(api.getAvailableModels).mockResolvedValue([makeModel()]);
+    vi.mocked(api.listThreads).mockResolvedValue([]);
+
+    const draftText = "Investigate the outage";
+    window.localStorage.setItem(
+      PROMPT_DRAFT_STORAGE_KEY,
+      JSON.stringify({ text: draftText, attachments: [] }),
+    );
+
+    const { wrapper } = createQueryClientTestHarness();
+    const mutateAsync = vi.fn(async () => {
+      throw new Error("network failure");
+    });
+
+    render(
+      <ThreadDetailPromptArea
+        canExpandPromptChangeList={false}
+        canUseGitUi={false}
+        isEnvironmentActionPending={false}
+        isLoadingMergeBaseBranchOptions={false}
+        pendingInteractions={[]}
+        openDiffFile={() => {}}
+        openThreadDiffPanel={() => {}}
+        projectId="proj_1"
+        promptBannerSummary="No changes"
+        sendMessage={{
+          isPending: false,
+          mutateAsync,
+        }}
+        showBranchComparisonUi={false}
+        showPromptGitStatsBanner={false}
+        thread={createThread()}
+      />,
+      { wrapper: renderWithStickToBottomContext(wrapper) },
+    );
+
+    const textarea = await screen.findByRole<HTMLTextAreaElement>("textbox");
+    expect(textarea.value).toBe(draftText);
+
+    const submitButton = await screen.findByTitle("Submit (Enter)");
+    fireEvent.click(submitButton);
+
+    await waitFor(() => {
+      expect(mutateAsync).toHaveBeenCalledTimes(1);
+    });
+
+    await waitFor(() => {
+      expect(textarea.value).toBe(draftText);
+    });
   });
 });

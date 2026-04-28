@@ -1,5 +1,6 @@
 import type { QueryClient, QueryKey } from "@tanstack/react-query";
-import type { Thread, ThreadListEntry } from "@bb/domain";
+import type { Thread, ThreadListEntry, TimelineRow } from "@bb/domain";
+import type { ThreadTimelineResponse } from "@bb/server-contract";
 import {
   ENVIRONMENT_GIT_DIFF_QUERY_KEY,
   ENVIRONMENT_WORK_STATUS_QUERY_KEY,
@@ -14,6 +15,7 @@ import {
   THREADS_QUERY_KEY,
   threadQueryKey,
   threadsQueryKey,
+  threadTimelineQueryKeyPrefix,
   type EnvironmentGitDiffQueryKey,
   type EnvironmentWorkStatusQueryKey,
   type ThreadListQueryFilters,
@@ -245,6 +247,51 @@ export function optimisticallyInsertThread(
       ...list,
     ]);
   }
+}
+
+function updateCachedTimelineRows(
+  queryClient: QueryClient,
+  threadId: string,
+  updater: (rows: readonly TimelineRow[]) => readonly TimelineRow[] | null,
+): void {
+  const timelineQueries = queryClient.getQueriesData<ThreadTimelineResponse>({
+    queryKey: threadTimelineQueryKeyPrefix(threadId),
+  });
+
+  for (const [queryKey, response] of timelineQueries) {
+    if (!response) {
+      continue;
+    }
+
+    const nextRows = updater(response.rows);
+    if (nextRows === null) {
+      continue;
+    }
+
+    queryClient.setQueryData<ThreadTimelineResponse>(queryKey, {
+      ...response,
+      rows: [...nextRows],
+    });
+  }
+}
+
+export function insertOptimisticTimelineRow(
+  queryClient: QueryClient,
+  threadId: string,
+  row: TimelineRow,
+): void {
+  updateCachedTimelineRows(queryClient, threadId, (rows) => [...rows, row]);
+}
+
+export function removeOptimisticTimelineRow(
+  queryClient: QueryClient,
+  threadId: string,
+  rowId: string,
+): void {
+  updateCachedTimelineRows(queryClient, threadId, (rows) => {
+    const nextRows = rows.filter((row) => row.id !== rowId);
+    return nextRows.length === rows.length ? null : nextRows;
+  });
 }
 
 export function updateCachedThreadListPendingInteractionState(
