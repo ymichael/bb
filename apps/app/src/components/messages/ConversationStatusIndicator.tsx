@@ -1,7 +1,8 @@
+import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 interface ConversationStatusIndicatorProps {
-  label: string;
+  label: ReactNode;
   className?: string;
 }
 
@@ -11,7 +12,7 @@ export function ConversationStatusIndicator({
 }: ConversationStatusIndicatorProps) {
   return (
     <div className={cn("px-2 text-sm text-muted-foreground", className)}>
-      <span className="animate-shine">{label}</span>
+      {label}
     </div>
   );
 }

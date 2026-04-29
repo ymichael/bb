@@ -41,7 +41,7 @@ export function ConversationWorkingIndicator({
 
   return (
     <ConversationStatusIndicator
-      label={resolvedLabel}
+      label={<span className="animate-shine">{resolvedLabel}</span>}
       className={cn("mt-4", className)}
     />
   );
