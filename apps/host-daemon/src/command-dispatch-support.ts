@@ -11,7 +11,10 @@ import type {
   HostRuntimeMaterialSnapshot,
   WorkspaceContext,
 } from "@bb/host-daemon-contract";
-import type { ReplayCaptureThreadMetadata } from "@bb/replay-capture/writer";
+import type {
+  ReplayCaptureThreadMetadata,
+  ReplayTurnRequestInput,
+} from "@bb/replay-capture/writer";
 import type { HostRuntimeMaterialState } from "@bb/host-runtime-material";
 import type { InteractiveResolveCommandInput } from "./interactive-request-registry.js";
 import { RuntimeManager, type RuntimeEntry } from "./runtime-manager.js";
@@ -63,6 +66,7 @@ export interface CommandDispatchOptions {
   recordReplayCaptureThreadMetadata?: (
     metadata: ReplayCaptureThreadMetadata,
   ) => void;
+  recordReplayCaptureTurnRequest?: (input: ReplayTurnRequestInput) => void;
   replayTasks?: ReplayTaskRegistry;
   threadStorageRootPath: string;
 }

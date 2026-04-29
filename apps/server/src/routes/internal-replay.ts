@@ -1,5 +1,6 @@
 import {
   createThread,
+  deleteThread,
   getEnvironment,
   getProject,
   getThread,
@@ -24,6 +25,7 @@ import { ApiError } from "../errors.js";
 import type { AppDeps } from "../types.js";
 import { queueCommandAndWait } from "../services/hosts/command-wait.js";
 import { ensureHostSessionReadyForWork } from "../services/hosts/host-lifecycle.js";
+import { appendClientTurnEvent } from "../services/threads/thread-events.js";
 
 interface ResolvedReplayCapture {
   environmentId: string;
@@ -319,26 +321,43 @@ export function registerDevelopmentOnlyReplayRoutes(
         status: "created",
         title: `[Replay] ${resolved.title ?? manifest.captureId}`,
       });
-      const command = queueCommand(deps.db, deps.hub, {
-        hostId: resolved.hostId,
-        sessionId: session.id,
-        type: "replay.run",
-        payload: JSON.stringify({
-          type: "replay.run",
-          captureId: manifest.captureId,
-          environmentId: resolved.environmentId,
+      try {
+        appendClientTurnEvent(deps, {
           threadId: replayThread.id,
-          speed: payload.speed,
-        }),
-      });
-      return context.json(
-        {
-          commandId: command.id,
-          replayThreadId: replayThread.id,
-          projectId: replayThread.projectId,
-        },
-        201,
-      );
+          environmentId: resolved.environmentId,
+          type: "client/turn/requested",
+          input: manifest.userInput,
+          execution: manifest.execution,
+          initiator: "user",
+          requestMethod:
+            manifest.kind === "thread-start" ? "thread/start" : "turn/start",
+          source: "tell",
+          target: { kind: "new-turn" },
+        });
+        const command = queueCommand(deps.db, deps.hub, {
+          hostId: resolved.hostId,
+          sessionId: session.id,
+          type: "replay.run",
+          payload: JSON.stringify({
+            type: "replay.run",
+            captureId: manifest.captureId,
+            environmentId: resolved.environmentId,
+            threadId: replayThread.id,
+            speed: payload.speed,
+          }),
+        });
+        return context.json(
+          {
+            commandId: command.id,
+            replayThreadId: replayThread.id,
+            projectId: replayThread.projectId,
+          },
+          201,
+        );
+      } catch (error) {
+        deleteThread(deps.db, deps.hub, replayThread.id);
+        throw error;
+      }
     },
   );
 }

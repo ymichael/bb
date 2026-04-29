@@ -11,7 +11,15 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import type { AgentRuntimeCaptureEntry } from "@bb/agent-runtime/capture";
-import type { ThreadEvent } from "@bb/domain";
+import type { ResolvedThreadExecutionOptions, ThreadEvent } from "@bb/domain";
+
+const DEFAULT_TEST_EXECUTION: ResolvedThreadExecutionOptions = {
+  model: "gpt-5",
+  reasoningLevel: "medium",
+  permissionMode: "full",
+  serviceTier: "default",
+  source: "client/turn/requested",
+};
 import {
   isReplayCaptureId,
   replayCaptureDir,
@@ -143,6 +151,12 @@ function recordStarted(
     threadId,
     title: threadId,
   });
+  service.recordTurnRequest({
+    threadId,
+    kind: "thread-start",
+    input: [{ type: "text", text: `Hello from ${threadId}` }],
+    execution: DEFAULT_TEST_EXECUTION,
+  });
   service.recordThreadEvent({
     environmentId: `env-${threadId}`,
     threadId,
@@ -236,6 +250,12 @@ describe("createReplayCaptureService", () => {
       threadId: "thr-1",
       title: "Original",
     });
+    service.recordTurnRequest({
+      threadId: "thr-1",
+      kind: "thread-start",
+      input: [{ type: "text", text: "Original prompt text" }],
+      execution: DEFAULT_TEST_EXECUTION,
+    });
 
     const rawEntry: AgentRuntimeCaptureEntry = {
       kind: "raw-provider-event",
@@ -295,6 +315,11 @@ describe("createReplayCaptureService", () => {
     expect(manifest.eventCounts.rawProviderEvents).toBe(1);
     expect(manifest.eventCounts.droppedRecords).toBe(0);
     expect(manifest.completedAt).toBe(1_050);
+    expect(manifest.kind).toBe("thread-start");
+    expect(manifest.userInput).toEqual([
+      { type: "text", text: "Original prompt text" },
+    ]);
+    expect(manifest.userInputPreview).toBe("Original prompt text");
 
     const rawLines = (
       await readFile(replayRawProviderEventsPath(dataDir, captureId), "utf8")
@@ -333,6 +358,126 @@ describe("createReplayCaptureService", () => {
     }
   });
 
+  it("skips capture creation when no turn request was buffered", async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), "bb-replay-capture-"));
+    const log = logger();
+    const service = createReplayCaptureService({
+      dataDir,
+      enabled: true,
+      logger: log,
+      now: () => 1_000,
+    });
+    expect(service).not.toBeNull();
+    if (!service) return;
+
+    service.recordThreadMetadata({
+      environmentId: "env-no-request",
+      projectId: "proj-no-request",
+      providerId: "codex",
+      threadId: "thr-no-request",
+      title: "thr-no-request",
+    });
+    service.recordThreadEvent({
+      environmentId: "env-no-request",
+      threadId: "thr-no-request",
+      event: turnStartedEvent("thr-no-request"),
+      createdAt: 1_000,
+    });
+    await service.drain();
+
+    expect(log.warn).toHaveBeenCalledWith(
+      { threadId: "thr-no-request" },
+      "skipping replay capture event without buffered turn request",
+    );
+    if (await pathExists(replayRoot(dataDir))) {
+      await expect(readdir(replayRoot(dataDir))).resolves.toEqual([]);
+    }
+  });
+
+  it("records the buffered turn request kind and input on the capture", async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), "bb-replay-capture-"));
+    let currentTime = 1_000;
+    const service = createReplayCaptureService({
+      dataDir,
+      enabled: true,
+      logger: logger(),
+      now: () => currentTime,
+    });
+    expect(service).not.toBeNull();
+    if (!service) return;
+
+    service.recordThreadMetadata({
+      environmentId: "env-follow-up",
+      projectId: "proj-follow-up",
+      providerId: "codex",
+      threadId: "thr-follow-up",
+      title: "thr-follow-up",
+    });
+    service.recordTurnRequest({
+      threadId: "thr-follow-up",
+      kind: "turn-start",
+      input: [
+        { type: "text", text: "Follow-up question" },
+        { type: "localFile", path: "/tmp/notes.md", name: "notes.md" },
+      ],
+      execution: DEFAULT_TEST_EXECUTION,
+    });
+    service.recordThreadEvent({
+      environmentId: "env-follow-up",
+      threadId: "thr-follow-up",
+      event: turnStartedEvent("thr-follow-up"),
+      createdAt: currentTime,
+    });
+    currentTime += 5;
+    recordCompleted(service, "thr-follow-up", currentTime);
+    await service.drain();
+
+    const captureId = await captureIdForThread(dataDir, "thr-follow-up");
+    const manifest = await readCaptureManifest(dataDir, captureId);
+    expect(manifest.kind).toBe("turn-start");
+    expect(manifest.userInput).toEqual([
+      { type: "text", text: "Follow-up question" },
+      { type: "localFile", path: "/tmp/notes.md", name: "notes.md" },
+    ]);
+    expect(manifest.userInputPreview).toBe(
+      "Follow-up question [file: notes.md]",
+    );
+    expect(manifest.execution).toEqual(DEFAULT_TEST_EXECUTION);
+  });
+
+  it("only consumes the buffered request once per capture", async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), "bb-replay-capture-"));
+    let currentTime = 1_000;
+    const service = createReplayCaptureService({
+      dataDir,
+      enabled: true,
+      finalizedCaptureGraceMs: 0,
+      logger: logger(),
+      now: () => currentTime,
+    });
+    expect(service).not.toBeNull();
+    if (!service) return;
+
+    recordStarted(service, "thr-once", currentTime);
+    currentTime += 5;
+    recordCompleted(service, "thr-once", currentTime);
+    await service.drain();
+    const firstCaptureId = await captureIdForThread(dataDir, "thr-once");
+
+    currentTime += 10;
+    service.recordThreadEvent({
+      environmentId: "env-thr-once",
+      threadId: "thr-once",
+      event: turnStartedEvent("thr-once"),
+      createdAt: currentTime,
+    });
+    await service.drain();
+
+    await expect(captureIdsForThread(dataDir, "thr-once")).resolves.toEqual([
+      firstCaptureId,
+    ]);
+  });
+
   it("dedupes raw provider ids per capture instead of globally", async () => {
     const dataDir = await mkdtemp(path.join(tmpdir(), "bb-replay-capture-"));
     let currentTime = 1_000;
@@ -352,6 +497,12 @@ describe("createReplayCaptureService", () => {
         providerId: "codex",
         threadId,
         title: threadId,
+      });
+      service.recordTurnRequest({
+        threadId,
+        kind: "thread-start",
+        input: [{ type: "text", text: `prompt ${threadId}` }],
+        execution: DEFAULT_TEST_EXECUTION,
       });
       service.recordRuntimeCaptureEntry({
         kind: "raw-provider-event",
@@ -569,6 +720,12 @@ describe("createReplayCaptureService", () => {
       threadId: "thr-pending-raw",
       title: "thr-pending-raw",
     });
+    service.recordTurnRequest({
+      threadId: "thr-pending-raw",
+      kind: "turn-start",
+      input: [{ type: "text", text: "second-turn" }],
+      execution: DEFAULT_TEST_EXECUTION,
+    });
     const started = turnStartedEvent("thr-pending-raw");
     service.recordRuntimeCaptureEntry({
       kind: "translated-thread-event",
@@ -620,6 +777,12 @@ describe("createReplayCaptureService", () => {
       providerId: "codex",
       threadId: "thr-capped",
       title: "thr-capped",
+    });
+    service.recordTurnRequest({
+      threadId: "thr-capped",
+      kind: "thread-start",
+      input: [{ type: "text", text: "capped prompt" }],
+      execution: DEFAULT_TEST_EXECUTION,
     });
     recordRawTranslatedThreadEvent({
       at: currentTime,

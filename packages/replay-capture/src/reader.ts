@@ -188,6 +188,9 @@ function toSummary(manifest: ReplayCaptureManifest): ReplayCaptureSummary {
     environmentId: manifest.environmentId,
     threadId: manifest.threadId,
     title: manifest.title,
+    kind: manifest.kind,
+    userInputPreview: manifest.userInputPreview,
+    execution: manifest.execution,
     eventCounts: manifest.eventCounts,
     errorMessage: manifest.errorMessage,
   };

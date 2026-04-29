@@ -580,6 +580,8 @@ export async function createHostDaemonApp(
       eventBuffer.seed({ [threadId]: sequence }),
     recordReplayCaptureThreadMetadata: (metadata) =>
       replayCapture?.recordThreadMetadata(metadata),
+    recordReplayCaptureTurnRequest: (input) =>
+      replayCapture?.recordTurnRequest(input),
     eventSink: {
       emit: (event) => eventBuffer.push(event),
       flush: () => eventBuffer.flush(),

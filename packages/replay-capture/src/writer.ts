@@ -7,13 +7,20 @@ import {
   stat,
   writeFile,
 } from "node:fs/promises";
+import path from "node:path";
 import type {
   AgentRuntimeCaptureEntry,
   AgentRuntimeTranslatedThreadEventCaptureEntry,
 } from "@bb/agent-runtime/capture";
-import type { ThreadEvent } from "@bb/domain";
+import type {
+  PromptInput,
+  ResolvedThreadExecutionOptions,
+  ThreadEvent,
+} from "@bb/domain";
 import {
   DEFAULT_REPLAY_CAPTURE_MAX_CAPTURES,
+  REPLAY_CAPTURE_SCHEMA_VERSION,
+  REPLAY_CAPTURE_USER_INPUT_PREVIEW_MAX,
   createReplayCaptureId,
   isReplayCaptureId,
   replayCaptureDir,
@@ -22,10 +29,44 @@ import {
   replayCaptureRoot,
   replayRawProviderCaptureEntrySchema,
   replayRawProviderEventsPath,
+  type ReplayCaptureKind,
   type ReplayCaptureManifest,
   type ReplayRawProviderCaptureEntry,
   type ReplayRawProviderEventRecord,
 } from "./index.js";
+
+function describePromptInput(item: PromptInput): string {
+  switch (item.type) {
+    case "text":
+      return item.text;
+    case "image":
+      return "[image]";
+    case "localImage":
+      return `[image: ${path.basename(item.path)}]`;
+    case "localFile":
+      return `[file: ${item.name ?? path.basename(item.path)}]`;
+  }
+}
+
+export function deriveReplayCaptureUserInputPreview(
+  input: readonly PromptInput[],
+): string {
+  const joined = input
+    .map(describePromptInput)
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (joined.length <= REPLAY_CAPTURE_USER_INPUT_PREVIEW_MAX) {
+    return joined;
+  }
+  const sliced = joined.slice(0, REPLAY_CAPTURE_USER_INPUT_PREVIEW_MAX);
+  const lastSpace = sliced.lastIndexOf(" ");
+  const truncated =
+    lastSpace > REPLAY_CAPTURE_USER_INPUT_PREVIEW_MAX / 2
+      ? sliced.slice(0, lastSpace)
+      : sliced;
+  return `${truncated}…`;
+}
 
 export interface ReplayCaptureLogger {
   info(fields: object, message: string): void;
@@ -44,6 +85,13 @@ export interface ReplayThreadEventInput {
   createdAt?: number;
   environmentId: string;
   event: ThreadEvent;
+  threadId: string;
+}
+
+export interface ReplayTurnRequestInput {
+  kind: ReplayCaptureKind;
+  input: PromptInput[];
+  execution: ResolvedThreadExecutionOptions;
   threadId: string;
 }
 
@@ -76,6 +124,7 @@ export interface ReplayCaptureService {
   recordRuntimeCaptureEntry(entry: AgentRuntimeCaptureEntry): void;
   recordThreadEvent(input: ReplayThreadEventInput): void;
   recordThreadMetadata(metadata: ReplayCaptureThreadMetadata): void;
+  recordTurnRequest(input: ReplayTurnRequestInput): void;
 }
 
 function createRandomSuffix(): string {
@@ -146,6 +195,7 @@ export function createReplayCaptureService(
     options.finalizedCaptureGraceMs ?? DEFAULT_FINALIZED_CAPTURE_GRACE_MS;
   const now = options.now ?? Date.now;
   const metadataByThreadId = new Map<string, ReplayCaptureThreadMetadata>();
+  const pendingTurnRequestByThreadId = new Map<string, ReplayTurnRequestInput>();
   const activeByThreadId = new Map<string, ActiveCapture>();
   const allCapturesById = new Map<string, ActiveCapture>();
   const latestCaptureByThreadId = new Map<string, ActiveCapture>();
@@ -266,13 +316,22 @@ export function createReplayCaptureService(
       );
       return null;
     }
+    const turnRequest = pendingTurnRequestByThreadId.get(threadId);
+    if (!turnRequest) {
+      options.logger.warn(
+        { threadId },
+        "skipping replay capture event without buffered turn request",
+      );
+      return null;
+    }
+    pendingTurnRequestByThreadId.delete(threadId);
     const capture: ActiveCapture = {
       captureId,
       dir: replayCaptureDir(options.dataDir, captureId),
       finalizedAt: null,
       finalized: false,
       manifest: {
-        schemaVersion: 1,
+        schemaVersion: REPLAY_CAPTURE_SCHEMA_VERSION,
         captureId,
         capturedAt,
         completedAt: null,
@@ -284,6 +343,10 @@ export function createReplayCaptureService(
         providerThreadId: null,
         turnIds: [],
         title: metadata.title,
+        kind: turnRequest.kind,
+        userInput: turnRequest.input,
+        userInputPreview: deriveReplayCaptureUserInputPreview(turnRequest.input),
+        execution: turnRequest.execution,
         eventCounts: {
           rawProviderEvents: 0,
           droppedRecords: 0,
@@ -494,6 +557,10 @@ export function createReplayCaptureService(
     }
   }
 
+  function recordTurnRequest(input: ReplayTurnRequestInput): void {
+    pendingTurnRequestByThreadId.set(input.threadId, input);
+  }
+
   function recordThreadMetadata(metadata: ReplayCaptureThreadMetadata): void {
     metadataByThreadId.set(metadata.threadId, metadata);
     const capture =
@@ -582,5 +649,6 @@ export function createReplayCaptureService(
     recordRuntimeCaptureEntry,
     recordThreadEvent,
     recordThreadMetadata,
+    recordTurnRequest,
   };
 }

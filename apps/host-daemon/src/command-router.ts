@@ -31,6 +31,7 @@ export interface CommandRouterOptions {
   listModels?: CommandDispatchOptions["listModels"];
   resolveInteractiveRequest?: CommandDispatchOptions["resolveInteractiveRequest"];
   recordReplayCaptureThreadMetadata?: CommandDispatchOptions["recordReplayCaptureThreadMetadata"];
+  recordReplayCaptureTurnRequest?: CommandDispatchOptions["recordReplayCaptureTurnRequest"];
   replayTasks?: CommandDispatchOptions["replayTasks"];
   threadStorageRootPath: string;
   logger: Pick<HostDaemonLogger, "warn">;
@@ -177,6 +178,8 @@ export class CommandRouter {
         resolveInteractiveRequest: this.options.resolveInteractiveRequest,
         recordReplayCaptureThreadMetadata:
           this.options.recordReplayCaptureThreadMetadata,
+        recordReplayCaptureTurnRequest:
+          this.options.recordReplayCaptureTurnRequest,
         replayTasks: this.options.replayTasks,
         threadStorageRootPath: this.options.threadStorageRootPath,
       });

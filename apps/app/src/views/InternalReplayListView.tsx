@@ -1,8 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronRight, Info, LoaderCircle, Trash2 } from "lucide-react";
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { DetailCard, DetailRow } from "@bb/ui-core";
+import { useMemo, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { DetailCard, DetailRow, Pill } from "@bb/ui-core";
 import type { ReplayRunSpeed } from "@bb/server-contract";
 import { PageShell } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/button";
@@ -11,12 +11,17 @@ import {
   type SplitButtonAction,
 } from "@/components/ui/split-button";
 import { invalidateReplayCaptures } from "@/hooks/cache-effects";
+import { useEffectiveHosts } from "@/hooks/queries/effective-hosts";
 import { replayCapturesQueryKey } from "@/hooks/queries/query-keys";
 import { cn } from "@/lib/utils";
+import { getProviderIconInfo } from "@/lib/provider-icon";
 import * as api from "@/lib/api";
 
 const DEFAULT_REPLAY_SPEED: ReplayRunSpeed = 1;
 const REPLAY_SPEEDS: readonly ReplayRunSpeed[] = [0.5, 1, 2, 5, 10];
+
+const DETAIL_LINK_CLASS =
+  "block min-w-0 truncate text-foreground underline underline-offset-2 transition-colors hover:text-foreground/80";
 
 interface StartReplayMutationRequest {
   captureId: string;
@@ -53,6 +58,11 @@ export function InternalReplayListView() {
     queryKey: replayCapturesQueryKey(),
     queryFn: () => api.listReplayCaptures(),
   });
+  const { data: hosts = [] } = useEffectiveHosts();
+  const hostNameById = useMemo(
+    () => new Map(hosts.map((host) => [host.id, host.name])),
+    [hosts],
+  );
   const deleteCapture = useMutation({
     mutationFn: (captureId: string) => api.deleteReplayCapture(captureId),
     onSuccess: () => {
@@ -98,8 +108,12 @@ export function InternalReplayListView() {
         ) : (
           <div className="space-y-1">
             {captures.map((capture) => {
-              const title = capture.title ?? capture.captureId;
-              const projectName = capture.projectName ?? capture.projectId;
+              const inputPreview =
+                capture.userInputPreview || capture.captureId;
+              const isNewThread = capture.kind === "thread-start";
+              const kindLabel = isNewThread ? "new" : "follow-up";
+              const providerIconInfo = getProviderIconInfo(capture.providerId);
+              const ProviderIcon = providerIconInfo?.icon;
               const isExpanded = expandedIds.has(capture.captureId);
               const isDeleting =
                 deleteCapture.isPending &&
@@ -153,11 +167,31 @@ export function InternalReplayListView() {
                           isExpanded && "rotate-90",
                         )}
                       />
-                      <span className="min-w-0 flex-1 truncate">
-                        {title}
-                        <span className="ml-1.5 text-xs text-muted-foreground">
-                          {projectName} · {capture.providerId}
+                      <span className="flex min-w-0 flex-1 items-center gap-2">
+                        <span className="min-w-0 max-w-xs truncate">
+                          {inputPreview}
                         </span>
+                        {capture.title ? (
+                          <span className="min-w-0 truncate text-muted-foreground">
+                            {capture.title}
+                          </span>
+                        ) : null}
+                        <Pill
+                          variant={isNewThread ? "secondary" : "outline"}
+                          className="shrink-0"
+                        >
+                          {kindLabel}
+                        </Pill>
+                        {ProviderIcon ? (
+                          <ProviderIcon
+                            className="size-3.5 shrink-0 text-muted-foreground"
+                            aria-label={providerIconInfo?.ariaLabel}
+                          />
+                        ) : (
+                          <span className="shrink-0 text-xs text-muted-foreground">
+                            {capture.providerId}
+                          </span>
+                        )}
                       </span>
                     </button>
                     <SplitButton
@@ -197,7 +231,7 @@ export function InternalReplayListView() {
                           label="Host"
                           valueClassName="min-w-0 truncate"
                         >
-                          {capture.hostId}
+                          {hostNameById.get(capture.hostId) ?? capture.hostId}
                         </DetailRow>
                         <DetailRow
                           label="Provider"
@@ -205,17 +239,24 @@ export function InternalReplayListView() {
                         >
                           {capture.providerId}
                         </DetailRow>
-                        <DetailRow
-                          label="Project"
-                          valueClassName="min-w-0 truncate"
-                        >
-                          {capture.projectName ?? capture.projectId}
+                        <DetailRow label="Project" valueClassName="min-w-0">
+                          <Link
+                            to={`/projects/${capture.projectId}`}
+                            className={DETAIL_LINK_CLASS}
+                          >
+                            {capture.projectName ?? capture.projectId}
+                          </Link>
                         </DetailRow>
-                        <DetailRow
-                          label="Thread"
-                          valueClassName="min-w-0 truncate font-mono"
-                        >
-                          {capture.threadId}
+                        <DetailRow label="Thread" valueClassName="min-w-0">
+                          <Link
+                            to={`/projects/${capture.projectId}/threads/${capture.threadId}`}
+                            className={cn(
+                              DETAIL_LINK_CLASS,
+                              !capture.title && "font-mono",
+                            )}
+                          >
+                            {capture.title ?? capture.threadId}
+                          </Link>
                         </DetailRow>
                         <DetailRow
                           label="Captured"

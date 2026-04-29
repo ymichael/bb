@@ -4,12 +4,20 @@ import {
   jsonRpcEnvelopeSchema,
   type JsonRpcEnvelope,
 } from "@bb/agent-runtime/shared/json-rpc-envelope";
+import {
+  promptInputSchema,
+  resolvedThreadExecutionOptionsSchema,
+} from "@bb/domain";
 
-export const REPLAY_CAPTURE_SCHEMA_VERSION = 1 as const;
+export const REPLAY_CAPTURE_SCHEMA_VERSION = 2 as const;
 export const REPLAY_CAPTURE_ID_PATTERN = /^cap_[0-9a-z]+_[0-9a-z]{8}$/u;
 export const REPLAY_CAPTURE_ID_PATTERN_DESCRIPTION =
   "cap_<base36 timestamp>_<8 lowercase base36 chars>";
 export const DEFAULT_REPLAY_CAPTURE_MAX_CAPTURES = 100;
+export const REPLAY_CAPTURE_USER_INPUT_PREVIEW_MAX = 120;
+
+export const replayCaptureKindSchema = z.enum(["thread-start", "turn-start"]);
+export type ReplayCaptureKind = z.infer<typeof replayCaptureKindSchema>;
 
 export const jsonRpcMessageSchema = z.custom<JsonRpcEnvelope>(
   (value) => jsonRpcEnvelopeSchema.safeParse(value).success,
@@ -44,6 +52,10 @@ export const replayCaptureManifestSchema = z.object({
   providerThreadId: z.string().nullable(),
   turnIds: z.array(z.string()),
   title: z.string().nullable(),
+  kind: replayCaptureKindSchema,
+  userInput: z.array(promptInputSchema),
+  userInputPreview: z.string(),
+  execution: resolvedThreadExecutionOptionsSchema,
   eventCounts: z.object({
     rawProviderEvents: z.number().int().nonnegative(),
     droppedRecords: z.number().int().nonnegative(),
@@ -159,6 +171,9 @@ export const replayCaptureSummarySchema = replayCaptureManifestSchema.pick({
   environmentId: true,
   threadId: true,
   title: true,
+  kind: true,
+  userInputPreview: true,
+  execution: true,
   eventCounts: true,
   errorMessage: true,
 });
@@ -216,3 +231,4 @@ export const replayRunResponseSchema = z.object({
   projectId: z.string(),
 });
 export type ReplayRunResponse = z.infer<typeof replayRunResponseSchema>;
+

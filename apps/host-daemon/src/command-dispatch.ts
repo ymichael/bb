@@ -3,6 +3,10 @@ import type {
   HostDaemonCommandResult,
   HostDaemonCommandType,
 } from "@bb/host-daemon-contract";
+import type {
+  ResolvedThreadExecutionOptions,
+  RuntimeThreadExecutionOptions,
+} from "@bb/domain";
 import {
   defaultListModels,
   defaultListProviders,
@@ -64,6 +68,56 @@ function recordReplayThreadMetadata(
   });
 }
 
+/**
+ * Translate runtime-shape execution options (which carry permissionEscalation
+ * details and no source field) into the server-shape used by stored client
+ * turn-request events, which is what the manifest persists for replay.
+ */
+function toReplayCaptureExecution(
+  options: RuntimeThreadExecutionOptions,
+): ResolvedThreadExecutionOptions {
+  return {
+    model: options.model,
+    serviceTier: options.serviceTier,
+    reasoningLevel: options.reasoningLevel,
+    permissionMode: options.permissionMode,
+    source: "client/turn/requested",
+  };
+}
+
+function recordReplayTurnRequest(
+  command:
+    | Extract<HostDaemonCommand, { type: "thread.start" }>
+    | Extract<HostDaemonCommand, { type: "turn.submit" }>,
+  options: CommandDispatchOptions,
+): void {
+  if (!options.recordReplayCaptureTurnRequest) {
+    return;
+  }
+  if (command.type === "thread.start") {
+    options.recordReplayCaptureTurnRequest({
+      threadId: command.threadId,
+      kind: "thread-start",
+      input: command.input,
+      execution: toReplayCaptureExecution(command.options),
+    });
+    return;
+  }
+  // Only "start" guarantees a new turn (and thus a turn/started event that
+  // consumes the buffered request). "auto" and "steer" may resolve to a steer
+  // that emits no turn/started — leaving a stale request that would mislabel
+  // a later capture. Skip them.
+  if (command.target.mode !== "start") {
+    return;
+  }
+  options.recordReplayCaptureTurnRequest({
+    threadId: command.threadId,
+    kind: "turn-start",
+    input: command.input,
+    execution: toReplayCaptureExecution(command.options),
+  });
+}
+
 function seedThreadHighWaterMarkIfPresent(
   command:
     | Extract<HostDaemonCommand, { type: "thread.start" }>
@@ -92,6 +146,7 @@ const commandHandlers: CommandHandlerMap = {
     options: CommandDispatchOptions,
   ) => {
     recordReplayThreadMetadata(command, options);
+    recordReplayTurnRequest(command, options);
     seedThreadHighWaterMarkIfPresent(command, options);
     return startThread(command, options);
   },
@@ -100,6 +155,7 @@ const commandHandlers: CommandHandlerMap = {
     options: CommandDispatchOptions,
   ) => {
     recordReplayThreadMetadata(command, options);
+    recordReplayTurnRequest(command, options);
     seedThreadHighWaterMarkIfPresent(command, options);
     const entry = await ensureThreadRuntime(command, options);
     return submitTurn(command, entry);

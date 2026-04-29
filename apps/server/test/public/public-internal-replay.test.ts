@@ -62,7 +62,7 @@ function captureManifest(args: {
   threadId: string;
 }): ReplayCaptureManifest {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     captureId: args.captureId,
     capturedAt: 1_000,
     completedAt: 1_100,
@@ -74,6 +74,16 @@ function captureManifest(args: {
     providerThreadId: "provider-thread-1",
     turnIds: ["turn-1"],
     title: "Original thread",
+    kind: "thread-start",
+    userInput: [{ type: "text", text: "Original prompt" }],
+    userInputPreview: "Original prompt",
+    execution: {
+      model: "gpt-5",
+      reasoningLevel: "medium",
+      permissionMode: "full",
+      serviceTier: "default",
+      source: "client/turn/requested",
+    },
     eventCounts: {
       rawProviderEvents: 1,
       droppedRecords: 0,
@@ -92,6 +102,9 @@ function captureSummary(manifest: ReplayCaptureManifest): ReplayCaptureSummary {
     environmentId: manifest.environmentId,
     threadId: manifest.threadId,
     title: manifest.title,
+    kind: manifest.kind,
+    userInputPreview: manifest.userInputPreview,
+    execution: manifest.execution,
     eventCounts: manifest.eventCounts,
     errorMessage: manifest.errorMessage,
   };

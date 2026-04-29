@@ -26,7 +26,7 @@ function threadStorageRoot(dataDir: string): string {
 
 function baseManifest(captureId: string): ReplayCaptureManifest {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     captureId,
     capturedAt: 1_000,
     completedAt: 1_100,
@@ -38,6 +38,16 @@ function baseManifest(captureId: string): ReplayCaptureManifest {
     providerThreadId: "provider-thread-1",
     turnIds: ["turn-1"],
     title: "Original",
+    kind: "thread-start",
+    userInput: [{ type: "text", text: "Original prompt" }],
+    userInputPreview: "Original prompt",
+    execution: {
+      model: "gpt-5",
+      reasoningLevel: "medium",
+      permissionMode: "full",
+      serviceTier: "default",
+      source: "client/turn/requested",
+    },
     eventCounts: {
       rawProviderEvents: 0,
       droppedRecords: 0,
@@ -233,7 +243,8 @@ describe("replay capture commands", () => {
       replayCaptureManifestPath(dataDir, captureId),
       JSON.stringify({
         ...baseManifest(captureId),
-        schemaVersion: 2,
+        // Force a schema mismatch by using a value the manifest schema rejects.
+        schemaVersion: 999,
       }),
     );
 
