@@ -9,6 +9,7 @@ import type { CommandResultWaiterResponse } from "../../internal/command-result-
 import type { AppDeps, SandboxWorkSessionDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
 import { ensureHostSessionReadyForWork } from "./host-lifecycle.js";
+import { assertDaemonCommandWaitAllowed } from "./command-wait-context.js";
 
 export interface QueueCommandAndWaitArgs<TType extends HostDaemonCommandType> {
   command: Extract<HostDaemonCommand, { type: TType }>;
@@ -32,6 +33,11 @@ export async function queueCommandAndWait(
   deps: SandboxWorkSessionDeps,
   args: QueueCommandAndWaitArgs<HostDaemonCommandType>,
 ): Promise<HostDaemonCommandResult> {
+  assertDaemonCommandWaitAllowed({
+    commandId: null,
+    commandType: args.command.type,
+    operation: "queue-and-wait",
+  });
   const session = await ensureHostSessionReadyForWork(deps, {
     hostId: args.hostId,
   });
@@ -57,6 +63,11 @@ export async function waitForQueuedCommandResult(
   deps: Pick<AppDeps, "hub">,
   args: WaitForQueuedCommandResultArgs<HostDaemonCommandType>,
 ): Promise<HostDaemonCommandResult> {
+  assertDaemonCommandWaitAllowed({
+    commandId: args.commandId,
+    commandType: args.type,
+    operation: "wait",
+  });
   let completed: CommandResultWaiterResponse;
   try {
     completed = await deps.hub.waitForCommandResult(

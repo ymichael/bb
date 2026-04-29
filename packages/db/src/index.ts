@@ -5,6 +5,7 @@ export * from "./schema.js";
 export {
   createAutomationId,
   createCloudAuthAttemptId,
+  createDraftClaimToken,
   createDraftId,
   createEnvironmentId,
   createEventId,

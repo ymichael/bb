@@ -12,7 +12,7 @@ import type { HostDaemonActiveThread } from "@bb/host-daemon-contract";
 import type { PendingInteractionWorkSessionDeps } from "../types.js";
 import {
   completeThreadStart,
-  finalizeStoppedThread,
+  finalizeStoppedThreadAndAdvanceCleanup,
   requestThreadStop,
 } from "../services/threads/thread-lifecycle.js";
 import { tryTransition } from "../services/threads/thread-transitions.js";
@@ -64,14 +64,16 @@ export async function reconcileSessionThreads(
     }
 
     if (thread.stopRequestedAt !== null && !isActive) {
-      await finalizeStoppedThread(deps, {
+      await finalizeStoppedThreadAndAdvanceCleanup(deps, {
         threadId: thread.id,
       });
       continue;
     }
 
     if (thread.deletedAt !== null && !isActive) {
-      await finalizeStoppedThread(deps, { threadId: thread.id });
+      await finalizeStoppedThreadAndAdvanceCleanup(deps, {
+        threadId: thread.id,
+      });
     }
   }
 

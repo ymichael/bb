@@ -704,6 +704,8 @@ describe("public thread archive delete cleanup routes", () => {
         stopCommand,
         {},
       );
+      const stopResultResponse = await stopResultPromise;
+      expect(stopResultResponse.status).toBe(200);
 
       const cleanupStatusCommand = await waitForQueuedCommandAfter(
         harness,
@@ -715,8 +717,6 @@ describe("public thread archive delete cleanup routes", () => {
       await reportQueuedCommandSuccess(harness, cleanupStatusCommand, {
         workspaceStatus: cleanWorkspaceStatus(),
       });
-      const stopResultResponse = await stopResultPromise;
-      expect(stopResultResponse.status).toBe(200);
 
       const destroyCommand = await waitForQueuedCommandAfter(
         harness,
@@ -783,6 +783,8 @@ describe("public thread archive delete cleanup routes", () => {
         stopCommand,
         {},
       );
+      const stopResultResponse = await stopResultPromise;
+      expect(stopResultResponse.status).toBe(200);
 
       const destroyCommand = await waitForQueuedCommandAfter(
         harness,
@@ -804,9 +806,6 @@ describe("public thread archive delete cleanup routes", () => {
           100,
         ),
       ).rejects.toThrow("Timed out waiting for queued command");
-
-      const stopResultResponse = await stopResultPromise;
-      expect(stopResultResponse.status).toBe(200);
     } finally {
       await harness.cleanup();
     }

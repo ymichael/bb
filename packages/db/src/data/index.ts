@@ -96,6 +96,7 @@ export {
   markThreadStopRequested,
   unarchiveThread,
   transitionThreadStatus,
+  transitionThreadStatusInTransaction,
   InvalidThreadStatusTransitionError,
   ALLOWED_TRANSITIONS,
 } from "./threads.js";
@@ -104,6 +105,7 @@ export type {
   CreateThreadInput,
   ListThreadsOptions,
   StopRequestedThreadRow,
+  TransitionThreadStatusInTransactionArgs,
   ListThreadEnvironmentAssignmentsOnHostArgs,
   MarkThreadDeletedArgs,
   MarkThreadStopRequestedArgs,
@@ -338,12 +340,28 @@ export {
   claimDraft,
   claimNextDraft,
   createDraft,
+  deleteClaimedDraft,
+  deleteClaimedDraftInTransaction,
   deleteDraft,
+  deleteDraftInTransaction,
   getDraft,
+  listIdleThreadsWithQueuedDrafts,
   listDrafts,
   releaseDraftClaim,
+  releaseStaleDraftClaims,
 } from "./drafts.js";
-export type { CreateDraftInput, DraftRow } from "./drafts.js";
+export type {
+  ClaimedDraftRow,
+  ClaimedDraftMutationArgs,
+  CreateDraftInput,
+  DeleteClaimedDraftArgs,
+  DeleteClaimedDraftInTransactionArgs,
+  DeleteDraftInTransactionArgs,
+  DraftRow,
+  QueuedDraftThreadRow,
+  ReleaseDraftClaimArgs,
+  ReleaseStaleDraftClaimsArgs,
+} from "./drafts.js";
 
 export {
   sweepEphemeralHostsPendingCleanup,

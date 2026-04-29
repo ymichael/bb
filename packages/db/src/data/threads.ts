@@ -102,6 +102,11 @@ interface InvalidThreadStatusTransitionErrorArgs {
   newStatus: ThreadStatus;
 }
 
+export interface TransitionThreadStatusInTransactionArgs {
+  id: string;
+  newStatus: ThreadStatus;
+}
+
 export class InvalidThreadStatusTransitionError extends Error {
   readonly currentStatus: ThreadStatus;
   readonly newStatus: ThreadStatus;
@@ -527,9 +532,8 @@ export function unarchiveThread(
   return updated ?? null;
 }
 
-export function transitionThreadStatus(
-  db: DbConnection,
-  notifier: DbNotifier,
+function transitionThreadStatusRecord(
+  db: ThreadWriteConnection,
   id: string,
   newStatus: ThreadStatus,
 ) {
@@ -563,8 +567,25 @@ export function transitionThreadStatus(
     .returning()
     .get();
 
-  notifier.notifyThread(id, ["status-changed"]);
   return updated!;
+}
+
+export function transitionThreadStatusInTransaction(
+  db: DbTransaction,
+  args: TransitionThreadStatusInTransactionArgs,
+) {
+  return transitionThreadStatusRecord(db, args.id, args.newStatus);
+}
+
+export function transitionThreadStatus(
+  db: DbConnection,
+  notifier: DbNotifier,
+  id: string,
+  newStatus: ThreadStatus,
+) {
+  const updated = transitionThreadStatusRecord(db, id, newStatus);
+  notifier.notifyThread(id, ["status-changed"]);
+  return updated;
 }
 
 export function transitionThreadsToError(

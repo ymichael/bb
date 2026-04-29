@@ -396,6 +396,41 @@ export const hostDaemonCommandSchema = z.union([
 ]);
 export type HostDaemonCommand = z.infer<typeof hostDaemonCommandSchema>;
 
+export function shouldFlushEventsBeforeReportingCommandResult(
+  command: HostDaemonCommand,
+): boolean {
+  switch (command.type) {
+    case "thread.start":
+    case "turn.submit":
+    case "thread.stop":
+    case "interactive.resolve":
+      return true;
+    case "environment.provision":
+      return command.initiator !== null;
+    case "environment.destroy":
+    case "host.list_files":
+    case "host.read_file":
+    case "host.sync_runtime_material":
+    case "provider.list":
+    case "provider.list_models":
+    case "replay.capture_delete":
+    case "replay.capture_get":
+    case "replay.capture_list":
+    case "replay.run":
+    case "thread.deleted":
+    case "thread.rename":
+    case "workspace.commit":
+    case "workspace.demote":
+    case "workspace.diff":
+    case "workspace.list_branches":
+    case "workspace.list_files":
+    case "workspace.promote":
+    case "workspace.squash_merge":
+    case "workspace.status":
+      return false;
+  }
+}
+
 const fileReadResultSchema = z.object({
   path: z.string(),
   content: z.string(),
@@ -531,8 +566,10 @@ type HostDaemonCommandErrorResultReport =
 export type HostDaemonKnownCommandResultReport =
   | HostDaemonCommandSuccessResultReport
   | HostDaemonKnownCommandErrorResultReportByType[HostDaemonCommandType];
-type HostDaemonCommandErrorResultReportWithoutSession =
-  Omit<HostDaemonCommandErrorResultReport, "sessionId">;
+type HostDaemonCommandErrorResultReportWithoutSession = Omit<
+  HostDaemonCommandErrorResultReport,
+  "sessionId"
+>;
 type HostDaemonCommandSuccessResultReportWithoutSession = Omit<
   HostDaemonCommandResultReportBase,
   "sessionId"
@@ -616,7 +653,8 @@ const knownHostDaemonCommandResultReportSchemasByType = new Map(
  */
 export const hostDaemonCommandResultReportSchema =
   z.custom<HostDaemonCommandResultReport>((value) => {
-    const envelope = hostDaemonCommandResultReportEnvelopeSchema.safeParse(value);
+    const envelope =
+      hostDaemonCommandResultReportEnvelopeSchema.safeParse(value);
     if (!envelope.success) {
       return false;
     }

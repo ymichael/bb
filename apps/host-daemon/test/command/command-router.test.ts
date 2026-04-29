@@ -244,7 +244,59 @@ describe("CommandRouter", () => {
     );
   });
 
-  it("flushes buffered events before reporting command results", async () => {
+  it("does not flush unrelated buffered events before reporting read-only workspace command results", async () => {
+    const calls: string[] = [];
+    const flushDeferred = createDeferred<void>();
+    const eventSink = {
+      emit: vi.fn(),
+      flush: vi.fn(async () => {
+        calls.push("flush");
+        await flushDeferred.promise;
+      }),
+    };
+    const reportResult = vi.fn(async () => {
+      calls.push("report");
+    });
+    const manager = new RuntimeManager({
+      provisionWorkspace: vi.fn(async () => createFakeWorkspace("/tmp/env-1")),
+    });
+    await manager.ensureEnvironment({
+      environmentId: "env-1",
+      workspacePath: "/tmp/env-1",
+      workspaceProvisionType: "unmanaged",
+    });
+    const router = new CommandRouter({
+      dataDir: "/tmp/bb-test-data",
+      fetchRuntimeMaterial: vi.fn(),
+      readPersistedRuntimeMaterial: async () => null,
+      persistRuntimeMaterial: async () => undefined,
+      reportResult,
+      runtimeManager: manager,
+      eventSink,
+      logger: createLogger(),
+    });
+
+    await router.handleCommands([
+      {
+        id: "provider-list",
+        cursor: 1,
+        command: {
+          type: "workspace.status",
+          environmentId: "env-1",
+          workspaceContext: {
+            workspacePath: "/tmp/env-1",
+            workspaceProvisionType: "unmanaged",
+          },
+        },
+      },
+    ]);
+
+    expect(calls).toEqual(["report"]);
+    expect(eventSink.flush).not.toHaveBeenCalled();
+    flushDeferred.resolve(undefined);
+  });
+
+  it("flushes buffered provider events before reporting thread command results", async () => {
     const calls: string[] = [];
     const eventSink = {
       emit: vi.fn(),
@@ -261,17 +313,30 @@ describe("CommandRouter", () => {
       readPersistedRuntimeMaterial: async () => null,
       persistRuntimeMaterial: async () => undefined,
       reportResult,
-      runtimeManager: new RuntimeManager({}),
+      runtimeManager: new RuntimeManager({
+        provisionWorkspace: vi.fn(async () =>
+          createFakeWorkspace("/tmp/env-1"),
+        ),
+        createRuntime: vi.fn(() => createFakeRuntime()),
+      }),
       eventSink,
       logger: createLogger(),
+      threadStorageRootPath: "/tmp/bb-test-thread-storage",
     });
 
     await router.handleCommands([
       {
-        id: "provider-list",
+        id: "thread-start",
         cursor: 1,
         command: {
-          type: "provider.list",
+          type: "thread.start",
+          environmentId: "env-1",
+          threadId: "thread-1",
+          ...createStandardRuntimeCommandContext({
+            workspacePath: "/tmp/env-1",
+          }),
+          eventSequence: 1,
+          input: [{ type: "text", text: "start thread" }],
         },
       },
     ]);

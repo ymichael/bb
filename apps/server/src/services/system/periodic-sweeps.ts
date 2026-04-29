@@ -38,10 +38,11 @@ import {
 import {
   advanceThreadStart,
   completeThreadStart,
-  finalizeStoppedThread,
+  finalizeStoppedThreadAndAdvanceCleanup,
   requestThreadStop,
 } from "../threads/thread-lifecycle.js";
 import { advanceThreadProvisioning } from "../threads/thread-provisioning.js";
+import { runQueuedDraftAutoSendSweep } from "../threads/queued-drafts.js";
 
 export type EvaluateManagedEnvironmentArchiveCleanupFn =
   typeof advanceEnvironmentCleanup;
@@ -297,7 +298,7 @@ export async function runThreadLifecycleSweep(
         continue;
       }
 
-      await finalizeStoppedThread(deps, {
+      await finalizeStoppedThreadAndAdvanceCleanup(deps, {
         threadId: thread.threadId,
       });
     } catch (error) {
@@ -350,6 +351,7 @@ export async function runPeriodicSweeps(
     await sweepDueNudges(deps);
     await runEnvironmentProvisioningSweep(deps);
     await runThreadLifecycleSweep(deps);
+    await runQueuedDraftAutoSendSweep(deps);
     await runIdleSandboxSuspendSweep(deps);
     await runManagedEnvironmentArchiveCleanupSweep(
       deps,

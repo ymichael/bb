@@ -34,6 +34,7 @@ import {
   seedProjectWithSource,
   seedStoredEvent,
   seedThread,
+  seedThreadRuntimeState,
 } from "../helpers/seed.js";
 import { createTestAppHarness } from "../helpers/test-app.js";
 
@@ -213,9 +214,7 @@ describe("public thread data routes", () => {
         await readJson(toolDetailsResponse),
       );
 
-      expect(toolDetails.rows.map((row) => row.kind)).toEqual([
-        "tool-bundle",
-      ]);
+      expect(toolDetails.rows.map((row) => row.kind)).toEqual(["tool-bundle"]);
       expect(toolDetails.rows[0]?.kind).toBe("tool-bundle");
       if (toolDetails.rows[0]?.kind === "tool-bundle") {
         expect(toolDetails.rows[0].rows[0]?.kind).toBe("message");
@@ -754,6 +753,68 @@ describe("public thread data routes", () => {
       expect(deleteResponse.status).toBe(200);
       await expect(readJson(deleteResponse)).resolves.toEqual({ ok: true });
       expect(getDraft(harness.db, draft.id)).toBeNull();
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("auto-sends drafts created on idle provider threads", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-draft-create-idle-auto-send",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/draft-create-idle-auto-send-source",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/draft-create-idle-auto-send-environment",
+        workspaceProvisionType: "unmanaged",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "idle",
+      });
+      seedThreadRuntimeState(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-draft-create-idle-auto-send",
+      });
+
+      const createResponse = await harness.app.request(
+        `/api/v1/threads/${thread.id}/drafts`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            input: [{ type: "text", text: "Draft ready to send" }],
+            permissionMode: "full",
+          }),
+        },
+      );
+      expect(createResponse.status).toBe(201);
+      const draft = draftIdResponseSchema.parse(await readJson(createResponse));
+
+      const queued = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "turn.submit" && command.threadId === thread.id,
+      );
+      expect(queued.command).toMatchObject({
+        environmentId: environment.id,
+        input: [{ type: "text", text: "Draft ready to send" }],
+        resumeContext: {
+          providerThreadId: "provider-draft-create-idle-auto-send",
+        },
+      });
+      expect(getDraft(harness.db, draft.id)).toBeNull();
+      expect(getThread(harness.db, thread.id)?.status).toBe("active");
     } finally {
       await harness.cleanup();
     }

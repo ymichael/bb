@@ -16,6 +16,7 @@ import type { Hono } from "hono";
 import type { AppDeps } from "../types.js";
 import { ApiError } from "../errors.js";
 import { markSandboxActivity } from "../services/hosts/host-lifecycle.js";
+import { runWithDaemonCommandWaitForbidden } from "../services/hosts/command-wait-context.js";
 import { getAuthenticatedDaemon } from "./auth.js";
 import { handleCommandResult } from "./command-results.js";
 import { requireAuthorizedActiveSession } from "./session-state.js";
@@ -65,53 +66,57 @@ export function registerInternalCommandResultRoutes(
   post(
     "/session/command-result",
     hostDaemonCommandResultReportSchema,
-    async (context, payload) => {
-      const daemon = getAuthenticatedDaemon(context);
-      const session = requireAuthorizedActiveSession(deps.db, {
-        hostId: daemon.hostId,
-        sessionId: payload.sessionId,
-      });
-      const command = getCommand(deps.db, payload.commandId);
-      if (!command || command.hostId !== session.hostId) {
-        throw new ApiError(404, "command_not_found", "Command not found");
-      }
+    (context, payload) =>
+      runWithDaemonCommandWaitForbidden({
+        reason: "/session/command-result",
+        work: async () => {
+          const daemon = getAuthenticatedDaemon(context);
+          const session = requireAuthorizedActiveSession(deps.db, {
+            hostId: daemon.hostId,
+            sessionId: payload.sessionId,
+          });
+          const command = getCommand(deps.db, payload.commandId);
+          if (!command || command.hostId !== session.hostId) {
+            throw new ApiError(404, "command_not_found", "Command not found");
+          }
 
-      void markSandboxActivity(deps, {
-        hostId: session.hostId,
-        source: "command-result",
-      });
-      let updatedCommand: HostDaemonCommandRow | null;
-      try {
-        updatedCommand = await handleCommandResult(deps, payload);
-      } catch (error) {
-        deps.logger.error(
-          {
-            commandId: payload.commandId,
-            commandState: command.state,
-            err: error,
-            reportOk: payload.ok,
-            reportType: payload.type,
-          },
-          "Command result handling failed",
-        );
-        throw error;
-      }
+          void markSandboxActivity(deps, {
+            hostId: session.hostId,
+            source: "command-result",
+          });
+          let updatedCommand: HostDaemonCommandRow | null;
+          try {
+            updatedCommand = await handleCommandResult(deps, payload);
+          } catch (error) {
+            deps.logger.error(
+              {
+                commandId: payload.commandId,
+                commandState: command.state,
+                err: error,
+                reportOk: payload.ok,
+                reportType: payload.type,
+              },
+              "Command result handling failed",
+            );
+            throw error;
+          }
 
-      if (!updatedCommand) {
-        throw new ApiError(404, "command_not_found", "Command not found");
-      }
+          if (!updatedCommand) {
+            throw new ApiError(404, "command_not_found", "Command not found");
+          }
 
-      const parsedCommand = parseJsonWithSchema(
-        command.payload,
-        hostDaemonCommandSchema,
-      );
-      return context.json({
-        ok: true,
-        threadHighWaterMarks: getHighWaterMarks(
-          deps.db,
-          commandResultHighWaterThreadIds(deps, parsedCommand),
-        ),
-      });
-    },
+          const parsedCommand = parseJsonWithSchema(
+            command.payload,
+            hostDaemonCommandSchema,
+          );
+          return context.json({
+            ok: true,
+            threadHighWaterMarks: getHighWaterMarks(
+              deps.db,
+              commandResultHighWaterThreadIds(deps, parsedCommand),
+            ),
+          });
+        },
+      }),
   );
 }

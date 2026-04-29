@@ -70,6 +70,7 @@ export {
   hostDaemonExecutionOptionsSchema,
   isHostDaemonCommandType,
   isKnownHostDaemonCommandResultReport,
+  shouldFlushEventsBeforeReportingCommandResult,
   hostListFilesCommandSchema,
   hostReadFileCommandSchema,
   providerListCommandSchema,

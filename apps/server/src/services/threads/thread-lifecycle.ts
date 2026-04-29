@@ -732,15 +732,29 @@ export async function finalizeStoppedThread(
       environmentId,
       mode: "force",
     });
-    await advanceEnvironmentCleanup(deps, { environmentId });
     return true;
   }
 
-  if (finalizedThread.archivedAt !== null) {
-    await advanceEnvironmentCleanup(deps, {
-      environmentId: finalizedThread.environmentId,
-    });
+  return true;
+}
+
+export async function finalizeStoppedThreadAndAdvanceCleanup(
+  deps: PendingInteractionWorkSessionDeps,
+  args: FinalizeStoppedThreadArgs,
+): Promise<boolean> {
+  const threadBeforeFinalize = getThread(deps.db, args.threadId);
+  const finalized = await finalizeStoppedThread(deps, args);
+  if (!finalized) {
+    return false;
   }
 
+  const threadAfterFinalize = getThread(deps.db, args.threadId);
+  const environmentId =
+    threadAfterFinalize?.environmentId ??
+    threadBeforeFinalize?.environmentId ??
+    null;
+  if (environmentId) {
+    await advanceEnvironmentCleanup(deps, { environmentId });
+  }
   return true;
 }

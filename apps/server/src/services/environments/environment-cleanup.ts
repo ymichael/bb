@@ -29,8 +29,13 @@ import {
 } from "@bb/host-daemon-contract";
 import { z } from "zod";
 import { ApiError } from "../../errors.js";
-import type { AppDeps, SandboxWorkSessionDeps } from "../../types.js";
+import type {
+  AppDeps,
+  LoggedSandboxWorkSessionDeps,
+  SandboxWorkSessionDeps,
+} from "../../types.js";
 import { queueCommandAndWait } from "../hosts/command-wait.js";
+import { scheduleAfterDaemonIngressResponse } from "../hosts/command-wait-context.js";
 import { parseJsonWithSchema } from "../lib/json-parsing.js";
 
 export interface EnvironmentDestroyTarget {
@@ -41,6 +46,10 @@ export interface EnvironmentDestroyTarget {
 }
 
 export interface AdvanceEnvironmentCleanupArgs {
+  environmentId: string;
+}
+
+export interface RequestEnvironmentCleanupAdvanceArgs {
   environmentId: string | null | undefined;
 }
 
@@ -395,10 +404,6 @@ export async function advanceEnvironmentCleanup(
   deps: SandboxWorkSessionDeps,
   args: AdvanceEnvironmentCleanupArgs,
 ): Promise<void> {
-  if (!args.environmentId) {
-    return;
-  }
-
   const environment = getEnvironment(deps.db, args.environmentId);
   let destroyOperation = getEnvironmentOperation(deps.db, {
     environmentId: args.environmentId,
@@ -518,5 +523,36 @@ export async function advanceEnvironmentCleanup(
     path: environment.path,
     status: environment.status,
     workspaceProvisionType: environment.workspaceProvisionType,
+  });
+}
+
+export async function runEnvironmentCleanupAdvance(
+  deps: SandboxWorkSessionDeps,
+  args: AdvanceEnvironmentCleanupArgs,
+): Promise<void> {
+  await deps.lifecycleDedupers.environmentCleanupAdvance.run(
+    args.environmentId,
+    async () => {
+      await advanceEnvironmentCleanup(deps, args);
+    },
+  );
+}
+
+export function requestEnvironmentCleanupAdvance(
+  deps: LoggedSandboxWorkSessionDeps,
+  args: RequestEnvironmentCleanupAdvanceArgs,
+): void {
+  if (!args.environmentId) {
+    return;
+  }
+  const environmentId = args.environmentId;
+
+  scheduleAfterDaemonIngressResponse({
+    context: {
+      environmentId,
+    },
+    logger: deps.logger,
+    name: "Environment cleanup advance request",
+    work: () => runEnvironmentCleanupAdvance(deps, { environmentId }),
   });
 }

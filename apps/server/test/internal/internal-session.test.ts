@@ -602,12 +602,9 @@ describe("internal session routes", () => {
       const body = hostDaemonCommandResultResponseSchema.parse(
         await readJson(response),
       );
-      const initiatorSequenceAfterResult = getLatestThreadSequence(
-        harness.db,
-        {
-          threadId: initiator.id,
-        },
-      );
+      const initiatorSequenceAfterResult = getLatestThreadSequence(harness.db, {
+        threadId: initiator.id,
+      });
       const reuserSequenceAfterResult = getLatestThreadSequence(harness.db, {
         threadId: reuser.id,
       });
@@ -625,9 +622,12 @@ describe("internal session routes", () => {
       expect(reuserProvisioningEvents).toHaveLength(1);
       expect(reuserSequenceAfterResult).toBeGreaterThan(3);
       expect(initiatorSequenceAfterResult).toBeGreaterThan(6);
+      expect(body.threadHighWaterMarks).toMatchObject({
+        [initiator.id]: initiatorSequenceAfterResult,
+        [reuser.id]: reuserSequenceAfterResult,
+      });
 
-      const daemonNextReuserSequence =
-        (body.threadHighWaterMarks[reuser.id] ?? 3) + 1;
+      const daemonNextReuserSequence = reuserSequenceAfterResult + 1;
       const daemonEventResponse = await harness.app.request(
         "/internal/session/events",
         {
@@ -2764,9 +2764,6 @@ describe("internal session routes", () => {
 
       expect(response.status).toBe(200);
       expect(getThread(harness.db, thread.id)).toBeNull();
-      expect(getEnvironment(harness.db, environment.id)?.status).toBe(
-        "destroying",
-      );
 
       const destroyCommand = await waitForQueuedCommand(
         harness,
@@ -2775,6 +2772,9 @@ describe("internal session routes", () => {
           command.environmentId === environment.id,
       );
       expect(destroyCommand.row.cursor).toBeGreaterThan(stopCommand.cursor);
+      expect(getEnvironment(harness.db, environment.id)?.status).toBe(
+        "destroying",
+      );
     } finally {
       await harness.cleanup();
     }

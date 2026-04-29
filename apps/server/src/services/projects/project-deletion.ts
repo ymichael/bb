@@ -20,7 +20,7 @@ import {
   requestEnvironmentCleanup,
 } from "../environments/environment-cleanup.js";
 import {
-  finalizeStoppedThread,
+  finalizeStoppedThreadAndAdvanceCleanup,
   requestThreadStopIfNeeded,
 } from "../threads/thread-lifecycle.js";
 
@@ -71,9 +71,9 @@ async function advanceProjectThreadsForDeletion(
     if (environment) {
       requestThreadStopIfNeeded(deps, thread, environment);
     }
-    await finalizeStoppedThread(deps, {
-      threadId: thread.id,
+    await finalizeStoppedThreadAndAdvanceCleanup(deps, {
       cancelPendingCommand: false,
+      threadId: thread.id,
     });
   }
 }

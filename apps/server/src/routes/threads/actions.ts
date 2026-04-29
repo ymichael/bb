@@ -29,7 +29,10 @@ import {
   requirePublicThread,
   requirePublicThreadEnvironment,
 } from "../../services/lib/entity-lookup.js";
-import { sendQueuedDraft } from "../../services/threads/queued-drafts.js";
+import {
+  requestQueuedDraftAutoSendForThread,
+  sendQueuedDraft,
+} from "../../services/threads/queued-drafts.js";
 import {
   ensureThreadIsNotAwaitingUserInteraction,
   ensureThreadIsWritable,
@@ -40,6 +43,7 @@ import {
   resetActiveThreadEventPruningState,
 } from "../../services/system/event-pruning.js";
 import { buildExecutionOptions } from "../../services/threads/thread-commands.js";
+import { getLastProviderThreadId } from "../../services/threads/thread-events.js";
 import { requestThreadStopIfNeeded } from "../../services/threads/thread-lifecycle.js";
 
 async function validateArchiveCleanupRequest(
@@ -111,6 +115,15 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
         permissionMode: execution.permissionMode,
         serviceTier: execution.serviceTier,
       });
+      if (
+        thread.status === "idle" &&
+        getLastProviderThreadId(deps, thread.id) !== null
+      ) {
+        requestQueuedDraftAutoSendForThread(deps, {
+          draftId: draft.id,
+          threadId: thread.id,
+        });
+      }
       return context.json(toQueuedMessage(draft), 201);
     },
   );
@@ -191,11 +204,11 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
       });
       if (shouldRequestCleanup) {
         requestEnvironmentCleanup(deps, {
-          environmentId: thread.environmentId,
+          environmentId: environment.id,
           mode: force ? "force" : "safe",
         });
         await advanceEnvironmentCleanup(deps, {
-          environmentId: thread.environmentId,
+          environmentId: environment.id,
         });
       }
       return context.json({ ok: true });

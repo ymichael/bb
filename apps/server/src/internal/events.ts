@@ -34,7 +34,11 @@ import {
 } from "../services/environments/environment-cleanup.js";
 import { syncManagerThreadSchedules } from "../services/scheduling/manager-schedule-sync.js";
 import { queueManagerSystemMessage } from "../services/threads/manager-system-messages.js";
-import { sendNextQueuedDraftIfPresent } from "../services/threads/queued-drafts.js";
+import { runQueuedDraftAutoSendForThread } from "../services/threads/queued-drafts.js";
+import {
+  runWithDaemonCommandWaitForbidden,
+  scheduleAfterDaemonIngressResponse,
+} from "../services/hosts/command-wait-context.js";
 import { isPreStartThreadStatus } from "../services/threads/thread-status.js";
 import { tryTransition } from "../services/threads/thread-transitions.js";
 import { getAuthenticatedDaemon } from "./auth.js";
@@ -105,6 +109,54 @@ interface RenderManagedThreadTurnStatusMessageArgs {
   title: string | null;
   turnStatus: CompletedTurnStatus;
 }
+
+interface ManagerScheduleSyncFollowUp {
+  kind: "manager-schedule-sync";
+  threadId: string;
+}
+
+interface ManagerTurnNotificationFollowUp {
+  kind: "manager-turn-notification";
+  managedThreadId: string;
+  managerThreadId: string;
+  title: string | null;
+  turnStatus: CompletedTurnStatus;
+}
+
+interface QueuedDraftAutoSendFollowUp {
+  kind: "queued-draft-auto-send";
+  threadId: string;
+}
+
+type EventEffectFollowUp =
+  | ManagerScheduleSyncFollowUp
+  | ManagerTurnNotificationFollowUp
+  | QueuedDraftAutoSendFollowUp;
+
+interface EventEffectResult {
+  followUps: EventEffectFollowUp[];
+}
+
+interface ManagerScheduleSyncLogContext {
+  followUpKind: "manager-schedule-sync";
+  threadId: string;
+}
+
+interface ManagerTurnNotificationLogContext {
+  followUpKind: "manager-turn-notification";
+  managedThreadId: string;
+  managerThreadId: string;
+}
+
+interface QueuedDraftAutoSendLogContext {
+  followUpKind: "queued-draft-auto-send";
+  threadId: string;
+}
+
+type EventFollowUpLogContext =
+  | ManagerScheduleSyncLogContext
+  | ManagerTurnNotificationLogContext
+  | QueuedDraftAutoSendLogContext;
 
 function formatManagedThreadTitleSuffix(title: string | null): string {
   return title ? ` (${title})` : "";
@@ -247,7 +299,11 @@ async function archiveCompletedAutomationThreadIfNeeded(
 async function applyEventEffects(
   deps: LoggedPendingInteractionWorkSessionDeps,
   events: HostDaemonEventEnvelope[],
-): Promise<void> {
+): Promise<EventEffectResult> {
+  // Keep event-owned state changes inline so the daemon response contains the
+  // right high-water marks. Defer follow-ups that may queue daemon work until
+  // after the ingress route returns.
+  const followUps: EventEffectFollowUp[] = [];
   for (const entry of events) {
     try {
       const event = entry.event;
@@ -275,7 +331,8 @@ async function applyEventEffects(
           threadId: entry.threadId,
         });
         if (turnCompleted.thread?.parentThreadId) {
-          await queueManagedThreadTurnNotificationBestEffort(deps, {
+          followUps.push({
+            kind: "manager-turn-notification",
             managedThreadId: turnCompleted.thread.id,
             managerThreadId: turnCompleted.thread.parentThreadId,
             turnStatus: event.status,
@@ -283,7 +340,8 @@ async function applyEventEffects(
           });
         }
         if (event.status === "completed") {
-          await sendNextQueuedDraftIfPresent(deps, {
+          followUps.push({
+            kind: "queued-draft-auto-send",
             threadId: entry.threadId,
           });
         }
@@ -291,7 +349,8 @@ async function applyEventEffects(
           const latestThread = getThread(deps.db, turnCompleted.thread.id);
           if (latestThread?.status === "idle") {
             if (latestThread.type === "manager") {
-              await syncManagerThreadSchedules(deps, {
+              followUps.push({
+                kind: "manager-schedule-sync",
                 threadId: latestThread.id,
               });
             }
@@ -321,6 +380,94 @@ async function applyEventEffects(
       );
     }
   }
+  return { followUps };
+}
+
+async function executeEventFollowUp(
+  deps: LoggedPendingInteractionWorkSessionDeps,
+  followUp: EventEffectFollowUp,
+): Promise<void> {
+  switch (followUp.kind) {
+    case "manager-schedule-sync":
+      await syncManagerThreadSchedules(deps, {
+        threadId: followUp.threadId,
+      });
+      return;
+    case "manager-turn-notification":
+      await queueManagedThreadTurnNotificationBestEffort(deps, {
+        managedThreadId: followUp.managedThreadId,
+        managerThreadId: followUp.managerThreadId,
+        turnStatus: followUp.turnStatus,
+        title: followUp.title,
+      });
+      return;
+    case "queued-draft-auto-send":
+      await runQueuedDraftAutoSendForThread(deps, {
+        threadId: followUp.threadId,
+      });
+      return;
+  }
+}
+
+function eventFollowUpLogContext(
+  followUp: EventEffectFollowUp,
+): EventFollowUpLogContext {
+  switch (followUp.kind) {
+    case "manager-schedule-sync":
+    case "queued-draft-auto-send":
+      return {
+        followUpKind: followUp.kind,
+        threadId: followUp.threadId,
+      };
+    case "manager-turn-notification":
+      return {
+        followUpKind: followUp.kind,
+        managedThreadId: followUp.managedThreadId,
+        managerThreadId: followUp.managerThreadId,
+      };
+  }
+}
+
+async function executeEventFollowUpBestEffort(
+  deps: LoggedPendingInteractionWorkSessionDeps,
+  followUp: EventEffectFollowUp,
+): Promise<void> {
+  try {
+    await executeEventFollowUp(deps, followUp);
+  } catch (error) {
+    deps.logger.error(
+      {
+        ...eventFollowUpLogContext(followUp),
+        err: error,
+        followUp,
+      },
+      "Failed to run event follow-up",
+    );
+  }
+}
+
+async function executeEventFollowUpBatch(
+  deps: LoggedPendingInteractionWorkSessionDeps,
+  followUps: EventEffectFollowUp[],
+): Promise<void> {
+  await Promise.all(
+    followUps.map((followUp) => executeEventFollowUpBestEffort(deps, followUp)),
+  );
+}
+
+function deferEventFollowUpBatch(
+  deps: LoggedPendingInteractionWorkSessionDeps,
+  followUps: EventEffectFollowUp[],
+): void {
+  if (followUps.length === 0) {
+    return;
+  }
+
+  scheduleAfterDaemonIngressResponse({
+    logger: deps.logger,
+    name: "Event follow-up scheduling",
+    work: () => executeEventFollowUpBatch(deps, followUps),
+  });
 }
 
 function toTurnKey(args: TurnKeyArgs): string {
@@ -503,61 +650,71 @@ export function registerInternalEventRoutes(app: Hono, deps: AppDeps): void {
     "/session/events",
     hostDaemonEventBatchRequestSchema,
     async (context, payload) => {
-      const daemon = getAuthenticatedDaemon(context);
-      const session = requireAuthorizedActiveSession(deps.db, {
-        hostId: daemon.hostId,
-        sessionId: payload.sessionId,
-      });
-      const { canonicalEnvironmentIds } =
-        validateAndResolveCanonicalEventBatchEnvironments(deps, {
-          hostId: session.hostId,
-          events: payload.events,
-        });
-      if (payload.events.length > 0) {
-        void markSandboxActivity(deps, {
-          hostId: session.hostId,
-          source: "events",
-        });
-      }
-
-      const insertResult = insertEvents(
-        deps.db,
-        deps.hub,
-        payload.events.map((entry, index) => {
-          const environmentId = canonicalEnvironmentIds[index];
-          if (!environmentId) {
-            throw new Error(
-              "Missing canonical environment for validated event",
-            );
-          }
-          return toStoredEvent({
-            envelope: entry,
-            environmentId,
+      const result = await runWithDaemonCommandWaitForbidden({
+        reason: "/session/events",
+        work: async () => {
+          const daemon = getAuthenticatedDaemon(context);
+          const session = requireAuthorizedActiveSession(deps.db, {
+            hostId: daemon.hostId,
+            sessionId: payload.sessionId,
           });
-        }),
-      );
+          const { canonicalEnvironmentIds } =
+            validateAndResolveCanonicalEventBatchEnvironments(deps, {
+              hostId: session.hostId,
+              events: payload.events,
+            });
+          if (payload.events.length > 0) {
+            void markSandboxActivity(deps, {
+              hostId: session.hostId,
+              source: "events",
+            });
+          }
 
-      await applyEventEffects(
-        deps,
-        resolveEventsToApply({
-          db: deps.db,
-          events: payload.events,
-          insertedEventIndexes: insertResult.insertedInputIndexes,
-        }),
-      );
-      for (const candidate of resolveActivePruneCandidates({
-        events: payload.events,
-        insertedEventIndexes: insertResult.insertedInputIndexes,
-      })) {
-        maybePruneActiveThreadEventHistory(deps, candidate);
-      }
+          const insertResult = insertEvents(
+            deps.db,
+            deps.hub,
+            payload.events.map((entry, index) => {
+              const environmentId = canonicalEnvironmentIds[index];
+              if (!environmentId) {
+                throw new Error(
+                  "Missing canonical environment for validated event",
+                );
+              }
+              return toStoredEvent({
+                envelope: entry,
+                environmentId,
+              });
+            }),
+          );
 
-      return context.json({
-        threadHighWaterMarks: getHighWaterMarks(
-          deps.db,
-          payload.events.map((event) => event.threadId),
-        ),
+          const eventEffectResult = await applyEventEffects(
+            deps,
+            resolveEventsToApply({
+              db: deps.db,
+              events: payload.events,
+              insertedEventIndexes: insertResult.insertedInputIndexes,
+            }),
+          );
+          for (const candidate of resolveActivePruneCandidates({
+            events: payload.events,
+            insertedEventIndexes: insertResult.insertedInputIndexes,
+          })) {
+            maybePruneActiveThreadEventHistory(deps, candidate);
+          }
+
+          return {
+            followUps: eventEffectResult.followUps,
+            response: context.json({
+              threadHighWaterMarks: getHighWaterMarks(
+                deps.db,
+                payload.events.map((event) => event.threadId),
+              ),
+            }),
+          };
+        },
       });
+      deferEventFollowUpBatch(deps, result.followUps);
+      return result.response;
     },
   );
 }

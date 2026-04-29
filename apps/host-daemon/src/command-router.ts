@@ -1,7 +1,9 @@
 import type {
+  HostDaemonCommand,
   HostDaemonCommandEnvelope,
   HostDaemonCommandResultReportWithoutSession,
 } from "@bb/host-daemon-contract";
+import { shouldFlushEventsBeforeReportingCommandResult } from "@bb/host-daemon-contract";
 import {
   dispatchCommand,
   getErrorCode,
@@ -11,6 +13,11 @@ import type { HostDaemonLogger } from "./logger.js";
 import { RuntimeManager } from "./runtime-manager.js";
 
 type CommandResultReport = HostDaemonCommandResultReportWithoutSession;
+
+interface PendingCommandResultReport {
+  command: HostDaemonCommand;
+  result: CommandResultReport;
+}
 
 export interface CommandRouterOptions {
   dataDir: CommandDispatchOptions["dataDir"];
@@ -36,7 +43,7 @@ export class CommandRouter {
   private readonly now;
   private readonly environmentLanes = new Map<string, Promise<void>>();
   private hostRuntimeMaterialLane: Promise<void> = Promise.resolve();
-  private readonly pendingResults: CommandResultReport[] = [];
+  private readonly pendingResults: PendingCommandResultReport[] = [];
   private reportingPromise: Promise<void> = Promise.resolve();
 
   constructor(private readonly options: CommandRouterOptions) {
@@ -77,16 +84,20 @@ export class CommandRouter {
     }
 
     const result = await task;
+    const report: PendingCommandResultReport = {
+      command: envelope.command,
+      result,
+    };
     if (envelope.command.type === "environment.destroy" && result.ok) {
       this.environmentLanes.delete(envelope.command.environmentId);
     }
     this.reportingPromise = this.reportingPromise
       .then(async () => {
         await this.drainPending();
-        await this.reportCommandResult(result);
+        await this.reportCommandResult(report);
       })
       .catch((error) => {
-        this.pendingResults.push(result);
+        this.pendingResults.push(report);
         this.logger.warn(
           { err: error },
           "failed to report command result, will retry on next completion",
@@ -106,18 +117,26 @@ export class CommandRouter {
 
   private async drainPending(): Promise<void> {
     while (this.pendingResults.length > 0) {
-      const result = this.pendingResults[0];
-      if (!result) {
+      const report = this.pendingResults[0];
+      if (!report) {
         return;
       }
-      await this.reportCommandResult(result);
+      await this.reportCommandResult(report);
       this.pendingResults.shift();
     }
   }
 
-  private async reportCommandResult(result: CommandResultReport): Promise<void> {
-    await this.options.eventSink.flush();
-    await this.reportResult(result);
+  private async reportCommandResult(
+    report: PendingCommandResultReport,
+  ): Promise<void> {
+    // Commands that can emit thread events before completing keep the old
+    // event-before-result ordering. Pure reads and host-local commands skip the
+    // router flush so an in-flight event POST cannot deadlock while waiting for
+    // a nested command result.
+    if (shouldFlushEventsBeforeReportingCommandResult(report.command)) {
+      await this.options.eventSink.flush();
+    }
+    await this.reportResult(report.result);
   }
 
   private runInEnvironmentLane<T>(

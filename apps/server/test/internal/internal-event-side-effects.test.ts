@@ -13,11 +13,7 @@ import {
   markThreadStopRequested,
   threads,
 } from "@bb/db";
-import {
-  threadScope,
-  turnRequestEventDataSchema,
-  turnScope,
-} from "@bb/domain";
+import { threadScope, turnRequestEventDataSchema, turnScope } from "@bb/domain";
 import { renderTemplate } from "@bb/templates";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -226,6 +222,102 @@ describe("internal event side effects", () => {
     }
   });
 
+  it("responds before manager queued-draft auto-send waits on preferences", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-event-manager-draft-auto-send",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/manager-queued-draft-auto-send",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "active",
+        type: "manager",
+      });
+      seedThreadRuntimeState(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-manager-draft-auto-send",
+        inputText: "Initial manager task",
+        model: "gpt-5.4",
+      });
+      seedDraft(harness.deps, {
+        threadId: thread.id,
+        content: [{ type: "text", text: "Queued manager follow-up" }],
+        model: "gpt-5",
+        serviceTier: "default",
+      });
+
+      const responsePromise = harness.app.request("/internal/session/events", {
+        method: "POST",
+        headers: internalAuthHeaders(harness),
+        body: JSON.stringify({
+          sessionId: session.id,
+          events: [
+            {
+              environmentId: environment.id,
+              threadId: thread.id,
+              sequence: 3,
+              createdAt: Date.now(),
+              event: {
+                type: "turn/completed",
+                threadId: thread.id,
+                providerThreadId: "provider-manager-draft-auto-send",
+                turnId: "turn-manager-draft-auto-send",
+                scope: turnScope("turn-manager-draft-auto-send"),
+                status: "completed",
+              },
+            },
+          ],
+        }),
+      });
+
+      const response = await responsePromise;
+      expect(response.status).toBe(200);
+
+      const managerPreferencesPath = `/tmp/bb-host-data/${host.id}/thread-storage/${thread.id}/PREFERENCES.md`;
+      const preferencesReadCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "host.read_file" &&
+          command.path === managerPreferencesPath,
+      );
+      const readResponse = await reportQueuedCommandError(
+        harness,
+        preferencesReadCommand,
+        {
+          errorCode: "ENOENT",
+          errorMessage: "File not found",
+        },
+      );
+      expect(readResponse.status).toBe(200);
+
+      const queuedCommand = await waitForQueuedCommandAfter(
+        harness,
+        preferencesReadCommand.row.cursor,
+        ({ command }) =>
+          command.type === "turn.submit" && command.threadId === thread.id,
+      );
+      expect(queuedCommand.command).toMatchObject({
+        input: [{ type: "text", text: "Queued manager follow-up" }],
+        options: {
+          model: "gpt-5",
+          serviceTier: "default",
+        },
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("auto-sends the next queued draft even when a pending interaction exists", async () => {
     const harness = await createTestAppHarness();
     try {
@@ -265,7 +357,9 @@ describe("internal event side effects", () => {
       });
       seedDraft(harness.deps, {
         threadId: thread.id,
-        content: [{ type: "text", text: "Queued follow-up with pending interaction" }],
+        content: [
+          { type: "text", text: "Queued follow-up with pending interaction" },
+        ],
         model: "gpt-5",
         serviceTier: "default",
       });
@@ -1033,6 +1127,9 @@ describe("internal event side effects", () => {
       });
 
       const asyncPath = `/tmp/bb-host-data/${host.id}/thread-storage/${thread.id}/ASYNC.md`;
+      const response = await responsePromise;
+      expect(response.status).toBe(200);
+
       const queued = await waitForQueuedCommand(
         harness,
         ({ command }) =>
@@ -1057,13 +1154,13 @@ describe("internal event side effects", () => {
       });
       expect(readResponse.status).toBe(200);
 
-      const response = await responsePromise;
-      expect(response.status).toBe(200);
-      expect(
-        listManagerThreadNudgesByThread(harness.db, thread.id).map(
-          (nudge) => nudge.name,
-        ),
-      ).toEqual(["daily-recap"]);
+      await vi.waitFor(() => {
+        expect(
+          listManagerThreadNudgesByThread(harness.db, thread.id).map(
+            (nudge) => nudge.name,
+          ),
+        ).toEqual(["daily-recap"]);
+      });
     } finally {
       await harness.cleanup();
     }

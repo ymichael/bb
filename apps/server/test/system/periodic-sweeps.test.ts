@@ -1,11 +1,13 @@
 import { setTimeout as sleep } from "node:timers/promises";
 import { eq } from "drizzle-orm";
 import {
+  claimDraft,
   getActiveSession,
   archiveThread,
   closeSession,
   fetchCommands,
   getEnvironment,
+  getDraft,
   getEnvironmentOperation,
   getHost,
   getHostOperation,
@@ -16,10 +18,12 @@ import {
   markEphemeralHostActivity,
   openSession,
   queueCommand,
+  queuedThreadMessages,
   reportCommandResult,
   transitionThreadStatus,
   upsertHost,
 } from "@bb/db";
+import { hostDaemonCommandSchema } from "@bb/host-daemon-contract";
 import type { SandboxHostProgressCallbacks } from "@bb/sandbox-host";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -46,11 +50,14 @@ import {
   requestEnvironmentCleanup,
 } from "../../src/services/environments/environment-cleanup.js";
 import { requestThreadStop } from "../../src/services/threads/thread-lifecycle.js";
+import { sendQueuedDraft } from "../../src/services/threads/queued-drafts.js";
 import {
   seedEnvironment,
+  seedDraft,
   seedHostSession,
   seedProjectWithSource,
   seedThread,
+  seedThreadRuntimeState,
 } from "../helpers/seed.js";
 import {
   createAllowOnceResolution,
@@ -58,6 +65,7 @@ import {
 } from "../helpers/pending-interactions.js";
 import { createTestAppHarness } from "../helpers/test-app.js";
 import {
+  reportQueuedCommandError,
   reportNextRuntimeMaterialSyncSuccess,
   waitForQueuedCommand,
   waitForQueuedCommandAfter,
@@ -622,6 +630,214 @@ describe("periodic sweeps", () => {
         environmentId: environment.id,
         threadId: thread.id,
       });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("auto-sends queued drafts left on idle threads", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-periodic-queued-draft",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/periodic-queued-draft-source",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/periodic-queued-draft-environment",
+        workspaceProvisionType: "unmanaged",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "idle",
+      });
+      seedThreadRuntimeState(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-periodic-queued-draft",
+      });
+      const draft = seedDraft(harness.deps, {
+        threadId: thread.id,
+        content: [{ type: "text", text: "Recover queued follow-up" }],
+      });
+
+      await runPeriodicSweeps(harness.deps);
+
+      const queued = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "turn.submit" && command.threadId === thread.id,
+      );
+      expect(queued.command).toMatchObject({
+        environmentId: environment.id,
+        input: [{ type: "text", text: "Recover queued follow-up" }],
+        resumeContext: {
+          providerThreadId: "provider-periodic-queued-draft",
+        },
+      });
+      expect(getDraft(harness.db, draft.id)).toBeNull();
+      expect(getThread(harness.db, thread.id)?.status).toBe("active");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("auto-sends stale claimed queued drafts left on idle threads", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-periodic-stale-claimed-draft",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/periodic-stale-claimed-draft-source",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/periodic-stale-claimed-draft-environment",
+        workspaceProvisionType: "unmanaged",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "idle",
+      });
+      seedThreadRuntimeState(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-periodic-stale-claimed-draft",
+      });
+      const draft = seedDraft(harness.deps, {
+        threadId: thread.id,
+        content: [{ type: "text", text: "Recover stale claimed follow-up" }],
+      });
+      expect(claimDraft(harness.db, harness.hub, draft.id)?.id).toBe(draft.id);
+      harness.db
+        .update(queuedThreadMessages)
+        .set({ claimedAt: Date.now() - 10 * 60_000 })
+        .where(eq(queuedThreadMessages.id, draft.id))
+        .run();
+
+      await runPeriodicSweeps(harness.deps);
+
+      const queued = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "turn.submit" && command.threadId === thread.id,
+      );
+      expect(queued.command).toMatchObject({
+        environmentId: environment.id,
+        input: [{ type: "text", text: "Recover stale claimed follow-up" }],
+        resumeContext: {
+          providerThreadId: "provider-periodic-stale-claimed-draft",
+        },
+      });
+      expect(getDraft(harness.db, draft.id)).toBeNull();
+      expect(getThread(harness.db, thread.id)?.status).toBe("active");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("does not double-send when a stale draft claimant resumes after recovery", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-periodic-stale-claim-race",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/periodic-stale-claim-race-source",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/periodic-stale-claim-race-environment",
+        workspaceProvisionType: "unmanaged",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "idle",
+        type: "manager",
+      });
+      seedThreadRuntimeState(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-periodic-stale-claim-race",
+      });
+      const draft = seedDraft(harness.deps, {
+        threadId: thread.id,
+        content: [{ type: "text", text: "Recover without duplicate" }],
+      });
+
+      const firstSend = sendQueuedDraft(harness.deps, {
+        draftId: draft.id,
+        threadId: thread.id,
+      });
+      const firstPreferencesRead = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "host.read_file" &&
+          command.path.endsWith("/PREFERENCES.md"),
+      );
+      const firstClaim = getDraft(harness.db, draft.id);
+      expect(firstClaim?.claimToken).toMatch(/^dclaim_/);
+      harness.db
+        .update(queuedThreadMessages)
+        .set({ claimedAt: Date.now() - 10 * 60_000 })
+        .where(eq(queuedThreadMessages.id, draft.id))
+        .run();
+
+      const recoverySweep = runPeriodicSweeps(harness.deps);
+      const secondPreferencesRead = await waitForQueuedCommandAfter(
+        harness,
+        firstPreferencesRead.row.cursor,
+        ({ command }) =>
+          command.type === "host.read_file" &&
+          command.path.endsWith("/PREFERENCES.md"),
+      );
+      await reportQueuedCommandError(harness, secondPreferencesRead, {
+        errorCode: "ENOENT",
+        errorMessage: "No preferences file",
+      });
+
+      const recoveredSubmit = await waitForQueuedCommandAfter(
+        harness,
+        secondPreferencesRead.row.cursor,
+        ({ command }) =>
+          command.type === "turn.submit" && command.threadId === thread.id,
+      );
+      expect(recoveredSubmit.command).toMatchObject({
+        input: [{ type: "text", text: "Recover without duplicate" }],
+      });
+      await recoverySweep;
+      expect(getDraft(harness.db, draft.id)).toBeNull();
+
+      await reportQueuedCommandError(harness, firstPreferencesRead, {
+        errorCode: "ENOENT",
+        errorMessage: "No preferences file",
+      });
+      await expect(firstSend).rejects.toMatchObject({
+        body: { code: "draft_claim_lost" },
+      });
+
+      const turnSubmits = harness.db
+        .select()
+        .from(hostDaemonCommands)
+        .all()
+        .map((row) => hostDaemonCommandSchema.parse(JSON.parse(row.payload)))
+        .filter(
+          (command) =>
+            command.type === "turn.submit" && command.threadId === thread.id,
+        );
+      expect(turnSubmits).toHaveLength(1);
     } finally {
       await harness.cleanup();
     }

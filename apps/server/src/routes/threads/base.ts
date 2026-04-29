@@ -179,11 +179,11 @@ export function registerThreadBaseRoutes(app: Hono, deps: AppDeps): void {
       cancelPendingCommand: false,
     });
     requestEnvironmentCleanup(deps, {
-      environmentId: thread.environmentId,
+      environmentId: environment.id,
       mode: "force",
     });
     await advanceEnvironmentCleanup(deps, {
-      environmentId: thread.environmentId,
+      environmentId: environment.id,
     });
     return context.json({ ok: true });
   });

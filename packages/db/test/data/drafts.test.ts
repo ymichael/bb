@@ -6,10 +6,14 @@ import {
   claimDraft,
   claimNextDraft,
   createDraft,
+  deleteClaimedDraft,
+  deleteClaimedDraftInTransaction,
   deleteDraft,
+  deleteDraftInTransaction,
   getDraft,
   listDrafts,
   releaseDraftClaim,
+  releaseStaleDraftClaims,
 } from "../../src/data/drafts.js";
 import { createProject } from "../../src/data/projects.js";
 import { createThread } from "../../src/data/threads.js";
@@ -109,6 +113,25 @@ describe("drafts", () => {
     expect(deleteDraft(db, noopNotifier, draft.id)).toBe(false);
   });
 
+  it("deletes a draft in a caller-owned transaction", () => {
+    const { db, thread } = setup();
+    const draft = createDraft(db, noopNotifier, {
+      threadId: thread.id,
+      content: defaultInput,
+      model: "gpt-5",
+      reasoningLevel: "medium",
+      permissionMode: "full",
+      serviceTier: "default",
+    });
+
+    const deleted = db.transaction((tx) =>
+      deleteDraftInTransaction(tx, { id: draft.id }),
+    );
+
+    expect(deleted).toBe(true);
+    expect(getDraft(db, draft.id)).toBeNull();
+  });
+
   it("claims a draft and hides it from the queue until the claim is released", () => {
     const { db, thread } = setup();
     const draft = createDraft(db, noopNotifier, {
@@ -122,10 +145,115 @@ describe("drafts", () => {
 
     const claimedDraft = claimDraft(db, noopNotifier, draft.id);
     expect(claimedDraft?.id).toBe(draft.id);
+    expect(claimedDraft?.claimToken).toMatch(/^dclaim_/);
     expect(listDrafts(db, thread.id)).toHaveLength(0);
 
-    expect(releaseDraftClaim(db, noopNotifier, draft.id)).toBe(true);
+    if (!claimedDraft) {
+      throw new Error("Expected draft claim");
+    }
+    expect(
+      releaseDraftClaim(db, noopNotifier, {
+        id: draft.id,
+        claimToken: claimedDraft.claimToken,
+      }),
+    ).toBe(true);
     expect(listDrafts(db, thread.id)).toHaveLength(1);
+  });
+
+  it("does not release or consume a draft claimed by another owner", () => {
+    const { db, thread } = setup();
+    const draft = createDraft(db, noopNotifier, {
+      threadId: thread.id,
+      content: defaultInput,
+      model: "gpt-5",
+      reasoningLevel: "medium",
+      permissionMode: "full",
+      serviceTier: "default",
+    });
+    const firstClaim = claimDraft(db, noopNotifier, draft.id);
+    if (!firstClaim) {
+      throw new Error("Expected first draft claim");
+    }
+    expect(
+      releaseDraftClaim(db, noopNotifier, {
+        id: draft.id,
+        claimToken: "dclaim_staleowner",
+      }),
+    ).toBe(false);
+    expect(getDraft(db, draft.id)?.claimToken).toBe(firstClaim.claimToken);
+    expect(
+      db.transaction((tx) =>
+        deleteClaimedDraftInTransaction(tx, {
+          id: draft.id,
+          claimToken: "dclaim_staleowner",
+        }),
+      ),
+    ).toBe(false);
+
+    expect(
+      releaseDraftClaim(db, noopNotifier, {
+        id: draft.id,
+        claimToken: firstClaim.claimToken,
+      }),
+    ).toBe(true);
+    const secondClaim = claimDraft(db, noopNotifier, draft.id);
+    if (!secondClaim) {
+      throw new Error("Expected second draft claim");
+    }
+    expect(secondClaim.claimToken).not.toBe(firstClaim.claimToken);
+    expect(
+      db.transaction((tx) =>
+        deleteClaimedDraftInTransaction(tx, {
+          id: draft.id,
+          claimToken: firstClaim.claimToken,
+        }),
+      ),
+    ).toBe(false);
+    expect(
+      deleteClaimedDraft(db, noopNotifier, {
+        id: draft.id,
+        claimToken: firstClaim.claimToken,
+      }),
+    ).toBe(false);
+    expect(getDraft(db, draft.id)?.claimToken).toBe(secondClaim.claimToken);
+    expect(
+      deleteClaimedDraft(db, noopNotifier, {
+        id: draft.id,
+        claimToken: secondClaim.claimToken,
+      }),
+    ).toBe(true);
+    expect(getDraft(db, draft.id)).toBeNull();
+  });
+
+  it("releases stale draft claims", () => {
+    const { db, thread } = setup();
+    const nowSpy = vi.spyOn(Date, "now");
+    try {
+      nowSpy.mockReturnValue(1_000);
+      const draft = createDraft(db, noopNotifier, {
+        threadId: thread.id,
+        content: defaultInput,
+        model: "gpt-5",
+        reasoningLevel: "medium",
+        permissionMode: "full",
+        serviceTier: "default",
+      });
+      const claimedDraft = claimDraft(db, noopNotifier, draft.id);
+      expect(claimedDraft?.claimedAt).toBe(1_000);
+      expect(claimedDraft?.claimToken).toMatch(/^dclaim_/);
+      expect(listDrafts(db, thread.id)).toHaveLength(0);
+
+      nowSpy.mockReturnValue(10_000);
+      expect(
+        releaseStaleDraftClaims(db, noopNotifier, { claimedBefore: 5_000 }),
+      ).toBe(1);
+      expect(listDrafts(db, thread.id).map((row) => row.id)).toEqual([
+        draft.id,
+      ]);
+      expect(getDraft(db, draft.id)?.claimToken).toBeNull();
+    } finally {
+      nowSpy.mockRestore();
+    }
   });
 
   it("claims the oldest queued draft first", () => {

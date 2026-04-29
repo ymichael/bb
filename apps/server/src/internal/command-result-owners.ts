@@ -31,10 +31,10 @@ import type {
   LifecycleCoordinationDeps,
 } from "../lifecycle-coordination-deps.js";
 import {
-  advanceEnvironmentCleanup,
   completeEnvironmentDestroyForCommand,
   failEnvironmentDestroyForCommand,
   hasActiveEnvironmentDestroyOperationForCommand,
+  requestEnvironmentCleanupAdvance,
 } from "../services/environments/environment-cleanup.js";
 import {
   completeEnvironmentProvisioningForCommand,
@@ -90,9 +90,7 @@ type ParsedCommandForType<TType extends ParsedCommandType> = Extract<
   ParsedHostDaemonCommand,
   { type: TType }
 >;
-interface CommandResultFailureReportForType<
-  TType extends ParsedCommandType,
-> {
+interface CommandResultFailureReportForType<TType extends ParsedCommandType> {
   commandId: string;
   completedAt: number;
   errorCode: string;
@@ -100,9 +98,7 @@ interface CommandResultFailureReportForType<
   ok: false;
   type: TType;
 }
-interface CommandResultSuccessReportForType<
-  TType extends ParsedCommandType,
-> {
+interface CommandResultSuccessReportForType<TType extends ParsedCommandType> {
   commandId: string;
   completedAt: number;
   ok: true;
@@ -117,10 +113,13 @@ type WorkspaceMutationCommandType =
   | "workspace.demote"
   | "workspace.promote"
   | "workspace.squash_merge";
-type WorkspaceMutationCommand = ParsedCommandForType<WorkspaceMutationCommandType>;
+type WorkspaceMutationCommand =
+  ParsedCommandForType<WorkspaceMutationCommandType>;
 type WorkspaceMutationResultReport =
   CommandResultReportForType<WorkspaceMutationCommandType>;
-type ThreadFailureCommand = ParsedCommandForType<"thread.start" | "turn.submit">;
+type ThreadFailureCommand = ParsedCommandForType<
+  "thread.start" | "turn.submit"
+>;
 type ThreadFailureResultReport =
   | CommandResultFailureReportForType<"thread.start">
   | CommandResultFailureReportForType<"turn.submit">;
@@ -128,9 +127,10 @@ type CommandResultOwnerMode =
   | "result-handler-error"
   | "settled-active-side-effects";
 
-interface ApplyCommandResultSideEffectsArgs<
-  TType extends ParsedCommandType,
-> {
+// Command-result owners apply durable command-owned state inline before the
+// daemon response. Work that can queue or wait for another daemon command must
+// be requested through its lifecycle owner so the ingress route can return.
+interface ApplyCommandResultSideEffectsArgs<TType extends ParsedCommandType> {
   command: ParsedCommandForType<TType>;
   commandRow: HostDaemonCommandRow;
   deps: CommandResultSideEffectsDeps;
@@ -305,7 +305,12 @@ async function handleProvisionCommandResult(
 
     for (const thread of boundThreads) {
       if (thread.deletedAt !== null) {
-        await finalizeStoppedThread(args.deps, { threadId: thread.id });
+        await finalizeStoppedThread(args.deps, {
+          threadId: thread.id,
+        });
+        requestEnvironmentCleanupAdvance(args.deps, {
+          environmentId: thread.environmentId,
+        });
         continue;
       }
       if (thread.archivedAt !== null || thread.stopRequestedAt !== null) {
@@ -352,7 +357,7 @@ async function handleProvisionCommandResult(
       commandId: args.commandRow.id,
     });
 
-    await advanceEnvironmentCleanup(args.deps, {
+    requestEnvironmentCleanupAdvance(args.deps, {
       environmentId: args.command.environmentId,
     });
     return;
@@ -507,9 +512,12 @@ async function handleThreadStopResult(
   }
 
   await finalizeStoppedThread(args.deps, {
-    threadId: args.command.threadId,
     cancelPendingCommand: false,
     expectedCommandId: args.commandRow.id,
+    threadId: args.command.threadId,
+  });
+  requestEnvironmentCleanupAdvance(args.deps, {
+    environmentId: args.command.environmentId,
   });
 }
 

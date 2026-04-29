@@ -72,6 +72,10 @@ export function createDraftId(): string {
   return createId("draft");
 }
 
+export function createDraftClaimToken(): string {
+  return createId("dclaim");
+}
+
 export function createPendingInteractionId(): string {
   return createId("pint");
 }
