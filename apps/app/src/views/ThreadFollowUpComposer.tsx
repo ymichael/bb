@@ -301,7 +301,9 @@ export function ThreadFollowUpComposer({
 
   return (
     <>
-      <ThreadTimelineScrollToBottomButton />
+      <ThreadTimelineScrollToBottomButton
+        active={composer.threadStatus === "active"}
+      />
       <div className="space-y-2">
         {banner.showPromptGitStatsBanner ? (
           <div

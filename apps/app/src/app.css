@@ -358,6 +358,13 @@ body.sidebar-resizing [data-sidebar="panel"] {
     -webkit-text-fill-color: transparent;
     animation: shine 2s linear infinite;
   }
+
+  .animate-typing-dot {
+    animation-name: typing-dot;
+    animation-duration: 1.2s;
+    animation-timing-function: ease-in-out;
+    animation-iteration-count: infinite;
+  }
 }
 
 @keyframes shine {
@@ -366,6 +373,19 @@ body.sidebar-resizing [data-sidebar="panel"] {
   }
   100% {
     background-position: -200% 0%;
+  }
+}
+
+@keyframes typing-dot {
+  0%,
+  80%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.35;
+  }
+  40% {
+    transform: translateY(-3px);
+    opacity: 1;
   }
 }
 

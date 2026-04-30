@@ -3,11 +3,13 @@ import { cn } from "@/lib/utils";
 
 export function ScrollToBottomButton({
   visible,
+  active = false,
   onClick,
   className,
   ariaLabel = "Scroll to latest event",
 }: {
   visible: boolean;
+  active?: boolean;
   onClick: () => void;
   className?: string;
   ariaLabel?: string;
@@ -25,8 +27,18 @@ export function ScrollToBottomButton({
         aria-label={ariaLabel}
         type="button"
       >
-        <ArrowDown className="size-4" />
+        {active ? <TypingDots /> : <ArrowDown className="size-4" />}
       </button>
     </div>
+  );
+}
+
+function TypingDots() {
+  return (
+    <span className="flex items-center gap-0.5" aria-hidden>
+      <span className="size-1 animate-typing-dot rounded-full bg-current [animation-delay:-240ms]" />
+      <span className="size-1 animate-typing-dot rounded-full bg-current [animation-delay:-120ms]" />
+      <span className="size-1 animate-typing-dot rounded-full bg-current" />
+    </span>
   );
 }
