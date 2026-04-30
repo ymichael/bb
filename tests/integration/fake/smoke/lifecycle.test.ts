@@ -339,6 +339,6 @@ describe.sequential("fake provider smoke lifecycle integration", () => {
         await getThreadEvents(harness.api, thread.id)
       ).filter((event) => event.type === "system/thread/interrupted");
       const latestInterruptedEvent = interruptedEvents.at(-1);
-      expect(latestInterruptedEvent?.data.reason).toBe("user");
+      expect(latestInterruptedEvent?.data.reason).toBe("manual-stop");
     }));
 });

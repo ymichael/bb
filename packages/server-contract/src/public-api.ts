@@ -7,7 +7,6 @@ import type {
   PendingInteraction,
   ProjectExecutionDefaults,
   ResolvedThreadExecutionOptions,
-  Thread,
   ThreadEventRow,
   ThreadGitDiffResponse,
   ProjectSource,
@@ -75,6 +74,7 @@ import type {
   ThreadListQuery,
   ThreadListResponse,
   ThreadPendingInteractionsResponse,
+  ThreadResponse,
   ThreadTimelineQuery,
   ThreadTimelineResponse,
   TimelineTurnSummaryDetailsQuery,
@@ -207,7 +207,7 @@ export type PublicApiSchema = {
     /** Create a manager thread for the project. Same flow as POST /threads with type="manager". */
     $post: Endpoint<
       PathProjectId & { json: CreateManagerThreadRequest },
-      Thread,
+      ThreadResponse,
       201
     >;
   };
@@ -294,12 +294,12 @@ export type PublicApiSchema = {
      * If input is provided, the thread starts automatically after provisioning.
      * A title is generated asynchronously if not provided.
      */
-    $post: Endpoint<{ json: CreateThreadRequest }, Thread, 201>;
+    $post: Endpoint<{ json: CreateThreadRequest }, ThreadResponse, 201>;
   };
   "/threads/:id": {
-    $get: Endpoint<PathId, Thread>;
+    $get: Endpoint<PathId, ThreadResponse>;
     /** Update thread metadata. If the title changes, also notifies providers that support `thread.rename`. */
-    $patch: Endpoint<PathId & { json: UpdateThreadRequest }, Thread>;
+    $patch: Endpoint<PathId & { json: UpdateThreadRequest }, ThreadResponse>;
     /** Delete a thread. Also destroys its environment if one exists. */
     $delete: Endpoint<PathId, { ok: true }>;
   };
@@ -365,10 +365,10 @@ export type PublicApiSchema = {
     $post: Endpoint<PathId, { ok: true }>;
   };
   "/threads/:id/read": {
-    $post: Endpoint<PathId, Thread>;
+    $post: Endpoint<PathId, ThreadResponse>;
   };
   "/threads/:id/unread": {
-    $post: Endpoint<PathId, Thread>;
+    $post: Endpoint<PathId, ThreadResponse>;
   };
   "/threads/:id/timeline": {
     /** Get thread timeline for UI rendering. Events transformed via `@bb/core-ui`. */

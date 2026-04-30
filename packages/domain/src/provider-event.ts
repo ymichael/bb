@@ -265,7 +265,9 @@ const unscopedProviderEventSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("turn/completed"),
     threadId: z.string(),
-    providerThreadId: z.string(),
+    // Server reconciliation can synthesize interrupted completions when the
+    // original provider thread id was never persisted.
+    providerThreadId: z.string().nullable(),
     status: threadEventTurnStatusSchema,
     error: z.object({ message: z.string() }).optional(),
   }),

@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { hostDaemonCommands } from "@bb/db";
+import { hostDaemonCommands, listEvents } from "@bb/db";
 import { ApiError } from "../../src/errors.js";
 import { sendThreadMessage } from "../../src/services/threads/thread-send.js";
 import { createCommandApprovalPayload } from "../helpers/pending-interactions.js";
 import {
   seedEnvironment,
+  seedHost,
   seedHostSession,
   seedProjectWithSource,
   seedThread,
@@ -124,6 +125,53 @@ describe("sendThreadMessage", () => {
       expect(["thread.start", "turn.submit"]).toContain(
         queuedCommands[0]?.type,
       );
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("rejects active-thread sends while the host is unavailable before appending a client event", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const host = seedHost(harness.deps, {
+        id: "host-thread-send-waiting-for-host",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        environmentId: environment.id,
+        projectId: project.id,
+        status: "active",
+      });
+
+      await expect(
+        sendThreadMessage(harness.deps, {
+          environment,
+          payload: {
+            input: [{ type: "text", text: "should not append" }],
+            mode: "auto",
+            model: "gpt-5.4",
+            permissionMode: "full",
+            reasoningLevel: "medium",
+            serviceTier: "default",
+          },
+          thread,
+          trigger: "user",
+        }),
+      ).rejects.toMatchObject<ApiError>({
+        status: 502,
+        body: {
+          code: "host_disconnected",
+        },
+      });
+
+      expect(harness.db.select().from(hostDaemonCommands).all()).toEqual([]);
+      expect(listEvents(harness.db, { threadId: thread.id })).toEqual([]);
     } finally {
       await harness.cleanup();
     }

@@ -389,6 +389,10 @@ describe("server-contract canonical schemas", () => {
           latestAttentionAt: 2,
           createdAt: 1,
           updatedAt: 2,
+          runtime: {
+            displayStatus: "idle",
+            hostReconnectGraceExpiresAt: null,
+          },
           hasPendingInteraction: true,
           environmentHostId: "host_123",
           environmentBranchName: "bb/test",
@@ -540,7 +544,9 @@ describe("server-contract canonical schemas", () => {
       }),
     ).toThrow("Project path must be an absolute path.");
 
-    expect(timelineTurnSummaryDetailsResponseSchema.parse({ rows: [] })).toEqual({
+    expect(
+      timelineTurnSummaryDetailsResponseSchema.parse({ rows: [] }),
+    ).toEqual({
       rows: [],
     });
 

@@ -8,11 +8,14 @@ import {
   getThread,
   getThreadOperation,
   getThreadOperationByCommandId,
+  listThreadTurnInterruptionEventStates,
   markThreadStopRequested,
   queueCommand,
+  transitionThreadStatusInTransaction,
   type DbConnection,
   type DbTransaction,
 } from "@bb/db";
+import { assertNever } from "@bb/core-ui";
 import {
   markThreadOperationRecordCompleted,
   markThreadOperationRecordFailed,
@@ -24,8 +27,12 @@ import {
   type PromptInput,
   type PermissionEscalation,
   type ResolvedThreadExecutionOptions,
+  type SystemThreadInterruptedReason,
   type Thread,
+  type ThreadStatus,
   type WorkspaceProvisionType,
+  threadScope,
+  turnScope,
 } from "@bb/domain";
 import {
   threadStartCommandSchema,
@@ -41,9 +48,15 @@ import {
   advanceEnvironmentCleanup,
   requestEnvironmentCleanup,
 } from "../environments/environment-cleanup.js";
-import { appendThreadInterruptedEvent } from "./thread-events.js";
+import {
+  appendThreadEventInTransaction,
+  appendThreadEventsInTransaction,
+  appendThreadInterruptedEvent,
+  appendThreadInterruptedEventInTransaction,
+  getActiveTurnId,
+  getLastProviderThreadId,
+} from "./thread-events.js";
 import { tryTransition } from "./thread-transitions.js";
-import { getLastProviderThreadId } from "./thread-events.js";
 import {
   buildThreadStartCommand,
   buildThreadStopCommand,
@@ -60,6 +73,9 @@ import { isPreStartThreadStatus } from "./thread-status.js";
 
 type QueueReadyThreadTurnCommandResult = "thread.start" | "turn.submit";
 type ThreadStartCommand = Awaited<ReturnType<typeof buildThreadStartCommand>>;
+type ThreadEventAppendArgs = Parameters<
+  typeof appendThreadEventsInTransaction
+>[1][number];
 
 const threadStartRequestDeduper = createAsyncDeduper<string, void>();
 
@@ -92,6 +108,31 @@ export interface FinalizeStoppedThreadArgs {
   threadId: string;
 }
 
+export interface InterruptActiveTurnForThreadArgs {
+  environmentId: string | null;
+  reason: SystemThreadInterruptedReason;
+  threadId: string;
+}
+
+export interface InterruptActiveThreadArgs {
+  environmentId: string | null;
+  threadId: string;
+}
+
+export interface InterruptActiveThreadsArgs {
+  reason: SystemThreadInterruptedReason;
+  threads: readonly InterruptActiveThreadArgs[];
+}
+
+export interface InterruptedActiveThreadResult {
+  interruptedTurnId: string | null;
+  threadId: string;
+}
+
+export interface InterruptActiveThreadsResult {
+  threads: InterruptedActiveThreadResult[];
+}
+
 export interface ThreadOperationMutationArgs {
   threadId: string;
 }
@@ -102,6 +143,18 @@ export interface ThreadOperationCommandMutationArgs {
 
 export interface FailThreadOperationForCommandArgs extends ThreadOperationCommandMutationArgs {
   failureReason: string;
+}
+
+function nextStatusForInterruptedThread(
+  reason: SystemThreadInterruptedReason,
+): Extract<ThreadStatus, "idle" | "error"> {
+  switch (reason) {
+    case "manual-stop":
+    case "host-daemon-restarted":
+      return "idle";
+    default:
+      return assertNever(reason);
+  }
 }
 
 interface RequestThreadStartHandoffArgs {
@@ -600,6 +653,128 @@ export function requestThreadStopIfNeeded(
   });
 }
 
+export function interruptActiveTurnForThread(
+  deps: Pick<AppDeps, "db" | "hub">,
+  args: InterruptActiveTurnForThreadArgs,
+): boolean {
+  const activeTurnId = getActiveTurnId(deps, args.threadId);
+  if (!activeTurnId) {
+    return false;
+  }
+
+  const providerThreadId = getLastProviderThreadId(deps, args.threadId);
+  const nextStatus = nextStatusForInterruptedThread(args.reason);
+
+  deps.db.transaction(
+    (tx) => {
+      appendThreadEventInTransaction(tx, {
+        threadId: args.threadId,
+        environmentId: args.environmentId,
+        providerThreadId,
+        type: "turn/completed",
+        scope: turnScope(activeTurnId),
+        data: {
+          providerThreadId,
+          status: "interrupted",
+        },
+      });
+      appendThreadInterruptedEventInTransaction(tx, {
+        threadId: args.threadId,
+        reason: args.reason,
+      });
+      transitionThreadStatusInTransaction(tx, {
+        id: args.threadId,
+        newStatus: nextStatus,
+      });
+    },
+    { behavior: "immediate" },
+  );
+  deps.hub.notifyThread(args.threadId, ["events-appended", "status-changed"]);
+
+  return true;
+}
+
+/**
+ * Reconciles threads whose server status is active after the host runtime no
+ * longer reports them. Every supplied thread gets a thread interruption event;
+ * threads with an open turn also get an interrupted turn completion event.
+ */
+export function interruptActiveThreads(
+  deps: Pick<AppDeps, "db" | "hub">,
+  args: InterruptActiveThreadsArgs,
+): InterruptActiveThreadsResult {
+  if (args.threads.length === 0) {
+    return { threads: [] };
+  }
+
+  const results: InterruptedActiveThreadResult[] = [];
+  const threadIds = args.threads.map((thread) => thread.threadId);
+  const nextStatus = nextStatusForInterruptedThread(args.reason);
+
+  deps.db.transaction(
+    (tx) => {
+      const stateByThreadId = new Map(
+        listThreadTurnInterruptionEventStates(tx, { threadIds }).map(
+          (state) => [state.threadId, state],
+        ),
+      );
+      const eventArgs: ThreadEventAppendArgs[] = [];
+
+      for (const thread of args.threads) {
+        const state = stateByThreadId.get(thread.threadId);
+        const activeTurnId = state?.activeTurnId ?? null;
+        const providerThreadId = state?.latestProviderThreadId ?? null;
+
+        if (activeTurnId !== null) {
+          eventArgs.push({
+            threadId: thread.threadId,
+            environmentId: thread.environmentId,
+            providerThreadId,
+            type: "turn/completed",
+            scope: turnScope(activeTurnId),
+            data: {
+              providerThreadId,
+              status: "interrupted",
+            },
+          });
+        }
+
+        eventArgs.push({
+          threadId: thread.threadId,
+          type: "system/thread/interrupted",
+          scope: threadScope(),
+          data: {
+            reason: args.reason,
+          },
+        });
+        results.push({
+          threadId: thread.threadId,
+          interruptedTurnId: activeTurnId,
+        });
+      }
+
+      appendThreadEventsInTransaction(tx, eventArgs);
+
+      for (const thread of args.threads) {
+        transitionThreadStatusInTransaction(tx, {
+          id: thread.threadId,
+          newStatus: nextStatus,
+        });
+      }
+    },
+    { behavior: "immediate" },
+  );
+
+  for (const thread of args.threads) {
+    deps.hub.notifyThread(thread.threadId, [
+      "events-appended",
+      "status-changed",
+    ]);
+  }
+
+  return { threads: results };
+}
+
 function advanceThreadStop(
   deps: Pick<AppDeps, "db" | "hub">,
   args: AdvanceThreadOperationArgs,
@@ -679,8 +854,16 @@ export async function finalizeStoppedThread(
     });
   }
 
+  let appendedThreadInterruptedEvent = false;
   if (currentThread.status === "active") {
-    tryTransition(deps.db, deps.hub, currentThread.id, "idle");
+    appendedThreadInterruptedEvent = interruptActiveTurnForThread(deps, {
+      environmentId: currentThread.environmentId,
+      threadId: currentThread.id,
+      reason: "manual-stop",
+    });
+    if (!appendedThreadInterruptedEvent) {
+      tryTransition(deps.db, deps.hub, currentThread.id, "idle");
+    }
   }
 
   completeThreadOperation(deps, {
@@ -702,10 +885,12 @@ export async function finalizeStoppedThread(
       threadIds: [finalizedThread.id],
       reason: "Thread stopped by user request",
     });
-    appendThreadInterruptedEvent(deps, {
-      threadId: finalizedThread.id,
-      message: "Thread stopped by user request",
-    });
+    if (!appendedThreadInterruptedEvent) {
+      appendThreadInterruptedEvent(deps, {
+        threadId: finalizedThread.id,
+        reason: "manual-stop",
+      });
+    }
   }
 
   if (finalizedThread.deletedAt !== null) {

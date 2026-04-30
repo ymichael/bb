@@ -4,6 +4,7 @@ import { threadScope, turnScope } from "@bb/domain";
 import { toViewMessages } from "../src/to-view-messages.js";
 import {
   assertMonotonicSourceSeq,
+  createTimelineEventFactory,
   flattenProjectionMessages,
   fromRows,
 } from "./timeline-test-harness.js";
@@ -737,6 +738,58 @@ describe("toViewMessages tool activity", () => {
     expect(toolMessage?.status).toBe("pending");
   });
 
+  it("interrupts pending subagents from an old interrupted turn while preserving active follow-up work", () => {
+    const factory = createTimelineEventFactory({ threadId: "thread-1" });
+    const events: ThreadEventRow[] = [
+      factory.turnStarted({ turnId: "turn-1" }),
+      factory.toolCallStarted({
+        turnId: "turn-1",
+        itemId: "agent-old",
+        tool: "Agent",
+        arguments: {
+          subagent_type: "Explore",
+          description: "Inspect lifecycle recovery",
+        },
+      }),
+      factory.turnCompleted({
+        turnId: "turn-1",
+        status: "interrupted",
+      }),
+      factory.clientTurnRequested({
+        text: "Keep going",
+      }),
+      factory.turnStarted({ turnId: "turn-2" }),
+      factory.toolCallStarted({
+        turnId: "turn-2",
+        itemId: "agent-new",
+        tool: "Agent",
+        arguments: {
+          subagent_type: "Explore",
+          description: "Continue lifecycle recovery",
+        },
+      }),
+    ];
+
+    const projected = toViewMessages(fromRows(events), {
+      threadStatus: "active",
+    });
+    const delegations = projected.filter(
+      (message): message is Extract<ViewMessage, { kind: "delegation" }> =>
+        message.kind === "delegation",
+    );
+    const delegationByCallId = new Map(
+      delegations.map((message) => [message.callId, message]),
+    );
+
+    expect(delegationByCallId.get("agent-old")).toMatchObject({
+      status: "interrupted",
+      output: "Tool execution interrupted",
+    });
+    expect(delegationByCallId.get("agent-new")).toMatchObject({
+      status: "pending",
+    });
+  });
+
   it("coalesces command output deltas and completion state", () => {
     const events: ThreadEventRow[] = [
       {
@@ -1115,8 +1168,7 @@ describe("toViewMessages tool activity", () => {
         data: {
           threadId: "thread-1",
           turnId: "turn-1",
-          reason: "user",
-          message: "Stopped by user",
+          reason: "manual-stop",
         },
         createdAt: 3,
         scope: threadScope(),

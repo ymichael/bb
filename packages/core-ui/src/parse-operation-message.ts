@@ -2,10 +2,12 @@ import type {
   ThreadEvent,
   ThreadEventPlanStepStatus,
   SystemThreadProvisioningStatus,
+  SystemThreadInterruptedReason,
   PendingInteractionStatus,
   ViewThreadOperationKind,
   ViewThreadOperationStatus,
 } from "@bb/domain";
+import { assertNever } from "./assert-never.js";
 import { getCompactionKey } from "./compaction-lifecycle.js";
 import type { EventMeta } from "./event-decode.js";
 import { capitalize, messageId } from "./format-helpers.js";
@@ -71,6 +73,19 @@ function createThreadOperationMetadata(
     operationId: decoded.operationId,
     ...(decoded.metadata ? { metadata: decoded.metadata } : {}),
   };
+}
+
+function threadInterruptedTitle(
+  reason: SystemThreadInterruptedReason,
+): string {
+  switch (reason) {
+    case "manual-stop":
+      return "Stopped manually";
+    case "host-daemon-restarted":
+      return "Host daemon restarted";
+    default:
+      return assertNever(reason);
+  }
 }
 
 export function threadOperationTitle(
@@ -272,8 +287,7 @@ export function parseOperationMessage(
   if (decoded.type === "system/thread/interrupted") {
     return op(decoded, meta, "thread-interrupted", {
       opType: "thread-interrupted",
-      title: "Stopped by user",
-      detail: decoded.message || undefined,
+      title: threadInterruptedTitle(decoded.reason),
       status: "interrupted",
     });
   }

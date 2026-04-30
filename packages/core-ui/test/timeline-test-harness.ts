@@ -100,6 +100,10 @@ interface ProviderTurnEventOptions extends EventFactoryRowOptions {
   turnId?: string;
 }
 
+interface DefaultTurnEventOptions extends EventFactoryRowOptions {
+  turnId?: string;
+}
+
 type ClientTurnRequestedArgs = EventFactoryRowOptions & {
   execution?: ResolvedThreadExecutionOptions;
   initiator?: ThreadTurnInitiator;
@@ -245,7 +249,7 @@ interface SystemOperationArgs extends EventFactoryRowOptions {
   status?: string;
 }
 
-interface PermissionGrantLifecycleArgs extends EventFactoryRowOptions {
+interface PermissionGrantLifecycleArgs extends DefaultTurnEventOptions {
   interactionId?: string;
   itemId?: string;
   message?: string;
@@ -496,11 +500,11 @@ export function createTimelineEventFactory(
 
   function nextDefaultTurnScopedRowBase(
     typePrefix: string,
-    options: EventFactoryRowOptions | undefined,
+    options: DefaultTurnEventOptions | undefined,
   ) {
     return {
       ...nextRowBase(typePrefix, options),
-      scope: turnScope(defaultTurnId()),
+      scope: turnScope(options?.turnId ?? defaultTurnId()),
     };
   }
 

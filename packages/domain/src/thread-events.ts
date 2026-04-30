@@ -151,9 +151,19 @@ export type SystemPermissionGrantLifecycleEventData = z.infer<
   typeof systemPermissionGrantLifecycleEventDataSchema
 >;
 
+export const systemThreadInterruptedReasonValues = [
+  "manual-stop",
+  "host-daemon-restarted",
+] as const;
+export const systemThreadInterruptedReasonSchema = z.enum(
+  systemThreadInterruptedReasonValues,
+);
+export type SystemThreadInterruptedReason = z.infer<
+  typeof systemThreadInterruptedReasonSchema
+>;
+
 export const systemThreadInterruptedEventDataSchema = z.object({
-  reason: z.literal("user"),
-  message: z.string().optional(),
+  reason: systemThreadInterruptedReasonSchema,
 });
 export type SystemThreadInterruptedEventData = z.infer<
   typeof systemThreadInterruptedEventDataSchema

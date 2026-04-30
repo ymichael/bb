@@ -15,6 +15,7 @@ import {
   serviceTierSchema,
   threadListEntrySchema,
   threadTypeSchema,
+  threadWithRuntimeSchema,
   timelineRowSchema,
   threadQueuedMessageSchema,
   workspaceStatusSchema,
@@ -265,6 +266,9 @@ export type SendDraftResponse = z.infer<typeof sendDraftResponseSchema>;
 
 export const threadListResponseSchema = z.array(threadListEntrySchema);
 export type ThreadListResponse = z.infer<typeof threadListResponseSchema>;
+
+export const threadResponseSchema = threadWithRuntimeSchema;
+export type ThreadResponse = z.infer<typeof threadResponseSchema>;
 
 export const threadPendingInteractionsResponseSchema = z.array(
   pendingInteractionSchema,

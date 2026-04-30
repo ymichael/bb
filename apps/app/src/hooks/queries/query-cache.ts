@@ -1,5 +1,10 @@
 import type { QueryClient, QueryKey } from "@tanstack/react-query";
-import type { Thread, ThreadListEntry, TimelineRow } from "@bb/domain";
+import type {
+  Thread,
+  ThreadListEntry,
+  ThreadWithRuntime,
+  TimelineRow,
+} from "@bb/domain";
 import type { ThreadTimelineResponse } from "@bb/server-contract";
 import {
   ENVIRONMENT_GIT_DIFF_QUERY_KEY,
@@ -157,7 +162,7 @@ export function getPrimaryCheckoutWorkspaceStateInvalidationQueryKeys(): QueryKe
 export function getCachedThreadListPlaceholder(
   queryClient: QueryClient,
   threadId: string,
-): Thread | undefined {
+): ThreadWithRuntime | undefined {
   if (!threadId) {
     return undefined;
   }
@@ -178,15 +183,18 @@ export function getCachedThreadListPlaceholder(
 export function updateCachedThread(
   queryClient: QueryClient,
   threadId: string,
-  updater: (thread: Thread) => Thread,
+  updater: (thread: ThreadWithRuntime) => ThreadWithRuntime,
 ): void {
-  queryClient.setQueryData<Thread>(threadQueryKey(threadId), (thread) => {
-    if (!thread) {
-      return thread;
-    }
+  queryClient.setQueryData<ThreadWithRuntime>(
+    threadQueryKey(threadId),
+    (thread) => {
+      if (!thread) {
+        return thread;
+      }
 
-    return updater(thread);
-  });
+      return updater(thread);
+    },
+  );
 }
 
 function threadMatchesListFilters(
@@ -217,7 +225,7 @@ function threadMatchesListFilters(
 
 export function optimisticallyInsertThread(
   queryClient: QueryClient,
-  thread: Thread,
+  thread: ThreadWithRuntime,
 ): void {
   const threadLists = queryClient.getQueriesData<ThreadListEntry[]>({
     queryKey: threadsQueryKey(),
@@ -241,6 +249,7 @@ export function optimisticallyInsertThread(
         ...thread,
         environmentBranchName: null,
         environmentHostId: null,
+        runtime: thread.runtime,
         hasPendingInteraction: false,
         environmentWorkspaceDisplayKind: "other",
       },

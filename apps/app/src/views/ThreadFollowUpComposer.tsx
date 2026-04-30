@@ -1,8 +1,4 @@
-import {
-  type ComponentProps,
-  type ComponentType,
-  type ReactNode,
-} from "react";
+import { type ComponentProps, type ComponentType, type ReactNode } from "react";
 import { HostStatusBadge } from "@/components/HostStatusIndicator";
 import {
   CornerDownRight,
@@ -17,6 +13,7 @@ import {
   type ReasoningLevel,
   type ServiceTier,
   type ThreadQueuedMessage,
+  type ThreadRuntimeDisplayStatus,
   type WorkspaceFileStatus,
   type WorkspaceStatus,
 } from "@bb/domain";
@@ -219,7 +216,7 @@ export interface ComposerCoreProps {
   processingQueuedMessageId: string | null;
   promptPlaceholder: string;
   threadId: string;
-  threadStatus: string;
+  threadRuntimeDisplayStatus: ThreadRuntimeDisplayStatus;
 }
 
 export interface ComposerEnvironmentProps {
@@ -298,11 +295,17 @@ export function ThreadFollowUpComposer({
     banner.onPromptBannerMergeBaseBranchChange &&
     promptBannerMergeBaseCandidates.length > 0,
   );
+  const canQueueFollowUp =
+    composer.threadRuntimeDisplayStatus === "active" ||
+    composer.threadRuntimeDisplayStatus === "host-reconnecting";
+  const canStopRuntime =
+    canQueueFollowUp ||
+    composer.threadRuntimeDisplayStatus === "waiting-for-host";
 
   return (
     <>
       <ThreadTimelineScrollToBottomButton
-        active={composer.threadStatus === "active"}
+        active={composer.threadRuntimeDisplayStatus === "active"}
       />
       <div className="space-y-2">
         {banner.showPromptGitStatsBanner ? (
@@ -416,16 +419,14 @@ export function ThreadFollowUpComposer({
           placeholder={composer.promptPlaceholder}
           autoFocus
           submission={{
-            onStop:
-              composer.threadStatus === "active" ? composer.onStop : undefined,
+            onStop: canStopRuntime ? composer.onStop : undefined,
             isSubmitting: composer.isFollowUpSubmitting,
             disabled:
               !composer.canSendFollowUp || composer.isFollowUpSubmitting,
-            title:
-              composer.threadStatus === "active"
-                ? "Queue follow-up (Enter)"
-                : "Submit (Enter)",
-            isRunning: composer.threadStatus === "active",
+            title: canQueueFollowUp
+              ? "Queue follow-up (Enter)"
+              : "Submit (Enter)",
+            isRunning: canStopRuntime,
             mode: "enter",
           }}
           mentions={{

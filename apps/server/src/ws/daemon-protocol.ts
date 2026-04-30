@@ -1,14 +1,10 @@
-import { and, eq, inArray, max } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import {
-  createEventId,
   closeSession,
-  events,
-  environments,
   getActiveSession,
   heartbeatSession,
   hostDaemonSessions,
   listHostThreadIds,
-  threads,
 } from "@bb/db";
 import {
   hasHostDaemonWebSocketProtocol,
@@ -17,9 +13,7 @@ import {
 import { DAEMON_DISCONNECT_GRACE_MS } from "../constants.js";
 import { ApiError } from "../errors.js";
 import { verifyAuthenticatedDaemon } from "../internal/auth.js";
-import { buildSystemErrorEventData } from "../services/threads/thread-events.js";
 import type { AppDeps } from "../types.js";
-import type { ThreadEventScopeKind } from "@bb/domain";
 import { requireAuthorizedActiveSession } from "../internal/session-state.js";
 import { decodeSocketPayload } from "./decode-payload.js";
 
@@ -131,144 +125,52 @@ export function onDaemonSocketClose(
   }
 
   // Close the session immediately so the host status reflects the disconnect
-  // right away. Thread interruption is deferred behind a grace period so that
-  // brief reconnects don't produce spurious error events on active threads.
+  // right away. Thread runtime status is notified immediately and again after
+  // grace, but connection loss alone does not prove active turns are gone.
   closeSession(deps.db, deps.hub, sessionId, "daemon-disconnect");
 
   const hostId = session.hostId;
+  notifyHostThreadRuntimeStatusChanged(deps, hostId);
   deps.hub.scheduleDaemonDisconnect(sessionId, DAEMON_DISCONNECT_GRACE_MS, () =>
-    deferredThreadInterrupt(deps, hostId),
+    notifyDisconnectedHostAfterGrace(deps, {
+      hostId,
+      sessionId,
+    }),
   );
 }
 
-/**
- * After the grace period, interrupt active threads on a host that is still
- * disconnected.  If the daemon reconnected in the meantime (a new active
- * session exists for the host), this is a no-op.
- */
-function deferredThreadInterrupt(
-  deps: Pick<AppDeps, "db" | "hub" | "pendingInteractions">,
+function notifyHostThreadRuntimeStatusChanged(
+  deps: Pick<AppDeps, "db" | "hub">,
   hostId: string,
 ): void {
-  // Host reconnected — nothing to interrupt.
-  if (getActiveSession(deps.db, hostId)) {
-    return;
-  }
-
-  const interruptedThreadIds = interruptThreadsForDisconnectedHost(
-    deps,
-    hostId,
-  );
-  deps.pendingInteractions.interruptPendingInteractionsForThreadIds({
-    threadIds: listHostThreadIds(deps.db, { hostId }),
-    reason:
-      "Host daemon disconnected while awaiting user interaction; retry the thread to continue",
-  });
-  for (const threadId of interruptedThreadIds.eventThreadIds) {
-    deps.hub.notifyThread(threadId, ["events-appended"]);
-  }
-  for (const threadId of interruptedThreadIds.statusThreadIds) {
+  for (const threadId of listHostThreadIds(deps.db, { hostId })) {
     deps.hub.notifyThread(threadId, ["status-changed"]);
   }
 }
 
-function interruptThreadsForDisconnectedHost(
-  deps: Pick<AppDeps, "db">,
-  hostId: string,
-): { eventThreadIds: string[]; statusThreadIds: string[] } {
-  const now = Date.now();
-  const disconnectEventType = "system/error" as const;
-  const disconnectErrorData = buildSystemErrorEventData({
-    code: "host_daemon_disconnected",
-    detail: "The host daemon disconnected while work was in progress.",
-    message: "Host daemon disconnected during active work",
+/**
+ * After the grace period, notify active thread views that the disconnected host
+ * is no longer in the reconnecting window. If the daemon reconnected in the
+ * meantime, runtime display status is already back to connected and this is a
+ * no-op.
+ */
+interface NotifyDisconnectedHostAfterGraceArgs {
+  hostId: string;
+  sessionId: string;
+}
+
+function notifyDisconnectedHostAfterGrace(
+  deps: Pick<AppDeps, "db" | "hub" | "pendingInteractions">,
+  args: NotifyDisconnectedHostAfterGraceArgs,
+): void {
+  if (getActiveSession(deps.db, args.hostId)) {
+    return;
+  }
+
+  deps.pendingInteractions.interruptPendingInteractionsForSessionIds({
+    sessionIds: [args.sessionId],
+    reason:
+      "Host daemon disconnected while awaiting user interaction; retry the thread to continue",
   });
-
-  return deps.db.transaction(
-    (tx) => {
-      const interruptedThreads = tx
-        .select({
-          environmentId: threads.environmentId,
-          id: threads.id,
-        })
-        .from(threads)
-        .innerJoin(environments, eq(threads.environmentId, environments.id))
-        .where(
-          and(
-            eq(environments.hostId, hostId),
-            inArray(threads.status, ["active", "provisioning"]),
-          ),
-        )
-        .all();
-
-      if (interruptedThreads.length === 0) {
-        return {
-          eventThreadIds: [],
-          statusThreadIds: [],
-        };
-      }
-
-      const interruptedThreadIds = interruptedThreads.map(
-        (thread) => thread.id,
-      );
-      const maxSequences = new Map(
-        tx
-          .select({
-            maxSeq: max(events.sequence),
-            threadId: events.threadId,
-          })
-          .from(events)
-          .where(inArray(events.threadId, interruptedThreadIds))
-          .groupBy(events.threadId)
-          .all()
-          .map((row) => [row.threadId, row.maxSeq ?? 0] as const),
-      );
-      const disconnectScopeKind: ThreadEventScopeKind = "thread";
-
-      tx.insert(events)
-        .values(
-          interruptedThreads.map((thread) => {
-            const nextSequence = (maxSequences.get(thread.id) ?? 0) + 1;
-            maxSequences.set(thread.id, nextSequence);
-            return {
-              createdAt: now,
-              data: JSON.stringify(disconnectErrorData),
-              environmentId: thread.environmentId,
-              id: createEventId(),
-              itemId: null,
-              itemKind: null,
-              providerThreadId: null,
-              scopeKind: disconnectScopeKind,
-              sequence: nextSequence,
-              threadId: thread.id,
-              turnId: null,
-              type: disconnectEventType,
-            };
-          }),
-        )
-        .run();
-
-      const updatedThreads = tx
-        .update(threads)
-        .set({
-          status: "error",
-          latestAttentionAt: now,
-          updatedAt: now,
-        })
-        .where(
-          and(
-            inArray(threads.id, interruptedThreadIds),
-            inArray(threads.status, ["active", "provisioning"]),
-          ),
-        )
-        .returning({ id: threads.id })
-        .all();
-
-      return {
-        eventThreadIds: interruptedThreadIds,
-        statusThreadIds: updatedThreads.map((thread) => thread.id),
-      };
-    },
-    { behavior: "immediate" },
-  );
+  notifyHostThreadRuntimeStatusChanged(deps, args.hostId);
 }

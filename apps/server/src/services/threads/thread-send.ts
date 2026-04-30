@@ -20,6 +20,7 @@ import {
   requireReadyThreadEnvironment,
 } from "./thread-turn-dispatch.js";
 import { resolvePermissionEscalation } from "./thread-runtime-config.js";
+import { resolveThreadRuntimeState } from "./thread-runtime-display.js";
 import { tryTransition } from "./thread-transitions.js";
 
 type SendThreadMessageMode = SendMessageRequest["mode"];
@@ -78,6 +79,29 @@ function resolveSendMode(
   return "start";
 }
 
+function ensureRuntimeCanAcceptActiveSend(
+  deps: Pick<AppDeps, "db">,
+  args: Pick<SendThreadMessageArgs, "environment" | "thread">,
+): void {
+  if (args.thread.status !== "active") {
+    return;
+  }
+
+  const runtime = resolveThreadRuntimeState(deps, {
+    environmentHostId: args.environment.hostId,
+    status: args.thread.status,
+  });
+  if (runtime.displayStatus === "active") {
+    return;
+  }
+
+  throw new ApiError(
+    502,
+    "host_disconnected",
+    "Host daemon is not connected",
+  );
+}
+
 export async function sendThreadMessage(
   deps: AppDeps,
   args: SendThreadMessageArgs,
@@ -88,6 +112,7 @@ export async function sendThreadMessage(
     ensureThreadIsNotAwaitingUserInteraction(deps, thread.id);
   }
   const mode = resolveSendMode(thread.status, payload.mode);
+  ensureRuntimeCanAcceptActiveSend(deps, args);
   if (mode === "start") {
     ensureThreadCanQueueStartRequest(deps, thread);
   }

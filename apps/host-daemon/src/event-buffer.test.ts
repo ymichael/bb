@@ -106,7 +106,7 @@ function createSystemThreadInterruptedEvent(threadId: string): ThreadEvent {
     type: "system/thread/interrupted",
     threadId,
     scope: threadScope(),
-    reason: "user",
+    reason: "manual-stop",
   };
 }
 

@@ -3,7 +3,7 @@ import {
   markThreadDeleted,
   updateThread,
 } from "@bb/db";
-import type { ThreadListEntry } from "@bb/domain";
+import type { ThreadListEntry, ThreadWithRuntime } from "@bb/domain";
 import {
   createThreadRequestSchema,
   threadListQuerySchema,
@@ -36,6 +36,10 @@ import {
 import { appendThreadOwnershipChangeEvent } from "../../services/threads/thread-events.js";
 import { createThreadFromRequest } from "../../services/threads/thread-create.js";
 import { queueManagerSystemMessage } from "../../services/threads/manager-system-messages.js";
+import {
+  toThreadListEntryResponses,
+  toThreadResponseFromThread,
+} from "../../services/threads/thread-runtime-display.js";
 
 function formatThreadLabelForManager(thread: {
   id: string;
@@ -84,24 +88,28 @@ export function registerThreadBaseRoutes(app: Hono, deps: AppDeps): void {
       archived:
         query.archived === undefined ? undefined : query.archived === "true",
     });
-    return context.json(threads satisfies ThreadListEntry[]);
+    return context.json(
+      toThreadListEntryResponses(deps, { threads }) satisfies ThreadListEntry[],
+    );
   });
 
   post("/threads", createThreadRequestSchema, async (context, payload) => {
     requirePublicProject(deps.db, payload.projectId);
-    return context.json(
-      await createThreadFromRequest(deps, {
-        ...payload,
-        automationId: null,
-        origin: payload.origin ?? null,
-        type: "standard",
-      }),
-      201,
-    );
+    const thread = await createThreadFromRequest(deps, {
+      ...payload,
+      automationId: null,
+      origin: payload.origin ?? null,
+      type: "standard",
+    });
+    return context.json(toThreadResponseFromThread(deps, { thread }), 201);
   });
 
   get("/threads/:id", (context) =>
-    context.json(requirePublicThread(deps.db, context.req.param("id"))),
+    context.json(
+      toThreadResponseFromThread(deps, {
+        thread: requirePublicThread(deps.db, context.req.param("id")),
+      }) satisfies ThreadWithRuntime,
+    ),
   );
 
   patch("/threads/:id", updateThreadRequestSchema, async (context, payload) => {
@@ -164,7 +172,7 @@ export function registerThreadBaseRoutes(app: Hono, deps: AppDeps): void {
       }
     }
 
-    return context.json(updated);
+    return context.json(toThreadResponseFromThread(deps, { thread: updated }));
   });
 
   del("/threads/:id", async (context) => {

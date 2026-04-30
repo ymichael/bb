@@ -1,6 +1,7 @@
 import { useCallback, useMemo, type ReactNode } from "react";
 import { useParams } from "react-router-dom";
 import type { ThreadTimelineLocalFileLink } from "@bb/ui-core";
+import type { ThreadWithRuntime } from "@bb/domain";
 import { toast } from "sonner";
 import { useThreadSecondaryPanelUrlSync } from "@/lib/thread-secondary-panel";
 import { useRequestEnvironmentAction } from "../hooks/mutations/environment-mutations";
@@ -47,6 +48,7 @@ import { useTurnSummaryRowLoader } from "./useTurnSummaryRowLoader";
 import { ThreadDetailHeader } from "./ThreadDetailHeader";
 import { ThreadDetailPromptArea } from "./ThreadDetailPromptArea";
 import { ThreadDetailSecondaryContent } from "./ThreadDetailSecondaryContent";
+import type { HostConnectionNotice } from "./ThreadTimelinePane";
 import { useThreadStorageViewer } from "./useThreadStorageViewer";
 import { useEnvironmentMergeBase } from "./useEnvironmentMergeBase";
 import { useThreadGitActions } from "./useThreadGitActions";
@@ -64,6 +66,26 @@ const PROMPT_BANNER_KIND_PREFIX = {
   untracked: "Untracked",
   committed: "Committed",
 } as const;
+
+function buildHostConnectionNotice(
+  thread: ThreadWithRuntime,
+): HostConnectionNotice | null {
+  const displayStatus = thread.runtime.displayStatus;
+  if (
+    displayStatus !== "host-reconnecting" &&
+    displayStatus !== "waiting-for-host"
+  ) {
+    return null;
+  }
+
+  return {
+    label:
+      displayStatus === "host-reconnecting"
+        ? "Host daemon disconnected. Waiting for reconnection..."
+        : "Host daemon disconnected",
+    tone: displayStatus === "host-reconnecting" ? "pending" : "error",
+  };
+}
 
 export function ThreadDetailView() {
   const { projectId, threadId } = useParams<{
@@ -132,15 +154,16 @@ export function ThreadDetailView() {
   const markThreadRead = useMarkThreadRead();
   const updateEnvironment = useUpdateEnvironment();
   const updateThread = useUpdateThread();
-  const threadDetailRows = useMemo(
-    () => timeline?.rows ?? [],
-    [timeline?.rows],
+  const timelineRows = useMemo(() => timeline?.rows ?? [], [timeline?.rows]);
+  const hostConnectionNotice = useMemo(
+    () => (thread ? buildHostConnectionNotice(thread) : null),
+    [thread],
   );
   const activeThinking = timeline?.activeThinking ?? null;
   const contextWindowUsage = timeline?.contextWindowUsage ?? undefined;
   const latestActivityRowId = useMemo(
-    () => findLatestActivityRowId(threadDetailRows),
-    [threadDetailRows],
+    () => findLatestActivityRowId(timelineRows),
+    [timelineRows],
   );
   const environmentQuery = useEnvironment(thread?.environmentId);
   const environment = environmentQuery.data;
@@ -198,8 +221,7 @@ export function ThreadDetailView() {
     enabled: localWorkspaceRootPath !== null,
   });
   const { data: environmentHost } = useEffectiveHost(environment?.hostId);
-  const isThreadTimelinePending =
-    timelineLoading && threadDetailRows.length === 0;
+  const isThreadTimelinePending = timelineLoading && timelineRows.length === 0;
   const {
     erroredTurnSummaryIds,
     handleLoadTurnSummaryRows,
@@ -630,6 +652,7 @@ export function ThreadDetailView() {
         showThreadMetadata={showThreadMetadata}
         timeline={{
           activeThinking,
+          hostConnectionNotice,
           isThreadTimelinePending,
           timelineError: Boolean(timelineError),
           latestActivityRowId,
@@ -639,13 +662,17 @@ export function ThreadDetailView() {
           onOpenLocalFileLink: handleOpenTimelineLocalFileLink,
           projectId,
           showOngoingIndicator:
-            thread.status === "active" && !isThreadTimelinePending,
+            (thread.runtime.displayStatus === "active" ||
+              thread.runtime.displayStatus === "host-reconnecting") &&
+            !isThreadTimelinePending,
           ongoingIndicatorLabel: hasPendingInteraction
             ? "Waiting for approval"
-            : undefined,
-          threadDetailRows,
+            : thread.runtime.displayStatus === "host-reconnecting"
+              ? "Waiting for reconnection"
+              : undefined,
+          threadDetailRows: timelineRows,
           threadId: thread.id,
-          threadStatus: thread.status,
+          threadRuntimeDisplayStatus: thread.runtime.displayStatus,
           turnSummaryRowsById,
         }}
       />

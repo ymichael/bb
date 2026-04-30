@@ -45,6 +45,7 @@ import {
 import { buildExecutionOptions } from "../../services/threads/thread-commands.js";
 import { getLastProviderThreadId } from "../../services/threads/thread-events.js";
 import { requestThreadStopIfNeeded } from "../../services/threads/thread-lifecycle.js";
+import { toThreadResponseFromThread } from "../../services/threads/thread-runtime-display.js";
 
 async function validateArchiveCleanupRequest(
   deps: AppDeps,
@@ -229,7 +230,7 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
     if (!thread) {
       throw new ApiError(404, "thread_not_found", "Thread not found");
     }
-    return context.json(thread);
+    return context.json(toThreadResponseFromThread(deps, { thread }));
   });
 
   post("/threads/:id/unread", (context) => {
@@ -240,6 +241,6 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
     if (!thread) {
       throw new ApiError(404, "thread_not_found", "Thread not found");
     }
-    return context.json(thread);
+    return context.json(toThreadResponseFromThread(deps, { thread }));
   });
 }

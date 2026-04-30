@@ -68,6 +68,22 @@ export interface CompletedStoredTurnRow {
   turnId: string;
 }
 
+export interface ListThreadIdsWithLatestHostDaemonRestartInterruptionArgs {
+  threadIds: readonly string[];
+}
+
+export interface ListThreadTurnInterruptionEventStatesArgs {
+  threadIds: readonly string[];
+}
+
+export interface ThreadTurnInterruptionEventState {
+  activeTurnId: string | null;
+  latestProviderThreadId: string | null;
+  threadId: string;
+}
+
+type ThreadEventQueryDb = DbConnection | DbTransaction;
+
 /**
  * Insert events with dedup on (threadId, sequence).
  * Uses INSERT OR IGNORE to skip duplicates.
@@ -123,40 +139,69 @@ export function appendStoredThreadEventInTransaction(
   db: DbTransaction,
   args: AppendStoredThreadEventArgs,
 ): number {
-  const now = Date.now();
-  const maxRow = db
-    .select({ maxSeq: max(events.sequence) })
-    .from(events)
-    .where(eq(events.threadId, args.threadId))
-    .get();
-  const sequence = (maxRow?.maxSeq ?? 0) + 1;
-  const itemFields = deriveStoredEventItemFieldsFromSource({
-    type: args.type,
-    item: "item" in args.data ? args.data.item : undefined,
-    itemId: "itemId" in args.data ? args.data.itemId : undefined,
-  });
-  const turnId = getThreadEventScopeTurnId(args.scope) ?? null;
+  const [sequence] = appendStoredThreadEventsInTransaction(db, [args]);
+  if (sequence === undefined) {
+    throw new Error("Expected one appended thread event sequence");
+  }
+  return sequence;
+}
 
-  db.run(
-    sql`INSERT INTO events
-      (id, thread_id, environment_id, scope_kind, turn_id, provider_thread_id, sequence, type, item_id, item_kind, data, created_at)
-      VALUES (
-        ${createEventId()},
-        ${args.threadId},
-        ${args.environmentId ?? null},
-        ${args.scope.kind},
-        ${turnId},
-        ${args.providerThreadId ?? null},
-        ${sequence},
-        ${args.type},
-        ${itemFields.itemId},
-        ${itemFields.itemKind},
-        ${JSON.stringify(args.data)},
-        ${now}
-      )`,
+export function appendStoredThreadEventsInTransaction(
+  db: DbTransaction,
+  eventArgs: readonly AppendStoredThreadEventArgs[],
+): number[] {
+  if (eventArgs.length === 0) {
+    return [];
+  }
+
+  const now = Date.now();
+  const threadIds = [...new Set(eventArgs.map((args) => args.threadId))];
+  const highWaterMarks = getHighWaterMarks(db, threadIds);
+  const nextSequencesByThreadId = new Map(
+    threadIds.map((threadId) => [
+      threadId,
+      (highWaterMarks[threadId] ?? 0) + 1,
+    ]),
   );
 
-  return sequence;
+  const sequences: number[] = [];
+  for (const args of eventArgs) {
+    const sequence = nextSequencesByThreadId.get(args.threadId);
+    if (sequence === undefined) {
+      throw new Error(`Missing event sequence for thread: ${args.threadId}`);
+    }
+
+    const itemFields = deriveStoredEventItemFieldsFromSource({
+      type: args.type,
+      item: "item" in args.data ? args.data.item : undefined,
+      itemId: "itemId" in args.data ? args.data.itemId : undefined,
+    });
+    const turnId = getThreadEventScopeTurnId(args.scope) ?? null;
+
+    db.run(
+      sql`INSERT INTO events
+        (id, thread_id, environment_id, scope_kind, turn_id, provider_thread_id, sequence, type, item_id, item_kind, data, created_at)
+        VALUES (
+          ${createEventId()},
+          ${args.threadId},
+          ${args.environmentId ?? null},
+          ${args.scope.kind},
+          ${turnId},
+          ${args.providerThreadId ?? null},
+          ${sequence},
+          ${args.type},
+          ${itemFields.itemId},
+          ${itemFields.itemKind},
+          ${JSON.stringify(args.data)},
+          ${now}
+        )`,
+    );
+
+    sequences.push(sequence);
+    nextSequencesByThreadId.set(args.threadId, sequence + 1);
+  }
+
+  return sequences;
 }
 
 export function appendStoredThreadEvent<TType extends ThreadEventType>(
@@ -182,7 +227,7 @@ export function appendStoredThreadEvent(
  * Returns Record<threadId, maxSequence>.
  */
 export function getHighWaterMarks(
-  db: DbConnection,
+  db: ThreadEventQueryDb,
   threadIds?: string[],
 ): Record<string, number> {
   const result: Record<string, number> = {};
@@ -609,6 +654,126 @@ export function getLastStoredProviderThreadId(
   return row?.providerThreadId ?? null;
 }
 
+export function listThreadTurnInterruptionEventStates(
+  db: ThreadEventQueryDb,
+  args: ListThreadTurnInterruptionEventStatesArgs,
+): ThreadTurnInterruptionEventState[] {
+  const threadIds = [...new Set(args.threadIds)];
+  if (threadIds.length === 0) {
+    return [];
+  }
+
+  const statesByThreadId = new Map<string, ThreadTurnInterruptionEventState>(
+    threadIds.map((threadId) => [
+      threadId,
+      {
+        activeTurnId: null,
+        latestProviderThreadId: null,
+        threadId,
+      },
+    ]),
+  );
+
+  const latestStartedTurnRows = db
+    .select({
+      threadId: events.threadId,
+      turnId: events.turnId,
+    })
+    .from(events)
+    .where(
+      and(
+        inArray(events.threadId, threadIds),
+        eq(events.type, "turn/started"),
+        isNotNull(events.turnId),
+        sql`${events.sequence} = (
+          SELECT MAX(latest.sequence)
+          FROM events AS latest
+          WHERE latest.thread_id = ${events.threadId}
+            AND latest.type = 'turn/started'
+            AND latest.turn_id IS NOT NULL
+        )`,
+        sql`NOT EXISTS (
+          SELECT 1
+          FROM events AS completed
+          WHERE completed.thread_id = ${events.threadId}
+            AND completed.turn_id = ${events.turnId}
+            AND completed.type = 'turn/completed'
+        )`,
+      ),
+    )
+    .all();
+  for (const row of latestStartedTurnRows) {
+    if (row.turnId === null) {
+      continue;
+    }
+    const state = statesByThreadId.get(row.threadId);
+    if (state) {
+      state.activeTurnId = row.turnId;
+    }
+  }
+
+  const latestProviderRows = db
+    .select({
+      providerThreadId: events.providerThreadId,
+      threadId: events.threadId,
+    })
+    .from(events)
+    .where(
+      and(
+        inArray(events.threadId, threadIds),
+        isNotNull(events.providerThreadId),
+        sql`${events.sequence} = (
+          SELECT MAX(latest.sequence)
+          FROM events AS latest
+          WHERE latest.thread_id = ${events.threadId}
+            AND latest.provider_thread_id IS NOT NULL
+        )`,
+      ),
+    )
+    .all();
+  for (const row of latestProviderRows) {
+    if (row.providerThreadId === null) {
+      continue;
+    }
+    const state = statesByThreadId.get(row.threadId);
+    if (state) {
+      state.latestProviderThreadId = row.providerThreadId;
+    }
+  }
+
+  return threadIds.flatMap((threadId) => {
+    const state = statesByThreadId.get(threadId);
+    return state ? [state] : [];
+  });
+}
+
+export function listThreadIdsWithLatestHostDaemonRestartInterruption(
+  db: DbConnection,
+  args: ListThreadIdsWithLatestHostDaemonRestartInterruptionArgs,
+): string[] {
+  if (args.threadIds.length === 0) {
+    return [];
+  }
+
+  return db
+    .select({ threadId: events.threadId })
+    .from(events)
+    .where(
+      and(
+        inArray(events.threadId, [...args.threadIds]),
+        eq(events.type, "system/thread/interrupted"),
+        sql`json_extract(${events.data}, '$.reason') = 'host-daemon-restarted'`,
+        sql`${events.sequence} = (
+          SELECT MAX(latest.sequence)
+          FROM events AS latest
+          WHERE latest.thread_id = ${events.threadId}
+        )`,
+      ),
+    )
+    .all()
+    .map((row) => row.threadId);
+}
+
 export function getLastStoredTurnRequestEvent(
   db: DbConnection,
   threadId: string,
@@ -639,7 +804,7 @@ export function getLastStoredTurnRequestEvent(
 }
 
 export function listCompletedTurnsByThreadIds(
-  db: DbConnection,
+  db: ThreadEventQueryDb,
   threadIds: readonly string[],
 ): CompletedStoredTurnRow[] {
   if (threadIds.length === 0) {

@@ -26,6 +26,7 @@ import type {
   ProjectResponse,
   SendMessageRequest,
   ThreadTimelineResponse,
+  ThreadResponse,
   UpdateEnvironmentRequest,
   UpdateThreadRequest,
 } from "@bb/server-contract";
@@ -34,6 +35,7 @@ import {
   environmentActionResponseSchema,
   environmentStatusResponseSchema,
   projectResponseSchema,
+  threadResponseSchema,
   threadTimelineResponseSchema,
 } from "@bb/server-contract";
 
@@ -300,6 +302,17 @@ export async function getThread(
   });
   await expectStatus(response, 200, `get thread ${threadId}`);
   return threadSchema.parse(await response.json());
+}
+
+export async function getThreadResponse(
+  api: PublicApiClient,
+  threadId: string,
+): Promise<ThreadResponse> {
+  const response = await api.threads[":id"].$get({
+    param: { id: threadId },
+  });
+  await expectStatus(response, 200, `get thread ${threadId}`);
+  return threadResponseSchema.parse(await response.json());
 }
 
 export async function getThreadEvents(

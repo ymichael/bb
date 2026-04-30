@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { cleanup, renderHook, waitFor } from "@testing-library/react";
-import type { Thread } from "@bb/domain";
+import type { Thread, ThreadWithRuntime } from "@bb/domain";
 import { useRef } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as api from "@/lib/api";
@@ -18,9 +18,9 @@ vi.mock("@/lib/api", async (importOriginal) => {
   };
 });
 
-interface ThreadOverrides extends Partial<Thread> {}
+interface ThreadOverrides extends Partial<ThreadWithRuntime> {}
 
-function makeThread(overrides: ThreadOverrides = {}): Thread {
+function makeThread(overrides: ThreadOverrides = {}): ThreadWithRuntime {
   return {
     archivedAt: null,
     automationId: null,
@@ -39,6 +39,10 @@ function makeThread(overrides: ThreadOverrides = {}): Thread {
     titleFallback: "Thread title",
     type: "standard",
     updatedAt: 10,
+    runtime: {
+      displayStatus: "idle",
+      hostReconnectGraceExpiresAt: null,
+    },
     ...overrides,
   };
 }

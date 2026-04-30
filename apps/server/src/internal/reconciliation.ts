@@ -7,12 +7,17 @@ import {
   notInArray,
   or,
 } from "drizzle-orm";
-import { environments, threads } from "@bb/db";
+import {
+  environments,
+  listThreadIdsWithLatestHostDaemonRestartInterruption,
+  threads,
+} from "@bb/db";
 import type { HostDaemonActiveThread } from "@bb/host-daemon-contract";
 import type { PendingInteractionWorkSessionDeps } from "../types.js";
 import {
   completeThreadStart,
   finalizeStoppedThreadAndAdvanceCleanup,
+  interruptActiveThreads,
   requestThreadStop,
 } from "../services/threads/thread-lifecycle.js";
 import { tryTransition } from "../services/threads/thread-transitions.js";
@@ -99,7 +104,7 @@ export async function reconcileSessionThreads(
   }
 
   const activeButMissing = deps.db
-    .select({ id: threads.id })
+    .select({ environmentId: threads.environmentId, id: threads.id })
     .from(threads)
     .innerJoin(environments, eq(threads.environmentId, environments.id))
     .where(
@@ -115,9 +120,13 @@ export async function reconcileSessionThreads(
     )
     .all();
 
-  for (const thread of activeButMissing) {
-    tryTransition(deps.db, deps.hub, thread.id, "idle");
-  }
+  interruptActiveThreads(deps, {
+    threads: activeButMissing.map((thread) => ({
+      environmentId: thread.environmentId,
+      threadId: thread.id,
+    })),
+    reason: "host-daemon-restarted",
+  });
 
   if (activeThreadIds.length > 0) {
     const inactiveButActive = deps.db
@@ -135,7 +144,16 @@ export async function reconcileSessionThreads(
       )
       .all();
 
+    const blockedRevivalThreadIds = new Set(
+      listThreadIdsWithLatestHostDaemonRestartInterruption(deps.db, {
+        threadIds: inactiveButActive.map((thread) => thread.id),
+      }),
+    );
+
     for (const thread of inactiveButActive) {
+      if (blockedRevivalThreadIds.has(thread.id)) {
+        continue;
+      }
       tryTransition(deps.db, deps.hub, thread.id, "active");
       completeThreadStart(deps, {
         threadId: thread.id,

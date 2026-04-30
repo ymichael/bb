@@ -654,8 +654,7 @@ describe("buildThreadTimeline", () => {
       type: "system/thread/interrupted",
       data: {
         turnId: "turn-1",
-        reason: "user",
-        message: "Stopped by user",
+        reason: "manual-stop",
       },
     });
 
@@ -851,8 +850,7 @@ describe("buildThreadTimeline", () => {
       sequence: 2,
       type: "system/thread/interrupted",
       data: {
-        reason: "user",
-        message: "Stopped by user",
+        reason: "manual-stop",
       },
     });
     seedEvent(harness.deps, {

@@ -236,6 +236,7 @@ export type { UpsertHostInput, UpdateHostInput } from "./hosts.js";
 export {
   appendStoredThreadEvent,
   appendStoredThreadEventInTransaction,
+  appendStoredThreadEventsInTransaction,
   findStoredEventRow,
   getActiveStoredTurnId,
   getHighWaterMarks,
@@ -252,6 +253,8 @@ export {
   listStoredEventRows,
   listStoredEventRowsInRange,
   listStoredTurnInputAcceptedRowsByClientRequestSequences,
+  listThreadIdsWithLatestHostDaemonRestartInterruption,
+  listThreadTurnInterruptionEventStates,
   pruneContextWindowUsageEventsBeforeSequence,
   pruneTokenUsageEventsBeforeSequence,
   pruneResolvedItemDeltas,
@@ -264,11 +267,14 @@ export type {
   InsertEventInput,
   InsertEventsResult,
   ListEventsOptions,
+  ListThreadIdsWithLatestHostDaemonRestartInterruptionArgs,
+  ListThreadTurnInterruptionEventStatesArgs,
   PruneContextWindowUsageEventsBeforeSequenceArgs,
   PruneTokenUsageEventsBeforeSequenceArgs,
   PruneResolvedItemDeltasArgs,
   PruneThreadEventsBeforeSequenceArgs,
   StoredEventRow,
+  ThreadTurnInterruptionEventState,
   StoredTurnRequestEventRow,
 } from "./events.js";
 
@@ -330,11 +336,19 @@ export {
   getActiveSession,
   getActiveSessionById,
   getCurrentSession,
+  getLatestSessionForHost,
   getMostRecentlyUpdatedConnectedHostId,
   heartbeatSession,
+  listLatestSessionsForHosts,
   listConnectedHostIds,
 } from "./sessions.js";
-export type { GetCurrentSessionArgs, OpenSessionInput } from "./sessions.js";
+export type {
+  GetCurrentSessionArgs,
+  GetLatestSessionForHostArgs,
+  HostDaemonSessionRow,
+  ListLatestSessionsForHostsArgs,
+  OpenSessionInput,
+} from "./sessions.js";
 
 export {
   claimDraft,

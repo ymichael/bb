@@ -15,6 +15,13 @@
       "when": 1777416059765,
       "tag": "0001_draft_claim_tokens",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1777519500000,
+      "tag": "0002_host_daemon_sessions_latest_index",
+      "breakpoints": true
     }
   ]
 }

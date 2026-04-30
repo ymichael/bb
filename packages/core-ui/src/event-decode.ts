@@ -13,7 +13,6 @@ export function getEventProviderThreadId(
   switch (decoded.type) {
     case "thread/identity":
     case "turn/started":
-    case "turn/completed":
     case "turn/input/accepted":
     case "thread/name/updated":
     case "thread/compacted":
@@ -35,6 +34,8 @@ export function getEventProviderThreadId(
     case "provider/warning":
     case "provider/unhandled":
       return decoded.providerThreadId;
+    case "turn/completed":
+      return decoded.providerThreadId ?? undefined;
     case "thread/started":
     case "client/thread/start":
     case "client/turn/requested":

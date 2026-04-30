@@ -2,6 +2,7 @@ import {
   getActiveSession,
   getEnvironment,
   getThread,
+  listHostThreadIds,
   listStopRequestedThreads,
   listEnvironmentOperations,
   listThreadOperations,
@@ -340,11 +341,19 @@ export async function runPeriodicSweeps(
     await failActiveLifecycleOperationsWithSettledCommands(deps);
     const expiredLeases = sweepExpiredLeases(deps.db, deps.hub);
     if (expiredLeases.expiredSessionIds.length > 0) {
+      for (const sessionId of expiredLeases.expiredSessionIds) {
+        deps.hub.closeDaemonSession(sessionId, "expired");
+      }
       deps.pendingInteractions.interruptPendingInteractionsForSessionIds({
         sessionIds: expiredLeases.expiredSessionIds,
         reason:
-          "Host daemon session expired while awaiting user interaction; retry the thread to continue",
+          "Host daemon connection expired while awaiting user interaction; retry the thread to continue",
       });
+      for (const hostId of expiredLeases.expiredHostIds) {
+        for (const threadId of listHostThreadIds(deps.db, { hostId })) {
+          deps.hub.notifyThread(threadId, ["status-changed"]);
+        }
+      }
     }
     sweepDestroyingEnvironments(deps.db, deps.hub);
     await sweepDueAutomations(deps);

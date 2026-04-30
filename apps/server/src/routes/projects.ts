@@ -47,6 +47,7 @@ import {
   ensureProjectSourceEnvironment,
   createThreadFromRequest,
 } from "../services/threads/thread-create.js";
+import { toThreadResponseFromThread } from "../services/threads/thread-runtime-display.js";
 import { queueCommandAndWait } from "../services/hosts/command-wait.js";
 import { parseOptionalInteger } from "../services/lib/validation.js";
 import {
@@ -450,7 +451,7 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
           workspace: { type: "unmanaged", path: source.path },
         },
       });
-      return context.json(thread, 201);
+      return context.json(toThreadResponseFromThread(deps, { thread }), 201);
     },
   );
 }

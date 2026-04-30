@@ -1,16 +1,35 @@
 import { describe, expect, it } from "vitest";
 import {
   isBusyThread,
-  isRunningThreadStatus,
   isUnreadDoneThread,
 } from "./thread-activity";
 
 describe("thread-activity", () => {
   it("exposes shared running/unread helpers", () => {
-    expect(isRunningThreadStatus("created")).toBe(true);
-    expect(isRunningThreadStatus("error")).toBe(false);
-    expect(isRunningThreadStatus("idle")).toBe(false);
-    expect(isBusyThread({ status: "active" })).toBe(true);
+    expect(
+      isBusyThread({
+        runtime: {
+          displayStatus: "active",
+          hostReconnectGraceExpiresAt: null,
+        },
+      }),
+    ).toBe(true);
+    expect(
+      isBusyThread({
+        runtime: {
+          displayStatus: "host-reconnecting",
+          hostReconnectGraceExpiresAt: 100,
+        },
+      }),
+    ).toBe(true);
+    expect(
+      isBusyThread({
+        runtime: {
+          displayStatus: "waiting-for-host",
+          hostReconnectGraceExpiresAt: null,
+        },
+      }),
+    ).toBe(false);
 
     expect(
       isUnreadDoneThread({

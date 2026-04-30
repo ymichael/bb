@@ -541,9 +541,11 @@ export function createCodexProviderAdapter(
     event: ThreadEvent,
   ): ThreadEvent[] {
     if (event.type === "turn/completed") {
-      nativeTurnStartClientRequestSequencesByProviderThreadId.delete(
-        event.providerThreadId,
-      );
+      if (event.providerThreadId !== null) {
+        nativeTurnStartClientRequestSequencesByProviderThreadId.delete(
+          event.providerThreadId,
+        );
+      }
       return [event];
     }
 
@@ -650,7 +652,11 @@ export function createCodexProviderAdapter(
   function reconcileRawCommandOutputLifecycle(events: ThreadEvent[]): void {
     for (const event of events) {
       if (event.type === "turn/completed") {
-        rawCommandOutputStateByProviderThreadId.delete(event.providerThreadId);
+        if (event.providerThreadId !== null) {
+          rawCommandOutputStateByProviderThreadId.delete(
+            event.providerThreadId,
+          );
+        }
       }
     }
   }

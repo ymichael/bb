@@ -221,7 +221,7 @@ describe("sweepExpiredCommands", () => {
 });
 
 describe("sweepExpiredLeases", () => {
-  it("closes expired sessions and errors active threads", () => {
+  it("closes expired sessions without erroring active threads", () => {
     const { db, host, project } = setup();
 
     const env = createEnvironment(db, noopNotifier, {
@@ -267,7 +267,7 @@ describe("sweepExpiredLeases", () => {
 
     const result = sweepExpiredLeases(db, spy);
     expect(result.sessionsClosed).toBe(1);
-    expect(result.threadsErrored).toBe(1);
+    expect(result.expiredHostIds).toEqual([host.id]);
     expect(result.expiredSessionIds).toEqual([session.id]);
 
     // Session should be closed
@@ -279,18 +279,15 @@ describe("sweepExpiredLeases", () => {
     expect(updatedSession?.status).toBe("closed");
     expect(updatedSession?.closeReason).toBe("expired");
 
-    // Thread should be errored
     const updatedThread = db
       .select()
       .from(threads)
       .where(eq(threads.id, thread.id))
       .get();
-    expect(updatedThread?.status).toBe("error");
+    expect(updatedThread?.status).toBe("active");
 
     expect(spy.notifyHost).toHaveBeenCalledWith(host.id, ["host-disconnected"]);
-    expect(spy.notifyThread).toHaveBeenCalledWith(thread.id, [
-      "status-changed",
-    ]);
+    expect(spy.notifyThread).not.toHaveBeenCalled();
   });
 
   it("does not error idle threads on lease expiry", () => {
@@ -329,7 +326,7 @@ describe("sweepExpiredLeases", () => {
 
     const result = sweepExpiredLeases(db, noopNotifier);
     expect(result.sessionsClosed).toBe(1);
-    expect(result.threadsErrored).toBe(0);
+    expect(result.expiredHostIds).toEqual([host.id]);
     expect(result.expiredSessionIds).toEqual([session.id]);
 
     const updatedThread = db

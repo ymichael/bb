@@ -178,6 +178,10 @@ function createThreadListEntry(
     environmentHostId: null,
     environmentWorkspaceDisplayKind: "other",
     hasPendingInteraction: args.hasPendingInteraction ?? false,
+    runtime: {
+      displayStatus: "idle",
+      hostReconnectGraceExpiresAt: null,
+    },
   };
 }
 
@@ -800,11 +804,7 @@ describe("useWebSocket", () => {
 
     act(() => {
       changedCallbacks[0]?.({
-        changes: [
-          "queue-changed",
-          "interactions-changed",
-          "status-changed",
-        ],
+        changes: ["queue-changed", "interactions-changed", "status-changed"],
         entity: "thread",
         type: "changed",
       });

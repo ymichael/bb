@@ -37,6 +37,11 @@ interface ExploringCompatibilityContext {
 
 type ViewWebActivityMessage = ViewWebSearchMessage | ViewWebFetchMessage;
 type WebActivityKind = ViewWebActivityMessage["kind"];
+type InterruptibleToolMessage =
+  | ViewToolExploringMessage
+  | ViewToolCallMessage
+  | ViewWebActivityMessage;
+type InterruptibleToolCall = Pick<ViewToolCallSummary, "output" | "status">;
 
 type ApprovalStatusDelta =
   | { kind: "keep" }
@@ -77,6 +82,10 @@ interface MergeCallSummaryOptions {
   appendOutput?: boolean;
   replaceOutput?: boolean;
   visibleOutput?: string;
+}
+
+export interface InterruptPendingToolActivityArgs {
+  turnIds?: ReadonlySet<string>;
 }
 
 export function createToolActivityState(): ToolActivityState {
@@ -313,6 +322,57 @@ function syncExploringStatus(cell: ViewToolExploringMessage): void {
     : "completed";
 }
 
+function shouldInterruptToolScope(
+  scope: ThreadEventScope,
+  args: InterruptPendingToolActivityArgs,
+): boolean {
+  return (
+    args.turnIds === undefined ||
+    (scope.kind === "turn" && args.turnIds.has(scope.turnId))
+  );
+}
+
+function interruptPendingToolCall(call: InterruptibleToolCall): void {
+  if (call.status !== "pending") {
+    return;
+  }
+  call.status = "interrupted";
+  if (!call.output) {
+    call.output = "Tool execution interrupted";
+  }
+}
+
+function interruptPendingToolMessage(message: InterruptibleToolMessage): void {
+  switch (message.kind) {
+    case "tool-call":
+      interruptPendingToolCall(message);
+      return;
+    case "tool-exploring":
+      for (const call of message.calls) {
+        interruptPendingToolCall(call);
+      }
+      syncExploringStatus(message);
+      return;
+    case "web-search":
+    case "web-fetch":
+      if (message.status === "pending") {
+        message.status = "interrupted";
+      }
+      return;
+  }
+}
+
+function isInterruptibleToolMessage(
+  message: ViewMessage,
+): message is InterruptibleToolMessage {
+  return (
+    message.kind === "tool-call" ||
+    message.kind === "tool-exploring" ||
+    message.kind === "web-search" ||
+    message.kind === "web-fetch"
+  );
+}
+
 function findCallInActiveCell(
   activeCell: ToolActivityState["activeCell"],
   callId: string,
@@ -512,14 +572,17 @@ export function flushPendingToolActivityOutput(
 
 export function interruptPendingToolActivity(
   state: ToolActivityProjectionState,
+  args: InterruptPendingToolActivityArgs = {},
 ): void {
+  const interruptedRunningCallIds: string[] = [];
   for (const call of state.toolActivity.runningCallsById.values()) {
+    if (!shouldInterruptToolScope(call.scope, args)) {
+      continue;
+    }
+
     flushVisibleTextBuffer(call.outputBuffer);
     syncRunningCallVisibleOutput(call);
-    call.status = mergeCallStatus(call.status, "interrupted") ?? "interrupted";
-    if (!call.output) {
-      call.output = "Tool execution interrupted";
-    }
+    interruptPendingToolCall(call);
 
     const activeCall = findCallInActiveCell(
       state.toolActivity.activeCell,
@@ -530,6 +593,7 @@ export function interruptPendingToolActivity(
         ...call,
         parsedCmd: call.parsedCmd,
       });
+      interruptedRunningCallIds.push(call.callId);
       continue;
     }
 
@@ -542,35 +606,38 @@ export function interruptPendingToolActivity(
       if (historyMatch.cell.kind === "tool-exploring") {
         syncExploringStatus(historyMatch.cell);
       }
+      interruptedRunningCallIds.push(call.callId);
       continue;
     }
 
     state.messages.push(createToolCallMessage(call));
+    interruptedRunningCallIds.push(call.callId);
   }
-  state.toolActivity.runningCallsById.clear();
 
-  if (state.toolActivity.activeCell?.kind === "tool-call") {
-    if (state.toolActivity.activeCell.status === "pending") {
-      state.toolActivity.activeCell.status = "interrupted";
-      if (!state.toolActivity.activeCell.output) {
-        state.toolActivity.activeCell.output = "Tool execution interrupted";
-      }
-    }
-  } else if (state.toolActivity.activeCell?.kind === "tool-exploring") {
-    for (const call of state.toolActivity.activeCell.calls) {
-      if (call.status === "pending") {
-        call.status = "interrupted";
-        if (!call.output) {
-          call.output = "Tool execution interrupted";
-        }
-      }
-    }
-    syncExploringStatus(state.toolActivity.activeCell);
-  } else if (
-    state.toolActivity.activeCell?.kind === "web-search" ||
-    state.toolActivity.activeCell?.kind === "web-fetch"
+  for (const callId of interruptedRunningCallIds) {
+    state.toolActivity.runningCallsById.delete(callId);
+  }
+
+  if (
+    state.toolActivity.activeCell &&
+    shouldInterruptToolScope(state.toolActivity.activeCell.scope, args)
   ) {
-    state.toolActivity.activeCell.status = "interrupted";
+    interruptPendingToolMessage(state.toolActivity.activeCell);
+  }
+
+  for (const cell of state.toolActivity.historyCells) {
+    if (shouldInterruptToolScope(cell.scope, args)) {
+      interruptPendingToolMessage(cell);
+    }
+  }
+
+  for (const message of state.messages) {
+    if (
+      isInterruptibleToolMessage(message) &&
+      shouldInterruptToolScope(message.scope, args)
+    ) {
+      interruptPendingToolMessage(message);
+    }
   }
 }
 

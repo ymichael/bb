@@ -9,7 +9,6 @@ import type {
   ProjectSource,
   ResolvedThreadExecutionOptions,
   SandboxBackendInfo,
-  Thread,
   ThreadType,
   ThreadGitDiffResponse,
   ThreadQueuedMessage,
@@ -41,6 +40,7 @@ import type {
   ThreadPendingInteractionsResponse,
   ThreadDraftListResponse,
   ThreadListResponse,
+  ThreadResponse,
   ThreadTimelineResponse,
   TimelineTurnSummaryDetailsResponse,
   ResolvePendingInteractionRequest,
@@ -294,8 +294,8 @@ export async function createProject(
 export async function hireProjectManager(
   projectId: string,
   options: CreateManagerThreadRequest,
-): Promise<Thread> {
-  return request<Thread>(
+): Promise<ThreadResponse> {
+  return request<ThreadResponse>(
     apiClient.projects[":id"].managers.$post({
       param: { id: projectId },
       json: {
@@ -412,8 +412,10 @@ export async function transcribeVoiceInput(
   );
 }
 
-export async function createThread(req: CreateThreadRequest): Promise<Thread> {
-  return request<Thread>(
+export async function createThread(
+  req: CreateThreadRequest,
+): Promise<ThreadResponse> {
+  return request<ThreadResponse>(
     apiClient.threads.$post({
       json: {
         ...req,
@@ -453,8 +455,10 @@ export async function listThreads(
   );
 }
 
-export async function getThread(id: string): Promise<Thread> {
-  return request<Thread>(apiClient.threads[":id"].$get({ param: { id } }));
+export async function getThread(id: string): Promise<ThreadResponse> {
+  return request<ThreadResponse>(
+    apiClient.threads[":id"].$get({ param: { id } }),
+  );
 }
 
 export async function listThreadStorageFiles(
@@ -482,8 +486,8 @@ export async function getThreadStorageFilePreview(
 export async function updateThread(
   id: string,
   req: UpdateThreadRequest,
-): Promise<Thread> {
-  return request<Thread>(
+): Promise<ThreadResponse> {
+  return request<ThreadResponse>(
     apiClient.threads[":id"].$patch({ param: { id }, json: req }),
   );
 }
@@ -598,14 +602,14 @@ export async function deleteThread(id: string): Promise<void> {
   await requestVoid(apiClient.threads[":id"].$delete({ param: { id } }));
 }
 
-export async function markThreadRead(id: string): Promise<Thread> {
-  return request<Thread>(
+export async function markThreadRead(id: string): Promise<ThreadResponse> {
+  return request<ThreadResponse>(
     apiClient.threads[":id"].read.$post({ param: { id } }),
   );
 }
 
-export async function markThreadUnread(id: string): Promise<Thread> {
-  return request<Thread>(
+export async function markThreadUnread(id: string): Promise<ThreadResponse> {
+  return request<ThreadResponse>(
     apiClient.threads[":id"].unread.$post({ param: { id } }),
   );
 }
@@ -674,9 +678,7 @@ export async function getThreadTimeline(
     apiClient.threads[":id"].timeline.$get({
       param: { id },
       query: {
-        ...(includeNestedRows
-          ? { includeNestedRows: "true" }
-          : {}),
+        ...(includeNestedRows ? { includeNestedRows: "true" } : {}),
         ...(includeAllEvents ? { showAllManagerEvents: "true" } : {}),
       },
     }),

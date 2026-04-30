@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { QueryClient, QueryKey } from "@tanstack/react-query";
-import type { Thread, ThreadListEntry } from "@bb/domain";
+import type { ThreadListEntry, ThreadWithRuntime } from "@bb/domain";
 import type { ProjectResponse, UpdateThreadRequest } from "@bb/server-contract";
 import * as api from "@/lib/api";
 import {
@@ -33,14 +33,14 @@ interface ArchiveThreadMutationRequest {
 }
 
 interface DeleteThreadMutationContext {
-  previousThread: Thread | undefined;
+  previousThread: ThreadWithRuntime | undefined;
   previousThreadLists: ThreadListSnapshot;
   previousProjects: ProjectResponse[] | undefined;
   environmentId: string | null | undefined;
 }
 
 interface ThreadListMutationContext {
-  previousThread: Thread | undefined;
+  previousThread: ThreadWithRuntime | undefined;
   previousThreadLists: ThreadListSnapshot;
 }
 
@@ -80,7 +80,10 @@ export function useUpdateThread() {
     mutationFn: ({ id, ...request }: UpdateThreadMutationRequest) =>
       api.updateThread(id, request),
     onSuccess: (thread) => {
-      queryClient.setQueryData<Thread>(threadQueryKey(thread.id), thread);
+      queryClient.setQueryData<ThreadWithRuntime>(
+        threadQueryKey(thread.id),
+        thread,
+      );
       invalidateThreadListAndStatusQueries({ queryClient });
     },
   });
@@ -100,7 +103,7 @@ export function useArchiveThread() {
       await queryClient.cancelQueries({ queryKey: threadQueryKey(id) });
       await queryClient.cancelQueries({ queryKey: threadsQueryKey() });
 
-      const previousThread = queryClient.getQueryData<Thread>(
+      const previousThread = queryClient.getQueryData<ThreadWithRuntime>(
         threadQueryKey(id),
       );
       const previousThreadLists = queryClient.getQueriesData<ThreadListEntry[]>(
@@ -111,16 +114,19 @@ export function useArchiveThread() {
 
       const archivedAt = Date.now();
 
-      queryClient.setQueryData<Thread>(threadQueryKey(id), (thread) => {
-        if (!thread) {
-          return thread;
-        }
+      queryClient.setQueryData<ThreadWithRuntime>(
+        threadQueryKey(id),
+        (thread) => {
+          if (!thread) {
+            return thread;
+          }
 
-        return {
-          ...thread,
-          archivedAt,
-        };
-      });
+          return {
+            ...thread,
+            archivedAt,
+          };
+        },
+      );
 
       archiveThreadInLists(queryClient, previousThreadLists, id);
 
@@ -158,7 +164,7 @@ export function useUnarchiveThread() {
       await queryClient.cancelQueries({ queryKey: threadQueryKey(id) });
       await queryClient.cancelQueries({ queryKey: threadsQueryKey() });
 
-      const previousThread = queryClient.getQueryData<Thread>(
+      const previousThread = queryClient.getQueryData<ThreadWithRuntime>(
         threadQueryKey(id),
       );
       const previousThreadLists = queryClient.getQueriesData<ThreadListEntry[]>(
@@ -167,16 +173,19 @@ export function useUnarchiveThread() {
         },
       );
 
-      queryClient.setQueryData<Thread>(threadQueryKey(id), (thread) => {
-        if (!thread) {
-          return thread;
-        }
+      queryClient.setQueryData<ThreadWithRuntime>(
+        threadQueryKey(id),
+        (thread) => {
+          if (!thread) {
+            return thread;
+          }
 
-        return {
-          ...thread,
-          archivedAt: null,
-        };
-      });
+          return {
+            ...thread,
+            archivedAt: null,
+          };
+        },
+      );
 
       for (const [queryKey, list] of previousThreadLists) {
         if (!list) {
@@ -231,7 +240,7 @@ export function useDeleteThread() {
       await queryClient.cancelQueries({ queryKey: threadsQueryKey() });
       await queryClient.cancelQueries({ queryKey: projectsQueryKey() });
 
-      const previousThread = queryClient.getQueryData<Thread>(
+      const previousThread = queryClient.getQueryData<ThreadWithRuntime>(
         threadQueryKey(id),
       );
       const previousThreadLists = queryClient.getQueriesData<ThreadListEntry[]>(
@@ -297,7 +306,10 @@ export function useMarkThreadRead() {
     },
     mutationFn: (threadId: string) => api.markThreadRead(threadId),
     onSuccess: (thread) => {
-      queryClient.setQueryData<Thread>(threadQueryKey(thread.id), thread);
+      queryClient.setQueryData<ThreadWithRuntime>(
+        threadQueryKey(thread.id),
+        thread,
+      );
       invalidateThreadReadStateQueries({ queryClient });
     },
   });
@@ -313,7 +325,10 @@ export function useMarkThreadUnread() {
     },
     mutationFn: (threadId: string) => api.markThreadUnread(threadId),
     onSuccess: (thread) => {
-      queryClient.setQueryData<Thread>(threadQueryKey(thread.id), thread);
+      queryClient.setQueryData<ThreadWithRuntime>(
+        threadQueryKey(thread.id),
+        thread,
+      );
       invalidateThreadReadStateQueries({ queryClient });
     },
   });

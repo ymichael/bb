@@ -601,30 +601,38 @@ describe("toViewMessages operations", () => {
   });
 
   it("projects thread interruption events as interrupted operations", () => {
-    const projected = toViewMessages(
-      fromRows([
-        {
-          id: "evt-1",
-          threadId: "thread-1",
-          seq: 1,
-          type: "system/thread/interrupted",
-          data: {
-            reason: "user",
-          },
-          createdAt: 1,
-          scope: threadScope(),
-        },
-      ]),
-    );
-    const op = projected.find(
-      (message): message is Extract<ViewMessage, { kind: "operation" }> =>
-        message.kind === "operation",
-    );
+    const cases = [
+      { reason: "manual-stop", title: "Stopped manually" },
+      { reason: "host-daemon-restarted", title: "Host daemon restarted" },
+    ];
 
-    expect(op).toBeDefined();
-    expect(op?.opType).toBe("thread-interrupted");
-    expect(op?.title).toBe("Stopped by user");
-    expect(op?.status).toBe("interrupted");
+    for (const { reason, title } of cases) {
+      const projected = toViewMessages(
+        fromRows([
+          {
+            id: `evt-${reason}`,
+            threadId: "thread-1",
+            seq: 1,
+            type: "system/thread/interrupted",
+            data: {
+              reason,
+            },
+            createdAt: 1,
+            scope: threadScope(),
+          },
+        ]),
+      );
+      const op = projected.find(
+        (message): message is Extract<ViewMessage, { kind: "operation" }> =>
+          message.kind === "operation",
+      );
+
+      expect(op).toBeDefined();
+      expect(op?.opType).toBe("thread-interrupted");
+      expect(op?.title).toBe(title);
+      expect(op?.status).toBe("interrupted");
+      expect(op?.detail).toBeUndefined();
+    }
   });
 
   it("projects provider/unhandled events as readable operations", () => {

@@ -1,6 +1,6 @@
 import type { QueryKey } from "@tanstack/react-query";
 import type {
-  Thread,
+  ThreadWithRuntime,
   ThreadGitDiffResponse,
   WorkspaceStatus,
 } from "@bb/domain";
@@ -75,10 +75,10 @@ export function resolveEnvironmentGitDiffPlaceholder(
 }
 
 export function resolveThreadPlaceholder(
-  previousData: Thread | undefined,
+  previousData: ThreadWithRuntime | undefined,
   previousQueryKey: QueryKey | undefined,
   nextThreadId: string,
-): Thread | undefined {
+): ThreadWithRuntime | undefined {
   return resolveThreadScopedPlaceholder(
     previousData,
     previousQueryKey,

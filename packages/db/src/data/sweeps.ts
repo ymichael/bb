@@ -21,9 +21,9 @@ const PROVISION_COMMAND_TTL_MS = 20 * 60_000;
 const DESTROYING_ENVIRONMENT_TTL_MS = 7 * 24 * 60 * 60_000;
 
 export interface SweepExpiredLeasesResult {
+  expiredHostIds: string[];
   expiredSessionIds: string[];
   sessionsClosed: number;
-  threadsErrored: number;
 }
 
 /**
@@ -118,9 +118,10 @@ export function sweepExpiredCommands(
 /**
  * Sweep expired leases: sessions past lease timeout.
  * - Close the session (status="closed", closeReason="expired")
- * - Error all active/provisioning threads on that host
+ * - Notify host availability changed
  *
- * Returns { sessionsClosed: number; threadsErrored: number }
+ * Returns the closed sessions and hosts so the server can notify runtime
+ * display state and close any still-registered sockets.
  */
 export function sweepExpiredLeases(
   db: DbConnection,
@@ -143,9 +144,9 @@ export function sweepExpiredLeases(
 
   if (expiredSessions.length === 0) {
     return {
+      expiredHostIds: [],
       expiredSessionIds: [],
       sessionsClosed: 0,
-      threadsErrored: 0,
     };
   }
 
@@ -172,32 +173,10 @@ export function sweepExpiredLeases(
     ...new Set(expiredSessions.map((session) => session.hostId)),
   ];
 
-  // Find active/provisioning threads on environments belonging to expired hosts.
-  // Idle threads are excluded — they have no in-flight work to interrupt.
-  const activeThreadIds = db
-    .select({ id: threads.id })
-    .from(threads)
-    .innerJoin(environments, eq(threads.environmentId, environments.id))
-    .where(
-      and(
-        inArray(environments.hostId, expiredHostIds),
-        inArray(threads.status, ["active", "provisioning"]),
-        isNull(threads.deletedAt),
-        isNull(threads.stopRequestedAt),
-      ),
-    )
-    .all()
-    .map((thread) => thread.id);
-
-  const erroredThreadIds = transitionThreadsToError(db, notifier, {
-    now: currentTime,
-    threadIds: activeThreadIds,
-  });
-
   return {
+    expiredHostIds,
     expiredSessionIds: expiredSessions.map((session) => session.id),
     sessionsClosed: expiredSessions.length,
-    threadsErrored: erroredThreadIds.length,
   };
 }
 

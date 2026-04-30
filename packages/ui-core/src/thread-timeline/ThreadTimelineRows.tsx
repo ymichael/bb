@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import type {
+  ThreadRuntimeDisplayStatus,
   TimelineRow,
   TimelineTurnSummaryRow,
   ViewMessage,
@@ -27,18 +28,19 @@ export interface ThreadTimelineRowsProps {
   resolveUserAttachmentImageSrc?: UserAttachmentImageSrcResolver;
   themeType?: ThreadTimelineTheme;
   threadDetailRows: TimelineRow[];
-  threadStatus: string;
+  threadRuntimeDisplayStatus: ThreadRuntimeDisplayStatus;
   turnSummaryRowsById: Record<string, TimelineRow[]>;
 }
 
 function getPresentationOptions(
-  threadStatus: string,
+  threadRuntimeDisplayStatus: ThreadRuntimeDisplayStatus,
 ): NestedTimelineRowPresentationOptions {
   return {
-    expandErrors: threadStatus === "error",
+    expandErrors: threadRuntimeDisplayStatus === "error",
     groupedRowsUseOngoingLabels: false,
     preferOngoingLabels:
-      threadStatus !== "completed" && threadStatus !== "error",
+      threadRuntimeDisplayStatus !== "error" &&
+      threadRuntimeDisplayStatus !== "waiting-for-host",
   };
 }
 
@@ -74,7 +76,7 @@ export function ThreadTimelineRows({
   resolveUserAttachmentImageSrc,
   themeType,
   threadDetailRows,
-  threadStatus,
+  threadRuntimeDisplayStatus,
   turnSummaryRowsById,
 }: ThreadTimelineRowsProps) {
   const turnSummaryRowsController = useMemo(
@@ -111,7 +113,7 @@ export function ThreadTimelineRows({
   return (
     <NestedTimelineRows
       latestActivityRowId={latestActivityRowId}
-      presentationOptions={getPresentationOptions(threadStatus)}
+      presentationOptions={getPresentationOptions(threadRuntimeDisplayStatus)}
       renderMessage={renderMessage}
       rowContainerClassName="pt-1"
       rows={threadDetailRows}

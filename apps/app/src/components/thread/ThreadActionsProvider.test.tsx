@@ -8,7 +8,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
-import type { Thread } from "@bb/domain";
+import type { ThreadWithRuntime } from "@bb/domain";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
@@ -40,7 +40,9 @@ vi.mock("sonner", () => ({
   toast: { error: vi.fn(), success: vi.fn() },
 }));
 
-function makeThread(overrides: Partial<Thread> = {}): Thread {
+function makeThread(
+  overrides: Partial<ThreadWithRuntime> = {},
+): ThreadWithRuntime {
   return {
     archivedAt: null,
     automationId: null,
@@ -59,6 +61,10 @@ function makeThread(overrides: Partial<Thread> = {}): Thread {
     titleFallback: "Thread title",
     type: "standard",
     updatedAt: 10,
+    runtime: {
+      displayStatus: "idle",
+      hostReconnectGraceExpiresAt: null,
+    },
     ...overrides,
   };
 }

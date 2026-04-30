@@ -2,12 +2,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   PendingInteraction,
   ResolvedThreadExecutionOptions,
-  Thread,
 } from "@bb/domain";
 import type {
   ThreadDraftListResponse,
   ThreadListResponse,
   ThreadPendingInteractionsResponse,
+  ThreadResponse,
   ThreadTimelineResponse,
   TimelineTurnSummaryDetailsResponse,
   WorkspaceFileListResponse,
@@ -81,7 +81,7 @@ export function useThreads(filters: UseThreadsFilters, options?: QueryOptions) {
 export function useThread(id: string, options?: RefetchOnMountOptions) {
   const queryClient = useQueryClient();
 
-  return useQuery<Thread>({
+  return useQuery<ThreadResponse>({
     queryKey: threadQueryKey(id),
     queryFn: () => api.getThread(requireThreadId(id, "useThread")),
     enabled: (options?.enabled ?? true) && Boolean(id),

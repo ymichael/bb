@@ -9,6 +9,7 @@ import {
   getActiveSessionById,
   getMostRecentlyUpdatedConnectedHostId,
   heartbeatSession,
+  listLatestSessionsForHosts,
   listConnectedHostIds,
   openSession,
 } from "../../src/data/sessions.js";
@@ -113,6 +114,78 @@ describe("sessions", () => {
       .get();
     expect(old?.status).toBe("closed");
     expect(old?.closeReason).toBe("replaced");
+  });
+
+  it("lists the latest session for each requested host", () => {
+    const { db, host } = setup();
+    const otherHost = upsertHost(db, noopNotifier, {
+      name: "test-host-2",
+      type: "persistent",
+    });
+
+    const firstSession = openSession(db, noopNotifier, {
+      hostId: host.id,
+      instanceId: "inst-1",
+      hostName: "test-host",
+      hostType: "persistent",
+      dataDir: "/tmp/test-host-data",
+      protocolVersion: 1,
+      heartbeatIntervalMs: 10_000,
+      leaseTimeoutMs: 30_000,
+    });
+    const latestSession = openSession(db, noopNotifier, {
+      hostId: host.id,
+      instanceId: "inst-2",
+      hostName: "test-host",
+      hostType: "persistent",
+      dataDir: "/tmp/test-host-data",
+      protocolVersion: 1,
+      heartbeatIntervalMs: 10_000,
+      leaseTimeoutMs: 30_000,
+    });
+    const otherFirstSession = openSession(db, noopNotifier, {
+      hostId: otherHost.id,
+      instanceId: "inst-3",
+      hostName: "test-host-2",
+      hostType: "persistent",
+      dataDir: "/tmp/test-host-data-2",
+      protocolVersion: 1,
+      heartbeatIntervalMs: 10_000,
+      leaseTimeoutMs: 30_000,
+    });
+    const otherLatestSession = openSession(db, noopNotifier, {
+      hostId: otherHost.id,
+      instanceId: "inst-4",
+      hostName: "test-host-2",
+      hostType: "persistent",
+      dataDir: "/tmp/test-host-data-2",
+      protocolVersion: 1,
+      heartbeatIntervalMs: 10_000,
+      leaseTimeoutMs: 30_000,
+    });
+
+    for (const sessionUpdate of [
+      { sessionId: firstSession.id, updatedAt: 10 },
+      { sessionId: latestSession.id, updatedAt: 20 },
+      { sessionId: otherFirstSession.id, updatedAt: 30 },
+      { sessionId: otherLatestSession.id, updatedAt: 40 },
+    ]) {
+      db.update(hostDaemonSessions)
+        .set({
+          createdAt: sessionUpdate.updatedAt,
+          updatedAt: sessionUpdate.updatedAt,
+        })
+        .where(eq(hostDaemonSessions.id, sessionUpdate.sessionId))
+        .run();
+    }
+
+    const sessions = listLatestSessionsForHosts(db, {
+      hostIds: [host.id, host.id, otherHost.id, "host-missing"],
+    });
+
+    expect(sessions.map((session) => session.id).sort()).toEqual(
+      [latestSession.id, otherLatestSession.id].sort(),
+    );
   });
 
   it("updates heartbeat timestamps for an active session", () => {

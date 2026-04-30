@@ -1,10 +1,7 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import type {
-  TimelineMessageRow,
-  ViewAssistantTextMessage,
-} from "@bb/domain";
+import type { TimelineMessageRow, ViewAssistantTextMessage } from "@bb/domain";
 import { threadScope } from "@bb/domain";
 import type { ThreadTimelineLocalFileLink } from "@bb/ui-core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -96,7 +93,7 @@ describe("ThreadTimelinePane", () => {
           buildAssistantRow("[Open file](/Users/me/project/src/file.ts:12)"),
         ]}
         threadId="thread-1"
-        threadStatus="completed"
+        threadRuntimeDisplayStatus="idle"
         turnSummaryRowsById={{}}
       />,
     );
@@ -107,5 +104,32 @@ describe("ThreadTimelinePane", () => {
       lineNumber: 12,
       path: "/Users/me/project/src/file.ts",
     });
+  });
+
+  it("renders host connection notices outside the event timeline rows", () => {
+    render(
+      <ThreadTimelinePane
+        activeThinking={null}
+        footer={null}
+        header={null}
+        hostConnectionNotice={{
+          label: "Host daemon disconnected",
+          tone: "error",
+        }}
+        isThreadTimelinePending={false}
+        timelineError={false}
+        latestActivityRowId={null}
+        loadingTurnSummaryIds={new Set()}
+        erroredTurnSummaryIds={new Set()}
+        onLoadTurnSummaryRows={() => undefined}
+        showOngoingIndicator={false}
+        threadDetailRows={[]}
+        threadId="thread-1"
+        threadRuntimeDisplayStatus="waiting-for-host"
+        turnSummaryRowsById={{}}
+      />,
+    );
+
+    expect(screen.getByText("Host daemon disconnected")).toBeTruthy();
   });
 });

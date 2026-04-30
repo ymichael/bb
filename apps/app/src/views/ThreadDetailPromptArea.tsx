@@ -4,6 +4,7 @@ import {
   type ComponentType,
   type ReactNode,
 } from "react";
+import { assertNever } from "@bb/core-ui";
 import { useActiveSecondaryPanel } from "@/lib/thread-secondary-panel";
 import type {
   PendingInteraction,
@@ -11,7 +12,8 @@ import type {
   PromptInput,
   ReasoningLevel,
   ServiceTier,
-  Thread,
+  ThreadRuntimeDisplayStatus,
+  ThreadWithRuntime,
   WorkspaceFileStatus,
   WorkspaceStatus,
 } from "@bb/domain";
@@ -74,8 +76,44 @@ interface ThreadDetailPromptAreaProps {
   sendMessage: SendMessageMutationLike;
   showBranchComparisonUi: boolean;
   showPromptGitStatsBanner: boolean;
-  thread: Thread;
+  thread: ThreadWithRuntime;
   workspaceStatus?: WorkspaceStatus;
+}
+
+function getPromptPlaceholder(
+  displayStatus: ThreadRuntimeDisplayStatus,
+  hasPendingInteraction: boolean,
+): string {
+  if (displayStatus === "created") {
+    return "Thread is being created...";
+  }
+  if (displayStatus === "provisioning") {
+    return "Thread is being provisioned...";
+  }
+  if (hasPendingInteraction) {
+    return "Resolve the pending interaction below before sending another message";
+  }
+
+  switch (displayStatus) {
+    case "waiting-for-host":
+      return "Host daemon disconnected";
+    case "host-reconnecting":
+      return "Waiting for host daemon to reconnect...";
+    case "error":
+      return "Retry by sending a follow-up message";
+    case "idle":
+      return "Ask for follow-up changes";
+    case "active":
+      return "Send a message to this thread...";
+    default:
+      return assertNever(displayStatus);
+  }
+}
+
+function shouldQueueFollowUpDraft(
+  displayStatus: ThreadRuntimeDisplayStatus,
+): boolean {
+  return displayStatus === "active" || displayStatus === "host-reconnecting";
 }
 
 export function ThreadDetailPromptArea({
@@ -157,9 +195,10 @@ export function ThreadDetailPromptArea({
     initialPermissionMode: defaultExecutionOptions?.permissionMode,
     initialEnvironmentSelectionValue: thread.environmentId ?? undefined,
   });
-  const isCreated = thread.status === "created";
-  const isProvisioning = thread.status === "provisioning";
-  const isRuntimeError = thread.status === "error";
+  const runtimeDisplayStatus = thread.runtime.displayStatus;
+  const isCreated = runtimeDisplayStatus === "created";
+  const isProvisioning = runtimeDisplayStatus === "provisioning";
+  const isWaitingForHost = runtimeDisplayStatus === "waiting-for-host";
   const activePendingInteraction =
     getLatestPendingInteraction(pendingInteractions);
   const hasPendingInteraction = activePendingInteraction !== null;
@@ -170,18 +209,14 @@ export function ThreadDetailPromptArea({
     isEnvironmentActionPending ||
     createDraft.isPending;
   const canSendFollowUp =
-    !isCreated && !isProvisioning && !hasPendingInteraction;
-  const promptPlaceholder = isCreated
-    ? "Thread is being created..."
-    : isProvisioning
-      ? "Thread is being provisioned..."
-      : hasPendingInteraction
-        ? "Resolve the pending interaction below before sending another message"
-        : isRuntimeError
-          ? "Retry by sending a follow-up message"
-          : thread.status === "idle"
-            ? "Ask for follow-up changes"
-            : "Send a message to this thread...";
+    !isCreated &&
+    !isProvisioning &&
+    !hasPendingInteraction &&
+    !isWaitingForHost;
+  const promptPlaceholder = getPromptPlaceholder(
+    runtimeDisplayStatus,
+    hasPendingInteraction,
+  );
   const sendFollowUpInput = useCallback(
     async ({
       input,
@@ -257,7 +292,7 @@ export function ThreadDetailPromptArea({
     promptDraft.clearIfCurrentMatches(submittedDraft);
     setAttachmentError(null);
 
-    const isQueuingDraft = thread.status === "active";
+    const isQueuingDraft = shouldQueueFollowUpDraft(runtimeDisplayStatus);
     try {
       if (isQueuingDraft) {
         await createDraft.mutateAsync({
@@ -299,7 +334,7 @@ export function ThreadDetailPromptArea({
     serviceTier,
     supportsServiceTier,
     thread.id,
-    thread.status,
+    runtimeDisplayStatus,
   ]);
 
   const handleSendQueuedImmediately = useCallback(
@@ -461,7 +496,7 @@ export function ThreadDetailPromptArea({
         processingQueuedMessageId,
         promptPlaceholder,
         threadId: thread.id,
-        threadStatus: thread.status,
+        threadRuntimeDisplayStatus: runtimeDisplayStatus,
       }}
       environment={{
         contextWindowUsage,

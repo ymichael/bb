@@ -7,6 +7,7 @@ import type { DbNotifier } from "../../src/notifier.js";
 import {
   appendStoredThreadEvent,
   appendStoredThreadEventInTransaction,
+  appendStoredThreadEventsInTransaction,
   findStoredEventRow,
   getActiveStoredTurnId,
   getHighWaterMarks,
@@ -23,6 +24,7 @@ import {
   listStoredEventRows,
   listStoredEventRowsInRange,
   listStoredTurnInputAcceptedRowsByClientRequestSequences,
+  listThreadTurnInterruptionEventStates,
   pruneContextWindowUsageEventsBeforeSequence,
   pruneTokenUsageEventsBeforeSequence,
   pruneResolvedItemDeltas,
@@ -620,6 +622,60 @@ describe("events", () => {
     expect(getActiveStoredTurnId(db, thread.id)).toBeNull();
   });
 
+  it("appends stored thread events in one transaction with per-thread sequences", () => {
+    const { db, project, thread } = setup();
+    const otherThread = createThread(db, noopNotifier, {
+      projectId: project.id,
+      providerId: "codex",
+    });
+
+    const sequences = db.transaction(
+      (tx) =>
+        appendStoredThreadEventsInTransaction(tx, [
+          {
+            threadId: thread.id,
+            scope: turnScope("turn_1"),
+            providerThreadId: "provider_thr_1",
+            type: "turn/started",
+            data: {
+              providerThreadId: "provider_thr_1",
+              turnId: "turn_1",
+            },
+          },
+          {
+            threadId: thread.id,
+            scope: turnScope("turn_1"),
+            providerThreadId: "provider_thr_1",
+            type: "turn/completed",
+            data: {
+              providerThreadId: "provider_thr_1",
+              status: "interrupted",
+              turnId: "turn_1",
+            },
+          },
+          {
+            threadId: otherThread.id,
+            scope: threadScope(),
+            type: "system/thread/interrupted",
+            data: {
+              reason: "host-daemon-restarted",
+            },
+          },
+        ]),
+      { behavior: "immediate" },
+    );
+
+    expect(sequences).toEqual([1, 2, 1]);
+    expect(
+      listEvents(db, { threadId: thread.id }).map((event) => event.sequence),
+    ).toEqual([1, 2]);
+    expect(
+      listEvents(db, { threadId: otherThread.id }).map(
+        (event) => event.sequence,
+      ),
+    ).toEqual([1]);
+  });
+
   it("lists completed turns for a specific thread set", () => {
     const { db, project, thread } = setup();
     const otherThread = createThread(db, noopNotifier, {
@@ -660,6 +716,110 @@ describe("events", () => {
       {
         threadId: thread.id,
         turnId: "turn_a",
+      },
+    ]);
+  });
+
+  it("lists active turn and latest provider state for thread interruption", () => {
+    const { db, project, thread } = setup();
+    const completedThread = createThread(db, noopNotifier, {
+      projectId: project.id,
+      providerId: "codex",
+    });
+    const noProviderThread = createThread(db, noopNotifier, {
+      projectId: project.id,
+      providerId: "codex",
+    });
+    const noEventThread = createThread(db, noopNotifier, {
+      projectId: project.id,
+      providerId: "codex",
+    });
+
+    insertEvents(db, noopNotifier, [
+      {
+        threadId: thread.id,
+        sequence: 1,
+        scope: turnScope("turn_active"),
+        providerThreadId: "provider_active",
+        type: "turn/started",
+        itemId: null,
+        itemKind: null,
+        data: JSON.stringify({
+          providerThreadId: "provider_active",
+          turnId: "turn_active",
+        }),
+      },
+      {
+        threadId: completedThread.id,
+        sequence: 1,
+        scope: turnScope("turn_done"),
+        providerThreadId: "provider_done",
+        type: "turn/started",
+        itemId: null,
+        itemKind: null,
+        data: JSON.stringify({
+          providerThreadId: "provider_done",
+          turnId: "turn_done",
+        }),
+      },
+      {
+        threadId: completedThread.id,
+        sequence: 2,
+        scope: turnScope("turn_done"),
+        providerThreadId: "provider_done",
+        type: "turn/completed",
+        itemId: null,
+        itemKind: null,
+        data: JSON.stringify({
+          providerThreadId: "provider_done",
+          turnId: "turn_done",
+          status: "completed",
+        }),
+      },
+      {
+        threadId: noProviderThread.id,
+        sequence: 1,
+        scope: turnScope("turn_no_provider"),
+        providerThreadId: null,
+        type: "turn/started",
+        itemId: null,
+        itemKind: null,
+        data: JSON.stringify({
+          providerThreadId: null,
+          turnId: "turn_no_provider",
+        }),
+      },
+    ]);
+
+    expect(
+      listThreadTurnInterruptionEventStates(db, {
+        threadIds: [
+          thread.id,
+          completedThread.id,
+          noProviderThread.id,
+          noEventThread.id,
+        ],
+      }),
+    ).toEqual([
+      {
+        activeTurnId: "turn_active",
+        latestProviderThreadId: "provider_active",
+        threadId: thread.id,
+      },
+      {
+        activeTurnId: null,
+        latestProviderThreadId: "provider_done",
+        threadId: completedThread.id,
+      },
+      {
+        activeTurnId: "turn_no_provider",
+        latestProviderThreadId: null,
+        threadId: noProviderThread.id,
+      },
+      {
+        activeTurnId: null,
+        latestProviderThreadId: null,
+        threadId: noEventThread.id,
       },
     ]);
   });

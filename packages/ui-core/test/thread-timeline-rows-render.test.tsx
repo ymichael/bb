@@ -72,7 +72,7 @@ describe("ThreadTimelineRows rendering", () => {
         erroredTurnSummaryIds={new Set()}
         onLoadTurnSummaryRows={() => {}}
         threadDetailRows={[buildToolGroupRow()]}
-        threadStatus="completed"
+        threadRuntimeDisplayStatus="idle"
         turnSummaryRowsById={{}}
       />,
     );
@@ -89,7 +89,7 @@ describe("ThreadTimelineRows rendering", () => {
         erroredTurnSummaryIds={new Set()}
         onLoadTurnSummaryRows={() => {}}
         threadDetailRows={[buildUserMessageRow()]}
-        threadStatus="completed"
+        threadRuntimeDisplayStatus="idle"
         turnSummaryRowsById={{}}
       />,
     );

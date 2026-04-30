@@ -17,6 +17,24 @@ export const threadStatusValues = [
 export const threadStatusSchema = z.enum(threadStatusValues);
 export type ThreadStatus = z.infer<typeof threadStatusSchema>;
 
+export const threadRuntimeDisplayStatusValues = [
+  ...threadStatusValues,
+  "host-reconnecting",
+  "waiting-for-host",
+] as const;
+export const threadRuntimeDisplayStatusSchema = z.enum(
+  threadRuntimeDisplayStatusValues,
+);
+export type ThreadRuntimeDisplayStatus = z.infer<
+  typeof threadRuntimeDisplayStatusSchema
+>;
+
+export const threadRuntimeStateSchema = z.object({
+  displayStatus: threadRuntimeDisplayStatusSchema,
+  hostReconnectGraceExpiresAt: z.number().nullable(),
+});
+export type ThreadRuntimeState = z.infer<typeof threadRuntimeStateSchema>;
+
 export const threadTypeValues = ["standard", "manager"] as const;
 export const threadTypeSchema = z.enum(threadTypeValues);
 export type ThreadType = z.infer<typeof threadTypeSchema>;
@@ -146,7 +164,12 @@ export const threadSchema = z.object({
 });
 export type Thread = z.infer<typeof threadSchema>;
 
-export const threadListEntrySchema = threadSchema.extend({
+export const threadWithRuntimeSchema = threadSchema.extend({
+  runtime: threadRuntimeStateSchema,
+});
+export type ThreadWithRuntime = z.infer<typeof threadWithRuntimeSchema>;
+
+export const threadListEntrySchema = threadWithRuntimeSchema.extend({
   hasPendingInteraction: z.boolean(),
   environmentHostId: z.string().nullable(),
   environmentBranchName: z.string().nullable(),

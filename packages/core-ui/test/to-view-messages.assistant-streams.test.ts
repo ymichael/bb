@@ -578,8 +578,7 @@ describe("toViewMessages assistant streams", () => {
         data: {
           threadId: "thread-1",
           turnId: "turn-1",
-          reason: "user",
-          message: "Stopped by user",
+          reason: "manual-stop",
         },
         createdAt: 2,
       },

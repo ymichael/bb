@@ -24,6 +24,7 @@ import {
   upsertHost,
 } from "@bb/db";
 import { hostDaemonCommandSchema } from "@bb/host-daemon-contract";
+import { threadResponseSchema } from "@bb/server-contract";
 import type { SandboxHostProgressCallbacks } from "@bb/sandbox-host";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -75,6 +76,7 @@ import {
   queueEnvironmentProvisionLifecycleCommand,
   queueThreadStartLifecycleCommand,
 } from "../helpers/lifecycle-commands.js";
+import { readJson } from "../helpers/json.js";
 
 const provisionHostMock = vi.fn();
 const resumeHostMock = vi.fn();
@@ -1648,6 +1650,11 @@ describe("periodic sweeps", () => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-periodic-expired-interaction",
       });
+      const socket = {
+        close: vi.fn(),
+        send: vi.fn(),
+      };
+      harness.hub.registerDaemon(session.id, host.id, socket);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
       });
@@ -1658,6 +1665,7 @@ describe("periodic sweeps", () => {
       const thread = seedThread(harness.deps, {
         projectId: project.id,
         environmentId: environment.id,
+        status: "active",
       });
 
       const registered =
@@ -1682,6 +1690,7 @@ describe("periodic sweeps", () => {
           `Expected interaction registration to succeed: ${registered.reason}`,
         );
       }
+      const notifyThread = vi.spyOn(harness.hub, "notifyThread");
 
       harness.db
         .update(hostDaemonSessions)
@@ -1692,6 +1701,27 @@ describe("periodic sweeps", () => {
       await runPeriodicSweeps(harness.deps);
 
       expect(getActiveSession(harness.db, host.id)).toBeNull();
+      const closedSession = harness.db
+        .select()
+        .from(hostDaemonSessions)
+        .where(eq(hostDaemonSessions.id, session.id))
+        .get();
+      expect(closedSession).toMatchObject({
+        status: "closed",
+        closeReason: "expired",
+      });
+      expect(socket.close).toHaveBeenCalled();
+      expect(notifyThread).toHaveBeenCalledWith(thread.id, ["status-changed"]);
+      const threadResponse = await harness.app.request(
+        `/api/v1/threads/${thread.id}`,
+      );
+      expect(threadResponse.status).toBe(200);
+      expect(
+        threadResponseSchema.parse(await readJson(threadResponse)).runtime,
+      ).toMatchObject({
+        displayStatus: "waiting-for-host",
+        hostReconnectGraceExpiresAt: null,
+      });
       expect(
         harness.deps.pendingInteractions.getThreadInteraction({
           threadId: thread.id,
@@ -1700,7 +1730,7 @@ describe("periodic sweeps", () => {
       ).toMatchObject({
         status: "interrupted",
         statusReason:
-          "Host daemon session expired while awaiting user interaction; retry the thread to continue",
+          "Host daemon connection expired while awaiting user interaction; retry the thread to continue",
       });
     } finally {
       await harness.cleanup();

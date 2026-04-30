@@ -2,6 +2,7 @@ import { z } from "zod";
 import {
   appendStoredThreadEvent,
   appendStoredThreadEventInTransaction,
+  appendStoredThreadEventsInTransaction,
   createEventId,
   getActiveStoredTurnId,
   getLastStoredProviderThreadId,
@@ -24,6 +25,7 @@ import type {
   ThreadEventType,
   ResolvedThreadExecutionOptions,
   SystemErrorEventData,
+  SystemThreadInterruptedReason,
   ThreadEventScope,
   ThreadTurnInitiator,
 } from "@bb/domain";
@@ -91,7 +93,7 @@ export interface BuildCwdBranchEntriesArgs {
 }
 
 export interface AppendThreadInterruptedEventArgs {
-  message?: string;
+  reason: SystemThreadInterruptedReason;
   threadId: string;
 }
 
@@ -234,15 +236,22 @@ export function appendThreadEvent(
   return appendStoredThreadEvent(deps.db, deps.hub, args);
 }
 
-function appendThreadEventInTransaction<TType extends ThreadEventType>(
+export function appendThreadEventInTransaction<TType extends ThreadEventType>(
   db: DbTransaction,
   args: AppendThreadEventArgs<TType>,
 ): number;
-function appendThreadEventInTransaction(
+export function appendThreadEventInTransaction(
   db: DbTransaction,
   args: AppendThreadEventArgs,
 ): number {
   return appendStoredThreadEventInTransaction(db, args);
+}
+
+export function appendThreadEventsInTransaction(
+  db: DbTransaction,
+  args: readonly AppendThreadEventArgs[],
+): number[] {
+  return appendStoredThreadEventsInTransaction(db, args);
 }
 
 export function appendClientTurnEvent(
@@ -434,8 +443,21 @@ export function appendThreadInterruptedEvent(
     type: "system/thread/interrupted",
     scope: threadScope(),
     data: {
-      reason: "user",
-      ...(args.message ? { message: args.message } : {}),
+      reason: args.reason,
+    },
+  });
+}
+
+export function appendThreadInterruptedEventInTransaction(
+  db: DbTransaction,
+  args: AppendThreadInterruptedEventArgs,
+): number {
+  return appendThreadEventInTransaction(db, {
+    threadId: args.threadId,
+    type: "system/thread/interrupted",
+    scope: threadScope(),
+    data: {
+      reason: args.reason,
     },
   });
 }

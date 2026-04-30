@@ -18,6 +18,7 @@ import { parseWebActivityLifecycleEvent } from "./web-activity-lifecycle.js";
 import {
   parseOperationMessage,
   finalizeOperationMessage,
+  interruptOperationMessage,
 } from "./parse-operation-message.js";
 import {
   parseErrorMessage,
@@ -105,6 +106,7 @@ import type {
   ViewMessage,
   ViewOperationMessage,
   ViewProjection,
+  ViewTurnStatus,
 } from "@bb/domain";
 import {
   createBufferedTextInstanceKey,
@@ -122,6 +124,12 @@ interface CompactionTurnFinalization {
   status: CompactionTurnFinalizationStatus;
   detail: string | undefined;
 }
+
+type TurnPendingFinalizationStatus = Extract<ViewTurnStatus, "interrupted">;
+type TurnCompletedStatus = Extract<
+  ThreadEvent,
+  { type: "turn/completed" }
+>["status"];
 
 interface BufferedTextProjectionRefs<TMessage extends BufferedTextViewMessage> {
   finalizedKeys: Set<string>;
@@ -168,6 +176,7 @@ interface ProjectionState {
   seenUserKeys: Set<string>;
   openTurnIds: Set<string>;
   closedTurnIds: Set<string>;
+  pendingFinalizationByTurnId: Map<string, TurnPendingFinalizationStatus>;
   openAssistantMessagesByKey: Map<string, ViewAssistantTextMessage>;
   assistantTextBuffersByKey: Map<string, VisibleTextBuffer>;
   visibleAssistantMessageKeys: Set<string>;
@@ -197,6 +206,7 @@ function createProjectionState(): ProjectionState {
     seenUserKeys: new Set(),
     openTurnIds: new Set(),
     closedTurnIds: new Set(),
+    pendingFinalizationByTurnId: new Map(),
     openAssistantMessagesByKey: new Map(),
     assistantTextBuffersByKey: new Map(),
     visibleAssistantMessageKeys: new Set(),
@@ -536,9 +546,16 @@ function onTurnStarted(state: ProjectionState, turnId: string): void {
   state.openTurnIds.add(turnId);
 }
 
-function onTurnCompleted(state: ProjectionState, turnId: string): void {
+function onTurnCompleted(
+  state: ProjectionState,
+  turnId: string,
+  status: TurnCompletedStatus,
+): void {
   state.closedTurnIds.add(turnId);
   state.openTurnIds.delete(turnId);
+  if (status === "interrupted") {
+    state.pendingFinalizationByTurnId.set(turnId, "interrupted");
+  }
   finalizeOpenReasoningLifecycles(state);
 }
 
@@ -584,6 +601,70 @@ function finalizePendingMessages(
   }
 
   flushActiveToolCell(state);
+}
+
+function isMessageScopedToFinalizedTurn(
+  message: ViewMessage,
+  pendingFinalizationByTurnId: ReadonlyMap<string, TurnPendingFinalizationStatus>,
+): boolean {
+  return (
+    message.scope.kind === "turn" &&
+    pendingFinalizationByTurnId.has(message.scope.turnId)
+  );
+}
+
+function finalizePendingMessageForInterruptedTurn(message: ViewMessage): void {
+  switch (message.kind) {
+    case "tool-call":
+    case "tool-exploring":
+    case "web-search":
+    case "web-fetch":
+      return;
+    case "file-edit":
+      if (message.status === "pending") {
+        message.status = "interrupted";
+      }
+      return;
+    case "operation":
+      interruptOperationMessage(message);
+      return;
+    case "permission-grant-lifecycle":
+      if (message.status === "pending") {
+        message.status = "interrupted";
+        message.title = "Permission grant interrupted";
+      }
+      return;
+    case "assistant-reasoning":
+    case "assistant-text":
+    case "debug/raw-event":
+    case "delegation":
+    case "error":
+    case "tasks":
+    case "user":
+      return;
+  }
+}
+
+function finalizeInterruptedTurnPendingMessages(state: ProjectionState): void {
+  if (state.pendingFinalizationByTurnId.size === 0) {
+    return;
+  }
+
+  interruptPendingToolActivity(state, {
+    turnIds: new Set(state.pendingFinalizationByTurnId.keys()),
+  });
+
+  for (const message of state.messages) {
+    if (
+      !isMessageScopedToFinalizedTurn(
+        message,
+        state.pendingFinalizationByTurnId,
+      )
+    ) {
+      continue;
+    }
+    finalizePendingMessageForInterruptedTurn(message);
+  }
 }
 
 // --- Main entry point ---
@@ -643,6 +724,7 @@ function buildFlatProjectionData(
             type: decoded.type,
             scope: decoded.scope,
           }),
+          decoded.status,
         );
       } else {
         onThreadInterrupted(state);
@@ -1078,6 +1160,7 @@ function buildFlatProjectionData(
   }
 
   finalizePendingMessages(state, args.options);
+  finalizeInterruptedTurnPendingMessages(state);
   return {
     activeThinking: args.includeActiveThinking
       ? buildProjectionActiveThinking(state, args.options?.threadStatus)

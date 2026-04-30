@@ -40,6 +40,10 @@ function createThread(
     environmentHostId: null,
     environmentBranchName: null,
     environmentWorkspaceDisplayKind: "other",
+    runtime: {
+      displayStatus: "active",
+      hostReconnectGraceExpiresAt: null,
+    },
     ...overrides,
   };
 }

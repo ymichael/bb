@@ -1,4 +1,4 @@
-import { and, desc, eq, gt } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, sql } from "drizzle-orm";
 import type { HostType } from "@bb/domain";
 import type { DbConnection, DbTransaction } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
@@ -6,6 +6,7 @@ import { hostDaemonSessions } from "../schema.js";
 import { createHostDaemonSessionId } from "../ids.js";
 
 type SessionReadConnection = DbConnection | DbTransaction;
+export type HostDaemonSessionRow = typeof hostDaemonSessions.$inferSelect;
 
 export interface GetActiveSessionByIdArgs {
   sessionId: string;
@@ -17,6 +18,14 @@ export interface GetCurrentSessionArgs {
 
 export interface GetMostRecentlyUpdatedConnectedHostIdArgs {
   hostType?: HostType;
+}
+
+export interface GetLatestSessionForHostArgs {
+  hostId: string;
+}
+
+export interface ListLatestSessionsForHostsArgs {
+  hostIds: readonly string[];
 }
 
 export interface OpenSessionInput {
@@ -163,6 +172,62 @@ export function getCurrentSession(
       .limit(1)
       .get() ?? null
   );
+}
+
+export function getLatestSessionForHost(
+  db: SessionReadConnection,
+  args: GetLatestSessionForHostArgs,
+): HostDaemonSessionRow | null {
+  return (
+    db
+      .select()
+      .from(hostDaemonSessions)
+      .where(eq(hostDaemonSessions.hostId, args.hostId))
+      .orderBy(
+        desc(hostDaemonSessions.updatedAt),
+        desc(hostDaemonSessions.createdAt),
+        desc(hostDaemonSessions.id),
+      )
+      .limit(1)
+      .get() ?? null
+  );
+}
+
+export function listLatestSessionsForHosts(
+  db: SessionReadConnection,
+  args: ListLatestSessionsForHostsArgs,
+): HostDaemonSessionRow[] {
+  const hostIds = [...new Set(args.hostIds)];
+  if (hostIds.length === 0) {
+    return [];
+  }
+
+  return db
+    .select()
+    .from(hostDaemonSessions)
+    .where(
+      and(
+        inArray(hostDaemonSessions.hostId, hostIds),
+        sql`NOT EXISTS (
+          SELECT 1
+          FROM host_daemon_sessions AS latest
+          WHERE latest.host_id = ${hostDaemonSessions.hostId}
+            AND (
+              latest.updated_at > ${hostDaemonSessions.updatedAt}
+              OR (
+                latest.updated_at = ${hostDaemonSessions.updatedAt}
+                AND latest.created_at > ${hostDaemonSessions.createdAt}
+              )
+              OR (
+                latest.updated_at = ${hostDaemonSessions.updatedAt}
+                AND latest.created_at = ${hostDaemonSessions.createdAt}
+                AND latest.id > ${hostDaemonSessions.id}
+              )
+            )
+        )`,
+      ),
+    )
+    .all();
 }
 
 export function getActiveSessionById(

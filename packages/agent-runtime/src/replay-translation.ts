@@ -61,16 +61,16 @@ function resolveStampedProviderThreadId(
   }
 
   return "providerThreadId" in args.event
-    ? args.event.providerThreadId
+    ? (args.event.providerThreadId ?? undefined)
     : undefined;
 }
 
 function stampTranslatedEvent(args: StampTranslatedEventArgs): ThreadEvent {
   const providerThreadId = resolveStampedProviderThreadId(args);
-  if ("providerThreadId" in args.event) {
+  if ("providerThreadId" in args.event && providerThreadId !== undefined) {
     return {
       ...args.event,
-      providerThreadId: providerThreadId ?? args.event.providerThreadId,
+      providerThreadId,
       threadId: args.bbThreadId,
     };
   }

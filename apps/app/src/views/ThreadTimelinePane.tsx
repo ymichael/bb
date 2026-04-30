@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import type {
   ActiveThinking,
+  ThreadRuntimeDisplayStatus,
   TimelineRow,
   TimelineTurnSummaryRow,
 } from "@bb/domain";
@@ -19,6 +20,7 @@ interface ThreadTimelinePaneProps {
   activeThinking: ActiveThinking | null;
   footer: ReactNode;
   header: ReactNode;
+  hostConnectionNotice?: HostConnectionNotice | null;
   isThreadTimelinePending: boolean;
   timelineError: boolean;
   latestActivityRowId: string | null;
@@ -31,14 +33,20 @@ interface ThreadTimelinePaneProps {
   ongoingIndicatorLabel?: string;
   threadDetailRows: TimelineRow[];
   threadId: string;
-  threadStatus: string;
+  threadRuntimeDisplayStatus: ThreadRuntimeDisplayStatus;
   turnSummaryRowsById: Record<string, TimelineRow[]>;
+}
+
+export interface HostConnectionNotice {
+  label: string;
+  tone: "pending" | "error";
 }
 
 export function ThreadTimelinePane({
   activeThinking,
   footer,
   header,
+  hostConnectionNotice,
   isThreadTimelinePending,
   timelineError,
   latestActivityRowId,
@@ -51,7 +59,7 @@ export function ThreadTimelinePane({
   ongoingIndicatorLabel,
   threadDetailRows,
   threadId,
-  threadStatus,
+  threadRuntimeDisplayStatus,
   turnSummaryRowsById,
 }: ThreadTimelinePaneProps) {
   const preferredTheme = usePreferredTheme();
@@ -97,8 +105,18 @@ export function ThreadTimelinePane({
               resolveUserAttachmentImageSrc={toUserAttachmentImageSrc}
               themeType={preferredTheme}
               threadDetailRows={threadDetailRows}
-              threadStatus={threadStatus}
+              threadRuntimeDisplayStatus={threadRuntimeDisplayStatus}
               turnSummaryRowsById={turnSummaryRowsById}
+            />
+          ) : null}
+          {hostConnectionNotice ? (
+            <ConversationStatusIndicator
+              label={hostConnectionNotice.label}
+              className={
+                hostConnectionNotice.tone === "error"
+                  ? "mt-4 text-destructive"
+                  : "mt-4"
+              }
             />
           ) : null}
         </ConversationTimeline>

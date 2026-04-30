@@ -2,7 +2,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { WebSocket } from "ws";
 import { eq } from "drizzle-orm";
 import { getHost, getThread, hostDaemonSessions, listEvents } from "@bb/db";
-import { systemErrorEventDataSchema } from "@bb/domain";
+import { threadResponseSchema } from "@bb/server-contract";
 import {
   HOST_DAEMON_PROTOCOL_VERSION,
   buildHostDaemonWebSocketAuthorizationHeader,
@@ -24,6 +24,7 @@ import {
   seedThread,
 } from "../helpers/seed.js";
 import { createCommandApprovalPayload } from "../helpers/pending-interactions.js";
+import { readJson } from "../helpers/json.js";
 import {
   createTestDaemonHostKey,
   createTestAppHarness,
@@ -429,7 +430,7 @@ describe("internal session correctness", () => {
     }
   });
 
-  it("marks active threads errored and appends a system error after the grace period expires", async () => {
+  it("keeps active threads active and reports host wait state after the grace period expires", async () => {
     const harness = await createTestAppHarness();
     try {
       vi.useFakeTimers();
@@ -450,6 +451,18 @@ describe("internal session correctness", () => {
       });
 
       onDaemonSocketClose(harness.deps, session.id);
+      const reconnectingResponse = await harness.app.request(
+        `/api/v1/threads/${thread.id}`,
+      );
+      expect(reconnectingResponse.status).toBe(200);
+      expect(
+        threadResponseSchema.parse(await readJson(reconnectingResponse))
+          .runtime,
+      ).toMatchObject({
+        displayStatus: "host-reconnecting",
+        hostReconnectGraceExpiresAt: expect.any(Number),
+      });
+
       await vi.advanceTimersByTimeAsync(DAEMON_DISCONNECT_GRACE_MS);
 
       const closedSession = harness.db
@@ -459,20 +472,32 @@ describe("internal session correctness", () => {
         .get();
       expect(closedSession?.closeReason).toBe("daemon-disconnect");
       const interruptedThread = getThread(harness.db, thread.id);
-      expect(interruptedThread?.status).toBe("error");
-      expect(interruptedThread?.latestAttentionAt).toBeGreaterThan(
+      expect(interruptedThread?.status).toBe("active");
+      expect(interruptedThread?.latestAttentionAt).toBe(
         thread.latestAttentionAt,
       );
 
-      const errorEvent = listEvents(harness.db, { threadId: thread.id }).find(
-        (event) => event.type === "system/error",
-      );
-      expect(errorEvent).toBeDefined();
+      const threadEventsAfterGrace = listEvents(harness.db, {
+        threadId: thread.id,
+      });
       expect(
-        systemErrorEventDataSchema.parse(JSON.parse(errorEvent?.data ?? "{}")),
+        threadEventsAfterGrace.some((event) => event.type === "system/error"),
+      ).toBe(false);
+      expect(
+        threadEventsAfterGrace.some(
+          (event) => event.type === "system/thread/interrupted",
+        ),
+      ).toBe(false);
+
+      const waitingResponse = await harness.app.request(
+        `/api/v1/threads/${thread.id}`,
+      );
+      expect(waitingResponse.status).toBe(200);
+      expect(
+        threadResponseSchema.parse(await readJson(waitingResponse)).runtime,
       ).toMatchObject({
-        code: "host_daemon_disconnected",
-        message: "Host daemon disconnected during active work",
+        displayStatus: "waiting-for-host",
+        hostReconnectGraceExpiresAt: null,
       });
     } finally {
       vi.useRealTimers();
@@ -480,7 +505,7 @@ describe("internal session correctness", () => {
     }
   });
 
-  it("interrupts pending interactions after the daemon-disconnect grace period", async () => {
+  it("leaves pending interactions pending after the daemon-disconnect grace period", async () => {
     const harness = await createTestAppHarness();
     try {
       vi.useFakeTimers();

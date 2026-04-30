@@ -11,6 +11,7 @@ import {
   threads,
 } from "@bb/db";
 import { threadSchema } from "@bb/domain";
+import { threadListResponseSchema } from "@bb/server-contract";
 import { waitForQueuedCommand } from "../helpers/commands.js";
 import { readJson } from "../helpers/json.js";
 import {
@@ -146,6 +147,61 @@ describe("public thread environment routes", () => {
             environmentHostId: sandboxHost.id,
             environmentBranchName: "bb/test",
             environmentWorkspaceDisplayKind: "sandbox",
+          }),
+        ]),
+      );
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("includes runtime display state for active thread list entries", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-thread-list-runtime",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/thread-list-runtime",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/thread-list-runtime/environment",
+        projectId: project.id,
+      });
+      const firstThread = seedThread(harness.deps, {
+        environmentId: environment.id,
+        projectId: project.id,
+        status: "active",
+      });
+      const secondThread = seedThread(harness.deps, {
+        environmentId: environment.id,
+        projectId: project.id,
+        status: "active",
+      });
+
+      const response = await harness.app.request(
+        `/api/v1/threads?projectId=${project.id}&archived=false`,
+      );
+
+      expect(response.status).toBe(200);
+      const body = threadListResponseSchema.parse(await readJson(response));
+      expect(body).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: firstThread.id,
+            runtime: {
+              displayStatus: "active",
+              hostReconnectGraceExpiresAt: null,
+            },
+          }),
+          expect.objectContaining({
+            id: secondThread.id,
+            runtime: {
+              displayStatus: "active",
+              hostReconnectGraceExpiresAt: null,
+            },
           }),
         ]),
       );

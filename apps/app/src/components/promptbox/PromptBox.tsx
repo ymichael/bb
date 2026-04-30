@@ -525,11 +525,9 @@ export function PromptBox({
         )
       : null;
   const showVoiceActionGroup = isVoiceRecording || isVoiceProcessing;
-  const showStop = Boolean(
-    isRunning && onStop && !hasSubmittableInput && !isVoiceBusy,
-  );
   const canSubmit =
     hasSubmittableInput && !isSubmitting && !submitDisabled && !isVoiceBusy;
+  const showStop = Boolean(isRunning && onStop && !canSubmit && !isVoiceBusy);
   const canStartVoiceInput = voiceInput.isSupported && !isSubmitting;
   const effectiveSubmitMode: SubmitMode = submitMode;
   const effectiveSubmitTitle = isZenMode

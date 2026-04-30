@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   threadScope,
-  type Thread,
+  type ThreadWithRuntime,
   type ThreadQueuedMessage,
   type TimelineRow,
 } from "@bb/domain";
@@ -60,7 +60,10 @@ export function useCreateThread() {
       await queryClient.cancelQueries({ queryKey: threadsQueryKey() });
     },
     onSuccess: (thread) => {
-      queryClient.setQueryData<Thread>(threadQueryKey(thread.id), thread);
+      queryClient.setQueryData<ThreadWithRuntime>(
+        threadQueryKey(thread.id),
+        thread,
+      );
       optimisticallyInsertThread(queryClient, thread);
       refetchThreadListsAfterComposerThreadCreate({ queryClient });
     },
@@ -137,7 +140,7 @@ export function useSendThreadMessage() {
         }),
       ]);
 
-      const previousThread = queryClient.getQueryData<Thread>(
+      const previousThread = queryClient.getQueryData<ThreadWithRuntime>(
         threadQueryKey(variables.id),
       );
       const optimisticCreatedAt = Date.now();
@@ -172,7 +175,7 @@ export function useSendThreadMessage() {
         return;
       }
 
-      queryClient.setQueryData<Thread>(
+      queryClient.setQueryData<ThreadWithRuntime>(
         threadQueryKey(variables.id),
         context.previousThread,
       );

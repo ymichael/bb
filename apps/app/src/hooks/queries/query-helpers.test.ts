@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type {
-  Thread,
   ThreadGitDiffResponse,
+  ThreadListEntry,
+  ThreadWithRuntime,
   WorkspaceStatus,
 } from "@bb/domain";
 import { turnScope } from "@bb/domain";
@@ -17,10 +18,12 @@ import {
   getEnvironmentBranchListInvalidationQueryKeys,
   getEnvironmentRecordInvalidationQueryKeys,
   getEnvironmentWorkspaceStateInvalidationQueryKeys,
+  optimisticallyInsertThread,
 } from "./query-cache";
 import {
   environmentGitDiffQueryKey,
   environmentWorkStatusQueryKey,
+  threadsQueryKey,
 } from "./query-keys";
 import {
   resolveEnvironmentGitDiffPlaceholder,
@@ -46,6 +49,35 @@ function makeGitDiffResponse(): ThreadGitDiffResponse {
     truncated: false,
     shortstat: " 1 file changed, 1 insertion(+)\n",
     files: "M\tfile\n",
+  };
+}
+
+function makeThreadWithRuntime(
+  thread: Partial<ThreadWithRuntime> = {},
+): ThreadWithRuntime {
+  return {
+    id: "thread-1",
+    projectId: "project-1",
+    automationId: null,
+    providerId: "codex",
+    type: "standard",
+    createdAt: 1,
+    status: "active",
+    updatedAt: 1,
+    lastReadAt: null,
+    latestAttentionAt: 1,
+    environmentId: "env-1",
+    title: null,
+    titleFallback: null,
+    parentThreadId: null,
+    archivedAt: null,
+    stopRequestedAt: null,
+    deletedAt: null,
+    runtime: {
+      displayStatus: "waiting-for-host",
+      hostReconnectGraceExpiresAt: null,
+    },
+    ...thread,
   };
 }
 
@@ -95,7 +127,7 @@ describe("resolveEnvironmentWorkStatusPlaceholder", () => {
 
 describe("resolveThreadPlaceholder", () => {
   it("keeps previous data when the same thread query refreshes", () => {
-    const previousThread: Thread = {
+    const previousThread: ThreadWithRuntime = {
       id: "thread-1",
       projectId: "project-1",
       automationId: null,
@@ -113,6 +145,10 @@ describe("resolveThreadPlaceholder", () => {
       archivedAt: null,
       stopRequestedAt: null,
       deletedAt: null,
+      runtime: {
+        displayStatus: "idle",
+        hostReconnectGraceExpiresAt: null,
+      },
     };
 
     expect(
@@ -125,7 +161,7 @@ describe("resolveThreadPlaceholder", () => {
   });
 
   it("drops previous data when switching to a different thread", () => {
-    const previousThread: Thread = {
+    const previousThread: ThreadWithRuntime = {
       id: "thread-1",
       projectId: "project-1",
       automationId: null,
@@ -143,6 +179,10 @@ describe("resolveThreadPlaceholder", () => {
       archivedAt: null,
       stopRequestedAt: null,
       deletedAt: null,
+      runtime: {
+        displayStatus: "idle",
+        hostReconnectGraceExpiresAt: null,
+      },
     };
 
     expect(
@@ -309,6 +349,22 @@ describe("getCachedEnvironmentRefWorkspaceStateInvalidationQueryKeys", () => {
     expect(queryKeys).not.toContainEqual(
       environmentGitDiffQueryKey("env-2", "all", "main"),
     );
+  });
+});
+
+describe("optimisticallyInsertThread", () => {
+  it("preserves the server-provided runtime state", () => {
+    const { queryClient } = createQueryClientTestHarness();
+    queryClient.setQueryData(threadsQueryKey(), []);
+
+    optimisticallyInsertThread(queryClient, makeThreadWithRuntime());
+
+    const [thread] =
+      queryClient.getQueryData<ThreadListEntry[]>(threadsQueryKey()) ?? [];
+    expect(thread?.runtime).toEqual({
+      displayStatus: "waiting-for-host",
+      hostReconnectGraceExpiresAt: null,
+    });
   });
 });
 

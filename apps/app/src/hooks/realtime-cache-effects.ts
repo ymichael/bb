@@ -4,9 +4,9 @@ import {
   createDebouncedCallbackScheduler,
   type ChangedMessage,
   type EnvironmentChangeKind,
-  type Thread,
   type ThreadListEntry,
   type ThreadChangeKind,
+  type ThreadWithRuntime,
 } from "@bb/domain";
 import { updateCachedThreadListPendingInteractionState } from "./queries/query-cache";
 import {
@@ -175,7 +175,7 @@ function collectCachedThreadIdsForEnvironment({
   queryClient,
 }: EnvironmentArg): string[] {
   const threadIds = new Set<string>();
-  for (const [, thread] of queryClient.getQueriesData<Thread>({
+  for (const [, thread] of queryClient.getQueriesData<ThreadWithRuntime>({
     queryKey: allThreadQueryKeyPrefix(),
   })) {
     if (thread?.environmentId === environmentId) {

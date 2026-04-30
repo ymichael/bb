@@ -465,6 +465,12 @@ export const hostDaemonSessions = sqliteTable(
       table.hostId,
       table.status,
     ),
+    index("host_daemon_sessions_host_latest_idx").on(
+      table.hostId,
+      table.updatedAt,
+      table.createdAt,
+      table.id,
+    ),
   ],
 );
 

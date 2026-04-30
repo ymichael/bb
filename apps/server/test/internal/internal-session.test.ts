@@ -11,6 +11,7 @@ import {
   getThread,
   hostDaemonCommands,
   hostDaemonSessions,
+  listEvents,
   markHostSuspended,
   markThreadDeleted,
   markThreadStopRequested,
@@ -37,6 +38,8 @@ import { describe, expect, it, vi } from "vitest";
 import { appendClientTurnEvent } from "../../src/services/threads/thread-events.js";
 import {
   finalizeStoppedThread,
+  interruptActiveThreads,
+  interruptActiveTurnForThread,
   requestThreadStart,
 } from "../../src/services/threads/thread-lifecycle.js";
 import {
@@ -132,7 +135,7 @@ describe("internal session routes", () => {
           },
         ],
         threadHighWaterMarks: {
-          [thread.id]: 4,
+          [thread.id]: 6,
         },
       });
       const replaced = harness.db
@@ -2183,6 +2186,34 @@ describe("internal session routes", () => {
         environmentId: environment.id,
         status: "active",
       });
+      const activeThreadWithoutProviderId = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "active",
+      });
+      const activeThreadWithoutTurn = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "active",
+      });
+      seedEvent(harness.deps, {
+        threadId: activeThread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-active-reconcile",
+        scope: turnScope("turn-active-reconcile"),
+        sequence: 1,
+        type: "turn/started",
+        data: {},
+      });
+      seedStoredEvent(harness.deps, {
+        threadId: activeThreadWithoutProviderId.id,
+        environmentId: environment.id,
+        providerThreadId: null,
+        scope: turnScope("turn-active-reconcile-no-provider"),
+        sequence: 1,
+        type: "turn/started",
+        data: {},
+      });
 
       const response = await harness.app.request("/internal/session/open", {
         method: "POST",
@@ -2205,6 +2236,102 @@ describe("internal session routes", () => {
       expect(response.status).toBe(201);
       expect(getThread(harness.db, erroredThread.id)?.status).toBe("active");
       expect(getThread(harness.db, activeThread.id)?.status).toBe("idle");
+      expect(
+        getThread(harness.db, activeThreadWithoutProviderId.id)?.status,
+      ).toBe("idle");
+      expect(getThread(harness.db, activeThreadWithoutTurn.id)?.status).toBe(
+        "idle",
+      );
+      const activeThreadEvents = listEvents(harness.db, {
+        threadId: activeThread.id,
+      });
+      const completedEvent = activeThreadEvents.find(
+        (event) => event.type === "turn/completed",
+      );
+      expect(completedEvent).toMatchObject({
+        providerThreadId: "provider-active-reconcile",
+        turnId: "turn-active-reconcile",
+      });
+      expect(JSON.parse(completedEvent?.data ?? "{}")).toEqual({
+        providerThreadId: "provider-active-reconcile",
+        status: "interrupted",
+      });
+      const interruptedEvent = activeThreadEvents.find(
+        (event) => event.type === "system/thread/interrupted",
+      );
+      expect(JSON.parse(interruptedEvent?.data ?? "{}")).toEqual({
+        reason: "host-daemon-restarted",
+      });
+      const activeThreadWithoutProviderEvents = listEvents(harness.db, {
+        threadId: activeThreadWithoutProviderId.id,
+      });
+      const completedWithoutProviderEvent =
+        activeThreadWithoutProviderEvents.find(
+          (event) => event.type === "turn/completed",
+        );
+      expect(completedWithoutProviderEvent).toMatchObject({
+        providerThreadId: null,
+        turnId: "turn-active-reconcile-no-provider",
+      });
+      expect(JSON.parse(completedWithoutProviderEvent?.data ?? "{}")).toEqual({
+        providerThreadId: null,
+        status: "interrupted",
+      });
+      const interruptedWithoutProviderEvent =
+        activeThreadWithoutProviderEvents.find(
+          (event) => event.type === "system/thread/interrupted",
+        );
+      expect(JSON.parse(interruptedWithoutProviderEvent?.data ?? "{}")).toEqual(
+        {
+          reason: "host-daemon-restarted",
+        },
+      );
+      const activeThreadWithoutTurnEvents = listEvents(harness.db, {
+        threadId: activeThreadWithoutTurn.id,
+      });
+      expect(
+        activeThreadWithoutTurnEvents.some(
+          (event) => event.type === "turn/completed",
+        ),
+      ).toBe(false);
+      const interruptedWithoutTurnEvent = activeThreadWithoutTurnEvents.find(
+        (event) => event.type === "system/thread/interrupted",
+      );
+      expect(JSON.parse(interruptedWithoutTurnEvent?.data ?? "{}")).toEqual({
+        reason: "host-daemon-restarted",
+      });
+
+      const secondResponse = await harness.app.request(
+        "/internal/session/open",
+        {
+          method: "POST",
+          headers: internalAuthHeaders(harness),
+          body: JSON.stringify({
+            hostId: host.id,
+            instanceId: "instance-reconcile-second",
+            hostName: "Reconcile Host",
+            hostType: "persistent",
+            dataDir: "/tmp/host-reconcile-data",
+            protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
+            activeThreads: [
+              { threadId: erroredThread.id },
+              { threadId: activeThread.id },
+              { threadId: activeThreadWithoutProviderId.id },
+              { threadId: activeThreadWithoutTurn.id },
+            ],
+          }),
+        },
+      );
+
+      expect(secondResponse.status).toBe(201);
+      expect(getThread(harness.db, erroredThread.id)?.status).toBe("active");
+      expect(getThread(harness.db, activeThread.id)?.status).toBe("idle");
+      expect(
+        getThread(harness.db, activeThreadWithoutProviderId.id)?.status,
+      ).toBe("idle");
+      expect(getThread(harness.db, activeThreadWithoutTurn.id)?.status).toBe(
+        "idle",
+      );
     } finally {
       await harness.cleanup();
     }
@@ -2367,6 +2494,185 @@ describe("internal session routes", () => {
         status: "interrupted",
         statusReason: "Thread stopped by user request",
       });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("finalizes an active stopped turn without a provider thread id", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-finalize-stop-no-provider",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "active",
+      });
+      seedStoredEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        providerThreadId: null,
+        scope: turnScope("turn-finalize-stop-no-provider"),
+        sequence: 1,
+        type: "turn/started",
+        data: {},
+      });
+
+      expect(
+        await finalizeStoppedThread(harness.deps, {
+          threadId: thread.id,
+        }),
+      ).toBe(true);
+
+      expect(getThread(harness.db, thread.id)?.status).toBe("idle");
+      const threadEvents = listEvents(harness.db, { threadId: thread.id });
+      const completedEvent = threadEvents.find(
+        (event) => event.type === "turn/completed",
+      );
+      expect(completedEvent).toMatchObject({
+        providerThreadId: null,
+        turnId: "turn-finalize-stop-no-provider",
+      });
+      expect(JSON.parse(completedEvent?.data ?? "{}")).toEqual({
+        providerThreadId: null,
+        status: "interrupted",
+      });
+      const interruptedEvent = threadEvents.find(
+        (event) => event.type === "system/thread/interrupted",
+      );
+      expect(JSON.parse(interruptedEvent?.data ?? "{}")).toEqual({
+        reason: "manual-stop",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("does not append interrupted turn events when status transition fails", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-interrupt-transition-fails",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "idle",
+      });
+      seedEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-interrupt-transition-fails",
+        scope: turnScope("turn-interrupt-transition-fails"),
+        sequence: 1,
+        type: "turn/started",
+        data: {},
+      });
+
+      expect(() =>
+        interruptActiveTurnForThread(harness.deps, {
+          environmentId: environment.id,
+          threadId: thread.id,
+          reason: "host-daemon-restarted",
+        }),
+      ).toThrow("Invalid thread status transition");
+
+      expect(getThread(harness.db, thread.id)?.status).toBe("idle");
+      const threadEvents = listEvents(harness.db, { threadId: thread.id });
+      expect(threadEvents.map((event) => event.type)).toEqual([
+        "turn/started",
+      ]);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("does not append batched interrupted events when any status transition fails", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-batch-interrupt-transition-fails",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const activeThread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "active",
+      });
+      const idleThread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "idle",
+      });
+      seedEvent(harness.deps, {
+        threadId: activeThread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-batch-transition-active",
+        scope: turnScope("turn-batch-transition-active"),
+        sequence: 1,
+        type: "turn/started",
+        data: {},
+      });
+      seedEvent(harness.deps, {
+        threadId: idleThread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-batch-transition-idle",
+        scope: turnScope("turn-batch-transition-idle"),
+        sequence: 1,
+        type: "turn/started",
+        data: {},
+      });
+
+      expect(() =>
+        interruptActiveThreads(harness.deps, {
+          threads: [
+            {
+              environmentId: environment.id,
+              threadId: activeThread.id,
+            },
+            {
+              environmentId: environment.id,
+              threadId: idleThread.id,
+            },
+          ],
+          reason: "host-daemon-restarted",
+        }),
+      ).toThrow("Invalid thread status transition");
+
+      expect(getThread(harness.db, activeThread.id)?.status).toBe("active");
+      expect(getThread(harness.db, idleThread.id)?.status).toBe("idle");
+      expect(
+        listEvents(harness.db, { threadId: activeThread.id }).map(
+          (event) => event.type,
+        ),
+      ).toEqual(["turn/started"]);
+      expect(
+        listEvents(harness.db, { threadId: idleThread.id }).map(
+          (event) => event.type,
+        ),
+      ).toEqual(["turn/started"]);
     } finally {
       await harness.cleanup();
     }

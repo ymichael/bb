@@ -2,6 +2,7 @@
 
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { ThreadWithRuntime } from "@bb/domain";
 import type {
   SendDraftResponse,
   ThreadTimelineResponse,
@@ -10,6 +11,7 @@ import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
 import * as api from "@/lib/api";
 import {
   projectSourceWorkspaceStatusQueryKey,
+  threadQueryKey,
   threadTimelineQueryKey,
 } from "../queries/query-keys";
 import {
@@ -38,6 +40,35 @@ const queuedMessage = {
   createdAt: 1,
   updatedAt: 1,
 } satisfies SendDraftResponse["queuedMessage"];
+
+function makeThreadWithRuntime(
+  thread: Partial<ThreadWithRuntime> = {},
+): ThreadWithRuntime {
+  return {
+    id: "thread-1",
+    projectId: "project-1",
+    automationId: null,
+    providerId: "codex",
+    type: "standard",
+    createdAt: 1,
+    status: "active",
+    updatedAt: 1,
+    lastReadAt: null,
+    latestAttentionAt: 1,
+    environmentId: "env-1",
+    title: null,
+    titleFallback: null,
+    parentThreadId: null,
+    archivedAt: null,
+    stopRequestedAt: null,
+    deletedAt: null,
+    runtime: {
+      displayStatus: "waiting-for-host",
+      hostReconnectGraceExpiresAt: null,
+    },
+    ...thread,
+  };
+}
 
 afterEach(() => {
   vi.clearAllMocks();
@@ -108,6 +139,43 @@ describe("thread runtime mutations", () => {
         expect(onlyRow.message.text).toBe("Hello there");
       }
     }
+
+    await act(async () => {
+      resolveSend?.();
+      await mutationPromise;
+    });
+  });
+
+  it("preserves unavailable-host runtime state during optimistic send", async () => {
+    let resolveSend: (() => void) | null = null;
+    vi.mocked(api.sendThreadMessage).mockImplementation(
+      () =>
+        new Promise<undefined>((resolve) => {
+          resolveSend = () => resolve(undefined);
+        }),
+    );
+    const { queryClient, wrapper } = createQueryClientTestHarness();
+    queryClient.setQueryData<ThreadWithRuntime>(
+      threadQueryKey("thread-1"),
+      makeThreadWithRuntime(),
+    );
+    const { result } = renderHook(() => useSendThreadMessage(), { wrapper });
+
+    let mutationPromise: Promise<void> | undefined;
+    act(() => {
+      mutationPromise = result.current.mutateAsync({
+        id: "thread-1",
+        input: [{ type: "text", text: "Hello there" }],
+        mode: "auto",
+      });
+    });
+
+    await waitFor(() => {
+      const thread = queryClient.getQueryData<ThreadWithRuntime>(
+        threadQueryKey("thread-1"),
+      );
+      expect(thread?.runtime.displayStatus).toBe("waiting-for-host");
+    });
 
     await act(async () => {
       resolveSend?.();

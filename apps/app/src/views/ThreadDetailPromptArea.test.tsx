@@ -7,7 +7,11 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
-import type { AvailableModel, PendingInteraction, Thread } from "@bb/domain";
+import type {
+  AvailableModel,
+  PendingInteraction,
+  ThreadWithRuntime,
+} from "@bb/domain";
 import type { SystemProviderInfo } from "@bb/server-contract";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as api from "@/lib/api";
@@ -27,6 +31,7 @@ vi.mock("@/lib/api", async (importOriginal) => {
     listThreadDrafts: vi.fn(),
     listThreadPendingInteractions: vi.fn(),
     listThreads: vi.fn(),
+    stopThread: vi.fn(),
   };
 });
 
@@ -34,7 +39,9 @@ interface ProviderOverrides extends Partial<SystemProviderInfo> {}
 
 interface ModelOverrides extends Partial<AvailableModel> {}
 
-function createThread(overrides: Partial<Thread> = {}): Thread {
+function createThread(
+  overrides: Partial<ThreadWithRuntime> = {},
+): ThreadWithRuntime {
   return {
     id: "thr_1",
     projectId: "proj_1",
@@ -53,6 +60,10 @@ function createThread(overrides: Partial<Thread> = {}): Thread {
     latestAttentionAt: 2,
     createdAt: 1,
     updatedAt: 2,
+    runtime: {
+      displayStatus: "idle",
+      hostReconnectGraceExpiresAt: null,
+    },
     ...overrides,
   };
 }
@@ -238,6 +249,61 @@ describe("ThreadDetailPromptArea", () => {
 
     await waitFor(() => {
       expect(textarea.value).toBe(draftText);
+    });
+  });
+
+  it("keeps Stop available while the host is unavailable", async () => {
+    mockMatchMedia();
+    vi.mocked(api.getThreadDefaultExecutionOptions).mockResolvedValue(null);
+    vi.mocked(api.listThreadDrafts).mockResolvedValue([]);
+    vi.mocked(api.listSystemProviders).mockResolvedValue([makeProvider()]);
+    vi.mocked(api.getAvailableModels).mockResolvedValue([makeModel()]);
+    vi.mocked(api.listThreads).mockResolvedValue([]);
+    vi.mocked(api.stopThread).mockResolvedValue(undefined);
+
+    window.localStorage.setItem(
+      PROMPT_DRAFT_STORAGE_KEY,
+      JSON.stringify({
+        text: "Queued text should not hide Stop",
+        attachments: [],
+      }),
+    );
+
+    const { wrapper } = createQueryClientTestHarness();
+
+    render(
+      <ThreadDetailPromptArea
+        canExpandPromptChangeList={false}
+        canUseGitUi={false}
+        isEnvironmentActionPending={false}
+        isLoadingMergeBaseBranchOptions={false}
+        pendingInteractions={[]}
+        openDiffFile={() => {}}
+        openThreadDiffPanel={() => {}}
+        projectId="proj_1"
+        promptBannerSummary="No changes"
+        sendMessage={{
+          isPending: false,
+          mutateAsync: vi.fn(async () => {}),
+        }}
+        showBranchComparisonUi={false}
+        showPromptGitStatsBanner={false}
+        thread={createThread({
+          status: "active",
+          runtime: {
+            displayStatus: "waiting-for-host",
+            hostReconnectGraceExpiresAt: null,
+          },
+        })}
+      />,
+      { wrapper },
+    );
+
+    const stopButton = await screen.findByTitle("Stop run");
+    fireEvent.click(stopButton);
+
+    await waitFor(() => {
+      expect(api.stopThread).toHaveBeenCalledWith("thr_1");
     });
   });
 });
