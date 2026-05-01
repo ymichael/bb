@@ -20,8 +20,7 @@
     "test": "vitest run --config vitest.config.ts"
   },
   "dependencies": {
-    "@bb/domain": "workspace:*",
-    "@bb/thread-view": "workspace:*"
+    "@bb/domain": "workspace:*"
   },
   "devDependencies": {
     "@bb/tsconfig": "workspace:*",

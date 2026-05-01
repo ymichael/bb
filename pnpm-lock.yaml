@@ -605,9 +605,6 @@ importers:
       '@bb/domain':
         specifier: workspace:*
         version: link:../domain
-      '@bb/thread-view':
-        specifier: workspace:*
-        version: link:../thread-view
     devDependencies:
       '@bb/tsconfig':
         specifier: workspace:*
