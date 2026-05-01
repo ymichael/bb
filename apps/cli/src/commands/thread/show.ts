@@ -335,17 +335,16 @@ export function registerShowCommand(
           );
         }
 
-        const events = await unwrap<ThreadEventRow[]>(
-          client.api.v1.threads[":id"].events.$get({
-            param: { id: threadId },
-            query: {
-              limit: String(opts.limit ?? 100),
-              ...(opts.afterSeq ? { afterSeq: opts.afterSeq } : {}),
-            },
-          }),
-        );
-
         if (format === "json") {
+          const events = await unwrap<ThreadEventRow[]>(
+            client.api.v1.threads[":id"].events.$get({
+              param: { id: threadId },
+              query: {
+                limit: String(opts.limit ?? 100),
+                ...(opts.afterSeq ? { afterSeq: opts.afterSeq } : {}),
+              },
+            }),
+          );
           console.log(JSON.stringify(events, null, 2));
           return;
         }

@@ -2856,6 +2856,7 @@ describe("CLI JSON output contracts", () => {
     const output = String(vi.mocked(console.log).mock.calls[0]?.[0]);
     expect(output).toContain("Provisioned thread");
     expect(output).not.toContain("Provisioning interrupted");
+    expect(getEvents).not.toHaveBeenCalled();
   });
 
   it("bb thread log renders approval state on command and file-change rows", async () => {
@@ -2933,6 +2934,7 @@ describe("CLI JSON output contracts", () => {
     expect(output).toContain("example.ts");
     expect(output).not.toContain("Command approval started");
     expect(output).not.toContain("File-change approval started");
+    expect(getEvents).not.toHaveBeenCalled();
   });
 
   it("bb thread log --self resolves from BB_THREAD_ID", async () => {
@@ -2962,10 +2964,7 @@ describe("CLI JSON output contracts", () => {
       registerThreadCommands(program, () => "http://server"),
     );
 
-    expect(getEvents).toHaveBeenCalledWith({
-      param: { id: "thread-log-self" },
-      query: { limit: "100" },
-    });
+    expect(getEvents).not.toHaveBeenCalled();
     expect(getTimeline).toHaveBeenCalledWith({
       param: { id: "thread-log-self" },
       query: {},
