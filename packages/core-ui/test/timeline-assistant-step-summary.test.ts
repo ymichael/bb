@@ -3,7 +3,9 @@ import type {
   TimelineAssistantStepSummaryChildRow,
   TimelineMessageRow,
   TimelineToolBundleRow,
+  ViewDelegationMessage,
   ViewFileEditMessage,
+  ViewProjection,
   ViewToolCallMessage,
 } from "@bb/domain";
 import {
@@ -147,6 +149,39 @@ function buildFileEditMessageRow({
   };
 }
 
+function emptyProjection(): ViewProjection {
+  return {
+    entries: [],
+    state: {
+      activeThinking: null,
+    },
+  };
+}
+
+function buildDelegationMessageRow(
+  status: ViewDelegationMessage["status"],
+): TimelineMessageRow {
+  const message: ViewDelegationMessage = {
+    kind: "delegation",
+    id: "delegation-1",
+    threadId: "thread-1",
+    turnId: "turn-1",
+    sourceSeqStart: 1,
+    sourceSeqEnd: 1,
+    createdAt: 1,
+    toolName: "Agent",
+    callId: "agent-1",
+    status,
+    childProjection: emptyProjection(),
+  };
+
+  return {
+    kind: "message",
+    id: "delegation-1-row",
+    message,
+  };
+}
+
 function getBundlePartStatus(
   rows: readonly TimelineAssistantStepSummaryChildRow[],
   kind: TimelineToolBundleRow["bundleKind"],
@@ -169,6 +204,19 @@ describe("timeline assistant step summary", () => {
     ]);
 
     expect(label).toBe("Explored 1 search");
+  });
+
+  it("labels delegation summaries as subagents in recap tense", () => {
+    expect(
+      buildTimelineAssistantStepSummaryLabel([
+        buildDelegationMessageRow("completed"),
+      ]),
+    ).toBe("Ran 1 subagent");
+    expect(
+      buildTimelineAssistantStepSummaryLabel([
+        buildDelegationMessageRow("pending"),
+      ]),
+    ).toBe("Ran 1 subagent");
   });
 
   it("merges same-kind bundle status independently of order", () => {
@@ -235,8 +283,6 @@ describe("timeline assistant step summary", () => {
     }
 
     expect(part.count).toBe(2);
-    expect(buildTimelineAssistantStepSummaryLabel(rows)).toBe(
-      "Edited 2 files",
-    );
+    expect(buildTimelineAssistantStepSummaryLabel(rows)).toBe("Edited 2 files");
   });
 });

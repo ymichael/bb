@@ -421,6 +421,7 @@ export type { ActiveThinking } from "./active-thinking.js";
 export {
   timelineAssistantStepSummaryRowSchema,
   timelineCommandsToolBundleSummarySchema,
+  timelineDelegationsToolBundleSummarySchema,
   timelineExplorationToolBundleSummarySchema,
   timelineMessageRowSchema,
   timelineRowSchema,
@@ -437,6 +438,7 @@ export type {
   TimelineAssistantStepSummaryChildRow,
   TimelineAssistantStepSummaryRow,
   TimelineCommandsToolBundleSummary,
+  TimelineDelegationsToolBundleSummary,
   TimelineExplorationToolBundleSummary,
   TimelineGroupedRowStatus,
   TimelineMessageRow,

@@ -55,7 +55,34 @@ function toolCallMessage(args: ToolCallFixtureArgs): ViewToolCallMessage {
     toolName: args.toolName,
     callId: args.callId,
     command: args.toolName,
+    approvalStatus: null,
     status: "completed",
+  };
+}
+
+function delegationMessage(args: ToolCallFixtureArgs): ViewDelegationMessage {
+  const toolCall = toolCallMessage(args);
+  return {
+    kind: "delegation",
+    id: toolCall.id,
+    threadId: toolCall.threadId,
+    sourceSeqStart: toolCall.sourceSeqStart,
+    sourceSeqEnd: toolCall.sourceSeqEnd,
+    createdAt: toolCall.createdAt,
+    scope: toolCall.scope,
+    ...(toolCall.parentToolCallId
+      ? { parentToolCallId: toolCall.parentToolCallId }
+      : {}),
+    toolName: toolCall.toolName,
+    callId: toolCall.callId,
+    command: toolCall.command,
+    status: toolCall.status,
+    childProjection: {
+      state: {
+        activeThinking: null,
+      },
+      entries: [],
+    },
   };
 }
 
@@ -110,6 +137,9 @@ function projectionTurn(args: TurnFixtureArgs): ViewTurn {
 
 function projectionFromTurn(turn: ViewTurn): ViewProjection {
   return {
+    state: {
+      activeThinking: null,
+    },
     entries: [
       {
         kind: "turn",
@@ -141,7 +171,7 @@ function onlyDelegation(message: ViewMessage): ViewDelegationMessage {
 
 describe("normalizeSemanticViewProjection", () => {
   it("recomputes child projection turn metadata from the child range", () => {
-    const delegation = toolCallMessage({
+    const delegation = delegationMessage({
       id: "delegate-1",
       callId: "delegate-call-1",
       toolName: "Agent",
@@ -220,15 +250,45 @@ describe("normalizeSemanticViewProjection", () => {
     );
   });
 
+  it("does not convert raw Agent tool calls into delegation rows", () => {
+    const parent = toolCallMessage({
+      id: "tool-1",
+      callId: "tool-call-1",
+      toolName: "Agent",
+      seq: 1,
+      turnId: "turn-1",
+    });
+    const child = assistantMessage({
+      id: "assistant-1",
+      text: "tool output",
+      parentToolCallId: "tool-call-1",
+      seq: 2,
+      turnId: "turn-1",
+    });
+
+    const normalized = normalizeSemanticViewProjection(
+      projectionFromTurn(
+        projectionTurn({
+          turnId: "turn-1",
+          messages: [parent, child],
+        }),
+      ),
+    );
+
+    expect(
+      projectionMessages(normalized).map((message) => message.kind),
+    ).toEqual(["tool-call", "assistant-text"]);
+  });
+
   it("keeps sibling delegation children isolated", () => {
-    const firstDelegation = toolCallMessage({
+    const firstDelegation = delegationMessage({
       id: "delegate-1",
       callId: "delegate-call-1",
       toolName: "Agent",
       seq: 1,
       turnId: "turn-1",
     });
-    const secondDelegation = toolCallMessage({
+    const secondDelegation = delegationMessage({
       id: "delegate-2",
       callId: "delegate-call-2",
       toolName: "Agent",
@@ -279,15 +339,104 @@ describe("normalizeSemanticViewProjection", () => {
     ).toEqual(["assistant-2"]);
   });
 
-  it("nests delegation chains without leaking descendants to ancestor top levels", () => {
-    const levelOne = toolCallMessage({
+  it("attaches children to delegation rows", () => {
+    const delegation = delegationMessage({
       id: "delegate-1",
       callId: "delegate-call-1",
       toolName: "Agent",
       seq: 1,
       turnId: "turn-1",
     });
-    const levelTwo = toolCallMessage({
+    const child = assistantMessage({
+      id: "assistant-1",
+      text: "child",
+      parentToolCallId: "delegate-call-1",
+      seq: 2,
+      turnId: "turn-1",
+    });
+
+    const normalized = normalizeSemanticViewProjection(
+      projectionFromTurn(
+        projectionTurn({
+          turnId: "turn-1",
+          messages: [delegation, child],
+        }),
+      ),
+    );
+
+    const normalizedDelegation = onlyDelegation(
+      projectionMessages(normalized)[0]!,
+    );
+    expect(
+      projectionMessages(normalizedDelegation.childProjection).map(
+        (message) => message.id,
+      ),
+    ).toEqual(["assistant-1"]);
+  });
+
+  it("preserves existing delegation children while adding discovered child rows", () => {
+    const existingChild = assistantMessage({
+      id: "assistant-existing",
+      text: "existing child",
+      seq: 2,
+      turnId: "turn-1",
+    });
+    const delegation = {
+      ...delegationMessage({
+        id: "delegate-1",
+        callId: "delegate-call-1",
+        toolName: "Agent",
+        seq: 1,
+        turnId: "turn-1",
+      }),
+      childProjection: {
+        state: {
+          activeThinking: null,
+        },
+        entries: [
+          {
+            kind: "message",
+            message: existingChild,
+          },
+        ],
+      },
+    };
+    const discoveredChild = assistantMessage({
+      id: "assistant-discovered",
+      text: "discovered child",
+      parentToolCallId: "delegate-call-1",
+      seq: 3,
+      turnId: "turn-1",
+    });
+
+    const normalized = normalizeSemanticViewProjection(
+      projectionFromTurn(
+        projectionTurn({
+          turnId: "turn-1",
+          messages: [delegation, discoveredChild],
+        }),
+      ),
+    );
+
+    const normalizedDelegation = onlyDelegation(
+      projectionMessages(normalized)[0]!,
+    );
+    expect(
+      projectionMessages(normalizedDelegation.childProjection).map(
+        (message) => message.id,
+      ),
+    ).toEqual(["assistant-existing", "assistant-discovered"]);
+  });
+
+  it("nests delegation chains without leaking descendants to ancestor top levels", () => {
+    const levelOne = delegationMessage({
+      id: "delegate-1",
+      callId: "delegate-call-1",
+      toolName: "Agent",
+      seq: 1,
+      turnId: "turn-1",
+    });
+    const levelTwo = delegationMessage({
       id: "delegate-2",
       callId: "delegate-call-2",
       toolName: "Agent",
@@ -295,7 +444,7 @@ describe("normalizeSemanticViewProjection", () => {
       seq: 2,
       turnId: "turn-1",
     });
-    const levelThree = toolCallMessage({
+    const levelThree = delegationMessage({
       id: "delegate-3",
       callId: "delegate-call-3",
       toolName: "Agent",
@@ -350,7 +499,7 @@ describe("normalizeSemanticViewProjection", () => {
 
 describe("normalizeSemanticViewMessages", () => {
   it("normalizes flat messages without synthesizing turn entries", () => {
-    const delegation = toolCallMessage({
+    const delegation = delegationMessage({
       id: "delegate-1",
       callId: "delegate-call-1",
       toolName: "Agent",

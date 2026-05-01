@@ -5,14 +5,12 @@ import type {
   ViewProjection,
   ViewTasksMessage,
   ViewTimelineEntry,
-  ViewToolCallMessage,
   ViewTurn,
   ViewTurnStatus,
 } from "@bb/domain";
 import { findLastTerminalTimelineMessage } from "./timeline-message-helpers.js";
 import { getProjectionSummaryCount } from "./apply-turn-message-detail.js";
 import { haveCompatibleViewMessageScope } from "./message-scope.js";
-import { isDelegationToolName } from "./tool-call-parsing.js";
 
 interface MessageTimingSource {
   createdAt: number;
@@ -137,14 +135,14 @@ export function sortViewMessagesBySource(
     .map((entry) => entry.message);
 }
 
-function isDelegationCandidate(
+function isDelegationSourceMessage(
   message: ViewMessage,
-): message is ViewToolCallMessage {
-  return message.kind === "tool-call" && isDelegationToolName(message.toolName);
+): message is ViewDelegationMessage {
+  return message.kind === "delegation";
 }
 
 function maybeStartedAt(
-  message: ViewToolCallMessage,
+  message: MessageTimingSource,
   childBounds: ProjectionMessageBounds | null,
 ): number | undefined {
   if (childBounds) {
@@ -154,15 +152,17 @@ function maybeStartedAt(
 }
 
 function toDelegationMessage(
-  message: ViewToolCallMessage,
+  message: ViewDelegationMessage,
   childProjection: ViewProjection,
 ): ViewDelegationMessage {
-  const childBounds = getProjectionMessageBounds(childProjection);
+  const resolvedChildProjection = mergeChildProjections(
+    message.childProjection,
+    childProjection,
+  );
+  const childBounds = getProjectionMessageBounds(resolvedChildProjection);
   const startedAt = maybeStartedAt(message, childBounds);
   const delegation: ViewDelegationMessage = {
-    kind: "delegation",
-    id: message.id,
-    threadId: message.threadId,
+    ...message,
     sourceSeqStart: childBounds
       ? Math.min(message.sourceSeqStart, childBounds.sourceSeqStart)
       : message.sourceSeqStart,
@@ -172,17 +172,7 @@ function toDelegationMessage(
     createdAt: childBounds
       ? Math.max(message.createdAt, childBounds.createdAt)
       : message.createdAt,
-    scope: message.scope,
-    toolName: message.toolName,
-    callId: message.callId,
-    command: message.command,
-    subagentType: message.subagentType,
-    description: message.description,
-    output: message.output,
-    duration: message.duration,
-    durationMs: message.durationMs,
-    status: message.status,
-    childProjection,
+    childProjection: resolvedChildProjection,
   };
   if (startedAt !== undefined) {
     delegation.startedAt = startedAt;
@@ -191,6 +181,38 @@ function toDelegationMessage(
     delegation.parentToolCallId = message.parentToolCallId;
   }
   return delegation;
+}
+
+function mergeChildProjections(
+  existingProjection: ViewProjection,
+  discoveredProjection: ViewProjection,
+): ViewProjection {
+  if (existingProjection.entries.length === 0) {
+    return discoveredProjection;
+  }
+  if (discoveredProjection.entries.length === 0) {
+    return existingProjection;
+  }
+
+  const existingMessageIds = new Set(
+    existingProjection.entries
+      .flatMap((entry) => getEntryMessages(entry))
+      .map((message) => message.id),
+  );
+  const discoveredEntries = discoveredProjection.entries.filter((entry) =>
+    getEntryMessages(entry).some(
+      (message) => !existingMessageIds.has(message.id),
+    ),
+  );
+
+  if (discoveredEntries.length === 0) {
+    return existingProjection;
+  }
+
+  return {
+    state: existingProjection.state,
+    entries: [...existingProjection.entries, ...discoveredEntries],
+  };
 }
 
 function getEntryMessages(entry: ViewTimelineEntry): readonly ViewMessage[] {
@@ -411,7 +433,7 @@ class SemanticProjectionBuilder {
     const delegationCallIds = new Set(
       contexts
         .map((context) => context.message)
-        .filter(isDelegationCandidate)
+        .filter(isDelegationSourceMessage)
         .map((message) => message.callId),
     );
 
@@ -496,7 +518,7 @@ class SemanticProjectionBuilder {
   }
 
   private toSemanticMessage(message: ViewMessage): ViewMessage {
-    if (!isDelegationCandidate(message)) {
+    if (!isDelegationSourceMessage(message)) {
       return message;
     }
 

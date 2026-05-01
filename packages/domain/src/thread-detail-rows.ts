@@ -24,6 +24,7 @@ export const timelineToolBundleKindValues = [
   "exploration",
   "commands",
   "web-research",
+  "delegations",
 ] as const;
 export const timelineToolBundleKindSchema = z.enum(
   timelineToolBundleKindValues,
@@ -61,10 +62,16 @@ export interface TimelineWebResearchToolBundleSummary {
   webSearches: number;
 }
 
+export interface TimelineDelegationsToolBundleSummary {
+  kind: "delegations";
+  delegations: number;
+}
+
 export type TimelineToolBundleSummary =
   | TimelineExplorationToolBundleSummary
   | TimelineCommandsToolBundleSummary
-  | TimelineWebResearchToolBundleSummary;
+  | TimelineWebResearchToolBundleSummary
+  | TimelineDelegationsToolBundleSummary;
 
 export interface TimelineToolBundleRow {
   kind: "tool-bundle";
@@ -144,10 +151,15 @@ export const timelineWebResearchToolBundleSummarySchema = z.object({
   webPagesRead: z.number().int().nonnegative(),
   webSearches: z.number().int().nonnegative(),
 });
+export const timelineDelegationsToolBundleSummarySchema = z.object({
+  kind: z.literal("delegations"),
+  delegations: z.number().int().nonnegative(),
+});
 export const timelineToolBundleSummarySchema = z.discriminatedUnion("kind", [
   timelineExplorationToolBundleSummarySchema,
   timelineCommandsToolBundleSummarySchema,
   timelineWebResearchToolBundleSummarySchema,
+  timelineDelegationsToolBundleSummarySchema,
 ]);
 export const timelineToolBundleRowSchema = z.object({
   kind: z.literal("tool-bundle"),

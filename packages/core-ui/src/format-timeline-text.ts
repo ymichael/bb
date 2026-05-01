@@ -435,7 +435,10 @@ function formatDelegation(
   color: boolean,
 ): string {
   const lines: string[] = [];
-  lines.push(separator(`Subagent ${formatDelegationSummary(msg)}`, color));
+  const verb = msg.status === "pending" ? "Running" : "Ran";
+  lines.push(
+    separator(`${verb} subagent: ${formatDelegationSummary(msg)}`, color),
+  );
 
   const durationLine = formatDurationLine(msg.durationMs, msg.duration, color);
   if (durationLine) {

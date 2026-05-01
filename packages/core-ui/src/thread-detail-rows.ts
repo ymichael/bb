@@ -336,12 +336,6 @@ function toToolCallSummary(
     durationMs: message.durationMs,
     approvalStatus: message.approvalStatus,
     status: message.status,
-    ...(message.kind === "tool-call"
-      ? {
-          subagentType: message.subagentType,
-          description: message.description,
-        }
-      : {}),
   };
 }
 
@@ -375,9 +369,10 @@ function getToolBundleKind(
     case "web-search":
     case "web-fetch":
       return "web-research";
+    case "delegation":
+      return "delegations";
     case "assistant-text":
     case "debug/raw-event":
-    case "delegation":
     case "error":
     case "file-edit":
     case "operation":
@@ -404,6 +399,8 @@ function canAppendToToolBundle(
       return message.kind === "command";
     case "web-research":
       return message.kind === "web-search" || message.kind === "web-fetch";
+    case "delegations":
+      return message.kind === "delegation";
     default:
       return assertNever(active.bundleKind);
   }
@@ -470,9 +467,44 @@ function buildToolBundleSummary(
         webSearches,
       };
     }
+    case "delegations": {
+      for (const message of messages) {
+        if (message.kind !== "delegation") {
+          throw new Error(
+            `Delegation bundles require delegation messages, got ${message.kind}`,
+          );
+        }
+      }
+      return {
+        kind: "delegations",
+        delegations: messages.length,
+      };
+    }
     default:
       return assertNever(bundleKind);
   }
+}
+
+function getToolBundleMinimumSize(bundleKind: TimelineToolBundleKind): number {
+  switch (bundleKind) {
+    case "delegations":
+      return 2;
+    case "commands":
+    case "exploration":
+    case "web-research":
+      return 1;
+    default:
+      return assertNever(bundleKind);
+  }
+}
+
+function shouldMaterializeToolBundle(
+  accumulator: ToolBundleAccumulator,
+): boolean {
+  return (
+    accumulator.messages.length >=
+    getToolBundleMinimumSize(accumulator.bundleKind)
+  );
 }
 
 function buildToolBundleRow(
@@ -522,7 +554,11 @@ function buildToolBundleRows(
     if (!active) {
       return;
     }
-    rows.push(buildToolBundleRow(active));
+    if (shouldMaterializeToolBundle(active)) {
+      rows.push(buildToolBundleRow(active));
+    } else {
+      rows.push(toMessageRow(active.messages[0]!));
+    }
     active = null;
   };
 

@@ -1279,8 +1279,8 @@ use subagents and then verify their comments before you synthesize the final rep
   -- Assistant -----------------------------------------------
   Branch has 73 commits, ~17k lines changed across 157 files — major timeline display model rewrite.... [truncated 62 chars]
 
-  -- Delegated to 4 subagents --------------------------------
-    -- Subagent general-purpose: Review correctness + plan adherence
+  -- Ran 4 subagents -----------------------------------------
+    -- Ran subagent: Review correctness + plan adherence (general-purpose)
       7m 31s
       -- Worked for 5m 56s ---------------------------------------
         -- Explored 27 files, 5 searches, ran 30 commands ----------
@@ -1484,8 +1484,8 @@ use subagents and then verify their comments before you synthesize the final rep
             Read $BB_DEV_WORKSPACE/packages/ui-core/src/thread-timeline/rows/TimelineFileDiffBlock.t... [truncated 2 chars]
             Search exploring\\|approvalStatus\\|cat\\|Read
             Search completedAt: in $BB_DEV_WORKSPACE/packages/core-ui/src
-  ... [truncated 77 lines]
-    -- Subagent general-purpose: Review maintainability + shortcuts
+  ... [truncated 76 lines]
+    -- Ran subagent: Review maintainability + shortcuts (general-purpose)
       5m 17s
       -- Worked for 3m 49s ---------------------------------------
         -- Explored 26 files, 19 searches, ran 10 commands ---------
@@ -1574,8 +1574,8 @@ use subagents and then verify their comments before you synthesize the final rep
             Read $BB_DEV_WORKSPACE/packages/ui-core/src/index.ts
             Search EventTitle|SlowToolHeader|TimelineStaticRow|formatSummaryDuration|getStaticEventT... [truncated 29 chars]
             Search useLiveNow|getSummaryDurationMs|TimelineDurationMessage in $BB_DEV_WORKSPACE
-  ... [truncated 120 lines]
-    -- Subagent general-purpose: Review security + performance -
+  ... [truncated 119 lines]
+    -- Ran subagent: Review security + performance (general-purpose)
       3m 29s
       -- Worked for 2m 25s ---------------------------------------
         -- Explored 20 files, 12 searches, ran 17 commands ---------
@@ -1709,8 +1709,8 @@ use subagents and then verify their comments before you synthesize the final rep
               [completed] git diff cdc9566e86..codex/timeline-bundle-unification -- apps/server/src/... [truncated 53 chars]
               59ms
               diff --git a/apps/server/src/services/interactions/pending-interaction-timeline.ts b/a... [truncated 68 chars]
-  ... [truncated 79 lines]
-    -- Subagent general-purpose: Review tests + AGENTS.md + readability
+  ... [truncated 78 lines]
+    -- Ran subagent: Review tests + AGENTS.md + readability (general-purpose)
       5m 53s
       -- Worked for 4m 53s ---------------------------------------
         -- Explored 17 files, 41 searches, 2 lists, ran 36 commands
@@ -3182,8 +3182,8 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots readable verbose CL
 There's a positioning bug in the eyedropper preview: near the viewport edges, the preview can end up... [truncated 186 chars]
 
 -- Worked for 1m 25s ---------------------------------------
-  -- Delegated to 1 subagent ---------------------------------
-    -- Subagent Explore: Find eyedropper preview code ----------
+  -- Ran 1 subagent ------------------------------------------
+    -- Ran subagent: Find eyedropper preview code (Explore) ----
       58.1s
       -- Worked for 44s ------------------------------------------
         -- Explored 6 files, 28 searches, 10 lists -----------------
@@ -3295,8 +3295,8 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots readable verbose CL
 Make the Magic Frame AI workflow discoverable from the command or search experience on desktop. It s... [truncated 188 chars]
 
 -- Worked for 7m 15s ---------------------------------------
-  -- Delegated to 1 subagent ---------------------------------
-    -- Subagent Explore: Explore codebase for Magic Frame AI ---
+  -- Ran 1 subagent ------------------------------------------
+    -- Ran subagent: Explore codebase for Magic Frame AI (Explore)
       1m 43s
       -- Worked for 1m 16s ---------------------------------------
         -- Explored 14 files, 34 searches, 12 lists ----------------
@@ -3541,8 +3541,8 @@ There's a usability bug in the canvas search sidebar: if I navigate to a later m
   -- Assistant -----------------------------------------------
   Let me start by exploring the codebase to understand the canvas search sidebar implementation.
 
-  -- Delegated to 1 subagent ---------------------------------
-    -- Subagent Explore: Find canvas search sidebar code -------
+  -- Ran 1 subagent ------------------------------------------
+    -- Ran subagent: Find canvas search sidebar code (Explore) -
       1m 5s
       -- Worked for 47s ------------------------------------------
         -- Explored 8 files, 19 searches, 6 lists ------------------
@@ -3639,8 +3639,8 @@ Add a small result summary to the canvas search sidebar: show \`N results\` when
   -- Assistant -----------------------------------------------
   I'll start by exploring the codebase to understand the canvas search sidebar implementation.
 
-  -- Delegated to 1 subagent ---------------------------------
-    -- Subagent Explore: Find canvas search sidebar code -------
+  -- Ran 1 subagent ------------------------------------------
+    -- Ran subagent: Find canvas search sidebar code (Explore) -
       53.9s
       -- Worked for 40s ------------------------------------------
         -- Explored 14 files, 17 searches, 13 lists ----------------
@@ -3732,24 +3732,24 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots readable verbose CL
 I'm trying to understand Excalidraw's text-to-diagram flow before changing it. Please trace the flow... [truncated 279 chars]
 
 -- Worked for 2m 11s ---------------------------------------
-  -- Delegated to 3 subagents --------------------------------
-    -- Subagent Explore: Explore text-to-diagram UI dialog -----
+  -- Ran 3 subagents -----------------------------------------
+    -- Ran subagent: Explore text-to-diagram UI dialog (Explore)
       40.3s
       -- Worked for 20s ------------------------------------------
         -- Explored 19 files, 7 searches, 3 lists ------------------
           List **/*[Tt]ext*[Dd]iagram*
           List **/*[Tt][Tt][Dd]*
           Search TTDDialog|TextToDiagram|text-to-diagram
-  ... [truncated 145 lines]
-    -- Subagent Explore: Explore TTD chat/state management -----
+  ... [truncated 144 lines]
+    -- Ran subagent: Explore TTD chat/state management (Explore)
       1m 3s
       -- Worked for 26s ------------------------------------------
         -- Explored 19 files, 8 searches, 6 lists ------------------
           List **/*TTD*
           List **/*chat*
           List **/*ai*
-  ... [truncated 331 lines]
-    -- Subagent Explore: Explore TTD response-to-scene conversion
+  ... [truncated 330 lines]
+    -- Ran subagent: Explore TTD response-to-scene conversion (Explore)
       1m 4s
       -- Worked for 41s ------------------------------------------
         -- Explored 16 files, 15 searches, 5 lists, ran 2 commands -
@@ -5364,12 +5364,9 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
       "-- Ran 2 commands ------------------------------------------",
       "-- Assistant -----------------------------------------------",
       "Branch has 73 commits, ~17k lines changed across 157 files — major timeline display model rewrite. D... [truncated 60 chars]",
-      "-- Subagent general-purpose: Review correctness + plan adherence ",
-      "-- Subagent general-purpose: Review maintainability + shortcuts ",
-      "-- Subagent general-purpose: Review security + performance -",
-      "-- Subagent general-purpose: Review tests + AGENTS.md + readability ",
+      "-- Running 4 subagents -------------------------------------",
     ],
-    "timelineRowCount": 7,
+    "timelineRowCount": 4,
     "totalEventCount": 790,
     "viewMessageCount": 8,
     "viewMessageKinds": {
@@ -5391,12 +5388,9 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
       "-- Ran 2 commands ------------------------------------------",
       "-- Assistant -----------------------------------------------",
       "Branch has 73 commits, ~17k lines changed across 157 files — major timeline display model rewrite. D... [truncated 60 chars]",
-      "-- Subagent general-purpose: Review correctness + plan adherence ",
-      "-- Subagent general-purpose: Review maintainability + shortcuts ",
-      "-- Subagent general-purpose: Review security + performance -",
-      "-- Subagent general-purpose: Review tests + AGENTS.md + readability ",
+      "-- Running 4 subagents -------------------------------------",
     ],
-    "timelineRowCount": 7,
+    "timelineRowCount": 4,
     "totalEventCount": 790,
     "viewMessageCount": 8,
     "viewMessageKinds": {
@@ -5418,7 +5412,7 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
       "-- Ran 2 commands ------------------------------------------",
       "-- Assistant -----------------------------------------------",
       "Branch has 73 commits, ~17k lines changed across 157 files — major timeline display model rewrite. D... [truncated 60 chars]",
-      "-- Delegated to 4 subagents --------------------------------",
+      "-- Ran 4 subagents -----------------------------------------",
       "-- Assistant -----------------------------------------------",
       "Verifying the most consequential claims before synthesis.",
       "-- Explored 5 files ----------------------------------------",
@@ -6066,7 +6060,7 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     "timelinePreview": [
       "-- User ----------------------------------------------------",
       "There's a positioning bug in the eyedropper preview: near the viewport edges, the preview can end up... [truncated 186 chars]",
-      "-- Subagent Explore: Find eyedropper preview code ----------",
+      "-- Running subagent: Find eyedropper preview code (Explore) ",
     ],
     "timelineRowCount": 2,
     "totalEventCount": 222,
@@ -6205,7 +6199,7 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     "timelinePreview": [
       "-- User ----------------------------------------------------",
       "Make the Magic Frame AI workflow discoverable from the command or search experience on desktop. It s... [truncated 188 chars]",
-      "-- Subagent Explore: Explore codebase for Magic Frame AI ---",
+      "-- Running subagent: Explore codebase for Magic Frame AI (Explore) ",
     ],
     "timelineRowCount": 2,
     "totalEventCount": 404,
@@ -6223,7 +6217,7 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     "timelinePreview": [
       "-- User ----------------------------------------------------",
       "Make the Magic Frame AI workflow discoverable from the command or search experience on desktop. It s... [truncated 188 chars]",
-      "-- Subagent Explore: Explore codebase for Magic Frame AI ---",
+      "-- Ran subagent: Explore codebase for Magic Frame AI (Explore) ",
       "  1m 43s",
       "  Perfect! I have gathered comprehensive information. Let me compile my findings into a thorough rep... [truncated 4 chars]",
       "  ## Thorough Codebase Exploration Report: Magic Frame ...",
@@ -6264,7 +6258,7 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     "timelinePreview": [
       "-- User ----------------------------------------------------",
       "Make the Magic Frame AI workflow discoverable from the command or search experience on desktop. It s... [truncated 188 chars]",
-      "-- Subagent Explore: Explore codebase for Magic Frame AI ---",
+      "-- Ran subagent: Explore codebase for Magic Frame AI (Explore) ",
       "  1m 43s",
       "  Perfect! I have gathered comprehensive information. Let me compile my findings into a thorough rep... [truncated 4 chars]",
       "  ## Thorough Codebase Exploration Report: Magic Frame ...",
@@ -6400,7 +6394,7 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
       "There's a usability bug in the canvas search sidebar: if I navigate to a later match and then change... [truncated 201 chars]",
       "-- Assistant -----------------------------------------------",
       "Let me start by exploring the codebase to understand the canvas search sidebar implementation.",
-      "-- Subagent Explore: Find canvas search sidebar code -------",
+      "-- Running subagent: Find canvas search sidebar code (Explore) ",
     ],
     "timelineRowCount": 3,
     "totalEventCount": 269,
@@ -6421,7 +6415,7 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
       "There's a usability bug in the canvas search sidebar: if I navigate to a later match and then change... [truncated 201 chars]",
       "-- Assistant -----------------------------------------------",
       "Let me start by exploring the codebase to understand the canvas search sidebar implementation.",
-      "-- Delegated to 1 subagent ---------------------------------",
+      "-- Ran 1 subagent ------------------------------------------",
       "-- Assistant -----------------------------------------------",
       "Now let me read the key file to understand the bug:",
       "-- Explored 1 file -----------------------------------------",
@@ -6449,7 +6443,7 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
       "There's a usability bug in the canvas search sidebar: if I navigate to a later match and then change... [truncated 201 chars]",
       "-- Assistant -----------------------------------------------",
       "Let me start by exploring the codebase to understand the canvas search sidebar implementation.",
-      "-- Delegated to 1 subagent ---------------------------------",
+      "-- Ran 1 subagent ------------------------------------------",
       "-- Assistant -----------------------------------------------",
       "Now let me read the key file to understand the bug:",
       "-- Explored 1 file -----------------------------------------",
@@ -6539,7 +6533,7 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
       "Add a small result summary to the canvas search sidebar: show \`N results\` when there are matches, sh... [truncated 210 chars]",
       "-- Assistant -----------------------------------------------",
       "I'll start by exploring the codebase to understand the canvas search sidebar implementation.",
-      "-- Subagent Explore: Find canvas search sidebar code -------",
+      "-- Running subagent: Find canvas search sidebar code (Explore) ",
     ],
     "timelineRowCount": 3,
     "totalEventCount": 207,
@@ -6560,7 +6554,7 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
       "Add a small result summary to the canvas search sidebar: show \`N results\` when there are matches, sh... [truncated 210 chars]",
       "-- Assistant -----------------------------------------------",
       "I'll start by exploring the codebase to understand the canvas search sidebar implementation.",
-      "-- Delegated to 1 subagent ---------------------------------",
+      "-- Ran 1 subagent ------------------------------------------",
       "-- Assistant -----------------------------------------------",
       "Now let me read the main files:",
       "-- Exploring 1 file ----------------------------------------",
@@ -6585,7 +6579,7 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
       "Add a small result summary to the canvas search sidebar: show \`N results\` when there are matches, sh... [truncated 210 chars]",
       "-- Assistant -----------------------------------------------",
       "I'll start by exploring the codebase to understand the canvas search sidebar implementation.",
-      "-- Delegated to 1 subagent ---------------------------------",
+      "-- Ran 1 subagent ------------------------------------------",
       "-- Assistant -----------------------------------------------",
       "Now let me read the main files:",
       "-- Explored 3 files ----------------------------------------",
@@ -6668,11 +6662,9 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     "timelinePreview": [
       "-- User ----------------------------------------------------",
       "I'm trying to understand Excalidraw's text-to-diagram flow before changing it. Please trace the flow... [truncated 279 chars]",
-      "-- Subagent Explore: Explore text-to-diagram UI dialog -----",
-      "-- Subagent Explore: Explore TTD chat/state management -----",
-      "-- Subagent Explore: Explore TTD response-to-scene conversion ",
+      "-- Running 3 subagents -------------------------------------",
     ],
-    "timelineRowCount": 4,
+    "timelineRowCount": 2,
     "totalEventCount": 473,
     "viewMessageCount": 4,
     "viewMessageKinds": {
@@ -6688,26 +6680,14 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     "timelinePreview": [
       "-- User ----------------------------------------------------",
       "I'm trying to understand Excalidraw's text-to-diagram flow before changing it. Please trace the flow... [truncated 279 chars]",
-      "-- Subagent Explore: Explore text-to-diagram UI dialog -----",
-      "  40.3s",
-      "  Perfect! Now I have a comprehensive understanding. Let me provide the complete report:",
-      "  ## Excalidraw Text-to-Diagram (TTD) Dialog UI - Complete Report",
-      "  ... [truncated 1 lines]",
-      "-- Subagent Explore: Explore TTD chat/state management -----",
-      "  1m 3s",
-      "  Perfect! I have all the information I need. Let me now compile a comprehensive report of my findin... [truncated 3 chars]",
-      "  ## Excalidraw Text-to-Diagram (TTD) Chat History & Sta...",
-      "-- Subagent Explore: Explore TTD response-to-scene conversion ",
-      "  1m 4s",
-      "  Perfect! Now I have all the information I need. Let me compile the comprehensive report.",
-      "  ## Complete Pipeline: Text-to-Diagram Responses to Excalidraw Scene...",
+      "-- Ran 3 subagents -----------------------------------------",
       "-- Assistant -----------------------------------------------",
       "Here's the full trace of Excalidraw's text-to-diagram (TTD) flow, grounded in the current codebase:",
       "---",
       "## 1. Dialog Entry Point",
       "  ... [truncated 10 lines]",
     ],
-    "timelineRowCount": 5,
+    "timelineRowCount": 3,
     "totalEventCount": 473,
     "viewMessageCount": 5,
     "viewMessageKinds": {

@@ -85,7 +85,7 @@ export interface ViewDelegationMetadata {
   description?: string;
 }
 
-export interface ViewToolCallSummary extends ViewDelegationMetadata {
+export interface ViewToolCallSummary {
   callId: string;
   command?: string;
   cwd?: string;
@@ -102,8 +102,7 @@ export interface ViewToolCallSummary extends ViewDelegationMetadata {
   >;
 }
 
-export interface ViewToolCallMessage
-  extends ViewMessageBase, ViewDelegationMetadata {
+export interface ViewToolCallMessage extends ViewMessageBase {
   kind: "tool-call";
   toolName: string;
   callId: string;

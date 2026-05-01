@@ -86,9 +86,12 @@ export function itemStatusToFileEditStatus(
   return itemStatusToExecStatus(status);
 }
 
-export interface ExecCallPartial extends Partial<ViewToolCallSummary> {
+export type ExecMessageKind = "command" | "tool-call" | "delegation";
+
+export interface ExecCallPartial
+  extends Partial<ViewToolCallSummary>, DelegationMetadata {
   callId: string;
-  messageKind: "command" | "tool-call";
+  messageKind?: ExecMessageKind;
   toolName?: string;
   parsedCmd: ViewToolParsedIntent[];
   parentToolCallId?: string;
@@ -330,7 +333,6 @@ export function parseToolCallLifecycleEvent(
       kind: "output",
       call: {
         callId: decoded.itemId,
-        messageKind: "tool-call",
         parsedCmd: [],
         output: decoded.message ?? "Progress update",
         status: "pending",
@@ -379,13 +381,16 @@ export function parseToolCallLifecycleEvent(
         : undefined;
     const errorField = decoded.item.error;
     const parsedCmd = getStructuredToolParsedIntents(fullToolName, parsedArgs);
+    const messageKind = isDelegationToolName(fullToolName)
+      ? "delegation"
+      : "tool-call";
     const delegationMetadata = getDelegationMetadata(fullToolName, parsedArgs);
 
     return {
       kind,
       call: {
         callId,
-        messageKind: "tool-call",
+        messageKind,
         toolName: fullToolName,
         command: formatToolCallCommand(fullToolName, parsedArgs),
         parsedCmd,

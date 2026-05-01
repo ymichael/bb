@@ -101,6 +101,15 @@ function projectionFromMessages(messages: ViewMessage[]): ViewProjection {
   };
 }
 
+function emptyProjection(): ViewProjection {
+  return {
+    entries: [],
+    state: {
+      activeThinking: null,
+    },
+  };
+}
+
 function withFixtureScope(message: ViewMessage): ViewMessage {
   if (message.scope !== undefined) {
     return message;
@@ -605,22 +614,66 @@ describe("formatTimelineAsText", () => {
         subagentType: "Explore",
         description: "Inspect the docs tree",
         output: "## Findings\n\n- alpha\n- beta",
-        childProjection: { entries: [] },
+        childProjection: emptyProjection(),
       },
     ];
 
     const minimal = formatMessagesAsText(messages, { color: false });
-    expect(minimal).toContain("Subagent Explore: Inspect the docs tree");
+    expect(minimal).toContain("Ran subagent: Inspect the docs tree (Explore)");
     expect(minimal).toContain("## Findings");
 
     const verbose = formatMessagesAsText(messages, {
       color: false,
       verbose: true,
     });
-    expect(verbose).toContain("Subagent Explore: Inspect the docs tree");
+    expect(verbose).toContain("Ran subagent: Inspect the docs tree (Explore)");
     expect(verbose).toContain("## Findings");
     expect(verbose).toContain("- alpha");
     expect(verbose).toContain("- beta");
+  });
+
+  it("renders adjacent delegation rows as a subagent bundle", () => {
+    const messages: ViewMessage[] = [
+      {
+        kind: "delegation",
+        id: "d1",
+        threadId: "t1",
+        sourceSeqStart: 1,
+        sourceSeqEnd: 1,
+        createdAt: 1,
+        toolName: "Agent",
+        callId: "agent-1",
+        status: "pending",
+        subagentType: "Explore",
+        description: "Inspect docs",
+        childProjection: emptyProjection(),
+      },
+      {
+        kind: "delegation",
+        id: "d2",
+        threadId: "t1",
+        sourceSeqStart: 2,
+        sourceSeqEnd: 2,
+        createdAt: 2,
+        toolName: "Agent",
+        callId: "agent-2",
+        status: "pending",
+        subagentType: "Review",
+        description: "Check tests",
+        childProjection: emptyProjection(),
+      },
+    ];
+
+    const minimal = formatMessagesAsText(messages, { color: false });
+    expect(minimal).toContain("Running 2 subagents");
+
+    const verbose = formatMessagesAsText(messages, {
+      color: false,
+      verbose: true,
+    });
+    expect(verbose).toContain("Running 2 subagents");
+    expect(verbose).toContain("Running subagent: Inspect docs (Explore)");
+    expect(verbose).toContain("Running subagent: Check tests (Review)");
   });
 
   it("labels tasks consistently as Updated tasks", () => {

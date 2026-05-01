@@ -108,6 +108,13 @@ function formatToolBundleSummaryParts({
     }
     case "web-research":
       return formatWebResearchSummaryParts(summary, status);
+    case "delegations": {
+      const verb = getVerbPair(status, "Ran", "Running");
+      return {
+        prefix: verb.uppercase,
+        emphasis: pluralize(summary.delegations, "subagent", "subagents"),
+      };
+    }
     default:
       return assertNever(summary);
   }
@@ -160,12 +167,6 @@ function toToolCallSummary(
     durationMs: message.durationMs,
     approvalStatus: message.approvalStatus,
     status: message.status,
-    ...(message.kind === "tool-call"
-      ? {
-          subagentType: message.subagentType,
-          description: message.description,
-        }
-      : {}),
   };
 }
 
@@ -194,6 +195,7 @@ export function buildToolBundleDetailLines(
       );
     case "commands":
     case "web-research":
+    case "delegations":
       return [];
     default:
       return assertNever(row.bundleKind);

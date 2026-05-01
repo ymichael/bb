@@ -283,6 +283,7 @@ describe("parseToolCallLifecycleEvent", () => {
 
     const result = parseToolCallLifecycleEvent(decoded, meta);
     expect(result?.kind).toBe("begin");
+    expect(result?.call.messageKind).toBe("delegation");
     expect(result?.call.command).toBe("Agent [Explore] Explore docs directory");
     expect(result?.call.subagentType).toBe("Explore");
     expect(result?.call.description).toBe("Explore docs directory");

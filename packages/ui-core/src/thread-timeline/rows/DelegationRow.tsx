@@ -3,7 +3,7 @@ import {
   buildCollapsedTimelineRows,
   buildTimelineRows,
   findLatestActivityRowId,
-  formatDelegationSummary,
+  getDelegationSummaryParts,
 } from "@bb/core-ui";
 import type {
   TimelineRow,
@@ -67,6 +67,21 @@ function createTurnSummaryRowsController(): NestedTimelineTurnSummaryRowsControl
   };
 }
 
+function formatDelegationRowSuffix(
+  metadata: string | undefined,
+  duration: string | undefined,
+): ReactNode {
+  if (!metadata && !duration) {
+    return undefined;
+  }
+  return (
+    <span className="inline-flex min-w-0 items-center gap-1.5">
+      {metadata ? <span className="truncate">{metadata}</span> : null}
+      {duration ? <span className="shrink-0">{duration}</span> : null}
+    </span>
+  );
+}
+
 export function DelegationRow({
   message,
   initialExpanded = false,
@@ -92,6 +107,12 @@ export function DelegationRow({
     [],
   );
   const isWorking = message.status === "pending" || preferOngoingLabels;
+  const prefix = isWorking ? "Running subagent:" : "Ran subagent:";
+  const summaryParts = getDelegationSummaryParts(message);
+  const suffix = formatDelegationRowSuffix(
+    summaryParts.metadata,
+    formatSummaryDuration(message.durationMs),
+  );
 
   return (
     <div className="group w-full">
@@ -100,9 +121,10 @@ export function DelegationRow({
           isExpanded={isExpanded}
           summaryContent={
             <EventTitle
-              prefix="Subagent"
-              emphasis={formatDelegationSummary(message)}
-              suffix={formatSummaryDuration(message.durationMs)}
+              prefix={prefix}
+              emphasis={summaryParts.label}
+              suffix={suffix}
+              suffixClassName="min-w-0 shrink"
               tone={message.status === "error" ? "destructive" : "default"}
               shimmerPrefix={isWorking}
             />

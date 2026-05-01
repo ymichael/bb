@@ -7,7 +7,6 @@ import type {
 } from "@bb/domain";
 import { assertNever } from "./assert-never.js";
 import { fileChangeIdentity } from "./file-change-summary.js";
-import { isDelegationToolName } from "./tool-call-parsing.js";
 import { mergeGroupedRowStatus } from "./timeline-grouped-row-status.js";
 import { formatToolBundleSummaryLabel } from "./timeline-tool-bundle-summary.js";
 
@@ -48,6 +47,7 @@ interface TimelineWebResearchSummaryPart {
 interface TimelineDelegationsSummaryPart {
   count: number;
   kind: "delegations";
+  status: TimelineGroupedRowStatus;
 }
 
 interface TimelineToolsSummaryPart {
@@ -65,6 +65,7 @@ type TimelineAssistantStepSummaryPart =
 
 interface TimelineAssistantStepSummaryAccumulator {
   delegationCount: number;
+  delegationStatus: TimelineGroupedRowStatus;
   fallbackItemCount: number;
   fileEditPaths: Set<string>;
   hasMeaningfulWork: boolean;
@@ -79,6 +80,11 @@ interface ToolBundleRowsByKind {
   "web-research": TimelineToolBundleRow[];
 }
 
+type MergeableTimelineToolBundleKind = Exclude<
+  TimelineToolBundleKind,
+  "delegations"
+>;
+
 type MergedToolBundleRowBase = Omit<TimelineToolBundleRow, "summary">;
 
 function getAssistantStepSummaryLabelStatus(
@@ -91,9 +97,14 @@ function pluralize(count: number, singular: string, plural: string): string {
   return `${count} ${count === 1 ? singular : plural}`;
 }
 
+function getDelegationVerb(status: TimelineGroupedRowStatus): string {
+  return status === "pending" ? "Running" : "Ran";
+}
+
 function createAccumulator(): TimelineAssistantStepSummaryAccumulator {
   return {
     delegationCount: 0,
+    delegationStatus: "completed",
     fallbackItemCount: 0,
     fileEditPaths: new Set<string>(),
     hasMeaningfulWork: false,
@@ -149,16 +160,14 @@ function addMessageRow(
   switch (message.kind) {
     case "delegation":
       accumulator.delegationCount += 1;
+      accumulator.delegationStatus = mergeGroupedRowStatus(
+        accumulator.delegationStatus,
+        message.status,
+      );
       accumulator.hasMeaningfulWork = true;
       addPartOrder(accumulator, "delegations");
       return;
     case "tool-call":
-      if (isDelegationToolName(message.toolName)) {
-        accumulator.delegationCount += 1;
-        accumulator.hasMeaningfulWork = true;
-        addPartOrder(accumulator, "delegations");
-        return;
-      }
       accumulator.toolsCount += 1;
       addPartOrder(accumulator, "tools");
       return;
@@ -199,6 +208,16 @@ function addToolBundleRow(
 ): void {
   accumulator.fallbackItemCount += row.rows.length;
   accumulator.hasMeaningfulWork = true;
+  if (row.bundleKind === "delegations") {
+    accumulator.delegationCount +=
+      row.summary.kind === "delegations" ? row.summary.delegations : 0;
+    accumulator.delegationStatus = mergeGroupedRowStatus(
+      accumulator.delegationStatus,
+      row.status,
+    );
+    addPartOrder(accumulator, "delegations");
+    return;
+  }
   accumulator.toolBundleRowsByKind[row.bundleKind].push(row);
   addPartOrder(accumulator, row.bundleKind);
 }
@@ -214,7 +233,11 @@ function buildCountSummaryPart(
   switch (kind) {
     case "delegations":
       return accumulator.delegationCount > 0
-        ? { kind: "delegations", count: accumulator.delegationCount }
+        ? {
+            kind: "delegations",
+            count: accumulator.delegationCount,
+            status: accumulator.delegationStatus,
+          }
         : null;
     case "file-edits":
       return accumulator.fileEditPaths.size > 0
@@ -314,6 +337,16 @@ function mergeToolBundleSummary(
           0,
         ),
       };
+    case "delegations":
+      return {
+        kind: "delegations",
+        delegations: bundleRows.reduce(
+          (total, row) =>
+            total +
+            (row.summary.kind === "delegations" ? row.summary.delegations : 0),
+          0,
+        ),
+      };
     default:
       return assertNever(firstRow.bundleKind);
   }
@@ -349,7 +382,7 @@ function mergeToolBundleRows(
 
 function getToolBundleRowsByKind(
   toolBundleRowsByKind: ToolBundleRowsByKind,
-  bundleKind: TimelineToolBundleKind,
+  bundleKind: MergeableTimelineToolBundleKind,
 ): readonly TimelineToolBundleRow[] {
   return toolBundleRowsByKind[bundleKind];
 }
@@ -378,13 +411,23 @@ export function buildTimelineAssistantStepSummary(
     parts: accumulator.partOrder
       .map((kind): TimelineAssistantStepSummaryPart | null => {
         switch (kind) {
-          case "exploration":
-          case "commands":
+          case "exploration": {
+            const merged = mergeToolBundleRows(
+              getToolBundleRowsByKind(accumulator.toolBundleRowsByKind, kind),
+            );
+            return merged ? { kind: "exploration", row: merged } : null;
+          }
+          case "commands": {
+            const merged = mergeToolBundleRows(
+              getToolBundleRowsByKind(accumulator.toolBundleRowsByKind, kind),
+            );
+            return merged ? { kind: "commands", row: merged } : null;
+          }
           case "web-research": {
             const merged = mergeToolBundleRows(
               getToolBundleRowsByKind(accumulator.toolBundleRowsByKind, kind),
             );
-            return merged ? { kind: merged.bundleKind, row: merged } : null;
+            return merged ? { kind: "web-research", row: merged } : null;
           }
           case "file-edits":
           case "delegations":
@@ -420,11 +463,12 @@ function formatSummaryPart(
         "files",
       )}`;
     case "delegations":
-      return `${capitalize ? "Delegated to" : "delegated to"} ${pluralize(
-        part.count,
-        "subagent",
-        "subagents",
-      )}`;
+      const delegationVerb = getDelegationVerb(
+        getAssistantStepSummaryLabelStatus(part.status),
+      );
+      return `${
+        capitalize ? delegationVerb : delegationVerb.toLowerCase()
+      } ${pluralize(part.count, "subagent", "subagents")}`;
     case "tools":
       return `${capitalize ? "Used" : "used"} ${pluralize(
         part.count,

@@ -1,10 +1,23 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import type { ViewDelegationMessage, ViewMessage } from "@bb/domain";
+import type {
+  ViewDelegationMessage,
+  ViewMessage,
+  ViewProjection,
+} from "@bb/domain";
 import { DelegationRow } from "../src/thread-timeline/rows/DelegationRow.js";
 
 function renderMessage(message: ViewMessage) {
   return <div data-kind={message.kind}>{message.kind}</div>;
+}
+
+function emptyProjection(): ViewProjection {
+  return {
+    entries: [],
+    state: {
+      activeThinking: null,
+    },
+  };
 }
 
 function baseDelegationMessage(): ViewDelegationMessage {
@@ -20,7 +33,7 @@ function baseDelegationMessage(): ViewDelegationMessage {
     toolName: "Agent",
     callId: "agent-1",
     status: "completed",
-    childProjection: { entries: [] },
+    childProjection: emptyProjection(),
   };
 }
 
@@ -37,8 +50,28 @@ describe("DelegationRow rendering", () => {
       />,
     );
 
-    expect(html).toContain("Subagent");
-    expect(html).toContain("Explore: Inspect the docs tree");
+    expect(html).toContain("Ran subagent:");
+    expect(html).toContain("Inspect the docs tree");
+    expect(html).toContain("Explore");
+    expect(html).toContain("text-muted-foreground/75");
+  });
+
+  it("uses an active label for pending subagents", () => {
+    const html = renderToStaticMarkup(
+      <DelegationRow
+        message={{
+          ...baseDelegationMessage(),
+          status: "pending",
+          subagentType: "Explore",
+          description: "Inspect the docs tree",
+        }}
+        renderMessage={renderMessage}
+      />,
+    );
+
+    expect(html).toContain("Running subagent:");
+    expect(html).toContain("Inspect the docs tree");
+    expect(html).toContain("Explore");
   });
 
   it("renders subagent output as markdown", () => {

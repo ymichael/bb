@@ -9,6 +9,11 @@ interface DelegationSummaryInput {
   toolName: string;
 }
 
+export interface DelegationSummaryParts {
+  label: string;
+  metadata?: string;
+}
+
 export interface ExploringCounts {
   filesRead: number;
   searches: number;
@@ -44,19 +49,32 @@ function getReadDisplayName(
   return intent.name ?? intent.cmd;
 }
 
+export function getDelegationSummaryParts(
+  message: DelegationSummaryInput,
+): DelegationSummaryParts {
+  if (message.description) {
+    return {
+      label: message.description,
+      ...(message.subagentType ? { metadata: message.subagentType } : {}),
+    };
+  }
+  if (message.command) {
+    return {
+      label: message.command,
+      ...(message.subagentType ? { metadata: message.subagentType } : {}),
+    };
+  }
+  if (message.subagentType) {
+    return { label: message.subagentType };
+  }
+  return { label: message.toolName };
+}
+
 export function formatDelegationSummary(
   message: DelegationSummaryInput,
 ): string {
-  if (message.subagentType && message.description) {
-    return `${message.subagentType}: ${message.description}`;
-  }
-  if (message.subagentType) {
-    return message.subagentType;
-  }
-  if (message.description) {
-    return message.description;
-  }
-  return message.command ?? message.toolName;
+  const parts = getDelegationSummaryParts(message);
+  return parts.metadata ? `${parts.label} (${parts.metadata})` : parts.label;
 }
 
 export function formatExploringIntentLine(

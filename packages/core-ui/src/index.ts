@@ -36,9 +36,7 @@ export {
   buildTimelineAssistantStepSummaryLabel,
   formatTimelineAssistantStepSummary,
 } from "./timeline-assistant-step-summary.js";
-export type {
-  TimelineAssistantStepSummary,
-} from "./timeline-assistant-step-summary.js";
+export type { TimelineAssistantStepSummary } from "./timeline-assistant-step-summary.js";
 export {
   countUniqueChangedFiles,
   fileChangeIdentity,
@@ -76,9 +74,13 @@ export {
   formatDelegationSummary,
   formatExploringCountsLabel,
   formatExploringIntentLine,
+  getDelegationSummaryParts,
   summarizeExploringCounts,
 } from "./timeline-render-helpers.js";
-export type { ExploringCounts } from "./timeline-render-helpers.js";
+export type {
+  DelegationSummaryParts,
+  ExploringCounts,
+} from "./timeline-render-helpers.js";
 export {
   formatCommandOutputText,
   getCommandExitCodeLine,

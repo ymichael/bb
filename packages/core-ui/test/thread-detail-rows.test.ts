@@ -19,7 +19,14 @@ type ViewAssistantTextMessage = Extract<
   ViewMessage,
   { kind: "assistant-text" }
 >;
+type ViewDelegationMessage = Extract<ViewMessage, { kind: "delegation" }>;
 type ViewErrorMessage = Extract<ViewMessage, { kind: "error" }>;
+
+interface DelegationMessageFixtureArgs {
+  id: string;
+  sourceSeq: number;
+  status?: ViewDelegationMessage["status"];
+}
 
 function expectToolBundleRow(
   row: TimelineRow | undefined,
@@ -71,6 +78,34 @@ function expectErrorMessage(
 
 function getStartedAt(message: ViewMessage): number {
   return message.startedAt ?? message.createdAt;
+}
+
+function emptyProjection(): ViewProjection {
+  return {
+    entries: [],
+    state: {
+      activeThinking: null,
+    },
+  };
+}
+
+function delegationMessage(
+  args: DelegationMessageFixtureArgs,
+): ViewDelegationMessage {
+  return {
+    kind: "delegation",
+    id: args.id,
+    threadId: "thread-1",
+    sourceSeqStart: args.sourceSeq,
+    sourceSeqEnd: args.sourceSeq,
+    createdAt: args.sourceSeq,
+    startedAt: args.sourceSeq,
+    turnId: "turn-1",
+    toolName: "Agent",
+    callId: args.id,
+    status: args.status ?? "completed",
+    childProjection: emptyProjection(),
+  };
 }
 
 function collectLeafMessages(rows: readonly TimelineRow[]): ViewMessage[] {
@@ -322,6 +357,35 @@ describe("buildTimelineRows projection turn lifecycle", () => {
       command: "git push",
       approvalStatus: "denied",
     });
+  });
+
+  it("keeps a single delegation as an individual row", () => {
+    const rows = buildRowsFromMessages([
+      delegationMessage({ id: "delegation-1", sourceSeq: 1 }),
+    ]);
+
+    expect(rows.map((row) => row.kind)).toEqual(["message"]);
+    const row = expectMessageRow(rows[0]);
+    expect(row.message.kind).toBe("delegation");
+  });
+
+  it("bundles adjacent delegation rows as subagents", () => {
+    const rows = buildRowsFromMessages([
+      delegationMessage({ id: "delegation-1", sourceSeq: 1 }),
+      delegationMessage({ id: "delegation-2", sourceSeq: 2 }),
+    ]);
+
+    expect(rows.map((row) => row.kind)).toEqual(["tool-bundle"]);
+    const row = expectToolBundleRow(rows[0]);
+    expect(row.bundleKind).toBe("delegations");
+    expect(row.summary).toEqual({
+      kind: "delegations",
+      delegations: 2,
+    });
+    expect(collectLeafMessages(row.rows).map((message) => message.id)).toEqual([
+      "delegation-1",
+      "delegation-2",
+    ]);
   });
 
   it("collapses a completed turn even when a child message is still pending", () => {
@@ -698,7 +762,7 @@ describe("buildTimelineRows tool group collapsing", () => {
         command: "Agent [Explore] Search for SearchMenu references",
         output: "Subagent report: found SearchMenu component and tests",
         status: "completed",
-        childProjection: { entries: [] },
+        childProjection: emptyProjection(),
       },
       {
         kind: "tasks",
@@ -964,7 +1028,7 @@ describe("buildTimelineRows tool group collapsing", () => {
         toolName: "Agent",
         callId: "agent-1",
         status: "completed",
-        childProjection: { entries: [] },
+        childProjection: emptyProjection(),
       },
       {
         kind: "tasks",

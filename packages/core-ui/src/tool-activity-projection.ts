@@ -2,15 +2,17 @@ import type {
   ThreadEventScope,
   ViewApprovalLifecycleStatus,
   ViewCommandMessage,
+  ViewDelegationMessage,
   ViewWebFetchMessage,
   ViewMessage,
+  ViewProjection,
   ViewToolCallMessage,
   ViewToolCallSummary,
   ViewToolParsedIntent,
   ViewWebSearchMessage,
 } from "@bb/domain";
 import type { EventMeta } from "./event-decode.js";
-import type { ExecCallPartial } from "./exec-lifecycle.js";
+import type { ExecCallPartial, ExecMessageKind } from "./exec-lifecycle.js";
 import { messageId } from "./format-helpers.js";
 import {
   areThreadEventScopesEqual,
@@ -28,12 +30,32 @@ import {
 } from "./visible-text-buffer.js";
 import type { WebActivityLifecycleEvent } from "./web-activity-lifecycle.js";
 
-type ViewExecMessage = ViewCommandMessage | ViewToolCallMessage;
+type ViewProviderExecutionMessage =
+  | ViewCommandMessage
+  | ViewToolCallMessage
+  | ViewDelegationMessage;
 type ViewWebActivityMessage = ViewWebSearchMessage | ViewWebFetchMessage;
 type WebActivityKind = ViewWebActivityMessage["kind"];
-type InterruptibleToolMessage = ViewExecMessage | ViewWebActivityMessage;
+type InterruptibleToolMessage =
+  | ViewProviderExecutionMessage
+  | ViewWebActivityMessage;
 type InterruptibleToolCall = Pick<ViewToolCallSummary, "output" | "status">;
-type MutableExecSummary = ViewToolCallSummary | ViewExecMessage;
+interface ExecDelegationMetadata {
+  subagentType?: string;
+  description?: string;
+}
+type MutableExecCallSummary = ViewToolCallSummary & ExecDelegationMetadata;
+type MutableExecSummary = MutableExecCallSummary | ViewProviderExecutionMessage;
+type CommandExecutionMetadataTarget =
+  | ViewToolCallSummary
+  | ViewCommandMessage
+  | ViewToolCallMessage;
+type DelegationMetadataTarget = MutableExecCallSummary | ViewDelegationMessage;
+type MaybeProviderExecutionMessage =
+  | ViewMessage
+  | ViewProviderExecutionMessage
+  | ViewWebActivityMessage
+  | null;
 
 type ApprovalStatusDelta =
   | { kind: "keep" }
@@ -44,10 +66,10 @@ export interface ToolActivityProjectionState {
   toolActivity: ToolActivityState;
 }
 
-interface RunningExecCall extends ViewToolCallSummary {
+interface RunningExecCall extends MutableExecCallSummary {
   threadId: string;
   scope: ThreadEventScope;
-  messageKind: "command" | "tool-call";
+  messageKind: ExecMessageKind;
   toolName?: string;
   parentToolCallId?: string;
   sourceSeqStart: number;
@@ -59,8 +81,8 @@ interface RunningExecCall extends ViewToolCallSummary {
 
 export interface ToolActivityState {
   runningCallsById: Map<string, RunningExecCall>;
-  activeCell: ViewExecMessage | ViewWebActivityMessage | null;
-  historyCells: Array<ViewExecMessage | ViewWebActivityMessage>;
+  activeCell: ViewProviderExecutionMessage | ViewWebActivityMessage | null;
+  historyCells: Array<ViewProviderExecutionMessage | ViewWebActivityMessage>;
   finalizedExecCallIds: Set<string>;
   finalizedWebActivityCallIds: Set<string>;
 }
@@ -83,6 +105,25 @@ export function createToolActivityState(): ToolActivityState {
     finalizedExecCallIds: new Set(),
     finalizedWebActivityCallIds: new Set(),
   };
+}
+
+function emptyViewProjection(): ViewProjection {
+  return {
+    entries: [],
+    state: {
+      activeThinking: null,
+    },
+  };
+}
+
+function isProviderExecutionMessage(
+  message: MaybeProviderExecutionMessage,
+): message is ViewProviderExecutionMessage {
+  return (
+    message?.kind === "command" ||
+    message?.kind === "tool-call" ||
+    message?.kind === "delegation"
+  );
 }
 
 function getCallStatusRank(
@@ -191,7 +232,7 @@ function upsertRunningExecCall(
     return {
       callId: incoming.callId,
       threadId,
-      messageKind: incoming.messageKind,
+      messageKind: incoming.messageKind ?? "tool-call",
       toolName: incoming.toolName,
       command: incoming.command,
       cwd: incoming.cwd,
@@ -226,13 +267,16 @@ function upsertRunningExecCall(
       `Cannot merge tool-call messages with different scopes for call ${incoming.callId}`,
     );
   }
+  if (incoming.messageKind && existing.messageKind !== incoming.messageKind) {
+    if (existing.toolName) {
+      throw new Error(
+        `Cannot merge ${existing.messageKind} with ${incoming.messageKind} for call ${incoming.callId}`,
+      );
+    }
+    existing.messageKind = incoming.messageKind;
+  }
   if (incoming.toolName && !existing.toolName)
     existing.toolName = incoming.toolName;
-  if (existing.messageKind !== incoming.messageKind) {
-    throw new Error(
-      `Cannot merge ${existing.messageKind} with ${incoming.messageKind} for call ${incoming.callId}`,
-    );
-  }
   if (incoming.cwd && !existing.cwd) existing.cwd = incoming.cwd;
   if (incoming.source && !existing.source) existing.source = incoming.source;
   if (incoming.duration && !existing.duration)
@@ -323,6 +367,7 @@ function interruptPendingToolMessage(message: InterruptibleToolMessage): void {
   switch (message.kind) {
     case "command":
     case "tool-call":
+    case "delegation":
       interruptPendingToolCall(message);
       return;
     case "web-search":
@@ -338,8 +383,7 @@ function isInterruptibleToolMessage(
   message: ViewMessage,
 ): message is InterruptibleToolMessage {
   return (
-    message.kind === "command" ||
-    message.kind === "tool-call" ||
+    isProviderExecutionMessage(message) ||
     message.kind === "web-search" ||
     message.kind === "web-fetch"
   );
@@ -348,12 +392,9 @@ function isInterruptibleToolMessage(
 function findExecMessageInActiveCell(
   activeCell: ToolActivityState["activeCell"],
   callId: string,
-): ViewExecMessage | null {
+): ViewProviderExecutionMessage | null {
   if (!activeCell) return null;
-  if (
-    (activeCell.kind === "command" || activeCell.kind === "tool-call") &&
-    activeCell.callId === callId
-  ) {
+  if (isProviderExecutionMessage(activeCell) && activeCell.callId === callId) {
     return activeCell;
   }
   return null;
@@ -363,8 +404,8 @@ function findExecMessageInHistoryCells(
   state: ToolActivityProjectionState,
   callId: string,
 ): {
-  cell: ViewExecMessage;
-  call: ViewExecMessage;
+  cell: ViewProviderExecutionMessage;
+  call: ViewProviderExecutionMessage;
 } | null {
   for (
     let index = state.toolActivity.historyCells.length - 1;
@@ -389,7 +430,11 @@ function findExecMessageInHistoryCells(
 }
 
 function isWebActivityMessage(
-  cell: ViewExecMessage | ViewWebActivityMessage | null | undefined,
+  cell:
+    | ViewProviderExecutionMessage
+    | ViewWebActivityMessage
+    | null
+    | undefined,
 ): cell is ViewWebActivityMessage {
   return cell?.kind === "web-search" || cell?.kind === "web-fetch";
 }
@@ -430,8 +475,18 @@ function interruptWebActivityMessage(message: ViewWebActivityMessage): void {
 
 function canSetDelegationMetadata(
   target: MutableExecSummary,
-): target is ViewToolCallSummary | ViewToolCallMessage {
-  return !("kind" in target) || target.kind === "tool-call";
+): target is DelegationMetadataTarget {
+  return !("kind" in target) || target.kind === "delegation";
+}
+
+function canSetCommandExecutionMetadata(
+  target: MutableExecSummary,
+): target is CommandExecutionMetadataTarget {
+  return (
+    !("kind" in target) ||
+    target.kind === "command" ||
+    target.kind === "tool-call"
+  );
 }
 
 function mergeCallSummary(
@@ -446,12 +501,14 @@ function mergeCallSummary(
   ) {
     target.command = incoming.command;
   }
-  if (incoming.cwd && !target.cwd) target.cwd = incoming.cwd;
-  target.parsedCmd = chooseParsedIntents(
-    target.parsedCmd ?? [],
-    incoming.parsedCmd,
-  );
-  if (incoming.source && !target.source) target.source = incoming.source;
+  if (canSetCommandExecutionMetadata(target)) {
+    if (incoming.cwd && !target.cwd) target.cwd = incoming.cwd;
+    target.parsedCmd = chooseParsedIntents(
+      target.parsedCmd ?? [],
+      incoming.parsedCmd,
+    );
+    if (incoming.source && !target.source) target.source = incoming.source;
+  }
   if (visibleOutput !== undefined) {
     target.output = visibleOutput;
   } else if (appendOutput && incoming.output && incoming.output.length > 0) {
@@ -466,7 +523,12 @@ function mergeCallSummary(
   ) {
     target.output = incoming.output;
   }
-  if (incoming.exitCode !== undefined) target.exitCode = incoming.exitCode;
+  if (
+    canSetCommandExecutionMetadata(target) &&
+    incoming.exitCode !== undefined
+  ) {
+    target.exitCode = incoming.exitCode;
+  }
   if (incoming.duration && !target.duration)
     target.duration = incoming.duration;
   if (incoming.durationMs !== undefined && target.durationMs === undefined) {
@@ -480,10 +542,12 @@ function mergeCallSummary(
       target.description = incoming.description;
     }
   }
-  target.approvalStatus = applyApprovalStatusDelta(
-    target.approvalStatus,
-    buildApprovalStatusDelta(incoming.approvalStatus, incoming.status),
-  );
+  if (canSetCommandExecutionMetadata(target)) {
+    target.approvalStatus = applyApprovalStatusDelta(
+      target.approvalStatus,
+      buildApprovalStatusDelta(incoming.approvalStatus, incoming.status),
+    );
+  }
   target.status =
     mergeCallStatus(target.status, incoming.status) ?? target.status;
 }
@@ -510,10 +574,7 @@ export function flushActiveToolCell(state: ToolActivityProjectionState): void {
   const active = state.toolActivity.activeCell;
   if (!active) return;
 
-  if (
-    (active.kind === "command" || active.kind === "tool-call") &&
-    active.status !== "pending"
-  ) {
+  if (isProviderExecutionMessage(active) && active.status !== "pending") {
     state.toolActivity.finalizedExecCallIds.add(active.callId);
   }
 
@@ -608,9 +669,11 @@ export function interruptPendingToolActivity(
   }
 }
 
-function createExecMessage(call: RunningExecCall): ViewExecMessage {
+function createExecMessage(
+  call: RunningExecCall,
+): ViewProviderExecutionMessage {
   const messageKindForId =
-    call.messageKind === "tool-call" ? "tool" : "command";
+    call.messageKind === "tool-call" ? "tool" : call.messageKind;
   const base = {
     id: messageId(call.threadId, messageKindForId, call.callId),
     threadId: call.threadId,
@@ -624,14 +687,9 @@ function createExecMessage(call: RunningExecCall): ViewExecMessage {
       : {}),
     callId: call.callId,
     command: call.command,
-    cwd: call.cwd,
-    parsedCmd: call.parsedCmd,
-    source: call.source,
     output: call.output,
-    exitCode: call.exitCode,
     duration: call.duration,
     durationMs: call.durationMs,
-    approvalStatus: call.approvalStatus,
     status: call.status,
   };
 
@@ -639,6 +697,22 @@ function createExecMessage(call: RunningExecCall): ViewExecMessage {
     return {
       ...base,
       kind: "command",
+      cwd: call.cwd,
+      parsedCmd: call.parsedCmd,
+      source: call.source,
+      exitCode: call.exitCode,
+      approvalStatus: call.approvalStatus,
+    };
+  }
+
+  if (call.messageKind === "delegation") {
+    return {
+      ...base,
+      kind: "delegation",
+      toolName: call.toolName ?? "Agent",
+      subagentType: call.subagentType,
+      description: call.description,
+      childProjection: emptyViewProjection(),
     };
   }
 
@@ -646,8 +720,11 @@ function createExecMessage(call: RunningExecCall): ViewExecMessage {
     ...base,
     kind: "tool-call",
     toolName: call.toolName ?? "tool",
-    subagentType: call.subagentType,
-    description: call.description,
+    cwd: call.cwd,
+    parsedCmd: call.parsedCmd,
+    source: call.source,
+    exitCode: call.exitCode,
+    approvalStatus: call.approvalStatus,
   };
 }
 
@@ -676,10 +753,7 @@ export function onExecBegin(
   );
   if (existingInActive) {
     mergeCallSummary(existingInActive, call);
-    if (
-      state.toolActivity.activeCell?.kind === "command" ||
-      state.toolActivity.activeCell?.kind === "tool-call"
-    ) {
+    if (isProviderExecutionMessage(state.toolActivity.activeCell)) {
       state.toolActivity.activeCell.sourceSeqEnd = Math.max(
         state.toolActivity.activeCell.sourceSeqEnd,
         call.sourceSeqEnd,
@@ -751,10 +825,7 @@ export function onExecOutput(
       replaceOutput,
       visibleOutput: existingRunning?.output,
     });
-    if (
-      state.toolActivity.activeCell?.kind === "command" ||
-      state.toolActivity.activeCell?.kind === "tool-call"
-    ) {
+    if (isProviderExecutionMessage(state.toolActivity.activeCell)) {
       state.toolActivity.activeCell.sourceSeqEnd = Math.max(
         state.toolActivity.activeCell.sourceSeqEnd,
         meta.seq,
@@ -815,13 +886,15 @@ export function onExecEnd(
     mergeCallSummary(existingInActive, merged, {
       visibleOutput: merged.output,
     });
-    if (active?.kind === "command" || active?.kind === "tool-call") {
+    if (isProviderExecutionMessage(active)) {
       active.sourceSeqEnd = Math.max(active.sourceSeqEnd, merged.sourceSeqEnd);
       active.createdAt = Math.max(active.createdAt, merged.createdAt);
       active.status =
         mergeCallStatus(active.status, merged.status) ?? active.status;
       active.output = merged.output ?? active.output;
-      active.exitCode = merged.exitCode ?? active.exitCode;
+      if (canSetCommandExecutionMetadata(active)) {
+        active.exitCode = merged.exitCode ?? active.exitCode;
+      }
       active.duration = merged.duration ?? active.duration;
       active.durationMs = merged.durationMs ?? active.durationMs;
       state.toolActivity.finalizedExecCallIds.add(incoming.callId);
@@ -852,7 +925,10 @@ export function onExecEnd(
       mergeCallStatus(historyMatch.cell.status, merged.status) ??
       historyMatch.cell.status;
     historyMatch.cell.output = merged.output ?? historyMatch.cell.output;
-    historyMatch.cell.exitCode = merged.exitCode ?? historyMatch.cell.exitCode;
+    if (canSetCommandExecutionMetadata(historyMatch.cell)) {
+      historyMatch.cell.exitCode =
+        merged.exitCode ?? historyMatch.cell.exitCode;
+    }
     historyMatch.cell.duration = merged.duration ?? historyMatch.cell.duration;
     historyMatch.cell.durationMs =
       merged.durationMs ?? historyMatch.cell.durationMs;
