@@ -125,6 +125,10 @@ describe("bridge", () => {
       append: "You are a coder.",
     });
     expect(options.effort).toBe("xhigh");
+    expect(options.thinking).toEqual({
+      type: "adaptive",
+      display: "summarized",
+    });
   });
 
   it("passes the resolved Claude permission mode through to the session", () => {
@@ -297,7 +301,7 @@ describe("bridge", () => {
     expect(queryMock).not.toHaveBeenCalled();
   });
 
-  it("passes thread/start reasoningLevel through to Claude SDK effort", async () => {
+  it("passes thread/start reasoningLevel through to Claude SDK effort and thinking display", async () => {
     const bridge = createBridgeJsonRpcTestHarness(handleLine);
     const queries: ControlledClaudeQuery[] = [];
     queryMock.mockImplementation(() => {
@@ -322,6 +326,10 @@ describe("bridge", () => {
         expect.objectContaining({
           options: expect.objectContaining({
             effort: "xhigh",
+            thinking: {
+              type: "adaptive",
+              display: "summarized",
+            },
           }),
         }),
       );

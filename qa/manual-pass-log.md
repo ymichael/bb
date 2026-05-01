@@ -560,3 +560,19 @@ Cleanup:
 
 - Teardown succeeded: `pnpm qa:standalone:stop --state ...` killed PIDs `66237` and `66297` and removed the standalone root.
 - `pnpm qa:standalone:cleanup` reported no remaining roots.
+
+## Claude Code Thinking Display Regression
+
+Date: 2026-04-30
+Operator: Codex
+Status: passed
+
+Validated:
+
+- Ran a live Claude Code SDK query from `packages/agent-runtime` with `effort: "high"` and `thinking: { type: "adaptive", display: "summarized" }`. The stream emitted 4 thinking deltas, 207 thinking characters, 1 final thinking block, and a successful result.
+- Ran a live query through bb's Claude bridge session helpers, using `buildSessionOptions` plus `SdkSession` from the built `@bb/agent-runtime` output. The resolved options included `thinking: { type: "adaptive", display: "summarized" }` and `effort: "high"`. The stream emitted 6 thinking deltas, 284 thinking characters, 1 final thinking block, and a successful result.
+
+Notes:
+
+- The validation intentionally reported counts only and did not print Claude's thinking text.
+- This covers the regression that Claude reasoning levels alone were insufficient after Claude Code started omitting visible thinking unless summarized thinking display is requested.

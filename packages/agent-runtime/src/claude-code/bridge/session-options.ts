@@ -24,6 +24,10 @@ const READONLY_ALLOWED_TOOLS = new Set([
   "Read",
   "TodoRead",
 ]);
+const SUMMARIZED_ADAPTIVE_THINKING = {
+  type: "adaptive",
+  display: "summarized",
+} satisfies Exclude<Options["thinking"], undefined>;
 
 export function buildReadonlyDenialMessage(): string {
   return "bb readonly mode allows reading and analysis only. Continue with a read-only answer; do not modify files, run shell commands, use network, or use mutating tools.";
@@ -116,6 +120,9 @@ export function buildSessionOptions(
     env,
     permissionMode: params.permissionMode,
     ...(params.reasoningLevel ? { effort: params.reasoningLevel } : {}),
+    ...(params.reasoningLevel
+      ? { thinking: SUMMARIZED_ADAPTIVE_THINKING }
+      : {}),
     ...(sandbox ? { sandbox } : {}),
     ...(hooks ? { hooks } : {}),
   };

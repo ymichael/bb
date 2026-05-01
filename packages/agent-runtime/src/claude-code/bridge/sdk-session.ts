@@ -24,6 +24,7 @@ export interface SdkSessionOptions {
   tools?: string[];
   canUseTool?: CanUseTool;
   env?: NodeJS.ProcessEnv;
+  thinking?: Options["thinking"];
 }
 
 type SdkSessionMessageHandler = (message: SDKMessage) => void;
@@ -100,6 +101,7 @@ export class SdkSession {
         : {}),
       ...(this.options.model ? { model: this.options.model } : {}),
       ...(this.options.effort ? { effort: this.options.effort } : {}),
+      ...(this.options.thinking ? { thinking: this.options.thinking } : {}),
     };
 
     this.query = query({
