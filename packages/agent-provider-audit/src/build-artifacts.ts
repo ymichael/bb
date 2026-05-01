@@ -2,7 +2,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  buildGroupedTimelineRows,
+  buildTimelineRows,
   decodeRow,
   extractThreadContextWindowUsage,
   formatTimelineAsText,
@@ -10,11 +10,11 @@ import {
 } from "@bb/thread-view";
 import {
   threadEventTypeValues,
-  timelineRowSchema,
   type ThreadEventType,
   type ViewMessage,
   type ViewProjection,
 } from "@bb/domain";
+import { timelineRowSchema } from "@bb/server-contract";
 import { z } from "zod";
 import { readJsonFile } from "./json-file.js";
 import {
@@ -267,7 +267,6 @@ const replayBuildArtifactSchema = z.object({
         taskId: z.string(),
         scenarioDescription: z.string(),
         threadStatus: z.string(),
-        latestActivityRowId: z.string().nullable(),
         timelineRowCount: z.number(),
         viewMessageCount: z.number(),
         timelineRows: z.array(timelineRowSchema),
@@ -332,6 +331,26 @@ function trimTrailingWhitespace(text: string): string {
     .join("\n");
 }
 
+function buildVerboseTimelineText(bundle: ProviderAuditBundle): string {
+  return trimTrailingWhitespace(
+    formatTimelineAsText(bundle.timelineVerboseRows, {
+      color: false,
+      truncateForAudit: true,
+      verbose: true,
+    }),
+  );
+}
+
+function buildAuditTimelineText(bundle: ProviderAuditBundle): string {
+  return trimTrailingWhitespace(
+    formatTimelineAsText(bundle.timelineRows, {
+      color: false,
+      truncateForAudit: true,
+      verbose: false,
+    }),
+  );
+}
+
 function flattenProjectionMessages(projection: ViewProjection): ViewMessage[] {
   const messages: ViewMessage[] = [];
   for (const entry of projection.entries) {
@@ -394,9 +413,10 @@ function buildPrefixSnapshot(
     threadStatus,
     turnMessageDetail: "summary",
   });
-  const timelineRows = buildGroupedTimelineRows(projection);
+  const timelineRows = buildTimelineRows(projection);
   const timelineText = formatTimelineAsText(timelineRows, {
     color: false,
+    truncateForAudit: true,
     verbose: false,
   });
   const viewMessages = flattenProjectionMessages(projection);
@@ -518,12 +538,12 @@ export function buildProviderAuditReplayBuildArtifact(
       unexpectedUntranslatedRawEventCount:
         bundle.auditReport.summary.unexpectedUntranslatedRawEventCount,
       viewMessageKinds: countMessageKinds(bundle.viewMessages),
-      timelinePreview: buildTimelinePreview(bundle.timelineText),
+      timelinePreview: buildTimelinePreview(buildAuditTimelineText(bundle)),
     })),
     timelinePrefixSnapshots: buildTimelinePrefixSnapshots(replayed),
     verboseTimelines: replayed.fixtures.map(({ fixture, bundle }) => ({
       fixture: toFixtureId(fixture),
-      text: trimTrailingWhitespace(bundle.timelineVerboseText),
+      text: buildVerboseTimelineText(bundle),
     })),
   };
 }

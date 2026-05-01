@@ -7,13 +7,9 @@ import {
   getThread,
   queuedThreadMessages,
 } from "@bb/db";
+import { threadScope, threadSchema, turnScope } from "@bb/domain";
 import {
-  threadScope,
-  threadSchema,
-  turnScope,
   type TimelineRow,
-} from "@bb/domain";
-import {
   threadDraftListResponseSchema,
   threadTimelineResponseSchema,
   timelineTurnSummaryDetailsResponseSchema,
@@ -51,7 +47,7 @@ const threadEventWaitResponseSchema = z.object({
   type: z.string(),
 });
 
-type TimelineTurnSummaryRow = Extract<TimelineRow, { kind: "turn-summary" }>;
+type TimelineTurnRow = Extract<TimelineRow, { kind: "turn" }>;
 
 describe("public thread data routes", () => {
   it("returns timeline rows and timeline tool details from thread events", async () => {
@@ -95,7 +91,7 @@ describe("public thread data routes", () => {
         expect.objectContaining({
           rows: expect.arrayContaining([
             expect.objectContaining({
-              kind: "message",
+              kind: "conversation",
             }),
           ]),
         }),
@@ -109,12 +105,10 @@ describe("public thread data routes", () => {
         await readJson(toolDetailsResponse),
       );
       expect(toolDetails.rows).toHaveLength(1);
-      expect(toolDetails.rows[0]?.kind).toBe("message");
-      if (toolDetails.rows[0]?.kind === "message") {
-        expect(toolDetails.rows[0].message.kind).toBe("assistant-text");
-        if (toolDetails.rows[0].message.kind === "assistant-text") {
-          expect(toolDetails.rows[0].message.text).toBe("Manager note two");
-        }
+      expect(toolDetails.rows[0]?.kind).toBe("conversation");
+      if (toolDetails.rows[0]?.kind === "conversation") {
+        expect(toolDetails.rows[0].role).toBe("assistant");
+        expect(toolDetails.rows[0].text).toBe("Manager note two");
       }
     } finally {
       await harness.cleanup();
@@ -197,33 +191,28 @@ describe("public thread data routes", () => {
       const timeline = threadTimelineResponseSchema.parse(
         await readJson(timelineResponse),
       );
-      const toolGroup = timeline.rows.find(
-        (row): row is TimelineTurnSummaryRow => row.kind === "turn-summary",
+      const turnRow = timeline.rows.find(
+        (row): row is TimelineTurnRow => row.kind === "turn",
       );
-      expect(toolGroup).toBeDefined();
-      if (!toolGroup) {
-        throw new Error("Expected a turn-summary row");
+      expect(turnRow).toBeDefined();
+      if (!turnRow) {
+        throw new Error("Expected a turn row");
       }
-      expect(toolGroup.rows).toBeNull();
+      expect(turnRow.children).toBeNull();
 
       const toolDetailsResponse = await harness.app.request(
-        `/api/v1/threads/${thread.id}/timeline/turn-summary-details?sourceSeqStart=${toolGroup.sourceSeqStart}&sourceSeqEnd=${toolGroup.sourceSeqEnd}`,
+        `/api/v1/threads/${thread.id}/timeline/turn-summary-details?sourceSeqStart=${turnRow.sourceSeqStart}&sourceSeqEnd=${turnRow.sourceSeqEnd}`,
       );
       expect(toolDetailsResponse.status).toBe(200);
       const toolDetails = timelineTurnSummaryDetailsResponseSchema.parse(
         await readJson(toolDetailsResponse),
       );
 
-      expect(toolDetails.rows.map((row) => row.kind)).toEqual(["tool-bundle"]);
-      expect(toolDetails.rows[0]?.kind).toBe("tool-bundle");
-      if (toolDetails.rows[0]?.kind === "tool-bundle") {
-        expect(toolDetails.rows[0].rows[0]?.kind).toBe("message");
-        if (toolDetails.rows[0].rows[0]?.kind === "message") {
-          expect(toolDetails.rows[0].rows[0].message.kind).toBe("tool-call");
-          if (toolDetails.rows[0].rows[0].message.kind === "tool-call") {
-            expect(toolDetails.rows[0].rows[0].message.callId).toBe("tool-1");
-          }
-        }
+      expect(toolDetails.rows.map((row) => row.kind)).toEqual(["work"]);
+      expect(toolDetails.rows[0]?.kind).toBe("work");
+      if (toolDetails.rows[0]?.kind === "work") {
+        expect(toolDetails.rows[0].workKind).toBe("tool");
+        expect(toolDetails.rows[0].callId).toBe("tool-1");
       }
     } finally {
       await harness.cleanup();

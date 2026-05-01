@@ -1,4 +1,3 @@
-import { expect } from "vitest";
 import { threadScope, turnScope } from "@bb/domain";
 import type {
   PromptInput,
@@ -13,13 +12,13 @@ import type {
   ThreadEventWarningCategory,
   ThreadTurnInitiator,
   TurnRequestTarget,
-  TimelineRow,
   ViewMessage,
   ViewProjection,
 } from "@bb/domain";
+import type { TimelineRow } from "@bb/server-contract";
 import type { ToViewProjectionOptions } from "@bb/domain";
 import {
-  buildGroupedTimelineRows,
+  buildTimelineRows,
   decodeRow,
   flattenProjectionMessagesDeep,
   formatTimelineAsText,
@@ -29,7 +28,7 @@ import type { ThreadEventWithMeta } from "../src/to-view-messages.js";
 
 export interface RenderTimelineFixtureArgs {
   events: ThreadEventRow[];
-  includeToolGroupMessages?: boolean;
+  includeNestedRows?: boolean;
   projectionOptions: ToViewProjectionOptions;
   verbose?: boolean;
 }
@@ -40,46 +39,11 @@ export interface RenderedTimelineFixture {
   projection: ViewProjection;
   rows: TimelineRow[];
   text: string;
-  toolGroups: Extract<TimelineRow, { kind: "turn-summary" }>[];
+  turnRows: Extract<TimelineRow, { kind: "turn" }>[];
 }
 
 export interface RenderTimelinePrefixesArgs extends RenderTimelineFixtureArgs {
   startAt?: number;
-}
-
-export type StableTimelineRowStatus =
-  | "pending"
-  | "completed"
-  | "error"
-  | "interrupted";
-
-export interface LogicalTimelineRow {
-  key: string;
-  status: StableTimelineRowStatus;
-  title: string;
-}
-
-export type LogicalTimelineRowResolver = (
-  row: TimelineRow,
-) => LogicalTimelineRow | null;
-
-export interface PrefixTerminalStabilityArgs extends RenderTimelinePrefixesArgs {
-  resolveRow: LogicalTimelineRowResolver;
-}
-
-export interface CollectLogicalTimelineRowsArgs {
-  resolveRow: LogicalTimelineRowResolver;
-  rows: TimelineRow[];
-}
-
-interface AppendResolvedLogicalRowArgs {
-  resolveRow: LogicalTimelineRowResolver;
-  rows: LogicalTimelineRow[];
-  timelineRow: TimelineRow;
-}
-
-interface TerminalRowSnapshot extends LogicalTimelineRow {
-  prefixLength: number;
 }
 
 export interface TimelineEventFactoryDefaults {
@@ -1051,18 +1015,23 @@ export function renderTimelineFixture(
   args: RenderTimelineFixtureArgs,
 ): RenderedTimelineFixture {
   const decodedEvents = args.events.map((row) => decodeRow(row));
-  const projection = toViewProjection(decodedEvents, args.projectionOptions);
-  const rows = buildGroupedTimelineRows(projection, {
-    includeNestedRows: args.includeToolGroupMessages ?? true,
+  const includeNestedRows = args.includeNestedRows ?? true;
+  const projection = toViewProjection(decodedEvents, {
+    ...args.projectionOptions,
+    turnMessageDetail: includeNestedRows
+      ? "full"
+      : args.projectionOptions.turnMessageDetail,
+  });
+  const rows = buildTimelineRows(projection, {
+    includeNestedRows,
   });
   const messages = flattenProjectionMessagesDeep(projection);
   const text = formatTimelineAsText(rows, {
     color: false,
     verbose: args.verbose ?? true,
   });
-  const toolGroups = rows.filter(
-    (row): row is Extract<TimelineRow, { kind: "turn-summary" }> =>
-      row.kind === "turn-summary",
+  const turnRows = rows.filter(
+    (row): row is Extract<TimelineRow, { kind: "turn" }> => row.kind === "turn",
   );
 
   return {
@@ -1071,7 +1040,7 @@ export function renderTimelineFixture(
     projection,
     rows,
     text,
-    toolGroups,
+    turnRows,
   };
 }
 
@@ -1085,108 +1054,11 @@ export function renderTimelinePrefixes(
     .map((prefixLength) =>
       renderTimelineFixture({
         events: args.events.slice(0, prefixLength),
-        includeToolGroupMessages: args.includeToolGroupMessages,
+        includeNestedRows: args.includeNestedRows,
         projectionOptions: args.projectionOptions,
         verbose: args.verbose,
       }),
     );
-}
-
-function isTerminalStatus(status: StableTimelineRowStatus): boolean {
-  return status !== "pending";
-}
-
-function appendResolvedLogicalRow(args: AppendResolvedLogicalRowArgs): void {
-  const logicalRow = args.resolveRow(args.timelineRow);
-  if (logicalRow) {
-    args.rows.push(logicalRow);
-  }
-}
-
-function appendLogicalRowsFromTimelineRow(
-  args: AppendResolvedLogicalRowArgs,
-): void {
-  appendResolvedLogicalRow(args);
-
-  switch (args.timelineRow.kind) {
-    case "message":
-      return;
-    case "tool-bundle":
-    case "assistant-step-summary":
-      for (const childRow of args.timelineRow.rows) {
-        appendLogicalRowsFromTimelineRow({
-          rows: args.rows,
-          timelineRow: childRow,
-          resolveRow: args.resolveRow,
-        });
-      }
-      return;
-    case "turn-summary":
-      if (!args.timelineRow.rows) {
-        return;
-      }
-      for (const childRow of args.timelineRow.rows) {
-        appendLogicalRowsFromTimelineRow({
-          rows: args.rows,
-          timelineRow: childRow,
-          resolveRow: args.resolveRow,
-        });
-      }
-      return;
-    default:
-      return;
-  }
-}
-
-export function collectLogicalTimelineRows(
-  args: CollectLogicalTimelineRowsArgs,
-): LogicalTimelineRow[] {
-  const logicalRows: LogicalTimelineRow[] = [];
-  for (const row of args.rows) {
-    appendLogicalRowsFromTimelineRow({
-      rows: logicalRows,
-      timelineRow: row,
-      resolveRow: args.resolveRow,
-    });
-  }
-  return logicalRows;
-}
-
-export function expectTerminalRowsNeverRegress(
-  args: PrefixTerminalStabilityArgs,
-): void {
-  const terminalByKey = new Map<string, TerminalRowSnapshot>();
-  const prefixes = renderTimelinePrefixes(args);
-
-  for (const prefix of prefixes) {
-    const currentRowsByKey = new Map<string, LogicalTimelineRow>();
-    for (const logicalRow of collectLogicalTimelineRows({
-      rows: prefix.rows,
-      resolveRow: args.resolveRow,
-    })) {
-      currentRowsByKey.set(logicalRow.key, logicalRow);
-    }
-
-    for (const previous of terminalByKey.values()) {
-      const current = currentRowsByKey.get(previous.key);
-      if (!current) {
-        throw new Error(
-          `Terminal row ${previous.key} disappeared after prefix ${previous.prefixLength}`,
-        );
-      }
-      expect(current.status).toBe(previous.status);
-      expect(current.title).toBe(previous.title);
-    }
-
-    for (const current of currentRowsByKey.values()) {
-      if (isTerminalStatus(current.status) && !terminalByKey.has(current.key)) {
-        terminalByKey.set(current.key, {
-          ...current,
-          prefixLength: prefix.events.length,
-        });
-      }
-    }
-  }
 }
 
 export function messageKinds(messages: readonly ViewMessage[]): string[] {

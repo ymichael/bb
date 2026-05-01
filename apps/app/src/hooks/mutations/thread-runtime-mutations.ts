@@ -1,14 +1,14 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
-  threadScope,
   type ThreadWithRuntime,
   type ThreadQueuedMessage,
-  type TimelineRow,
 } from "@bb/domain";
 import type {
   CreateDraftRequest,
   CreateThreadRequest,
   SendDraftResponse,
+  TimelineConversationAttachments,
+  TimelineRow,
 } from "@bb/server-contract";
 import * as api from "@/lib/api";
 import { wsManager } from "@/lib/ws";
@@ -90,20 +90,29 @@ function buildOptimisticUserMessageRow({
     .map((entry) => entry.text)
     .join("\n\n");
   const attachments = collectPromptAttachments(input);
+  const timelineAttachments: TimelineConversationAttachments | null =
+    attachments
+      ? {
+          webImages: attachments.webImages,
+          localImages: attachments.localImages,
+          localFiles: attachments.localFiles,
+          imageUrls: attachments.imageUrls ?? [],
+          localImagePaths: attachments.localImagePaths ?? [],
+          localFilePaths: attachments.localFilePaths ?? [],
+        }
+      : null;
   return {
-    kind: "message",
     id,
-    message: {
-      kind: "user",
-      id,
-      threadId,
-      sourceSeqStart: 0,
-      sourceSeqEnd: 0,
-      createdAt,
-      scope: threadScope(),
-      text,
-      ...(attachments ? { attachments } : {}),
-    },
+    kind: "conversation",
+    role: "user",
+    threadId,
+    turnId: null,
+    sourceSeqStart: 0,
+    sourceSeqEnd: 0,
+    startedAt: createdAt,
+    createdAt,
+    text,
+    attachments: timelineAttachments,
   };
 }
 

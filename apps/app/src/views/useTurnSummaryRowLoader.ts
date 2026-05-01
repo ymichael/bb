@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import type { TimelineRow, TimelineTurnSummaryRow } from "@bb/domain";
+import type { TimelineRow, TimelineTurnRow } from "@bb/server-contract";
 import { shouldLoadNestedRows } from "./turnSummaryRowLoaderHelpers";
 
 interface LoadTurnSummaryRowsArgs {
@@ -31,13 +31,13 @@ export function useTurnSummaryRowLoader({
   >({});
 
   const handleLoadTurnSummaryRows = useCallback(
-    (entry: TimelineTurnSummaryRow) => {
+    (entry: TimelineTurnRow) => {
       const currentThreadId = threadId;
 
       if (
         !shouldLoadNestedRows({
           cachedRowCount: turnSummaryRowsById[entry.id]?.length ?? 0,
-          inlineRowCount: entry.rows?.length ?? 0,
+          inlineRowCount: entry.children?.length ?? 0,
           isLoading: loadingTurnSummaryIds.has(entry.id),
           threadId: currentThreadId,
         })

@@ -940,7 +940,7 @@ function formatUnknownToolCommand(
   if (entries.length === 0) return toolName;
   const compact = entries
     .map(([k, v]) => {
-      const vs = typeof v === "string" ? v : JSON.stringify(v);
+      const vs = typeof v === "string" ? v.trim() : JSON.stringify(v);
       const display = vs.length > 40 ? `${vs.slice(0, 37)}...` : vs;
       return `${k}: ${display}`;
     })

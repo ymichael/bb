@@ -16,11 +16,11 @@ import {
   threadListEntrySchema,
   threadTypeSchema,
   threadWithRuntimeSchema,
-  timelineRowSchema,
   threadQueuedMessageSchema,
   workspaceStatusSchema,
 } from "@bb/domain";
 import { apiErrorSchema } from "./errors.js";
+import { timelineRowSchema } from "./thread-timeline.js";
 
 export const sendMessageModeSchema = z.enum(["auto", "start", "steer"]);
 export type SendMessageMode = z.infer<typeof sendMessageModeSchema>;

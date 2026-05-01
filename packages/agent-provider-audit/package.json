@@ -26,6 +26,7 @@
   "dependencies": {
     "@bb/agent-runtime": "workspace:*",
     "@bb/domain": "workspace:*",
+    "@bb/server-contract": "workspace:*",
     "@bb/thread-view": "workspace:*",
     "@bb/ui-core": "workspace:*",
     "zod": "^4.3.6"

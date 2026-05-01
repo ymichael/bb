@@ -5,7 +5,6 @@ import type {
   ThreadWithRuntime,
   WorkspaceStatus,
 } from "@bb/domain";
-import { turnScope } from "@bb/domain";
 import {
   makeWorkspaceMergeBase,
   makeWorkspaceStatus,
@@ -201,19 +200,17 @@ describe("resolveThreadTimelinePlaceholder", () => {
       activeThinking: null,
       rows: [
         {
-          kind: "message",
           id: "assistant-1",
-          message: {
-            id: "assistant-1",
-            kind: "assistant-text",
-            threadId: "thread-1",
-            text: "Done",
-            sourceSeqStart: 1,
-            sourceSeqEnd: 1,
-            createdAt: 1,
-            scope: turnScope("turn-1"),
-            status: "completed",
-          },
+          kind: "conversation",
+          role: "assistant",
+          threadId: "thread-1",
+          turnId: "turn-1",
+          text: "Done",
+          sourceSeqStart: 1,
+          sourceSeqEnd: 1,
+          startedAt: 1,
+          createdAt: 1,
+          attachments: null,
         },
       ],
     };

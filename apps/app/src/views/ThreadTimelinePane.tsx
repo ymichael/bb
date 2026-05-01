@@ -2,9 +2,8 @@ import { useEffect, useState, type ReactNode } from "react";
 import type {
   ActiveThinking,
   ThreadRuntimeDisplayStatus,
-  TimelineRow,
-  TimelineTurnSummaryRow,
 } from "@bb/domain";
+import type { TimelineRow, TimelineTurnRow } from "@bb/server-contract";
 import {
   ConversationTimeline,
   ThreadTimelineRows,
@@ -23,15 +22,14 @@ interface ThreadTimelinePaneProps {
   hostConnectionNotice?: HostConnectionNotice | null;
   isThreadTimelinePending: boolean;
   timelineError: boolean;
-  latestActivityRowId: string | null;
   loadingTurnSummaryIds: ReadonlySet<string>;
   erroredTurnSummaryIds: ReadonlySet<string>;
-  onLoadTurnSummaryRows: (entry: TimelineTurnSummaryRow) => void;
+  onLoadTurnSummaryRows: (entry: TimelineTurnRow) => void;
   onOpenLocalFileLink?: ThreadTimelineLocalFileLinkHandler;
   projectId?: string;
   showOngoingIndicator: boolean;
   ongoingIndicatorLabel?: string;
-  threadDetailRows: TimelineRow[];
+  timelineRows: TimelineRow[];
   threadId: string;
   threadRuntimeDisplayStatus: ThreadRuntimeDisplayStatus;
   turnSummaryRowsById: Record<string, TimelineRow[]>;
@@ -49,7 +47,6 @@ export function ThreadTimelinePane({
   hostConnectionNotice,
   isThreadTimelinePending,
   timelineError,
-  latestActivityRowId,
   loadingTurnSummaryIds,
   erroredTurnSummaryIds,
   onLoadTurnSummaryRows,
@@ -57,7 +54,7 @@ export function ThreadTimelinePane({
   projectId,
   showOngoingIndicator,
   ongoingIndicatorLabel,
-  threadDetailRows,
+  timelineRows,
   threadId,
   threadRuntimeDisplayStatus,
   turnSummaryRowsById,
@@ -94,9 +91,8 @@ export function ThreadTimelinePane({
               label="Failed to load timeline"
               className="mt-6 text-destructive"
             />
-          ) : threadDetailRows.length > 0 ? (
+          ) : timelineRows.length > 0 ? (
             <ThreadTimelineRows
-              latestActivityRowId={latestActivityRowId}
               loadingTurnSummaryIds={loadingTurnSummaryIds}
               erroredTurnSummaryIds={erroredTurnSummaryIds}
               onLoadTurnSummaryRows={onLoadTurnSummaryRows}
@@ -104,7 +100,7 @@ export function ThreadTimelinePane({
               projectId={projectId}
               resolveUserAttachmentImageSrc={toUserAttachmentImageSrc}
               themeType={preferredTheme}
-              threadDetailRows={threadDetailRows}
+              timelineRows={timelineRows}
               threadRuntimeDisplayStatus={threadRuntimeDisplayStatus}
               turnSummaryRowsById={turnSummaryRowsById}
             />

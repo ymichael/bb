@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { threadScope, turnScope, type TimelineRow } from "@bb/domain";
+import { threadScope, turnScope } from "@bb/domain";
+import type { TimelineRow } from "@bb/server-contract";
 import { createTestAppHarness } from "../helpers/test-app.js";
 import {
   seedEnvironment,
@@ -14,31 +15,37 @@ import {
   buildTimelineTurnSummaryDetails,
 } from "../../src/services/threads/timeline.js";
 
-type TimelineMessageRow = Extract<TimelineRow, { kind: "message" }>;
+type TimelineSourceTestRow = Extract<
+  TimelineRow,
+  { kind: "conversation" | "system" | "work" }
+>;
 
-function flattenTimelineMessageRows(rows: TimelineRow[]): TimelineMessageRow[] {
-  const messageRows: TimelineMessageRow[] = [];
+function flattenTimelineSourceRows(
+  rows: TimelineRow[],
+): TimelineSourceTestRow[] {
+  const sourceRows: TimelineSourceTestRow[] = [];
 
   for (const row of rows) {
     switch (row.kind) {
-      case "message":
-        messageRows.push(row);
+      case "conversation":
+      case "system":
+        sourceRows.push(row);
         break;
-      case "tool-bundle":
-        messageRows.push(...row.rows);
+      case "work":
+        sourceRows.push(row);
+        if (row.workKind === "delegation") {
+          sourceRows.push(...flattenTimelineSourceRows(row.childRows));
+        }
         break;
-      case "assistant-step-summary":
-        messageRows.push(...flattenTimelineMessageRows(row.rows));
-        break;
-      case "turn-summary":
-        if (row.rows) {
-          messageRows.push(...flattenTimelineMessageRows(row.rows));
+      case "turn":
+        if (row.children) {
+          sourceRows.push(...flattenTimelineSourceRows(row.children));
         }
         break;
     }
   }
 
-  return messageRows;
+  return sourceRows;
 }
 
 describe("buildThreadTimeline", () => {
@@ -152,14 +159,11 @@ describe("buildThreadTimeline", () => {
 
     expect(timeline.rows).toHaveLength(1);
     expect(timeline.rows[0]).toMatchObject({
-      kind: "message",
-      message: {
-        kind: "assistant-text",
-        text: "Final answer",
-        status: "completed",
-        sourceSeqStart: 2,
-        sourceSeqEnd: 1002,
-      },
+      kind: "conversation",
+      role: "assistant",
+      text: "Final answer",
+      sourceSeqStart: 2,
+      sourceSeqEnd: 1002,
     });
     expect(timeline.contextWindowUsage).toEqual({
       usedTokens: 42,
@@ -213,13 +217,13 @@ describe("buildThreadTimeline", () => {
       isDevelopment: true,
     });
     const developmentRows = developmentTimeline.rows.filter(
-      (row): row is TimelineMessageRow => row.kind === "message",
+      (row): row is Extract<TimelineRow, { kind: "system" }> =>
+        row.kind === "system",
     );
 
     expect(developmentRows).toHaveLength(1);
-    expect(developmentRows[0]?.message).toMatchObject({
-      kind: "operation",
-      opType: "provider-unhandled",
+    expect(developmentRows[0]).toMatchObject({
+      systemKind: "operation",
       title: "Unhandled Codex event",
     });
 
@@ -228,13 +232,13 @@ describe("buildThreadTimeline", () => {
       showAllManagerEvents: true,
     });
     const debugRows = debugTimeline.rows.filter(
-      (row): row is TimelineMessageRow => row.kind === "message",
+      (row): row is Extract<TimelineRow, { kind: "system" }> =>
+        row.kind === "system",
     );
 
     expect(debugRows).toHaveLength(1);
-    expect(debugRows[0]?.message).toMatchObject({
-      kind: "operation",
-      opType: "provider-unhandled",
+    expect(debugRows[0]).toMatchObject({
+      systemKind: "operation",
       title: "Unhandled Codex event",
     });
   });
@@ -583,11 +587,9 @@ describe("buildThreadTimeline", () => {
     expect(timeline.activeThinking).toBeNull();
     expect(timeline.rows).toHaveLength(1);
     expect(timeline.rows[0]).toMatchObject({
-      kind: "message",
-      message: {
-        kind: "assistant-text",
-        text: "Done.",
-      },
+      kind: "conversation",
+      role: "assistant",
+      text: "Done.",
     });
   });
 
@@ -1199,9 +1201,7 @@ describe("buildThreadTimeline", () => {
     const timeline = buildThreadTimeline(harness.db, thread, {
       isDevelopment: true,
     });
-    const turnSummary = timeline.rows.find(
-      (row) => row.kind === "turn-summary",
-    );
+    const turnSummary = timeline.rows.find((row) => row.kind === "turn");
 
     expect(turnSummary).toMatchObject({
       sourceSeqStart: 1,
@@ -1213,11 +1213,16 @@ describe("buildThreadTimeline", () => {
       sourceSeqStart: 1,
       sourceSeqEnd: 5,
     });
-    const detailMessages = flattenTimelineMessageRows(details.rows);
+    const detailRows = flattenTimelineSourceRows(details.rows);
+    const toolRows = detailRows.filter(
+      (row): row is Extract<TimelineRow, { kind: "work"; workKind: "tool" }> =>
+        row.kind === "work" && row.workKind === "tool",
+    );
 
-    expect(detailMessages).toHaveLength(1);
-    expect(detailMessages[0]?.message).toMatchObject({
-      kind: "tool-call",
+    expect(toolRows).toHaveLength(1);
+    expect(toolRows[0]).toMatchObject({
+      kind: "work",
+      workKind: "tool",
       sourceSeqStart: 2,
       sourceSeqEnd: 2,
     });
@@ -1346,9 +1351,7 @@ describe("buildThreadTimeline", () => {
     const timeline = buildThreadTimeline(harness.db, thread, {
       isDevelopment: true,
     });
-    const turnSummary = timeline.rows.find(
-      (row) => row.kind === "turn-summary",
-    );
+    const turnSummary = timeline.rows.find((row) => row.kind === "turn");
 
     expect(turnSummary).toMatchObject({
       sourceSeqStart: 1,
@@ -1361,20 +1364,18 @@ describe("buildThreadTimeline", () => {
       sourceSeqEnd: 5,
     });
 
-    expect(details.rows).toEqual([
+    const detailRows = flattenTimelineSourceRows(details.rows);
+    const toolRows = detailRows.filter(
+      (row): row is Extract<TimelineRow, { kind: "work"; workKind: "tool" }> =>
+        row.kind === "work" && row.workKind === "tool",
+    );
+
+    expect(toolRows).toEqual([
       expect.objectContaining({
-        kind: "tool-bundle",
-        bundleKind: "commands",
-        rows: [
-          expect.objectContaining({
-            kind: "message",
-            message: expect.objectContaining({
-              kind: "tool-call",
-              sourceSeqStart: 2,
-              sourceSeqEnd: 2,
-            }),
-          }),
-        ],
+        kind: "work",
+        workKind: "tool",
+        sourceSeqStart: 2,
+        sourceSeqEnd: 2,
       }),
     ]);
   });
@@ -1437,12 +1438,12 @@ describe("buildThreadTimeline", () => {
       sourceSeqStart: 1,
       sourceSeqEnd: 3,
     });
-    const detailMessages = flattenTimelineMessageRows(details.rows);
+    const detailRows = flattenTimelineSourceRows(details.rows);
 
-    expect(detailMessages).toHaveLength(1);
-    expect(detailMessages[0]?.message.kind).toBe("assistant-text");
-    if (detailMessages[0]?.message.kind === "assistant-text") {
-      expect(detailMessages[0].message.text).toBe("Nothing to expand.");
+    expect(detailRows).toHaveLength(1);
+    expect(detailRows[0]?.kind).toBe("conversation");
+    if (detailRows[0]?.kind === "conversation") {
+      expect(detailRows[0].text).toBe("Nothing to expand.");
     }
   });
 
@@ -1527,19 +1528,19 @@ describe("buildThreadTimeline", () => {
       sourceSeqStart: 1,
       sourceSeqEnd: 3,
     });
-    const developmentRows = flattenTimelineMessageRows(developmentDetails.rows);
-    const debugRows = flattenTimelineMessageRows(debugDetails.rows);
+    const developmentRows = flattenTimelineSourceRows(developmentDetails.rows);
+    const debugRows = flattenTimelineSourceRows(debugDetails.rows);
 
     expect(developmentRows).toHaveLength(1);
-    expect(developmentRows[0]?.message).toMatchObject({
-      kind: "operation",
-      opType: "provider-unhandled",
+    expect(developmentRows[0]).toMatchObject({
+      kind: "system",
+      systemKind: "operation",
       title: "Unhandled Codex event",
     });
     expect(debugRows).toHaveLength(1);
-    expect(debugRows[0]?.message).toMatchObject({
-      kind: "operation",
-      opType: "provider-unhandled",
+    expect(debugRows[0]).toMatchObject({
+      kind: "system",
+      systemKind: "operation",
       title: "Unhandled Codex event",
     });
   });
@@ -1709,21 +1710,17 @@ describe("buildThreadTimeline", () => {
       isDevelopment: true,
     });
     const defaultKinds = defaultTimeline.rows.map((row) =>
-      row.kind === "message" ? row.message.kind : row.kind,
+      row.kind === "conversation" ? row.role : row.kind,
     );
-    expect(defaultKinds).toEqual(["operation", "assistant-text", "user"]);
+    expect(defaultKinds).toEqual(["system", "assistant", "user"]);
 
     // Verify the assistant-text is the message_user output
     const assistantRow = defaultTimeline.rows.find(
-      (row) => row.kind === "message" && row.message.kind === "assistant-text",
+      (row) => row.kind === "conversation" && row.role === "assistant",
     );
     expect(assistantRow).toBeDefined();
-    if (
-      assistantRow?.kind === "message" &&
-      assistantRow.message.kind === "assistant-text"
-    ) {
-      expect(assistantRow.message.text).toBe("Hello from manager");
-      expect(assistantRow.message.isManagerUserMessage).toBe(true);
+    if (assistantRow?.kind === "conversation") {
+      expect(assistantRow.text).toBe("Hello from manager");
     }
 
     // Show all events — should show everything
@@ -1736,7 +1733,7 @@ describe("buildThreadTimeline", () => {
     );
   });
 
-  it("keeps manager-visible messages that would otherwise be buried in turn tool groups", async () => {
+  it("keeps manager-visible messages that would otherwise be buried in turn summaries", async () => {
     const harness = await createTestAppHarness();
     harnesses.push(harness);
 
@@ -1833,24 +1830,18 @@ describe("buildThreadTimeline", () => {
     const timeline = buildThreadTimeline(harness.db, thread, {
       isDevelopment: true,
     });
-    const rows = timeline.rows.filter(
-      (row): row is TimelineMessageRow => row.kind === "message",
-    );
+    const rows = flattenTimelineSourceRows(timeline.rows);
 
     expect(timeline.rows).toHaveLength(2);
-    expect(rows.map((row) => row.message.kind)).toEqual([
-      "operation",
-      "assistant-text",
-    ]);
-    expect(rows[0]?.message.kind).toBe("operation");
-    if (rows[0]?.message.kind === "operation") {
-      expect(rows[0].message.opType).toBe("compaction");
-      expect(rows[0].message.title).toBe("Context compacted");
+    expect(rows.map((row) => row.kind)).toEqual(["system", "conversation"]);
+    expect(rows[0]?.kind).toBe("system");
+    if (rows[0]?.kind === "system") {
+      expect(rows[0].systemKind).toBe("operation");
+      expect(rows[0].title).toBe("Context compacted");
     }
-    expect(rows[1]?.message.kind).toBe("assistant-text");
-    if (rows[1]?.message.kind === "assistant-text") {
-      expect(rows[1].message.text).toBe("Visible manager update");
-      expect(rows[1].message.isManagerUserMessage).toBe(true);
+    expect(rows[1]?.kind).toBe("conversation");
+    if (rows[1]?.kind === "conversation") {
+      expect(rows[1].text).toBe("Visible manager update");
     }
   });
 });

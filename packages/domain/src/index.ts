@@ -419,39 +419,6 @@ export { activeThinkingSchema } from "./active-thinking.js";
 export type { ActiveThinking } from "./active-thinking.js";
 
 export {
-  timelineAssistantStepSummaryRowSchema,
-  timelineCommandsToolBundleSummarySchema,
-  timelineDelegationsToolBundleSummarySchema,
-  timelineExplorationToolBundleSummarySchema,
-  timelineMessageRowSchema,
-  timelineRowSchema,
-  timelineGroupedRowStatusSchema,
-  timelineGroupedRowStatusValues,
-  timelineToolBundleKindSchema,
-  timelineToolBundleKindValues,
-  timelineToolBundleRowSchema,
-  timelineToolBundleSummarySchema,
-  timelineTurnSummaryRowSchema,
-  timelineWebResearchToolBundleSummarySchema,
-} from "./thread-detail-rows.js";
-export type {
-  TimelineAssistantStepSummaryChildRow,
-  TimelineAssistantStepSummaryRow,
-  TimelineCommandsToolBundleSummary,
-  TimelineDelegationsToolBundleSummary,
-  TimelineExplorationToolBundleSummary,
-  TimelineGroupedRowStatus,
-  TimelineMessageRow,
-  TimelineRow,
-  TimelineToolBundleKind,
-  TimelineToolBundleRow,
-  TimelineToolBundleSummary,
-  TimelineTurnSummaryChildRow,
-  TimelineTurnSummaryRow,
-  TimelineWebResearchToolBundleSummary,
-} from "./thread-detail-rows.js";
-
-export {
   viewMessageSchema,
   viewOperationTypeSchema,
   viewOperationTypeValues,

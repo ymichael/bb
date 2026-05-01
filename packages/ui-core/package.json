@@ -25,6 +25,7 @@
   "dependencies": {
     "@bb/core-ui": "workspace:*",
     "@bb/domain": "workspace:*",
+    "@bb/server-contract": "workspace:*",
     "@bb/thread-view": "workspace:*",
     "clsx": "^2.1.1",
     "@pierre/diffs": "^1.0.11",

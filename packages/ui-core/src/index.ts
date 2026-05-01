@@ -32,6 +32,10 @@ export {
   type StatusPillVariant,
 } from "./status-pill.js";
 export {
+  ExpandableLine,
+  type ExpandableLineProps,
+} from "./expandable-line.js";
+export {
   CollapsibleHeader,
   ExpandablePanel,
   getCollapsibleHeaderToneClass,
@@ -52,15 +56,10 @@ export {
   getDetailScrollMaxHeightClass,
   type DetailScrollSize,
 } from "./detail-scroll-size.js";
-export { ConversationEntry } from "./thread-timeline/ConversationEntry.js";
-export { ConversationMarkdown } from "./thread-timeline/ConversationMarkdown.js";
-export { ExpandableLine } from "./thread-timeline/rows/ExpandableLine.js";
-export type { ExpandableLineProps } from "./thread-timeline/rows/ExpandableLine.js";
 export { ThreadTimelineRows } from "./thread-timeline/ThreadTimelineRows.js";
 export type {
   ThreadTimelineLocalFileLink,
   ThreadTimelineLocalFileLinkHandler,
   ThreadTimelineTheme,
-  ThreadTimelineRenderOptions,
   UserAttachmentImageSrcResolver,
 } from "./thread-timeline/types.js";

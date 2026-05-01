@@ -8,7 +8,7 @@ import {
 } from "@bb/agent-runtime";
 import type { AgentRuntimeCaptureEntry } from "@bb/agent-runtime/capture";
 import {
-  buildGroupedTimelineRows,
+  buildTimelineRows,
   decodeRow,
   formatTimelineAsText,
   toViewMessages,
@@ -1146,17 +1146,24 @@ export function buildBundle(args: {
     threadStatus: "idle",
     includeDebugRawEvents: true,
   });
-  const timelineRows = buildGroupedTimelineRows(
+  const timelineRows = buildTimelineRows(
+    toViewProjection(decodedRows, {
+      threadStatus: "idle",
+      turnMessageDetail: "summary",
+    }),
+  );
+  const verboseTimelineRows = buildTimelineRows(
     toViewProjection(decodedRows, {
       threadStatus: "idle",
       turnMessageDetail: "full",
     }),
+    { includeNestedRows: true },
   );
   const timelineText = formatTimelineAsText(timelineRows, {
     verbose: false,
     color: false,
   });
-  const timelineVerboseText = formatTimelineAsText(timelineRows, {
+  const timelineVerboseText = formatTimelineAsText(verboseTimelineRows, {
     verbose: true,
     color: false,
   });
@@ -1188,6 +1195,7 @@ export function buildBundle(args: {
     auditViewMessages,
     timelineRows,
     timelineText,
+    timelineVerboseRows: verboseTimelineRows,
     timelineVerboseText,
     auditReport,
   };

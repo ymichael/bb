@@ -1,638 +1,686 @@
 import type {
-  TimelineAssistantStepSummaryRow,
+  TimelineActivityIntent,
+  TimelineCommandWorkRow,
+  TimelineFileChange,
+  TimelineFileChangeWorkRow,
   TimelineRow,
-  TimelineToolBundleRow,
-  TimelineTurnSummaryRow,
-  ViewAssistantTextMessage,
-  ViewCommandMessage,
-  ViewPermissionGrantLifecycleMessage,
-  ViewDelegationMessage,
-  ViewErrorMessage,
-  ViewFileEditMessage,
-  ViewMessage,
-  ViewOperationMessage,
-  ViewTasksMessage,
-  ViewToolCallMessage,
-  ViewUserMessage,
-  ViewWebFetchMessage,
-  ViewWebSearchMessage,
-} from "@bb/domain";
-import { durationToString } from "./format-helpers.js";
-import { taskStatusGlyph } from "./task-status.js";
-import { buildCollapsedGroupedTimelineRows } from "./timeline-grouping.js";
+  TimelineRowStatus,
+  TimelineToolWorkRow,
+  TimelineWebFetchWorkRow,
+  TimelineWebSearchWorkRow,
+} from "@bb/server-contract";
+import { assertNever } from "./assert-never.js";
+import { durationToCompactString } from "./format-helpers.js";
 import {
-  getCommandExitCodeLine,
-  getPermissionGrantDisplayStatus,
-  getTimelineDisplayStatus,
-  getTimelineDisplayStatusInfo,
-  getVisibleCommandOutput,
-  type TimelineDisplayStatus,
-} from "./timeline-display-status.js";
-import {
-  buildToolBundleDetailLines,
-} from "./timeline-tool-bundle-summary.js";
-import { getThreadTimelineRowTitle } from "./thread-timeline-row-title.js";
-import { formatToolCallCommand } from "./tool-call-parsing.js";
+  buildTimelineActivitySummaryLabel,
+  buildTimelineViewRows,
+} from "./timeline-view.js";
+import type {
+  ThreadTimelineViewRow,
+  TimelineActivitySummaryRow,
+  TimelineViewDelegationWorkRow,
+  TimelineViewTurnRow,
+  TimelineViewWorkRow,
+} from "./timeline-view.js";
 
 export type TimelineFormat = "json" | "minimal" | "verbose";
 
 export interface FormatTimelineOptions {
   format: TimelineFormat;
-  /** Whether to use ANSI colors. Default: auto-detect from stdout.isTTY. */
   color?: boolean;
 }
 
 export interface TimelineTextFormatOptions {
   verbose?: boolean;
   color?: boolean;
+  truncateForAudit?: boolean;
 }
 
-// Simple ANSI helpers (no external dependency)
+type TimelineExplorationWorkRow = TimelineCommandWorkRow | TimelineToolWorkRow;
+
+interface TimelineTextFormatContext {
+  verbose: boolean;
+  color: boolean;
+  depth: number;
+  truncateForAudit: boolean;
+}
+
+interface AuditTruncationNoticeOptions {
+  skippedLineCount: number;
+  indent: number;
+}
+
+const AUDIT_BODY_LINE_LIMIT = 3;
+const AUDIT_LINE_LENGTH_LIMIT = 100;
+
 function dim(text: string, color: boolean): string {
   return color ? `\x1b[2m${text}\x1b[22m` : text;
 }
-function cyan(text: string, color: boolean): string {
-  return color ? `\x1b[36m${text}\x1b[39m` : text;
-}
+
 function green(text: string, color: boolean): string {
   return color ? `\x1b[32m${text}\x1b[39m` : text;
 }
+
 function yellow(text: string, color: boolean): string {
   return color ? `\x1b[33m${text}\x1b[39m` : text;
 }
+
 function red(text: string, color: boolean): string {
   return color ? `\x1b[31m${text}\x1b[39m` : text;
 }
 
-function separator(label: string, color: boolean): string {
-  const pad = Math.max(0, 60 - label.length - 4);
-  return dim(`── ${label} ${"─".repeat(pad)}`, color);
+function cyan(text: string, color: boolean): string {
+  return color ? `\x1b[36m${text}\x1b[39m` : text;
 }
 
-function truncate(text: string, maxLen: number): string {
-  if (text.length <= maxLen) return text;
-  return `${text.slice(0, maxLen - 3)}...`;
+function separator(label: string, color: boolean): string {
+  const pad = Math.max(0, 60 - label.length - 4);
+  const suffix = "─".repeat(pad);
+  return dim(
+    suffix.length > 0 ? `── ${label} ${suffix}` : `── ${label}`,
+    color,
+  );
+}
+
+function rowHeader(label: string, context: TimelineTextFormatContext): string {
+  if (context.depth === 0) {
+    return separator(label, context.color);
+  }
+  return dim(`── ${label}`, context.color);
+}
+
+function nestedContext(
+  context: TimelineTextFormatContext,
+): TimelineTextFormatContext {
+  return {
+    ...context,
+    depth: context.depth + 1,
+  };
 }
 
 function indentBlock(text: string, prefix: string): string {
   return text
     .split("\n")
-    .map((line) => `${prefix}${line}`)
+    .map((line) => (line.length === 0 ? "" : `${prefix}${line}`))
     .join("\n");
 }
 
-function formatLifecycleLabel(
-  displayStatus: TimelineDisplayStatus,
-  color: boolean,
+function lineIndent(line: string): number {
+  return /^\s*/u.exec(line)?.[0].length ?? 0;
+}
+
+function auditTruncatedLine(line: string): string {
+  if (line.length <= AUDIT_LINE_LENGTH_LIMIT) {
+    return line;
+  }
+
+  const omittedCharacterCount = line.length - AUDIT_LINE_LENGTH_LIMIT;
+  return `${line.slice(0, AUDIT_LINE_LENGTH_LIMIT)}... [truncated ${omittedCharacterCount} chars]`;
+}
+
+function auditTruncatedLinesNotice(
+  options: AuditTruncationNoticeOptions,
 ): string {
-  const statusInfo = getTimelineDisplayStatusInfo(displayStatus);
+  return `${" ".repeat(options.indent)}... [truncated ${options.skippedLineCount} lines]`;
+}
 
-  switch (statusInfo.cliTone) {
-    case "success":
-      return green(statusInfo.cliLabel, color);
-    case "danger":
-      return red(statusInfo.cliLabel, color);
-    case "warning":
-      return yellow(statusInfo.cliLabel, color);
+function auditTruncationNoticeIndent(
+  skippedLines: readonly string[],
+  fallbackLines: readonly string[],
+): number {
+  const skippedLineIndents = skippedLines
+    .filter((line) => line.length > 0)
+    .map(lineIndent);
+  if (skippedLineIndents.length > 0) {
+    return Math.min(...skippedLineIndents);
+  }
+
+  const fallbackLineIndents = fallbackLines
+    .filter((line) => line.length > 0)
+    .map(lineIndent);
+  return fallbackLineIndents.length > 0 ? Math.min(...fallbackLineIndents) : 0;
+}
+
+function truncateBodyLinesForAudit(lines: readonly string[]): string[] {
+  const bodyLines = lines.flatMap((line) => line.split("\n"));
+  const visibleLines = bodyLines
+    .slice(0, AUDIT_BODY_LINE_LIMIT)
+    .map(auditTruncatedLine);
+  const skippedLines = bodyLines.slice(AUDIT_BODY_LINE_LIMIT);
+  if (skippedLines.length === 0) {
+    return visibleLines;
+  }
+
+  return [
+    ...visibleLines,
+    auditTruncatedLinesNotice({
+      skippedLineCount: skippedLines.length,
+      indent: auditTruncationNoticeIndent(skippedLines, visibleLines),
+    }),
+  ];
+}
+
+function maybeTruncateBodyLinesForAudit(
+  lines: readonly string[],
+  context: TimelineTextFormatContext,
+): string[] {
+  if (!context.truncateForAudit) {
+    return [...lines];
+  }
+  return truncateBodyLinesForAudit(lines);
+}
+
+function plural(count: number, singular: string, pluralName?: string): string {
+  return `${count} ${count === 1 ? singular : (pluralName ?? `${singular}s`)}`;
+}
+
+function statusVerb(status: TimelineRowStatus, running: string, past: string) {
+  switch (status) {
+    case "pending":
+      return running;
+    case "completed":
+      return past;
+    case "error":
+      return "Failed";
+    case "interrupted":
+      return "Interrupted";
+    default:
+      return assertNever(status);
   }
 }
 
-function formatDurationLine(
-  durationMs: number | null | undefined,
-  color: boolean,
-): string | undefined {
-  if (durationMs === null || durationMs === undefined) {
-    return undefined;
+function plainStatusLabel(status: TimelineRowStatus): string {
+  switch (status) {
+    case "pending":
+      return "running";
+    case "completed":
+      return "completed";
+    case "error":
+      return "error";
+    case "interrupted":
+      return "interrupted";
+    default:
+      return assertNever(status);
   }
-  return dim(`  ${durationToString(durationMs) ?? `${durationMs}ms`}`, color);
 }
 
-function formatToolCallOutputLine(
-  output: string,
-  verbose: boolean,
-  color: boolean,
-): string | undefined {
-  const maxOut = verbose ? output.length : 200;
-  const formattedOutput = truncate(output.trim(), maxOut);
-  if (formattedOutput.length === 0) {
-    return undefined;
+function statusLabel(status: TimelineRowStatus, color: boolean): string {
+  switch (status) {
+    case "pending":
+      return yellow("running", color);
+    case "completed":
+      return green("completed", color);
+    case "error":
+      return red("error", color);
+    case "interrupted":
+      return yellow("interrupted", color);
+    default:
+      return assertNever(status);
   }
-  return dim(`  ${formattedOutput.split("\n").join("\n  ")}`, color);
+}
+
+function workStatusLabel(row: TimelineViewWorkRow, color: boolean): string {
+  if (
+    (row.workKind === "command" ||
+      row.workKind === "tool" ||
+      row.workKind === "file-change") &&
+    row.approvalStatus === "denied"
+  ) {
+    return red("denied", color);
+  }
+  if (
+    (row.workKind === "command" ||
+      row.workKind === "tool" ||
+      row.workKind === "file-change") &&
+    row.approvalStatus === "waiting_for_approval"
+  ) {
+    return yellow("waiting", color);
+  }
+  return statusLabel(row.status, color);
+}
+
+function fileName(path: string): string {
+  const normalized = path.replaceAll("\\", "/");
+  return normalized.split("/").pop() || path;
+}
+
+function primaryActivityIntent(
+  row: TimelineExplorationWorkRow,
+): TimelineActivityIntent | null {
+  return (
+    row.activityIntents.find((intent) => intent.type !== "unknown") ?? null
+  );
+}
+
+function hasExplorationIntent(row: TimelineExplorationWorkRow): boolean {
+  return primaryActivityIntent(row) !== null;
+}
+
+function formatActivityIntentTitle(
+  intent: TimelineActivityIntent,
+  status: TimelineRowStatus,
+): string {
+  const isPending = status === "pending";
+  switch (intent.type) {
+    case "read":
+      return `${isPending ? "Reading" : "Read"} ${intent.path ?? intent.name}`;
+    case "list_files":
+      return `${isPending ? "Listing" : "Listed"} ${intent.path ?? "files"}`;
+    case "search":
+      if (intent.path) {
+        return `${isPending ? "Searching" : "Searched"} ${intent.path}`;
+      }
+      return `${isPending ? "Searching" : "Searched"} ${intent.query ?? "files"}`;
+    case "unknown":
+      return intent.command;
+    default:
+      return assertNever(intent);
+  }
+}
+
+function formatActivityIntentDetail(intent: TimelineActivityIntent): string {
+  switch (intent.type) {
+    case "read":
+      return `Read ${intent.path ?? intent.name}`;
+    case "list_files":
+      return intent.path ? `Listed files in ${intent.path}` : "Listed files";
+    case "search":
+      if (intent.query && intent.path) {
+        return `Searched for ${intent.query} in ${intent.path}`;
+      }
+      if (intent.path) {
+        return `Searched in ${intent.path}`;
+      }
+      if (intent.query) {
+        return `Searched for ${intent.query}`;
+      }
+      return "Searched files";
+    case "unknown":
+      return intent.command;
+    default:
+      return assertNever(intent);
+  }
+}
+
+function getActivityIntentDetailDedupeKey(
+  intent: TimelineActivityIntent,
+): string | null {
+  switch (intent.type) {
+    case "read":
+      return `file:${intent.path ?? intent.name}`;
+    case "list_files":
+    case "search":
+    case "unknown":
+      return null;
+    default:
+      return assertNever(intent);
+  }
+}
+
+function formatDiffStats(change: TimelineFileChange): string | null {
+  const { added, removed } = change.diffStats;
+  if (added === 0 && removed === 0) {
+    return null;
+  }
+  if (added === 0) {
+    return `-${removed}`;
+  }
+  if (removed === 0) {
+    return `+${added}`;
+  }
+  return `+${added} -${removed}`;
+}
+
+function formatFileChangeTitle(row: TimelineFileChangeWorkRow): string {
+  const change = row.change;
+  const targetPath = change.movePath ?? change.path;
+  const completedVerb =
+    change.kind === "create"
+      ? "Created"
+      : change.kind === "delete"
+        ? "Deleted"
+        : change.kind === "rename"
+          ? "Renamed"
+          : "Edited";
+  const verb =
+    row.status === "pending"
+      ? "Editing"
+      : statusVerb(row.status, "Editing", completedVerb);
+  const stats = formatDiffStats(change);
+  return [verb, fileName(targetPath), stats].filter(Boolean).join(" ");
+}
+
+function formatStatusDurationSuffix(
+  status: TimelineRowStatus,
+  durationMs: number | null,
+): string {
+  const parts = [plainStatusLabel(status)];
+  if (durationMs !== null) {
+    parts.push(durationToCompactString(durationMs));
+  }
+  return `(${parts.join(", ")})`;
+}
+
+function formatCommandTitle(row: TimelineCommandWorkRow): string {
+  const intent = primaryActivityIntent(row);
+  if (intent) {
+    return formatActivityIntentTitle(intent, row.status);
+  }
+  if (row.approvalStatus === "waiting_for_approval") {
+    return "Command (waiting)";
+  }
+  if (row.approvalStatus === "denied") {
+    return "Command (denied)";
+  }
+  const verb = row.status === "pending" ? "Running" : "Ran";
+  return `${verb} command ${formatStatusDurationSuffix(row.status, row.durationMs)}`;
+}
+
+function formatToolTitle(row: TimelineToolWorkRow): string {
+  const intent = primaryActivityIntent(row);
+  if (intent) {
+    return formatActivityIntentTitle(intent, row.status);
+  }
+  if (row.approvalStatus === "waiting_for_approval") {
+    return `Tool (waiting): ${row.label}`;
+  }
+  if (row.approvalStatus === "denied") {
+    return `Tool (denied): ${row.label}`;
+  }
+  const verb = statusVerb(row.status, "Running", "Ran");
+  return `${verb} tool: ${row.label}`;
+}
+
+function formatDelegationTitle(row: TimelineViewDelegationWorkRow): string {
+  const description = row.description ?? (row.output.trim() || row.toolName);
+  const metadata = row.subagentType ? ` (${row.subagentType})` : "";
+  const duration =
+    row.durationMs !== null
+      ? ` ${durationToCompactString(row.durationMs)}`
+      : "";
+  return `${statusVerb(row.status, "Running subagent", "Ran subagent")}: ${description}${metadata}${duration}`;
+}
+
+function formatWebSearchTitle(row: TimelineWebSearchWorkRow): string {
+  const query = row.queries.join(", ") || "web search";
+  switch (row.status) {
+    case "pending":
+      return `Running web search: ${query}`;
+    case "completed":
+      return `Ran web search: ${query}`;
+    case "error":
+      return `Failed web search: ${query}`;
+    case "interrupted":
+      return `Interrupted web search: ${query}`;
+    default:
+      return assertNever(row.status);
+  }
+}
+
+function formatWebFetchTitle(row: TimelineWebFetchWorkRow): string {
+  switch (row.status) {
+    case "pending":
+      return `Fetching: ${row.url}`;
+    case "completed":
+      return `Fetched: ${row.url}`;
+    case "error":
+      return `Failed fetch: ${row.url}`;
+    case "interrupted":
+      return `Interrupted fetch: ${row.url}`;
+    default:
+      return assertNever(row.status);
+  }
+}
+
+function formatWorkTitle(row: TimelineViewWorkRow): string {
+  switch (row.workKind) {
+    case "command":
+      return formatCommandTitle(row);
+    case "tool":
+      return formatToolTitle(row);
+    case "file-change":
+      return formatFileChangeTitle(row);
+    case "web-search":
+      return formatWebSearchTitle(row);
+    case "web-fetch":
+      return formatWebFetchTitle(row);
+    case "approval":
+      return row.title;
+    case "delegation":
+      return formatDelegationTitle(row);
+    default:
+      return assertNever(row);
+  }
+}
+
+function formatWorkOutput(output: string, color: boolean): string {
+  return dim(indentBlock(output.trim(), "  "), color);
 }
 
 function formatCommandExitCodeLine(
-  displayStatus: TimelineDisplayStatus,
-  exitCode: number | null,
-  hasVisibleOutput: boolean,
+  row: TimelineCommandWorkRow,
   color: boolean,
-): string | undefined {
-  const exitCodeLine = getCommandExitCodeLine({
-    displayStatus,
-    exitCode,
-    hasVisibleOutput,
-  });
-
-  if (!exitCodeLine) {
-    return undefined;
+): string | null {
+  if (row.exitCode === null || row.status === "pending") {
+    return null;
   }
-
-  if (exitCode !== null && exitCode !== 0) {
-    return red(`  ${exitCodeLine}`, color);
+  if (row.exitCode === 0 && row.output.trim().length > 0) {
+    return null;
   }
-
-  return dim(`  ${exitCodeLine}`, color);
+  if (row.exitCode === 0) {
+    return dim("  exit code 0", color);
+  }
+  return red(`  exit ${row.exitCode}`, color);
 }
 
-function formatPermissionLifecycleLabel(
-  msg: ViewPermissionGrantLifecycleMessage,
-  color: boolean,
-): string {
-  return formatLifecycleLabel(
-    getPermissionGrantDisplayStatus(msg.status),
-    color,
-  );
-}
-
-function formatOperationLifecycleLabel(
-  msg: ViewOperationMessage,
-  color: boolean,
-): string | undefined {
-  if (!msg.status || msg.opType === "warning" || msg.opType === "deprecation") {
-    return undefined;
-  }
-
-  return formatLifecycleLabel(
-    getTimelineDisplayStatus({
-      status: msg.status,
-    }),
-    color,
-  );
-}
-
-function formatUser(
-  msg: ViewUserMessage,
-  title: string,
-  _verbose: boolean,
-  color: boolean,
-): string {
+function formatWorkBody(
+  row: TimelineViewWorkRow,
+  context: TimelineTextFormatContext,
+): string[] {
   const lines: string[] = [];
-  lines.push(separator(title, color));
-  lines.push(msg.text);
-  if (msg.attachments) {
-    const parts: string[] = [];
-    if (msg.attachments.localImages > 0)
-      parts.push(`${msg.attachments.localImages} image(s)`);
-    if (msg.attachments.localFiles > 0)
-      parts.push(`${msg.attachments.localFiles} file(s)`);
-    if (parts.length > 0) lines.push(dim(`  [${parts.join(", ")}]`, color));
-  }
-  return lines.join("\n");
-}
-
-function formatAssistantText(
-  msg: ViewAssistantTextMessage,
-  title: string,
-  _verbose: boolean,
-  color: boolean,
-): string {
-  const lines: string[] = [];
-  lines.push(separator(title, color));
-  lines.push(msg.text);
-  return lines.join("\n");
-}
-
-interface FormatExecutionCallArgs {
-  approvalStatus: ViewCommandMessage["approvalStatus"];
-  durationMs: number | null;
-  exitCode: number | null;
-  label: string;
-  output: string;
-  status: ViewCommandMessage["status"];
-  title: string;
-}
-
-function formatExecutionCall(
-  args: FormatExecutionCallArgs,
-  verbose: boolean,
-  color: boolean,
-): string {
-  const lines: string[] = [];
-  const displayStatus = getTimelineDisplayStatus({
-    approvalStatus: args.approvalStatus,
-    status: args.status,
-  });
-  lines.push(separator(`Tool Call: ${args.label}`, color));
-  lines.push(
-    `  ${formatLifecycleLabel(displayStatus, color)} ${cyan(args.title || args.label, color)}`,
-  );
-
-  const durationLine = formatDurationLine(args.durationMs, color);
-  if (durationLine) {
-    lines.push(durationLine);
-  }
-
-  const output = getVisibleCommandOutput(args.output);
-  if (output) {
-    const outputLine = formatToolCallOutputLine(output, verbose, color);
-    if (outputLine) {
-      lines.push(outputLine);
-    }
-  }
-
-  const exitCodeLine = formatCommandExitCodeLine(
-    displayStatus,
-    args.exitCode,
-    output !== undefined,
-    color,
-  );
-  if (exitCodeLine) {
-    lines.push(exitCodeLine);
-  }
-
-  return lines.join("\n");
-}
-
-function formatToolCall(
-  msg: ViewToolCallMessage,
-  title: string,
-  verbose: boolean,
-  color: boolean,
-): string {
-  return formatExecutionCall(
-    {
-      approvalStatus: msg.approvalStatus,
-      durationMs: msg.durationMs,
-      exitCode: null,
-      label: msg.toolName,
-      output: msg.output,
-      status: msg.status,
-      title: formatToolCallCommand(msg.toolName, msg.toolArgs),
-    },
-    verbose,
-    color,
-  );
-}
-
-function formatCommand(
-  msg: ViewCommandMessage,
-  title: string,
-  verbose: boolean,
-  color: boolean,
-): string {
-  return formatExecutionCall(
-    {
-      approvalStatus: msg.approvalStatus,
-      durationMs: msg.durationMs,
-      exitCode: msg.exitCode,
-      label: "exec_command",
-      output: msg.output,
-      status: msg.status,
-      title: msg.command,
-    },
-    verbose,
-    color,
-  );
-}
-
-function formatFileEdit(
-  msg: ViewFileEditMessage,
-  title: string,
-  verbose: boolean,
-  color: boolean,
-): string {
-  const lines: string[] = [];
-  const lifecycleLabel = formatLifecycleLabel(
-    getTimelineDisplayStatus({
-      approvalStatus: msg.approvalStatus,
-      status: msg.status,
-    }),
-    color,
-  );
-  lines.push(separator(title, color));
-  if (msg.changes.length === 0) {
-    lines.push(`  ${lifecycleLabel} ${cyan("file changes", color)}`);
-  }
-  for (const change of msg.changes) {
-    const kindLabel = change.kind ? ` (${change.kind})` : "";
-    lines.push(
-      `  ${lifecycleLabel} ${cyan(change.path, color)}${dim(kindLabel, color)}`,
-    );
-    if (verbose && change.diff) {
-      const diff = truncate(change.diff.trim(), 2_000);
-      lines.push(dim(`  ${diff.split("\n").join("\n  ")}`, color));
-    }
-  }
-  if (msg.stdout && verbose) {
-    lines.push(dim(`  ${truncate(msg.stdout.trim(), 500)}`, color));
-  }
-  return lines.join("\n");
-}
-
-function formatWebSearch(
-  msg: ViewWebSearchMessage,
-  title: string,
-  verbose: boolean,
-  color: boolean,
-): string {
-  const lines: string[] = [];
-  const query = msg.queries[0] ?? "web search";
-  const lifecycleLabel = formatLifecycleLabel(
-    getTimelineDisplayStatus({
-      status: msg.status,
-    }),
-    color,
-  );
-  lines.push(separator(title, color));
-  lines.push(`  ${lifecycleLabel} ${cyan(query, color)}`);
-  if (verbose && msg.resultText) {
-    lines.push(dim(`  ${truncate(msg.resultText.trim(), 500)}`, color));
-  }
-  return lines.join("\n");
-}
-
-function formatWebFetch(
-  msg: ViewWebFetchMessage,
-  title: string,
-  verbose: boolean,
-  color: boolean,
-): string {
-  const lines: string[] = [];
-  const lifecycleLabel = formatLifecycleLabel(
-    getTimelineDisplayStatus({
-      status: msg.status,
-    }),
-    color,
-  );
-  lines.push(separator(title, color));
-  lines.push(`  ${lifecycleLabel} ${cyan(msg.url, color)}`);
-  if (verbose && msg.resultText) {
-    lines.push(dim(`  ${truncate(msg.resultText.trim(), 500)}`, color));
-  }
-  return lines.join("\n");
-}
-
-function formatOperation(
-  msg: ViewOperationMessage,
-  title: string,
-  verbose: boolean,
-  color: boolean,
-): string {
-  const lines: string[] = [];
-  lines.push(separator(title, color));
-  const lifecycleLabel = formatOperationLifecycleLabel(msg, color);
-  if (lifecycleLabel) {
-    lines.push(`  ${lifecycleLabel}`);
-  }
-  if (msg.detail) lines.push(dim(`  ${msg.detail}`, color));
-  return lines.join("\n");
-}
-
-function formatPermissionGrantLifecycle(
-  msg: ViewPermissionGrantLifecycleMessage,
-  title: string,
-  verbose: boolean,
-  color: boolean,
-): string {
-  const lines: string[] = [];
-  lines.push(separator(title, color));
-  lines.push(`  ${formatPermissionLifecycleLabel(msg, color)}`);
-  if (verbose) {
-    lines.push(`  item: ${msg.approvalTarget.itemId}`);
-    if (msg.approvalTarget.toolName) {
-      lines.push(dim(`  tool: ${msg.approvalTarget.toolName}`, color));
-    }
-  }
-  return lines.join("\n");
-}
-
-function formatTasks(
-  msg: ViewTasksMessage,
-  title: string,
-  _verbose: boolean,
-  color: boolean,
-): string {
-  const lines: string[] = [];
-  lines.push(separator(title, color));
-  for (const task of msg.tasks) {
-    lines.push(`  ${taskStatusGlyph(task.status)} ${task.text}`);
-  }
-  return lines.join("\n");
-}
-
-function formatDelegation(
-  msg: ViewDelegationMessage,
-  title: string,
-  verbose: boolean,
-  color: boolean,
-): string {
-  const lines: string[] = [];
-  lines.push(separator(title, color));
-
-  const durationLine = formatDurationLine(msg.durationMs, color);
-  if (durationLine) {
-    lines.push(durationLine);
-  }
-
-  if (!verbose) {
-    if (msg.output) {
-      const output = truncate(msg.output.trim(), 160);
-      if (output) {
-        lines.push(dim(`  ${output.split("\n").join("\n  ")}`, color));
-      }
-    }
-    return lines.join("\n");
-  }
-
-  for (const row of buildCollapsedGroupedTimelineRows(msg.childProjection)) {
-    const block = formatTimelineRow(row, true, color);
-    if (block) {
-      lines.push(indentBlock(block, "  "));
-    }
-  }
-
-  if (msg.output) {
-    const output = msg.output.trim();
-    if (output) {
-      lines.push(dim(`  ${output.split("\n").join("\n  ")}`, color));
-    }
-  }
-
-  return lines.join("\n");
-}
-
-function formatError(
-  msg: ViewErrorMessage,
-  title: string,
-  _verbose: boolean,
-  color: boolean,
-): string {
-  const lines: string[] = [];
-  lines.push(separator(title, color));
-  lines.push(red(`  ${msg.message}`, color));
-  return lines.join("\n");
-}
-
-function formatMessage(
-  msg: ViewMessage,
-  title: string,
-  verbose: boolean,
-  color: boolean,
-): string {
-  switch (msg.kind) {
-    case "user":
-      return formatUser(msg, title, verbose, color);
-    case "assistant-text":
-      return formatAssistantText(msg, title, verbose, color);
+  switch (row.workKind) {
     case "command":
-      return formatCommand(msg, title, verbose, color);
-    case "tool-call":
-      return formatToolCall(msg, title, verbose, color);
-    case "file-edit":
-      return formatFileEdit(msg, title, verbose, color);
+      lines.push(`  $ ${cyan(row.command, context.color)}`);
+      if (context.verbose && row.output.trim() && !hasExplorationIntent(row)) {
+        lines.push(formatWorkOutput(row.output, context.color));
+      }
+      const exitCodeLine = formatCommandExitCodeLine(row, context.color);
+      if (exitCodeLine) {
+        lines.push(exitCodeLine);
+      }
+      return lines;
+    case "tool":
+      if (row.approvalStatus !== null) {
+        lines.push(`  ${workStatusLabel(row, context.color)}`);
+      }
+      if (context.verbose && row.output.trim() && !hasExplorationIntent(row)) {
+        lines.push(formatWorkOutput(row.output, context.color));
+      }
+      return lines;
+    case "file-change":
+      if (row.approvalStatus !== null) {
+        lines.push(`  ${workStatusLabel(row, context.color)}`);
+      }
+      if (context.verbose && row.change.diff) {
+        lines.push(dim(indentBlock(row.change.diff, "  "), context.color));
+      }
+      return lines;
     case "web-search":
-      return formatWebSearch(msg, title, verbose, color);
+      if (context.verbose && row.resultText) {
+        lines.push(dim(indentBlock(row.resultText, "  "), context.color));
+      }
+      return lines;
     case "web-fetch":
-      return formatWebFetch(msg, title, verbose, color);
-    case "operation":
-      return formatOperation(msg, title, verbose, color);
-    case "permission-grant-lifecycle":
-      return formatPermissionGrantLifecycle(msg, title, verbose, color);
-    case "tasks":
-      return formatTasks(msg, title, verbose, color);
+      if (context.verbose && row.resultText) {
+        lines.push(dim(indentBlock(row.resultText, "  "), context.color));
+      }
+      return lines;
+    case "approval":
+      return lines;
     case "delegation":
-      return formatDelegation(msg, title, verbose, color);
-    case "error":
-      return formatError(msg, title, verbose, color);
-    case "debug/raw-event":
-      return "";
+      if (row.childRows.length > 0) {
+        lines.push(
+          indentBlock(formatRows(row.childRows, nestedContext(context)), "  "),
+        );
+      }
+      return lines;
     default:
-      return "";
+      return assertNever(row);
   }
 }
 
-function formatNestedTimelineRows(
-  rows: TimelineRow[],
-  verbose: boolean,
-  color: boolean,
+function formatWorkRow(
+  row: TimelineViewWorkRow,
+  context: TimelineTextFormatContext,
 ): string {
-  const blocks: string[] = [];
-  for (const row of rows) {
-    const block = formatTimelineRow(row, verbose, color);
-    if (block.length > 0) {
-      blocks.push(block);
-    }
-  }
-  return blocks.join("\n\n");
-}
-
-function formatAssistantStepSummaryRow(
-  row: TimelineAssistantStepSummaryRow,
-  title: string,
-  verbose: boolean,
-  color: boolean,
-): string {
-  const lines: string[] = [];
-  lines.push(separator(title, color));
-
-  if (!verbose) {
-    return lines.join("\n");
-  }
-
-  const body = formatNestedTimelineRows(row.rows, true, color);
-  if (body.length > 0) {
-    lines.push(indentBlock(body, "  "));
-  }
-
+  const lines = [rowHeader(formatWorkTitle(row), context)];
+  const bodyLines = formatWorkBody(row, context);
+  lines.push(
+    ...(row.workKind === "delegation"
+      ? bodyLines
+      : maybeTruncateBodyLinesForAudit(bodyLines, context)),
+  );
   return lines.join("\n");
 }
 
-function formatToolBundleRow(
-  row: TimelineToolBundleRow,
-  title: string,
-  verbose: boolean,
-  color: boolean,
-): string {
+function formatExplorationWorkDetails(
+  row: TimelineExplorationWorkRow,
+  dedupedDetailKeys: Set<string>,
+): string[] {
+  const details: string[] = [];
+  for (const intent of row.activityIntents) {
+    if (intent.type === "unknown") {
+      continue;
+    }
+    const dedupeKey = getActivityIntentDetailDedupeKey(intent);
+    if (dedupeKey !== null) {
+      if (dedupedDetailKeys.has(dedupeKey)) {
+        continue;
+      }
+      dedupedDetailKeys.add(dedupeKey);
+    }
+    details.push(formatActivityIntentDetail(intent));
+  }
+  return details;
+}
+
+function formatActivitySummaryDetails(
+  row: TimelineActivitySummaryRow,
+  context: TimelineTextFormatContext,
+): string[] {
   const lines: string[] = [];
-  lines.push(separator(title, color));
-
-  if (!verbose) {
-    return lines.join("\n");
-  }
-
-  if (row.bundleKind === "exploration") {
-    for (const line of buildToolBundleDetailLines(row, {
-      readPathStyle: "full",
-    })) {
-      lines.push(`  ${line}`);
+  const dedupedDetailKeys = new Set<string>();
+  const childContext = nestedContext(context);
+  for (const child of row.children) {
+    if (
+      (child.workKind === "command" || child.workKind === "tool") &&
+      hasExplorationIntent(child)
+    ) {
+      lines.push(
+        ...formatExplorationWorkDetails(child, dedupedDetailKeys).map(
+          (detail) => rowHeader(detail, childContext),
+        ),
+      );
+      continue;
     }
-    return lines.join("\n");
+    if (child.workKind === "web-search" || child.workKind === "web-fetch") {
+      lines.push(rowHeader(formatWorkTitle(child), childContext));
+      continue;
+    }
+    lines.push(formatWorkRow(child, childContext));
   }
+  return lines;
+}
 
-  for (const messageRow of row.rows) {
-    const block = formatTimelineRow(messageRow, true, color);
-    if (block.length > 0) {
-      lines.push(indentBlock(block, "  "));
+function formatActivitySummary(
+  row: TimelineActivitySummaryRow,
+  context: TimelineTextFormatContext,
+): string {
+  const lines = [rowHeader(buildTimelineActivitySummaryLabel(row), context)];
+  if (context.verbose) {
+    const details = formatActivitySummaryDetails(row, context);
+    if (details.length > 0) {
+      lines.push(indentBlock(details.join("\n"), "  "));
     }
   }
-
   return lines.join("\n");
 }
 
-function formatTurnSummaryRow(
-  row: TimelineTurnSummaryRow,
-  title: string,
-  verbose: boolean,
-  color: boolean,
-): string {
-  const lines: string[] = [];
-  lines.push(separator(title, color));
-
-  if (!verbose || !row.rows) {
-    return lines.join("\n");
+function formatTurnTitle(row: TimelineViewTurnRow): string {
+  if (row.durationMs !== null && row.durationMs >= 1_000) {
+    return `Worked for ${durationToCompactString(row.durationMs)}`;
   }
-
-  const body = formatNestedTimelineRows(row.rows, true, color);
-  if (body.length > 0) {
-    lines.push(indentBlock(body, "  "));
+  if (row.summaryCount > 0) {
+    return `Worked on ${plural(row.summaryCount, "item")}`;
   }
-
-  return lines.join("\n");
+  return "Turn";
 }
 
-function formatTimelineRow(
-  row: TimelineRow,
-  verbose: boolean,
-  color: boolean,
+function formatRow(
+  row: ThreadTimelineViewRow,
+  context: TimelineTextFormatContext,
 ): string {
-  const title = getThreadTimelineRowTitle(row, {
-    preferOngoingLabels: false,
-  }).plain;
   switch (row.kind) {
-    case "message":
-      return formatMessage(row.message, title, verbose, color);
-    case "assistant-step-summary":
-      return formatAssistantStepSummaryRow(row, title, verbose, color);
-    case "tool-bundle":
-      return formatToolBundleRow(row, title, verbose, color);
-    case "turn-summary":
-      return formatTurnSummaryRow(row, title, verbose, color);
+    case "conversation":
+      return [
+        rowHeader(row.role === "user" ? "User" : "Assistant", context),
+        maybeTruncateBodyLinesForAudit(row.text.split("\n"), context).join(
+          "\n",
+        ),
+      ].join("\n");
+    case "work":
+      return formatWorkRow(row, context);
+    case "system":
+      if (row.systemKind === "reconnect") {
+        return rowHeader(row.title, context);
+      }
+      if (row.systemKind === "error") {
+        return [
+          rowHeader("Error", context),
+          dim(indentBlock(row.title, "  "), context.color),
+        ]
+          .filter((line) => line.length > 0)
+          .join("\n");
+      }
+      return [
+        rowHeader(row.title, context),
+        row.detail ? dim(row.detail, context.color) : "",
+      ]
+        .filter((line) => line.length > 0)
+        .join("\n");
+    case "activity-summary":
+      return formatActivitySummary(row, context);
+    case "turn": {
+      const label = formatTurnTitle(row);
+      if (!row.children || row.children.length === 0) {
+        return rowHeader(label, context);
+      }
+      return [
+        rowHeader(label, context),
+        indentBlock(formatRows(row.children, nestedContext(context)), "  "),
+      ].join("\n");
+    }
     default:
-      return "";
+      return assertNever(row);
   }
 }
 
-/**
- * Format timeline rows as human-readable terminal text.
- *
- * - `minimal`: Compact view — grouped tool work stays collapsed, reasoning hidden
- * - `verbose`: Expanded view — grouped rows are expanded, diffs shown
- */
+function formatRows(
+  rows: readonly ThreadTimelineViewRow[],
+  context: TimelineTextFormatContext,
+): string {
+  return rows.map((row) => formatRow(row, context)).join("\n\n");
+}
+
 export function formatTimelineAsText(
-  rows: TimelineRow[],
+  rows: readonly TimelineRow[],
   options?: TimelineTextFormatOptions,
 ): string {
-  const verbose = options?.verbose ?? false;
-  const color = options?.color ?? false;
-
-  return formatNestedTimelineRows(rows, verbose, color);
+  const viewRows = buildTimelineViewRows(rows);
+  return formatRows(viewRows, {
+    verbose: options?.verbose ?? false,
+    color: options?.color ?? false,
+    depth: 0,
+    truncateForAudit: options?.truncateForAudit ?? false,
+  });
 }

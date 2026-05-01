@@ -132,12 +132,10 @@ describe("thread runtime mutations", () => {
       threadTimelineQueryKey("thread-1", false),
     );
     const onlyRow = optimisticTimeline?.rows[0];
-    expect(onlyRow?.kind).toBe("message");
-    if (onlyRow?.kind === "message") {
-      expect(onlyRow.message.kind).toBe("user");
-      if (onlyRow.message.kind === "user") {
-        expect(onlyRow.message.text).toBe("Hello there");
-      }
+    expect(onlyRow?.kind).toBe("conversation");
+    if (onlyRow?.kind === "conversation") {
+      expect(onlyRow.role).toBe("user");
+      expect(onlyRow.text).toBe("Hello there");
     }
 
     await act(async () => {

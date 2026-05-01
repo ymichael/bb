@@ -6,7 +6,7 @@
 - The provider audit package now tracks only raw fixture inputs in git: `manifest.json`, `client-requests.json`, and `raw-provider-events.json`.
 - Fixture replay is now reproducible offline. The package can regenerate thread events, `ViewMessage`s, timeline rows, CLI text, and audit summaries without live provider usage.
 - Empty Codex `item/commandExecution/terminalInteraction` stdin events are treated as non-user-visible lifecycle noise instead of unexplained translation misses.
-- Shell-style repo exploration now projects as `tool-exploring` across providers when the command is clearly a read, search, or file-discovery step. This substantially reduces generic `exec_command` noise in the Excalidraw corpus.
+- Shell-style repo exploration now keeps command/tool identity and carries parsed activity intents, so shared timeline formatting can summarize read/search/file-discovery work without erasing the underlying shell command.
 - Claude `Agent` tool results are now compact summaries instead of dumping the subagent's full report inline in the main thread timeline.
 - Provider audit replay now writes `timeline.txt` in the CLI's default minimal format and keeps `timeline.verbose.txt` for deeper inspection.
 - Provider-agnostic thread events and projected `ViewMessage`s now preserve optional `parentToolCallId` linkage where the provider emits it.
@@ -21,7 +21,7 @@
 - Claude assistant messages now preserve the provider's real message ids instead of reusing one synthetic id per turn, so separate narration steps no longer collapse into corrupted run-on text in the final timeline.
 - Projection can now infer delegated child nesting from provider child thread ids plus collab-tool `receiverThreadIds`, so Codex-style child-thread activity can attach under a parent delegation without widening the stored thread-event model.
 - Tool projection no longer drops an unrelated active tool cell when a later terminal tool event arrives. This keeps delegated exploration plus follow-up child interactions visible in the same nested subtree.
-- `thread-detail-rows.ts` now collapses consecutive tool-heavy runs anywhere in a turn, so post-assistant validation/probe churn shows up as one expandable summary row in the shared React timeline instead of a wall of sibling entries.
+- `@bb/thread-view` now collapses consecutive work runs for shared CLI/audit formatting, so post-assistant validation/probe churn shows up as one summary row instead of a wall of sibling entries.
 
 ## Open
 

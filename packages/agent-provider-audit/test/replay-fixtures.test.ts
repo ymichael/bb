@@ -9,8 +9,6 @@ import { replayFixtures } from "../src/replay.js";
 import { DEFAULT_LADLE_OUTPUT_PATH } from "../src/visual-audit.js";
 
 const TEMP_DIRS: string[] = [];
-const SNAPSHOT_BODY_LINE_LIMIT = 3;
-const SNAPSHOT_LINE_LENGTH_LIMIT = 100;
 let checkedInArtifact: ProviderAuditReplayBuildArtifact;
 
 type ReplayBuildSummary = ProviderAuditReplayBuildArtifact["summaries"][number];
@@ -22,67 +20,18 @@ function fixtureRoot(): string {
 }
 
 function normalizeTimelineSnapshotText(text: string): string {
-  return text.replaceAll("─", "-");
-}
-
-function isTimelineHeaderLine(line: string): boolean {
-  return line.trimStart().startsWith("-- ");
-}
-
-function truncateSnapshotLine(line: string): string {
-  if (line.length <= SNAPSHOT_LINE_LENGTH_LIMIT) {
-    return line;
-  }
-
-  const omittedCharacterCount = line.length - SNAPSHOT_LINE_LENGTH_LIMIT;
-  return `${line.slice(0, SNAPSHOT_LINE_LENGTH_LIMIT)}... [truncated ${omittedCharacterCount} chars]`;
-}
-
-function truncatedLinesNotice(skippedLineCount: number): string {
-  return `  ... [truncated ${skippedLineCount} lines]`;
-}
-
-function compactTimelineSnapshotLines(lines: string[]): string[] {
-  const compacted: string[] = [];
-  let bodyLineCount = 0;
-  let skippedLineCount = 0;
-
-  function flushSkippedLines(): void {
-    if (skippedLineCount === 0) {
-      return;
-    }
-    compacted.push(truncatedLinesNotice(skippedLineCount));
-    skippedLineCount = 0;
-  }
-
-  for (const line of lines) {
-    const normalizedLine = normalizeTimelineSnapshotText(line);
-    if (isTimelineHeaderLine(normalizedLine)) {
-      flushSkippedLines();
-      bodyLineCount = 0;
-      compacted.push(truncateSnapshotLine(normalizedLine));
-      continue;
-    }
-
-    bodyLineCount += 1;
-    if (bodyLineCount <= SNAPSHOT_BODY_LINE_LIMIT) {
-      compacted.push(truncateSnapshotLine(normalizedLine));
-      continue;
-    }
-
-    skippedLineCount += 1;
-  }
-
-  flushSkippedLines();
-  return compacted;
+  return text
+    .replaceAll("─", "-")
+    .replaceAll("\t", "  ")
+    .replace(/[ \t]+$/u, "");
 }
 
 function compactTimelineSnapshotText(text: string): string {
-  return compactTimelineSnapshotLines(text.split("\n")).join("\n");
+  return normalizeTimelineSnapshotText(text);
 }
 
 function compactTimelinePreview(lines: string[]): string[] {
-  return compactTimelineSnapshotLines(lines);
+  return lines.map(normalizeTimelineSnapshotText);
 }
 
 function compactSummarySnapshot(
@@ -249,7 +198,6 @@ describe("@bb/agent-provider-audit fixture replay", () => {
     expect(
       storyData.fixtures.map((fixture) => ({
         id: fixture.id,
-        latestActivityRowId: fixture.latestActivityRowId,
         timelineRowCount: fixture.timelineRowCount,
         viewMessageCount: fixture.viewMessageCount,
       })),

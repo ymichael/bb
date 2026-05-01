@@ -31,7 +31,6 @@ import { HEADER_ICON_BUTTON_CLASS } from "@/components/layout/AppPageHeader";
 import { ThreadActionsMenu } from "@/components/thread/ThreadActionsMenu";
 import { ThreadWorkspaceOpenButton } from "@/components/thread/ThreadWorkspaceOpenButton";
 import { formatEnvironmentDisplay } from "@bb/core-ui";
-import { findLatestActivityRowId } from "@bb/thread-view";
 import { useHostDaemon } from "@/hooks/useHostDaemon";
 import { useLocalOpenTargets } from "@/hooks/useLocalOpenTargets";
 import { useEffectiveHost } from "@/hooks/queries/effective-hosts";
@@ -162,10 +161,6 @@ export function ThreadDetailView() {
   );
   const activeThinking = timeline?.activeThinking ?? null;
   const contextWindowUsage = timeline?.contextWindowUsage ?? undefined;
-  const latestActivityRowId = useMemo(
-    () => findLatestActivityRowId(timelineRows),
-    [timelineRows],
-  );
   const environmentQuery = useEnvironment(thread?.environmentId);
   const environment = environmentQuery.data;
   const {
@@ -656,7 +651,6 @@ export function ThreadDetailView() {
           hostConnectionNotice,
           isThreadTimelinePending,
           timelineError: Boolean(timelineError),
-          latestActivityRowId,
           loadingTurnSummaryIds,
           erroredTurnSummaryIds,
           onLoadTurnSummaryRows: handleLoadTurnSummaryRows,
@@ -671,7 +665,7 @@ export function ThreadDetailView() {
             : thread.runtime.displayStatus === "host-reconnecting"
               ? "Waiting for reconnection"
               : undefined,
-          threadDetailRows: timelineRows,
+          timelineRows,
           threadId: thread.id,
           threadRuntimeDisplayStatus: thread.runtime.displayStatus,
           turnSummaryRowsById,

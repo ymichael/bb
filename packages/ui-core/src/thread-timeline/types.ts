@@ -1,9 +1,5 @@
 export type ThreadTimelineTheme = "light" | "dark";
 
-export interface ThreadTimelineRenderOptions {
-  initialExpanded?: boolean;
-}
-
 export interface ThreadTimelineLocalFileLink {
   lineNumber: number | null;
   path: string;

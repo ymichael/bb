@@ -1,7 +1,6 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { findLatestActivityRowId } from "@bb/thread-view";
 import { replayFixtures } from "./replay.js";
 import type {
   ProviderAuditBuildLadleStoryDataArgs,
@@ -35,9 +34,6 @@ function toLadleFixture(
     taskId: replayedFixture.fixture.taskId,
     scenarioDescription: replayedFixture.fixture.manifest.scenarioDescription,
     threadStatus: "idle",
-    latestActivityRowId: findLatestActivityRowId(
-      replayedFixture.bundle.timelineRows,
-    ),
     timelineRowCount: replayedFixture.bundle.timelineRows.length,
     viewMessageCount: replayedFixture.bundle.viewMessages.length,
     timelineRows: replayedFixture.bundle.timelineRows,

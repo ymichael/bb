@@ -43,8 +43,8 @@ The rendering stack has a few seams:
 
 1. `@bb/agent-runtime` captures provider-specific events and translates some of them into provider-agnostic `ThreadEvent`s.
 2. Events are stored and later decoded into `ThreadEventRow`s.
-3. `@bb/core-ui` projects those rows into `ViewMessage[]`.
-4. `thread-detail-rows.ts` and `format-timeline-text.ts` shape what users actually see.
+3. `@bb/thread-view` projects those rows into raw timeline rows.
+4. `@bb/thread-view` builds shared view summaries and CLI text from those rows.
 
 This package gives us a stable offline corpus so we can improve that pipeline without repeatedly spending live provider turns.
 
@@ -95,9 +95,9 @@ The current fixture-backed findings are:
 - the final rendered timeline matters more than streaming polish
   - once the final projection is readable, the remaining streaming gaps are smaller and easier to reason about
 
-The first rendering pass on top of this corpus now does two things:
+The current rendering pass on top of this corpus now does two things:
 
-- shell-style repo exploration projects into `tool-exploring` more often instead of flat generic `tool-call`
+- shell-style repo exploration keeps command/tool identity and carries parsed activity intents, so shared view formatting can summarize exploration without hiding the underlying shell command
 - Claude `Agent` outputs are summarized as compact subagent reports instead of dumping the full report body
 
 The next rendering pass adds two first-class view concepts on top of the same

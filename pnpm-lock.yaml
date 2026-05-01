@@ -447,6 +447,9 @@ importers:
       '@bb/domain':
         specifier: workspace:*
         version: link:../domain
+      '@bb/server-contract':
+        specifier: workspace:*
+        version: link:../server-contract
       '@bb/thread-view':
         specifier: workspace:*
         version: link:../thread-view
@@ -1081,6 +1084,9 @@ importers:
       '@bb/domain':
         specifier: workspace:*
         version: link:../domain
+      '@bb/server-contract':
+        specifier: workspace:*
+        version: link:../server-contract
     devDependencies:
       '@bb/tsconfig':
         specifier: workspace:*
@@ -1102,6 +1108,9 @@ importers:
       '@bb/domain':
         specifier: workspace:*
         version: link:../domain
+      '@bb/server-contract':
+        specifier: workspace:*
+        version: link:../server-contract
       '@bb/thread-view':
         specifier: workspace:*
         version: link:../thread-view

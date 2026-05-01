@@ -3,9 +3,8 @@ import type {
   Thread,
   ThreadListEntry,
   ThreadWithRuntime,
-  TimelineRow,
 } from "@bb/domain";
-import type { ThreadTimelineResponse } from "@bb/server-contract";
+import type { ThreadTimelineResponse, TimelineRow } from "@bb/server-contract";
 import {
   ENVIRONMENT_GIT_DIFF_QUERY_KEY,
   ENVIRONMENT_WORK_STATUS_QUERY_KEY,

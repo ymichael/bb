@@ -1,5 +1,5 @@
 import {
-  buildGroupedTimelineRows,
+  buildTimelineRows,
   extractThreadContextWindowUsage,
   flattenProjectionMessagesDeep,
   TIMELINE_NOISE_EVENT_TYPES,
@@ -9,9 +9,9 @@ import {
 } from "@bb/thread-view";
 import type {
   Thread,
-  TimelineRow,
   ViewMessage,
   ViewProjection,
+  ViewTimelineEntry,
 } from "@bb/domain";
 import {
   createBufferedTextInstanceKey,
@@ -19,6 +19,7 @@ import {
 } from "@bb/domain";
 import type {
   ThreadTimelineResponse,
+  TimelineRow,
   TimelineTurnSummaryDetailsResponse,
 } from "@bb/server-contract";
 import {
@@ -36,8 +37,6 @@ interface TimelineSourceSeqRange {
   sourceSeqEnd: number;
   sourceSeqStart: number;
 }
-
-type TimelineMessageRow = Extract<TimelineRow, { kind: "message" }>;
 
 interface BuildThreadTimelineOptions {
   isDevelopment: boolean;
@@ -81,33 +80,28 @@ function isManagerConversationMessage(message: ViewMessage): boolean {
   return false;
 }
 
-function toTimelineMessageRow(message: ViewMessage): TimelineMessageRow {
-  return {
-    kind: "message",
-    id: message.id,
-    message,
-  };
-}
-
 function buildManagerConversationRows(
   projection: ViewProjection,
-): TimelineMessageRow[] {
-  const visibleMessages = flattenProjectionMessagesDeep(projection).filter(
-    isManagerConversationMessage,
-  );
-  return visibleMessages.map((message) => toTimelineMessageRow(message));
+): TimelineRow[] {
+  const entries: ViewTimelineEntry[] = flattenProjectionMessagesDeep(projection)
+    .filter(isManagerConversationMessage)
+    .map((message) => ({ kind: "message", message }));
+  return buildTimelineRows({
+    entries,
+    state: projection.state,
+  });
 }
 
-type TimelineTurnSummaryRow = Extract<TimelineRow, { kind: "turn-summary" }>;
+type TimelineTurnRow = Extract<TimelineRow, { kind: "turn" }>;
 
 function findMatchingTurnSummaryRow(
   rows: TimelineRow[],
   options: TimelineSourceSeqRange,
-): TimelineTurnSummaryRow | null {
+): TimelineTurnRow | null {
   return (
     rows.find(
-      (row): row is TimelineTurnSummaryRow =>
-        row.kind === "turn-summary" &&
+      (row): row is TimelineTurnRow =>
+        row.kind === "turn" &&
         row.sourceSeqStart === options.sourceSeqStart &&
         row.sourceSeqEnd === options.sourceSeqEnd,
     ) ?? null
@@ -115,21 +109,21 @@ function findMatchingTurnSummaryRow(
 }
 
 function hasTurnSummaryRows(rows: TimelineRow[]): boolean {
-  return rows.some((row) => row.kind === "turn-summary");
+  return rows.some((row) => row.kind === "turn");
 }
 
 function resolveTimelineTurnSummaryDetailsRows(
   projection: ViewProjection,
   options: TimelineSourceSeqRange,
 ): TimelineTurnSummaryDetailsResolution {
-  const nestedRows = buildGroupedTimelineRows(projection, {
+  const nestedRows = buildTimelineRows(projection, {
     includeNestedRows: true,
   });
   const matchingTurnSummary = findMatchingTurnSummaryRow(nestedRows, options);
   if (matchingTurnSummary) {
     return {
       kind: "matched",
-      rows: matchingTurnSummary.rows ?? [],
+      rows: matchingTurnSummary.children ?? [],
     };
   }
 
@@ -283,9 +277,9 @@ export function buildThreadTimeline(
     includeProviderUnhandledOperations,
     threadStatus: thread.status,
     threadType: thread.type,
-    turnMessageDetail: "summary",
+    turnMessageDetail: includeNestedRows ? "full" : "summary",
   });
-  const rows = buildGroupedTimelineRows(projection, {
+  const rows = buildTimelineRows(projection, {
     includeNestedRows,
   });
 
