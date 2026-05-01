@@ -2,39 +2,39 @@
 
 ## Goal
 
-End with one shared package for thread rendering, not both `@bb/core-ui` and
-`@bb/thread-view`.
+End with one shared package for thread timeline rendering, not both
+`@bb/core-ui` and `@bb/thread-view`.
 
-The package owns the complete thread view pipeline:
+The package owns the thread view pipeline:
 
 ```text
 ThreadEvent[]
   -> ThreadViewProjection
   -> ThreadTimeline
-  -> ThreadTimelinePresentation
   -> React renderer | CLI text renderer | audit output
 ```
 
-The important boundary is not the package move. The important boundary is that
-app, CLI, audit, and server code consume one presentation model instead of
-reaching into ad-hoc helper exports whenever two surfaces disagree.
+The immediate problem is shared row grouping and row titles. We should not
+invent a full presentation tree until body/detail rendering has a concrete
+duplication problem.
 
 ## Locked Decisions
 
 - `@bb/core-ui` is not a final package. It must be deleted or emptied during
   this cleanup.
 - `@bb/thread-view` is the only shared package for thread timeline rendering.
-- The root package export is small and boring: pipeline functions plus public
-  input/output types.
-- Shared text/label logic is expressed through a presentation DSL, not through
-  helper exports such as `buildToolBundleSummaryLabel`,
+- `ThreadTimeline` is the semantic grouped model. Grouping lives there, not in
+  a presentation layer.
+- The near-term presentation boundary is row titles only.
+- React and CLI keep rendering bodies/details from semantic `ThreadTimelineRow`
+  data for now.
+- Shared title logic is exposed through one title presenter, not through helper
+  exports such as `buildToolBundleSummaryLabel`,
   `getTimelineDisplayStatus`, `formatToolCallCommand`, or
   `fileChangeIdentity`.
-- React and CLI render the same `ThreadTimelinePresentation` tree.
-- Internal implementation files can keep private helpers, but other packages
-  should not import them.
-- Compatibility re-exports from `@bb/core-ui` are forbidden. They keep the old
-  muddy API alive.
+- Root exports stay small: pipeline functions, row title presenter, text
+  formatter, and public types.
+- Compatibility re-exports from `@bb/core-ui` are forbidden.
 
 ## Public Interface
 
@@ -51,13 +51,13 @@ function buildThreadTimeline(
   options: BuildThreadTimelineOptions,
 ): ThreadTimeline;
 
-function presentThreadTimeline(
-  timeline: ThreadTimeline,
-  options: PresentThreadTimelineOptions,
-): ThreadTimelinePresentation;
+function getThreadTimelineRowTitle(
+  row: ThreadTimelineRow,
+  context: ThreadTimelineTitleContext,
+): ThreadTimelineRowTitle;
 
 function formatThreadTimelineText(
-  presentation: ThreadTimelinePresentation,
+  timeline: ThreadTimeline,
   options: FormatThreadTimelineTextOptions,
 ): string;
 ```
@@ -69,70 +69,60 @@ The root should also export the stable public types used by these functions:
 - `ThreadViewState`
 - `ThreadTimeline`
 - `ThreadTimelineRow`
-- `ThreadTimelinePresentation`
-- `ThreadTimelinePresentationRow`
-- `RowText`
-- `TextTone`
-- option/result types for the four public functions
+- `ThreadTimelineRowTitle`
+- `RichTitle`
+- option/result/context types for the public functions
 
 Everything else is internal unless there is a concrete public use case that
-cannot be represented by the presentation model.
+cannot be represented by `ThreadTimelineRow` plus `ThreadTimelineRowTitle`.
 
-## Presentation DSL
+## Title Model
 
-The shared renderer contract should be segment-based:
+Start with plain text:
 
 ```ts
-type RowText =
-  | {
-      kind: "text";
-      value: string;
-      tone?: TextTone;
-      shimmer?: boolean;
-      truncate?: boolean;
-    }
-  | { kind: "duration"; ms: number; tone?: TextTone }
-  | { kind: "diff-stats"; insertions: number; deletions: number };
-
-type TextTone =
-  | "muted"
-  | "default"
-  | "emphasis"
-  | "destructive"
-  | "destructive-emphasis";
-
-interface ThreadTimelinePresentationRow {
-  id: string;
-  sourceRowId: string;
-  kind: "message" | "work" | "group" | "turn";
-  summary: RowText[];
-  body: ThreadTimelinePresentationBody | null;
-  children: ThreadTimelinePresentationRow[] | null;
+interface ThreadTimelineRowTitle {
+  plain: string;
 }
 ```
 
-`body` should also be structured, not renderer-specific branching:
+Then add rich title after the plain title path is proven:
 
 ```ts
-type ThreadTimelinePresentationBody =
-  | { kind: "markdown"; value: string }
-  | { kind: "terminal"; command?: string; output?: string; exitCode?: number | null }
-  | { kind: "diff"; path: string; diff: string }
-  | { kind: "list"; items: RowText[][] }
-  | { kind: "timeline"; rows: ThreadTimelinePresentationRow[] };
+interface ThreadTimelineRowTitle {
+  plain: string;
+  rich?: RichTitle;
+}
+
+interface RichTitle {
+  prefix?: RichTitlePart;
+  content: RichTitlePart;
+  suffix?: RichTitleSuffix;
+  active?: boolean;
+}
+
+interface RichTitlePart {
+  text: string;
+  tone: "muted" | "default" | "emphasis" | "danger";
+}
+
+type RichTitleSuffix =
+  | { kind: "duration"; ms: number }
+  | { kind: "diff-stats"; insertions: number; deletions: number }
+  | { kind: "text"; text: string; tone: "muted" | "default" | "emphasis" };
 ```
 
-The presenter owns wording, status labels, file summaries, command formatting,
-duration formatting, active shimmer, and diff-stat segments. Renderers only
-walk the tree and apply surface-specific styling.
+Layout behavior such as truncation belongs to the renderer. The presenter
+defines title meaning and wording, not CSS behavior.
 
 ## Export Policy
 
 ### Public
 
 - Pipeline functions.
-- Presentation DSL types.
-- Stable source/timeline/presentation row types.
+- `getThreadTimelineRowTitle`.
+- `formatThreadTimelineText`.
+- Stable source/timeline/title types.
 
 ### Internal
 
@@ -146,7 +136,7 @@ These should stop being root exports and become private implementation details:
 - file-change identity/name summary helpers
 - lifecycle parsers/projection internals
 - message-scope helpers
-- activity/highlight internals unless represented in presentation output
+- activity/highlight internals unless a public renderer genuinely needs them
 
 ### Not Thread View
 
@@ -158,59 +148,67 @@ They need concrete owners:
   inline in app/CLI clients.
 - `formatEnvironmentDisplay`: move to the environment display owner or local
   app/CLI presentation module.
-- pending-interaction formatting: either fold into the same presentation system
-  if it renders in thread surfaces, or move to a pending-interaction-specific
-  owner.
+- pending-interaction formatting: either fold into a pending-interaction
+  presentation owner or keep local to the current callers.
 - `timeAgo` / generic duration helpers: only stay in thread view if used by the
-  thread presentation DSL; otherwise move to concrete callers.
+  thread title/text formatter; otherwise move to concrete callers.
 
 ## Implementation Steps
 
-1. Freeze package movement until the public interface is defined in code.
-   - Add the intended root exports to `@bb/thread-view`.
-   - Add tests that exercise the public pipeline, not private helper calls.
+1. Define the public title boundary in code.
+   - Add `ThreadTimelineRowTitle`.
+   - Add `getThreadTimelineRowTitle(row, context)`.
+   - Keep `rich` out until `plain` is used by app and CLI.
 
-2. Build `ThreadTimelinePresentation`.
-   - Convert existing label/status/file/command helper logic into internal
+2. Route existing title/helper logic through the title presenter.
+   - Convert tool bundle, assistant step, turn summary, command, file edit,
+     delegation, task, error, web, and operation title logic into internal
      presenter functions.
-   - Add presentation fixtures for active and completed rows.
-   - Cover CLI and app-relevant examples: command, file edit, tasks, error,
-     delegation, exploration, web research, turn/group rows.
+   - Add focused title tests for active and completed rows.
 
-3. Move CLI/audit formatting onto presentation.
-   - `formatThreadTimelineText` takes `ThreadTimelinePresentation`.
-   - CLI snapshots verify text output without importing label helpers.
+3. Move CLI/audit title rendering onto `getThreadTimelineRowTitle`.
+   - CLI text output still renders existing bodies/details.
+   - Snapshots verify title output without importing label helpers.
 
-4. Move React timeline rendering onto presentation.
-   - React receives `ThreadTimelinePresentationRow[]`.
-   - Remove direct imports of helper functions from `@bb/thread-view`.
-   - React may own styling and interactions, not wording or summary logic.
+4. Move React row headers onto `getThreadTimelineRowTitle`.
+   - React continues rendering details from semantic `ThreadTimelineRow`.
+   - Remove direct React imports of title/status/file/command helper functions.
 
 5. Remove helper exports.
    - Root exports contain only the agreed public API.
    - Search confirms app/CLI/audit/server do not import private helpers.
 
 6. Eliminate `@bb/core-ui`.
-   - Move or inline its remaining non-thread helpers into concrete owners.
+   - Move or inline remaining non-thread helpers into concrete owners.
    - Remove the package from workspace dependencies.
    - Delete the package once no package imports it.
 
-7. Rename domain/view vocabulary after the presentation boundary is in place.
+7. Rename domain/view vocabulary after the title boundary is in place.
    - `ViewProjection` -> `ThreadViewProjection`
    - `ViewMessage` -> `ThreadTimelineSourceRow` or the agreed source-row name
    - `TimelineRow` -> `ThreadTimelineRow`
    - File names should match the public concepts, not old implementation names.
 
+## Deferred
+
+- Full `ThreadTimelinePresentation` tree.
+- Structured body/details DSL.
+- Rich titles.
+- Moving lazy child loading into presentation.
+
+These can be added later if the semantic-row renderers keep duplicating logic.
+
 ## Exit Criteria
 
 - There is one shared thread rendering package.
 - `@bb/core-ui` is gone or contains no public exports and no dependents.
-- Root `@bb/thread-view` exports are limited to the public pipeline and stable
-  public types.
+- Root `@bb/thread-view` exports are limited to the public pipeline, title
+  presenter, text formatter, and stable public types.
 - App, CLI, audit, and server code do not import label/status/file/command
   helper functions.
-- React and CLI render from the same presentation tree.
-- CLI snapshots and focused presentation tests cover active and completed row
+- React and CLI get row titles from the same title presenter.
+- Existing body/detail rendering is preserved.
+- CLI snapshots and focused title tests cover active and completed row
   examples.
 - The completed plan file is deleted.
 
