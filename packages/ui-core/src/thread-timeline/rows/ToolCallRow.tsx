@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   formatCommandOutputText,
+  formatToolCallCommand,
   getTimelineDisplayStatus,
   getTimelineDisplayStatusInfo,
 } from "@bb/core-ui";
@@ -29,9 +30,11 @@ interface CommandRowProps {
 }
 
 interface ExecutionRowProps {
-  command: string;
+  approvalStatus: ExecutionMessage["approvalStatus"];
+  exitCode: number | null;
   getTitleDetail: (isExpanded: boolean) => string;
   initialExpanded: boolean;
+  displayText: string;
   message: ExecutionMessage;
   preferOngoingLabels: boolean;
   tone: "default" | "destructive";
@@ -74,11 +77,13 @@ function getSummaryDurationMs(
   if (preferRunningLabel) {
     return message.durationMs ?? getElapsedDurationMs(message, undefined);
   }
-  return message.durationMs;
+  return message.durationMs ?? undefined;
 }
 
 function ExecutionRow({
-  command,
+  approvalStatus,
+  exitCode,
+  displayText,
   getTitleDetail,
   message,
   initialExpanded,
@@ -90,18 +95,18 @@ function ExecutionRow({
   const preferRunningLabel =
     preferOngoingLabels && message.status === "completed";
   const displayStatus = getTimelineDisplayStatus({
-    approvalStatus: message.approvalStatus,
+    approvalStatus,
     preferRunningLabel,
     status: message.status,
   });
   const outputText = formatCommandOutputText({
     displayStatus,
-    exitCode: message.exitCode,
+    exitCode,
     output: message.output,
   });
   const actionLabel = getTimelineDisplayStatusInfo(displayStatus).reactLabel;
   const isVisuallyActive =
-    message.status === "pending" && message.approvalStatus !== "denied";
+    message.status === "pending" && approvalStatus !== "denied";
   const isRunning = displayStatus === "running";
   const liveNow = useLiveNow(isRunning && message.status === "pending");
   const duration = formatSummaryDuration(
@@ -128,7 +133,7 @@ function ExecutionRow({
           onToggle={onToggle}
         >
           <TerminalOutputBlock
-            command={command}
+            command={displayText}
             outputText={outputText}
             isExpanded={isExpanded}
           />
@@ -143,10 +148,12 @@ export function CommandRow({
   initialExpanded = false,
   preferOngoingLabels = false,
 }: CommandRowProps) {
-  const command = message.command ?? "command";
+  const command = message.command;
   return (
     <ExecutionRow
-      command={command}
+      approvalStatus={message.approvalStatus}
+      exitCode={message.exitCode}
+      displayText={command}
       getTitleDetail={(isExpanded) => (isExpanded ? "command" : command)}
       initialExpanded={initialExpanded}
       message={message}
@@ -161,11 +168,13 @@ export function ToolCallRow({
   initialExpanded = false,
   preferOngoingLabels = false,
 }: ToolCallRowProps) {
-  const command = message.command ?? message.toolName;
+  const displayText = formatToolCallCommand(message.toolName, message.toolArgs);
   return (
     <ExecutionRow
-      command={command}
-      getTitleDetail={() => command}
+      approvalStatus={message.approvalStatus}
+      exitCode={null}
+      displayText={displayText}
+      getTitleDetail={() => displayText}
       initialExpanded={initialExpanded}
       message={message}
       preferOngoingLabels={preferOngoingLabels}

@@ -3,17 +3,19 @@ import {
   buildExploringDetailLines,
   formatExploringIntentLine,
   summarizeExploringCounts,
+  type ToolIntentSummary,
 } from "@bb/core-ui";
-import type { ViewToolCallSummary, ViewToolParsedIntent } from "@bb/domain";
+import type { ViewToolParsedIntent } from "@bb/domain";
 
 function buildCall(
-  callId: string,
-  parsedCmd: ViewToolParsedIntent[],
-): ViewToolCallSummary {
+  _callId: string,
+  parsedIntents: ViewToolParsedIntent[],
+): ToolIntentSummary {
   return {
-    callId,
-    parsedCmd,
-    status: "completed",
+    kind: "tool-call",
+    toolName: "Tool",
+    toolArgs: null,
+    parsedIntents,
   };
 }
 

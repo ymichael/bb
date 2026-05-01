@@ -159,7 +159,6 @@ describe("toViewMessages tool activity", () => {
     const tool = projected.find(isCommandMessage);
 
     expect(tool?.durationMs).toBe(400);
-    expect(tool?.duration).toBe("400ms");
   });
 
   it("projects provider plan updates into tasks messages", () => {

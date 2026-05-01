@@ -111,7 +111,7 @@ export function DelegationRow({
   const summaryParts = getDelegationSummaryParts(message);
   const suffix = formatDelegationRowSuffix(
     summaryParts.metadata,
-    formatSummaryDuration(message.durationMs),
+    formatSummaryDuration(message.durationMs ?? undefined),
   );
 
   return (

@@ -40,14 +40,14 @@ export interface TimelineDisplayStatusInfo {
 
 export interface CommandExitCodeLineArgs {
   displayStatus: TimelineDisplayStatus;
-  exitCode?: number;
+  exitCode: number | null;
   hasVisibleOutput: boolean;
 }
 
 export interface CommandOutputTextArgs {
   displayStatus: TimelineDisplayStatus;
-  exitCode?: number;
-  output?: string;
+  exitCode: number | null;
+  output: string;
 }
 
 const timelineDisplayStatusInfo = {
@@ -123,11 +123,11 @@ export function getTimelineDisplayStatusInfo(
   return timelineDisplayStatusInfo[status];
 }
 
-export function hasVisibleCommandOutput(output?: string): boolean {
-  return output !== undefined && output.trim().length !== 0;
+export function hasVisibleCommandOutput(output: string): boolean {
+  return output.trim().length !== 0;
 }
 
-export function getVisibleCommandOutput(output?: string): string | undefined {
+export function getVisibleCommandOutput(output: string): string | undefined {
   if (!hasVisibleCommandOutput(output)) {
     return undefined;
   }
@@ -143,7 +143,7 @@ export function getCommandExitCodeLine(
     case "running":
       return undefined;
     case "completed":
-      if (args.exitCode === undefined) {
+      if (args.exitCode === null) {
         return undefined;
       }
       if (args.exitCode === 0 && args.hasVisibleOutput) {
@@ -152,7 +152,7 @@ export function getCommandExitCodeLine(
       return `exit code ${args.exitCode}`;
     case "failed":
     case "interrupted":
-      if (args.exitCode === undefined) {
+      if (args.exitCode === null) {
         return undefined;
       }
       return `exit code ${args.exitCode}`;

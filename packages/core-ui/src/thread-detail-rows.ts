@@ -10,7 +10,6 @@ import type {
   TimelineTurnSummaryRow,
   ViewMessage,
   ViewProjection,
-  ViewToolCallSummary,
   ViewTurn,
 } from "@bb/domain";
 import { assertNever } from "./assert-never.js";
@@ -22,7 +21,10 @@ import {
   type IndexedTimelineMessage,
 } from "./timeline-message-helpers.js";
 import { mergeGroupedRowStatus } from "./timeline-grouped-row-status.js";
-import { summarizeExploringCounts } from "./timeline-render-helpers.js";
+import {
+  summarizeExploringCounts,
+  type ToolIntentSummary,
+} from "./timeline-render-helpers.js";
 import { isExploringCall } from "./tool-call-parsing.js";
 import {
   getViewMessageScopeTurnId,
@@ -312,30 +314,30 @@ function toMessageRow(message: ViewMessage): TimelineMessageRow {
 function isExplorationToolCallMessage(
   message: Extract<ViewMessage, { kind: "tool-call" }>,
 ): boolean {
-  return isExploringCall({ parsedCmd: message.parsedCmd ?? [] });
+  return isExploringCall({ parsedIntents: message.parsedIntents });
 }
 
 function isExplorationToolActivityMessage(
   message: Extract<ViewMessage, { kind: "command" | "tool-call" }>,
 ): boolean {
-  return isExploringCall({ parsedCmd: message.parsedCmd ?? [] });
+  return isExploringCall({ parsedIntents: message.parsedIntents });
 }
 
 function toToolCallSummary(
   message: Extract<ViewMessage, { kind: "command" | "tool-call" }>,
-): ViewToolCallSummary {
+): ToolIntentSummary {
+  if (message.kind === "command") {
+    return {
+      kind: "command",
+      command: message.command,
+      parsedIntents: message.parsedIntents,
+    };
+  }
   return {
-    callId: message.callId,
-    command: message.command,
-    cwd: message.cwd,
-    parsedCmd: message.parsedCmd ?? [],
-    source: message.source,
-    output: message.output,
-    exitCode: message.exitCode,
-    duration: message.duration,
-    durationMs: message.durationMs,
-    approvalStatus: message.approvalStatus,
-    status: message.status,
+    kind: "tool-call",
+    toolName: message.toolName,
+    toolArgs: message.toolArgs,
+    parsedIntents: message.parsedIntents,
   };
 }
 

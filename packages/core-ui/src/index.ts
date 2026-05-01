@@ -80,6 +80,7 @@ export {
 export type {
   DelegationSummaryParts,
   ExploringCounts,
+  ToolIntentSummary,
 } from "./timeline-render-helpers.js";
 export {
   formatCommandOutputText,
@@ -99,6 +100,7 @@ export type {
 
 export {
   extractShellCommandFromString,
+  formatToolCallCommand,
   isShellToolName,
 } from "./tool-call-parsing.js";
 

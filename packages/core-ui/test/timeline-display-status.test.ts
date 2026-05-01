@@ -9,8 +9,7 @@ import {
 } from "../src/timeline-display-status.js";
 
 describe("timeline display status", () => {
-  it("treats undefined and whitespace-only command output as empty", () => {
-    expect(hasVisibleCommandOutput(undefined)).toBe(false);
+  it("treats empty and whitespace-only command output as empty", () => {
     expect(hasVisibleCommandOutput("")).toBe(false);
     expect(hasVisibleCommandOutput(" \n\t ")).toBe(false);
     expect(hasVisibleCommandOutput("FIRST\n")).toBe(true);
@@ -90,9 +89,7 @@ describe("timeline display status", () => {
     expect(getPermissionGrantDisplayStatus("pending")).toBe("waiting");
     expect(getPermissionGrantDisplayStatus("completed")).toBe("completed");
     expect(getPermissionGrantDisplayStatus("error")).toBe("failed");
-    expect(getPermissionGrantDisplayStatus("interrupted")).toBe(
-      "interrupted",
-    );
+    expect(getPermissionGrantDisplayStatus("interrupted")).toBe("interrupted");
   });
 
   it("shows exit code 0 only for silent successful commands", () => {

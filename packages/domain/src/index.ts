@@ -332,7 +332,7 @@ export type {
 } from "./stored-thread-event.js";
 
 export { jsonValueSchema } from "./json-value.js";
-export type { JsonValue } from "./json-value.js";
+export type { JsonObject, JsonValue } from "./json-value.js";
 
 export {
   assertThreadEventScope,
@@ -490,7 +490,6 @@ export type {
   ViewThreadOperationMetadata,
   ViewThreadOperationStatus,
   ViewToolCallMessage,
-  ViewToolCallSummary,
   ViewToolParsedIntent,
   ViewUserMessage,
   ViewWebFetchMessage,

@@ -3,6 +3,7 @@ import type { Thread } from "./thread.js";
 import type { ThreadEventScope } from "./thread-event-scope.js";
 import type { ThreadEventRow } from "./stored-thread-event.js";
 import type { ViewProjection } from "./timeline-projection.js";
+import type { JsonObject } from "./json-value.js";
 
 export const viewMessageStatusValues = [
   "streaming",
@@ -85,35 +86,14 @@ export interface ViewDelegationMetadata {
   description?: string;
 }
 
-export interface ViewToolCallSummary {
-  callId: string;
-  command?: string;
-  cwd?: string;
-  parsedCmd: ViewToolParsedIntent[];
-  source?: string;
-  output?: string;
-  exitCode?: number;
-  duration?: string;
-  durationMs?: number;
-  approvalStatus: ViewApprovalLifecycleStatus | null;
-  status: Extract<
-    ViewMessageStatus,
-    "pending" | "completed" | "error" | "interrupted"
-  >;
-}
-
 export interface ViewToolCallMessage extends ViewMessageBase {
   kind: "tool-call";
   toolName: string;
+  toolArgs: JsonObject | null;
   callId: string;
-  command?: string;
-  cwd?: string;
-  parsedCmd?: ViewToolParsedIntent[];
-  source?: string;
-  output?: string;
-  exitCode?: number;
-  duration?: string;
-  durationMs?: number;
+  parsedIntents: ViewToolParsedIntent[];
+  output: string;
+  durationMs: number | null;
   approvalStatus: ViewApprovalLifecycleStatus | null;
   status: Extract<
     ViewMessageStatus,
@@ -124,14 +104,13 @@ export interface ViewToolCallMessage extends ViewMessageBase {
 export interface ViewCommandMessage extends ViewMessageBase {
   kind: "command";
   callId: string;
-  command?: string;
-  cwd?: string;
-  parsedCmd?: ViewToolParsedIntent[];
-  source?: string;
-  output?: string;
-  exitCode?: number;
-  duration?: string;
-  durationMs?: number;
+  command: string;
+  cwd: string | null;
+  parsedIntents: ViewToolParsedIntent[];
+  source: string | null;
+  output: string;
+  exitCode: number | null;
+  durationMs: number | null;
   approvalStatus: ViewApprovalLifecycleStatus | null;
   status: Extract<
     ViewMessageStatus,
@@ -303,10 +282,8 @@ export interface ViewDelegationMessage
   kind: "delegation";
   toolName: string;
   callId: string;
-  command?: string;
-  output?: string;
-  duration?: string;
-  durationMs?: number;
+  output: string;
+  durationMs: number | null;
   status: Extract<
     ViewMessageStatus,
     "pending" | "completed" | "error" | "interrupted"

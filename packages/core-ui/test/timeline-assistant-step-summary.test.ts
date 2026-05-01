@@ -34,7 +34,10 @@ function buildCommandBundleRow({
     createdAt,
     toolName: "exec_command",
     callId,
-    command: "ls",
+    toolArgs: { command: "ls" },
+    parsedIntents: [],
+    output: "",
+    durationMs: null,
     approvalStatus: null,
     status,
   };
@@ -76,9 +79,9 @@ function buildExplorationBundleRow(
     sourceSeqEnd: 1,
     createdAt: 1,
     toolName: "Grep",
+    toolArgs: { pattern: "button", path: "src" },
     callId: "search-1",
-    command: "Grep button src",
-    parsedCmd: [
+    parsedIntents: [
       {
         type: "search",
         cmd: "Grep button src",
@@ -86,6 +89,8 @@ function buildExplorationBundleRow(
         path: "src",
       },
     ],
+    output: "",
+    durationMs: null,
     approvalStatus: null,
     status: status === "pending" ? "pending" : "completed",
   };
@@ -171,6 +176,8 @@ function buildDelegationMessageRow(
     createdAt: 1,
     toolName: "Agent",
     callId: "agent-1",
+    output: "",
+    durationMs: null,
     status,
     childProjection: emptyProjection(),
   };

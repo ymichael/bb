@@ -7,6 +7,7 @@ import {
   renderTimelineFixture,
   type LogicalTimelineRow,
 } from "./timeline-test-harness.js";
+import { formatToolCallCommand } from "../src/tool-call-parsing.js";
 
 function provisioningLogicalRow(row: TimelineRow): LogicalTimelineRow | null {
   if (row.kind !== "message") {
@@ -91,8 +92,8 @@ function toolCallLogicalRow(row: TimelineRow): LogicalTimelineRow | null {
     status: message.status,
     title:
       message.kind === "tool-call"
-        ? (message.command ?? message.toolName)
-        : (message.command ?? "command"),
+        ? formatToolCallCommand(message.toolName, message.toolArgs)
+        : message.command,
   };
 }
 

@@ -76,20 +76,20 @@ describe("isExploringIntent / isExploringCall", () => {
     );
   });
 
-  it("isExploringCall returns false for empty parsedCmd", () => {
-    expect(isExploringCall({ parsedCmd: [] })).toBe(false);
+  it("isExploringCall returns false for empty parsedIntents", () => {
+    expect(isExploringCall({ parsedIntents: [] })).toBe(false);
   });
 
   it("isExploringCall returns true when all intents are exploring", () => {
     expect(
-      isExploringCall({ parsedCmd: [{ type: "read", cmd: "Read x" }] }),
+      isExploringCall({ parsedIntents: [{ type: "read", cmd: "Read x" }] }),
     ).toBe(true);
   });
 
   it("isExploringCall returns false when any intent is not exploring", () => {
     expect(
       isExploringCall({
-        parsedCmd: [
+        parsedIntents: [
           { type: "read", cmd: "Read x" },
           { type: "unknown", cmd: "something" },
         ],

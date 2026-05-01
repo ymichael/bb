@@ -5,12 +5,12 @@ import type {
   TimelineToolBundleSummary,
   ViewCommandMessage,
   ViewToolCallMessage,
-  ViewToolCallSummary,
 } from "@bb/domain";
 import { assertNever } from "./assert-never.js";
 import {
   buildExploringDetailLines,
   formatExploringCountsLabel,
+  type ToolIntentSummary,
 } from "./timeline-render-helpers.js";
 
 interface FormatToolBundleSummaryLabelArgs {
@@ -154,25 +154,25 @@ type ExplorationBundleMessage = ViewCommandMessage | ViewToolCallMessage;
 
 function toToolCallSummary(
   message: ExplorationBundleMessage,
-): ViewToolCallSummary {
+): ToolIntentSummary {
+  if (message.kind === "command") {
+    return {
+      kind: "command",
+      command: message.command,
+      parsedIntents: message.parsedIntents,
+    };
+  }
   return {
-    callId: message.callId,
-    command: message.command,
-    cwd: message.cwd,
-    parsedCmd: message.parsedCmd ?? [],
-    source: message.source,
-    output: message.output,
-    exitCode: message.exitCode,
-    duration: message.duration,
-    durationMs: message.durationMs,
-    approvalStatus: message.approvalStatus,
-    status: message.status,
+    kind: "tool-call",
+    toolName: message.toolName,
+    toolArgs: message.toolArgs,
+    parsedIntents: message.parsedIntents,
   };
 }
 
 function getExplorationBundleCalls(
   rows: readonly TimelineMessageRow[],
-): ViewToolCallSummary[] {
+): ToolIntentSummary[] {
   return rows.map((row) => {
     if (row.message.kind !== "command" && row.message.kind !== "tool-call") {
       throw new Error(

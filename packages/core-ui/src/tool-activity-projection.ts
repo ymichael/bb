@@ -1,4 +1,5 @@
 import type {
+  JsonObject,
   ThreadEventScope,
   ViewApprovalLifecycleStatus,
   ViewCommandMessage,
@@ -7,12 +8,11 @@ import type {
   ViewMessage,
   ViewProjection,
   ViewToolCallMessage,
-  ViewToolCallSummary,
   ViewToolParsedIntent,
   ViewWebSearchMessage,
 } from "@bb/domain";
 import type { EventMeta } from "./event-decode.js";
-import type { ExecCallPartial, ExecMessageKind } from "./exec-lifecycle.js";
+import type { ExecCallUpdate, ExecMessageKind } from "./exec-lifecycle.js";
 import { messageId } from "./format-helpers.js";
 import {
   areThreadEventScopesEqual,
@@ -39,15 +39,34 @@ type WebActivityKind = ViewWebActivityMessage["kind"];
 type InterruptibleToolMessage =
   | ViewProviderExecutionMessage
   | ViewWebActivityMessage;
-type InterruptibleToolCall = Pick<ViewToolCallSummary, "output" | "status">;
+type InterruptibleToolCall = Pick<
+  ViewProviderExecutionMessage,
+  "output" | "status"
+>;
 interface ExecDelegationMetadata {
   subagentType?: string;
   description?: string;
 }
-type MutableExecCallSummary = ViewToolCallSummary & ExecDelegationMetadata;
+interface MutableExecCallSummary extends ExecDelegationMetadata {
+  callId: string;
+  command: string;
+  toolArgs: JsonObject | null;
+  cwd: string | null;
+  parsedIntents: ViewToolParsedIntent[];
+  source: string | null;
+  output: string;
+  exitCode: number | null;
+  durationMs: number | null;
+  approvalStatus: ViewApprovalLifecycleStatus | null;
+  status: ViewProviderExecutionMessage["status"];
+}
 type MutableExecSummary = MutableExecCallSummary | ViewProviderExecutionMessage;
 type CommandExecutionMetadataTarget =
-  | ViewToolCallSummary
+  | MutableExecCallSummary
+  | ViewCommandMessage;
+type ToolCallMetadataTarget = MutableExecCallSummary | ViewToolCallMessage;
+type ParsedIntentMetadataTarget =
+  | MutableExecCallSummary
   | ViewCommandMessage
   | ViewToolCallMessage;
 type DelegationMetadataTarget = MutableExecCallSummary | ViewDelegationMessage;
@@ -191,13 +210,13 @@ function chooseParsedIntents(
 }
 
 function isTerminalToolCallStatus(
-  status: ViewToolCallSummary["status"] | undefined,
+  status: ViewToolCallMessage["status"] | undefined,
 ): boolean {
   return status !== undefined && status !== "pending";
 }
 
 function syncRunningCallVisibleOutput(call: RunningExecCall): void {
-  call.output = getVisibleTextBufferText(call.outputBuffer);
+  call.output = getVisibleTextBufferText(call.outputBuffer) ?? "";
 }
 
 function setRunningCallOutput(
@@ -211,7 +230,7 @@ function setRunningCallOutput(
 
 function upsertRunningExecCall(
   existing: RunningExecCall | undefined,
-  incoming: ExecCallPartial,
+  incoming: ExecCallUpdate,
   meta: EventMeta,
   threadId: string,
   turnId: string | undefined,
@@ -234,17 +253,17 @@ function upsertRunningExecCall(
       threadId,
       messageKind: incoming.messageKind ?? "tool-call",
       toolName: incoming.toolName,
-      command: incoming.command,
-      cwd: incoming.cwd,
-      parsedCmd: incoming.parsedCmd,
-      source: incoming.source,
+      command: incoming.command ?? "",
+      toolArgs: incoming.toolArgs ?? null,
+      cwd: incoming.cwd ?? null,
+      parsedIntents: incoming.parsedIntents,
+      source: incoming.source ?? null,
       scope: scopeFields.scope,
       subagentType: incoming.subagentType,
       description: incoming.description,
-      output: getVisibleTextBufferText(outputBuffer),
-      exitCode: incoming.exitCode,
-      duration: incoming.duration,
-      durationMs: incoming.durationMs,
+      output: getVisibleTextBufferText(outputBuffer) ?? "",
+      exitCode: incoming.exitCode ?? null,
+      durationMs: incoming.durationMs ?? null,
       approvalStatus: incoming.approvalStatus ?? null,
       status: incoming.status ?? "pending",
       parentToolCallId: incoming.parentToolCallId,
@@ -279,9 +298,7 @@ function upsertRunningExecCall(
     existing.toolName = incoming.toolName;
   if (incoming.cwd && !existing.cwd) existing.cwd = incoming.cwd;
   if (incoming.source && !existing.source) existing.source = incoming.source;
-  if (incoming.duration && !existing.duration)
-    existing.duration = incoming.duration;
-  if (incoming.durationMs !== undefined && existing.durationMs === undefined) {
+  if (incoming.durationMs !== undefined && existing.durationMs === null) {
     existing.durationMs = incoming.durationMs;
   }
   if (incoming.subagentType && !existing.subagentType) {
@@ -295,11 +312,11 @@ function upsertRunningExecCall(
   }
 
   // keep longest (begin has partial, end has full)
-  if (
-    incoming.command &&
-    (!existing.command || incoming.command.length > existing.command.length)
-  ) {
+  if (incoming.command && incoming.command.length > existing.command.length) {
     existing.command = incoming.command;
+  }
+  if (incoming.toolArgs && !existing.toolArgs) {
+    existing.toolArgs = incoming.toolArgs;
   }
   if (incoming.output && incoming.output.length > 0) {
     if (
@@ -317,9 +334,9 @@ function upsertRunningExecCall(
 
   // keep latest
   existing.threadId = threadId;
-  existing.parsedCmd = chooseParsedIntents(
-    existing.parsedCmd,
-    incoming.parsedCmd,
+  existing.parsedIntents = chooseParsedIntents(
+    existing.parsedIntents,
+    incoming.parsedIntents,
   );
   if (incoming.exitCode !== undefined) existing.exitCode = incoming.exitCode;
   existing.approvalStatus = applyApprovalStatusDelta(
@@ -482,6 +499,18 @@ function canSetDelegationMetadata(
 function canSetCommandExecutionMetadata(
   target: MutableExecSummary,
 ): target is CommandExecutionMetadataTarget {
+  return !("kind" in target) || target.kind === "command";
+}
+
+function canSetToolCallMetadata(
+  target: MutableExecSummary,
+): target is ToolCallMetadataTarget {
+  return !("kind" in target) || target.kind === "tool-call";
+}
+
+function canSetParsedIntentMetadata(
+  target: MutableExecSummary,
+): target is ParsedIntentMetadataTarget {
   return (
     !("kind" in target) ||
     target.kind === "command" ||
@@ -491,35 +520,41 @@ function canSetCommandExecutionMetadata(
 
 function mergeCallSummary(
   target: MutableExecSummary,
-  incoming: ExecCallPartial,
+  incoming: ExecCallUpdate,
   options: MergeCallSummaryOptions = {},
 ): void {
   const { appendOutput, replaceOutput, visibleOutput } = options;
   if (
+    canSetCommandExecutionMetadata(target) &&
     incoming.command &&
-    (!target.command || incoming.command.length > target.command.length)
+    incoming.command.length > target.command.length
   ) {
     target.command = incoming.command;
   }
   if (canSetCommandExecutionMetadata(target)) {
     if (incoming.cwd && !target.cwd) target.cwd = incoming.cwd;
-    target.parsedCmd = chooseParsedIntents(
-      target.parsedCmd ?? [],
-      incoming.parsedCmd,
-    );
     if (incoming.source && !target.source) target.source = incoming.source;
+  }
+  if (canSetToolCallMetadata(target) && incoming.toolArgs && !target.toolArgs) {
+    target.toolArgs = incoming.toolArgs;
+  }
+  if (canSetParsedIntentMetadata(target)) {
+    target.parsedIntents = chooseParsedIntents(
+      target.parsedIntents,
+      incoming.parsedIntents,
+    );
   }
   if (visibleOutput !== undefined) {
     target.output = visibleOutput;
   } else if (appendOutput && incoming.output && incoming.output.length > 0) {
-    target.output = `${target.output ?? ""}${incoming.output}`;
+    target.output = `${target.output}${incoming.output}`;
   } else if (replaceOutput && incoming.output && incoming.output.length > 0) {
     target.output = incoming.output;
   } else if (
     !appendOutput &&
     incoming.output &&
     incoming.output.length > 0 &&
-    (!target.output || incoming.output.length >= target.output.length)
+    incoming.output.length >= target.output.length
   ) {
     target.output = incoming.output;
   }
@@ -529,9 +564,7 @@ function mergeCallSummary(
   ) {
     target.exitCode = incoming.exitCode;
   }
-  if (incoming.duration && !target.duration)
-    target.duration = incoming.duration;
-  if (incoming.durationMs !== undefined && target.durationMs === undefined) {
+  if (incoming.durationMs !== undefined && target.durationMs === null) {
     target.durationMs = incoming.durationMs;
   }
   if (canSetDelegationMetadata(target)) {
@@ -542,7 +575,10 @@ function mergeCallSummary(
       target.description = incoming.description;
     }
   }
-  if (canSetCommandExecutionMetadata(target)) {
+  if (
+    canSetCommandExecutionMetadata(target) ||
+    canSetToolCallMetadata(target)
+  ) {
     target.approvalStatus = applyApprovalStatusDelta(
       target.approvalStatus,
       buildApprovalStatusDelta(incoming.approvalStatus, incoming.status),
@@ -622,7 +658,7 @@ export function interruptPendingToolActivity(
     if (activeCall) {
       mergeCallSummary(activeCall, {
         ...call,
-        parsedCmd: call.parsedCmd,
+        parsedIntents: call.parsedIntents,
       });
       interruptedRunningCallIds.push(call.callId);
       continue;
@@ -632,7 +668,7 @@ export function interruptPendingToolActivity(
     if (historyMatch) {
       mergeCallSummary(historyMatch.call, {
         ...call,
-        parsedCmd: call.parsedCmd,
+        parsedIntents: call.parsedIntents,
       });
       interruptedRunningCallIds.push(call.callId);
       continue;
@@ -686,9 +722,7 @@ function createExecMessage(
       ? { parentToolCallId: call.parentToolCallId }
       : {}),
     callId: call.callId,
-    command: call.command,
     output: call.output,
-    duration: call.duration,
     durationMs: call.durationMs,
     status: call.status,
   };
@@ -697,8 +731,9 @@ function createExecMessage(
     return {
       ...base,
       kind: "command",
+      command: call.command,
       cwd: call.cwd,
-      parsedCmd: call.parsedCmd,
+      parsedIntents: call.parsedIntents,
       source: call.source,
       exitCode: call.exitCode,
       approvalStatus: call.approvalStatus,
@@ -720,10 +755,8 @@ function createExecMessage(
     ...base,
     kind: "tool-call",
     toolName: call.toolName ?? "tool",
-    cwd: call.cwd,
-    parsedCmd: call.parsedCmd,
-    source: call.source,
-    exitCode: call.exitCode,
+    toolArgs: call.toolArgs,
+    parsedIntents: call.parsedIntents,
     approvalStatus: call.approvalStatus,
   };
 }
@@ -733,7 +766,7 @@ export function onExecBegin(
   meta: EventMeta,
   threadId: string,
   turnId: string | undefined,
-  incoming: ExecCallPartial,
+  incoming: ExecCallUpdate,
 ): void {
   const existingRunning = state.toolActivity.runningCallsById.get(
     incoming.callId,
@@ -773,7 +806,7 @@ export function onExecBegin(
 export function onExecOutput(
   state: ToolActivityProjectionState,
   meta: EventMeta,
-  incoming: ExecCallPartial,
+  incoming: ExecCallUpdate,
   appendOutput?: boolean,
   replaceOutput?: boolean,
 ): void {
@@ -864,7 +897,7 @@ export function onExecEnd(
   meta: EventMeta,
   threadId: string,
   turnId: string | undefined,
-  incoming: ExecCallPartial,
+  incoming: ExecCallUpdate,
 ): void {
   const running = state.toolActivity.runningCallsById.get(incoming.callId);
   const merged = upsertRunningExecCall(
@@ -891,11 +924,10 @@ export function onExecEnd(
       active.createdAt = Math.max(active.createdAt, merged.createdAt);
       active.status =
         mergeCallStatus(active.status, merged.status) ?? active.status;
-      active.output = merged.output ?? active.output;
+      active.output = merged.output || active.output;
       if (canSetCommandExecutionMetadata(active)) {
         active.exitCode = merged.exitCode ?? active.exitCode;
       }
-      active.duration = merged.duration ?? active.duration;
       active.durationMs = merged.durationMs ?? active.durationMs;
       state.toolActivity.finalizedExecCallIds.add(incoming.callId);
       flushActiveToolCell(state);
@@ -924,12 +956,11 @@ export function onExecEnd(
     historyMatch.cell.status =
       mergeCallStatus(historyMatch.cell.status, merged.status) ??
       historyMatch.cell.status;
-    historyMatch.cell.output = merged.output ?? historyMatch.cell.output;
+    historyMatch.cell.output = merged.output || historyMatch.cell.output;
     if (canSetCommandExecutionMetadata(historyMatch.cell)) {
       historyMatch.cell.exitCode =
         merged.exitCode ?? historyMatch.cell.exitCode;
     }
-    historyMatch.cell.duration = merged.duration ?? historyMatch.cell.duration;
     historyMatch.cell.durationMs =
       merged.durationMs ?? historyMatch.cell.durationMs;
 

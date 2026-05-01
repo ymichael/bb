@@ -1,4 +1,6 @@
-import type {
+import {
+  jsonValueSchema,
+  type JsonObject,
   ThreadEvent,
   ThreadEventItemApprovalStatus,
   ThreadEventItemStatus,
@@ -8,10 +10,9 @@ import type {
   ViewApprovalLifecycleStatus,
   ViewFileEditMessage,
   ViewToolCallMessage,
-  ViewToolCallSummary,
   ViewToolParsedIntent,
 } from "@bb/domain";
-import { durationToString, getFirstStringField } from "./format-helpers.js";
+import { getFirstStringField } from "./format-helpers.js";
 import {
   baseToolName,
   extractShellCommandFromString,
@@ -28,6 +29,17 @@ import {
 interface DelegationMetadata {
   subagentType?: string;
   description?: string;
+}
+
+function parseToolArgs(
+  args: Record<string, unknown> | null,
+): JsonObject | null {
+  if (!args) return null;
+  const toolArgs: JsonObject = {};
+  for (const [key, value] of Object.entries(args)) {
+    toolArgs[key] = jsonValueSchema.parse(value);
+  }
+  return toolArgs;
 }
 
 export interface ExecLifecycleContext {
@@ -88,18 +100,26 @@ export function itemStatusToFileEditStatus(
 
 export type ExecMessageKind = "command" | "tool-call" | "delegation";
 
-export interface ExecCallPartial
-  extends Partial<ViewToolCallSummary>, DelegationMetadata {
+export interface ExecCallUpdate extends DelegationMetadata {
   callId: string;
   messageKind?: ExecMessageKind;
   toolName?: string;
-  parsedCmd: ViewToolParsedIntent[];
+  command?: string;
+  toolArgs?: JsonObject | null;
+  cwd?: string | null;
+  parsedIntents: ViewToolParsedIntent[];
+  source?: string | null;
+  output?: string;
+  exitCode?: number | null;
+  durationMs?: number | null;
+  approvalStatus?: ViewApprovalLifecycleStatus | null;
+  status?: ViewToolCallMessage["status"];
   parentToolCallId?: string;
 }
 
 export interface ExecLifecycleEvent {
   kind: "begin" | "end" | "output";
-  call: ExecCallPartial;
+  call: ExecCallUpdate;
   appendOutput?: boolean;
   replaceOutput?: boolean;
 }
@@ -258,7 +278,7 @@ export function parseExecLifecycleEvent(
       call: {
         callId,
         messageKind: "command",
-        parsedCmd: [],
+        parsedIntents: [],
         output: decoded.delta,
         status: "pending",
         ...(parentToolCallId ? { parentToolCallId } : {}),
@@ -302,11 +322,10 @@ export function parseExecLifecycleEvent(
         messageKind: "command",
         command,
         cwd: decoded.item.cwd,
-        parsedCmd: parseShellCommandIntents(command),
+        parsedIntents: parseShellCommandIntents(command),
         output: decoded.item.aggregatedOutput,
         exitCode,
         durationMs,
-        duration: durationToString(durationMs),
         approvalStatus: itemStatusToApprovalStatus(decoded.item.approvalStatus),
         status,
         ...(parentToolCallId ? { parentToolCallId } : {}),
@@ -333,7 +352,8 @@ export function parseToolCallLifecycleEvent(
       kind: "output",
       call: {
         callId: decoded.itemId,
-        parsedCmd: [],
+        messageKind: "tool-call",
+        parsedIntents: [],
         output: decoded.message ?? "Progress update",
         status: "pending",
         ...(parentToolCallId ? { parentToolCallId } : {}),
@@ -380,26 +400,44 @@ export function parseToolCallLifecycleEvent(
         ? formatToolCallResultOutput(fullToolName, rawOutput)
         : undefined;
     const errorField = decoded.item.error;
-    const parsedCmd = getStructuredToolParsedIntents(fullToolName, parsedArgs);
+    const parsedIntents = getStructuredToolParsedIntents(
+      fullToolName,
+      parsedArgs,
+    );
     const messageKind = isDelegationToolName(fullToolName)
       ? "delegation"
       : "tool-call";
     const delegationMetadata = getDelegationMetadata(fullToolName, parsedArgs);
+    const toolArgs = parseToolArgs(parsedArgs);
+
+    const baseCall = {
+      callId,
+      toolName: fullToolName,
+      parsedIntents,
+      output: kind === "end" ? (output ?? errorField) : undefined,
+      durationMs,
+      status,
+      ...(parentToolCallId ? { parentToolCallId } : {}),
+    };
+
+    if (messageKind === "delegation") {
+      return {
+        kind,
+        call: {
+          ...baseCall,
+          messageKind,
+          ...delegationMetadata,
+        },
+      };
+    }
 
     return {
       kind,
       call: {
-        callId,
+        ...baseCall,
         messageKind,
-        toolName: fullToolName,
-        command: formatToolCallCommand(fullToolName, parsedArgs),
-        parsedCmd,
-        output: kind === "end" ? (output ?? errorField) : undefined,
-        durationMs,
-        duration: durationToString(durationMs),
-        status,
+        toolArgs,
         ...delegationMetadata,
-        ...(parentToolCallId ? { parentToolCallId } : {}),
       },
     };
   }

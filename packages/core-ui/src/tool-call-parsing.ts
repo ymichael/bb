@@ -1,4 +1,4 @@
-import type { ViewToolCallSummary, ViewToolParsedIntent } from "@bb/domain";
+import type { ViewToolParsedIntent } from "@bb/domain";
 import { getFirstStringField } from "./format-helpers.js";
 import { toRecord } from "./unknown-helpers.js";
 
@@ -971,9 +971,9 @@ export function isExploringIntent(intent: ViewToolParsedIntent): boolean {
   );
 }
 
-export function isExploringCall(
-  call: Pick<ViewToolCallSummary, "parsedCmd">,
-): boolean {
-  if (call.parsedCmd.length === 0) return false;
-  return call.parsedCmd.every((intent) => isExploringIntent(intent));
+export function isExploringCall(call: {
+  parsedIntents: ViewToolParsedIntent[];
+}): boolean {
+  if (call.parsedIntents.length === 0) return false;
+  return call.parsedIntents.every((intent) => isExploringIntent(intent));
 }

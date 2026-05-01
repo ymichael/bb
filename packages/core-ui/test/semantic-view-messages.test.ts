@@ -53,8 +53,11 @@ function toolCallMessage(args: ToolCallFixtureArgs): ViewToolCallMessage {
       ? { parentToolCallId: args.parentToolCallId }
       : {}),
     toolName: args.toolName,
+    toolArgs: null,
     callId: args.callId,
-    command: args.toolName,
+    parsedIntents: [],
+    output: "",
+    durationMs: null,
     approvalStatus: null,
     status: "completed",
   };
@@ -75,7 +78,8 @@ function delegationMessage(args: ToolCallFixtureArgs): ViewDelegationMessage {
       : {}),
     toolName: toolCall.toolName,
     callId: toolCall.callId,
-    command: toolCall.command,
+    output: "",
+    durationMs: null,
     status: toolCall.status,
     childProjection: {
       state: {

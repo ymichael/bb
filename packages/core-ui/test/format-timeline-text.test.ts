@@ -111,19 +111,53 @@ function emptyProjection(): ViewProjection {
 }
 
 function withFixtureScope(message: ViewMessage): ViewMessage {
-  if (message.scope !== undefined) {
-    return message;
+  const normalizedMessage = withFixtureDefaults(message);
+  if (normalizedMessage.scope !== undefined) {
+    return normalizedMessage;
   }
-  if (message.turnId) {
+  if (normalizedMessage.turnId) {
     return {
-      ...message,
-      scope: turnScope(message.turnId),
+      ...normalizedMessage,
+      scope: turnScope(normalizedMessage.turnId),
     };
   }
   return {
-    ...message,
+    ...normalizedMessage,
     scope: threadScope(),
   };
+}
+
+function withFixtureDefaults(message: ViewMessage): ViewMessage {
+  if (message.kind === "command") {
+    return {
+      ...message,
+      command: message.command ?? "",
+      cwd: message.cwd ?? null,
+      parsedIntents: message.parsedIntents ?? [],
+      source: message.source ?? null,
+      output: message.output ?? "",
+      exitCode: message.exitCode ?? null,
+      durationMs: message.durationMs ?? null,
+    };
+  }
+  if (message.kind === "tool-call") {
+    return {
+      ...message,
+      toolArgs: message.toolArgs ?? null,
+      parsedIntents: message.parsedIntents ?? [],
+      output: message.output ?? "",
+      durationMs: message.durationMs ?? null,
+      approvalStatus: message.approvalStatus ?? null,
+    };
+  }
+  if (message.kind === "delegation") {
+    return {
+      ...message,
+      output: message.output ?? "",
+      durationMs: message.durationMs ?? null,
+    };
+  }
+  return message;
 }
 
 function timelineRowsFromMessages(messages: ViewMessage[]): TimelineRow[] {
@@ -316,7 +350,7 @@ describe("formatTimelineAsText", () => {
         toolName: "Read",
         callId: "c1",
         command: "Read /src/main.ts",
-        parsedCmd: [
+        parsedIntents: [
           {
             type: "read",
             cmd: "Read /src/main.ts",
@@ -338,7 +372,7 @@ describe("formatTimelineAsText", () => {
         toolName: "Grep",
         callId: "c2",
         command: "Grep 'bug' in /src",
-        parsedCmd: [
+        parsedIntents: [
           {
             type: "search",
             cmd: "Grep 'bug' in /src",
@@ -372,7 +406,7 @@ describe("formatTimelineAsText", () => {
     const calls = Array.from({ length: 10 }, (_, index) => ({
       callId: `c${index + 1}`,
       command: `Read /src/file-${index + 1}.ts`,
-      parsedCmd: [
+      parsedIntents: [
         {
           type: "read" as const,
           cmd: `Read /src/file-${index + 1}.ts`,

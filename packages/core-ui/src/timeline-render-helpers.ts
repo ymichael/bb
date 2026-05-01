@@ -1,11 +1,11 @@
-import type { ViewToolCallSummary, ViewToolParsedIntent } from "@bb/domain";
+import type { JsonObject, ViewToolParsedIntent } from "@bb/domain";
 import { assertNever } from "./assert-never.js";
 import { fileNameFromPath } from "./file-change-summary.js";
+import { formatToolCallCommand } from "./tool-call-parsing.js";
 
 interface DelegationSummaryInput {
   subagentType?: string;
   description?: string;
-  command?: string;
   toolName: string;
 }
 
@@ -23,6 +23,19 @@ export interface ExploringCounts {
 export interface ExploringRenderOptions {
   readPathStyle?: "basename" | "full";
 }
+
+export type ToolIntentSummary =
+  | {
+      kind: "command";
+      command: string;
+      parsedIntents: ViewToolParsedIntent[];
+    }
+  | {
+      kind: "tool-call";
+      toolName: string;
+      toolArgs: JsonObject | null;
+      parsedIntents: ViewToolParsedIntent[];
+    };
 
 const DEFAULT_EXPLORING_RENDER_OPTIONS: ExploringRenderOptions = {
   readPathStyle: "full",
@@ -55,12 +68,6 @@ export function getDelegationSummaryParts(
   if (message.description) {
     return {
       label: message.description,
-      ...(message.subagentType ? { metadata: message.subagentType } : {}),
-    };
-  }
-  if (message.command) {
-    return {
-      label: message.command,
       ...(message.subagentType ? { metadata: message.subagentType } : {}),
     };
   }
@@ -101,12 +108,25 @@ function isReadIntent(
   return intent.type === "read";
 }
 
-function isReadOnlyCall(call: ViewToolCallSummary): boolean {
-  return call.parsedCmd.length > 0 && call.parsedCmd.every(isReadIntent);
+function isReadOnlyCall(call: ToolIntentSummary): boolean {
+  return (
+    call.parsedIntents.length > 0 && call.parsedIntents.every(isReadIntent)
+  );
+}
+
+function formatToolIntentSummary(call: ToolIntentSummary): string {
+  switch (call.kind) {
+    case "command":
+      return call.command;
+    case "tool-call":
+      return formatToolCallCommand(call.toolName, call.toolArgs);
+    default:
+      return assertNever(call);
+  }
 }
 
 export function buildExploringDetailLines(
-  calls: ViewToolCallSummary[],
+  calls: ToolIntentSummary[],
   options: ExploringRenderOptions = DEFAULT_EXPLORING_RENDER_OPTIONS,
 ): string[] {
   const detailLines: string[] = [];
@@ -125,7 +145,7 @@ export function buildExploringDetailLines(
       ) {
         const current = calls[index];
         if (!current) break;
-        for (const intent of current.parsedCmd) {
+        for (const intent of current.parsedIntents) {
           if (intent.type !== "read") continue;
           const label = getReadDisplayName(intent, options);
           if (seen.has(label)) continue;
@@ -137,13 +157,14 @@ export function buildExploringDetailLines(
       continue;
     }
 
-    if (call.parsedCmd.length === 0) {
-      if (call.command) detailLines.push(call.command);
+    if (call.parsedIntents.length === 0) {
+      const detail = formatToolIntentSummary(call);
+      if (detail) detailLines.push(detail);
       index += 1;
       continue;
     }
 
-    for (const intent of call.parsedCmd) {
+    for (const intent of call.parsedIntents) {
       detailLines.push(formatExploringIntentLine(intent, options));
     }
     index += 1;
@@ -153,14 +174,14 @@ export function buildExploringDetailLines(
 }
 
 export function summarizeExploringCounts(
-  calls: ViewToolCallSummary[],
+  calls: ToolIntentSummary[],
 ): ExploringCounts {
   const readNames = new Set<string>();
   let searches = 0;
   let lists = 0;
 
   for (const call of calls) {
-    for (const intent of call.parsedCmd) {
+    for (const intent of call.parsedIntents) {
       switch (intent.type) {
         case "read":
           readNames.add(

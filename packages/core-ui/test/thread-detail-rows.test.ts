@@ -103,6 +103,8 @@ function delegationMessage(
     turnId: "turn-1",
     toolName: "Agent",
     callId: args.id,
+    output: "",
+    durationMs: null,
     status: args.status ?? "completed",
     childProjection: emptyProjection(),
   };
@@ -214,23 +216,60 @@ function projectionFromMessages(messages: ViewMessage[]): ViewProjection {
         turn: projectionTurnFromMessages(entry.turn.turnId, messagesForTurn),
       };
     }),
+    state: {
+      activeThinking: null,
+    },
   };
 }
 
 function withFixtureScope(message: ViewMessage): ViewMessage {
-  if (message.scope !== undefined) {
-    return message;
+  const normalizedMessage = withFixtureDefaults(message);
+  if (normalizedMessage.scope !== undefined) {
+    return normalizedMessage;
   }
-  if (message.turnId) {
+  if (normalizedMessage.turnId) {
     return {
-      ...message,
-      scope: turnScope(message.turnId),
+      ...normalizedMessage,
+      scope: turnScope(normalizedMessage.turnId),
     };
   }
   return {
-    ...message,
+    ...normalizedMessage,
     scope: threadScope(),
   };
+}
+
+function withFixtureDefaults(message: ViewMessage): ViewMessage {
+  if (message.kind === "command") {
+    return {
+      ...message,
+      command: message.command ?? "",
+      cwd: message.cwd ?? null,
+      parsedIntents: message.parsedIntents ?? [],
+      source: message.source ?? null,
+      output: message.output ?? "",
+      exitCode: message.exitCode ?? null,
+      durationMs: message.durationMs ?? null,
+    };
+  }
+  if (message.kind === "tool-call") {
+    return {
+      ...message,
+      toolArgs: message.toolArgs ?? null,
+      parsedIntents: message.parsedIntents ?? [],
+      output: message.output ?? "",
+      durationMs: message.durationMs ?? null,
+      approvalStatus: message.approvalStatus ?? null,
+    };
+  }
+  if (message.kind === "delegation") {
+    return {
+      ...message,
+      output: message.output ?? "",
+      durationMs: message.durationMs ?? null,
+    };
+  }
+  return message;
 }
 
 function withProjectionFixtureScopes(
@@ -257,6 +296,7 @@ function withProjectionFixtureScopes(
         },
       };
     }),
+    state: projection.state,
   };
 }
 
@@ -759,8 +799,10 @@ describe("buildTimelineRows tool group collapsing", () => {
         turnId: "turn-1",
         toolName: "Agent",
         callId: "agent-1",
-        command: "Agent [Explore] Search for SearchMenu references",
+        subagentType: "Explore",
+        description: "Search for SearchMenu references",
         output: "Subagent report: found SearchMenu component and tests",
+        durationMs: null,
         status: "completed",
         childProjection: emptyProjection(),
       },
@@ -1300,7 +1342,7 @@ describe("buildTimelineRows tool group collapsing", () => {
         toolName: "Read",
         callId: "call-1",
         command: "Read /src/main.ts",
-        parsedCmd: [
+        parsedIntents: [
           {
             type: "read",
             cmd: "Read /src/main.ts",
@@ -1358,7 +1400,7 @@ describe("buildTimelineRows tool group collapsing", () => {
         toolName: "Grep",
         callId: "call-2",
         command: "Grep foo",
-        parsedCmd: [
+        parsedIntents: [
           {
             type: "search",
             cmd: "Grep foo",
@@ -1435,7 +1477,7 @@ describe("buildTimelineRows tool group collapsing", () => {
           toolName: "Read",
           callId: "call-read",
           command: "Read src/deburr.ts",
-          parsedCmd: [
+          parsedIntents: [
             {
               type: "read",
               cmd: "Read src/deburr.ts",
@@ -1469,7 +1511,7 @@ describe("buildTimelineRows tool group collapsing", () => {
           toolName: "Grep",
           callId: "call-search",
           command: "Grep search src/locales/en.json",
-          parsedCmd: [
+          parsedIntents: [
             {
               type: "search",
               cmd: "Grep search src/locales/en.json",

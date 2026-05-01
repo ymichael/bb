@@ -18,7 +18,7 @@ import type {
   ViewWebSearchMessage,
 } from "@bb/domain";
 import { buildTimelineAssistantStepSummaryLabel } from "./timeline-assistant-step-summary.js";
-import { durationToCompactString } from "./format-helpers.js";
+import { durationToCompactString, durationToString } from "./format-helpers.js";
 import { taskStatusGlyph } from "./task-status.js";
 import { buildCollapsedTimelineRows } from "./thread-detail-rows.js";
 import {
@@ -35,6 +35,7 @@ import {
 } from "./timeline-tool-bundle-summary.js";
 import { buildTurnSummaryParts } from "./timeline-turn-summary.js";
 import { formatDelegationSummary } from "./timeline-render-helpers.js";
+import { formatToolCallCommand } from "./tool-call-parsing.js";
 
 export type TimelineFormat = "json" | "minimal" | "verbose";
 
@@ -100,23 +101,22 @@ function formatLifecycleLabel(
 }
 
 function formatSummaryDuration(
-  durationMs: number | undefined,
+  durationMs: number | null | undefined,
 ): string | undefined {
-  if (durationMs === undefined || durationMs < 1_000) {
+  if (durationMs === null || durationMs === undefined || durationMs < 1_000) {
     return undefined;
   }
   return durationToCompactString(durationMs);
 }
 
 function formatDurationLine(
-  durationMs: number | undefined,
-  duration: string | undefined,
+  durationMs: number | null | undefined,
   color: boolean,
 ): string | undefined {
-  if (durationMs === undefined) {
+  if (durationMs === null || durationMs === undefined) {
     return undefined;
   }
-  return dim(`  ${duration ?? `${durationMs}ms`}`, color);
+  return dim(`  ${durationToString(durationMs) ?? `${durationMs}ms`}`, color);
 }
 
 function formatToolCallOutputLine(
@@ -134,7 +134,7 @@ function formatToolCallOutputLine(
 
 function formatCommandExitCodeLine(
   displayStatus: TimelineDisplayStatus,
-  exitCode: number | undefined,
+  exitCode: number | null,
   hasVisibleOutput: boolean,
   color: boolean,
 ): string | undefined {
@@ -148,7 +148,7 @@ function formatCommandExitCodeLine(
     return undefined;
   }
 
-  if (exitCode !== undefined && exitCode !== 0) {
+  if (exitCode !== null && exitCode !== 0) {
     return red(`  ${exitCodeLine}`, color);
   }
 
@@ -213,13 +213,12 @@ function formatAssistantText(
 
 interface FormatExecutionCallArgs {
   approvalStatus: ViewCommandMessage["approvalStatus"];
-  command: string | undefined;
-  duration: string | undefined;
-  durationMs: number | undefined;
-  exitCode: number | undefined;
+  durationMs: number | null;
+  exitCode: number | null;
   label: string;
-  output: string | undefined;
+  output: string;
   status: ViewCommandMessage["status"];
+  title: string;
 }
 
 function formatExecutionCall(
@@ -228,21 +227,16 @@ function formatExecutionCall(
   color: boolean,
 ): string {
   const lines: string[] = [];
-  const cmd = args.command ?? "";
   const displayStatus = getTimelineDisplayStatus({
     approvalStatus: args.approvalStatus,
     status: args.status,
   });
   lines.push(separator(`Tool Call: ${args.label}`, color));
   lines.push(
-    `  ${formatLifecycleLabel(displayStatus, color)} ${cyan(cmd || args.label, color)}`,
+    `  ${formatLifecycleLabel(displayStatus, color)} ${cyan(args.title || args.label, color)}`,
   );
 
-  const durationLine = formatDurationLine(
-    args.durationMs,
-    args.duration,
-    color,
-  );
+  const durationLine = formatDurationLine(args.durationMs, color);
   if (durationLine) {
     lines.push(durationLine);
   }
@@ -276,13 +270,12 @@ function formatToolCall(
   return formatExecutionCall(
     {
       approvalStatus: msg.approvalStatus,
-      command: msg.command,
-      duration: msg.duration,
       durationMs: msg.durationMs,
-      exitCode: msg.exitCode,
+      exitCode: null,
       label: msg.toolName,
       output: msg.output,
       status: msg.status,
+      title: formatToolCallCommand(msg.toolName, msg.toolArgs),
     },
     verbose,
     color,
@@ -297,13 +290,12 @@ function formatCommand(
   return formatExecutionCall(
     {
       approvalStatus: msg.approvalStatus,
-      command: msg.command,
-      duration: msg.duration,
       durationMs: msg.durationMs,
       exitCode: msg.exitCode,
       label: "exec_command",
       output: msg.output,
       status: msg.status,
+      title: msg.command,
     },
     verbose,
     color,
@@ -440,7 +432,7 @@ function formatDelegation(
     separator(`${verb} subagent: ${formatDelegationSummary(msg)}`, color),
   );
 
-  const durationLine = formatDurationLine(msg.durationMs, msg.duration, color);
+  const durationLine = formatDurationLine(msg.durationMs, color);
   if (durationLine) {
     lines.push(durationLine);
   }

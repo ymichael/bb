@@ -143,7 +143,7 @@ describe("parseExecLifecycleEvent", () => {
     };
 
     const result = parseExecLifecycleEvent(decoded, meta);
-    expect(result?.call.parsedCmd).toEqual([
+    expect(result?.call.parsedIntents).toEqual([
       {
         type: "read",
         cmd: "sed -n '1,260p' packages/excalidraw/components/SearchMenu.tsx",
@@ -194,7 +194,6 @@ describe("parseExecLifecycleEvent", () => {
     );
 
     expect(result?.call.durationMs).toBe(400);
-    expect(result?.call.duration).toBe("400ms");
   });
 
   it("does not synthesize durationMs for a started call without completion", () => {
@@ -219,7 +218,6 @@ describe("parseExecLifecycleEvent", () => {
     );
 
     expect(result?.call.durationMs).toBeUndefined();
-    expect(result?.call.duration).toBeUndefined();
   });
 });
 
@@ -257,9 +255,21 @@ describe("parseToolCallLifecycleEvent", () => {
 
     const result = parseToolCallLifecycleEvent(decoded, meta);
     expect(result?.kind).toBe("end");
-    expect(result?.call.command).toBe(
-      "TodoWrite 2 todos - 1 in progress, 1 completed: Editing notes/todo.txt",
-    );
+    expect(result?.call.toolName).toBe("TodoWrite");
+    expect(result?.call.toolArgs).toEqual({
+      todos: [
+        {
+          content: "Read notes/context.txt",
+          status: "completed",
+          activeForm: "Reading notes/context.txt",
+        },
+        {
+          content: "Edit notes/todo.txt",
+          status: "in_progress",
+          activeForm: "Editing notes/todo.txt",
+        },
+      ],
+    });
     expect(result?.call.output).toBe("Todo list updated");
   });
 
@@ -284,7 +294,7 @@ describe("parseToolCallLifecycleEvent", () => {
     const result = parseToolCallLifecycleEvent(decoded, meta);
     expect(result?.kind).toBe("begin");
     expect(result?.call.messageKind).toBe("delegation");
-    expect(result?.call.command).toBe("Agent [Explore] Explore docs directory");
+    expect(result?.call.toolArgs).toBeUndefined();
     expect(result?.call.subagentType).toBe("Explore");
     expect(result?.call.description).toBe("Explore docs directory");
   });
@@ -345,7 +355,7 @@ describe("parseToolCallLifecycleEvent", () => {
     };
 
     const result = parseToolCallLifecycleEvent(decoded, meta);
-    expect(result?.call.parsedCmd).toEqual([
+    expect(result?.call.parsedIntents).toEqual([
       {
         type: "read",
         cmd: "Read src/app.ts",
@@ -373,7 +383,7 @@ describe("parseToolCallLifecycleEvent", () => {
     };
 
     const result = parseToolCallLifecycleEvent(decoded, meta);
-    expect(result?.call.parsedCmd).toEqual([
+    expect(result?.call.parsedIntents).toEqual([
       {
         type: "search",
         cmd: "Grep 'TODO' in src",
@@ -427,7 +437,6 @@ describe("parseToolCallLifecycleEvent", () => {
     );
 
     expect(result?.call.durationMs).toBe(400);
-    expect(result?.call.duration).toBe("400ms");
   });
 
   it("preserves provider durationMs instead of overwriting it", () => {
@@ -475,6 +484,5 @@ describe("parseToolCallLifecycleEvent", () => {
     );
 
     expect(result?.call.durationMs).toBe(150);
-    expect(result?.call.duration).toBe("150ms");
   });
 });
