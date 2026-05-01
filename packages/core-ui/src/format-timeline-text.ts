@@ -20,7 +20,7 @@ import type {
 import { buildTimelineAssistantStepSummaryLabel } from "./timeline-assistant-step-summary.js";
 import { durationToCompactString, durationToString } from "./format-helpers.js";
 import { taskStatusGlyph } from "./task-status.js";
-import { buildCollapsedTimelineRows } from "./thread-detail-rows.js";
+import { buildCollapsedGroupedTimelineRows } from "./timeline-grouping.js";
 import {
   getCommandExitCodeLine,
   getPermissionGrantDisplayStatus,
@@ -447,7 +447,7 @@ function formatDelegation(
     return lines.join("\n");
   }
 
-  for (const row of buildCollapsedTimelineRows(msg.childProjection)) {
+  for (const row of buildCollapsedGroupedTimelineRows(msg.childProjection)) {
     const block = formatTimelineRow(row, true, color);
     if (block) {
       lines.push(indentBlock(block, "  "));

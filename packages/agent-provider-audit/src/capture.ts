@@ -8,7 +8,7 @@ import {
 } from "@bb/agent-runtime";
 import type { AgentRuntimeCaptureEntry } from "@bb/agent-runtime/capture";
 import {
-  buildTimelineRows,
+  buildGroupedTimelineRows,
   decodeRow,
   formatTimelineAsText,
   toViewMessages,
@@ -1146,7 +1146,7 @@ export function buildBundle(args: {
     threadStatus: "idle",
     includeDebugRawEvents: true,
   });
-  const timelineRows = buildTimelineRows(
+  const timelineRows = buildGroupedTimelineRows(
     toViewProjection(decodedRows, {
       threadStatus: "idle",
       turnMessageDetail: "full",

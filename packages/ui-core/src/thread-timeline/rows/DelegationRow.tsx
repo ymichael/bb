@@ -1,7 +1,7 @@
 import { useMemo, type ReactNode } from "react";
 import {
-  buildCollapsedTimelineRows,
-  buildTimelineRows,
+  buildCollapsedGroupedTimelineRows,
+  buildGroupedTimelineRows,
   findLatestActivityRowId,
   getDelegationSummaryParts,
 } from "@bb/core-ui";
@@ -94,8 +94,8 @@ export function DelegationRow({
   const nestedRows = useMemo(
     () =>
       isSubagentPending
-        ? buildTimelineRows(message.childProjection)
-        : buildCollapsedTimelineRows(message.childProjection),
+        ? buildGroupedTimelineRows(message.childProjection)
+        : buildCollapsedGroupedTimelineRows(message.childProjection),
     [message.childProjection, isSubagentPending],
   );
   const nestedLatestActivityRowId = useMemo(

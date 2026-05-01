@@ -114,10 +114,10 @@ export {
 export { extractThreadContextWindowUsage } from "./thread-context-window-usage.js";
 
 export {
-  buildCollapsedTimelineRows,
-  buildTimelineRows,
-} from "./thread-detail-rows.js";
-export type { BuildTimelineRowsOptions } from "./thread-detail-rows.js";
+  buildCollapsedGroupedTimelineRows,
+  buildGroupedTimelineRows,
+} from "./timeline-grouping.js";
+export type { GroupedTimelineRowsOptions } from "./timeline-grouping.js";
 export {
   flattenProjectionMessages,
   flattenProjectionMessagesDeep,

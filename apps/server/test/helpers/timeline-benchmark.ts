@@ -15,7 +15,7 @@ import {
   upsertHost,
 } from "@bb/db";
 import {
-  buildTimelineRows,
+  buildGroupedTimelineRows,
   TIMELINE_NOISE_EVENT_TYPES,
   toViewMessages,
   toViewProjection,
@@ -177,7 +177,7 @@ function createTimelineBenchmarkScenario(
       threadType: thread.type,
     });
   const buildFullSummaryRowsOnly = () =>
-    buildTimelineRows(
+    buildGroupedTimelineRows(
       toViewProjection(decodedSummaryEvents, {
         threadStatus: thread.status,
         threadType: thread.type,
@@ -188,7 +188,7 @@ function createTimelineBenchmarkScenario(
       },
     );
   const buildSummaryRowsOnly = () =>
-    buildTimelineRows(
+    buildGroupedTimelineRows(
       toViewProjection(decodedSummaryEvents, {
         threadStatus: thread.status,
         threadType: thread.type,

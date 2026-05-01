@@ -19,7 +19,7 @@ import type {
 } from "@bb/domain";
 import type { ToViewProjectionOptions } from "@bb/domain";
 import {
-  buildTimelineRows,
+  buildGroupedTimelineRows,
   decodeRow,
   flattenProjectionMessagesDeep,
   formatTimelineAsText,
@@ -1052,7 +1052,7 @@ export function renderTimelineFixture(
 ): RenderedTimelineFixture {
   const decodedEvents = args.events.map((row) => decodeRow(row));
   const projection = toViewProjection(decodedEvents, args.projectionOptions);
-  const rows = buildTimelineRows(projection, {
+  const rows = buildGroupedTimelineRows(projection, {
     includeNestedRows: args.includeToolGroupMessages ?? true,
   });
   const messages = flattenProjectionMessagesDeep(projection);

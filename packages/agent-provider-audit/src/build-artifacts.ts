@@ -2,7 +2,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  buildTimelineRows,
+  buildGroupedTimelineRows,
   decodeRow,
   extractThreadContextWindowUsage,
   formatTimelineAsText,
@@ -394,7 +394,7 @@ function buildPrefixSnapshot(
     threadStatus,
     turnMessageDetail: "summary",
   });
-  const timelineRows = buildTimelineRows(projection);
+  const timelineRows = buildGroupedTimelineRows(projection);
   const timelineText = formatTimelineAsText(timelineRows, {
     color: false,
     verbose: false,

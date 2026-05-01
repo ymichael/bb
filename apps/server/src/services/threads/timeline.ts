@@ -1,5 +1,5 @@
 import {
-  buildTimelineRows,
+  buildGroupedTimelineRows,
   extractThreadContextWindowUsage,
   flattenProjectionMessagesDeep,
   TIMELINE_NOISE_EVENT_TYPES,
@@ -122,7 +122,7 @@ function resolveTimelineTurnSummaryDetailsRows(
   projection: ViewProjection,
   options: TimelineSourceSeqRange,
 ): TimelineTurnSummaryDetailsResolution {
-  const nestedRows = buildTimelineRows(projection, {
+  const nestedRows = buildGroupedTimelineRows(projection, {
     includeNestedRows: true,
   });
   const matchingTurnSummary = findMatchingTurnSummaryRow(nestedRows, options);
@@ -285,7 +285,7 @@ export function buildThreadTimeline(
     threadType: thread.type,
     turnMessageDetail: "summary",
   });
-  const rows = buildTimelineRows(projection, {
+  const rows = buildGroupedTimelineRows(projection, {
     includeNestedRows,
   });
 
