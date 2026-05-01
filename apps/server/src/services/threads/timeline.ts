@@ -1,25 +1,18 @@
 import {
-  buildTimelineRows,
+  buildManagerTimelineRowsFromEvents,
+  buildTimelineRowsFromEvents,
   extractThreadContextWindowUsage,
-  flattenProjectionMessagesDeep,
   TIMELINE_NOISE_EVENT_TYPES,
-  toViewProjectionEntries,
-  toViewProjection,
+  resolveTimelineTurnSummaryDetailsFromEvents,
   type ThreadEventWithMeta,
 } from "@bb/thread-view";
-import type {
-  Thread,
-  ViewMessage,
-  ViewProjection,
-  ViewTimelineEntry,
-} from "@bb/domain";
+import type { Thread } from "@bb/domain";
 import {
   createBufferedTextInstanceKey,
   resolveBufferedTextIdentity,
 } from "@bb/domain";
 import type {
   ThreadTimelineResponse,
-  TimelineRow,
   TimelineTurnSummaryDetailsResponse,
 } from "@bb/server-contract";
 import {
@@ -47,96 +40,6 @@ interface BuildThreadTimelineOptions {
 interface BuildTimelineTurnSummaryDetailsOptions extends TimelineSourceSeqRange {
   isDevelopment: boolean;
   showAllManagerEvents?: boolean;
-}
-
-type TimelineTurnSummaryDetailsResolution =
-  | {
-      kind: "matched";
-      rows: TimelineRow[];
-    }
-  | {
-      kind: "missing-match";
-    }
-  | {
-      kind: "ungrouped";
-      rows: TimelineRow[];
-    };
-
-/**
- * For manager threads in the default (non-debug) view, only show user messages,
- * message_user output, and lifecycle operations (provisioning, compaction).
- * Everything else (assistant text, delegations, other tool calls, etc.) is
- * internal manager machinery.
- */
-function isManagerConversationMessage(message: ViewMessage): boolean {
-  if (message.kind === "user") return true;
-  if (message.kind === "operation") return true;
-  if (
-    message.kind === "assistant-text" &&
-    message.isManagerUserMessage === true
-  ) {
-    return true;
-  }
-  return false;
-}
-
-function buildManagerConversationRows(
-  projection: ViewProjection,
-): TimelineRow[] {
-  const entries: ViewTimelineEntry[] = flattenProjectionMessagesDeep(projection)
-    .filter(isManagerConversationMessage)
-    .map((message) => ({ kind: "message", message }));
-  return buildTimelineRows({
-    entries,
-    state: projection.state,
-  });
-}
-
-type TimelineTurnRow = Extract<TimelineRow, { kind: "turn" }>;
-
-function findMatchingTurnSummaryRow(
-  rows: TimelineRow[],
-  options: TimelineSourceSeqRange,
-): TimelineTurnRow | null {
-  return (
-    rows.find(
-      (row): row is TimelineTurnRow =>
-        row.kind === "turn" &&
-        row.sourceSeqStart === options.sourceSeqStart &&
-        row.sourceSeqEnd === options.sourceSeqEnd,
-    ) ?? null
-  );
-}
-
-function hasTurnSummaryRows(rows: TimelineRow[]): boolean {
-  return rows.some((row) => row.kind === "turn");
-}
-
-function resolveTimelineTurnSummaryDetailsRows(
-  projection: ViewProjection,
-  options: TimelineSourceSeqRange,
-): TimelineTurnSummaryDetailsResolution {
-  const nestedRows = buildTimelineRows(projection, {
-    includeNestedRows: true,
-  });
-  const matchingTurnSummary = findMatchingTurnSummaryRow(nestedRows, options);
-  if (matchingTurnSummary) {
-    return {
-      kind: "matched",
-      rows: matchingTurnSummary.children ?? [],
-    };
-  }
-
-  if (hasTurnSummaryRows(nestedRows)) {
-    return {
-      kind: "missing-match",
-    };
-  }
-
-  return {
-    kind: "ungrouped",
-    rows: nestedRows,
-  };
 }
 
 export function toThreadEventWithMeta(
@@ -255,16 +158,19 @@ export function buildThreadTimeline(
   });
 
   if (isDefaultManagerView) {
-    const projection = toViewProjectionEntries(decodedEvents, {
-      includeInternalSystemMessages: options.showAllManagerEvents,
-      includeProviderUnhandledOperations,
-      threadStatus: thread.status,
-      threadType: thread.type,
-      turnMessageDetail: "full",
+    const timeline = buildManagerTimelineRowsFromEvents({
+      events: decodedEvents,
+      options: {
+        includeInternalSystemMessages: options.showAllManagerEvents,
+        includeProviderUnhandledOperations,
+        threadStatus: thread.status,
+        threadType: thread.type,
+        turnMessageDetail: "full",
+      },
     });
     return {
-      rows: buildManagerConversationRows(projection),
-      activeThinking: null,
+      rows: timeline.rows,
+      activeThinking: timeline.activeThinking,
       contextWindowUsage:
         extractThreadContextWindowUsage(
           contextWindowUsageRows.map((row) => parseStoredEventRow(row)),
@@ -272,20 +178,21 @@ export function buildThreadTimeline(
     };
   }
 
-  const projection = toViewProjection(decodedEvents, {
-    includeInternalSystemMessages: options.showAllManagerEvents,
-    includeProviderUnhandledOperations,
-    threadStatus: thread.status,
-    threadType: thread.type,
-    turnMessageDetail: includeNestedRows ? "full" : "summary",
-  });
-  const rows = buildTimelineRows(projection, {
-    includeNestedRows,
+  const timeline = buildTimelineRowsFromEvents({
+    events: decodedEvents,
+    options: {
+      includeInternalSystemMessages: options.showAllManagerEvents,
+      includeNestedRows,
+      includeProviderUnhandledOperations,
+      threadStatus: thread.status,
+      threadType: thread.type,
+      turnMessageDetail: includeNestedRows ? "full" : "summary",
+    },
   });
 
   return {
-    rows,
-    activeThinking: projection.state.activeThinking,
+    rows: timeline.rows,
+    activeThinking: timeline.activeThinking,
     contextWindowUsage:
       extractThreadContextWindowUsage(
         contextWindowUsageRows.map((row) => parseStoredEventRow(row)),
@@ -318,21 +225,19 @@ export function buildTimelineTurnSummaryDetails(
       afterSequence: options.sourceSeqEnd,
       clientRequestSequences,
     });
-  const projection = toViewProjectionEntries(
-    [...exactEventRows, ...acceptedInputRows].map((row) =>
+  const resolution = resolveTimelineTurnSummaryDetailsFromEvents({
+    events: [...exactEventRows, ...acceptedInputRows].map((row) =>
       toThreadEventWithMeta(row),
     ),
-    {
+    options: {
       includeInternalSystemMessages: options.showAllManagerEvents,
       includeProviderUnhandledOperations,
+      sourceSeqEnd: options.sourceSeqEnd,
+      sourceSeqStart: options.sourceSeqStart,
       threadStatus: thread.status,
       threadType: thread.type,
       turnMessageDetail: "full",
     },
-  );
-  const resolution = resolveTimelineTurnSummaryDetailsRows(projection, {
-    sourceSeqStart: options.sourceSeqStart,
-    sourceSeqEnd: options.sourceSeqEnd,
   });
 
   if (resolution.kind !== "missing-match") {

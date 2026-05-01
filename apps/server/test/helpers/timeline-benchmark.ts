@@ -15,15 +15,12 @@ import {
   upsertHost,
 } from "@bb/db";
 import {
-  buildTimelineRows,
+  buildTimelineRowsFromEvents,
   TIMELINE_NOISE_EVENT_TYPES,
-  toViewMessages,
-  toViewProjection,
   type ThreadEventWithMeta,
 } from "@bb/thread-view";
 import { replayFixtures } from "@bb/agent-provider-audit";
 import { buildThreadEvent } from "@bb/domain";
-import type { ViewMessage } from "@bb/domain";
 import {
   buildThreadTimeline,
   compactSummaryStoredEventRows,
@@ -48,7 +45,6 @@ export interface TimelineBenchmarkScenario {
   loadContextWindowUsageRows: () => StoredEventRow[];
   compactSummaryStoredRows: () => StoredEventRow[];
   decodeSummaryEvents: () => ThreadEventWithMeta[];
-  projectSummaryMessages: () => ViewMessage[];
   buildSummaryRowsOnly: () => ReturnType<typeof buildThreadTimeline>["rows"];
 }
 
@@ -171,33 +167,26 @@ function createTimelineBenchmarkScenario(
     });
   const decodeSummaryEvents = () =>
     summaryEventRows.map((row) => toThreadEventWithMeta(row));
-  const projectSummaryMessages = () =>
-    toViewMessages(decodedSummaryEvents, {
-      threadStatus: thread.status,
-      threadType: thread.type,
-    });
   const buildFullSummaryRowsOnly = () =>
-    buildTimelineRows(
-      toViewProjection(decodedSummaryEvents, {
+    buildTimelineRowsFromEvents({
+      events: decodedSummaryEvents,
+      options: {
+        includeNestedRows: true,
         threadStatus: thread.status,
         threadType: thread.type,
         turnMessageDetail: "full",
-      }),
-      {
-        includeNestedRows: true,
       },
-    );
+    }).rows;
   const buildSummaryRowsOnly = () =>
-    buildTimelineRows(
-      toViewProjection(decodedSummaryEvents, {
+    buildTimelineRowsFromEvents({
+      events: decodedSummaryEvents,
+      options: {
+        includeNestedRows: false,
         threadStatus: thread.status,
         threadType: thread.type,
         turnMessageDetail: "summary",
-      }),
-      {
-        includeNestedRows: false,
       },
-    );
+    }).rows;
   const summaryBytes = Buffer.byteLength(buildAndSerializeSummary(), "utf8");
   const fullBytes = Buffer.byteLength(
     JSON.stringify({
@@ -219,7 +208,6 @@ function createTimelineBenchmarkScenario(
     loadContextWindowUsageRows,
     compactSummaryStoredRows,
     decodeSummaryEvents,
-    projectSummaryMessages,
     buildSummaryRowsOnly,
   };
 }

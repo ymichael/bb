@@ -251,32 +251,6 @@ export interface ViewPermissionGrantLifecycleMessage extends ViewMessageBase {
   approvalTarget: ViewApprovalTarget;
 }
 
-export const viewTaskStatusValues = [
-  "pending",
-  "active",
-  "completed",
-  "failed",
-] as const;
-export const viewTaskStatusSchema = z.enum(viewTaskStatusValues);
-export type ViewTaskStatus = z.infer<typeof viewTaskStatusSchema>;
-
-export interface ViewTaskEntry {
-  text: string;
-  status: ViewTaskStatus;
-}
-
-export interface ViewTasksMessage extends ViewMessageBase {
-  kind: "tasks";
-  source: "plan" | "todo";
-  callId?: string;
-  status: Extract<
-    ViewMessageStatus,
-    "pending" | "completed" | "error" | "interrupted"
-  >;
-  title: string;
-  tasks: ViewTaskEntry[];
-}
-
 export interface ViewDelegationMessage
   extends ViewMessageBase, ViewDelegationMetadata {
   kind: "delegation";
@@ -316,7 +290,6 @@ export type ViewMessage =
   | ViewFileEditMessage
   | ViewOperationMessage
   | ViewPermissionGrantLifecycleMessage
-  | ViewTasksMessage
   | ViewDelegationMessage
   | ViewErrorMessage
   | ViewDebugRawEventMessage;

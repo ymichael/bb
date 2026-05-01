@@ -324,7 +324,6 @@ export function summarizeReplayResults(
     rawProviderEventCount: bundle.auditReport.summary.rawProviderEventCount,
     translatedThreadEventCount:
       bundle.auditReport.summary.translatedThreadEventCount,
-    viewMessageCount: bundle.auditReport.summary.viewMessageCount,
     timelineRowCount: bundle.auditReport.summary.timelineRowCount,
     debugRawEventCount: bundle.auditReport.summary.debugRawEventCount,
     unexpectedUntranslatedRawEventCount:

@@ -35,7 +35,6 @@ function toLadleFixture(
     scenarioDescription: replayedFixture.fixture.manifest.scenarioDescription,
     threadStatus: "idle",
     timelineRowCount: replayedFixture.bundle.timelineRows.length,
-    viewMessageCount: replayedFixture.bundle.viewMessages.length,
     timelineRows: replayedFixture.bundle.timelineRows,
   };
 }

@@ -8,11 +8,9 @@ import {
 } from "@bb/agent-runtime";
 import type { AgentRuntimeCaptureEntry } from "@bb/agent-runtime/capture";
 import {
-  buildTimelineRows,
-  decodeRow,
+  buildTimelineRowsFromEvents,
+  decodeThreadEventRow,
   formatTimelineAsText,
-  toViewMessages,
-  toViewProjection,
 } from "@bb/thread-view";
 import { buildThreadEvent, buildThreadEventRow, threadScope } from "@bb/domain";
 import type {
@@ -20,6 +18,7 @@ import type {
   ToolCallRequest,
   ToolCallResponse,
 } from "@bb/domain";
+import type { TimelineRow, TimelineSystemRow } from "@bb/server-contract";
 import type { RuntimeThreadExecutionOptions } from "@bb/domain";
 import type {
   ProviderAuditBundle,
@@ -792,17 +791,36 @@ function buildObservedToolCalls(
   });
 }
 
+function flattenTimelineRows(rows: readonly TimelineRow[]): TimelineRow[] {
+  const flattenedRows: TimelineRow[] = [];
+  for (const row of rows) {
+    flattenedRows.push(row);
+    if (row.kind === "turn" && row.children) {
+      flattenedRows.push(...flattenTimelineRows(row.children));
+      continue;
+    }
+    if (row.kind === "work" && row.workKind === "delegation") {
+      flattenedRows.push(...flattenTimelineRows(row.childRows));
+    }
+  }
+  return flattenedRows;
+}
+
+function isDebugSystemRow(row: TimelineRow): row is TimelineSystemRow {
+  return row.kind === "system" && row.systemKind === "debug";
+}
+
 function buildDebugRawEvents(
-  viewMessages: ProviderAuditBundle["auditViewMessages"],
+  timelineRows: readonly TimelineRow[],
 ): ProviderAuditDebugRawEvent[] {
-  return viewMessages
-    .filter((message) => message.kind === "debug/raw-event")
-    .map((message) => ({
-      messageId: message.id,
-      rawType: message.rawType,
-      reason: message.reason,
-      sourceSeqStart: message.sourceSeqStart,
-      sourceSeqEnd: message.sourceSeqEnd,
+  return flattenTimelineRows(timelineRows)
+    .filter(isDebugSystemRow)
+    .map((row) => ({
+      messageId: row.id,
+      rawType: row.title,
+      reason: "unhandled",
+      sourceSeqStart: row.sourceSeqStart,
+      sourceSeqEnd: row.sourceSeqEnd,
     }));
 }
 
@@ -815,9 +833,8 @@ function buildAuditReport(args: {
     AgentRuntimeCaptureEntry,
     { kind: "translated-thread-event" }
   >[];
-  viewMessages: ProviderAuditBundle["viewMessages"];
-  auditViewMessages: ProviderAuditBundle["auditViewMessages"];
   timelineRows: ProviderAuditBundle["timelineRows"];
+  debugTimelineRows: TimelineRow[];
   toolCallRequests: Extract<
     AgentRuntimeCaptureEntry,
     { kind: "tool-call-request" }
@@ -841,7 +858,7 @@ function buildAuditReport(args: {
     untranslatedRawProviderEvents.filter(
       (entry) => entry.classification !== "noise",
     );
-  const debugRawEvents = buildDebugRawEvents(args.auditViewMessages);
+  const debugRawEvents = buildDebugRawEvents(args.debugTimelineRows);
   const observedToolCalls = buildObservedToolCalls(args.rawProviderEvents);
   const normalizedRawEventCount = rawEventKinds
     .filter((entry) => entry.classification === "normalized")
@@ -895,7 +912,6 @@ function buildAuditReport(args: {
     summary: {
       rawProviderEventCount: args.rawProviderEvents.length,
       translatedThreadEventCount: args.translatedCaptures.length,
-      viewMessageCount: args.viewMessages.length,
       timelineRowCount: args.timelineRows.length,
       debugRawEventCount: debugRawEvents.length,
       unexpectedUntranslatedRawEventCount:
@@ -1140,25 +1156,32 @@ export function buildBundle(args: {
     model: args.model,
     threadId: args.manifest.threadId,
   });
-  const decodedRows = threadEventRows.map((row) => decodeRow(row));
-  const viewMessages = toViewMessages(decodedRows, { threadStatus: "idle" });
-  const auditViewMessages = toViewMessages(decodedRows, {
-    threadStatus: "idle",
-    includeDebugRawEvents: true,
-  });
-  const timelineRows = buildTimelineRows(
-    toViewProjection(decodedRows, {
+  const decodedRows = threadEventRows.map((row) =>
+    decodeThreadEventRow(row),
+  );
+  const timelineRows = buildTimelineRowsFromEvents({
+    events: decodedRows,
+    options: {
       threadStatus: "idle",
       turnMessageDetail: "summary",
-    }),
-  );
-  const verboseTimelineRows = buildTimelineRows(
-    toViewProjection(decodedRows, {
+    },
+  }).rows;
+  const verboseTimelineRows = buildTimelineRowsFromEvents({
+    events: decodedRows,
+    options: {
+      includeNestedRows: true,
       threadStatus: "idle",
       turnMessageDetail: "full",
-    }),
-    { includeNestedRows: true },
-  );
+    },
+  }).rows;
+  const debugTimelineRows = buildTimelineRowsFromEvents({
+    events: decodedRows,
+    options: {
+      includeDebugRawEvents: true,
+      threadStatus: "idle",
+      turnMessageDetail: "summary",
+    },
+  }).rows;
   const timelineText = formatTimelineAsText(timelineRows, {
     verbose: false,
     color: false,
@@ -1170,9 +1193,8 @@ export function buildBundle(args: {
   const auditReport = buildAuditReport({
     rawProviderEvents,
     translatedCaptures,
-    viewMessages,
-    auditViewMessages,
     timelineRows,
+    debugTimelineRows,
     toolCallRequests,
     toolCallResults,
     providerStderr,
@@ -1191,8 +1213,6 @@ export function buildBundle(args: {
     processLifecycle,
     threadEvents,
     threadEventRows,
-    viewMessages,
-    auditViewMessages,
     timelineRows,
     timelineText,
     timelineVerboseRows: verboseTimelineRows,
@@ -1223,16 +1243,6 @@ export function writeBundle(bundle: ProviderAuditBundle): void {
     bundle.manifest.outputDir,
     "thread-event-rows.json",
     bundle.threadEventRows,
-  );
-  writeJson(
-    bundle.manifest.outputDir,
-    "view-messages.json",
-    bundle.viewMessages,
-  );
-  writeJson(
-    bundle.manifest.outputDir,
-    "view-messages.audit.json",
-    bundle.auditViewMessages,
   );
   writeJson(
     bundle.manifest.outputDir,

@@ -18,6 +18,25 @@ the API response and renderers. "Semantic" means source/lifecycle semantics,
 not display-only labels: a row keeps the provider item that owns status,
 approval, output, duration, and identity.
 
+## Current Status
+
+The committed baseline now has the semantic row contract in
+`@bb/server-contract`, the `@bb/thread-view` timeline builder, the server
+timeline response, CLI formatting, and provider-audit replay snapshots on
+semantic rows.
+
+Two important pieces are intentionally still unfinished:
+
+- `@bb/thread-view` still uses the old `ViewMessage`/`ViewProjection` projector
+  internally before converting to semantic rows. That compatibility layer should
+  be replaced by a direct `ThreadEventWithMeta[] -> ThreadTimelineProjection`
+  projector, but it is not a React-renderer prerequisite.
+- React still renders through the current app/UI path. Do not start the React
+  renderer cutover until `plans/ui-core-design-system.md` has been completed.
+
+Non-React cleanup is allowed before the React cutover when it removes dead code,
+fixes stale package boundaries, or makes audit/server/CLI behavior clearer.
+
 ## Package Boundaries
 
 - `@bb/domain` owns durable domain facts only: persisted event schemas,

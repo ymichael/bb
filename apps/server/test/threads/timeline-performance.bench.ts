@@ -37,10 +37,6 @@ describe("/timeline performance", () => {
       scenario.decodeSummaryEvents();
     });
 
-    bench(`project summary messages ${scenario.id}`, () => {
-      scenario.projectSummaryMessages();
-    });
-
     bench(`build summary rows ${scenario.id}`, () => {
       scenario.buildSummaryRowsOnly();
     });

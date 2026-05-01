@@ -190,7 +190,6 @@ function getMessageStatus(message: ViewMessage): ViewMessageStatus {
     case "web-search":
     case "web-fetch":
     case "file-edit":
-    case "tasks":
     case "delegation":
     case "permission-grant-lifecycle":
       return message.status;

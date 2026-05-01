@@ -188,18 +188,17 @@ describe("@bb/agent-provider-audit fixture replay", () => {
     );
 
     expect(delegation).toBeDefined();
-    expect(delegation?.childMessageCount).toBeGreaterThan(0);
+    expect(delegation?.childRowCount).toBeGreaterThan(0);
     expect(delegation?.hasChildToolActivity).toBe(true);
   });
 
-  it("exports shared React story data for the checked-in fixtures", () => {
+  it("exports generated fixture data for the checked-in fixtures", () => {
     const storyData = checkedInArtifact.ladleStoryData;
 
     expect(
       storyData.fixtures.map((fixture) => ({
         id: fixture.id,
         timelineRowCount: fixture.timelineRowCount,
-        viewMessageCount: fixture.viewMessageCount,
       })),
     ).toMatchSnapshot();
 

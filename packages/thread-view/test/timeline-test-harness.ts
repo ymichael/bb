@@ -18,12 +18,12 @@ import type {
 import type { TimelineRow } from "@bb/server-contract";
 import type { ToViewProjectionOptions } from "@bb/domain";
 import {
-  buildTimelineRows,
-  decodeRow,
-  flattenProjectionMessagesDeep,
+  buildTimelineRowsFromEvents,
+  decodeThreadEventRow,
   formatTimelineAsText,
-  toViewProjection,
 } from "../src/index.js";
+import { flattenProjectionMessagesDeep } from "../src/projection-flatten.js";
+import { toViewProjection } from "../src/to-view-messages.js";
 import type { ThreadEventWithMeta } from "../src/to-view-messages.js";
 
 export interface RenderTimelineFixtureArgs {
@@ -344,7 +344,9 @@ export interface TimelineEventFactory {
 }
 
 export function fromRows(rows: ThreadEventRow[]): ThreadEventWithMeta[] {
-  return rows.map((row) => decodeRow(withExplicitApprovalStatus(row)));
+  return rows.map((row) =>
+    decodeThreadEventRow(withExplicitApprovalStatus(row)),
+  );
 }
 
 export function flattenProjectionMessages(
@@ -1014,7 +1016,9 @@ export function createTimelineEventFactory(
 export function renderTimelineFixture(
   args: RenderTimelineFixtureArgs,
 ): RenderedTimelineFixture {
-  const decodedEvents = args.events.map((row) => decodeRow(row));
+  const decodedEvents = args.events.map((row) =>
+    decodeThreadEventRow(row),
+  );
   const includeNestedRows = args.includeNestedRows ?? true;
   const projection = toViewProjection(decodedEvents, {
     ...args.projectionOptions,
@@ -1022,9 +1026,16 @@ export function renderTimelineFixture(
       ? "full"
       : args.projectionOptions.turnMessageDetail,
   });
-  const rows = buildTimelineRows(projection, {
-    includeNestedRows,
-  });
+  const rows = buildTimelineRowsFromEvents({
+    events: decodedEvents,
+    options: {
+      ...args.projectionOptions,
+      includeNestedRows,
+      turnMessageDetail: includeNestedRows
+        ? "full"
+        : args.projectionOptions.turnMessageDetail,
+    },
+  }).rows;
   const messages = flattenProjectionMessagesDeep(projection);
   const text = formatTimelineAsText(rows, {
     color: false,

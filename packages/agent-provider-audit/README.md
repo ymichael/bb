@@ -1,10 +1,11 @@
 # Provider Audit
 
-`@bb/agent-provider-audit` is the offline fidelity harness for provider rendering work.
+`@bb/agent-provider-audit` is the offline fidelity harness for provider
+timeline work.
 
-It exists to answer a narrow question: given real provider traces, what do we store, what do we project into `ViewMessage`, and what text would a user see in the CLI-style timeline?
-
-It now also answers the React-side version of the same question: what does the shared thread timeline UI render for those same fixture-backed `ViewMessage`s?
+It exists to answer a narrow question: given real provider traces, what do we
+store, what semantic timeline rows do we project, and what text would a user see
+in the CLI-style timeline?
 
 ## What Is Tracked
 
@@ -24,10 +25,9 @@ That gives us enough data to regenerate:
 
 - `ThreadEvent[]`
 - `ThreadEventRow[]`
-- `ViewMessage[]`
-- timeline rows
+- semantic timeline rows
 - CLI-friendly text via `formatTimelineAsText()`
-- shared React timeline story data
+- generated fixture data for future visual review
 - audit summaries
 
 The package build materializes the expensive replay-derived data once:
@@ -39,19 +39,19 @@ Both files are generated and ignored by git.
 
 ## Why This Package Exists
 
-The rendering stack has a few seams:
+The rendering stack has a few boundaries:
 
 1. `@bb/agent-runtime` captures provider-specific events and translates some of them into provider-agnostic `ThreadEvent`s.
 2. Events are stored and later decoded into `ThreadEventRow`s.
-3. `@bb/thread-view` projects those rows into raw timeline rows.
-4. `@bb/thread-view` builds shared view summaries and CLI text from those rows.
+3. `@bb/thread-view` projects those rows into semantic timeline rows.
+4. `@bb/thread-view` builds shared grouping summaries and CLI text from those
+   rows.
 
 This package gives us a stable offline corpus so we can improve that pipeline without repeatedly spending live provider turns.
 
-The same replay output now feeds two review loops:
-
-- CLI text via `formatTimelineAsText()`
-- shared React timeline stories rendered through `@bb/ui-core`
+The replay output currently feeds the CLI/audit review loop via
+`formatTimelineAsText()`. React visual review is intentionally deferred until
+the `ui-core` design-system work gives that renderer a stable foundation.
 
 ## Corpora
 
@@ -100,53 +100,36 @@ The current rendering pass on top of this corpus now does two things:
 - shell-style repo exploration keeps command/tool identity and carries parsed activity intents, so shared view formatting can summarize exploration without hiding the underlying shell command
 - Claude `Agent` outputs are summarized as compact subagent reports instead of dumping the full report body
 
-The next rendering pass adds two first-class view concepts on top of the same
-stored thread events:
+The current semantic timeline keeps tasks/todos/plans out of the timeline. They
+will move to a separate surface later.
 
-- `tasks`
-  - Codex `turn/plan/updated` and Claude `TodoWrite` now normalize into the
-    same user-facing task/todo surface
-- `delegation`
-  - subagent invocations now render as their own parent row instead of just
-    looking like another generic tool call
+Delegation is a first-class work row: subagent invocations render as parent rows
+with child timeline progress, rather than looking like generic tool calls.
 
 When parent-child linkage is present, delegated child activity can now nest
 under that parent row recursively. The checked-in Excalidraw Claude corpus does
 carry non-null `parent_tool_use_id`, and the replay path now preserves that
 linkage so realistic delegated child activity nests under the parent `Agent`
-row in both the CLI text output and the shared React timeline. Codex protocol
-support for child collaboration threads is also understood, but the current
-Excalidraw Codex fixtures do not yet exercise `collabAgentToolCall`.
-
-The shared React timeline also now collapses consecutive tool-heavy runs
-anywhere in a turn, so late validation/probe sequences show up as one
-expandable summary row instead of a long stack of sibling entries.
-
-The reusable React timeline renderer also now lives in `@bb/ui-core` rather
-than `apps/app`, which means `apps/app` and the provider-audit Ladle stories
-render the same timeline components.
+row in the CLI text output. Codex protocol support for child collaboration
+threads is also understood, but the current Excalidraw Codex fixtures do not yet
+exercise `collabAgentToolCall`.
 
 ## Cross-Package Data Flows
 
-Some user-facing timeline concepts now intentionally span multiple packages:
+Some user-facing timeline concepts intentionally span multiple packages:
 
-- task updates
-  - adapters normalize provider-specific plan/todo signals into
-    `turn/plan/updated` or `TodoWrite`-shaped thread events
-  - `@bb/core-ui` projects those into `tasks`
-  - CLI text and React rows both render that same projected message shape
 - delegation
   - adapters preserve parent tool-call linkage and structured subagent metadata
-  - `to-view-messages()` projects parent rows plus nested child activity
-  - CLI and React both render the same nested delegation tree
+  - `@bb/thread-view` projects parent rows plus nested child activity
+  - CLI/audit text renders the same nested semantic tree
 - tool progress
   - providers emit command output deltas, shared `item/toolCall/progress`, or
     provider-specific progress signals
-  - `ExecLifecycleContext` in `@bb/core-ui` keeps enough timing state to merge
-    those partial updates into one coherent tool row with synthesized duration
+  - `@bb/thread-view` merges those partial updates into coherent command/tool
+    rows with lifecycle state and duration
 
-When any of these flows change, validation has to cover all three layers:
-adapter translation, `ViewMessage` projection, and final CLI/React rendering.
+When any of these flows change, validation has to cover adapter translation,
+semantic timeline projection, and final CLI/audit text.
 
 ## Shell Parsing Rationale
 
@@ -247,7 +230,6 @@ That output root will contain generated files like:
 
 - `thread-events.json`
 - `thread-event-rows.json`
-- `view-messages.json`
 - `timeline-rows.json`
 - `timeline.txt`
 - `timeline.verbose.txt`
@@ -256,61 +238,18 @@ That output root will contain generated files like:
 `timeline.txt` is the CLI-aligned minimal text view. `timeline.verbose.txt` keeps
 the full expanded text for deeper debugging.
 
-## React Visual Audit
+## Generated Fixture Data
 
-Build the package to generate replayed story data for the checked-in fixtures:
+Build the package to generate replayed fixture data for the checked-in fixtures:
 
 ```bash
 pnpm exec turbo run build --filter=@bb/agent-provider-audit
 ```
 
-That writes a generated module to `packages/agent-provider-audit/.ladle/fixture-story-data.ts`.
-It is intentionally ignored by git.
-
-Open the shared React timeline stories:
-
-```bash
-pnpm --dir packages/agent-provider-audit ladle
-```
-
-Build the static Ladle site:
-
-```bash
-pnpm --dir packages/agent-provider-audit ladle:build
-```
-
-Those stories replay the Excalidraw fixture corpus into the shared timeline
-renderer from `@bb/ui-core`, so they exercise the same presentation layer used
-by `apps/app`.
-
-### Optional: Drive Ladle With `dev-browser`
-
-For visual iteration in a real browser, `dev-browser` works well against the
-fixture-backed Ladle stories:
-
-```bash
-npm install -g dev-browser
-dev-browser install
-pnpm --dir packages/agent-provider-audit ladle
-```
-
-Then point `dev-browser` at the running Ladle server:
-
-```bash
-dev-browser --headless <<'EOF'
-const page = await browser.getPage("provider-audit-ladle");
-await page.goto(
-  "http://localhost:61000/?story=excalidraw-timeline--claude-code-bugfix",
-  { waitUntil: "networkidle" },
-);
-console.log(await page.title());
-const snapshot = await page.snapshotForAI({ depth: 2, timeout: 10000 });
-console.log(snapshot.full);
-EOF
-```
-
-That gives a persistent Playwright-backed browser you can reuse while iterating
-on the shared React timeline rows.
+That writes the replay artifact and a generated fixture-data module under
+`packages/agent-provider-audit/.ladle/fixture-story-data.ts`. The generated
+module is retained for the future React visual audit, but there is no current
+React renderer review loop in this package.
 
 ## Testing
 
@@ -320,7 +259,7 @@ The package test suite does three things:
 
 - validates the build-generated replay artifact and snapshots a compact summary
 - verifies replay output can be written on demand for inspection
-- verifies build-generated React story data exists for Ladle
+- verifies generated fixture data exists for future visual review
 
 The snapshot is intentionally compact. We do not commit full generated outputs back into the corpus.
 
@@ -329,14 +268,16 @@ Automated replay is the baseline, not the whole review:
 - replay tests should pass
 - coverage issues should be zero for the checked-in corpus
 - CLI verbose timeline snapshots should be spot-checked for new or changed fixtures
-- package build should regenerate Ladle story data cleanly for the full corpus
-- when a fixture wave changes rendering semantics, do a real browser pass in Ladle rather than relying only on generated story data
+- package build should regenerate fixture data cleanly for the full corpus
+- when the React renderer work resumes, add a real browser pass on top of these
+  fixtures rather than relying only on generated data
 
 The practical split is:
 
 - automated validation catches classification regressions and snapshot drift
 - manual CLI review catches weak wording and noisy rows
-- manual React review catches layout, grouping, and visual hierarchy problems
+- future manual React review catches layout and visual hierarchy problems after
+  the `ui-core` design-system work lands
 
 ## Current Direction
 

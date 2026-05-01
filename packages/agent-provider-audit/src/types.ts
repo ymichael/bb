@@ -4,7 +4,6 @@ import type {
   ThreadExecutionOptions,
   ThreadEvent,
   ThreadEventRow,
-  ViewMessage,
   ToolCallResponse,
 } from "@bb/domain";
 import type { TimelineRow } from "@bb/server-contract";
@@ -164,7 +163,6 @@ export interface ProviderAuditReport {
   summary: {
     rawProviderEventCount: number;
     translatedThreadEventCount: number;
-    viewMessageCount: number;
     timelineRowCount: number;
     debugRawEventCount: number;
     unexpectedUntranslatedRawEventCount: number;
@@ -231,8 +229,6 @@ export interface ProviderAuditBundle {
   >;
   threadEvents: ThreadEvent[];
   threadEventRows: ThreadEventRow[];
-  viewMessages: ViewMessage[];
-  auditViewMessages: ViewMessage[];
   timelineRows: TimelineRow[];
   timelineText: string;
   timelineVerboseRows: TimelineRow[];
@@ -356,7 +352,6 @@ export interface ProviderAuditLadleFixture {
   scenarioDescription: string;
   threadStatus: string;
   timelineRowCount: number;
-  viewMessageCount: number;
   timelineRows: TimelineRow[];
 }
 

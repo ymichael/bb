@@ -112,7 +112,7 @@ function buildEventMeta(row: ThreadEventRow): EventMeta {
   };
 }
 
-export function decodeRow(row: ThreadEventRow): {
+export function decodeThreadEventRow(row: ThreadEventRow): {
   event: ThreadEvent;
   meta: EventMeta;
 } {

@@ -1,126 +1,102 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`@bb/agent-provider-audit fixture replay > exports shared React story data for the checked-in fixtures 1`] = `
+exports[`@bb/agent-provider-audit fixture replay > exports generated fixture data for the checked-in fixtures 1`] = `
 [
   {
     "id": "dev-replays/claude-code/cap_mom0xkzo_3atb06ph",
     "timelineRowCount": 3,
-    "viewMessageCount": 22,
   },
   {
     "id": "dev-replays/codex/cap_mol1xza1_zclp97wz",
     "timelineRowCount": 3,
-    "viewMessageCount": 234,
   },
   {
     "id": "excalidraw/claude-code/collab-startup-explanation",
     "timelineRowCount": 6,
-    "viewMessageCount": 6,
   },
   {
     "id": "excalidraw/claude-code/eyedropper-browser-compat",
     "timelineRowCount": 8,
-    "viewMessageCount": 85,
   },
   {
     "id": "excalidraw/claude-code/eyedropper-preview-bugfix",
     "timelineRowCount": 6,
-    "viewMessageCount": 37,
   },
   {
     "id": "excalidraw/claude-code/magicframe-feature",
     "timelineRowCount": 5,
-    "viewMessageCount": 79,
   },
   {
     "id": "excalidraw/claude-code/search-bugfix",
     "timelineRowCount": 5,
-    "viewMessageCount": 23,
   },
   {
     "id": "excalidraw/claude-code/search-feature",
     "timelineRowCount": 5,
-    "viewMessageCount": 24,
   },
   {
     "id": "excalidraw/claude-code/ttd-explanation",
     "timelineRowCount": 6,
-    "viewMessageCount": 14,
   },
   {
     "id": "excalidraw/codex/collab-startup-explanation",
     "timelineRowCount": 5,
-    "viewMessageCount": 54,
   },
   {
     "id": "excalidraw/codex/command-output-recovery",
     "timelineRowCount": 3,
-    "viewMessageCount": 4,
   },
   {
     "id": "excalidraw/codex/eyedropper-preview-bugfix",
     "timelineRowCount": 5,
-    "viewMessageCount": 40,
   },
   {
     "id": "excalidraw/codex/magicframe-feature",
     "timelineRowCount": 5,
-    "viewMessageCount": 59,
   },
   {
     "id": "excalidraw/codex/search-bugfix",
     "timelineRowCount": 5,
-    "viewMessageCount": 34,
   },
   {
     "id": "excalidraw/codex/search-feature",
     "timelineRowCount": 5,
-    "viewMessageCount": 38,
   },
   {
     "id": "excalidraw/codex/share-web-compat",
     "timelineRowCount": 5,
-    "viewMessageCount": 81,
   },
   {
     "id": "excalidraw/codex/ttd-explanation",
     "timelineRowCount": 5,
-    "viewMessageCount": 51,
   },
   {
     "id": "excalidraw/pi/collab-startup-explanation",
     "timelineRowCount": 6,
-    "viewMessageCount": 21,
   },
   {
     "id": "excalidraw/pi/command-palette-map",
     "timelineRowCount": 8,
-    "viewMessageCount": 80,
   },
   {
     "id": "excalidraw/pi/eyedropper-preview-bugfix",
     "timelineRowCount": 5,
-    "viewMessageCount": 26,
   },
   {
     "id": "excalidraw/pi/magicframe-feature",
     "timelineRowCount": 7,
-    "viewMessageCount": 97,
   },
   {
     "id": "excalidraw/pi/search-bugfix",
     "timelineRowCount": 5,
-    "viewMessageCount": 19,
   },
   {
     "id": "excalidraw/pi/search-feature",
     "timelineRowCount": 5,
-    "viewMessageCount": 17,
   },
   {
     "id": "excalidraw/pi/ttd-explanation",
     "timelineRowCount": 4,
-    "viewMessageCount": 4,
   },
 ]
 `;
@@ -144,14 +120,6 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
     "timelineRowCount": 3,
     "translatedThreadEventCount": 789,
     "unexpectedUntranslatedRawEventCount": 0,
-    "viewMessageCount": 22,
-    "viewMessageKinds": {
-      "assistant-text": 3,
-      "command": 2,
-      "delegation": 4,
-      "tool-call": 12,
-      "user": 1,
-    },
   },
   {
     "debugRawEventCount": 1,
@@ -171,13 +139,6 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
     "timelineRowCount": 3,
     "translatedThreadEventCount": 3095,
     "unexpectedUntranslatedRawEventCount": 0,
-    "viewMessageCount": 234,
-    "viewMessageKinds": {
-      "assistant-text": 39,
-      "command": 140,
-      "file-edit": 54,
-      "user": 1,
-    },
   },
   {
     "debugRawEventCount": 0,
@@ -198,12 +159,6 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
     "timelineRowCount": 6,
     "translatedThreadEventCount": 13,
     "unexpectedUntranslatedRawEventCount": 0,
-    "viewMessageCount": 6,
-    "viewMessageKinds": {
-      "assistant-text": 2,
-      "error": 2,
-      "user": 2,
-    },
   },
   {
     "debugRawEventCount": 0,
@@ -234,16 +189,6 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
     "timelineRowCount": 8,
     "translatedThreadEventCount": 407,
     "unexpectedUntranslatedRawEventCount": 0,
-    "viewMessageCount": 85,
-    "viewMessageKinds": {
-      "assistant-text": 27,
-      "command": 7,
-      "file-edit": 6,
-      "tool-call": 34,
-      "user": 3,
-      "web-fetch": 5,
-      "web-search": 3,
-    },
   },
   {
     "debugRawEventCount": 0,
@@ -266,16 +211,6 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
     "timelineRowCount": 6,
     "translatedThreadEventCount": 220,
     "unexpectedUntranslatedRawEventCount": 0,
-    "viewMessageCount": 37,
-    "viewMessageKinds": {
-      "assistant-text": 11,
-      "command": 6,
-      "delegation": 1,
-      "error": 1,
-      "file-edit": 3,
-      "tool-call": 13,
-      "user": 2,
-    },
   },
   {
     "debugRawEventCount": 0,
@@ -299,15 +234,6 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
     "timelineRowCount": 5,
     "translatedThreadEventCount": 402,
     "unexpectedUntranslatedRawEventCount": 0,
-    "viewMessageCount": 79,
-    "viewMessageKinds": {
-      "assistant-text": 29,
-      "command": 3,
-      "delegation": 1,
-      "file-edit": 6,
-      "tool-call": 38,
-      "user": 2,
-    },
   },
   {
     "debugRawEventCount": 0,
@@ -331,15 +257,6 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
     "timelineRowCount": 5,
     "translatedThreadEventCount": 267,
     "unexpectedUntranslatedRawEventCount": 0,
-    "viewMessageCount": 23,
-    "viewMessageKinds": {
-      "assistant-text": 8,
-      "command": 8,
-      "delegation": 1,
-      "file-edit": 2,
-      "tool-call": 2,
-      "user": 2,
-    },
   },
   {
     "debugRawEventCount": 0,
@@ -363,15 +280,6 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
     "timelineRowCount": 5,
     "translatedThreadEventCount": 205,
     "unexpectedUntranslatedRawEventCount": 0,
-    "viewMessageCount": 24,
-    "viewMessageKinds": {
-      "assistant-text": 9,
-      "command": 5,
-      "delegation": 1,
-      "file-edit": 3,
-      "tool-call": 4,
-      "user": 2,
-    },
   },
   {
     "debugRawEventCount": 0,
@@ -396,13 +304,6 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
     "timelineRowCount": 6,
     "translatedThreadEventCount": 471,
     "unexpectedUntranslatedRawEventCount": 0,
-    "viewMessageCount": 14,
-    "viewMessageKinds": {
-      "assistant-text": 3,
-      "delegation": 3,
-      "tool-call": 6,
-      "user": 2,
-    },
   },
   {
     "debugRawEventCount": 0,
@@ -426,12 +327,6 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
     "timelineRowCount": 5,
     "translatedThreadEventCount": 3512,
     "unexpectedUntranslatedRawEventCount": 0,
-    "viewMessageCount": 54,
-    "viewMessageKinds": {
-      "assistant-text": 2,
-      "command": 50,
-      "user": 2,
-    },
   },
   {
     "debugRawEventCount": 0,
@@ -447,12 +342,6 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
     "timelineRowCount": 3,
     "translatedThreadEventCount": 46,
     "unexpectedUntranslatedRawEventCount": 0,
-    "viewMessageCount": 4,
-    "viewMessageKinds": {
-      "assistant-text": 2,
-      "command": 1,
-      "user": 1,
-    },
   },
   {
     "debugRawEventCount": 0,
@@ -476,13 +365,6 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
     "timelineRowCount": 5,
     "translatedThreadEventCount": 936,
     "unexpectedUntranslatedRawEventCount": 0,
-    "viewMessageCount": 40,
-    "viewMessageKinds": {
-      "assistant-text": 5,
-      "command": 30,
-      "file-edit": 3,
-      "user": 2,
-    },
   },
   {
     "debugRawEventCount": 0,
@@ -507,13 +389,6 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
     "timelineRowCount": 5,
     "translatedThreadEventCount": 941,
     "unexpectedUntranslatedRawEventCount": 0,
-    "viewMessageCount": 59,
-    "viewMessageKinds": {
-      "assistant-text": 4,
-      "command": 49,
-      "file-edit": 4,
-      "user": 2,
-    },
   },
   {
     "debugRawEventCount": 0,
@@ -537,13 +412,6 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
     "timelineRowCount": 5,
     "translatedThreadEventCount": 658,
     "unexpectedUntranslatedRawEventCount": 0,
-    "viewMessageCount": 34,
-    "viewMessageKinds": {
-      "assistant-text": 3,
-      "command": 27,
-      "file-edit": 2,
-      "user": 2,
-    },
   },
   {
     "debugRawEventCount": 0,
@@ -568,13 +436,6 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
     "timelineRowCount": 5,
     "translatedThreadEventCount": 582,
     "unexpectedUntranslatedRawEventCount": 0,
-    "viewMessageCount": 38,
-    "viewMessageKinds": {
-      "assistant-text": 3,
-      "command": 29,
-      "file-edit": 4,
-      "user": 2,
-    },
   },
   {
     "debugRawEventCount": 0,
@@ -599,14 +460,6 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
     "timelineRowCount": 5,
     "translatedThreadEventCount": 1090,
     "unexpectedUntranslatedRawEventCount": 0,
-    "viewMessageCount": 81,
-    "viewMessageKinds": {
-      "assistant-text": 3,
-      "command": 70,
-      "file-edit": 5,
-      "tool-call": 1,
-      "user": 2,
-    },
   },
   {
     "debugRawEventCount": 0,
@@ -630,12 +483,6 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
     "timelineRowCount": 5,
     "translatedThreadEventCount": 3077,
     "unexpectedUntranslatedRawEventCount": 0,
-    "viewMessageCount": 51,
-    "viewMessageKinds": {
-      "assistant-text": 2,
-      "command": 47,
-      "user": 2,
-    },
   },
   {
     "debugRawEventCount": 0,
@@ -660,13 +507,6 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
     "timelineRowCount": 6,
     "translatedThreadEventCount": 337,
     "unexpectedUntranslatedRawEventCount": 0,
-    "viewMessageCount": 21,
-    "viewMessageKinds": {
-      "assistant-text": 4,
-      "command": 4,
-      "tool-call": 11,
-      "user": 2,
-    },
   },
   {
     "debugRawEventCount": 0,
@@ -697,14 +537,6 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
     "timelineRowCount": 8,
     "translatedThreadEventCount": 421,
     "unexpectedUntranslatedRawEventCount": 0,
-    "viewMessageCount": 80,
-    "viewMessageKinds": {
-      "assistant-text": 27,
-      "command": 30,
-      "file-edit": 3,
-      "tool-call": 17,
-      "user": 3,
-    },
   },
   {
     "debugRawEventCount": 0,
@@ -728,14 +560,6 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
     "timelineRowCount": 5,
     "translatedThreadEventCount": 128,
     "unexpectedUntranslatedRawEventCount": 0,
-    "viewMessageCount": 26,
-    "viewMessageKinds": {
-      "assistant-text": 8,
-      "command": 10,
-      "file-edit": 3,
-      "tool-call": 3,
-      "user": 2,
-    },
   },
   {
     "debugRawEventCount": 0,
@@ -754,14 +578,6 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
     "timelineRowCount": 7,
     "translatedThreadEventCount": 283,
     "unexpectedUntranslatedRawEventCount": 0,
-    "viewMessageCount": 97,
-    "viewMessageKinds": {
-      "assistant-text": 24,
-      "command": 55,
-      "file-edit": 6,
-      "tool-call": 10,
-      "user": 2,
-    },
   },
   {
     "debugRawEventCount": 0,
@@ -785,14 +601,6 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
     "timelineRowCount": 5,
     "translatedThreadEventCount": 185,
     "unexpectedUntranslatedRawEventCount": 0,
-    "viewMessageCount": 19,
-    "viewMessageKinds": {
-      "assistant-text": 7,
-      "command": 1,
-      "file-edit": 2,
-      "tool-call": 7,
-      "user": 2,
-    },
   },
   {
     "debugRawEventCount": 0,
@@ -816,14 +624,6 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
     "timelineRowCount": 5,
     "translatedThreadEventCount": 100,
     "unexpectedUntranslatedRawEventCount": 0,
-    "viewMessageCount": 17,
-    "viewMessageKinds": {
-      "assistant-text": 6,
-      "command": 4,
-      "file-edit": 2,
-      "tool-call": 3,
-      "user": 2,
-    },
   },
   {
     "debugRawEventCount": 0,
@@ -846,11 +646,6 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
     "timelineRowCount": 4,
     "translatedThreadEventCount": 201,
     "unexpectedUntranslatedRawEventCount": 0,
-    "viewMessageCount": 4,
-    "viewMessageKinds": {
-      "assistant-text": 2,
-      "user": 2,
-    },
   },
 ]
 `;
@@ -5289,10 +5084,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 1,
     "totalEventCount": 790,
-    "viewMessageCount": 1,
-    "viewMessageKinds": {
-      "user": 1,
-    },
   },
   {
     "fixture": "dev-replays/claude-code/cap_mom0xkzo_3atb06ph",
@@ -5310,13 +5101,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 8,
     "totalEventCount": 790,
-    "viewMessageCount": 8,
-    "viewMessageKinds": {
-      "assistant-text": 1,
-      "command": 2,
-      "delegation": 4,
-      "user": 1,
-    },
   },
   {
     "fixture": "dev-replays/claude-code/cap_mom0xkzo_3atb06ph",
@@ -5334,13 +5118,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 8,
     "totalEventCount": 790,
-    "viewMessageCount": 8,
-    "viewMessageKinds": {
-      "assistant-text": 1,
-      "command": 2,
-      "delegation": 4,
-      "user": 1,
-    },
   },
   {
     "fixture": "dev-replays/claude-code/cap_mom0xkzo_3atb06ph",
@@ -5361,14 +5138,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 15,
     "totalEventCount": 790,
-    "viewMessageCount": 15,
-    "viewMessageKinds": {
-      "assistant-text": 2,
-      "command": 2,
-      "delegation": 4,
-      "tool-call": 6,
-      "user": 1,
-    },
   },
   {
     "fixture": "dev-replays/claude-code/cap_mom0xkzo_3atb06ph",
@@ -5387,11 +5156,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 3,
     "totalEventCount": 790,
-    "viewMessageCount": 2,
-    "viewMessageKinds": {
-      "assistant-text": 1,
-      "user": 1,
-    },
   },
   {
     "fixture": "dev-replays/codex/cap_mol1xza1_zclp97wz",
@@ -5401,8 +5165,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     "timelinePreview": [],
     "timelineRowCount": 0,
     "totalEventCount": 3096,
-    "viewMessageCount": 0,
-    "viewMessageKinds": {},
   },
   {
     "fixture": "dev-replays/codex/cap_mol1xza1_zclp97wz",
@@ -5444,13 +5206,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 71,
     "totalEventCount": 3096,
-    "viewMessageCount": 71,
-    "viewMessageKinds": {
-      "assistant-text": 9,
-      "command": 46,
-      "file-edit": 15,
-      "user": 1,
-    },
   },
   {
     "fixture": "dev-replays/codex/cap_mol1xza1_zclp97wz",
@@ -5515,13 +5270,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 144,
     "totalEventCount": 3096,
-    "viewMessageCount": 144,
-    "viewMessageKinds": {
-      "assistant-text": 16,
-      "command": 85,
-      "file-edit": 42,
-      "user": 1,
-    },
   },
   {
     "fixture": "dev-replays/codex/cap_mol1xza1_zclp97wz",
@@ -5624,13 +5372,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 192,
     "totalEventCount": 3096,
-    "viewMessageCount": 192,
-    "viewMessageKinds": {
-      "assistant-text": 29,
-      "command": 115,
-      "file-edit": 47,
-      "user": 1,
-    },
   },
   {
     "fixture": "dev-replays/codex/cap_mol1xza1_zclp97wz",
@@ -5650,11 +5391,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 3,
     "totalEventCount": 3096,
-    "viewMessageCount": 2,
-    "viewMessageKinds": {
-      "assistant-text": 1,
-      "user": 1,
-    },
   },
   {
     "fixture": "excalidraw/claude-code/collab-startup-explanation",
@@ -5667,10 +5403,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 1,
     "totalEventCount": 15,
-    "viewMessageCount": 1,
-    "viewMessageKinds": {
-      "user": 1,
-    },
   },
   {
     "fixture": "excalidraw/claude-code/collab-startup-explanation",
@@ -5685,11 +5417,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 2,
     "totalEventCount": 15,
-    "viewMessageCount": 2,
-    "viewMessageKinds": {
-      "assistant-text": 1,
-      "user": 1,
-    },
   },
   {
     "fixture": "excalidraw/claude-code/collab-startup-explanation",
@@ -5705,11 +5432,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 3,
     "totalEventCount": 15,
-    "viewMessageCount": 2,
-    "viewMessageKinds": {
-      "error": 1,
-      "user": 1,
-    },
   },
   {
     "fixture": "excalidraw/claude-code/collab-startup-explanation",
@@ -5729,12 +5451,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 5,
     "totalEventCount": 15,
-    "viewMessageCount": 4,
-    "viewMessageKinds": {
-      "assistant-text": 1,
-      "error": 1,
-      "user": 2,
-    },
   },
   {
     "fixture": "excalidraw/claude-code/collab-startup-explanation",
@@ -5755,11 +5471,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 6,
     "totalEventCount": 15,
-    "viewMessageCount": 4,
-    "viewMessageKinds": {
-      "error": 2,
-      "user": 2,
-    },
   },
   {
     "fixture": "excalidraw/claude-code/eyedropper-browser-compat",
@@ -5772,10 +5483,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 1,
     "totalEventCount": 410,
-    "viewMessageCount": 1,
-    "viewMessageKinds": {
-      "user": 1,
-    },
   },
   {
     "fixture": "excalidraw/claude-code/eyedropper-browser-compat",
@@ -5805,15 +5512,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 27,
     "totalEventCount": 410,
-    "viewMessageCount": 27,
-    "viewMessageKinds": {
-      "assistant-text": 6,
-      "command": 1,
-      "tool-call": 16,
-      "user": 1,
-      "web-fetch": 2,
-      "web-search": 1,
-    },
   },
   {
     "fixture": "excalidraw/claude-code/eyedropper-browser-compat",
@@ -5835,11 +5533,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 5,
     "totalEventCount": 410,
-    "viewMessageCount": 4,
-    "viewMessageKinds": {
-      "assistant-text": 2,
-      "user": 2,
-    },
   },
   {
     "fixture": "excalidraw/claude-code/eyedropper-browser-compat",
@@ -5904,14 +5597,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 39,
     "totalEventCount": 410,
-    "viewMessageCount": 38,
-    "viewMessageKinds": {
-      "assistant-text": 15,
-      "command": 1,
-      "file-edit": 6,
-      "tool-call": 14,
-      "user": 2,
-    },
   },
   {
     "fixture": "excalidraw/claude-code/eyedropper-browser-compat",
@@ -5942,11 +5627,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 8,
     "totalEventCount": 410,
-    "viewMessageCount": 6,
-    "viewMessageKinds": {
-      "assistant-text": 3,
-      "user": 3,
-    },
   },
   {
     "fixture": "excalidraw/claude-code/eyedropper-preview-bugfix",
@@ -5959,10 +5639,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 1,
     "totalEventCount": 222,
-    "viewMessageCount": 1,
-    "viewMessageKinds": {
-      "user": 1,
-    },
   },
   {
     "fixture": "excalidraw/claude-code/eyedropper-preview-bugfix",
@@ -5978,11 +5654,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 2,
     "totalEventCount": 222,
-    "viewMessageCount": 2,
-    "viewMessageKinds": {
-      "delegation": 1,
-      "user": 1,
-    },
   },
   {
     "fixture": "excalidraw/claude-code/eyedropper-preview-bugfix",
@@ -6003,13 +5674,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 8,
     "totalEventCount": 222,
-    "viewMessageCount": 7,
-    "viewMessageKinds": {
-      "assistant-text": 1,
-      "error": 1,
-      "tool-call": 3,
-      "user": 2,
-    },
   },
   {
     "fixture": "excalidraw/claude-code/eyedropper-preview-bugfix",
@@ -6050,15 +5714,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 31,
     "totalEventCount": 222,
-    "viewMessageCount": 30,
-    "viewMessageKinds": {
-      "assistant-text": 8,
-      "command": 5,
-      "error": 1,
-      "file-edit": 3,
-      "tool-call": 11,
-      "user": 2,
-    },
   },
   {
     "fixture": "excalidraw/claude-code/eyedropper-preview-bugfix",
@@ -6081,12 +5736,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 6,
     "totalEventCount": 222,
-    "viewMessageCount": 4,
-    "viewMessageKinds": {
-      "assistant-text": 1,
-      "error": 1,
-      "user": 2,
-    },
   },
   {
     "fixture": "excalidraw/claude-code/magicframe-feature",
@@ -6099,10 +5748,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 1,
     "totalEventCount": 404,
-    "viewMessageCount": 1,
-    "viewMessageKinds": {
-      "user": 1,
-    },
   },
   {
     "fixture": "excalidraw/claude-code/magicframe-feature",
@@ -6118,11 +5763,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 2,
     "totalEventCount": 404,
-    "viewMessageCount": 2,
-    "viewMessageKinds": {
-      "delegation": 1,
-      "user": 1,
-    },
   },
   {
     "fixture": "excalidraw/claude-code/magicframe-feature",
@@ -6155,14 +5795,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 22,
     "totalEventCount": 404,
-    "viewMessageCount": 22,
-    "viewMessageKinds": {
-      "assistant-text": 5,
-      "delegation": 1,
-      "file-edit": 2,
-      "tool-call": 13,
-      "user": 1,
-    },
   },
   {
     "fixture": "excalidraw/claude-code/magicframe-feature",
@@ -6240,15 +5872,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 56,
     "totalEventCount": 404,
-    "viewMessageCount": 56,
-    "viewMessageKinds": {
-      "assistant-text": 19,
-      "command": 2,
-      "delegation": 1,
-      "file-edit": 5,
-      "tool-call": 28,
-      "user": 1,
-    },
   },
   {
     "fixture": "excalidraw/claude-code/magicframe-feature",
@@ -6272,11 +5895,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 5,
     "totalEventCount": 404,
-    "viewMessageCount": 4,
-    "viewMessageKinds": {
-      "assistant-text": 2,
-      "user": 2,
-    },
   },
   {
     "fixture": "excalidraw/claude-code/search-bugfix",
@@ -6289,10 +5907,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 1,
     "totalEventCount": 269,
-    "viewMessageCount": 1,
-    "viewMessageKinds": {
-      "user": 1,
-    },
   },
   {
     "fixture": "excalidraw/claude-code/search-bugfix",
@@ -6309,12 +5923,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 3,
     "totalEventCount": 269,
-    "viewMessageCount": 3,
-    "viewMessageKinds": {
-      "assistant-text": 1,
-      "delegation": 1,
-      "user": 1,
-    },
   },
   {
     "fixture": "excalidraw/claude-code/search-bugfix",
@@ -6338,13 +5946,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 7,
     "totalEventCount": 269,
-    "viewMessageCount": 7,
-    "viewMessageKinds": {
-      "assistant-text": 3,
-      "delegation": 1,
-      "tool-call": 2,
-      "user": 1,
-    },
   },
   {
     "fixture": "excalidraw/claude-code/search-bugfix",
@@ -6378,15 +5979,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 20,
     "totalEventCount": 269,
-    "viewMessageCount": 20,
-    "viewMessageKinds": {
-      "assistant-text": 6,
-      "command": 8,
-      "delegation": 1,
-      "file-edit": 2,
-      "tool-call": 2,
-      "user": 1,
-    },
   },
   {
     "fixture": "excalidraw/claude-code/search-bugfix",
@@ -6410,11 +6002,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 5,
     "totalEventCount": 269,
-    "viewMessageCount": 4,
-    "viewMessageKinds": {
-      "assistant-text": 2,
-      "user": 2,
-    },
   },
   {
     "fixture": "excalidraw/claude-code/search-feature",
@@ -6427,10 +6014,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 1,
     "totalEventCount": 207,
-    "viewMessageCount": 1,
-    "viewMessageKinds": {
-      "user": 1,
-    },
   },
   {
     "fixture": "excalidraw/claude-code/search-feature",
@@ -6447,12 +6030,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 3,
     "totalEventCount": 207,
-    "viewMessageCount": 3,
-    "viewMessageKinds": {
-      "assistant-text": 1,
-      "delegation": 1,
-      "user": 1,
-    },
   },
   {
     "fixture": "excalidraw/claude-code/search-feature",
@@ -6473,13 +6050,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 5,
     "totalEventCount": 207,
-    "viewMessageCount": 5,
-    "viewMessageKinds": {
-      "assistant-text": 2,
-      "delegation": 1,
-      "tool-call": 1,
-      "user": 1,
-    },
   },
   {
     "fixture": "excalidraw/claude-code/search-feature",
@@ -6511,14 +6081,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 13,
     "totalEventCount": 207,
-    "viewMessageCount": 13,
-    "viewMessageKinds": {
-      "assistant-text": 5,
-      "delegation": 1,
-      "file-edit": 2,
-      "tool-call": 4,
-      "user": 1,
-    },
   },
   {
     "fixture": "excalidraw/claude-code/search-feature",
@@ -6542,11 +6104,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 5,
     "totalEventCount": 207,
-    "viewMessageCount": 4,
-    "viewMessageKinds": {
-      "assistant-text": 2,
-      "user": 2,
-    },
   },
   {
     "fixture": "excalidraw/claude-code/ttd-explanation",
@@ -6559,10 +6116,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 1,
     "totalEventCount": 473,
-    "viewMessageCount": 1,
-    "viewMessageKinds": {
-      "user": 1,
-    },
   },
   {
     "fixture": "excalidraw/claude-code/ttd-explanation",
@@ -6576,11 +6129,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 4,
     "totalEventCount": 473,
-    "viewMessageCount": 4,
-    "viewMessageKinds": {
-      "delegation": 3,
-      "user": 1,
-    },
   },
   {
     "fixture": "excalidraw/claude-code/ttd-explanation",
@@ -6598,12 +6146,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 5,
     "totalEventCount": 473,
-    "viewMessageCount": 5,
-    "viewMessageKinds": {
-      "assistant-text": 1,
-      "delegation": 3,
-      "user": 1,
-    },
   },
   {
     "fixture": "excalidraw/claude-code/ttd-explanation",
@@ -6625,11 +6167,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 5,
     "totalEventCount": 473,
-    "viewMessageCount": 4,
-    "viewMessageKinds": {
-      "assistant-text": 2,
-      "user": 2,
-    },
   },
   {
     "fixture": "excalidraw/claude-code/ttd-explanation",
@@ -6654,11 +6191,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 6,
     "totalEventCount": 473,
-    "viewMessageCount": 4,
-    "viewMessageKinds": {
-      "assistant-text": 2,
-      "user": 2,
-    },
   },
   {
     "fixture": "excalidraw/codex/collab-startup-explanation",
@@ -6668,8 +6200,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     "timelinePreview": [],
     "timelineRowCount": 0,
     "totalEventCount": 3514,
-    "viewMessageCount": 0,
-    "viewMessageKinds": {},
   },
   {
     "fixture": "excalidraw/codex/collab-startup-explanation",
@@ -6687,12 +6217,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 52,
     "totalEventCount": 3514,
-    "viewMessageCount": 52,
-    "viewMessageKinds": {
-      "assistant-text": 1,
-      "command": 50,
-      "user": 1,
-    },
   },
   {
     "fixture": "excalidraw/codex/collab-startup-explanation",
@@ -6710,12 +6234,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 52,
     "totalEventCount": 3514,
-    "viewMessageCount": 52,
-    "viewMessageKinds": {
-      "assistant-text": 1,
-      "command": 50,
-      "user": 1,
-    },
   },
   {
     "fixture": "excalidraw/codex/collab-startup-explanation",
@@ -6733,12 +6251,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 52,
     "totalEventCount": 3514,
-    "viewMessageCount": 52,
-    "viewMessageKinds": {
-      "assistant-text": 1,
-      "command": 50,
-      "user": 1,
-    },
   },
   {
     "fixture": "excalidraw/codex/collab-startup-explanation",
@@ -6762,11 +6274,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 5,
     "totalEventCount": 3514,
-    "viewMessageCount": 4,
-    "viewMessageKinds": {
-      "assistant-text": 2,
-      "user": 2,
-    },
   },
   {
     "fixture": "excalidraw/codex/command-output-recovery",
@@ -6776,8 +6283,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     "timelinePreview": [],
     "timelineRowCount": 0,
     "totalEventCount": 47,
-    "viewMessageCount": 0,
-    "viewMessageKinds": {},
   },
   {
     "fixture": "excalidraw/codex/command-output-recovery",
@@ -6790,10 +6295,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 1,
     "totalEventCount": 47,
-    "viewMessageCount": 1,
-    "viewMessageKinds": {
-      "user": 1,
-    },
   },
   {
     "fixture": "excalidraw/codex/command-output-recovery",
@@ -6806,10 +6307,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 1,
     "totalEventCount": 47,
-    "viewMessageCount": 1,
-    "viewMessageKinds": {
-      "user": 1,
-    },
   },
   {
     "fixture": "excalidraw/codex/command-output-recovery",
@@ -6824,11 +6321,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 2,
     "totalEventCount": 47,
-    "viewMessageCount": 2,
-    "viewMessageKinds": {
-      "assistant-text": 1,
-      "user": 1,
-    },
   },
   {
     "fixture": "excalidraw/codex/command-output-recovery",
@@ -6844,11 +6336,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 3,
     "totalEventCount": 47,
-    "viewMessageCount": 2,
-    "viewMessageKinds": {
-      "assistant-text": 1,
-      "user": 1,
-    },
   },
   {
     "fixture": "excalidraw/codex/eyedropper-preview-bugfix",
@@ -6858,8 +6345,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     "timelinePreview": [],
     "timelineRowCount": 0,
     "totalEventCount": 938,
-    "viewMessageCount": 0,
-    "viewMessageKinds": {},
   },
   {
     "fixture": "excalidraw/codex/eyedropper-preview-bugfix",
@@ -6881,13 +6366,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 35,
     "totalEventCount": 938,
-    "viewMessageCount": 35,
-    "viewMessageKinds": {
-      "assistant-text": 3,
-      "command": 28,
-      "file-edit": 3,
-      "user": 1,
-    },
   },
   {
     "fixture": "excalidraw/codex/eyedropper-preview-bugfix",
@@ -6913,13 +6391,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 38,
     "totalEventCount": 938,
-    "viewMessageCount": 38,
-    "viewMessageKinds": {
-      "assistant-text": 4,
-      "command": 30,
-      "file-edit": 3,
-      "user": 1,
-    },
   },
   {
     "fixture": "excalidraw/codex/eyedropper-preview-bugfix",
@@ -6943,11 +6414,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 5,
     "totalEventCount": 938,
-    "viewMessageCount": 4,
-    "viewMessageKinds": {
-      "assistant-text": 2,
-      "user": 2,
-    },
   },
   {
     "fixture": "excalidraw/codex/eyedropper-preview-bugfix",
@@ -6971,11 +6437,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 5,
     "totalEventCount": 938,
-    "viewMessageCount": 4,
-    "viewMessageKinds": {
-      "assistant-text": 2,
-      "user": 2,
-    },
   },
   {
     "fixture": "excalidraw/codex/magicframe-feature",
@@ -6985,8 +6446,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     "timelinePreview": [],
     "timelineRowCount": 0,
     "totalEventCount": 943,
-    "viewMessageCount": 0,
-    "viewMessageKinds": {},
   },
   {
     "fixture": "excalidraw/codex/magicframe-feature",
@@ -7005,13 +6464,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 39,
     "totalEventCount": 943,
-    "viewMessageCount": 39,
-    "viewMessageKinds": {
-      "assistant-text": 2,
-      "command": 34,
-      "file-edit": 2,
-      "user": 1,
-    },
   },
   {
     "fixture": "excalidraw/codex/magicframe-feature",
@@ -7035,13 +6487,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 57,
     "totalEventCount": 943,
-    "viewMessageCount": 57,
-    "viewMessageKinds": {
-      "assistant-text": 3,
-      "command": 49,
-      "file-edit": 4,
-      "user": 1,
-    },
   },
   {
     "fixture": "excalidraw/codex/magicframe-feature",
@@ -7065,13 +6510,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 57,
     "totalEventCount": 943,
-    "viewMessageCount": 57,
-    "viewMessageKinds": {
-      "assistant-text": 3,
-      "command": 49,
-      "file-edit": 4,
-      "user": 1,
-    },
   },
   {
     "fixture": "excalidraw/codex/magicframe-feature",
@@ -7096,11 +6534,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 5,
     "totalEventCount": 943,
-    "viewMessageCount": 4,
-    "viewMessageKinds": {
-      "assistant-text": 2,
-      "user": 2,
-    },
   },
   {
     "fixture": "excalidraw/codex/search-bugfix",
@@ -7110,8 +6543,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     "timelinePreview": [],
     "timelineRowCount": 0,
     "totalEventCount": 660,
-    "viewMessageCount": 0,
-    "viewMessageKinds": {},
   },
   {
     "fixture": "excalidraw/codex/search-bugfix",
@@ -7128,13 +6559,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 28,
     "totalEventCount": 660,
-    "viewMessageCount": 28,
-    "viewMessageKinds": {
-      "assistant-text": 1,
-      "command": 24,
-      "file-edit": 2,
-      "user": 1,
-    },
   },
   {
     "fixture": "excalidraw/codex/search-bugfix",
@@ -7155,13 +6579,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 32,
     "totalEventCount": 660,
-    "viewMessageCount": 32,
-    "viewMessageKinds": {
-      "assistant-text": 2,
-      "command": 27,
-      "file-edit": 2,
-      "user": 1,
-    },
   },
   {
     "fixture": "excalidraw/codex/search-bugfix",
@@ -7185,11 +6602,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 5,
     "totalEventCount": 660,
-    "viewMessageCount": 4,
-    "viewMessageKinds": {
-      "assistant-text": 2,
-      "user": 2,
-    },
   },
   {
     "fixture": "excalidraw/codex/search-bugfix",
@@ -7213,11 +6625,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 5,
     "totalEventCount": 660,
-    "viewMessageCount": 4,
-    "viewMessageKinds": {
-      "assistant-text": 2,
-      "user": 2,
-    },
   },
   {
     "fixture": "excalidraw/codex/search-feature",
@@ -7227,8 +6634,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     "timelinePreview": [],
     "timelineRowCount": 0,
     "totalEventCount": 584,
-    "viewMessageCount": 0,
-    "viewMessageKinds": {},
   },
   {
     "fixture": "excalidraw/codex/search-feature",
@@ -7244,13 +6649,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 30,
     "totalEventCount": 584,
-    "viewMessageCount": 30,
-    "viewMessageKinds": {
-      "assistant-text": 1,
-      "command": 24,
-      "file-edit": 4,
-      "user": 1,
-    },
   },
   {
     "fixture": "excalidraw/codex/search-feature",
@@ -7270,13 +6668,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 36,
     "totalEventCount": 584,
-    "viewMessageCount": 36,
-    "viewMessageKinds": {
-      "assistant-text": 2,
-      "command": 29,
-      "file-edit": 4,
-      "user": 1,
-    },
   },
   {
     "fixture": "excalidraw/codex/search-feature",
@@ -7301,11 +6692,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 5,
     "totalEventCount": 584,
-    "viewMessageCount": 4,
-    "viewMessageKinds": {
-      "assistant-text": 2,
-      "user": 2,
-    },
   },
   {
     "fixture": "excalidraw/codex/search-feature",
@@ -7330,11 +6716,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 5,
     "totalEventCount": 584,
-    "viewMessageCount": 4,
-    "viewMessageKinds": {
-      "assistant-text": 2,
-      "user": 2,
-    },
   },
   {
     "fixture": "excalidraw/codex/share-web-compat",
@@ -7344,8 +6725,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     "timelinePreview": [],
     "timelineRowCount": 0,
     "totalEventCount": 1092,
-    "viewMessageCount": 0,
-    "viewMessageKinds": {},
   },
   {
     "fixture": "excalidraw/codex/share-web-compat",
@@ -7362,14 +6741,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 48,
     "totalEventCount": 1092,
-    "viewMessageCount": 48,
-    "viewMessageKinds": {
-      "assistant-text": 1,
-      "command": 43,
-      "file-edit": 2,
-      "tool-call": 1,
-      "user": 1,
-    },
   },
   {
     "fixture": "excalidraw/codex/share-web-compat",
@@ -7390,14 +6761,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 79,
     "totalEventCount": 1092,
-    "viewMessageCount": 79,
-    "viewMessageKinds": {
-      "assistant-text": 2,
-      "command": 70,
-      "file-edit": 5,
-      "tool-call": 1,
-      "user": 1,
-    },
   },
   {
     "fixture": "excalidraw/codex/share-web-compat",
@@ -7422,11 +6785,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 5,
     "totalEventCount": 1092,
-    "viewMessageCount": 4,
-    "viewMessageKinds": {
-      "assistant-text": 2,
-      "user": 2,
-    },
   },
   {
     "fixture": "excalidraw/codex/share-web-compat",
@@ -7451,11 +6809,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 5,
     "totalEventCount": 1092,
-    "viewMessageCount": 4,
-    "viewMessageKinds": {
-      "assistant-text": 2,
-      "user": 2,
-    },
   },
   {
     "fixture": "excalidraw/codex/ttd-explanation",
@@ -7465,8 +6818,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     "timelinePreview": [],
     "timelineRowCount": 0,
     "totalEventCount": 3079,
-    "viewMessageCount": 0,
-    "viewMessageKinds": {},
   },
   {
     "fixture": "excalidraw/codex/ttd-explanation",
@@ -7484,12 +6835,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 49,
     "totalEventCount": 3079,
-    "viewMessageCount": 49,
-    "viewMessageKinds": {
-      "assistant-text": 1,
-      "command": 47,
-      "user": 1,
-    },
   },
   {
     "fixture": "excalidraw/codex/ttd-explanation",
@@ -7507,12 +6852,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 49,
     "totalEventCount": 3079,
-    "viewMessageCount": 49,
-    "viewMessageKinds": {
-      "assistant-text": 1,
-      "command": 47,
-      "user": 1,
-    },
   },
   {
     "fixture": "excalidraw/codex/ttd-explanation",
@@ -7530,12 +6869,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 49,
     "totalEventCount": 3079,
-    "viewMessageCount": 49,
-    "viewMessageKinds": {
-      "assistant-text": 1,
-      "command": 47,
-      "user": 1,
-    },
   },
   {
     "fixture": "excalidraw/codex/ttd-explanation",
@@ -7559,11 +6892,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 5,
     "totalEventCount": 3079,
-    "viewMessageCount": 4,
-    "viewMessageKinds": {
-      "assistant-text": 2,
-      "user": 2,
-    },
   },
   {
     "fixture": "excalidraw/pi/collab-startup-explanation",
@@ -7576,10 +6904,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 1,
     "totalEventCount": 339,
-    "viewMessageCount": 1,
-    "viewMessageKinds": {
-      "user": 1,
-    },
   },
   {
     "fixture": "excalidraw/pi/collab-startup-explanation",
@@ -7597,13 +6921,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 11,
     "totalEventCount": 339,
-    "viewMessageCount": 11,
-    "viewMessageKinds": {
-      "assistant-text": 1,
-      "command": 2,
-      "tool-call": 7,
-      "user": 1,
-    },
   },
   {
     "fixture": "excalidraw/pi/collab-startup-explanation",
@@ -7621,13 +6938,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 11,
     "totalEventCount": 339,
-    "viewMessageCount": 11,
-    "viewMessageKinds": {
-      "assistant-text": 1,
-      "command": 2,
-      "tool-call": 7,
-      "user": 1,
-    },
   },
   {
     "fixture": "excalidraw/pi/collab-startup-explanation",
@@ -7652,13 +6962,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 11,
     "totalEventCount": 339,
-    "viewMessageCount": 10,
-    "viewMessageKinds": {
-      "assistant-text": 2,
-      "command": 2,
-      "tool-call": 4,
-      "user": 2,
-    },
   },
   {
     "fixture": "excalidraw/pi/collab-startup-explanation",
@@ -7683,11 +6986,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 6,
     "totalEventCount": 339,
-    "viewMessageCount": 4,
-    "viewMessageKinds": {
-      "assistant-text": 2,
-      "user": 2,
-    },
   },
   {
     "fixture": "excalidraw/pi/command-palette-map",
@@ -7700,10 +6998,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 1,
     "totalEventCount": 424,
-    "viewMessageCount": 1,
-    "viewMessageKinds": {
-      "user": 1,
-    },
   },
   {
     "fixture": "excalidraw/pi/command-palette-map",
@@ -7721,13 +7015,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 16,
     "totalEventCount": 424,
-    "viewMessageCount": 16,
-    "viewMessageKinds": {
-      "assistant-text": 1,
-      "command": 4,
-      "tool-call": 10,
-      "user": 1,
-    },
   },
   {
     "fixture": "excalidraw/pi/command-palette-map",
@@ -7751,13 +7038,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 24,
     "totalEventCount": 424,
-    "viewMessageCount": 23,
-    "viewMessageKinds": {
-      "assistant-text": 3,
-      "command": 13,
-      "tool-call": 5,
-      "user": 2,
-    },
   },
   {
     "fixture": "excalidraw/pi/command-palette-map",
@@ -7787,14 +7067,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 41,
     "totalEventCount": 424,
-    "viewMessageCount": 40,
-    "viewMessageKinds": {
-      "assistant-text": 4,
-      "command": 24,
-      "file-edit": 3,
-      "tool-call": 7,
-      "user": 2,
-    },
   },
   {
     "fixture": "excalidraw/pi/command-palette-map",
@@ -7825,11 +7097,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 8,
     "totalEventCount": 424,
-    "viewMessageCount": 6,
-    "viewMessageKinds": {
-      "assistant-text": 3,
-      "user": 3,
-    },
   },
   {
     "fixture": "excalidraw/pi/eyedropper-preview-bugfix",
@@ -7842,10 +7109,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 1,
     "totalEventCount": 130,
-    "viewMessageCount": 1,
-    "viewMessageKinds": {
-      "user": 1,
-    },
   },
   {
     "fixture": "excalidraw/pi/eyedropper-preview-bugfix",
@@ -7859,12 +7122,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 10,
     "totalEventCount": 130,
-    "viewMessageCount": 10,
-    "viewMessageKinds": {
-      "command": 7,
-      "tool-call": 2,
-      "user": 1,
-    },
   },
   {
     "fixture": "excalidraw/pi/eyedropper-preview-bugfix",
@@ -7882,14 +7139,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 18,
     "totalEventCount": 130,
-    "viewMessageCount": 18,
-    "viewMessageKinds": {
-      "assistant-text": 1,
-      "command": 10,
-      "file-edit": 3,
-      "tool-call": 3,
-      "user": 1,
-    },
   },
   {
     "fixture": "excalidraw/pi/eyedropper-preview-bugfix",
@@ -7912,11 +7161,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 5,
     "totalEventCount": 130,
-    "viewMessageCount": 4,
-    "viewMessageKinds": {
-      "assistant-text": 2,
-      "user": 2,
-    },
   },
   {
     "fixture": "excalidraw/pi/eyedropper-preview-bugfix",
@@ -7940,11 +7184,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 5,
     "totalEventCount": 130,
-    "viewMessageCount": 4,
-    "viewMessageKinds": {
-      "assistant-text": 2,
-      "user": 2,
-    },
   },
   {
     "fixture": "excalidraw/pi/magicframe-feature",
@@ -7954,8 +7193,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     "timelinePreview": [],
     "timelineRowCount": 0,
     "totalEventCount": 285,
-    "viewMessageCount": 0,
-    "viewMessageKinds": {},
   },
   {
     "fixture": "excalidraw/pi/magicframe-feature",
@@ -7969,11 +7206,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 20,
     "totalEventCount": 285,
-    "viewMessageCount": 20,
-    "viewMessageKinds": {
-      "command": 19,
-      "user": 1,
-    },
   },
   {
     "fixture": "excalidraw/pi/magicframe-feature",
@@ -7992,14 +7224,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 40,
     "totalEventCount": 285,
-    "viewMessageCount": 40,
-    "viewMessageKinds": {
-      "assistant-text": 1,
-      "command": 31,
-      "file-edit": 2,
-      "tool-call": 5,
-      "user": 1,
-    },
   },
   {
     "fixture": "excalidraw/pi/magicframe-feature",
@@ -8018,14 +7242,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 58,
     "totalEventCount": 285,
-    "viewMessageCount": 58,
-    "viewMessageKinds": {
-      "assistant-text": 1,
-      "command": 44,
-      "file-edit": 4,
-      "tool-call": 8,
-      "user": 1,
-    },
   },
   {
     "fixture": "excalidraw/pi/magicframe-feature",
@@ -8044,14 +7260,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 7,
     "totalEventCount": 285,
-    "viewMessageCount": 97,
-    "viewMessageKinds": {
-      "assistant-text": 24,
-      "command": 55,
-      "file-edit": 6,
-      "tool-call": 10,
-      "user": 2,
-    },
   },
   {
     "fixture": "excalidraw/pi/search-bugfix",
@@ -8064,10 +7272,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 1,
     "totalEventCount": 187,
-    "viewMessageCount": 1,
-    "viewMessageKinds": {
-      "user": 1,
-    },
   },
   {
     "fixture": "excalidraw/pi/search-bugfix",
@@ -8081,11 +7285,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 5,
     "totalEventCount": 187,
-    "viewMessageCount": 5,
-    "viewMessageKinds": {
-      "tool-call": 4,
-      "user": 1,
-    },
   },
   {
     "fixture": "excalidraw/pi/search-bugfix",
@@ -8099,11 +7298,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 5,
     "totalEventCount": 187,
-    "viewMessageCount": 5,
-    "viewMessageKinds": {
-      "tool-call": 4,
-      "user": 1,
-    },
   },
   {
     "fixture": "excalidraw/pi/search-bugfix",
@@ -8126,14 +7320,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 13,
     "totalEventCount": 187,
-    "viewMessageCount": 13,
-    "viewMessageKinds": {
-      "assistant-text": 2,
-      "command": 1,
-      "file-edit": 2,
-      "tool-call": 7,
-      "user": 1,
-    },
   },
   {
     "fixture": "excalidraw/pi/search-bugfix",
@@ -8157,11 +7343,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 5,
     "totalEventCount": 187,
-    "viewMessageCount": 4,
-    "viewMessageKinds": {
-      "assistant-text": 2,
-      "user": 2,
-    },
   },
   {
     "fixture": "excalidraw/pi/search-feature",
@@ -8174,10 +7355,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 1,
     "totalEventCount": 102,
-    "viewMessageCount": 1,
-    "viewMessageKinds": {
-      "user": 1,
-    },
   },
   {
     "fixture": "excalidraw/pi/search-feature",
@@ -8191,12 +7368,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 7,
     "totalEventCount": 102,
-    "viewMessageCount": 7,
-    "viewMessageKinds": {
-      "command": 3,
-      "tool-call": 3,
-      "user": 1,
-    },
   },
   {
     "fixture": "excalidraw/pi/search-feature",
@@ -8215,14 +7386,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 10,
     "totalEventCount": 102,
-    "viewMessageCount": 10,
-    "viewMessageKinds": {
-      "assistant-text": 1,
-      "command": 3,
-      "file-edit": 2,
-      "tool-call": 3,
-      "user": 1,
-    },
   },
   {
     "fixture": "excalidraw/pi/search-feature",
@@ -8245,14 +7408,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 12,
     "totalEventCount": 102,
-    "viewMessageCount": 12,
-    "viewMessageKinds": {
-      "assistant-text": 2,
-      "command": 4,
-      "file-edit": 2,
-      "tool-call": 3,
-      "user": 1,
-    },
   },
   {
     "fixture": "excalidraw/pi/search-feature",
@@ -8276,11 +7431,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 5,
     "totalEventCount": 102,
-    "viewMessageCount": 4,
-    "viewMessageKinds": {
-      "assistant-text": 2,
-      "user": 2,
-    },
   },
   {
     "fixture": "excalidraw/pi/ttd-explanation",
@@ -8293,10 +7443,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 1,
     "totalEventCount": 203,
-    "viewMessageCount": 1,
-    "viewMessageKinds": {
-      "user": 1,
-    },
   },
   {
     "fixture": "excalidraw/pi/ttd-explanation",
@@ -8313,11 +7459,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 2,
     "totalEventCount": 203,
-    "viewMessageCount": 2,
-    "viewMessageKinds": {
-      "assistant-text": 1,
-      "user": 1,
-    },
   },
   {
     "fixture": "excalidraw/pi/ttd-explanation",
@@ -8334,11 +7475,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 2,
     "totalEventCount": 203,
-    "viewMessageCount": 2,
-    "viewMessageKinds": {
-      "assistant-text": 1,
-      "user": 1,
-    },
   },
   {
     "fixture": "excalidraw/pi/ttd-explanation",
@@ -8358,11 +7494,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 4,
     "totalEventCount": 203,
-    "viewMessageCount": 4,
-    "viewMessageKinds": {
-      "assistant-text": 2,
-      "user": 2,
-    },
   },
   {
     "fixture": "excalidraw/pi/ttd-explanation",
@@ -8385,11 +7516,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 4,
     "totalEventCount": 203,
-    "viewMessageCount": 4,
-    "viewMessageKinds": {
-      "assistant-text": 2,
-      "user": 2,
-    },
   },
 ]
 `;

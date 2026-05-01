@@ -9,20 +9,85 @@ import type {
   TimelineTurnRow,
 } from "@bb/server-contract";
 import type {
+  ActiveThinking,
+  Thread,
   ViewFileEditChange,
   ViewMessage,
   ViewProjection,
   ViewToolParsedIntent,
   ViewTurn,
+  ViewTimelineEntry,
 } from "@bb/domain";
 import { assertNever } from "./assert-never.js";
 import { getMessageStartedAt } from "./format-helpers.js";
 import { getViewMessageScopeTurnId } from "./message-scope.js";
 import { formatToolCallCommand } from "./tool-call-parsing.js";
+import { flattenProjectionMessagesDeep } from "./projection-flatten.js";
+import {
+  toViewProjection,
+  toViewProjectionEntries,
+  type ThreadEventWithMeta,
+} from "./to-view-messages.js";
 
 export interface BuildTimelineRowsOptions {
   includeNestedRows?: boolean;
 }
+
+export type TimelineTurnMessageDetail = "summary" | "full";
+
+export interface TimelineRowsFromEventsOptions {
+  includeDebugRawEvents?: boolean;
+  includeInternalSystemMessages?: boolean;
+  includeNestedRows?: boolean;
+  includeOptionalOperations?: boolean;
+  includeProviderUnhandledOperations?: boolean;
+  threadStatus?: Thread["status"];
+  threadType?: Thread["type"];
+  turnMessageDetail: TimelineTurnMessageDetail;
+}
+
+export interface BuildTimelineRowsFromEventsArgs {
+  events: ThreadEventWithMeta[];
+  options: TimelineRowsFromEventsOptions;
+}
+
+export interface TimelineRowsFromEventsResult {
+  activeThinking: ActiveThinking | null;
+  rows: TimelineRow[];
+}
+
+export type ManagerTimelineRowsFromEventsOptions = Omit<
+  TimelineRowsFromEventsOptions,
+  "includeNestedRows"
+>;
+
+export interface BuildManagerTimelineRowsFromEventsArgs {
+  events: ThreadEventWithMeta[];
+  options: ManagerTimelineRowsFromEventsOptions;
+}
+
+export interface TimelineSourceSeqRange {
+  sourceSeqEnd: number;
+  sourceSeqStart: number;
+}
+
+export interface ResolveTimelineTurnSummaryDetailsFromEventsArgs {
+  events: ThreadEventWithMeta[];
+  options: ManagerTimelineRowsFromEventsOptions & TimelineSourceSeqRange;
+}
+
+export type TimelineTurnSummaryDetailsResolution =
+  | {
+      kind: "matched";
+      rows: TimelineRow[];
+    }
+  | {
+      kind: "missing-match";
+    }
+  | {
+      kind: "ungrouped";
+      rows: TimelineRow[];
+    };
 
 interface BuildTurnRowsArgs {
   includeNestedRows: boolean;
@@ -314,8 +379,6 @@ function convertMessage(message: ViewMessage): TimelineSourceRow[] {
           status: null,
         },
       ];
-    case "tasks":
-      return [];
     default:
       return assertNever(message);
   }
@@ -416,6 +479,53 @@ function buildTurnRows({
   return [turnRow, ...terminalRows, ...trailingRows];
 }
 
+/**
+ * For manager threads in the default (non-debug) view, only show user messages,
+ * message_user output, and lifecycle operations (provisioning, compaction).
+ * Everything else (assistant text, delegations, other tool calls, etc.) is
+ * internal manager machinery.
+ */
+function isManagerConversationMessage(message: ViewMessage): boolean {
+  if (message.kind === "user") return true;
+  if (message.kind === "operation") return true;
+  return (
+    message.kind === "assistant-text" &&
+    message.isManagerUserMessage === true
+  );
+}
+
+function buildManagerConversationRows(
+  projection: ViewProjection,
+): TimelineRow[] {
+  const entries: ViewTimelineEntry[] = flattenProjectionMessagesDeep(projection)
+    .filter(isManagerConversationMessage)
+    .map((message) => ({ kind: "message", message }));
+  return buildTimelineRows({
+    entries,
+    state: projection.state,
+  });
+}
+
+type TimelineTurnSummaryRow = Extract<TimelineRow, { kind: "turn" }>;
+
+function findMatchingTurnSummaryRow(
+  rows: TimelineRow[],
+  range: TimelineSourceSeqRange,
+): TimelineTurnSummaryRow | null {
+  return (
+    rows.find(
+      (row): row is TimelineTurnSummaryRow =>
+        row.kind === "turn" &&
+        row.sourceSeqStart === range.sourceSeqStart &&
+        row.sourceSeqEnd === range.sourceSeqEnd,
+    ) ?? null
+  );
+}
+
+function hasTurnSummaryRows(rows: TimelineRow[]): boolean {
+  return rows.some((row) => row.kind === "turn");
+}
+
 export function buildTimelineRows(
   projection: ViewProjection,
   options?: BuildTimelineRowsOptions,
@@ -445,9 +555,81 @@ export function buildTimelineRows(
   return rows;
 }
 
-export function buildCollapsedTimelineRows(
-  projection: ViewProjection,
-  options?: BuildTimelineRowsOptions,
-): TimelineRow[] {
-  return buildTimelineRows(projection, options);
+export function buildTimelineRowsFromEvents(
+  args: BuildTimelineRowsFromEventsArgs,
+): TimelineRowsFromEventsResult {
+  const projection = toViewProjection(args.events, {
+    includeDebugRawEvents: args.options.includeDebugRawEvents,
+    includeInternalSystemMessages: args.options.includeInternalSystemMessages,
+    includeOptionalOperations: args.options.includeOptionalOperations,
+    includeProviderUnhandledOperations:
+      args.options.includeProviderUnhandledOperations,
+    threadStatus: args.options.threadStatus,
+    threadType: args.options.threadType,
+    turnMessageDetail: args.options.turnMessageDetail,
+  });
+  return {
+    activeThinking: projection.state.activeThinking,
+    rows: buildTimelineRows(projection, {
+      includeNestedRows: args.options.includeNestedRows,
+    }),
+  };
+}
+
+export function buildManagerTimelineRowsFromEvents(
+  args: BuildManagerTimelineRowsFromEventsArgs,
+): TimelineRowsFromEventsResult {
+  const projection = toViewProjectionEntries(args.events, {
+    includeDebugRawEvents: args.options.includeDebugRawEvents,
+    includeInternalSystemMessages: args.options.includeInternalSystemMessages,
+    includeOptionalOperations: args.options.includeOptionalOperations,
+    includeProviderUnhandledOperations:
+      args.options.includeProviderUnhandledOperations,
+    threadStatus: args.options.threadStatus,
+    threadType: args.options.threadType,
+    turnMessageDetail: args.options.turnMessageDetail,
+  });
+  return {
+    activeThinking: null,
+    rows: buildManagerConversationRows(projection),
+  };
+}
+
+export function resolveTimelineTurnSummaryDetailsFromEvents(
+  args: ResolveTimelineTurnSummaryDetailsFromEventsArgs,
+): TimelineTurnSummaryDetailsResolution {
+  const projection = toViewProjectionEntries(args.events, {
+    includeDebugRawEvents: args.options.includeDebugRawEvents,
+    includeInternalSystemMessages: args.options.includeInternalSystemMessages,
+    includeOptionalOperations: args.options.includeOptionalOperations,
+    includeProviderUnhandledOperations:
+      args.options.includeProviderUnhandledOperations,
+    threadStatus: args.options.threadStatus,
+    threadType: args.options.threadType,
+    turnMessageDetail: args.options.turnMessageDetail,
+  });
+  const nestedRows = buildTimelineRows(projection, {
+    includeNestedRows: true,
+  });
+  const matchingTurnSummary = findMatchingTurnSummaryRow(
+    nestedRows,
+    args.options,
+  );
+  if (matchingTurnSummary) {
+    return {
+      kind: "matched",
+      rows: matchingTurnSummary.children ?? [],
+    };
+  }
+
+  if (hasTurnSummaryRows(nestedRows)) {
+    return {
+      kind: "missing-match",
+    };
+  }
+
+  return {
+    kind: "ungrouped",
+    rows: nestedRows,
+  };
 }

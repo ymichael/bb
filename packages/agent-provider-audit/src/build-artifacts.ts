@@ -2,19 +2,13 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  buildTimelineRows,
-  decodeRow,
+  buildTimelineRowsFromEvents,
+  decodeThreadEventRow,
   extractThreadContextWindowUsage,
   formatTimelineAsText,
-  toViewProjection,
 } from "@bb/thread-view";
-import {
-  threadEventTypeValues,
-  type ThreadEventType,
-  type ViewMessage,
-  type ViewProjection,
-} from "@bb/domain";
-import { timelineRowSchema } from "@bb/server-contract";
+import { threadEventTypeValues, type ThreadEventType } from "@bb/domain";
+import { timelineRowSchema, type TimelineRow } from "@bb/server-contract";
 import { z } from "zod";
 import { readJsonFile } from "./json-file.js";
 import {
@@ -70,8 +64,6 @@ export interface ProviderAuditReplayBuildSummary {
   timelineRowCount: number;
   translatedThreadEventCount: number;
   unexpectedUntranslatedRawEventCount: number;
-  viewMessageCount: number;
-  viewMessageKinds: Record<string, number>;
 }
 
 export interface ProviderAuditReplayBuildVerboseTimeline {
@@ -89,8 +81,6 @@ export interface ProviderAuditReplayBuildPrefixSnapshot {
   timelinePreview: string[];
   timelineRowCount: number;
   totalEventCount: number;
-  viewMessageCount: number;
-  viewMessageKinds: Record<string, number>;
 }
 
 export interface ProviderAuditReplayBuildTokenUsageSummary {
@@ -113,7 +103,7 @@ export interface ProviderAuditReplayBuildContextWindowSnapshot {
 }
 
 export interface ProviderAuditReplayBuildDelegationSnapshot {
-  childMessageCount: number;
+  childRowCount: number;
   fixture: string;
   hasChildToolActivity: boolean;
 }
@@ -252,7 +242,7 @@ const replayBuildArtifactSchema = z.object({
   coverageSummary: coverageSummarySchema,
   delegationSnapshots: z.array(
     z.object({
-      childMessageCount: z.number(),
+      childRowCount: z.number(),
       fixture: z.string(),
       hasChildToolActivity: z.boolean(),
     }),
@@ -268,7 +258,6 @@ const replayBuildArtifactSchema = z.object({
         scenarioDescription: z.string(),
         threadStatus: z.string(),
         timelineRowCount: z.number(),
-        viewMessageCount: z.number(),
         timelineRows: z.array(timelineRowSchema),
       }),
     ),
@@ -282,8 +271,6 @@ const replayBuildArtifactSchema = z.object({
       timelineRowCount: z.number(),
       translatedThreadEventCount: z.number(),
       unexpectedUntranslatedRawEventCount: z.number(),
-      viewMessageCount: z.number(),
-      viewMessageKinds: z.record(z.string(), z.number()),
     }),
   ),
   timelinePrefixSnapshots: z.array(
@@ -295,8 +282,6 @@ const replayBuildArtifactSchema = z.object({
       timelinePreview: z.array(z.string()),
       timelineRowCount: z.number(),
       totalEventCount: z.number(),
-      viewMessageCount: z.number(),
-      viewMessageKinds: z.record(z.string(), z.number()),
     }),
   ),
   verboseTimelines: z.array(
@@ -311,13 +296,6 @@ function toFixtureId(
   fixture: ProviderAuditReplayFixturesResult["fixtures"][number]["fixture"],
 ): string {
   return `${fixture.corpusId}/${fixture.providerId}/${fixture.taskId}`;
-}
-
-function countMessageKinds(messages: ViewMessage[]): Record<string, number> {
-  return messages.reduce<Record<string, number>>((counts, message) => {
-    counts[message.kind] = (counts[message.kind] ?? 0) + 1;
-    return counts;
-  }, {});
 }
 
 function buildTimelinePreview(text: string): string[] {
@@ -351,22 +329,19 @@ function buildAuditTimelineText(bundle: ProviderAuditBundle): string {
   );
 }
 
-function flattenProjectionMessages(projection: ViewProjection): ViewMessage[] {
-  const messages: ViewMessage[] = [];
-  for (const entry of projection.entries) {
-    if (entry.kind === "message") {
-      messages.push(entry.message);
+function flattenTimelineRows(rows: readonly TimelineRow[]): TimelineRow[] {
+  const flattenedRows: TimelineRow[] = [];
+  for (const row of rows) {
+    flattenedRows.push(row);
+    if (row.kind === "turn" && row.children) {
+      flattenedRows.push(...flattenTimelineRows(row.children));
       continue;
     }
-    if (entry.turn.messages) {
-      messages.push(...entry.turn.messages);
-      continue;
-    }
-    if (entry.turn.terminalMessage) {
-      messages.push(entry.turn.terminalMessage);
+    if (row.kind === "work" && row.workKind === "delegation") {
+      flattenedRows.push(...flattenTimelineRows(row.childRows));
     }
   }
-  return messages;
+  return flattenedRows;
 }
 
 function isTokenUsageTranslatedCapture(
@@ -408,18 +383,19 @@ function buildPrefixSnapshot(
     args.prefixLength === args.bundle.threadEventRows.length
       ? "idle"
       : "active";
-  const decodedRows = prefixRows.map((row) => decodeRow(row));
-  const projection = toViewProjection(decodedRows, {
-    threadStatus,
-    turnMessageDetail: "summary",
-  });
-  const timelineRows = buildTimelineRows(projection);
+  const decodedRows = prefixRows.map((row) => decodeThreadEventRow(row));
+  const timelineRows = buildTimelineRowsFromEvents({
+    events: decodedRows,
+    options: {
+      threadStatus,
+      turnMessageDetail: "summary",
+    },
+  }).rows;
   const timelineText = formatTimelineAsText(timelineRows, {
     color: false,
     truncateForAudit: true,
     verbose: false,
   });
-  const viewMessages = flattenProjectionMessages(projection);
 
   return {
     fixture: args.fixtureId,
@@ -429,8 +405,6 @@ function buildPrefixSnapshot(
     timelinePreview: buildTimelinePreview(timelineText),
     timelineRowCount: timelineRows.length,
     totalEventCount: args.bundle.threadEventRows.length,
-    viewMessageCount: viewMessages.length,
-    viewMessageKinds: countMessageKinds(viewMessages),
   };
 }
 
@@ -490,16 +464,18 @@ function buildDelegationSnapshots(
 ): ProviderAuditReplayBuildDelegationSnapshot[] {
   const snapshots: ProviderAuditReplayBuildDelegationSnapshot[] = [];
   for (const { fixture, bundle } of replayed.fixtures) {
-    for (const message of bundle.viewMessages) {
-      if (message.kind !== "delegation") {
+    for (const row of flattenTimelineRows(bundle.timelineVerboseRows)) {
+      if (row.kind !== "work" || row.workKind !== "delegation") {
         continue;
       }
-      const childMessages = flattenProjectionMessages(message.childProjection);
+      const childRows = flattenTimelineRows(row.childRows);
       snapshots.push({
         fixture: toFixtureId(fixture),
-        childMessageCount: childMessages.length,
-        hasChildToolActivity: childMessages.some(
-          (child) => child.kind === "command" || child.kind === "tool-call",
+        childRowCount: childRows.length,
+        hasChildToolActivity: childRows.some(
+          (child) =>
+            child.kind === "work" &&
+            (child.workKind === "command" || child.workKind === "tool"),
         ),
       });
     }
@@ -532,12 +508,10 @@ export function buildProviderAuditReplayBuildArtifact(
       rawProviderEventCount: bundle.auditReport.summary.rawProviderEventCount,
       translatedThreadEventCount:
         bundle.auditReport.summary.translatedThreadEventCount,
-      viewMessageCount: bundle.auditReport.summary.viewMessageCount,
       timelineRowCount: bundle.auditReport.summary.timelineRowCount,
       debugRawEventCount: bundle.auditReport.summary.debugRawEventCount,
       unexpectedUntranslatedRawEventCount:
         bundle.auditReport.summary.unexpectedUntranslatedRawEventCount,
-      viewMessageKinds: countMessageKinds(bundle.viewMessages),
       timelinePreview: buildTimelinePreview(buildAuditTimelineText(bundle)),
     })),
     timelinePrefixSnapshots: buildTimelinePrefixSnapshots(replayed),

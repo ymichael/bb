@@ -664,7 +664,6 @@ function finalizePendingMessageForInterruptedTurn(message: ViewMessage): void {
     case "debug/raw-event":
     case "delegation":
     case "error":
-    case "tasks":
     case "user":
       return;
   }
