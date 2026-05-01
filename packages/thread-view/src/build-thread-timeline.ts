@@ -68,24 +68,24 @@ export interface ThreadTimelineProjection {
   rows: TimelineRow[];
 }
 
-export interface TimelineSourceSeqRange {
+export interface ThreadTimelineSourceSeqRange {
   sourceSeqEnd: number;
   sourceSeqStart: number;
 }
 
-export interface ResolveThreadTimelineTurnSummaryDetailsOptions extends TimelineSourceSeqRange {
+export interface BuildThreadTimelineTurnSummaryChildrenOptions extends ThreadTimelineSourceSeqRange {
   includeOptionalOperations: boolean;
   includeProviderUnhandledOperations: boolean;
   threadStatus: Thread["status"];
   viewMode: ThreadTimelineViewMode;
 }
 
-export interface ResolveThreadTimelineTurnSummaryDetailsArgs {
+export interface BuildThreadTimelineTurnSummaryChildrenArgs {
   events: ThreadEventWithMeta[];
-  options: ResolveThreadTimelineTurnSummaryDetailsOptions;
+  options: BuildThreadTimelineTurnSummaryChildrenOptions;
 }
 
-export type TimelineTurnSummaryDetailsResolution =
+export type ThreadTimelineTurnSummaryChildrenResult =
   | {
       kind: "matched";
       rows: TimelineRow[];
@@ -612,7 +612,7 @@ type TimelineTurnSummaryRow = Extract<TimelineRow, { kind: "turn" }>;
 
 function findMatchingTurnSummaryRow(
   rows: TimelineRow[],
-  range: TimelineSourceSeqRange,
+  range: ThreadTimelineSourceSeqRange,
 ): TimelineTurnSummaryRow | null {
   return (
     rows.find(
@@ -695,9 +695,9 @@ export function buildThreadTimelineProjection(
   };
 }
 
-export function resolveThreadTimelineTurnSummaryDetails(
-  args: ResolveThreadTimelineTurnSummaryDetailsArgs,
-): TimelineTurnSummaryDetailsResolution {
+export function buildThreadTimelineTurnSummaryChildren(
+  args: BuildThreadTimelineTurnSummaryChildrenArgs,
+): ThreadTimelineTurnSummaryChildrenResult {
   const projection = toViewProjectionEntries(args.events, {
     includeDebugRawEvents: false,
     includeOptionalOperations: args.options.includeOptionalOperations,

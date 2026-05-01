@@ -1,7 +1,7 @@
 import {
   buildThreadTimelineProjection,
   TIMELINE_NOISE_EVENT_TYPES,
-  resolveThreadTimelineTurnSummaryDetails,
+  buildThreadTimelineTurnSummaryChildren,
   type ThreadEventWithMeta,
 } from "@bb/thread-view";
 import type { Thread } from "@bb/domain";
@@ -25,7 +25,7 @@ import { parseStoredEvent } from "./thread-data.js";
 
 const MIN_AGENT_MESSAGE_DELTAS_FOR_SUMMARY_COMPACTION = 1000;
 
-interface TimelineSourceSeqRange {
+interface TimelineTurnSummarySourceRange {
   sourceSeqEnd: number;
   sourceSeqStart: number;
 }
@@ -36,7 +36,7 @@ interface BuildThreadTimelineOptions {
   managerTimelineView?: ManagerTimelineView;
 }
 
-interface BuildTimelineTurnSummaryDetailsOptions extends TimelineSourceSeqRange {
+interface BuildTimelineTurnSummaryDetailsOptions extends TimelineTurnSummarySourceRange {
   isDevelopment: boolean;
   managerTimelineView?: ManagerTimelineView;
 }
@@ -227,7 +227,7 @@ export function buildTimelineTurnSummaryDetails(
     managerTimelineView: options.managerTimelineView,
     thread,
   });
-  const resolution = resolveThreadTimelineTurnSummaryDetails({
+  const children = buildThreadTimelineTurnSummaryChildren({
     events: [...exactEventRows, ...acceptedInputRows].map((row) =>
       toThreadEventWithMeta(row),
     ),
@@ -241,9 +241,9 @@ export function buildTimelineTurnSummaryDetails(
     },
   });
 
-  if (resolution.kind !== "missing-match") {
+  if (children.kind !== "missing-match") {
     return {
-      rows: resolution.rows,
+      rows: children.rows,
     };
   }
 
