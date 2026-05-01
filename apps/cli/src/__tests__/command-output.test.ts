@@ -7,6 +7,11 @@ import {
   type PendingInteraction,
   type Thread,
 } from "@bb/domain";
+import type {
+  ThreadTimelineResponse,
+  TimelineRow,
+  TimelineRowBase,
+} from "@bb/server-contract";
 
 const readlineState = vi.hoisted(() => ({
   question: vi.fn(),
@@ -43,6 +48,33 @@ import { registerStatusCommand } from "../commands/status.js";
 import { registerThreadCommands } from "../commands/thread/index.js";
 
 type ServerClient = ReturnType<typeof createClient>;
+
+interface TimelineBaseArgs {
+  id: string;
+  sourceSeqStart: number;
+  sourceSeqEnd?: number;
+  startedAt?: number;
+  createdAt?: number;
+}
+
+function makeTimelineBase(args: TimelineBaseArgs): TimelineRowBase {
+  return {
+    id: args.id,
+    threadId: "thread-log",
+    turnId: null,
+    sourceSeqStart: args.sourceSeqStart,
+    sourceSeqEnd: args.sourceSeqEnd ?? args.sourceSeqStart,
+    startedAt: args.startedAt ?? args.createdAt ?? args.sourceSeqStart,
+    createdAt: args.createdAt ?? args.sourceSeqStart,
+  };
+}
+
+function makeTimelineResponse(rows: TimelineRow[]): ThreadTimelineResponse {
+  return {
+    rows,
+    activeThinking: null,
+  };
+}
 
 function makeThread(
   overrides: Partial<Thread> & {
@@ -2759,56 +2791,44 @@ describe("CLI JSON output contracts", () => {
 
   it("bb thread log renders merged timeline rows for human output", async () => {
     const getEvents = vi.fn(async () => []);
-    const getTimeline = vi.fn(async () => ({
-      activeThinking: null,
-      rows: [
+    const getTimeline = vi.fn(async () =>
+      makeTimelineResponse([
         {
-          kind: "message",
-          id: "msg-1",
-          message: {
-            kind: "user",
+          ...makeTimelineBase({
             id: "user-1",
-            threadId: "thread-log",
             sourceSeqStart: 1,
-            sourceSeqEnd: 1,
-            createdAt: 1,
-            startedAt: 1,
-            text: "Say hello",
-          },
+          }),
+          kind: "conversation",
+          role: "user",
+          text: "Say hello",
+          attachments: null,
         },
         {
-          kind: "message",
-          id: "msg-2",
-          message: {
-            kind: "operation",
+          ...makeTimelineBase({
             id: "op-1",
-            threadId: "thread-log",
             sourceSeqStart: 2,
             sourceSeqEnd: 8,
-            createdAt: 8,
             startedAt: 2,
-            opType: "thread-provisioning",
-            title: "Provisioned thread",
-            status: "completed",
-          },
+            createdAt: 8,
+          }),
+          kind: "system",
+          systemKind: "operation",
+          title: "Provisioned thread",
+          detail: null,
+          status: "completed",
         },
         {
-          kind: "message",
-          id: "msg-3",
-          message: {
-            kind: "assistant-text",
+          ...makeTimelineBase({
             id: "assistant-1",
-            threadId: "thread-log",
             sourceSeqStart: 9,
-            sourceSeqEnd: 9,
-            createdAt: 9,
-            startedAt: 9,
-            text: "Hello!",
-            status: "completed",
-          },
+          }),
+          kind: "conversation",
+          role: "assistant",
+          text: "Hello!",
+          attachments: null,
         },
-      ],
-    }));
+      ]),
+    );
     createClientMock.mockReturnValue(
       asServerClient({
         api: {
@@ -2828,8 +2848,9 @@ describe("CLI JSON output contracts", () => {
       }),
     );
 
-    await runCommand(["thread", "log", "thread-log"], (program) =>
-      registerThreadCommands(program, () => "http://server"),
+    await runCommand(
+      ["thread", "log", "thread-log", "--format", "verbose"],
+      (program) => registerThreadCommands(program, () => "http://server"),
     );
 
     const output = String(vi.mocked(console.log).mock.calls[0]?.[0]);
@@ -2839,47 +2860,48 @@ describe("CLI JSON output contracts", () => {
 
   it("bb thread log renders approval state on command and file-change rows", async () => {
     const getEvents = vi.fn(async () => []);
-    const getTimeline = vi.fn(async () => ({
-      activeThinking: null,
-      rows: [
+    const getTimeline = vi.fn(async () =>
+      makeTimelineResponse([
         {
-          kind: "message",
-          id: "command-approval",
-          message: {
-            kind: "tool-call",
+          ...makeTimelineBase({
             id: "command-approval",
-            threadId: "thread-log",
             sourceSeqStart: 1,
-            sourceSeqEnd: 1,
-            createdAt: 1,
-            startedAt: 1,
-            toolName: "exec_command",
-            callId: "cmd-1",
-            command: "git push",
-            parsedCmd: [],
-            status: "pending",
-            approvalStatus: "waiting_for_approval",
-          },
+          }),
+          kind: "work",
+          workKind: "command",
+          status: "pending",
+          callId: "cmd-1",
+          command: "git push",
+          cwd: null,
+          source: null,
+          output: "",
+          exitCode: null,
+          durationMs: null,
+          approvalStatus: "waiting_for_approval",
+          activityIntents: [],
         },
         {
-          kind: "message",
-          id: "file-approval",
-          message: {
-            kind: "file-edit",
+          ...makeTimelineBase({
             id: "file-approval",
-            threadId: "thread-log",
             sourceSeqStart: 2,
-            sourceSeqEnd: 2,
-            createdAt: 2,
-            startedAt: 2,
-            callId: "file-1",
-            changes: [],
-            status: "interrupted",
-            approvalStatus: "denied",
+          }),
+          kind: "work",
+          workKind: "file-change",
+          status: "interrupted",
+          callId: "file-1",
+          change: {
+            path: "src/example.ts",
+            kind: null,
+            movePath: null,
+            diff: null,
+            diffStats: { added: 0, removed: 0 },
           },
+          stdout: null,
+          stderr: null,
+          approvalStatus: "denied",
         },
-      ],
-    }));
+      ]),
+    );
     createClientMock.mockReturnValue(
       asServerClient({
         api: {
@@ -2899,15 +2921,16 @@ describe("CLI JSON output contracts", () => {
       }),
     );
 
-    await runCommand(["thread", "log", "thread-log"], (program) =>
-      registerThreadCommands(program, () => "http://server"),
+    await runCommand(
+      ["thread", "log", "thread-log", "--format", "verbose"],
+      (program) => registerThreadCommands(program, () => "http://server"),
     );
 
     const output = String(vi.mocked(console.log).mock.calls[0]?.[0]);
-    expect(output).toContain("[waiting]");
+    expect(output).toContain("Command (waiting)");
     expect(output).toContain("git push");
-    expect(output).toContain("[denied]");
-    expect(output).toContain("file changes");
+    expect(output).toContain("denied");
+    expect(output).toContain("example.ts");
     expect(output).not.toContain("Command approval started");
     expect(output).not.toContain("File-change approval started");
   });
