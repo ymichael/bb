@@ -19,6 +19,7 @@ function isProvisioningActivityOperation(
 
 function isActivityMessage(message: ViewMessage): boolean {
   return (
+    message.kind === "command" ||
     message.kind === "tool-call" ||
     message.kind === "delegation" ||
     message.kind === "file-edit" ||
@@ -48,6 +49,7 @@ function isActivityRow(row: TimelineRow): boolean {
 
 function shouldPreferOngoingLabelsForMessage(message: ViewMessage): boolean {
   switch (message.kind) {
+    case "command":
     case "tool-call":
     case "delegation":
     case "web-search":

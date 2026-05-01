@@ -468,6 +468,7 @@ export type {
   ViewApprovalTarget,
   ViewApprovalLifecycleStatus,
   ViewAssistantTextMessage,
+  ViewCommandMessage,
   ViewDelegationMessage,
   ViewDebugRawEventMessage,
   ViewErrorMessage,

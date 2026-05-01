@@ -23,7 +23,7 @@ import {
 } from "./timeline-message-helpers.js";
 import { mergeGroupedRowStatus } from "./timeline-grouped-row-status.js";
 import { summarizeExploringCounts } from "./timeline-render-helpers.js";
-import { isExploringCall, isShellToolName } from "./tool-call-parsing.js";
+import { isExploringCall } from "./tool-call-parsing.js";
 import {
   getViewMessageScopeTurnId,
   haveCompatibleViewMessageScope,
@@ -91,6 +91,7 @@ function getDurationMs(range: TimelineMessageRange | null): number | undefined {
 
 function getGroupMessageStatus(message: ViewMessage): TimelineGroupedRowStatus {
   switch (message.kind) {
+    case "command":
     case "tool-call":
     case "web-search":
     case "web-fetch":
@@ -314,8 +315,14 @@ function isExplorationToolCallMessage(
   return isExploringCall({ parsedCmd: message.parsedCmd ?? [] });
 }
 
+function isExplorationToolActivityMessage(
+  message: Extract<ViewMessage, { kind: "command" | "tool-call" }>,
+): boolean {
+  return isExploringCall({ parsedCmd: message.parsedCmd ?? [] });
+}
+
 function toToolCallSummary(
-  message: Extract<ViewMessage, { kind: "tool-call" }>,
+  message: Extract<ViewMessage, { kind: "command" | "tool-call" }>,
 ): ViewToolCallSummary {
   return {
     callId: message.callId,
@@ -329,8 +336,12 @@ function toToolCallSummary(
     durationMs: message.durationMs,
     approvalStatus: message.approvalStatus,
     status: message.status,
-    subagentType: message.subagentType,
-    description: message.description,
+    ...(message.kind === "tool-call"
+      ? {
+          subagentType: message.subagentType,
+          description: message.description,
+        }
+      : {}),
   };
 }
 
@@ -351,11 +362,16 @@ function getToolBundleKind(
   message: ViewMessage,
 ): TimelineToolBundleKind | null {
   switch (message.kind) {
+    case "command":
+      if (isExplorationToolActivityMessage(message)) {
+        return "exploration";
+      }
+      return "commands";
     case "tool-call":
       if (isExplorationToolCallMessage(message)) {
         return "exploration";
       }
-      return isShellToolName(message.toolName) ? "commands" : null;
+      return null;
     case "web-search":
     case "web-fetch":
       return "web-research";
@@ -381,10 +397,11 @@ function canAppendToToolBundle(
   switch (active.bundleKind) {
     case "exploration":
       return (
-        message.kind === "tool-call" && isExplorationToolCallMessage(message)
+        (message.kind === "command" || message.kind === "tool-call") &&
+        isExplorationToolActivityMessage(message)
       );
     case "commands":
-      return message.kind === "tool-call" && isShellToolName(message.toolName);
+      return message.kind === "command";
     case "web-research":
       return message.kind === "web-search" || message.kind === "web-fetch";
     default:
@@ -400,11 +417,11 @@ function buildToolBundleSummary(
     case "exploration": {
       const calls = messages.map((message) => {
         if (
-          message.kind !== "tool-call" ||
-          !isExplorationToolCallMessage(message)
+          (message.kind !== "command" && message.kind !== "tool-call") ||
+          !isExplorationToolActivityMessage(message)
         ) {
           throw new Error(
-            `Exploration bundles require exploring tool-call messages, got ${message.kind}`,
+            `Exploration bundles require exploring command or tool-call messages, got ${message.kind}`,
           );
         }
         return toToolCallSummary(message);
@@ -417,11 +434,19 @@ function buildToolBundleSummary(
         lists: counts.lists,
       };
     }
-    case "commands":
+    case "commands": {
+      for (const message of messages) {
+        if (message.kind !== "command") {
+          throw new Error(
+            `Command bundles require command messages, got ${message.kind}`,
+          );
+        }
+      }
       return {
         kind: "commands",
         commands: messages.length,
       };
+    }
     case "web-research": {
       let webPagesRead = 0;
       let webSearches = 0;

@@ -70,6 +70,18 @@ function findToolCallMessage(
   );
 }
 
+function findCommandMessage(
+  messages: readonly ViewMessage[],
+  itemId: string,
+): Extract<ViewMessage, { kind: "command" }> | null {
+  return (
+    messages.find(
+      (message): message is Extract<ViewMessage, { kind: "command" }> =>
+        message.kind === "command" && message.callId === itemId,
+    ) ?? null
+  );
+}
+
 function findDelegationMessage(
   messages: readonly ViewMessage[],
   itemId: string,
@@ -161,6 +173,19 @@ function expectToolCallPending(args: MessageAssertionArgs): void {
   });
 }
 
+function expectCommandInterrupted(args: MessageAssertionArgs): void {
+  expect(findCommandMessage(args.messages, args.itemId)).toMatchObject({
+    status: "interrupted",
+    output: "Tool execution interrupted",
+  });
+}
+
+function expectCommandPending(args: MessageAssertionArgs): void {
+  expect(findCommandMessage(args.messages, args.itemId)).toMatchObject({
+    status: "pending",
+  });
+}
+
 function expectDelegationInterrupted(args: MessageAssertionArgs): void {
   expect(findDelegationMessage(args.messages, args.itemId)).toMatchObject({
     status: "interrupted",
@@ -237,7 +262,7 @@ function expectPermissionGrantPending(args: MessageAssertionArgs): void {
 
 const scenarios: InterruptedTurnProjectionScenario[] = [
   {
-    name: "tool-call",
+    name: "command",
     oldId: "command-old",
     newId: "command-new",
     buildPendingEvents: (args) => [
@@ -247,8 +272,8 @@ const scenarios: InterruptedTurnProjectionScenario[] = [
         command: `echo ${args.itemId}`,
       }),
     ],
-    assertInterrupted: expectToolCallInterrupted,
-    assertPending: expectToolCallPending,
+    assertInterrupted: expectCommandInterrupted,
+    assertPending: expectCommandPending,
   },
   {
     name: "read tool-call",

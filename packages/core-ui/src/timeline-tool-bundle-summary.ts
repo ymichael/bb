@@ -3,6 +3,7 @@ import type {
   TimelineGroupedRowStatus,
   TimelineToolBundleRow,
   TimelineToolBundleSummary,
+  ViewCommandMessage,
   ViewToolCallMessage,
   ViewToolCallSummary,
 } from "@bb/domain";
@@ -142,7 +143,11 @@ export function buildToolBundleSummaryParts(
   });
 }
 
-function toToolCallSummary(message: ViewToolCallMessage): ViewToolCallSummary {
+type ExplorationBundleMessage = ViewCommandMessage | ViewToolCallMessage;
+
+function toToolCallSummary(
+  message: ExplorationBundleMessage,
+): ViewToolCallSummary {
   return {
     callId: message.callId,
     command: message.command,
@@ -155,8 +160,12 @@ function toToolCallSummary(message: ViewToolCallMessage): ViewToolCallSummary {
     durationMs: message.durationMs,
     approvalStatus: message.approvalStatus,
     status: message.status,
-    subagentType: message.subagentType,
-    description: message.description,
+    ...(message.kind === "tool-call"
+      ? {
+          subagentType: message.subagentType,
+          description: message.description,
+        }
+      : {}),
   };
 }
 
@@ -164,9 +173,9 @@ function getExplorationBundleCalls(
   rows: readonly TimelineMessageRow[],
 ): ViewToolCallSummary[] {
   return rows.map((row) => {
-    if (row.message.kind !== "tool-call") {
+    if (row.message.kind !== "command" && row.message.kind !== "tool-call") {
       throw new Error(
-        `Exploration tool bundles must only contain tool-call rows, got ${row.message.kind}`,
+        `Exploration tool bundles must only contain command or tool-call rows, got ${row.message.kind}`,
       );
     }
     return toToolCallSummary(row.message);

@@ -129,17 +129,16 @@ function formatMessagesAsText(
 }
 
 describe("formatTimelineAsText", () => {
-  it("renders command approval state on tool-call rows", () => {
+  it("renders command approval state on command rows", () => {
     const text = formatMessagesAsText(
       [
         {
-          kind: "tool-call",
+          kind: "command",
           id: "approval-1",
           threadId: "t1",
           sourceSeqStart: 1,
           sourceSeqEnd: 1,
           createdAt: 1,
-          toolName: "exec_command",
           callId: "item-1",
           command: "git push",
           status: "pending",
@@ -157,13 +156,12 @@ describe("formatTimelineAsText", () => {
     const text = formatMessagesAsText(
       [
         {
-          kind: "tool-call",
+          kind: "command",
           id: "silent-success-1",
           threadId: "t1",
           sourceSeqStart: 1,
           sourceSeqEnd: 1,
           createdAt: 1,
-          toolName: "Bash",
           callId: "call-1",
           command: "true",
           exitCode: 0,
@@ -272,13 +270,12 @@ describe("formatTimelineAsText", () => {
         status: "completed",
       },
       {
-        kind: "tool-call",
+        kind: "command",
         id: "tc1",
         threadId: "t1",
         sourceSeqStart: 3,
         sourceSeqEnd: 4,
         createdAt: 3,
-        toolName: "Bash",
         callId: "call-1",
         command: "npm test",
         output: "All tests passed",
@@ -451,7 +448,7 @@ describe("formatTimelineAsText", () => {
   it("collapses grouped tool activity in minimal mode and expands it in verbose mode", () => {
     const messages: ViewMessage[] = [
       {
-        kind: "tool-call",
+        kind: "command",
         id: "tc1",
         threadId: "t1",
         turnId: "turn-1",
@@ -459,14 +456,13 @@ describe("formatTimelineAsText", () => {
         sourceSeqEnd: 1,
         createdAt: 1,
         startedAt: 1,
-        toolName: "exec_command",
         callId: "call-1",
         command: "npm test",
         output: "ok",
         status: "completed",
       },
       {
-        kind: "tool-call",
+        kind: "command",
         id: "tc2",
         threadId: "t1",
         turnId: "turn-1",
@@ -474,7 +470,6 @@ describe("formatTimelineAsText", () => {
         sourceSeqEnd: 2,
         createdAt: 2,
         startedAt: 2,
-        toolName: "exec_command",
         callId: "call-2",
         command: "npm run lint",
         output: "clean",

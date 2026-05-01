@@ -122,7 +122,7 @@ describe("timeline CLI rendering snapshots", () => {
         {
           "messageKinds": [
             "user",
-            "tool-call",
+            "command",
           ],
           "prefixLength": 3,
           "text": "── User ────────────────────────────────────────────────────
@@ -134,7 +134,7 @@ describe("timeline CLI rendering snapshots", () => {
         {
           "messageKinds": [
             "user",
-            "tool-call",
+            "command",
           ],
           "prefixLength": 5,
           "text": "── User ────────────────────────────────────────────────────
@@ -146,7 +146,7 @@ describe("timeline CLI rendering snapshots", () => {
         {
           "messageKinds": [
             "user",
-            "tool-call",
+            "command",
             "web-search",
             "file-edit",
           ],
@@ -187,26 +187,26 @@ describe("timeline CLI rendering snapshots", () => {
     const event = createTimelineEventFactory({ threadId: "thread-1" });
     const timeline = renderIdleTimeline([
       event.turnStarted(),
-      event.toolCallCompleted({
+      event.commandCompleted({
         itemId: "tool-before-steer",
-        arguments: { cmd: "pnpm test" },
+        command: "pnpm test",
       }),
       event.clientTurnRequested({
         target: { kind: "auto", expectedTurnId: "turn-1" },
         text: "Please account for the restart",
       }),
-      event.toolCallCompleted({
+      event.commandCompleted({
         itemId: "tool-after-steer",
-        arguments: { cmd: "sqlite3 ~/.bb-dev/bb.db '.tables'" },
+        command: "sqlite3 ~/.bb-dev/bb.db '.tables'",
       }),
       event.assistantCompleted({ itemId: "assistant-1", text: "Done." }),
       event.turnCompleted(),
     ]);
 
     expect(messageKinds(timeline.messages)).toEqual([
-      "tool-call",
+      "command",
       "user",
-      "tool-call",
+      "command",
       "assistant-text",
     ]);
     const steerMessage = timeline.messages.find(
@@ -216,7 +216,7 @@ describe("timeline CLI rendering snapshots", () => {
     expect(timeline.text).toMatchInlineSnapshot(`
       "── Ran 1 command ───────────────────────────────────────────
         ── Tool Call: exec_command ─────────────────────────────────
-          [completed] exec_command { cmd: pnpm test }
+          [completed] pnpm test
 
       ── User ────────────────────────────────────────────────────
       Please account for the restart
@@ -224,7 +224,7 @@ describe("timeline CLI rendering snapshots", () => {
       ── Worked on 1 item ────────────────────────────────────────
         ── Ran 1 command ───────────────────────────────────────────
           ── Tool Call: exec_command ─────────────────────────────────
-            [completed] exec_command { cmd: sqlite3 ~/.bb-dev/bb.db '.tables' }
+            [completed] sqlite3 ~/.bb-dev/bb.db '.tables'
 
       ── Assistant ───────────────────────────────────────────────
       Done."
@@ -235,9 +235,9 @@ describe("timeline CLI rendering snapshots", () => {
     const event = createTimelineEventFactory({ threadId: "thread-1" });
     const timeline = renderIdleTimeline([
       event.turnStarted(),
-      event.toolCallCompleted({
+      event.commandCompleted({
         itemId: "tool-before-steer",
-        arguments: { cmd: "pnpm test" },
+        command: "pnpm test",
       }),
       event.clientTurnRequested({
         target: { kind: "auto", expectedTurnId: "turn-1" },
@@ -246,18 +246,18 @@ describe("timeline CLI rendering snapshots", () => {
       event.inputAccepted({
         clientRequestSequence: 3,
       }),
-      event.toolCallCompleted({
+      event.commandCompleted({
         itemId: "tool-after-steer",
-        arguments: { cmd: "sqlite3 ~/.bb-dev/bb.db '.tables'" },
+        command: "sqlite3 ~/.bb-dev/bb.db '.tables'",
       }),
       event.assistantCompleted({ itemId: "assistant-1", text: "Done." }),
       event.turnCompleted(),
     ]);
 
     expect(messageKinds(timeline.messages)).toEqual([
-      "tool-call",
+      "command",
       "user",
-      "tool-call",
+      "command",
       "assistant-text",
     ]);
     const steerMessage = timeline.messages.find(
@@ -267,7 +267,7 @@ describe("timeline CLI rendering snapshots", () => {
     expect(timeline.text).toMatchInlineSnapshot(`
       "── Ran 1 command ───────────────────────────────────────────
         ── Tool Call: exec_command ─────────────────────────────────
-          [completed] exec_command { cmd: pnpm test }
+          [completed] pnpm test
 
       ── User ────────────────────────────────────────────────────
       Please account for the restart
@@ -275,7 +275,7 @@ describe("timeline CLI rendering snapshots", () => {
       ── Worked on 1 item ────────────────────────────────────────
         ── Ran 1 command ───────────────────────────────────────────
           ── Tool Call: exec_command ─────────────────────────────────
-            [completed] exec_command { cmd: sqlite3 ~/.bb-dev/bb.db '.tables' }
+            [completed] sqlite3 ~/.bb-dev/bb.db '.tables'
 
       ── Assistant ───────────────────────────────────────────────
       Done."
@@ -498,7 +498,7 @@ describe("timeline CLI rendering snapshots", () => {
 
     expect(messageKinds(timeline.messages)).toEqual([
       "permission-grant-lifecycle",
-      "tool-call",
+      "command",
     ]);
     expect(timeline.text).toMatchInlineSnapshot(`
       "── Waiting for approval to grant Bash ──────────────────────

@@ -479,7 +479,7 @@ function buildDelegationSnapshots(
         fixture: toFixtureId(fixture),
         childMessageCount: childMessages.length,
         hasChildToolActivity: childMessages.some(
-          (child) => child.kind === "tool-call",
+          (child) => child.kind === "command" || child.kind === "tool-call",
         ),
       });
     }

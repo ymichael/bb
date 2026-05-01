@@ -83,13 +83,16 @@ function toolCallLogicalRow(row: TimelineRow): LogicalTimelineRow | null {
     return null;
   }
   const message = row.message;
-  if (message.kind !== "tool-call") {
+  if (message.kind !== "command" && message.kind !== "tool-call") {
     return null;
   }
   return {
     key: `tool:${message.callId}`,
     status: message.status,
-    title: message.command ?? message.toolName,
+    title:
+      message.kind === "tool-call"
+        ? (message.command ?? message.toolName)
+        : (message.command ?? "command"),
   };
 }
 
@@ -168,9 +171,7 @@ function userLogicalRow(row: TimelineRow): LogicalTimelineRow | null {
   };
 }
 
-function providerNoticeLogicalRow(
-  row: TimelineRow,
-): LogicalTimelineRow | null {
+function providerNoticeLogicalRow(row: TimelineRow): LogicalTimelineRow | null {
   if (row.kind !== "message") {
     return null;
   }
@@ -254,9 +255,9 @@ describe("timeline prefix stability", () => {
     });
 
     expect(
-      completedPrefix.rows.map((row) => provisioningLogicalRow(row)).filter(
-        (row): row is LogicalTimelineRow => row !== null,
-      ),
+      completedPrefix.rows
+        .map((row) => provisioningLogicalRow(row))
+        .filter((row): row is LogicalTimelineRow => row !== null),
     ).toEqual([
       {
         key: "provisioning:tpv-prefix",
@@ -265,9 +266,9 @@ describe("timeline prefix stability", () => {
       },
     ]);
     expect(
-      contentPrefix.rows.map((row) => provisioningLogicalRow(row)).filter(
-        (row): row is LogicalTimelineRow => row !== null,
-      ),
+      contentPrefix.rows
+        .map((row) => provisioningLogicalRow(row))
+        .filter((row): row is LogicalTimelineRow => row !== null),
     ).toEqual([
       {
         key: "provisioning:tpv-prefix",
@@ -382,9 +383,9 @@ describe("timeline prefix stability", () => {
     });
 
     expect(
-      contentPrefix.rows.map((row) => operationLogicalRow(row)).filter(
-        (row): row is LogicalTimelineRow => row !== null,
-      ),
+      contentPrefix.rows
+        .map((row) => operationLogicalRow(row))
+        .filter((row): row is LogicalTimelineRow => row !== null),
     ).toEqual([
       {
         key: "operation:op-prefix",
@@ -438,9 +439,9 @@ describe("timeline prefix stability", () => {
     });
 
     expect(
-      contentPrefix.rows.map((row) => permissionGrantLogicalRow(row)).filter(
-        (row): row is LogicalTimelineRow => row !== null,
-      ),
+      contentPrefix.rows
+        .map((row) => permissionGrantLogicalRow(row))
+        .filter((row): row is LogicalTimelineRow => row !== null),
     ).toEqual([
       {
         key: "permission-grant:pi-prefix",
@@ -497,9 +498,9 @@ describe("timeline prefix stability", () => {
     });
 
     expect(
-      completedPrefix.rows.map((row) => compactionLogicalRow(row)).filter(
-        (row): row is LogicalTimelineRow => row !== null,
-      ),
+      completedPrefix.rows
+        .map((row) => compactionLogicalRow(row))
+        .filter((row): row is LogicalTimelineRow => row !== null),
     ).toEqual([
       {
         key: "thread-1:op:compaction:turn-1",

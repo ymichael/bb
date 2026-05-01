@@ -7,7 +7,7 @@ import type {
 } from "@bb/domain";
 import { assertNever } from "./assert-never.js";
 import { fileChangeIdentity } from "./file-change-summary.js";
-import { isDelegationToolName, isShellToolName } from "./tool-call-parsing.js";
+import { isDelegationToolName } from "./tool-call-parsing.js";
 import { mergeGroupedRowStatus } from "./timeline-grouped-row-status.js";
 import { formatToolBundleSummaryLabel } from "./timeline-tool-bundle-summary.js";
 
@@ -122,6 +122,7 @@ function countFallbackMessage(message: ViewMessage): boolean {
     case "debug/raw-event":
     case "user":
       return false;
+    case "command":
     case "delegation":
     case "error":
     case "file-edit":
@@ -158,9 +159,6 @@ function addMessageRow(
         addPartOrder(accumulator, "delegations");
         return;
       }
-      if (isShellToolName(message.toolName)) {
-        return;
-      }
       accumulator.toolsCount += 1;
       addPartOrder(accumulator, "tools");
       return;
@@ -180,6 +178,7 @@ function addMessageRow(
     case "tasks":
     case "permission-grant-lifecycle":
       return;
+    case "command":
     case "operation":
       return;
     case "error":

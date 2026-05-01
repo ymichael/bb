@@ -3,9 +3,8 @@ import {
   formatCommandOutputText,
   getTimelineDisplayStatus,
   getTimelineDisplayStatusInfo,
-  isShellToolName,
 } from "@bb/core-ui";
-import type { ViewToolCallMessage } from "@bb/domain";
+import type { ViewCommandMessage, ViewToolCallMessage } from "@bb/domain";
 import { ExpandablePanel } from "../../disclosure.js";
 import { useLatestInitialExpanded } from "../latestInitialExpanded.js";
 import {
@@ -15,20 +14,27 @@ import {
 } from "./shared.js";
 import { TerminalOutputBlock } from "./TerminalOutputBlock.js";
 
+type ExecutionMessage = ViewCommandMessage | ViewToolCallMessage;
+
 interface ToolCallRowProps {
   message: ViewToolCallMessage;
   initialExpanded?: boolean;
   preferOngoingLabels?: boolean;
 }
 
-function getToolCallTone(
-  message: ViewToolCallMessage,
-): "default" | "destructive" {
-  // Shell command rows are common, and failed commands should read like regular
-  // command history rather than error alerts. Keep destructive tone for any future
-  // non-shell tool rows that may still need stronger emphasis.
-  if (isShellToolName(message.toolName)) return "default";
-  return message.status === "error" ? "destructive" : "default";
+interface CommandRowProps {
+  message: ViewCommandMessage;
+  initialExpanded?: boolean;
+  preferOngoingLabels?: boolean;
+}
+
+interface ExecutionRowProps {
+  command: string;
+  getTitleDetail: (isExpanded: boolean) => string;
+  initialExpanded: boolean;
+  message: ExecutionMessage;
+  preferOngoingLabels: boolean;
+  tone: "default" | "destructive";
 }
 
 function useLiveNow(enabled: boolean): number | undefined {
@@ -49,7 +55,7 @@ function useLiveNow(enabled: boolean): number | undefined {
 }
 
 function getElapsedDurationMs(
-  message: ViewToolCallMessage,
+  message: ExecutionMessage,
   now: number | undefined,
 ): number | undefined {
   if (message.startedAt === undefined) return undefined;
@@ -58,7 +64,7 @@ function getElapsedDurationMs(
 }
 
 function getSummaryDurationMs(
-  message: ViewToolCallMessage,
+  message: ExecutionMessage,
   preferRunningLabel: boolean,
   liveNow: number | undefined,
 ): number | undefined {
@@ -71,15 +77,16 @@ function getSummaryDurationMs(
   return message.durationMs;
 }
 
-export function ToolCallRow({
+function ExecutionRow({
+  command,
+  getTitleDetail,
   message,
-  initialExpanded = false,
-  preferOngoingLabels = false,
-}: ToolCallRowProps) {
+  initialExpanded,
+  preferOngoingLabels,
+  tone,
+}: ExecutionRowProps) {
   const { isExpanded, onToggle } = useLatestInitialExpanded(initialExpanded);
-  const command = message.command ?? message.toolName;
-  const titleDetail =
-    isExpanded && isShellToolName(message.toolName) ? "command" : command;
+  const titleDetail = getTitleDetail(isExpanded);
   const preferRunningLabel =
     preferOngoingLabels && message.status === "completed";
   const displayStatus = getTimelineDisplayStatus({
@@ -100,7 +107,6 @@ export function ToolCallRow({
   const duration = formatSummaryDuration(
     getSummaryDurationMs(message, preferRunningLabel, liveNow),
   );
-  const tone = getToolCallTone(message);
   const summaryContent = (
     <EventTitle
       prefix={actionLabel}
@@ -129,5 +135,41 @@ export function ToolCallRow({
         </ExpandablePanel>
       </div>
     </div>
+  );
+}
+
+export function CommandRow({
+  message,
+  initialExpanded = false,
+  preferOngoingLabels = false,
+}: CommandRowProps) {
+  const command = message.command ?? "command";
+  return (
+    <ExecutionRow
+      command={command}
+      getTitleDetail={(isExpanded) => (isExpanded ? "command" : command)}
+      initialExpanded={initialExpanded}
+      message={message}
+      preferOngoingLabels={preferOngoingLabels}
+      tone="default"
+    />
+  );
+}
+
+export function ToolCallRow({
+  message,
+  initialExpanded = false,
+  preferOngoingLabels = false,
+}: ToolCallRowProps) {
+  const command = message.command ?? message.toolName;
+  return (
+    <ExecutionRow
+      command={command}
+      getTitleDetail={() => command}
+      initialExpanded={initialExpanded}
+      message={message}
+      preferOngoingLabels={preferOngoingLabels}
+      tone={message.status === "error" ? "destructive" : "default"}
+    />
   );
 }

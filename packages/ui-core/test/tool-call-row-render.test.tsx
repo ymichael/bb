@@ -1,17 +1,47 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import type { ViewToolCallMessage } from "@bb/domain";
-import { ToolCallRow } from "../src/thread-timeline/rows/ToolCallRow.js";
+import type { ViewCommandMessage, ViewToolCallMessage } from "@bb/domain";
+import {
+  CommandRow,
+  ToolCallRow,
+} from "../src/thread-timeline/rows/ToolCallRow.js";
 
-interface BuildToolCallMessageArgs {
-  approvalStatus?: ViewToolCallMessage["approvalStatus"];
-  status: ViewToolCallMessage["status"];
+interface BuildCommandMessageArgs {
+  approvalStatus?: ViewCommandMessage["approvalStatus"];
+  status: ViewCommandMessage["status"];
   createdAt?: number;
   durationMs?: number;
   exitCode?: number;
   output?: string;
   startedAt?: number;
+}
+
+interface BuildToolCallMessageArgs {
+  status: ViewToolCallMessage["status"];
+  createdAt?: number;
+  startedAt?: number;
   toolName?: string;
+}
+
+function buildCommandMessage(
+  args: BuildCommandMessageArgs,
+): ViewCommandMessage {
+  return {
+    kind: "command",
+    id: "command-1",
+    threadId: "thread-1",
+    sourceSeqStart: 1,
+    sourceSeqEnd: 1,
+    createdAt: args.createdAt ?? 1,
+    ...(args.startedAt !== undefined ? { startedAt: args.startedAt } : {}),
+    callId: "call-1",
+    command: "echo hello",
+    ...(args.output !== undefined ? { output: args.output } : {}),
+    ...(args.exitCode !== undefined ? { exitCode: args.exitCode } : {}),
+    ...(args.durationMs !== undefined ? { durationMs: args.durationMs } : {}),
+    approvalStatus: args.approvalStatus ?? null,
+    status: args.status,
+  };
 }
 
 function buildToolCallMessage(
@@ -25,13 +55,10 @@ function buildToolCallMessage(
     sourceSeqEnd: 1,
     createdAt: args.createdAt ?? 1,
     ...(args.startedAt !== undefined ? { startedAt: args.startedAt } : {}),
-    toolName: args.toolName ?? "exec_command",
+    toolName: args.toolName ?? "CustomTool",
     callId: "call-1",
     command: "echo hello",
-    ...(args.output !== undefined ? { output: args.output } : {}),
-    ...(args.exitCode !== undefined ? { exitCode: args.exitCode } : {}),
-    ...(args.durationMs !== undefined ? { durationMs: args.durationMs } : {}),
-    approvalStatus: args.approvalStatus ?? null,
+    approvalStatus: null,
     status: args.status,
   };
 }
@@ -39,7 +66,7 @@ function buildToolCallMessage(
 describe("ToolCallRow rendering", () => {
   it("labels interrupted commands as interrupted, not declined", () => {
     const html = renderToStaticMarkup(
-      <ToolCallRow message={buildToolCallMessage({ status: "interrupted" })} />,
+      <CommandRow message={buildCommandMessage({ status: "interrupted" })} />,
     );
 
     expect(html).toContain("Interrupted");
@@ -49,8 +76,8 @@ describe("ToolCallRow rendering", () => {
 
   it("shows non-zero exit code when a failed command has no output", () => {
     const html = renderToStaticMarkup(
-      <ToolCallRow
-        message={buildToolCallMessage({ status: "error", exitCode: 1 })}
+      <CommandRow
+        message={buildCommandMessage({ status: "error", exitCode: 1 })}
         initialExpanded
       />,
     );
@@ -61,8 +88,8 @@ describe("ToolCallRow rendering", () => {
 
   it("shows exit code 0 when a successful command completes silently", () => {
     const html = renderToStaticMarkup(
-      <ToolCallRow
-        message={buildToolCallMessage({ status: "completed", exitCode: 0 })}
+      <CommandRow
+        message={buildCommandMessage({ status: "completed", exitCode: 0 })}
         initialExpanded
       />,
     );
@@ -74,8 +101,8 @@ describe("ToolCallRow rendering", () => {
 
   it("uses denied approval state instead of a completed label", () => {
     const html = renderToStaticMarkup(
-      <ToolCallRow
-        message={buildToolCallMessage({
+      <CommandRow
+        message={buildCommandMessage({
           approvalStatus: "denied",
           status: "completed",
         })}
@@ -88,8 +115,8 @@ describe("ToolCallRow rendering", () => {
 
   it("renders no output block while approval is still waiting", () => {
     const html = renderToStaticMarkup(
-      <ToolCallRow
-        message={buildToolCallMessage({
+      <CommandRow
+        message={buildCommandMessage({
           approvalStatus: "waiting_for_approval",
           status: "pending",
         })}
@@ -105,8 +132,8 @@ describe("ToolCallRow rendering", () => {
 
   it("keeps waiting-for-approval rows visually active without showing a running duration", () => {
     const html = renderToStaticMarkup(
-      <ToolCallRow
-        message={buildToolCallMessage({
+      <CommandRow
+        message={buildCommandMessage({
           approvalStatus: "waiting_for_approval",
           status: "pending",
           startedAt: 1_000,
@@ -123,8 +150,8 @@ describe("ToolCallRow rendering", () => {
 
   it("omits pending command duration before the live clock starts", () => {
     const html = renderToStaticMarkup(
-      <ToolCallRow
-        message={buildToolCallMessage({
+      <CommandRow
+        message={buildCommandMessage({
           status: "pending",
           startedAt: 1_000,
           createdAt: 3_500,
@@ -139,8 +166,8 @@ describe("ToolCallRow rendering", () => {
 
   it("shows expanded pending command titles without repeating the command text", () => {
     const html = renderToStaticMarkup(
-      <ToolCallRow
-        message={buildToolCallMessage({
+      <CommandRow
+        message={buildCommandMessage({
           status: "pending",
           startedAt: 1_000,
           createdAt: 3_500,
@@ -156,7 +183,7 @@ describe("ToolCallRow rendering", () => {
   });
 
   it.each(["bash", "Bash"])(
-    "uses shell title behavior for %s tool rows",
+    "renders %s tool rows as ordinary tool calls",
     (toolName) => {
       const html = renderToStaticMarkup(
         <ToolCallRow
@@ -171,7 +198,7 @@ describe("ToolCallRow rendering", () => {
       );
 
       expect(html).toContain("Running");
-      expect(html).toContain("command");
+      expect(html).toContain("echo hello");
       expect(html).not.toContain("3s");
       expect(html).toContain("$ echo hello");
     },

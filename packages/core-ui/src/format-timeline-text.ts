@@ -4,6 +4,7 @@ import type {
   TimelineToolBundleRow,
   TimelineTurnSummaryRow,
   ViewAssistantTextMessage,
+  ViewCommandMessage,
   ViewPermissionGrantLifecycleMessage,
   ViewDelegationMessage,
   ViewErrorMessage,
@@ -210,29 +211,43 @@ function formatAssistantText(
   return lines.join("\n");
 }
 
-function formatToolCall(
-  msg: ViewToolCallMessage,
+interface FormatExecutionCallArgs {
+  approvalStatus: ViewCommandMessage["approvalStatus"];
+  command: string | undefined;
+  duration: string | undefined;
+  durationMs: number | undefined;
+  exitCode: number | undefined;
+  label: string;
+  output: string | undefined;
+  status: ViewCommandMessage["status"];
+}
+
+function formatExecutionCall(
+  args: FormatExecutionCallArgs,
   verbose: boolean,
   color: boolean,
 ): string {
   const lines: string[] = [];
-  const name = msg.toolName ?? "exec_command";
-  const cmd = msg.command ?? "";
+  const cmd = args.command ?? "";
   const displayStatus = getTimelineDisplayStatus({
-    approvalStatus: msg.approvalStatus,
-    status: msg.status,
+    approvalStatus: args.approvalStatus,
+    status: args.status,
   });
-  lines.push(separator(`Tool Call: ${name}`, color));
+  lines.push(separator(`Tool Call: ${args.label}`, color));
   lines.push(
-    `  ${formatLifecycleLabel(displayStatus, color)} ${cyan(cmd || name, color)}`,
+    `  ${formatLifecycleLabel(displayStatus, color)} ${cyan(cmd || args.label, color)}`,
   );
 
-  const durationLine = formatDurationLine(msg.durationMs, msg.duration, color);
+  const durationLine = formatDurationLine(
+    args.durationMs,
+    args.duration,
+    color,
+  );
   if (durationLine) {
     lines.push(durationLine);
   }
 
-  const output = getVisibleCommandOutput(msg.output);
+  const output = getVisibleCommandOutput(args.output);
   if (output) {
     const outputLine = formatToolCallOutputLine(output, verbose, color);
     if (outputLine) {
@@ -242,7 +257,7 @@ function formatToolCall(
 
   const exitCodeLine = formatCommandExitCodeLine(
     displayStatus,
-    msg.exitCode,
+    args.exitCode,
     output !== undefined,
     color,
   );
@@ -251,6 +266,48 @@ function formatToolCall(
   }
 
   return lines.join("\n");
+}
+
+function formatToolCall(
+  msg: ViewToolCallMessage,
+  verbose: boolean,
+  color: boolean,
+): string {
+  return formatExecutionCall(
+    {
+      approvalStatus: msg.approvalStatus,
+      command: msg.command,
+      duration: msg.duration,
+      durationMs: msg.durationMs,
+      exitCode: msg.exitCode,
+      label: msg.toolName,
+      output: msg.output,
+      status: msg.status,
+    },
+    verbose,
+    color,
+  );
+}
+
+function formatCommand(
+  msg: ViewCommandMessage,
+  verbose: boolean,
+  color: boolean,
+): string {
+  return formatExecutionCall(
+    {
+      approvalStatus: msg.approvalStatus,
+      command: msg.command,
+      duration: msg.duration,
+      durationMs: msg.durationMs,
+      exitCode: msg.exitCode,
+      label: "exec_command",
+      output: msg.output,
+      status: msg.status,
+    },
+    verbose,
+    color,
+  );
 }
 
 function formatFileEdit(
@@ -433,6 +490,8 @@ function formatMessage(
       return formatUser(msg, verbose, color);
     case "assistant-text":
       return formatAssistantText(msg, verbose, color);
+    case "command":
+      return formatCommand(msg, verbose, color);
     case "tool-call":
       return formatToolCall(msg, verbose, color);
     case "file-edit":

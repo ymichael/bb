@@ -251,28 +251,26 @@ describe("buildTimelineRows projection turn lifecycle", () => {
   it("keeps command approval state on the command row", () => {
     const rows = buildRowsFromMessages([
       {
-        kind: "tool-call",
+        kind: "command",
         id: "command-waiting",
         threadId: "thread-1",
         turnId: "turn-1",
         sourceSeqStart: 1,
         sourceSeqEnd: 1,
         createdAt: 1,
-        toolName: "exec_command",
         callId: "item-1",
         command: "git push",
         status: "pending",
         approvalStatus: "waiting_for_approval",
       },
       {
-        kind: "tool-call",
+        kind: "command",
         id: "command-completed",
         threadId: "thread-1",
         turnId: "turn-1",
         sourceSeqStart: 2,
         sourceSeqEnd: 2,
         createdAt: 2,
-        toolName: "exec_command",
         callId: "item-1",
         command: "git push",
         status: "completed",
@@ -290,7 +288,7 @@ describe("buildTimelineRows projection turn lifecycle", () => {
       "command-completed",
     ]);
     expect(approvalMessages[0]).toMatchObject({
-      kind: "tool-call",
+      kind: "command",
       command: "git push",
       approvalStatus: "waiting_for_approval",
     });
@@ -299,14 +297,13 @@ describe("buildTimelineRows projection turn lifecycle", () => {
   it("keeps denied approval state on the command row", () => {
     const rows = buildRowsFromMessages([
       {
-        kind: "tool-call",
+        kind: "command",
         id: "command-denied",
         threadId: "thread-1",
         turnId: "turn-1",
         sourceSeqStart: 1,
         sourceSeqEnd: 1,
         createdAt: 1,
-        toolName: "exec_command",
         callId: "item-1",
         command: "git push",
         status: "interrupted",
@@ -321,7 +318,7 @@ describe("buildTimelineRows projection turn lifecycle", () => {
     const deniedMessages = collectLeafMessages(deniedRow.rows);
     expect(deniedMessages).toHaveLength(1);
     expect(deniedMessages[0]).toMatchObject({
-      kind: "tool-call",
+      kind: "command",
       command: "git push",
       approvalStatus: "denied",
     });
@@ -356,14 +353,13 @@ describe("buildTimelineRows projection turn lifecycle", () => {
             },
             messages: [
               {
-                kind: "tool-call",
+                kind: "command",
                 id: "tool-1",
                 threadId: "thread-1",
                 sourceSeqStart: 2,
                 sourceSeqEnd: 2,
                 createdAt: 2,
                 turnId: "turn-1",
-                toolName: "exec_command",
                 callId: "call-1",
                 command: "pnpm test",
                 status: "pending",
@@ -395,7 +391,7 @@ describe("buildTimelineRows projection turn lifecycle", () => {
     expect(toolGroup.sourceSeqStart).toBe(1);
     expect(toolGroup.sourceSeqEnd).toBe(4);
     expect(collectLeafMessages(toolGroup.rows ?? [])).toHaveLength(1);
-    expect(collectLeafMessages(toolGroup.rows ?? [])[0]?.kind).toBe("tool-call");
+    expect(collectLeafMessages(toolGroup.rows ?? [])[0]?.kind).toBe("command");
   });
 
   it("keeps a pending turn expanded even when all current messages are terminal", () => {
@@ -480,14 +476,13 @@ describe("buildTimelineRows projection turn lifecycle", () => {
             },
             messages: [
               {
-                kind: "tool-call",
+                kind: "command",
                 id: "tool-1",
                 threadId: "thread-1",
                 sourceSeqStart: 2,
                 sourceSeqEnd: 2,
                 createdAt: 2,
                 turnId: "turn-1",
-                toolName: "exec_command",
                 callId: "call-1",
                 command: "pnpm test",
                 status: "completed",
@@ -531,7 +526,9 @@ describe("buildTimelineRows projection turn lifecycle", () => {
       "message",
     ]);
     const toolGroup = expectTurnSummaryRow(rows[0]);
-    expect(collectLeafMessages(toolGroup.rows ?? []).map((message) => message.id)).toEqual(["tool-1"]);
+    expect(
+      collectLeafMessages(toolGroup.rows ?? []).map((message) => message.id),
+    ).toEqual(["tool-1"]);
     const terminalRow = expectMessageRow(rows[1]);
     expect(terminalRow.message.id).toBe("assistant-1");
     const operationRow = expectMessageRow(rows[2]);
@@ -567,14 +564,13 @@ describe("buildTimelineRows projection turn lifecycle", () => {
             },
             messages: [
               {
-                kind: "tool-call",
+                kind: "command",
                 id: "tool-1",
                 threadId: "thread-1",
                 sourceSeqStart: 2,
                 sourceSeqEnd: 2,
                 createdAt: 2,
                 turnId: "turn-1",
-                toolName: "exec_command",
                 callId: "call-1",
                 command: "pnpm test",
                 status: "completed",
@@ -590,14 +586,13 @@ describe("buildTimelineRows projection turn lifecycle", () => {
                 text: "Actually, run the focused test.",
               },
               {
-                kind: "tool-call",
+                kind: "command",
                 id: "tool-2",
                 threadId: "thread-1",
                 sourceSeqStart: 4,
                 sourceSeqEnd: 4,
                 createdAt: 4,
                 turnId: "turn-1",
-                toolName: "exec_command",
                 callId: "call-2",
                 command: "pnpm exec turbo run test --filter=@bb/core-ui",
                 status: "completed",
@@ -629,10 +624,16 @@ describe("buildTimelineRows projection turn lifecycle", () => {
       "turn-summary",
       "message",
     ]);
-    expect(collectLeafMessages([expectToolBundleRow(rows[0])]).map((message) => message.id)).toEqual(["tool-1"]);
+    expect(
+      collectLeafMessages([expectToolBundleRow(rows[0])]).map(
+        (message) => message.id,
+      ),
+    ).toEqual(["tool-1"]);
     expect(expectMessageRow(rows[1]).message.id).toBe("user-1");
     const toolGroup = expectTurnSummaryRow(rows[2]);
-    expect(collectLeafMessages(toolGroup.rows ?? []).map((message) => message.id)).toEqual(["tool-2"]);
+    expect(
+      collectLeafMessages(toolGroup.rows ?? []).map((message) => message.id),
+    ).toEqual(["tool-2"]);
     expect(expectMessageRow(rows[3]).message.id).toBe("assistant-1");
   });
 });
@@ -734,7 +735,9 @@ describe("buildTimelineRows tool group collapsing", () => {
       expect(rows[0].summaryCount).toBe(2);
       expect(rows[0].status).toBe("completed");
       expect(collectLeafMessages(rows[0].rows ?? [])).toHaveLength(2);
-      expect(collectLeafMessages(rows[0].rows ?? [])[0]?.kind).toBe("delegation");
+      expect(collectLeafMessages(rows[0].rows ?? [])[0]?.kind).toBe(
+        "delegation",
+      );
       expect(collectLeafMessages(rows[0].rows ?? [])[1]?.kind).toBe("tasks");
     }
     expect(rows[1]?.kind).toBe("message");
@@ -767,14 +770,13 @@ describe("buildTimelineRows tool group collapsing", () => {
         status: "completed",
       },
       {
-        kind: "tool-call",
+        kind: "command",
         id: "tool-1",
         threadId: "thread-1",
         sourceSeqStart: 5,
         sourceSeqEnd: 6,
         createdAt: 6,
         turnId: "turn-1",
-        toolName: "exec_command",
         callId: "call-1",
         command:
           "rg -n focusIndex packages/excalidraw/components/SearchMenu.tsx",
@@ -799,10 +801,9 @@ describe("buildTimelineRows tool group collapsing", () => {
       "message",
     ]);
     const toolGroup = expectTurnSummaryRow(rows[1]);
-    expect(collectLeafMessages(toolGroup.rows ?? []).map((message) => message.kind)).toEqual([
-      "assistant-text",
-      "tool-call",
-    ]);
+    expect(
+      collectLeafMessages(toolGroup.rows ?? []).map((message) => message.kind),
+    ).toEqual(["assistant-text", "command"]);
     const finalRow = expectMessageRow(rows[2]);
     expect(expectAssistantTextMessage(finalRow.message).text).toBe(
       "The fix is in SearchMenu.tsx.",
@@ -852,10 +853,9 @@ describe("buildTimelineRows tool group collapsing", () => {
     const toolGroup = expectTurnSummaryRow(rows[0]);
     expect(toolGroup.summaryCount).toBe(2);
     expect(toolGroup.status).toBe("error");
-    expect(collectLeafMessages(toolGroup.rows ?? []).map((message) => message.kind)).toEqual([
-      "tasks",
-      "error",
-    ]);
+    expect(
+      collectLeafMessages(toolGroup.rows ?? []).map((message) => message.kind),
+    ).toEqual(["tasks", "error"]);
   });
 
   it("counts intermediate assistant-text messages in summaryCount", () => {
@@ -872,14 +872,13 @@ describe("buildTimelineRows tool group collapsing", () => {
         status: "completed",
       },
       {
-        kind: "tool-call",
+        kind: "command",
         id: "tool-1",
         threadId: "thread-1",
         sourceSeqStart: 2,
         sourceSeqEnd: 2,
         createdAt: 2,
         turnId: "turn-1",
-        toolName: "exec_command",
         callId: "call-1",
         command: "npm test",
         status: "completed",
@@ -900,10 +899,9 @@ describe("buildTimelineRows tool group collapsing", () => {
     expect(rows.map((row) => row.kind)).toEqual(["turn-summary", "message"]);
     const toolGroup = expectTurnSummaryRow(rows[0]);
     expect(toolGroup.summaryCount).toBe(2);
-    expect(collectLeafMessages(toolGroup.rows ?? []).map((m) => m.kind)).toEqual([
-      "assistant-text",
-      "tool-call",
-    ]);
+    expect(
+      collectLeafMessages(toolGroup.rows ?? []).map((m) => m.kind),
+    ).toEqual(["assistant-text", "command"]);
   });
 
   it("groups pre-terminal messages before the last assistant-text, leaving it standalone", () => {
@@ -920,14 +918,13 @@ describe("buildTimelineRows tool group collapsing", () => {
         status: "completed",
       },
       {
-        kind: "tool-call",
+        kind: "command",
         id: "tool-1",
         threadId: "thread-1",
         sourceSeqStart: 3,
         sourceSeqEnd: 8,
         createdAt: 8,
         turnId: "turn-1",
-        toolName: "exec_command",
         callId: "call-1",
         command: "pnpm exec turbo run test --filter=@bb/core-ui",
         status: "completed",
@@ -948,10 +945,9 @@ describe("buildTimelineRows tool group collapsing", () => {
     // Last terminal is assistant-2, so assistant-1 + tool-1 get grouped; assistant-2 stays standalone
     expect(rows).toHaveLength(2);
     const toolGroup = expectTurnSummaryRow(rows[0]);
-    expect(collectLeafMessages(toolGroup.rows ?? []).map((message) => message.kind)).toEqual([
-      "assistant-text",
-      "tool-call",
-    ]);
+    expect(
+      collectLeafMessages(toolGroup.rows ?? []).map((message) => message.kind),
+    ).toEqual(["assistant-text", "command"]);
     expectMessageRow(rows[1]);
   });
 
@@ -1011,11 +1007,9 @@ describe("buildTimelineRows tool group collapsing", () => {
 
     expect(rows.map((row) => row.kind)).toEqual(["turn-summary", "message"]);
     const toolGroup = expectTurnSummaryRow(rows[0]);
-    expect(collectLeafMessages(toolGroup.rows ?? []).map((message) => message.kind)).toEqual([
-      "delegation",
-      "tasks",
-      "error",
-    ]);
+    expect(
+      collectLeafMessages(toolGroup.rows ?? []).map((message) => message.kind),
+    ).toEqual(["delegation", "tasks", "error"]);
   });
 
   it("groups each turn independently in multi-turn conversations", () => {
@@ -1044,14 +1038,13 @@ describe("buildTimelineRows tool group collapsing", () => {
         tasks: [{ text: "Inspect SearchMenu.tsx", status: "completed" }],
       },
       {
-        kind: "tool-call",
+        kind: "command",
         id: "tool-1",
         threadId: "thread-1",
         sourceSeqStart: 3,
         sourceSeqEnd: 3,
         createdAt: 3,
         turnId: "turn-1",
-        toolName: "exec_command",
         callId: "call-1",
         command: "pnpm exec turbo run test --filter=@bb/core-ui",
         status: "completed",
@@ -1091,14 +1084,13 @@ describe("buildTimelineRows tool group collapsing", () => {
         tasks: [{ text: "Update search summary copy", status: "completed" }],
       },
       {
-        kind: "tool-call",
+        kind: "command",
         id: "tool-2",
         threadId: "thread-1",
         sourceSeqStart: 7,
         sourceSeqEnd: 7,
         createdAt: 7,
         turnId: "turn-2",
-        toolName: "exec_command",
         callId: "call-2",
         command: "pnpm exec turbo run test --filter=@bb/ui-core",
         status: "completed",
@@ -1146,14 +1138,13 @@ describe("buildTimelineRows tool group collapsing", () => {
         text: "Run the test",
       },
       {
-        kind: "tool-call",
+        kind: "command",
         id: "tool-1",
         threadId: "thread-1",
         sourceSeqStart: 2,
         sourceSeqEnd: 2,
         createdAt: 2,
         turnId: "turn-1",
-        toolName: "exec_command",
         callId: "call-1",
         command: "pnpm exec turbo run test --filter=@bb/core-ui",
         status: "completed",
@@ -1189,14 +1180,13 @@ describe("buildTimelineRows tool group collapsing", () => {
         tasks: [{ text: "Inspect SearchMenu.tsx", status: "completed" }],
       },
       {
-        kind: "tool-call",
+        kind: "command",
         id: "tool-1",
         threadId: "thread-1",
         sourceSeqStart: 3,
         sourceSeqEnd: 3,
         createdAt: 3,
         turnId: "turn-1",
-        toolName: "exec_command",
         callId: "call-1",
         command: "pnpm exec turbo run test --filter=@bb/core-ui",
         status: "completed",
@@ -1282,14 +1272,13 @@ describe("buildTimelineRows tool group collapsing", () => {
   it("wraps pre-terminal tool bundles in an assistant-step-summary even without any mid-turn assistant-text", () => {
     const rows = buildRowsFromMessages([
       {
-        kind: "tool-call",
+        kind: "command",
         id: "tool-1",
         threadId: "thread-1",
         sourceSeqStart: 1,
         sourceSeqEnd: 1,
         createdAt: 1,
         turnId: "turn-1",
-        toolName: "exec_command",
         callId: "call-1",
         command: "git show main:src/a.ts",
         status: "completed",
@@ -1318,27 +1307,25 @@ describe("buildTimelineRows tool group collapsing", () => {
         status: "completed",
       },
       {
-        kind: "tool-call",
+        kind: "command",
         id: "tool-3",
         threadId: "thread-1",
         sourceSeqStart: 3,
         sourceSeqEnd: 3,
         createdAt: 3,
         turnId: "turn-1",
-        toolName: "exec_command",
         callId: "call-3",
         command: "git show main:src/b.ts",
         status: "completed",
       },
       {
-        kind: "tool-call",
+        kind: "command",
         id: "tool-4",
         threadId: "thread-1",
         sourceSeqStart: 4,
         sourceSeqEnd: 4,
         createdAt: 4,
         turnId: "turn-1",
-        toolName: "exec_command",
         callId: "call-4",
         command: "git show main:src/c.ts",
         status: "completed",
@@ -1431,14 +1418,13 @@ describe("buildTimelineRows tool group collapsing", () => {
           status: "completed",
         },
         {
-          kind: "tool-call",
+          kind: "command",
           id: "command-1",
           threadId: "thread-1",
           sourceSeqStart: 4,
           sourceSeqEnd: 4,
           createdAt: 4,
           turnId: "turn-1",
-          toolName: "exec_command",
           callId: "call-command",
           command: "python3 -c 'print(\"Search\")'",
           output: "Search",
@@ -1481,27 +1467,25 @@ describe("buildTimelineRows tool group collapsing", () => {
     const rows = buildRowsFromMessages(
       [
         {
-          kind: "tool-call",
+          kind: "command",
           id: "tool-1",
           threadId: "thread-1",
           sourceSeqStart: 1,
           sourceSeqEnd: 1,
           createdAt: 1,
           turnId: "turn-1",
-          toolName: "exec_command",
           callId: "call-1",
           command: "git status",
           status: "completed",
         },
         {
-          kind: "tool-call",
+          kind: "command",
           id: "tool-2",
           threadId: "thread-1",
           sourceSeqStart: 2,
           sourceSeqEnd: 2,
           createdAt: 2,
           turnId: "turn-1",
-          toolName: "exec_command",
           callId: "call-2",
           command: "git diff",
           status: "completed",
@@ -1556,14 +1540,13 @@ describe("buildTimelineRows tool group collapsing", () => {
         tasks: [{ text: "Run focused tests", status: "active" }],
       },
       {
-        kind: "tool-call",
+        kind: "command",
         id: "tool-1",
         threadId: "thread-1",
         sourceSeqStart: 3,
         sourceSeqEnd: 3,
         createdAt: 3,
         turnId: "turn-1",
-        toolName: "exec_command",
         callId: "call-1",
         command: "pnpm exec turbo run test --filter=@bb/core-ui",
         status: "pending",
@@ -1613,27 +1596,25 @@ describe("buildTimelineRows tool group collapsing", () => {
         status: "completed",
       },
       {
-        kind: "tool-call",
+        kind: "command",
         id: "tool-1",
         threadId: "thread-1",
         sourceSeqStart: 3,
         sourceSeqEnd: 3,
         createdAt: 3,
         turnId: "turn-1",
-        toolName: "exec_command",
         callId: "call-1",
         command: "npx jest search.test.tsx",
         status: "error",
       },
       {
-        kind: "tool-call",
+        kind: "command",
         id: "tool-2",
         threadId: "thread-1",
         sourceSeqStart: 4,
         sourceSeqEnd: 4,
         createdAt: 4,
         turnId: "turn-1",
-        toolName: "exec_command",
         callId: "call-2",
         command: "npx vitest run search.test.tsx",
         status: "completed",
@@ -1676,14 +1657,13 @@ describe("buildTimelineRows tool group collapsing", () => {
         status: "completed",
       },
       {
-        kind: "tool-call",
+        kind: "command",
         id: "tool-1",
         threadId: "thread-1",
         sourceSeqStart: 3,
         sourceSeqEnd: 3,
         createdAt: 3,
         turnId: "turn-1",
-        toolName: "exec_command",
         callId: "call-1",
         command: "npx vitest run search.test.tsx",
         status: "completed",
@@ -1774,14 +1754,13 @@ describe("buildTimelineRows reconnect error collapsing", () => {
         reconnectTotal: 5,
       },
       {
-        kind: "tool-call",
+        kind: "command",
         id: "tool-1",
         threadId: "thread-1",
         sourceSeqStart: 11,
         sourceSeqEnd: 11,
         createdAt: 11,
         turnId: "turn-1",
-        toolName: "exec_command",
         callId: "call-1",
         status: "completed",
       },

@@ -126,7 +126,7 @@ describe("toViewMessages approval projection", () => {
 
     expect(projected).toMatchObject([
       {
-        kind: "tool-call",
+        kind: "command",
         callId: "item-1",
         command: "git push",
         status: "completed",
@@ -186,7 +186,7 @@ describe("toViewMessages approval projection", () => {
 
     expect(projected).toMatchObject([
       {
-        kind: "tool-call",
+        kind: "command",
         callId: "item-1",
         command: "git push",
         status: "interrupted",

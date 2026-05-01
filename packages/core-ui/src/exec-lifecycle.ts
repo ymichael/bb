@@ -88,6 +88,7 @@ export function itemStatusToFileEditStatus(
 
 export interface ExecCallPartial extends Partial<ViewToolCallSummary> {
   callId: string;
+  messageKind: "command" | "tool-call";
   toolName?: string;
   parsedCmd: ViewToolParsedIntent[];
   parentToolCallId?: string;
@@ -253,14 +254,13 @@ export function parseExecLifecycleEvent(
       kind: "output",
       call: {
         callId,
+        messageKind: "command",
         parsedCmd: [],
         output: decoded.delta,
         status: "pending",
         ...(parentToolCallId ? { parentToolCallId } : {}),
       },
-      ...(decoded.reset
-        ? { replaceOutput: true }
-        : { appendOutput: true }),
+      ...(decoded.reset ? { replaceOutput: true } : { appendOutput: true }),
     };
   }
 
@@ -296,6 +296,7 @@ export function parseExecLifecycleEvent(
       kind,
       call: {
         callId,
+        messageKind: "command",
         command,
         cwd: decoded.item.cwd,
         parsedCmd: parseShellCommandIntents(command),
@@ -329,6 +330,7 @@ export function parseToolCallLifecycleEvent(
       kind: "output",
       call: {
         callId: decoded.itemId,
+        messageKind: "tool-call",
         parsedCmd: [],
         output: decoded.message ?? "Progress update",
         status: "pending",
@@ -383,6 +385,7 @@ export function parseToolCallLifecycleEvent(
       kind,
       call: {
         callId,
+        messageKind: "tool-call",
         toolName: fullToolName,
         command: formatToolCallCommand(fullToolName, parsedArgs),
         parsedCmd,

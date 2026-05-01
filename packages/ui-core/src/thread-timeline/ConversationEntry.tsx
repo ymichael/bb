@@ -11,7 +11,7 @@ import {
   OperationRow,
 } from "./rows/OperationRow.js";
 import { TasksRow } from "./rows/TasksRow.js";
-import { ToolCallRow } from "./rows/ToolCallRow.js";
+import { CommandRow, ToolCallRow } from "./rows/ToolCallRow.js";
 import { UserMessageRow } from "./rows/UserMessageRow.js";
 import { WebFetchRow, WebSearchRow } from "./rows/WebSearchRow.js";
 import type {
@@ -60,6 +60,14 @@ function ConversationEntryComponent({
           onOpenLocalFileLink={onOpenLocalFileLink}
         />
       );
+    case "command":
+      return (
+        <CommandRow
+          message={message}
+          initialExpanded={initialExpanded}
+          preferOngoingLabels={preferOngoingLabels}
+        />
+      );
     case "tool-call":
       return (
         <ToolCallRow
@@ -103,9 +111,7 @@ function ConversationEntryComponent({
         />
       );
     case "tasks":
-      return (
-        <TasksRow message={message} initialExpanded={initialExpanded} />
-      );
+      return <TasksRow message={message} initialExpanded={initialExpanded} />;
     case "delegation":
       return (
         <DelegationRow
@@ -134,10 +140,7 @@ function ConversationEntryComponent({
     case "debug/raw-event":
       return <DebugEventRow message={message} />;
     default:
-      return assertNever(
-        message,
-        "Unhandled conversation entry message kind",
-      );
+      return assertNever(message, "Unhandled conversation entry message kind");
   }
 }
 

@@ -122,6 +122,24 @@ export interface ViewToolCallMessage
   >;
 }
 
+export interface ViewCommandMessage extends ViewMessageBase {
+  kind: "command";
+  callId: string;
+  command?: string;
+  cwd?: string;
+  parsedCmd?: ViewToolParsedIntent[];
+  source?: string;
+  output?: string;
+  exitCode?: number;
+  duration?: string;
+  durationMs?: number;
+  approvalStatus: ViewApprovalLifecycleStatus | null;
+  status: Extract<
+    ViewMessageStatus,
+    "pending" | "completed" | "error" | "interrupted"
+  >;
+}
+
 export interface ViewWebSearchMessage extends ViewMessageBase {
   kind: "web-search";
   callId: string;
@@ -315,6 +333,7 @@ export interface ViewDebugRawEventMessage extends ViewMessageBase {
 export type ViewMessage =
   | ViewUserMessage
   | ViewAssistantTextMessage
+  | ViewCommandMessage
   | ViewToolCallMessage
   | ViewWebSearchMessage
   | ViewWebFetchMessage

@@ -127,6 +127,7 @@ function isPendingLikeMessage(message: ViewMessage): boolean {
   switch (message.kind) {
     case "assistant-text":
       return message.status === "streaming";
+    case "command":
     case "tool-call":
     case "web-search":
     case "web-fetch":
@@ -181,9 +182,11 @@ function buildNestedTimelineAutoExpandMap(
       row.kind === "tool-bundle" || row.kind === "assistant-step-summary"
         ? row.rows
         : row.kind === "turn-summary"
-          ? turnSummaryRowsController.getRows(row) ?? []
+          ? (turnSummaryRowsController.getRows(row) ?? [])
           : [];
-    const childShouldAutoExpand = childRows.some((childRow) => visitRow(childRow));
+    const childShouldAutoExpand = childRows.some((childRow) =>
+      visitRow(childRow),
+    );
     const shouldAutoExpand =
       row.kind === "message"
         ? shouldAutoExpandMessage(row.message, expandErrors)
@@ -271,9 +274,7 @@ function ToolBundleEntry({
   };
 
   return (
-    <div
-      className={getExpandableRowWrapperClassName(isExpanded)}
-    >
+    <div className={getExpandableRowWrapperClassName(isExpanded)}>
       <div className="mr-auto w-full">
         <ExpandablePanel
           isExpanded={isExpanded}
@@ -325,9 +326,7 @@ function AssistantStepSummaryEntry({
   const tone: EventTitleTone = "default";
 
   return (
-    <div
-      className={getExpandableRowWrapperClassName(isExpanded)}
-    >
+    <div className={getExpandableRowWrapperClassName(isExpanded)}>
       <div className="mr-auto w-full">
         <ExpandablePanel
           isExpanded={isExpanded}
@@ -393,9 +392,7 @@ function TurnSummaryEntry({
   };
 
   return (
-    <div
-      className={getExpandableRowWrapperClassName(isExpanded)}
-    >
+    <div className={getExpandableRowWrapperClassName(isExpanded)}>
       <div className="mr-auto w-full">
         <ExpandablePanel
           isExpanded={isExpanded}

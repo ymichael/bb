@@ -643,6 +643,7 @@ function isMessageScopedToFinalizedTurn(
 
 function finalizePendingMessageForInterruptedTurn(message: ViewMessage): void {
   switch (message.kind) {
+    case "command":
     case "tool-call":
     case "web-search":
     case "web-fetch":
