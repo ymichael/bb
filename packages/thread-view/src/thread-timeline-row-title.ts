@@ -9,12 +9,19 @@ import type {
 import { assertNever } from "./assert-never.js";
 import { durationToCompactString } from "./format-helpers.js";
 import { buildTimelineAssistantStepSummaryLabel } from "./timeline-assistant-step-summary.js";
-import { buildToolBundleSummaryLabel } from "./timeline-tool-bundle-summary.js";
+import { buildToolBundleSummaryParts } from "./timeline-tool-bundle-summary.js";
 import { buildTurnSummaryParts } from "./timeline-turn-summary.js";
-import { formatDelegationSummary } from "./timeline-render-helpers.js";
+import { getDelegationSummaryParts } from "./timeline-render-helpers.js";
+
+export interface ThreadTimelineRichTitle {
+  prefix: string | null;
+  content: string;
+  metadata: string | null;
+}
 
 export interface ThreadTimelineRowTitle {
   plain: string;
+  rich: ThreadTimelineRichTitle;
 }
 
 export interface ThreadTimelineTitleContext {
@@ -40,40 +47,59 @@ function applyOngoingLabelPreference(
   return status;
 }
 
+function titleFromRich(rich: ThreadTimelineRichTitle): ThreadTimelineRowTitle {
+  const text = rich.prefix ? `${rich.prefix} ${rich.content}` : rich.content;
+  return {
+    plain: rich.metadata ? `${text} (${rich.metadata})` : text,
+    rich,
+  };
+}
+
+function titleFromPlain(plain: string): ThreadTimelineRowTitle {
+  return titleFromRich({
+    prefix: null,
+    content: plain,
+    metadata: null,
+  });
+}
+
 function getTimelineMessageRowTitle(
   message: ViewMessage,
 ): ThreadTimelineRowTitle {
   switch (message.kind) {
     case "user":
-      return { plain: "User" };
+      return titleFromPlain("User");
     case "assistant-text":
-      return { plain: "Assistant" };
+      return titleFromPlain("Assistant");
     case "command":
-      return { plain: "Tool Call: exec_command" };
+      return titleFromPlain("Tool Call: exec_command");
     case "tool-call":
-      return { plain: `Tool Call: ${message.toolName}` };
+      return titleFromPlain(`Tool Call: ${message.toolName}`);
     case "file-edit":
-      return { plain: "File Edit" };
+      return titleFromPlain("File Edit");
     case "web-search":
-      return { plain: `Searched ${message.queries[0] ?? "web search"}` };
+      return titleFromPlain(`Searched ${message.queries[0] ?? "web search"}`);
     case "web-fetch":
-      return { plain: `Fetched ${message.url}` };
+      return titleFromPlain(`Fetched ${message.url}`);
     case "operation":
-      return { plain: `Operation: ${message.title}` };
+      return titleFromPlain(`Operation: ${message.title}`);
     case "permission-grant-lifecycle":
-      return { plain: message.title };
+      return titleFromPlain(message.title);
     case "tasks":
-      return { plain: "Updated tasks" };
+      return titleFromPlain("Updated tasks");
     case "delegation": {
       const verb = message.status === "pending" ? "Running" : "Ran";
-      return {
-        plain: `${verb} subagent: ${formatDelegationSummary(message)}`,
-      };
+      const parts = getDelegationSummaryParts(message);
+      return titleFromRich({
+        prefix: `${verb} subagent:`,
+        content: parts.label,
+        metadata: parts.metadata ?? null,
+      });
     }
     case "error":
-      return { plain: "Error" };
+      return titleFromPlain("Error");
     case "debug/raw-event":
-      return { plain: "" };
+      return titleFromPlain("");
     default:
       return assertNever(message);
   }
@@ -83,18 +109,22 @@ function getToolBundleRowTitle(
   row: TimelineToolBundleRow,
   context: ThreadTimelineTitleContext,
 ): ThreadTimelineRowTitle {
-  return {
-    plain: buildToolBundleSummaryLabel({
-      ...row,
-      status: applyOngoingLabelPreference(row.status, context),
-    }),
+  const titleRow = {
+    ...row,
+    status: applyOngoingLabelPreference(row.status, context),
   };
+  const parts = buildToolBundleSummaryParts(titleRow);
+  return titleFromRich({
+    prefix: parts.prefix,
+    content: parts.emphasis,
+    metadata: null,
+  });
 }
 
 function getAssistantStepSummaryRowTitle(
   row: TimelineAssistantStepSummaryRow,
 ): ThreadTimelineRowTitle {
-  return { plain: buildTimelineAssistantStepSummaryLabel(row.rows) };
+  return titleFromPlain(buildTimelineAssistantStepSummaryLabel(row.rows));
 }
 
 function getTurnSummaryRowTitle(
@@ -107,7 +137,11 @@ function getTurnSummaryRowTitle(
     status: applyOngoingLabelPreference(row.status, context),
     summaryCount: row.summaryCount,
   });
-  return { plain: `${parts.prefix} ${parts.emphasis}` };
+  return titleFromRich({
+    prefix: parts.prefix,
+    content: parts.emphasis,
+    metadata: null,
+  });
 }
 
 export function getThreadTimelineRowTitle(

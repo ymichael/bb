@@ -8,6 +8,7 @@ export type {
 } from "./format-timeline-text.js";
 export { getThreadTimelineRowTitle } from "./thread-timeline-row-title.js";
 export type {
+  ThreadTimelineRichTitle,
   ThreadTimelineRowTitle,
   ThreadTimelineTitleContext,
 } from "./thread-timeline-row-title.js";

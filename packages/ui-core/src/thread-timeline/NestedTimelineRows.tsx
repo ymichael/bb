@@ -1,11 +1,9 @@
 import { useMemo, type ReactNode } from "react";
 import {
-  buildTimelineAssistantStepSummaryLabel,
   buildTimelineRowActivityInfoMap,
-  buildToolBundleSummaryLabel,
-  buildToolBundleSummaryParts,
-  buildTurnSummaryParts,
+  getThreadTimelineRowTitle,
   shouldPreferOngoingLabelsForRow,
+  type ThreadTimelineRowTitle,
   type TimelineRowActivityInfo,
 } from "@bb/thread-view";
 import type {
@@ -24,7 +22,6 @@ import { ToolBundleBody } from "./rows/ToolBundleBody.js";
 import {
   EventTitle,
   GroupedSummaryText,
-  formatSummaryDuration,
   getEventHeaderToneClass,
   getExpandableRowWrapperClassName,
   type EventTitleTone,
@@ -106,6 +103,12 @@ interface ToolBundleMessageRowRenderer {
 
 interface NestedTimelineRowsContentProps extends NestedTimelineRowsProps {
   rowState: NestedTimelineRowState;
+}
+
+interface RenderGroupedTimelineTitleArgs {
+  shimmerPrefix: boolean;
+  title: ThreadTimelineRowTitle;
+  tone: EventTitleTone;
 }
 
 const NESTED_ROW_CONTAINER_CLASS = "";
@@ -235,6 +238,27 @@ function getRowIsWorking(
   return presentationOptions.groupedRowsUseOngoingLabels && preferOngoingLabels;
 }
 
+function renderGroupedTimelineTitle({
+  shimmerPrefix,
+  title,
+  tone,
+}: RenderGroupedTimelineTitleArgs): ReactNode {
+  if (!title.rich.prefix && !title.rich.metadata) {
+    return <GroupedSummaryText text={title.plain} />;
+  }
+
+  return (
+    <EventTitle
+      prefix={title.rich.prefix ?? title.rich.content}
+      emphasis={title.rich.prefix ? title.rich.content : undefined}
+      suffix={title.rich.metadata ?? undefined}
+      shimmerPrefix={shimmerPrefix}
+      suffixClassName="truncate"
+      tone={tone}
+    />
+  );
+}
+
 function ToolBundleEntry({
   entry,
   latestActivityRowId,
@@ -254,7 +278,16 @@ function ToolBundleEntry({
   const tone: EventTitleTone = "default";
   const isStepSummaryPlaceholder =
     entry.presentation === "assistant-step-summary-placeholder";
-  const summaryParts = buildToolBundleSummaryParts(entry);
+  const useOngoingTitle =
+    presentationOptions.groupedRowsUseOngoingLabels && preferOngoingLabels;
+  const title = getThreadTimelineRowTitle(entry, {
+    preferOngoingLabels: useOngoingTitle,
+  });
+  const isWorking = getRowIsWorking(
+    entry,
+    presentationOptions,
+    preferOngoingLabels,
+  );
   const renderMessageRow: ToolBundleMessageRowRenderer = (messageRow) => {
     const rowPreferOngoingLabels = shouldPreferNestedOngoingLabels({
       latestActivityRowId,
@@ -282,19 +315,13 @@ function ToolBundleEntry({
           headerToneClass={getEventHeaderToneClass(isExpanded, tone)}
           summaryContent={
             isStepSummaryPlaceholder ? (
-              <GroupedSummaryText text={buildToolBundleSummaryLabel(entry)} />
+              <GroupedSummaryText text={title.plain} />
             ) : (
-              <EventTitle
-                prefix={summaryParts.prefix}
-                emphasis={summaryParts.emphasis}
-                shimmerPrefix={getRowIsWorking(
-                  entry,
-                  presentationOptions,
-                  preferOngoingLabels,
-                )}
-                suffixClassName="truncate"
-                tone={tone}
-              />
+              renderGroupedTimelineTitle({
+                shimmerPrefix: isWorking,
+                title,
+                tone,
+              })
             )
           }
           bodyClassName="duration-300"
@@ -324,6 +351,9 @@ function AssistantStepSummaryEntry({
     shouldAutoExpandTimelineRow(entry, rowState),
   );
   const tone: EventTitleTone = "default";
+  const title = getThreadTimelineRowTitle(entry, {
+    preferOngoingLabels: false,
+  });
 
   return (
     <div className={getExpandableRowWrapperClassName(isExpanded)}>
@@ -333,9 +363,7 @@ function AssistantStepSummaryEntry({
           onToggle={onToggle}
           headerToneClass={getEventHeaderToneClass(isExpanded, tone)}
           summaryContent={
-            <GroupedSummaryText
-              text={buildTimelineAssistantStepSummaryLabel(entry.rows)}
-            />
+            <GroupedSummaryText text={title.plain} />
           }
           bodyClassName="duration-300"
           contentClassName="pb-1 duration-300"
@@ -378,11 +406,16 @@ function TurnSummaryEntry({
     shouldAutoExpandTimelineRow(entry, rowState),
   );
   const tone: EventTitleTone = "default";
-  const summary = buildTurnSummaryParts({
-    duration: formatSummaryDuration(entry.durationMs),
-    status: entry.status,
-    summaryCount: entry.summaryCount,
+  const useOngoingTitle =
+    presentationOptions.groupedRowsUseOngoingLabels && preferOngoingLabels;
+  const title = getThreadTimelineRowTitle(entry, {
+    preferOngoingLabels: useOngoingTitle,
   });
+  const isWorking = getRowIsWorking(
+    entry,
+    presentationOptions,
+    preferOngoingLabels,
+  );
 
   const handleToggle = () => {
     if (!isExpanded && rows === null && !isLoadingRows) {
@@ -399,17 +432,11 @@ function TurnSummaryEntry({
           onToggle={handleToggle}
           headerToneClass={getEventHeaderToneClass(isExpanded, tone)}
           summaryContent={
-            <EventTitle
-              prefix={summary.prefix}
-              emphasis={summary.emphasis}
-              shimmerPrefix={getRowIsWorking(
-                entry,
-                presentationOptions,
-                preferOngoingLabels,
-              )}
-              suffixClassName="truncate"
-              tone={tone}
-            />
+            renderGroupedTimelineTitle({
+              shimmerPrefix: isWorking,
+              title,
+              tone,
+            })
           }
           bodyClassName="duration-300"
           contentClassName="pb-1 duration-300"

@@ -10,6 +10,7 @@ import type {
 import { threadScope } from "@bb/domain";
 import {
   getThreadTimelineRowTitle,
+  type ThreadTimelineRichTitle,
   type ThreadTimelineTitleContext,
 } from "../src/thread-timeline-row-title.js";
 
@@ -21,6 +22,10 @@ const titleContext: ThreadTimelineTitleContext = {
 
 function title(row: TimelineRow): string {
   return getThreadTimelineRowTitle(row, titleContext).plain;
+}
+
+function richTitle(row: TimelineRow): ThreadTimelineRichTitle {
+  return getThreadTimelineRowTitle(row, titleContext).rich;
 }
 
 function titleWithOngoingPreference(row: TimelineRow): string {
@@ -84,6 +89,11 @@ describe("getThreadTimelineRowTitle", () => {
     };
 
     expect(title(row)).toBe("Ran 2 commands");
+    expect(richTitle(row)).toEqual({
+      prefix: "Ran",
+      content: "2 commands",
+      metadata: null,
+    });
     expect(titleWithOngoingPreference(row)).toBe("Running 2 commands");
   });
 
@@ -110,6 +120,11 @@ describe("getThreadTimelineRowTitle", () => {
     const row = delegationRow("completed");
 
     expect(title(row)).toBe("Ran subagent: Inspect the docs tree (Explore)");
+    expect(richTitle(row)).toEqual({
+      prefix: "Ran subagent:",
+      content: "Inspect the docs tree",
+      metadata: "Explore",
+    });
   });
 
   it("uses the row status for standalone delegation titles", () => {
