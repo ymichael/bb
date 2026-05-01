@@ -8,10 +8,15 @@ import type {
 } from "@bb/domain";
 import { assertNever } from "./assert-never.js";
 import { durationToCompactString } from "./format-helpers.js";
+import {
+  getTimelineDisplayStatus,
+  getTimelineDisplayStatusInfo,
+} from "./timeline-display-status.js";
 import { buildTimelineAssistantStepSummaryLabel } from "./timeline-assistant-step-summary.js";
 import { buildToolBundleSummaryParts } from "./timeline-tool-bundle-summary.js";
 import { buildTurnSummaryParts } from "./timeline-turn-summary.js";
 import { getDelegationSummaryParts } from "./timeline-render-helpers.js";
+import { formatToolCallCommand } from "./tool-call-parsing.js";
 
 type ViewWebSearchStatus = Extract<
   ViewMessage,
@@ -21,6 +26,10 @@ type ViewWebFetchStatus = Extract<
   ViewMessage,
   { kind: "web-fetch" }
 >["status"];
+type ViewExecutionMessage = Extract<
+  ViewMessage,
+  { kind: "command" | "tool-call" }
+>;
 
 export type ThreadTimelineRichTitle =
   | {
@@ -125,6 +134,26 @@ function webFetchPrefix(status: ViewWebFetchStatus): string {
   }
 }
 
+function getExecutionContent(message: ViewExecutionMessage): string {
+  switch (message.kind) {
+    case "command":
+      return message.command;
+    case "tool-call":
+      return formatToolCallCommand(message.toolName, message.toolArgs);
+    default:
+      return assertNever(message);
+  }
+}
+
+function getExecutionPrefix(message: ViewExecutionMessage): string {
+  return getTimelineDisplayStatusInfo(
+    getTimelineDisplayStatus({
+      approvalStatus: message.approvalStatus,
+      status: message.status,
+    }),
+  ).reactLabel;
+}
+
 function getTimelineMessageRowTitle(
   message: ViewMessage,
 ): ThreadTimelineRowTitle {
@@ -134,9 +163,19 @@ function getTimelineMessageRowTitle(
     case "assistant-text":
       return titleFromPlain("Assistant");
     case "command":
-      return titleFromPlain("Tool Call: exec_command");
+      return titleWithPlain("Tool Call: exec_command", {
+        kind: "prefixed",
+        prefix: getExecutionPrefix(message),
+        content: getExecutionContent(message),
+        metadata: null,
+      });
     case "tool-call":
-      return titleFromPlain(`Tool Call: ${message.toolName}`);
+      return titleWithPlain(`Tool Call: ${message.toolName}`, {
+        kind: "prefixed",
+        prefix: getExecutionPrefix(message),
+        content: getExecutionContent(message),
+        metadata: null,
+      });
     case "file-edit":
       return titleFromPlain("File Edit");
     case "web-search": {

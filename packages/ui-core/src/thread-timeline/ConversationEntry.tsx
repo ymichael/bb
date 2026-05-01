@@ -61,19 +61,12 @@ function ConversationEntryComponent({
         />
       );
     case "command":
-      return (
-        <CommandRow
-          message={message}
-          initialExpanded={initialExpanded}
-          preferOngoingLabels={preferOngoingLabels}
-        />
-      );
+      return <CommandRow message={message} initialExpanded={initialExpanded} />;
     case "tool-call":
       return (
         <ToolCallRow
           message={message}
           initialExpanded={initialExpanded}
-          preferOngoingLabels={preferOngoingLabels}
         />
       );
     case "web-search":

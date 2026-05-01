@@ -4,7 +4,9 @@ import type {
   TimelineRow,
   TimelineToolBundleRow,
   TimelineTurnSummaryRow,
+  ViewCommandMessage,
   ViewDelegationMessage,
+  ViewToolCallMessage,
   ViewWebSearchMessage,
   ViewProjection,
 } from "@bb/domain";
@@ -17,6 +19,13 @@ import {
 
 type DelegationStatus = ViewDelegationMessage["status"];
 type WebSearchStatus = ViewWebSearchMessage["status"];
+type CommandStatus = ViewCommandMessage["status"];
+type ToolCallStatus = ViewToolCallMessage["status"];
+
+interface CommandRowArgs {
+  approvalStatus?: ViewCommandMessage["approvalStatus"];
+  status: CommandStatus;
+}
 
 const titleContext: ThreadTimelineTitleContext = {
   preferOngoingLabels: false,
@@ -91,7 +100,97 @@ function webSearchRow(status: WebSearchStatus): TimelineMessageRow {
   };
 }
 
+function commandRow(args: CommandRowArgs): TimelineMessageRow {
+  const message: ViewCommandMessage = {
+    kind: "command",
+    id: "command-1",
+    threadId: "thread-1",
+    sourceSeqStart: 1,
+    sourceSeqEnd: 1,
+    createdAt: 1,
+    scope: threadScope(),
+    callId: "call-1",
+    command: "echo hello",
+    cwd: null,
+    parsedIntents: [],
+    source: null,
+    output: "",
+    exitCode: null,
+    durationMs: null,
+    approvalStatus: args.approvalStatus ?? null,
+    status: args.status,
+  };
+  return {
+    kind: "message",
+    id: message.id,
+    message,
+  };
+}
+
+function toolCallRow(status: ToolCallStatus): TimelineMessageRow {
+  const message: ViewToolCallMessage = {
+    kind: "tool-call",
+    id: "tool-call-1",
+    threadId: "thread-1",
+    sourceSeqStart: 1,
+    sourceSeqEnd: 1,
+    createdAt: 1,
+    scope: threadScope(),
+    toolName: "Bash",
+    toolArgs: { command: "echo hello" },
+    callId: "call-1",
+    parsedIntents: [],
+    output: "",
+    durationMs: null,
+    approvalStatus: null,
+    status,
+  };
+  return {
+    kind: "message",
+    id: message.id,
+    message,
+  };
+}
+
 describe("getThreadTimelineRowTitle", () => {
+  it("keeps CLI-compatible plain text and rich execution titles", () => {
+    const row = commandRow({ status: "pending" });
+
+    expect(title(row)).toBe("Tool Call: exec_command");
+    expect(richTitle(row)).toEqual({
+      kind: "prefixed",
+      prefix: "Running",
+      content: "echo hello",
+      metadata: null,
+    });
+  });
+
+  it("uses approval state for rich execution title prefixes", () => {
+    const row = commandRow({
+      approvalStatus: "waiting_for_approval",
+      status: "pending",
+    });
+
+    expect(richTitle(row)).toEqual({
+      kind: "prefixed",
+      prefix: "Waiting for approval to run",
+      content: "echo hello",
+      metadata: null,
+    });
+  });
+
+  it("formats generic tool-call content from tool args", () => {
+    const row = toolCallRow("completed");
+
+    expect(title(row)).toBe("Tool Call: Bash");
+    expect(richTitle(row)).toEqual({
+      kind: "prefixed",
+      prefix: "Completed",
+      content: "echo hello",
+      metadata: null,
+    });
+  });
+
   it("formats command bundle titles and active-label preference", () => {
     const row: TimelineToolBundleRow = {
       kind: "tool-bundle",

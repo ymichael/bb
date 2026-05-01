@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import {
   formatCommandOutputText,
-  formatToolCallCommand,
+  getThreadTimelineRowTitle,
   getTimelineDisplayStatus,
-  getTimelineDisplayStatusInfo,
+  type ThreadTimelineRowTitle,
 } from "@bb/thread-view";
 import type { ViewCommandMessage, ViewToolCallMessage } from "@bb/domain";
 import { ExpandablePanel } from "../../disclosure.js";
@@ -20,24 +20,27 @@ type ExecutionMessage = ViewCommandMessage | ViewToolCallMessage;
 interface ToolCallRowProps {
   message: ViewToolCallMessage;
   initialExpanded?: boolean;
-  preferOngoingLabels?: boolean;
 }
 
 interface CommandRowProps {
   message: ViewCommandMessage;
   initialExpanded?: boolean;
-  preferOngoingLabels?: boolean;
 }
 
 interface ExecutionRowProps {
   approvalStatus: ExecutionMessage["approvalStatus"];
   exitCode: number | null;
-  getTitleDetail: (isExpanded: boolean) => string;
   initialExpanded: boolean;
   displayText: string;
   message: ExecutionMessage;
-  preferOngoingLabels: boolean;
+  title: ThreadTimelineRowTitle;
   tone: "default" | "destructive";
+}
+
+interface ExecutionTitleDetailArgs {
+  isExpanded: boolean;
+  message: ExecutionMessage;
+  title: ThreadTimelineRowTitle;
 }
 
 function useLiveNow(enabled: boolean): number | undefined {
@@ -68,35 +71,75 @@ function getElapsedDurationMs(
 
 function getSummaryDurationMs(
   message: ExecutionMessage,
-  preferRunningLabel: boolean,
   liveNow: number | undefined,
 ): number | undefined {
   if (message.status === "pending") {
     return message.durationMs ?? getElapsedDurationMs(message, liveNow);
   }
-  if (preferRunningLabel) {
-    return message.durationMs ?? getElapsedDurationMs(message, undefined);
-  }
   return message.durationMs ?? undefined;
+}
+
+function executionTitleContent(title: ThreadTimelineRowTitle): string {
+  switch (title.rich.kind) {
+    case "plain":
+      return title.rich.text;
+    case "prefixed":
+      return title.rich.content;
+  }
+}
+
+function executionTitlePrefix(title: ThreadTimelineRowTitle): string {
+  switch (title.rich.kind) {
+    case "plain":
+      return title.rich.text;
+    case "prefixed":
+      return title.rich.prefix;
+  }
+}
+
+function executionTitleDetail({
+  isExpanded,
+  message,
+  title,
+}: ExecutionTitleDetailArgs): string {
+  if (message.kind === "command" && isExpanded) {
+    return "command";
+  }
+  return executionTitleContent(title);
+}
+
+function getExecutionRowTitle(
+  message: ExecutionMessage,
+): ThreadTimelineRowTitle {
+  return getThreadTimelineRowTitle(
+    {
+      kind: "message",
+      id: message.id,
+      message,
+    },
+    {
+      preferOngoingLabels: false,
+    },
+  );
 }
 
 function ExecutionRow({
   approvalStatus,
   exitCode,
   displayText,
-  getTitleDetail,
   message,
   initialExpanded,
-  preferOngoingLabels,
+  title,
   tone,
 }: ExecutionRowProps) {
   const { isExpanded, onToggle } = useLatestInitialExpanded(initialExpanded);
-  const titleDetail = getTitleDetail(isExpanded);
-  const preferRunningLabel =
-    preferOngoingLabels && message.status === "completed";
+  const titleDetail = executionTitleDetail({
+    isExpanded,
+    message,
+    title,
+  });
   const displayStatus = getTimelineDisplayStatus({
     approvalStatus,
-    preferRunningLabel,
     status: message.status,
   });
   const outputText = formatCommandOutputText({
@@ -104,13 +147,13 @@ function ExecutionRow({
     exitCode,
     output: message.output,
   });
-  const actionLabel = getTimelineDisplayStatusInfo(displayStatus).reactLabel;
+  const actionLabel = executionTitlePrefix(title);
   const isVisuallyActive =
     message.status === "pending" && approvalStatus !== "denied";
   const isRunning = displayStatus === "running";
   const liveNow = useLiveNow(isRunning && message.status === "pending");
   const duration = formatSummaryDuration(
-    getSummaryDurationMs(message, preferRunningLabel, liveNow),
+    getSummaryDurationMs(message, liveNow),
   );
   const summaryContent = (
     <EventTitle
@@ -146,18 +189,17 @@ function ExecutionRow({
 export function CommandRow({
   message,
   initialExpanded = false,
-  preferOngoingLabels = false,
 }: CommandRowProps) {
   const command = message.command;
+  const title = getExecutionRowTitle(message);
   return (
     <ExecutionRow
       approvalStatus={message.approvalStatus}
       exitCode={message.exitCode}
       displayText={command}
-      getTitleDetail={(isExpanded) => (isExpanded ? "command" : command)}
       initialExpanded={initialExpanded}
       message={message}
-      preferOngoingLabels={preferOngoingLabels}
+      title={title}
       tone="default"
     />
   );
@@ -166,18 +208,17 @@ export function CommandRow({
 export function ToolCallRow({
   message,
   initialExpanded = false,
-  preferOngoingLabels = false,
 }: ToolCallRowProps) {
-  const displayText = formatToolCallCommand(message.toolName, message.toolArgs);
+  const title = getExecutionRowTitle(message);
+  const displayText = executionTitleContent(title);
   return (
     <ExecutionRow
       approvalStatus={message.approvalStatus}
       exitCode={null}
       displayText={displayText}
-      getTitleDetail={() => displayText}
       initialExpanded={initialExpanded}
       message={message}
-      preferOngoingLabels={preferOngoingLabels}
+      title={title}
       tone={message.status === "error" ? "destructive" : "default"}
     />
   );
