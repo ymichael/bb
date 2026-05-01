@@ -14,7 +14,7 @@ type PendingInteractionPermissionSummaryProfile =
   | PendingInteractionGrantablePermissionProfile
   | PendingInteractionRequestedPermissionProfile;
 
-export function summarizePendingInteractionRequestedMacOsPermissions(
+function summarizeRequestedMacOsPermissions(
   permissions: PendingInteractionMacOsPermissions | null,
 ): string[] {
   if (permissions === null) {
@@ -86,13 +86,13 @@ export function summarizePendingInteractionRequestedPermissions(
 
   return [
     ...summaries,
-    ...summarizePendingInteractionRequestedMacOsPermissions(
+    ...summarizeRequestedMacOsPermissions(
       "macos" in permissions ? permissions.macos : null,
     ),
   ];
 }
 
-export function summarizePendingInteractionCommandActions(
+function summarizeCommandActions(
   actions: PendingInteractionCommandAction[],
 ): string[] {
   return actions.map((action) => {
@@ -132,7 +132,7 @@ export function formatPendingInteractionSubjectDetailLines(
 ): string[] {
   switch (interaction.payload.subject.kind) {
     case "command": {
-      const actionLines = summarizePendingInteractionCommandActions(
+      const actionLines = summarizeCommandActions(
         interaction.payload.subject.actions,
       ).map((action) => `Action: ${action}`);
       const sessionGrant = formatPermissionSummaryLine(
@@ -177,7 +177,7 @@ export function formatPendingInteractionSubjectDetailLines(
   }
 }
 
-export function toGrantedPendingInteractionPermissions(
+function toGrantedPermissions(
   permissions: PendingInteractionPermissionSummaryProfile,
 ): PendingInteractionGrantedPermissionProfile {
   return {
@@ -206,40 +206,12 @@ export function formatPendingInteractionApprovalResolutionOutcome(
   }
 }
 
-export function formatPendingInteractionCommandApprovalResolutionMessage(
-  decision: PendingInteractionApprovalDecision,
-): string {
-  return `Command ${formatPendingInteractionApprovalResolutionOutcome(decision)}`;
-}
-
-export function formatPendingInteractionFileChangeApprovalResolutionMessage(
-  decision: PendingInteractionApprovalDecision,
-): string {
-  return `File changes ${formatPendingInteractionApprovalResolutionOutcome(decision)}`;
-}
-
-export function isPendingInteractionCommandApprovalPositiveDecision(
-  decision: PendingInteractionApprovalDecision,
-): boolean {
-  switch (decision) {
-    case "allow_once":
-    case "allow_for_session":
-      return true;
-    case "deny":
-      return false;
-    default:
-      return assertNever(decision);
-  }
-}
-
-export function getPendingInteractionApprovalGrantedPermissions(
+function resolveGrantedPermissionsForApproval(
   interaction: PendingInteraction,
   decision: PendingInteractionApprovalDecision,
 ): PendingInteractionGrantedPermissionProfile | null {
   if (interaction.payload.subject.kind === "permission_grant") {
-    return toGrantedPendingInteractionPermissions(
-      interaction.payload.subject.permissions,
-    );
+    return toGrantedPermissions(interaction.payload.subject.permissions);
   }
 
   if (decision !== "allow_for_session") {
@@ -268,7 +240,7 @@ export function buildPendingInteractionApprovalResolution(
 
   return {
     decision,
-    grantedPermissions: getPendingInteractionApprovalGrantedPermissions(
+    grantedPermissions: resolveGrantedPermissionsForApproval(
       interaction,
       decision,
     ),
@@ -286,7 +258,7 @@ function hasPendingInteractionGrantedPermissions(
   );
 }
 
-export function formatPendingInteractionPermissionResolutionOutcome(
+function formatPermissionResolutionOutcome(
   args: PendingInteractionResolution,
 ): string {
   if (args.decision === "deny") {
@@ -324,5 +296,5 @@ export function formatPendingInteractionPermissionResolutionMessage(
     return "Permission request denied";
   }
 
-  return `Permissions ${formatPendingInteractionPermissionResolutionOutcome(args)}`;
+  return `Permissions ${formatPermissionResolutionOutcome(args)}`;
 }

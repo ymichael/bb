@@ -3,10 +3,7 @@ import type { PendingInteraction } from "@bb/domain";
 import {
   buildPendingInteractionApprovalResolution,
   formatPendingInteractionApprovalResolutionOutcome,
-  formatPendingInteractionCommandApprovalResolutionMessage,
-  formatPendingInteractionFileChangeApprovalResolutionMessage,
   formatPendingInteractionPermissionResolutionMessage,
-  formatPendingInteractionPermissionResolutionOutcome,
   formatPendingInteractionSubjectDetailLines,
   summarizePendingInteractionRequestedPermissions,
 } from "../src/index.js";
@@ -64,17 +61,9 @@ describe("pending interaction formatting", () => {
     expect(
       formatPendingInteractionApprovalResolutionOutcome("allow_for_session"),
     ).toBe("approved for this session");
-    expect(
-      formatPendingInteractionCommandApprovalResolutionMessage("deny"),
-    ).toBe("Command denied");
-    expect(
-      formatPendingInteractionFileChangeApprovalResolutionMessage("allow_once"),
-    ).toBe("File changes approved");
-    expect(
-      formatPendingInteractionPermissionResolutionOutcome({
-        decision: "deny",
-      }),
-    ).toBe("denied");
+    expect(formatPendingInteractionApprovalResolutionOutcome("deny")).toBe(
+      "denied",
+    );
     expect(
       formatPendingInteractionPermissionResolutionMessage({
         decision: "allow_for_session",

@@ -6,17 +6,9 @@ export type { EnvironmentDisplayInfo } from "./environment-display.js";
 export {
   buildPendingInteractionApprovalResolution,
   formatPendingInteractionApprovalResolutionOutcome,
-  formatPendingInteractionCommandApprovalResolutionMessage,
-  formatPendingInteractionFileChangeApprovalResolutionMessage,
   formatPendingInteractionPermissionResolutionMessage,
-  formatPendingInteractionPermissionResolutionOutcome,
   formatPendingInteractionSubjectDetailLines,
-  getPendingInteractionApprovalGrantedPermissions,
-  isPendingInteractionCommandApprovalPositiveDecision,
-  summarizePendingInteractionCommandActions,
-  summarizePendingInteractionRequestedMacOsPermissions,
   summarizePendingInteractionRequestedPermissions,
-  toGrantedPendingInteractionPermissions,
 } from "./pending-interaction-formatting.js";
 export { formatPendingInteractionSummary } from "./pending-interaction-presentation.js";
 export type {
