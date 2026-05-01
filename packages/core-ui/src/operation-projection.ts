@@ -34,7 +34,7 @@ import {
 
 export interface OperationProjectionState {
   messages: ViewMessage[];
-  fileEditsByCallId: Map<string, ViewFileEditMessage>;
+  fileEditsByCallId: Map<string, ViewFileEditMessage[]>;
   fileEditStdoutBuffersByCallId: Map<string, VisibleTextBuffer>;
   openCompactionsByKey: Map<string, ViewOperationMessage>;
   finalizedCompactionKeys: Set<string>;
@@ -68,6 +68,9 @@ type LifecycleStatus = Extract<
 type LifecycleViewMessage =
   | ViewOperationMessage
   | ViewPermissionGrantLifecycleMessage;
+type ViewMessageScopeFields = ReturnType<
+  typeof viewMessageThreadScopeFields | typeof viewMessageTurnScopeFields
+>;
 
 interface OperationDetailMergeArgs {
   existing: string | undefined;
@@ -255,32 +258,20 @@ function mergePermissionGrantLifecycleMessage(
   existing.approvalTarget = incoming.approvalTarget;
 }
 
-function mergeFileChanges(
-  existing: ViewFileEditChange[],
-  incoming: ViewFileEditChange[],
-): ViewFileEditChange[] {
-  const byPath = new Map<string, ViewFileEditChange>();
-
-  for (const change of existing) {
-    byPath.set(change.path, { ...change });
+function mergeFileChange(
+  existing: ViewFileEditChange | undefined,
+  incoming: ViewFileEditChange,
+): ViewFileEditChange {
+  if (!existing) {
+    return { ...incoming };
   }
 
-  for (const change of incoming) {
-    const prev = byPath.get(change.path);
-    if (!prev) {
-      byPath.set(change.path, { ...change });
-      continue;
-    }
-
-    byPath.set(change.path, {
-      path: change.path,
-      kind: change.kind ?? prev.kind,
-      movePath: change.movePath ?? prev.movePath,
-      diff: change.diff ?? prev.diff,
-    });
-  }
-
-  return [...byPath.values()];
+  return {
+    path: incoming.path,
+    kind: incoming.kind ?? existing.kind,
+    movePath: incoming.movePath ?? existing.movePath,
+    diff: incoming.diff ?? existing.diff,
+  };
 }
 
 function isTerminalFileEditStatus(
@@ -292,70 +283,67 @@ function isTerminalFileEditStatus(
 export function flushPendingFileEditOutput(
   state: OperationProjectionState,
 ): void {
-  for (const [callId, fileEdit] of state.fileEditsByCallId.entries()) {
+  for (const [callId, fileEdits] of state.fileEditsByCallId.entries()) {
     const buffer = state.fileEditStdoutBuffersByCallId.get(callId);
     if (!buffer || !flushVisibleTextBuffer(buffer)) {
       continue;
     }
-    fileEdit.stdout = getVisibleTextBufferText(buffer);
+    for (const fileEdit of fileEdits) {
+      fileEdit.stdout = getVisibleTextBufferText(buffer);
+    }
   }
 }
 
-export function upsertFileEdit(
-  state: OperationProjectionState,
+interface CreateFileEditMessageArgs {
+  callId: string;
+  change: ViewFileEditChange | null;
+  changeIndex: number;
+  meta: EventMeta;
+  partial: FileEditPartial;
+  scopeFields: ViewMessageScopeFields;
+  stdout: string | undefined;
+  threadId: string;
+}
+
+function createFileEditMessage({
+  callId,
+  change,
+  changeIndex,
+  meta,
+  partial,
+  scopeFields,
+  stdout,
+  threadId,
+}: CreateFileEditMessageArgs): ViewFileEditMessage {
+  return {
+    kind: "file-edit",
+    id: messageId(threadId, "file-edit", `${callId}:${changeIndex}`),
+    threadId,
+    sourceSeqStart: meta.seq,
+    sourceSeqEnd: meta.seq,
+    createdAt: meta.createdAt,
+    startedAt: meta.createdAt,
+    ...scopeFields,
+    ...(partial.parentToolCallId
+      ? { parentToolCallId: partial.parentToolCallId }
+      : {}),
+    callId,
+    changes: change ? [{ ...change }] : [],
+    stdout,
+    stderr: partial.stderr,
+    approvalStatus: partial.approvalStatus ?? null,
+    status: partial.status ?? "pending",
+  };
+}
+
+function updateFileEditMessage(
+  existing: ViewFileEditMessage,
   meta: EventMeta,
-  threadId: string,
-  turnId: string | undefined,
   partial: FileEditPartial,
+  scopeFields: ViewMessageScopeFields,
+  change: ViewFileEditChange | null,
+  stdout: string | undefined,
 ): void {
-  const scopeFields = turnId
-    ? viewMessageTurnScopeFields(turnId)
-    : viewMessageThreadScopeFields();
-  const existing = state.fileEditsByCallId.get(partial.callId);
-  const stdoutBuffer =
-    state.fileEditStdoutBuffersByCallId.get(partial.callId) ??
-    createVisibleTextBuffer();
-  state.fileEditStdoutBuffersByCallId.set(partial.callId, stdoutBuffer);
-
-  if (partial.stdout) {
-    if (partial.appendStdout) {
-      appendVisibleTextBuffer(stdoutBuffer, partial.stdout);
-    } else {
-      setVisibleTextBuffer(
-        stdoutBuffer,
-        partial.stdout,
-        isTerminalFileEditStatus(partial.status),
-      );
-    }
-  } else if (isTerminalFileEditStatus(partial.status)) {
-    flushVisibleTextBuffer(stdoutBuffer);
-  }
-
-  if (!existing) {
-    const message: ViewFileEditMessage = {
-      kind: "file-edit",
-      id: messageId(threadId, "file-edit", partial.callId),
-      threadId,
-      sourceSeqStart: meta.seq,
-      sourceSeqEnd: meta.seq,
-      createdAt: meta.createdAt,
-      startedAt: meta.createdAt,
-      ...scopeFields,
-      ...(partial.parentToolCallId
-        ? { parentToolCallId: partial.parentToolCallId }
-        : {}),
-      callId: partial.callId,
-      changes: partial.changes ?? [],
-      stdout: getVisibleTextBufferText(stdoutBuffer),
-      stderr: partial.stderr,
-      approvalStatus: partial.approvalStatus ?? null,
-      status: partial.status ?? "pending",
-    };
-    state.fileEditsByCallId.set(partial.callId, message);
-    state.messages.push(message);
-    return;
-  }
-
   if (!haveCompatibleViewMessageScope(existing, scopeFields)) {
     throw new Error(
       `Cannot merge file-edit messages with different scopes for call ${partial.callId}`,
@@ -368,11 +356,11 @@ export function upsertFileEdit(
     existing.parentToolCallId = partial.parentToolCallId;
   }
 
-  if (partial.changes && partial.changes.length > 0) {
-    existing.changes = mergeFileChanges(existing.changes, partial.changes);
+  if (change) {
+    existing.changes = [mergeFileChange(existing.changes[0], change)];
   }
 
-  existing.stdout = getVisibleTextBufferText(stdoutBuffer);
+  existing.stdout = stdout;
 
   if (partial.stderr) {
     existing.stderr = partial.stderr;
@@ -395,6 +383,75 @@ export function upsertFileEdit(
       existing.status = "completed";
     }
   }
+}
+
+export function upsertFileEdit(
+  state: OperationProjectionState,
+  meta: EventMeta,
+  threadId: string,
+  turnId: string | undefined,
+  partial: FileEditPartial,
+): void {
+  const scopeFields = turnId
+    ? viewMessageTurnScopeFields(turnId)
+    : viewMessageThreadScopeFields();
+  const existingRows = state.fileEditsByCallId.get(partial.callId) ?? [];
+  const stdoutBuffer =
+    state.fileEditStdoutBuffersByCallId.get(partial.callId) ??
+    createVisibleTextBuffer();
+  state.fileEditStdoutBuffersByCallId.set(partial.callId, stdoutBuffer);
+
+  if (partial.stdout) {
+    if (partial.appendStdout) {
+      appendVisibleTextBuffer(stdoutBuffer, partial.stdout);
+    } else {
+      setVisibleTextBuffer(
+        stdoutBuffer,
+        partial.stdout,
+        isTerminalFileEditStatus(partial.status),
+      );
+    }
+  } else if (isTerminalFileEditStatus(partial.status)) {
+    flushVisibleTextBuffer(stdoutBuffer);
+  }
+
+  const stdout = getVisibleTextBufferText(stdoutBuffer);
+  const changes =
+    partial.changes && partial.changes.length > 0
+      ? partial.changes
+      : existingRows.length > 0
+        ? existingRows.map(() => null)
+        : [null];
+
+  for (const [changeIndex, change] of changes.entries()) {
+    const existing = existingRows[changeIndex];
+    if (existing) {
+      updateFileEditMessage(
+        existing,
+        meta,
+        partial,
+        scopeFields,
+        change,
+        stdout,
+      );
+      continue;
+    }
+
+    const message = createFileEditMessage({
+      callId: partial.callId,
+      change,
+      changeIndex,
+      meta,
+      partial,
+      scopeFields,
+      stdout,
+      threadId,
+    });
+    existingRows.push(message);
+    state.messages.push(message);
+  }
+
+  state.fileEditsByCallId.set(partial.callId, existingRows);
 }
 
 export function onCompactionBegin(

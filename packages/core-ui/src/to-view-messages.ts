@@ -187,7 +187,7 @@ interface ProjectionState {
     Extract<ViewMessage, { kind: "permission-grant-lifecycle" }>
   >;
   threadOperationsById: Map<string, ViewOperationMessage>;
-  fileEditsByCallId: Map<string, ViewFileEditMessage>;
+  fileEditsByCallId: Map<string, ViewFileEditMessage[]>;
   fileEditStdoutBuffersByCallId: Map<string, VisibleTextBuffer>;
   delegationParentToolCallIdsByProviderThreadId: Map<string, string>;
   toolActivity: ToolActivityState;
@@ -610,9 +610,11 @@ function finalizePendingMessages(
   flushPendingFileEditOutput(state);
   interruptPendingToolActivity(state);
 
-  for (const fileEdit of state.fileEditsByCallId.values()) {
-    if (fileEdit.status === "pending") {
-      fileEdit.status = "interrupted";
+  for (const fileEdits of state.fileEditsByCallId.values()) {
+    for (const fileEdit of fileEdits) {
+      if (fileEdit.status === "pending") {
+        fileEdit.status = "interrupted";
+      }
     }
   }
 

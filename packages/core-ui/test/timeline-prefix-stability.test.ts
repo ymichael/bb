@@ -121,7 +121,7 @@ function fileEditLogicalRow(row: TimelineRow): LogicalTimelineRow | null {
     return null;
   }
   return {
-    key: `file-edit:${message.callId}`,
+    key: message.id,
     status: message.status,
     title: message.changes[0]?.path ?? "file changes",
   };
@@ -769,12 +769,12 @@ describe("timeline prefix stability", () => {
       }),
     ).toEqual([
       {
-        key: "file-edit:file-a",
+        key: "thread-1:file-edit:file-a:0",
         status: "completed",
         title: "/repo/a.ts",
       },
       {
-        key: "file-edit:file-b",
+        key: "thread-1:file-edit:file-b:0",
         status: "pending",
         title: "/repo/b.ts",
       },

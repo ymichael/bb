@@ -1908,21 +1908,73 @@ describe("toViewMessages tool activity", () => {
     const projected = toViewMessages(fromRows(events), {
       threadStatus: "idle",
     });
-    const fileEdit = projected.find(
+    const fileEdits = projected.filter(
       (message): message is Extract<ViewMessage, { kind: "file-edit" }> =>
         message.kind === "file-edit",
     );
 
-    expect(fileEdit).toBeDefined();
-    expect(fileEdit?.changes).toHaveLength(2);
+    expect(fileEdits).toHaveLength(2);
     expect(
-      fileEdit?.changes.find((change) => change.path.endsWith("new-file.ts"))
+      fileEdits
+        .flatMap((message) => message.changes)
+        .find((change) => change.path.endsWith("new-file.ts"))
         ?.kind,
     ).toBe("add");
     expect(
-      fileEdit?.changes.find((change) => change.path.endsWith("old-file.ts"))
+      fileEdits
+        .flatMap((message) => message.changes)
+        .find((change) => change.path.endsWith("old-file.ts"))
         ?.kind,
     ).toBe("delete");
+  });
+
+  it("projects repeated changes to the same file as separate file-edit rows", () => {
+    const projected = toViewMessages(
+      fromRows([
+        {
+          id: "evt-1",
+          threadId: "thread-1",
+          seq: 1,
+          type: "item/completed",
+          data: {
+            providerThreadId: "thread-1",
+            item: {
+              type: "fileChange",
+              id: "call-edit-same-file",
+              status: "completed",
+              changes: [
+                {
+                  path: "/repo/src/app.ts",
+                  kind: "update",
+                  diff: "-a\n+b\n",
+                },
+                {
+                  path: "/repo/src/app.ts",
+                  kind: "update",
+                  diff: "-b\n+c\n",
+                },
+              ],
+            },
+            turnId: "turn-1",
+          },
+          createdAt: 1,
+          scope: turnScope("turn-1"),
+        },
+      ]),
+      {
+        threadStatus: "idle",
+      },
+    );
+    const fileEdits = projected.filter(
+      (message): message is Extract<ViewMessage, { kind: "file-edit" }> =>
+        message.kind === "file-edit",
+    );
+
+    expect(fileEdits).toHaveLength(2);
+    expect(fileEdits.map((message) => message.changes[0]?.diff)).toEqual([
+      "-a\n+b\n",
+      "-b\n+c\n",
+    ]);
   });
 
   it("projects shared tool progress onto the active tool call", () => {

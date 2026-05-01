@@ -54,12 +54,6 @@ interface ToolBundleAccumulator {
   messages: ViewMessage[];
 }
 
-function isFileEditMessage(
-  message: ViewMessage,
-): message is Extract<ViewMessage, { kind: "file-edit" }> {
-  return message.kind === "file-edit";
-}
-
 function getTimelineRange(
   messages: readonly Pick<
     ViewMessage,
@@ -213,80 +207,6 @@ function mergeConsecutiveReconnectErrors(
   return merged;
 }
 
-function mergeConsecutiveToolActivityMessages(
-  messages: readonly ViewMessage[],
-): ViewMessage[] {
-  const merged: ViewMessage[] = [];
-  let active: Extract<ViewMessage, { kind: "file-edit" }> | null = null;
-
-  const flush = () => {
-    if (!active) {
-      return;
-    }
-    merged.push(active);
-    active = null;
-  };
-
-  for (const message of messages) {
-    if (!isFileEditMessage(message)) {
-      flush();
-      merged.push(message);
-      continue;
-    }
-
-    if (!active) {
-      active = {
-        ...message,
-        changes: message.changes.map((change) => ({ ...change })),
-      };
-      continue;
-    }
-
-    if (!haveCompatibleViewMessageScope(active, message)) {
-      flush();
-      active = {
-        ...message,
-        changes: message.changes.map((change) => ({ ...change })),
-      };
-      continue;
-    }
-
-    if (active.callId !== message.callId) {
-      flush();
-      active = {
-        ...message,
-        changes: message.changes.map((change) => ({ ...change })),
-      };
-      continue;
-    }
-
-    active.changes = [
-      ...active.changes,
-      ...message.changes.map((change) => ({ ...change })),
-    ];
-    active.sourceSeqStart = Math.min(
-      active.sourceSeqStart,
-      message.sourceSeqStart,
-    );
-    active.sourceSeqEnd = Math.max(active.sourceSeqEnd, message.sourceSeqEnd);
-    active.createdAt = Math.max(active.createdAt, message.createdAt);
-    active.startedAt = Math.min(
-      getMessageStartedAt(active),
-      getMessageStartedAt(message),
-    );
-    active.status = mergeGroupedRowStatus(active.status, message.status);
-    if (message.stdout) {
-      active.stdout = message.stdout;
-    }
-    if (message.stderr) {
-      active.stderr = message.stderr;
-    }
-  }
-
-  flush();
-  return merged;
-}
-
 function getTurnSummaryCount(messages: readonly ViewMessage[]): number {
   return messages.reduce((count, message) => {
     if (message.kind === "file-edit") {
@@ -299,8 +219,7 @@ function getTurnSummaryCount(messages: readonly ViewMessage[]): number {
 function prepareTimelineMessages(
   messages: readonly ViewMessage[],
 ): ViewMessage[] {
-  const reconnectMergedMessages = mergeConsecutiveReconnectErrors(messages);
-  return mergeConsecutiveToolActivityMessages(reconnectMergedMessages);
+  return mergeConsecutiveReconnectErrors(messages);
 }
 
 function toMessageRow(message: ViewMessage): TimelineMessageRow {

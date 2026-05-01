@@ -18,7 +18,7 @@ function meta(seq: number): EventMeta {
 function createState(): OperationProjectionState {
   return {
     messages: [],
-    fileEditsByCallId: new Map<string, ViewFileEditMessage>(),
+    fileEditsByCallId: new Map<string, ViewFileEditMessage[]>(),
     fileEditStdoutBuffersByCallId: new Map(),
     openCompactionsByKey: new Map(),
     finalizedCompactionKeys: new Set(),
