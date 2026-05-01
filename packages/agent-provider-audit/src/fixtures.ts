@@ -1,5 +1,6 @@
 import {
   mkdirSync,
+  readFileSync,
   readdirSync,
   rmSync,
   statSync,
@@ -8,6 +9,11 @@ import {
 import { basename, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { AgentRuntimeCaptureEntry } from "@bb/agent-runtime/capture";
+import {
+  promptInputSchema,
+  threadExecutionOptionsSchema,
+  type PromptInput,
+} from "@bb/domain";
 import { z } from "zod";
 import {
   providerAuditClientRequestSchema,
@@ -17,6 +23,7 @@ import {
 } from "./json-file.js";
 import type {
   ProviderAuditClientRequest,
+  ProviderAuditImportDevReplaysArgs,
   ProviderAuditImportFixtureResult,
   ProviderAuditImportFixturesArgs,
   ProviderAuditImportFixturesResult,
@@ -24,9 +31,14 @@ import type {
 } from "./types.js";
 
 const DEFAULT_CORPUS_ID = "excalidraw";
+const DEFAULT_DEV_REPLAY_CORPUS_ID = "dev-replays";
 const DEFAULT_FIXTURE_ROOT = resolve(
   fileURLToPath(new URL("../fixtures", import.meta.url)),
 );
+const BB_DEV_WORKSPACE_PLACEHOLDER = "$BB_DEV_WORKSPACE";
+const EXCALIDRAW_REPO_PLACEHOLDER = "$EXCALIDRAW_REPO";
+const FIXTURE_ROOT_PLACEHOLDER = "$FIXTURE_ROOT";
+const CAPTURE_OUTPUT_PLACEHOLDER = "$CAPTURE_OUTPUT";
 
 const FIXTURE_FILE_NAMES = [
   "manifest.json",
@@ -36,6 +48,10 @@ const FIXTURE_FILE_NAMES = [
 
 interface ProviderAuditFixtureCliParseResult {
   args: ProviderAuditImportFixturesArgs;
+}
+
+interface ProviderAuditDevReplayCliParseResult {
+  args: ProviderAuditImportDevReplaysArgs;
 }
 
 interface ProviderAuditFixtureBundlePaths {
@@ -48,6 +64,7 @@ interface ProviderAuditFixtureBundlePaths {
 interface ProviderAuditFixturePathSanitization {
   homeDir: string | null;
   workspacePath: string;
+  workspacePlaceholder: string;
   outputDir: string;
 }
 
@@ -62,9 +79,53 @@ interface ResolveFixtureCorpusRootArgs {
   fixtureRoot: string;
 }
 
+interface BuildDevReplayScenarioDescriptionArgs {
+  manifest: ProviderAuditDevReplayManifest;
+  turnText: string;
+}
+
+interface ProviderAuditImportDevReplayFixtureArgs {
+  replayRoot: string;
+  fixtureCorpusRoot: string;
+  corpusId: string;
+  captureId: string;
+}
+
+const devReplayManifestSchema = z
+  .object({
+    schemaVersion: z.literal(2),
+    captureId: z.string(),
+    capturedAt: z.number(),
+    completedAt: z.number(),
+    environmentId: z.string(),
+    execution: threadExecutionOptionsSchema.optional(),
+    projectId: z.string(),
+    providerId: z.string(),
+    threadId: z.string(),
+    userInput: z.array(promptInputSchema),
+    userInputPreview: z.string().nullable().optional(),
+  })
+  .passthrough();
+type ProviderAuditDevReplayManifest = z.infer<typeof devReplayManifestSchema>;
+
+const devReplayRawProviderEventLineSchema = z
+  .object({
+    entry: providerAuditRawProviderEventCaptureEntrySchema,
+    ordinal: z.number().int(),
+  })
+  .passthrough();
+
 function getHomeDir(): string | null {
   const homeDir = process.env.HOME;
   return homeDir && homeDir.length > 0 ? homeDir : null;
+}
+
+function getDefaultDevReplayRoot(): string {
+  const homeDir = getHomeDir();
+  if (homeDir) {
+    return join(homeDir, ".bb-dev", "replays");
+  }
+  return resolve(".bb-dev", "replays");
 }
 
 function writeJsonFile(filePath: string, value: object): void {
@@ -101,24 +162,24 @@ function sanitizeTextContent(
   const replacements: Array<{ from: string; to: string }> = [
     {
       from: sanitization.workspacePath,
-      to: "$EXCALIDRAW_REPO",
+      to: sanitization.workspacePlaceholder,
     },
     {
       from: sanitization.outputDir,
-      to: "$CAPTURE_OUTPUT",
+      to: CAPTURE_OUTPUT_PLACEHOLDER,
     },
   ];
 
   if (sanitization.workspacePath.startsWith("/tmp/")) {
     replacements.push({
       from: `/private${sanitization.workspacePath}`,
-      to: "$EXCALIDRAW_REPO",
+      to: sanitization.workspacePlaceholder,
     });
   }
   if (sanitization.outputDir.startsWith("/tmp/")) {
     replacements.push({
       from: `/private${sanitization.outputDir}`,
-      to: "$CAPTURE_OUTPUT",
+      to: CAPTURE_OUTPUT_PLACEHOLDER,
     });
   }
   if (sanitization.homeDir) {
@@ -187,11 +248,69 @@ function normalizeManifest(args: {
 }): ProviderAuditManifest {
   return {
     ...args.manifest,
-    workspacePath: "$EXCALIDRAW_REPO",
-    runtimeWorkspacePath: "$EXCALIDRAW_REPO",
-    envWorkspacePath: "$EXCALIDRAW_REPO",
-    outputDir: `$FIXTURE_ROOT/${args.corpusId}/${args.manifest.providerId}/${args.taskId}`,
+    workspacePath: EXCALIDRAW_REPO_PLACEHOLDER,
+    runtimeWorkspacePath: EXCALIDRAW_REPO_PLACEHOLDER,
+    envWorkspacePath: EXCALIDRAW_REPO_PLACEHOLDER,
+    outputDir: `${FIXTURE_ROOT_PLACEHOLDER}/${args.corpusId}/${args.manifest.providerId}/${args.taskId}`,
   };
+}
+
+function formatPromptInput(input: PromptInput): string {
+  switch (input.type) {
+    case "text":
+      return input.text;
+    case "image":
+      return `[image: ${input.url}]`;
+    case "localImage":
+      return `[local image: ${input.path}]`;
+    case "localFile":
+      return `[local file: ${input.name ?? input.path}]`;
+  }
+}
+
+function formatPromptInputs(input: PromptInput[]): string {
+  return input.map(formatPromptInput).join("\n\n");
+}
+
+function buildScenarioDescription(
+  args: BuildDevReplayScenarioDescriptionArgs,
+): string {
+  const preview = args.manifest.userInputPreview?.trim();
+  if (preview && preview.length > 0) {
+    return preview;
+  }
+
+  const collapsedText = args.turnText.trim().replace(/\s+/g, " ");
+  if (collapsedText.length > 0) {
+    return collapsedText.slice(0, 160);
+  }
+
+  return args.manifest.captureId;
+}
+
+function buildDevReplayWorkspacePath(
+  manifest: ProviderAuditDevReplayManifest,
+): string {
+  const homeDir = getHomeDir();
+  if (!homeDir) {
+    return BB_DEV_WORKSPACE_PLACEHOLDER;
+  }
+  return join(homeDir, ".bb-dev", "worktrees", manifest.environmentId, "bb");
+}
+
+function readDevReplayRawProviderEvents(
+  rawProviderEventsPath: string,
+): Extract<AgentRuntimeCaptureEntry, { kind: "raw-provider-event" }>[] {
+  const content = readFileSync(rawProviderEventsPath, "utf8");
+  return content
+    .split(/\r?\n/)
+    .filter((line) => line.trim().length > 0)
+    .map((line) => {
+      const parsedLine = devReplayRawProviderEventLineSchema.parse(
+        JSON.parse(line),
+      );
+      return parsedLine.entry;
+    });
 }
 
 function normalizeRawProviderEvents(
@@ -287,6 +406,7 @@ function importFixtureBundle(
     sanitization: {
       homeDir: getHomeDir(),
       workspacePath: manifest.workspacePath,
+      workspacePlaceholder: EXCALIDRAW_REPO_PLACEHOLDER,
       outputDir: manifest.outputDir,
     },
   });
@@ -337,6 +457,169 @@ export function parseImportFixturesArgs(
   }
 
   return { args };
+}
+
+export function parseImportDevReplaysArgs(
+  argv: string[],
+): ProviderAuditDevReplayCliParseResult {
+  const args: ProviderAuditImportDevReplaysArgs = {
+    replayRoot: getDefaultDevReplayRoot(),
+    fixtureRoot: DEFAULT_FIXTURE_ROOT,
+    corpusId: DEFAULT_DEV_REPLAY_CORPUS_ID,
+    captureIds: [],
+  };
+
+  for (let index = 0; index < argv.length; index += 1) {
+    const token = argv[index];
+    const next = argv[index + 1];
+
+    if (token === "--") {
+      continue;
+    }
+    if (token === "--replay-root" && next) {
+      args.replayRoot = resolve(next);
+      index += 1;
+      continue;
+    }
+    if (token === "--fixture-root" && next) {
+      args.fixtureRoot = resolve(next);
+      index += 1;
+      continue;
+    }
+    if (token === "--corpus-id" && next) {
+      args.corpusId = next;
+      index += 1;
+      continue;
+    }
+    if (token === "--capture-id" && next) {
+      args.captureIds.push(next);
+      index += 1;
+      continue;
+    }
+    if (!token.startsWith("--")) {
+      args.captureIds.push(token);
+      continue;
+    }
+  }
+
+  args.captureIds = Array.from(new Set(args.captureIds));
+
+  if (args.captureIds.length === 0) {
+    throw new Error("At least one replay capture id is required");
+  }
+
+  return { args };
+}
+
+function importDevReplayFixture(
+  args: ProviderAuditImportDevReplayFixtureArgs,
+): ProviderAuditImportFixtureResult {
+  const replayDir = resolve(args.replayRoot, args.captureId);
+  const manifest = readJsonFile({
+    filePath: join(replayDir, "manifest.json"),
+    schema: devReplayManifestSchema,
+  });
+
+  if (manifest.captureId !== args.captureId) {
+    throw new Error(
+      `Replay manifest captureId ${manifest.captureId} does not match requested ${args.captureId}`,
+    );
+  }
+
+  const turnText = formatPromptInputs(manifest.userInput);
+  const taskId = manifest.captureId;
+  const destinationBundleDir = join(
+    args.fixtureCorpusRoot,
+    manifest.providerId,
+    taskId,
+  );
+  const rawProviderEvents = normalizeRawProviderEvents(
+    readDevReplayRawProviderEvents(
+      join(replayDir, "raw-provider-events.ndjson"),
+    ),
+  );
+  const fixtureOutputDir = `${FIXTURE_ROOT_PLACEHOLDER}/${args.corpusId}/${manifest.providerId}/${taskId}`;
+  const normalizedManifest: ProviderAuditManifest = {
+    providerId: manifest.providerId,
+    scenarioId: manifest.captureId,
+    scenarioDescription: buildScenarioDescription({ manifest, turnText }),
+    model: manifest.execution?.model ?? null,
+    source: "live-capture",
+    capturedAt: manifest.capturedAt,
+    completedAt: manifest.completedAt,
+    gitSha: null,
+    workspacePath: BB_DEV_WORKSPACE_PLACEHOLDER,
+    runtimeWorkspacePath: BB_DEV_WORKSPACE_PLACEHOLDER,
+    envWorkspacePath: BB_DEV_WORKSPACE_PLACEHOLDER,
+    outputDir: fixtureOutputDir,
+    threadId: manifest.threadId,
+    projectId: manifest.projectId,
+    turns: [turnText],
+    gitResetRef: null,
+    runtimeWorkspaceGitStart: null,
+    runtimeWorkspaceGitEnd: null,
+  };
+
+  writeFixtureBundle({
+    destinationBundleDir,
+    manifest: normalizedManifest,
+    clientRequests: [
+      {
+        id: `${manifest.captureId}:turn-0`,
+        turnIndex: 0,
+        type: "client/turn/requested",
+        target: { kind: "thread-start" },
+        requestMethod: "thread/start",
+        text: turnText,
+        createdAt: manifest.capturedAt,
+      },
+    ],
+    rawProviderEvents,
+    sanitization: {
+      homeDir: getHomeDir(),
+      workspacePath: buildDevReplayWorkspacePath(manifest),
+      workspacePlaceholder: BB_DEV_WORKSPACE_PLACEHOLDER,
+      outputDir: replayDir,
+    },
+  });
+
+  return {
+    corpusId: args.corpusId,
+    providerId: normalizedManifest.providerId,
+    taskId,
+    fixturePath: join(args.corpusId, normalizedManifest.providerId, taskId),
+  };
+}
+
+export function importDevReplayFixtures(
+  args: ProviderAuditImportDevReplaysArgs,
+): ProviderAuditImportFixturesResult {
+  const fixtureCorpusRoot = resolveFixtureCorpusRoot({
+    fixtureRoot: args.fixtureRoot,
+    corpusId: args.corpusId,
+  });
+  rmSync(fixtureCorpusRoot, { recursive: true, force: true });
+  mkdirSync(fixtureCorpusRoot, { recursive: true });
+
+  const fixtures = args.captureIds.map((captureId) =>
+    importDevReplayFixture({
+      replayRoot: args.replayRoot,
+      fixtureCorpusRoot,
+      corpusId: args.corpusId,
+      captureId,
+    }),
+  );
+
+  return {
+    corpusId: args.corpusId,
+    fixtureRoot: fixtureCorpusRoot,
+    fixtures: fixtures.sort((left, right) => {
+      if (left.providerId !== right.providerId) {
+        return left.providerId.localeCompare(right.providerId);
+      }
+      return left.taskId.localeCompare(right.taskId);
+    }),
+  };
 }
 
 export function importFixtureCorpus(

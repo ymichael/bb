@@ -68,6 +68,13 @@ export interface ProviderAuditImportFixturesArgs {
   corpusId: string;
 }
 
+export interface ProviderAuditImportDevReplaysArgs {
+  replayRoot: string;
+  fixtureRoot: string;
+  corpusId: string;
+  captureIds: string[];
+}
+
 export interface ProviderAuditReplayFixturesArgs {
   fixtureRoot: string;
   corpusId?: string;

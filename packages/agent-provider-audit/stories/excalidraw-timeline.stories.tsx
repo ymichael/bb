@@ -44,7 +44,7 @@ function FixtureTimeline({ fixtureId }: { fixtureId: FixtureStoryId }) {
           onLoadTurnSummaryRows={() => {}}
           themeType="dark"
           threadDetailRows={fixture.timelineRows}
-          threadStatus={fixture.threadStatus}
+          threadRuntimeDisplayStatus="idle"
           turnSummaryRowsById={EMPTY_TURN_SUMMARY_ROWS_BY_ID}
         />
       </ConversationTimeline>

@@ -9,7 +9,13 @@ import { replayFixtures } from "../src/replay.js";
 import { DEFAULT_LADLE_OUTPUT_PATH } from "../src/visual-audit.js";
 
 const TEMP_DIRS: string[] = [];
+const SNAPSHOT_BODY_LINE_LIMIT = 3;
+const SNAPSHOT_LINE_LENGTH_LIMIT = 100;
 let checkedInArtifact: ProviderAuditReplayBuildArtifact;
+
+type ReplayBuildSummary = ProviderAuditReplayBuildArtifact["summaries"][number];
+type ReplayBuildPrefixSnapshot =
+  ProviderAuditReplayBuildArtifact["timelinePrefixSnapshots"][number];
 
 function fixtureRoot(): string {
   return join(dirname(fileURLToPath(import.meta.url)), "../fixtures");
@@ -17,6 +23,84 @@ function fixtureRoot(): string {
 
 function normalizeTimelineSnapshotText(text: string): string {
   return text.replaceAll("─", "-");
+}
+
+function isTimelineHeaderLine(line: string): boolean {
+  return line.trimStart().startsWith("-- ");
+}
+
+function truncateSnapshotLine(line: string): string {
+  if (line.length <= SNAPSHOT_LINE_LENGTH_LIMIT) {
+    return line;
+  }
+
+  const omittedCharacterCount = line.length - SNAPSHOT_LINE_LENGTH_LIMIT;
+  return `${line.slice(0, SNAPSHOT_LINE_LENGTH_LIMIT)}... [truncated ${omittedCharacterCount} chars]`;
+}
+
+function truncatedLinesNotice(skippedLineCount: number): string {
+  return `  ... [truncated ${skippedLineCount} lines]`;
+}
+
+function compactTimelineSnapshotLines(lines: string[]): string[] {
+  const compacted: string[] = [];
+  let bodyLineCount = 0;
+  let skippedLineCount = 0;
+
+  function flushSkippedLines(): void {
+    if (skippedLineCount === 0) {
+      return;
+    }
+    compacted.push(truncatedLinesNotice(skippedLineCount));
+    skippedLineCount = 0;
+  }
+
+  for (const line of lines) {
+    const normalizedLine = normalizeTimelineSnapshotText(line);
+    if (isTimelineHeaderLine(normalizedLine)) {
+      flushSkippedLines();
+      bodyLineCount = 0;
+      compacted.push(truncateSnapshotLine(normalizedLine));
+      continue;
+    }
+
+    bodyLineCount += 1;
+    if (bodyLineCount <= SNAPSHOT_BODY_LINE_LIMIT) {
+      compacted.push(truncateSnapshotLine(normalizedLine));
+      continue;
+    }
+
+    skippedLineCount += 1;
+  }
+
+  flushSkippedLines();
+  return compacted;
+}
+
+function compactTimelineSnapshotText(text: string): string {
+  return compactTimelineSnapshotLines(text.split("\n")).join("\n");
+}
+
+function compactTimelinePreview(lines: string[]): string[] {
+  return compactTimelineSnapshotLines(lines);
+}
+
+function compactSummarySnapshot(
+  summary: ReplayBuildSummary,
+): ReplayBuildSummary {
+  return {
+    ...summary,
+    timelinePreview: compactTimelinePreview(summary.timelinePreview),
+  };
+}
+
+function compactPrefixSnapshot(
+  snapshot: ReplayBuildPrefixSnapshot,
+): ReplayBuildPrefixSnapshot {
+  return {
+    ...snapshot,
+    timelinePreview: compactTimelinePreview(snapshot.timelinePreview),
+  };
 }
 
 afterEach(() => {
@@ -44,15 +128,35 @@ describe("@bb/agent-provider-audit fixture replay", () => {
       ).toBe(0);
     }
 
-    expect(checkedInArtifact.summaries).toMatchSnapshot();
+    expect(
+      checkedInArtifact.summaries.map(compactSummarySnapshot),
+    ).toMatchSnapshot();
   });
 
-  it("snapshots verbose CLI timeline output for every fixture", () => {
+  it("snapshots readable verbose CLI timeline structure for every fixture", () => {
     for (const timeline of checkedInArtifact.verboseTimelines) {
-      expect(normalizeTimelineSnapshotText(timeline.text)).toMatchSnapshot(
+      expect(compactTimelineSnapshotText(timeline.text)).toMatchSnapshot(
         timeline.fixture,
       );
     }
+  });
+
+  it("snapshots streaming prefix timeline structure for every fixture", () => {
+    expect(checkedInArtifact.timelinePrefixSnapshots.length).toBeGreaterThan(0);
+    expect(
+      checkedInArtifact.timelinePrefixSnapshots.some(
+        (snapshot) => snapshot.threadStatus === "active",
+      ),
+    ).toBe(true);
+    expect(
+      checkedInArtifact.timelinePrefixSnapshots.some(
+        (snapshot) => snapshot.threadStatus === "idle",
+      ),
+    ).toBe(true);
+
+    expect(
+      checkedInArtifact.timelinePrefixSnapshots.map(compactPrefixSnapshot),
+    ).toMatchSnapshot();
   });
 
   it("summarizes raw-event and tool-call coverage across the checked-in fixtures", () => {

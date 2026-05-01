@@ -1,0 +1,22 @@
+{
+  "providerId": "codex",
+  "scenarioId": "cap_mol1xza1_zclp97wz",
+  "scenarioDescription": "please work on @plans/react-perf-audit.md I want you to commit as you go work until the plan is done. each time you…",
+  "model": "gpt-5.5",
+  "source": "live-capture",
+  "capturedAt": 1777527440857,
+  "completedAt": 1777528889138,
+  "gitSha": null,
+  "workspacePath": "$BB_DEV_WORKSPACE",
+  "runtimeWorkspacePath": "$BB_DEV_WORKSPACE",
+  "envWorkspacePath": "$BB_DEV_WORKSPACE",
+  "outputDir": "$FIXTURE_ROOT/dev-replays/codex/cap_mol1xza1_zclp97wz",
+  "threadId": "thr_4gfmxbsa64",
+  "projectId": "proj_gyz9przugq",
+  "turns": [
+    "please work on @plans/react-perf-audit.md\n\nI want you to commit as you go\nwork until the plan is done.\n\neach time you commit, review the commit against the plan and the guidelines in [AGENTS.md](AGENTS.md)"
+  ],
+  "gitResetRef": null,
+  "runtimeWorkspaceGitStart": null,
+  "runtimeWorkspaceGitEnd": null
+}

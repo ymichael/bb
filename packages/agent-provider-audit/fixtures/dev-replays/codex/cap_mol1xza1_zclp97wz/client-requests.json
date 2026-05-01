@@ -1,0 +1,13 @@
+[
+  {
+    "id": "cap_mol1xza1_zclp97wz:turn-0",
+    "turnIndex": 0,
+    "type": "client/turn/requested",
+    "target": {
+      "kind": "thread-start"
+    },
+    "requestMethod": "thread/start",
+    "text": "please work on @plans/react-perf-audit.md\n\nI want you to commit as you go\nwork until the plan is done.\n\neach time you commit, review the commit against the plan and the guidelines in [AGENTS.md](AGENTS.md)",
+    "createdAt": 1777527440857
+  }
+]

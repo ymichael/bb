@@ -1,7 +1,13 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { extractThreadContextWindowUsage } from "@bb/core-ui";
+import {
+  buildTimelineRows,
+  decodeRow,
+  extractThreadContextWindowUsage,
+  formatTimelineAsText,
+  toViewProjection,
+} from "@bb/core-ui";
 import {
   threadEventTypeValues,
   timelineRowSchema,
@@ -50,6 +56,12 @@ interface ProviderAuditBuildReplayArtifactCliParseResult {
   args: WriteProviderAuditReplayBuildArtifactsArgs;
 }
 
+interface BuildPrefixSnapshotArgs {
+  bundle: ProviderAuditBundle;
+  fixtureId: string;
+  prefixLength: number;
+}
+
 export interface ProviderAuditReplayBuildSummary {
   debugRawEventCount: number;
   fixture: string;
@@ -65,6 +77,20 @@ export interface ProviderAuditReplayBuildSummary {
 export interface ProviderAuditReplayBuildVerboseTimeline {
   fixture: string;
   text: string;
+}
+
+export type ProviderAuditReplayBuildPrefixThreadStatus = "active" | "idle";
+
+export interface ProviderAuditReplayBuildPrefixSnapshot {
+  fixture: string;
+  lastEventType: ThreadEventType;
+  prefixLength: number;
+  threadStatus: ProviderAuditReplayBuildPrefixThreadStatus;
+  timelinePreview: string[];
+  timelineRowCount: number;
+  totalEventCount: number;
+  viewMessageCount: number;
+  viewMessageKinds: Record<string, number>;
 }
 
 export interface ProviderAuditReplayBuildTokenUsageSummary {
@@ -100,6 +126,7 @@ export interface ProviderAuditReplayBuildArtifact {
   fixtureCount: number;
   ladleStoryData: ProviderAuditLadleStoryData;
   summaries: ProviderAuditReplayBuildSummary[];
+  timelinePrefixSnapshots: ProviderAuditReplayBuildPrefixSnapshot[];
   verboseTimelines: ProviderAuditReplayBuildVerboseTimeline[];
 }
 
@@ -260,6 +287,19 @@ const replayBuildArtifactSchema = z.object({
       viewMessageKinds: z.record(z.string(), z.number()),
     }),
   ),
+  timelinePrefixSnapshots: z.array(
+    z.object({
+      fixture: z.string(),
+      lastEventType: providerAuditThreadEventTypeSchema,
+      prefixLength: z.number(),
+      threadStatus: z.enum(["active", "idle"]),
+      timelinePreview: z.array(z.string()),
+      timelineRowCount: z.number(),
+      totalEventCount: z.number(),
+      viewMessageCount: z.number(),
+      viewMessageKinds: z.record(z.string(), z.number()),
+    }),
+  ),
   verboseTimelines: z.array(
     z.object({
       fixture: z.string(),
@@ -314,6 +354,85 @@ function isTokenUsageTranslatedCapture(
   entry: ProviderAuditBundle["translatedCaptures"][number],
 ): entry is TokenUsageTranslatedCapture {
   return entry.event.type === "thread/tokenUsage/updated";
+}
+
+function selectPrefixLengths(totalEventCount: number): number[] {
+  if (totalEventCount <= 0) {
+    return [];
+  }
+
+  return [
+    ...new Set([
+      1,
+      Math.ceil(totalEventCount * 0.25),
+      Math.ceil(totalEventCount * 0.5),
+      Math.ceil(totalEventCount * 0.75),
+      totalEventCount,
+    ]),
+  ]
+    .filter(
+      (prefixLength) => prefixLength > 0 && prefixLength <= totalEventCount,
+    )
+    .sort((left, right) => left - right);
+}
+
+function buildPrefixSnapshot(
+  args: BuildPrefixSnapshotArgs,
+): ProviderAuditReplayBuildPrefixSnapshot {
+  const prefixRows = args.bundle.threadEventRows.slice(0, args.prefixLength);
+  const lastRow = prefixRows[prefixRows.length - 1];
+  if (!lastRow) {
+    throw new Error(`Cannot build empty prefix snapshot for ${args.fixtureId}`);
+  }
+
+  const threadStatus: ProviderAuditReplayBuildPrefixThreadStatus =
+    args.prefixLength === args.bundle.threadEventRows.length
+      ? "idle"
+      : "active";
+  const decodedRows = prefixRows.map((row) => decodeRow(row));
+  const projection = toViewProjection(decodedRows, {
+    threadStatus,
+    turnMessageDetail: "summary",
+  });
+  const timelineRows = buildTimelineRows(projection);
+  const timelineText = formatTimelineAsText(timelineRows, {
+    color: false,
+    verbose: false,
+  });
+  const viewMessages = flattenProjectionMessages(projection);
+
+  return {
+    fixture: args.fixtureId,
+    lastEventType: lastRow.type,
+    prefixLength: args.prefixLength,
+    threadStatus,
+    timelinePreview: buildTimelinePreview(timelineText),
+    timelineRowCount: timelineRows.length,
+    totalEventCount: args.bundle.threadEventRows.length,
+    viewMessageCount: viewMessages.length,
+    viewMessageKinds: countMessageKinds(viewMessages),
+  };
+}
+
+function buildTimelinePrefixSnapshots(
+  replayed: ProviderAuditReplayFixturesResult,
+): ProviderAuditReplayBuildPrefixSnapshot[] {
+  const snapshots: ProviderAuditReplayBuildPrefixSnapshot[] = [];
+  for (const { fixture, bundle } of replayed.fixtures) {
+    const fixtureId = toFixtureId(fixture);
+    for (const prefixLength of selectPrefixLengths(
+      bundle.threadEventRows.length,
+    )) {
+      snapshots.push(
+        buildPrefixSnapshot({
+          bundle,
+          fixtureId,
+          prefixLength,
+        }),
+      );
+    }
+  }
+  return snapshots;
 }
 
 function buildFixtureContextWindowSnapshot(
@@ -402,6 +521,7 @@ export function buildProviderAuditReplayBuildArtifact(
       viewMessageKinds: countMessageKinds(bundle.viewMessages),
       timelinePreview: buildTimelinePreview(bundle.timelineText),
     })),
+    timelinePrefixSnapshots: buildTimelinePrefixSnapshots(replayed),
     verboseTimelines: replayed.fixtures.map(({ fixture, bundle }) => ({
       fixture: toFixtureId(fixture),
       text: trimTrailingWhitespace(bundle.timelineVerboseText),

@@ -6,9 +6,11 @@ import {
 } from "./timeline-test-harness.js";
 import type { TimelineEventFactory } from "./timeline-test-harness.js";
 
-function renderIdleTimeline(
-  events: ReturnType<TimelineEventFactory[keyof TimelineEventFactory]>[],
-) {
+type TimelineFixtureEvent = ReturnType<
+  TimelineEventFactory[keyof TimelineEventFactory]
+>;
+
+function renderIdleTimeline(events: TimelineFixtureEvent[]) {
   return renderTimelineFixture({
     events,
     projectionOptions: {
@@ -18,9 +20,7 @@ function renderIdleTimeline(
   });
 }
 
-function renderActiveTimeline(
-  events: ReturnType<TimelineEventFactory[keyof TimelineEventFactory]>[],
-) {
+function renderActiveTimeline(events: TimelineFixtureEvent[]) {
   return renderTimelineFixture({
     events,
     projectionOptions: {
@@ -30,7 +30,159 @@ function renderActiveTimeline(
   });
 }
 
+function renderPrefixSnapshots(events: TimelineFixtureEvent[]) {
+  return [1, 3, 5, 8, events.length].map((prefixLength) => {
+    const timeline = renderTimelineFixture({
+      events: events.slice(0, prefixLength),
+      projectionOptions: {
+        threadStatus: prefixLength === events.length ? "idle" : "active",
+        turnMessageDetail: "summary",
+      },
+    });
+    return {
+      prefixLength,
+      messageKinds: messageKinds(timeline.messages),
+      text: timeline.text,
+    };
+  });
+}
+
 describe("timeline CLI rendering snapshots", () => {
+  it("snapshots streaming CLI prefixes before the final idle state", () => {
+    const event = createTimelineEventFactory({ threadId: "thread-1" });
+    const events = [
+      event.clientTurnRequested({
+        target: { kind: "new-turn" },
+        text: "Patch the timeline output",
+      }),
+      event.turnStarted(),
+      event.commandStarted({
+        itemId: "cmd-1",
+        command: "rg timeline packages/core-ui",
+      }),
+      event.commandOutputDelta({
+        itemId: "cmd-1",
+        delta: "packages/core-ui/src/format-timeline-text.ts\n",
+      }),
+      event.commandCompleted({
+        itemId: "cmd-1",
+        command: "rg timeline packages/core-ui",
+        aggregatedOutput: "packages/core-ui/src/format-timeline-text.ts\n",
+        exitCode: 0,
+      }),
+      event.webSearchStarted({
+        itemId: "web-1",
+        queries: ["timeline rendering"],
+      }),
+      event.webSearchCompleted({
+        itemId: "web-1",
+        queries: ["timeline rendering"],
+        resultText: "Found rendering references",
+      }),
+      event.fileChangeStarted({
+        itemId: "edit-1",
+        changes: [
+          {
+            path: "/repo/packages/core-ui/src/format-timeline-text.ts",
+            kind: "update",
+          },
+        ],
+      }),
+      event.fileChangeCompleted({
+        itemId: "edit-1",
+        changes: [
+          {
+            path: "/repo/packages/core-ui/src/format-timeline-text.ts",
+            kind: "update",
+            diff: "@@ -1 +1 @@\n-before\n+after",
+          },
+        ],
+      }),
+      event.assistantDelta({
+        itemId: "assistant-1",
+        delta: "Updated the timeline output.",
+      }),
+      event.assistantCompleted({
+        itemId: "assistant-1",
+        text: "Updated the timeline output.",
+      }),
+      event.turnCompleted(),
+    ];
+
+    expect(renderPrefixSnapshots(events)).toMatchInlineSnapshot(`
+      [
+        {
+          "messageKinds": [
+            "user",
+          ],
+          "prefixLength": 1,
+          "text": "── User ────────────────────────────────────────────────────
+      Patch the timeline output",
+        },
+        {
+          "messageKinds": [
+            "user",
+            "tool-exploring",
+          ],
+          "prefixLength": 3,
+          "text": "── User ────────────────────────────────────────────────────
+      Patch the timeline output
+
+      ── Exploring 1 search ──────────────────────────────────────
+        Search timeline in packages/core-ui",
+        },
+        {
+          "messageKinds": [
+            "user",
+            "tool-exploring",
+          ],
+          "prefixLength": 5,
+          "text": "── User ────────────────────────────────────────────────────
+      Patch the timeline output
+
+      ── Explored 1 search ───────────────────────────────────────
+        Search timeline in packages/core-ui",
+        },
+        {
+          "messageKinds": [
+            "user",
+            "tool-exploring",
+            "web-search",
+            "file-edit",
+          ],
+          "prefixLength": 8,
+          "text": "── User ────────────────────────────────────────────────────
+      Patch the timeline output
+
+      ── Explored 1 search ───────────────────────────────────────
+        Search timeline in packages/core-ui
+
+      ── Ran 1 web search ────────────────────────────────────────
+        ── Searched timeline rendering ─────────────────────────────
+          [completed] timeline rendering
+          Found rendering references
+
+      ── File Edit ───────────────────────────────────────────────
+        [running] /repo/packages/core-ui/src/format-timeline-text.ts (update)",
+        },
+        {
+          "messageKinds": [
+            "user",
+            "assistant-text",
+          ],
+          "prefixLength": 12,
+          "text": "── User ────────────────────────────────────────────────────
+      Patch the timeline output
+
+      ── Worked on 3 items ───────────────────────────────────────
+
+      ── Assistant ───────────────────────────────────────────────
+      Updated the timeline output.",
+        },
+      ]
+    `);
+  });
+
   it("shows an unacknowledged active-turn steer from the client request", () => {
     const event = createTimelineEventFactory({ threadId: "thread-1" });
     const timeline = renderIdleTimeline([

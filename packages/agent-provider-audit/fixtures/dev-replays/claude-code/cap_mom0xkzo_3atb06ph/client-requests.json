@@ -1,0 +1,13 @@
+[
+  {
+    "id": "cap_mom0xkzo_3atb06ph:turn-0",
+    "turnIndex": 0,
+    "type": "client/turn/requested",
+    "target": {
+      "kind": "thread-start"
+    },
+    "requestMethod": "thread/start",
+    "text": "please review codex/timeline-bundle-unification using @docs/CODE_REVIEW.md\n\nuse subagents and then verify their comments before you synthesize the final report",
+    "createdAt": 1777586208900
+  }
+]

@@ -4,7 +4,12 @@ export {
   parseBuildReplayArtifactArgs,
   writeProviderAuditReplayBuildArtifacts,
 } from "./build-artifacts.js";
-export { importFixtureCorpus, parseImportFixturesArgs } from "./fixtures.js";
+export {
+  importDevReplayFixtures,
+  importFixtureCorpus,
+  parseImportDevReplaysArgs,
+  parseImportFixturesArgs,
+} from "./fixtures.js";
 export {
   collectCoverageIssues,
   listFixtureBundles,
@@ -46,6 +51,7 @@ export type {
   ProviderAuditFixtureCoverageSummary,
   ProviderAuditFixtureBundle,
   ProviderAuditGitSnapshot,
+  ProviderAuditImportDevReplaysArgs,
   ProviderAuditImportFixtureResult,
   ProviderAuditImportFixturesArgs,
   ProviderAuditImportFixturesResult,
