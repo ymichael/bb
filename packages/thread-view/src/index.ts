@@ -43,24 +43,11 @@ export type {
 } from "./timeline-render-helpers.js";
 export {
   formatCommandOutputText,
-  getCommandExitCodeLine,
-  getPermissionGrantDisplayStatus,
   getTimelineDisplayStatus,
-  getTimelineDisplayStatusInfo,
-  getVisibleCommandOutput,
-  hasVisibleCommandOutput,
-  timelineDisplayStatusValues,
-} from "./timeline-display-status.js";
-export type {
-  TimelineDisplayStatus,
-  TimelineDisplayStatusInfo,
-  TimelineDisplayStatusTone,
 } from "./timeline-display-status.js";
 
 export {
   extractShellCommandFromString,
-  formatToolCallCommand,
-  isShellToolName,
 } from "./tool-call-parsing.js";
 
 export { taskStatusGlyph } from "./task-status.js";
