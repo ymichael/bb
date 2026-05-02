@@ -5,6 +5,7 @@ import {
   renderTimelineFixture,
 } from "./timeline-test-harness.js";
 import { formatThreadTimelineText } from "../src/format-timeline-text.js";
+import type { TimelineRow } from "@bb/server-contract";
 import type { TimelineEventFactory } from "./timeline-test-harness.js";
 
 type TimelineFixtureEvent = ReturnType<
@@ -46,6 +47,28 @@ function renderPrefixSnapshots(events: TimelineFixtureEvent[]) {
       text: timeline.text,
     };
   });
+}
+
+function getNestedRows(row: TimelineRow): readonly TimelineRow[] {
+  if (row.kind === "turn") {
+    return row.children ?? [];
+  }
+  if (row.kind === "work" && row.workKind === "delegation") {
+    return row.childRows;
+  }
+  return [];
+}
+
+function flattenTimelineRows(rows: readonly TimelineRow[]): TimelineRow[] {
+  const flattenedRows: TimelineRow[] = [];
+  const visitRows = (currentRows: readonly TimelineRow[]): void => {
+    for (const row of currentRows) {
+      flattenedRows.push(row);
+      visitRows(getNestedRows(row));
+    }
+  };
+  visitRows(rows);
+  return flattenedRows;
 }
 
 describe("timeline CLI rendering snapshots", () => {
@@ -496,6 +519,66 @@ describe("timeline CLI rendering snapshots", () => {
       ── Explored 1 search ───────────────────────────────────────
         ── Searched for setState in packages/excalidraw/tests/helpers/ui.ts"
     `);
+  });
+
+  it("scopes nested delegation row ids", () => {
+    const event = createTimelineEventFactory({
+      providerThreadId: "root-provider",
+      threadId: "thread-1",
+      turnId: "turn-1",
+    });
+    const timeline = renderIdleTimeline([
+      event.turnStarted(),
+      event.toolCallCompleted({
+        itemId: "delegation-1",
+        tool: "spawnAgent",
+        arguments: {
+          prompt: "Review the branch",
+          receiverThreadIds: ["child-provider"],
+        },
+        result: "Child result",
+      }),
+      event.commandCompleted({
+        providerThreadId: "child-provider",
+        itemId: "child-command-1",
+        command: "echo child",
+        aggregatedOutput: "child\n",
+      }),
+      event.assistantCompleted({
+        providerThreadId: "child-provider",
+        itemId: "child-assistant-1",
+        text: "Child done.",
+      }),
+      event.assistantCompleted({
+        itemId: "root-assistant-1",
+        text: "Root done.",
+      }),
+      event.turnCompleted(),
+    ]);
+
+    const allRows = flattenTimelineRows(timeline.rows);
+    const rootTurn = timeline.rows.find(
+      (row): row is Extract<TimelineRow, { kind: "turn" }> =>
+        row.kind === "turn",
+    );
+    const delegation = allRows.find(
+      (row): row is Extract<
+        TimelineRow,
+        { kind: "work"; workKind: "delegation" }
+      > => row.kind === "work" && row.workKind === "delegation",
+    );
+    const nestedTurn = delegation?.childRows.find(
+      (row): row is Extract<TimelineRow, { kind: "turn" }> =>
+        row.kind === "turn",
+    );
+
+    expect(rootTurn).toBeDefined();
+    expect(delegation).toBeDefined();
+    expect(nestedTurn).toBeDefined();
+    expect(nestedTurn?.id).toBe(
+      `${delegation?.id}:child:thread-1:turn-1:turn`,
+    );
+    expect(nestedTurn?.id).not.toBe(rootTurn?.id);
   });
 
   it("counts lists separately while de-duping explored files", () => {

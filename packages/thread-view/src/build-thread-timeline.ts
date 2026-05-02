@@ -110,6 +110,7 @@ interface ThreadContextWindowSignal {
 
 interface BuildTurnRowsArgs {
   includeNestedRows: boolean;
+  rowIdPrefix: string;
   turn: EventProjectionTurn;
 }
 
@@ -121,7 +122,10 @@ interface CompletedTurnMessageSlices {
 
 interface BuildTimelineRowsOptions {
   includeNestedRows: boolean;
+  rowIdPrefix: string;
 }
+
+const ROOT_TIMELINE_ROW_ID_PREFIX = "";
 
 type TimelineOperationMessage = Extract<
   EventProjectionMessage,
@@ -209,9 +213,10 @@ function extractThreadContextWindowUsage(
 
 function buildTimelineRowBase(
   message: EventProjectionMessage,
+  rowIdPrefix: string,
 ): TimelineRowBase {
   return {
-    id: message.id,
+    id: `${rowIdPrefix}${message.id}`,
     threadId: message.threadId,
     turnId: getEventProjectionMessageScopeTurnId(message),
     sourceSeqStart: message.sourceSeqStart,
@@ -359,12 +364,15 @@ function buildTimelineOperationDetail(
   return lines.length > 0 ? lines.join("\n") : null;
 }
 
-function convertMessage(message: EventProjectionMessage): TimelineSourceRow[] {
+function convertMessage(
+  message: EventProjectionMessage,
+  options: BuildTimelineRowsOptions,
+): TimelineSourceRow[] {
   switch (message.kind) {
     case "user":
       return [
         {
-          ...buildTimelineRowBase(message),
+          ...buildTimelineRowBase(message, options.rowIdPrefix),
           kind: "conversation",
           role: "user",
           text: message.text,
@@ -374,7 +382,7 @@ function convertMessage(message: EventProjectionMessage): TimelineSourceRow[] {
     case "assistant-text":
       return [
         {
-          ...buildTimelineRowBase(message),
+          ...buildTimelineRowBase(message, options.rowIdPrefix),
           kind: "conversation",
           role: "assistant",
           text: message.text,
@@ -384,7 +392,7 @@ function convertMessage(message: EventProjectionMessage): TimelineSourceRow[] {
     case "command":
       return [
         {
-          ...buildTimelineRowBase(message),
+          ...buildTimelineRowBase(message, options.rowIdPrefix),
           kind: "work",
           workKind: "command",
           status: toTimelineStatus(message.status),
@@ -402,7 +410,7 @@ function convertMessage(message: EventProjectionMessage): TimelineSourceRow[] {
     case "tool-call":
       return [
         {
-          ...buildTimelineRowBase(message),
+          ...buildTimelineRowBase(message, options.rowIdPrefix),
           kind: "work",
           workKind: "tool",
           status: toTimelineStatus(message.status),
@@ -420,7 +428,7 @@ function convertMessage(message: EventProjectionMessage): TimelineSourceRow[] {
       if (message.changes.length === 0 && message.approvalStatus !== null) {
         return [
           {
-            ...buildTimelineRowBase(message),
+            ...buildTimelineRowBase(message, options.rowIdPrefix),
             kind: "work",
             workKind: "approval",
             status: toTimelineStatus(message.status),
@@ -436,22 +444,25 @@ function convertMessage(message: EventProjectionMessage): TimelineSourceRow[] {
           },
         ];
       }
-      return message.changes.map((change, index) => ({
-        ...buildTimelineRowBase(message),
-        id: `${message.id}:file-change:${index}`,
-        kind: "work",
-        workKind: "file-change",
-        status: toTimelineStatus(message.status),
-        callId: message.callId,
-        change: toTimelineFileChange(change),
-        stdout: message.stdout ?? null,
-        stderr: message.stderr ?? null,
-        approvalStatus: message.approvalStatus,
-      }));
+      return message.changes.map((change, index) => {
+        const base = buildTimelineRowBase(message, options.rowIdPrefix);
+        return {
+          ...base,
+          id: `${base.id}:file-change:${index}`,
+          kind: "work",
+          workKind: "file-change",
+          status: toTimelineStatus(message.status),
+          callId: message.callId,
+          change: toTimelineFileChange(change),
+          stdout: message.stdout ?? null,
+          stderr: message.stderr ?? null,
+          approvalStatus: message.approvalStatus,
+        };
+      });
     case "web-search":
       return [
         {
-          ...buildTimelineRowBase(message),
+          ...buildTimelineRowBase(message, options.rowIdPrefix),
           kind: "work",
           workKind: "web-search",
           status: toTimelineStatus(message.status),
@@ -463,7 +474,7 @@ function convertMessage(message: EventProjectionMessage): TimelineSourceRow[] {
     case "web-fetch":
       return [
         {
-          ...buildTimelineRowBase(message),
+          ...buildTimelineRowBase(message, options.rowIdPrefix),
           kind: "work",
           workKind: "web-fetch",
           status: toTimelineStatus(message.status),
@@ -475,27 +486,31 @@ function convertMessage(message: EventProjectionMessage): TimelineSourceRow[] {
         },
       ];
     case "delegation":
-      return [
-        {
-          ...buildTimelineRowBase(message),
-          kind: "work",
-          workKind: "delegation",
-          status: toTimelineStatus(message.status),
-          callId: message.callId,
-          toolName: message.toolName,
-          subagentType: message.subagentType ?? null,
-          description: message.description ?? null,
-          output: message.output,
-          durationMs: message.durationMs,
-          childRows: buildTimelineRows(message.childProjection, {
-            includeNestedRows: true,
-          }),
-        },
-      ];
+      {
+        const base = buildTimelineRowBase(message, options.rowIdPrefix);
+        return [
+          {
+            ...base,
+            kind: "work",
+            workKind: "delegation",
+            status: toTimelineStatus(message.status),
+            callId: message.callId,
+            toolName: message.toolName,
+            subagentType: message.subagentType ?? null,
+            description: message.description ?? null,
+            output: message.output,
+            durationMs: message.durationMs,
+            childRows: buildTimelineRows(message.childProjection, {
+              includeNestedRows: true,
+              rowIdPrefix: `${base.id}:child:`,
+            }),
+          },
+        ];
+      }
     case "permission-grant-lifecycle":
       return [
         {
-          ...buildTimelineRowBase(message),
+          ...buildTimelineRowBase(message, options.rowIdPrefix),
           kind: "work",
           workKind: "approval",
           status: toTimelineStatus(message.status),
@@ -507,7 +522,7 @@ function convertMessage(message: EventProjectionMessage): TimelineSourceRow[] {
     case "operation":
       return [
         {
-          ...buildTimelineRowBase(message),
+          ...buildTimelineRowBase(message, options.rowIdPrefix),
           kind: "system",
           systemKind: "operation",
           title: message.title,
@@ -518,7 +533,7 @@ function convertMessage(message: EventProjectionMessage): TimelineSourceRow[] {
     case "error":
       return [
         {
-          ...buildTimelineRowBase(message),
+          ...buildTimelineRowBase(message, options.rowIdPrefix),
           kind: "system",
           systemKind: message.reconnectAttempt ? "reconnect" : "error",
           title: message.message,
@@ -529,7 +544,7 @@ function convertMessage(message: EventProjectionMessage): TimelineSourceRow[] {
     case "debug/raw-event":
       return [
         {
-          ...buildTimelineRowBase(message),
+          ...buildTimelineRowBase(message, options.rowIdPrefix),
           kind: "system",
           systemKind: "debug",
           title: message.rawType,
@@ -600,6 +615,7 @@ function splitCompletedTurnMessages(
 
 function buildTurnRows({
   includeNestedRows,
+  rowIdPrefix,
   turn,
 }: BuildTurnRowsArgs): TimelineRow[] {
   const messages = turn.messages ?? [];
@@ -607,21 +623,29 @@ function buildTurnRows({
     turn.status !== "pending" && turn.completedAt !== null;
 
   if (!isCompletedTurn) {
-    return messages.flatMap(convertMessage);
+    return messages.flatMap((message) =>
+      convertMessage(message, { includeNestedRows, rowIdPrefix }),
+    );
   }
 
   const { summaryMessages, terminalMessages, trailingMessages } =
     splitCompletedTurnMessages(messages, turn.terminalMessage);
-  const sourceRows = summaryMessages.flatMap(convertMessage);
-  const terminalRows = terminalMessages.flatMap(convertMessage);
-  const trailingRows = trailingMessages.flatMap(convertMessage);
+  const sourceRows = summaryMessages.flatMap((message) =>
+    convertMessage(message, { includeNestedRows, rowIdPrefix }),
+  );
+  const terminalRows = terminalMessages.flatMap((message) =>
+    convertMessage(message, { includeNestedRows, rowIdPrefix }),
+  );
+  const trailingRows = trailingMessages.flatMap((message) =>
+    convertMessage(message, { includeNestedRows, rowIdPrefix }),
+  );
 
   if (turn.summaryCount === 0 && sourceRows.length === 0) {
     return [...terminalRows, ...trailingRows];
   }
 
   const turnRow: TimelineTurnRow = {
-    id: `${turn.threadId}:${turn.turnId}:turn`,
+    id: `${rowIdPrefix}${turn.threadId}:${turn.turnId}:turn`,
     threadId: turn.threadId,
     turnId: turn.turnId,
     sourceSeqStart: turn.sourceSeqStart,
@@ -668,6 +692,7 @@ function buildManagerConversationRows(
     },
     {
       includeNestedRows: false,
+      rowIdPrefix: ROOT_TIMELINE_ROW_ID_PREFIX,
     },
   );
 }
@@ -702,7 +727,7 @@ function buildTimelineRows(
   for (const entry of projection.entries) {
     switch (entry.kind) {
       case "projected-message":
-        appendRows(rows, convertMessage(entry.message));
+        appendRows(rows, convertMessage(entry.message, options));
         break;
       case "turn":
         appendRows(
@@ -710,6 +735,7 @@ function buildTimelineRows(
           buildTurnRows({
             turn: entry.turn,
             includeNestedRows,
+            rowIdPrefix: options.rowIdPrefix,
           }),
         );
         break;
@@ -755,6 +781,7 @@ export function buildThreadTimelineFromEvents(
         ? buildManagerConversationRows(projection)
         : buildTimelineRows(projection, {
             includeNestedRows: args.options.includeNestedRows,
+            rowIdPrefix: ROOT_TIMELINE_ROW_ID_PREFIX,
           }),
   };
 }
@@ -774,6 +801,7 @@ export function buildThreadTimelineTurnDetailsFromEvents(
   });
   const nestedRows = buildTimelineRows(projection, {
     includeNestedRows: true,
+    rowIdPrefix: ROOT_TIMELINE_ROW_ID_PREFIX,
   });
   const matchingTurnSummary = findMatchingTurnSummaryRow(
     nestedRows,
