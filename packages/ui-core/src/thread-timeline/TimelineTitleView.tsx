@@ -84,7 +84,7 @@ export function TimelineTitleView({ title, className }: TimelineTitleViewProps) 
   return (
     <span
       className={cn(
-        "inline-flex min-w-0 max-w-full items-baseline gap-1 overflow-hidden whitespace-nowrap text-sm leading-5",
+        "inline-flex min-w-0 max-w-full items-baseline gap-1 overflow-hidden whitespace-nowrap text-sm leading-4",
         className,
       )}
       title={title.plain}

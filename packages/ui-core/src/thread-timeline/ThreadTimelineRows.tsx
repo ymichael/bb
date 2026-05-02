@@ -270,7 +270,14 @@ function TimelineStaticRow({ children, className }: TimelineStaticRowProps) {
 function timelineRowsListGapClassName(
   spacing: TimelineRowsListSpacing,
 ): string {
-  return spacing === "bundle" ? "gap-0" : "gap-0.5";
+  switch (spacing) {
+    case "top-level":
+      return "gap-1";
+    case "nested":
+      return "gap-0.5";
+    case "bundle":
+      return "gap-0";
+  }
 }
 
 function ConversationRow({

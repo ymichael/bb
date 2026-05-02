@@ -41,7 +41,7 @@ export function ExpandableTimelineRow({
       summaryContentClassName="min-w-0 max-w-full"
       className={cn(isExpanded ? "w-full" : "group w-full", className)}
       headerClassName="px-2 py-0"
-      headerButtonClassName="w-full max-w-full justify-start py-0"
+      headerButtonClassName="w-full max-w-full justify-start py-0 leading-4"
       contentClassName="px-2 pb-1 pt-0"
     >
       {isExpanded ? renderBody() : null}

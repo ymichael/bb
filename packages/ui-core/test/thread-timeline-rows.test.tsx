@@ -401,6 +401,33 @@ describe("ThreadTimelineRows", () => {
     expect(screen.getAllByRole("button")).toHaveLength(1);
   });
 
+  it("renders top-level timeline rows with a visible list gap", () => {
+    const view = render(
+      <ThreadTimelineRows
+        loadingTurnSummaryIds={new Set()}
+        erroredTurnSummaryIds={new Set()}
+        onLoadTurnSummaryRows={() => {}}
+        timelineRows={[
+          conversationRow({ id: "assistant-1", text: "Done." }),
+          commandRow({
+            id: "command-1",
+            command: "pnpm test",
+            sourceSeqStart: 2,
+          }),
+        ]}
+        threadRuntimeDisplayStatus="idle"
+        turnSummaryRowsById={{}}
+      />,
+    );
+
+    const topLevelList = view.container.querySelector(
+      '[data-timeline-row-list="top-level"]',
+    );
+    expect(topLevelList).not.toBeNull();
+    expect(topLevelList?.classList.contains("gap-1")).toBe(true);
+    expect(topLevelList?.classList.contains("gap-0.5")).toBe(false);
+  });
+
   it("renders rows inside activity summaries with no list gap", () => {
     const view = render(
       <ThreadTimelineRows
