@@ -13,6 +13,13 @@ export interface TerminalOutputBlockProps {
   metadataLines?: readonly string[];
 }
 
+interface TerminalScrollContentKeyArgs {
+  commandLine: string | undefined;
+  exitCode: number | null;
+  metadataLines: readonly string[];
+  output: string;
+}
+
 const COMMAND_LINE_CLAMP_STYLE: CSSProperties = {
   display: "-webkit-box",
   WebkitBoxOrient: "vertical",
@@ -25,6 +32,28 @@ const ANSI_TO_HTML = new Convert({
   stream: false,
 });
 
+function stringLengthSum(values: readonly string[]): number {
+  let length = 0;
+  for (const value of values) {
+    length += value.length;
+  }
+  return length;
+}
+
+function terminalScrollContentKey({
+  commandLine,
+  exitCode,
+  metadataLines,
+  output,
+}: TerminalScrollContentKeyArgs): string {
+  return [
+    commandLine?.length ?? 0,
+    stringLengthSum(metadataLines),
+    output.length,
+    exitCode ?? "",
+  ].join(":");
+}
+
 export function TerminalOutputBlock({
   commandLine,
   exitCode = null,
@@ -32,19 +61,18 @@ export function TerminalOutputBlock({
   metadataLines = [],
   output,
 }: TerminalOutputBlockProps) {
-  const outputText = output.trimEnd();
-  const scrollContentKey = [
-    commandLine ?? "",
-    metadataLines.join("\n"),
-    outputText,
-    exitCode ?? "",
-  ].join("\u0000");
+  const scrollContentKey = terminalScrollContentKey({
+    commandLine,
+    exitCode,
+    metadataLines,
+    output,
+  });
   const outputScroll = useStickyBottomScroll<HTMLPreElement>({
     contentKey: scrollContentKey,
   });
   const renderedOutputHtml = useMemo(
-    () => (outputText.length > 0 ? ANSI_TO_HTML.toHtml(outputText) : null),
-    [outputText],
+    () => (output.length > 0 ? ANSI_TO_HTML.toHtml(output) : null),
+    [output],
   );
 
   const showExitCode = exitCode !== null;

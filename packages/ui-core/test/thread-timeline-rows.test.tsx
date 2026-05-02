@@ -1171,6 +1171,42 @@ describe("ThreadTimelineRows", () => {
     expect(view.container.textContent ?? "").toContain("echo two");
   });
 
+  it("does not auto-expand lazy turn children when the runtime scope is idle", () => {
+    const view = render(
+      <ThreadTimelineRows
+        loadingTurnSummaryIds={new Set()}
+        erroredTurnSummaryIds={new Set()}
+        onLoadTurnSummaryRows={() => {}}
+        timelineRows={[
+          {
+            ...turnRow(),
+            status: "pending",
+          },
+        ]}
+        threadRuntimeDisplayStatus="idle"
+        turnSummaryRowsById={{
+          "turn-summary-1": [
+            commandRow({
+              id: "nested-pending-command-1",
+              command: "pnpm test",
+              output: "still running",
+              sourceSeqStart: 11,
+              status: "pending",
+            }),
+          ],
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Working for\s*4s/u }));
+
+    const nestedBundleButton = screen.getByRole("button", {
+      name: /Running 1 command/u,
+    });
+    expect(nestedBundleButton.getAttribute("aria-expanded")).toBe("false");
+    expect(view.container.textContent ?? "").not.toContain("still running");
+  });
+
   it("renders system rows with detail as expandable", () => {
     withElementScrollMetrics(() => {
       const view = render(

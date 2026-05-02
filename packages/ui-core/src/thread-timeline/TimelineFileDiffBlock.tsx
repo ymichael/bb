@@ -32,6 +32,7 @@ interface RenderedFileChange {
 
 type FileChangeAction = "created" | "deleted" | "renamed" | "edited";
 type SyntheticPatchAction = "created" | "deleted";
+type RenderedFileChangeCacheKey = string;
 
 const DIFF_VIEW_BASE_OPTIONS = {
   overflow: "scroll",
@@ -44,8 +45,9 @@ const DIFF_VIEW_STYLE: TimelineDiffViewStyle = {
   "--diffs-line-height": "18px",
 };
 
-const renderedFileChangeCache = new WeakMap<
-  TimelineFileChange,
+const RENDERED_FILE_CHANGE_CACHE_LIMIT = 50;
+const renderedFileChangeCache = new Map<
+  RenderedFileChangeCacheKey,
   RenderedFileChange
 >();
 
@@ -235,10 +237,37 @@ function getPlainDiffFallback(
   return diff && diff.length > 0 ? diff : null;
 }
 
+function renderedFileChangeCacheKey(
+  change: TimelineFileChange,
+): RenderedFileChangeCacheKey {
+  return [
+    change.path,
+    change.movePath ?? "",
+    change.kind ?? "",
+    change.diffStats.added,
+    change.diffStats.removed,
+    change.diff ?? "",
+  ].join("\u0000");
+}
+
+function cacheRenderedFileChange(
+  key: RenderedFileChangeCacheKey,
+  renderedChange: RenderedFileChange,
+): void {
+  if (renderedFileChangeCache.size >= RENDERED_FILE_CHANGE_CACHE_LIMIT) {
+    const oldestKey = renderedFileChangeCache.keys().next().value;
+    if (oldestKey !== undefined) {
+      renderedFileChangeCache.delete(oldestKey);
+    }
+  }
+  renderedFileChangeCache.set(key, renderedChange);
+}
+
 function buildRenderedFileChange(
   change: TimelineFileChange,
 ): RenderedFileChange {
-  const cached = renderedFileChangeCache.get(change);
+  const cacheKey = renderedFileChangeCacheKey(change);
+  const cached = renderedFileChangeCache.get(cacheKey);
   if (cached) {
     return cached;
   }
@@ -252,7 +281,7 @@ function buildRenderedFileChange(
     renderablePatch,
     plainDiff: getPlainDiffFallback(change, renderablePatch !== null),
   };
-  renderedFileChangeCache.set(change, renderedChange);
+  cacheRenderedFileChange(cacheKey, renderedChange);
   return renderedChange;
 }
 

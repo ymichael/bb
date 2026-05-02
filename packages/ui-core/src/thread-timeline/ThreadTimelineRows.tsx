@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import type { MutableRefObject, ReactNode } from "react";
 import type { ThreadRuntimeDisplayStatus } from "@bb/domain";
 import type { TimelineRow, TimelineTurnRow } from "@bb/server-contract";
@@ -44,6 +44,7 @@ export interface ThreadTimelineRowsProps {
 interface TimelineRendererContext {
   autoExpandedRowIds: ReadonlySet<string>;
   compactActivityIntents: boolean;
+  getViewRows: GetTimelineViewRows;
   requestedTurnSummaryRowIdsRef: MutableRefObject<Set<string>>;
   loadingTurnSummaryIds: ReadonlySet<string>;
   erroredTurnSummaryIds: ReadonlySet<string>;
@@ -101,6 +102,7 @@ interface RequestLazyTurnRowsArgs {
 }
 
 interface CollectTimelineAutoExpandedRowIdsArgs {
+  getViewRows: GetTimelineViewRows;
   rows: readonly ThreadTimelineViewRow[];
   scopeActive: boolean;
   turnSummaryRowsById: Record<string, TimelineRow[]>;
@@ -118,6 +120,8 @@ type TimelineConversationViewRow = Extract<
 >;
 
 type TimelineRowsListSpacing = "top-level" | "nested" | "bundle";
+type TimelineRawRows = readonly TimelineRow[];
+type GetTimelineViewRows = (rows: TimelineRawRows) => ThreadTimelineViewRow[];
 
 interface ConversationRowProps {
   onOpenLocalFileLink?: ThreadTimelineLocalFileLinkHandler;
@@ -128,6 +132,10 @@ interface ConversationRowProps {
 
 interface TurnRowBodyProps extends TimelineRendererContext {
   row: TimelineViewTurnRow;
+}
+
+interface UseTimelineViewRowsCacheResult {
+  getViewRows: GetTimelineViewRows;
 }
 
 function assertNever(value: never): never {
@@ -165,6 +173,27 @@ function requestLazyTurnRows({
 
 function isRuntimeScopeActive(status: ThreadRuntimeDisplayStatus): boolean {
   return status === "active" || status === "host-reconnecting";
+}
+
+function useTimelineViewRowsCache(): UseTimelineViewRowsCacheResult {
+  const cacheRef = useRef(new WeakMap<TimelineRawRows, ThreadTimelineViewRow[]>());
+  const getViewRows = useCallback<GetTimelineViewRows>((rawRows) => {
+    const cachedRows = cacheRef.current.get(rawRows);
+    if (cachedRows) {
+      return cachedRows;
+    }
+
+    const viewRows = buildTimelineViewRows(rawRows);
+    cacheRef.current.set(rawRows, viewRows);
+    return viewRows;
+  }, []);
+
+  return useMemo(
+    () => ({
+      getViewRows,
+    }),
+    [getViewRows],
+  );
 }
 
 function isWorkRowExpandable(row: TimelineViewWorkRow): boolean {
@@ -263,6 +292,7 @@ function shouldAutoExpandRow({
 }
 
 function collectTimelineAutoExpandedRowIds({
+  getViewRows,
   rows,
   scopeActive,
   turnSummaryRowsById,
@@ -273,6 +303,10 @@ function collectTimelineAutoExpandedRowIds({
     currentRows: readonly ThreadTimelineViewRow[],
     currentScopeActive: boolean,
   ): void => {
+    if (!currentScopeActive) {
+      return;
+    }
+
     currentRows.forEach((row, index) => {
       const isTail = index === currentRows.length - 1;
       if (shouldAutoExpandRow({ isTail, row, scopeActive: currentScopeActive })) {
@@ -287,7 +321,7 @@ function collectTimelineAutoExpandedRowIds({
         const turnChildRows =
           row.children ??
           (turnSummaryRowsById[row.id]
-            ? buildTimelineViewRows(turnSummaryRowsById[row.id] ?? [])
+            ? getViewRows(turnSummaryRowsById[row.id] ?? [])
             : null);
         if (turnChildRows) {
           visitRows(turnChildRows, row.status === "pending");
@@ -426,6 +460,7 @@ function TimelineExpandableBody({
   row,
   themeType,
   turnSummaryRowsById,
+  getViewRows,
 }: TimelineExpandableBodyProps) {
   switch (row.kind) {
     case "activity-summary":
@@ -445,6 +480,7 @@ function TimelineExpandableBody({
           resolveUserAttachmentImageSrc={resolveUserAttachmentImageSrc}
           themeType={themeType}
           turnSummaryRowsById={turnSummaryRowsById}
+          getViewRows={getViewRows}
         />
       );
     case "turn":
@@ -462,6 +498,7 @@ function TimelineExpandableBody({
           resolveUserAttachmentImageSrc={resolveUserAttachmentImageSrc}
           themeType={themeType}
           turnSummaryRowsById={turnSummaryRowsById}
+          getViewRows={getViewRows}
         />
       );
     case "work":
@@ -485,6 +522,7 @@ function TimelineExpandableBody({
                   resolveUserAttachmentImageSrc={resolveUserAttachmentImageSrc}
                   themeType={themeType}
                   turnSummaryRowsById={turnSummaryRowsById}
+                  getViewRows={getViewRows}
                 />
               </div>
             ) : null}
@@ -532,24 +570,21 @@ function TurnRowBody({
   row,
   themeType,
   turnSummaryRowsById,
+  getViewRows,
 }: TurnRowBodyProps) {
   const loadedRows = turnSummaryRowsById[row.id];
   const hasInlineChildren = row.children !== null;
+  const hasLoadedRows = loadedRows !== undefined;
   const rows = hasInlineChildren
     ? row.children
     : loadedRows
-      ? buildTimelineViewRows(loadedRows)
+      ? getViewRows(loadedRows)
       : null;
   const isLoading = loadingTurnSummaryIds.has(row.id);
   const isError = erroredTurnSummaryIds.has(row.id);
 
   useEffect(() => {
-    if (
-      hasInlineChildren ||
-      rows !== null ||
-      isLoading ||
-      isError
-    ) {
+    if (hasInlineChildren || hasLoadedRows || isLoading || isError) {
       return;
     }
     requestLazyTurnRows({
@@ -558,13 +593,13 @@ function TurnRowBody({
       row,
     });
   }, [
+    hasLoadedRows,
     hasInlineChildren,
     isError,
     isLoading,
     onLoadTurnSummaryRows,
     requestedTurnSummaryRowIdsRef,
     row,
-    rows,
   ]);
 
   if (isError) {
@@ -591,6 +626,7 @@ function TurnRowBody({
         resolveUserAttachmentImageSrc={resolveUserAttachmentImageSrc}
         themeType={themeType}
         turnSummaryRowsById={turnSummaryRowsById}
+        getViewRows={getViewRows}
       />
     );
   }
@@ -615,6 +651,7 @@ function TimelineRowView({
   spacing,
   themeType,
   turnSummaryRowsById,
+  getViewRows,
 }: TimelineRowViewProps) {
   const horizontalPadding = timelineRowHorizontalPadding(spacing);
 
@@ -682,6 +719,7 @@ function TimelineRowView({
       resolveUserAttachmentImageSrc={resolveUserAttachmentImageSrc}
       themeType={themeType}
       turnSummaryRowsById={turnSummaryRowsById}
+      getViewRows={getViewRows}
     />
   );
 }
@@ -701,6 +739,7 @@ function TimelineExpandableRowView({
   row,
   themeType,
   turnSummaryRowsById,
+  getViewRows,
 }: TimelineExpandableRowViewProps) {
   const handleBeforeExpand = (): void => {
     if (
@@ -738,6 +777,7 @@ function TimelineExpandableRowView({
           resolveUserAttachmentImageSrc={resolveUserAttachmentImageSrc}
           themeType={themeType}
           turnSummaryRowsById={turnSummaryRowsById}
+          getViewRows={getViewRows}
         />
       )}
     />
@@ -759,6 +799,7 @@ function TimelineRowsList({
   spacing,
   themeType,
   turnSummaryRowsById,
+  getViewRows,
 }: TimelineRowsListProps) {
   return (
     <div
@@ -789,6 +830,7 @@ function TimelineRowsList({
             resolveUserAttachmentImageSrc={resolveUserAttachmentImageSrc}
             themeType={themeType}
             turnSummaryRowsById={turnSummaryRowsById}
+            getViewRows={getViewRows}
           />
         </div>
       ))}
@@ -797,20 +839,22 @@ function TimelineRowsList({
 }
 
 export function ThreadTimelineRows(props: ThreadTimelineRowsProps) {
+  const { getViewRows } = useTimelineViewRowsCache();
   const rows = useMemo(
-    () => buildTimelineViewRows(props.timelineRows),
-    [props.timelineRows],
+    () => getViewRows(props.timelineRows),
+    [getViewRows, props.timelineRows],
   );
   const scopeActive = isRuntimeScopeActive(props.threadRuntimeDisplayStatus);
   const themeType = props.themeType ?? "light";
   const autoExpandedRowIds = useMemo(
     () =>
       collectTimelineAutoExpandedRowIds({
+        getViewRows,
         rows,
         scopeActive,
         turnSummaryRowsById: props.turnSummaryRowsById,
       }),
-    [rows, scopeActive, props.turnSummaryRowsById],
+    [getViewRows, rows, scopeActive, props.turnSummaryRowsById],
   );
   const requestedTurnSummaryRowIdsRef = useRef(new Set<string>());
 
@@ -830,6 +874,7 @@ export function ThreadTimelineRows(props: ThreadTimelineRowsProps) {
       resolveUserAttachmentImageSrc={props.resolveUserAttachmentImageSrc}
       themeType={themeType}
       turnSummaryRowsById={props.turnSummaryRowsById}
+      getViewRows={getViewRows}
     />
   );
 }

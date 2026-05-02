@@ -1,7 +1,19 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { cn } from "./cn.js";
 
 const EXPANDABLE_PANEL_TRANSITION_MS = 200;
+const useBrowserLayoutEffect =
+  typeof window === "undefined" ? useEffect : useLayoutEffect;
+
+interface ChevronProps {
+  className?: string;
+}
 
 export const COLLAPSIBLE_HEADER_COLLAPSED_TONE_CLASS =
   "text-muted-foreground/90 transition-colors hover:text-foreground/90 focus-visible:text-foreground/90";
@@ -11,7 +23,7 @@ export const COLLAPSIBLE_HEADER_BUTTON_BASE_CLASS =
   "inline-flex max-w-full items-center gap-1 overflow-hidden py-0.5 text-left text-sm";
 export const COLLAPSIBLE_HEADER_TEXT_CLASS = "min-w-0 truncate";
 
-function Chevron({ className }: { className?: string }) {
+function Chevron({ className }: ChevronProps) {
   return (
     <svg
       viewBox="0 0 16 16"
@@ -121,38 +133,43 @@ export function ExpandablePanel({
     headerClassName,
     headerButtonClassName,
   );
-  const [shouldRenderBody, setShouldRenderBody] = useState(isExpanded);
-  const [previousIsExpanded, setPreviousIsExpanded] = useState(isExpanded);
+  const [isClosing, setIsClosing] = useState(false);
   const renderedBodyRef = useRef<ReactNode>(null);
-  if (previousIsExpanded !== isExpanded) {
-    setPreviousIsExpanded(isExpanded);
-    if (isExpanded) {
-      setShouldRenderBody(true);
-    }
-  }
-  useEffect(() => {
-    if (isExpanded || !shouldRenderBody) {
+  const expandedBody = isExpanded
+    ? renderBody
+      ? renderBody()
+      : children
+    : null;
+
+  useBrowserLayoutEffect(() => {
+    if (!isExpanded) {
       return;
     }
+    renderedBodyRef.current = expandedBody;
+  }, [expandedBody, isExpanded]);
+
+  useBrowserLayoutEffect(() => {
+    if (isExpanded) {
+      return;
+    }
+    if (renderedBodyRef.current === null) {
+      return;
+    }
+    setIsClosing(true);
     const timeout = setTimeout(
-      () => setShouldRenderBody(false),
+      () => {
+        renderedBodyRef.current = null;
+        setIsClosing(false);
+      },
       EXPANDABLE_PANEL_TRANSITION_MS,
     );
     return () => clearTimeout(timeout);
-  }, [isExpanded, shouldRenderBody]);
-  const renderedBody =
-    shouldRenderBody && isExpanded
-      ? renderBody
-        ? renderBody()
-        : children
-      : shouldRenderBody
-        ? renderedBodyRef.current
-        : null;
-  if (isExpanded) {
-    renderedBodyRef.current = renderedBody;
-  } else if (!shouldRenderBody) {
-    renderedBodyRef.current = null;
-  }
+  }, [isExpanded]);
+  const renderedBody = isExpanded
+    ? expandedBody
+    : isClosing
+      ? renderedBodyRef.current
+      : null;
 
   return (
     <div className={cn("rounded-md text-muted-foreground", className)}>

@@ -70,7 +70,7 @@ afterEach(() => {
 });
 
 describe("TimelineFileDiffBlock", () => {
-  it("parses a renderable patch once across remounts", () => {
+  it("parses a renderable patch once across remounts with equivalent changes", () => {
     const diff = [
       "diff --git a/src/app.ts b/src/app.ts",
       "--- a/src/app.ts",
@@ -93,7 +93,12 @@ describe("TimelineFileDiffBlock", () => {
     expect(parsePatchFilesMock()).toHaveBeenCalledTimes(1);
 
     firstView.unmount();
-    render(<TimelineFileDiffBlock change={change} themeType="light" />);
+    render(
+      <TimelineFileDiffBlock
+        change={timelineFileChange(diff)}
+        themeType="light"
+      />,
+    );
 
     expect(screen.getByTestId("file-diff").textContent ?? "").toBe(
       "src/app.ts",
