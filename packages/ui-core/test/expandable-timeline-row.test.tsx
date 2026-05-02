@@ -170,6 +170,9 @@ describe("ExpandableTimelineRow", () => {
 
     expect(screen.getByRole("button").className).toContain("w-full");
     expect(screen.getByRole("button").className).toContain("justify-start");
+    expect(screen.getByRole("button").className).toContain(
+      "timeline-row-header",
+    );
     expect(screen.getByRole("button").className).toContain("group/toggle");
     expect(screen.getByRole("button").className).toContain("px-2");
     expect(screen.getByRole("button").className).not.toContain(

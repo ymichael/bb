@@ -19,10 +19,11 @@ import type {
   UserAttachmentImageSrcResolver,
 } from "./types.js";
 import { ConversationMessageContent } from "./ConversationMessageContent.js";
+import { ExpandableTimelineRow } from "./ExpandableTimelineRow.js";
 import {
-  ExpandableTimelineRow,
+  TimelineStaticRowHeader,
   type TimelineRowHorizontalPadding,
-} from "./ExpandableTimelineRow.js";
+} from "./TimelineRowHeader.js";
 import { TimelineTitleView } from "./TimelineTitleView.js";
 import { WorkRowBody } from "./TimelineRowDetails.js";
 import {
@@ -332,33 +333,18 @@ function timelineRowHorizontalPadding(
   }
 }
 
-function timelineRowHorizontalPaddingClassName(
-  horizontalPadding: TimelineRowHorizontalPadding,
-): string {
-  switch (horizontalPadding) {
-    case "default":
-      return "px-2";
-    case "flush":
-      return "px-0";
-  }
-}
-
 function TimelineStaticRow({
   children,
   className,
   horizontalPadding = "default",
 }: TimelineStaticRowProps) {
   return (
-    <div className={cn("group w-full", className)}>
-      <div
-        className={cn(
-          timelineRowHorizontalPaddingClassName(horizontalPadding),
-          "flex min-w-0 py-0 text-sm",
-        )}
-      >
-        {children}
-      </div>
-    </div>
+    <TimelineStaticRowHeader
+      horizontalPadding={horizontalPadding}
+      className={className}
+    >
+      {children}
+    </TimelineStaticRowHeader>
   );
 }
 
