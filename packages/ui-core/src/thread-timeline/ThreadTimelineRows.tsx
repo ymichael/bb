@@ -353,7 +353,7 @@ function TimelineStaticRow({
       <div
         className={cn(
           timelineRowHorizontalPaddingClassName(horizontalPadding),
-          "py-0",
+          "flex min-w-0 py-0 text-sm leading-none",
         )}
       >
         {children}

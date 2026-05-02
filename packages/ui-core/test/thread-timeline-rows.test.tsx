@@ -619,6 +619,13 @@ describe("ThreadTimelineRows", () => {
     );
     expect(staticTitle?.parentElement?.classList.contains("px-0")).toBe(true);
     expect(staticTitle?.parentElement?.classList.contains("px-2")).toBe(false);
+    expect(staticTitle?.parentElement?.classList.contains("flex")).toBe(true);
+    expect(staticTitle?.parentElement?.classList.contains("text-sm")).toBe(
+      true,
+    );
+    expect(staticTitle?.parentElement?.classList.contains("leading-none")).toBe(
+      true,
+    );
     expect(staticTitle?.parentElement?.classList.contains("py-0")).toBe(true);
     expect(staticTitle?.parentElement?.classList.contains("py-0.5")).toBe(
       false,
