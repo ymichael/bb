@@ -1,6 +1,6 @@
-import { cn } from "@/lib/utils";
+import { cn } from "./cn.js";
 
-interface FormErrorProps {
+export interface FormErrorProps {
   message?: string | null;
   className?: string;
 }

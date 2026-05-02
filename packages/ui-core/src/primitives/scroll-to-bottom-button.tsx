@@ -1,5 +1,13 @@
 import { ArrowDown } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn } from "./cn.js";
+
+export interface ScrollToBottomButtonProps {
+  visible: boolean;
+  active?: boolean;
+  onClick: () => void;
+  className?: string;
+  ariaLabel?: string;
+}
 
 export function ScrollToBottomButton({
   visible,
@@ -7,13 +15,7 @@ export function ScrollToBottomButton({
   onClick,
   className,
   ariaLabel = "Scroll to latest event",
-}: {
-  visible: boolean;
-  active?: boolean;
-  onClick: () => void;
-  className?: string;
-  ariaLabel?: string;
-}) {
+}: ScrollToBottomButtonProps) {
   return (
     <div className={cn("flex h-0 items-center justify-center", className)}>
       <button

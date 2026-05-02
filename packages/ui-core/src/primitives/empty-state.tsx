@@ -1,7 +1,7 @@
 import type { LucideIcon } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn } from "./cn.js";
 
-interface EmptyStateProps {
+export interface EmptyStateProps {
   message: string;
   icon?: LucideIcon;
   className?: string;

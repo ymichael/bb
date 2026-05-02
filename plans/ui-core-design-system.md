@@ -207,7 +207,7 @@ Progress:
       layer structure and document the package boundary.
 - [x] Step 4 — scaffold ui-core Ladle and add a primitive story. The timeline
       domain story is deferred until the React timeline renderer exists again.
-- [ ] Step 5 — extract the first app primitive batch with stories.
+- [x] Step 5 — extract the first app primitive batch with stories.
 - [ ] Step 6 — evaluate criteria-gated domain composition moves.
 
 ### Step 1 — Extract shared theme CSS

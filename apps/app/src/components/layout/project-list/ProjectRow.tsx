@@ -3,7 +3,7 @@ import type { ThreadListEntry } from "@bb/domain";
 import type { ProjectResponse } from "@bb/server-contract";
 import { AlertTriangle, ChevronRight, Folder, FolderOpen } from "lucide-react";
 import { NavLink } from "react-router-dom";
-import { EmptyState } from "@/components/shared/EmptyState";
+import { EmptyState } from "@bb/ui-core";
 import { ProjectActionsMenu } from "@/components/project/ProjectActionsMenu";
 import { SidebarMenuItem, SidebarMenuSkeleton } from "@bb/ui-core";
 import {

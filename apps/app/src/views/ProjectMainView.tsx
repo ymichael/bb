@@ -10,7 +10,7 @@ import {
   parseEnvironmentValue,
 } from "@/components/promptbox/EnvironmentPicker";
 import { PromptOptionPicker } from "@/components/promptbox/PromptOptionPicker";
-import { PageShell } from "@/components/layout/PageShell";
+import { PageShell } from "@bb/ui-core";
 import { useUploadPromptAttachment } from "@/hooks/mutations/project-mutations";
 import { useCreateThread } from "@/hooks/mutations/thread-runtime-mutations";
 import { useProjects } from "@/hooks/queries/project-queries";

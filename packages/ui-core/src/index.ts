@@ -175,9 +175,26 @@ export {
   getScrollAnimationBehavior,
 } from "./primitives/scroll.js";
 export {
+  BottomAnchoredScrollBody,
+  useBottomAnchoredScroll,
+  type BottomAnchorContextValue,
+  type BottomAnchoredScrollBodyProps,
+} from "./primitives/bottom-anchored-scroll-body.js";
+export { EmptyState, type EmptyStateProps } from "./primitives/empty-state.js";
+export {
   EventCodeBlock,
   type EventCodeBlockProps,
 } from "./primitives/event-content.js";
+export { FormError, type FormErrorProps } from "./primitives/form-error.js";
+export { PageShell, type PageShellProps } from "./primitives/page-shell.js";
+export {
+  ScrollToBottomButton,
+  type ScrollToBottomButtonProps,
+} from "./primitives/scroll-to-bottom-button.js";
+export {
+  SettingsSection,
+  type SettingsSectionProps,
+} from "./primitives/settings-section.js";
 export {
   getDetailScrollMaxHeightClass,
   type DetailScrollSize,

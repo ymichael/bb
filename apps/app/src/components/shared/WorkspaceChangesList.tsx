@@ -1,6 +1,6 @@
 import type { WorkspaceStatus } from "@bb/domain";
 import { TruncateStart } from "@bb/ui-core";
-import { EmptyState } from "@/components/shared/EmptyState";
+import { EmptyState } from "@bb/ui-core";
 import { cn } from "@/lib/utils";
 import { formatWorkspaceFileStatus } from "@/lib/workspace-change-summary";
 

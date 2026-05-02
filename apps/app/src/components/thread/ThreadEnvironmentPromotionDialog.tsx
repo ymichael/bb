@@ -2,7 +2,7 @@ import { useState, type FormEvent } from "react";
 import { Loader2 } from "lucide-react";
 import { assertNever } from "@bb/core-ui";
 import { DetailCard, DetailRow } from "@bb/ui-core";
-import { FormError } from "@/components/shared/FormError";
+import { FormError } from "@bb/ui-core";
 import { Button } from "@bb/ui-core";
 import {
   Dialog,

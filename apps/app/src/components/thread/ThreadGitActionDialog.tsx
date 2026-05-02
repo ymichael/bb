@@ -5,7 +5,7 @@ import type { PromptInput, ThreadType, WorkspaceStatus } from "@bb/domain";
 import { DetailCard, DetailRow } from "@bb/ui-core";
 import type { ThreadGitStatusDisplay } from "@/lib/workspace-status";
 import { WorkspaceChangesList } from "@/components/shared/WorkspaceChangesList";
-import { FormError } from "@/components/shared/FormError";
+import { FormError } from "@bb/ui-core";
 import { Button } from "@bb/ui-core";
 import {
   Dialog,

@@ -30,7 +30,7 @@ import {
   PromptExecutionControls,
   PromptPermissionModePicker,
 } from "@/components/promptbox/PromptExecutionControls";
-import { useBottomAnchoredScroll } from "@/components/layout/BottomAnchoredScrollBody";
+import { useBottomAnchoredScroll } from "@bb/ui-core";
 import { Button } from "@bb/ui-core";
 import { ThreadTimelineScrollToBottomButton } from "./ThreadTimelineScrollToBottomButton";
 import { WorkspaceChangesList } from "@/components/shared/WorkspaceChangesList";

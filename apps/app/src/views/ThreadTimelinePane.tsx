@@ -9,7 +9,7 @@ import {
   ThreadTimelineRows,
   type ThreadTimelineLocalFileLinkHandler,
 } from "@bb/ui-core";
-import { PageShell } from "@/components/layout/PageShell";
+import { PageShell } from "@bb/ui-core";
 import { ConversationStatusIndicator } from "@/components/messages/ConversationStatusIndicator";
 import { ConversationWorkingIndicator } from "@/components/messages/ConversationWorkingIndicator";
 import { usePreferredTheme } from "@/hooks/useTheme";
@@ -80,7 +80,7 @@ export function ThreadTimelinePane({
         scrollBehavior="bottom-anchor"
         shellClassName="!mx-0 !mt-0 md:!mx-0 md:!mt-0"
         contentClassName="min-h-full gap-2 pt-0"
-        footerUsesPromptPadding
+        footerClassName="chat-prompt-box"
         footer={footer}
       >
         <ConversationTimeline className="flex-1">

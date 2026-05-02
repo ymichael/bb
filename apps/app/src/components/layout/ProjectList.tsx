@@ -19,7 +19,7 @@ import {
 import { useHostDaemon } from "@/hooks/useHostDaemon";
 import * as api from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { EmptyState } from "@/components/shared/EmptyState";
+import { EmptyState } from "@bb/ui-core";
 import {
   SidebarGroup,
   SidebarGroupContent,

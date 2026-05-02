@@ -21,9 +21,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@bb/ui-core";
-import { PageShell } from "@/components/layout/PageShell";
+import { PageShell } from "@bb/ui-core";
 import { ProjectPathDialog } from "@/components/project/ProjectPathDialog";
-import { SettingsSection } from "@/components/settings/SettingsSection";
+import { SettingsSection } from "@bb/ui-core";
 import { SettingsRowList } from "@/components/settings/SettingsRow";
 import { ProjectSourceRow } from "@/views/project-settings/ProjectSourceRow";
 import {

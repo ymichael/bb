@@ -1,11 +1,10 @@
-// PageShell owns app-wide page chrome and scrollport layout. Specialized
-// scroll reconciliation should live in dedicated components and be selected
-// here through explicit scroll modes.
 import type { ReactNode } from "react";
-import { cn } from "@/lib/utils";
-import { BottomAnchoredScrollBody } from "./BottomAnchoredScrollBody";
+import { BottomAnchoredScrollBody } from "./bottom-anchored-scroll-body.js";
+import { cn } from "./cn.js";
 
-interface PageShellBaseProps {
+export type PageShellScrollBehavior = "bottom-anchor" | "static";
+
+export interface PageShellBaseProps {
   children: ReactNode;
   footer?: ReactNode;
   shellClassName?: string;
@@ -13,16 +12,14 @@ interface PageShellBaseProps {
   contentClassName?: string;
   footerClassName?: string;
   maxWidthClassName?: string;
-  footerUsesPromptPadding?: boolean;
 }
 
-interface PageShellProps extends PageShellBaseProps {
-  scrollBehavior?: "bottom-anchor" | "static";
+export interface PageShellProps extends PageShellBaseProps {
+  scrollBehavior?: PageShellScrollBehavior;
 }
 
 interface FooterRenderOptions {
   maxWidthClassName: string;
-  footerUsesPromptPadding: boolean;
   footerClassName?: string;
 }
 
@@ -32,11 +29,7 @@ const DEFAULT_MAX_WIDTH_CLASS = "max-w-[760px]";
 
 function renderStaticFooter(
   footer: ReactNode,
-  {
-    maxWidthClassName,
-    footerUsesPromptPadding,
-    footerClassName,
-  }: FooterRenderOptions,
+  { maxWidthClassName, footerClassName }: FooterRenderOptions,
 ) {
   if (!footer) return null;
   return (
@@ -49,7 +42,6 @@ function renderStaticFooter(
         className={cn(
           "mx-auto w-full bg-background px-4 pb-4",
           maxWidthClassName,
-          footerUsesPromptPadding && "chat-prompt-box",
           footerClassName,
         )}
       >
@@ -67,12 +59,10 @@ export function PageShell({
   contentClassName,
   footerClassName,
   maxWidthClassName = DEFAULT_MAX_WIDTH_CLASS,
-  footerUsesPromptPadding = false,
   scrollBehavior = "static",
 }: PageShellProps) {
   const staticFooter = renderStaticFooter(footer, {
     maxWidthClassName,
-    footerUsesPromptPadding,
     footerClassName,
   });
 

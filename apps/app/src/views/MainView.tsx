@@ -2,7 +2,7 @@ import { Navigate } from "react-router-dom";
 import { useProjects } from "../hooks/queries/project-queries";
 import { useQuickCreateProjectController } from "@/hooks/useQuickCreateProject";
 import { Button } from "@bb/ui-core";
-import { PageShell } from "@/components/layout/PageShell";
+import { PageShell } from "@bb/ui-core";
 
 export function MainView() {
   const { data: projects, isLoading: projectsLoading } = useProjects();

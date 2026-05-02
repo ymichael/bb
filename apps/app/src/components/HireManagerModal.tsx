@@ -19,7 +19,7 @@ import {
   DialogTitle,
 } from "@bb/ui-core";
 import { Button } from "@bb/ui-core";
-import { FormError } from "@/components/shared/FormError";
+import { FormError } from "@bb/ui-core";
 import { Input } from "@bb/ui-core";
 import { useHireProjectManager } from "@/hooks/mutations/project-mutations";
 import {

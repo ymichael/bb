@@ -12,10 +12,10 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@bb/ui-core";
-import { PageShell } from "@/components/layout/PageShell";
+import { PageShell } from "@bb/ui-core";
 import { CloudAuthSettingsSection } from "@/components/settings/CloudAuthSettingsSection";
 import { CONNECTED_DOT_CLASS } from "@/components/settings/constants";
-import { SettingsSection } from "@/components/settings/SettingsSection";
+import { SettingsSection } from "@bb/ui-core";
 import {
   SettingsRow,
   SettingsRowList,

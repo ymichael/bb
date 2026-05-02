@@ -8,10 +8,10 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { cn } from "@/lib/utils";
+import { cn } from "./cn.js";
 
-// BottomAnchoredScrollBody owns the thread timeline's "follow the bottom"
-// behavior. It combines two mechanisms because neither is sufficient alone:
+// BottomAnchoredScrollBody owns "follow the bottom" behavior for streaming
+// surfaces. It combines two mechanisms because neither is sufficient alone:
 //
 // - At the bottom, CSS scroll anchoring is redirected to the trailing 1px
 //   `.scroll-bottom-anchor` sentinel. That lets Chromium/Firefox keep the
@@ -26,12 +26,12 @@ import { cn } from "@/lib/utils";
 // middle of the timeline. User intent is inferred from wheel/touch/keyboard
 // input and pointer-drag scrolling before a non-bottom scroll event.
 
-interface BottomAnchorContextValue {
+export interface BottomAnchorContextValue {
   isAtBottom: boolean;
   scrollToBottom: () => void;
 }
 
-interface BottomAnchoredScrollBodyProps {
+export interface BottomAnchoredScrollBodyProps {
   children: ReactNode;
   footer: ReactNode;
   scrollAreaClassName?: string;
@@ -58,7 +58,7 @@ const BottomAnchorContext = createContext<BottomAnchorContextValue | null>(
   null,
 );
 
-export function useBottomAnchoredScroll() {
+export function useBottomAnchoredScroll(): BottomAnchorContextValue | null {
   return useContext(BottomAnchorContext);
 }
 

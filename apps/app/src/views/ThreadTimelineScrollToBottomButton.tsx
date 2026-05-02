@@ -1,5 +1,5 @@
-import { useBottomAnchoredScroll } from "@/components/layout/BottomAnchoredScrollBody";
-import { ScrollToBottomButton } from "@/components/shared/ScrollToBottomButton";
+import { useBottomAnchoredScroll } from "@bb/ui-core";
+import { ScrollToBottomButton } from "@bb/ui-core";
 
 export function ThreadTimelineScrollToBottomButton({
   active,

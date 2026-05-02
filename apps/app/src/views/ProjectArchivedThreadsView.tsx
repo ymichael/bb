@@ -1,5 +1,5 @@
 import { Link, useParams } from "react-router-dom";
-import { PageShell } from "@/components/layout/PageShell";
+import { PageShell } from "@bb/ui-core";
 import { ArchiveTimestampAction } from "@/components/shared/ArchiveTimestampAction";
 import { useUnarchiveThread } from "@/hooks/mutations/thread-state-mutations";
 import { useThreads } from "@/hooks/queries/thread-queries";

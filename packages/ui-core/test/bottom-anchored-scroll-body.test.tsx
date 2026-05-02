@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   BottomAnchoredScrollBody,
   useBottomAnchoredScroll,
-} from "./BottomAnchoredScrollBody";
+} from "../src/primitives/bottom-anchored-scroll-body.js";
 
 interface ScrollMetrics {
   scrollHeight: number;

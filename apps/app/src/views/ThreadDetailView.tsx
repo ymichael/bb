@@ -26,7 +26,7 @@ import {
 } from "../hooks/queries/thread-queries";
 import { ThreadGitActionDialog } from "@/components/thread/ThreadGitActionDialog";
 import { ThreadEnvironmentPromotionDialog } from "@/components/thread/ThreadEnvironmentPromotionDialog";
-import { PageShell } from "@/components/layout/PageShell";
+import { PageShell } from "@bb/ui-core";
 import { HEADER_ICON_BUTTON_CLASS } from "@/components/layout/AppPageHeader";
 import { ThreadActionsMenu } from "@/components/thread/ThreadActionsMenu";
 import { ThreadWorkspaceOpenButton } from "@/components/thread/ThreadWorkspaceOpenButton";

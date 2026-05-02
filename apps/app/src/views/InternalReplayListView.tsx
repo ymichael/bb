@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { DetailCard, DetailRow, Pill } from "@bb/ui-core";
 import type { ReplayRunSpeed } from "@bb/server-contract";
-import { PageShell } from "@/components/layout/PageShell";
+import { PageShell } from "@bb/ui-core";
 import { Button } from "@bb/ui-core";
 import {
   SplitButton,
