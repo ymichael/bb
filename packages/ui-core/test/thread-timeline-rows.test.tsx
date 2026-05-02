@@ -620,6 +620,8 @@ describe("ThreadTimelineRows", () => {
     const staticHeader = staticTitle?.closest(".timeline-row-header");
     expect(staticHeader?.classList.contains("px-0")).toBe(true);
     expect(staticHeader?.classList.contains("px-2")).toBe(false);
+    expect(staticHeader?.classList.contains("flex")).toBe(true);
+    expect(staticHeader?.classList.contains("inline-flex")).toBe(false);
     expect(staticHeader?.classList.contains("items-center")).toBe(true);
     expect(staticHeader?.classList.contains("text-sm")).toBe(true);
     expect(staticHeader?.classList.contains("leading-none")).toBe(false);

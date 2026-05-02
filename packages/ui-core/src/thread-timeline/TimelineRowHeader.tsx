@@ -9,7 +9,7 @@ export type TimelineRowHorizontalPadding = "default" | "flush";
 
 export const TIMELINE_ROW_HEADER_CONTENT_CLASS_NAME = "min-w-0 max-w-full";
 const TIMELINE_ROW_HEADER_CONTROL_CLASS_NAME =
-  "timeline-row-header w-full max-w-full justify-start py-0";
+  "timeline-row-header flex w-full max-w-full justify-start py-0";
 
 export interface TimelineStaticRowHeaderProps {
   children: ReactNode;

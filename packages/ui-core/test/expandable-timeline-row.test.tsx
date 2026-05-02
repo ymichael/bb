@@ -214,6 +214,8 @@ describe("ExpandableTimelineRow", () => {
     );
 
     const button = screen.getByRole("button");
+    expect(button.className).toContain("flex");
+    expect(button.className).not.toContain("inline-flex");
     expect(button.className).not.toContain("leading-none");
     expect(button.className).not.toContain("leading-4");
     expect(button.className).toContain("py-0");
