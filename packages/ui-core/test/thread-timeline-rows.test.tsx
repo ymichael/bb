@@ -653,6 +653,9 @@ describe("ThreadTimelineRows", () => {
 
     expect(systemButton.getAttribute("aria-expanded")).toBe("true");
     expect(view.container.textContent ?? "").toContain("Running setup");
+    const detail = view.container.querySelector("pre");
+    expect(detail?.className).toContain("whitespace-pre");
+    expect(detail?.className).not.toContain("whitespace-pre-wrap");
   });
 
   it("routes markdown local file links through the timeline handler", () => {

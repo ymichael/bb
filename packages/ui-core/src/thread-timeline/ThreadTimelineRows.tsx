@@ -12,7 +12,6 @@ import {
   type TimelineViewWorkRow,
 } from "@bb/thread-view";
 import { cn } from "../primitives/cn.js";
-import { EventCodeBlock } from "../primitives/event-content.js";
 import type {
   ThreadTimelineLocalFileLinkHandler,
   ThreadTimelineTheme,
@@ -72,6 +71,11 @@ interface TimelineStaticRowProps {
 
 interface TimelineExpandableBodyProps extends TimelineRendererContext {
   row: ThreadTimelineViewRow;
+}
+
+interface TimelineSystemDetailBlockProps {
+  detail: string;
+  tone: "default" | "danger";
 }
 
 interface TimelineExpansionIds {
@@ -307,6 +311,24 @@ function ConversationRow({
   );
 }
 
+function TimelineSystemDetailBlock({
+  detail,
+  tone,
+}: TimelineSystemDetailBlockProps) {
+  return (
+    <pre
+      className={cn(
+        "max-h-96 overflow-auto whitespace-pre rounded-md border px-3 py-2 font-mono text-xs leading-5",
+        tone === "danger"
+          ? "border-destructive/30 bg-destructive/5 text-destructive/90"
+          : "border-border/60 bg-background/40 text-muted-foreground",
+      )}
+    >
+      {detail}
+    </pre>
+  );
+}
+
 function TimelineExpandableBody({
   compactActivityIntents,
   erroredTurnSummaryIds,
@@ -395,9 +417,10 @@ function TimelineExpandableBody({
       return <WorkRowBody row={row} themeType={themeType} />;
     case "system":
       return row.detail ? (
-        <EventCodeBlock tone={row.systemKind === "error" ? "danger" : "default"}>
-          {row.detail}
-        </EventCodeBlock>
+        <TimelineSystemDetailBlock
+          detail={row.detail}
+          tone={row.systemKind === "error" ? "danger" : "default"}
+        />
       ) : null;
     case "conversation":
       return null;
