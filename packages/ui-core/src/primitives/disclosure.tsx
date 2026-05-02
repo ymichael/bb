@@ -74,7 +74,7 @@ export function CollapsibleHeader({
           "size-4 shrink-0 origin-center transition-[opacity,rotate] duration-200 ease-out",
           isExpanded
             ? "rotate-90"
-            : "opacity-0 group-hover:opacity-100",
+            : "opacity-0 group-hover:opacity-100 max-md:pointer-coarse:opacity-100",
         )}
       />
     </button>

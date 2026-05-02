@@ -1081,6 +1081,9 @@ importers:
       '@bb/server-contract':
         specifier: workspace:*
         version: link:../server-contract
+      '@bb/thread-view':
+        specifier: workspace:*
+        version: link:../thread-view
       '@pierre/diffs':
         specifier: ^1.0.11
         version: 1.0.11(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
