@@ -99,6 +99,51 @@ describe("ExpandableTimelineRow", () => {
     );
   });
 
+  it("does not let collapsed animated body intercept row clicks", () => {
+    const view = render(
+      <ExpandableTimelineRow
+        title={TITLE}
+        isExpanded={false}
+        onToggle={() => {}}
+        renderBody={() => <div>details</div>}
+      />,
+    );
+
+    const body = view.container.querySelector('div[aria-hidden="true"]');
+    expect(body?.className).toContain("pointer-events-none");
+
+    view.rerender(
+      <ExpandableTimelineRow
+        title={TITLE}
+        isExpanded={true}
+        onToggle={() => {}}
+        renderBody={() => <div>details</div>}
+      />,
+    );
+
+    const expandedBody = view.container.querySelector(
+      'div[aria-hidden="false"]',
+    );
+    expect(expandedBody?.className).toContain("pointer-events-auto");
+  });
+
+  it("keeps the chevron from becoming a separate pointer target", () => {
+    const onToggle = vi.fn();
+    const view = render(
+      <ExpandableTimelineRow
+        title={TITLE}
+        isExpanded={false}
+        onToggle={onToggle}
+        renderBody={() => <div>details</div>}
+      />,
+    );
+
+    const chevron = view.container.querySelector("svg");
+    expect(chevron?.getAttribute("class") ?? "").toContain(
+      "pointer-events-none",
+    );
+  });
+
   it("makes the whole row header clickable", () => {
     render(
       <ExpandableTimelineRow

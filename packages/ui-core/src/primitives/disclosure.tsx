@@ -74,7 +74,7 @@ export function CollapsibleHeader({
       <span className={summaryClass}>{summaryContent}</span>
       <Chevron
         className={cn(
-          "size-4 shrink-0 origin-center transition-[opacity,rotate] duration-200 ease-out",
+          "pointer-events-none size-4 shrink-0 origin-center transition-[opacity,rotate] duration-200 ease-out",
           isExpanded
             ? "rotate-90"
             : "opacity-0 group-hover:opacity-100 max-md:pointer-coarse:opacity-100",
@@ -130,8 +130,8 @@ export function ExpandablePanel({
         className={cn(
           "grid transition-[grid-template-rows,opacity] duration-200 ease-out",
           isExpanded
-            ? "grid-rows-[1fr] opacity-100"
-            : "grid-rows-[0fr] opacity-0",
+            ? "pointer-events-auto grid-rows-[1fr] opacity-100"
+            : "pointer-events-none grid-rows-[0fr] opacity-0",
           bodyClassName,
         )}
       >
