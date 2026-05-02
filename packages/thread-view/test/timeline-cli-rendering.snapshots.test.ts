@@ -376,7 +376,7 @@ describe("timeline CLI rendering snapshots", () => {
       status: "accepted",
     });
     expect(timeline.pendingSteers).toHaveLength(0);
-    const steerRow = timeline.turnRows[0]?.children?.find(
+    const steerRow = timeline.rows.find(
       (row) => row.kind === "conversation" && row.role === "user",
     );
     expect(steerRow?.sourceSeqStart).toBe(4);
@@ -385,21 +385,107 @@ describe("timeline CLI rendering snapshots", () => {
       status: "accepted",
     });
     expect(timeline.text).toMatchInlineSnapshot(`
-      "── Worked on 2 items ───────────────────────────────────────
+      "── Worked on 1 item ────────────────────────────────────────
         ── Ran 1 command
           ── Ran command (completed)
             $ pnpm test
 
-        ── User
-        Please account for the restart
-        steer
+      ── User ────────────────────────────────────────────────────
+      Please account for the restart
+      steer
 
+      ── Worked on 1 item ────────────────────────────────────────
         ── Ran 1 command
           ── Ran command (completed)
             $ sqlite3 ~/.bb-dev/bb.db '.tables'
 
       ── Assistant ───────────────────────────────────────────────
       Done."
+    `);
+  });
+
+  it("keeps accepted regular follow-up messages as normal user rows", () => {
+    const event = createTimelineEventFactory({ threadId: "thread-1" });
+    const firstRequest = event.clientTurnRequested({
+      target: { kind: "new-turn" },
+      text: "First task",
+    });
+    const events: TimelineFixtureEvent[] = [
+      firstRequest,
+      event.turnStarted({ turnId: "turn-1" }),
+      event.inputAccepted({
+        clientRequestSequence: firstRequest.seq,
+        turnId: "turn-1",
+      }),
+      event.assistantCompleted({
+        itemId: "assistant-1",
+        text: "First done.",
+        turnId: "turn-1",
+      }),
+      event.turnCompleted({ turnId: "turn-1" }),
+    ];
+    const followUpRequest = event.clientTurnRequested({
+      target: { kind: "new-turn" },
+      text: "Follow-up task",
+    });
+    events.push(
+      followUpRequest,
+      event.turnStarted({ turnId: "turn-2" }),
+      event.inputAccepted({
+        clientRequestSequence: followUpRequest.seq,
+        turnId: "turn-2",
+      }),
+      event.commandCompleted({
+        itemId: "tool-follow-up",
+        command: "pnpm test",
+        turnId: "turn-2",
+      }),
+      event.assistantCompleted({
+        itemId: "assistant-2",
+        text: "Follow-up done.",
+        turnId: "turn-2",
+      }),
+      event.turnCompleted({ turnId: "turn-2" }),
+    );
+    const timeline = renderIdleTimeline(events);
+
+    const userMessages = timeline.messages.filter(
+      (message) => message.kind === "user",
+    );
+    expect(userMessages).toHaveLength(2);
+    expect(userMessages.map((message) => message.text)).toEqual([
+      "First task",
+      "Follow-up task",
+    ]);
+    expect(userMessages.map((message) => message.request)).toEqual([
+      { kind: "message", status: "accepted" },
+      { kind: "message", status: "accepted" },
+    ]);
+    expect(timeline.pendingSteers).toHaveLength(0);
+    const topLevelUserRows = timeline.rows.filter(
+      (row) => row.kind === "conversation" && row.role === "user",
+    );
+    expect(topLevelUserRows.map((row) => row.text)).toEqual([
+      "First task",
+      "Follow-up task",
+    ]);
+    expect(timeline.text).toMatchInlineSnapshot(`
+      "── User ────────────────────────────────────────────────────
+      First task
+
+      ── Assistant ───────────────────────────────────────────────
+      First done.
+
+      ── User ────────────────────────────────────────────────────
+      Follow-up task
+
+      ── Worked on 1 item ────────────────────────────────────────
+        ── Ran 1 command
+          ── Ran command (completed)
+            $ pnpm test
+
+      ── Assistant ───────────────────────────────────────────────
+      Follow-up done."
     `);
   });
 

@@ -30,11 +30,13 @@ import { getFileChangeDiffStats } from "./file-change-summary.js";
 import { getEventProjectionMessageScopeTurnId } from "./message-scope.js";
 import { formatToolCallCommand } from "./tool-call-parsing.js";
 import { flattenEventProjectionMessagesDeep } from "./event-projection-flatten.js";
+import { isTimelineUngroupableMessage } from "./timeline-message-helpers.js";
 import {
   buildEventProjection,
   buildEventProjectionEntries,
   type ThreadEventWithMeta,
 } from "./build-event-projection.js";
+import { getProjectionSummaryCount } from "./apply-turn-message-detail.js";
 import {
   buildAcceptedClientRequestBySequence,
   parsePendingSteerFromClientRequest,
@@ -125,6 +127,31 @@ interface CompletedTurnMessageSlices {
   summaryMessages: EventProjectionMessage[];
   terminalMessages: EventProjectionMessage[];
   trailingMessages: EventProjectionMessage[];
+}
+
+interface TimelineMessageBounds {
+  createdAt: number;
+  sourceSeqEnd: number;
+  sourceSeqStart: number;
+  startedAt: number;
+}
+
+interface BuildTurnSummaryRowArgs {
+  durationMs: number | null;
+  includeNestedRows: boolean;
+  rowIdPrefix: string;
+  segmentIndex: number | null;
+  sourceMessages: EventProjectionMessage[];
+  sourceRows: TimelineRow[];
+  summaryCount: number;
+  turn: EventProjectionTurn;
+}
+
+interface BuildCompletedTurnSummaryRowsArgs {
+  includeNestedRows: boolean;
+  rowIdPrefix: string;
+  summaryMessages: EventProjectionMessage[];
+  turn: EventProjectionTurn;
 }
 
 interface BuildTimelineRowsOptions {
@@ -666,6 +693,153 @@ function splitCompletedTurnMessages(
   };
 }
 
+function getTimelineMessageBounds(
+  messages: readonly EventProjectionMessage[],
+): TimelineMessageBounds {
+  const firstMessage = messages[0];
+  if (!firstMessage) {
+    throw new Error("Cannot build timeline bounds from an empty message list");
+  }
+
+  let sourceSeqStart = firstMessage.sourceSeqStart;
+  let sourceSeqEnd = firstMessage.sourceSeqEnd;
+  let startedAt = getMessageStartedAt(firstMessage);
+  let createdAt = firstMessage.createdAt;
+
+  for (const message of messages.slice(1)) {
+    sourceSeqStart = Math.min(sourceSeqStart, message.sourceSeqStart);
+    sourceSeqEnd = Math.max(sourceSeqEnd, message.sourceSeqEnd);
+    startedAt = Math.min(startedAt, getMessageStartedAt(message));
+    createdAt = Math.min(createdAt, message.createdAt);
+  }
+
+  return {
+    createdAt,
+    sourceSeqEnd,
+    sourceSeqStart,
+    startedAt,
+  };
+}
+
+function getTurnBounds(turn: EventProjectionTurn): TimelineMessageBounds {
+  return {
+    createdAt: turn.createdAt,
+    sourceSeqEnd: turn.sourceSeqEnd,
+    sourceSeqStart: turn.sourceSeqStart,
+    startedAt: turn.startedAt,
+  };
+}
+
+function buildTurnSummaryRow({
+  durationMs,
+  includeNestedRows,
+  rowIdPrefix,
+  segmentIndex,
+  sourceMessages,
+  sourceRows,
+  summaryCount,
+  turn,
+}: BuildTurnSummaryRowArgs): TimelineTurnRow | null {
+  if (summaryCount === 0 && sourceRows.length === 0) {
+    return null;
+  }
+
+  const bounds =
+    segmentIndex === null || sourceMessages.length === 0
+      ? getTurnBounds(turn)
+      : getTimelineMessageBounds(sourceMessages);
+  const rowId =
+    segmentIndex === null
+      ? `${rowIdPrefix}${turn.threadId}:${turn.turnId}:turn`
+      : `${rowIdPrefix}${turn.threadId}:${turn.turnId}:turn:${segmentIndex}`;
+
+  return {
+    id: rowId,
+    threadId: turn.threadId,
+    turnId: turn.turnId,
+    sourceSeqStart: bounds.sourceSeqStart,
+    sourceSeqEnd: bounds.sourceSeqEnd,
+    startedAt: bounds.startedAt,
+    createdAt: bounds.createdAt,
+    kind: "turn",
+    status: turn.status,
+    summaryCount,
+    durationMs,
+    children: includeNestedRows ? sourceRows : null,
+  };
+}
+
+function buildCompletedTurnSummaryRows({
+  includeNestedRows,
+  rowIdPrefix,
+  summaryMessages,
+  turn,
+}: BuildCompletedTurnSummaryRowsArgs): TimelineRow[] {
+  if (!summaryMessages.some(isTimelineUngroupableMessage)) {
+    const sourceRows = summaryMessages.flatMap((message) =>
+      convertMessage(message, { includeNestedRows, rowIdPrefix }),
+    );
+    const turnRow = buildTurnSummaryRow({
+      durationMs: turn.durationMs ?? null,
+      includeNestedRows,
+      rowIdPrefix,
+      segmentIndex: null,
+      sourceMessages: summaryMessages,
+      sourceRows,
+      summaryCount: turn.summaryCount,
+      turn,
+    });
+    return turnRow ? [turnRow] : [];
+  }
+
+  const rows: TimelineRow[] = [];
+  let groupedMessages: EventProjectionMessage[] = [];
+  let segmentIndex = 0;
+
+  function flushGroupedMessages(): void {
+    if (groupedMessages.length === 0) {
+      return;
+    }
+
+    const sourceMessages = groupedMessages;
+    const sourceRows = sourceMessages.flatMap((message) =>
+      convertMessage(message, { includeNestedRows, rowIdPrefix }),
+    );
+    const turnRow = buildTurnSummaryRow({
+      durationMs: null,
+      includeNestedRows,
+      rowIdPrefix,
+      segmentIndex,
+      sourceMessages,
+      sourceRows,
+      summaryCount: getProjectionSummaryCount(sourceMessages, undefined),
+      turn,
+    });
+    if (turnRow) {
+      rows.push(turnRow);
+      segmentIndex += 1;
+    }
+    groupedMessages = [];
+  }
+
+  for (const message of summaryMessages) {
+    if (isTimelineUngroupableMessage(message)) {
+      flushGroupedMessages();
+      rows.push(
+        ...convertMessage(message, {
+          includeNestedRows,
+          rowIdPrefix,
+        }),
+      );
+      continue;
+    }
+    groupedMessages.push(message);
+  }
+
+  flushGroupedMessages();
+  return rows;
+}
+
 function buildTurnRows({
   includeNestedRows,
   rowIdPrefix,
@@ -683,35 +857,19 @@ function buildTurnRows({
 
   const { summaryMessages, terminalMessages, trailingMessages } =
     splitCompletedTurnMessages(messages, turn.terminalMessage);
-  const sourceRows = summaryMessages.flatMap((message) =>
-    convertMessage(message, { includeNestedRows, rowIdPrefix }),
-  );
   const terminalRows = terminalMessages.flatMap((message) =>
     convertMessage(message, { includeNestedRows, rowIdPrefix }),
   );
   const trailingRows = trailingMessages.flatMap((message) =>
     convertMessage(message, { includeNestedRows, rowIdPrefix }),
   );
-
-  if (turn.summaryCount === 0 && sourceRows.length === 0) {
-    return [...terminalRows, ...trailingRows];
-  }
-
-  const turnRow: TimelineTurnRow = {
-    id: `${rowIdPrefix}${turn.threadId}:${turn.turnId}:turn`,
-    threadId: turn.threadId,
-    turnId: turn.turnId,
-    sourceSeqStart: turn.sourceSeqStart,
-    sourceSeqEnd: turn.sourceSeqEnd,
-    startedAt: turn.startedAt,
-    createdAt: turn.createdAt,
-    kind: "turn",
-    status: turn.status,
-    summaryCount: turn.summaryCount,
-    durationMs: turn.durationMs ?? null,
-    children: includeNestedRows ? sourceRows : null,
-  };
-  return [turnRow, ...terminalRows, ...trailingRows];
+  const summaryRows = buildCompletedTurnSummaryRows({
+    includeNestedRows,
+    rowIdPrefix,
+    summaryMessages,
+    turn,
+  });
+  return [...summaryRows, ...terminalRows, ...trailingRows];
 }
 
 /**
