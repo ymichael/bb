@@ -218,6 +218,7 @@ describe("ExpandableTimelineRow", () => {
     expect(button.className).not.toContain("inline-flex");
     expect(button.className).not.toContain("leading-none");
     expect(button.className).not.toContain("leading-4");
+    expect(button.className).toContain("leading-5");
     expect(button.className).toContain("py-0");
     expect(button.className).not.toContain("py-0.5");
     expect(button.parentElement?.className).not.toContain("py-0");

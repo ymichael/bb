@@ -625,6 +625,7 @@ describe("ThreadTimelineRows", () => {
     expect(staticHeader?.classList.contains("items-center")).toBe(true);
     expect(staticHeader?.classList.contains("text-sm")).toBe(true);
     expect(staticHeader?.classList.contains("leading-none")).toBe(false);
+    expect(staticHeader?.classList.contains("leading-5")).toBe(true);
     expect(staticHeader?.classList.contains("py-0")).toBe(true);
     expect(staticHeader?.classList.contains("py-0.5")).toBe(false);
     expect(staticHeader?.classList.contains("py-1")).toBe(false);
