@@ -15,6 +15,7 @@ import type {
   TimelineRowBase,
   TimelineRowStatus,
   TimelineSystemRow,
+  TimelineToolWorkRow,
   TimelineTurnRow,
   TimelineWebFetchWorkRow,
   TimelineWebSearchWorkRow,
@@ -58,6 +59,15 @@ interface FileChangeRowArgs {
   path?: string;
   stderr?: string | null;
   stdout?: string | null;
+}
+
+interface ToolRowArgs {
+  activityIntents?: TimelineActivityIntent[];
+  id?: string;
+  label?: string;
+  output?: string;
+  status?: TimelineRowStatus;
+  toolName?: string;
 }
 
 type ElementScrollMetricName = "clientHeight" | "scrollHeight";
@@ -183,6 +193,30 @@ function fileChangeRow({
     stdout,
     stderr,
     approvalStatus: null,
+  };
+}
+
+function toolRow({
+  activityIntents = [],
+  id = "tool-1",
+  label = "Read /repo/src/app.ts",
+  output = "",
+  status = "completed",
+  toolName = "Read",
+}: ToolRowArgs = {}): TimelineToolWorkRow {
+  return {
+    ...baseRow({ id, sourceSeqStart: 1 }),
+    kind: "work",
+    workKind: "tool",
+    status,
+    callId: id,
+    toolName,
+    toolArgs: null,
+    label,
+    output,
+    durationMs: 2_000,
+    approvalStatus: null,
+    activityIntents,
   };
 }
 
@@ -677,6 +711,40 @@ describe("ThreadTimelineRows", () => {
     });
     expect(button.textContent ?? "").not.toContain("(error");
     expect(view.container.innerHTML).not.toContain("text-destructive");
+  });
+
+  it("renders failed structured tools with intent titles and normal styling", () => {
+    const view = render(
+      <ThreadTimelineRows
+        loadingTurnSummaryIds={new Set()}
+        erroredTurnSummaryIds={new Set()}
+        onLoadTurnSummaryRows={() => {}}
+        timelineRows={[
+          toolRow({
+            activityIntents: [readIntent("/repo/src/app.ts")],
+            output: "ENOENT: no such file or directory",
+            status: "error",
+          }),
+        ]}
+        threadRuntimeDisplayStatus="idle"
+        turnSummaryRowsById={{}}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Explored 1 file/u }));
+
+    const button = screen.getByRole("button", {
+      name: /Read\s+app\.ts/u,
+    });
+    expect(button.textContent ?? "").not.toContain("Ran tool:");
+    expect(button.textContent ?? "").not.toContain("(error");
+    expect(view.container.innerHTML).not.toContain("text-destructive");
+
+    fireEvent.click(button);
+
+    expect(view.container.textContent ?? "").toContain(
+      "ENOENT: no such file or directory",
+    );
   });
 
   it("does not auto-expand error command details", () => {

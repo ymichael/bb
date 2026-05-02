@@ -4,6 +4,7 @@ import type {
   TimelineCommandWorkRow,
   TimelineFileChangeWorkRow,
   TimelineRowBase,
+  TimelineToolWorkRow,
   TimelineWebFetchWorkRow,
   TimelineWebSearchWorkRow,
 } from "@bb/server-contract";
@@ -48,6 +49,25 @@ function commandRow(): TimelineCommandWorkRow {
     durationMs: 2_100,
     approvalStatus: null,
     activityIntents: [],
+  };
+}
+
+function toolRow(): TimelineToolWorkRow {
+  return {
+    ...baseRow("tool-1"),
+    kind: "work",
+    workKind: "tool",
+    status: "completed",
+    callId: "tool-call-1",
+    toolName: "Read",
+    toolArgs: {
+      file_path: "/repo/src/app.ts",
+    },
+    label: "Read /repo/src/app.ts",
+    output: "",
+    durationMs: 2_100,
+    approvalStatus: null,
+    activityIntents: [readIntent("/repo/src/app.ts")],
   };
 }
 
@@ -219,6 +239,23 @@ describe("buildTimelineRowTitle", () => {
 
     expect(title.plain).toBe("Ran pnpm exec turbo run test --filter=@bb/app 2s");
     expect(title.tone).toBe("default");
+  });
+
+  it("keeps error tools in the normal tool title style", () => {
+    const row = {
+      ...toolRow(),
+      status: "error",
+    } satisfies TimelineToolWorkRow;
+
+    const title = buildTimelineRowTitle(row, DEFAULT_OPTIONS);
+
+    expect(title.plain).toBe("Ran tool: Read /repo/src/app.ts 2s");
+    expect(title.tone).toBe("default");
+    expect(title.suffix).toEqual({
+      kind: "text",
+      text: "2s",
+      truncate: false,
+    });
   });
 
   it("omits zero-sided diff stats from file change suffixes", () => {

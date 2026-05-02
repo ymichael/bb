@@ -242,10 +242,7 @@ function executionPrefix(
 function titleToneForExecution(
   row: TimelineExecutionWorkRow,
 ): TimelineTitleTone {
-  return (row.workKind === "tool" && row.status === "error") ||
-    row.approvalStatus === "denied"
-    ? "destructive"
-    : "default";
+  return row.approvalStatus === "denied" ? "destructive" : "default";
 }
 
 function buildExecutionTitle(
@@ -255,9 +252,7 @@ function buildExecutionTitle(
   const prefix = executionPrefix(row, options.preferOngoingLabel);
   const content = row.workKind === "command" ? row.command : row.label;
   const statusSuffix =
-    row.status === "error" && row.workKind === "tool"
-      ? statusDurationSuffix("error", row.durationMs)
-      : row.status === "interrupted"
+    row.status === "interrupted"
         ? statusDurationSuffix("interrupted", row.durationMs)
         : durationSuffix(row.durationMs);
   return titleFromParts({

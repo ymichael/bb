@@ -8,6 +8,7 @@ import {
   buildTimelineViewRows,
   type BuildTimelineRowTitleOptions,
   type ThreadTimelineViewRow,
+  type TimelineTitle,
   type TimelineViewTurnRow,
   type TimelineViewWorkRow,
 } from "@bb/thread-view";
@@ -227,6 +228,20 @@ function shouldRenderCompactActivityIntentRows(
     row.status !== "error" &&
     row.status !== "interrupted"
   );
+}
+
+function buildExpandableStructuredToolTitle(
+  row: ThreadTimelineViewRow,
+): TimelineTitle | null {
+  if (
+    row.kind !== "work" ||
+    row.workKind !== "tool" ||
+    row.status !== "error"
+  ) {
+    return null;
+  }
+  const titles = buildTimelineActivityIntentTitles(row);
+  return titles.length === 1 ? (titles[0]?.title ?? null) : null;
 }
 
 function shouldAutoExpandRow({
@@ -660,6 +675,10 @@ function TimelineRowView({
     row,
     timelineRowTitleOptions({ isTail, row, scopeActive }),
   );
+  const expandableTitle =
+    compactActivityIntents && row.status === "error"
+      ? (buildExpandableStructuredToolTitle(row) ?? title)
+      : title;
 
   if (!isRowExpandable(row)) {
     return (
@@ -690,7 +709,7 @@ function TimelineRowView({
 
   return (
     <ExpandableTimelineRow
-      title={title}
+      title={expandableTitle}
       horizontalPadding={horizontalPadding}
       isExpanded={isExpanded}
       onToggle={handleToggle}
