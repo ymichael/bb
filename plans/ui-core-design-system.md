@@ -374,30 +374,31 @@ The following are explicitly out of scope for this plan:
 
 ## Exit Criteria
 
-- [ ] `packages/ui-core/src/primitives/` exists and contains all generic
+- [x] `packages/ui-core/src/primitives/` exists and contains all generic
       primitives. Domain compositions live in named feature folders.
-- [ ] Generic shadcn/Radix wrappers live in `packages/ui-core/src/primitives/ui/`,
+- [x] Generic shadcn/Radix wrappers live in `packages/ui-core/src/primitives/ui/`,
       not `apps/app/src/components/ui`.
-- [ ] `packages/ui-core/src` contains no app aliases (`@/components`, `@/hooks`,
+- [x] `packages/ui-core/src` contains no app aliases (`@/components`, `@/hooks`,
       or other `@/` imports).
-- [ ] `packages/ui-core/README.md` documents the three-layer model, admission
+- [x] `packages/ui-core/README.md` documents the three-layer model, admission
       criteria, dependency direction, and litmus tests.
-- [ ] Shared theme CSS lives in `packages/ui-core/`. Neither `apps/app` nor
+- [x] Shared theme CSS lives in `packages/ui-core/`. Neither `apps/app` nor
       `packages/agent-provider-audit` reaches across the monorepo for it.
-- [ ] `packages/ui-core/.ladle/` exists. `pnpm --filter @bb/ui-core ladle`
-      starts and shows working stories.
-- [ ] At least one primitive story and one thread-timeline domain indicator
+- [x] `packages/ui-core/.ladle/` exists. `pnpm --filter @bb/ui-core ladle:build`
+      builds working stories.
+- [x] At least one primitive story and one thread-timeline domain indicator
       story exist. Add the row-level domain story in the React timeline
       renderer pass once real timeline rows render again.
-- [ ] Five primitives are extracted from `apps/app` into
+- [x] Five primitives are extracted from `apps/app` into
       `ui-core/src/primitives/`, each with a story.
 - [x] Domain compositions are moved only when they meet the ≥2-consumer
       criterion. Components that don't qualify are documented (in PR
       descriptions) as intentionally staying in `apps/app`.
-- [ ] App and ui-core builds pass:
+- [x] App and ui-core builds pass:
       `pnpm exec turbo run build --filter=@bb/app --filter=@bb/ui-core --filter=@bb/agent-provider-audit`.
 - [ ] `apps/app` visually unchanged (spot-check thread detail, settings, project
-      list).
+      list). Deferred until the React timeline renderer pass because the thread
+      timeline renderer is intentionally stubbed in this cleanup window.
 
 ## Risks / Decisions
 
