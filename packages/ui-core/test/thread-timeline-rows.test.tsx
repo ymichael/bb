@@ -6,6 +6,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
   TimelineActivityIntent,
   TimelineCommandWorkRow,
+  TimelineConversationAttachments,
+  TimelineConversationRow,
   TimelineFileChangeWorkRow,
   TimelineRow,
   TimelineRowBase,
@@ -15,6 +17,10 @@ import type {
   TimelineWebSearchWorkRow,
 } from "@bb/server-contract";
 import { ThreadTimelineRows } from "../src/thread-timeline/ThreadTimelineRows.js";
+import type {
+  ThreadTimelineLocalFileLinkHandler,
+  UserAttachmentImageSrcResolver,
+} from "../src/thread-timeline/types.js";
 
 interface BaseRowArgs {
   id: string;
@@ -30,6 +36,13 @@ interface CommandRowArgs {
   status?: TimelineRowStatus;
 }
 
+interface ConversationRowArgs {
+  attachments?: TimelineConversationAttachments | null;
+  id?: string;
+  role?: TimelineConversationRow["role"];
+  text: string;
+}
+
 function baseRow({ id, sourceSeqStart }: BaseRowArgs): TimelineRowBase {
   return {
     id,
@@ -39,6 +52,21 @@ function baseRow({ id, sourceSeqStart }: BaseRowArgs): TimelineRowBase {
     sourceSeqEnd: sourceSeqStart,
     startedAt: sourceSeqStart,
     createdAt: sourceSeqStart,
+  };
+}
+
+function conversationRow({
+  attachments = null,
+  id = "conversation-1",
+  role = "assistant",
+  text,
+}: ConversationRowArgs): TimelineConversationRow {
+  return {
+    ...baseRow({ id, sourceSeqStart: 1 }),
+    kind: "conversation",
+    role,
+    text,
+    attachments,
   };
 }
 
@@ -300,17 +328,85 @@ describe("ThreadTimelineRows", () => {
   });
 
   it("renders plain conversation rows through the timeline path", () => {
-    const html = renderRowsToStaticMarkup([
-      {
-        ...baseRow({ id: "conversation-1", sourceSeqStart: 1 }),
-        kind: "conversation",
-        role: "assistant",
-        text: "Done.",
-        attachments: null,
-      },
-    ]);
+    const html = renderRowsToStaticMarkup([conversationRow({ text: "Done." })]);
 
     expect(html).toContain("Assistant");
     expect(html).toContain("Done.");
+  });
+
+  it("routes markdown local file links through the timeline handler", () => {
+    const onOpenLocalFileLink =
+      vi.fn<ThreadTimelineLocalFileLinkHandler>(() => true);
+
+    render(
+      <ThreadTimelineRows
+        loadingTurnSummaryIds={new Set()}
+        erroredTurnSummaryIds={new Set()}
+        onLoadTurnSummaryRows={() => {}}
+        onOpenLocalFileLink={onOpenLocalFileLink}
+        timelineRows={[
+          conversationRow({
+            text: "[Open file](/workspace/src/app.ts:7)",
+          }),
+        ]}
+        threadRuntimeDisplayStatus="idle"
+        turnSummaryRowsById={{}}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("link", { name: "Open file" }));
+
+    expect(onOpenLocalFileLink).toHaveBeenCalledWith({
+      lineNumber: 7,
+      path: "/workspace/src/app.ts",
+    });
+  });
+
+  it("renders user attachments and routes file attachment clicks", () => {
+    const onOpenLocalFileLink =
+      vi.fn<ThreadTimelineLocalFileLinkHandler>(() => true);
+    const resolveUserAttachmentImageSrc: UserAttachmentImageSrcResolver = (
+      path,
+      projectId,
+    ) => `/attachments/${projectId}${path}`;
+
+    render(
+      <ThreadTimelineRows
+        loadingTurnSummaryIds={new Set()}
+        erroredTurnSummaryIds={new Set()}
+        onLoadTurnSummaryRows={() => {}}
+        onOpenLocalFileLink={onOpenLocalFileLink}
+        projectId="project-1"
+        resolveUserAttachmentImageSrc={resolveUserAttachmentImageSrc}
+        timelineRows={[
+          conversationRow({
+            role: "user",
+            text: "Attached.",
+            attachments: {
+              webImages: 0,
+              localImages: 1,
+              localFiles: 1,
+              imageUrls: [],
+              localImagePaths: ["/workspace/shot.png"],
+              localFilePaths: ["/workspace/notes.md"],
+            },
+          }),
+        ]}
+        threadRuntimeDisplayStatus="idle"
+        turnSummaryRowsById={{}}
+      />,
+    );
+
+    const image = screen.getByRole("img", { name: "shot.png" });
+    expect(image.getAttribute("src")).toBe(
+      "/attachments/project-1/workspace/shot.png",
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "notes.md" }));
+
+    expect(onOpenLocalFileLink).toHaveBeenCalledWith({
+      lineNumber: null,
+      path: "/workspace/notes.md",
+    });
   });
 });

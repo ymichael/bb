@@ -1,12 +1,12 @@
 import { useEffect } from "react";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
-import { Button } from "@bb/ui-core";
+import { Button } from "./ui/button.js";
 import {
   Dialog,
   DialogClose,
   DialogContent,
   DialogTitle,
-} from "@bb/ui-core";
+} from "./ui/dialog.js";
 
 export const imageLightboxKeyActionValues = [
   "close",
@@ -22,6 +22,22 @@ export interface ImageLightboxKeyActionInput {
     "altKey" | "ctrlKey" | "defaultPrevented" | "key" | "metaKey"
   >;
   hasNavigation: boolean;
+}
+
+export interface WrappedImageIndexInput {
+  currentIndex: number;
+  direction: "next" | "previous";
+  itemCount: number;
+}
+
+export interface ImageLightboxProps {
+  hasMultipleImages?: boolean;
+  imageAlt: string;
+  imageSrc: string | null;
+  onClose: () => void;
+  onNext?: () => void;
+  onPrevious?: () => void;
+  title: string;
 }
 
 export function getImageLightboxKeyAction({
@@ -60,32 +76,20 @@ export function getWrappedImageIndex({
   currentIndex,
   direction,
   itemCount,
-}: {
-  currentIndex: number;
-  direction: "next" | "previous";
-  itemCount: number;
-}): number {
-  if (itemCount <= 0) return currentIndex;
+}: WrappedImageIndexInput): number {
+  if (itemCount <= 0) {
+    return currentIndex;
+  }
   if (direction === "previous") {
     return currentIndex === 0 ? itemCount - 1 : currentIndex - 1;
   }
   return currentIndex === itemCount - 1 ? 0 : currentIndex + 1;
 }
 
-interface ImageLightboxProps {
-  imageAlt: string;
-  imageSrc: string | null;
-  hasMultipleImages?: boolean;
-  onClose: () => void;
-  onNext?: () => void;
-  onPrevious?: () => void;
-  title: string;
-}
-
 export function ImageLightbox({
+  hasMultipleImages = false,
   imageAlt,
   imageSrc,
-  hasMultipleImages = false,
   onClose,
   onNext,
   onPrevious,
@@ -95,14 +99,18 @@ export function ImageLightbox({
     hasMultipleImages && onPrevious !== undefined && onNext !== undefined;
 
   useEffect(() => {
-    if (!imageSrc) return;
+    if (!imageSrc) {
+      return;
+    }
 
     const handleKeyDown = (event: KeyboardEvent) => {
       const action = getImageLightboxKeyAction({
         event,
         hasNavigation,
       });
-      if (!action) return;
+      if (!action) {
+        return;
+      }
 
       switch (action) {
         case "close":
@@ -110,16 +118,18 @@ export function ImageLightbox({
           onClose();
           return;
         case "previous":
-          if (!onPrevious) return;
+          if (!onPrevious) {
+            return;
+          }
           event.preventDefault();
           onPrevious();
           return;
         case "next":
-          if (!onNext) return;
+          if (!onNext) {
+            return;
+          }
           event.preventDefault();
           onNext();
-          return;
-        default:
           return;
       }
     };
@@ -128,7 +138,9 @@ export function ImageLightbox({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [hasNavigation, imageSrc, onClose, onNext, onPrevious]);
 
-  if (!imageSrc) return null;
+  if (!imageSrc) {
+    return null;
+  }
 
   return (
     <Dialog open={true} onOpenChange={(open) => !open && onClose()}>

@@ -3,7 +3,7 @@ import { X } from "lucide-react";
 import {
   ImageLightbox,
   getWrappedImageIndex,
-} from "@/components/shared/ImageLightbox";
+} from "@bb/ui-core";
 import type { PromptDraftAttachment } from "@/lib/prompt-draft";
 import { toUserAttachmentImageSrc } from "@/lib/user-attachment-images";
 

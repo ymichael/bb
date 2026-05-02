@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   getImageLightboxKeyAction,
   getWrappedImageIndex,
-} from "./ImageLightbox";
+} from "../src/primitives/image-lightbox.js";
 
 interface TestKeyboardEvent {
   altKey: boolean;

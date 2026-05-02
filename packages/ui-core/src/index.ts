@@ -186,6 +186,12 @@ export {
   type EventCodeBlockProps,
 } from "./primitives/event-content.js";
 export { FormError, type FormErrorProps } from "./primitives/form-error.js";
+export {
+  ImageLightbox,
+  getWrappedImageIndex,
+  type ImageLightboxProps,
+  type WrappedImageIndexInput,
+} from "./primitives/image-lightbox.js";
 export { PageShell, type PageShellProps } from "./primitives/page-shell.js";
 export {
   ScrollToBottomButton,

@@ -17,6 +17,7 @@ import type {
   ThreadTimelineTheme,
   UserAttachmentImageSrcResolver,
 } from "./types.js";
+import { ConversationMessageContent } from "./ConversationMessageContent.js";
 import { ExpandableTimelineRow } from "./ExpandableTimelineRow.js";
 import { TimelineTitleView } from "./TimelineTitleView.js";
 import { WorkRowBody } from "./TimelineRowDetails.js";
@@ -43,6 +44,9 @@ interface TimelineRendererContext {
   loadingTurnSummaryIds: ReadonlySet<string>;
   erroredTurnSummaryIds: ReadonlySet<string>;
   onLoadTurnSummaryRows: (entry: TimelineTurnRow) => void;
+  onOpenLocalFileLink?: ThreadTimelineLocalFileLinkHandler;
+  projectId?: string;
+  resolveUserAttachmentImageSrc?: UserAttachmentImageSrcResolver;
   themeType: ThreadTimelineTheme;
   turnSummaryRowsById: Record<string, TimelineRow[]>;
 }
@@ -89,6 +93,9 @@ type TimelineConversationViewRow = Extract<
 >;
 
 interface ConversationRowProps {
+  onOpenLocalFileLink?: ThreadTimelineLocalFileLinkHandler;
+  projectId?: string;
+  resolveUserAttachmentImageSrc?: UserAttachmentImageSrcResolver;
   row: TimelineConversationViewRow;
 }
 
@@ -250,7 +257,12 @@ function TimelineStaticRow({ children, className }: TimelineStaticRowProps) {
   );
 }
 
-function ConversationRow({ row }: ConversationRowProps) {
+function ConversationRow({
+  onOpenLocalFileLink,
+  projectId,
+  resolveUserAttachmentImageSrc,
+  row,
+}: ConversationRowProps) {
   const title = buildTimelineRowTitle(row, {
     preferOngoingLabel: false,
     summaryStyle: "background",
@@ -258,11 +270,13 @@ function ConversationRow({ row }: ConversationRowProps) {
   return (
     <TimelineStaticRow>
       <TimelineTitleView title={title} />
-      {row.text.trim().length > 0 ? (
-        <div className="mt-1 whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground/90">
-          {row.text}
-        </div>
-      ) : null}
+      <ConversationMessageContent
+        attachments={row.attachments}
+        onOpenLocalFileLink={onOpenLocalFileLink}
+        projectId={projectId}
+        resolveUserAttachmentImageSrc={resolveUserAttachmentImageSrc}
+        text={row.text}
+      />
     </TimelineStaticRow>
   );
 }
@@ -272,6 +286,9 @@ function TimelineExpandableBody({
   expansion,
   loadingTurnSummaryIds,
   onLoadTurnSummaryRows,
+  onOpenLocalFileLink,
+  projectId,
+  resolveUserAttachmentImageSrc,
   row,
   themeType,
   turnSummaryRowsById,
@@ -286,6 +303,9 @@ function TimelineExpandableBody({
           loadingTurnSummaryIds={loadingTurnSummaryIds}
           erroredTurnSummaryIds={erroredTurnSummaryIds}
           onLoadTurnSummaryRows={onLoadTurnSummaryRows}
+          onOpenLocalFileLink={onOpenLocalFileLink}
+          projectId={projectId}
+          resolveUserAttachmentImageSrc={resolveUserAttachmentImageSrc}
           themeType={themeType}
           turnSummaryRowsById={turnSummaryRowsById}
         />
@@ -298,6 +318,9 @@ function TimelineExpandableBody({
           loadingTurnSummaryIds={loadingTurnSummaryIds}
           erroredTurnSummaryIds={erroredTurnSummaryIds}
           onLoadTurnSummaryRows={onLoadTurnSummaryRows}
+          onOpenLocalFileLink={onOpenLocalFileLink}
+          projectId={projectId}
+          resolveUserAttachmentImageSrc={resolveUserAttachmentImageSrc}
           themeType={themeType}
           turnSummaryRowsById={turnSummaryRowsById}
         />
@@ -312,6 +335,9 @@ function TimelineExpandableBody({
             loadingTurnSummaryIds={loadingTurnSummaryIds}
             erroredTurnSummaryIds={erroredTurnSummaryIds}
             onLoadTurnSummaryRows={onLoadTurnSummaryRows}
+            onOpenLocalFileLink={onOpenLocalFileLink}
+            projectId={projectId}
+            resolveUserAttachmentImageSrc={resolveUserAttachmentImageSrc}
             themeType={themeType}
             turnSummaryRowsById={turnSummaryRowsById}
           />
@@ -336,6 +362,9 @@ function TurnRowBody({
   expansion,
   loadingTurnSummaryIds,
   onLoadTurnSummaryRows,
+  onOpenLocalFileLink,
+  projectId,
+  resolveUserAttachmentImageSrc,
   row,
   themeType,
   turnSummaryRowsById,
@@ -394,6 +423,9 @@ function TurnRowBody({
         loadingTurnSummaryIds={loadingTurnSummaryIds}
         erroredTurnSummaryIds={erroredTurnSummaryIds}
         onLoadTurnSummaryRows={onLoadTurnSummaryRows}
+        onOpenLocalFileLink={onOpenLocalFileLink}
+        projectId={projectId}
+        resolveUserAttachmentImageSrc={resolveUserAttachmentImageSrc}
         themeType={themeType}
         turnSummaryRowsById={turnSummaryRowsById}
       />
@@ -410,13 +442,23 @@ function TimelineRowView({
   isTail,
   loadingTurnSummaryIds,
   onLoadTurnSummaryRows,
+  onOpenLocalFileLink,
+  projectId,
+  resolveUserAttachmentImageSrc,
   row,
   scopeActive,
   themeType,
   turnSummaryRowsById,
 }: TimelineRowViewProps) {
   if (row.kind === "conversation") {
-    return <ConversationRow row={row} />;
+    return (
+      <ConversationRow
+        row={row}
+        onOpenLocalFileLink={onOpenLocalFileLink}
+        projectId={projectId}
+        resolveUserAttachmentImageSrc={resolveUserAttachmentImageSrc}
+      />
+    );
   }
 
   const title = buildTimelineRowTitle(
@@ -444,6 +486,9 @@ function TimelineRowView({
           loadingTurnSummaryIds={loadingTurnSummaryIds}
           erroredTurnSummaryIds={erroredTurnSummaryIds}
           onLoadTurnSummaryRows={onLoadTurnSummaryRows}
+          onOpenLocalFileLink={onOpenLocalFileLink}
+          projectId={projectId}
+          resolveUserAttachmentImageSrc={resolveUserAttachmentImageSrc}
           themeType={themeType}
           turnSummaryRowsById={turnSummaryRowsById}
         />
@@ -457,6 +502,9 @@ function TimelineRowsList({
   expansion,
   loadingTurnSummaryIds,
   onLoadTurnSummaryRows,
+  onOpenLocalFileLink,
+  projectId,
+  resolveUserAttachmentImageSrc,
   rows,
   scopeActive,
   themeType,
@@ -474,6 +522,9 @@ function TimelineRowsList({
           loadingTurnSummaryIds={loadingTurnSummaryIds}
           erroredTurnSummaryIds={erroredTurnSummaryIds}
           onLoadTurnSummaryRows={onLoadTurnSummaryRows}
+          onOpenLocalFileLink={onOpenLocalFileLink}
+          projectId={projectId}
+          resolveUserAttachmentImageSrc={resolveUserAttachmentImageSrc}
           themeType={themeType}
           turnSummaryRowsById={turnSummaryRowsById}
         />
@@ -503,6 +554,9 @@ export function ThreadTimelineRows(props: ThreadTimelineRowsProps) {
       loadingTurnSummaryIds={props.loadingTurnSummaryIds}
       erroredTurnSummaryIds={props.erroredTurnSummaryIds}
       onLoadTurnSummaryRows={props.onLoadTurnSummaryRows}
+      onOpenLocalFileLink={props.onOpenLocalFileLink}
+      projectId={props.projectId}
+      resolveUserAttachmentImageSrc={props.resolveUserAttachmentImageSrc}
       themeType={themeType}
       turnSummaryRowsById={props.turnSummaryRowsById}
     />
