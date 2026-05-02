@@ -31,6 +31,10 @@ import {
   previewThreadText,
 } from "../helpers/thread-diagnostics.js";
 import { scaleTimeoutMs } from "../helpers/time.js";
+import {
+  formatTimelineRowKindsForDiagnostics,
+  timelineHasAssistantConversation,
+} from "../helpers/timeline-response.js";
 
 export type RealProviderId = "codex" | "claude-code" | "pi";
 
@@ -463,9 +467,7 @@ export function expectNonEmptyOutput(
 export function hasAssistantTimelineMessage(
   timeline: ThreadTimelineResponse,
 ): boolean {
-  return timeline.rows.some(
-    (row) => row.kind === "message" && row.message.kind === "assistant-text",
-  );
+  return timelineHasAssistantConversation(timeline);
 }
 
 export async function createRealThread(args: CreateRealThreadArgs) {
@@ -557,9 +559,7 @@ export async function sendAndWaitForIdle(args: SendAndWaitForIdleArgs) {
     ]);
     const recentEvents = events.slice(-10).map(describeThreadEvent).join(" | ");
     const timelineKinds = timeline
-      ? timeline.rows
-          .map((row) => (row.kind === "message" ? row.message.kind : row.kind))
-          .join(", ")
+      ? formatTimelineRowKindsForDiagnostics(timeline)
       : "unavailable";
     const outputPreview = output?.trim().slice(0, 160) ?? "";
     const lastError = [...events]
