@@ -59,6 +59,11 @@ interface TimelineRowsListProps extends TimelineRendererContext {
   spacing: TimelineRowsListSpacing;
 }
 
+interface TimelineRowWrapperClassNameArgs {
+  row: ThreadTimelineViewRow;
+  spacing: TimelineRowsListSpacing;
+}
+
 interface TimelineRowViewProps extends TimelineRendererContext {
   isTail: boolean;
   row: ThreadTimelineViewRow;
@@ -278,6 +283,19 @@ function timelineRowsListGapClassName(
     case "bundle":
       return "gap-0";
   }
+}
+
+function timelineRowWrapperClassName({
+  row,
+  spacing,
+}: TimelineRowWrapperClassNameArgs): string | undefined {
+  if (spacing === "bundle") {
+    return undefined;
+  }
+  if (row.kind === "conversation" && row.role === "user") {
+    return undefined;
+  }
+  return "pb-2";
 }
 
 function ConversationRow({
@@ -613,7 +631,10 @@ function TimelineRowsList({
       data-timeline-row-list={spacing}
     >
       {rows.map((row, index) => (
-        <div key={row.id}>
+        <div
+          key={row.id}
+          className={timelineRowWrapperClassName({ row, spacing })}
+        >
           <TimelineRowView
             row={row}
             isTail={index === rows.length - 1}

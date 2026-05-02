@@ -428,6 +428,41 @@ describe("ThreadTimelineRows", () => {
     expect(topLevelList?.classList.contains("gap-0.5")).toBe(false);
   });
 
+  it("adds bottom padding to non-user rows but not user message rows", () => {
+    const view = render(
+      <ThreadTimelineRows
+        loadingTurnSummaryIds={new Set()}
+        erroredTurnSummaryIds={new Set()}
+        onLoadTurnSummaryRows={() => {}}
+        timelineRows={[
+          conversationRow({ id: "assistant-1", text: "Done." }),
+          conversationRow({
+            id: "user-1",
+            role: "user",
+            text: "Please patch this.",
+          }),
+          commandRow({
+            id: "command-1",
+            command: "pnpm test",
+            sourceSeqStart: 3,
+          }),
+        ]}
+        threadRuntimeDisplayStatus="idle"
+        turnSummaryRowsById={{}}
+      />,
+    );
+
+    const topLevelList = view.container.querySelector(
+      '[data-timeline-row-list="top-level"]',
+    );
+    const topLevelRows = Array.from(topLevelList?.children ?? []);
+
+    expect(topLevelRows).toHaveLength(3);
+    expect(topLevelRows[0]?.classList.contains("pb-2")).toBe(true);
+    expect(topLevelRows[1]?.classList.contains("pb-2")).toBe(false);
+    expect(topLevelRows[2]?.classList.contains("pb-2")).toBe(true);
+  });
+
   it("renders rows inside activity summaries with no list gap", () => {
     const view = render(
       <ThreadTimelineRows
@@ -459,6 +494,11 @@ describe("ThreadTimelineRows", () => {
     expect(bundleList).not.toBeNull();
     expect(bundleList?.classList.contains("gap-0")).toBe(true);
     expect(bundleList?.classList.contains("gap-0.5")).toBe(false);
+    expect(
+      Array.from(bundleList?.children ?? []).some((child) =>
+        child.classList.contains("pb-2"),
+      ),
+    ).toBe(false);
   });
 
   it("uses compact padding for static title rows inside activity summaries", () => {
