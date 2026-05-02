@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { TimelineTitle } from "@bb/thread-view";
 import { ExpandableTimelineRow } from "../src/thread-timeline/ExpandableTimelineRow.js";
@@ -25,8 +25,6 @@ describe("ExpandableTimelineRow", () => {
     const view = render(
       <ExpandableTimelineRow
         title={TITLE}
-        isExpanded={false}
-        onToggle={() => {}}
         renderBody={renderBody}
       />,
     );
@@ -42,8 +40,6 @@ describe("ExpandableTimelineRow", () => {
       const view = render(
         <ExpandableTimelineRow
           title={TITLE}
-          isExpanded={false}
-          onToggle={() => {}}
           renderBody={renderBody}
         />,
       );
@@ -51,8 +47,7 @@ describe("ExpandableTimelineRow", () => {
       view.rerender(
         <ExpandableTimelineRow
           title={TITLE}
-          isExpanded={true}
-          onToggle={() => {}}
+          autoExpanded
           renderBody={renderBody}
         />,
       );
@@ -63,8 +58,6 @@ describe("ExpandableTimelineRow", () => {
       view.rerender(
         <ExpandableTimelineRow
           title={TITLE}
-          isExpanded={false}
-          onToggle={() => {}}
           renderBody={renderBody}
         />,
       );
@@ -89,8 +82,6 @@ describe("ExpandableTimelineRow", () => {
     const view = render(
       <ExpandableTimelineRow
         title={TITLE}
-        isExpanded={false}
-        onToggle={() => {}}
         renderBody={() => <div>details</div>}
       />,
     );
@@ -102,8 +93,7 @@ describe("ExpandableTimelineRow", () => {
     view.rerender(
       <ExpandableTimelineRow
         title={TITLE}
-        isExpanded={true}
-        onToggle={() => {}}
+        autoExpanded
         renderBody={() => <div>details</div>}
       />,
     );
@@ -117,8 +107,6 @@ describe("ExpandableTimelineRow", () => {
     const view = render(
       <ExpandableTimelineRow
         title={TITLE}
-        isExpanded={false}
-        onToggle={() => {}}
         renderBody={() => <div>details</div>}
       />,
     );
@@ -129,8 +117,7 @@ describe("ExpandableTimelineRow", () => {
     view.rerender(
       <ExpandableTimelineRow
         title={TITLE}
-        isExpanded={true}
-        onToggle={() => {}}
+        autoExpanded
         renderBody={() => <div>details</div>}
       />,
     );
@@ -146,8 +133,7 @@ describe("ExpandableTimelineRow", () => {
     const view = render(
       <ExpandableTimelineRow
         title={TITLE}
-        isExpanded={false}
-        onToggle={onToggle}
+        onBeforeExpand={onToggle}
         renderBody={() => <div>details</div>}
       />,
     );
@@ -162,8 +148,6 @@ describe("ExpandableTimelineRow", () => {
     render(
       <ExpandableTimelineRow
         title={TITLE}
-        isExpanded={false}
-        onToggle={() => {}}
         renderBody={() => <div>details</div>}
       />,
     );
@@ -184,8 +168,6 @@ describe("ExpandableTimelineRow", () => {
     const view = render(
       <ExpandableTimelineRow
         title={TITLE}
-        isExpanded={false}
-        onToggle={() => {}}
         renderBody={() => <div>details</div>}
       />,
     );
@@ -207,8 +189,6 @@ describe("ExpandableTimelineRow", () => {
     const view = render(
       <ExpandableTimelineRow
         title={TITLE}
-        isExpanded={false}
-        onToggle={() => {}}
         renderBody={() => <div>details</div>}
       />,
     );
@@ -231,8 +211,7 @@ describe("ExpandableTimelineRow", () => {
       <ExpandableTimelineRow
         title={TITLE}
         horizontalPadding="flush"
-        isExpanded={true}
-        onToggle={() => {}}
+        autoExpanded
         renderBody={() => <div>details</div>}
       />,
     );
@@ -247,8 +226,7 @@ describe("ExpandableTimelineRow", () => {
     const view = render(
       <ExpandableTimelineRow
         title={TITLE}
-        isExpanded={true}
-        onToggle={() => {}}
+        autoExpanded
         renderBody={() => <div>details</div>}
       />,
     );
@@ -261,8 +239,6 @@ describe("ExpandableTimelineRow", () => {
     const view = render(
       <ExpandableTimelineRow
         title={TITLE}
-        isExpanded={false}
-        onToggle={() => {}}
         renderBody={() => <div>details</div>}
       />,
     );
@@ -272,12 +248,59 @@ describe("ExpandableTimelineRow", () => {
     view.rerender(
       <ExpandableTimelineRow
         title={TITLE}
-        isExpanded={true}
-        onToggle={() => {}}
+        autoExpanded
         renderBody={() => <div>details</div>}
       />,
     );
 
     expect(view.container.firstElementChild?.className).not.toContain("group");
+  });
+
+  it("keeps manual collapse across auto-expanded rerenders", () => {
+    const view = render(
+      <ExpandableTimelineRow
+        title={TITLE}
+        autoExpanded
+        renderBody={() => <div>details</div>}
+      />,
+    );
+
+    expect(screen.getByRole("button").getAttribute("aria-expanded")).toBe(
+      "true",
+    );
+
+    fireEvent.click(screen.getByRole("button"));
+    expect(screen.getByRole("button").getAttribute("aria-expanded")).toBe(
+      "false",
+    );
+
+    view.rerender(
+      <ExpandableTimelineRow
+        title={TITLE}
+        autoExpanded
+        renderBody={() => <div>details</div>}
+      />,
+    );
+
+    expect(screen.getByRole("button").getAttribute("aria-expanded")).toBe(
+      "false",
+    );
+  });
+
+  it("runs before-expand work only when opening locally", () => {
+    const onBeforeExpand = vi.fn();
+    render(
+      <ExpandableTimelineRow
+        title={TITLE}
+        onBeforeExpand={onBeforeExpand}
+        renderBody={() => <div>details</div>}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button"));
+    expect(onBeforeExpand).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole("button"));
+    expect(onBeforeExpand).toHaveBeenCalledTimes(1);
   });
 });

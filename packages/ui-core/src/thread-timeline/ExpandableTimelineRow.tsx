@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import type { TimelineTitle } from "@bb/thread-view";
 import {
   ExpandablePanel,
@@ -14,13 +14,15 @@ import {
 import { TimelineTitleView } from "./TimelineTitleView.js";
 
 export interface ExpandableTimelineRowProps {
-  isExpanded: boolean;
-  onToggle: () => void;
+  autoExpanded?: boolean;
+  onBeforeExpand?: () => void;
   renderBody: () => ReactNode;
   title: TimelineTitle;
   className?: string;
   horizontalPadding?: TimelineRowHorizontalPadding;
 }
+
+type ManualExpansionOverride = boolean | null;
 
 function headerToneClass(title: TimelineTitle, isExpanded: boolean): string {
   if (title.tone === "destructive") {
@@ -33,20 +35,29 @@ function headerToneClass(title: TimelineTitle, isExpanded: boolean): string {
 }
 
 export function ExpandableTimelineRow({
+  autoExpanded = false,
   className,
   horizontalPadding = "default",
-  isExpanded,
-  onToggle,
+  onBeforeExpand,
   renderBody,
   title,
 }: ExpandableTimelineRowProps) {
+  const [manualExpansionOverride, setManualExpansionOverride] =
+    useState<ManualExpansionOverride>(null);
+  const isExpanded = manualExpansionOverride ?? autoExpanded;
   const horizontalPaddingClass =
     timelineRowHorizontalPaddingClassName(horizontalPadding);
+  const handleToggle = (): void => {
+    if (!isExpanded) {
+      onBeforeExpand?.();
+    }
+    setManualExpansionOverride(!isExpanded);
+  };
 
   return (
     <ExpandablePanel
       isExpanded={isExpanded}
-      onToggle={onToggle}
+      onToggle={handleToggle}
       headerToneClass={headerToneClass(title, isExpanded)}
       summaryContent={<TimelineTitleView title={title} />}
       summaryContentClassName={TIMELINE_ROW_HEADER_CONTENT_CLASS_NAME}
