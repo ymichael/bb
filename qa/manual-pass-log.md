@@ -576,3 +576,73 @@ Notes:
 
 - The validation intentionally reported counts only and did not print Claude's thinking text.
 - This covers the regression that Claude reasoning levels alone were insufficient after Claude Code started omitting visible thinking unless summarized thinking display is requested.
+
+## Full Standalone Run After UI-Core Cleanup
+
+Date: 2026-05-01
+Operator: Codex
+Status: passed
+Standalone workflow: `pnpm qa:standalone:start` / `pnpm qa:standalone:stop`
+Run log: `/tmp/bb-manual-runbook.log`
+
+Resolved models:
+
+- `codex`: `gpt-5.5`
+- `claude-code`: `claude-haiku-4-5`
+- `pi`: `anthropic/claude-haiku-4-5`
+
+Standalone state path: `/var/folders/lr/f3ynv4xj6p77kvx_rz7zgzg00000gn/T/bb-standalone-FZgrFE/standalone-state.json`
+Smoke thread: `thr_ra7zi7ujdp`
+Smoke worktree thread: `thr_vbq29q3aib`
+Dirty archive thread: `thr_ah4k78y23m`
+
+Shared environment:
+
+- Thread A: `thr_2e38vi6wg3`
+- Thread B: `thr_s6jmk77wdu`
+- Shared environment: `env_zeufi7yih5`
+
+Mixed-provider worktrees:
+
+- Claude thread: `thr_h2532aaxvw`
+- Claude environment: `env_p5hw76mjtf`
+- Pi thread: `thr_4bygqei56u`
+- Pi environment: `env_h27bynsudp`
+
+Provider-specific worktrees:
+
+- Codex thread: `thr_vz5sfkskrq`, worktree thread: `thr_7un9k6k2ir`, environment: `env_bn6isdpugt`
+- Claude thread: `thr_njj4khc9ej`, worktree thread: `thr_pfpew82v5v`, environment: `env_e7jv5wd6mj`
+- Pi thread: `thr_a87n4gg3ts`, worktree thread: `thr_hupbzp7vj8`, environment: `env_up8ta86ghd`
+
+Promote/demote:
+
+- Promote thread: `thr_sv2ry3b9xx`
+- Promote environment: `env_eqsjjv55cx`
+
+Pending interactions:
+
+- Approval thread: `thr_ctuqvuhh26`, interaction `pint_yxnmzv26sn`
+- Denial thread: `thr_ywuca8e7ia`
+- Claude grant thread: `thr_x93dm96gyn`, interaction `pint_mx9zqqpwuc`
+
+Validated:
+
+- Smoke unmanaged and managed worktree threads reached `idle`; status, diff, merge-base update, and merge-base clear checks passed.
+- Archive safety blocked sends to archived threads and blocked dirty managed-worktree archive without `--force`.
+- Thread A and Thread B reused the same direct environment, completed alternating follow-ups, and stayed usable after archiving one sibling.
+- Mixed-provider Claude and Pi worktree flows completed without cross-contamination.
+- Managed worktree commit, promote, and demote all succeeded.
+- The server stayed reachable across graceful and active daemon restarts; the smoke thread recovered and accepted work after restart.
+- Codex, Claude, and Pi each completed hello, uppercase follow-up, active-turn stop, and worktree file-creation checks.
+- Approval, denial, and Claude grant pending-interaction flows surfaced interactions, blocked concurrent sends while pending, and resolved correctly.
+
+Notes:
+
+- The first wrapper attempt stopped because the wrapper asserted lowercase `hello` against provider output `Hello from the smoke pass.` The runbook behavior was valid; the wrapper was rerun with case-insensitive contains checks and passed.
+- Claude grant output was `##`, matching the first non-empty line in the local `/etc/hosts` file.
+
+Cleanup:
+
+- Teardown succeeded: `pnpm qa:standalone:stop --state ...` killed PIDs `39234` and `39286` and removed the standalone root.
+- `pnpm qa:standalone:cleanup` reported no remaining roots.
