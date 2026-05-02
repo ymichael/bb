@@ -12,6 +12,7 @@ import type {
   TimelineWorkRow,
 } from "@bb/server-contract";
 import { assertNever } from "./assert-never.js";
+import { getFileChangeAction } from "./file-change-summary.js";
 import { hasTimelineExplorationIntent } from "./timeline-activity-intents.js";
 
 export interface TimelineViewDelegationWorkRow extends Omit<
@@ -47,10 +48,14 @@ export type ThreadTimelineViewRow =
 
 export interface TimelineActivitySummaryCounts {
   commands: number;
+  createdFiles: number;
+  deletedFiles: number;
   delegations: number;
+  editedFiles: number;
   fileChanges: number;
   files: number;
   lists: number;
+  renamedFiles: number;
   searches: number;
   tools: number;
   webFetches: number;
@@ -131,17 +136,24 @@ export function summarizeTimelineActivity(
 ): TimelineActivitySummaryCounts {
   const counts: TimelineActivitySummaryCounts = {
     commands: 0,
+    createdFiles: 0,
+    deletedFiles: 0,
     delegations: 0,
+    editedFiles: 0,
     fileChanges: 0,
     files: 0,
     lists: 0,
+    renamedFiles: 0,
     searches: 0,
     tools: 0,
     webFetches: 0,
     webSearches: 0,
   };
   const exploredFileIdentities = new Set<string>();
-  const changedFileIdentities = new Set<string>();
+  const createdFileIdentities = new Set<string>();
+  const deletedFileIdentities = new Set<string>();
+  const editedFileIdentities = new Set<string>();
+  const renamedFileIdentities = new Set<string>();
 
   for (const row of rows) {
     switch (row.workKind) {
@@ -160,7 +172,20 @@ export function summarizeTimelineActivity(
         }
         break;
       case "file-change":
-        changedFileIdentities.add(getFileChangeIdentity(row));
+        switch (getFileChangeAction(row.change)) {
+          case "created":
+            createdFileIdentities.add(getFileChangeIdentity(row));
+            break;
+          case "deleted":
+            deletedFileIdentities.add(getFileChangeIdentity(row));
+            break;
+          case "edited":
+            editedFileIdentities.add(getFileChangeIdentity(row));
+            break;
+          case "renamed":
+            renamedFileIdentities.add(getFileChangeIdentity(row));
+            break;
+        }
         break;
       case "web-fetch":
         counts.webFetches += 1;
@@ -179,7 +204,15 @@ export function summarizeTimelineActivity(
   }
 
   counts.files = exploredFileIdentities.size;
-  counts.fileChanges = changedFileIdentities.size;
+  counts.createdFiles = createdFileIdentities.size;
+  counts.deletedFiles = deletedFileIdentities.size;
+  counts.editedFiles = editedFileIdentities.size;
+  counts.renamedFiles = renamedFileIdentities.size;
+  counts.fileChanges =
+    counts.createdFiles +
+    counts.deletedFiles +
+    counts.editedFiles +
+    counts.renamedFiles;
   return counts;
 }
 
@@ -247,6 +280,20 @@ function hasOnlyWebResearch(counts: TimelineActivitySummaryCounts): boolean {
   );
 }
 
+function hasOnlyFileChanges(counts: TimelineActivitySummaryCounts): boolean {
+  return (
+    counts.fileChanges > 0 &&
+    counts.commands === 0 &&
+    counts.delegations === 0 &&
+    counts.files === 0 &&
+    counts.lists === 0 &&
+    counts.searches === 0 &&
+    counts.tools === 0 &&
+    counts.webFetches === 0 &&
+    counts.webSearches === 0
+  );
+}
+
 function getTimelineActivitySummaryCategory(
   row: TimelineViewWorkRow,
 ): TimelineActivitySummaryCategory | null {
@@ -282,6 +329,43 @@ function getOrderedSummaryCategories(
   return categories;
 }
 
+function fileChangeSummaryPhrase(
+  counts: TimelineActivitySummaryCounts,
+  active: boolean,
+): string | null {
+  const parts = [
+    counts.createdFiles > 0
+      ? `${active ? "Creating" : "Created"} ${plural(
+          counts.createdFiles,
+          "file",
+        )}`
+      : null,
+    counts.deletedFiles > 0
+      ? `${active ? "Deleting" : "Deleted"} ${plural(
+          counts.deletedFiles,
+          "file",
+        )}`
+      : null,
+    counts.renamedFiles > 0
+      ? `${active ? "Renaming" : "Renamed"} ${plural(
+          counts.renamedFiles,
+          "file",
+        )}`
+      : null,
+    counts.editedFiles > 0
+      ? `${active ? "Editing" : "Edited"} ${plural(
+          counts.editedFiles,
+          "file",
+        )}`
+      : null,
+  ].filter((part): part is string => part !== null);
+  return parts.length === 0
+    ? null
+    : parts
+        .map((part, index) => (index === 0 ? part : lowerFirst(part)))
+        .join(", ");
+}
+
 function completedSummaryPhrase(
   category: TimelineActivitySummaryCategory,
   counts: TimelineActivitySummaryCounts,
@@ -295,9 +379,7 @@ function completedSummaryPhrase(
         ? `Ran ${plural(counts.commands, "command")}`
         : null;
     case "fileChanges":
-      return counts.fileChanges > 0
-        ? `Edited ${plural(counts.fileChanges, "file")}`
-        : null;
+      return fileChangeSummaryPhrase(counts, false);
     case "webResearch":
       return webResearchSummaryPhrase(counts, false);
     case "delegations":
@@ -360,6 +442,12 @@ export function buildTimelineActivitySummaryLabel(
     if (hasOnlyWebResearch(counts)) {
       return (
         webResearchSummaryPhrase(counts, true) ??
+        `Working on ${plural(row.children.length, "item")}`
+      );
+    }
+    if (hasOnlyFileChanges(counts)) {
+      return (
+        fileChangeSummaryPhrase(counts, true) ??
         `Working on ${plural(row.children.length, "item")}`
       );
     }

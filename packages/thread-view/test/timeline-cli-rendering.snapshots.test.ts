@@ -542,7 +542,7 @@ describe("timeline CLI rendering snapshots", () => {
     `);
   });
 
-  it("counts edited files by unique path while preserving repeated change rows", () => {
+  it("summarizes file changes by action while preserving repeated change rows", () => {
     const event = createTimelineEventFactory({ threadId: "thread-1" });
     const timeline = renderIdleTimeline([
       event.turnStarted(),
@@ -595,7 +595,7 @@ describe("timeline CLI rendering snapshots", () => {
 
     expect(timeline.text).toMatchInlineSnapshot(`
       "── Worked on 4 items ───────────────────────────────────────
-        ── Edited 3 files
+        ── Created 1 file, deleted 1 file, edited 2 files
           ── Created a.ts +1
             @@ -0,0 +1 @@
             +first
@@ -640,7 +640,7 @@ describe("timeline CLI rendering snapshots", () => {
 
     expect(timeline.text).toMatchInlineSnapshot(`
       "── Worked on 2 items ───────────────────────────────────────
-        ── Edited 2 files
+        ── Created 1 file, deleted 1 file
           ── Created created.ts +2
             first line
             second line

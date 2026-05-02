@@ -54,6 +54,8 @@ interface FileChangeRowArgs {
   id?: string;
   kind?: string;
   path?: string;
+  stderr?: string | null;
+  stdout?: string | null;
 }
 
 function baseRow({ id, sourceSeqStart }: BaseRowArgs): TimelineRowBase {
@@ -147,6 +149,8 @@ function fileChangeRow({
   id = "file-change-1",
   kind = "update",
   path = "src/app.ts",
+  stderr = null,
+  stdout = "applied",
 }: FileChangeRowArgs = {}): TimelineFileChangeWorkRow {
   return {
     ...baseRow({ id, sourceSeqStart: 1 }),
@@ -161,8 +165,8 @@ function fileChangeRow({
       diff,
       diffStats,
     },
-    stdout: "applied",
-    stderr: null,
+    stdout,
+    stderr,
     approvalStatus: null,
   };
 }
@@ -592,7 +596,32 @@ describe("ThreadTimelineRows", () => {
     expect(
       view.container.querySelector("[data-timeline-file-diff]"),
     ).not.toBeNull();
-    expect(view.container.textContent ?? "").toContain("applied");
+    expect(view.container.textContent ?? "").not.toContain("applied");
+  });
+
+  it("renders file-change stderr without rendering stdout below diffs", () => {
+    const view = render(
+      <ThreadTimelineRows
+        loadingTurnSummaryIds={new Set()}
+        erroredTurnSummaryIds={new Set()}
+        onLoadTurnSummaryRows={() => {}}
+        timelineRows={[
+          fileChangeRow({
+            stdout: "Success. Updated the following files:\nM src/app.ts",
+            stderr: "patch failed",
+          }),
+        ]}
+        threadRuntimeDisplayStatus="idle"
+        turnSummaryRowsById={{}}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button"));
+
+    expect(view.container.textContent ?? "").not.toContain(
+      "Success. Updated the following files:",
+    );
+    expect(view.container.textContent ?? "").toContain("patch failed");
   });
 
   it("renders raw created-file diffs with the same diff viewer", () => {

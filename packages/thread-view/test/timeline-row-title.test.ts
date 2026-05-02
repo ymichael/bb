@@ -115,6 +115,29 @@ function createdFileRow(): TimelineFileChangeWorkRow {
   };
 }
 
+function editedFileRow(): TimelineFileChangeWorkRow {
+  return {
+    ...baseRow("file-edited-1"),
+    kind: "work",
+    workKind: "file-change",
+    status: "completed",
+    callId: "file-call-3",
+    change: {
+      path: "src/existing-file.ts",
+      kind: "update",
+      movePath: null,
+      diff: "-before\n+after",
+      diffStats: {
+        added: 1,
+        removed: 1,
+      },
+    },
+    stdout: null,
+    stderr: null,
+    approvalStatus: null,
+  };
+}
+
 function webSearchRow(): TimelineWebSearchWorkRow {
   return {
     ...baseRow("web-search-1"),
@@ -252,6 +275,19 @@ describe("buildTimelineRowTitle", () => {
     expect(backgroundTitle.prefix).toBeNull();
     expect(backgroundTitle.contentTone).toBe("muted");
     expect(backgroundTitle.tone).toBe("summary");
+  });
+
+  it("summarizes file changes by action", () => {
+    const title = buildTimelineRowTitle(
+      activitySummaryRow([
+        createdFileRow(),
+        deletedFileRow(),
+        editedFileRow(),
+      ]),
+      DEFAULT_OPTIONS,
+    );
+
+    expect(title.plain).toBe("Created 1 file, deleted 1 file, edited 1 file");
   });
 
   it("uses active wording for tail summaries only when requested", () => {

@@ -57,9 +57,6 @@ export function WorkRowBody({ row, themeType }: WorkRowBodyProps) {
       return (
         <div className="space-y-2">
           <TimelineFileDiffBlock change={row.change} themeType={themeType} />
-          {row.stdout ? (
-            <TerminalOutputBlock output={row.stdout} maxHeightClassName="max-h-48" />
-          ) : null}
           {row.stderr ? (
             <EventCodeBlock tone="danger" maxHeightClassName="max-h-48">
               {row.stderr}
