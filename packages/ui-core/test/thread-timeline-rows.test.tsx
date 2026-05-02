@@ -370,12 +370,15 @@ describe("ThreadTimelineRows", () => {
       "Final subagent answer.",
     );
 
-    fireEvent.click(screen.getByRole("button"));
+    fireEvent.click(screen.getByRole("button", { name: /Ran 1 subagent/u }));
+    fireEvent.click(screen.getByRole("button", { name: /Ran subagent:/u }));
+    expect(view.container.textContent ?? "").toContain("Final subagent answer.");
+
+    fireEvent.click(screen.getByRole("button", { name: /Ran 1 command/u }));
 
     expect(view.container.textContent ?? "").toContain(
       "rg timeline packages/ui-core",
     );
-    expect(view.container.textContent ?? "").toContain("Final subagent answer.");
   });
 
   it("does not render web search and fetch leaves as expandable rows", () => {
@@ -448,7 +451,11 @@ describe("ThreadTimelineRows", () => {
     expect(view.container.textContent ?? "").toContain("Ran");
     expect(view.container.textContent ?? "").not.toContain("$ true");
 
-    fireEvent.click(screen.getByRole("button"));
+    fireEvent.click(screen.getByRole("button", { name: /Ran 1 command/u }));
+    expect(view.container.textContent ?? "").toContain("Ran");
+    expect(view.container.textContent ?? "").not.toContain("$ true");
+
+    fireEvent.click(screen.getByRole("button", { name: /Ran\s+true/u }));
 
     expect(view.container.textContent ?? "").toContain("$ true");
     expect(view.container.textContent ?? "").toContain("exit code 0");
@@ -471,6 +478,8 @@ describe("ThreadTimelineRows", () => {
         turnSummaryRowsById={{}}
       />,
     );
+
+    fireEvent.click(screen.getByRole("button", { name: /Ran 1 command/u }));
 
     const button = screen.getByRole("button", {
       name: /Ran\s+pnpm test\s+2s/u,
@@ -498,12 +507,21 @@ describe("ThreadTimelineRows", () => {
       />,
     );
 
-    const button = screen.getByRole("button", { name: /Ran\s+pnpm test/u });
-    expect(button.getAttribute("aria-expanded")).toBe("false");
+    const summaryButton = screen.getByRole("button", {
+      name: /Ran 1 command/u,
+    });
+    expect(summaryButton.getAttribute("aria-expanded")).toBe("false");
+    expect(view.container.textContent ?? "").not.toContain("test failure");
+
+    fireEvent.click(summaryButton);
+    const commandButton = screen.getByRole("button", {
+      name: /Ran\s+pnpm test/u,
+    });
+    expect(commandButton.getAttribute("aria-expanded")).toBe("false");
     expect(view.container.textContent ?? "").not.toContain("test failure");
   });
 
-  it("auto-expands pending direct work in an active turn", () => {
+  it("auto-expands pending single-row summaries in an active turn", () => {
     const view = render(
       <ThreadTimelineRows
         loadingTurnSummaryIds={new Set()}
@@ -522,11 +540,16 @@ describe("ThreadTimelineRows", () => {
       />,
     );
 
-    const button = screen.getByRole("button", {
+    const summaryButton = screen.getByRole("button", {
+      name: /Running 1 command/u,
+    });
+    expect(summaryButton.getAttribute("aria-expanded")).toBe("true");
+
+    const commandButton = screen.getByRole("button", {
       name: /Running\s+pnpm test/u,
     });
-    expect(button.getAttribute("aria-expanded")).toBe("true");
-    expect(view.container.textContent ?? "").toContain("still running");
+    expect(commandButton.getAttribute("aria-expanded")).toBe("false");
+    expect(view.container.textContent ?? "").not.toContain("still running");
   });
 
   it("does not auto-expand pending work already summarized by an active bundle", () => {
@@ -590,7 +613,8 @@ describe("ThreadTimelineRows", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button"));
+    fireEvent.click(screen.getByRole("button", { name: /Ran 1 command/u }));
+    fireEvent.click(screen.getByRole("button", { name: /Ran\s+pwd/u }));
 
     expect(view.container.textContent ?? "").not.toContain("cwd:");
     expect(view.container.textContent ?? "").toContain("exit code 0");
@@ -606,7 +630,7 @@ describe("ThreadTimelineRows", () => {
         timelineRows={[
           commandRow({
             id: "command-ansi-1",
-            command: "printf red",
+            command: "printf color",
             output: "\u001b[31mred\u001b[0m",
           }),
         ]}
@@ -615,7 +639,8 @@ describe("ThreadTimelineRows", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button"));
+    fireEvent.click(screen.getByRole("button", { name: /Ran 1 command/u }));
+    fireEvent.click(screen.getByRole("button", { name: /Ran\s+printf color/u }));
 
     expect(view.container.textContent ?? "").toContain("red");
     expect(view.container.textContent ?? "").not.toContain("\u001b");
@@ -636,7 +661,10 @@ describe("ThreadTimelineRows", () => {
     expect(view.container.textContent ?? "").toContain("Edited");
     expect(view.container.querySelector("[data-timeline-file-diff]")).toBeNull();
 
-    fireEvent.click(screen.getByRole("button"));
+    fireEvent.click(screen.getByRole("button", { name: /Edited 1 file/u }));
+    expect(view.container.querySelector("[data-timeline-file-diff]")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /Edited\s+app\.ts/u }));
 
     expect(
       view.container.querySelector("[data-timeline-file-diff]"),
@@ -661,7 +689,8 @@ describe("ThreadTimelineRows", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button"));
+    fireEvent.click(screen.getByRole("button", { name: /Edited 1 file/u }));
+    fireEvent.click(screen.getByRole("button", { name: /Edited\s+app\.ts/u }));
 
     expect(view.container.textContent ?? "").not.toContain(
       "Success. Updated the following files:",
@@ -692,11 +721,15 @@ describe("ThreadTimelineRows", () => {
       />,
     );
 
+    fireEvent.click(screen.getByRole("button", { name: /Created 1 file/u }));
+
     expect(
       screen.getByRole("button", { name: /Created\s+new-file\.ts\s+\+2/u }),
     ).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button"));
+    fireEvent.click(
+      screen.getByRole("button", { name: /Created\s+new-file\.ts\s+\+2/u }),
+    );
 
     expect(
       view.container.querySelector("[data-timeline-file-diff]"),

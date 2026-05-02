@@ -294,6 +294,70 @@ function hasOnlyFileChanges(counts: TimelineActivitySummaryCounts): boolean {
   );
 }
 
+function approvalStatusSummaryLabel(
+  rows: readonly TimelineViewWorkRow[],
+): string | null {
+  let status: "waiting_for_approval" | "denied" | null = null;
+  let commands = 0;
+  let fileChanges = 0;
+  let tools = 0;
+
+  for (const row of rows) {
+    let rowApprovalStatus: "waiting_for_approval" | "denied";
+    switch (row.workKind) {
+      case "command":
+        if (row.approvalStatus === null) {
+          return null;
+        }
+        rowApprovalStatus = row.approvalStatus;
+        commands += 1;
+        break;
+      case "file-change":
+        if (row.approvalStatus === null) {
+          return null;
+        }
+        rowApprovalStatus = row.approvalStatus;
+        fileChanges += 1;
+        break;
+      case "tool":
+        if (row.approvalStatus === null) {
+          return null;
+        }
+        rowApprovalStatus = row.approvalStatus;
+        tools += 1;
+        break;
+      case "approval":
+      case "delegation":
+      case "web-fetch":
+      case "web-search":
+        return null;
+      default:
+        assertNever(row);
+    }
+
+    if (status === null) {
+      status = rowApprovalStatus;
+    } else if (status !== rowApprovalStatus) {
+      return null;
+    }
+  }
+
+  if (status === null) {
+    return null;
+  }
+
+  const details = [
+    commands > 0 ? plural(commands, "command") : null,
+    fileChanges > 0 ? plural(fileChanges, "file change") : null,
+    tools > 0 ? plural(tools, "tool") : null,
+  ].filter((detail): detail is string => detail !== null);
+  const detail = details.join(", ");
+
+  return status === "denied"
+    ? `Denied ${detail}`
+    : `Waiting for approval on ${detail}`;
+}
+
 function getTimelineActivitySummaryCategory(
   row: TimelineViewWorkRow,
 ): TimelineActivitySummaryCategory | null {
@@ -425,6 +489,11 @@ function webResearchSummaryPhrase(
 export function buildTimelineActivitySummaryLabel(
   row: TimelineActivitySummaryRow,
 ): string {
+  const approvalSummaryLabel = approvalStatusSummaryLabel(row.children);
+  if (approvalSummaryLabel !== null) {
+    return approvalSummaryLabel;
+  }
+
   const counts = summarizeTimelineActivity(row.children);
   const active = row.status === "pending";
   const exploration = explorationDetail(counts);
@@ -534,20 +603,7 @@ function isSummarizableWorkRow(
 }
 
 function shouldSummarizeRun(rows: readonly TimelineViewWorkRow[]): boolean {
-  if (rows.length > 1) {
-    return true;
-  }
-  const only = rows[0];
-  if (!only) {
-    return false;
-  }
-  if (
-    (only.workKind === "command" || only.workKind === "tool") &&
-    hasTimelineExplorationIntent(only)
-  ) {
-    return true;
-  }
-  return only.workKind === "web-search" || only.workKind === "web-fetch";
+  return rows.length > 0;
 }
 
 function buildActivitySummaryRow(

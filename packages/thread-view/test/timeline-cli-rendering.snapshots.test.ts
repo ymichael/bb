@@ -317,14 +317,16 @@ describe("timeline CLI rendering snapshots", () => {
     expect(steerMessage?.sourceSeqStart).toBe(3);
     expect(timeline.text).toMatchInlineSnapshot(`
       "── Worked on 2 items ───────────────────────────────────────
-        ── Ran command (completed)
-          $ pnpm test
+        ── Ran 1 command
+          ── Ran command (completed)
+            $ pnpm test
 
         ── User
         Please account for the restart
 
-        ── Ran command (completed)
-          $ sqlite3 ~/.bb-dev/bb.db '.tables'
+        ── Ran 1 command
+          ── Ran command (completed)
+            $ sqlite3 ~/.bb-dev/bb.db '.tables'
 
       ── Assistant ───────────────────────────────────────────────
       Done."
@@ -366,14 +368,16 @@ describe("timeline CLI rendering snapshots", () => {
     expect(steerMessage?.sourceSeqStart).toBe(3);
     expect(timeline.text).toMatchInlineSnapshot(`
       "── Worked on 2 items ───────────────────────────────────────
-        ── Ran command (completed)
-          $ pnpm test
+        ── Ran 1 command
+          ── Ran command (completed)
+            $ pnpm test
 
         ── User
         Please account for the restart
 
-        ── Ran command (completed)
-          $ sqlite3 ~/.bb-dev/bb.db '.tables'
+        ── Ran 1 command
+          ── Ran command (completed)
+            $ sqlite3 ~/.bb-dev/bb.db '.tables'
 
       ── Assistant ───────────────────────────────────────────────
       Done."
@@ -509,9 +513,10 @@ describe("timeline CLI rendering snapshots", () => {
     expect(timeline.turnRows[0]?.summaryCount).toBe(1);
     expect(timeline.text).toMatchInlineSnapshot(`
       "── Worked on 1 item ────────────────────────────────────────
-        ── Ran command (completed)
-          $ pnpm test
-          Tests passed
+        ── Ran 1 command
+          ── Ran command (completed)
+            $ pnpm test
+            Tests passed
 
       ── Assistant ───────────────────────────────────────────────
       I found the test path.
@@ -761,7 +766,8 @@ describe("timeline CLI rendering snapshots", () => {
     expect(timeline.text).not.toContain("Reasoning");
     expect(timeline.text).toMatchInlineSnapshot(`
       "── Worked on 1 item ────────────────────────────────────────
-        ── Ran tool: exec_command { cmd: sed -n '1,80p' packages/core-ui/src/i... }
+        ── Ran 1 tool
+          ── Ran tool: exec_command { cmd: sed -n '1,80p' packages/core-ui/src/i... }
 
       ── Assistant ───────────────────────────────────────────────
       The extension point is the timeline row builder."
@@ -941,8 +947,9 @@ describe("timeline CLI rendering snapshots", () => {
     expect(timeline.text).toMatchInlineSnapshot(`
       "── Waiting for approval to grant Bash ──────────────────────
 
-      ── Command (denied) ────────────────────────────────────────
-        $ git push"
+      ── Denied 1 command ────────────────────────────────────────
+        ── Command (denied)
+          $ git push"
     `);
   });
 
@@ -966,10 +973,11 @@ describe("timeline CLI rendering snapshots", () => {
     ]);
 
     expect(timeline.text).toMatchInlineSnapshot(`
-      "── Ran command 2s ──────────────────────────────────────────
-        $ pnpm test
-        Tests failed
-        exit 1"
+      "── Ran 1 command ───────────────────────────────────────────
+        ── Ran command 2s
+          $ pnpm test
+          Tests failed
+          exit 1"
     `);
   });
 
@@ -994,9 +1002,10 @@ describe("timeline CLI rendering snapshots", () => {
     ]);
 
     expect(timeline.text).toMatchInlineSnapshot(`
-      "── Ran command (completed, 4s) ─────────────────────────────
-        $ pnpm exec turbo run typecheck --filter=@bb/app > /tmp/typecheck.txt 2>&1
-        exit code 0"
+      "── Ran 1 command ───────────────────────────────────────────
+        ── Ran command (completed, 4s)
+          $ pnpm exec turbo run typecheck --filter=@bb/app > /tmp/typecheck.txt 2>&1
+          exit code 0"
     `);
   });
 
