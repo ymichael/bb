@@ -31,6 +31,8 @@ import {
 } from "../environments/environment-provisioning.js";
 import { buildDirectEnvironmentProvisionRequest } from "../environments/environment-provision-request.js";
 import { resolveStableThreadRequestEnvironment } from "./thread-request-eligibility.js";
+import { resolveCreateThreadEnvironment } from "./thread-default-policy.js";
+import { assertValidManagerParentThread } from "./thread-parent.js";
 import {
   type ThreadCreateServiceRequestInput,
   type ThreadCreateServiceRequest,
@@ -171,16 +173,27 @@ export async function createThreadFromRequest(
   requestInput: ThreadCreateServiceRequestInput,
 ) {
   requireProjectExists(deps, requestInput.projectId);
+  const parentThread = requestInput.parentThreadId
+    ? assertValidManagerParentThread(deps, {
+        parentThreadId: requestInput.parentThreadId,
+        projectId: requestInput.projectId,
+      })
+    : null;
   const { executionDefaults, providerId } =
     resolveProjectExecutionDefaultsForCreate(deps, {
       model: requestInput.model,
-      origin: requestInput.origin,
       projectId: requestInput.projectId,
       providerId: requestInput.providerId,
       threadType: requestInput.type,
     });
   const request: ThreadCreateServiceRequest = {
     ...requestInput,
+    environment: resolveCreateThreadEnvironment({
+      parentThread,
+      projectId: requestInput.projectId,
+      requestedEnvironment: requestInput.environment,
+      threadType: requestInput.type,
+    }),
     providerId,
   };
   const resolvedEnvironment = resolveStableThreadRequestEnvironment(deps, {

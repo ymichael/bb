@@ -8,6 +8,7 @@ import {
   getDraft,
   getThread,
   hostDaemonCommands,
+  markThreadDeleted,
   threads,
 } from "@bb/db";
 import {
@@ -22,6 +23,7 @@ import {
   waitForQueuedCommandAfter,
 } from "../helpers/commands.js";
 import { readJson } from "../helpers/json.js";
+import { waitForThreadEnvironment } from "./public-thread-assertions.js";
 import {
   seedDraft,
   seedEnvironment,
@@ -153,6 +155,7 @@ describe("public thread manager and ownership routes", () => {
             "content-type": "application/json",
           },
           body: JSON.stringify({
+            origin: "app",
             name: "Project manager",
             providerId: "codex",
             model: "gpt-5",
@@ -384,6 +387,278 @@ describe("public thread manager and ownership routes", () => {
           },
         },
       });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("defaults manager-created child threads to managed worktrees and keeps explicit reuse opt-in", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-manager-child-defaults",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/manager-child-defaults",
+      });
+      const managerEnvironment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/manager-child-defaults",
+      });
+      const managerThread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: managerEnvironment.id,
+        type: "manager",
+        title: "Manager thread",
+      });
+
+      const createManagedChildResponse = await harness.app.request(
+        "/api/v1/threads",
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            origin: "app",
+            projectId: project.id,
+            parentThreadId: managerThread.id,
+            providerId: "codex",
+            model: "gpt-5",
+            input: [{ type: "text", text: "Implement the feature" }],
+            environment: {
+              type: "host",
+              hostId: host.id,
+              workspace: { type: "unmanaged", path: null },
+            },
+          }),
+        },
+      );
+
+      expect(createManagedChildResponse.status).toBe(201);
+      const managedChild = threadSchema.parse(
+        await readJson(createManagedChildResponse),
+      );
+      expect(managedChild.parentThreadId).toBe(managerThread.id);
+      expect(managedChild.status).toBe("provisioning");
+      expect(managedChild.environmentId).toBeNull();
+      const managedChildEnvironment = await waitForThreadEnvironment(
+        harness,
+        managedChild.id,
+      );
+
+      const provisionCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "environment.provision" &&
+          command.environmentId === managedChildEnvironment.id,
+      );
+      expect(provisionCommand.command).toMatchObject({
+        workspaceProvisionType: "managed-worktree",
+      });
+
+      const reuseEnvironment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/manager-child-defaults/reuse",
+        workspaceProvisionType: "managed-worktree",
+      });
+      const createReuseChildResponse = await harness.app.request(
+        "/api/v1/threads",
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            origin: "app",
+            projectId: project.id,
+            parentThreadId: managerThread.id,
+            providerId: "codex",
+            model: "gpt-5",
+            input: [{ type: "text", text: "Review in place" }],
+            environment: {
+              type: "reuse",
+              environmentId: reuseEnvironment.id,
+            },
+          }),
+        },
+      );
+
+      expect(createReuseChildResponse.status).toBe(201);
+      const reuseChild = threadSchema.parse(
+        await readJson(createReuseChildResponse),
+      );
+      expect(reuseChild.environmentId).toBe(reuseEnvironment.id);
+      const reuseThreadStart = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "thread.start" &&
+          command.threadId === reuseChild.id,
+      );
+      expect(reuseThreadStart.command.environmentId).toBe(reuseEnvironment.id);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("rejects invalid parentThreadId values when creating managed child threads", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-invalid-parent-create",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/invalid-parent-create-project",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/invalid-parent-create-project/worktree",
+      });
+      const { project: otherProject } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/invalid-parent-create-other-project",
+      });
+      const crossProjectManager = seedThread(harness.deps, {
+        projectId: otherProject.id,
+        type: "manager",
+      });
+      const standardParent = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        type: "standard",
+      });
+      const deletedManager = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        type: "manager",
+      });
+      markThreadDeleted(harness.db, harness.hub, {
+        threadId: deletedManager.id,
+      });
+
+      const initialThreadCount = harness.db.select().from(threads).all().length;
+      const invalidParentThreadIds = [
+        crossProjectManager.id,
+        standardParent.id,
+        deletedManager.id,
+      ];
+
+      for (const parentThreadId of invalidParentThreadIds) {
+        const response = await harness.app.request("/api/v1/threads", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            origin: "app",
+            projectId: project.id,
+            parentThreadId,
+            providerId: "codex",
+            model: "gpt-5",
+            input: [{ type: "text", text: "Invalid parent" }],
+            environment: {
+              type: "host",
+              hostId: host.id,
+              workspace: { type: "unmanaged", path: null },
+            },
+          }),
+        });
+
+        expect(response.status).toBe(400);
+        await expect(readJson(response)).resolves.toMatchObject({
+          code: "invalid_request",
+          message:
+            "parentThreadId must reference a live manager thread in the same project",
+        });
+      }
+
+      expect(harness.db.select().from(threads).all()).toHaveLength(
+        initialThreadCount,
+      );
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("rejects invalid parentThreadId values when assigning ownership", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-invalid-parent-update",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/invalid-parent-update-project",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/invalid-parent-update-project/worktree",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        parentThreadId: null,
+      });
+      const { project: otherProject } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/invalid-parent-update-other-project",
+      });
+      const crossProjectManager = seedThread(harness.deps, {
+        projectId: otherProject.id,
+        type: "manager",
+      });
+      const standardParent = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        type: "standard",
+      });
+      const deletedManager = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        type: "manager",
+      });
+      markThreadDeleted(harness.db, harness.hub, {
+        threadId: deletedManager.id,
+      });
+
+      const invalidParentThreadIds = [
+        crossProjectManager.id,
+        standardParent.id,
+        deletedManager.id,
+      ];
+
+      for (const parentThreadId of invalidParentThreadIds) {
+        const response = await harness.app.request(`/api/v1/threads/${thread.id}`, {
+          method: "PATCH",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            parentThreadId,
+          }),
+        });
+
+        expect(response.status).toBe(400);
+        await expect(readJson(response)).resolves.toMatchObject({
+          code: "invalid_request",
+          message:
+            "parentThreadId must reference a live manager thread in the same project",
+        });
+        expect(getThread(harness.db, thread.id)?.parentThreadId).toBeNull();
+      }
+
+      expect(
+        harness.db
+          .select({ id: hostDaemonCommands.id })
+          .from(hostDaemonCommands)
+          .all(),
+      ).toEqual([]);
     } finally {
       await harness.cleanup();
     }

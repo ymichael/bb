@@ -32,9 +32,9 @@ interface UpdateLocalProjectSourceRequest {
 interface HireProjectManagerRequest {
   projectId: string;
   name?: string;
-  providerId: string;
-  model: string;
-  reasoningLevel: ReasoningLevel;
+  providerId?: string;
+  model?: string;
+  reasoningLevel?: ReasoningLevel;
   environment: ManagerEnvironmentArgs;
 }
 
@@ -79,9 +79,9 @@ export function useHireProjectManager() {
     }: HireProjectManagerRequest) =>
       api.hireProjectManager(projectId, {
         name,
-        providerId,
-        model,
-        reasoningLevel,
+        ...(providerId ? { providerId } : {}),
+        ...(model ? { model } : {}),
+        ...(reasoningLevel ? { reasoningLevel } : {}),
         environment,
       }),
     onSuccess: (thread) => {

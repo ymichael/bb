@@ -69,6 +69,7 @@ describe("generated managed branch names", () => {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
+          origin: "app",
           projectId: project.id,
           providerId: "codex",
           model: "gpt-5",
@@ -128,6 +129,7 @@ describe("generated managed branch names", () => {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
+          origin: "app",
           projectId: project.id,
           providerId: "codex",
           model: "gpt-5",
@@ -211,6 +213,7 @@ describe("generated managed branch names", () => {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
+          origin: "app",
           projectId: project.id,
           providerId: "codex",
           model: "gpt-5",
@@ -299,6 +302,7 @@ describe("generated managed branch names", () => {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
+          origin: "app",
           projectId: project.id,
           providerId: "codex",
           model: "gpt-5",
@@ -352,6 +356,7 @@ describe("generated managed branch names", () => {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
+          origin: "app",
           projectId: project.id,
           providerId: "codex",
           model: "gpt-5",
@@ -405,6 +410,7 @@ describe("generated managed branch names", () => {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
+          origin: "app",
           projectId: project.id,
           providerId: "codex",
           model: "gpt-5",

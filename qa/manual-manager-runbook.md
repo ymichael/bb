@@ -2,27 +2,32 @@
 
 This runbook covers the CLI-oriented manual QA pass for manager threads. It is
 focused on the manager product contract, not the general thread/worktree smoke
-coverage in [qa/manual-runbook.md](/Users/michael/.codex/worktrees/dc39/bb/qa/manual-runbook.md).
+coverage in [manual-runbook.md](manual-runbook.md).
 
 ## Scope
 
 Manager providers under test:
 
-- `codex` with `gpt-5.4` / `medium`
-- `pi` with `anthropic/claude-opus-4-7` / `medium`
-- Pi fallback: `openai/gpt-5.4` / `medium`
+- default server policy: omit provider/model and expect `pi` with
+  `anthropic/claude-opus-4-7` / `medium`
+- explicit codex override: `codex` with `gpt-5.4` / `medium`
+- explicit Pi fallback: `openai-codex/gpt-5.4` / `medium`
 
 Worker providers under test:
 
 - `codex` with `gpt-5.3-codex` / `medium`
 - `claude-code` with `claude-sonnet-4-6` / `medium`
 - `pi` with `anthropic/claude-sonnet-4-6`
-- Pi fallback: `openai/gpt-5.4`
+- Pi fallback: `openai-codex/gpt-5.4`
 
 Core behaviors under test:
 
+- server-default manager hire with omitted provider/model
 - hire -> immediate hatch -> meet-and-greet
 - delegation to child threads
+- fresh managed child threads default to isolated managed worktrees
+- managed child execution defaults to `workspace-write` when the provider
+  supports it
 - kickoff and completion user updates via `message_user`
 - no polling loops while waiting for child completion
 - automated manager system messages for welcome, child completion, assignment,
@@ -148,12 +153,40 @@ bb thread list --project "$BB_PROJECT_ID" --parent-thread "$MANAGER_ID" --archiv
 bb thread log "$MANAGER_ID" --format verbose
 bb thread log "$MANAGER_ID" --json --limit 200 | jq
 bb thread show "$THREAD_ID" --json | jq
+bb environment show "$ENV_ID" --json | jq
 bb thread output "$THREAD_ID"
 sqlite3 "$SERVER_DB" "select thread_id,name,cron,timezone,next_fire_at from manager_thread_nudges order by thread_id,name;"
 find "$BB_ROOT/thread-storage" -maxdepth 2 -type f | sort
 ```
 
-## Scenario 1: Codex Hire And Hatch
+## Scenario 1: Server-Default Hire And Hatch
+
+Hire the manager without provider or model overrides:
+
+```bash
+DEFAULT_MANAGER_ID=$(bb manager hire "$BB_PROJECT_ID" \
+  --json | jq -r '.id')
+
+bb manager list --project "$BB_PROJECT_ID"
+bb thread wait "$DEFAULT_MANAGER_ID" --status idle --timeout 240
+bb manager status "$DEFAULT_MANAGER_ID"
+bb thread show "$DEFAULT_MANAGER_ID" --json | jq '{id, providerId, type, status}'
+bb thread output "$DEFAULT_MANAGER_ID"
+bb thread log "$DEFAULT_MANAGER_ID" --format verbose
+```
+
+Expected:
+
+- the hired thread is type `manager`
+- the manager starts immediately and reaches `idle`
+- the thread provider is `pi`
+- if the initial execution payload is visible in the manager log, it shows the
+  server default manager target of `anthropic/claude-opus-4-7` / `medium`
+- the first visible manager message is a meet-and-greet sent without any user
+  prompt
+- the welcome behavior is visible in the manager log
+
+## Scenario 2: Explicit Codex Override And Hatch
 
 Hire the manager:
 
@@ -162,6 +195,7 @@ CODEX_MANAGER_ID=$(bb manager hire "$BB_PROJECT_ID" \
   --provider codex \
   --model gpt-5.4 \
   --reasoning-level medium \
+  --permission-mode workspace-write \
   --json | jq -r '.id')
 
 bb manager list --project "$BB_PROJECT_ID"
@@ -175,11 +209,12 @@ Expected:
 
 - the hired thread is type `manager`
 - the manager starts immediately and reaches `idle`
+- the explicit codex override is reflected in the thread provider
 - the first visible manager message is a meet-and-greet sent without any user
   prompt
 - the welcome behavior is visible in the manager log
 
-## Scenario 2: Preference Intake And Simple Delegation
+## Scenario 3: Preference Intake, Simple Delegation, And Isolation Defaults
 
 Give the manager durable routing and workflow preferences:
 
@@ -203,17 +238,32 @@ bb thread log "$CODEX_MANAGER_ID" --format verbose
 bb thread wait "$CODEX_MANAGER_ID" --status idle --timeout 480
 bb thread output "$CODEX_MANAGER_ID"
 bb thread log "$CODEX_MANAGER_ID" --json --limit 200 | jq
+
+CODEX_CHILD_ID=$(bb thread list \
+  --project "$BB_PROJECT_ID" \
+  --parent-thread "$CODEX_MANAGER_ID" \
+  --json | jq -r 'map(select(.status != "archived")) | .[0].id')
+CODEX_CHILD_ENV_ID=$(bb thread show "$CODEX_CHILD_ID" --json | jq -r '.environmentId')
+
+bb thread show "$CODEX_CHILD_ID" --json | jq '{id, providerId, parentThreadId, environmentId, status}'
+bb environment show "$CODEX_CHILD_ENV_ID" --json | jq '{id, path, managed, workspaceProvisionType, isWorktree, status}'
+bb thread log "$CODEX_CHILD_ID" --json --limit 80 | jq
 ```
 
 Expected:
 
 - the manager creates at least one managed child thread
 - the child thread is linked with `parentThreadId=<manager-id>`
+- the child thread gets its own environment instead of reusing `$PROJECT_ROOT`
+- `bb environment show` reports `workspaceProvisionType=managed-worktree`
+  and `isWorktree=true`
+- if the child execution payload is visible in the log, `permissionMode` is
+  `workspace-write` for providers that support it
 - the manager sends a short kickoff update after delegation
 - the manager later sends a completion update after the child completes
 - the manager does not pretend it directly made the repo edits itself
 
-## Scenario 3: No Polling And Child Completion Signaling
+## Scenario 4: No Polling And Child Completion Signaling
 
 Inspect the manager log from Scenario 2 and verify that completion was not
 detected via repetitive CLI polling:
@@ -231,7 +281,7 @@ Expected:
 - the log shows a managed-thread completion event or equivalent system message
   before the final completion update
 
-## Scenario 4: Multiple Threads And Provider Routing
+## Scenario 5: Multiple Threads And Provider Routing
 
 Give the manager independent backend and frontend work in one request:
 
@@ -264,7 +314,7 @@ If the thread JSON includes provider fields, confirm that the backend-oriented
 child used `codex` and the frontend-oriented child used `claude-code`. If not,
 use the child-thread logs as supporting evidence.
 
-## Scenario 5: Same-Environment Review Workflow
+## Scenario 6: Same-Environment Review Workflow
 
 Ask the manager to run the user’s preferred code -> review -> triage workflow:
 
@@ -276,17 +326,23 @@ bb thread wait "$CODEX_MANAGER_ID" --status idle --timeout 600
 bb thread output "$CODEX_MANAGER_ID"
 bb thread list --project "$BB_PROJECT_ID" --parent-thread "$CODEX_MANAGER_ID" --json > /tmp/codex-manager-review-flow.json
 jq '.[] | {id, title, status, environmentId}' /tmp/codex-manager-review-flow.json
+
+IMPLEMENTATION_THREAD_ID=$(jq -r '.[0].id' /tmp/codex-manager-review-flow.json)
+REVIEW_THREAD_ID=$(jq -r '.[1].id' /tmp/codex-manager-review-flow.json)
+bb thread show "$IMPLEMENTATION_THREAD_ID" --json | jq '{id, environmentId, status}'
+bb thread show "$REVIEW_THREAD_ID" --json | jq '{id, environmentId, status}'
 ```
 
 Expected:
 
 - the manager creates an implementation thread and a separate review thread
 - the review thread reuses the implementation environment
+- the review reuse is explicit rather than the default for fresh child threads
 - the manager forwards review findings back to the implementation thread when
   there is actionable feedback
 - the manager notifies the user when the work is ready for manual testing
 
-## Scenario 6: Ownership Transfer, Assigned Message, And Unassigned Message
+## Scenario 7: Ownership Transfer, Assigned Message, And Unassigned Message
 
 Start a standalone unassigned thread:
 
@@ -296,6 +352,7 @@ UNASSIGNED_THREAD_ID=$(bb thread spawn \
   --provider codex \
   --model gpt-5.3-codex \
   --reasoning-level medium \
+  --new-environment worktree \
   --title "Standalone prototype" \
   --prompt "Prototype a small improvement to README.md and src/dashboard.js. Work carefully and explain what you changed." \
   --json | jq -r '.id')
@@ -329,7 +386,7 @@ Expected:
 - after `--clear-parent-thread`, the manager receives the unassignment event
 - the manager stops treating the thread as active managed work after unassign
 
-## Scenario 7: Archive Judgment
+## Scenario 8: Archive Judgment
 
 Ask for quick research that should become an archive candidate while keeping
 useful implementation threads available:
@@ -352,7 +409,7 @@ Expected:
 - the manager does not archive active or likely-to-be-reused implementation
   threads prematurely
 
-## Scenario 8: `ASYNC.md` Scheduling
+## Scenario 9: `ASYNC.md` Scheduling
 
 Ask for reminder-style scheduled work:
 
@@ -383,7 +440,7 @@ Expected:
 - manager-thread nudges are synced for the manager after it goes idle
 - the manager treats reminder requests as scheduling work, not as transient chat
 
-## Scenario 9: Pi Manager Smoke
+## Scenario 10: Pi Manager Smoke
 
 Run a smaller provider regression with Pi as the manager:
 
@@ -422,7 +479,7 @@ If Pi Anthropic is unstable or unavailable, rerun this scenario with:
 ```bash
 bb manager hire "$BB_PROJECT_ID" \
   --provider pi \
-  --model openai/gpt-5.4 \
+  --model openai-codex/gpt-5.4 \
   --reasoning-level medium \
   --json
 ```
@@ -434,9 +491,12 @@ Record the fallback in the pass log if used.
 This run is green only if all of the following are true:
 
 - both `codex` and `pi` managers can be hired from the CLI
+- omitted provider/model manager hire uses the server manager policy
 - the hired manager hatches immediately and initiates a meet-and-greet without
   prompting
 - substantive work is delegated to child threads
+- fresh managed child threads default to managed worktrees instead of the
+  primary checkout
 - kickoff and completion updates are sent via the visible manager channel
 - the manager does not rely on repeated polling loops to discover child
   completion

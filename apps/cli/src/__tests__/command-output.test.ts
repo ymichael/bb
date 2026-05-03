@@ -269,6 +269,30 @@ async function runCommand(
   await program.parseAsync(["node", "bb", ...args]);
 }
 
+async function getHelpOutput(
+  args: string[],
+  register: (program: Command) => void,
+): Promise<string> {
+  const program = new Command();
+  const writeOut = vi.fn();
+  program.exitOverride();
+  program.configureOutput({
+    writeOut,
+    writeErr: vi.fn(),
+  });
+  register(program);
+
+  await expect(
+    program.parseAsync(["node", "bb", ...args, "--help"]),
+  ).rejects.toMatchObject({
+    code: "commander.helpDisplayed",
+  });
+
+  return writeOut.mock.calls
+    .map((callArgs) => String(callArgs[0] ?? ""))
+    .join("");
+}
+
 describe("CLI command output contracts", () => {
   const createClientMock = vi.mocked(createClient);
   const unwrapMock = vi.mocked(unwrap);
@@ -843,6 +867,80 @@ describe("CLI command output contracts", () => {
     );
   });
 
+  it("bb manager hire forwards managed permission mode", async () => {
+    const post = vi.fn(async () => ({
+      id: "thread-manager-4",
+      projectId: "project-123",
+      title: "Manager",
+      type: "manager",
+      status: "active",
+      createdAt: 1,
+      updatedAt: 2,
+    }));
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            projects: {
+              ":id": {
+                managers: {
+                  $post: post,
+                },
+              },
+            },
+          },
+        },
+      }),
+    );
+
+    await runCommand(
+      [
+        "manager",
+        "hire",
+        "project-123",
+        "--permission-mode",
+        "workspace-write",
+      ],
+      (program) => registerManagerCommands(program, () => "http://server"),
+    );
+
+    expect(post).toHaveBeenCalledWith({
+      param: { id: "project-123" },
+      json: {
+        environment: { type: "host", hostId: "host-test-001" },
+        origin: "cli",
+        permissionMode: "workspace-write",
+      },
+    });
+  });
+
+  it("bb manager hire help lists permission modes and server defaults", async () => {
+    const helpOutput = await getHelpOutput(["manager", "hire"], (program) =>
+      registerManagerCommands(program, () => "http://server"),
+    );
+
+    expect(helpOutput).toContain("--permission-mode <mode>");
+    expect(helpOutput).toMatch(
+      /Permission mode: full, workspace-write, or\s+readonly/,
+    );
+    expect(helpOutput).toMatch(
+      /remembered manager defaults or the server\s+manager policy/,
+    );
+  });
+
+  it("bb manager hire reports invalid permission mode choices", async () => {
+    await expect(
+      runCommand(
+        ["manager", "hire", "project-123", "--permission-mode", "unsafe"],
+        (program) => registerManagerCommands(program, () => "http://server"),
+      ),
+    ).rejects.toThrow("process.exit:1");
+
+    expect(console.error).toHaveBeenCalledWith(
+      "Error: Invalid permission mode 'unsafe'. Expected full, workspace-write, or readonly.",
+    );
+  });
+
   it("bb manager list reports when no managers are hired", async () => {
     const list = vi.fn(async () => []);
     createClientMock.mockReturnValue(
@@ -1194,22 +1292,9 @@ describe("CLI command output contracts", () => {
   });
 
   it("bb thread spawn help lists product permission modes", async () => {
-    const program = new Command();
-    const writeOut = vi.fn();
-    program.exitOverride();
-    program.configureOutput({
-      writeOut,
-      writeErr: vi.fn(),
-    });
-    registerThreadCommands(program, () => "http://server");
-
-    await expect(
-      program.parseAsync(["node", "bb", "thread", "spawn", "--help"]),
-    ).rejects.toMatchObject({ code: "commander.helpDisplayed" });
-
-    const helpOutput = writeOut.mock.calls
-      .map((args) => String(args[0] ?? ""))
-      .join("");
+    const helpOutput = await getHelpOutput(["thread", "spawn"], (program) =>
+      registerThreadCommands(program, () => "http://server"),
+    );
     expect(helpOutput).toContain("--permission-mode <mode>");
     expect(helpOutput).toMatch(
       /Permission mode: full, workspace-write, or\s+readonly/,

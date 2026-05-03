@@ -32,17 +32,11 @@ import { useHostDaemon } from "@/hooks/useHostDaemon";
 import { formatModelLabel } from "@/hooks/useThreadCreationOptions";
 import { getMutationErrorMessage } from "@/lib/mutation-errors";
 import { getProviderIconInfo } from "@/lib/provider-icon";
-import { PromptProviderModelPicker } from "@/components/promptbox/PromptProviderModelPicker";
 import {
   PromptOptionPicker,
   type PromptOption,
 } from "@/components/promptbox/PromptOptionPicker";
 import { HostPicker } from "@/components/promptbox/HostPicker";
-import {
-  resolvePreferredManagerModel,
-  resolvePreferredManagerProviderId,
-  resolvePreferredManagerReasoningLevel,
-} from "@/lib/manager-hire-defaults";
 
 const REASONING_LABELS: Record<ReasoningLevel, string> = {
   low: "Low",
@@ -51,6 +45,8 @@ const REASONING_LABELS: Record<ReasoningLevel, string> = {
   xhigh: "Extra High",
 };
 const EMPTY_SYSTEM_PROVIDERS: SystemProviderInfo[] = [];
+const SERVER_DEFAULT_PROVIDER_VALUE = "";
+type ReasoningSelectionSource = "default" | "user";
 
 interface HireManagerModalProps {
   projectId: string;
@@ -66,8 +62,7 @@ export function HireManagerModal({
   onHired,
 }: HireManagerModalProps) {
   const nameInputId = useId();
-  const providersQuery = useSystemProviders();
-  const providers = providersQuery.data ?? EMPTY_SYSTEM_PROVIDERS;
+  const providers = useSystemProviders().data ?? EMPTY_SYSTEM_PROVIDERS;
   const { data: projects } = useProjects();
   const { data: hosts = [] } = useEffectiveHosts();
   const { isLocalHost } = useHostDaemon();
@@ -78,23 +73,32 @@ export function HireManagerModal({
   }, [projects, projectId]);
 
   const [managerName, setManagerName] = useState("");
-  const [selectedProviderId, setSelectedProviderId] = useState<string>("");
+  const [selectedProviderId, setSelectedProviderId] = useState<string | null>(
+    null,
+  );
   const [selectedModel, setSelectedModel] = useState<string>("");
   const [selectedReasoningLevel, setSelectedReasoningLevel] = useState<
     ReasoningLevel | ""
   >("");
+  const [reasoningSelectionSource, setReasoningSelectionSource] =
+    useState<ReasoningSelectionSource>("default");
   const [selectedHostId, setSelectedHostId] = useState<string>("");
   const [isPending, setIsPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const effectiveProviderId = providers.some(
-    (provider) => provider.id === selectedProviderId,
-  )
-    ? selectedProviderId
-    : resolvePreferredManagerProviderId(providers);
-
-  const hasMultipleProviders = providers.length >= 2;
-
-  const modelsQuery = useAvailableModels(effectiveProviderId || undefined);
+  const selectedProvider = useMemo(
+    () =>
+      selectedProviderId
+        ? providers.find((provider) => provider.id === selectedProviderId) ?? null
+        : null,
+    [providers, selectedProviderId],
+  );
+  const selectedProviderValue =
+    selectedProviderId ?? SERVER_DEFAULT_PROVIDER_VALUE;
+  const hasProviderOverride = selectedProvider !== null;
+  const modelsQuery = useAvailableModels({
+    providerId: selectedProvider?.id,
+    enabled: hasProviderOverride,
+  });
   const models = useMemo(() => modelsQuery.data ?? [], [modelsQuery.data]);
 
   const selectedModelData = useMemo(
@@ -113,12 +117,19 @@ export function HireManagerModal({
     }, [selectedModelData]);
 
   const providerOptions = useMemo(
-    (): readonly PromptOption<string>[] =>
-      providers.map((p) => ({
+    (): readonly PromptOption<string>[] => [
+      {
+        value: SERVER_DEFAULT_PROVIDER_VALUE,
+        label: "Server Default",
+        description:
+          "Use remembered manager defaults for this project, otherwise the server manager default.",
+      },
+      ...providers.map((p) => ({
         value: p.id,
         label: p.displayName,
         icon: getProviderIconInfo(p.id)?.icon,
       })),
+    ],
     [providers],
   );
 
@@ -128,35 +139,59 @@ export function HireManagerModal({
         value: model.model,
         label: formatModelLabel(
           model.displayName || model.model,
-          effectiveProviderId,
+          selectedProvider?.id ?? SERVER_DEFAULT_PROVIDER_VALUE,
         ),
       })),
-    [effectiveProviderId, models],
+    [models, selectedProvider],
   );
 
   // Reset model and reasoning when provider changes.
   useEffect(() => {
     setSelectedModel("");
     setSelectedReasoningLevel("");
-  }, [effectiveProviderId]);
+    setReasoningSelectionSource("default");
+  }, [selectedProviderId]);
 
   useEffect(() => {
-    if (models.length > 0 && !models.some((m) => m.model === selectedModel)) {
-      setSelectedModel(resolvePreferredManagerModel(models));
+    if (
+      hasProviderOverride &&
+      models.length > 0 &&
+      !models.some((m) => m.model === selectedModel)
+    ) {
+      setSelectedModel(
+        models.find((model) => model.isDefault)?.model ?? models[0]?.model ?? "",
+      );
     }
-  }, [models, selectedModel]);
+  }, [hasProviderOverride, models, selectedModel]);
 
-  // Reset reasoning level when model changes.
   useEffect(() => {
-    setSelectedReasoningLevel(
-      resolvePreferredManagerReasoningLevel(selectedModelData),
+    if (!selectedModelData) {
+      setSelectedReasoningLevel("");
+      return;
+    }
+
+    const currentReasoningStillSupported = reasoningOptions.some(
+      (option) => option.value === selectedReasoningLevel,
     );
-  }, [selectedModelData]);
-  const effectiveReasoningLevel = reasoningOptions.some(
-    (option) => option.value === selectedReasoningLevel,
-  )
-    ? selectedReasoningLevel
-    : (reasoningOptions[0]?.value ?? "");
+    if (
+      reasoningSelectionSource === "user" &&
+      currentReasoningStillSupported
+    ) {
+      return;
+    }
+
+    setSelectedReasoningLevel(
+      selectedModelData.defaultReasoningEffort ?? reasoningOptions[0]?.value ?? "",
+    );
+  }, [
+    reasoningOptions,
+    reasoningSelectionSource,
+    selectedModelData,
+    selectedReasoningLevel,
+  ]);
+  const effectiveReasoningLevel =
+    reasoningOptions.find((option) => option.value === selectedReasoningLevel)
+      ?.value ?? reasoningOptions[0]?.value;
 
   // Auto-select the first connected host that has a source for this project.
   const eligibleHosts = useMemo(
@@ -179,15 +214,27 @@ export function HireManagerModal({
     }
   }, [eligibleHosts, selectedHostId, isLocalHost]);
 
-  const handleProviderChange = useCallback((id: string) => {
-    setSelectedProviderId(id);
+  const handleProviderChange = useCallback((value: string) => {
+    setSelectedProviderId(
+      value === SERVER_DEFAULT_PROVIDER_VALUE ? null : value,
+    );
     setError(null);
   }, []);
 
   const handleModelChange = useCallback((model: string) => {
     setSelectedModel(model);
+    setReasoningSelectionSource("default");
     setError(null);
   }, []);
+
+  const handleReasoningLevelChange = useCallback(
+    (reasoningLevel: ReasoningLevel) => {
+      setSelectedReasoningLevel(reasoningLevel);
+      setReasoningSelectionSource("user");
+      setError(null);
+    },
+    [],
+  );
 
   const hireManager = useHireProjectManager();
 
@@ -195,8 +242,8 @@ export function HireManagerModal({
     async (event: FormEvent<HTMLFormElement>) => {
       event.preventDefault();
       if (!projectId || isPending) return;
-      if (!effectiveProviderId || !selectedModel || !effectiveReasoningLevel) {
-        setError("Manager provider, model, and reasoning level are required");
+      if (selectedProvider && !selectedModel) {
+        setError("A model is required when overriding the server default");
         return;
       }
       if (!selectedHostId) {
@@ -210,9 +257,15 @@ export function HireManagerModal({
         const thread = await hireManager.mutateAsync({
           projectId,
           ...(trimmedManagerName ? { name: trimmedManagerName } : {}),
-          providerId: effectiveProviderId,
-          model: selectedModel,
-          reasoningLevel: effectiveReasoningLevel,
+          ...(selectedProvider
+            ? {
+                providerId: selectedProvider.id,
+                model: selectedModel,
+                ...(effectiveReasoningLevel
+                  ? { reasoningLevel: effectiveReasoningLevel }
+                  : {}),
+              }
+            : {}),
           environment: { type: "host", hostId: selectedHostId },
         });
         onHired(thread);
@@ -237,7 +290,7 @@ export function HireManagerModal({
       projectId,
       selectedModel,
       selectedHostId,
-      effectiveProviderId,
+      selectedProvider,
       effectiveReasoningLevel,
     ],
   );
@@ -276,37 +329,47 @@ export function HireManagerModal({
               />
             </DetailRow>
             <DetailRow label="Model" valueClassName="min-w-0">
-              {modelOptions.length > 0 ? (
-                <div className="flex min-w-0 flex-wrap items-center">
-                  <PromptProviderModelPicker
-                    className="text-foreground"
-                    providerOptions={providerOptions}
-                    selectedProviderId={effectiveProviderId}
-                    onSelectedProviderChange={handleProviderChange}
-                    hasMultipleProviders={hasMultipleProviders}
-                    modelValue={selectedModel}
-                    modelOptions={modelOptions}
-                    onModelChange={handleModelChange}
-                    formatModelLabel={formatModelLabel}
-                    fastModeEnabled={false}
-                    onFastModeChange={() => {}}
-                    showFastModeToggle={false}
-                  />
-                  {reasoningOptions.length > 0 ? (
-                    <PromptOptionPicker
-                      label="Reasoning"
-                      value={effectiveReasoningLevel}
-                      options={reasoningOptions}
-                      onChange={setSelectedReasoningLevel}
-                      className="text-foreground"
-                    />
-                  ) : null}
-                </div>
-              ) : (
-                <span className="text-muted-foreground text-sm">
-                  Loading models…
-                </span>
-              )}
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <PromptOptionPicker
+                  label="Provider"
+                  value={selectedProviderValue}
+                  options={providerOptions}
+                  onChange={handleProviderChange}
+                  className="text-foreground"
+                  contentClassName="min-w-64"
+                />
+                {hasProviderOverride ? (
+                  modelOptions.length > 0 ? (
+                    <>
+                      <PromptOptionPicker
+                        label="Model"
+                        value={selectedModel}
+                        options={modelOptions}
+                        onChange={handleModelChange}
+                        className="text-foreground"
+                        contentClassName="min-w-64"
+                      />
+                      {reasoningOptions.length > 0 ? (
+                        <PromptOptionPicker
+                          label="Reasoning"
+                          value={effectiveReasoningLevel ?? reasoningOptions[0]!.value}
+                          options={reasoningOptions}
+                          onChange={handleReasoningLevelChange}
+                          className="text-foreground"
+                        />
+                      ) : null}
+                    </>
+                  ) : (
+                    <span className="text-sm text-muted-foreground">
+                      Loading models…
+                    </span>
+                  )
+                ) : (
+                  <span className="text-sm text-muted-foreground">
+                    Using server-owned manager defaults unless you choose an override.
+                  </span>
+                )}
+              </div>
             </DetailRow>
             <DetailRow label="Host" valueClassName="min-w-0">
               <HostPicker

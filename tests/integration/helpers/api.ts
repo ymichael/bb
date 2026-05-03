@@ -43,6 +43,7 @@ export interface CreateHostThreadOptions {
   execution?: ThreadExecutionRequestOptions;
   hostId: string;
   input?: CreateThreadRequest["input"];
+  origin?: CreateThreadRequest["origin"];
   projectId: string;
   providerId?: string;
   title?: string;
@@ -56,9 +57,15 @@ export interface CreateReuseThreadOptions {
   execution?: ThreadExecutionRequestOptions;
   environmentId: string;
   input?: CreateThreadRequest["input"];
+  origin?: CreateThreadRequest["origin"];
   projectId: string;
   providerId?: string;
   title?: string;
+}
+
+export interface CreateManagerThreadOptions
+  extends Omit<CreateManagerThreadRequest, "origin"> {
+  origin?: CreateManagerThreadRequest["origin"];
 }
 
 export type ThreadExecutionRequestOptions = Pick<
@@ -81,6 +88,7 @@ export interface GetAvailableModelsOptions {
 type PublicApiClient = ReturnType<typeof createPublicApiClient>;
 const DEFAULT_THREAD_BOOTSTRAP_TEXT =
   "Reply with exactly READY and nothing else.";
+const DEFAULT_PUBLIC_TEST_THREAD_ORIGIN = "app";
 
 async function expectStatus(
   response: Response,
@@ -142,11 +150,14 @@ export async function createProject(
 export async function createManagerThread(
   api: PublicApiClient,
   projectId: string,
-  request: CreateManagerThreadRequest,
+  request: CreateManagerThreadOptions,
 ): Promise<Thread> {
   const response = await api.projects[":id"].managers.$post({
     param: { id: projectId },
-    json: request,
+    json: {
+      ...request,
+      origin: request.origin ?? DEFAULT_PUBLIC_TEST_THREAD_ORIGIN,
+    },
   });
   await expectStatus(
     response,
@@ -160,6 +171,7 @@ export async function createHostThread(
   api: PublicApiClient,
   options: CreateHostThreadOptions,
 ): Promise<Thread> {
+  const origin = options.origin ?? DEFAULT_PUBLIC_TEST_THREAD_ORIGIN;
   const providerId = options.providerId ?? "fake";
   const { model, ...execution } = options.execution ?? {};
   const response = await api.threads.$post({
@@ -170,6 +182,7 @@ export async function createHostThread(
         workspace: options.workspace,
       },
       input: options.input ?? defaultThreadInput(DEFAULT_THREAD_BOOTSTRAP_TEXT),
+      origin,
       ...execution,
       model: model ?? defaultModelForProvider(providerId),
       projectId: options.projectId,
@@ -185,6 +198,7 @@ export async function createReuseThread(
   api: PublicApiClient,
   options: CreateReuseThreadOptions,
 ): Promise<Thread> {
+  const origin = options.origin ?? DEFAULT_PUBLIC_TEST_THREAD_ORIGIN;
   const providerId = options.providerId ?? "fake";
   const { model, ...execution } = options.execution ?? {};
   const response = await api.threads.$post({
@@ -194,6 +208,7 @@ export async function createReuseThread(
         environmentId: options.environmentId,
       },
       input: options.input ?? defaultThreadInput(DEFAULT_THREAD_BOOTSTRAP_TEXT),
+      origin,
       ...execution,
       model: model ?? defaultModelForProvider(providerId),
       projectId: options.projectId,

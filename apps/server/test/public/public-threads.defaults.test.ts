@@ -307,6 +307,47 @@ describe("public thread default routes", () => {
     }
   });
 
+  it("rejects thread creation without an origin at the public API boundary", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/thread-defaults-missing-origin",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/thread-defaults-missing-origin",
+      });
+
+      const response = await harness.app.request("/api/v1/threads", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          projectId: project.id,
+          providerId: "codex",
+          model: "gpt-5-mini",
+          input: [{ type: "text", text: "Create without origin" }],
+          environment: {
+            type: "reuse",
+            environmentId: environment.id,
+          },
+        }),
+      });
+
+      expect(response.status).toBe(400);
+      await expect(readJson(response)).resolves.toMatchObject({
+        code: "invalid_request",
+        message: expect.stringContaining('expected one of "app"|"cli"'),
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("does not overwrite project execution defaults after a standard thread send", async () => {
     const harness = await createTestAppHarness();
     try {

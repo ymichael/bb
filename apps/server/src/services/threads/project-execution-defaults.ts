@@ -12,6 +12,7 @@ import type {
   ThreadCreateServiceRequest,
   ThreadCreateServiceRequestInput,
 } from "./thread-create-request.js";
+import { resolveCreateThreadExecutionDefaults } from "./thread-default-policy.js";
 
 export interface RememberProjectExecutionDefaultsForCreateArgs {
   execution: ResolvedThreadExecutionOptions;
@@ -20,7 +21,6 @@ export interface RememberProjectExecutionDefaultsForCreateArgs {
 
 export interface ResolveProjectExecutionDefaultsForCreateArgs {
   model?: ThreadCreateServiceRequestInput["model"];
-  origin: ThreadCreateServiceRequestInput["origin"];
   projectId: string;
   providerId?: ThreadCreateServiceRequestInput["providerId"];
   threadType: ThreadCreateServiceRequestInput["type"];
@@ -42,34 +42,24 @@ export function resolveProjectExecutionDefaultsForCreate(
   deps: Pick<AppDeps, "db">,
   args: ResolveProjectExecutionDefaultsForCreateArgs,
 ): ResolvedProjectExecutionDefaultsForCreate {
-  if (!args.origin) {
-    if (!args.providerId) {
-      throw new ApiError(400, "invalid_request", "Provider is required");
-    }
-    if (!args.model) {
-      throw new ApiError(400, "invalid_request", "Model is required");
-    }
-    return {
-      executionDefaults: null,
-      providerId: args.providerId,
-    };
-  }
-
   const storedDefaults = getProjectExecutionDefaults(deps.db, {
     projectId: args.projectId,
     threadType: args.threadType,
   });
-  const providerId = args.providerId ?? storedDefaults?.providerId;
-  if (!providerId) {
+  const resolution = resolveCreateThreadExecutionDefaults({
+    requestedProviderId: args.providerId,
+    storedDefaults,
+    threadType: args.threadType,
+  });
+  if (resolution.kind === "provider_required") {
     throw new ApiError(
       400,
       "invalid_request",
       `Provider is required when project ${args.projectId} has no stored execution defaults for thread type ${args.threadType}`,
     );
   }
+  const { executionDefaults, providerId } = resolution;
 
-  const executionDefaults =
-    storedDefaults?.providerId === providerId ? storedDefaults : null;
   if (!args.model && !executionDefaults) {
     throw new ApiError(
       400,

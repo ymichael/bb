@@ -76,21 +76,17 @@ const INTENTIONAL_OPTIONAL_SERVER_FIELDS: Record<string, string> = {
   "updateAutomationRequestSchema.trigger":
     "Automation PATCH requests omit trigger when leaving it unchanged.",
   "createManagerThreadRequestSchema.model":
-    "Manager creation may omit model and inherit the project/provider manager default.",
+    "Manager creation may omit model and inherit remembered manager defaults for the resolved provider or the server manager default.",
   "createManagerThreadRequestSchema.name":
     "Manager creation may omit a custom name and use the server-generated default.",
-  "createManagerThreadRequestSchema.origin":
-    "Legacy manager creation callers may omit origin when the server should treat the create surface as unknown.",
   "createManagerThreadRequestSchema.providerId":
-    "Manager creation may omit providerId and use the project's remembered manager provider choice.",
+    "Manager creation may omit providerId and use remembered manager defaults or the server manager default.",
   "createManagerThreadRequestSchema.permissionMode":
     "Manager creation may omit permission mode and use the server default.",
   "createManagerThreadRequestSchema.reasoningLevel":
     "Manager creation may omit reasoning level and use the server default.",
   "createManagerThreadRequestSchema.serviceTier":
     "Manager creation may omit service tier and use the server default.",
-  "createThreadRequestSchema.origin":
-    "Legacy thread creation callers may omit origin when the server should treat the create surface as unknown.",
   "createThreadRequestSchema.model":
     "Thread creation may omit model and inherit the project/provider default.",
   "createThreadRequestSchema.parentThreadId":
@@ -608,6 +604,27 @@ describe("server-contract canonical schemas", () => {
     ).toMatchObject({
       origin: "cli",
     });
+
+    expect(() =>
+      createThreadRequestSchema.parse({
+        projectId: "proj_123",
+        providerId: "codex",
+        input: [{ type: "text", text: "Ship it" }],
+        environment: {
+          type: "host",
+          hostId: "host_abc",
+          workspace: { type: "unmanaged", path: null },
+        },
+      }),
+    ).toThrow();
+
+    expect(() =>
+      createManagerThreadRequestSchema.parse({
+        reasoningLevel: "high",
+        name: "Missing origin",
+        environment: { type: "host", hostId: "host_123" },
+      }),
+    ).toThrow();
   });
 });
 

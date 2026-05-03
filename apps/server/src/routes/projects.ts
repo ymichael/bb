@@ -431,7 +431,7 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
 
       const thread = await createThreadFromRequest(deps, {
         automationId: null,
-        origin: payload.origin ?? null,
+        origin: payload.origin,
         projectId,
         providerId: payload.providerId,
         type: "manager",

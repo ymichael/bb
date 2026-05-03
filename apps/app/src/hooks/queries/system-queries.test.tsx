@@ -1,17 +1,19 @@
 // @vitest-environment jsdom
 
 import { cleanup, renderHook, waitFor } from "@testing-library/react";
-import type { Host } from "@bb/domain";
+import type { AvailableModel, Host } from "@bb/domain";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
 import { installFetchRoutes, jsonResponse } from "@/test/http-test-utils";
 import {
+  availableModelsQueryKey,
   cloudAuthAttemptQueryKey,
   cloudAuthSettingsQueryKey,
   hostQueryKey,
   sandboxEnvVarsQueryKey,
 } from "./query-keys";
 import {
+  useAvailableModels,
   useCloudAuthAttempt,
   useCloudAuthSettings,
   useHost,
@@ -28,6 +30,26 @@ function makeHost(overrides: Partial<Host> = {}): Host {
     status: "connected",
     type: "ephemeral",
     updatedAt: 1,
+    ...overrides,
+  };
+}
+
+function makeAvailableModel(
+  overrides: Partial<AvailableModel> = {},
+): AvailableModel {
+  return {
+    defaultReasoningEffort: "medium",
+    description: "Test model",
+    displayName: "Test Model",
+    id: "provider/test-model",
+    isDefault: true,
+    model: "provider/test-model",
+    supportedReasoningEfforts: [
+      {
+        description: "Medium reasoning effort",
+        reasoningEffort: "medium",
+      },
+    ],
     ...overrides,
   };
 }
@@ -94,6 +116,65 @@ describe("getEffectiveHost", () => {
         serverConnectionState: "reconnecting",
       }).status,
     ).toBe("suspended");
+  });
+});
+
+describe("useAvailableModels", () => {
+  it("fetches models without a provider filter when only a selected model is supplied", async () => {
+    const models = [
+      makeAvailableModel({
+        id: "anthropic/claude-opus-4-7",
+        model: "anthropic/claude-opus-4-7",
+        displayName: "Claude Opus 4.7",
+      }),
+    ];
+    const fetchMock = installFetchRoutes([
+      {
+        pathname: "/api/v1/system/models",
+        handler: async (request) => {
+          const url = new URL(request.url);
+          expect(url.searchParams.get("providerId")).toBeNull();
+          expect(url.searchParams.get("selectedModel")).toBe(
+            "anthropic/claude-opus-4-7",
+          );
+          return jsonResponse(models);
+        },
+      },
+    ]);
+
+    const { queryClient, wrapper } = createQueryClientTestHarness();
+    const { result } = renderHook(
+      () =>
+        useAvailableModels({
+          selectedModel: "anthropic/claude-opus-4-7",
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => {
+      expect(result.current.data).toEqual(models);
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(
+      queryClient.getQueryData(
+        availableModelsQueryKey(null, "anthropic/claude-opus-4-7"),
+      ),
+    ).toEqual(models);
+  });
+
+  it("stays disabled when explicitly disabled", () => {
+    const { wrapper } = createQueryClientTestHarness();
+    const { result } = renderHook(
+      () =>
+        useAvailableModels({
+          providerId: "pi",
+          enabled: false,
+        }),
+      { wrapper },
+    );
+
+    expect(result.current.fetchStatus).toBe("idle");
   });
 });
 

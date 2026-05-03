@@ -94,7 +94,7 @@ export type ThreadCreateOrigin = z.infer<typeof threadCreateOriginSchema>;
 export const createThreadRequestSchema = z.object({
   projectId: z.string().min(1),
   providerId: z.string().min(1).optional(),
-  origin: threadCreateOriginSchema.optional(),
+  origin: threadCreateOriginSchema,
   title: z.string().min(1).optional(),
   input: z.array(promptInputSchema).min(1),
   model: z.string().min(1).optional(),
@@ -107,7 +107,8 @@ export const createThreadRequestSchema = z.object({
 export type CreateThreadRequest = z.infer<typeof createThreadRequestSchema>;
 
 const automationThreadRequestSchema = z.object({
-  // Automations stay self-contained instead of inheriting project defaults.
+  // Automations must choose provider/model explicitly; omitted execution
+  // options may still inherit scheduled-thread defaults.
   providerId: z.string().min(1),
   title: z.string().min(1).optional(),
   input: z.array(promptInputSchema).min(1),
@@ -419,7 +420,7 @@ export type ManagerEnvironmentArgs = z.infer<
 export const createManagerThreadRequestSchema = z.object({
   name: z.string().min(1).optional(),
   providerId: z.string().min(1).optional(),
-  origin: threadCreateOriginSchema.optional(),
+  origin: threadCreateOriginSchema,
   model: z.string().min(1).optional(),
   serviceTier: serviceTierSchema.optional(),
   reasoningLevel: reasoningLevelSchema.optional(),

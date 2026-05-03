@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { markThreadDeleted } from "@bb/db";
 import {
   resolvePermissionEscalation,
   resolveExecutionOptions,
@@ -22,11 +23,33 @@ function resolveLocalTimezone(): string {
 }
 
 describe("thread runtime config", () => {
-  it("defaults execution permission mode to full", async () => {
+  it.each([
+    {
+      childProviderId: "codex",
+      expectedPermissionMode: "full",
+      managerProviderId: null,
+      name: "defaults root-thread execution permission mode to full",
+      requestedModel: "gpt-5",
+    },
+    {
+      childProviderId: "codex",
+      expectedPermissionMode: "workspace-write",
+      managerProviderId: "codex",
+      name: "defaults managed child execution permission mode to workspace-write when supported",
+      requestedModel: "gpt-5",
+    },
+    {
+      childProviderId: "pi",
+      expectedPermissionMode: "full",
+      managerProviderId: "pi",
+      name: "falls back to full for managed child execution when the provider does not support workspace-write",
+      requestedModel: "openai-codex/gpt-5.4",
+    },
+  ])("$name", async ({ childProviderId, expectedPermissionMode, managerProviderId, requestedModel }) => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps, {
-        id: "host-runtime-permission-mode",
+        id: `host-runtime-${childProviderId}-${managerProviderId ?? "root"}`,
       });
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -35,21 +58,126 @@ describe("thread runtime config", () => {
         hostId: host.id,
         projectId: project.id,
       });
+      const managerThread =
+        managerProviderId === null
+          ? null
+          : seedThread(harness.deps, {
+              projectId: project.id,
+              environmentId: environment.id,
+              type: "manager",
+              providerId: managerProviderId,
+            });
       const thread = seedThread(harness.deps, {
         projectId: project.id,
         environmentId: environment.id,
-        providerId: "codex",
+        parentThreadId: managerThread?.id ?? null,
+        providerId: childProviderId,
       });
 
       const execution = await resolveExecutionOptions(harness.deps, {
         threadId: thread.id,
+        requestedExecution: {
+          model: requestedModel,
+          source: "client/turn/requested",
+        },
+      });
+
+      expect(execution.permissionMode).toBe(expectedPermissionMode);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("ignores standard project permission defaults for managed child execution", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-runtime-managed-child-project-default-permission-mode",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const managerThread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        type: "manager",
+      });
+      const childThread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        parentThreadId: managerThread.id,
+        providerId: "codex",
+      });
+
+      const execution = await resolveExecutionOptions(harness.deps, {
+        threadId: childThread.id,
+        projectDefaults: {
+          providerId: "codex",
+          model: "gpt-5",
+          reasoningLevel: "medium",
+          permissionMode: "full",
+          serviceTier: "default",
+        },
         requestedExecution: {
           model: "gpt-5",
           source: "client/turn/requested",
         },
       });
 
-      expect(execution.permissionMode).toBe("full");
+      expect(execution.permissionMode).toBe("workspace-write");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("treats ghost parent references as root-thread execution defaults", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-runtime-deleted-parent-permission-mode",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const deletedManager = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        type: "manager",
+      });
+      markThreadDeleted(harness.db, harness.hub, {
+        threadId: deletedManager.id,
+      });
+      const childThread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        parentThreadId: deletedManager.id,
+        providerId: "codex",
+      });
+
+      const execution = await resolveExecutionOptions(harness.deps, {
+        threadId: childThread.id,
+        projectDefaults: {
+          providerId: "codex",
+          model: "gpt-5",
+          reasoningLevel: "medium",
+          permissionMode: "readonly",
+          serviceTier: "default",
+        },
+        requestedExecution: {
+          model: "gpt-5",
+          source: "client/turn/requested",
+        },
+      });
+
+      expect(execution.permissionMode).toBe("readonly");
     } finally {
       await harness.cleanup();
     }

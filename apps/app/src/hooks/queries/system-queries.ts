@@ -21,6 +21,12 @@ import {
   systemProvidersQueryKey,
 } from "./query-keys";
 
+export interface UseAvailableModelsArgs {
+  enabled?: boolean;
+  providerId?: string;
+  selectedModel?: string;
+}
+
 function requireQueryId(id: HostQueryId, hookName: string): string {
   if (!id) {
     throw new Error(`${hookName}: hostId is required when query is enabled`);
@@ -46,16 +52,14 @@ export function useHost(hostId: HostQueryId) {
   });
 }
 
-export function useAvailableModels(
-  providerId?: string,
-  selectedModel?: string,
-) {
+export function useAvailableModels(args: UseAvailableModelsArgs = {}) {
   return useQuery<AvailableModel[]>({
     queryKey: availableModelsQueryKey(
-      providerId ?? null,
-      selectedModel ?? null,
+      args.providerId ?? null,
+      args.selectedModel ?? null,
     ),
-    queryFn: () => api.getAvailableModels(providerId, selectedModel),
+    queryFn: () => api.getAvailableModels(args.providerId, args.selectedModel),
+    enabled: args.enabled ?? true,
     staleTime: 60_000,
   });
 }

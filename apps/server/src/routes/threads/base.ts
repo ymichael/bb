@@ -40,6 +40,7 @@ import {
   toThreadListEntryResponses,
   toThreadResponseFromThread,
 } from "../../services/threads/thread-runtime-display.js";
+import { assertValidManagerParentThread } from "../../services/threads/thread-parent.js";
 
 function formatThreadLabelForManager(thread: {
   id: string;
@@ -98,7 +99,7 @@ export function registerThreadBaseRoutes(app: Hono, deps: AppDeps): void {
     const thread = await createThreadFromRequest(deps, {
       ...payload,
       automationId: null,
-      origin: payload.origin ?? null,
+      origin: payload.origin,
       type: "standard",
     });
     return context.json(toThreadResponseFromThread(deps, { thread }), 201);
@@ -114,6 +115,12 @@ export function registerThreadBaseRoutes(app: Hono, deps: AppDeps): void {
 
   patch("/threads/:id", updateThreadRequestSchema, async (context, payload) => {
     const thread = requirePublicThread(deps.db, context.req.param("id"));
+    if (payload.parentThreadId) {
+      assertValidManagerParentThread(deps, {
+        parentThreadId: payload.parentThreadId,
+        projectId: thread.projectId,
+      });
+    }
     const updated = updateThread(deps.db, deps.hub, thread.id, payload);
     if (!updated) {
       throw new ApiError(404, "thread_not_found", "Thread not found");

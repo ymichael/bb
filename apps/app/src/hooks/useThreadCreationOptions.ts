@@ -390,10 +390,10 @@ export function useThreadCreationOptions(
     [providers],
   );
 
-  const availableModelsQuery = useAvailableModels(
-    hasMultipleProviders ? effectiveProviderId || undefined : undefined,
-    rawSelectedModel || undefined,
-  );
+  const availableModelsQuery = useAvailableModels({
+    providerId: hasMultipleProviders ? effectiveProviderId || undefined : undefined,
+    selectedModel: rawSelectedModel || undefined,
+  });
 
   const activeProviderCapabilities = selectedProviderInfo?.capabilities;
 

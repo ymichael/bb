@@ -197,6 +197,7 @@ describe("server integration", () => {
 
       const threadResponse = await publicClient.threads.$post({
         json: {
+          origin: "app",
           projectId: project.id,
           providerId: "codex",
           model: "gpt-5",
@@ -299,6 +300,7 @@ describe("server integration", () => {
       const thread = await (
         await publicClient.threads.$post({
           json: {
+            origin: "app",
             projectId: project.id,
             providerId: "codex",
             model: "gpt-5",
@@ -447,6 +449,7 @@ describe("server integration", () => {
       const thread = await (
         await publicClient.threads.$post({
           json: {
+            origin: "app",
             projectId: project.id,
             providerId: "codex",
             model: "gpt-5",

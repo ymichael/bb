@@ -385,7 +385,7 @@ describe("public project and host routes", () => {
     }
   });
 
-  it("stores manager defaults separately from standard thread defaults when hiring a manager from the app", async () => {
+  it("stores server-owned manager defaults separately from standard thread defaults when hiring a manager from the app", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps, {
@@ -415,9 +415,6 @@ describe("public project and host routes", () => {
           },
           body: JSON.stringify({
             origin: "app",
-            providerId: "codex",
-            model: "gpt-5",
-            reasoningLevel: "high",
             environment: { type: "host", hostId: host.id },
           }),
         },
@@ -442,9 +439,9 @@ describe("public project and host routes", () => {
           threadType: "manager",
         }),
       ).toEqual({
-        providerId: "codex",
-        model: "gpt-5",
-        reasoningLevel: "high",
+        providerId: "pi",
+        model: "anthropic/claude-opus-4-7",
+        reasoningLevel: "medium",
         permissionMode: "full",
         serviceTier: "default",
       });
@@ -506,6 +503,81 @@ describe("public project and host routes", () => {
     }
   });
 
+  it("uses the server-owned manager defaults when the CLI omits provider and model with no stored manager defaults", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-manager-defaults-cli-fallback",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/manager-defaults-cli-fallback",
+      });
+
+      const response = await harness.app.request(
+        `/api/v1/projects/${project.id}/managers`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            origin: "cli",
+            environment: { type: "host", hostId: host.id },
+          }),
+        },
+      );
+
+      expect(response.status).toBe(201);
+      await expect(readJson(response)).resolves.toMatchObject({
+        providerId: "pi",
+        type: "manager",
+      });
+      expect(
+        getProjectExecutionDefaults(harness.db, {
+          projectId: project.id,
+          threadType: "manager",
+        }),
+      ).toBeNull();
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("rejects manager creation without an origin at the public API boundary", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-manager-missing-origin",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/manager-missing-origin",
+      });
+
+      const response = await harness.app.request(
+        `/api/v1/projects/${project.id}/managers`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            environment: { type: "host", hostId: host.id },
+          }),
+        },
+      );
+
+      expect(response.status).toBe(400);
+      await expect(readJson(response)).resolves.toMatchObject({
+        code: "invalid_request",
+        message: expect.stringContaining('expected one of "app"|"cli"'),
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("keeps created threads pending deletion until queued thread.start work is stopped", async () => {
     const harness = await createTestAppHarness();
     try {
@@ -530,6 +602,7 @@ describe("public project and host routes", () => {
             "content-type": "application/json",
           },
           body: JSON.stringify({
+            origin: "app",
             projectId: project.id,
             providerId: "codex",
             model: "gpt-5",
@@ -1386,6 +1459,7 @@ describe("public project and host routes", () => {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
+            origin: "app",
             projectId: project.id,
             providerId: "codex",
             model: "gpt-5",

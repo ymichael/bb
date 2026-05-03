@@ -90,9 +90,9 @@ export function PromptProviderModelPicker({
   // so we don't disturb the committed state in the hook.
   const isPreviewing =
     previewProviderId !== null && previewProviderId !== selectedProviderId;
-  const previewModelsQuery = useAvailableModels(
-    isPreviewing ? previewProviderId : undefined,
-  );
+  const previewModelsQuery = useAvailableModels({
+    providerId: isPreviewing ? previewProviderId : undefined,
+  });
 
   const previewModelOptions = useMemo((): readonly PromptOption<string>[] => {
     if (!isPreviewing) return modelOptions;

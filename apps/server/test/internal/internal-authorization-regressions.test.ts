@@ -271,6 +271,7 @@ describe("internal authorization regressions", () => {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
+          origin: "app",
           projectId: projectA.id,
           providerId: "codex",
           model: "gpt-5",

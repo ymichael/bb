@@ -1843,7 +1843,7 @@ describe("pi provider adapter", () => {
     );
   });
 
-  it("includes selected-only Pi fallback models only when already selected", () => {
+  it("does not inject removed Pi fallback models", () => {
     const models = buildPiAvailableModels({
       providers: ["anthropic"],
       getModels: () => [
@@ -1860,15 +1860,6 @@ describe("pi provider adapter", () => {
       selectedModel: "anthropic/claude-opus-4-6",
     });
 
-    expect(models.map((model) => model.id)).toMatchObject([
-      "anthropic/claude-opus-4-6",
-      "anthropic/claude-opus-4-7",
-    ]);
-    expect(models[0]).toEqual(
-      expect.objectContaining({
-        displayName: "Claude Opus 4.6 (Legacy)",
-        isDefault: false,
-      }),
-    );
+    expect(models.map((model) => model.id)).toEqual(["anthropic/claude-opus-4-7"]);
   });
 });

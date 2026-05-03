@@ -10,9 +10,7 @@ import type {
   PermissionEscalation,
   PermissionMode,
   ProjectExecutionDefaults,
-  ReasoningLevel,
   ResolvedThreadExecutionOptions,
-  ServiceTier,
   Thread,
   ThreadExecutionOptions,
   ThreadExecutionSource,
@@ -26,10 +24,12 @@ import type { AppDeps, SandboxWorkSessionDeps } from "../../types.js";
 import { queueCommandAndWait } from "../hosts/command-wait.js";
 import { getLastExecutionOptions } from "./thread-events.js";
 import { requireThreadStoragePath } from "./thread-storage.js";
+import {
+  DEFAULT_REASONING_LEVEL,
+  DEFAULT_SERVICE_TIER,
+  resolveThreadExecutionPermissionMode,
+} from "./thread-default-policy.js";
 
-const DEFAULT_SERVICE_TIER: ServiceTier = "default";
-const DEFAULT_REASONING_LEVEL: ReasoningLevel = "medium";
-const DEFAULT_PERMISSION_MODE: PermissionMode = "full";
 const MANAGER_PREFERENCES_FILE_NAME = "PREFERENCES.md";
 const NO_MANAGER_PREFERENCES = "(file does not exist)";
 const STANDARD_AGENT_INSTRUCTIONS = renderTemplate(
@@ -188,6 +188,9 @@ export async function resolveExecutionOptions(
   const lastExecution = getLastExecutionOptions(deps, args.threadId);
   const projectExecution = args.projectDefaults ?? null;
   const thread = getThread(deps.db, args.threadId);
+  if (!thread) {
+    throw new ApiError(404, "thread_not_found", "Thread not found");
+  }
   const model =
     args.requestedExecution.model ??
     lastExecution?.model ??
@@ -199,13 +202,19 @@ export async function resolveExecutionOptions(
       `Thread ${args.threadId} has no stored execution model`,
     );
   }
+  const parentThread =
+    thread.parentThreadId !== null
+      ? getThread(deps.db, thread.parentThreadId)
+      : null;
 
-  const permissionMode =
-    args.requestedExecution.permissionMode ??
-    lastExecution?.permissionMode ??
-    projectExecution?.permissionMode ??
-    DEFAULT_PERMISSION_MODE;
-  validateProviderPermissionMode(thread?.providerId, permissionMode);
+  const permissionMode = resolveThreadExecutionPermissionMode({
+    requestedPermissionMode: args.requestedExecution.permissionMode,
+    lastExecutionPermissionMode: lastExecution?.permissionMode,
+    parentThread,
+    projectExecutionPermissionMode: projectExecution?.permissionMode,
+    thread,
+  });
+  validateProviderPermissionMode(thread.providerId, permissionMode);
 
   return {
     model,

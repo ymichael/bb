@@ -169,6 +169,84 @@ describe("automation sweep", () => {
     }
   });
 
+  it("inherits stored project execution defaults for omitted automation execution options", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-automation-inherited-defaults",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/automation-inherited-defaults-environment",
+      });
+      const now = Date.now();
+
+      upsertProjectExecutionDefaults(harness.db, {
+        projectId: project.id,
+        providerId: "codex",
+        threadType: "standard",
+        model: "gpt-5-mini",
+        reasoningLevel: "high",
+        permissionMode: "readonly",
+        serviceTier: "fast",
+      });
+
+      const automation = createAutomation(harness.db, harness.hub, {
+        projectId: project.id,
+        name: "Automation inherits defaults",
+        enabled: true,
+        triggerType: "schedule",
+        triggerConfig: JSON.stringify(
+          createScheduleTrigger(createDailySchedule({ times: ["08:00"] })),
+        ),
+        action: JSON.stringify({
+          actionType: "scheduled-thread",
+          threadRequest: {
+            providerId: "codex",
+            model: "gpt-5",
+            input: [{ type: "text", text: "Use inherited execution defaults" }],
+            environment: {
+              type: "reuse",
+              environmentId: environment.id,
+            },
+          },
+        }),
+        autoArchive: false,
+        nextRunAt: now - 1,
+      });
+
+      await sweepDueAutomations(harness.deps, { now });
+
+      const createdThread = harness.db
+        .select()
+        .from(threads)
+        .where(eq(threads.automationId, automation.id))
+        .get();
+      if (!createdThread) {
+        throw new Error("Expected automation thread to be created");
+      }
+
+      const queued = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "thread.start" &&
+          command.threadId === createdThread.id,
+      );
+      expect(queued.command.options).toMatchObject({
+        model: "gpt-5",
+        permissionMode: "readonly",
+        reasoningLevel: "high",
+        serviceTier: "fast",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("continues processing later due automations when one has an invalid stored schedule", async () => {
     const harness = await createTestAppHarness();
     try {

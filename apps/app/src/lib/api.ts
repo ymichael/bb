@@ -71,6 +71,11 @@ interface GetThreadTimelineTurnSummaryDetailsArgs
   extends TimelineTurnSummaryDetailsRequest {
   id: string;
 }
+export type AppCreateManagerThreadRequest = Omit<
+  CreateManagerThreadRequest,
+  "origin"
+>;
+export type AppCreateThreadRequest = Omit<CreateThreadRequest, "origin">;
 
 const MAX_ERROR_MESSAGE_LENGTH = 180;
 const HTML_DOCUMENT_PATTERN = /<!doctype html|<html[\s>]/i;
@@ -300,7 +305,7 @@ export async function createProject(
 
 export async function hireProjectManager(
   projectId: string,
-  options: CreateManagerThreadRequest,
+  options: AppCreateManagerThreadRequest,
 ): Promise<ThreadResponse> {
   return request<ThreadResponse>(
     apiClient.projects[":id"].managers.$post({
@@ -420,7 +425,7 @@ export async function transcribeVoiceInput(
 }
 
 export async function createThread(
-  req: CreateThreadRequest,
+  req: AppCreateThreadRequest,
 ): Promise<ThreadResponse> {
   return request<ThreadResponse>(
     apiClient.threads.$post({

@@ -52,17 +52,17 @@ export function registerManagerCommands(
   manager
     .command("hire [projectId]")
     .description(
-      "Hire a new manager for a project; omitted provider and execution flags inherit remembered manager defaults",
+      "Hire a new manager for a project; omitted provider and execution flags use remembered manager defaults or the server manager policy",
     )
     .option("--project <id>", "Project ID (defaults to BB_PROJECT_ID)")
     .option("--name <name>", "Manager name")
     .option(
       "--provider <id>",
-      "Provider ID for the manager. Omit to use the project's remembered manager provider choice",
+      "Provider ID for the manager. Omit to use the project's remembered manager defaults or the server manager policy",
     )
     .option(
       "--model <model>",
-      "Model ID for the manager. Omit to use the project's remembered manager default for the resolved provider",
+      "Model ID for the manager. Omit to use the remembered or server default for the resolved provider",
     )
     .option(
       "--reasoning-level <level>",

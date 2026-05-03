@@ -5,12 +5,12 @@ import {
 } from "@bb/domain";
 import type {
   CreateDraftRequest,
-  CreateThreadRequest,
   SendDraftResponse,
   TimelineConversationAttachments,
   TimelineRow,
 } from "@bb/server-contract";
 import * as api from "@/lib/api";
+import type { AppCreateThreadRequest } from "@/lib/api";
 import { wsManager } from "@/lib/ws";
 import { collectPromptAttachments } from "@/lib/prompt-attachments";
 import type { SendThreadMessageMutationRequest } from "./mutation-request-types";
@@ -55,7 +55,7 @@ export function useCreateThread() {
     meta: {
       errorMessage: "Failed to create thread.",
     },
-    mutationFn: (request: CreateThreadRequest) => api.createThread(request),
+    mutationFn: (request: AppCreateThreadRequest) => api.createThread(request),
     onMutate: async () => {
       await queryClient.cancelQueries({ queryKey: threadsQueryKey() });
     },

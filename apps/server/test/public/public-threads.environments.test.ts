@@ -231,6 +231,7 @@ describe("public thread environment routes", () => {
           "content-type": "application/json",
         },
         body: JSON.stringify({
+          origin: "app",
           projectId: project.id,
           providerId: "codex",
           model: "gpt-5",
@@ -312,6 +313,7 @@ describe("public thread environment routes", () => {
           "content-type": "application/json",
         },
         body: JSON.stringify({
+          origin: "app",
           projectId: project.id,
           providerId: "codex",
           model: "gpt-5",
@@ -361,6 +363,7 @@ describe("public thread environment routes", () => {
           "content-type": "application/json",
         },
         body: JSON.stringify({
+          origin: "app",
           projectId: project.id,
           providerId: "codex",
           model: "gpt-5",

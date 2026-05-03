@@ -53,6 +53,7 @@ describe("public thread send and steer routes", () => {
           "content-type": "application/json",
         },
         body: JSON.stringify({
+          origin: "app",
           projectId: project.id,
           providerId: "codex",
           model: "gpt-5",

@@ -63,6 +63,7 @@ describe("public thread sandbox-host routes", () => {
           "content-type": "application/json",
         },
         body: JSON.stringify({
+          origin: "app",
           projectId: project.id,
           providerId: "codex",
           type: "standard",
@@ -103,6 +104,7 @@ describe("public thread sandbox-host routes", () => {
           "content-type": "application/json",
         },
         body: JSON.stringify({
+          origin: "app",
           projectId: project.id,
           providerId: "codex",
           model: "gpt-5",
@@ -176,6 +178,7 @@ describe("public thread sandbox-host routes", () => {
           "content-type": "application/json",
         },
         body: JSON.stringify({
+          origin: "app",
           projectId: project.id,
           providerId: "codex",
           model: "gpt-5",
@@ -284,6 +287,7 @@ describe("public thread sandbox-host routes", () => {
           "content-type": "application/json",
         },
         body: JSON.stringify({
+          origin: "app",
           projectId: project.id,
           providerId: "codex",
           type: "standard",
@@ -434,6 +438,7 @@ describe("public thread sandbox-host routes", () => {
           "content-type": "application/json",
         },
         body: JSON.stringify({
+          origin: "app",
           projectId: project.id,
           providerId: "codex",
           type: "standard",
@@ -565,6 +570,7 @@ describe("public thread sandbox-host routes", () => {
           "content-type": "application/json",
         },
         body: JSON.stringify({
+          origin: "app",
           projectId: project.id,
           providerId: "codex",
           type: "standard",
@@ -590,6 +596,7 @@ describe("public thread sandbox-host routes", () => {
           "content-type": "application/json",
         },
         body: JSON.stringify({
+          origin: "app",
           projectId: project.id,
           providerId: "codex",
           type: "standard",
@@ -678,6 +685,7 @@ describe("public thread sandbox-host routes", () => {
           "content-type": "application/json",
         },
         body: JSON.stringify({
+          origin: "app",
           projectId: project.id,
           providerId: "codex",
           type: "standard",
@@ -763,6 +771,7 @@ describe("public thread sandbox-host routes", () => {
           "content-type": "application/json",
         },
         body: JSON.stringify({
+          origin: "app",
           projectId: project.id,
           providerId: "codex",
           type: "standard",
@@ -854,6 +863,7 @@ describe("public thread sandbox-host routes", () => {
           "content-type": "application/json",
         },
         body: JSON.stringify({
+          origin: "app",
           projectId: project.id,
           providerId: "codex",
           type: "standard",
@@ -898,6 +908,7 @@ describe("public thread sandbox-host routes", () => {
           "content-type": "application/json",
         },
         body: JSON.stringify({
+          origin: "app",
           projectId: project.id,
           providerId: "codex",
           type: "standard",
@@ -943,6 +954,7 @@ describe("public thread sandbox-host routes", () => {
           "content-type": "application/json",
         },
         body: JSON.stringify({
+          origin: "app",
           projectId: project.id,
           providerId: "codex",
           type: "standard",
@@ -986,6 +998,7 @@ describe("public thread sandbox-host routes", () => {
           "content-type": "application/json",
         },
         body: JSON.stringify({
+          origin: "app",
           projectId: project.id,
           providerId: "codex",
           type: "standard",
