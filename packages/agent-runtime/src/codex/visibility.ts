@@ -45,6 +45,10 @@ interface CodexMcpStartupStatusRawEvent {
   status?: string;
 }
 
+interface CodexRemoteControlStatusRawEvent {
+  kind: "remote-control-status";
+}
+
 interface CodexUnknownRawEvent {
   kind: "unknown";
   method: string;
@@ -53,6 +57,7 @@ interface CodexUnknownRawEvent {
 type CodexRawEvent =
   | CodexNotificationRawEvent
   | CodexMcpStartupStatusRawEvent
+  | CodexRemoteControlStatusRawEvent
   | CodexUnknownRawEvent;
 
 const CODEX_SERVER_NOTIFICATION_METHODS = {
@@ -179,6 +184,12 @@ function parseCodexRawEvent(event: JsonRpcMessage): CodexRawEvent {
     };
   }
 
+  if (event.method === "remoteControl/status/changed") {
+    return {
+      kind: "remote-control-status",
+    };
+  }
+
   if (isCodexServerNotificationMethod(event.method)) {
     return {
       kind: "notification",
@@ -205,6 +216,9 @@ function describeParsedCodexRawEvent(
         return { kind: "mcpServer/startupStatus/updated", coverage: "noise" };
       }
       return { kind: "mcpServer/startupStatus/updated", coverage: "unknown" };
+
+    case "remote-control-status":
+      return { kind: "remoteControl/status/changed", coverage: "noise" };
 
     case "notification":
       if (

@@ -1467,6 +1467,37 @@ describe("claude-code provider adapter", () => {
     ]);
   });
 
+  it("translateEvent ignores sdk user text echoes", () => {
+    const adapter = createClaudeCodeProviderAdapter();
+
+    const events = adapter.translateEvent({
+      jsonrpc: "2.0",
+      method: "sdk/message",
+      params: {
+        threadId: "bb-thread-1",
+        message: {
+          type: "user",
+          message: {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: "This session is being continued from a previous conversation.",
+              },
+            ],
+          },
+          parent_tool_use_id: null,
+          session_id: "sess-1",
+          uuid: "user-message-1",
+          timestamp: "2026-05-03T07:53:31.543Z",
+          isSynthetic: true,
+        },
+      },
+    });
+
+    expect(events).toEqual([]);
+  });
+
   it("translateEvent preserves the active turn on unknown sdk envelopes", () => {
     const adapter = createClaudeCodeProviderAdapter();
 

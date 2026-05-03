@@ -2702,6 +2702,20 @@ describe("codex provider adapter", () => {
     expect(events).toMatchObject([]);
   });
 
+  it("translateEvent ignores remote control status changes", () => {
+    const adapter = createCodexProviderAdapter();
+    const events = adapter.translateEvent({
+      jsonrpc: "2.0",
+      method: "remoteControl/status/changed",
+      params: {
+        status: "disabled",
+        environmentId: null,
+      },
+    });
+
+    expect(events).toEqual([]);
+  });
+
   it("decodeToolCallRequest preserves numeric request ids", () => {
     const adapter = createCodexProviderAdapter();
     expect(

@@ -96,14 +96,12 @@ interface ClaudeUnknownSdkRawEvent {
 
 interface ClaudeAssistantRawEvent {
   contentTypes: ClaudeMessageContentType[];
-  hasParentToolUseId: boolean;
   kind: "sdk/assistant";
   toolNames: string[];
 }
 
 interface ClaudeUserRawEvent {
   contentTypes: ClaudeMessageContentType[];
-  hasParentToolUseId: boolean;
   kind: "sdk/user";
 }
 
@@ -161,10 +159,6 @@ type ClaudeRawEvent =
 
 function assertNever(value: never): never {
   throw new Error(`Unhandled Claude visibility value: ${String(value)}`);
-}
-
-function hasClaudeParentToolUseId(message: StringRecord): boolean {
-  return typeof message["parent_tool_use_id"] === "string";
 }
 
 function toClaudeMessageContentType(
@@ -295,7 +289,6 @@ function parseClaudeRawEvent(event: JsonRpcMessage): ClaudeRawEvent {
         contentTypes: getMessageContentTypes(message).map(
           toClaudeMessageContentType,
         ),
-        hasParentToolUseId: hasClaudeParentToolUseId(message),
         toolNames: getClaudeToolNames(message),
       };
 
@@ -360,7 +353,6 @@ function parseClaudeRawEvent(event: JsonRpcMessage): ClaudeRawEvent {
         contentTypes: getMessageContentTypes(message).map(
           toClaudeMessageContentType,
         ),
-        hasParentToolUseId: hasClaudeParentToolUseId(message),
       };
 
     default:
@@ -421,7 +413,7 @@ function describeParsedClaudeRawEvent(
 
     case "sdk/user": {
       const kind = toClaudeMessageKind("sdk/user", event.contentTypes);
-      if (kind === "sdk/user:text" && event.hasParentToolUseId) {
+      if (kind === "sdk/user:text") {
         return { kind, coverage: "noise" };
       }
       if (kind === "sdk/user:tool_result") {
