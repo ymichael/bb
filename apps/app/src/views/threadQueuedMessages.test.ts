@@ -32,6 +32,20 @@ describe("threadQueuedMessages", () => {
     );
   });
 
+  it("preserves the attachment fallback for blank paths", () => {
+    const input: PromptInput[] = [
+      {
+        type: "localImage",
+        path: "  ",
+      },
+    ];
+
+    expect(formatQueuedFollowUpPreview(input)).toBe(
+      "Attachment only (Attachment)",
+    );
+    expect(queuedInputToDraft(input).attachments[0]?.name).toBe("Attachment");
+  });
+
   it("restores editable drafts from queued messages", () => {
     const draft = queuedInputToDraft([
       { type: "text", text: "Follow up" },

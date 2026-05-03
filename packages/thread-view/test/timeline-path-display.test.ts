@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { formatTimelinePath } from "../src/timeline-path-display.js";
+import {
+  fileNameFromPath,
+  formatTimelinePath,
+} from "../src/timeline-path-display.js";
 
 describe("formatTimelinePath", () => {
   it("uses full paths for text surfaces and compact names for app labels", () => {
@@ -24,5 +27,13 @@ describe("formatTimelinePath", () => {
         mode: "compact",
       }),
     ).toBe("CODE_REVIEW.md");
+  });
+
+  it("returns the last non-empty path segment for shared display labels", () => {
+    expect(fileNameFromPath("/tmp/repo/src/index.ts")).toBe("index.ts");
+    expect(fileNameFromPath("C:\\repo\\docs\\CODE_REVIEW.md")).toBe(
+      "CODE_REVIEW.md",
+    );
+    expect(fileNameFromPath("/tmp/repo/")).toBe("/tmp/repo/");
   });
 });

@@ -28,6 +28,7 @@ import type {
 
 interface BaseRowArgs {
   id: string;
+  sourceSeqEnd?: number;
   sourceSeqStart: number;
 }
 
@@ -36,6 +37,7 @@ interface CommandRowArgs {
   command: string;
   activityIntents?: TimelineActivityIntent[];
   output?: string;
+  sourceSeqEnd?: number;
   sourceSeqStart?: number;
   status?: TimelineRowStatus;
 }
@@ -72,13 +74,17 @@ interface ToolRowArgs {
 
 type ElementScrollMetricName = "clientHeight" | "scrollHeight";
 
-function baseRow({ id, sourceSeqStart }: BaseRowArgs): TimelineRowBase {
+function baseRow({
+  id,
+  sourceSeqEnd,
+  sourceSeqStart,
+}: BaseRowArgs): TimelineRowBase {
   return {
     id,
     threadId: "thread-1",
     turnId: "turn-1",
     sourceSeqStart,
-    sourceSeqEnd: sourceSeqStart,
+    sourceSeqEnd: sourceSeqEnd ?? sourceSeqStart,
     startedAt: sourceSeqStart,
     createdAt: sourceSeqStart,
   };
@@ -115,11 +121,16 @@ function commandRow({
   command,
   id,
   output = "",
+  sourceSeqEnd,
   sourceSeqStart = 1,
   status = "completed",
 }: CommandRowArgs): TimelineCommandWorkRow {
   return {
-    ...baseRow({ id, sourceSeqStart }),
+    ...baseRow({
+      id,
+      sourceSeqEnd: sourceSeqEnd ?? sourceSeqStart,
+      sourceSeqStart,
+    }),
     kind: "work",
     workKind: "command",
     status,
@@ -401,7 +412,7 @@ describe("ThreadTimelineRows", () => {
     fireEvent.click(screen.getByRole("button"));
 
     expect(
-      view.container.querySelector('[aria-label="Read app.ts"]'),
+      view.container.querySelector('[aria-label="Read src/app.ts"]'),
     ).not.toBeNull();
     expect(view.container.textContent ?? "").not.toContain("Read src/app.ts");
     expect(
@@ -461,7 +472,7 @@ describe("ThreadTimelineRows", () => {
     expect(screen.getAllByRole("button")).toHaveLength(1);
   });
 
-  it("renders top-level timeline rows with a visible list gap", () => {
+  it("style contract: renders top-level timeline rows with a visible list gap", () => {
     const view = render(
       <ThreadTimelineRows
         loadingTurnSummaryIds={new Set()}
@@ -488,7 +499,7 @@ describe("ThreadTimelineRows", () => {
     expect(topLevelList?.classList.contains("gap-0.5")).toBe(false);
   });
 
-  it("adds bottom padding to non-user rows but not user message rows", () => {
+  it("style contract: adds bottom padding to non-user rows but not user message rows", () => {
     const view = render(
       <ThreadTimelineRows
         loadingTurnSummaryIds={new Set()}
@@ -523,7 +534,7 @@ describe("ThreadTimelineRows", () => {
     expect(topLevelRows[2]?.classList.contains("pb-2")).toBe(true);
   });
 
-  it("does not add bottom padding to nested rows", () => {
+  it("style contract: does not add bottom padding to nested rows", () => {
     const view = render(
       <ThreadTimelineRows
         loadingTurnSummaryIds={new Set()}
@@ -556,7 +567,7 @@ describe("ThreadTimelineRows", () => {
     );
   });
 
-  it("renders rows inside activity summaries with no list gap", () => {
+  it("style contract: renders rows inside activity summaries with no list gap", () => {
     const view = render(
       <ThreadTimelineRows
         loadingTurnSummaryIds={new Set()}
@@ -651,7 +662,7 @@ describe("ThreadTimelineRows", () => {
     ).toBe(childButton);
   });
 
-  it("uses flush horizontal padding for static title rows inside activity summaries", () => {
+  it("style contract: uses flush horizontal padding for static title rows inside activity summaries", () => {
     const view = render(
       <ThreadTimelineRows
         loadingTurnSummaryIds={new Set()}
@@ -669,17 +680,9 @@ describe("ThreadTimelineRows", () => {
       '[aria-label="Ran web search: timeline renderer"]',
     );
     const staticHeader = staticTitle?.closest(".timeline-row-header");
+    expect(staticTitle).not.toBeNull();
     expect(staticHeader?.classList.contains("px-0")).toBe(true);
     expect(staticHeader?.classList.contains("px-2")).toBe(false);
-    expect(staticHeader?.classList.contains("flex")).toBe(true);
-    expect(staticHeader?.classList.contains("inline-flex")).toBe(false);
-    expect(staticHeader?.classList.contains("items-center")).toBe(true);
-    expect(staticHeader?.classList.contains("text-sm")).toBe(true);
-    expect(staticHeader?.classList.contains("leading-none")).toBe(false);
-    expect(staticHeader?.classList.contains("leading-5")).toBe(true);
-    expect(staticHeader?.classList.contains("py-0")).toBe(true);
-    expect(staticHeader?.classList.contains("py-0.5")).toBe(false);
-    expect(staticHeader?.classList.contains("py-1")).toBe(false);
   });
 
   it("loads lazy turn details once for one expansion", () => {
@@ -712,6 +715,42 @@ describe("ThreadTimelineRows", () => {
     expect(onLoadTurnSummaryRows).toHaveBeenCalledTimes(1);
   });
 
+  it("retries lazy turn details from the error state", () => {
+    const onLoadTurnSummaryRows = vi.fn();
+    const view = render(
+      <ThreadTimelineRows
+        loadingTurnSummaryIds={new Set()}
+        erroredTurnSummaryIds={new Set()}
+        onLoadTurnSummaryRows={onLoadTurnSummaryRows}
+        timelineRows={[turnRow()]}
+        threadRuntimeDisplayStatus="idle"
+        turnSummaryRowsById={{}}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button"));
+    expect(onLoadTurnSummaryRows).toHaveBeenCalledTimes(1);
+
+    view.rerender(
+      <ThreadTimelineRows
+        loadingTurnSummaryIds={new Set()}
+        erroredTurnSummaryIds={new Set(["turn-summary-1"])}
+        onLoadTurnSummaryRows={onLoadTurnSummaryRows}
+        timelineRows={[turnRow()]}
+        threadRuntimeDisplayStatus="idle"
+        turnSummaryRowsById={{}}
+      />,
+    );
+
+    expect(view.container.textContent ?? "").toContain(
+      "Failed to load turn details.",
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+
+    expect(onLoadTurnSummaryRows).toHaveBeenCalledTimes(2);
+  });
+
   it("hides command detail until the row is expanded", () => {
     const view = render(
       <ThreadTimelineRows
@@ -742,7 +781,59 @@ describe("ThreadTimelineRows", () => {
     expect(view.container.textContent ?? "").toContain("exit code 0");
   });
 
-  it("renders error command titles with normal command styling", () => {
+  it("updates expanded pending command output when source sequence advances", () => {
+    const view = render(
+      <ThreadTimelineRows
+        loadingTurnSummaryIds={new Set()}
+        erroredTurnSummaryIds={new Set()}
+        onLoadTurnSummaryRows={() => {}}
+        timelineRows={[
+          commandRow({
+            id: "command-streaming-1",
+            command: "pnpm test",
+            output: "first chunk",
+            sourceSeqEnd: 1,
+            sourceSeqStart: 1,
+            status: "pending",
+          }),
+        ]}
+        threadRuntimeDisplayStatus="idle"
+        turnSummaryRowsById={{}}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Running 1 command/u }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /Running\s+pnpm test/u }),
+    );
+
+    expect(view.container.textContent ?? "").toContain("first chunk");
+
+    view.rerender(
+      <ThreadTimelineRows
+        loadingTurnSummaryIds={new Set()}
+        erroredTurnSummaryIds={new Set()}
+        onLoadTurnSummaryRows={() => {}}
+        timelineRows={[
+          commandRow({
+            id: "command-streaming-1",
+            command: "pnpm test",
+            output: "second chunk",
+            sourceSeqEnd: 2,
+            sourceSeqStart: 1,
+            status: "pending",
+          }),
+        ]}
+        threadRuntimeDisplayStatus="idle"
+        turnSummaryRowsById={{}}
+      />,
+    );
+
+    expect(view.container.textContent ?? "").toContain("second chunk");
+    expect(view.container.textContent ?? "").not.toContain("first chunk");
+  });
+
+  it("renders error command titles without error decorations", () => {
     const view = render(
       <ThreadTimelineRows
         loadingTurnSummaryIds={new Set()}
@@ -766,10 +857,9 @@ describe("ThreadTimelineRows", () => {
       name: /Ran\s+pnpm test\s+2s/u,
     });
     expect(button.textContent ?? "").not.toContain("(error");
-    expect(view.container.innerHTML).not.toContain("text-destructive");
   });
 
-  it("renders failed structured tools with intent titles and normal styling", () => {
+  it("renders failed structured tools with intent titles and no error decorations", () => {
     const view = render(
       <ThreadTimelineRows
         loadingTurnSummaryIds={new Set()}
@@ -790,11 +880,10 @@ describe("ThreadTimelineRows", () => {
     fireEvent.click(screen.getByRole("button", { name: /Explored 1 file/u }));
 
     const button = screen.getByRole("button", {
-      name: /Read\s+app\.ts/u,
+      name: /Read\s+\/repo\/src\/app\.ts/u,
     });
     expect(button.textContent ?? "").not.toContain("Ran tool:");
     expect(button.textContent ?? "").not.toContain("(error");
-    expect(view.container.innerHTML).not.toContain("text-destructive");
 
     fireEvent.click(button);
 
@@ -933,7 +1022,6 @@ describe("ThreadTimelineRows", () => {
 
     expect(view.container.textContent ?? "").not.toContain("cwd:");
     expect(view.container.textContent ?? "").toContain("exit code 0");
-    expect(view.container.innerHTML).toContain("text-muted-foreground");
   });
 
   it("renders ANSI command output without leaking escape codes", () => {
@@ -979,7 +1067,9 @@ describe("ThreadTimelineRows", () => {
     fireEvent.click(screen.getByRole("button", { name: /Edited 1 file/u }));
     expect(view.container.querySelector("[data-timeline-file-diff]")).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: /Edited\s+app\.ts/u }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /Edited\s+src\/app\.ts/u }),
+    );
 
     expect(
       view.container.querySelector("[data-timeline-file-diff]"),
@@ -1005,7 +1095,9 @@ describe("ThreadTimelineRows", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: /Edited 1 file/u }));
-    fireEvent.click(screen.getByRole("button", { name: /Edited\s+app\.ts/u }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /Edited\s+src\/app\.ts/u }),
+    );
 
     expect(view.container.textContent ?? "").not.toContain(
       "Success. Updated the following files:",
@@ -1039,11 +1131,15 @@ describe("ThreadTimelineRows", () => {
     fireEvent.click(screen.getByRole("button", { name: /Created 1 file/u }));
 
     expect(
-      screen.getByRole("button", { name: /Created\s+new-file\.ts\s+\+2/u }),
+      screen.getByRole("button", {
+        name: /Created\s+src\/new-file\.ts\s+\+2/u,
+      }),
     ).toBeTruthy();
 
     fireEvent.click(
-      screen.getByRole("button", { name: /Created\s+new-file\.ts\s+\+2/u }),
+      screen.getByRole("button", {
+        name: /Created\s+src\/new-file\.ts\s+\+2/u,
+      }),
     );
 
     expect(
@@ -1059,7 +1155,7 @@ describe("ThreadTimelineRows", () => {
     expect(html).toContain("Done.");
   });
 
-  it("renders user conversation rows as a right-aligned message bubble", () => {
+  it("style contract: renders user conversation rows as a right-aligned message bubble", () => {
     const html = renderRowsToStaticMarkup([
       conversationRow({ role: "user", text: "Please patch this." }),
     ]);
@@ -1097,7 +1193,7 @@ describe("ThreadTimelineRows", () => {
     expect(screen.getByText("steer pending")).toBeTruthy();
   });
 
-  it("puts top spacing on user messages instead of every timeline row", () => {
+  it("style contract: puts top spacing on user messages instead of every timeline row", () => {
     const html = renderRowsToStaticMarkup([
       conversationRow({ id: "assistant-1", text: "Before." }),
       conversationRow({

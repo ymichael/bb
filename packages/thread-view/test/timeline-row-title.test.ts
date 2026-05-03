@@ -12,10 +12,10 @@ import {
   buildTimelineActivityIntentTitles,
   buildTimelineRowTitle,
   type BuildTimelineRowTitleOptions,
-  type TimelineActivitySummaryRow,
   type TimelineViewDelegationWorkRow,
   type TimelineViewWorkRow,
 } from "../src/index.js";
+import type { TimelineActivitySummaryRow } from "../src/timeline-view.js";
 
 const DEFAULT_OPTIONS: BuildTimelineRowTitleOptions = {
   preferOngoingLabel: false,

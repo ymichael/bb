@@ -13,6 +13,7 @@ import type {
 } from "@bb/server-contract";
 import { assertNever } from "./assert-never.js";
 import { getFileChangeAction } from "./file-change-summary.js";
+import { plural } from "./format-helpers.js";
 import { hasTimelineExplorationIntent } from "./timeline-activity-intents.js";
 
 export interface TimelineViewDelegationWorkRow extends Omit<
@@ -72,10 +73,6 @@ type TimelineActivitySummaryCategory =
 
 interface TimelineActivitySummaryRange extends TimelineRowBase {
   status: TimelineRowStatus;
-}
-
-function plural(count: number, singular: string, pluralName?: string): string {
-  return `${count} ${count === 1 ? singular : (pluralName ?? `${singular}s`)}`;
 }
 
 function lowerFirst(value: string): string {

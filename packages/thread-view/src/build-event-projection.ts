@@ -67,7 +67,6 @@ import type {
   EventProjection,
 } from "./event-projection-types.js";
 import {
-  buildProjectionActiveThinking,
   createProjectionState,
   finalizeProjectionState,
   flushProjectionBufferedOutputs,
@@ -77,6 +76,7 @@ import {
   type CompactionTurnFinalization,
   type ProjectionState,
 } from "./event-projection-state.js";
+import { buildProjectionActiveThinking } from "./reasoning-lifecycle-projection.js";
 import { projectAssistantAndReasoningEvent } from "./assistant-event-projection.js";
 
 // --- Projection state machine ---

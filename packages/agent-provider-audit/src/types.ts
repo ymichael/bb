@@ -166,7 +166,8 @@ export interface ProviderAuditReport {
   summary: {
     rawProviderEventCount: number;
     translatedThreadEventCount: number;
-    timelineRowCount: number;
+    semanticTimelineRowCount: number;
+    renderedTimelineRowCount: number;
     debugRawEventCount: number;
     unexpectedUntranslatedRawEventCount: number;
     toolCallRequestCount: number;
@@ -355,7 +356,8 @@ export interface ProviderAuditLadleFixture {
   taskId: string;
   scenarioDescription: string;
   threadStatus: string;
-  timelineRowCount: number;
+  semanticTimelineRowCount: number;
+  renderedTimelineRowCount: number;
   timelineRows: TimelineRow[];
 }
 

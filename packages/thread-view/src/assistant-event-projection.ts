@@ -20,8 +20,8 @@ import {
   finalizeReasoningLifecycle,
   trackReasoningTurn,
   upsertReasoningLifecycle,
-  type ProjectionState,
-} from "./event-projection-state.js";
+} from "./reasoning-lifecycle-projection.js";
+import type { ProjectionState } from "./event-projection-state.js";
 
 interface ProjectAssistantAndReasoningEventArgs {
   decoded: ThreadEvent;
@@ -93,7 +93,6 @@ export function projectAssistantAndReasoningEvent(
         identity: reasoningIdentity,
         meta: args.meta,
         state: args.state,
-        threadId: args.decoded.threadId,
       });
     }
   }
@@ -159,7 +158,6 @@ export function projectAssistantAndReasoningEvent(
         identity: reasoningIdentity,
         meta: args.meta,
         state: args.state,
-        threadId: args.decoded.threadId,
       });
     }
   }

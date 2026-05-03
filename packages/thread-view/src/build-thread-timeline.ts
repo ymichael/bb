@@ -5,7 +5,6 @@ import type {
   TimelineFileChange,
   TimelineRow,
   TimelineRowBase,
-  TimelineRowStatus,
   TimelineSourceRow,
   TimelineTurnRow,
   TimelineUserConversationRow,
@@ -20,7 +19,6 @@ import type {
   EventProjectionTurn,
   EventProjectionEntry,
 } from "./event-projection-types.js";
-import { toPositiveNumber } from "@bb/domain";
 import { assertNever } from "./assert-never.js";
 import {
   durationToCompactString,
@@ -30,18 +28,21 @@ import { getFileChangeDiffStats } from "./file-change-summary.js";
 import { getEventProjectionMessageScopeTurnId } from "./message-scope.js";
 import { formatToolCallCommand } from "./tool-call-parsing.js";
 import { flattenEventProjectionMessagesDeep } from "./event-projection-flatten.js";
-import { isTimelineUngroupableMessage } from "./timeline-message-helpers.js";
 import {
   buildEventProjection,
   buildEventProjectionEntries,
   type ThreadEventWithMeta,
 } from "./build-event-projection.js";
-import { getProjectionSummaryCount } from "./apply-turn-message-detail.js";
 import {
   buildAcceptedClientRequestBySequence,
   parsePendingSteerFromClientRequest,
 } from "./user-message-parsing.js";
 import { getOrderedThreadEvents } from "./group-event-projection-turns.js";
+import {
+  groupCompletedTurnMessages,
+  type CompletedTurnSummaryItem,
+} from "./completed-turn-grouping.js";
+import { extractThreadContextWindowUsage } from "./thread-context-window-usage.js";
 
 export type ThreadTimelineTurnMessageDetail = "summary" | "full";
 
@@ -111,22 +112,10 @@ export type ThreadTimelineTurnDetailsFromEventsResult =
       rows: TimelineRow[];
     };
 
-interface ThreadContextWindowSignal {
-  estimated: boolean;
-  modelContextWindow: number | null;
-  usedTokens: number | null;
-}
-
 interface BuildTurnRowsArgs {
   includeNestedRows: boolean;
   rowIdPrefix: string;
   turn: EventProjectionTurn;
-}
-
-interface CompletedTurnMessageSlices {
-  summaryMessages: EventProjectionMessage[];
-  terminalMessages: EventProjectionMessage[];
-  trailingMessages: EventProjectionMessage[];
 }
 
 interface TimelineMessageBounds {
@@ -150,7 +139,7 @@ interface BuildTurnSummaryRowArgs {
 interface BuildCompletedTurnSummaryRowsArgs {
   includeNestedRows: boolean;
   rowIdPrefix: string;
-  summaryMessages: EventProjectionMessage[];
+  summaryItems: CompletedTurnSummaryItem[];
   turn: EventProjectionTurn;
 }
 
@@ -166,85 +155,6 @@ type TimelineOperationMessage = Extract<
   { kind: "operation" }
 >;
 
-function toNonNegativeNumber(value: number): number | null {
-  if (!Number.isFinite(value) || value < 0) {
-    return null;
-  }
-  return value;
-}
-
-function decodeContextWindowSignal(
-  eventWithMeta: ThreadEventWithMeta,
-): ThreadContextWindowSignal | null {
-  const { event } = eventWithMeta;
-  if (event.type !== "thread/contextWindowUsage/updated") {
-    return null;
-  }
-  const { contextWindowUsage } = event;
-  return {
-    usedTokens:
-      contextWindowUsage.usedTokens === null
-        ? null
-        : toNonNegativeNumber(contextWindowUsage.usedTokens),
-    modelContextWindow:
-      contextWindowUsage.modelContextWindow === null
-        ? null
-        : (toPositiveNumber(contextWindowUsage.modelContextWindow) ?? null),
-    estimated: contextWindowUsage.estimated,
-  };
-}
-
-function extractThreadContextWindowUsage(
-  events: readonly ThreadEventWithMeta[],
-): ThreadContextWindowUsage | null {
-  let estimated: boolean | undefined;
-  let modelContextWindow: number | undefined;
-  let usedTokens: number | undefined;
-  let usageIsUnknown = false;
-  const orderedEvents = [...events].sort(
-    (left, right) => left.meta.seq - right.meta.seq,
-  );
-
-  for (let index = orderedEvents.length - 1; index >= 0; index -= 1) {
-    const signal = decodeContextWindowSignal(orderedEvents[index]);
-    if (!signal) continue;
-
-    if (usedTokens === undefined && !usageIsUnknown) {
-      if (signal.usedTokens === null) {
-        usageIsUnknown = true;
-        estimated = signal.estimated;
-      } else {
-        usedTokens = signal.usedTokens;
-        estimated = signal.estimated;
-      }
-    }
-
-    if (
-      modelContextWindow === undefined &&
-      signal.modelContextWindow !== null
-    ) {
-      modelContextWindow = signal.modelContextWindow;
-    }
-
-    if (
-      (usedTokens !== undefined || usageIsUnknown) &&
-      modelContextWindow !== undefined
-    ) {
-      break;
-    }
-  }
-
-  if (usedTokens === undefined || modelContextWindow === undefined) {
-    return null;
-  }
-
-  return {
-    estimated: estimated ?? false,
-    modelContextWindow,
-    usedTokens,
-  };
-}
-
 function buildTimelineRowBase(
   message: EventProjectionMessage,
   rowIdPrefix: string,
@@ -258,12 +168,6 @@ function buildTimelineRowBase(
     startedAt: getMessageStartedAt(message),
     createdAt: message.createdAt,
   };
-}
-
-function toTimelineStatus(
-  status: "pending" | "completed" | "error" | "interrupted",
-): TimelineRowStatus {
-  return status;
 }
 
 function toConversationAttachments(
@@ -431,7 +335,7 @@ function convertMessage(
           ...buildTimelineRowBase(message, options.rowIdPrefix),
           kind: "work",
           workKind: "command",
-          status: toTimelineStatus(message.status),
+          status: message.status,
           callId: message.callId,
           command: message.command,
           cwd: message.cwd,
@@ -449,7 +353,7 @@ function convertMessage(
           ...buildTimelineRowBase(message, options.rowIdPrefix),
           kind: "work",
           workKind: "tool",
-          status: toTimelineStatus(message.status),
+          status: message.status,
           callId: message.callId,
           toolName: message.toolName,
           toolArgs: message.toolArgs,
@@ -467,7 +371,7 @@ function convertMessage(
             ...buildTimelineRowBase(message, options.rowIdPrefix),
             kind: "work",
             workKind: "approval",
-            status: toTimelineStatus(message.status),
+            status: message.status,
             interactionId: message.callId,
             title:
               message.approvalStatus === "denied"
@@ -487,7 +391,7 @@ function convertMessage(
           id: `${base.id}:file-change:${index}`,
           kind: "work",
           workKind: "file-change",
-          status: toTimelineStatus(message.status),
+          status: message.status,
           callId: message.callId,
           change: toTimelineFileChange(change),
           stdout: message.stdout ?? null,
@@ -501,7 +405,7 @@ function convertMessage(
           ...buildTimelineRowBase(message, options.rowIdPrefix),
           kind: "work",
           workKind: "web-search",
-          status: toTimelineStatus(message.status),
+          status: message.status,
           callId: message.callId,
           queries: message.queries,
           resultText: message.resultText,
@@ -513,7 +417,7 @@ function convertMessage(
           ...buildTimelineRowBase(message, options.rowIdPrefix),
           kind: "work",
           workKind: "web-fetch",
-          status: toTimelineStatus(message.status),
+          status: message.status,
           callId: message.callId,
           url: message.url,
           prompt: message.prompt,
@@ -529,7 +433,7 @@ function convertMessage(
             ...base,
             kind: "work",
             workKind: "delegation",
-            status: toTimelineStatus(message.status),
+            status: message.status,
             callId: message.callId,
             toolName: message.toolName,
             subagentType: message.subagentType ?? null,
@@ -549,7 +453,7 @@ function convertMessage(
           ...buildTimelineRowBase(message, options.rowIdPrefix),
           kind: "work",
           workKind: "approval",
-          status: toTimelineStatus(message.status),
+          status: message.status,
           interactionId: message.interactionId,
           title: message.title,
           target: message.approvalTarget,
@@ -563,7 +467,7 @@ function convertMessage(
           systemKind: "operation",
           title: message.title,
           detail: buildTimelineOperationDetail(message),
-          status: message.status ? toTimelineStatus(message.status) : null,
+          status: message.status ?? null,
         },
       ];
     case "error":
@@ -649,48 +553,13 @@ function appendRows(target: TimelineRow[], rows: readonly TimelineRow[]): void {
       isReconnectSystemRow(previous) &&
       isReconnectSystemRow(row)
     ) {
+      // Reconnect attempts are one transient status, so update the progress row
+      // in place instead of flooding the timeline with every retry attempt.
       target[target.length - 1] = row;
       continue;
     }
     target.push(row);
   }
-}
-
-function splitCompletedTurnMessages(
-  messages: readonly EventProjectionMessage[],
-  terminalMessage: EventProjectionMessage | undefined,
-): CompletedTurnMessageSlices {
-  if (!terminalMessage) {
-    return {
-      summaryMessages: [...messages],
-      terminalMessages: [],
-      trailingMessages: [],
-    };
-  }
-
-  const terminalIndex = messages.findIndex(
-    (message) => message.id === terminalMessage.id,
-  );
-  if (terminalIndex === -1) {
-    return {
-      summaryMessages: [...messages],
-      terminalMessages: [terminalMessage],
-      trailingMessages: [],
-    };
-  }
-
-  const terminalMessageAtIndex = messages[terminalIndex];
-  if (!terminalMessageAtIndex) {
-    throw new Error(
-      `Cannot split completed turn messages at index ${terminalIndex}`,
-    );
-  }
-
-  return {
-    summaryMessages: messages.slice(0, terminalIndex),
-    terminalMessages: [terminalMessageAtIndex],
-    trailingMessages: messages.slice(terminalIndex + 1),
-  };
 }
 
 function getTimelineMessageBounds(
@@ -772,71 +641,38 @@ function buildTurnSummaryRow({
 function buildCompletedTurnSummaryRows({
   includeNestedRows,
   rowIdPrefix,
-  summaryMessages,
+  summaryItems,
   turn,
 }: BuildCompletedTurnSummaryRowsArgs): TimelineRow[] {
-  if (!summaryMessages.some(isTimelineUngroupableMessage)) {
-    const sourceRows = summaryMessages.flatMap((message) =>
-      convertMessage(message, { includeNestedRows, rowIdPrefix }),
-    );
-    const turnRow = buildTurnSummaryRow({
-      durationMs: turn.durationMs ?? null,
-      includeNestedRows,
-      rowIdPrefix,
-      segmentIndex: null,
-      sourceMessages: summaryMessages,
-      sourceRows,
-      summaryCount: turn.summaryCount,
-      turn,
-    });
-    return turnRow ? [turnRow] : [];
-  }
-
   const rows: TimelineRow[] = [];
-  let groupedMessages: EventProjectionMessage[] = [];
-  let segmentIndex = 0;
-
-  function flushGroupedMessages(): void {
-    if (groupedMessages.length === 0) {
-      return;
-    }
-
-    const sourceMessages = groupedMessages;
-    const sourceRows = sourceMessages.flatMap((message) =>
-      convertMessage(message, { includeNestedRows, rowIdPrefix }),
-    );
-    const turnRow = buildTurnSummaryRow({
-      durationMs: null,
-      includeNestedRows,
-      rowIdPrefix,
-      segmentIndex,
-      sourceMessages,
-      sourceRows,
-      summaryCount: getProjectionSummaryCount(sourceMessages, undefined),
-      turn,
-    });
-    if (turnRow) {
-      rows.push(turnRow);
-      segmentIndex += 1;
-    }
-    groupedMessages = [];
-  }
-
-  for (const message of summaryMessages) {
-    if (isTimelineUngroupableMessage(message)) {
-      flushGroupedMessages();
+  for (const item of summaryItems) {
+    if (item.kind === "ungrouped-message") {
       rows.push(
-        ...convertMessage(message, {
+        ...convertMessage(item.message, {
           includeNestedRows,
           rowIdPrefix,
         }),
       );
       continue;
     }
-    groupedMessages.push(message);
-  }
 
-  flushGroupedMessages();
+    const sourceRows = item.sourceMessages.flatMap((message) =>
+      convertMessage(message, { includeNestedRows, rowIdPrefix }),
+    );
+    const turnRow = buildTurnSummaryRow({
+      durationMs: item.durationMs,
+      includeNestedRows,
+      rowIdPrefix,
+      segmentIndex: item.segmentIndex,
+      sourceMessages: item.sourceMessages,
+      sourceRows,
+      summaryCount: item.summaryCount,
+      turn,
+    });
+    if (turnRow) {
+      rows.push(turnRow);
+    }
+  }
   return rows;
 }
 
@@ -855,8 +691,8 @@ function buildTurnRows({
     );
   }
 
-  const { summaryMessages, terminalMessages, trailingMessages } =
-    splitCompletedTurnMessages(messages, turn.terminalMessage);
+  const { summaryItems, terminalMessages, trailingMessages } =
+    groupCompletedTurnMessages(turn);
   const terminalRows = terminalMessages.flatMap((message) =>
     convertMessage(message, { includeNestedRows, rowIdPrefix }),
   );
@@ -866,7 +702,7 @@ function buildTurnRows({
   const summaryRows = buildCompletedTurnSummaryRows({
     includeNestedRows,
     rowIdPrefix,
-    summaryMessages,
+    summaryItems,
     turn,
   });
   return [...summaryRows, ...terminalRows, ...trailingRows];

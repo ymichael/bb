@@ -153,7 +153,7 @@ function createTimelineBenchmarkScenario(
   const timelineViewMode =
     thread.type === "manager" ? "manager-conversation" : "standard";
   const buildSummary = () =>
-    buildThreadTimeline(db, thread, { isDevelopment: true });
+    buildThreadTimeline(db, thread, { isDevelopment: true, timelineViewMode });
 
   const buildAndSerializeSummary = () => JSON.stringify(buildSummary());
   const loadSummaryStoredRows = () =>

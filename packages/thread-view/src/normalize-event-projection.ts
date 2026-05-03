@@ -211,6 +211,9 @@ function getScopedTurnStatus(
   messages: EventProjectionMessage[],
 ): EventProjectionTurnStatus {
   const statuses = messages.map((message) => getMessageStatus(message));
+  // Display aggregation prioritizes what users need to notice in a grouped
+  // turn. This intentionally differs from tool-activity-projection.ts:
+  // mergeCallStatus, where lifecycle terminal state is monotonic.
   if (statuses.includes("error")) {
     return "error";
   }

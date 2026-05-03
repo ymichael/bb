@@ -121,6 +121,33 @@ describe("@bb/agent-provider-audit fixture replay", () => {
     }
   });
 
+  it("checks one verbose replay without audit truncation", () => {
+    const replayed = replayFixtures({
+      fixtureRoot: fixtureRoot(),
+      corpusId: "excalidraw",
+      providerId: "codex",
+      taskId: "command-output-recovery",
+    });
+
+    expect(replayed.fixtures).toHaveLength(1);
+    const replay = replayed.fixtures[0];
+    expect(replay).toBeDefined();
+    if (!replay) {
+      throw new Error("Expected command-output-recovery replay");
+    }
+
+    const verboseText = compactTimelineSnapshotText(
+      replay.bundle.timelineVerboseText,
+    );
+    expect(verboseText).not.toContain("[truncated");
+    expect(verboseText).toContain(
+      "Use your real shell tool, preserve the full command output",
+    );
+    expect(verboseText).toContain("FIRST");
+    expect(verboseText).toContain("SECOND");
+    expect(verboseText).toContain("THIRD");
+  });
+
   it("snapshots streaming prefix timeline structure for every fixture", () => {
     expect(checkedInArtifact.timelinePrefixSnapshots.length).toBeGreaterThan(0);
     expect(
@@ -133,6 +160,20 @@ describe("@bb/agent-provider-audit fixture replay", () => {
         (snapshot) => snapshot.threadStatus === "idle",
       ),
     ).toBe(true);
+
+    const activeSubagentPrefix =
+      checkedInArtifact.timelinePrefixSnapshots.find(
+        (snapshot) =>
+          snapshot.fixture === "excalidraw/claude-code/search-feature" &&
+          snapshot.threadStatus === "active" &&
+          snapshot.timelinePreview.some((line) =>
+            line.includes("Running 1 subagent"),
+          ),
+      );
+    expect(activeSubagentPrefix).toBeDefined();
+    expect(activeSubagentPrefix?.lastEventType).toBe("item/started");
+    expect(activeSubagentPrefix?.semanticTimelineRowCount).toBeGreaterThan(0);
+    expect(activeSubagentPrefix?.renderedTimelineRowCount).toBeGreaterThan(0);
 
     expect(
       checkedInArtifact.timelinePrefixSnapshots.map(compactPrefixSnapshot),
@@ -229,7 +270,8 @@ describe("@bb/agent-provider-audit fixture replay", () => {
     expect(
       storyData.fixtures.map((fixture) => ({
         id: fixture.id,
-        timelineRowCount: fixture.timelineRowCount,
+        renderedTimelineRowCount: fixture.renderedTimelineRowCount,
+        semanticTimelineRowCount: fixture.semanticTimelineRowCount,
       })),
     ).toMatchSnapshot();
 

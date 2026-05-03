@@ -1,13 +1,28 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
-import type { MutableRefObject, ReactNode } from "react";
-import type { ThreadRuntimeDisplayStatus } from "@bb/domain";
-import type { TimelineRow, TimelineTurnRow } from "@bb/server-contract";
 import {
+  createContext,
+  memo,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+} from "react";
+import type { MutableRefObject, ReactNode } from "react";
+import { RotateCcw } from "lucide-react";
+import type { ThreadRuntimeDisplayStatus } from "@bb/domain";
+import type {
+  TimelineActivityIntent,
+  TimelineRow,
+  TimelineTurnRow,
+} from "@bb/server-contract";
+import {
+  assertNever,
   buildTimelineActivityIntentTitles,
   buildTimelineRowTitle,
   buildTimelineViewRows,
   type BuildTimelineRowTitleOptions,
   type ThreadTimelineViewRow,
+  type TimelineActivityIntentTitle,
   type TimelineTitle,
   type TimelineViewTurnRow,
   type TimelineViewWorkRow,
@@ -27,6 +42,7 @@ import {
 import { TimelineTitleView } from "./TimelineTitleView.js";
 import { WorkRowBody } from "./TimelineRowDetails.js";
 import { useStickyBottomScroll } from "./useStickyBottomScroll.js";
+import { Button } from "../primitives/ui/button.js";
 
 export interface ThreadTimelineRowsProps {
   erroredTurnSummaryIds: ReadonlySet<string>;
@@ -41,22 +57,22 @@ export interface ThreadTimelineRowsProps {
   turnSummaryRowsById: Record<string, TimelineRow[]>;
 }
 
-interface TimelineRendererContext {
+interface TimelineRendererContextValue {
   autoExpandedRowIds: ReadonlySet<string>;
-  compactActivityIntents: boolean;
   getViewRows: GetTimelineViewRows;
   requestedTurnSummaryRowIdsRef: MutableRefObject<Set<string>>;
   loadingTurnSummaryIds: ReadonlySet<string>;
   erroredTurnSummaryIds: ReadonlySet<string>;
   onLoadTurnSummaryRows: (entry: TimelineTurnRow) => void;
-  onOpenLocalFileLink?: ThreadTimelineLocalFileLinkHandler;
-  projectId?: string;
-  resolveUserAttachmentImageSrc?: UserAttachmentImageSrcResolver;
+  onOpenLocalFileLink: ThreadTimelineLocalFileLinkHandler | undefined;
+  projectId: string | undefined;
+  resolveUserAttachmentImageSrc: UserAttachmentImageSrcResolver | undefined;
   themeType: ThreadTimelineTheme;
   turnSummaryRowsById: Record<string, TimelineRow[]>;
 }
 
-interface TimelineRowsListProps extends TimelineRendererContext {
+interface TimelineRowsListProps {
+  compactActivityIntents: boolean;
   rows: readonly ThreadTimelineViewRow[];
   scopeActive: boolean;
   spacing: TimelineRowsListSpacing;
@@ -67,14 +83,16 @@ interface TimelineRowWrapperClassNameArgs {
   spacing: TimelineRowsListSpacing;
 }
 
-interface TimelineRowViewProps extends TimelineRendererContext {
+interface TimelineRowViewProps {
+  compactActivityIntents: boolean;
   isTail: boolean;
   row: ThreadTimelineViewRow;
   scopeActive: boolean;
   spacing: TimelineRowsListSpacing;
 }
 
-interface TimelineExpandableRowViewProps extends TimelineRendererContext {
+interface TimelineExpandableRowViewProps {
+  compactActivityIntents: boolean;
   expandableTitle: TimelineTitle;
   horizontalPadding: TimelineRowHorizontalPadding;
   row: Exclude<ThreadTimelineViewRow, { kind: "conversation" }>;
@@ -86,7 +104,8 @@ interface TimelineStaticRowProps {
   horizontalPadding?: TimelineRowHorizontalPadding;
 }
 
-interface TimelineExpandableBodyProps extends TimelineRendererContext {
+interface TimelineExpandableBodyProps {
+  compactActivityIntents: boolean;
   row: ThreadTimelineViewRow;
 }
 
@@ -114,32 +133,347 @@ interface RowActivityContext {
   scopeActive: boolean;
 }
 
+interface TimelineRowTitleRenderStateArgs extends RowActivityContext {
+  compactActivityIntents: boolean;
+}
+
+interface TimelineRowTitleRenderStateCache {
+  key: string;
+  state: TimelineRowTitleRenderState;
+}
+
 type TimelineConversationViewRow = Extract<
   ThreadTimelineViewRow,
   { kind: "conversation" }
 >;
 
+type TimelineRowTitleRenderState =
+  | {
+      kind: "compact-activity-intents";
+      titles: readonly TimelineActivityIntentTitle[];
+    }
+  | {
+      expandableTitle: TimelineTitle;
+      kind: "row-title";
+      title: TimelineTitle;
+    };
+
+type TimelineRowSignaturePart = boolean | number | string | null | undefined;
 type TimelineRowsListSpacing = "top-level" | "nested" | "bundle";
 type TimelineRawRows = readonly TimelineRow[];
 type GetTimelineViewRows = (rows: TimelineRawRows) => ThreadTimelineViewRow[];
 
 interface ConversationRowProps {
-  onOpenLocalFileLink?: ThreadTimelineLocalFileLinkHandler;
-  projectId?: string;
-  resolveUserAttachmentImageSrc?: UserAttachmentImageSrcResolver;
   row: TimelineConversationViewRow;
 }
 
-interface TurnRowBodyProps extends TimelineRendererContext {
+interface TurnRowBodyProps {
+  compactActivityIntents: boolean;
   row: TimelineViewTurnRow;
 }
 
-interface UseTimelineViewRowsCacheResult {
-  getViewRows: GetTimelineViewRows;
+const TimelineRendererContext =
+  createContext<TimelineRendererContextValue | null>(null);
+
+function useTimelineRendererContext(): TimelineRendererContextValue {
+  const context = useContext(TimelineRendererContext);
+  if (!context) {
+    throw new Error("Thread timeline renderer context is missing");
+  }
+  return context;
 }
 
-function assertNever(value: never): never {
-  throw new Error(`Unhandled timeline row: ${String(value)}`);
+function signaturePart(value: TimelineRowSignaturePart): string {
+  if (value === null) return "<null>";
+  if (value === undefined) return "<undefined>";
+  return String(value);
+}
+
+function joinSignatureParts(parts: readonly TimelineRowSignaturePart[]): string {
+  return parts.map(signaturePart).join("\u001f");
+}
+
+function activityIntentSignature(intent: TimelineActivityIntent): string {
+  switch (intent.type) {
+    case "read":
+      return joinSignatureParts([
+        intent.type,
+        intent.command,
+        intent.name,
+        intent.path,
+      ]);
+    case "list_files":
+      return joinSignatureParts([intent.type, intent.command, intent.path]);
+    case "search":
+      return joinSignatureParts([
+        intent.type,
+        intent.command,
+        intent.query,
+        intent.path,
+      ]);
+    case "unknown":
+      return joinSignatureParts([intent.type, intent.command]);
+    default:
+      return assertNever(intent);
+  }
+}
+
+function activityIntentsSignature(
+  intents: readonly TimelineActivityIntent[],
+): string {
+  return intents.map(activityIntentSignature).join("\u001e");
+}
+
+function timelineRowsSignature(rows: readonly ThreadTimelineViewRow[]): string {
+  return rows.map(timelineRowRenderSignature).join("\u001e");
+}
+
+function timelineRowBaseSignature(row: ThreadTimelineViewRow): string {
+  // sourceSeqEnd guards high-mutation fields omitted from signatures below,
+  // including output, text, and diffs. In-place row content mutations must
+  // advance the source sequence to avoid stale memoized UI.
+  return joinSignatureParts([
+    row.kind,
+    row.id,
+    row.threadId,
+    row.turnId,
+    row.sourceSeqStart,
+    row.sourceSeqEnd,
+    row.startedAt,
+    row.createdAt,
+  ]);
+}
+
+function timelineWorkRowRenderSignature(row: TimelineViewWorkRow): string {
+  const baseParts: TimelineRowSignaturePart[] = [
+    timelineRowBaseSignature(row),
+    row.status,
+    row.workKind,
+  ];
+
+  switch (row.workKind) {
+    case "command":
+      return joinSignatureParts([
+        ...baseParts,
+        row.callId,
+        row.command,
+        row.source,
+        row.exitCode,
+        row.durationMs,
+        row.approvalStatus,
+        activityIntentsSignature(row.activityIntents),
+      ]);
+    case "tool":
+      return joinSignatureParts([
+        ...baseParts,
+        row.callId,
+        row.toolName,
+        row.label,
+        row.durationMs,
+        row.approvalStatus,
+        activityIntentsSignature(row.activityIntents),
+      ]);
+    case "file-change":
+      return joinSignatureParts([
+        ...baseParts,
+        row.callId,
+        row.approvalStatus,
+        row.change.kind,
+        row.change.path,
+        row.change.movePath,
+        row.change.diffStats.added,
+        row.change.diffStats.removed,
+      ]);
+    case "web-search":
+      return joinSignatureParts([
+        ...baseParts,
+        row.callId,
+        row.queries.join("\u001e"),
+      ]);
+    case "web-fetch":
+      return joinSignatureParts([
+        ...baseParts,
+        row.callId,
+        row.url,
+        row.prompt,
+        row.pattern,
+      ]);
+    case "delegation":
+      return joinSignatureParts([
+        ...baseParts,
+        row.callId,
+        row.toolName,
+        row.subagentType,
+        row.description,
+        row.durationMs,
+        timelineRowsSignature(row.childRows),
+      ]);
+    case "approval":
+      return joinSignatureParts([
+        ...baseParts,
+        row.interactionId,
+        row.title,
+        row.target.itemId,
+        row.target.toolName,
+      ]);
+    default:
+      return assertNever(row);
+  }
+}
+
+function timelineRowRenderSignature(row: ThreadTimelineViewRow): string {
+  const baseSignature = timelineRowBaseSignature(row);
+  switch (row.kind) {
+    case "conversation":
+      return joinSignatureParts([
+        baseSignature,
+        row.role,
+        row.userRequest?.kind,
+        row.userRequest?.status,
+        row.attachments?.localFiles,
+        row.attachments?.localImages,
+        row.attachments?.webImages,
+      ]);
+    case "system":
+      return joinSignatureParts([
+        baseSignature,
+        row.status,
+        row.systemKind,
+        row.title,
+        row.detail,
+      ]);
+    case "activity-summary":
+      return joinSignatureParts([
+        baseSignature,
+        row.status,
+        timelineRowsSignature(row.children),
+      ]);
+    case "turn":
+      return joinSignatureParts([
+        baseSignature,
+        row.status,
+        row.summaryCount,
+        row.durationMs,
+        row.children ? timelineRowsSignature(row.children) : null,
+      ]);
+    case "work":
+      return timelineWorkRowRenderSignature(row);
+    default:
+      return assertNever(row);
+  }
+}
+
+function timelineRowTitleRenderStateKey({
+  compactActivityIntents,
+  isTail,
+  row,
+  scopeActive,
+}: TimelineRowTitleRenderStateArgs): string {
+  return joinSignatureParts([
+    timelineRowRenderSignature(row),
+    compactActivityIntents,
+    isTail,
+    scopeActive,
+  ]);
+}
+
+function buildTimelineRowTitleRenderState({
+  compactActivityIntents,
+  isTail,
+  row,
+  scopeActive,
+}: TimelineRowTitleRenderStateArgs): TimelineRowTitleRenderState {
+  if (compactActivityIntents && shouldRenderCompactActivityIntentRows(row)) {
+    const titles = buildTimelineActivityIntentTitles(row);
+    if (titles.length > 0) {
+      return {
+        kind: "compact-activity-intents",
+        titles,
+      };
+    }
+  }
+
+  const title = buildTimelineRowTitle(
+    row,
+    timelineRowTitleOptions({ isTail, row, scopeActive }),
+  );
+  return {
+    kind: "row-title",
+    title,
+    expandableTitle:
+      compactActivityIntents &&
+      row.kind !== "conversation" &&
+      row.status === "error"
+        ? (buildExpandableStructuredToolTitle(row) ?? title)
+        : title,
+  };
+}
+
+function useTimelineRowTitleRenderState(
+  args: TimelineRowTitleRenderStateArgs,
+): TimelineRowTitleRenderState {
+  const cacheRef = useRef<TimelineRowTitleRenderStateCache | null>(null);
+  const key = timelineRowTitleRenderStateKey(args);
+  const cached = cacheRef.current;
+  if (cached?.key === key) {
+    return cached.state;
+  }
+
+  const state = buildTimelineRowTitleRenderState(args);
+  cacheRef.current = {
+    key,
+    state,
+  };
+  return state;
+}
+
+function areTimelineRowViewPropsEqual(
+  previous: TimelineRowViewProps,
+  next: TimelineRowViewProps,
+): boolean {
+  return (
+    previous.compactActivityIntents === next.compactActivityIntents &&
+    previous.isTail === next.isTail &&
+    previous.scopeActive === next.scopeActive &&
+    previous.spacing === next.spacing &&
+    timelineRowRenderSignature(previous.row) ===
+      timelineRowRenderSignature(next.row)
+  );
+}
+
+function areTimelineExpandableRowViewPropsEqual(
+  previous: TimelineExpandableRowViewProps,
+  next: TimelineExpandableRowViewProps,
+): boolean {
+  return (
+    previous.compactActivityIntents === next.compactActivityIntents &&
+    previous.expandableTitle === next.expandableTitle &&
+    previous.horizontalPadding === next.horizontalPadding &&
+    timelineRowRenderSignature(previous.row) ===
+      timelineRowRenderSignature(next.row)
+  );
+}
+
+function areReadonlySetsEqual(
+  left: ReadonlySet<string>,
+  right: ReadonlySet<string>,
+): boolean {
+  if (left === right) return true;
+  if (left.size !== right.size) return false;
+  for (const value of left) {
+    if (!right.has(value)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function useStableReadonlySet(values: ReadonlySet<string>): ReadonlySet<string> {
+  const valuesRef = useRef(values);
+  if (!areReadonlySetsEqual(valuesRef.current, values)) {
+    valuesRef.current = values;
+  }
+  return valuesRef.current;
 }
 
 function toLazyTurnRequest(row: TimelineViewTurnRow): TimelineTurnRow {
@@ -175,9 +509,9 @@ function isRuntimeScopeActive(status: ThreadRuntimeDisplayStatus): boolean {
   return status === "active" || status === "host-reconnecting";
 }
 
-function useTimelineViewRowsCache(): UseTimelineViewRowsCacheResult {
+function useTimelineViewRowsCache(): GetTimelineViewRows {
   const cacheRef = useRef(new WeakMap<TimelineRawRows, ThreadTimelineViewRow[]>());
-  const getViewRows = useCallback<GetTimelineViewRows>((rawRows) => {
+  return useCallback<GetTimelineViewRows>((rawRows) => {
     const cachedRows = cacheRef.current.get(rawRows);
     if (cachedRows) {
       return cachedRows;
@@ -187,13 +521,6 @@ function useTimelineViewRowsCache(): UseTimelineViewRowsCacheResult {
     cacheRef.current.set(rawRows, viewRows);
     return viewRows;
   }, []);
-
-  return useMemo(
-    () => ({
-      getViewRows,
-    }),
-    [getViewRows],
-  );
 }
 
 function isWorkRowExpandable(row: TimelineViewWorkRow): boolean {
@@ -400,12 +727,12 @@ function timelineRowWrapperClassName({
   return "pb-2";
 }
 
-function ConversationRow({
-  onOpenLocalFileLink,
-  projectId,
-  resolveUserAttachmentImageSrc,
-  row,
-}: ConversationRowProps) {
+function ConversationRow({ row }: ConversationRowProps) {
+  const {
+    onOpenLocalFileLink,
+    projectId,
+    resolveUserAttachmentImageSrc,
+  } = useTimelineRendererContext();
   return (
     <ConversationMessageContent
       attachments={row.attachments}
@@ -449,19 +776,15 @@ function TimelineSystemDetailBlock({
 
 function TimelineExpandableBody({
   compactActivityIntents,
-  autoExpandedRowIds,
-  erroredTurnSummaryIds,
-  loadingTurnSummaryIds,
-  onLoadTurnSummaryRows,
-  onOpenLocalFileLink,
-  projectId,
-  resolveUserAttachmentImageSrc,
-  requestedTurnSummaryRowIdsRef,
   row,
-  themeType,
-  turnSummaryRowsById,
-  getViewRows,
 }: TimelineExpandableBodyProps) {
+  const {
+    onOpenLocalFileLink,
+    projectId,
+    resolveUserAttachmentImageSrc,
+    themeType,
+  } = useTimelineRendererContext();
+
   switch (row.kind) {
     case "activity-summary":
       return (
@@ -469,18 +792,7 @@ function TimelineExpandableBody({
           rows={row.children}
           scopeActive={false}
           compactActivityIntents={true}
-          autoExpandedRowIds={autoExpandedRowIds}
           spacing="bundle"
-          requestedTurnSummaryRowIdsRef={requestedTurnSummaryRowIdsRef}
-          loadingTurnSummaryIds={loadingTurnSummaryIds}
-          erroredTurnSummaryIds={erroredTurnSummaryIds}
-          onLoadTurnSummaryRows={onLoadTurnSummaryRows}
-          onOpenLocalFileLink={onOpenLocalFileLink}
-          projectId={projectId}
-          resolveUserAttachmentImageSrc={resolveUserAttachmentImageSrc}
-          themeType={themeType}
-          turnSummaryRowsById={turnSummaryRowsById}
-          getViewRows={getViewRows}
         />
       );
     case "turn":
@@ -488,17 +800,6 @@ function TimelineExpandableBody({
         <TurnRowBody
           row={row}
           compactActivityIntents={compactActivityIntents}
-          autoExpandedRowIds={autoExpandedRowIds}
-          requestedTurnSummaryRowIdsRef={requestedTurnSummaryRowIdsRef}
-          loadingTurnSummaryIds={loadingTurnSummaryIds}
-          erroredTurnSummaryIds={erroredTurnSummaryIds}
-          onLoadTurnSummaryRows={onLoadTurnSummaryRows}
-          onOpenLocalFileLink={onOpenLocalFileLink}
-          projectId={projectId}
-          resolveUserAttachmentImageSrc={resolveUserAttachmentImageSrc}
-          themeType={themeType}
-          turnSummaryRowsById={turnSummaryRowsById}
-          getViewRows={getViewRows}
         />
       );
     case "work":
@@ -511,18 +812,7 @@ function TimelineExpandableBody({
                   rows={row.childRows}
                   scopeActive={row.status === "pending"}
                   compactActivityIntents={false}
-                  autoExpandedRowIds={autoExpandedRowIds}
                   spacing="nested"
-                  requestedTurnSummaryRowIdsRef={requestedTurnSummaryRowIdsRef}
-                  loadingTurnSummaryIds={loadingTurnSummaryIds}
-                  erroredTurnSummaryIds={erroredTurnSummaryIds}
-                  onLoadTurnSummaryRows={onLoadTurnSummaryRows}
-                  onOpenLocalFileLink={onOpenLocalFileLink}
-                  projectId={projectId}
-                  resolveUserAttachmentImageSrc={resolveUserAttachmentImageSrc}
-                  themeType={themeType}
-                  turnSummaryRowsById={turnSummaryRowsById}
-                  getViewRows={getViewRows}
                 />
               </div>
             ) : null}
@@ -559,19 +849,16 @@ function TimelineExpandableBody({
 
 function TurnRowBody({
   compactActivityIntents,
-  autoExpandedRowIds,
-  erroredTurnSummaryIds,
-  loadingTurnSummaryIds,
-  onLoadTurnSummaryRows,
-  onOpenLocalFileLink,
-  projectId,
-  resolveUserAttachmentImageSrc,
-  requestedTurnSummaryRowIdsRef,
   row,
-  themeType,
-  turnSummaryRowsById,
-  getViewRows,
 }: TurnRowBodyProps) {
+  const {
+    getViewRows,
+    requestedTurnSummaryRowIdsRef,
+    loadingTurnSummaryIds,
+    erroredTurnSummaryIds,
+    onLoadTurnSummaryRows,
+    turnSummaryRowsById,
+  } = useTimelineRendererContext();
   const loadedRows = turnSummaryRowsById[row.id];
   const hasInlineChildren = row.children !== null;
   const hasLoadedRows = loadedRows !== undefined;
@@ -582,6 +869,14 @@ function TurnRowBody({
       : null;
   const isLoading = loadingTurnSummaryIds.has(row.id);
   const isError = erroredTurnSummaryIds.has(row.id);
+  const handleRetry = useCallback((): void => {
+    requestedTurnSummaryRowIdsRef.current.delete(row.id);
+    requestLazyTurnRows({
+      onLoadTurnSummaryRows,
+      requestedTurnSummaryRowIdsRef,
+      row,
+    });
+  }, [onLoadTurnSummaryRows, requestedTurnSummaryRowIdsRef, row]);
 
   useEffect(() => {
     if (hasInlineChildren || hasLoadedRows || isLoading || isError) {
@@ -604,8 +899,18 @@ function TurnRowBody({
 
   if (isError) {
     return (
-      <div className="text-sm text-destructive">
-        Failed to load turn details.
+      <div className="flex items-center gap-2 text-sm text-destructive">
+        <span>Failed to load turn details.</span>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={handleRetry}
+          className="h-7 border-destructive/30 px-2 text-destructive hover:text-destructive"
+        >
+          <RotateCcw />
+          Retry
+        </Button>
       </div>
     );
   }
@@ -615,18 +920,7 @@ function TurnRowBody({
         rows={rows}
         scopeActive={row.status === "pending"}
         compactActivityIntents={compactActivityIntents}
-        autoExpandedRowIds={autoExpandedRowIds}
         spacing="nested"
-        requestedTurnSummaryRowIdsRef={requestedTurnSummaryRowIdsRef}
-        loadingTurnSummaryIds={loadingTurnSummaryIds}
-        erroredTurnSummaryIds={erroredTurnSummaryIds}
-        onLoadTurnSummaryRows={onLoadTurnSummaryRows}
-        onOpenLocalFileLink={onOpenLocalFileLink}
-        projectId={projectId}
-        resolveUserAttachmentImageSrc={resolveUserAttachmentImageSrc}
-        themeType={themeType}
-        turnSummaryRowsById={turnSummaryRowsById}
-        getViewRows={getViewRows}
       />
     );
   }
@@ -636,112 +930,77 @@ function TurnRowBody({
 }
 
 function TimelineRowView({
-  autoExpandedRowIds,
   compactActivityIntents,
-  erroredTurnSummaryIds,
   isTail,
-  loadingTurnSummaryIds,
-  onLoadTurnSummaryRows,
-  onOpenLocalFileLink,
-  projectId,
-  resolveUserAttachmentImageSrc,
-  requestedTurnSummaryRowIdsRef,
   row,
   scopeActive,
   spacing,
-  themeType,
-  turnSummaryRowsById,
-  getViewRows,
 }: TimelineRowViewProps) {
   const horizontalPadding = timelineRowHorizontalPadding(spacing);
+  const titleState = useTimelineRowTitleRenderState({
+    compactActivityIntents,
+    isTail,
+    row,
+    scopeActive,
+  });
 
   if (row.kind === "conversation") {
+    return <ConversationRow row={row} />;
+  }
+  if (titleState.kind === "compact-activity-intents") {
     return (
-      <ConversationRow
-        row={row}
-        onOpenLocalFileLink={onOpenLocalFileLink}
-        projectId={projectId}
-        resolveUserAttachmentImageSrc={resolveUserAttachmentImageSrc}
-      />
+      <>
+        {titleState.titles.map((entry) => (
+          <TimelineStaticRow
+            key={entry.id}
+            horizontalPadding={horizontalPadding}
+          >
+            <TimelineTitleView title={entry.title} />
+          </TimelineStaticRow>
+        ))}
+      </>
     );
   }
-  if (
-    compactActivityIntents &&
-    shouldRenderCompactActivityIntentRows(row)
-  ) {
-    const titles = buildTimelineActivityIntentTitles(row);
-    if (titles.length > 0) {
-      return (
-        <>
-          {titles.map((entry) => (
-            <TimelineStaticRow
-              key={entry.id}
-              horizontalPadding={horizontalPadding}
-            >
-              <TimelineTitleView title={entry.title} />
-            </TimelineStaticRow>
-          ))}
-        </>
-      );
-    }
-  }
-
-  const title = buildTimelineRowTitle(
-    row,
-    timelineRowTitleOptions({ isTail, row, scopeActive }),
-  );
-  const expandableTitle =
-    compactActivityIntents && row.status === "error"
-      ? (buildExpandableStructuredToolTitle(row) ?? title)
-      : title;
 
   if (!isRowExpandable(row)) {
     return (
       <TimelineStaticRow horizontalPadding={horizontalPadding}>
-        <TimelineTitleView title={title} />
+        <TimelineTitleView title={titleState.title} />
       </TimelineStaticRow>
     );
   }
 
   return (
-    <TimelineExpandableRowView
+    <MemoizedTimelineExpandableRowView
       row={row}
-      expandableTitle={expandableTitle}
+      expandableTitle={titleState.expandableTitle}
       horizontalPadding={horizontalPadding}
-      autoExpandedRowIds={autoExpandedRowIds}
       compactActivityIntents={compactActivityIntents}
-      requestedTurnSummaryRowIdsRef={requestedTurnSummaryRowIdsRef}
-      loadingTurnSummaryIds={loadingTurnSummaryIds}
-      erroredTurnSummaryIds={erroredTurnSummaryIds}
-      onLoadTurnSummaryRows={onLoadTurnSummaryRows}
-      onOpenLocalFileLink={onOpenLocalFileLink}
-      projectId={projectId}
-      resolveUserAttachmentImageSrc={resolveUserAttachmentImageSrc}
-      themeType={themeType}
-      turnSummaryRowsById={turnSummaryRowsById}
-      getViewRows={getViewRows}
     />
   );
 }
 
+const MemoizedTimelineRowView = memo(
+  TimelineRowView,
+  areTimelineRowViewPropsEqual,
+);
+
 function TimelineExpandableRowView({
-  autoExpandedRowIds,
   compactActivityIntents,
-  erroredTurnSummaryIds,
   expandableTitle,
   horizontalPadding,
-  loadingTurnSummaryIds,
-  onLoadTurnSummaryRows,
-  onOpenLocalFileLink,
-  projectId,
-  resolveUserAttachmentImageSrc,
-  requestedTurnSummaryRowIdsRef,
   row,
-  themeType,
-  turnSummaryRowsById,
-  getViewRows,
 }: TimelineExpandableRowViewProps) {
-  const handleBeforeExpand = (): void => {
+  const {
+    autoExpandedRowIds,
+    requestedTurnSummaryRowIdsRef,
+    loadingTurnSummaryIds,
+    erroredTurnSummaryIds,
+    onLoadTurnSummaryRows,
+    turnSummaryRowsById,
+  } = useTimelineRendererContext();
+
+  const handleBeforeExpand = useCallback((): void => {
     if (
       row.kind === "turn" &&
       row.children === null &&
@@ -755,7 +1014,23 @@ function TimelineExpandableRowView({
         row,
       });
     }
-  };
+  }, [
+    erroredTurnSummaryIds,
+    loadingTurnSummaryIds,
+    onLoadTurnSummaryRows,
+    requestedTurnSummaryRowIdsRef,
+    row,
+    turnSummaryRowsById,
+  ]);
+  const renderBody = useCallback(
+    () => (
+      <TimelineExpandableBody
+        row={row}
+        compactActivityIntents={compactActivityIntents}
+      />
+    ),
+    [compactActivityIntents, row],
+  );
 
   return (
     <ExpandableTimelineRow
@@ -763,43 +1038,21 @@ function TimelineExpandableRowView({
       horizontalPadding={horizontalPadding}
       autoExpanded={autoExpandedRowIds.has(row.id)}
       onBeforeExpand={handleBeforeExpand}
-      renderBody={() => (
-        <TimelineExpandableBody
-          row={row}
-          compactActivityIntents={compactActivityIntents}
-          autoExpandedRowIds={autoExpandedRowIds}
-          requestedTurnSummaryRowIdsRef={requestedTurnSummaryRowIdsRef}
-          loadingTurnSummaryIds={loadingTurnSummaryIds}
-          erroredTurnSummaryIds={erroredTurnSummaryIds}
-          onLoadTurnSummaryRows={onLoadTurnSummaryRows}
-          onOpenLocalFileLink={onOpenLocalFileLink}
-          projectId={projectId}
-          resolveUserAttachmentImageSrc={resolveUserAttachmentImageSrc}
-          themeType={themeType}
-          turnSummaryRowsById={turnSummaryRowsById}
-          getViewRows={getViewRows}
-        />
-      )}
+      renderBody={renderBody}
     />
   );
 }
 
+const MemoizedTimelineExpandableRowView = memo(
+  TimelineExpandableRowView,
+  areTimelineExpandableRowViewPropsEqual,
+);
+
 function TimelineRowsList({
-  autoExpandedRowIds,
   compactActivityIntents,
-  erroredTurnSummaryIds,
-  loadingTurnSummaryIds,
-  onLoadTurnSummaryRows,
-  onOpenLocalFileLink,
-  projectId,
-  resolveUserAttachmentImageSrc,
-  requestedTurnSummaryRowIdsRef,
   rows,
   scopeActive,
   spacing,
-  themeType,
-  turnSummaryRowsById,
-  getViewRows,
 }: TimelineRowsListProps) {
   return (
     <div
@@ -814,23 +1067,12 @@ function TimelineRowsList({
           key={row.id}
           className={timelineRowWrapperClassName({ row, spacing })}
         >
-          <TimelineRowView
+          <MemoizedTimelineRowView
             row={row}
             isTail={index === rows.length - 1}
             scopeActive={scopeActive}
             spacing={spacing}
-            autoExpandedRowIds={autoExpandedRowIds}
             compactActivityIntents={compactActivityIntents}
-            requestedTurnSummaryRowIdsRef={requestedTurnSummaryRowIdsRef}
-            loadingTurnSummaryIds={loadingTurnSummaryIds}
-            erroredTurnSummaryIds={erroredTurnSummaryIds}
-            onLoadTurnSummaryRows={onLoadTurnSummaryRows}
-            onOpenLocalFileLink={onOpenLocalFileLink}
-            projectId={projectId}
-            resolveUserAttachmentImageSrc={resolveUserAttachmentImageSrc}
-            themeType={themeType}
-            turnSummaryRowsById={turnSummaryRowsById}
-            getViewRows={getViewRows}
           />
         </div>
       ))}
@@ -839,14 +1081,14 @@ function TimelineRowsList({
 }
 
 export function ThreadTimelineRows(props: ThreadTimelineRowsProps) {
-  const { getViewRows } = useTimelineViewRowsCache();
+  const getViewRows = useTimelineViewRowsCache();
   const rows = useMemo(
     () => getViewRows(props.timelineRows),
     [getViewRows, props.timelineRows],
   );
   const scopeActive = isRuntimeScopeActive(props.threadRuntimeDisplayStatus);
   const themeType = props.themeType ?? "light";
-  const autoExpandedRowIds = useMemo(
+  const computedAutoExpandedRowIds = useMemo(
     () =>
       collectTimelineAutoExpandedRowIds({
         getViewRows,
@@ -856,25 +1098,55 @@ export function ThreadTimelineRows(props: ThreadTimelineRowsProps) {
       }),
     [getViewRows, rows, scopeActive, props.turnSummaryRowsById],
   );
+  const autoExpandedRowIds = useStableReadonlySet(computedAutoExpandedRowIds);
+  const loadingTurnSummaryIds = useStableReadonlySet(
+    props.loadingTurnSummaryIds,
+  );
+  const erroredTurnSummaryIds = useStableReadonlySet(
+    props.erroredTurnSummaryIds,
+  );
   const requestedTurnSummaryRowIdsRef = useRef(new Set<string>());
+  useEffect(() => {
+    for (const rowId of erroredTurnSummaryIds) {
+      requestedTurnSummaryRowIdsRef.current.delete(rowId);
+    }
+  }, [erroredTurnSummaryIds]);
+  const rendererContextValue = useMemo<TimelineRendererContextValue>(
+    () => ({
+      autoExpandedRowIds,
+      getViewRows,
+      requestedTurnSummaryRowIdsRef,
+      loadingTurnSummaryIds,
+      erroredTurnSummaryIds,
+      onLoadTurnSummaryRows: props.onLoadTurnSummaryRows,
+      onOpenLocalFileLink: props.onOpenLocalFileLink,
+      projectId: props.projectId,
+      resolveUserAttachmentImageSrc: props.resolveUserAttachmentImageSrc,
+      themeType,
+      turnSummaryRowsById: props.turnSummaryRowsById,
+    }),
+    [
+      autoExpandedRowIds,
+      erroredTurnSummaryIds,
+      getViewRows,
+      loadingTurnSummaryIds,
+      props.onLoadTurnSummaryRows,
+      props.onOpenLocalFileLink,
+      props.projectId,
+      props.resolveUserAttachmentImageSrc,
+      props.turnSummaryRowsById,
+      themeType,
+    ],
+  );
 
   return (
-    <TimelineRowsList
-      rows={rows}
-      scopeActive={scopeActive}
-      compactActivityIntents={false}
-      spacing="top-level"
-      autoExpandedRowIds={autoExpandedRowIds}
-      requestedTurnSummaryRowIdsRef={requestedTurnSummaryRowIdsRef}
-      loadingTurnSummaryIds={props.loadingTurnSummaryIds}
-      erroredTurnSummaryIds={props.erroredTurnSummaryIds}
-      onLoadTurnSummaryRows={props.onLoadTurnSummaryRows}
-      onOpenLocalFileLink={props.onOpenLocalFileLink}
-      projectId={props.projectId}
-      resolveUserAttachmentImageSrc={props.resolveUserAttachmentImageSrc}
-      themeType={themeType}
-      turnSummaryRowsById={props.turnSummaryRowsById}
-      getViewRows={getViewRows}
-    />
+    <TimelineRendererContext.Provider value={rendererContextValue}>
+      <TimelineRowsList
+        rows={rows}
+        scopeActive={scopeActive}
+        compactActivityIntents={false}
+        spacing="top-level"
+      />
+    </TimelineRendererContext.Provider>
   );
 }

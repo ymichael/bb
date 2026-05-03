@@ -251,6 +251,7 @@ describe("thread event pruning", () => {
       });
       const timeline = buildThreadTimeline(harness.db, thread, {
         isDevelopment: true,
+        timelineViewMode: "standard",
       });
 
       expect(result.removedAgePrunableEvents).toBe(4);

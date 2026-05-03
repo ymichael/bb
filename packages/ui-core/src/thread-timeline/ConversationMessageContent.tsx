@@ -6,17 +6,20 @@ import {
   useRef,
   useState,
   type ComponentPropsWithoutRef,
+  type Dispatch,
   type MouseEvent as ReactMouseEvent,
   type RefObject,
+  type SetStateAction,
 } from "react";
 import ReactMarkdown from "react-markdown";
-import type { ExtraProps } from "react-markdown";
+import type { Components, ExtraProps } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type {
   TimelineConversationAttachments,
   TimelineConversationRow,
   TimelineConversationUserRequest,
 } from "@bb/server-contract";
+import { fileNameFromPath } from "@bb/thread-view";
 import {
   ImageLightbox,
   getWrappedImageIndex,
@@ -66,6 +69,19 @@ interface MarkdownAnchorProps
   onOpenLocalFileLink?: ThreadTimelineLocalFileLinkHandler;
 }
 
+interface BuildMarkdownComponentsArgs {
+  imageUrls: readonly string[];
+  onOpenLocalFileLink?: ThreadTimelineLocalFileLinkHandler;
+  setExpandedImageIndex: ExpandedImageIndexSetter;
+}
+
+interface MarkdownImageRendererArgs {
+  alt: ComponentPropsWithoutRef<"img">["alt"];
+  imageUrls: readonly string[];
+  setExpandedImageIndex: ExpandedImageIndexSetter;
+  src: ComponentPropsWithoutRef<"img">["src"];
+}
+
 interface LocalFileHrefParts {
   lineNumber: number | null;
   path: string;
@@ -90,6 +106,22 @@ interface CountPreWrappedLinesInput {
 }
 
 type ConversationMarkdownAnchorEvent = ReactMouseEvent<HTMLAnchorElement>;
+type ExpandedImageIndexSetter = Dispatch<SetStateAction<number | null>>;
+type MarkdownBlockquoteProps = ComponentPropsWithoutRef<"blockquote"> &
+  ExtraProps;
+type MarkdownCodeProps = ComponentPropsWithoutRef<"code"> & ExtraProps;
+type MarkdownHrProps = ComponentPropsWithoutRef<"hr"> & ExtraProps;
+type MarkdownImageProps = ComponentPropsWithoutRef<"img"> & ExtraProps;
+type MarkdownListItemProps = ComponentPropsWithoutRef<"li"> & ExtraProps;
+type MarkdownOrderedListProps = ComponentPropsWithoutRef<"ol"> & ExtraProps;
+type MarkdownParagraphProps = ComponentPropsWithoutRef<"p"> & ExtraProps;
+type MarkdownPreProps = ComponentPropsWithoutRef<"pre"> & ExtraProps;
+type MarkdownTableProps = ComponentPropsWithoutRef<"table"> & ExtraProps;
+type MarkdownTableCellProps = ComponentPropsWithoutRef<"td"> & ExtraProps;
+type MarkdownTableHeadProps = ComponentPropsWithoutRef<"thead"> & ExtraProps;
+type MarkdownTableHeaderProps = ComponentPropsWithoutRef<"th"> & ExtraProps;
+type MarkdownUnorderedListProps = ComponentPropsWithoutRef<"ul"> &
+  ExtraProps;
 
 function userRequestLabel(
   userRequest: TimelineConversationUserRequest | null,
@@ -98,11 +130,6 @@ function userRequestLabel(
     return null;
   }
   return userRequest.status === "pending" ? "steer pending" : "steer";
-}
-
-function fileName(path: string): string {
-  const normalized = path.replaceAll("\\", "/");
-  return normalized.split("/").pop() || path;
 }
 
 function safeDecodeURIComponent(value: string): string {
@@ -219,6 +246,174 @@ function MarkdownAnchor({
   );
 }
 
+function MarkdownCode({
+  className: codeClassName,
+  children,
+  ...props
+}: MarkdownCodeProps) {
+  const codeText = String(children ?? "").replace(/\n$/, "");
+  const languageMatch = /language-(\w+)/u.exec(codeClassName || "");
+  const language = languageMatch?.[1];
+  const isBlock = codeText.includes("\n");
+  if (isBlock) {
+    return (
+      <div className="my-2 overflow-hidden rounded-md border border-border/70 bg-muted/35">
+        <div className="flex items-center justify-between pl-3 pr-1.5 pt-1.5">
+          <span className="font-mono text-xs uppercase tracking-wide text-muted-foreground">
+            {language ?? ""}
+          </span>
+          <CopyButton text={codeText} label="Copy code" />
+        </div>
+        <pre className="overflow-x-auto px-3 pb-3 pt-1">
+          <code
+            className={cn(
+              "font-mono text-xs",
+              language ? `language-${language}` : "",
+            )}
+            {...props}
+          >
+            {codeText}
+          </code>
+        </pre>
+      </div>
+    );
+  }
+  return (
+    <code
+      className="rounded bg-muted px-1.5 py-0.5 font-mono text-sm"
+      {...props}
+    >
+      {children}
+    </code>
+  );
+}
+
+function MarkdownPre({ children }: MarkdownPreProps) {
+  return <>{children}</>;
+}
+
+function MarkdownParagraph({ children }: MarkdownParagraphProps) {
+  return <p className="mb-2 text-foreground last:mb-0">{children}</p>;
+}
+
+function MarkdownUnorderedList({ children }: MarkdownUnorderedListProps) {
+  return <ul className="mb-2 list-disc pl-5 text-foreground">{children}</ul>;
+}
+
+function MarkdownOrderedList({ children }: MarkdownOrderedListProps) {
+  return <ol className="mb-2 list-decimal pl-5 text-foreground">{children}</ol>;
+}
+
+function MarkdownListItem({ children }: MarkdownListItemProps) {
+  return <li className="mb-1 text-foreground">{children}</li>;
+}
+
+function MarkdownBlockquote({ children }: MarkdownBlockquoteProps) {
+  return (
+    <blockquote className="my-2 border-l-2 border-border pl-3 italic text-muted-foreground">
+      {children}
+    </blockquote>
+  );
+}
+
+function MarkdownTable({ children }: MarkdownTableProps) {
+  return (
+    <div
+      className="my-2"
+      style={{
+        width: "max(100%, min(1100px, 100cqw - 2rem))",
+        marginInline:
+          "calc((100% - max(100%, min(1100px, 100cqw - 2rem))) / 2)",
+      }}
+    >
+      <div className="mx-auto w-max max-w-full overflow-x-auto">
+        <table className="border border-border/80">{children}</table>
+      </div>
+    </div>
+  );
+}
+
+function MarkdownTableHead({ children }: MarkdownTableHeadProps) {
+  return <thead className="bg-muted/40">{children}</thead>;
+}
+
+function MarkdownTableHeader({ children }: MarkdownTableHeaderProps) {
+  return (
+    <th className="border border-border/80 px-2 py-1 text-left font-medium">
+      {children}
+    </th>
+  );
+}
+
+function MarkdownTableCell({ children }: MarkdownTableCellProps) {
+  return <td className="border border-border/80 px-2 py-1">{children}</td>;
+}
+
+function renderMarkdownImage({
+  alt,
+  imageUrls,
+  setExpandedImageIndex,
+  src,
+}: MarkdownImageRendererArgs) {
+  const imageUrl = typeof src === "string" ? src : "";
+  if (!imageUrl) return null;
+  const imageIndex = imageUrls.indexOf(imageUrl);
+  return (
+    <img
+      src={imageUrl}
+      alt={typeof alt === "string" ? alt : "Image"}
+      className="my-2 max-h-96 max-w-full cursor-zoom-in rounded-md border border-border/60 object-contain"
+      loading="lazy"
+      onClick={() => setExpandedImageIndex(imageIndex >= 0 ? imageIndex : 0)}
+    />
+  );
+}
+
+function MarkdownHr(_props: MarkdownHrProps) {
+  return <hr className="my-4 border-t border-border/70" />;
+}
+
+function buildMarkdownComponents({
+  imageUrls,
+  onOpenLocalFileLink,
+  setExpandedImageIndex,
+}: BuildMarkdownComponentsArgs): Components {
+  function MarkdownLink(props: MarkdownAnchorProps) {
+    return (
+      <MarkdownAnchor
+        {...props}
+        onOpenLocalFileLink={onOpenLocalFileLink}
+      />
+    );
+  }
+
+  function MarkdownImage({ src, alt }: MarkdownImageProps) {
+    return renderMarkdownImage({
+      alt,
+      imageUrls,
+      setExpandedImageIndex,
+      src,
+    });
+  }
+
+  return {
+    a: MarkdownLink,
+    blockquote: MarkdownBlockquote,
+    code: MarkdownCode,
+    hr: MarkdownHr,
+    img: MarkdownImage,
+    li: MarkdownListItem,
+    ol: MarkdownOrderedList,
+    p: MarkdownParagraph,
+    pre: MarkdownPre,
+    table: MarkdownTable,
+    td: MarkdownTableCell,
+    th: MarkdownTableHeader,
+    thead: MarkdownTableHead,
+    ul: MarkdownUnorderedList,
+  };
+}
+
 function ConversationMarkdownComponent({
   content,
   className,
@@ -232,6 +427,15 @@ function ConversationMarkdownComponent({
     expandedImageIndex !== null
       ? (imageUrls[expandedImageIndex] ?? null)
       : null;
+  const markdownComponents = useMemo(
+    () =>
+      buildMarkdownComponents({
+        imageUrls,
+        onOpenLocalFileLink,
+        setExpandedImageIndex,
+      }),
+    [imageUrls, onOpenLocalFileLink, setExpandedImageIndex],
+  );
 
   const showPreviousImage = useCallback(() => {
     setExpandedImageIndex((currentIndex) => {
@@ -265,145 +469,7 @@ function ConversationMarkdownComponent({
       >
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}
-          components={{
-            code({
-              className: codeClassName,
-              children,
-              ...props
-            }: ComponentPropsWithoutRef<"code"> & ExtraProps) {
-              const codeText = String(children ?? "").replace(/\n$/, "");
-              const languageMatch = /language-(\w+)/u.exec(
-                codeClassName || "",
-              );
-              const language = languageMatch?.[1];
-              const isBlock = codeText.includes("\n");
-              if (isBlock) {
-                return (
-                  <div className="my-2 overflow-hidden rounded-md border border-border/70 bg-muted/35">
-                    <div className="flex items-center justify-between pl-3 pr-1.5 pt-1.5">
-                      <span className="font-mono text-[0.7rem] uppercase tracking-wide text-muted-foreground">
-                        {language ?? ""}
-                      </span>
-                      <CopyButton text={codeText} label="Copy code" />
-                    </div>
-                    <pre className="overflow-x-auto px-3 pb-3 pt-1">
-                      <code
-                        className={cn(
-                          "font-mono text-xs",
-                          language ? `language-${language}` : "",
-                        )}
-                        {...props}
-                      >
-                        {codeText}
-                      </code>
-                    </pre>
-                  </div>
-                );
-              }
-              return (
-                <code
-                  className="rounded bg-muted px-1.5 py-0.5 font-mono text-[0.92em]"
-                  {...props}
-                >
-                  {children}
-                </code>
-              );
-            },
-            pre({ children }: ComponentPropsWithoutRef<"pre"> & ExtraProps) {
-              return <>{children}</>;
-            },
-            p({ children }: ComponentPropsWithoutRef<"p"> & ExtraProps) {
-              return (
-                <p className="mb-2 text-foreground last:mb-0">{children}</p>
-              );
-            },
-            ul({ children }: ComponentPropsWithoutRef<"ul"> & ExtraProps) {
-              return (
-                <ul className="mb-2 list-disc pl-5 text-foreground">
-                  {children}
-                </ul>
-              );
-            },
-            ol({ children }: ComponentPropsWithoutRef<"ol"> & ExtraProps) {
-              return (
-                <ol className="mb-2 list-decimal pl-5 text-foreground">
-                  {children}
-                </ol>
-              );
-            },
-            li({ children }: ComponentPropsWithoutRef<"li"> & ExtraProps) {
-              return <li className="mb-1 text-foreground">{children}</li>;
-            },
-            blockquote({
-              children,
-            }: ComponentPropsWithoutRef<"blockquote"> & ExtraProps) {
-              return (
-                <blockquote className="my-2 border-l-2 border-border pl-3 italic text-muted-foreground">
-                  {children}
-                </blockquote>
-              );
-            },
-            table({ children }: ComponentPropsWithoutRef<"table"> & ExtraProps) {
-              return (
-                <div
-                  className="my-2"
-                  style={{
-                    width: "max(100%, min(1100px, 100cqw - 2rem))",
-                    marginInline:
-                      "calc((100% - max(100%, min(1100px, 100cqw - 2rem))) / 2)",
-                  }}
-                >
-                  <div className="mx-auto w-max max-w-full overflow-x-auto">
-                    <table className="border border-border/80">
-                      {children}
-                    </table>
-                  </div>
-                </div>
-              );
-            },
-            thead({ children }: ComponentPropsWithoutRef<"thead"> & ExtraProps) {
-              return <thead className="bg-muted/40">{children}</thead>;
-            },
-            th({ children }: ComponentPropsWithoutRef<"th"> & ExtraProps) {
-              return (
-                <th className="border border-border/80 px-2 py-1 text-left font-medium">
-                  {children}
-                </th>
-              );
-            },
-            td({ children }: ComponentPropsWithoutRef<"td"> & ExtraProps) {
-              return (
-                <td className="border border-border/80 px-2 py-1">
-                  {children}
-                </td>
-              );
-            },
-            a: (props) => (
-              <MarkdownAnchor
-                {...props}
-                onOpenLocalFileLink={onOpenLocalFileLink}
-              />
-            ),
-            img({ src, alt }: ComponentPropsWithoutRef<"img"> & ExtraProps) {
-              const imageUrl = typeof src === "string" ? src : "";
-              if (!imageUrl) return null;
-              const imageIndex = imageUrls.indexOf(imageUrl);
-              return (
-                <img
-                  src={imageUrl}
-                  alt={typeof alt === "string" ? alt : "Image"}
-                  className="my-2 max-h-96 max-w-full cursor-zoom-in rounded-md border border-border/60 object-contain"
-                  loading="lazy"
-                  onClick={() =>
-                    setExpandedImageIndex(imageIndex >= 0 ? imageIndex : 0)
-                  }
-                />
-              );
-            },
-            hr() {
-              return <hr className="my-4 border-t border-border/70" />;
-            },
-          }}
+          components={markdownComponents}
         >
           {content}
         </ReactMarkdown>
@@ -442,11 +508,11 @@ function buildAttachmentItems({
 
   const imageItems: ConversationImageItem[] = [
     ...attachments.imageUrls.map((url) => ({
-      alt: fileName(url),
+      alt: fileNameFromPath(url),
       src: url,
     })),
     ...attachments.localImagePaths.map((path) => ({
-      alt: fileName(path),
+      alt: fileNameFromPath(path),
       src: resolveUserAttachmentImageSrc
         ? resolveUserAttachmentImageSrc(path, projectId)
         : path,
@@ -523,7 +589,9 @@ function ConversationAttachments({
                 ? "border-primary/30 bg-background/70"
                 : "border-border/70 bg-muted/40",
             );
-            const label = <span className="truncate">{fileName(path)}</span>;
+            const label = (
+              <span className="truncate">{fileNameFromPath(path)}</span>
+            );
 
             if (!onOpenLocalFileLink) {
               return (

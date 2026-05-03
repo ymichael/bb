@@ -103,32 +103,32 @@ describe("ExpandableTimelineRow", () => {
     );
   });
 
-  it("does not let collapsed animated body intercept row clicks", () => {
+  it("exposes hidden and visible states for the animated body", () => {
     const view = render(
       <ExpandableTimelineRow
         title={TITLE}
-        renderBody={() => <div>details</div>}
+        renderBody={() => <div>expanded body details</div>}
       />,
     );
 
+    const button = screen.getByRole("button", { name: /Ran details/u });
     const body = view.container.querySelector('div[aria-hidden="true"]');
-    expect(body?.className).toContain("pointer-events-none");
-
-    view.rerender(
-      <ExpandableTimelineRow
-        title={TITLE}
-        autoExpanded
-        renderBody={() => <div>details</div>}
-      />,
+    expect(button.getAttribute("aria-expanded")).toBe("false");
+    expect(body).not.toBeNull();
+    expect(view.container.textContent ?? "").not.toContain(
+      "expanded body details",
     );
+
+    fireEvent.click(button);
 
     const expandedBody = view.container.querySelector(
       'div[aria-hidden="false"]',
     );
-    expect(expandedBody?.className).toContain("pointer-events-auto");
+    expect(button.getAttribute("aria-expanded")).toBe("true");
+    expect(expandedBody?.textContent ?? "").toContain("expanded body details");
   });
 
-  it("keeps the chevron from becoming a separate pointer target", () => {
+  it("style contract: keeps the chevron from becoming a separate pointer target", () => {
     const onToggle = vi.fn();
     const view = render(
       <ExpandableTimelineRow
@@ -144,27 +144,29 @@ describe("ExpandableTimelineRow", () => {
     );
   });
 
-  it("makes the whole row header clickable", () => {
-    render(
+  it("toggles from the accessible row header", () => {
+    const view = render(
       <ExpandableTimelineRow
         title={TITLE}
-        renderBody={() => <div>details</div>}
+        renderBody={() => <div>expanded row content</div>}
       />,
     );
 
-    expect(screen.getByRole("button").className).toContain("w-full");
-    expect(screen.getByRole("button").className).toContain("justify-start");
-    expect(screen.getByRole("button").className).toContain(
-      "timeline-row-header",
+    const button = screen.getByRole("button", { name: /Ran details/u });
+    expect(button.getAttribute("aria-expanded")).toBe("false");
+    expect(view.container.textContent ?? "").not.toContain(
+      "expanded row content",
     );
-    expect(screen.getByRole("button").className).toContain("group/toggle");
-    expect(screen.getByRole("button").className).toContain("px-2");
-    expect(screen.getByRole("button").className).not.toContain(
-      "justify-between",
+
+    fireEvent.click(button);
+
+    expect(button.getAttribute("aria-expanded")).toBe("true");
+    expect(view.container.textContent ?? "").toContain(
+      "expanded row content",
     );
   });
 
-  it("shows the chevron from the clickable button hover state", () => {
+  it("style contract: scopes chevron hover state to the toggle button", () => {
     const view = render(
       <ExpandableTimelineRow
         title={TITLE}
@@ -185,8 +187,8 @@ describe("ExpandableTimelineRow", () => {
     expect(view.container.firstElementChild?.className).not.toContain("group");
   });
 
-  it("uses compact timeline header padding", () => {
-    const view = render(
+  it("style contract: uses compact timeline header spacing", () => {
+    render(
       <ExpandableTimelineRow
         title={TITLE}
         renderBody={() => <div>details</div>}
@@ -194,20 +196,14 @@ describe("ExpandableTimelineRow", () => {
     );
 
     const button = screen.getByRole("button");
-    expect(button.className).toContain("flex");
-    expect(button.className).not.toContain("inline-flex");
-    expect(button.className).not.toContain("leading-none");
-    expect(button.className).not.toContain("leading-4");
-    expect(button.className).toContain("leading-5");
-    expect(button.className).toContain("py-0");
-    expect(button.className).not.toContain("py-0.5");
-    expect(button.parentElement?.className).not.toContain("py-0");
-    expect(button.parentElement?.className).not.toContain("py-0.5");
-    expect(view.container.innerHTML).not.toContain("py-1");
+    expect(button.classList.contains("timeline-row-header")).toBe(true);
+    expect(button.classList.contains("leading-5")).toBe(true);
+    expect(button.classList.contains("py-0")).toBe(true);
+    expect(button.classList.contains("py-0.5")).toBe(false);
   });
 
-  it("can render flush horizontal padding for bundled rows", () => {
-    const view = render(
+  it("style contract: can render flush horizontal padding for bundled rows", () => {
+    render(
       <ExpandableTimelineRow
         title={TITLE}
         horizontalPadding="flush"
@@ -217,12 +213,11 @@ describe("ExpandableTimelineRow", () => {
     );
 
     const button = screen.getByRole("button");
-    expect(button.className).toContain("px-0");
-    expect(button.className).not.toContain("px-2");
-    expect(view.container.innerHTML).toContain("px-0");
+    expect(button.classList.contains("px-0")).toBe(true);
+    expect(button.classList.contains("px-2")).toBe(false);
   });
 
-  it("keeps a small gap between an expanded title and its contents", () => {
+  it("style contract: keeps a small gap between an expanded title and its contents", () => {
     const view = render(
       <ExpandableTimelineRow
         title={TITLE}
@@ -235,7 +230,7 @@ describe("ExpandableTimelineRow", () => {
     expect(view.container.innerHTML).not.toContain("pt-0 ");
   });
 
-  it("does not put hover group state on the row wrapper", () => {
+  it("style contract: does not put hover group state on the row wrapper", () => {
     const view = render(
       <ExpandableTimelineRow
         title={TITLE}

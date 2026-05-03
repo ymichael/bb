@@ -1,9 +1,8 @@
 #!/usr/bin/env node
 
 import { readFileSync } from "node:fs";
-import { homedir } from "node:os";
 import { extname } from "node:path";
-import { join, resolve } from "node:path";
+import { resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { pathToFileURL } from "node:url";
 import { z } from "zod";
@@ -28,6 +27,7 @@ import {
   type PiSdkSessionOptions,
   type ShellEnvOverrides,
 } from "./sdk-session.js";
+import { resolvePiSessionFilePath } from "./session-paths.js";
 import {
   buildDynamicTools,
   type DynamicToolDefinition,
@@ -479,10 +479,11 @@ function buildSessionOptions(
   args: BuildPiSessionOptionsArgs,
 ): PiSdkSessionOptions {
   const shellEnvOverrides = normalizeShellEnvOverrides(args.shellEnvOverrides);
-  const sessionFilePath = resolvePiSessionFilePath(
-    args.threadId,
-    args.params.sessionPath,
-  );
+  const sessionFilePath = resolvePiSessionFilePath({
+    env: process.env,
+    sessionPath: args.params.sessionPath,
+    threadId: args.threadId,
+  });
 
   return {
     cwd: args.params.cwd,
@@ -508,26 +509,6 @@ function applyDynamicTools(
       createForwardToolCall(threadId),
     );
   }
-}
-
-function resolvePiSessionFilePath(
-  threadId: string,
-  sessionPath?: string,
-): string {
-  if (sessionPath?.trim()) {
-    return resolve(sessionPath);
-  }
-
-  return join(
-    homedir(),
-    ".bb",
-    "pi-bridge-sessions",
-    `${sanitizeSessionKey(threadId)}.jsonl`,
-  );
-}
-
-function sanitizeSessionKey(threadId: string): string {
-  return threadId.replace(/[^A-Za-z0-9._-]/g, "_");
 }
 
 async function handleRequest(

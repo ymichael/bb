@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { buildTimelineViewRows } from "@bb/thread-view";
 import { replayFixtures } from "./replay.js";
 import type {
   ProviderAuditBuildLadleStoryDataArgs,
@@ -34,7 +35,10 @@ function toLadleFixture(
     taskId: replayedFixture.fixture.taskId,
     scenarioDescription: replayedFixture.fixture.manifest.scenarioDescription,
     threadStatus: "idle",
-    timelineRowCount: replayedFixture.bundle.timelineRows.length,
+    semanticTimelineRowCount: replayedFixture.bundle.timelineRows.length,
+    renderedTimelineRowCount: buildTimelineViewRows(
+      replayedFixture.bundle.timelineRows,
+    ).length,
     timelineRows: replayedFixture.bundle.timelineRows,
   };
 }

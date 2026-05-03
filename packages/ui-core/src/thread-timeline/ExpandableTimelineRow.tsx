@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { memo, useCallback, useState, type ReactNode } from "react";
 import type { TimelineTitle } from "@bb/thread-view";
 import {
   ExpandablePanel,
@@ -34,7 +34,7 @@ function headerToneClass(title: TimelineTitle, isExpanded: boolean): string {
   return getCollapsibleHeaderToneClass(isExpanded);
 }
 
-export function ExpandableTimelineRow({
+function ExpandableTimelineRowComponent({
   autoExpanded = false,
   className,
   horizontalPadding = "default",
@@ -47,12 +47,12 @@ export function ExpandableTimelineRow({
   const isExpanded = manualExpansionOverride ?? autoExpanded;
   const horizontalPaddingClass =
     timelineRowHorizontalPaddingClassName(horizontalPadding);
-  const handleToggle = (): void => {
+  const handleToggle = useCallback((): void => {
     if (!isExpanded) {
       onBeforeExpand?.();
     }
     setManualExpansionOverride(!isExpanded);
-  };
+  }, [isExpanded, onBeforeExpand]);
 
   return (
     <ExpandablePanel
@@ -68,3 +68,5 @@ export function ExpandableTimelineRow({
     />
   );
 }
+
+export const ExpandableTimelineRow = memo(ExpandableTimelineRowComponent);

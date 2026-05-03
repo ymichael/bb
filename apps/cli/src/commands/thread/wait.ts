@@ -6,9 +6,9 @@ import {
   threadStatusSchema,
   threadStatusValues,
 } from "@bb/domain";
+import { assertNever } from "@bb/core-ui";
 import type { ThreadEventWaitQuery } from "@bb/server-contract";
 import { action, CliExitError } from "../../action.js";
-import { assertNever } from "../../assert-never.js";
 import { createClient, unwrap } from "../../client.js";
 import {
   outputJson,

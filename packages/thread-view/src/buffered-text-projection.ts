@@ -5,7 +5,11 @@ import {
   syncBufferedTextMessage,
 } from "./assistant-stream-projection.js";
 import type { ProjectionState } from "./event-projection-state.js";
-import { getReasoningTextBuffer } from "./event-projection-state.js";
+import {
+  finalizeReasoningTextBuffer,
+  getReasoningTextBuffer,
+  isReasoningProjectionKeyFinalized,
+} from "./reasoning-lifecycle-projection.js";
 import {
   appendVisibleTextBuffer,
   createVisibleTextBuffer,
@@ -161,7 +165,7 @@ export function projectReasoningTextEvent(
   if (args.state.closedTurnIds.has(args.identity.turnId)) {
     return true;
   }
-  if (args.state.finalizedReasoningKeys.has(messageKey)) {
+  if (isReasoningProjectionKeyFinalized(args.state, messageKey)) {
     return true;
   }
   args.state.openTurnIds.add(args.identity.turnId);
@@ -174,7 +178,6 @@ export function projectReasoningTextEvent(
   }
 
   setVisibleTextBuffer(buffer, args.text, true);
-  args.state.reasoningTextBuffersByKey.delete(messageKey);
-  finalizeProjectionKey(args.state.finalizedReasoningKeys, messageKey);
+  finalizeReasoningTextBuffer(args.state, messageKey);
   return true;
 }

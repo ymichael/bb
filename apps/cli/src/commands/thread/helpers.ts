@@ -5,7 +5,7 @@ import {
   serviceTierSchema,
   type ServiceTier,
 } from "@bb/domain";
-import { assertNever } from "../../assert-never.js";
+import { assertNever } from "@bb/core-ui";
 import { joinValues } from "../helpers.js";
 
 export type ThreadWaitTarget =

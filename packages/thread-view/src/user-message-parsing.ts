@@ -251,10 +251,7 @@ export function parseUserFromClientRequest(
     return null;
   }
 
-  if (
-    decoded.initiator === "system" &&
-    !options?.includeInternalSystemMessages
-  ) {
+  if (decoded.initiator === "system") {
     return null;
   }
   const parsedInput = parsePromptInput(decoded.input);
@@ -286,10 +283,7 @@ export function parsePendingSteerFromClientRequest(
   if (!isSteerRequest(decoded)) {
     return null;
   }
-  if (
-    decoded.initiator === "system" &&
-    !options?.includeInternalSystemMessages
-  ) {
+  if (decoded.initiator === "system") {
     return null;
   }
   if (!shouldPreservePendingMessages(options?.threadStatus)) {
@@ -318,10 +312,7 @@ export function parseAcceptedSteerFromClientRequest(
   if (!isSteerRequest(decoded)) {
     return null;
   }
-  if (
-    decoded.initiator === "system" &&
-    !options?.includeInternalSystemMessages
-  ) {
+  if (decoded.initiator === "system") {
     return null;
   }
   const parsedInput = parsePromptInput(decoded.input);

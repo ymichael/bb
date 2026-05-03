@@ -5,7 +5,7 @@ export interface FormatTimelinePathArgs {
   path: string;
 }
 
-function fileNameFromPath(path: string): string {
+export function fileNameFromPath(path: string): string {
   const normalizedPath = path.replaceAll("\\", "/");
   const segments = normalizedPath.split("/");
   const candidate = segments[segments.length - 1];

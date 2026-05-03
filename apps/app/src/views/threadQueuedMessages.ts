@@ -1,14 +1,13 @@
 import { type PromptInput } from "@bb/domain";
+import { fileNameFromPath } from "@bb/thread-view";
 import { type PromptDraftState } from "@/lib/prompt-draft";
 
 const QUEUED_FOLLOW_UP_PREVIEW_MAX_CHARS = 220;
 
-function getFileNameFromPath(path: string): string {
+function getAttachmentNameFromPath(path: string): string {
   const trimmedPath = path.trim();
   if (trimmedPath.length === 0) return "Attachment";
-  const segments = trimmedPath.split("/");
-  const lastSegment = segments[segments.length - 1];
-  return lastSegment && lastSegment.length > 0 ? lastSegment : trimmedPath;
+  return fileNameFromPath(trimmedPath);
 }
 
 export function countQueuedMessageAttachments(input: PromptInput[]): number {
@@ -47,7 +46,9 @@ export function formatQueuedFollowUpPreview(input: PromptInput[]): string {
       if (firstAttachment.type === "localFile" && firstAttachment.name) {
         return `Attachment only (${firstAttachment.name})`;
       }
-      return `Attachment only (${getFileNameFromPath(firstAttachment.path)})`;
+      return `Attachment only (${getAttachmentNameFromPath(
+        firstAttachment.path,
+      )})`;
     }
     return "Attachment only (1 file)";
   }
@@ -74,7 +75,7 @@ export function queuedInputToDraft(input: PromptInput[]): PromptDraftState {
       attachments.push({
         type: "localImage",
         path: chunk.path,
-        name: getFileNameFromPath(chunk.path),
+        name: getAttachmentNameFromPath(chunk.path),
         sizeBytes: 0,
       });
       continue;
@@ -84,7 +85,7 @@ export function queuedInputToDraft(input: PromptInput[]): PromptDraftState {
       attachments.push({
         type: "localFile",
         path: chunk.path,
-        name: chunk.name ?? getFileNameFromPath(chunk.path),
+        name: chunk.name ?? getAttachmentNameFromPath(chunk.path),
         sizeBytes: chunk.sizeBytes ?? 0,
         ...(chunk.mimeType ? { mimeType: chunk.mimeType } : {}),
       });

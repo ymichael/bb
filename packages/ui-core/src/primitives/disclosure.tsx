@@ -1,6 +1,7 @@
 import {
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -135,11 +136,12 @@ export function ExpandablePanel({
   );
   const [isClosing, setIsClosing] = useState(false);
   const renderedBodyRef = useRef<ReactNode>(null);
-  const expandedBody = isExpanded
-    ? renderBody
-      ? renderBody()
-      : children
-    : null;
+  const expandedBody = useMemo(() => {
+    if (!isExpanded) {
+      return null;
+    }
+    return renderBody ? renderBody() : children;
+  }, [children, isExpanded, renderBody]);
 
   useBrowserLayoutEffect(() => {
     if (!isExpanded) {

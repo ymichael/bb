@@ -97,8 +97,8 @@ export function TerminalOutputBlock({
             {commandLine}
           </ExpandableLine>
         ) : null}
-        {metadataLines.map((line) => (
-          <div key={line} className="mt-1 text-muted-foreground">
+        {metadataLines.map((line, index) => (
+          <div key={`${index}:${line}`} className="mt-1 text-muted-foreground">
             {line}
           </div>
         ))}

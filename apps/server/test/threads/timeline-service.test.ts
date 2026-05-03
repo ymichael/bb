@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { threadScope, turnScope } from "@bb/domain";
+import type { Thread } from "@bb/domain";
+import type { DbConnection } from "@bb/db";
 import type { TimelineRow } from "@bb/server-contract";
 import { createTestAppHarness } from "../helpers/test-app.js";
 import {
@@ -11,9 +13,21 @@ import {
 } from "../helpers/seed.js";
 import { getTimelineBenchmarkScenarios } from "../helpers/timeline-benchmark.js";
 import {
-  buildThreadTimeline,
-  buildTimelineTurnSummaryDetails,
+  buildThreadTimeline as buildThreadTimelineWithResolvedMode,
+  buildTimelineTurnSummaryDetails as buildTimelineTurnSummaryDetailsWithResolvedMode,
+  resolveThreadTimelineServiceViewMode,
 } from "../../src/services/threads/timeline.js";
+
+interface TimelineServiceTestOptions {
+  includeNestedRows?: boolean;
+  isDevelopment: boolean;
+}
+
+interface TimelineTurnSummaryDetailsTestOptions {
+  isDevelopment: boolean;
+  sourceSeqEnd: number;
+  sourceSeqStart: number;
+}
 
 type TimelineSourceTestRow = Extract<
   TimelineRow,
@@ -48,6 +62,39 @@ function flattenTimelineSourceRows(
   return sourceRows;
 }
 
+function buildThreadTimeline(
+  db: DbConnection,
+  thread: Thread,
+  options: TimelineServiceTestOptions,
+) {
+  return buildThreadTimelineWithResolvedMode(db, thread, {
+    ...options,
+    timelineViewMode: "standard",
+  });
+}
+
+function buildManagerConversationTimeline(
+  db: DbConnection,
+  thread: Thread,
+  options: TimelineServiceTestOptions,
+) {
+  return buildThreadTimelineWithResolvedMode(db, thread, {
+    ...options,
+    timelineViewMode: "manager-conversation",
+  });
+}
+
+function buildTimelineTurnSummaryDetails(
+  db: DbConnection,
+  thread: Thread,
+  options: TimelineTurnSummaryDetailsTestOptions,
+) {
+  return buildTimelineTurnSummaryDetailsWithResolvedMode(db, thread, {
+    ...options,
+    timelineViewMode: "standard",
+  });
+}
+
 describe("buildThreadTimeline", () => {
   const scenarios = getTimelineBenchmarkScenarios();
   const harnesses: Array<Awaited<ReturnType<typeof createTestAppHarness>>> = [];
@@ -68,6 +115,54 @@ describe("buildThreadTimeline", () => {
       expect(scenario.summaryBytes).toBeLessThan(scenario.fullBytes);
     });
   }
+
+  it("resolves public manager timeline view defaults before timeline projection", async () => {
+    const harness = await createTestAppHarness();
+    harnesses.push(harness);
+
+    const host = seedHost(harness.deps);
+    const { project } = seedProjectWithSource(harness.deps, {
+      hostId: host.id,
+    });
+    const environment = seedEnvironment(harness.deps, {
+      hostId: host.id,
+      projectId: project.id,
+    });
+    const thread = seedThread(harness.deps, {
+      projectId: project.id,
+      environmentId: environment.id,
+    });
+    const managerThread = seedThread(harness.deps, {
+      projectId: project.id,
+      environmentId: environment.id,
+      type: "manager",
+    });
+
+    expect(
+      resolveThreadTimelineServiceViewMode({
+        managerTimelineView: undefined,
+        thread,
+      }),
+    ).toBe("standard");
+    expect(
+      resolveThreadTimelineServiceViewMode({
+        managerTimelineView: undefined,
+        thread: managerThread,
+      }),
+    ).toBe("manager-conversation");
+    expect(
+      resolveThreadTimelineServiceViewMode({
+        managerTimelineView: "standard",
+        thread: managerThread,
+      }),
+    ).toBe("standard");
+    expect(
+      resolveThreadTimelineServiceViewMode({
+        managerTimelineView: "conversation",
+        thread: managerThread,
+      }),
+    ).toBe("manager-conversation");
+  });
 
   it("preserves completed assistant content and excludes summary-noise rows after compaction", async () => {
     const harness = await createTestAppHarness();
@@ -1567,7 +1662,6 @@ describe("buildThreadTimeline", () => {
       thread,
       {
         isDevelopment: false,
-        managerTimelineView: "standard",
         sourceSeqStart: 1,
         sourceSeqEnd: 3,
       },
@@ -1677,13 +1771,27 @@ describe("buildThreadTimeline", () => {
       },
     });
 
-    // Internal tool call (should be hidden)
+    // Buffered internal assistant delta (should be hidden in the default view)
     seedEvent(harness.deps, {
       threadId: thread.id,
       environmentId: environment.id,
       providerThreadId: "provider-1",
       scope: turnScope("turn-1"),
       sequence: 5,
+      type: "item/agentMessage/delta",
+      data: {
+        itemId: "msg-buffered",
+        delta: "buffered manager delta",
+      },
+    });
+
+    // Internal tool call (should be hidden)
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-1",
+      scope: turnScope("turn-1"),
+      sequence: 6,
       type: "item/completed",
       data: {
         item: {
@@ -1700,7 +1808,7 @@ describe("buildThreadTimeline", () => {
     seedEvent(harness.deps, {
       threadId: thread.id,
       environmentId: environment.id,
-      sequence: 6,
+      sequence: 7,
       type: "system/manager/user_message",
       scope: threadScope(),
       data: {
@@ -1715,7 +1823,7 @@ describe("buildThreadTimeline", () => {
       environmentId: environment.id,
       providerThreadId: "provider-1",
       scope: turnScope("turn-1"),
-      sequence: 7,
+      sequence: 8,
       type: "turn/completed",
       data: {
         status: "completed",
@@ -1726,7 +1834,7 @@ describe("buildThreadTimeline", () => {
     seedEvent(harness.deps, {
       threadId: thread.id,
       environmentId: environment.id,
-      sequence: 8,
+      sequence: 9,
       type: "client/turn/requested",
       scope: threadScope(),
       data: {
@@ -1747,7 +1855,7 @@ describe("buildThreadTimeline", () => {
     });
 
     // Default view — should show only operation, message_user, and user message
-    const defaultTimeline = buildThreadTimeline(harness.db, thread, {
+    const defaultTimeline = buildManagerConversationTimeline(harness.db, thread, {
       isDevelopment: true,
     });
     const defaultKinds = defaultTimeline.rows.map((row) =>
@@ -1763,15 +1871,21 @@ describe("buildThreadTimeline", () => {
     if (assistantRow?.kind === "conversation") {
       expect(assistantRow.text).toBe("Hello from manager");
     }
+    expect(JSON.stringify(defaultTimeline.rows)).not.toContain(
+      "buffered manager delta",
+    );
 
     // Standard manager timeline uses the same row builder as ordinary threads.
     const standardTimeline = buildThreadTimeline(harness.db, thread, {
       isDevelopment: false,
-      managerTimelineView: "standard",
     });
     expect(standardTimeline.rows.length).toBeGreaterThan(
       defaultTimeline.rows.length,
     );
+    const standardRowsText = JSON.stringify(standardTimeline.rows);
+    expect(standardRowsText).toContain("buffered manager delta");
+    expect(standardRowsText).toContain("ToolSearch");
+    expect(standardRowsText).toContain("found something");
   });
 
   it("keeps manager-visible messages that would otherwise be buried in turn summaries", async () => {
@@ -1868,7 +1982,7 @@ describe("buildThreadTimeline", () => {
       },
     });
 
-    const timeline = buildThreadTimeline(harness.db, thread, {
+    const timeline = buildManagerConversationTimeline(harness.db, thread, {
       isDevelopment: true,
     });
     const rows = flattenTimelineSourceRows(timeline.rows);

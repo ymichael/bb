@@ -107,11 +107,19 @@ function applyTurnMessageDetail(
     shouldIncludeSummaryTurnMessages(messages, terminalMessage);
 
   const detailedTurn: EventProjectionTurn = {
-    ...turn,
+    turnId: turn.turnId,
+    threadId: turn.threadId,
+    sourceSeqStart: turn.sourceSeqStart,
+    sourceSeqEnd: turn.sourceSeqEnd,
+    startedAt: turn.startedAt,
+    createdAt: turn.createdAt,
+    completedAt: turn.completedAt,
+    status: turn.status,
     summaryCount,
   };
-  delete detailedTurn.terminalMessage;
-  delete detailedTurn.messages;
+  if (turn.durationMs !== undefined) {
+    detailedTurn.durationMs = turn.durationMs;
+  }
   if (terminalMessage) {
     detailedTurn.terminalMessage = terminalMessage;
   }

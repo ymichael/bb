@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { join } from "node:path";
 
 interface MockPiResourceLoaderOptions {
   cwd?: string;
@@ -65,7 +66,10 @@ vi.mock("@mariozechner/pi-ai", () => ({
 }));
 
 import { handleLine } from "../bridge.js";
+import { PI_BRIDGE_SESSION_DIR_ENV } from "../session-paths.js";
 import { createBridgeJsonRpcTestHarness } from "../../../test/bridge-json-rpc-test-helpers.js";
+
+const originalPiBridgeSessionDir = process.env[PI_BRIDGE_SESSION_DIR_ENV];
 
 interface ControlledPiAgentSession {
   abort: ReturnType<typeof vi.fn>;
@@ -108,6 +112,15 @@ describe("pi bridge", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockResourceLoaders.length = 0;
+    delete process.env[PI_BRIDGE_SESSION_DIR_ENV];
+  });
+
+  afterEach(() => {
+    if (originalPiBridgeSessionDir === undefined) {
+      delete process.env[PI_BRIDGE_SESSION_DIR_ENV];
+      return;
+    }
+    process.env[PI_BRIDGE_SESSION_DIR_ENV] = originalPiBridgeSessionDir;
   });
 
   it("passes appendSystemPrompt through Pi's append override path", async () => {
@@ -191,6 +204,29 @@ describe("pi bridge", () => {
         expect.objectContaining({
           thinkingLevel: "high",
         }),
+      );
+    } finally {
+      bridge.restore();
+    }
+  });
+
+  it("uses the configured bridge session directory for default Pi sessions", async () => {
+    const bridge = createBridgeJsonRpcTestHarness(handleLine);
+    mockCreateAgentSession.mockImplementation(async () => ({
+      session: createControlledPiAgentSession(),
+    }));
+    process.env[PI_BRIDGE_SESSION_DIR_ENV] = "/tmp/pi-bridge-test-sessions";
+
+    try {
+      bridge.sendRequest(4, "thread/start", {
+        cwd: "/tmp/worktree",
+        threadId: "thread/session:test",
+      });
+      await bridge.waitForResponse(4);
+
+      expect(mockOpen).toHaveBeenCalledWith(
+        join("/tmp/pi-bridge-test-sessions", "thread_session_test.jsonl"),
+        "/tmp/pi-bridge-test-sessions",
       );
     } finally {
       bridge.restore();

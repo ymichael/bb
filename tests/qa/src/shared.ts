@@ -552,10 +552,10 @@ export async function startQaServer(
     cwd: repoRoot,
     env: {
       ...process.env,
+      ...(args.env ?? {}),
       BB_DATA_DIR: args.dataDir,
       BB_SERVER_PORT: String(args.port),
       ...(args.publicUrl ? { BB_EXTERNAL_URL: args.publicUrl } : {}),
-      ...(args.env ?? {}),
     },
     logPath: args.logPath,
   });

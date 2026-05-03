@@ -1,16 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
-import type {
-  ManagerTimelineView,
-  TimelineRow,
-  TimelineTurnRow,
-} from "@bb/server-contract";
+import type { TimelineRow, TimelineTurnRow } from "@bb/server-contract";
 import { shouldLoadNestedRows } from "./turnSummaryRowLoaderHelpers";
 
 interface LoadTurnSummaryRowsArgs {
   id: string;
   sourceSeqStart: number;
   sourceSeqEnd: number;
-  managerTimelineView?: ManagerTimelineView;
 }
 
 interface UseTurnSummaryRowLoaderParams {

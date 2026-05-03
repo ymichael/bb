@@ -30,6 +30,7 @@ import { toQueuedMessage } from "../../services/threads/drafts.js";
 import {
   buildThreadTimeline,
   buildTimelineTurnSummaryDetails,
+  resolveThreadTimelineServiceViewMode,
 } from "../../services/threads/timeline.js";
 import {
   findThreadEvent,
@@ -96,38 +97,39 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
     onValidationError: (msg) => new ApiError(400, "invalid_request", msg),
   });
 
-  get("/threads/:id/timeline", threadTimelineQuerySchema, (context, query) =>
-    context.json(
-      buildThreadTimeline(
-        deps.db,
-        requirePublicThread(deps.db, context.req.param("id")),
-        {
-          isDevelopment: deps.config.isDevelopment,
+  get("/threads/:id/timeline", threadTimelineQuerySchema, (context, query) => {
+    const thread = requirePublicThread(deps.db, context.req.param("id"));
+    return context.json(
+      buildThreadTimeline(deps.db, thread, {
+        isDevelopment: deps.config.isDevelopment,
+        timelineViewMode: resolveThreadTimelineServiceViewMode({
           managerTimelineView: query.managerTimelineView,
-          includeNestedRows: query.includeNestedRows === "true",
-        },
-      ),
-    ),
-  );
+          thread,
+        }),
+        includeNestedRows: query.includeNestedRows === "true",
+      }),
+    );
+  });
 
   get(
     "/threads/:id/timeline/turn-summary-details",
     timelineTurnSummaryDetailsQuerySchema,
-    (context, query) =>
-      context.json(
-        buildTimelineTurnSummaryDetails(
-          deps.db,
-          requirePublicThread(deps.db, context.req.param("id")),
-          {
-            isDevelopment: deps.config.isDevelopment,
-            sourceSeqStart:
-              parseOptionalInteger(query.sourceSeqStart, "sourceSeqStart") ?? 0,
-            sourceSeqEnd:
-              parseOptionalInteger(query.sourceSeqEnd, "sourceSeqEnd") ?? 0,
+    (context, query) => {
+      const thread = requirePublicThread(deps.db, context.req.param("id"));
+      return context.json(
+        buildTimelineTurnSummaryDetails(deps.db, thread, {
+          isDevelopment: deps.config.isDevelopment,
+          sourceSeqStart:
+            parseOptionalInteger(query.sourceSeqStart, "sourceSeqStart") ?? 0,
+          sourceSeqEnd:
+            parseOptionalInteger(query.sourceSeqEnd, "sourceSeqEnd") ?? 0,
+          timelineViewMode: resolveThreadTimelineServiceViewMode({
             managerTimelineView: query.managerTimelineView,
-          },
-        ),
-      ),
+            thread,
+          }),
+        }),
+      );
+    },
   );
 
   get("/threads/:id/output", (context) => {

@@ -1,4 +1,5 @@
 import type {
+  EventProjectionApprovalLifecycleStatus,
   EventProjectionFileEditChange,
   EventProjectionFileEditMessage,
   EventProjectionMessage,
@@ -44,6 +45,21 @@ export interface OperationProjectionState {
     EventProjectionPermissionGrantLifecycleMessage
   >;
   threadOperationsById: Map<string, EventProjectionOperationMessage>;
+}
+
+export function createOperationProjectionState(
+  messages: EventProjectionMessage[],
+): OperationProjectionState {
+  return {
+    messages,
+    openCompactionsByKey: new Map(),
+    finalizedCompactionKeys: new Set(),
+    provisioningOperationsByKey: new Map(),
+    permissionGrantsByInteractionId: new Map(),
+    threadOperationsById: new Map(),
+    fileEditsByCallId: new Map(),
+    fileEditStdoutBuffersByCallId: new Map(),
+  };
 }
 
 export type CompactionTurnFinalizationStatus = Extract<
@@ -275,6 +291,26 @@ function mergeFileChange(
   };
 }
 
+function fileEditPartialApprovalStatus(
+  partial: FileEditPartial,
+): EventProjectionApprovalLifecycleStatus | null | undefined {
+  return "approvalStatus" in partial ? partial.approvalStatus : undefined;
+}
+
+function fileEditPartialChanges(
+  partial: FileEditPartial,
+): EventProjectionFileEditChange[] | undefined {
+  return "changes" in partial ? partial.changes : undefined;
+}
+
+function fileEditPartialHasAppendedStdout(partial: FileEditPartial): boolean {
+  return "appendStdout" in partial;
+}
+
+function fileEditPartialStdout(partial: FileEditPartial): string | undefined {
+  return "stdout" in partial ? partial.stdout : undefined;
+}
+
 function isTerminalFileEditStatus(
   status: EventProjectionFileEditMessage["status"] | undefined,
 ): boolean {
@@ -298,7 +334,7 @@ export function flushPendingFileEditOutput(
 interface CreateFileEditMessageArgs {
   callId: string;
   change: EventProjectionFileEditChange | null;
-  changeIndex: number;
+  messageKey: string;
   meta: EventMeta;
   partial: FileEditPartial;
   scopeFields: EventProjectionMessageScopeFields;
@@ -309,7 +345,7 @@ interface CreateFileEditMessageArgs {
 function createFileEditMessage({
   callId,
   change,
-  changeIndex,
+  messageKey,
   meta,
   partial,
   scopeFields,
@@ -318,7 +354,7 @@ function createFileEditMessage({
 }: CreateFileEditMessageArgs): EventProjectionFileEditMessage {
   return {
     kind: "file-edit",
-    id: messageId(threadId, "file-edit", `${callId}:${changeIndex}`),
+    id: messageId(threadId, "file-edit", messageKey),
     threadId,
     sourceSeqStart: meta.seq,
     sourceSeqEnd: meta.seq,
@@ -331,10 +367,151 @@ function createFileEditMessage({
     callId,
     changes: change ? [{ ...change }] : [],
     stdout,
-    stderr: partial.stderr,
-    approvalStatus: partial.approvalStatus ?? null,
-    status: partial.status ?? "pending",
+    approvalStatus: fileEditPartialApprovalStatus(partial) ?? null,
+    status: partial.status,
   };
+}
+
+interface FileEditChangeEntry {
+  change: EventProjectionFileEditChange;
+  identity: string;
+  matchKeys: string[];
+  messageKey: string;
+}
+
+function fileEditChangeIdentity(change: EventProjectionFileEditChange): string {
+  return change.movePath ?? change.path;
+}
+
+function fileEditChangeMatchKeys(
+  change: EventProjectionFileEditChange,
+): string[] {
+  if (change.movePath && change.movePath !== change.path) {
+    return [change.path, change.movePath];
+  }
+  return [change.path];
+}
+
+function fileEditMessageKey(
+  callId: string,
+  change: EventProjectionFileEditChange | null,
+  changeIndex: number,
+): string {
+  if (!change) {
+    return `${callId}:${changeIndex}`;
+  }
+  return `${callId}:${fileEditChangeIdentity(change)}`;
+}
+
+function buildFileEditChangeEntries(
+  callId: string,
+  changes: readonly EventProjectionFileEditChange[],
+): FileEditChangeEntry[] {
+  const seenIdentityCounts = new Map<string, number>();
+  return changes.map((change) => {
+    const identity = fileEditChangeIdentity(change);
+    const seenCount = seenIdentityCounts.get(identity) ?? 0;
+    seenIdentityCounts.set(identity, seenCount + 1);
+    return {
+      change,
+      identity,
+      matchKeys: fileEditChangeMatchKeys(change),
+      messageKey:
+        seenCount === 0
+          ? `${callId}:${identity}`
+          : `${callId}:${identity}:${seenCount}`,
+    };
+  });
+}
+
+function groupFileEditRowsByChangeMatchKey(
+  rows: readonly EventProjectionFileEditMessage[],
+): Map<string, EventProjectionFileEditMessage[]> {
+  const grouped = new Map<string, EventProjectionFileEditMessage[]>();
+  for (const row of rows) {
+    const change = row.changes[0];
+    if (!change) {
+      continue;
+    }
+    for (const matchKey of fileEditChangeMatchKeys(change)) {
+      const rowsForIdentity = grouped.get(matchKey) ?? [];
+      rowsForIdentity.push(row);
+      grouped.set(matchKey, rowsForIdentity);
+    }
+  }
+  return grouped;
+}
+
+interface TakeFileEditRowForChangeEntryArgs {
+  entry: FileEditChangeEntry;
+  groupedRows: Map<string, EventProjectionFileEditMessage[]>;
+  usedRowIds: Set<string>;
+}
+
+function takeFileEditRowForChangeEntry({
+  entry,
+  groupedRows,
+  usedRowIds,
+}: TakeFileEditRowForChangeEntryArgs):
+  | EventProjectionFileEditMessage
+  | undefined {
+  for (const matchKey of entry.matchKeys) {
+    const row = takeUnusedFileEditRowForMatchKey(
+      groupedRows,
+      matchKey,
+      usedRowIds,
+    );
+    if (row) {
+      return row;
+    }
+  }
+  return undefined;
+}
+
+function takeUnusedFileEditRowForMatchKey(
+  groupedRows: Map<string, EventProjectionFileEditMessage[]>,
+  matchKey: string,
+  usedRowIds: Set<string>,
+): EventProjectionFileEditMessage | undefined {
+  const rows = groupedRows.get(matchKey);
+  if (!rows || rows.length === 0) {
+    return undefined;
+  }
+
+  let row: EventProjectionFileEditMessage | undefined;
+  while (!row && rows.length > 0) {
+    const candidate = rows.shift();
+    if (candidate && !usedRowIds.has(candidate.id)) {
+      row = candidate;
+    }
+  }
+
+  if (rows.length === 0) {
+    groupedRows.delete(matchKey);
+  }
+  if (row) {
+    usedRowIds.add(row.id);
+  }
+  return row;
+}
+
+function replaceFileEditMessagesForCall(
+  state: OperationProjectionState,
+  callId: string,
+  nextRows: readonly EventProjectionFileEditMessage[],
+): void {
+  const insertionIndex = state.messages.findIndex(
+    (message) => message.kind === "file-edit" && message.callId === callId,
+  );
+  const messagesWithoutCallRows = state.messages.filter(
+    (message) => message.kind !== "file-edit" || message.callId !== callId,
+  );
+  if (insertionIndex === -1) {
+    messagesWithoutCallRows.push(...nextRows);
+  } else {
+    messagesWithoutCallRows.splice(insertionIndex, 0, ...nextRows);
+  }
+  state.messages = messagesWithoutCallRows;
 }
 
 function updateFileEditMessage(
@@ -363,26 +540,23 @@ function updateFileEditMessage(
 
   existing.stdout = stdout;
 
-  if (partial.stderr) {
-    existing.stderr = partial.stderr;
-  }
-
   existing.approvalStatus = applyApprovalStatusDelta(
     existing.approvalStatus,
-    buildApprovalStatusDelta(partial.approvalStatus, partial.status),
+    buildApprovalStatusDelta(
+      fileEditPartialApprovalStatus(partial),
+      partial.status,
+    ),
   );
 
-  if (partial.status) {
-    if (partial.status === "error") {
-      existing.status = "error";
-    } else if (
-      existing.status === "pending" ||
-      existing.status === "interrupted"
-    ) {
-      existing.status = partial.status;
-    } else if (existing.status !== "error" && partial.status === "completed") {
-      existing.status = "completed";
-    }
+  if (partial.status === "error") {
+    existing.status = "error";
+  } else if (
+    existing.status === "pending" ||
+    existing.status === "interrupted"
+  ) {
+    existing.status = partial.status;
+  } else if (existing.status !== "error" && partial.status === "completed") {
+    existing.status = "completed";
   }
 }
 
@@ -400,15 +574,18 @@ export function upsertFileEdit(
   const stdoutBuffer =
     state.fileEditStdoutBuffersByCallId.get(partial.callId) ??
     createVisibleTextBuffer();
+  // Provider stdout is per call, so split file-edit rows for the same call
+  // intentionally share one buffer.
   state.fileEditStdoutBuffersByCallId.set(partial.callId, stdoutBuffer);
 
-  if (partial.stdout) {
-    if (partial.appendStdout) {
-      appendVisibleTextBuffer(stdoutBuffer, partial.stdout);
+  const partialStdout = fileEditPartialStdout(partial);
+  if (partialStdout) {
+    if (fileEditPartialHasAppendedStdout(partial)) {
+      appendVisibleTextBuffer(stdoutBuffer, partialStdout);
     } else {
       setVisibleTextBuffer(
         stdoutBuffer,
-        partial.stdout,
+        partialStdout,
         isTerminalFileEditStatus(partial.status),
       );
     }
@@ -417,10 +594,57 @@ export function upsertFileEdit(
   }
 
   const stdout = getVisibleTextBufferText(stdoutBuffer);
+  const partialChanges = fileEditPartialChanges(partial);
+  if (partialChanges && partialChanges.length > 0) {
+    // A later change list is authoritative for the call: rows absent from the
+    // new list are dropped so stale split file-edit rows do not linger.
+    const existingRowsByMatchKey =
+      groupFileEditRowsByChangeMatchKey(existingRows);
+    const usedRowIds = new Set<string>();
+    const nextRows: EventProjectionFileEditMessage[] = [];
+    for (const entry of buildFileEditChangeEntries(
+      partial.callId,
+      partialChanges,
+    )) {
+      const existing = takeFileEditRowForChangeEntry({
+        entry,
+        groupedRows: existingRowsByMatchKey,
+        usedRowIds,
+      });
+      if (existing) {
+        updateFileEditMessage(
+          existing,
+          meta,
+          partial,
+          scopeFields,
+          entry.change,
+          stdout,
+        );
+        nextRows.push(existing);
+        continue;
+      }
+
+      nextRows.push(
+        createFileEditMessage({
+          callId: partial.callId,
+          change: entry.change,
+          messageKey: entry.messageKey,
+          meta,
+          partial,
+          scopeFields,
+          stdout,
+          threadId,
+        }),
+      );
+    }
+
+    replaceFileEditMessagesForCall(state, partial.callId, nextRows);
+    state.fileEditsByCallId.set(partial.callId, nextRows);
+    return;
+  }
+
   const changes =
-    partial.changes && partial.changes.length > 0
-      ? partial.changes
-      : existingRows.length > 0
+    existingRows.length > 0
         ? existingRows.map(() => null)
         : [null];
 
@@ -441,7 +665,7 @@ export function upsertFileEdit(
     const message = createFileEditMessage({
       callId: partial.callId,
       change,
-      changeIndex,
+      messageKey: fileEditMessageKey(partial.callId, change, changeIndex),
       meta,
       partial,
       scopeFields,

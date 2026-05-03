@@ -25,17 +25,31 @@ The committed baseline now has the semantic row contract in
 timeline response, CLI formatting, and provider-audit replay snapshots on
 semantic rows.
 
-Two important pieces are intentionally still unfinished:
+React now renders semantic timeline rows through `ThreadTimelineRows` in
+`@bb/ui-core`, and Batch 12 clarified provider-audit counts by reporting both
+raw semantic row counts and rendered view-row counts. Batch 12 also trimmed the
+`@bb/thread-view` root exports for activity-summary internals that had no
+external consumer.
+
+Important pieces are intentionally still unfinished:
 
 - `@bb/thread-view` still uses a private event-projection model before
   converting to semantic rows. The old `ViewMessage`/`ViewProjection` names and
   `@bb/domain` exports are gone, but the final direct flat source projection is
   still future work.
-- React still renders through the current app/UI path. Do not start the React
-  renderer cutover until `plans/ui-core-design-system.md` has been completed.
+- `@bb/core-ui` still has product imports for shared app/CLI/server helpers.
+  Those must be moved to concrete owners before the package can be deleted.
+- The React renderer is on the semantic row path, but remaining renderer polish,
+  behavior tests, and pending-interaction/app-local surfaces still live in the
+  current app/UI packages.
 
-Non-React cleanup is allowed before the React cutover when it removes dead code,
-fixes stale package boundaries, or makes audit/server/CLI behavior clearer.
+Cleanup is allowed when it removes dead code, fixes stale package boundaries,
+or makes audit/server/CLI/React behavior clearer without reintroducing parallel
+timeline paths.
+
+Keep this plan until the remaining exit criteria below are completed or moved
+to a newer plan. Delete it only after the remaining work is done or explicitly
+superseded.
 
 ## Package Boundaries
 
@@ -73,6 +87,11 @@ fixes stale package boundaries, or makes audit/server/CLI behavior clearer.
 Temporary exception: `extractShellCommandFromString` remains exported only
 because the React pending-interaction banner still imports it. Remove that
 export when the React/pending-interaction surface is touched.
+
+Batch 12 removed root exports for activity-summary label/count/source-row
+internals after confirming they had no external consumers. Keep future helper
+exports at the root only when they are part of the stable pipeline above or a
+consumer truly needs a stable public type to compile.
 
 Everything else is internal by default. Helpers such as shell-tool detection,
 file-name summaries, activity label builders, duration formatting, latest
@@ -408,6 +427,8 @@ Each commit review checks:
 
 ## Exit Criteria
 
+Current satisfied criteria:
+
 - `ThreadTimelineResponse.rows` is the semantic row tree used by app, CLI, and
   audit.
 - React timeline rendering enters through one generic semantic row renderer.
@@ -418,14 +439,22 @@ Each commit review checks:
 - `@bb/thread-view` root exports are limited to semantic projection, grouping,
   text formatting, and stable public types.
 - CLI timeline rendering has one semantic-row text path.
-- `rg "@bb/core-ui"` returns no product imports and the package is gone.
-- CLI/provider-audit snapshots cover app and CLI formatting.
+- CLI/provider-audit snapshots cover app and CLI formatting, including
+  streaming-prefix and untruncated fixture checks.
 - Focused tests cover source projection, grouping, lazy turn children, command
   rows with exploration intents, pending/denied command approvals, pending
   file-change approvals, permission grants, concrete file-change rows,
   delegation rows, active-run grouping, user steers, and manager-thread
   filtering.
-- The completed plan file is deleted.
+
+Remaining criteria:
+
+- Decide whether the private event-projection model in `@bb/thread-view` should
+  be collapsed into a direct flat source projection. If kept, document it as
+  the intentional internal projector boundary.
+- `rg "@bb/core-ui"` returns no product imports and the package is gone.
+- Delete this completed plan file once the remaining work is complete or moved
+  to a replacement plan.
 
 ## Validation
 

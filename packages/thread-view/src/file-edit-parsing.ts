@@ -5,6 +5,7 @@ import {
 } from "./exec-lifecycle.js";
 import { getEventParentToolCallId } from "./event-decode.js";
 import type {
+  EventProjectionApprovalLifecycleStatus,
   EventProjectionFileEditChange,
   EventProjectionFileEditMessage,
 } from "./event-projection-types.js";
@@ -20,11 +21,26 @@ export function mapFileChanges(
   }));
 }
 
-export interface FileEditPartial extends Partial<EventProjectionFileEditMessage> {
+type FileEditStatus = EventProjectionFileEditMessage["status"];
+
+interface FileEditPartialBase {
   callId: string;
-  appendStdout?: boolean;
   parentToolCallId?: string;
 }
+
+export interface FileEditOutputPartial extends FileEditPartialBase {
+  stdout: string;
+  appendStdout: true;
+  status: Extract<FileEditStatus, "pending">;
+}
+
+export interface FileEditChangesPartial extends FileEditPartialBase {
+  changes: EventProjectionFileEditChange[];
+  approvalStatus: EventProjectionApprovalLifecycleStatus | null;
+  status: FileEditStatus;
+}
+
+export type FileEditPartial = FileEditOutputPartial | FileEditChangesPartial;
 
 export function parseFileEditFromItemEvent(
   decoded: ThreadEvent,

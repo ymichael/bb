@@ -11,6 +11,7 @@ import type {
   ThreadTimelineResponse,
   TimelineRow,
   TimelineRowBase,
+  TimelineUserConversationRow,
 } from "@bb/server-contract";
 
 const readlineState = vi.hoisted(() => ({
@@ -70,10 +71,39 @@ function makeTimelineBase(args: TimelineBaseArgs): TimelineRowBase {
 }
 
 function makeTimelineResponse(rows: TimelineRow[]): ThreadTimelineResponse {
-  return {
+  return makeTimelineResponseWithPendingSteers({
     rows,
     pendingSteers: [],
+  });
+}
+
+interface TimelineResponseWithPendingSteersArgs {
+  pendingSteers: TimelineUserConversationRow[];
+  rows: TimelineRow[];
+}
+
+function makeTimelineResponseWithPendingSteers({
+  pendingSteers,
+  rows,
+}: TimelineResponseWithPendingSteersArgs): ThreadTimelineResponse {
+  return {
+    rows,
+    pendingSteers,
     activeThinking: null,
+  };
+}
+
+function makePendingSteerTimelineRow(): TimelineUserConversationRow {
+  return {
+    ...makeTimelineBase({
+      id: "pending-steer-1",
+      sourceSeqStart: 12,
+    }),
+    kind: "conversation",
+    role: "user",
+    text: "Please switch to the safer plan",
+    attachments: null,
+    userRequest: { kind: "steer", status: "pending" },
   };
 }
 
@@ -2859,6 +2889,89 @@ describe("CLI JSON output contracts", () => {
     const output = String(vi.mocked(console.log).mock.calls[0]?.[0]);
     expect(output).toContain("Provisioned thread");
     expect(output).not.toContain("Provisioning interrupted");
+    expect(getEvents).not.toHaveBeenCalled();
+  });
+
+  it("bb thread log renders pending steers for human output", async () => {
+    const getEvents = vi.fn(async () => []);
+    const getTimeline = vi.fn(async () =>
+      makeTimelineResponseWithPendingSteers({
+        rows: [],
+        pendingSteers: [makePendingSteerTimelineRow()],
+      }),
+    );
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              ":id": {
+                events: {
+                  $get: getEvents,
+                },
+                timeline: {
+                  $get: getTimeline,
+                },
+              },
+            },
+          },
+        },
+      }),
+    );
+
+    await runCommand(
+      ["thread", "log", "thread-log", "--format", "verbose"],
+      (program) => registerThreadCommands(program, () => "http://server"),
+    );
+
+    const output = String(vi.mocked(console.log).mock.calls[0]?.[0]);
+    expect(output).toContain("Please switch to the safer plan");
+    expect(output).toContain("steer pending");
+    expect(getTimeline).toHaveBeenCalledWith({
+      param: { id: "thread-log" },
+      query: { includeNestedRows: "true" },
+    });
+    expect(getEvents).not.toHaveBeenCalled();
+  });
+
+  it("bb thread log renders pending steers with default formatting", async () => {
+    const getEvents = vi.fn(async () => []);
+    const getTimeline = vi.fn(async () =>
+      makeTimelineResponseWithPendingSteers({
+        rows: [],
+        pendingSteers: [makePendingSteerTimelineRow()],
+      }),
+    );
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              ":id": {
+                events: {
+                  $get: getEvents,
+                },
+                timeline: {
+                  $get: getTimeline,
+                },
+              },
+            },
+          },
+        },
+      }),
+    );
+
+    await runCommand(["thread", "log", "thread-log"], (program) =>
+      registerThreadCommands(program, () => "http://server"),
+    );
+
+    const output = String(vi.mocked(console.log).mock.calls[0]?.[0]);
+    expect(output).toContain("Please switch to the safer plan");
+    expect(output).toContain("steer pending");
+    expect(getTimeline).toHaveBeenCalledWith({
+      param: { id: "thread-log" },
+      query: {},
+    });
     expect(getEvents).not.toHaveBeenCalled();
   });
 

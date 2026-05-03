@@ -6,7 +6,7 @@ type ProjectScopedStorageParam = string | null | undefined;
 type StringValueGuard<T extends string> = (value: string) => value is T;
 type StoredValueListener = (storedValue: string | null) => void;
 
-interface SyncStorage<T> {
+export interface SyncStorage<T> {
   getItem: (key: string, initialValue: T) => T;
   setItem: (key: string, newValue: T) => void;
   removeItem: (key: string) => void;

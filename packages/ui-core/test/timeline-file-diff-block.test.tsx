@@ -13,6 +13,16 @@ interface MockFileDiffProps {
   options: BaseDiffOptions;
 }
 
+interface TimelineFileChangeOverrides {
+  diffStats?: {
+    added: number;
+    removed: number;
+  };
+  kind?: string;
+  movePath?: string | null;
+  path?: string;
+}
+
 vi.mock("@pierre/diffs", async (importOriginal) => {
   const original = await importOriginal<typeof import("@pierre/diffs")>();
   return {
@@ -51,13 +61,16 @@ function parsePatchFilesMock() {
   return vi.mocked(parsePatchFiles);
 }
 
-function timelineFileChange(diff: string): TimelineFileChange {
+function timelineFileChange(
+  diff: string,
+  overrides: TimelineFileChangeOverrides = {},
+): TimelineFileChange {
   return {
-    path: "src/app.ts",
-    kind: "update",
-    movePath: null,
+    path: overrides.path ?? "src/app.ts",
+    kind: overrides.kind ?? "update",
+    movePath: overrides.movePath ?? null,
     diff,
-    diffStats: {
+    diffStats: overrides.diffStats ?? {
       added: 1,
       removed: 1,
     },
@@ -70,7 +83,7 @@ afterEach(() => {
 });
 
 describe("TimelineFileDiffBlock", () => {
-  it("parses a renderable patch once across remounts with equivalent changes", () => {
+  it("reuses a parsed renderable patch across remounts with the same change object", () => {
     const diff = [
       "diff --git a/src/app.ts b/src/app.ts",
       "--- a/src/app.ts",
@@ -93,6 +106,34 @@ describe("TimelineFileDiffBlock", () => {
     expect(parsePatchFilesMock()).toHaveBeenCalledTimes(1);
 
     firstView.unmount();
+    render(<TimelineFileDiffBlock change={change} themeType="light" />);
+
+    expect(screen.getByTestId("file-diff").textContent ?? "").toBe(
+      "src/app.ts",
+    );
+    expect(parsePatchFilesMock()).toHaveBeenCalledTimes(1);
+  });
+
+  it("parses equivalent new change objects independently", () => {
+    const diff = [
+      "diff --git a/src/app.ts b/src/app.ts",
+      "--- a/src/app.ts",
+      "+++ b/src/app.ts",
+      "@@ -1 +1 @@",
+      "-before",
+      "+after",
+      "",
+    ].join("\n");
+    parsePatchFilesMock().mockReturnValue([parsedPatch]);
+
+    const firstView = render(
+      <TimelineFileDiffBlock
+        change={timelineFileChange(diff)}
+        themeType="light"
+      />,
+    );
+
+    firstView.unmount();
     render(
       <TimelineFileDiffBlock
         change={timelineFileChange(diff)}
@@ -100,10 +141,77 @@ describe("TimelineFileDiffBlock", () => {
       />,
     );
 
-    expect(screen.getByTestId("file-diff").textContent ?? "").toBe(
-      "src/app.ts",
+    expect(parsePatchFilesMock()).toHaveBeenCalledTimes(2);
+  });
+
+  it("filters context and removed lines from synthetic created-file patches", () => {
+    const diff = [
+      " preserved context",
+      "+created line",
+      "-removed line",
+      "plain created line",
+    ].join("\n");
+    parsePatchFilesMock().mockReturnValue([parsedPatch]);
+
+    render(
+      <TimelineFileDiffBlock
+        change={timelineFileChange(diff, {
+          kind: "create",
+          diffStats: {
+            added: 2,
+            removed: 0,
+          },
+        })}
+        themeType="light"
+      />,
     );
-    expect(parsePatchFilesMock()).toHaveBeenCalledTimes(1);
+
+    expect(parsePatchFilesMock()).toHaveBeenCalledWith(
+      [
+        "diff --git a/src/app.ts b/src/app.ts",
+        "--- /dev/null",
+        "+++ b/src/app.ts",
+        "@@ -1,0 +1,2 @@",
+        "+created line",
+        "+plain created line",
+        "",
+      ].join("\n"),
+    );
+  });
+
+  it("filters context and added lines from synthetic deleted-file patches", () => {
+    const diff = [
+      " preserved context",
+      "-deleted line",
+      "+added line",
+      "plain deleted line",
+    ].join("\n");
+    parsePatchFilesMock().mockReturnValue([parsedPatch]);
+
+    render(
+      <TimelineFileDiffBlock
+        change={timelineFileChange(diff, {
+          kind: "delete",
+          diffStats: {
+            added: 0,
+            removed: 2,
+          },
+        })}
+        themeType="light"
+      />,
+    );
+
+    expect(parsePatchFilesMock()).toHaveBeenCalledWith(
+      [
+        "diff --git a/src/app.ts b/src/app.ts",
+        "--- a/src/app.ts",
+        "+++ /dev/null",
+        "@@ -1,2 +1,0 @@",
+        "-deleted line",
+        "-plain deleted line",
+        "",
+      ].join("\n"),
+    );
   });
 
   it("falls back to plain text when a patch cannot be parsed as one file", () => {
@@ -117,7 +225,9 @@ describe("TimelineFileDiffBlock", () => {
       />,
     );
 
-    expect(view.container.querySelector("[data-timeline-file-diff]")).toBeNull();
+    expect(
+      view.container.querySelector("[data-timeline-file-diff]"),
+    ).toBeNull();
     expect(view.container.textContent ?? "").toContain("not a valid patch");
   });
 });

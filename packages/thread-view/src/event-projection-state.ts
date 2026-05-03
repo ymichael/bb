@@ -1,6 +1,4 @@
-import type { ActiveThinking } from "@bb/domain";
 import type { ThreadEvent } from "@bb/domain";
-import type { EventMeta } from "./event-decode.js";
 import type {
   BuildEventProjectionMessagesOptions,
   EventProjectionMessage,
@@ -21,20 +19,17 @@ import {
 } from "./tool-activity-projection.js";
 import { createToolActivityState } from "./tool-activity-projection.js";
 import {
+  createOperationProjectionState,
   flushPendingFileEditOutput,
   type CompactionTurnFinalizationStatus,
   type OperationProjectionState,
 } from "./operation-projection.js";
 import {
-  createVisibleTextBuffer,
-  getVisibleTextBufferText,
-  type VisibleTextBuffer,
-} from "./visible-text-buffer.js";
+  createReasoningProjectionState,
+  finalizeOpenReasoningLifecycles,
+  type ReasoningProjectionState,
+} from "./reasoning-lifecycle-projection.js";
 import { shouldPreservePendingMessages } from "./user-message-parsing.js";
-import {
-  createBufferedTextInstanceKey,
-  type BufferedTextInstanceIdentity,
-} from "./buffered-text-identity.js";
 
 export interface CompactionTurnFinalization {
   status: CompactionTurnFinalizationStatus;
@@ -50,23 +45,6 @@ type TurnCompletedStatus = Extract<
   { type: "turn/completed" }
 >["status"];
 
-interface ActiveThinkingLifecycle {
-  itemId: string;
-  messageKey: string;
-  startedAt: number;
-  threadId: string;
-  turnId: string;
-  updatedAt: number;
-  updatedSeq: number;
-}
-
-interface UpsertReasoningLifecycleArgs {
-  identity: BufferedTextInstanceIdentity | null;
-  meta: EventMeta;
-  state: ProjectionState;
-  threadId: string;
-}
-
 interface CompleteTurnArgs {
   state: ProjectionState;
   status: TurnCompletedStatus;
@@ -79,20 +57,20 @@ interface FinalizeProjectionMessagesArgs {
 }
 
 export interface ProjectionState
-  extends AssistantStreamProjectionState, OperationProjectionState {
+  extends AssistantStreamProjectionState,
+    OperationProjectionState,
+    ReasoningProjectionState {
   seenUserKeys: Set<string>;
   openTurnIds: Set<string>;
   closedTurnIds: Set<string>;
   pendingFinalizationByTurnId: Map<string, TurnPendingFinalizationStatus>;
-  openReasoningLifecyclesByKey: Map<string, ActiveThinkingLifecycle>;
-  reasoningTextBuffersByKey: Map<string, VisibleTextBuffer>;
-  finalizedReasoningKeys: Set<string>;
   delegationParentToolCallIdsByProviderThreadId: Map<string, string>;
 }
 
 export function createProjectionState(): ProjectionState {
+  const messages: EventProjectionMessage[] = [];
   return {
-    messages: [],
+    ...createOperationProjectionState(messages),
     seenUserKeys: new Set(),
     openTurnIds: new Set(),
     closedTurnIds: new Set(),
@@ -101,134 +79,10 @@ export function createProjectionState(): ProjectionState {
     assistantTextBuffersByKey: new Map(),
     visibleAssistantMessageKeys: new Set(),
     finalizedAssistantMessageKeys: new Set(),
-    openReasoningLifecyclesByKey: new Map(),
-    reasoningTextBuffersByKey: new Map(),
-    finalizedReasoningKeys: new Set(),
-    openCompactionsByKey: new Map(),
-    finalizedCompactionKeys: new Set(),
-    provisioningOperationsByKey: new Map(),
-    permissionGrantsByInteractionId: new Map(),
-    threadOperationsById: new Map(),
-    fileEditsByCallId: new Map(),
-    fileEditStdoutBuffersByCallId: new Map(),
+    ...createReasoningProjectionState(),
     delegationParentToolCallIdsByProviderThreadId: new Map(),
     toolActivity: createToolActivityState(),
   };
-}
-
-function isNewerActiveThinkingLifecycle(
-  candidate: ActiveThinkingLifecycle,
-  current: ActiveThinkingLifecycle,
-): boolean {
-  if (candidate.updatedSeq !== current.updatedSeq) {
-    return candidate.updatedSeq > current.updatedSeq;
-  }
-  return candidate.updatedAt > current.updatedAt;
-}
-
-function findLatestActiveThinkingLifecycle(
-  openLifecycles: ReadonlyMap<string, ActiveThinkingLifecycle>,
-): ActiveThinkingLifecycle | null {
-  let latestLifecycle: ActiveThinkingLifecycle | null = null;
-  for (const lifecycle of openLifecycles.values()) {
-    if (
-      latestLifecycle === null ||
-      isNewerActiveThinkingLifecycle(lifecycle, latestLifecycle)
-    ) {
-      latestLifecycle = lifecycle;
-    }
-  }
-  return latestLifecycle;
-}
-
-function getActiveThinkingText(
-  state: ProjectionState,
-  messageKey: string,
-): string {
-  const buffer = state.reasoningTextBuffersByKey.get(messageKey);
-  return (buffer ? getVisibleTextBufferText(buffer) : undefined) ?? "";
-}
-
-export function buildProjectionActiveThinking(
-  state: ProjectionState,
-  threadStatus: BuildEventProjectionMessagesOptions["threadStatus"],
-): ActiveThinking | null {
-  if (threadStatus !== "active") {
-    return null;
-  }
-
-  const latestLifecycle = findLatestActiveThinkingLifecycle(
-    state.openReasoningLifecyclesByKey,
-  );
-  if (!latestLifecycle) {
-    return null;
-  }
-
-  return {
-    id: latestLifecycle.itemId,
-    text: getActiveThinkingText(state, latestLifecycle.messageKey),
-    startedAt: latestLifecycle.startedAt,
-    updatedAt: latestLifecycle.updatedAt,
-  };
-}
-
-export function upsertReasoningLifecycle(
-  args: UpsertReasoningLifecycleArgs,
-): void {
-  if (!args.identity) {
-    return;
-  }
-
-  const messageKey = createBufferedTextInstanceKey(args.identity);
-  if (args.state.closedTurnIds.has(args.identity.turnId)) {
-    return;
-  }
-  if (args.state.finalizedReasoningKeys.has(messageKey)) {
-    return;
-  }
-
-  args.state.openTurnIds.add(args.identity.turnId);
-
-  const existingLifecycle =
-    args.state.openReasoningLifecyclesByKey.get(messageKey);
-  if (existingLifecycle) {
-    existingLifecycle.updatedAt = args.meta.createdAt;
-    existingLifecycle.updatedSeq = args.meta.seq;
-    return;
-  }
-
-  args.state.openReasoningLifecyclesByKey.set(messageKey, {
-    itemId: args.identity.itemId,
-    messageKey,
-    startedAt: args.meta.createdAt,
-    threadId: args.threadId,
-    turnId: args.identity.turnId,
-    updatedAt: args.meta.createdAt,
-    updatedSeq: args.meta.seq,
-  });
-}
-
-export function trackReasoningTurn(
-  state: ProjectionState,
-  identity: BufferedTextInstanceIdentity | null,
-): void {
-  if (!identity || state.closedTurnIds.has(identity.turnId)) {
-    return;
-  }
-  state.openTurnIds.add(identity.turnId);
-}
-
-export function finalizeReasoningLifecycle(
-  state: ProjectionState,
-  identity: BufferedTextInstanceIdentity | null,
-): void {
-  if (!identity) {
-    return;
-  }
-
-  const messageKey = createBufferedTextInstanceKey(identity);
-  state.openReasoningLifecyclesByKey.delete(messageKey);
-  state.finalizedReasoningKeys.add(messageKey);
 }
 
 function closeOpenTurns(state: ProjectionState): void {
@@ -236,13 +90,6 @@ function closeOpenTurns(state: ProjectionState): void {
     state.closedTurnIds.add(turnId);
   }
   state.openTurnIds.clear();
-}
-
-function finalizeOpenReasoningLifecycles(state: ProjectionState): void {
-  for (const messageKey of state.openReasoningLifecyclesByKey.keys()) {
-    state.finalizedReasoningKeys.add(messageKey);
-  }
-  state.openReasoningLifecyclesByKey.clear();
 }
 
 export function onTurnStarted(state: ProjectionState, turnId: string): void {
@@ -376,15 +223,4 @@ export function finalizeProjectionState(
 ): void {
   finalizePendingMessages(args);
   finalizeInterruptedTurnPendingMessages(args.state);
-}
-
-export function getReasoningTextBuffer(
-  state: ProjectionState,
-  messageKey: string,
-): VisibleTextBuffer {
-  const buffer =
-    state.reasoningTextBuffersByKey.get(messageKey) ??
-    createVisibleTextBuffer();
-  state.reasoningTextBuffersByKey.set(messageKey, buffer);
-  return buffer;
 }

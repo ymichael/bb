@@ -285,6 +285,35 @@ describe("timeline CLI rendering snapshots", () => {
     `);
   });
 
+  it("renders command output deltas before command completion", () => {
+    const event = createTimelineEventFactory({ threadId: "thread-1" });
+    const timeline = renderActiveTimeline([
+      event.clientTurnRequested({
+        target: { kind: "new-turn" },
+        text: "Run the focused tests",
+      }),
+      event.turnStarted(),
+      event.commandStarted({
+        itemId: "cmd-output",
+        command: "pnpm test -- --runInBand",
+      }),
+      event.commandOutputDelta({
+        itemId: "cmd-output",
+        delta: "collecting tests\n",
+      }),
+    ]);
+    const commandMessage = timeline.messages.find(
+      (message) => message.kind === "command",
+    );
+
+    expect(messageKinds(timeline.messages)).toEqual(["user", "command"]);
+    expect(commandMessage?.output).toBe("collecting tests\n");
+    expect(timeline.text).toContain("Running 1 command");
+    expect(timeline.text).toContain("$ pnpm test -- --runInBand");
+    expect(timeline.text).toContain("collecting tests");
+    expect(timeline.text).not.toContain("exit code");
+  });
+
   it("shows an unacknowledged active-turn steer from the client request", () => {
     const event = createTimelineEventFactory({ threadId: "thread-1" });
     const timeline = renderActiveTimeline([

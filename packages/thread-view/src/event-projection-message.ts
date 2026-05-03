@@ -313,7 +313,6 @@ export interface BuildEventProjectionMessagesOptions {
   includeDebugRawEvents?: boolean;
   includeProviderUnhandledOperations?: boolean;
   includeOptionalOperations?: boolean;
-  includeInternalSystemMessages?: boolean;
   threadStatus?: Thread["status"];
   threadType?: Thread["type"];
 }

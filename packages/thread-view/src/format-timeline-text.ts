@@ -9,7 +9,7 @@ import type {
   TimelineWebSearchWorkRow,
 } from "@bb/server-contract";
 import { assertNever } from "./assert-never.js";
-import { durationToCompactString } from "./format-helpers.js";
+import { durationToCompactString, plural } from "./format-helpers.js";
 import {
   buildTimelineActivitySummaryLabel,
   buildTimelineViewRows,
@@ -179,10 +179,6 @@ function maybeTruncateBodyLinesForAudit(
     return [...lines];
   }
   return truncateBodyLinesForAudit(lines);
-}
-
-function plural(count: number, singular: string, pluralName?: string): string {
-  return `${count} ${count === 1 ? singular : (pluralName ?? `${singular}s`)}`;
 }
 
 function statusVerb(status: TimelineRowStatus, running: string, past: string) {

@@ -20,7 +20,7 @@ export const eventProjectionTurnMessageDetailValues = [
 /**
  * Controls how eagerly completed turns include their message arrays.
  * Summary projections may still include messages when row ordering,
- * ungroupable messages, or nested delegation projections need them.
+ * ungroupable messages, or post-terminal trailing messages need them.
  */
 export type EventProjectionTurnMessageDetail =
   (typeof eventProjectionTurnMessageDetailValues)[number];

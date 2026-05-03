@@ -1,4 +1,4 @@
-import type { TimelineViewWorkRow } from "@bb/thread-view";
+import { assertNever, type TimelineViewWorkRow } from "@bb/thread-view";
 import { EventCodeBlock } from "../primitives/event-content.js";
 import { TerminalOutputBlock } from "./TerminalOutputBlock.js";
 import { TimelineFileDiffBlock } from "./TimelineFileDiffBlock.js";
@@ -11,10 +11,6 @@ export interface WorkRowBodyProps {
 
 type DetailLine = string | null;
 type TimelineToolViewRow = Extract<TimelineViewWorkRow, { workKind: "tool" }>;
-
-function assertNever(value: never): never {
-  throw new Error(`Unhandled timeline work row: ${String(value)}`);
-}
 
 function compactDetailLines(lines: readonly DetailLine[]): string[] {
   const compactedLines: string[] = [];

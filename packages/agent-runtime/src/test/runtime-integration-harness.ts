@@ -1,8 +1,16 @@
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+} from "node:fs";
 import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect } from "vitest";
+import { getAgentDir } from "@mariozechner/pi-coding-agent";
 import type {
   PendingInteractionCreate,
   PendingInteractionResolution,
@@ -15,6 +23,7 @@ import { getThreadEventScopeTurnId } from "@bb/domain";
 import { resolvePreferredTestModel } from "@bb/test-helpers";
 import type { AgentRuntimeCaptureEntry } from "../capture-types.js";
 import { createAgentRuntime } from "../runtime.js";
+import { PI_BRIDGE_SESSION_DIR_ENV } from "../pi/bridge/session-paths.js";
 import type { AgentRuntime, AgentRuntimeExecutionOptions } from "../types.js";
 import {
   waitForRuntimeConditionUnsafe,
@@ -138,6 +147,7 @@ export const runtimeOptionsTemplates = {
 } satisfies Record<RuntimeOptionsPreset, RuntimeOptionsTemplate>;
 
 const INTEGRATION_REASONING_LEVEL = "low" satisfies ReasoningLevel;
+const PI_CODING_AGENT_DIR_ENV = "PI_CODING_AGENT_DIR";
 const resolvedIntegrationModelPromises = new Map<string, Promise<string>>();
 
 export function turnCompletedCount(events: ThreadEvent[]): number {
@@ -734,6 +744,65 @@ export interface CreateTestRuntimeOptions {
   workspacePath?: string;
 }
 
+interface CreateRuntimeProcessEnvArgs {
+  providerId: string;
+  tmpDir: string;
+}
+
+interface CopyPiAgentFileIfPresentArgs {
+  fileName: string;
+  sourceAgentDir: string;
+  targetAgentDir: string;
+}
+
+interface PreparePiAgentDirArgs {
+  tmpDir: string;
+}
+
+function copyPiAgentFileIfPresent(
+  args: CopyPiAgentFileIfPresentArgs,
+): void {
+  const sourcePath = join(args.sourceAgentDir, args.fileName);
+  if (!existsSync(sourcePath)) {
+    return;
+  }
+
+  copyFileSync(sourcePath, join(args.targetAgentDir, args.fileName));
+}
+
+function preparePiAgentDir(args: PreparePiAgentDirArgs): string {
+  const targetAgentDir = join(args.tmpDir, ".bb-pi-agent");
+  mkdirSync(targetAgentDir, { recursive: true });
+
+  const sourceAgentDir = getAgentDir();
+  // Keep credentials/custom model metadata available while isolating mutable
+  // Pi prompts, extensions, settings, and session files per concurrent test.
+  for (const fileName of ["auth.json", "models.json"]) {
+    copyPiAgentFileIfPresent({
+      fileName,
+      sourceAgentDir,
+      targetAgentDir,
+    });
+  }
+
+  return targetAgentDir;
+}
+
+function createRuntimeProcessEnv(
+  args: CreateRuntimeProcessEnvArgs,
+): Record<string, string> | undefined {
+  if (args.providerId !== "pi") {
+    return undefined;
+  }
+
+  const sessionDir = join(args.tmpDir, ".bb-pi-bridge-sessions");
+  mkdirSync(sessionDir, { recursive: true });
+  return {
+    [PI_BRIDGE_SESSION_DIR_ENV]: sessionDir,
+    [PI_CODING_AGENT_DIR_ENV]: preparePiAgentDir({ tmpDir: args.tmpDir }),
+  };
+}
+
 export function createTestRuntime(
   providerId: string,
   opts?: CreateTestRuntimeOptions,
@@ -753,6 +822,7 @@ export function createTestRuntime(
   });
 
   const runtime = createAgentRuntime({
+    env: createRuntimeProcessEnv({ providerId, tmpDir }),
     workspacePath: tmpDir,
     onEvent: (e) => events.push(e),
     onCapture: (entry) => captures.push(entry),

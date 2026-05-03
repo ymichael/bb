@@ -1,5 +1,7 @@
 export { formatThreadTimelineText } from "./format-timeline-text.js";
 export type { ThreadTimelineTextFormat } from "./format-timeline-text.js";
+export { assertNever } from "./assert-never.js";
+export { fileNameFromPath } from "./timeline-path-display.js";
 export {
   buildTimelineActivityIntentTitles,
   buildTimelineRowTitle,
@@ -14,21 +16,16 @@ export type {
 } from "./timeline-row-title.js";
 export { THREAD_TIMELINE_EXCLUDED_EVENT_TYPES } from "./timeline-noise-events.js";
 export { extractShellCommandFromString } from "./tool-call-parsing.js";
+export { getFileChangeAction } from "./file-change-summary.js";
+export type { FileChangeAction } from "./file-change-summary.js";
 export {
   buildThreadTimelineFromEvents,
   buildThreadTimelineTurnDetailsFromEvents,
 } from "./build-thread-timeline.js";
-export {
-  buildTimelineActivitySummaryLabel,
-  buildTimelineViewRows,
-  summarizeTimelineActivity,
-} from "./timeline-view.js";
+export { buildTimelineViewRows } from "./timeline-view.js";
 export type {
   ThreadTimelineViewRow,
-  TimelineActivitySummaryCounts,
-  TimelineActivitySummaryRow,
   TimelineViewDelegationWorkRow,
-  TimelineViewSourceRow,
   TimelineViewTurnRow,
   TimelineViewWorkRow,
 } from "./timeline-view.js";

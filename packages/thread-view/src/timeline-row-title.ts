@@ -16,7 +16,7 @@ import {
   getFileChangeActionPastTense,
   getFileChangeActionPresentTense,
 } from "./file-change-summary.js";
-import { durationToCompactString } from "./format-helpers.js";
+import { durationToCompactString, plural } from "./format-helpers.js";
 import {
   formatTimelineActivityIntentDetail,
   getTimelineActivityIntentDetailDedupeKey,
@@ -502,7 +502,7 @@ function buildTurnTitle(
   }
   return titleFromParts({
     prefix: status === "pending" ? "Working on" : "Worked on",
-    content: `${row.summaryCount} ${row.summaryCount === 1 ? "item" : "items"}`,
+    content: plural(row.summaryCount, "item"),
     shimmerPrefix: status === "pending",
   });
 }

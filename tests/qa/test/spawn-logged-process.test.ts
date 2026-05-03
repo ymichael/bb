@@ -55,7 +55,7 @@ vi.mock("node:child_process", async (importOriginal) => {
   };
 });
 
-import { spawnLoggedProcess } from "../src/shared.js";
+import { spawnLoggedProcess, startQaServer } from "../src/shared.js";
 
 afterEach(() => {
   for (const child of spawnMockState.children) {
@@ -63,6 +63,8 @@ afterEach(() => {
   }
   spawnMockState.children.length = 0;
   spawnMockState.invocations.length = 0;
+  vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
 
   for (const tempDir of spawnMockState.tempDirs) {
     rmSync(tempDir, { force: true, recursive: true });
@@ -94,5 +96,31 @@ describe("spawnLoggedProcess", () => {
     ]);
     expect(spawnMockState.invocations[0]?.options.cwd).toBe("/repo");
     expect(spawnMockState.invocations[0]?.options.detached).toBe(true);
+  });
+
+  it("keeps standalone server runtime env isolated from inherited bb env", async () => {
+    vi.stubEnv("BB_DATA_DIR", "/Users/example/.bb-dev");
+    vi.stubEnv("BB_SERVER_PORT", "3334");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(null, { status: 200 })),
+    );
+
+    await startQaServer({
+      dataDir: "/tmp/standalone-server-data",
+      env: {
+        BB_DATA_DIR: "/tmp/leaked-data-dir",
+        BB_SERVER_PORT: "9999",
+        OPENAI_API_KEY: "test-openai-key",
+      },
+      logPath: "/tmp/standalone-server.log",
+      port: 4567,
+    });
+
+    expect(spawnMockState.invocations[0]?.options.env).toMatchObject({
+      BB_DATA_DIR: "/tmp/standalone-server-data",
+      BB_SERVER_PORT: "4567",
+      OPENAI_API_KEY: "test-openai-key",
+    });
   });
 });

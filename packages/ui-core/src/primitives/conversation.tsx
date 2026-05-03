@@ -1,12 +1,9 @@
+import { assertNever } from "@bb/core-ui";
 import type { ReactNode } from "react";
 import { cx } from "./utils.js";
 
 type ConversationEmptyStateSpacing = "default" | "compact";
 type ConversationEmptyStateAlignment = "center" | "left";
-
-function assertNever(value: never, message: string): never {
-  throw new Error(`${message}: ${String(value)}`);
-}
 
 function conversationEmptyStateSpacingClass(
   spacing: ConversationEmptyStateSpacing,

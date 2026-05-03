@@ -3,6 +3,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   buildThreadTimelineFromEvents,
+  buildTimelineViewRows,
   decodeThreadEventRow,
   formatThreadTimelineText,
 } from "@bb/thread-view";
@@ -59,8 +60,9 @@ export interface ProviderAuditReplayBuildSummary {
   debugRawEventCount: number;
   fixture: string;
   rawProviderEventCount: number;
+  renderedTimelineRowCount: number;
+  semanticTimelineRowCount: number;
   timelinePreview: string[];
-  timelineRowCount: number;
   translatedThreadEventCount: number;
   unexpectedUntranslatedRawEventCount: number;
 }
@@ -76,9 +78,10 @@ export interface ProviderAuditReplayBuildPrefixSnapshot {
   fixture: string;
   lastEventType: ThreadEventType;
   prefixLength: number;
+  renderedTimelineRowCount: number;
+  semanticTimelineRowCount: number;
   threadStatus: ProviderAuditReplayBuildPrefixThreadStatus;
   timelinePreview: string[];
-  timelineRowCount: number;
   totalEventCount: number;
 }
 
@@ -256,7 +259,8 @@ const replayBuildArtifactSchema = z.object({
         taskId: z.string(),
         scenarioDescription: z.string(),
         threadStatus: z.string(),
-        timelineRowCount: z.number(),
+        semanticTimelineRowCount: z.number(),
+        renderedTimelineRowCount: z.number(),
         timelineRows: z.array(timelineRowSchema),
       }),
     ),
@@ -266,8 +270,9 @@ const replayBuildArtifactSchema = z.object({
       debugRawEventCount: z.number(),
       fixture: z.string(),
       rawProviderEventCount: z.number(),
+      renderedTimelineRowCount: z.number(),
+      semanticTimelineRowCount: z.number(),
       timelinePreview: z.array(z.string()),
-      timelineRowCount: z.number(),
       translatedThreadEventCount: z.number(),
       unexpectedUntranslatedRawEventCount: z.number(),
     }),
@@ -277,9 +282,10 @@ const replayBuildArtifactSchema = z.object({
       fixture: z.string(),
       lastEventType: providerAuditThreadEventTypeSchema,
       prefixLength: z.number(),
+      renderedTimelineRowCount: z.number(),
+      semanticTimelineRowCount: z.number(),
       threadStatus: z.enum(["active", "idle"]),
       timelinePreview: z.array(z.string()),
-      timelineRowCount: z.number(),
       totalEventCount: z.number(),
     }),
   ),
@@ -401,14 +407,16 @@ function buildPrefixSnapshot(
     truncateForAudit: true,
     verbose: false,
   });
+  const renderedTimelineRowCount = buildTimelineViewRows(timelineRows).length;
 
   return {
     fixture: args.fixtureId,
     lastEventType: lastRow.type,
     prefixLength: args.prefixLength,
+    renderedTimelineRowCount,
+    semanticTimelineRowCount: timelineRows.length,
     threadStatus,
     timelinePreview: buildTimelinePreview(timelineText),
-    timelineRowCount: timelineRows.length,
     totalEventCount: args.bundle.threadEventRows.length,
   };
 }
@@ -513,7 +521,10 @@ export function buildProviderAuditReplayBuildArtifact(
       rawProviderEventCount: bundle.auditReport.summary.rawProviderEventCount,
       translatedThreadEventCount:
         bundle.auditReport.summary.translatedThreadEventCount,
-      timelineRowCount: bundle.auditReport.summary.timelineRowCount,
+      semanticTimelineRowCount:
+        bundle.auditReport.summary.semanticTimelineRowCount,
+      renderedTimelineRowCount:
+        bundle.auditReport.summary.renderedTimelineRowCount,
       debugRawEventCount: bundle.auditReport.summary.debugRawEventCount,
       unexpectedUntranslatedRawEventCount:
         bundle.auditReport.summary.unexpectedUntranslatedRawEventCount,

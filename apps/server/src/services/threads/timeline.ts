@@ -28,21 +28,28 @@ interface TimelineTurnSummarySourceRange {
 interface BuildThreadTimelineOptions {
   isDevelopment: boolean;
   includeNestedRows?: boolean;
-  managerTimelineView?: ManagerTimelineView;
+  timelineViewMode: ThreadTimelineServiceViewMode;
 }
 
 interface BuildTimelineTurnSummaryDetailsOptions extends TimelineTurnSummarySourceRange {
   isDevelopment: boolean;
-  managerTimelineView?: ManagerTimelineView;
+  timelineViewMode: ThreadTimelineServiceViewMode;
 }
 
-function resolveTimelineViewMode(args: {
+export type ThreadTimelineServiceViewMode = "manager-conversation" | "standard";
+
+export interface ResolveThreadTimelineServiceViewModeArgs {
   managerTimelineView: ManagerTimelineView | undefined;
   thread: Thread;
-}): "manager-conversation" | "standard" {
+}
+
+export function resolveThreadTimelineServiceViewMode({
+  managerTimelineView,
+  thread,
+}: ResolveThreadTimelineServiceViewModeArgs): ThreadTimelineServiceViewMode {
   if (
-    args.thread.type === "manager" &&
-    args.managerTimelineView !== "standard"
+    thread.type === "manager" &&
+    managerTimelineView !== "standard"
   ) {
     return "manager-conversation";
   }
@@ -95,10 +102,7 @@ export function buildThreadTimeline(
   const contextWindowUsageRows = listContextWindowUsageRows(db, {
     threadId: thread.id,
   });
-  const viewMode = resolveTimelineViewMode({
-    managerTimelineView: options.managerTimelineView,
-    thread,
-  });
+  const viewMode = options.timelineViewMode;
   const commonProjectionOptions = {
     includeDebugRawEvents: false,
     includeOptionalOperations: false,
@@ -156,10 +160,7 @@ export function buildTimelineTurnSummaryDetails(
       afterSequence: options.sourceSeqEnd,
       clientRequestSequences,
     });
-  const viewMode = resolveTimelineViewMode({
-    managerTimelineView: options.managerTimelineView,
-    thread,
-  });
+  const viewMode = options.timelineViewMode;
   const children = buildThreadTimelineTurnDetailsFromEvents({
     events: [...exactEventRows, ...acceptedInputRows].map((row) =>
       toThreadEventWithMeta(row),

@@ -9,6 +9,7 @@ import {
 import type { AgentRuntimeCaptureEntry } from "@bb/agent-runtime/capture";
 import {
   buildThreadTimelineFromEvents,
+  buildTimelineViewRows,
   decodeThreadEventRow,
   formatThreadTimelineText,
 } from "@bb/thread-view";
@@ -912,7 +913,8 @@ function buildAuditReport(args: {
     summary: {
       rawProviderEventCount: args.rawProviderEvents.length,
       translatedThreadEventCount: args.translatedCaptures.length,
-      timelineRowCount: args.timelineRows.length,
+      semanticTimelineRowCount: args.timelineRows.length,
+      renderedTimelineRowCount: buildTimelineViewRows(args.timelineRows).length,
       debugRawEventCount: debugRawEvents.length,
       unexpectedUntranslatedRawEventCount:
         unexpectedUntranslatedRawProviderEvents.length,

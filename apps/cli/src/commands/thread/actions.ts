@@ -5,8 +5,8 @@ import {
   type Thread,
   type ThreadStatus,
 } from "@bb/domain";
+import { assertNever } from "@bb/core-ui";
 import { action } from "../../action.js";
-import { assertNever } from "../../assert-never.js";
 import { createClient, unwrap } from "../../client.js";
 import {
   confirmDestructiveAction,

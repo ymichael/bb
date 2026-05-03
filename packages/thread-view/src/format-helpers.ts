@@ -29,19 +29,12 @@ export function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-export function durationToString(
-  durationMs: number | undefined,
-): string | undefined {
-  if (durationMs === undefined) return undefined;
-  if (durationMs < 1_000) return `${Math.round(durationMs)}ms`;
-  const seconds = durationMs / 1_000;
-  if (seconds < 60)
-    return `${Number.isInteger(seconds) ? seconds : seconds.toFixed(1)}s`;
-  const minutes = Math.floor(seconds / 60);
-  const remainingSeconds = Math.round(seconds % 60);
-  return remainingSeconds === 0
-    ? `${minutes}m`
-    : `${minutes}m ${remainingSeconds}s`;
+export function plural(
+  count: number,
+  singular: string,
+  pluralName?: string,
+): string {
+  return `${count} ${count === 1 ? singular : (pluralName ?? `${singular}s`)}`;
 }
 
 export function durationToCompactString(durationMs: number): string;
@@ -57,17 +50,6 @@ export function durationToCompactString(
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   return seconds === 0 ? `${minutes}m` : `${minutes}m ${seconds}s`;
-}
-
-export function timeAgo(timestamp: number): string {
-  const seconds = Math.floor((Date.now() - timestamp) / 1000);
-  if (seconds < 60) return "just now";
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
 }
 
 export function messageId(threadId: string, kind: string, key: string): string {

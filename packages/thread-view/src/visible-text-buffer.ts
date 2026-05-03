@@ -136,6 +136,12 @@ export function getVisibleTextBufferFullLength(
   return buffer.visibleLength + buffer.pendingLength;
 }
 
+export function getVisibleTextBufferFullText(
+  buffer: VisibleTextBuffer,
+): string {
+  return buildFullText(buffer);
+}
+
 export function getVisibleTextBufferText(
   buffer: VisibleTextBuffer,
 ): string | undefined {
