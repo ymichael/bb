@@ -327,17 +327,17 @@ curl -fsS "$BB_SERVER_URL/api/v1/projects/$BB_PROJECT_ID/sources/$PROJECT_SOURCE
 curl -fsS "$BB_SERVER_URL/api/v1/environments/$PROMOTE_ENV_ID/status" | jq
 bb environment commit "$PROMOTE_ENV_ID"
 curl -fsS "$BB_SERVER_URL/api/v1/environments/$PROMOTE_ENV_ID/promotion" \
-  | jq -e '.state.isPromoted == false and .actions.promote.enabled == true'
+  | jq -e '.state.isPromoted == false and .actions.promote.unavailableReasons == []'
 
 bb environment promote "$PROMOTE_ENV_ID"
 curl -fsS "$BB_SERVER_URL/api/v1/environments/$PROMOTE_ENV_ID/promotion" \
-  | jq -e '.state.isPromoted == true and .actions.demote.enabled == true'
+  | jq -e '.state.isPromoted == true and .actions.demote.unavailableReasons == []'
 curl -fsS "$BB_SERVER_URL/api/v1/projects/$BB_PROJECT_ID/sources/$PROJECT_SOURCE_ID/status" \
   | jq -e --arg branch "$PROMOTE_BRANCH" '.workspace.branch.currentBranch == $branch'
 
 bb environment demote "$PROMOTE_ENV_ID"
 curl -fsS "$BB_SERVER_URL/api/v1/environments/$PROMOTE_ENV_ID/promotion" \
-  | jq -e '.state.isPromoted == false and .actions.demote.enabled == false'
+  | jq -e '.state.isPromoted == false and (.actions.demote.unavailableReasons | index("not_promoted")) != null'
 curl -fsS "$BB_SERVER_URL/api/v1/projects/$BB_PROJECT_ID/sources/$PROJECT_SOURCE_ID/status" \
   | jq -e --arg branch "$PROMOTE_DEFAULT_BRANCH" '.workspace.branch.currentBranch == $branch'
 ```
@@ -348,7 +348,7 @@ Expected result:
 - Alternating follow-ups complete and return the requested exact outputs.
 - Archiving one sibling does not break the other.
 - Mixed-provider threads succeed without event cross-contamination.
-- Promotion availability reports promote enabled before promote, promoted state and demote enabled after promote, then unpromoted state after demote.
+- Promotion availability reports no promote blockers before promote, promoted state and no demote blockers after promote, then unpromoted state after demote.
 - The project source status route shows the primary checkout branch change during promote/demote.
 
 ## Recovery

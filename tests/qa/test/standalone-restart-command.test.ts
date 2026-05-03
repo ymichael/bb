@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildDaemonRestartCommand,
+  buildStandaloneShellExports,
   resolveStandaloneParentPid,
   STANDALONE_PARENT_PID_ENV,
 } from "../src/shared.js";
@@ -26,6 +27,22 @@ describe("standalone restart command", () => {
         fallbackPid: 1111,
       }),
     ).toBe(1111);
+  });
+
+  it("clears inherited thread context from env-format setup output", () => {
+    expect(
+      buildStandaloneShellExports({
+        BB_HOST_DAEMON_PORT: "3334",
+        BB_PROJECT_ID: "proj_standalone",
+        BB_SERVER_URL: "http://127.0.0.1:3333",
+      }).split("\n"),
+    ).toEqual([
+      "unset BB_THREAD_ID",
+      "unset BB_ENVIRONMENT_ID",
+      "export BB_HOST_DAEMON_PORT='3334'",
+      "export BB_PROJECT_ID='proj_standalone'",
+      "export BB_SERVER_URL='http://127.0.0.1:3333'",
+    ]);
   });
 
   it("reloads the env file without embedding provider secrets", () => {

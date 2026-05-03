@@ -27,6 +27,7 @@ const STANDALONE_TMP_PREFIX = "bb-standalone-";
 const PROCESS_SCAN_MAX_BUFFER = 10 * 1024 * 1024;
 
 type EnvironmentMap = Record<string, string>;
+const STANDALONE_THREAD_CONTEXT_ENV = ["BB_THREAD_ID", "BB_ENVIRONMENT_ID"];
 
 interface StandaloneStateRuntime {
   daemonPid: number | null;
@@ -154,6 +155,13 @@ export function buildShellExports(env: EnvironmentMap): string {
   return Object.entries(env)
     .map(([key, value]) => `export ${key}=${shellQuote(String(value))}`)
     .join("\n");
+}
+
+export function buildStandaloneShellExports(env: EnvironmentMap): string {
+  const unsetThreadContext = STANDALONE_THREAD_CONTEXT_ENV.map(
+    (key) => `unset ${key}`,
+  );
+  return [...unsetThreadContext, buildShellExports(env)].join("\n");
 }
 
 export function readStandaloneStateRuntime(

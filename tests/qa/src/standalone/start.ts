@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import {
-  buildShellExports,
+  buildStandaloneShellExports,
   buildDaemonRestartCommand,
   cleanupStandaloneOrphans,
   createHostJoin,
@@ -195,7 +195,7 @@ async function main() {
     await fs.writeFile(statePath, JSON.stringify(state, null, 2), "utf8");
     const output =
       format === "env"
-        ? buildShellExports(setupEnv)
+        ? buildStandaloneShellExports(setupEnv)
         : JSON.stringify(state, null, 2);
     process.stdout.write(`${output}\n`);
   } catch (error) {
