@@ -1,5 +1,6 @@
 import { useCallback, useMemo } from "react";
 import { type Environment, type Thread } from "@bb/domain";
+import type { EnvironmentPromotionUnavailableReason } from "@bb/server-contract";
 import { useDialogState } from "@/hooks/useDialogState";
 import { useHostDaemon } from "@/hooks/useHostDaemon";
 import { useEnvironmentPromotion } from "@/hooks/queries/environment-queries";
@@ -14,12 +15,14 @@ import {
 
 interface UseThreadEnvironmentPromotionActionsParams {
   environment?: Environment;
+  isAgentActive: boolean;
   requestEnvironmentAction: RequestEnvironmentActionMutationLike;
   thread?: Thread;
 }
 
 export function useThreadEnvironmentPromotionActions({
   environment,
+  isAgentActive,
   requestEnvironmentAction,
   thread,
 }: UseThreadEnvironmentPromotionActionsParams) {
@@ -80,6 +83,7 @@ export function useThreadEnvironmentPromotionActions({
       hasPromotionControl
         ? resolveThreadPromotionHeaderAction({
             actionAvailability,
+            isAgentActive,
             isLoading: isPromotionStateLoading,
             isPending: requestEnvironmentAction.isPending,
             isPromoted: promotionState.isPromoted,
@@ -89,6 +93,7 @@ export function useThreadEnvironmentPromotionActions({
     [
       actionAvailability,
       hasPromotionControl,
+      isAgentActive,
       isPromotionStateLoading,
       localUnavailableReason,
       promotionState.isPromoted,
@@ -109,8 +114,22 @@ export function useThreadEnvironmentPromotionActions({
     [environment, requestEnvironmentAction],
   );
 
+  const dialogTargetKind = promotionDialog.target?.kind ?? null;
+  const dialogServerAvailability =
+    dialogTargetKind === "demote"
+      ? promotionQuery.data?.actions.demote
+      : dialogTargetKind === "promote"
+        ? promotionQuery.data?.actions.promote
+        : undefined;
+  const dialogBlockers: EnvironmentPromotionUnavailableReason[] =
+    localUnavailableReason
+      ? [localUnavailableReason]
+      : (dialogServerAvailability?.unavailableReasons ?? []);
+
   return {
     branchName: promotionState.branchName,
+    defaultBranch: environment?.defaultBranch ?? null,
+    dialogBlockers,
     handlePromotionAction,
     headerAction,
     isPromoted: promotionState.isPromoted,

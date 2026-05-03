@@ -63,21 +63,15 @@ type PromotionWorkspaceEligibility =
 
 type EnvironmentPromotionDbDeps = Pick<LoggedSandboxWorkSessionDeps, "db">;
 
-function unavailable(
-  unavailableReason: EnvironmentPromotionUnavailableReason,
+function withReasons(
+  unavailableReasons: EnvironmentPromotionUnavailableReason[],
 ): EnvironmentPromotionActionAvailability {
-  return {
-    enabled: false,
-    unavailableReason,
-  };
+  return { unavailableReasons };
 }
 
-function available(): EnvironmentPromotionActionAvailability {
-  return {
-    enabled: true,
-    unavailableReason: null,
-  };
-}
+const AVAILABLE: EnvironmentPromotionActionAvailability = {
+  unavailableReasons: [],
+};
 
 function getLocalPathSourceForEnvironment(
   deps: EnvironmentPromotionDbDeps,
@@ -192,29 +186,35 @@ interface ReadyPromotionStatuses {
 }
 
 type CommonAvailabilityCheck =
-  | { unavailableReason: EnvironmentPromotionUnavailableReason }
-  | { unavailableReason: null; statuses: ReadyPromotionStatuses };
+  | { precondition: EnvironmentPromotionUnavailableReason }
+  | {
+      precondition: null;
+      reasons: EnvironmentPromotionUnavailableReason[];
+      statuses: ReadyPromotionStatuses;
+    };
 
 function checkCommonAvailability(
   facts: PromotionWorkspaceFacts,
 ): CommonAvailabilityCheck {
   if (facts.eligibilityUnavailableReason) {
-    return { unavailableReason: facts.eligibilityUnavailableReason };
+    return { precondition: facts.eligibilityUnavailableReason };
   }
   if (!facts.primaryStatus) {
-    return { unavailableReason: "primary_checkout_status_unavailable" };
+    return { precondition: "primary_checkout_status_unavailable" };
   }
   if (!facts.environmentStatus) {
-    return { unavailableReason: "environment_status_unavailable" };
+    return { precondition: "environment_status_unavailable" };
   }
+  const reasons: EnvironmentPromotionUnavailableReason[] = [];
   if (facts.primaryStatus.workingTree.hasUncommittedChanges) {
-    return { unavailableReason: "primary_checkout_dirty" };
+    reasons.push("primary_checkout_dirty");
   }
   if (facts.environmentStatus.workingTree.hasUncommittedChanges) {
-    return { unavailableReason: "environment_dirty" };
+    reasons.push("environment_dirty");
   }
   return {
-    unavailableReason: null,
+    precondition: null,
+    reasons,
     statuses: {
       environmentStatus: facts.environmentStatus,
       primaryStatus: facts.primaryStatus,
@@ -227,18 +227,18 @@ function buildPromoteAvailability(
   state: EnvironmentPromotionState,
 ): EnvironmentPromotionActionAvailability {
   const check = checkCommonAvailability(facts);
-  if (check.unavailableReason) {
-    return unavailable(check.unavailableReason);
+  if (check.precondition) {
+    return withReasons([check.precondition]);
   }
+  const reasons = [...check.reasons];
   if (state.isPromoted) {
-    return unavailable("already_promoted");
-  }
-  if (
+    reasons.push("already_promoted");
+  } else if (
     check.statuses.environmentStatus.branch.currentBranch !== state.branchName
   ) {
-    return unavailable("environment_branch_mismatch");
+    reasons.push("environment_branch_mismatch");
   }
-  return available();
+  return reasons.length === 0 ? AVAILABLE : withReasons(reasons);
 }
 
 function buildDemoteAvailability(
@@ -247,16 +247,17 @@ function buildDemoteAvailability(
   state: EnvironmentPromotionState,
 ): EnvironmentPromotionActionAvailability {
   const check = checkCommonAvailability(facts);
-  if (check.unavailableReason) {
-    return unavailable(check.unavailableReason);
+  if (check.precondition) {
+    return withReasons([check.precondition]);
   }
+  const reasons = [...check.reasons];
   if (!environment.defaultBranch) {
-    return unavailable("missing_default_branch");
+    reasons.push("missing_default_branch");
   }
   if (!state.isPromoted) {
-    return unavailable("not_promoted");
+    reasons.push("not_promoted");
   }
-  return available();
+  return reasons.length === 0 ? AVAILABLE : withReasons(reasons);
 }
 
 async function readWorkspaceStatus(

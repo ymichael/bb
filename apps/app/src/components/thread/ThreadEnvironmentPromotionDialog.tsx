@@ -1,25 +1,31 @@
 import { useState, type FormEvent } from "react";
-import { Loader2 } from "lucide-react";
+import { AlertCircle, Loader2 } from "lucide-react";
 import { assertNever } from "@bb/core-ui";
-import { DetailCard, DetailRow } from "@bb/ui-core";
-import { FormError } from "@bb/ui-core";
-import { Button } from "@bb/ui-core";
 import {
+  Button,
+  DetailCard,
+  DetailRow,
   Dialog,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  FormError,
 } from "@bb/ui-core";
+import type { EnvironmentPromotionUnavailableReason } from "@bb/server-contract";
 import { getMutationErrorMessage } from "@/lib/mutation-errors";
+import { PROMOTION_UNAVAILABLE_COPY } from "@/lib/promotion-copy";
 
 export type ThreadEnvironmentPromotionDialogTarget =
   | { kind: "promote" }
   | { kind: "demote" };
 
 interface ThreadEnvironmentPromotionDialogProps {
+  agentActive: boolean;
+  blockers: EnvironmentPromotionUnavailableReason[];
   branchName: string | null;
+  defaultBranch: string | null;
   primaryCheckoutPath?: string;
   pending?: boolean;
   target: ThreadEnvironmentPromotionDialogTarget | null;
@@ -27,26 +33,38 @@ interface ThreadEnvironmentPromotionDialogProps {
   onSubmit: (target: ThreadEnvironmentPromotionDialogTarget) => Promise<void>;
 }
 
+interface PromotionDialogIssuesProps {
+  agentActive: boolean;
+  blockers: EnvironmentPromotionUnavailableReason[];
+}
+
 interface DialogCopy {
   description: string;
+  plannedChange: string;
   submitLabel: string;
   title: string;
 }
 
 function getDialogCopy(
   target: ThreadEnvironmentPromotionDialogTarget,
+  branchName: string | null,
+  defaultBranch: string | null,
 ): DialogCopy {
+  const branchLabel = branchName ?? "the environment branch";
+  const defaultLabel = defaultBranch ?? "the default branch";
   switch (target.kind) {
     case "promote":
       return {
         title: "Promote environment",
         description: "Move this branch into the primary checkout.",
+        plannedChange: `Check out ${branchLabel} in the primary checkout and return the worktree to ${defaultLabel}.`,
         submitLabel: "Promote",
       };
     case "demote":
       return {
         title: "Demote environment",
         description: "Move this branch back into its worktree.",
+        plannedChange: `Check out ${branchLabel} in the worktree and return the primary checkout to ${defaultLabel}.`,
         submitLabel: "Demote",
       };
     default:
@@ -55,7 +73,10 @@ function getDialogCopy(
 }
 
 export function ThreadEnvironmentPromotionDialog({
+  agentActive,
+  blockers,
   branchName,
+  defaultBranch,
   primaryCheckoutPath,
   pending = false,
   target,
@@ -63,11 +84,14 @@ export function ThreadEnvironmentPromotionDialog({
   onSubmit,
 }: ThreadEnvironmentPromotionDialogProps) {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const dialogCopy = target ? getDialogCopy(target) : null;
+  const dialogCopy = target
+    ? getDialogCopy(target, branchName, defaultBranch)
+    : null;
+  const submitDisabled = pending || blockers.length > 0 || agentActive;
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!target || pending) {
+    if (!target || submitDisabled) {
       return;
     }
     setErrorMessage(null);
@@ -93,7 +117,7 @@ export function ThreadEnvironmentPromotionDialog({
               <DialogTitle>{dialogCopy.title}</DialogTitle>
               <DialogDescription>{dialogCopy.description}</DialogDescription>
             </DialogHeader>
-            <form className="space-y-5 px-6 pt-3 pb-5" onSubmit={handleSubmit}>
+            <form className="space-y-4 px-6 pt-3 pb-5" onSubmit={handleSubmit}>
               <DetailCard className="border-border/70 bg-muted/20">
                 {branchName ? (
                   <DetailRow label="Branch" valueClassName="min-w-0 truncate">
@@ -115,12 +139,18 @@ export function ThreadEnvironmentPromotionDialog({
                     </span>
                   </DetailRow>
                 ) : null}
-                <DetailRow label="Preflight" valueClassName="min-w-0">
+                <DetailRow label="Planned change" valueClassName="min-w-0">
                   <span className="text-muted-foreground">
-                    Both workspaces must be clean.
+                    {dialogCopy.plannedChange}
                   </span>
                 </DetailRow>
               </DetailCard>
+              {blockers.length > 0 || agentActive ? (
+                <PromotionDialogIssues
+                  agentActive={agentActive}
+                  blockers={blockers}
+                />
+              ) : null}
               <FormError message={errorMessage} />
               <DialogFooter>
                 <Button
@@ -130,7 +160,7 @@ export function ThreadEnvironmentPromotionDialog({
                 >
                   Cancel
                 </Button>
-                <Button type="submit" disabled={pending}>
+                <Button type="submit" disabled={submitDisabled}>
                   {pending ? <Loader2 className="size-4 animate-spin" /> : null}
                   {dialogCopy.submitLabel}
                 </Button>
@@ -140,5 +170,27 @@ export function ThreadEnvironmentPromotionDialog({
         ) : null}
       </DialogContent>
     </Dialog>
+  );
+}
+
+function PromotionDialogIssues({
+  agentActive,
+  blockers,
+}: PromotionDialogIssuesProps) {
+  return (
+    <div className="rounded-md border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-foreground">
+      <div className="flex items-center gap-2 font-medium">
+        <AlertCircle className="size-4 text-warning" />
+        Resolve before continuing
+      </div>
+      <ul className="mt-2 ml-6 list-disc space-y-1 text-muted-foreground">
+        {agentActive ? (
+          <li>Wait for the agent to finish before continuing.</li>
+        ) : null}
+        {blockers.map((reason) => (
+          <li key={reason}>{PROMOTION_UNAVAILABLE_COPY[reason]}</li>
+        ))}
+      </ul>
+    </div>
   );
 }

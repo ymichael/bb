@@ -845,8 +845,7 @@ export type EnvironmentPromotionUnavailableReason = z.infer<
 
 export const environmentPromotionActionAvailabilitySchema = z
   .object({
-    enabled: z.boolean(),
-    unavailableReason: environmentPromotionUnavailableReasonSchema.nullable(),
+    unavailableReasons: z.array(environmentPromotionUnavailableReasonSchema),
   })
   .strict();
 export type EnvironmentPromotionActionAvailability = z.infer<

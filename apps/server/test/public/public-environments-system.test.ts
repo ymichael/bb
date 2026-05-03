@@ -232,12 +232,96 @@ describe("public environment and system routes", () => {
         },
         actions: {
           promote: {
-            enabled: false,
-            unavailableReason: "already_promoted",
+            unavailableReasons: ["already_promoted"],
           },
           demote: {
-            enabled: true,
-            unavailableReason: null,
+            unavailableReasons: [],
+          },
+        },
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("returns every applicable promote blocker when both worktrees are dirty", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-environment-promotion-both-dirty",
+      });
+      const { project, source } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/environment-promotion-both-dirty",
+      });
+      const sourceEnvironment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: source.path,
+        managed: false,
+        workspaceProvisionType: "unmanaged",
+        branchName: "main",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/environment-promotion-both-dirty/.bb-worktrees/thread",
+        managed: true,
+        workspaceProvisionType: "managed-worktree",
+        branchName: "bb/thread",
+        defaultBranch: "main",
+      });
+
+      const responsePromise = harness.app.request(
+        `/api/v1/environments/${environment.id}/promotion`,
+      );
+
+      const primaryStatusCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "workspace.status" &&
+          command.environmentId === sourceEnvironment.id,
+      );
+      await reportQueuedCommandSuccess(harness, primaryStatusCommand, {
+        workspaceStatus: makeWorkspaceStatus({
+          workingTree: makeWorkspaceWorkingTree({
+            hasUncommittedChanges: true,
+            state: "dirty_uncommitted",
+          }),
+          branch: { currentBranch: "main", defaultBranch: "main" },
+        }),
+      });
+
+      const environmentStatusCommand = await waitForQueuedCommandAfter(
+        harness,
+        primaryStatusCommand.row.cursor,
+        ({ command }) =>
+          command.type === "workspace.status" &&
+          command.environmentId === environment.id,
+      );
+      await reportQueuedCommandSuccess(harness, environmentStatusCommand, {
+        workspaceStatus: makeWorkspaceStatus({
+          workingTree: makeWorkspaceWorkingTree({
+            hasUncommittedChanges: true,
+            state: "dirty_uncommitted",
+          }),
+          branch: { currentBranch: "bb/thread", defaultBranch: "main" },
+        }),
+      });
+
+      const response = await responsePromise;
+      expect(response.status).toBe(200);
+      await expect(readJson(response)).resolves.toMatchObject({
+        actions: {
+          promote: {
+            unavailableReasons: ["primary_checkout_dirty", "environment_dirty"],
+          },
+          demote: {
+            unavailableReasons: [
+              "primary_checkout_dirty",
+              "environment_dirty",
+              "not_promoted",
+            ],
           },
         },
       });
@@ -312,12 +396,10 @@ describe("public environment and system routes", () => {
         },
         actions: {
           promote: {
-            enabled: false,
-            unavailableReason: "environment_branch_mismatch",
+            unavailableReasons: ["environment_branch_mismatch"],
           },
           demote: {
-            enabled: false,
-            unavailableReason: "not_promoted",
+            unavailableReasons: ["not_promoted"],
           },
         },
       });

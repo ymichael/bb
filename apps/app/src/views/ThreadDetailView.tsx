@@ -276,8 +276,10 @@ export function ThreadDetailView() {
     thread,
     workspaceStatus,
   });
+  const isAgentActive = thread?.status === "active";
   const promotionActions = useThreadEnvironmentPromotionActions({
     environment,
+    isAgentActive,
     requestEnvironmentAction,
     thread,
   });
@@ -720,9 +722,12 @@ export function ThreadDetailView() {
         />
       ) : null}
       <ThreadEnvironmentPromotionDialog
+        agentActive={isAgentActive}
+        blockers={promotionActions.dialogBlockers}
         target={promotionActions.promotionDialog.target}
         pending={promotionActions.isPromotionActionPending}
         branchName={promotionActions.branchName}
+        defaultBranch={promotionActions.defaultBranch}
         primaryCheckoutPath={promotionActions.primaryCheckoutPath}
         onOpenChange={promotionActions.promotionDialog.onOpenChange}
         onSubmit={promotionActions.handlePromotionAction}

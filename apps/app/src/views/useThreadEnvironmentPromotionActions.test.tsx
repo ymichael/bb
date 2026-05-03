@@ -108,12 +108,10 @@ function makePromotionResponse(
     },
     actions: {
       promote: {
-        enabled: !isPromoted,
-        unavailableReason: isPromoted ? "already_promoted" : null,
+        unavailableReasons: isPromoted ? ["already_promoted"] : [],
       },
       demote: {
-        enabled: isPromoted,
-        unavailableReason: isPromoted ? null : "not_promoted",
+        unavailableReasons: isPromoted ? [] : ["not_promoted"],
       },
     },
   };
@@ -167,6 +165,7 @@ describe("useThreadEnvironmentPromotionActions", () => {
       () =>
         useThreadEnvironmentPromotionActions({
           environment: makeEnvironment(),
+          isAgentActive: false,
           requestEnvironmentAction,
           thread: makeThread(),
         }),
@@ -174,10 +173,11 @@ describe("useThreadEnvironmentPromotionActions", () => {
     );
 
     await waitFor(() => {
-      expect(result.current.headerAction).toMatchObject({
-        disabled: false,
+      expect(result.current.headerAction).toEqual({
+        kind: "enabled",
         label: "Promote",
         target: { kind: "promote" },
+        blockers: [],
       });
     });
 
@@ -191,12 +191,13 @@ describe("useThreadEnvironmentPromotionActions", () => {
     });
   });
 
-  it("disables promotion for a different host before querying promotion state", () => {
+  it("hides promotion for a different host", () => {
     const { wrapper } = createQueryClientTestHarness();
     const { result } = renderHook(
       () =>
         useThreadEnvironmentPromotionActions({
           environment: makeEnvironment({ hostId: "host-other" }),
+          isAgentActive: false,
           requestEnvironmentAction: makeRequestEnvironmentAction(),
           thread: makeThread(),
         }),
@@ -204,15 +205,32 @@ describe("useThreadEnvironmentPromotionActions", () => {
     );
 
     expect(api.getEnvironmentPromotion).not.toHaveBeenCalled();
-    expect(result.current.headerAction).toMatchObject({
-      disabled: true,
-      label: "Promote",
-      title:
-        "Promotion is only available for local worktree environments on this host.",
+    expect(result.current.headerAction).toBeNull();
+  });
+
+  it("hard-disables the action while the agent is running", async () => {
+    const { wrapper } = createQueryClientTestHarness();
+    const { result } = renderHook(
+      () =>
+        useThreadEnvironmentPromotionActions({
+          environment: makeEnvironment(),
+          isAgentActive: true,
+          requestEnvironmentAction: makeRequestEnvironmentAction(),
+          thread: makeThread({ status: "active" }),
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => {
+      expect(result.current.headerAction).toEqual({
+        kind: "hard-disabled",
+        label: "Promote",
+        tooltip: "Promotion is unavailable while the agent is running.",
+      });
     });
   });
 
-  it("maps server promotion unavailable reasons to header copy", async () => {
+  it("surfaces server promotion unavailable reasons as modal blockers", async () => {
     vi.mocked(api.getEnvironmentPromotion).mockResolvedValue({
       state: {
         isPromoted: false,
@@ -220,12 +238,10 @@ describe("useThreadEnvironmentPromotionActions", () => {
       },
       actions: {
         promote: {
-          enabled: false,
-          unavailableReason: "primary_checkout_dirty",
+          unavailableReasons: ["primary_checkout_dirty", "environment_dirty"],
         },
         demote: {
-          enabled: false,
-          unavailableReason: "not_promoted",
+          unavailableReasons: ["not_promoted"],
         },
       },
     });
@@ -234,6 +250,44 @@ describe("useThreadEnvironmentPromotionActions", () => {
       () =>
         useThreadEnvironmentPromotionActions({
           environment: makeEnvironment(),
+          isAgentActive: false,
+          requestEnvironmentAction: makeRequestEnvironmentAction(),
+          thread: makeThread(),
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => {
+      expect(result.current.headerAction).toEqual({
+        kind: "enabled",
+        label: "Promote",
+        target: { kind: "promote" },
+        blockers: ["primary_checkout_dirty", "environment_dirty"],
+      });
+    });
+  });
+
+  it("derives dialogBlockers from the dialog target, not the latest isPromoted", async () => {
+    vi.mocked(api.getEnvironmentPromotion).mockResolvedValue({
+      state: {
+        isPromoted: true,
+        branchName: "bb/thread",
+      },
+      actions: {
+        promote: {
+          unavailableReasons: ["already_promoted"],
+        },
+        demote: {
+          unavailableReasons: [],
+        },
+      },
+    });
+    const { wrapper } = createQueryClientTestHarness();
+    const { result } = renderHook(
+      () =>
+        useThreadEnvironmentPromotionActions({
+          environment: makeEnvironment(),
+          isAgentActive: false,
           requestEnvironmentAction: makeRequestEnvironmentAction(),
           thread: makeThread(),
         }),
@@ -242,9 +296,160 @@ describe("useThreadEnvironmentPromotionActions", () => {
 
     await waitFor(() => {
       expect(result.current.headerAction).toMatchObject({
-        disabled: true,
+        kind: "enabled",
+        label: "Demote",
+      });
+    });
+
+    act(() => {
+      result.current.promotionDialog.onOpen({ kind: "promote" });
+    });
+
+    expect(result.current.dialogBlockers).toEqual(["already_promoted"]);
+  });
+
+  it("hard-disables when the environment workspace status is unavailable", async () => {
+    vi.mocked(api.getEnvironmentPromotion).mockResolvedValue({
+      state: { isPromoted: false, branchName: "bb/thread" },
+      actions: {
+        promote: { unavailableReasons: ["environment_status_unavailable"] },
+        demote: { unavailableReasons: ["environment_status_unavailable"] },
+      },
+    });
+    const { wrapper } = createQueryClientTestHarness();
+    const { result } = renderHook(
+      () =>
+        useThreadEnvironmentPromotionActions({
+          environment: makeEnvironment(),
+          isAgentActive: false,
+          requestEnvironmentAction: makeRequestEnvironmentAction(),
+          thread: makeThread(),
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => {
+      expect(result.current.headerAction).toEqual({
+        kind: "hard-disabled",
         label: "Promote",
-        title: "Clean the primary checkout before continuing.",
+        tooltip: "Environment status is unavailable.",
+      });
+    });
+  });
+
+  it("hard-disables when the primary checkout status is unavailable", async () => {
+    vi.mocked(api.getEnvironmentPromotion).mockResolvedValue({
+      state: { isPromoted: false, branchName: "bb/thread" },
+      actions: {
+        promote: { unavailableReasons: ["primary_checkout_status_unavailable"] },
+        demote: { unavailableReasons: ["primary_checkout_status_unavailable"] },
+      },
+    });
+    const { wrapper } = createQueryClientTestHarness();
+    const { result } = renderHook(
+      () =>
+        useThreadEnvironmentPromotionActions({
+          environment: makeEnvironment(),
+          isAgentActive: false,
+          requestEnvironmentAction: makeRequestEnvironmentAction(),
+          thread: makeThread(),
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => {
+      expect(result.current.headerAction).toEqual({
+        kind: "hard-disabled",
+        label: "Promote",
+        tooltip: "Primary checkout status is unavailable.",
+      });
+    });
+  });
+
+  it("hard-disables with the local-host tooltip when the daemon is disconnected", () => {
+    vi.mocked(useHostDaemon).mockReturnValue({
+      ...makeHostDaemonSnapshot(),
+      hasConnectedPersistentHost: false,
+    });
+    const { wrapper } = createQueryClientTestHarness();
+    const { result } = renderHook(
+      () =>
+        useThreadEnvironmentPromotionActions({
+          environment: makeEnvironment(),
+          isAgentActive: false,
+          requestEnvironmentAction: makeRequestEnvironmentAction(),
+          thread: makeThread(),
+        }),
+      { wrapper },
+    );
+
+    expect(api.getEnvironmentPromotion).not.toHaveBeenCalled();
+    expect(result.current.headerAction).toEqual({
+      kind: "hard-disabled",
+      label: "Promote",
+      tooltip:
+        "Promotion is available when the local host daemon is connected.",
+    });
+  });
+
+  it("prefers the pending tooltip over agent-active and other gates", async () => {
+    vi.mocked(api.getEnvironmentPromotion).mockResolvedValue({
+      state: { isPromoted: false, branchName: "bb/thread" },
+      actions: {
+        promote: { unavailableReasons: ["environment_status_unavailable"] },
+        demote: { unavailableReasons: ["not_promoted"] },
+      },
+    });
+    const requestEnvironmentAction: RequestEnvironmentActionMutationLike = {
+      isPending: true,
+      mutateAsync: vi.fn(),
+    };
+    const { wrapper } = createQueryClientTestHarness();
+    const { result } = renderHook(
+      () =>
+        useThreadEnvironmentPromotionActions({
+          environment: makeEnvironment(),
+          isAgentActive: true,
+          requestEnvironmentAction,
+          thread: makeThread({ status: "active" }),
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => {
+      expect(result.current.headerAction).toEqual({
+        kind: "hard-disabled",
+        label: "Promote",
+        tooltip: "Promotion action is running.",
+      });
+    });
+  });
+
+  it("prefers the agent-active tooltip over a status-unavailable hard reason", async () => {
+    vi.mocked(api.getEnvironmentPromotion).mockResolvedValue({
+      state: { isPromoted: false, branchName: "bb/thread" },
+      actions: {
+        promote: { unavailableReasons: ["environment_status_unavailable"] },
+        demote: { unavailableReasons: ["environment_status_unavailable"] },
+      },
+    });
+    const { wrapper } = createQueryClientTestHarness();
+    const { result } = renderHook(
+      () =>
+        useThreadEnvironmentPromotionActions({
+          environment: makeEnvironment(),
+          isAgentActive: true,
+          requestEnvironmentAction: makeRequestEnvironmentAction(),
+          thread: makeThread({ status: "active" }),
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => {
+      expect(result.current.headerAction).toEqual({
+        kind: "hard-disabled",
+        label: "Promote",
+        tooltip: "Promotion is unavailable while the agent is running.",
       });
     });
   });

@@ -345,12 +345,10 @@ describe("server-contract canonical schemas", () => {
         },
         actions: {
           promote: {
-            enabled: false,
-            unavailableReason: "already_promoted",
+            unavailableReasons: ["already_promoted"],
           },
           demote: {
-            enabled: true,
-            unavailableReason: null,
+            unavailableReasons: [],
           },
         },
       }),
@@ -359,8 +357,11 @@ describe("server-contract canonical schemas", () => {
         isPromoted: true,
       },
       actions: {
+        promote: {
+          unavailableReasons: ["already_promoted"],
+        },
         demote: {
-          enabled: true,
+          unavailableReasons: [],
         },
       },
     });
