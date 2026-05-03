@@ -295,6 +295,67 @@ describe("buildTimelineRowTitle", () => {
     });
   });
 
+  it("declares an open-file-diff action on file-change titles using the canonical path", () => {
+    const editTitle = buildTimelineRowTitle(editedFileRow(), DEFAULT_OPTIONS);
+    expect(editTitle.action).toEqual({
+      kind: "open-file-diff",
+      path: "src/existing-file.ts",
+    });
+
+    const createTitle = buildTimelineRowTitle(
+      createdFileRow(),
+      DEFAULT_OPTIONS,
+    );
+    expect(createTitle.action).toEqual({
+      kind: "open-file-diff",
+      path: "src/new-file.ts",
+    });
+  });
+
+  it("uses the rename destination as the open-file-diff path", () => {
+    const renamedRow: TimelineFileChangeWorkRow = {
+      ...editedFileRow(),
+      change: {
+        path: "src/old-name.ts",
+        kind: "update",
+        movePath: "src/new-name.ts",
+        diff: "-before\n+after",
+        diffStats: {
+          added: 1,
+          removed: 1,
+        },
+      },
+    };
+
+    const title = buildTimelineRowTitle(renamedRow, DEFAULT_OPTIONS);
+
+    expect(title.action).toEqual({
+      kind: "open-file-diff",
+      path: "src/new-name.ts",
+    });
+  });
+
+  it("does not declare an action on non-file-change titles", () => {
+    const commandRow = {
+      ...baseRow("cmd-1"),
+      kind: "work" as const,
+      workKind: "command" as const,
+      status: "completed" as const,
+      command: "ls",
+      source: null,
+      output: null,
+      exitCode: 0,
+      durationMs: 0,
+      stdout: null,
+      stderr: null,
+      approvalStatus: null,
+    } satisfies TimelineCommandWorkRow;
+
+    const title = buildTimelineRowTitle(commandRow, DEFAULT_OPTIONS);
+
+    expect(title.action).toBeNull();
+  });
+
   it("marks long delegation metadata as a truncating suffix", () => {
     const title = buildTimelineRowTitle(delegationRow(), DEFAULT_OPTIONS);
 

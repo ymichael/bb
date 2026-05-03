@@ -12,21 +12,22 @@ import {
   GripVertical,
   Info,
   Loader2,
+  MoreHorizontal,
   Rows2,
   X,
 } from "lucide-react";
 import { FileDiff as DiffView } from "@pierre/diffs/react";
-import { DiffStatsTally, TruncateStart } from "@bb/ui-core";
+import { DiffStatsTally, FilePathLink, Skeleton } from "@bb/ui-core";
+import { copyToClipboardWithToast } from "@/lib/clipboard";
 import { Panel, PanelResizeHandle } from "react-resizable-panels";
 import {
   formatChangeSummary,
   renderChangeSummary,
 } from "@/lib/workspace-change-summary";
 import { useIntersectionObserver } from "usehooks-ts";
-import { Button } from "@bb/ui-core";
-import { COARSE_POINTER_COMPACT_ICON_SIZE_CLASS } from "@bb/ui-core";
-import { Skeleton } from "@bb/ui-core";
 import {
+  Button,
+  COARSE_POINTER_COMPACT_ICON_SIZE_CLASS,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -220,7 +221,7 @@ interface GitDiffFileCardProps {
   setGitDiffFileRef: (fileKey: string, element: HTMLDivElement | null) => void;
   toggleGitDiffFileCollapsed: (fileKey: string) => void;
   gitDiffViewOptions: Record<string, string | boolean>;
-  onOpenFile?: (path: string) => void;
+  onOpenFileInEditor?: (path: string) => void;
 }
 
 const GitDiffFileCard = memo(function GitDiffFileCard({
@@ -232,7 +233,7 @@ const GitDiffFileCard = memo(function GitDiffFileCard({
   setGitDiffFileRef,
   toggleGitDiffFileCollapsed,
   gitDiffViewOptions,
-  onOpenFile,
+  onOpenFileInEditor,
 }: GitDiffFileCardProps) {
   const { isStuck: isHeaderStuck, sentinelRef } = useIsStuck();
   const fileDiffStats = useMemo(
@@ -285,26 +286,53 @@ const GitDiffFileCard = memo(function GitDiffFileCard({
                 )}
               />
             </button>
-            {canOpenFile && openablePath && onOpenFile ? (
-              <button
-                type="button"
-                className="block min-w-0 text-left underline-offset-2 hover:underline"
-                title={fileDiffLabel}
-                onClick={() => onOpenFile(openablePath)}
-              >
-                <TruncateStart>{fileDiffLabel}</TruncateStart>
-              </button>
-            ) : (
-              <TruncateStart title={fileDiffLabel}>
-                {fileDiffLabel}
-              </TruncateStart>
-            )}
+            <FilePathLink
+              path={openablePath ?? fileDiff.name}
+              displayName={fileDiffLabel}
+              onClick={
+                canOpenFile && openablePath && onOpenFileInEditor
+                  ? () => onOpenFileInEditor(openablePath)
+                  : undefined
+              }
+              variant="external"
+              className="font-medium text-foreground"
+            />
           </span>
-          <DiffStatsTally
-            insertions={fileDiffStats.insertions}
-            deletions={fileDiffStats.deletions}
-            className="shrink-0 text-xs"
-          />
+          <span className="flex shrink-0 items-center gap-1">
+            <DiffStatsTally
+              insertions={fileDiffStats.insertions}
+              deletions={fileDiffStats.deletions}
+              className="text-xs"
+            />
+            {openablePath ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="size-5 rounded-md p-0 text-muted-foreground hover:bg-accent/70 hover:text-foreground data-[state=open]:bg-accent/45 data-[state=open]:text-foreground"
+                    aria-label={`More actions for ${fileDiffLabel}`}
+                    title="More actions"
+                  >
+                    <MoreHorizontal className="size-3.5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-40">
+                  <DropdownMenuItem
+                    onSelect={() => {
+                      void copyToClipboardWithToast(openablePath, {
+                        successMessage: "Path copied",
+                        errorMessage: "Could not copy path",
+                      });
+                    }}
+                  >
+                    Copy path
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : null}
+          </span>
         </div>
       </div>
       {!isCollapsed ? (
@@ -347,7 +375,7 @@ export interface ThreadSecondaryPanelProps {
   threadId: string;
   onCollapse: () => void;
   onClose: () => void;
-  onOpenFile?: (path: string) => void;
+  onOpenFileInEditor?: (path: string) => void;
   /**
    * When true, render only the aside content — skip the PanelResizeHandle +
    * Panel wrappers that are only meaningful inside a desktop PanelGroup.
@@ -369,7 +397,7 @@ export function ThreadSecondaryPanel({
   threadId,
   onCollapse,
   onClose,
-  onOpenFile,
+  onOpenFileInEditor,
   isMobile = false,
 }: ThreadSecondaryPanelProps) {
   const rawActivePanel = useActiveSecondaryPanel();
@@ -650,7 +678,7 @@ export function ThreadSecondaryPanel({
                         setGitDiffFileRef={setGitDiffFileRef}
                         toggleGitDiffFileCollapsed={toggleGitDiffFileCollapsed}
                         gitDiffViewOptions={gitDiffViewOptions}
-                        onOpenFile={onOpenFile}
+                        onOpenFileInEditor={onOpenFileInEditor}
                       />
                     );
                   })}

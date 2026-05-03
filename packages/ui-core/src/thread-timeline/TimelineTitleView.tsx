@@ -1,9 +1,20 @@
-import type { TimelineTitle } from "@bb/thread-view";
+import type { KeyboardEvent, MouseEvent } from "react";
+import type { TimelineTitle, TimelineTitleAction } from "@bb/thread-view";
 import { cn } from "../primitives/cn.js";
+
+/**
+ * Resolves a title's declared action to a click callback. Return `null` to
+ * leave the content as plain (non-interactive) text — the renderer will not
+ * surface the action in that case.
+ */
+export type TimelineTitleActionResolver = (
+  action: TimelineTitleAction,
+) => (() => void) | null;
 
 export interface TimelineTitleViewProps {
   title: TimelineTitle;
   className?: string;
+  onTitleAction?: TimelineTitleActionResolver;
 }
 
 function titleToneClass(title: TimelineTitle): string {
@@ -80,7 +91,15 @@ function renderSuffix(title: TimelineTitle) {
   }
 }
 
-export function TimelineTitleView({ title, className }: TimelineTitleViewProps) {
+export function TimelineTitleView({
+  title,
+  className,
+  onTitleAction,
+}: TimelineTitleViewProps) {
+  const onClick =
+    title.action && onTitleAction ? onTitleAction(title.action) : null;
+  const contentClassName = cn("min-w-0 truncate", contentToneClass(title));
+
   return (
     <span
       className={cn(
@@ -101,9 +120,36 @@ export function TimelineTitleView({ title, className }: TimelineTitleViewProps) 
           {title.prefix}
         </span>
       ) : null}
-      <span className={cn("min-w-0 truncate", contentToneClass(title))}>
-        {title.content}
-      </span>
+      {onClick ? (
+        // Title actions live inside a row-level CollapsibleHeader button; HTML
+        // forbids nested <button> elements, so the action is rendered as a
+        // span with role="link" and explicit keyboard handling. stopPropagation
+        // keeps a click/Enter on the title from also toggling the surrounding
+        // row.
+        <span
+          role="link"
+          tabIndex={0}
+          className={cn(
+            contentClassName,
+            "cursor-pointer text-left underline-offset-2 hover:underline focus-visible:underline focus-visible:outline-none",
+          )}
+          onClick={(event: MouseEvent<HTMLSpanElement>) => {
+            event.stopPropagation();
+            onClick();
+          }}
+          onKeyDown={(event: KeyboardEvent<HTMLSpanElement>) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              event.stopPropagation();
+              onClick();
+            }
+          }}
+        >
+          {title.content}
+        </span>
+      ) : (
+        <span className={contentClassName}>{title.content}</span>
+      )}
       {renderSuffix(title)}
     </span>
   );

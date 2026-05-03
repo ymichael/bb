@@ -1,6 +1,9 @@
 import { useCallback, useMemo, type ReactNode } from "react";
 import { useParams } from "react-router-dom";
-import type { ThreadTimelineLocalFileLink } from "@bb/ui-core";
+import type {
+  ThreadTimelineLocalFileLink,
+  TimelineTitleActionResolver,
+} from "@bb/ui-core";
 import type { ThreadWithRuntime } from "@bb/domain";
 import { toast } from "sonner";
 import { useThreadSecondaryPanelUrlSync } from "@/lib/thread-secondary-panel";
@@ -31,6 +34,7 @@ import { HEADER_ICON_BUTTON_CLASS } from "@/components/layout/AppPageHeader";
 import { ThreadActionsMenu } from "@/components/thread/ThreadActionsMenu";
 import { ThreadWorkspaceOpenButton } from "@/components/thread/ThreadWorkspaceOpenButton";
 import { formatEnvironmentDisplay } from "@bb/core-ui";
+import { assertNever } from "@bb/thread-view";
 import { useHostDaemon } from "@/hooks/useHostDaemon";
 import { useLocalOpenTargets } from "@/hooks/useLocalOpenTargets";
 import { useConnectionAwareQueryState } from "@/hooks/queries/connection-aware-query-state";
@@ -368,6 +372,29 @@ export function ThreadDetailView() {
     },
     [localWorkspaceRootPath, openPathInPreferredTarget],
   );
+  const handleTimelineTitleAction = useCallback<TimelineTitleActionResolver>(
+    (action) => {
+      switch (action.kind) {
+        case "open-file-diff":
+          // Manager threads can't render the diff panel (showGitDiffTab is
+          // gated on canUseGitUi); leave the title content as plain text in
+          // that case rather than producing a clickable affordance that would
+          // route nowhere.
+          if (isManagerThread) {
+            return null;
+          }
+          return () => {
+            openDiffFile(action.path);
+          };
+        default:
+          // Surfaces a compile-time error if a future TimelineTitleAction
+          // variant is added without app-side handling, instead of silently
+          // returning undefined and leaving a kind unrouted.
+          return assertNever(action.kind);
+      }
+    },
+    [isManagerThread, openDiffFile],
+  );
 
   if (!projectId || !threadId) {
     return (
@@ -643,6 +670,11 @@ export function ThreadDetailView() {
             unarchiveThread.variables?.id === thread.id,
           updateThreadPending:
             updateThread.isPending || updateEnvironment.isPending,
+          onChangedFileClick: canUseGitUi
+            ? (file) => {
+                openDiffFile(file.path);
+              }
+            : undefined,
           workspaceStatusFiles: workspaceChangedFilesSection?.files,
           workspaceStatusFilesLabel: workspaceChangedFilesSection?.label,
         }}
@@ -653,16 +685,17 @@ export function ThreadDetailView() {
           isManagerThread,
           onClose: closeThreadSecondaryPanel,
           onCollapse: closeThreadSecondaryPanel,
-          onOpenFile: localWorkspaceRootPath
-            ? (relativePath: string) => {
-                const fullPath = `${localWorkspaceRootPath}/${relativePath}`;
-                void openPathInPreferredTarget({
-                  lineNumber: null,
-                  path: fullPath,
-                  workspaceRootPath: localWorkspaceRootPath,
-                });
-              }
-            : undefined,
+          onOpenFileInEditor:
+            localWorkspaceRootPath && canOpenPreferredTarget
+              ? (relativePath: string) => {
+                  const fullPath = `${localWorkspaceRootPath}/${relativePath}`;
+                  void openPathInPreferredTarget({
+                    lineNumber: null,
+                    path: fullPath,
+                    workspaceRootPath: localWorkspaceRootPath,
+                  });
+                }
+              : undefined,
           onPanelChange: openThreadSecondaryPanel,
           showGitDiffTab: canUseGitUi,
           showThreadStorageTab: thread.type === "manager",
@@ -678,6 +711,7 @@ export function ThreadDetailView() {
           erroredTurnSummaryIds,
           onLoadTurnSummaryRows: handleLoadTurnSummaryRows,
           onOpenLocalFileLink: handleOpenTimelineLocalFileLink,
+          onTitleAction: handleTimelineTitleAction,
           projectId,
           showOngoingIndicator:
             (thread.runtime.displayStatus === "active" ||

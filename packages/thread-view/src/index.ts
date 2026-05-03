@@ -10,6 +10,7 @@ export type {
   BuildTimelineRowTitleOptions,
   TimelineActivityIntentTitle,
   TimelineTitle,
+  TimelineTitleAction,
   TimelineTitleContentTone,
   TimelineTitleSuffix,
   TimelineTitleTone,

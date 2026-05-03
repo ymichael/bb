@@ -125,6 +125,7 @@ export {
 } from "./primitives/ui/coarse-pointer-sizing.js";
 export { useIsMobile, MOBILE_QUERY } from "./primitives/hooks/use-mobile.js";
 export { useMediaQuery } from "./primitives/hooks/use-media-query.js";
+export { FilePathLink } from "./primitives/file-path-link.js";
 export {
   ThreePaneLayout,
   type ThreePaneLayoutProps,
@@ -206,6 +207,7 @@ export {
   type DetailScrollSize,
 } from "./primitives/detail-scroll-size.js";
 export { ThreadTimelineRows } from "./thread-timeline/ThreadTimelineRows.js";
+export type { TimelineTitleActionResolver } from "./thread-timeline/TimelineTitleView.js";
 export {
   ConversationStatusIndicator,
   type ConversationStatusIndicatorProps,

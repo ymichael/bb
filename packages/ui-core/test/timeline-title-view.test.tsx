@@ -1,12 +1,19 @@
+// @vitest-environment jsdom
+
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
-import type { TimelineTitle } from "@bb/thread-view";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import type {
+  TimelineTitle,
+  TimelineTitleAction,
+} from "@bb/thread-view";
 import { TimelineTitleView } from "../src/thread-timeline/TimelineTitleView.js";
 
 type TimelineTitleOverrides = Partial<TimelineTitle>;
 
 function title(parts: TimelineTitleOverrides): TimelineTitle {
   return {
+    action: null,
     content: "pnpm exec turbo run test --filter=@bb/app",
     contentTone: "emphasis",
     plain: "Ran pnpm exec turbo run test --filter=@bb/app 2s",
@@ -17,6 +24,15 @@ function title(parts: TimelineTitleOverrides): TimelineTitle {
     ...parts,
   };
 }
+
+const fileDiffAction: TimelineTitleAction = {
+  kind: "open-file-diff",
+  path: "src/foo.ts",
+};
+
+afterEach(() => {
+  cleanup();
+});
 
 describe("TimelineTitleView", () => {
   it("truncates the content segment while keeping prefix and duration fixed", () => {
@@ -112,5 +128,130 @@ describe("TimelineTitleView", () => {
 
     expect(html).toContain("text-muted-foreground/60");
     expect(html).not.toContain("font-semibold");
+  });
+
+  it("renders title content as a plain span when no resolver is provided", () => {
+    render(
+      <TimelineTitleView
+        title={title({ content: "src/foo.ts", action: fileDiffAction })}
+      />,
+    );
+
+    expect(screen.queryByRole("link")).toBeNull();
+    const node = screen.getByText("src/foo.ts");
+    expect(node.tagName).toBe("SPAN");
+    expect(node.getAttribute("role")).toBeNull();
+    expect(node.getAttribute("tabindex")).toBeNull();
+  });
+
+  it("renders title content as a plain span when the resolver returns null", () => {
+    const resolver = vi.fn(() => null);
+
+    render(
+      <TimelineTitleView
+        title={title({ content: "src/foo.ts", action: fileDiffAction })}
+        onTitleAction={resolver}
+      />,
+    );
+
+    expect(resolver).toHaveBeenCalledWith(fileDiffAction);
+    expect(screen.queryByRole("link")).toBeNull();
+  });
+
+  it("renders title content as a focusable role=link and never as a nested <button>", () => {
+    render(
+      <TimelineTitleView
+        title={title({ content: "src/foo.ts", action: fileDiffAction })}
+        onTitleAction={() => () => {}}
+      />,
+    );
+
+    const link = screen.getByRole("link", { name: /src\/foo\.ts/ });
+    expect(link.tagName).toBe("SPAN");
+    expect(link.getAttribute("tabindex")).toBe("0");
+    expect(screen.queryByRole("button")).toBeNull();
+  });
+
+  it("invokes the resolved callback on mouse click", () => {
+    const onAction = vi.fn();
+    render(
+      <TimelineTitleView
+        title={title({ content: "src/foo.ts", action: fileDiffAction })}
+        onTitleAction={() => onAction}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("link", { name: /src\/foo\.ts/ }));
+
+    expect(onAction).toHaveBeenCalledTimes(1);
+  });
+
+  it("invokes the resolved callback on Enter and Space keypress", () => {
+    const onAction = vi.fn();
+    render(
+      <TimelineTitleView
+        title={title({ content: "src/foo.ts", action: fileDiffAction })}
+        onTitleAction={() => onAction}
+      />,
+    );
+
+    const link = screen.getByRole("link", { name: /src\/foo\.ts/ });
+    fireEvent.keyDown(link, { key: "Enter" });
+    fireEvent.keyDown(link, { key: " " });
+
+    expect(onAction).toHaveBeenCalledTimes(2);
+  });
+
+  it("ignores unrelated keys", () => {
+    const onAction = vi.fn();
+    render(
+      <TimelineTitleView
+        title={title({ content: "src/foo.ts", action: fileDiffAction })}
+        onTitleAction={() => onAction}
+      />,
+    );
+
+    fireEvent.keyDown(screen.getByRole("link", { name: /src\/foo\.ts/ }), {
+      key: "a",
+    });
+
+    expect(onAction).not.toHaveBeenCalled();
+  });
+
+  it("does not consult the resolver for titles without an action", () => {
+    const resolver = vi.fn();
+
+    render(
+      <TimelineTitleView
+        title={title({ content: "src/foo.ts", action: null })}
+        onTitleAction={resolver}
+      />,
+    );
+
+    expect(resolver).not.toHaveBeenCalled();
+    expect(screen.queryByRole("link")).toBeNull();
+  });
+
+  it("stops click and keyboard propagation so the surrounding row header doesn't toggle", () => {
+    const onAction = vi.fn();
+    const onWrapperClick = vi.fn();
+    const onWrapperKeyDown = vi.fn();
+
+    render(
+      <div onClick={onWrapperClick} onKeyDown={onWrapperKeyDown}>
+        <TimelineTitleView
+          title={title({ content: "src/foo.ts", action: fileDiffAction })}
+          onTitleAction={() => onAction}
+        />
+      </div>,
+    );
+
+    const link = screen.getByRole("link", { name: /src\/foo\.ts/ });
+    fireEvent.click(link);
+    fireEvent.keyDown(link, { key: "Enter" });
+
+    expect(onAction).toHaveBeenCalledTimes(2);
+    expect(onWrapperClick).not.toHaveBeenCalled();
+    expect(onWrapperKeyDown).not.toHaveBeenCalled();
   });
 });

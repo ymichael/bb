@@ -47,7 +47,26 @@ export type TimelineTitleSuffix =
       removed: number;
     };
 
+/**
+ * Describes what the title's content semantically represents when it's also an
+ * actionable target (e.g. a file path that the consumer can open). Renderers
+ * decide whether to surface the action; the title-builder only declares what's
+ * available. New action kinds extend this union.
+ */
+export type TimelineTitleAction = {
+  kind: "open-file-diff";
+  /** Workspace-relative path of the file. For renames, the destination path. */
+  path: string;
+};
+
 export interface TimelineTitle {
+  /**
+   * When set, the title's `content` represents an actionable target. Renderers
+   * MAY surface the action (e.g. as a clickable button) when a handler is
+   * available; when no handler is available, the content renders as plain
+   * text.
+   */
+  action: TimelineTitleAction | null;
   content: string;
   contentTone: TimelineTitleContentTone;
   plain: string;
@@ -68,6 +87,7 @@ export interface TimelineActivityIntentTitle {
 }
 
 interface TitlePartsArgs {
+  action?: TimelineTitleAction | null;
   content: string;
   contentTone?: TimelineTitleContentTone;
   plainContent?: string;
@@ -114,6 +134,7 @@ function plainSuffixText(suffix: TimelineTitleSuffix | null): string {
 }
 
 function titleFromParts({
+  action = null,
   content,
   contentTone = "emphasis",
   plainContent,
@@ -125,6 +146,7 @@ function titleFromParts({
   const plainContentText = plainContent ?? content;
   const head = prefix ? `${prefix} ${plainContentText}` : plainContentText;
   return {
+    action,
     content,
     contentTone,
     plain: `${head}${plainSuffixText(suffix)}`,
@@ -296,6 +318,12 @@ function buildFileChangeTitle(
     }
   })();
   return titleFromParts({
+    action: {
+      kind: "open-file-diff",
+      // For renames, the destination path is the canonical workspace location
+      // and matches what TimelineFileDiffBlock renders against.
+      path: row.change.movePath ?? row.change.path,
+    },
     prefix,
     content: formatFileChangePath({ change: row.change, mode: "compact" }),
     plainContent: formatFileChangePath({ change: row.change, mode: "full" }),

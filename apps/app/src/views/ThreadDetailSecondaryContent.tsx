@@ -14,7 +14,10 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@bb/ui-core";
-import { WorkspaceChangesList } from "@/components/shared/WorkspaceChangesList";
+import {
+  WorkspaceChangesList,
+  type WorkspaceChangedFile,
+} from "@/components/shared/WorkspaceChangesList";
 import { ArchiveTimestampAction } from "@/components/shared/ArchiveTimestampAction";
 import { MergeBaseBranchPicker } from "@/components/thread/MergeBaseBranchPicker";
 import { useIsSecondaryPanelOpen } from "@/lib/thread-secondary-panel";
@@ -75,7 +78,8 @@ interface ThreadDetailMetadataProps {
   mergeBaseCandidates: readonly string[];
   unarchivePending: boolean;
   updateThreadPending: boolean;
-  workspaceStatusFiles?: ComponentProps<typeof WorkspaceChangesList>["files"];
+  onChangedFileClick?: (file: WorkspaceChangedFile) => void;
+  workspaceStatusFiles?: readonly WorkspaceChangedFile[];
   workspaceStatusFilesLabel?: string;
 }
 
@@ -230,6 +234,7 @@ function ThreadMetadataContent({
   mergeBaseCandidates,
   unarchivePending,
   updateThreadPending,
+  onChangedFileClick,
   workspaceStatusFiles,
   workspaceStatusFilesLabel,
 }: ThreadDetailMetadataProps) {
@@ -343,6 +348,7 @@ function ThreadMetadataContent({
           <WorkspaceChangesList
             files={workspaceStatusFiles ?? []}
             maxHeightClassName="h-full"
+            onFileClick={onChangedFileClick}
           />
         </DetailRow>
       ) : null}

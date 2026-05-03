@@ -39,7 +39,10 @@ import {
   TimelineStaticRowHeader,
   type TimelineRowHorizontalPadding,
 } from "./TimelineRowHeader.js";
-import { TimelineTitleView } from "./TimelineTitleView.js";
+import {
+  TimelineTitleView,
+  type TimelineTitleActionResolver,
+} from "./TimelineTitleView.js";
 import { WorkRowBody } from "./TimelineRowDetails.js";
 import { useStickyBottomScroll } from "./useStickyBottomScroll.js";
 import { Button } from "../primitives/ui/button.js";
@@ -49,6 +52,7 @@ export interface ThreadTimelineRowsProps {
   loadingTurnSummaryIds: ReadonlySet<string>;
   onLoadTurnSummaryRows: (entry: TimelineTurnRow) => void;
   onOpenLocalFileLink?: ThreadTimelineLocalFileLinkHandler;
+  onTitleAction?: TimelineTitleActionResolver;
   projectId?: string;
   resolveUserAttachmentImageSrc?: UserAttachmentImageSrcResolver;
   themeType?: ThreadTimelineTheme;
@@ -65,6 +69,7 @@ interface TimelineRendererContextValue {
   erroredTurnSummaryIds: ReadonlySet<string>;
   onLoadTurnSummaryRows: (entry: TimelineTurnRow) => void;
   onOpenLocalFileLink: ThreadTimelineLocalFileLinkHandler | undefined;
+  onTitleAction: TimelineTitleActionResolver | undefined;
   projectId: string | undefined;
   resolveUserAttachmentImageSrc: UserAttachmentImageSrcResolver | undefined;
   themeType: ThreadTimelineTheme;
@@ -936,6 +941,7 @@ function TimelineRowView({
   scopeActive,
   spacing,
 }: TimelineRowViewProps) {
+  const { onTitleAction } = useTimelineRendererContext();
   const horizontalPadding = timelineRowHorizontalPadding(spacing);
   const titleState = useTimelineRowTitleRenderState({
     compactActivityIntents,
@@ -955,7 +961,10 @@ function TimelineRowView({
             key={entry.id}
             horizontalPadding={horizontalPadding}
           >
-            <TimelineTitleView title={entry.title} />
+            <TimelineTitleView
+              title={entry.title}
+              onTitleAction={onTitleAction}
+            />
           </TimelineStaticRow>
         ))}
       </>
@@ -965,7 +974,10 @@ function TimelineRowView({
   if (!isRowExpandable(row)) {
     return (
       <TimelineStaticRow horizontalPadding={horizontalPadding}>
-        <TimelineTitleView title={titleState.title} />
+        <TimelineTitleView
+          title={titleState.title}
+          onTitleAction={onTitleAction}
+        />
       </TimelineStaticRow>
     );
   }
@@ -997,6 +1009,7 @@ function TimelineExpandableRowView({
     loadingTurnSummaryIds,
     erroredTurnSummaryIds,
     onLoadTurnSummaryRows,
+    onTitleAction,
     turnSummaryRowsById,
   } = useTimelineRendererContext();
 
@@ -1038,6 +1051,7 @@ function TimelineExpandableRowView({
       horizontalPadding={horizontalPadding}
       autoExpanded={autoExpandedRowIds.has(row.id)}
       onBeforeExpand={handleBeforeExpand}
+      onTitleAction={onTitleAction}
       renderBody={renderBody}
     />
   );
@@ -1120,6 +1134,7 @@ export function ThreadTimelineRows(props: ThreadTimelineRowsProps) {
       erroredTurnSummaryIds,
       onLoadTurnSummaryRows: props.onLoadTurnSummaryRows,
       onOpenLocalFileLink: props.onOpenLocalFileLink,
+      onTitleAction: props.onTitleAction,
       projectId: props.projectId,
       resolveUserAttachmentImageSrc: props.resolveUserAttachmentImageSrc,
       themeType,
@@ -1132,6 +1147,7 @@ export function ThreadTimelineRows(props: ThreadTimelineRowsProps) {
       loadingTurnSummaryIds,
       props.onLoadTurnSummaryRows,
       props.onOpenLocalFileLink,
+      props.onTitleAction,
       props.projectId,
       props.resolveUserAttachmentImageSrc,
       props.turnSummaryRowsById,

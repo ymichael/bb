@@ -8,6 +8,7 @@ import {
   ConversationTimeline,
   ThreadTimelineRows,
   type ThreadTimelineLocalFileLinkHandler,
+  type TimelineTitleActionResolver,
 } from "@bb/ui-core";
 import { PageShell } from "@bb/ui-core";
 import { ConversationStatusIndicator } from "@bb/ui-core";
@@ -26,6 +27,7 @@ interface ThreadTimelinePaneProps {
   erroredTurnSummaryIds: ReadonlySet<string>;
   onLoadTurnSummaryRows: (entry: TimelineTurnRow) => void;
   onOpenLocalFileLink?: ThreadTimelineLocalFileLinkHandler;
+  onTitleAction?: TimelineTitleActionResolver;
   projectId?: string;
   showOngoingIndicator: boolean;
   ongoingIndicatorLabel?: string;
@@ -51,6 +53,7 @@ export function ThreadTimelinePane({
   erroredTurnSummaryIds,
   onLoadTurnSummaryRows,
   onOpenLocalFileLink,
+  onTitleAction,
   projectId,
   showOngoingIndicator,
   ongoingIndicatorLabel,
@@ -97,6 +100,7 @@ export function ThreadTimelinePane({
               erroredTurnSummaryIds={erroredTurnSummaryIds}
               onLoadTurnSummaryRows={onLoadTurnSummaryRows}
               onOpenLocalFileLink={onOpenLocalFileLink}
+              onTitleAction={onTitleAction}
               projectId={projectId}
               resolveUserAttachmentImageSrc={toUserAttachmentImageSrc}
               themeType={preferredTheme}

@@ -62,9 +62,21 @@ export function WorkRowBody({ row, themeType }: WorkRowBodyProps) {
         </div>
       );
     case "delegation":
-      return row.output.trim().length > 0 ? (
-        <EventCodeBlock maxHeightClassName="max-h-96">{row.output}</EventCodeBlock>
-      ) : null;
+      if (row.output.trim().length > 0) {
+        return (
+          <EventCodeBlock maxHeightClassName="max-h-96">
+            {row.output}
+          </EventCodeBlock>
+        );
+      }
+      if (row.status === "pending") {
+        return (
+          <div className="px-2 py-2 text-sm text-muted-foreground/90">
+            <span className="animate-shine">Working…</span>
+          </div>
+        );
+      }
+      return null;
     case "approval":
     case "web-search":
     case "web-fetch":

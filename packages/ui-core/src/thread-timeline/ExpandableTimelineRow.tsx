@@ -11,7 +11,10 @@ import {
   timelineRowHorizontalPaddingClassName,
   type TimelineRowHorizontalPadding,
 } from "./TimelineRowHeader.js";
-import { TimelineTitleView } from "./TimelineTitleView.js";
+import {
+  TimelineTitleView,
+  type TimelineTitleActionResolver,
+} from "./TimelineTitleView.js";
 
 export interface ExpandableTimelineRowProps {
   autoExpanded?: boolean;
@@ -20,6 +23,7 @@ export interface ExpandableTimelineRowProps {
   title: TimelineTitle;
   className?: string;
   horizontalPadding?: TimelineRowHorizontalPadding;
+  onTitleAction?: TimelineTitleActionResolver;
 }
 
 type ManualExpansionOverride = boolean | null;
@@ -39,6 +43,7 @@ function ExpandableTimelineRowComponent({
   className,
   horizontalPadding = "default",
   onBeforeExpand,
+  onTitleAction,
   renderBody,
   title,
 }: ExpandableTimelineRowProps) {
@@ -59,7 +64,9 @@ function ExpandableTimelineRowComponent({
       isExpanded={isExpanded}
       onToggle={handleToggle}
       headerToneClass={headerToneClass(title, isExpanded)}
-      summaryContent={<TimelineTitleView title={title} />}
+      summaryContent={
+        <TimelineTitleView title={title} onTitleAction={onTitleAction} />
+      }
       summaryContentClassName={TIMELINE_ROW_HEADER_CONTENT_CLASS_NAME}
       className={cn("w-full", className)}
       headerClassName={timelineRowHeaderClassName(horizontalPadding)}
