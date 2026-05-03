@@ -2067,7 +2067,8 @@ describe("buildThreadTimeline", () => {
       "[bb system] Welcome!",
     );
 
-    // Standard manager timeline uses the same row builder as ordinary threads.
+    // Standard manager timeline uses the same row builder as ordinary threads,
+    // while low-value tool discovery rows are still globally suppressed.
     const standardTimeline = buildThreadTimeline(harness.db, thread, {
       isDevelopment: false,
     });
@@ -2076,8 +2077,8 @@ describe("buildThreadTimeline", () => {
     );
     const standardRowsText = JSON.stringify(standardTimeline.rows);
     expect(standardRowsText).toContain("buffered manager delta");
-    expect(standardRowsText).toContain("ToolSearch");
-    expect(standardRowsText).toContain("found something");
+    expect(standardRowsText).not.toContain("ToolSearch");
+    expect(standardRowsText).not.toContain("found something");
     expect(standardRowsText).toContain("[bb system] Welcome!");
 
     const standardSourceRows = flattenTimelineSourceRows(

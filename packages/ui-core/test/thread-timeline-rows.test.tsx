@@ -69,6 +69,7 @@ interface ToolRowArgs {
   label?: string;
   output?: string;
   status?: TimelineRowStatus;
+  toolArgs?: TimelineToolWorkRow["toolArgs"];
   toolName?: string;
 }
 
@@ -213,6 +214,7 @@ function toolRow({
   label = "Read /repo/src/app.ts",
   output = "",
   status = "completed",
+  toolArgs = null,
   toolName = "Read",
 }: ToolRowArgs = {}): TimelineToolWorkRow {
   return {
@@ -222,7 +224,7 @@ function toolRow({
     status,
     callId: id,
     toolName,
-    toolArgs: null,
+    toolArgs,
     label,
     output,
     durationMs: 2_000,
@@ -779,6 +781,39 @@ describe("ThreadTimelineRows", () => {
 
     expect(view.container.textContent ?? "").toContain("$ true");
     expect(view.container.textContent ?? "").toContain("exit code 0");
+  });
+
+  it("renders expanded tool details as labeled content", () => {
+    const view = render(
+      <ThreadTimelineRows
+        loadingTurnSummaryIds={new Set()}
+        erroredTurnSummaryIds={new Set()}
+        onLoadTurnSummaryRows={() => {}}
+        timelineRows={[
+          toolRow({
+            id: "tool-detail-1",
+            label: "LookupTool select:TodoWrite",
+            output: "Matched tools: TodoWrite",
+            toolArgs: { query: "select:TodoWrite" },
+            toolName: "LookupTool",
+          }),
+        ]}
+        threadRuntimeDisplayStatus="idle"
+        turnSummaryRowsById={{}}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Ran 1 tool/u }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /Ran tool:\s+LookupTool/u }),
+    );
+
+    const text = view.container.textContent ?? "";
+    expect(text).toContain("Tool: LookupTool");
+    expect(text).toContain("Arguments");
+    expect(text).toContain('"query": "select:TodoWrite"');
+    expect(text).toContain("Output");
+    expect(text).toContain("Matched tools: TodoWrite");
   });
 
   it("updates expanded pending command output when source sequence advances", () => {

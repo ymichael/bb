@@ -1,5 +1,6 @@
 import { turnScope } from "@bb/domain";
 import type {
+  JsonObject,
   ThreadEventFileChange,
   ThreadEventItemStatus,
 } from "@bb/domain";
@@ -7,6 +8,7 @@ import type {
   ThreadContextWindowUsage,
   TimelineFileChangeWorkRow,
   TimelineRow,
+  TimelineToolWorkRow,
 } from "@bb/server-contract";
 import { describe, expect, it } from "vitest";
 import {
@@ -26,6 +28,16 @@ interface FileChangeItemEventArgs {
   itemId?: string;
   seq: number;
   status?: ThreadEventItemStatus;
+  type: "item/completed" | "item/started";
+}
+
+interface ToolCallItemEventArgs {
+  itemId?: string;
+  result?: string;
+  seq: number;
+  status?: ThreadEventItemStatus;
+  tool: string;
+  toolArgs?: JsonObject;
   type: "item/completed" | "item/started";
 }
 
@@ -78,6 +90,38 @@ function fileChangeItemEvent({
         changes,
         status: status ?? (type === "item/completed" ? "completed" : "pending"),
         approvalStatus: null,
+      },
+    },
+    meta: {
+      id: `event-${seq}`,
+      seq,
+      createdAt: seq,
+    },
+  };
+}
+
+function toolCallItemEvent({
+  itemId = "tool-call-1",
+  result,
+  seq,
+  status,
+  tool,
+  toolArgs,
+  type,
+}: ToolCallItemEventArgs): ThreadEventWithMeta {
+  return {
+    event: {
+      type,
+      threadId: "thread-1",
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-1"),
+      item: {
+        type: "toolCall",
+        id: itemId,
+        tool,
+        ...(toolArgs ? { arguments: toolArgs } : {}),
+        status: status ?? (type === "item/completed" ? "completed" : "pending"),
+        ...(result ? { result } : {}),
       },
     },
     meta: {
@@ -144,6 +188,10 @@ function isFileChangeRow(row: TimelineRow): row is TimelineFileChangeWorkRow {
   return row.kind === "work" && row.workKind === "file-change";
 }
 
+function isToolRow(row: TimelineRow): row is TimelineToolWorkRow {
+  return row.kind === "work" && row.workKind === "tool";
+}
+
 function collectFileChangeRows(
   rows: readonly TimelineRow[],
 ): TimelineFileChangeWorkRow[] {
@@ -164,6 +212,24 @@ function collectFileChangeRows(
   return fileChangeRows;
 }
 
+function collectToolRows(rows: readonly TimelineRow[]): TimelineToolWorkRow[] {
+  const toolRows: TimelineToolWorkRow[] = [];
+  for (const row of rows) {
+    if (isToolRow(row)) {
+      toolRows.push(row);
+      continue;
+    }
+    if (row.kind === "turn" && row.children) {
+      toolRows.push(...collectToolRows(row.children));
+      continue;
+    }
+    if (row.kind === "work" && row.workKind === "delegation") {
+      toolRows.push(...collectToolRows(row.childRows));
+    }
+  }
+  return toolRows;
+}
+
 function fileChangeRowIdByPath(
   rows: readonly TimelineFileChangeWorkRow[],
 ): Record<string, string> {
@@ -175,6 +241,28 @@ function fileChangeRowIdByPath(
 }
 
 describe("buildThreadTimelineFromEvents", () => {
+  it("suppresses low-value ToolSearch rows", () => {
+    const rows = buildTimelineRows([
+      turnStartedEvent({ seq: 0 }),
+      toolCallItemEvent({
+        seq: 1,
+        tool: "ToolSearch",
+        toolArgs: { query: "select:TodoWrite", max_results: 1 },
+        type: "item/started",
+      }),
+      toolCallItemEvent({
+        result: "Matched tools: TodoWrite",
+        seq: 2,
+        tool: "ToolSearch",
+        toolArgs: { query: "select:TodoWrite", max_results: 1 },
+        type: "item/completed",
+      }),
+    ]);
+
+    expect(collectToolRows(rows)).toEqual([]);
+    expect(JSON.stringify(rows)).not.toContain("Matched tools: TodoWrite");
+  });
+
   it("extracts context-window usage from ordered events", () => {
     expect(
       buildContextWindowUsage([

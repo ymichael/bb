@@ -1,6 +1,10 @@
 import type { ThreadEvent } from "@bb/domain";
 
-const SUPPRESSED_TIMELINE_TOOL_NAMES = new Set(["TodoRead", "TodoWrite"]);
+const SUPPRESSED_TIMELINE_TOOL_NAMES = new Set([
+  "TodoRead",
+  "TodoWrite",
+  "ToolSearch",
+]);
 
 export function shouldSuppressLowValueToolCall(decoded: ThreadEvent): boolean {
   if (

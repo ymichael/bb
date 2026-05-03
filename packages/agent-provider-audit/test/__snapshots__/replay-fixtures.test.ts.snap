@@ -2488,9 +2488,7 @@ I want to make Excalidraw's eyedropper experience friendlier on browsers with un
   -- Assistant
   Let me start by setting up a todo list and exploring the codebase for eyedropper-related code, while... [truncated 59 chars]
 
-  -- Ran 1 tool, explored 1 search, ran 1 web search
-    -- Ran tool: ToolSearch select:TodoWrite,WebSearch,WebFetch
-      Matched tools: TodoWrite, WebSearch, WebFetch
+  -- Explored 1 search, ran 1 web search
     -- Searched for eyeDropper|EyeDropper|eyedropper|EYEDROPPER
     -- Ran web search: EyeDropper API browser compatibility support 2026
 
@@ -5580,14 +5578,14 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     "lastEventType": "item/completed",
     "prefixLength": 103,
     "renderedTimelineRowCount": 12,
-    "semanticTimelineRowCount": 27,
+    "semanticTimelineRowCount": 26,
     "threadStatus": "active",
     "timelinePreview": [
       "-- User ----------------------------------------------------",
       "I want to make Excalidraw's eyedropper experience friendlier on browsers with uneven platform suppor... [truncated 280 chars]",
       "-- Assistant -----------------------------------------------",
       "Let me start by setting up a todo list and exploring the codebase for eyedropper-related code, while... [truncated 59 chars]",
-      "-- Ran 1 tool, explored 1 search, ran 1 web search ---------",
+      "-- Explored 1 search, ran 1 web search ---------------------",
       "-- Assistant -----------------------------------------------",
       "Good, I've found 69 files and the web search confirms limited browser support. Let me now read the c... [truncated 65 chars]",
       "-- Explored 6 files, 1 list, fetched 2 web pages -----------",

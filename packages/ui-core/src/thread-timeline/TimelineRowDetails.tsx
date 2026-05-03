@@ -2,6 +2,7 @@ import { assertNever, type TimelineViewWorkRow } from "@bb/thread-view";
 import { EventCodeBlock } from "../primitives/event-content.js";
 import { TerminalOutputBlock } from "./TerminalOutputBlock.js";
 import { TimelineFileDiffBlock } from "./TimelineFileDiffBlock.js";
+import { ToolCallDetailBlock } from "./ToolCallDetailBlock.js";
 import type { ThreadTimelineTheme } from "./types.js";
 
 export interface WorkRowBodyProps {
@@ -42,10 +43,10 @@ export function WorkRowBody({ row, themeType }: WorkRowBodyProps) {
     case "tool": {
       const toolArgs = formatToolArgs(row);
       return (
-        <TerminalOutputBlock
-          commandLine={`Tool: ${row.toolName}`}
-          metadataLines={toolArgs ? [toolArgs] : []}
+        <ToolCallDetailBlock
+          argsText={toolArgs}
           output={row.output}
+          toolName={row.toolName}
         />
       );
     }
