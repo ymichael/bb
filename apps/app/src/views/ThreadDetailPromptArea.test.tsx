@@ -157,6 +157,104 @@ function mockMatchMedia(): void {
 }
 
 describe("ThreadDetailPromptArea", () => {
+  it("loads active manager threads for standard-thread prompt mention candidates", async () => {
+    mockMatchMedia();
+    vi.mocked(api.getThreadDefaultExecutionOptions).mockResolvedValue(null);
+    vi.mocked(api.listThreadDrafts).mockResolvedValue([]);
+    vi.mocked(api.listThreadPromptHistory).mockResolvedValue([]);
+    vi.mocked(api.listSystemProviders).mockResolvedValue([makeProvider()]);
+    vi.mocked(api.getAvailableModels).mockResolvedValue([makeModel()]);
+    vi.mocked(api.listThreads).mockResolvedValue([]);
+
+    const { wrapper } = createQueryClientTestHarness();
+
+    render(
+      <ThreadDetailPromptArea
+        canExpandPromptChangeList={false}
+        canUseGitUi={false}
+        isEnvironmentActionPending={false}
+        isLoadingMergeBaseBranchOptions={false}
+        pendingInteractions={[]}
+        openDiffFile={() => {}}
+        openThreadDiffPanel={() => {}}
+        projectId="proj_1"
+        promptBannerSummary="No changes"
+        sendMessage={{
+          isPending: false,
+          mutateAsync: vi.fn(async () => {}),
+        }}
+        showBranchComparisonUi={false}
+        showPromptGitStatsBanner={false}
+        thread={createThread()}
+      />,
+      { wrapper },
+    );
+
+    await waitFor(() => {
+      expect(api.listThreads).toHaveBeenCalled();
+    });
+    const threadListFilters = vi
+      .mocked(api.listThreads)
+      .mock.calls.map(([filters]) => filters);
+    expect(
+      threadListFilters.every(
+        (filters) =>
+          filters.archived === false &&
+          filters.projectId === "proj_1" &&
+          filters.type === "manager",
+      ),
+    ).toBe(true);
+  });
+
+  it("loads all active threads for manager-thread prompt mention candidates", async () => {
+    mockMatchMedia();
+    vi.mocked(api.getThreadDefaultExecutionOptions).mockResolvedValue(null);
+    vi.mocked(api.listThreadDrafts).mockResolvedValue([]);
+    vi.mocked(api.listThreadPromptHistory).mockResolvedValue([]);
+    vi.mocked(api.listSystemProviders).mockResolvedValue([makeProvider()]);
+    vi.mocked(api.getAvailableModels).mockResolvedValue([makeModel()]);
+    vi.mocked(api.listThreads).mockResolvedValue([]);
+
+    const { wrapper } = createQueryClientTestHarness();
+
+    render(
+      <ThreadDetailPromptArea
+        canExpandPromptChangeList={false}
+        canUseGitUi={false}
+        isEnvironmentActionPending={false}
+        isLoadingMergeBaseBranchOptions={false}
+        pendingInteractions={[]}
+        openDiffFile={() => {}}
+        openThreadDiffPanel={() => {}}
+        projectId="proj_1"
+        promptBannerSummary="No changes"
+        sendMessage={{
+          isPending: false,
+          mutateAsync: vi.fn(async () => {}),
+        }}
+        showBranchComparisonUi={false}
+        showPromptGitStatsBanner={false}
+        thread={createThread({ type: "manager" })}
+      />,
+      { wrapper },
+    );
+
+    await waitFor(() => {
+      expect(api.listThreads).toHaveBeenCalled();
+    });
+    const threadListFilters = vi
+      .mocked(api.listThreads)
+      .mock.calls.map(([filters]) => filters);
+    expect(
+      threadListFilters.every(
+        (filters) =>
+          filters.archived === false &&
+          filters.projectId === "proj_1" &&
+          filters.type === undefined,
+      ),
+    ).toBe(true);
+  });
+
   it("renders only the pending interaction banner when an interaction is awaiting", async () => {
     mockMatchMedia();
     vi.mocked(api.getThreadDefaultExecutionOptions).mockResolvedValue(null);

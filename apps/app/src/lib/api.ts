@@ -456,7 +456,12 @@ export interface ThreadListFilters {
   projectId: string;
   type?: ThreadType;
   parentThreadId?: string;
-  archived?: boolean;
+  /** App callers must choose active or archived; server omission intentionally means both. */
+  archived: boolean;
+}
+
+function toBooleanQueryValue(value: boolean): "true" | "false" {
+  return value ? "true" : "false";
 }
 
 export async function listThreads(
@@ -472,9 +477,7 @@ export async function listThreads(
           ...(filters.parentThreadId
             ? { parentThreadId: filters.parentThreadId }
             : {}),
-          ...(filters.archived !== undefined
-            ? { archived: String(filters.archived) as "true" | "false" }
-            : {}),
+          archived: toBooleanQueryValue(filters.archived),
         },
       },
       requestOptions(signal),

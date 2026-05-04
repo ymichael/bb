@@ -65,9 +65,10 @@ describe("thread state mutations", () => {
     vi.mocked(api.archiveThread).mockResolvedValue(undefined);
     const { queryClient, wrapper } = createQueryClientTestHarness();
     const projectPromptHistoryKey = projectPromptHistoryQueryKey("project-1");
-    queryClient.setQueryData(threadListQueryKey({ projectId: "project-1" }), [
-      makeThreadListEntry(),
-    ]);
+    queryClient.setQueryData(
+      threadListQueryKey({ projectId: "project-1", archived: false }),
+      [makeThreadListEntry()],
+    );
     queryClient.setQueryData(projectPromptHistoryKey, []);
 
     const { result } = renderHook(() => useArchiveThread(), { wrapper });
@@ -93,9 +94,10 @@ describe("thread state mutations", () => {
     vi.mocked(api.unarchiveThread).mockResolvedValue(undefined);
     const { queryClient, wrapper } = createQueryClientTestHarness();
     const projectPromptHistoryKey = projectPromptHistoryQueryKey("project-1");
-    queryClient.setQueryData(threadListQueryKey({ projectId: "project-1" }), [
-      makeThreadListEntry({ archivedAt: 10 }),
-    ]);
+    queryClient.setQueryData(
+      threadListQueryKey({ projectId: "project-1", archived: true }),
+      [makeThreadListEntry({ archivedAt: 10 })],
+    );
     queryClient.setQueryData(projectPromptHistoryKey, []);
 
     const { result } = renderHook(() => useUnarchiveThread(), { wrapper });

@@ -291,7 +291,10 @@ export type PublicApiSchema = {
   // ─── Threads ─────────────────────────────────────────────────────────
 
   "/threads": {
-    /** List threads. Supports filters: projectId, type, parentThreadId, archived. */
+    /**
+     * List threads. Supports filters: projectId, type, parentThreadId, archived.
+     * Omitting archived intentionally returns both active and archived threads.
+     */
     $get: Endpoint<{ query?: ThreadListQuery }, ThreadListResponse>;
     /**
      * Create a thread with environment provisioning.

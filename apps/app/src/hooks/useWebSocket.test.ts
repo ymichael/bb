@@ -28,6 +28,7 @@ import {
   systemProvidersQueryKey,
   threadDefaultExecutionOptionsQueryKey,
   threadDraftsQueryKey,
+  threadListQueryKey,
   threadPendingInteractionsQueryKey,
   threadQueryKey,
   threadStorageFilePreviewQueryKey,
@@ -184,6 +185,10 @@ function createThreadListEntry(
       hostReconnectGraceExpiresAt: null,
     },
   };
+}
+
+function activeThreadListQueryKey() {
+  return threadListQueryKey({ projectId: "proj-1", archived: false });
 }
 
 function createPendingInteraction(threadId: string): PendingInteraction {
@@ -420,7 +425,12 @@ describe("useWebSocket", () => {
       queryKeys: [...invalidatedQueryKeys, ...preservedQueryKeys],
     });
     queryClient.setQueryData(threadQueryKey(thread.id), thread);
-    queryClient.setQueryData(threadsQueryKey(), [thread]);
+    queryClient.setQueryData(activeThreadListQueryKey(), [
+      createThreadListEntry({
+        environmentId: thread.environmentId,
+        id: thread.id,
+      }),
+    ]);
 
     renderHook(() => useWebSocket(), { wrapper });
 
@@ -618,7 +628,12 @@ describe("useWebSocket", () => {
     ];
     cacheQueries({ queryClient, queryKeys });
     queryClient.setQueryData(threadQueryKey(thread.id), thread);
-    queryClient.setQueryData(threadsQueryKey(), [thread]);
+    queryClient.setQueryData(activeThreadListQueryKey(), [
+      createThreadListEntry({
+        environmentId: thread.environmentId,
+        id: thread.id,
+      }),
+    ]);
 
     renderHook(() => useWebSocket(), { wrapper });
 
@@ -784,7 +799,8 @@ describe("useWebSocket", () => {
       },
     ]);
     const { queryClient, wrapper } = createQueryClientTestHarness();
-    queryClient.setQueryData(threadsQueryKey(), [
+    const threadListKey = activeThreadListQueryKey();
+    queryClient.setQueryData(threadListKey, [
       createThreadListEntry({
         environmentId: "env-1",
         id: "thread-1",
@@ -814,7 +830,7 @@ describe("useWebSocket", () => {
 
     await vi.waitFor(() => {
       expect(
-        queryClient.getQueryData<ThreadListEntry[]>(threadsQueryKey()),
+        queryClient.getQueryData<ThreadListEntry[]>(threadListKey),
       ).toEqual([
         expect.objectContaining({
           hasPendingInteraction: true,

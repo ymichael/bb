@@ -40,7 +40,7 @@ export interface ThreadListQueryFilters {
   projectId?: string;
   type?: ThreadListFilters["type"];
   parentThreadId?: string;
-  archived?: boolean;
+  archived: boolean;
 }
 
 export type HostsQueryKey = readonly [typeof HOSTS_QUERY_KEY];
@@ -80,7 +80,7 @@ export type ProjectSourceWorkspaceStatusQueryKeyPrefix = readonly [
 export type ThreadsQueryKey = readonly [typeof THREADS_QUERY_KEY];
 export type ThreadListQueryKey = readonly [
   typeof THREADS_QUERY_KEY,
-  ThreadListQueryFilters?,
+  ThreadListQueryFilters,
 ];
 export type ThreadQueryKeyPrefix = readonly [typeof THREAD_QUERY_KEY];
 export type ThreadQueryKey = readonly [typeof THREAD_QUERY_KEY, string];
@@ -298,9 +298,9 @@ export function threadsQueryKey(): ThreadsQueryKey {
 }
 
 export function threadListQueryKey(
-  filters?: ThreadListQueryFilters,
+  filters: ThreadListQueryFilters,
 ): ThreadListQueryKey {
-  return filters ? [THREADS_QUERY_KEY, filters] : [THREADS_QUERY_KEY];
+  return [THREADS_QUERY_KEY, filters];
 }
 
 export function threadQueryKey(threadId: string): ThreadQueryKey {

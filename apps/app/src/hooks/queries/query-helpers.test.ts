@@ -22,6 +22,7 @@ import {
 import {
   environmentGitDiffQueryKey,
   environmentWorkStatusQueryKey,
+  threadListQueryKey,
   threadsQueryKey,
 } from "./query-keys";
 import {
@@ -353,14 +354,29 @@ describe("getCachedEnvironmentRefWorkspaceStateInvalidationQueryKeys", () => {
 });
 
 describe("optimisticallyInsertThread", () => {
-  it("preserves the server-provided runtime state", () => {
+  it("does not treat the prefix-only threads key as an active thread list", () => {
     const { queryClient } = createQueryClientTestHarness();
     queryClient.setQueryData(threadsQueryKey(), []);
 
     optimisticallyInsertThread(queryClient, makeThreadWithRuntime());
 
+    expect(
+      queryClient.getQueryData<ThreadListEntry[]>(threadsQueryKey()),
+    ).toEqual([]);
+  });
+
+  it("preserves the server-provided runtime state", () => {
+    const { queryClient } = createQueryClientTestHarness();
+    const threadListKey = threadListQueryKey({
+      archived: false,
+      projectId: "project-1",
+    });
+    queryClient.setQueryData(threadListKey, []);
+
+    optimisticallyInsertThread(queryClient, makeThreadWithRuntime());
+
     const [thread] =
-      queryClient.getQueryData<ThreadListEntry[]>(threadsQueryKey()) ?? [];
+      queryClient.getQueryData<ThreadListEntry[]>(threadListKey) ?? [];
     expect(thread?.runtime).toEqual({
       displayStatus: "waiting-for-host",
       hostReconnectGraceExpiresAt: null,

@@ -7,10 +7,10 @@ import * as api from "@/lib/api";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
 import {
   statusQueryKey,
+  threadListQueryKey,
   threadPendingInteractionsQueryKey,
   threadQueryKey,
   threadTimelineQueryKey,
-  threadsQueryKey,
 } from "../queries/query-keys";
 import { useResolveThreadPendingInteraction } from "./thread-interaction-mutations";
 
@@ -66,12 +66,15 @@ describe("useResolveThreadPendingInteraction", () => {
       threadPendingInteractionsQueryKey("thr_1");
     const timelineQueryKey = threadTimelineQueryKey("thr_1", undefined);
     const threadDetailQueryKey = threadQueryKey("thr_1");
-    const threadListQueryKey = threadsQueryKey();
+    const threadListKey = threadListQueryKey({
+      archived: false,
+      projectId: "project-1",
+    });
     const statusKey = statusQueryKey();
     queryClient.setQueryData(pendingInteractionsQueryKey, []);
     queryClient.setQueryData(timelineQueryKey, {});
     queryClient.setQueryData(threadDetailQueryKey, {});
-    queryClient.setQueryData(threadListQueryKey, []);
+    queryClient.setQueryData(threadListKey, []);
     queryClient.setQueryData(statusKey, {});
 
     const { result } = renderHook(() => useResolveThreadPendingInteraction(), {
@@ -106,7 +109,7 @@ describe("useResolveThreadPendingInteraction", () => {
     expect(queryClient.getQueryState(threadDetailQueryKey)?.isInvalidated).toBe(
       true,
     );
-    expect(queryClient.getQueryState(threadListQueryKey)?.isInvalidated).toBe(
+    expect(queryClient.getQueryState(threadListKey)?.isInvalidated).toBe(
       true,
     );
     expect(queryClient.getQueryState(statusKey)?.isInvalidated).toBe(true);

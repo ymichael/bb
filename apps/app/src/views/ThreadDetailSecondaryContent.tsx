@@ -28,6 +28,7 @@ import { DetailCard, DetailRow, LocalhostBadge } from "@bb/ui-core";
 import type { Thread } from "@bb/domain";
 import type { WorkspaceFile } from "@bb/server-contract";
 import type { FilePreview } from "@/lib/file-preview";
+import type { ManagerSelectorOption } from "./threadManagerSelectorOptions";
 
 const TIMELINE_PANEL_DEFAULT_SIZE_PERCENT = 50;
 const CLOSED_TIMELINE_PANEL_SIZE_PERCENT = 100;
@@ -40,11 +41,6 @@ type ThreadSecondaryPanelProps = Omit<
   ComponentProps<typeof ThreadSecondaryPanel>,
   "threadStorageContent" | "metadataContent"
 >;
-
-interface ManagerSelectorOption {
-  label: string;
-  value: string;
-}
 
 interface ThreadDetailMetadataProps {
   canAssignToManager: boolean;

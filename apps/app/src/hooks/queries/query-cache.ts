@@ -53,15 +53,51 @@ function getThreadListFiltersFromQueryKey(
     return undefined;
   }
 
+  if (!isThreadListQueryFilters(candidate)) {
+    return undefined;
+  }
+
+  return candidate;
+}
+
+function isThreadListQueryFilters(
+  candidate: unknown,
+): candidate is ThreadListQueryFilters {
   if (
     typeof candidate !== "object" ||
     candidate === null ||
     Array.isArray(candidate)
   ) {
-    return undefined;
+    return false;
   }
 
-  return candidate;
+  if (!("archived" in candidate) || typeof candidate.archived !== "boolean") {
+    return false;
+  }
+  if (
+    "projectId" in candidate &&
+    candidate.projectId !== undefined &&
+    typeof candidate.projectId !== "string"
+  ) {
+    return false;
+  }
+  if (
+    "parentThreadId" in candidate &&
+    candidate.parentThreadId !== undefined &&
+    typeof candidate.parentThreadId !== "string"
+  ) {
+    return false;
+  }
+  if (
+    "type" in candidate &&
+    candidate.type !== undefined &&
+    candidate.type !== "manager" &&
+    candidate.type !== "standard"
+  ) {
+    return false;
+  }
+
+  return true;
 }
 
 export function getEnvironmentRecordInvalidationQueryKeys({
@@ -212,10 +248,13 @@ function threadMatchesListFilters(
   thread: Thread,
   filters: ThreadListQueryFilters | undefined,
 ): boolean {
-  if (filters?.archived === true && thread.archivedAt == null) {
+  if (!filters) {
     return false;
   }
-  if (filters?.archived !== true && thread.archivedAt != null) {
+  if (filters.archived && thread.archivedAt == null) {
+    return false;
+  }
+  if (!filters.archived && thread.archivedAt != null) {
     return false;
   }
   if (filters?.projectId && thread.projectId !== filters.projectId) {

@@ -1,13 +1,25 @@
 // @vitest-environment jsdom
 
 import { Suspense, type ReactNode } from "react";
-import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import type { QueryClient } from "@tanstack/react-query";
-import type { ThreadListEntry } from "@bb/domain";
+import type { ThreadListEntry, ThreadWithRuntime } from "@bb/domain";
+import { SidebarProvider } from "@bb/ui-core";
 import { resetFakeReconnectingWebSockets } from "@/test/fake-reconnecting-websocket";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
-import { installFetchRoutes, jsonResponse } from "@/test/http-test-utils";
+import {
+  installFetchRoutes,
+  jsonResponse,
+  type FetchRoute,
+} from "@/test/http-test-utils";
+import { ThreadActionsProvider } from "@/components/thread/ThreadActionsProvider";
 import {
   threadListQueryKey,
   threadQueryKey,
@@ -15,6 +27,7 @@ import {
 import { wsManager } from "@/lib/ws";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ThreadDetailView } from "./ThreadDetailView";
+import { buildManagerSelectorOptions } from "./threadManagerSelectorOptions";
 
 vi.mock("partysocket/ws", async () => {
   const { FakeReconnectingWebSocket: FakeSocket } =
@@ -36,17 +49,22 @@ interface RenderThreadDetailViewOptions {
   cachedProjectThreads?: ThreadListEntry[];
 }
 
-function createThreadListEntry(): ThreadListEntry {
+interface CreateThreadDetailSuccessRoutesArgs {
+  managerThreads?: ThreadListEntry[];
+  parentThread?: ThreadWithRuntime;
+  thread: ThreadWithRuntime;
+  threadListRequests?: URL[];
+}
+
+function createThreadResponse(
+  overrides: Partial<ThreadWithRuntime> = {},
+): ThreadWithRuntime {
   return {
     archivedAt: null,
     automationId: null,
     createdAt: 1,
     deletedAt: null,
-    environmentBranchName: null,
-    environmentHostId: null,
     environmentId: null,
-    environmentWorkspaceDisplayKind: "other",
-    hasPendingInteraction: false,
     id: "thr-1",
     lastReadAt: null,
     latestAttentionAt: 1,
@@ -63,6 +81,20 @@ function createThreadListEntry(): ThreadListEntry {
     titleFallback: "Cached thread",
     type: "standard",
     updatedAt: 1,
+    ...overrides,
+  };
+}
+
+function createThreadListEntry(
+  overrides: Partial<ThreadListEntry> = {},
+): ThreadListEntry {
+  return {
+    ...createThreadResponse(),
+    environmentBranchName: null,
+    environmentHostId: null,
+    environmentWorkspaceDisplayKind: "other",
+    hasPendingInteraction: false,
+    ...overrides,
   };
 }
 
@@ -72,16 +104,22 @@ function createThreadDetailWrapper() {
   function ThreadDetailWrapper({ children }: ThreadDetailWrapperProps) {
     return harness.wrapper({
       children: (
-        <Suspense fallback={null}>
-          <MemoryRouter initialEntries={["/projects/project-1/threads/thr-1"]}>
-            <Routes>
-              <Route
-                path="/projects/:projectId/threads/:threadId"
-                element={children}
-              />
-            </Routes>
-          </MemoryRouter>
-        </Suspense>
+        <SidebarProvider>
+          <Suspense fallback={null}>
+            <MemoryRouter
+              initialEntries={["/projects/project-1/threads/thr-1"]}
+            >
+              <ThreadActionsProvider>
+                <Routes>
+                  <Route
+                    path="/projects/:projectId/threads/:threadId"
+                    element={children}
+                  />
+                </Routes>
+              </ThreadActionsProvider>
+            </MemoryRouter>
+          </Suspense>
+        </SidebarProvider>
       ),
     });
   }
@@ -111,6 +149,114 @@ async function renderThreadDetailView(
   return { queryClient };
 }
 
+function createThreadDetailSuccessRoutes(
+  args: CreateThreadDetailSuccessRoutesArgs,
+): FetchRoute[] {
+  return [
+    {
+      pathname: "/api/v1/threads/thr-1",
+      handler: () => jsonResponse(args.thread),
+    },
+    ...(args.parentThread
+      ? [
+          {
+            pathname: `/api/v1/threads/${args.parentThread.id}`,
+            handler: () => jsonResponse(args.parentThread),
+          },
+        ]
+      : []),
+    {
+      pathname: "/api/v1/threads/thr-1/timeline",
+      handler: () =>
+        jsonResponse({
+          activeThinking: null,
+          contextWindowUsage: null,
+          pendingSteers: [],
+          rows: [],
+        }),
+    },
+    {
+      pathname: "/api/v1/threads",
+      handler: (request) => {
+        const requestUrl = new URL(request.url);
+        args.threadListRequests?.push(requestUrl);
+        const isActiveManagerRequest =
+          requestUrl.searchParams.get("archived") === "false" &&
+          requestUrl.searchParams.get("type") === "manager";
+        return jsonResponse(
+          isActiveManagerRequest ? (args.managerThreads ?? []) : [],
+        );
+      },
+    },
+    {
+      pathname: "/api/v1/threads/thr-1/default-execution-options",
+      handler: () => jsonResponse(null),
+    },
+    {
+      pathname: "/api/v1/threads/thr-1/drafts",
+      handler: () => jsonResponse([]),
+    },
+    {
+      pathname: "/api/v1/threads/thr-1/interactions",
+      handler: () => jsonResponse([]),
+    },
+    {
+      pathname: "/api/v1/threads/thr-1/prompt-history",
+      handler: () => jsonResponse([]),
+    },
+    {
+      pathname: "/api/v1/system/config",
+      handler: () =>
+        jsonResponse({
+          githubConnected: false,
+          hostDaemonPort: null,
+          sandboxHostSupported: false,
+          voiceTranscriptionEnabled: false,
+        }),
+    },
+    {
+      pathname: "/api/v1/hosts",
+      handler: () => jsonResponse([]),
+    },
+    {
+      pathname: "/api/v1/system/providers",
+      handler: () =>
+        jsonResponse([
+          {
+            available: true,
+            capabilities: {
+              supportedPermissionModes: ["full", "workspace-write", "readonly"],
+              supportsRename: true,
+              supportsServiceTier: false,
+            },
+            displayName: "Codex",
+            id: "codex",
+          },
+        ]),
+    },
+    {
+      pathname: "/api/v1/system/models",
+      handler: () =>
+        jsonResponse([
+          {
+            defaultReasoningEffort: "medium",
+            description: "Model description",
+            displayName: "GPT 5.4",
+            id: "gpt-5.4",
+            isDefault: true,
+            model: "gpt-5.4",
+            supportedReasoningEfforts: [
+              {
+                description: "Medium effort",
+                reasoningEffort: "medium",
+              },
+            ],
+          },
+        ]),
+    },
+  ];
+}
+
 afterEach(() => {
   wsManager.disconnect();
   cleanup();
@@ -120,6 +266,93 @@ afterEach(() => {
 });
 
 describe("ThreadDetailView", () => {
+  it("loads active manager threads for manager selector data", async () => {
+    const threadListRequests: URL[] = [];
+    const activeManager = createThreadListEntry({
+      id: "thr-manager-active",
+      title: "Active manager",
+      titleFallback: "Active manager",
+      type: "manager",
+    });
+
+    installFetchRoutes(
+      createThreadDetailSuccessRoutes({
+        managerThreads: [activeManager],
+        thread: createThreadResponse({ title: "Standard thread" }),
+        threadListRequests,
+      }),
+    );
+
+    wsManager.connect();
+
+    await renderThreadDetailView();
+
+    await waitFor(() => {
+      expect(threadListRequests.length).toBeGreaterThan(0);
+    });
+    expect(
+      threadListRequests.every(
+        (requestUrl) =>
+          requestUrl.searchParams.get("projectId") === "project-1" &&
+          requestUrl.searchParams.get("archived") === "false" &&
+          requestUrl.searchParams.get("type") === "manager",
+      ),
+    ).toBe(true);
+  });
+
+  it("builds new assignment targets from active manager query results", () => {
+    const thread = createThreadResponse({ title: "Standard thread" });
+    const activeManager = createThreadListEntry({
+      id: "thr-manager-active",
+      title: "Active manager",
+      titleFallback: "Active manager",
+      type: "manager",
+    });
+
+    const managerSelectorOptions = buildManagerSelectorOptions({
+      currentThreadId: thread.id,
+      isManagerThread: false,
+      managerThreads: [activeManager],
+      parentThreadDisplayName: null,
+      parentThreadId: null,
+    });
+
+    expect(managerSelectorOptions).toEqual([
+      { label: "None", value: "none" },
+      { label: "Active manager", value: activeManager.id },
+    ]);
+  });
+
+  it("keeps an already-assigned archived manager parent in selector options", () => {
+    const archivedManager = createThreadResponse({
+      archivedAt: 10,
+      id: "thr-manager-archived",
+      title: "Archived manager",
+      titleFallback: "Archived manager",
+      type: "manager",
+    });
+    const thread = createThreadResponse({
+      parentThreadId: archivedManager.id,
+      title: "Managed child thread",
+    });
+
+    const managerSelectorOptions = buildManagerSelectorOptions({
+      currentThreadId: thread.id,
+      isManagerThread: false,
+      managerThreads: [],
+      parentThreadDisplayName: archivedManager.title,
+      parentThreadId: archivedManager.id,
+    });
+    const selectedManagerOption = managerSelectorOptions.find(
+      (option) => option.value === archivedManager.id,
+    );
+
+    expect(selectedManagerOption).toEqual({
+      label: "Archived manager",
+      value: archivedManager.id,
+    });
+  });
+
   it("keeps showing loading when the thread request fails before the websocket connects", async () => {
     installFetchRoutes([
       {

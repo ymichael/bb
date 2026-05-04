@@ -44,8 +44,9 @@ interface RefetchOnMountOptions extends QueryOptions {
 
 export interface UseThreadsFilters extends Omit<
   ThreadListFilters,
-  "projectId"
+  "archived" | "projectId"
 > {
+  archived: boolean;
   projectId?: string;
 }
 

@@ -2,7 +2,10 @@ import type { ThreadType } from "@bb/domain";
 import { useEffect, useMemo, useState } from "react";
 import { useDebounceValue } from "usehooks-ts";
 import { useProjectFileSuggestions } from "./queries/project-queries";
-import { useThreads } from "./queries/thread-queries";
+import {
+  useThreads,
+  type UseThreadsFilters,
+} from "./queries/thread-queries";
 
 export type PromptMentionSuggestion =
   | { kind: "file"; path: string; replacement: string }
@@ -68,10 +71,13 @@ export function usePromptMentions(
     environmentId: options.environmentId,
   });
   const threadSuggestionMode = options.threadSuggestionMode ?? "none";
-  const threadsQuery = useThreads(
-    { projectId },
-    { enabled: threadSuggestionMode !== "none" },
-  );
+  const threadFilters: UseThreadsFilters =
+    threadSuggestionMode === "managers"
+      ? { archived: false, projectId, type: "manager" }
+      : { archived: false, projectId };
+  const threadsQuery = useThreads(threadFilters, {
+    enabled: threadSuggestionMode !== "none",
+  });
 
   const hasQuery = (query?.trim().length ?? 0) > 0;
   const isDebouncing = hasQuery && query !== debouncedQuery;
@@ -91,7 +97,6 @@ export function usePromptMentions(
       return [];
     }
     return (threadsQuery.data ?? [])
-      .filter((thread) => thread.archivedAt == null)
       .filter((thread) => thread.id !== currentThreadId)
       .filter((thread) =>
         threadSuggestionMode === "managers" ? thread.type === "manager" : true,

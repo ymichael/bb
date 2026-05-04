@@ -4,7 +4,7 @@ import type {
   ThreadTimelineLocalFileLink,
   TimelineTitleActionResolver,
 } from "@bb/ui-core";
-import type { ThreadWithRuntime } from "@bb/domain";
+import type { ThreadListEntry, ThreadWithRuntime } from "@bb/domain";
 import { toast } from "sonner";
 import { useThreadSecondaryPanelUrlSync } from "@/lib/thread-secondary-panel";
 import { useRequestEnvironmentAction } from "../hooks/mutations/environment-mutations";
@@ -65,12 +65,17 @@ import {
 } from "./threadWorkspaceOpenButton";
 import { copyToClipboardWithToast } from "@/lib/clipboard";
 import { resolveThreadLocalFileLink } from "@/lib/thread-local-file-links";
+import {
+  buildManagerSelectorOptions,
+  isUnassignedStandardThread,
+} from "./threadManagerSelectorOptions";
 
 const PROMPT_BANNER_KIND_PREFIX = {
   uncommitted: "Uncommitted",
   untracked: "Untracked",
   committed: "Committed",
 } as const;
+const EMPTY_MANAGER_THREADS: readonly ThreadListEntry[] = [];
 
 function buildHostConnectionNotice(
   thread: ThreadWithRuntime,
@@ -149,14 +154,19 @@ export function ThreadDetailView() {
     },
     [isManagerThread, setStoredUseStandardManagerTimeline],
   );
-  const { data: allProjectThreads } = useThreads({ projectId });
-  const managerThreads = useMemo(
-    () =>
-      (allProjectThreads ?? []).filter(
-        (candidate) => candidate.type === "manager",
-      ),
-    [allProjectThreads],
+  const isUnassignedStandard = isUnassignedStandardThread(thread);
+  const shouldLoadManagerThreads = isUnassignedStandard;
+  const managerThreadsQuery = useThreads(
+    {
+      archived: false,
+      projectId,
+      type: "manager",
+    },
+    {
+      enabled: shouldLoadManagerThreads,
+    },
   );
+  const managerThreads = managerThreadsQuery.data ?? EMPTY_MANAGER_THREADS;
   const {
     data: timeline,
     isLoading: timelineLoading,
@@ -293,39 +303,23 @@ export function ThreadDetailView() {
     parentThread?.title && parentThread.title.trim().length > 0
       ? parentThread.title
       : parentThreadId;
-  const managerSelectorOptions = useMemo(() => {
-    if (!thread || isManagerThread) {
-      return [];
-    }
-
-    const options: Array<{ value: string; label: string }> = [
-      { value: "none", label: "None" },
-    ];
-    const seen = new Set<string>(["none"]);
-    const addOption = (value: string | undefined, label: string) => {
-      if (!value || value === thread.id || seen.has(value)) {
-        return;
-      }
-      seen.add(value);
-      options.push({ value, label });
-    };
-
-    addOption(
-      parentThreadId ?? undefined,
-      parentThreadDisplayName ?? "Manager",
-    );
-    for (const manager of managerThreads) {
-      addOption(manager.id, manager.title?.trim() ? manager.title : "Manager");
-    }
-
-    return options;
-  }, [
-    isManagerThread,
-    managerThreads,
-    parentThreadDisplayName,
-    parentThreadId,
-    thread,
-  ]);
+  const managerSelectorOptions = useMemo(
+    () =>
+      buildManagerSelectorOptions({
+        currentThreadId: thread?.id,
+        isManagerThread,
+        managerThreads,
+        parentThreadDisplayName,
+        parentThreadId,
+      }),
+    [
+      isManagerThread,
+      managerThreads,
+      parentThreadDisplayName,
+      parentThreadId,
+      thread?.id,
+    ],
+  );
   const managerSelectorValue = parentThreadId ?? "none";
   const selectedManagerOption = managerSelectorOptions.find(
     (option) => option.value === managerSelectorValue,
@@ -423,11 +417,10 @@ export function ThreadDetailView() {
   }
 
   const canUseGitUi = !isManagerThread;
-  const canAssignToManager =
-    thread.type === "standard" &&
-    !thread.parentThreadId &&
-    managerThreads.length > 0 &&
-    !managerThreads.some((manager) => manager.id === thread.id);
+  const hasAssignableManager = managerSelectorOptions.some(
+    (option) => option.value !== "none",
+  );
+  const canAssignToManager = isUnassignedStandard && hasAssignableManager;
   const canTakeOverThread =
     thread.type === "standard" && Boolean(thread.parentThreadId);
   const threadEnvironmentDisplay = environment
