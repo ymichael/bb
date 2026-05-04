@@ -1,4 +1,5 @@
 import { createDebouncedCallbackScheduler, type ThreadEvent } from "@bb/domain";
+import type { HostDaemonEventSequenceKey } from "@bb/host-daemon-contract";
 import type { HostDaemonLogger } from "./logger.js";
 
 export interface BufferedEventInput {
@@ -13,9 +14,34 @@ export interface BufferedEvent extends BufferedEventInput {
   createdAt: number;
 }
 
+export interface EventPostAcceptedResult {
+  kind: "accepted";
+  threadHighWaterMarks: Record<string, number>;
+}
+
+export interface EventPostSequenceConflictResult {
+  acceptedSequences: HostDaemonEventSequenceKey[];
+  kind: "sequence-conflict";
+  threadHighWaterMarks: Record<string, number>;
+}
+
+export type EventPostResult =
+  | EventPostAcceptedResult
+  | EventPostSequenceConflictResult;
+
+interface EventFlushResult {
+  acknowledgedBatchCount: number;
+  rebased: boolean;
+  succeeded: boolean;
+}
+
+interface BufferedEventState extends BufferedEvent {
+  bufferId: number;
+}
+
 export interface CreateEventBufferOptions {
   logger: Pick<HostDaemonLogger, "warn">;
-  postEvents: (events: BufferedEvent[]) => Promise<Record<string, number>>;
+  postEvents: (events: BufferedEvent[]) => Promise<EventPostResult>;
   initialHighWaterMarks?: Record<string, number>;
   debounceMs?: number;
   maxWaitMs?: number;
@@ -46,6 +72,7 @@ export interface EventBuffer {
 
 const DEFAULT_DEBOUNCE_MS = 100;
 const DEFAULT_MAX_WAIT_MS = 500;
+const MAX_IMMEDIATE_REBASE_RETRIES = 3;
 
 function isWaitingForApprovalItemEvent(event: ThreadEvent): boolean {
   if (event.type !== "item/started" && event.type !== "item/completed") {
@@ -96,10 +123,12 @@ export function createEventBuffer(
     nextSequenceByThread.set(threadId, highWaterMark + 1);
   }
 
-  let buffer: BufferedEvent[] = [];
+  let buffer: BufferedEventState[] = [];
+  let nextBufferId = 1;
   let disposed = false;
   let flushPromise: Promise<{
     acknowledgedBatchCount: number;
+    rebased: boolean;
     succeeded: boolean;
   }> | null = null;
   const flushScheduler = createDebouncedCallbackScheduler({
@@ -130,15 +159,28 @@ export function createEventBuffer(
     return nextValue;
   }
 
+  function toBufferedEvent(state: BufferedEventState): BufferedEvent {
+    return {
+      environmentId: state.environmentId,
+      threadId: state.threadId,
+      event: state.event,
+      sequence: state.sequence,
+      createdAt: state.createdAt,
+    };
+  }
+
   function push(event: BufferedEventInput): BufferedEvent {
     const sequence = nextSequence(event.threadId);
-    const bufferedEvent: BufferedEvent = {
+    const bufferedEvent: BufferedEventState = {
       ...event,
+      bufferId: nextBufferId,
       sequence,
       createdAt: event.createdAt ?? now(),
     };
+    nextBufferId++;
 
     buffer.push(bufferedEvent);
+    const publicEvent = toBufferedEvent(bufferedEvent);
 
     if (shouldFlushThreadEventImmediately(event.event)) {
       flushImmediately();
@@ -146,7 +188,7 @@ export function createEventBuffer(
       scheduleFlush();
     }
 
-    return bufferedEvent;
+    return publicEvent;
   }
 
   function ack(threadHighWaterMarks: Record<string, number>): void {
@@ -172,6 +214,58 @@ export function createEventBuffer(
 
   function seed(threadHighWaterMarks: Record<string, number>): void {
     ack(threadHighWaterMarks);
+  }
+
+  function ackPostedBatch(
+    batch: readonly BufferedEventState[],
+    threadHighWaterMarks: Record<string, number>,
+  ): number {
+    const acceptedBufferIds = new Set<number>();
+    for (const event of batch) {
+      const highWaterMark = threadHighWaterMarks[event.threadId];
+      if (highWaterMark !== undefined && event.sequence <= highWaterMark) {
+        acceptedBufferIds.add(event.bufferId);
+      }
+    }
+
+    return removeBufferedEventsById(acceptedBufferIds);
+  }
+
+  function ackPostedSequences(
+    batch: readonly BufferedEventState[],
+    sequences: readonly HostDaemonEventSequenceKey[],
+  ): number {
+    if (sequences.length === 0) {
+      return 0;
+    }
+
+    const acceptedSequenceKeys = new Set(
+      sequences.map((sequence) => `${sequence.threadId}:${sequence.sequence}`),
+    );
+    const acceptedBufferIds = new Set<number>();
+    for (const event of batch) {
+      if (acceptedSequenceKeys.has(`${event.threadId}:${event.sequence}`)) {
+        acceptedBufferIds.add(event.bufferId);
+      }
+    }
+
+    return removeBufferedEventsById(acceptedBufferIds);
+  }
+
+  function removeBufferedEventsById(bufferIds: ReadonlySet<number>): number {
+    if (bufferIds.size === 0) {
+      return 0;
+    }
+
+    let removedCount = 0;
+    buffer = buffer.filter((event) => {
+      if (!bufferIds.has(event.bufferId)) {
+        return true;
+      }
+      removedCount++;
+      return false;
+    });
+    return removedCount;
   }
 
   function rebase(threadHighWaterMarks: Record<string, number>): void {
@@ -211,7 +305,59 @@ export function createEventBuffer(
     }
   }
 
+  function applySequenceConflict(
+    batch: readonly BufferedEventState[],
+    result: EventPostSequenceConflictResult,
+  ): number {
+    const acknowledgedBatchCount = ackPostedSequences(
+      batch,
+      result.acceptedSequences,
+    );
+    rebase(result.threadHighWaterMarks);
+    return acknowledgedBatchCount;
+  }
+
   async function flush(): Promise<void> {
+    let immediateRebaseRetryCount = 0;
+
+    function shouldRetryImmediatelyAfterRebase(): boolean {
+      immediateRebaseRetryCount++;
+      if (immediateRebaseRetryCount <= MAX_IMMEDIATE_REBASE_RETRIES) {
+        return true;
+      }
+
+      options.logger.warn(
+        {
+          bufferDepth: buffer.length,
+          immediateRebaseRetryCount,
+          maxImmediateRebaseRetries: MAX_IMMEDIATE_REBASE_RETRIES,
+        },
+        "event flush hit repeated sequence conflicts, will retry",
+      );
+      if (buffer.length > 0) {
+        scheduleFlush();
+      }
+      return false;
+    }
+
+    function shouldContinueAfterFlushResult(result: EventFlushResult): boolean {
+      if (!result.succeeded || result.acknowledgedBatchCount === 0) {
+        if (result.rebased) {
+          return shouldRetryImmediatelyAfterRebase();
+        }
+        if (buffer.length > 0) {
+          scheduleFlush();
+        }
+        return false;
+      }
+
+      immediateRebaseRetryCount = 0;
+      if (buffer.length === 0) {
+        return false;
+      }
+      return true;
+    }
+
     while (true) {
       if (disposed) {
         return;
@@ -222,13 +368,7 @@ export function createEventBuffer(
         if (disposed) {
           return;
         }
-        if (!result.succeeded || result.acknowledgedBatchCount === 0) {
-          if (buffer.length > 0) {
-            scheduleFlush();
-          }
-          return;
-        }
-        if (buffer.length === 0) {
+        if (!shouldContinueAfterFlushResult(result)) {
           return;
         }
         continue;
@@ -240,20 +380,27 @@ export function createEventBuffer(
 
       const batch = buffer.slice();
 
-      flushPromise = (async (): Promise<{
-        acknowledgedBatchCount: number;
-        succeeded: boolean;
-      }> => {
+      flushPromise = (async (): Promise<EventFlushResult> => {
         let acknowledgedBatchCount = 0;
+        let rebased = false;
         let succeeded = false;
         try {
-          const threadHighWaterMarks = await options.postEvents(batch);
-          const bufferDepthBeforeAck = buffer.length;
-          ack(threadHighWaterMarks);
-          acknowledgedBatchCount = Math.min(
-            batch.length,
-            Math.max(0, bufferDepthBeforeAck - buffer.length),
+          const postResult = await options.postEvents(
+            batch.map(toBufferedEvent),
           );
+          if (postResult.kind === "sequence-conflict") {
+            acknowledgedBatchCount = applySequenceConflict(batch, postResult);
+            rebased = true;
+            succeeded = true;
+            return {
+              acknowledgedBatchCount,
+              rebased,
+              succeeded,
+            };
+          }
+          const { threadHighWaterMarks } = postResult;
+          acknowledgedBatchCount = ackPostedBatch(batch, threadHighWaterMarks);
+          rebase(threadHighWaterMarks);
           if (acknowledgedBatchCount === 0) {
             options.logger.warn(
               {
@@ -277,6 +424,7 @@ export function createEventBuffer(
         }
         return {
           acknowledgedBatchCount,
+          rebased,
           succeeded,
         };
       })();
@@ -285,16 +433,10 @@ export function createEventBuffer(
       if (disposed) {
         return;
       }
-      if (!result.succeeded || result.acknowledgedBatchCount === 0) {
-        if (buffer.length > 0) {
-          scheduleFlush();
-        }
+      if (!shouldContinueAfterFlushResult(result)) {
         return;
       }
-
-      if (buffer.length === 0) {
-        return;
-      }
+      continue;
     }
   }
 
@@ -313,7 +455,7 @@ export function createEventBuffer(
       return buffer.length;
     },
     snapshot(): BufferedEvent[] {
-      return buffer.slice();
+      return buffer.map(toBufferedEvent);
     },
     dispose,
   };

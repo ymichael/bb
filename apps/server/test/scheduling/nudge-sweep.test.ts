@@ -1,6 +1,7 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import {
   createManagerThreadNudge,
+  events,
   getManagerThreadNudge,
   hostDaemonCommands,
   markHostSuspended,
@@ -9,7 +10,11 @@ import {
   upsertHost,
   updateManagerThreadNudge,
 } from "@bb/db";
-import { threadScope } from "@bb/domain";
+import {
+  threadScope,
+  turnRequestEventDataSchema,
+  turnScope,
+} from "@bb/domain";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { sweepDueNudges } from "../../src/services/scheduling/nudge-sweep.js";
 import { appendClientTurnEvent } from "../../src/services/threads/thread-events.js";
@@ -17,6 +22,7 @@ import {
   reportNextRuntimeMaterialSyncSuccess,
   reportQueuedCommandError,
   waitForQueuedCommand,
+  waitForQueuedCommandAfter,
 } from "../helpers/commands.js";
 import {
   seedEnvironment,
@@ -269,8 +275,9 @@ describe("nudge sweep", () => {
 
       await sweepPromise;
 
-      expect(resumeHostMock).toHaveBeenCalledTimes(1);
-      expect(sandboxHost.resume).not.toHaveBeenCalled();
+      expect(harness.deps.sandboxRegistry.get(host.id)).toBe(
+        resumedSandboxHost,
+      );
       const queuedTurnSubmit = await waitForQueuedCommand(
         harness,
         ({ command }) =>
@@ -462,11 +469,11 @@ describe("nudge sweep", () => {
     }
   });
 
-  it("advances due nudges without queueing work when the thread is not idle", async () => {
+  it("queues due nudges as auto submits when the manager is already active", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps, {
-        id: "host-nudge-non-idle",
+        id: "host-nudge-active",
       });
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -474,7 +481,7 @@ describe("nudge sweep", () => {
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
-        path: "/tmp/nudge-non-idle-environment",
+        path: "/tmp/nudge-active-environment",
       });
       const thread = seedRunnableManagerThread({
         harness,
@@ -485,11 +492,20 @@ describe("nudge sweep", () => {
       const nudge = createManagerThreadNudge(harness.db, harness.hub, {
         projectId: project.id,
         threadId: thread.id,
-        name: "non-idle-check",
+        name: "active-check",
         cron: "0 8 * * *",
         timezone: "UTC",
         enabled: true,
         nextFireAt: now - 1,
+      });
+      seedEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-manager-thread",
+        sequence: 3,
+        type: "turn/started",
+        scope: turnScope("turn-active-nudge"),
+        data: {},
       });
       harness.db
         .update(threads)
@@ -497,17 +513,362 @@ describe("nudge sweep", () => {
         .where(eq(threads.id, thread.id))
         .run();
 
-      await sweepDueNudges(harness.deps, { now });
-
-      expect(harness.db.select().from(hostDaemonCommands).all()).toHaveLength(
-        0,
+      const sweepPromise = sweepDueNudges(harness.deps, { now });
+      const preferencesPath = `/tmp/bb-host-data/${host.id}/thread-storage/${thread.id}/PREFERENCES.md`;
+      const readPreferences = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "host.read_file" && command.path === preferencesPath,
       );
+      const preferencesResponse = await reportQueuedCommandError(
+        harness,
+        readPreferences,
+        {
+          errorCode: "ENOENT",
+          errorMessage: "File not found",
+        },
+      );
+      expect(preferencesResponse.status).toBe(200);
+
+      await sweepPromise;
+
+      const queuedTurnSubmit = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "turn.submit" && command.threadId === thread.id,
+      );
+      expect(queuedTurnSubmit.command).toMatchObject({
+        input: [
+          {
+            type: "text",
+            text: "[bb system] Scheduled nudge: active-check. Check ASYNC.md.",
+          },
+        ],
+        target: {
+          mode: "auto",
+          expectedTurnId: "turn-active-nudge",
+        },
+      });
+
+      const clientRequests = harness.db
+        .select()
+        .from(events)
+        .where(
+          and(
+            eq(events.threadId, thread.id),
+            eq(events.type, "client/turn/requested"),
+          ),
+        )
+        .orderBy(events.sequence)
+        .all();
+      const nudgeRequest = clientRequests[clientRequests.length - 1];
+      if (!nudgeRequest) {
+        throw new Error("Expected nudge client request event");
+      }
+      const nudgeRequestData = turnRequestEventDataSchema.parse(
+        JSON.parse(nudgeRequest.data),
+      );
+      expect(nudgeRequestData.target).toEqual({
+        kind: "auto",
+        expectedTurnId: "turn-active-nudge",
+      });
       expect(getManagerThreadNudge(harness.db, nudge.id)).toMatchObject({
         lastFiredAt: now,
       });
       expect(
         getManagerThreadNudge(harness.db, nudge.id)?.nextFireAt,
       ).toBeGreaterThan(now);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("does not queue a stale start nudge when the thread becomes active during preparation", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-nudge-idle-active-race",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/nudge-idle-active-race-environment",
+      });
+      const thread = seedRunnableManagerThread({
+        harness,
+        environmentId: environment.id,
+        projectId: project.id,
+      });
+      const now = Date.now();
+      const nudge = createManagerThreadNudge(harness.db, harness.hub, {
+        projectId: project.id,
+        threadId: thread.id,
+        name: "idle-active-race",
+        cron: "0 8 * * *",
+        timezone: "UTC",
+        enabled: true,
+        nextFireAt: now - 1,
+      });
+
+      const sweepPromise = sweepDueNudges(harness.deps, { now });
+      const preferencesPath = `/tmp/bb-host-data/${host.id}/thread-storage/${thread.id}/PREFERENCES.md`;
+      const readPreferences = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "host.read_file" && command.path === preferencesPath,
+      );
+
+      seedEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-manager-thread",
+        sequence: 3,
+        type: "turn/started",
+        scope: turnScope("turn-became-active"),
+        data: {},
+      });
+      harness.db
+        .update(threads)
+        .set({ status: "active", updatedAt: now })
+        .where(eq(threads.id, thread.id))
+        .run();
+
+      const preferencesResponse = await reportQueuedCommandError(
+        harness,
+        readPreferences,
+        {
+          errorCode: "ENOENT",
+          errorMessage: "File not found",
+        },
+      );
+      expect(preferencesResponse.status).toBe(200);
+
+      await sweepPromise;
+
+      expect(
+        harness.db
+          .select()
+          .from(hostDaemonCommands)
+          .where(eq(hostDaemonCommands.type, "turn.submit"))
+          .all(),
+      ).toHaveLength(0);
+      expect(
+        harness.db
+          .select()
+          .from(events)
+          .where(
+            and(
+              eq(events.threadId, thread.id),
+              eq(events.type, "client/turn/requested"),
+            ),
+          )
+          .all(),
+      ).toHaveLength(1);
+      expect(getManagerThreadNudge(harness.db, nudge.id)).toMatchObject({
+        lastFiredAt: null,
+        nextFireAt: now - 1,
+      });
+
+      const retrySweepPromise = sweepDueNudges(harness.deps, { now: now + 1 });
+      const retryReadPreferences = await waitForQueuedCommandAfter(
+        harness,
+        readPreferences.row.cursor,
+        ({ command }) =>
+          command.type === "host.read_file" && command.path === preferencesPath,
+      );
+      const retryPreferencesResponse = await reportQueuedCommandError(
+        harness,
+        retryReadPreferences,
+        {
+          errorCode: "ENOENT",
+          errorMessage: "File not found",
+        },
+      );
+      expect(retryPreferencesResponse.status).toBe(200);
+
+      await retrySweepPromise;
+
+      const queuedTurnSubmit = await waitForQueuedCommandAfter(
+        harness,
+        retryReadPreferences.row.cursor,
+        ({ command }) =>
+          command.type === "turn.submit" && command.threadId === thread.id,
+      );
+      expect(queuedTurnSubmit.command).toMatchObject({
+        target: {
+          mode: "auto",
+          expectedTurnId: "turn-became-active",
+        },
+      });
+      const clientRequests = harness.db
+        .select()
+        .from(events)
+        .where(
+          and(
+            eq(events.threadId, thread.id),
+            eq(events.type, "client/turn/requested"),
+          ),
+        )
+        .orderBy(events.sequence)
+        .all();
+      const nudgeRequest = clientRequests[clientRequests.length - 1];
+      if (!nudgeRequest) {
+        throw new Error("Expected retry nudge client request event");
+      }
+      const nudgeRequestData = turnRequestEventDataSchema.parse(
+        JSON.parse(nudgeRequest.data),
+      );
+      expect(nudgeRequestData.target).toEqual({
+        kind: "auto",
+        expectedTurnId: "turn-became-active",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("does not queue a stale active nudge when the active turn changes during preparation", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-nudge-active-race",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/nudge-active-race-environment",
+      });
+      const thread = seedRunnableManagerThread({
+        harness,
+        environmentId: environment.id,
+        projectId: project.id,
+      });
+      const now = Date.now();
+      const nudge = createManagerThreadNudge(harness.db, harness.hub, {
+        projectId: project.id,
+        threadId: thread.id,
+        name: "active-race",
+        cron: "0 8 * * *",
+        timezone: "UTC",
+        enabled: true,
+        nextFireAt: now - 1,
+      });
+      seedEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-manager-thread",
+        sequence: 3,
+        type: "turn/started",
+        scope: turnScope("turn-original-active"),
+        data: {},
+      });
+      harness.db
+        .update(threads)
+        .set({ status: "active", updatedAt: now })
+        .where(eq(threads.id, thread.id))
+        .run();
+
+      const sweepPromise = sweepDueNudges(harness.deps, { now });
+      const preferencesPath = `/tmp/bb-host-data/${host.id}/thread-storage/${thread.id}/PREFERENCES.md`;
+      const readPreferences = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "host.read_file" && command.path === preferencesPath,
+      );
+
+      seedEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-manager-thread",
+        sequence: 4,
+        type: "turn/started",
+        scope: turnScope("turn-replaced-active"),
+        data: {},
+      });
+
+      const preferencesResponse = await reportQueuedCommandError(
+        harness,
+        readPreferences,
+        {
+          errorCode: "ENOENT",
+          errorMessage: "File not found",
+        },
+      );
+      expect(preferencesResponse.status).toBe(200);
+
+      await sweepPromise;
+
+      expect(
+        harness.db
+          .select()
+          .from(hostDaemonCommands)
+          .where(eq(hostDaemonCommands.type, "turn.submit"))
+          .all(),
+      ).toHaveLength(0);
+      expect(getManagerThreadNudge(harness.db, nudge.id)).toMatchObject({
+        lastFiredAt: null,
+        nextFireAt: now - 1,
+      });
+
+      const retrySweepPromise = sweepDueNudges(harness.deps, { now: now + 1 });
+      const retryReadPreferences = await waitForQueuedCommandAfter(
+        harness,
+        readPreferences.row.cursor,
+        ({ command }) =>
+          command.type === "host.read_file" && command.path === preferencesPath,
+      );
+      const retryPreferencesResponse = await reportQueuedCommandError(
+        harness,
+        retryReadPreferences,
+        {
+          errorCode: "ENOENT",
+          errorMessage: "File not found",
+        },
+      );
+      expect(retryPreferencesResponse.status).toBe(200);
+
+      await retrySweepPromise;
+
+      const queuedTurnSubmit = await waitForQueuedCommandAfter(
+        harness,
+        retryReadPreferences.row.cursor,
+        ({ command }) =>
+          command.type === "turn.submit" && command.threadId === thread.id,
+      );
+      expect(queuedTurnSubmit.command).toMatchObject({
+        target: {
+          mode: "auto",
+          expectedTurnId: "turn-replaced-active",
+        },
+      });
+      const clientRequests = harness.db
+        .select()
+        .from(events)
+        .where(
+          and(
+            eq(events.threadId, thread.id),
+            eq(events.type, "client/turn/requested"),
+          ),
+        )
+        .orderBy(events.sequence)
+        .all();
+      const nudgeRequest = clientRequests[clientRequests.length - 1];
+      if (!nudgeRequest) {
+        throw new Error("Expected retry nudge client request event");
+      }
+      const nudgeRequestData = turnRequestEventDataSchema.parse(
+        JSON.parse(nudgeRequest.data),
+      );
+      expect(nudgeRequestData.target).toEqual({
+        kind: "auto",
+        expectedTurnId: "turn-replaced-active",
+      });
     } finally {
       await harness.cleanup();
     }

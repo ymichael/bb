@@ -131,6 +131,23 @@ export type HostDaemonEventBatchResponse = z.infer<
   typeof hostDaemonEventBatchResponseSchema
 >;
 
+export const hostDaemonEventSequenceKeySchema = z.object({
+  sequence: z.number().int().nonnegative(),
+  threadId: z.string().min(1),
+});
+export type HostDaemonEventSequenceKey = z.infer<
+  typeof hostDaemonEventSequenceKeySchema
+>;
+
+export const hostDaemonEventBatchSequenceConflictResponseSchema = z.object({
+  acceptedSequences: z.array(hostDaemonEventSequenceKeySchema),
+  code: z.literal("sequence_conflict"),
+  threadHighWaterMarks: z.record(z.string(), z.number().int().nonnegative()),
+});
+export type HostDaemonEventBatchSequenceConflictResponse = z.infer<
+  typeof hostDaemonEventBatchSequenceConflictResponseSchema
+>;
+
 export const hostDaemonCommandResultResponseSchema = z.object({
   ok: z.literal(true),
   threadHighWaterMarks: z.record(z.string(), z.number().int().nonnegative()),
@@ -309,10 +326,16 @@ export type HostDaemonInternalSchema = {
   };
   "/session/events": {
     /** Used by the daemon to stream provider events (turn progress, completions, errors) back to the server. */
-    $post: Endpoint<
-      { json: HostDaemonEventBatchRequest },
-      HostDaemonEventBatchResponse
-    >;
+    $post:
+      | Endpoint<
+          { json: HostDaemonEventBatchRequest },
+          HostDaemonEventBatchResponse
+        >
+      | Endpoint<
+          { json: HostDaemonEventBatchRequest },
+          HostDaemonEventBatchSequenceConflictResponse,
+          409
+        >;
   };
   "/session/environment-change": {
     /** Used by the daemon to report raw environment workspace change hints for server-side validation and fan-out. */

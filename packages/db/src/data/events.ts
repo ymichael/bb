@@ -19,11 +19,17 @@ import type {
   ThreadEventType,
 } from "@bb/domain";
 import { getThreadEventScopeTurnId } from "@bb/domain";
-import type { DbConnection, DbTransaction } from "../connection.js";
+import type {
+  DbConnection,
+  DbQueryConnection,
+  DbTransaction,
+} from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
 import { events } from "../schema.js";
 import { createEventId } from "../ids.js";
 import { deriveStoredEventItemFieldsFromSource } from "../stored-event-item-fields.js";
+
+const STORED_EVENT_SEQUENCE_LOOKUP_CHUNK_SIZE = 250;
 
 export interface InsertEventInput {
   threadId: string;
@@ -82,15 +88,13 @@ export interface ThreadTurnInterruptionEventState {
   threadId: string;
 }
 
-type ThreadEventQueryDb = DbConnection | DbTransaction;
-
 /**
  * Insert events with dedup on (threadId, sequence).
  * Uses INSERT OR IGNORE to skip duplicates.
  * Returns the count and input indexes of actually inserted events.
  */
 export function insertEvents(
-  db: DbConnection,
+  db: DbQueryConnection,
   notifier: DbNotifier,
   eventInputs: InsertEventInput[],
 ): InsertEventsResult {
@@ -227,7 +231,7 @@ export function appendStoredThreadEvent(
  * Returns Record<threadId, maxSequence>.
  */
 export function getHighWaterMarks(
-  db: ThreadEventQueryDb,
+  db: DbQueryConnection,
   threadIds?: string[],
 ): Record<string, number> {
   const result: Record<string, number> = {};
@@ -307,6 +311,19 @@ export interface ListStoredEventRowsInRangeArgs {
   seqEnd: number;
   seqStart: number;
   threadId: string;
+}
+
+export interface ThreadSequenceKey {
+  sequence: number;
+  threadId: string;
+}
+
+export interface ListStoredEventRowsByThreadSequencesArgs {
+  keys: readonly ThreadSequenceKey[];
+}
+
+export interface StoredEventSequenceRow extends StoredEventRow {
+  environmentId: string | null;
 }
 
 export interface ListStoredTurnInputAcceptedRowsByClientRequestSequencesArgs {
@@ -441,6 +458,81 @@ export function listStoredEventRowsInRange(
     )
     .orderBy(events.sequence)
     .all();
+}
+
+function buildThreadSequenceKey(key: ThreadSequenceKey): string {
+  return `${key.threadId}:${key.sequence}`;
+}
+
+function compareStoredEventSequenceRows(
+  left: StoredEventSequenceRow,
+  right: StoredEventSequenceRow,
+): number {
+  if (left.threadId < right.threadId) {
+    return -1;
+  }
+  if (left.threadId > right.threadId) {
+    return 1;
+  }
+  return left.sequence - right.sequence;
+}
+
+function listStoredEventRowsByThreadSequenceChunk(
+  db: DbQueryConnection,
+  keys: readonly ThreadSequenceKey[],
+): StoredEventSequenceRow[] {
+  const sequenceConditions = keys.map((key) =>
+    and(eq(events.threadId, key.threadId), eq(events.sequence, key.sequence)),
+  );
+
+  return db
+    .select({
+      ...storedEventRowFields,
+      environmentId: events.environmentId,
+    })
+    .from(events)
+    .where(or(...sequenceConditions))
+    .orderBy(events.threadId, events.sequence)
+    .all();
+}
+
+export function listStoredEventRowsByThreadSequences(
+  db: DbQueryConnection,
+  args: ListStoredEventRowsByThreadSequencesArgs,
+): StoredEventSequenceRow[] {
+  if (args.keys.length === 0) {
+    return [];
+  }
+
+  const uniqueKeys: ThreadSequenceKey[] = [];
+  const seenKeys = new Set<string>();
+  for (const key of args.keys) {
+    const lookupKey = buildThreadSequenceKey(key);
+    if (seenKeys.has(lookupKey)) {
+      continue;
+    }
+    seenKeys.add(lookupKey);
+    uniqueKeys.push(key);
+  }
+
+  const rows: StoredEventSequenceRow[] = [];
+  for (
+    let offset = 0;
+    offset < uniqueKeys.length;
+    offset += STORED_EVENT_SEQUENCE_LOOKUP_CHUNK_SIZE
+  ) {
+    rows.push(
+      ...listStoredEventRowsByThreadSequenceChunk(
+        db,
+        uniqueKeys.slice(
+          offset,
+          offset + STORED_EVENT_SEQUENCE_LOOKUP_CHUNK_SIZE,
+        ),
+      ),
+    );
+  }
+
+  return rows.sort(compareStoredEventSequenceRows);
 }
 
 export function listStoredTurnInputAcceptedRowsByClientRequestSequences(
@@ -629,7 +721,7 @@ export function getLastStoredTurnId(
 }
 
 export function getActiveStoredTurnId(
-  db: DbConnection,
+  db: DbQueryConnection,
   threadId: string,
 ): string | null {
   const latestStarted = db
@@ -684,7 +776,7 @@ export function getLastStoredProviderThreadId(
 }
 
 export function listThreadTurnInterruptionEventStates(
-  db: ThreadEventQueryDb,
+  db: DbQueryConnection,
   args: ListThreadTurnInterruptionEventStatesArgs,
 ): ThreadTurnInterruptionEventState[] {
   const threadIds = [...new Set(args.threadIds)];
@@ -833,7 +925,7 @@ export function getLastStoredTurnRequestEvent(
 }
 
 export function listCompletedTurnsByThreadIds(
-  db: ThreadEventQueryDb,
+  db: DbQueryConnection,
   threadIds: readonly string[],
 ): CompletedStoredTurnRow[] {
   if (threadIds.length === 0) {

@@ -110,6 +110,67 @@ describe("createServerClient", () => {
     expect(fetchFn).toHaveBeenCalledTimes(1);
   });
 
+  it("returns sequence conflicts when posting events", async () => {
+    const fetchFn = vi.fn<typeof fetch>(async (input) => {
+      expect(String(input)).toContain("/internal/session/events");
+      return new Response(
+        JSON.stringify({
+          acceptedSequences: [
+            {
+              sequence: 6,
+              threadId: "thr_123",
+            },
+          ],
+          code: "sequence_conflict",
+          threadHighWaterMarks: {
+            thr_123: 7,
+          },
+        }),
+        {
+          headers: {
+            "content-type": "application/json",
+          },
+          status: 409,
+        },
+      );
+    });
+    const client = createServerClient({
+      fetchFn,
+      getSessionId: () => "session-1",
+      hostKey: "host-key",
+      logger: createLogger(),
+      serverUrl: "https://bb.example.test",
+    });
+
+    await expect(
+      client.postEvents([
+        {
+          environmentId: "env_123",
+          threadId: "thr_123",
+          sequence: 7,
+          createdAt: 1_700_000_000_000,
+          event: {
+            type: "turn/started",
+            threadId: "thr_123",
+            providerThreadId: "provider-thread",
+            scope: { kind: "turn", turnId: "turn-1" },
+          },
+        },
+      ]),
+    ).resolves.toEqual({
+      acceptedSequences: [
+        {
+          sequence: 6,
+          threadId: "thr_123",
+        },
+      ],
+      kind: "sequence-conflict",
+      threadHighWaterMarks: {
+        thr_123: 7,
+      },
+    });
+  });
+
   it("retries transient interactive request registration failures", async () => {
     let calls = 0;
     const fetchFn = vi.fn<typeof fetch>(async () => {

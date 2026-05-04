@@ -156,6 +156,35 @@ describe("internal session routes", () => {
     }
   });
 
+  it("rejects old host daemon protocol versions during session open", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const response = await harness.app.request("/internal/session/open", {
+        method: "POST",
+        headers: internalAuthHeaders(harness),
+        body: JSON.stringify({
+          hostId: "host-1",
+          instanceId: "instance-old-protocol",
+          hostName: "Old Protocol Host",
+          hostType: "persistent",
+          dataDir: "/tmp/old-protocol",
+          protocolVersion: HOST_DAEMON_PROTOCOL_VERSION - 1,
+          activeThreads: [],
+        }),
+      });
+
+      expect(response.status).toBe(400);
+      await expect(readJson(response)).resolves.toMatchObject({
+        code: "invalid_request",
+      });
+      expect(
+        harness.db.select().from(hostDaemonSessions).all(),
+      ).toHaveLength(0);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("returns session-open responses before runtime material sync finishes on resumed sandboxes", async () => {
     const harness = await createTestAppHarness({
       githubPat: "test-github-pat",

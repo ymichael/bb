@@ -6,8 +6,16 @@ import {
   getThread,
   insertEvents,
   listCompletedTurnsByThreadIds,
+  listStoredEventRowsByThreadSequences,
   listThreadEnvironmentAssignmentsOnHost,
+  noopNotifier,
   updateThread,
+} from "@bb/db";
+import type {
+  DbQueryConnection,
+  InsertEventInput,
+  InsertEventsResult,
+  StoredEventSequenceRow,
 } from "@bb/db";
 import {
   hostDaemonEventBatchRequestSchema,
@@ -15,7 +23,12 @@ import {
   type HostDaemonEventEnvelope,
   type HostDaemonInternalSchema,
 } from "@bb/host-daemon-contract";
-import { requireThreadEventScopeTurnId } from "@bb/domain";
+import {
+  getThreadEventScopeTurnId,
+  jsonValueSchema,
+  requireThreadEventScopeTurnId,
+} from "@bb/domain";
+import type { JsonValue } from "@bb/domain";
 import { renderTemplate } from "@bb/templates";
 import type { Hono } from "hono";
 import { ApiError } from "../errors.js";
@@ -63,6 +76,56 @@ interface ResolveEventsToApplyArgs {
   db: AppDeps["db"];
   events: HostDaemonEventEnvelope[];
   insertedEventIndexes: number[];
+}
+
+interface EventSequenceConflict {
+  acceptedSequences: StoredEventSequenceKey[];
+  threadHighWaterMarks: Record<string, number>;
+}
+
+interface EventBatchInsertedTransactionResult {
+  kind: "inserted";
+  insertResult: InsertEventsResult;
+}
+
+interface EventBatchSequenceConflictTransactionResult {
+  kind: "sequence-conflict";
+  sequenceConflict: EventSequenceConflict;
+}
+
+type EventBatchTransactionResult =
+  | EventBatchInsertedTransactionResult
+  | EventBatchSequenceConflictTransactionResult;
+
+interface InsertEventInputsAtomicallyDeps {
+  db: AppDeps["db"];
+}
+
+interface InsertEventInputsAtomicallyArgs {
+  eventInputs: InsertEventInput[];
+}
+
+interface NotifyInsertedEventThreadsDeps {
+  hub: AppDeps["hub"];
+}
+
+interface NotifyInsertedEventThreadsArgs {
+  eventInputs: InsertEventInput[];
+  insertedInputIndexes: number[];
+}
+
+interface CanonicalizeStoredEventDataArgs {
+  data: string;
+}
+
+interface FindEventSequenceConflictArgs {
+  db: DbQueryConnection;
+  eventInputs: InsertEventInput[];
+}
+
+interface StoredEventSequenceKey {
+  sequence: number;
+  threadId: string;
 }
 
 interface ShouldApplyEventEffectArgs {
@@ -254,7 +317,7 @@ function resolveProviderIdentifiers(event: HostDaemonEventEnvelope["event"]): {
   }
 }
 
-function toStoredEvent(args: ToStoredEventArgs) {
+function toStoredEvent(args: ToStoredEventArgs): InsertEventInput {
   const envelope = args.envelope;
   const { scope, type, threadId, ...data } = envelope.event;
   return {
@@ -270,6 +333,203 @@ function toStoredEvent(args: ToStoredEventArgs) {
     ...deriveStoredEventItemFields(envelope.event),
     data: JSON.stringify(data),
   };
+}
+
+function canonicalizeJsonValue(value: JsonValue): JsonValue {
+  if (Array.isArray(value)) {
+    return value.map((entry) => canonicalizeJsonValue(entry));
+  }
+  if (value === null || typeof value !== "object") {
+    return value;
+  }
+
+  const canonicalValue: Record<string, JsonValue> = {};
+  for (const key of Object.keys(value).sort()) {
+    const entryValue = value[key];
+    if (entryValue !== undefined) {
+      canonicalValue[key] = canonicalizeJsonValue(entryValue);
+    }
+  }
+  return canonicalValue;
+}
+
+function canonicalizeStoredEventData(
+  args: CanonicalizeStoredEventDataArgs,
+): string {
+  try {
+    return JSON.stringify(
+      canonicalizeJsonValue(jsonValueSchema.parse(JSON.parse(args.data))),
+    );
+  } catch {
+    throw new Error("Invalid event JSON while comparing stored event data");
+  }
+}
+
+function storedEventMatchesInput(
+  row: StoredEventSequenceRow,
+  input: InsertEventInput,
+): boolean {
+  const storedData = canonicalizeStoredEventData({
+    data: row.data,
+  });
+  const inputData = canonicalizeStoredEventData({
+    data: input.data,
+  });
+  return (
+    row.threadId === input.threadId &&
+    row.environmentId === (input.environmentId ?? null) &&
+    row.scopeKind === input.scope.kind &&
+    row.turnId === (getThreadEventScopeTurnId(input.scope) ?? null) &&
+    row.providerThreadId === (input.providerThreadId ?? null) &&
+    row.sequence === input.sequence &&
+    row.type === input.type &&
+    row.itemId === input.itemId &&
+    row.itemKind === input.itemKind &&
+    storedData === inputData
+  );
+}
+
+function storedEventSequenceKey(key: StoredEventSequenceKey): string {
+  return `${key.threadId}:${key.sequence}`;
+}
+
+function eventInputsMatch(
+  left: InsertEventInput,
+  right: InsertEventInput,
+): boolean {
+  const leftData = canonicalizeStoredEventData({
+    data: left.data,
+  });
+  const rightData = canonicalizeStoredEventData({
+    data: right.data,
+  });
+  return (
+    left.threadId === right.threadId &&
+    (left.environmentId ?? null) === (right.environmentId ?? null) &&
+    left.scope.kind === right.scope.kind &&
+    getThreadEventScopeTurnId(left.scope) ===
+      getThreadEventScopeTurnId(right.scope) &&
+    (left.providerThreadId ?? null) === (right.providerThreadId ?? null) &&
+    left.sequence === right.sequence &&
+    left.type === right.type &&
+    left.itemId === right.itemId &&
+    left.itemKind === right.itemKind &&
+    leftData === rightData
+  );
+}
+
+function findEventSequenceConflict(
+  args: FindEventSequenceConflictArgs,
+): EventSequenceConflict | null {
+  if (args.eventInputs.length === 0) {
+    return null;
+  }
+
+  const rows = listStoredEventRowsByThreadSequences(args.db, {
+    keys: args.eventInputs.map((input) => ({
+      threadId: input.threadId,
+      sequence: input.sequence,
+    })),
+  });
+
+  const existingRowsByThreadSequence = new Map<
+    string,
+    StoredEventSequenceRow
+  >();
+  for (const row of rows) {
+    existingRowsByThreadSequence.set(storedEventSequenceKey(row), row);
+  }
+
+  const acceptedSequences: StoredEventSequenceKey[] = [];
+  const acceptedSequenceKeys = new Set<string>();
+  const firstInputByThreadSequence = new Map<string, InsertEventInput>();
+  let hasSequenceConflict = false;
+
+  function addAcceptedSequence(input: InsertEventInput): void {
+    const sequenceKey = storedEventSequenceKey(input);
+    if (acceptedSequenceKeys.has(sequenceKey)) {
+      return;
+    }
+    acceptedSequenceKeys.add(sequenceKey);
+    acceptedSequences.push({
+      sequence: input.sequence,
+      threadId: input.threadId,
+    });
+  }
+
+  for (const input of args.eventInputs) {
+    const sequenceKey = storedEventSequenceKey(input);
+    const firstInput = firstInputByThreadSequence.get(sequenceKey);
+    if (firstInput === undefined) {
+      firstInputByThreadSequence.set(sequenceKey, input);
+    } else if (!eventInputsMatch(firstInput, input)) {
+      hasSequenceConflict = true;
+    }
+
+    const existing = existingRowsByThreadSequence.get(sequenceKey);
+    if (!existing) {
+      continue;
+    }
+    if (storedEventMatchesInput(existing, input)) {
+      addAcceptedSequence(input);
+      continue;
+    }
+    hasSequenceConflict = true;
+  }
+
+  if (!hasSequenceConflict) {
+    return null;
+  }
+
+  return {
+    acceptedSequences,
+    threadHighWaterMarks: getHighWaterMarks(
+      args.db,
+      args.eventInputs.map((eventInput) => eventInput.threadId),
+    ),
+  };
+}
+
+function insertEventInputsAtomically(
+  deps: InsertEventInputsAtomicallyDeps,
+  args: InsertEventInputsAtomicallyArgs,
+): EventBatchTransactionResult {
+  return deps.db.transaction(
+    (tx): EventBatchTransactionResult => {
+      const sequenceConflict = findEventSequenceConflict({
+        db: tx,
+        eventInputs: args.eventInputs,
+      });
+      if (sequenceConflict) {
+        return {
+          kind: "sequence-conflict",
+          sequenceConflict,
+        };
+      }
+
+      return {
+        kind: "inserted",
+        insertResult: insertEvents(tx, noopNotifier, args.eventInputs),
+      };
+    },
+    { behavior: "immediate" },
+  );
+}
+
+function notifyInsertedEventThreads(
+  deps: NotifyInsertedEventThreadsDeps,
+  args: NotifyInsertedEventThreadsArgs,
+): void {
+  const threadIds = new Set<string>();
+  for (const index of args.insertedInputIndexes) {
+    const eventInput = args.eventInputs[index];
+    if (eventInput) {
+      threadIds.add(eventInput.threadId);
+    }
+  }
+  for (const threadId of threadIds) {
+    deps.hub.notifyThread(threadId, ["events-appended"]);
+  }
 }
 
 async function archiveCompletedAutomationThreadIfNeeded(
@@ -670,22 +930,41 @@ export function registerInternalEventRoutes(app: Hono, deps: AppDeps): void {
             });
           }
 
-          const insertResult = insertEvents(
-            deps.db,
-            deps.hub,
-            payload.events.map((entry, index) => {
-              const environmentId = canonicalEnvironmentIds[index];
-              if (!environmentId) {
-                throw new Error(
-                  "Missing canonical environment for validated event",
-                );
-              }
-              return toStoredEvent({
-                envelope: entry,
-                environmentId,
-              });
-            }),
-          );
+          const eventInputs = payload.events.map((entry, index) => {
+            const environmentId = canonicalEnvironmentIds[index];
+            if (!environmentId) {
+              throw new Error(
+                "Missing canonical environment for validated event",
+              );
+            }
+            return toStoredEvent({
+              envelope: entry,
+              environmentId,
+            });
+          });
+          const eventBatchTransactionResult = insertEventInputsAtomically(deps, {
+            eventInputs,
+          });
+          if (eventBatchTransactionResult.kind === "sequence-conflict") {
+            const { sequenceConflict } = eventBatchTransactionResult;
+            return {
+              followUps: [],
+              response: context.json(
+                {
+                  acceptedSequences: sequenceConflict.acceptedSequences,
+                  code: "sequence_conflict",
+                  threadHighWaterMarks: sequenceConflict.threadHighWaterMarks,
+                },
+                409,
+              ),
+            };
+          }
+
+          const { insertResult } = eventBatchTransactionResult;
+          notifyInsertedEventThreads(deps, {
+            eventInputs,
+            insertedInputIndexes: insertResult.insertedInputIndexes,
+          });
 
           const eventEffectResult = await applyEventEffects(
             deps,

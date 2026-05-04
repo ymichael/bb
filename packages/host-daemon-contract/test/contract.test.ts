@@ -16,6 +16,7 @@ import {
   hostDaemonEnvironmentChangeRequestSchema,
   hostDaemonEventBatchRequestSchema,
   hostDaemonEventBatchResponseSchema,
+  hostDaemonEventBatchSequenceConflictResponseSchema,
   hostDaemonInteractiveInterruptRequestSchema,
   hostDaemonInteractiveInterruptResponseSchema,
   hostDaemonInteractiveRequestResponseSchema,
@@ -789,6 +790,18 @@ describe("host-daemon session schemas", () => {
       }),
     ).toThrow();
 
+    expect(() =>
+      hostDaemonSessionOpenRequestSchema.parse({
+        hostId: "host_123",
+        instanceId: "instance_1",
+        hostName: "Michael's MacBook",
+        hostType: "persistent",
+        dataDir: "/tmp/bb-data",
+        protocolVersion: HOST_DAEMON_PROTOCOL_VERSION - 1,
+        activeThreads: [],
+      }),
+    ).toThrow();
+
     expect(
       hostDaemonCommandsQuerySchema.parse({
         sessionId: "session_123",
@@ -857,6 +870,32 @@ describe("host-daemon session schemas", () => {
         },
       }),
     ).toEqual({
+      threadHighWaterMarks: {
+        thr_123: 42,
+      },
+    });
+
+    expect(
+      hostDaemonEventBatchSequenceConflictResponseSchema.parse({
+        acceptedSequences: [
+          {
+            sequence: 41,
+            threadId: "thr_123",
+          },
+        ],
+        code: "sequence_conflict",
+        threadHighWaterMarks: {
+          thr_123: 42,
+        },
+      }),
+    ).toEqual({
+      acceptedSequences: [
+        {
+          sequence: 41,
+          threadId: "thr_123",
+        },
+      ],
+      code: "sequence_conflict",
       threadHighWaterMarks: {
         thr_123: 42,
       },

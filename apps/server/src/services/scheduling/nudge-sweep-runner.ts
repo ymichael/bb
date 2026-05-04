@@ -5,15 +5,22 @@ import {
   type DbTransaction,
   deleteManagerThreadNudge,
   type DueManagerThreadNudgeCursor,
+  getActiveStoredTurnId,
   getEnvironment,
   getThread,
   hasPendingHostCommandForThread,
   listDueManagerThreadNudges,
 } from "@bb/db";
-import type { PromptInput, ResolvedThreadExecutionOptions } from "@bb/domain";
+import type {
+  PromptInput,
+  ResolvedThreadExecutionOptions,
+  TurnRequestTarget,
+} from "@bb/domain";
+import type { TurnSubmitTarget } from "@bb/host-daemon-contract";
 import type { AppDeps, LoggedSandboxWorkSessionDeps } from "../../types.js";
 import {
   appendClientTurnEventInTransaction,
+  getActiveTurnId,
   getLastProviderThreadId,
 } from "../threads/thread-events.js";
 import {
@@ -68,6 +75,7 @@ interface QueueDueNudgePreparation {
   kind: "queue";
   preparedCommand: PreparedTurnSubmitCommandPayload;
   sessionId: string;
+  targetIntent: NudgeTurnTargetIntent;
   thread: NudgeThread;
 }
 
@@ -75,6 +83,28 @@ type DueNudgePreparation =
   | DeleteDueNudgePreparation
   | SkipDueNudgePreparation
   | QueueDueNudgePreparation;
+
+interface StartNudgeTurnTargetIntent {
+  kind: "start";
+}
+
+interface AutoNudgeTurnTargetIntent {
+  expectedTurnId: string | null;
+  kind: "auto";
+}
+
+type NudgeTurnTargetIntent =
+  | AutoNudgeTurnTargetIntent
+  | StartNudgeTurnTargetIntent;
+
+interface BuildNudgeTurnTargetIntentArgs {
+  expectedTurnId: string | null;
+  thread: NudgeThread;
+}
+
+interface IsNudgePreparationCurrentArgs {
+  preparation: QueueDueNudgePreparation;
+}
 
 interface PendingTurnSubmitNudgeResult {
   kind: "pending-turn-submit";
@@ -163,6 +193,96 @@ function computeNextFireAt(
   });
 }
 
+function canQueueNudgeForThread(thread: NudgeThread): boolean {
+  return thread.status === "idle" || thread.status === "active";
+}
+
+function buildNudgeTurnTargetIntent(
+  args: BuildNudgeTurnTargetIntentArgs,
+): NudgeTurnTargetIntent {
+  if (args.thread.status === "active") {
+    return {
+      kind: "auto",
+      expectedTurnId: args.expectedTurnId,
+    };
+  }
+
+  return { kind: "start" };
+}
+
+function renderNudgeTurnSubmitTarget(
+  intent: NudgeTurnTargetIntent,
+): TurnSubmitTarget {
+  switch (intent.kind) {
+    case "start":
+      return { mode: "start" };
+    case "auto":
+      return {
+        mode: "auto",
+        expectedTurnId: intent.expectedTurnId,
+      };
+  }
+}
+
+function renderNudgeTurnRequestTarget(
+  intent: NudgeTurnTargetIntent,
+): TurnRequestTarget {
+  switch (intent.kind) {
+    case "start":
+      return { kind: "new-turn" };
+    case "auto":
+      return {
+        kind: "auto",
+        expectedTurnId: intent.expectedTurnId,
+      };
+  }
+}
+
+function nudgeTurnTargetIntentsEqual(
+  left: NudgeTurnTargetIntent,
+  right: NudgeTurnTargetIntent,
+): boolean {
+  switch (left.kind) {
+    case "start":
+      return right.kind === "start";
+    case "auto":
+      return (
+        right.kind === "auto" &&
+        right.expectedTurnId === left.expectedTurnId
+      );
+  }
+}
+
+function isNudgePreparationCurrent(
+  tx: DbTransaction,
+  args: IsNudgePreparationCurrentArgs,
+): boolean {
+  const latestThread = getThread(tx, args.preparation.thread.id);
+  if (
+    !latestThread ||
+    latestThread.archivedAt !== null ||
+    latestThread.deletedAt !== null ||
+    latestThread.environmentId !== args.preparation.environment.id ||
+    !canQueueNudgeForThread(latestThread)
+  ) {
+    return false;
+  }
+
+  const expectedTurnId =
+    latestThread.status === "active"
+      ? getActiveStoredTurnId(tx, latestThread.id)
+      : null;
+  const currentTargetIntent = buildNudgeTurnTargetIntent({
+    expectedTurnId,
+    thread: latestThread,
+  });
+
+  return nudgeTurnTargetIntentsEqual(
+    args.preparation.targetIntent,
+    currentTargetIntent,
+  );
+}
+
 export function createNudgeSweepCache(): NudgeSweepCache {
   return {
     environmentById: new Map(),
@@ -241,10 +361,10 @@ async function prepareDueNudge(
     return { kind: "delete" };
   }
 
-  if (thread.status !== "idle") {
+  if (!canQueueNudgeForThread(thread)) {
     return {
       kind: "skip",
-      reason: "thread-not-idle",
+      reason: "thread-not-runnable",
     };
   }
 
@@ -302,6 +422,12 @@ async function prepareDueNudge(
       { threadId: thread.id },
       "client/turn/requested",
     );
+    const expectedTurnId =
+      thread.status === "active" ? getActiveTurnId(deps, thread.id) : null;
+    const targetIntent = buildNudgeTurnTargetIntent({
+      expectedTurnId,
+      thread,
+    });
     const preparedCommand = await prepareTurnSubmitCommandPayload(deps, {
       environment: {
         id: environment.id,
@@ -316,7 +442,7 @@ async function prepareDueNudge(
       }),
       input,
       providerThreadId,
-      target: { mode: "start" },
+      target: renderNudgeTurnSubmitTarget(targetIntent),
       thread,
     });
 
@@ -327,6 +453,7 @@ async function prepareDueNudge(
       kind: "queue",
       preparedCommand,
       sessionId: session.id,
+      targetIntent,
       thread,
     };
   } catch (error) {
@@ -370,6 +497,10 @@ function queueDueNudgeInTransaction(
     return advanced ? { kind: "pending-turn-submit" } : { kind: "lost-race" };
   }
 
+  if (!isNudgePreparationCurrent(tx, { preparation: args.preparation })) {
+    return { kind: "lost-race" };
+  }
+
   if (
     !advanceManagerThreadNudgeAfterFireInTransaction(tx, {
       expectedNextFireAt: args.nudge.nextFireAt,
@@ -390,7 +521,7 @@ function queueDueNudgeInTransaction(
     initiator: "system",
     requestMethod: "turn/start",
     source: "tell",
-    target: { kind: "new-turn" },
+    target: renderNudgeTurnRequestTarget(args.preparation.targetIntent),
   });
 
   queueTurnSubmitCommandInTransaction(tx, {

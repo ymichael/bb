@@ -6,6 +6,7 @@ export type DbConnection = ReturnType<typeof createConnection>;
 export type DbTransaction = Parameters<
   Parameters<DbConnection["transaction"]>[0]
 >[0];
+export type DbQueryConnection = DbConnection | DbTransaction;
 
 export function createConnection(dbPath: string = "bb.db") {
   const sqlite = new Database(dbPath);

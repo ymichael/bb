@@ -21,7 +21,7 @@ import {
 import { z } from "zod";
 import { hostRuntimeMaterialSnapshotSchema } from "./local-state.js";
 
-export const HOST_DAEMON_PROTOCOL_VERSION = 10 as const;
+export const HOST_DAEMON_PROTOCOL_VERSION = 11 as const;
 
 export const FILE_LIST_QUERY_MAX_LENGTH = 256;
 export const FILE_LIST_LIMIT_MAX = 10_000;

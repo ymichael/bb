@@ -84,7 +84,7 @@ export function createThread(
   return thread;
 }
 
-export function getThread(db: DbConnection, id: string) {
+export function getThread(db: ThreadWriteConnection, id: string) {
   return db.select().from(threads).where(eq(threads.id, id)).get() ?? null;
 }
 

@@ -23,6 +23,7 @@ import {
   listRecentStoredEventRows,
   listStoredEventRows,
   listStoredEventRowsInRange,
+  listStoredEventRowsByThreadSequences,
   listStoredTurnInputAcceptedRowsByClientRequestSequences,
   listThreadTurnInterruptionEventStates,
   pruneContextWindowUsageEventsBeforeSequence,
@@ -325,6 +326,45 @@ describe("events", () => {
       sequence: 2,
       type: "system/error",
     });
+  });
+
+  it("chunks stored event row lookups by thread sequence", () => {
+    const { db, thread } = setup();
+
+    insertEvents(db, noopNotifier, [
+      {
+        threadId: thread.id,
+        sequence: 1,
+        type: "system/error",
+        ...threadEventFields,
+        data: JSON.stringify({ message: "first" }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 600,
+        type: "system/error",
+        ...threadEventFields,
+        data: JSON.stringify({ message: "middle" }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 1_200,
+        type: "system/error",
+        ...threadEventFields,
+        data: JSON.stringify({ message: "last" }),
+      },
+    ]);
+
+    const keys = Array.from({ length: 1_200 }, (_entry, index) => ({
+      threadId: thread.id,
+      sequence: index + 1,
+    }));
+
+    expect(
+      listStoredEventRowsByThreadSequences(db, { keys }).map(
+        (row) => row.sequence,
+      ),
+    ).toEqual([1, 600, 1_200]);
   });
 
   it("finds the latest output event row without scanning unrelated event types", () => {

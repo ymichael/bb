@@ -9,6 +9,7 @@ import {
   hostDaemonEnvironmentChangeRequestSchema,
   hostDaemonEventBatchRequestSchema,
   hostDaemonEventBatchResponseSchema,
+  hostDaemonEventBatchSequenceConflictResponseSchema,
   hostDaemonRuntimeMaterialQuerySchema,
   hostDaemonInteractiveInterruptRequestSchema,
   hostDaemonInteractiveInterruptResponseSchema,
@@ -34,6 +35,7 @@ import {
 } from "@bb/host-daemon-contract";
 import type { PendingInteractionCreate, ToolCallRequest } from "@bb/domain";
 import type { HostDaemonLogger } from "./logger.js";
+import type { EventPostResult } from "./event-buffer.js";
 
 const knownCommandTypes = new Set<string>(HOST_DAEMON_COMMAND_TYPES);
 const DEFAULT_COMMAND_FETCH_LIMIT = 100;
@@ -79,7 +81,8 @@ function readRawCommandHeader(rawCommand: unknown): RawCommandHeader {
   const command = toJsonRecord(record.command);
   return {
     commandId: typeof record.id === "string" ? record.id : undefined,
-    type: command && typeof command.type === "string" ? command.type : undefined,
+    type:
+      command && typeof command.type === "string" ? command.type : undefined,
   };
 }
 
@@ -126,9 +129,7 @@ export interface ServerClient {
   postEnvironmentChange(
     args: HostDaemonEnvironmentChangePayload,
   ): Promise<void>;
-  postEvents(
-    events: HostDaemonEventEnvelope[],
-  ): Promise<Record<string, number>>;
+  postEvents(events: HostDaemonEventEnvelope[]): Promise<EventPostResult>;
   callTool(request: ToolCallRequest): Promise<HostDaemonToolCallResponse>;
   registerInteractiveRequest(
     request: PendingInteractionCreate,
@@ -452,7 +453,7 @@ export function createServerClient(
 
     async postEvents(
       events: HostDaemonEventEnvelope[],
-    ): Promise<Record<string, number>> {
+    ): Promise<EventPostResult> {
       const payload = hostDaemonEventBatchRequestSchema.parse({
         sessionId: requireSessionId(),
         events,
@@ -464,14 +465,28 @@ export function createServerClient(
       });
 
       if (!response.ok) {
+        if (response.status === 409) {
+          const conflict =
+            hostDaemonEventBatchSequenceConflictResponseSchema.parse(
+              await response.json(),
+            );
+          return {
+            acceptedSequences: conflict.acceptedSequences,
+            kind: "sequence-conflict",
+            threadHighWaterMarks: conflict.threadHighWaterMarks,
+          };
+        }
         throw new Error(
           `Failed to post events: ${response.status} ${response.statusText}`,
         );
       }
 
       const json = await response.json();
-      return hostDaemonEventBatchResponseSchema.parse(json)
-        .threadHighWaterMarks;
+      return {
+        kind: "accepted",
+        threadHighWaterMarks:
+          hostDaemonEventBatchResponseSchema.parse(json).threadHighWaterMarks,
+      };
     },
 
     async callTool(
