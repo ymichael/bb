@@ -6,6 +6,7 @@ import type { DbNotifier } from "../../src/notifier.js";
 import {
   createThread,
   countLiveThreadsInEnvironment,
+  countNonDeletedAssignedChildThreads,
   getThread,
   hasPendingThreadShutdownInEnvironment,
   listHostThreadIds,
@@ -124,6 +125,95 @@ describe("threads", () => {
     expect(
       listThreads(db, { projectId: project.id, archived: false }),
     ).toHaveLength(2);
+  });
+
+  it("counts active assigned child threads", () => {
+    const { db, project } = setup();
+    const parent = createThread(db, noopNotifier, {
+      projectId: project.id,
+      providerId: "codex",
+      type: "manager",
+    });
+    createThread(db, noopNotifier, {
+      projectId: project.id,
+      providerId: "codex",
+      parentThreadId: parent.id,
+    });
+
+    expect(
+      countNonDeletedAssignedChildThreads(db, {
+        parentThreadId: parent.id,
+      }),
+    ).toBe(1);
+  });
+
+  it("counts archived assigned child threads", () => {
+    const { db, project } = setup();
+    const parent = createThread(db, noopNotifier, {
+      projectId: project.id,
+      providerId: "codex",
+      type: "manager",
+    });
+    const archivedChild = createThread(db, noopNotifier, {
+      projectId: project.id,
+      providerId: "codex",
+      parentThreadId: parent.id,
+    });
+
+    archiveThread(db, noopNotifier, archivedChild.id);
+
+    expect(
+      countNonDeletedAssignedChildThreads(db, {
+        parentThreadId: parent.id,
+      }),
+    ).toBe(1);
+  });
+
+  it("excludes deleted assigned child threads", () => {
+    const { db, project } = setup();
+    const parent = createThread(db, noopNotifier, {
+      projectId: project.id,
+      providerId: "codex",
+      type: "manager",
+    });
+    const deletedChild = createThread(db, noopNotifier, {
+      projectId: project.id,
+      providerId: "codex",
+      parentThreadId: parent.id,
+    });
+
+    markThreadDeleted(db, noopNotifier, { threadId: deletedChild.id });
+
+    expect(
+      countNonDeletedAssignedChildThreads(db, {
+        parentThreadId: parent.id,
+      }),
+    ).toBe(0);
+  });
+
+  it("excludes assigned child threads under a different parent", () => {
+    const { db, project } = setup();
+    const parent = createThread(db, noopNotifier, {
+      projectId: project.id,
+      providerId: "codex",
+      type: "manager",
+    });
+    const otherParent = createThread(db, noopNotifier, {
+      projectId: project.id,
+      providerId: "codex",
+      type: "manager",
+    });
+    createThread(db, noopNotifier, {
+      projectId: project.id,
+      providerId: "codex",
+      parentThreadId: otherParent.id,
+    });
+
+    expect(
+      countNonDeletedAssignedChildThreads(db, {
+        parentThreadId: parent.id,
+      }),
+    ).toBe(0);
   });
 
   it("lists thread environment workspace display kind without per-thread lookups", () => {

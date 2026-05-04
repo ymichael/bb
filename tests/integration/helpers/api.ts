@@ -131,7 +131,7 @@ export async function archiveThread(
 ): Promise<void> {
   const response = await api.threads[":id"].archive.$post({
     param: { id: threadId },
-    json: { force },
+    json: { force, managerChildThreadsConfirmed: false },
   });
   await expectStatus(response, 200, `archive thread ${threadId}`);
 }
@@ -226,6 +226,7 @@ export async function deleteThread(
 ): Promise<void> {
   const response = await api.threads[":id"].$delete({
     param: { id: threadId },
+    json: { managerChildThreadsConfirmed: false },
   });
   await expectStatus(response, 200, `delete thread ${threadId}`);
 }

@@ -33,6 +33,7 @@ import {
   requestQueuedDraftAutoSendForThread,
   sendQueuedDraft,
 } from "../../services/threads/queued-drafts.js";
+import { requireManagerChildThreadsConfirmation } from "../../services/threads/manager-child-confirmation.js";
 import {
   ensureThreadIsNotAwaitingUserInteraction,
   ensureThreadIsWritable,
@@ -191,11 +192,25 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
       if (thread.archivedAt !== null) {
         return context.json({ ok: true });
       }
+      requireManagerChildThreadsConfirmation({
+        action: "archive",
+        confirmed: payload.managerChildThreadsConfirmed,
+        deps,
+        thread,
+      });
       const shouldRequestCleanup = await validateArchiveCleanupRequest(
         deps,
         thread,
         force,
       );
+      // Cleanup validation can await host workspace status. Re-check after
+      // that wait so a child assigned during validation still gates archive.
+      requireManagerChildThreadsConfirmation({
+        action: "archive",
+        confirmed: payload.managerChildThreadsConfirmed,
+        deps,
+        thread,
+      });
       archiveThread(deps.db, deps.hub, thread.id);
       requestThreadStopIfNeeded(deps, thread, environment);
       resetActiveThreadEventPruningState(thread.id);

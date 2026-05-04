@@ -1,4 +1,5 @@
 import {
+  countNonDeletedAssignedChildThreads,
   listThreadsWithPendingInteractionState,
   markThreadDeleted,
   updateThread,
@@ -6,9 +7,11 @@ import {
 import type { ThreadListEntry, ThreadWithRuntime } from "@bb/domain";
 import {
   createThreadRequestSchema,
+  deleteThreadRequestSchema,
   threadListQuerySchema,
   updateThreadRequestSchema,
   typedRoutes,
+  type ThreadAssignedChildSummaryResponse,
   type PublicApiSchema,
 } from "@bb/server-contract";
 import { renderTemplate } from "@bb/templates";
@@ -36,6 +39,7 @@ import {
 import { appendThreadOwnershipChangeEvent } from "../../services/threads/thread-events.js";
 import { createThreadFromRequest } from "../../services/threads/thread-create.js";
 import { queueManagerSystemMessage } from "../../services/threads/manager-system-messages.js";
+import { requireManagerChildThreadsConfirmation } from "../../services/threads/manager-child-confirmation.js";
 import {
   toThreadListEntryResponses,
   toThreadResponseFromThread,
@@ -113,6 +117,26 @@ export function registerThreadBaseRoutes(app: Hono, deps: AppDeps): void {
     ),
   );
 
+  get("/threads/:id/assigned-child-summary", (context) => {
+    const thread = requirePublicThread(deps.db, context.req.param("id"));
+    if (thread.type !== "manager") {
+      throw new ApiError(
+        400,
+        "invalid_request",
+        "Assigned child summary is only available for manager threads",
+      );
+    }
+    const nonDeletedAssignedChildCount = countNonDeletedAssignedChildThreads(
+      deps.db,
+      {
+        parentThreadId: thread.id,
+      },
+    );
+    return context.json({
+      nonDeletedAssignedChildCount,
+    } satisfies ThreadAssignedChildSummaryResponse);
+  });
+
   patch("/threads/:id", updateThreadRequestSchema, async (context, payload) => {
     const thread = requirePublicThread(deps.db, context.req.param("id"));
     if (payload.parentThreadId) {
@@ -182,11 +206,17 @@ export function registerThreadBaseRoutes(app: Hono, deps: AppDeps): void {
     return context.json(toThreadResponseFromThread(deps, { thread: updated }));
   });
 
-  del("/threads/:id", async (context) => {
+  del("/threads/:id", deleteThreadRequestSchema, async (context, payload) => {
     const { environment, thread } = requirePublicThreadEnvironment(
       deps.db,
       context.req.param("id"),
     );
+    requireManagerChildThreadsConfirmation({
+      action: "delete",
+      confirmed: payload.managerChildThreadsConfirmed,
+      deps,
+      thread,
+    });
     markThreadDeleted(deps.db, deps.hub, { threadId: thread.id });
     requestThreadStopIfNeeded(deps, thread, environment);
     await finalizeStoppedThread(deps, {

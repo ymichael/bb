@@ -37,6 +37,7 @@ import type {
   CreateProjectRequest,
   CreateProjectSourceRequest,
   CreateThreadRequest,
+  DeleteThreadRequest,
   EnvironmentDiffQuery,
   EnvironmentActionApiError,
   EnvironmentActionRequest,
@@ -58,6 +59,7 @@ import type {
   SendDraftResponse,
   SendMessageRequest,
   ResolvePendingInteractionRequest,
+  ThreadAssignedChildSummaryResponse,
   ThreadDraftListResponse,
   GithubRepoInfo,
   GithubReposQuery,
@@ -308,8 +310,15 @@ export type PublicApiSchema = {
     $get: Endpoint<PathId, ThreadResponse>;
     /** Update thread metadata. If the title changes, also notifies providers that support `thread.rename`. */
     $patch: Endpoint<PathId & { json: UpdateThreadRequest }, ThreadResponse>;
-    /** Delete a thread. Also destroys its environment if one exists. */
-    $delete: Endpoint<PathId, { ok: true }>;
+    /**
+     * Delete a thread. Also destroys its environment if one exists. Manager
+     * threads with assigned child threads require explicit confirmation.
+     */
+    $delete: Endpoint<PathId & { json: DeleteThreadRequest }, { ok: true }>;
+  };
+  "/threads/:id/assigned-child-summary": {
+    /** Count non-deleted threads assigned to a manager thread via parentThreadId. Archived child threads are included. */
+    $get: Endpoint<PathId, ThreadAssignedChildSummaryResponse>;
   };
   "/threads/:id/send": {
     /**
@@ -369,7 +378,9 @@ export type PublicApiSchema = {
   "/threads/:id/archive": {
     /**
      * Archive a thread. Rejects if work could be lost (unless force=true) —
-     * checks workspace status for uncommitted or unmerged changes.
+     * checks workspace status for uncommitted or unmerged changes. Manager
+     * threads with assigned child threads require explicit confirmation
+     * separate from workspace force.
      * Stops the thread if active. If its managed environment now has zero
      * non-archived threads, destroys the environment.
      */

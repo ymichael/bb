@@ -91,6 +91,7 @@ export type {
 export {
   createThread,
   countLiveThreadsInEnvironment,
+  countNonDeletedAssignedChildThreads,
   getThread,
   hasPendingThreadShutdownInEnvironment,
   listHostThreadIds,
@@ -112,6 +113,7 @@ export {
 } from "./threads.js";
 export type {
   CountLiveThreadsInEnvironmentArgs,
+  CountNonDeletedAssignedChildThreadsArgs,
   CreateThreadInput,
   ListThreadsOptions,
   StopRequestedThreadRow,

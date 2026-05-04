@@ -37,6 +37,7 @@ interface ManagerStatusCommandOptions {
 }
 
 interface ManagerDeleteCommandOptions {
+  confirmAssignedChildThreads?: boolean;
   yes?: boolean;
   json?: boolean;
 }
@@ -175,6 +176,10 @@ export function registerManagerCommands(
     .command("delete <id>")
     .description("Delete a manager permanently")
     .option("--yes", "Skip the confirmation prompt")
+    .option(
+      "--confirm-assigned-child-threads",
+      "Confirm deleting a manager with assigned child threads",
+    )
     .option("--json", "Print machine-readable JSON output")
     .action(
       action(async (id: string, opts: ManagerDeleteCommandOptions) => {
@@ -196,6 +201,10 @@ export function registerManagerCommands(
         await unwrap<{ ok: boolean }>(
           client.api.v1.threads[":id"].$delete({
             param: { id: managerThreadId },
+            json: {
+              managerChildThreadsConfirmed:
+                opts.confirmAssignedChildThreads === true,
+            },
           }),
         );
         if (outputJson(opts, { ok: true, managerId: managerThreadId })) return;

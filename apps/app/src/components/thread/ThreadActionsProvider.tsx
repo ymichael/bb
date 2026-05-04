@@ -2,7 +2,9 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
+  useRef,
   type ReactNode,
 } from "react";
 import { useNavigate } from "react-router-dom";
@@ -16,9 +18,13 @@ import {
   useUnarchiveThread,
   useUpdateThread,
 } from "@/hooks/mutations/thread-state-mutations";
+import { getThreadAssignedChildSummary } from "@/lib/api";
 import { useAppRoute } from "@/hooks/useAppRoute";
 import { useDialogState } from "@/hooks/useDialogState";
-import { getMutationErrorMessage } from "@/lib/mutation-errors";
+import {
+  getMutationErrorMessage,
+  shouldShowMutationErrorToast,
+} from "@/lib/mutation-errors";
 import { isArchiveForceRequiredError } from "@/lib/thread-archive";
 import { getThreadDisplayTitle, threadTypeLabel } from "@/lib/thread-title";
 import {
@@ -26,7 +32,15 @@ import {
   type ThreadRenameDialogTarget,
 } from "@/components/thread/ThreadRenameDialog";
 import { ThreadDeleteDialog } from "@/components/thread/ThreadDeleteDialog";
-import { ThreadArchiveConfirmationDialog } from "@/components/thread/ThreadArchiveConfirmationDialog";
+import {
+  ThreadArchiveConfirmationDialog,
+  type ThreadArchiveConfirmationDialogTarget,
+} from "@/components/thread/ThreadArchiveConfirmationDialog";
+import {
+  ThreadManagerChildThreadsConfirmationDialog,
+  type ThreadManagerChildThreadsAction,
+  type ThreadManagerChildThreadsDialogTarget,
+} from "@/components/thread/ThreadManagerChildThreadsConfirmationDialog";
 import { getThreadReadToggleAction } from "@/components/layout/project-list/threadReadState";
 
 export interface ThreadActionsContextValue {
@@ -54,6 +68,24 @@ interface ThreadActionsProviderProps {
   children: ReactNode;
 }
 
+interface ArchiveThreadActionRequest {
+  force: boolean;
+  managerChildThreadsConfirmed: boolean;
+  thread: Thread;
+}
+
+interface DeleteThreadActionRequest {
+  closeDialog: () => void;
+  managerChildThreadsConfirmed: boolean;
+  thread: Thread;
+}
+
+interface ManagerChildThreadsCheckRequest {
+  action: ThreadManagerChildThreadsAction;
+  onNoAssignedChildren: () => void;
+  thread: Thread;
+}
+
 export function ThreadActionsProvider({
   children,
 }: ThreadActionsProviderProps) {
@@ -65,6 +97,7 @@ export function ThreadActionsProvider({
   const markThreadUnread = useMarkThreadUnread();
   const deleteThread = useDeleteThread();
   const updateThread = useUpdateThread();
+  const managerChildThreadsCheckAbortRef = useRef<AbortController | null>(null);
   // Destructure `.mutate` so useCallback deps see stable references across
   // renders. Depending on the full mutation objects would churn callback
   // identities on every isPending flip and force every useThreadActions()
@@ -78,7 +111,10 @@ export function ThreadActionsProvider({
 
   const renameDialog = useDialogState<ThreadRenameDialogTarget>();
   const deleteDialog = useDialogState<Thread>();
-  const archiveConfirmationDialog = useDialogState<Thread>();
+  const archiveConfirmationDialog =
+    useDialogState<ThreadArchiveConfirmationDialogTarget>();
+  const managerChildThreadsConfirmationDialog =
+    useDialogState<ThreadManagerChildThreadsDialogTarget>();
 
   const { onClose: closeRenameDialog, onOpen: openRenameDialog } = renameDialog;
   const { onClose: closeDeleteDialog, onOpen: openDeleteDialog } = deleteDialog;
@@ -86,6 +122,17 @@ export function ThreadActionsProvider({
     onClose: closeArchiveConfirmationDialog,
     onOpen: openArchiveConfirmationDialog,
   } = archiveConfirmationDialog;
+  const {
+    onClose: closeManagerChildThreadsConfirmationDialog,
+    onOpen: openManagerChildThreadsConfirmationDialog,
+  } = managerChildThreadsConfirmationDialog;
+
+  useEffect(() => {
+    return () => {
+      managerChildThreadsCheckAbortRef.current?.abort();
+      managerChildThreadsCheckAbortRef.current = null;
+    };
+  }, []);
 
   const navigateAwayIfViewing = useCallback(
     (thread: Thread) => {
@@ -123,26 +170,110 @@ export function ThreadActionsProvider({
     [closeRenameDialog, updateMutate],
   );
 
-  const requestDelete = useCallback(
-    (thread: Thread) => {
-      openDeleteDialog(thread);
+  const checkManagerChildThreadsBeforeAction = useCallback(
+    ({
+      action,
+      onNoAssignedChildren,
+      thread,
+    }: ManagerChildThreadsCheckRequest) => {
+      managerChildThreadsCheckAbortRef.current?.abort();
+      managerChildThreadsCheckAbortRef.current = null;
+
+      if (thread.type !== "manager") {
+        onNoAssignedChildren();
+        return;
+      }
+
+      const abortController = new AbortController();
+      managerChildThreadsCheckAbortRef.current = abortController;
+
+      void getThreadAssignedChildSummary(thread.id, abortController.signal)
+        .then((summary) => {
+          if (
+            managerChildThreadsCheckAbortRef.current !== abortController ||
+            abortController.signal.aborted
+          ) {
+            return;
+          }
+          managerChildThreadsCheckAbortRef.current = null;
+
+          if (summary.nonDeletedAssignedChildCount > 0) {
+            openManagerChildThreadsConfirmationDialog({
+              action,
+              nonDeletedAssignedChildCount:
+                summary.nonDeletedAssignedChildCount,
+              thread,
+            });
+            return;
+          }
+
+          onNoAssignedChildren();
+        })
+        .catch((error) => {
+          if (
+            managerChildThreadsCheckAbortRef.current !== abortController ||
+            abortController.signal.aborted
+          ) {
+            return;
+          }
+          managerChildThreadsCheckAbortRef.current = null;
+
+          if (!shouldShowMutationErrorToast(error)) {
+            return;
+          }
+
+          toast.error(
+            getMutationErrorMessage({
+              error,
+              fallbackMessage: "Failed to check assigned child threads.",
+            }),
+          );
+        });
     },
-    [openDeleteDialog],
+    [openManagerChildThreadsConfirmationDialog],
   );
 
-  const confirmDelete = useCallback(
-    (thread: Thread) => {
+  const performDelete = useCallback(
+    ({
+      closeDialog,
+      managerChildThreadsConfirmed,
+      thread,
+    }: DeleteThreadActionRequest) => {
       deleteMutate(
-        { id: thread.id },
+        { id: thread.id, managerChildThreadsConfirmed },
         {
           onSuccess: () => {
-            closeDeleteDialog();
+            closeDialog();
             navigateAwayIfViewing(thread);
           },
         },
       );
     },
-    [closeDeleteDialog, deleteMutate, navigateAwayIfViewing],
+    [deleteMutate, navigateAwayIfViewing],
+  );
+
+  const requestDelete = useCallback(
+    (thread: Thread) => {
+      checkManagerChildThreadsBeforeAction({
+        action: "delete",
+        onNoAssignedChildren: () => {
+          openDeleteDialog(thread);
+        },
+        thread,
+      });
+    },
+    [checkManagerChildThreadsBeforeAction, openDeleteDialog],
+  );
+
+  const confirmDelete = useCallback(
+    (thread: Thread) => {
+      performDelete({
+        closeDialog: closeDeleteDialog,
+        managerChildThreadsConfirmed: false,
+        thread,
+      });
+    },
+    [closeDeleteDialog, performDelete],
   );
 
   const showArchiveError = useCallback((thread: Thread, error: unknown) => {
@@ -154,17 +285,24 @@ export function ThreadActionsProvider({
     );
   }, []);
 
-  const requestArchive = useCallback(
-    (thread: Thread) => {
+  const submitArchive = useCallback(
+    ({
+      force,
+      managerChildThreadsConfirmed,
+      thread,
+    }: ArchiveThreadActionRequest) => {
       archiveMutate(
-        { id: thread.id, force: false },
+        { id: thread.id, force, managerChildThreadsConfirmed },
         {
           onSuccess: () => {
             navigateAwayIfViewing(thread);
           },
           onError: (error) => {
-            if (isArchiveForceRequiredError(error)) {
-              openArchiveConfirmationDialog(thread);
+            if (!force && isArchiveForceRequiredError(error)) {
+              openArchiveConfirmationDialog({
+                managerChildThreadsConfirmed,
+                thread,
+              });
               return;
             }
             showArchiveError(thread, error);
@@ -180,27 +318,54 @@ export function ThreadActionsProvider({
     ],
   );
 
-  const confirmArchive = useCallback(
+  const requestArchive = useCallback(
     (thread: Thread) => {
-      closeArchiveConfirmationDialog();
-      archiveMutate(
-        { id: thread.id, force: true },
-        {
-          onSuccess: () => {
-            navigateAwayIfViewing(thread);
-          },
-          onError: (error) => {
-            showArchiveError(thread, error);
-          },
+      checkManagerChildThreadsBeforeAction({
+        action: "archive",
+        onNoAssignedChildren: () => {
+          submitArchive({
+            force: false,
+            managerChildThreadsConfirmed: false,
+            thread,
+          });
         },
-      );
+        thread,
+      });
     },
-    [
-      archiveMutate,
-      closeArchiveConfirmationDialog,
-      navigateAwayIfViewing,
-      showArchiveError,
-    ],
+    [checkManagerChildThreadsBeforeAction, submitArchive],
+  );
+
+  const confirmArchive = useCallback(
+    (target: ThreadArchiveConfirmationDialogTarget) => {
+      closeArchiveConfirmationDialog();
+      submitArchive({
+        force: true,
+        managerChildThreadsConfirmed: target.managerChildThreadsConfirmed,
+        thread: target.thread,
+      });
+    },
+    [closeArchiveConfirmationDialog, submitArchive],
+  );
+
+  const confirmManagerChildThreadsAction = useCallback(
+    (target: ThreadManagerChildThreadsDialogTarget) => {
+      if (target.action === "archive") {
+        closeManagerChildThreadsConfirmationDialog();
+        submitArchive({
+          force: false,
+          managerChildThreadsConfirmed: true,
+          thread: target.thread,
+        });
+        return;
+      }
+
+      performDelete({
+        closeDialog: closeManagerChildThreadsConfirmationDialog,
+        managerChildThreadsConfirmed: true,
+        thread: target.thread,
+      });
+    },
+    [closeManagerChildThreadsConfirmationDialog, performDelete, submitArchive],
   );
 
   const toggleArchive = useCallback(
@@ -273,6 +438,15 @@ export function ThreadActionsProvider({
         pending={archiveThread.isPending}
         onOpenChange={archiveConfirmationDialog.onOpenChange}
         onArchive={confirmArchive}
+      />
+      <ThreadManagerChildThreadsConfirmationDialog
+        target={managerChildThreadsConfirmationDialog.target}
+        pending={
+          managerChildThreadsConfirmationDialog.target?.action === "delete" &&
+          deleteThread.isPending
+        }
+        onOpenChange={managerChildThreadsConfirmationDialog.onOpenChange}
+        onConfirm={confirmManagerChildThreadsAction}
       />
     </ThreadActionsContext.Provider>
   );

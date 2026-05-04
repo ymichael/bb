@@ -16,6 +16,7 @@ import type {
   WorkspaceStatus,
 } from "@bb/domain";
 import type {
+  ArchiveThreadRequest,
   CreateManagerThreadRequest,
   CloudAuthAttemptResponse,
   CloudAuthConnectResponse,
@@ -24,6 +25,7 @@ import type {
   CreateProjectSourceRequest,
   CreateProjectRequest,
   CreateDraftRequest,
+  DeleteThreadRequest,
   EnvironmentActionRequest,
   EnvironmentActionResponse,
   EnvironmentPromotionResponse,
@@ -39,6 +41,7 @@ import type {
   SandboxEnvVar,
   SandboxEnvVarsResponse,
   SystemVoiceTranscriptionResponse,
+  ThreadAssignedChildSummaryResponse,
   ThreadPendingInteractionsResponse,
   ThreadDraftListResponse,
   ThreadListResponse,
@@ -485,6 +488,18 @@ export async function getThread(id: string): Promise<ThreadResponse> {
   );
 }
 
+export async function getThreadAssignedChildSummary(
+  id: string,
+  signal?: AbortSignal,
+): Promise<ThreadAssignedChildSummaryResponse> {
+  return request<ThreadAssignedChildSummaryResponse>(
+    apiClient.threads[":id"]["assigned-child-summary"].$get(
+      { param: { id } },
+      requestOptions(signal),
+    ),
+  );
+}
+
 export async function listThreadStorageFiles(
   id: string,
 ): Promise<WorkspaceFileListResponse> {
@@ -618,12 +633,12 @@ export async function resolveThreadPendingInteraction(
 
 export async function archiveThread(
   id: string,
-  opts: { force: boolean },
+  opts: ArchiveThreadRequest,
 ): Promise<void> {
   await requestVoid(
     apiClient.threads[":id"].archive.$post({
       param: { id },
-      json: { force: opts.force },
+      json: opts,
     }),
   );
 }
@@ -634,8 +649,13 @@ export async function unarchiveThread(id: string): Promise<void> {
   );
 }
 
-export async function deleteThread(id: string): Promise<void> {
-  await requestVoid(apiClient.threads[":id"].$delete({ param: { id } }));
+export async function deleteThread(
+  id: string,
+  opts: DeleteThreadRequest,
+): Promise<void> {
+  await requestVoid(
+    apiClient.threads[":id"].$delete({ param: { id }, json: opts }),
+  );
 }
 
 export async function markThreadRead(id: string): Promise<ThreadResponse> {

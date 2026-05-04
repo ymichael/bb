@@ -795,6 +795,10 @@ describe("public thread sandbox-host routes", () => {
         `/api/v1/threads/${createdThread.id}`,
         {
           method: "DELETE",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ managerChildThreadsConfirmed: false }),
         },
       );
       expect(deleteResponse.status).toBe(200);

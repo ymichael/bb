@@ -372,7 +372,10 @@ describe("thread event pruning", () => {
           headers: {
             "content-type": "application/json",
           },
-          body: JSON.stringify({ force: true }),
+          body: JSON.stringify({
+            force: true,
+            managerChildThreadsConfirmed: false,
+          }),
         },
       );
 

@@ -13,7 +13,7 @@ import {
   listThreads,
   threads,
 } from "@bb/db";
-import { threadSchema } from "@bb/domain";
+import { threadSchema, type Thread } from "@bb/domain";
 import {
   reportQueuedCommandSuccess,
   waitForQueuedCommand,
@@ -28,13 +28,166 @@ import {
   seedThread,
 } from "../helpers/seed.js";
 import { createTestAppHarness } from "../helpers/test-app.js";
+import type { TestAppHarness } from "../helpers/test-app.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
+
+interface ManagerWithAssignedChildFixture {
+  childThread: Thread;
+  managerThread: Thread;
+}
+
+function seedManagerWithAssignedChild(
+  harness: TestAppHarness,
+): ManagerWithAssignedChildFixture {
+  const { host } = seedHostSession(harness.deps);
+  const { project } = seedProjectWithSource(harness.deps, {
+    hostId: host.id,
+  });
+  const environment = seedEnvironment(harness.deps, {
+    hostId: host.id,
+    projectId: project.id,
+  });
+  const managerThread = seedThread(harness.deps, {
+    projectId: project.id,
+    environmentId: environment.id,
+    type: "manager",
+  });
+  const childThread = seedThread(harness.deps, {
+    projectId: project.id,
+    parentThreadId: managerThread.id,
+  });
+  return { childThread, managerThread };
+}
 
 describe("public thread archive delete cleanup routes", () => {
   beforeEach(() => {
     provisionHostMock.mockReset();
     resumeHostMock.mockReset();
+  });
+
+  it("rejects archiving managers with assigned child threads unless confirmed", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { managerThread } = seedManagerWithAssignedChild(harness);
+
+      const response = await harness.app.request(
+        `/api/v1/threads/${managerThread.id}/archive`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            force: false,
+            managerChildThreadsConfirmed: false,
+          }),
+        },
+      );
+
+      expect(response.status).toBe(409);
+      await expect(readJson(response)).resolves.toMatchObject({
+        code: "manager_child_threads_confirmation_required",
+      });
+      expect(getThread(harness.db, managerThread.id)?.archivedAt).toBeNull();
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("archives managers with assigned child threads after explicit confirmation", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { childThread, managerThread } =
+        seedManagerWithAssignedChild(harness);
+
+      const response = await harness.app.request(
+        `/api/v1/threads/${managerThread.id}/archive`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            force: false,
+            managerChildThreadsConfirmed: true,
+          }),
+        },
+      );
+
+      expect(response.status).toBe(200);
+      expect(getThread(harness.db, managerThread.id)?.archivedAt).toBeTypeOf(
+        "number",
+      );
+      expect(getThread(harness.db, childThread.id)?.parentThreadId).toBe(
+        managerThread.id,
+      );
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("rejects deleting managers with assigned child threads unless confirmed", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { managerThread } = seedManagerWithAssignedChild(harness);
+
+      const response = await harness.app.request(
+        `/api/v1/threads/${managerThread.id}`,
+        {
+          method: "DELETE",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            managerChildThreadsConfirmed: false,
+          }),
+        },
+      );
+
+      expect(response.status).toBe(409);
+      await expect(readJson(response)).resolves.toMatchObject({
+        code: "manager_child_threads_confirmation_required",
+      });
+      expect(getThread(harness.db, managerThread.id)?.deletedAt).toBeNull();
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("deletes managers with assigned child threads after explicit confirmation", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { childThread, managerThread } =
+        seedManagerWithAssignedChild(harness);
+
+      const response = await harness.app.request(
+        `/api/v1/threads/${managerThread.id}`,
+        {
+          method: "DELETE",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            managerChildThreadsConfirmed: true,
+          }),
+        },
+      );
+
+      expect(response.status).toBe(200);
+      const visibleThreads = listThreads(harness.db, {
+        projectId: childThread.projectId,
+      });
+      expect(
+        visibleThreads.some((thread) => thread.id === managerThread.id),
+      ).toBe(false);
+      expect(getThread(harness.db, childThread.id)).toMatchObject({
+        id: childThread.id,
+        deletedAt: null,
+      });
+    } finally {
+      await harness.cleanup();
+    }
   });
 
   it("stops threads, archives unmanaged workspaces directly, and requires confirmation for dirty isolated managed workspaces", async () => {
@@ -88,7 +241,10 @@ describe("public thread archive delete cleanup routes", () => {
           headers: {
             "content-type": "application/json",
           },
-          body: JSON.stringify({ force: false }),
+          body: JSON.stringify({
+            force: false,
+            managerChildThreadsConfirmed: false,
+          }),
         },
       );
       const dirtyStatusCommand = await waitForQueuedCommand(
@@ -122,7 +278,10 @@ describe("public thread archive delete cleanup routes", () => {
           headers: {
             "content-type": "application/json",
           },
-          body: JSON.stringify({ force: false }),
+          body: JSON.stringify({
+            force: false,
+            managerChildThreadsConfirmed: false,
+          }),
         },
       );
       expect(archiveResponse.status).toBe(200);
@@ -215,6 +374,10 @@ describe("public thread archive delete cleanup routes", () => {
         `/api/v1/threads/${thread.id}`,
         {
           method: "DELETE",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ managerChildThreadsConfirmed: false }),
         },
       );
 
@@ -258,6 +421,10 @@ describe("public thread archive delete cleanup routes", () => {
         `/api/v1/threads/${thread.id}`,
         {
           method: "DELETE",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ managerChildThreadsConfirmed: false }),
         },
       );
 
@@ -316,6 +483,10 @@ describe("public thread archive delete cleanup routes", () => {
         `/api/v1/threads/${thread.id}`,
         {
           method: "DELETE",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ managerChildThreadsConfirmed: false }),
         },
       );
 
@@ -398,6 +569,10 @@ describe("public thread archive delete cleanup routes", () => {
         `/api/v1/threads/${createdThread.id}`,
         {
           method: "DELETE",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ managerChildThreadsConfirmed: false }),
         },
       );
 
@@ -480,7 +655,10 @@ describe("public thread archive delete cleanup routes", () => {
           headers: {
             "content-type": "application/json",
           },
-          body: JSON.stringify({ force: true }),
+          body: JSON.stringify({
+            force: true,
+            managerChildThreadsConfirmed: false,
+          }),
         },
       );
 
@@ -549,7 +727,10 @@ describe("public thread archive delete cleanup routes", () => {
           headers: {
             "content-type": "application/json",
           },
-          body: JSON.stringify({ force: false }),
+          body: JSON.stringify({
+            force: false,
+            managerChildThreadsConfirmed: false,
+          }),
         },
       );
 
@@ -609,7 +790,10 @@ describe("public thread archive delete cleanup routes", () => {
           headers: {
             "content-type": "application/json",
           },
-          body: JSON.stringify({ force: false }),
+          body: JSON.stringify({
+            force: false,
+            managerChildThreadsConfirmed: false,
+          }),
         },
       );
 
@@ -663,7 +847,10 @@ describe("public thread archive delete cleanup routes", () => {
           headers: {
             "content-type": "application/json",
           },
-          body: JSON.stringify({ force: false }),
+          body: JSON.stringify({
+            force: false,
+            managerChildThreadsConfirmed: false,
+          }),
         },
       );
 
@@ -764,7 +951,10 @@ describe("public thread archive delete cleanup routes", () => {
           headers: {
             "content-type": "application/json",
           },
-          body: JSON.stringify({ force: true }),
+          body: JSON.stringify({
+            force: true,
+            managerChildThreadsConfirmed: false,
+          }),
         },
       );
       expect(archiveResponse.status).toBe(200);
@@ -836,6 +1026,10 @@ describe("public thread archive delete cleanup routes", () => {
         `/api/v1/threads/${thread.id}`,
         {
           method: "DELETE",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ managerChildThreadsConfirmed: false }),
         },
       );
       expect(response.status).toBe(200);
@@ -878,6 +1072,10 @@ describe("public thread archive delete cleanup routes", () => {
         `/api/v1/threads/${thread.id}`,
         {
           method: "DELETE",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ managerChildThreadsConfirmed: false }),
         },
       );
       expect(response.status).toBe(200);
@@ -934,7 +1132,10 @@ describe("public thread archive delete cleanup routes", () => {
           headers: {
             "content-type": "application/json",
           },
-          body: JSON.stringify({ force: false }),
+          body: JSON.stringify({
+            force: false,
+            managerChildThreadsConfirmed: false,
+          }),
         },
       );
 

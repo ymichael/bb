@@ -133,6 +133,10 @@ export interface CountLiveThreadsInEnvironmentArgs {
   excludeThreadId?: string;
 }
 
+export interface CountNonDeletedAssignedChildThreadsArgs {
+  parentThreadId: string;
+}
+
 export interface MarkThreadStopRequestedArgs {
   requestedAt?: number;
   threadId: string;
@@ -297,6 +301,24 @@ export function countLiveThreadsInEnvironment(
     .get();
 
   return liveThreadCount?.count ?? 0;
+}
+
+export function countNonDeletedAssignedChildThreads(
+  db: DbConnection,
+  args: CountNonDeletedAssignedChildThreadsArgs,
+): number {
+  const assignedChildThreadCount = db
+    .select({ count: count() })
+    .from(threads)
+    .where(
+      and(
+        eq(threads.parentThreadId, args.parentThreadId),
+        isNull(threads.deletedAt),
+      ),
+    )
+    .get();
+
+  return assignedChildThreadCount?.count ?? 0;
 }
 
 export function listThreadEnvironmentAssignmentsOnHost(

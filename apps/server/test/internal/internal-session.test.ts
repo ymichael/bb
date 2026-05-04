@@ -2595,9 +2595,7 @@ describe("internal session routes", () => {
 
       expect(getThread(harness.db, thread.id)?.status).toBe("idle");
       const threadEvents = listEvents(harness.db, { threadId: thread.id });
-      expect(threadEvents.map((event) => event.type)).toEqual([
-        "turn/started",
-      ]);
+      expect(threadEvents.map((event) => event.type)).toEqual(["turn/started"]);
     } finally {
       await harness.cleanup();
     }
@@ -2805,7 +2803,10 @@ describe("internal session routes", () => {
           headers: {
             "content-type": "application/json",
           },
-          body: JSON.stringify({ force: true }),
+          body: JSON.stringify({
+            force: true,
+            managerChildThreadsConfirmed: false,
+          }),
         },
       );
 
@@ -2964,6 +2965,10 @@ describe("internal session routes", () => {
         `/api/v1/threads/${createdThread.id}`,
         {
           method: "DELETE",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ managerChildThreadsConfirmed: false }),
         },
       );
 

@@ -293,10 +293,23 @@ export type ThreadDraftListResponse = z.infer<
   typeof threadDraftListResponseSchema
 >;
 
+export const threadAssignedChildSummaryResponseSchema = z.object({
+  nonDeletedAssignedChildCount: z.number().int().nonnegative(),
+});
+export type ThreadAssignedChildSummaryResponse = z.infer<
+  typeof threadAssignedChildSummaryResponseSchema
+>;
+
 export const archiveThreadRequestSchema = z.object({
   force: z.boolean(),
+  managerChildThreadsConfirmed: z.boolean(),
 });
 export type ArchiveThreadRequest = z.infer<typeof archiveThreadRequestSchema>;
+
+export const deleteThreadRequestSchema = z.object({
+  managerChildThreadsConfirmed: z.boolean(),
+});
+export type DeleteThreadRequest = z.infer<typeof deleteThreadRequestSchema>;
 
 export const updateThreadRequestSchema = z
   .object({

@@ -26,6 +26,7 @@ interface ThreadUpdateCommandOptions {
 }
 
 interface ThreadArchiveCommandOptions {
+  confirmAssignedChildThreads?: boolean;
   self?: boolean;
   force?: boolean;
   json?: boolean;
@@ -37,6 +38,7 @@ interface ThreadUnarchiveCommandOptions {
 }
 
 interface ThreadDeleteCommandOptions {
+  confirmAssignedChildThreads?: boolean;
   yes?: boolean;
   json?: boolean;
 }
@@ -137,6 +139,10 @@ export function registerActionsCommands(
       "--force",
       "Archive even when the thread workspace has uncommitted or unmerged work",
     )
+    .option(
+      "--confirm-assigned-child-threads",
+      "Confirm archiving a manager with assigned child threads",
+    )
     .option("--json", "Print machine-readable JSON output")
     .action(
       action(
@@ -147,7 +153,11 @@ export function registerActionsCommands(
             await unwrap<{ ok: boolean }>(
               client.api.v1.threads[":id"].archive.$post({
                 param: { id: threadId },
-                json: { force: opts.force === true },
+                json: {
+                  force: opts.force === true,
+                  managerChildThreadsConfirmed:
+                    opts.confirmAssignedChildThreads === true,
+                },
               }),
             );
           } catch (err: unknown) {
@@ -187,6 +197,10 @@ export function registerActionsCommands(
     .command("delete <id>")
     .description("Delete a thread permanently")
     .option("--yes", "Skip the confirmation prompt")
+    .option(
+      "--confirm-assigned-child-threads",
+      "Confirm deleting a manager with assigned child threads",
+    )
     .option("--json", "Print machine-readable JSON output")
     .action(
       action(async (id: string, opts: ThreadDeleteCommandOptions) => {
@@ -209,6 +223,10 @@ export function registerActionsCommands(
           await unwrap<{ ok: boolean }>(
             client.api.v1.threads[":id"].$delete({
               param: { id },
+              json: {
+                managerChildThreadsConfirmed:
+                  opts.confirmAssignedChildThreads === true,
+              },
             }),
           );
         } catch (err: unknown) {

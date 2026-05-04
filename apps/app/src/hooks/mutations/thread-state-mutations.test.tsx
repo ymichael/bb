@@ -76,15 +76,17 @@ describe("thread state mutations", () => {
       await result.current.mutateAsync({
         id: "thread-1",
         force: false,
+        managerChildThreadsConfirmed: false,
       });
     });
 
     expect(api.archiveThread).toHaveBeenCalledWith("thread-1", {
       force: false,
+      managerChildThreadsConfirmed: false,
     });
-    expect(queryClient.getQueryState(projectPromptHistoryKey)?.isInvalidated).toBe(
-      true,
-    );
+    expect(
+      queryClient.getQueryState(projectPromptHistoryKey)?.isInvalidated,
+    ).toBe(true);
   });
 
   it("invalidates project prompt history after unarchiving a thread", async () => {
@@ -105,8 +107,8 @@ describe("thread state mutations", () => {
     });
 
     expect(api.unarchiveThread).toHaveBeenCalledWith("thread-1");
-    expect(queryClient.getQueryState(projectPromptHistoryKey)?.isInvalidated).toBe(
-      true,
-    );
+    expect(
+      queryClient.getQueryState(projectPromptHistoryKey)?.isInvalidated,
+    ).toBe(true);
   });
 });

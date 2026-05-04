@@ -9,11 +9,16 @@ import {
   DialogTitle,
 } from "@bb/ui-core";
 
+export interface ThreadArchiveConfirmationDialogTarget {
+  managerChildThreadsConfirmed: boolean;
+  thread: Thread;
+}
+
 interface ThreadArchiveConfirmationDialogProps {
-  target: Thread | null;
+  target: ThreadArchiveConfirmationDialogTarget | null;
   pending: boolean;
   onOpenChange: (open: boolean) => void;
-  onArchive: (thread: Thread) => void;
+  onArchive: (target: ThreadArchiveConfirmationDialogTarget) => void;
 }
 
 export function ThreadArchiveConfirmationDialog({

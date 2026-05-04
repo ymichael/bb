@@ -1094,10 +1094,56 @@ describe("CLI command output contracts", () => {
 
     expect(deleteFn).toHaveBeenCalledWith({
       param: { id: "thread-manager-1" },
+      json: { managerChildThreadsConfirmed: false },
     });
     expect(collectLogLines(vi.mocked(console.log))).toContain(
       "Manager thread-manager-1 deleted",
     );
+  });
+
+  it("bb manager delete forwards explicit assigned-child confirmation", async () => {
+    const managerThread: Thread = makeThread({
+      id: "thread-manager-children",
+      projectId: "project-123",
+      providerId: "codex",
+      title: "Manager",
+      type: "manager",
+      status: "idle",
+      createdAt: 1,
+      updatedAt: 2,
+    });
+    const get = vi.fn(async () => managerThread);
+    const deleteFn = vi.fn(async () => ({ ok: true }));
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              ":id": {
+                $get: get,
+                $delete: deleteFn,
+              },
+            },
+          },
+        },
+      }),
+    );
+
+    await runCommand(
+      [
+        "manager",
+        "delete",
+        "thread-manager-children",
+        "--yes",
+        "--confirm-assigned-child-threads",
+      ],
+      (program) => registerManagerCommands(program, () => "http://server"),
+    );
+
+    expect(deleteFn).toHaveBeenCalledWith({
+      param: { id: "thread-manager-children" },
+      json: { managerChildThreadsConfirmed: true },
+    });
   });
 
   it("bb status prints project/thread context", async () => {
@@ -1814,7 +1860,10 @@ describe("CLI command output contracts", () => {
 
     expect(archivePost).toHaveBeenCalledWith({
       param: { id: "thread-archive-1" },
-      json: { force: false },
+      json: {
+        force: false,
+        managerChildThreadsConfirmed: false,
+      },
     });
     expect(collectLogLines(vi.mocked(console.log))).toContain(
       "Thread thread-archive-1 archived",
@@ -1846,7 +1895,47 @@ describe("CLI command output contracts", () => {
 
     expect(archivePost).toHaveBeenCalledWith({
       param: { id: "thread-archive-2" },
-      json: { force: true },
+      json: {
+        force: true,
+        managerChildThreadsConfirmed: false,
+      },
+    });
+  });
+
+  it("bb thread archive forwards explicit assigned-child confirmation", async () => {
+    const archivePost = vi.fn(async () => ({ ok: true }));
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              ":id": {
+                archive: {
+                  $post: archivePost,
+                },
+              },
+            },
+          },
+        },
+      }),
+    );
+
+    await runCommand(
+      [
+        "thread",
+        "archive",
+        "thread-archive-children",
+        "--confirm-assigned-child-threads",
+      ],
+      (program) => registerThreadCommands(program, () => "http://server"),
+    );
+
+    expect(archivePost).toHaveBeenCalledWith({
+      param: { id: "thread-archive-children" },
+      json: {
+        force: false,
+        managerChildThreadsConfirmed: true,
+      },
     });
   });
 
@@ -1881,7 +1970,10 @@ describe("CLI command output contracts", () => {
     );
     expect(archivePost).toHaveBeenCalledWith({
       param: { id: "thread-archive-1" },
-      json: { force: false },
+      json: {
+        force: false,
+        managerChildThreadsConfirmed: false,
+      },
     });
   });
 
@@ -1954,6 +2046,7 @@ describe("CLI command output contracts", () => {
     });
     expect(deleteFn).toHaveBeenCalledWith({
       param: { id: "thread-delete-1" },
+      json: { managerChildThreadsConfirmed: false },
     });
     expect(readlineState.question).toHaveBeenCalled();
     expect(collectLogLines(vi.mocked(console.log))).toContain(
@@ -2034,6 +2127,51 @@ describe("CLI command output contracts", () => {
     expect(readlineState.question).not.toHaveBeenCalled();
     expect(deleteFn).toHaveBeenCalledWith({
       param: { id: "thread-delete-3" },
+      json: { managerChildThreadsConfirmed: false },
+    });
+  });
+
+  it("bb thread delete forwards explicit assigned-child confirmation", async () => {
+    const thread: Thread = makeThread({
+      id: "thread-delete-children",
+      projectId: "proj-1",
+      providerId: "codex",
+      type: "manager",
+      status: "idle",
+      createdAt: 1,
+      updatedAt: 1,
+    });
+    const get = vi.fn(async () => thread);
+    const deleteFn = vi.fn(async () => ({ ok: true }));
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              ":id": {
+                $get: get,
+                $delete: deleteFn,
+              },
+            },
+          },
+        },
+      }),
+    );
+
+    await runCommand(
+      [
+        "thread",
+        "delete",
+        "thread-delete-children",
+        "--yes",
+        "--confirm-assigned-child-threads",
+      ],
+      (program) => registerThreadCommands(program, () => "http://server"),
+    );
+
+    expect(deleteFn).toHaveBeenCalledWith({
+      param: { id: "thread-delete-children" },
+      json: { managerChildThreadsConfirmed: true },
     });
   });
 

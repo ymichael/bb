@@ -875,7 +875,13 @@ describe("public thread lifecycle regressions", () => {
 
       const firstDelete = await harness.app.request(
         `/api/v1/threads/${firstThreadBody.id}`,
-        { method: "DELETE" },
+        {
+          method: "DELETE",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ managerChildThreadsConfirmed: false }),
+        },
       );
       expect(firstDelete.status).toBe(200);
       expect(
@@ -888,7 +894,13 @@ describe("public thread lifecycle regressions", () => {
 
       const secondDelete = await harness.app.request(
         `/api/v1/threads/${secondThreadBody.id}`,
-        { method: "DELETE" },
+        {
+          method: "DELETE",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ managerChildThreadsConfirmed: false }),
+        },
       );
       expect(secondDelete.status).toBe(200);
 

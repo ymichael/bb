@@ -5,6 +5,7 @@ import {
 
 import {
   events,
+  archiveThread,
   getDraft,
   getThread,
   hostDaemonCommands,
@@ -42,6 +43,137 @@ describe("public thread manager and ownership routes", () => {
   beforeEach(() => {
     provisionHostMock.mockReset();
     resumeHostMock.mockReset();
+  });
+
+  it("summarizes non-deleted assigned child threads for a manager", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const managerThread = seedThread(harness.deps, {
+        projectId: project.id,
+        type: "manager",
+      });
+      seedThread(harness.deps, {
+        projectId: project.id,
+        parentThreadId: managerThread.id,
+      });
+      const archivedChild = seedThread(harness.deps, {
+        projectId: project.id,
+        parentThreadId: managerThread.id,
+      });
+      const deletedChild = seedThread(harness.deps, {
+        projectId: project.id,
+        parentThreadId: managerThread.id,
+      });
+      seedThread(harness.deps, {
+        projectId: project.id,
+      });
+      archiveThread(harness.db, harness.deps.hub, archivedChild.id);
+      markThreadDeleted(harness.db, harness.deps.hub, {
+        threadId: deletedChild.id,
+      });
+
+      const response = await harness.app.request(
+        `/api/v1/threads/${managerThread.id}/assigned-child-summary`,
+      );
+
+      expect(response.status).toBe(200);
+      await expect(readJson(response)).resolves.toEqual({
+        nonDeletedAssignedChildCount: 2,
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("returns zero assigned child threads when a manager only has deleted children", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const managerThread = seedThread(harness.deps, {
+        projectId: project.id,
+        type: "manager",
+      });
+      const deletedChild = seedThread(harness.deps, {
+        projectId: project.id,
+        parentThreadId: managerThread.id,
+      });
+      markThreadDeleted(harness.db, harness.deps.hub, {
+        threadId: deletedChild.id,
+      });
+
+      const response = await harness.app.request(
+        `/api/v1/threads/${managerThread.id}/assigned-child-summary`,
+      );
+
+      expect(response.status).toBe(200);
+      await expect(readJson(response)).resolves.toEqual({
+        nonDeletedAssignedChildCount: 0,
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("summarizes assigned child threads for archived manager threads", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const managerThread = seedThread(harness.deps, {
+        projectId: project.id,
+        type: "manager",
+      });
+      seedThread(harness.deps, {
+        projectId: project.id,
+        parentThreadId: managerThread.id,
+      });
+      archiveThread(harness.db, harness.deps.hub, managerThread.id);
+
+      const response = await harness.app.request(
+        `/api/v1/threads/${managerThread.id}/assigned-child-summary`,
+      );
+
+      expect(response.status).toBe(200);
+      await expect(readJson(response)).resolves.toEqual({
+        nonDeletedAssignedChildCount: 1,
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("rejects assigned child summaries for non-manager threads", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        type: "standard",
+      });
+
+      const response = await harness.app.request(
+        `/api/v1/threads/${thread.id}/assigned-child-summary`,
+      );
+
+      expect(response.status).toBe(400);
+      await expect(readJson(response)).resolves.toMatchObject({
+        code: "invalid_request",
+      });
+    } finally {
+      await harness.cleanup();
+    }
   });
 
   it("queues thread.rename, returns thread events, sends drafts, and creates manager threads", async () => {
