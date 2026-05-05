@@ -284,22 +284,6 @@ function createThreadDetailSuccessRoutes(
   ];
 }
 
-async function updateManagerSelectorThreadCache(
-  queryClient: QueryClient,
-  filters: ThreadListQueryFilters,
-): Promise<void> {
-  await act(async () => {
-    queryClient.setQueryData(threadListQueryKey(filters), [
-      createThreadListEntry({
-        id: "manager-1",
-        title: "Cached manager thread",
-        titleFallback: "Cached manager thread",
-        type: "manager",
-      }),
-    ]);
-  });
-}
-
 function getThreadListObserverCount(
   queryClient: QueryClient,
   filters: ThreadListQueryFilters,
@@ -560,7 +544,6 @@ describe("ThreadDetailView", () => {
     expect(getThreadListObserverCount(queryClient, projectThreadFilters)).toBe(
       1,
     );
-    await updateManagerSelectorThreadCache(queryClient, projectThreadFilters);
 
     expect(listThreadsRequestCount).toBe(1);
     expect(getThreadListObserverCount(queryClient, projectThreadFilters)).toBe(
@@ -596,7 +579,6 @@ describe("ThreadDetailView", () => {
     expect(getThreadListObserverCount(queryClient, managerThreadFilters)).toBe(
       1,
     );
-    await updateManagerSelectorThreadCache(queryClient, managerThreadFilters);
 
     expect(listThreadsRequestCount).toBe(1);
     expect(getThreadListObserverCount(queryClient, managerThreadFilters)).toBe(

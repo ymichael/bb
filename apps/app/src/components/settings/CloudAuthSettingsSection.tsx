@@ -2,8 +2,7 @@ import type { CloudAuthProviderId } from "@bb/agent-providers";
 import type { CloudAuthConnection } from "@bb/server-contract";
 import { StatusPill, type StatusPillVariant } from "@bb/ui-core";
 import { Button } from "@bb/ui-core";
-import { SettingsCard } from "@/components/settings/SettingsCard";
-import { SettingsRowList } from "@/components/settings/SettingsRow";
+import { SettingsCard, SettingsRowList } from "@bb/ui-core";
 import { CONNECTED_DOT_CLASS } from "@/components/settings/constants";
 
 const CLOUD_AUTH_STATUS_DISPLAY: Record<

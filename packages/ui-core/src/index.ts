@@ -209,7 +209,15 @@ export {
 } from "./primitives/scroll-to-bottom-button.js";
 export {
   SettingsSection,
+  SettingsCard,
+  SettingsRow,
+  SettingsRowList,
+  SettingsWithControl,
   type SettingsSectionProps,
+  type SettingsCardProps,
+  type SettingsRowProps,
+  type SettingsRowListProps,
+  type SettingsWithControlProps,
 } from "./primitives/settings-section.js";
 export {
   getDetailScrollMaxHeightClass,

@@ -4,7 +4,7 @@ import {
   type LocalPathProjectSource,
   type ProjectSource,
 } from "@bb/domain";
-import { LocalhostBadge, StatusPill } from "@bb/ui-core";
+import { LocalhostBadge, SettingsRow, StatusPill } from "@bb/ui-core";
 import { GitHubIcon } from "@/components/icons/GitHubIcon";
 import { Button } from "@bb/ui-core";
 import {
@@ -13,7 +13,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@bb/ui-core";
-import { SettingsRow } from "@/components/settings/SettingsRow";
 
 interface ProjectSourceRowProps {
   source: ProjectSource;

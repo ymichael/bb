@@ -3,7 +3,7 @@ import type { SandboxEnvVar } from "@bb/server-contract";
 import { sandboxEnvVarNameSchema } from "@bb/server-contract";
 import { Button } from "@bb/ui-core";
 import { Input } from "@bb/ui-core";
-import { SettingsCard } from "@/components/settings/SettingsCard";
+import { SettingsCard } from "@bb/ui-core";
 import { looksLikeEnvContent, parseEnvContent } from "@/lib/parse-env";
 
 export interface EnvVarEntry {

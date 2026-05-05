@@ -23,8 +23,7 @@ import {
 } from "@bb/ui-core";
 import { PageShell } from "@bb/ui-core";
 import { ProjectPathDialog } from "@/components/project/ProjectPathDialog";
-import { SettingsSection } from "@bb/ui-core";
-import { SettingsRowList } from "@/components/settings/SettingsRow";
+import { SettingsRowList, SettingsSection } from "@bb/ui-core";
 import { ProjectSourceRow } from "@/views/project-settings/ProjectSourceRow";
 import {
   useAddLocalProjectSource,

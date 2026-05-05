@@ -15,16 +15,16 @@ import {
 import { PageShell } from "@bb/ui-core";
 import { CloudAuthSettingsSection } from "@/components/settings/CloudAuthSettingsSection";
 import { CONNECTED_DOT_CLASS } from "@/components/settings/constants";
-import { SettingsSection } from "@bb/ui-core";
 import {
   SettingsRow,
   SettingsRowList,
-} from "@/components/settings/SettingsRow";
+  SettingsSection,
+  SettingsWithControl,
+} from "@bb/ui-core";
 import {
   SandboxEnvVarsSection,
   type EnvVarEntry,
 } from "@/components/settings/SandboxEnvVarsSection";
-import { SettingsWithControl } from "@/components/settings/SettingsWithControl";
 import {
   HostDeleteDialog,
   type HostDeleteDialogTarget,
@@ -183,10 +183,7 @@ export function AppSettingsView() {
     meta: {
       errorMessage: "Failed to save environment variables.",
     },
-    mutationFn: async ({
-      toUpsert,
-      toDelete,
-    }: SaveEnvVarsMutationRequest) => {
+    mutationFn: async ({ toUpsert, toDelete }: SaveEnvVarsMutationRequest) => {
       await Promise.all([
         ...toUpsert.map((entry) => api.upsertSandboxEnvVar(entry)),
         ...toDelete.map((name) => api.deleteSandboxEnvVar(name)),
