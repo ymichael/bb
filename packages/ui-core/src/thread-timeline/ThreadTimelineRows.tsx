@@ -458,6 +458,8 @@ function areTimelineRowViewPropsEqual(
     previous.compactActivityIntents === next.compactActivityIntents &&
     previous.scopeActive === next.scopeActive &&
     previous.spacing === next.spacing &&
+    // The view-row cache keys by the raw rows array, so unchanged query data
+    // preserves row object identity and can skip recursive signature work.
     (previous.row === next.row ||
       timelineRowRenderSignature(previous.row) ===
         timelineRowRenderSignature(next.row))
@@ -472,6 +474,8 @@ function areTimelineExpandableRowViewPropsEqual(
     previous.compactActivityIntents === next.compactActivityIntents &&
     previous.expandableTitle === next.expandableTitle &&
     previous.horizontalPadding === next.horizontalPadding &&
+    // The view-row cache keys by the raw rows array, so unchanged query data
+    // preserves row object identity and can skip recursive signature work.
     (previous.row === next.row ||
       timelineRowRenderSignature(previous.row) ===
         timelineRowRenderSignature(next.row))
