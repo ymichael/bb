@@ -234,7 +234,6 @@ function ConversationAttachments({
 }
 
 const COLLAPSED_MESSAGE_LINE_COUNT = 15;
-const OVERFLOW_MEASURE_MIN_LENGTH = 800;
 
 function countPreWrappedLines({ text }: CountPreWrappedLinesInput): number {
   return text.split(/\r\n|\r|\n/u).length;
@@ -280,11 +279,9 @@ function CollapsibleMessageText({ text }: CollapsibleMessageTextProps) {
   const textRef = useRef<HTMLParagraphElement>(null);
   const exceedsCollapsedLineCount =
     countPreWrappedLines({ text }) > COLLAPSED_MESSAGE_LINE_COUNT;
-  const canOverflow =
-    text.length >= OVERFLOW_MEASURE_MIN_LENGTH || exceedsCollapsedLineCount;
   const isOverflowing = useIsOverflowing(
     textRef,
-    canOverflow && !isExpanded,
+    !isExpanded,
     text,
   );
   const showToggle = isExpanded || exceedsCollapsedLineCount || isOverflowing;

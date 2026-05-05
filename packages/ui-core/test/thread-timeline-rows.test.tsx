@@ -189,6 +189,25 @@ describe("ThreadTimelineRows", () => {
     expect(resolveUserAttachmentImageSrc).toHaveBeenCalledTimes(1);
   });
 
+  it("shows the expand control when a short user message overflows by wrapping", () => {
+    const wrappedShortMessage = "wrapped ".repeat(70);
+
+    withElementScrollMetrics(() => {
+      renderTimelineRows({
+        timelineRows: [
+          conversationRow({
+            role: "user",
+            text: wrappedShortMessage,
+          }),
+        ],
+      });
+
+      expect(
+        screen.getByRole("button", { name: "Show more" }),
+      ).toBeTruthy();
+    });
+  });
+
   it("keeps completed activity summaries in past tense in an active scope", () => {
     const html = renderRowsToStaticMarkup({
       timelineRows: [
