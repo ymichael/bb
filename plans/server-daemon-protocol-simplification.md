@@ -112,6 +112,61 @@ requests to prove the current daemon is authorized, but it should not appear in
 domain uniqueness, idempotency keys, event identity, or pending interaction
 identity.
 
+When command delivery attempts record `sessionId`, that value is attempt lease
+metadata: it answers which transport session received this delivery attempt. It
+is not part of the durable job identity, idempotency key, lifecycle operation
+identity, or provider-originated request identity.
+
+### Identity Glossary
+
+- `clientRequestId`: event-plan identity for a persisted
+  `client/turn/requested` event. It appears here only because Phase 1 completes
+  the event hard cutover first; do not reuse it for durable jobs, RPCs, or
+  provider-originated tool calls.
+- `producerEventId`: daemon-generated durable id for a daemon-produced event
+  record. It deduplicates daemon event delivery retries.
+- `jobId`: target protocol name for the stable server-owned durable daemon job
+  identity. If the implementation keeps the existing `commandId` field/table
+  name, `commandId` is the concrete `jobId`; do not create parallel durable
+  identities for the same job.
+- `commandId`: current persisted command-row id and lifecycle-operation foreign
+  key. It identifies durable work, not a delivery attempt.
+- `attemptId`: server-generated id for one delivery attempt of a durable daemon
+  job.
+- `requestId` on websocket RPC: server-generated id scoped to one online
+  `rpc.request`/`rpc.response` exchange. It is not persisted and is not a durable
+  job id.
+- `requestId` on dynamic tool calls: provider/runtime-generated idempotency
+  handle for one provider-originated server-side tool call, scoped by
+  `providerRunId` or `providerRequestScope`.
+- `providerRunId` or `providerRequestScope`: daemon/provider-process-run
+  identity. It scopes provider-originated pending interactions and dynamic tool
+  calls across websocket reconnects, and changes on provider process restart.
+- `desiredRuntimeMaterialVersion`: server-owned content/version id for the
+  runtime material snapshot the host should apply.
+- `appliedRuntimeMaterialVersion`: daemon-reported content/version id that the
+  server records as currently applied host state.
+- `daemonInstanceId`: stable daemon installation/instance identity used to decide
+  whether a replacement websocket session represents the same daemon instance.
+  It is distinct from shorter provider-run/process identities.
+- `sessionId`: transport authorization and lease state only.
+
+### Protocol Boundary Observability
+
+Every phase that introduces a protocol idempotency boundary must add structured
+logs and counters for:
+
+- protocol-version mismatch during session open;
+- duplicate id with mismatched payload, such as `producerEventId`, command
+  `attemptId`, pending interaction identity, and dynamic tool call id;
+- stale attempt or stale provider-run result rejection;
+- host-unavailable RPC failures.
+
+Counters are owned by the server protocol/lifecycle owner for server-side
+decisions and by the host daemon for host-local transport/runtime decisions.
+Each phase's exit criteria must name the specific boundary logs/counters and
+include automated assertions for them; a generic log line is not enough.
+
 ### Deferred Modeling Gaps
 
 These gaps are related to the same ownership boundary but should not block the
@@ -131,7 +186,8 @@ them:
 
 ### Phase 1: Finish Event Protocol Hard Cutover
 
-Complete `plans/host-daemon-event-protocol-hard-cutover.md`.
+Complete all six phases and completion criteria in
+`plans/host-daemon-event-protocol-hard-cutover.md`.
 
 This removes:
 
@@ -167,6 +223,38 @@ Data model:
   - `settledAt`
   - `status`
 - A command can have multiple attempts; exactly one attempt can be active.
+- `sessionId` on an attempt is lease metadata for that delivery attempt only,
+  not job identity.
+
+Migration and drain guidance:
+
+- Add a `host_daemon_command_attempts` table, or equivalent structured columns
+  if a table is rejected during design review, with a foreign key to
+  `host_daemon_commands.id`.
+- Keep lifecycle operation tables pointing at the durable command/job row through
+  their existing `commandId` foreign keys. Do not point lifecycle operations at
+  attempts; attempts are transport deliveries, not lifecycle work.
+- Rename or map current terminal command states:
+  - `pending` -> `queued`;
+  - `fetched` -> `running` with one synthetic attempt carrying the existing
+    `sessionId`, `fetchedAt` as `deliveredAt`, and a lease derived from command
+    TTL policy;
+  - `success` -> `succeeded`;
+  - `error` -> `failed`.
+- Before applying the dev DB migration, stop the daemon and run a preflight that
+  lists all `pending` and `fetched` command rows. If any `fetched` rows exist,
+  either wait for them to settle on the old protocol before migration or mark
+  their synthetic attempts expired/stale during migration so late old-protocol
+  results cannot settle the job.
+- Back up the DB before rewriting command state. Abort without mutation if a row
+  has an unknown state, malformed payload, missing host/session reference, or a
+  lifecycle operation points at a missing command row.
+- Keep `retryCount` and `fetchedAt` until the migrated Phase 2 code no longer
+  reads them; then drop them in the final Phase 2 schema migration before moving
+  to Phase 3.
+- Rollback is restore-from-backup only. Do not try to downgrade attempt rows back
+  into `retryCount`/`fetchedAt` because stale attempt semantics cannot be
+  represented by the old schema.
 
 Protocol:
 
@@ -194,6 +282,15 @@ Exit criteria:
 - A stale result from an expired attempt cannot settle a command.
 - A command retry creates a new attempt id.
 - Non-idempotent mutation command tests cover late result arrival after retry.
+- Dev DB migration tests cover `pending`, `fetched`, `success`, and `error`
+  command rows, including a `fetched` row whose late result is rejected after
+  migration.
+- Lifecycle operation FK tests prove operation `commandId` links still point to
+  durable command rows and never to attempt rows.
+- Tests assert structured logs/counters for stale-attempt rejection, active
+  attempt mismatch, and duplicate/late command-result delivery.
+- Phase 2 includes the final schema migration that drops `retryCount` and
+  `fetchedAt` after tests prove migrated code no longer reads them.
 - `rg "retryCount|state: \"fetched\"|Command expired after retry" apps packages` returns no production matches after migration.
 
 ### Phase 3: Split Durable Jobs From Online RPC
@@ -250,11 +347,16 @@ Exit criteria:
   and file-read RPCs.
 - App/CLI tests assert that host-unavailable responses are presented as
   retryable availability states.
+- Tests assert structured logs/counters for host-unavailable RPC attempts, RPC
+  timeout, and response/request id mismatch.
 
 ### Phase 4: Make Command Result Application Atomic
 
 Dependency: Phase 2 must land first so the result route can validate the active
 attempt before it mutates command or lifecycle state.
+Dependency: Phase 1 must already have completed the event protocol hard cutover,
+so command result routes no longer need to preserve event high-water-mark
+compatibility for daemon sequence coordination.
 
 Move command result settlement and domain lifecycle transition into one owner
 transaction.
@@ -284,7 +386,18 @@ Target:
 
 Code to remove or shrink:
 
-- command result side-effect replay/failure sweep modules;
+- command result side-effect replay/failure sweep modules:
+  - `apps/server/src/internal/command-result-side-effect-sweep.ts`;
+  - `apps/server/src/internal/command-result-side-effect-failure-common.ts`;
+  - the re-export shim
+    `apps/server/src/internal/command-result-side-effect-failures.ts`;
+  - replay/failure helpers in
+    `apps/server/src/internal/command-result-owners.ts` that exist only to
+    repair command-result side-effect gaps;
+  - `replaySettledSideEffects`, `failSettledSideEffects`,
+    `commandResultOwnerReplaysSettledSideEffects`,
+    `failCommandResultSideEffects`, and side-effect failure imports/types in
+    `command-result-owners.ts`;
 - stored command result reconstruction from untyped JSON;
 - special expired-result report construction.
 
@@ -294,6 +407,15 @@ Exit criteria:
   operation is still active because result side effects failed.
 - `apps/server/src/internal/command-result-side-effect-sweep.ts` is deleted.
 - `apps/server/src/internal/command-result-side-effect-failures.ts` is deleted.
+- `apps/server/src/internal/command-result-side-effect-failure-common.ts` is
+  deleted.
+- `apps/server/src/internal/stored-command-result-report.ts` is deleted or no
+  longer reconstructs reports for side-effect replay.
+- `rg "replaySettledSideEffects|failSettledSideEffects|commandResultOwnerReplaysSettledSideEffects|failCommandResultSideEffects|CommandResultSideEffectFailure|settledCommandSideEffectFailureReason|buildStoredCommandResultReport" apps/server/src/internal` returns no production matches.
+- Integration tests prove command settlement, attempt settlement, lifecycle
+  advancement, and server-owned event appends commit atomically or not at all.
+- Tests assert structured logs/counters for atomic owner transaction rollback and
+  lifecycle-owner result rejection.
 - Expired command handling uses typed lifecycle failure paths, not synthetic
   daemon result reports.
 
@@ -312,6 +434,25 @@ Target identity:
 The runtime already scopes provider request ids with an in-memory provider
 process scope. Promote that into an explicit protocol field such as
 `providerRunId` or `providerRequestScope` and persist it.
+
+Migration and drain guidance:
+
+- Add a persisted provider-run/request-scope field before changing the unique
+  index.
+- Replace the current unique key that includes `sessionId` with one based on the
+  provider-run identity, provider id, provider thread id, and provider request
+  id.
+- Stop the daemon before the dev DB migration and preflight all active pending
+  interactions. Active `waiting` or `resolving` rows cannot be safely rekeyed
+  from `sessionId` alone because websocket session identity is not provider-run
+  identity; resolve them first or expire/interrupt them explicitly as
+  old-daemon-instance work.
+- That forced resolve/expire option is migration-only for legacy active rows that
+  lack provider-run identity. After this phase lands, steady-state websocket
+  reconnect keeps pending interactions alive because provider-run identity exists.
+- Terminal rows may be backfilled with deterministic legacy provider-run ids for
+  retry-window dedupe, but active rows must not be silently guessed.
+- Rollback is restore-from-backup only after the unique index has changed.
 
 Lifecycle handling:
 
@@ -335,6 +476,10 @@ Exit criteria:
 
 - The unique pending interaction key no longer includes `sessionId`.
 - `registerPendingInteraction()` is idempotent across session reconnect.
+- Migration tests cover duplicate old rows that would collide under the new
+  provider-run key, active-row abort behavior, and terminal-row legacy backfill.
+- Tests assert structured logs/counters for duplicate registration with mismatched
+  payload, stale provider-run resolution, and terminal-row GC.
 - Tests cover:
   - reconnect while approval is pending;
   - daemon process restart while approval is pending;
@@ -381,6 +526,8 @@ Exit criteria:
   `system/manager/user_message` events.
 - Same tool-call id with different payload is rejected.
 - Tool call request schema carries an idempotency key end to end.
+- Tests assert structured logs/counters for duplicate tool-call payload mismatch,
+  stale provider-run retry, expired in-progress record, and completed-record GC.
 - Tests cover lost response retry, stale provider-run retry, mismatched payload,
   expired in-progress records, and GC of completed records.
 
@@ -409,6 +556,10 @@ Exit criteria:
   replaced with websocket hint tests.
 - `apps/server/test/internal/internal-environment-change.test.ts` is deleted or
   replaced with websocket hint authorization/fan-out tests.
+- App-side tests prove websocket environment-change messages invalidate/refetch
+  workspace status, diff, file-list, and thread-storage queries.
+- Tests assert structured logs/counters for websocket hint fan-out, unauthorized
+  hint rejection, and dropped best-effort hints when no subscribers are present.
 - Manual validation confirms workspace status/diff/file-list views refetch after
   a file change and after reconnect.
 
@@ -440,6 +591,9 @@ Exit criteria:
   applied-version recording.
 - Host-daemon tests cover applying the same runtime material version twice
   without rewriting state unnecessarily.
+- Tests assert structured logs/counters for desired/applied version mismatch,
+  repeated desired-version request dedupe, offline-daemon deferral, and stale
+  applied-version rejection.
 
 ### Phase 9: Move Development Replay Out Of Production Commands
 
@@ -466,6 +620,8 @@ Exit criteria:
   get, delete, and run over the dev-only RPC path.
 - Host-daemon replay handler tests move from command dispatch to RPC handling.
 - Production command contract tests do not mention replay commands.
+- Tests assert structured logs/counters for dev replay RPC authorization,
+  host-unavailable replay RPC, and replay request/response id mismatch.
 
 ## Deletion Targets
 
@@ -488,15 +644,41 @@ targets:
 Run typecheck after each phase for touched packages. At minimum:
 
 ```bash
-pnpm exec turbo run typecheck --filter=@bb/host-daemon --filter=@bb/server --filter=@bb/host-daemon-contract --filter=@bb/db --filter=@bb/domain --filter=@bb/agent-runtime
+pnpm exec turbo run typecheck --filter=@bb/host-daemon --filter=@bb/server --filter=@bb/host-daemon-contract --filter=@bb/db --filter=@bb/domain --filter=@bb/thread-view --filter=@bb/agent-runtime
 ```
 
 Run the focused test set after each phase:
 
 ```bash
-pnpm exec turbo run test --filter=@bb/host-daemon --filter=@bb/server --filter=@bb/host-daemon-contract --filter=@bb/db --filter=@bb/domain --filter=@bb/agent-runtime > /tmp/bb-server-daemon-protocol-test-out.txt 2>&1
+pnpm exec turbo run test --filter=@bb/host-daemon --filter=@bb/server --filter=@bb/host-daemon-contract --filter=@bb/db --filter=@bb/domain --filter=@bb/thread-view --filter=@bb/agent-runtime > /tmp/bb-server-daemon-protocol-test-out.txt 2>&1
 git diff --check
 ```
+
+Required per-phase validation additions:
+
+- Phase 1: protocol-version mismatch contract and session-open tests; old
+  sequence-bearing event/command payloads are rejected; duplicate
+  `producerEventId` payload mismatch is logged/counted and rejected.
+- Phase 2: stale-attempt rejection, retry creates a new attempt, pending/fetched
+  dev-row migration, lifecycle operation FK preservation, and late result after
+  retry for a non-idempotent mutation.
+- Phase 3: offline-host RPC route coverage for provider list/model list,
+  workspace status/diff, file listing, and thread-storage reads; app/CLI display
+  host-unavailable as retryable availability.
+- Phase 4: lifecycle no-gap integration test proving command result settlement
+  and lifecycle advancement are atomic.
+- Phase 5: reconnect while pending, daemon process restart while pending,
+  duplicate registration, mismatched payload, stale/lost resolution delivery,
+  stale resolution after provider process exit, and terminal-row GC.
+- Phase 6: provider-run idempotency for dynamic tool calls, including lost
+  response retry, mismatched payload, stale provider run, expired in-progress
+  record, and completed-record GC.
+- Phase 7: websocket fan-out/auth tests and app-side refetch reconciliation.
+- Phase 8: sandbox runtime material offline-daemon behavior, reconnect
+  reconciliation, repeated desired-version requests, and applied-version
+  recording.
+- Phase 9: public/internal replay routes over dev-only RPC and host-daemon replay
+  handling outside the production command union.
 
 Manual validation on dev:
 
