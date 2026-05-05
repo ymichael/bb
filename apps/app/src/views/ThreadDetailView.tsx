@@ -24,7 +24,6 @@ import {
   useThread,
   useThreadPendingInteractions,
   useThreadTimeline,
-  useThreadTimelineTurnSummaryDetails,
   useThreads,
 } from "../hooks/queries/thread-queries";
 import { ThreadGitActionDialog } from "@/components/thread/ThreadGitActionDialog";
@@ -49,7 +48,7 @@ import {
 } from "@/lib/workspace-change-summary";
 import { getThreadDisplayTitle } from "@/lib/thread-title";
 import { useGitDiffPanel } from "./useGitDiffPanel";
-import { useTurnSummaryRowLoader } from "./useTurnSummaryRowLoader";
+import { useThreadDetailTurnSummaryRows } from "./useThreadDetailTurnSummaryRows";
 import { ThreadDetailHeader } from "./ThreadDetailHeader";
 import { ThreadDetailPromptArea } from "./ThreadDetailPromptArea";
 import { ThreadDetailSecondaryContent } from "./ThreadDetailSecondaryContent";
@@ -155,7 +154,8 @@ export function ThreadDetailView() {
     [isManagerThread, setStoredUseStandardManagerTimeline],
   );
   const isUnassignedStandard = isUnassignedStandardThread(thread);
-  const shouldLoadManagerThreads = isUnassignedStandard;
+  const shouldLoadManagerThreads =
+    threadQueryState.status === "ready" && isUnassignedStandard;
   const managerThreadsQuery = useThreads(
     {
       archived: false,
@@ -175,7 +175,6 @@ export function ThreadDetailView() {
     refetchOnMount: "always",
     managerTimelineView,
   });
-  const timelineTurnSummaryDetails = useThreadTimelineTurnSummaryDetails();
   const sendMessage = useSendThreadMessage();
   const requestEnvironmentAction = useRequestEnvironmentAction();
   const unarchiveThread = useUnarchiveThread();
@@ -254,13 +253,9 @@ export function ThreadDetailView() {
     handleLoadTurnSummaryRows,
     loadingTurnSummaryIds,
     turnSummaryRowsById,
-  } = useTurnSummaryRowLoader({
+  } = useThreadDetailTurnSummaryRows({
+    managerTimelineView,
     threadId,
-    loadTurnSummaryRows: (args) =>
-      timelineTurnSummaryDetails.mutateAsync({
-        ...args,
-        managerTimelineView,
-      }),
   });
   useThreadReadTracking({
     markThreadRead,
@@ -517,9 +512,7 @@ export function ThreadDetailView() {
         isManagerThread ? useStandardManagerTimeline : undefined
       }
       onViewerToggleCheckedChange={
-        isManagerThread
-          ? handleUseStandardManagerTimelineChange
-          : undefined
+        isManagerThread ? handleUseStandardManagerTimelineChange : undefined
       }
     />
   );

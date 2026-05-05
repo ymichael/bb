@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { memo, useState } from "react";
 import type { ThreadListEntry } from "@bb/domain";
 import { Pill, SidebarStickyTier } from "@bb/ui-core";
 import {
@@ -27,30 +27,35 @@ import { isBusyThread, isUnreadDoneThread } from "@/lib/thread-activity";
 import { getThreadDisplayTitle } from "@/lib/thread-title";
 import { cn } from "@/lib/utils";
 
-export type ThreadRowOptions =
-  | {
-      kind: "default";
-    }
-  | {
-      kind: "manager";
-      hasManagedChildren: boolean;
-      isCollapsed: boolean;
-      managedChildCount: number;
-      managedChildBusyCount: number;
-    }
-  | {
-      kind: "managed-child";
-    };
-
-interface ThreadRowProps {
+interface BaseThreadRowProps {
   projectId: string;
   thread: ThreadListEntry;
   isActive: boolean;
   isPromoted?: boolean;
   onProjectSelect?: () => void;
   onToggleManagerCollapsed?: (threadId: string) => void;
-  options: ThreadRowOptions;
 }
+
+interface DefaultThreadRowProps extends BaseThreadRowProps {
+  kind: "default";
+}
+
+interface ManagerThreadRowProps extends BaseThreadRowProps {
+  kind: "manager";
+  hasManagedChildren: boolean;
+  isCollapsed: boolean;
+  managedChildCount: number;
+  managedChildBusyCount: number;
+}
+
+interface ManagedChildThreadRowProps extends BaseThreadRowProps {
+  kind: "managed-child";
+}
+
+export type ThreadRowProps =
+  | DefaultThreadRowProps
+  | ManagerThreadRowProps
+  | ManagedChildThreadRowProps;
 
 interface ManagerChevronProps {
   isCollapsed: boolean;
@@ -169,29 +174,27 @@ function ThreadLeadingGlyph({
   );
 }
 
-export function ThreadRow({
-  projectId,
-  thread,
-  isActive,
-  isPromoted = false,
-  onProjectSelect,
-  onToggleManagerCollapsed,
-  options,
-}: ThreadRowProps) {
+function ThreadRowComponent(props: ThreadRowProps) {
+  const {
+    projectId,
+    thread,
+    isActive,
+    isPromoted = false,
+    onProjectSelect,
+    onToggleManagerCollapsed,
+  } = props;
   const [isActionsOpen, setIsActionsOpen] = useState(false);
   const hasPendingInteraction = thread.hasPendingInteraction;
   const threadIsBusy = isBusyThread(thread) && !hasPendingInteraction;
   const showUnreadBadge = !hasPendingInteraction && isUnreadDoneThread(thread);
   const threadTitle = getThreadDisplayTitle(thread);
-  const isManager = options.kind === "manager";
-  const isManagedChild = options.kind === "managed-child";
-  const hasManagedChildren =
-    options.kind === "manager" && options.hasManagedChildren;
-  const isManagerCollapsed = options.kind === "manager" && options.isCollapsed;
-  const managedChildCount =
-    options.kind === "manager" ? options.managedChildCount : 0;
+  const isManager = props.kind === "manager";
+  const isManagedChild = props.kind === "managed-child";
+  const hasManagedChildren = isManager && props.hasManagedChildren;
+  const isManagerCollapsed = isManager && props.isCollapsed;
+  const managedChildCount = isManager ? props.managedChildCount : 0;
   const managedChildBusyCount =
-    options.kind === "manager" ? options.managedChildBusyCount : 0;
+    isManager ? props.managedChildBusyCount : 0;
   const isManagerBusy =
     isManager && (threadIsBusy || managedChildBusyCount > 0);
   const EnvironmentIcon = getEnvironmentWorkspaceDisplayIcon(
@@ -339,3 +342,5 @@ export function ThreadRow({
 
   return <div className={rowClassName}>{rowContent}</div>;
 }
+
+export const ThreadRow = memo(ThreadRowComponent);

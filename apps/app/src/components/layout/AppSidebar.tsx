@@ -1,3 +1,4 @@
+import { useCallback, useMemo, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { Link, useLocation } from "react-router-dom";
 import { Moon, Settings, Sun } from "lucide-react";
@@ -25,19 +26,24 @@ export function AppSidebar({ onResizeMouseDown, isResizing }: AppSidebarProps) {
   const location = useLocation();
   const { isMobile, setOpenMobile } = useSidebar();
   const theme = usePreferredTheme();
+  const isMobileRef = useRef(isMobile);
+  // Keep the ProjectList callback stable while reading the latest breakpoint.
+  isMobileRef.current = isMobile;
 
-  const closeOnMobile = () => {
-    if (isMobile) {
+  const closeOnMobile = useCallback(() => {
+    if (isMobileRef.current) {
       setOpenMobile(false);
     }
-  };
+  }, [setOpenMobile]);
 
   const isDarkTheme = theme === "dark";
-  const toggleTheme = () => {
+  const toggleTheme = useCallback(() => {
     setPreferredTheme(isDarkTheme ? "light" : "dark");
-  };
-  const selectedProjectId =
-    location.pathname.match(/^\/projects\/([^/]+)/)?.[1];
+  }, [isDarkTheme]);
+  const selectedProjectId = useMemo(
+    () => location.pathname.match(/^\/projects\/([^/]+)/)?.[1],
+    [location.pathname],
+  );
 
   return (
     <>

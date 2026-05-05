@@ -1,10 +1,15 @@
-import { useCallback, useMemo } from "react";
+import { memo, useCallback, useMemo } from "react";
 import { useAtom } from "jotai";
-import { useQueries } from "@tanstack/react-query";
+import {
+  useQueries,
+  type QueryFunctionContext,
+  type UseQueryResult,
+} from "@tanstack/react-query";
 import {
   findLocalPathProjectSourceForHost,
   type ThreadListEntry,
 } from "@bb/domain";
+import type { ProjectSourceWorkspaceStatusResponse } from "@bb/server-contract";
 import { Folder, Plus } from "lucide-react";
 import { useLocation } from "react-router-dom";
 import {
@@ -20,6 +25,7 @@ import {
 import {
   projectSourceWorkspaceStatusQueryKey,
   threadListQueryKey,
+  type ThreadListQueryKey,
 } from "@/hooks/queries/query-keys";
 import { useHostDaemon } from "@/hooks/useHostDaemon";
 import { useServerConnectionState } from "@/hooks/useServerConnectionState";
@@ -54,6 +60,7 @@ interface ProjectListProps {
 }
 
 interface ProjectSourceStatusTarget {
+  path: string;
   projectId: string;
   sourceId: string;
 }
@@ -62,11 +69,17 @@ interface ProjectThreadQueryState {
   status: ConnectionAwareQueryStatus;
 }
 
-interface ProjectThreadQueryResult {
-  data: ThreadListEntry[] | undefined;
-  isFetching: boolean;
-  isLoadingError: boolean;
-}
+type ProjectThreadQueryResult = Pick<
+  UseQueryResult<ThreadListEntry[]>,
+  "data" | "isFetching" | "isLoadingError"
+>;
+
+type ProjectSourceWorkspaceStatusQueryResult = Pick<
+  UseQueryResult<ProjectSourceWorkspaceStatusResponse>,
+  "data"
+>;
+
+type ThreadQueryFnContext = QueryFunctionContext<ThreadListQueryKey>;
 
 interface ProjectThreadQueryAggregation {
   threads: ThreadListEntry[];
@@ -136,7 +149,7 @@ function getProjectThreadListState({
   }
 }
 
-export function ProjectList({
+function ProjectListComponent({
   onNewProject,
   onProjectSelect,
   selectedProjectId,
@@ -158,19 +171,29 @@ export function ProjectList({
     () => (projects ?? []).map((project) => project.id),
     [projects],
   );
-  const { threads, threadStatesByProjectId } = useQueries({
-    queries: projectIds.map((projectId) => ({
-      queryKey: threadListQueryKey({ projectId, archived: false }),
-      queryFn: ({ signal }) =>
-        api.listThreads({ projectId, archived: false }, signal),
-      staleTime: 10_000,
-    })),
-    combine: (results) =>
+  const threadQueries = useMemo(
+    () =>
+      projectIds.map((projectId) => ({
+        queryKey: threadListQueryKey({ projectId, archived: false }),
+        queryFn: ({ signal }: ThreadQueryFnContext) =>
+          api.listThreads({ projectId, archived: false }, signal),
+        staleTime: 10_000,
+      })),
+    [projectIds],
+  );
+  // Keep combine stable so useQueries skips aggregation on unrelated renders.
+  const combineProjectThreadQueries = useCallback(
+    (results: readonly ProjectThreadQueryResult[]) =>
       buildProjectThreadQueryAggregation({
         projectIds,
         queryResults: results,
         serverConnectionState,
       }),
+    [projectIds, serverConnectionState],
+  );
+  const { threads, threadStatesByProjectId } = useQueries({
+    queries: threadQueries,
+    combine: combineProjectThreadQueries,
   });
   const { localHostId } = useHostDaemon();
   const location = useLocation();
@@ -185,6 +208,7 @@ export function ProjectList({
       );
       if (source) {
         targets.push({
+          path: source.path,
           projectId: project.id,
           sourceId: source.id,
         });
@@ -193,18 +217,33 @@ export function ProjectList({
     return targets;
   }, [localHostId, projects]);
 
-  const promotedBranchNamesByProjectId = useQueries({
-    queries: localSourceTargets.map((target) => ({
-      queryKey: projectSourceWorkspaceStatusQueryKey(
-        target.projectId,
-        target.sourceId,
-      ),
-      queryFn: () =>
-        api.getProjectSourceWorkspaceStatus(target.projectId, target.sourceId),
-      staleTime: 5_000,
-      refetchOnWindowFocus: true,
-    })),
-    combine: (results) => {
+  const localSourcePathsByProjectId = useMemo(() => {
+    const pathsByProjectId = new Map<string, string>();
+    for (const target of localSourceTargets) {
+      pathsByProjectId.set(target.projectId, target.path);
+    }
+    return pathsByProjectId;
+  }, [localSourceTargets]);
+
+  const promotedBranchQueries = useMemo(
+    () =>
+      localSourceTargets.map((target) => ({
+        queryKey: projectSourceWorkspaceStatusQueryKey(
+          target.projectId,
+          target.sourceId,
+        ),
+        queryFn: () =>
+          api.getProjectSourceWorkspaceStatus(
+            target.projectId,
+            target.sourceId,
+          ),
+        staleTime: 5_000,
+        refetchOnWindowFocus: true,
+      })),
+    [localSourceTargets],
+  );
+  const combinePromotedBranchQueries = useCallback(
+    (results: readonly ProjectSourceWorkspaceStatusQueryResult[]) => {
       const branchNamesByProjectId = new Map<string, string | null>();
       for (let index = 0; index < results.length; index += 1) {
         const target = localSourceTargets[index];
@@ -216,17 +255,17 @@ export function ProjectList({
       }
       return branchNamesByProjectId;
     },
+    [localSourceTargets],
+  );
+  const promotedBranchNamesByProjectId = useQueries({
+    queries: promotedBranchQueries,
+    combine: combinePromotedBranchQueries,
   });
 
   const localPaths = useMemo(() => {
-    if (!localHostId || !projects) return [];
-    return projects
-      .map(
-        (project) =>
-          findLocalPathProjectSourceForHost(project.sources, localHostId)?.path,
-      )
-      .filter((path): path is string => typeof path === "string");
-  }, [localHostId, projects]);
+    if (!localHostId) return [];
+    return localSourceTargets.map((target) => target.path);
+  }, [localHostId, localSourceTargets]);
   const pathExistence = useLocalPathExistence(localPaths);
 
   const [collapsedProjectIdList, setCollapsedProjectIdList] = useAtom(
@@ -331,12 +370,8 @@ export function ProjectList({
                 status: threadState?.status,
                 threads: threadsByProject.get(project.id),
               });
-              const localSourcePath = localHostId
-                ? findLocalPathProjectSourceForHost(
-                    project.sources,
-                    localHostId,
-                  )?.path
-                : undefined;
+              const localSourcePath =
+                localSourcePathsByProjectId.get(project.id);
               const isLocalPathInvalid = isLocalPathMissing(
                 pathExistence,
                 localSourcePath,
@@ -383,3 +418,5 @@ export function ProjectList({
     </SidebarStickyStack>
   );
 }
+
+export const ProjectList = memo(ProjectListComponent);

@@ -23,6 +23,7 @@ import {
   resolveThreadTimelinePlaceholder,
 } from "./query-placeholders";
 import {
+  disabledThreadListQueryKey,
   threadDefaultExecutionOptionsQueryKey,
   threadDraftsQueryKey,
   threadListQueryKey,
@@ -64,9 +65,16 @@ function requireThreadId(id: string, hookName: string): string {
 
 export function useThreads(filters: UseThreadsFilters, options?: QueryOptions) {
   const { projectId, ...rest } = filters;
+  const enabled = (options?.enabled ?? true) && Boolean(projectId);
+  const queryKey =
+    enabled && projectId
+      ? threadListQueryKey({ ...rest, projectId })
+      : disabledThreadListQueryKey(
+          projectId ? { ...rest, projectId } : rest,
+        );
 
   return useQuery<ThreadListResponse>({
-    queryKey: threadListQueryKey(projectId ? { ...rest, projectId } : rest),
+    queryKey,
     queryFn: ({ signal }) =>
       api.listThreads(
         {
@@ -75,7 +83,7 @@ export function useThreads(filters: UseThreadsFilters, options?: QueryOptions) {
         },
         signal,
       ),
-    enabled: (options?.enabled ?? true) && Boolean(projectId),
+    enabled,
     staleTime: 10_000,
   });
 }

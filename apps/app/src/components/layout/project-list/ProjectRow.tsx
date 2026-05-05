@@ -11,9 +11,9 @@ import {
   COARSE_POINTER_PROJECT_ROW_ACTION_SIZE_CLASS,
   COARSE_POINTER_ROW_ACTION_SIZE_CLASS,
 } from "@bb/ui-core";
-import { isBusyThread } from "@/lib/thread-activity";
 import { cn } from "@/lib/utils";
 import { ThreadRow } from "./ThreadRow";
+import { buildProjectThreadGroups } from "./projectThreadGroups";
 
 export type ProjectThreadListState =
   | {
@@ -42,54 +42,7 @@ interface ProjectRowProps {
   promotedBranchName: string | null;
 }
 
-interface ProjectThreadGroups {
-  managerThreads: ThreadListEntry[];
-  managedThreadsByManagerId: Map<string, ThreadListEntry[]>;
-  otherThreads: ThreadListEntry[];
-}
-
 const EMPTY_PROJECT_THREADS: ThreadListEntry[] = [];
-
-function buildProjectThreadGroups(
-  projectThreads: ThreadListEntry[],
-): ProjectThreadGroups {
-  const managerThreads = projectThreads
-    .filter((thread) => thread.type === "manager")
-    .sort((a, b) => b.createdAt - a.createdAt);
-  const managerThreadIds = new Set(managerThreads.map((thread) => thread.id));
-  const managedThreadsByManagerId = new Map<string, ThreadListEntry[]>();
-
-  for (const thread of projectThreads) {
-    if (thread.type !== "standard" || !thread.parentThreadId) continue;
-    if (!managerThreadIds.has(thread.parentThreadId)) continue;
-
-    const existing = managedThreadsByManagerId.get(thread.parentThreadId);
-    if (existing) {
-      existing.push(thread);
-      continue;
-    }
-
-    managedThreadsByManagerId.set(thread.parentThreadId, [thread]);
-  }
-
-  for (const managedThreads of managedThreadsByManagerId.values()) {
-    managedThreads.sort((a, b) => b.createdAt - a.createdAt);
-  }
-
-  const otherThreads = projectThreads
-    .filter((thread) => {
-      if (thread.type === "manager") return false;
-      if (!thread.parentThreadId) return true;
-      return !managerThreadIds.has(thread.parentThreadId);
-    })
-    .sort((a, b) => b.createdAt - a.createdAt);
-
-  return {
-    managerThreads,
-    managedThreadsByManagerId,
-    otherThreads,
-  };
-}
 
 export function ProjectRow({
   project,
@@ -109,10 +62,12 @@ export function ProjectRow({
     threadListState.status === "ready"
       ? threadListState.threads
       : EMPTY_PROJECT_THREADS;
-  const { managerThreads, managedThreadsByManagerId, otherThreads } = useMemo(
-    () => buildProjectThreadGroups(projectThreads),
-    [projectThreads],
-  );
+  const {
+    managerThreads,
+    managedChildBusyCountsByManagerId,
+    managedThreadsByManagerId,
+    otherThreads,
+  } = useMemo(() => buildProjectThreadGroups(projectThreads), [projectThreads]);
   const isThreadPromoted = (thread: ThreadListEntry) =>
     localHostId !== null &&
     promotedBranchName !== null &&
@@ -238,14 +193,13 @@ export function ProjectRow({
                     isPromoted={isThreadPromoted(thread)}
                     onProjectSelect={onProjectSelect}
                     onToggleManagerCollapsed={onToggleManagerCollapsed}
-                    options={{
-                      kind: "manager",
-                      hasManagedChildren: managedChildren.length > 0,
-                      isCollapsed: isManagerCollapsed,
-                      managedChildCount: managedChildren.length,
-                      managedChildBusyCount:
-                        managedChildren.filter(isBusyThread).length,
-                    }}
+                    kind="manager"
+                    hasManagedChildren={managedChildren.length > 0}
+                    isCollapsed={isManagerCollapsed}
+                    managedChildCount={managedChildren.length}
+                    managedChildBusyCount={
+                      managedChildBusyCountsByManagerId.get(thread.id) ?? 0
+                    }
                   />
                   {!isManagerCollapsed && managedChildren.length > 0 ? (
                     <div className="space-y-0.5">
@@ -257,7 +211,7 @@ export function ProjectRow({
                           isActive={selectedThreadId === childThread.id}
                           isPromoted={isThreadPromoted(childThread)}
                           onProjectSelect={onProjectSelect}
-                          options={{ kind: "managed-child" }}
+                          kind="managed-child"
                         />
                       ))}
                     </div>
@@ -273,7 +227,7 @@ export function ProjectRow({
                 isActive={selectedThreadId === thread.id}
                 isPromoted={isThreadPromoted(thread)}
                 onProjectSelect={onProjectSelect}
-                options={{ kind: "default" }}
+                kind="default"
               />
             ))}
           </div>

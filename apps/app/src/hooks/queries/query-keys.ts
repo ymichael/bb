@@ -7,6 +7,7 @@ export const PROJECTS_QUERY_KEY = "projects";
 export const PROJECT_FILES_QUERY_KEY = "projectFiles";
 export const PROJECT_PROMPT_HISTORY_QUERY_KEY = "projectPromptHistory";
 export const THREADS_QUERY_KEY = "threads";
+export const THREADS_DISABLED_QUERY_KEY = "threadsDisabled";
 export const THREAD_QUERY_KEY = "thread";
 export const THREAD_DEFAULT_EXECUTION_OPTIONS_QUERY_KEY =
   "threadDefaultExecutionOptions";
@@ -81,6 +82,10 @@ export type ThreadsQueryKey = readonly [typeof THREADS_QUERY_KEY];
 export type ThreadListQueryKey = readonly [
   typeof THREADS_QUERY_KEY,
   ThreadListQueryFilters,
+];
+export type DisabledThreadListQueryKey = readonly [
+  typeof THREADS_DISABLED_QUERY_KEY,
+  ThreadListQueryFilters?,
 ];
 export type ThreadQueryKeyPrefix = readonly [typeof THREAD_QUERY_KEY];
 export type ThreadQueryKey = readonly [typeof THREAD_QUERY_KEY, string];
@@ -301,6 +306,14 @@ export function threadListQueryKey(
   filters: ThreadListQueryFilters,
 ): ThreadListQueryKey {
   return [THREADS_QUERY_KEY, filters];
+}
+
+export function disabledThreadListQueryKey(
+  filters?: ThreadListQueryFilters,
+): DisabledThreadListQueryKey {
+  return filters
+    ? [THREADS_DISABLED_QUERY_KEY, filters]
+    : [THREADS_DISABLED_QUERY_KEY];
 }
 
 export function threadQueryKey(threadId: string): ThreadQueryKey {

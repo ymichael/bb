@@ -6,15 +6,18 @@ import type {
 } from "@bb/server-contract";
 import { shouldLoadNestedRows } from "./turnSummaryRowLoaderHelpers";
 
-interface LoadTurnSummaryRowsArgs extends TimelineTurnSummaryDetailsRequest {
+export interface LoadTurnSummaryRowsArgs
+  extends TimelineTurnSummaryDetailsRequest {
   id: string;
 }
 
+export type LoadTurnSummaryRows = (
+  args: LoadTurnSummaryRowsArgs,
+) => Promise<{ rows: TimelineRow[] }>;
+
 interface UseTurnSummaryRowLoaderParams {
   threadId?: string;
-  loadTurnSummaryRows: (
-    args: LoadTurnSummaryRowsArgs,
-  ) => Promise<{ rows: TimelineRow[] }>;
+  loadTurnSummaryRows: LoadTurnSummaryRows;
 }
 
 export function useTurnSummaryRowLoader({

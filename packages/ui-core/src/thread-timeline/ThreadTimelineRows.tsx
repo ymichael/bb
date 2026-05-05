@@ -441,8 +441,9 @@ function areTimelineRowViewPropsEqual(
     previous.isTail === next.isTail &&
     previous.scopeActive === next.scopeActive &&
     previous.spacing === next.spacing &&
-    timelineRowRenderSignature(previous.row) ===
-      timelineRowRenderSignature(next.row)
+    (previous.row === next.row ||
+      timelineRowRenderSignature(previous.row) ===
+        timelineRowRenderSignature(next.row))
   );
 }
 
@@ -454,8 +455,9 @@ function areTimelineExpandableRowViewPropsEqual(
     previous.compactActivityIntents === next.compactActivityIntents &&
     previous.expandableTitle === next.expandableTitle &&
     previous.horizontalPadding === next.horizontalPadding &&
-    timelineRowRenderSignature(previous.row) ===
-      timelineRowRenderSignature(next.row)
+    (previous.row === next.row ||
+      timelineRowRenderSignature(previous.row) ===
+        timelineRowRenderSignature(next.row))
   );
 }
 
@@ -1094,7 +1096,7 @@ function TimelineRowsList({
   );
 }
 
-export function ThreadTimelineRows(props: ThreadTimelineRowsProps) {
+function ThreadTimelineRowsComponent(props: ThreadTimelineRowsProps) {
   const getViewRows = useTimelineViewRowsCache();
   const rows = useMemo(
     () => getViewRows(props.timelineRows),
@@ -1166,3 +1168,6 @@ export function ThreadTimelineRows(props: ThreadTimelineRowsProps) {
     </TimelineRendererContext.Provider>
   );
 }
+
+export const ThreadTimelineRows = memo(ThreadTimelineRowsComponent);
+ThreadTimelineRows.displayName = "ThreadTimelineRows";

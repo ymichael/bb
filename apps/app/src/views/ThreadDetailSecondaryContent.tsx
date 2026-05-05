@@ -449,6 +449,7 @@ export function ThreadDetailSecondaryContent({
   const isMobile = useIsMobile();
   const isSecondaryPanelOpen = useIsSecondaryPanelOpen();
   const didResetOnMobileRef = useRef(false);
+  const { onClose } = secondaryPanel;
 
   useEffect(() => {
     if (!isMobile) {
@@ -458,9 +459,9 @@ export function ThreadDetailSecondaryContent({
     if (didResetOnMobileRef.current) return;
     didResetOnMobileRef.current = true;
     if (isSecondaryPanelOpen) {
-      secondaryPanel.onClose();
+      onClose();
     }
-  }, [isMobile, isSecondaryPanelOpen, secondaryPanel]);
+  }, [isMobile, isSecondaryPanelOpen, onClose]);
 
   const metadataContent = showThreadMetadata ? (
     <ThreadMetadataContent {...metadata} />

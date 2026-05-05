@@ -365,6 +365,60 @@ afterEach(() => {
 });
 
 describe("ThreadTimelineRows", () => {
+  it("keeps same-props timeline rerenders from re-resolving attachment image sources", () => {
+    const erroredTurnSummaryIds = new Set<string>();
+    const loadingTurnSummaryIds = new Set<string>();
+    const onLoadTurnSummaryRows = () => {};
+    const resolveUserAttachmentImageSrc =
+      vi.fn<UserAttachmentImageSrcResolver>(
+        (path, projectId) => `/attachments/${projectId}${path}`,
+      );
+    const timelineRows = [
+      conversationRow({
+        role: "user",
+        text: "Attached.",
+        attachments: {
+          webImages: 0,
+          localImages: 1,
+          localFiles: 0,
+          imageUrls: [],
+          localImagePaths: ["/workspace/shot.png"],
+          localFilePaths: [],
+        },
+      }),
+    ];
+    const turnSummaryRowsById = {};
+
+    const view = render(
+      <ThreadTimelineRows
+        erroredTurnSummaryIds={erroredTurnSummaryIds}
+        loadingTurnSummaryIds={loadingTurnSummaryIds}
+        onLoadTurnSummaryRows={onLoadTurnSummaryRows}
+        projectId="project-1"
+        resolveUserAttachmentImageSrc={resolveUserAttachmentImageSrc}
+        timelineRows={timelineRows}
+        threadRuntimeDisplayStatus="idle"
+        turnSummaryRowsById={turnSummaryRowsById}
+      />,
+    );
+    expect(resolveUserAttachmentImageSrc).toHaveBeenCalledTimes(1);
+
+    view.rerender(
+      <ThreadTimelineRows
+        erroredTurnSummaryIds={erroredTurnSummaryIds}
+        loadingTurnSummaryIds={loadingTurnSummaryIds}
+        onLoadTurnSummaryRows={onLoadTurnSummaryRows}
+        projectId="project-1"
+        resolveUserAttachmentImageSrc={resolveUserAttachmentImageSrc}
+        timelineRows={timelineRows}
+        threadRuntimeDisplayStatus="idle"
+        turnSummaryRowsById={turnSummaryRowsById}
+      />,
+    );
+
+    expect(resolveUserAttachmentImageSrc).toHaveBeenCalledTimes(1);
+  });
+
   it("uses active wording for the tail activity summary in an active scope", () => {
     const html = renderToStaticMarkup(
       <ThreadTimelineRows

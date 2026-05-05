@@ -1,13 +1,7 @@
 // @vitest-environment jsdom
 
 import { Suspense, type ReactNode } from "react";
-import {
-  act,
-  cleanup,
-  render,
-  screen,
-  waitFor,
-} from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import type { QueryClient } from "@tanstack/react-query";
 import type { ThreadListEntry, ThreadWithRuntime } from "@bb/domain";
@@ -23,6 +17,7 @@ import { ThreadActionsProvider } from "@/components/thread/ThreadActionsProvider
 import {
   threadListQueryKey,
   threadQueryKey,
+  type ThreadListQueryFilters,
 } from "@/hooks/queries/query-keys";
 import { wsManager } from "@/lib/ws";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -53,11 +48,24 @@ interface CreateThreadDetailSuccessRoutesArgs {
   managerThreads?: ThreadListEntry[];
   parentThread?: ThreadWithRuntime;
   thread: ThreadWithRuntime;
+  threadListHandler?: ThreadListHandler;
   threadListRequests?: URL[];
 }
 
+interface ThreadListEntryOverrides extends Partial<ThreadListEntry> {}
+
+interface ThreadResponseOverrides extends Partial<ThreadWithRuntime> {}
+
+interface ThreadDetailSuccessFetchRoutesArgs {
+  listThreadsHandler: ThreadListHandler;
+  parentThread?: ThreadWithRuntime;
+  thread: ThreadWithRuntime;
+}
+
+type ThreadListHandler = (request: Request) => Response;
+
 function createThreadResponse(
-  overrides: Partial<ThreadWithRuntime> = {},
+  overrides: ThreadResponseOverrides = {},
 ): ThreadWithRuntime {
   return {
     archivedAt: null,
@@ -77,8 +85,8 @@ function createThreadResponse(
     },
     status: "idle",
     stopRequestedAt: null,
-    title: "Cached thread",
-    titleFallback: "Cached thread",
+    title: "Loaded thread",
+    titleFallback: "Loaded thread",
     type: "standard",
     updatedAt: 1,
     ...overrides,
@@ -86,10 +94,13 @@ function createThreadResponse(
 }
 
 function createThreadListEntry(
-  overrides: Partial<ThreadListEntry> = {},
+  overrides: ThreadListEntryOverrides = {},
 ): ThreadListEntry {
   return {
-    ...createThreadResponse(),
+    ...createThreadResponse({
+      title: "Cached thread",
+      titleFallback: "Cached thread",
+    }),
     environmentBranchName: null,
     environmentHostId: null,
     environmentWorkspaceDisplayKind: "other",
@@ -98,17 +109,29 @@ function createThreadListEntry(
   };
 }
 
+function installThreadDetailSuccessFetchRoutes({
+  listThreadsHandler,
+  parentThread,
+  thread,
+}: ThreadDetailSuccessFetchRoutesArgs) {
+  return installFetchRoutes(
+    createThreadDetailSuccessRoutes({
+      parentThread,
+      thread,
+      threadListHandler: listThreadsHandler,
+    }),
+  );
+}
+
 function createThreadDetailWrapper() {
   const harness = createQueryClientTestHarness();
 
   function ThreadDetailWrapper({ children }: ThreadDetailWrapperProps) {
     return harness.wrapper({
       children: (
-        <SidebarProvider>
-          <Suspense fallback={null}>
-            <MemoryRouter
-              initialEntries={["/projects/project-1/threads/thr-1"]}
-            >
+        <Suspense fallback={null}>
+          <MemoryRouter initialEntries={["/projects/project-1/threads/thr-1"]}>
+            <SidebarProvider>
               <ThreadActionsProvider>
                 <Routes>
                   <Route
@@ -117,9 +140,9 @@ function createThreadDetailWrapper() {
                   />
                 </Routes>
               </ThreadActionsProvider>
-            </MemoryRouter>
-          </Suspense>
-        </SidebarProvider>
+            </SidebarProvider>
+          </MemoryRouter>
+        </Suspense>
       ),
     });
   }
@@ -180,6 +203,9 @@ function createThreadDetailSuccessRoutes(
       handler: (request) => {
         const requestUrl = new URL(request.url);
         args.threadListRequests?.push(requestUrl);
+        if (args.threadListHandler) {
+          return args.threadListHandler(request);
+        }
         const isActiveManagerRequest =
           requestUrl.searchParams.get("archived") === "false" &&
           requestUrl.searchParams.get("type") === "manager";
@@ -226,6 +252,7 @@ function createThreadDetailSuccessRoutes(
             available: true,
             capabilities: {
               supportedPermissionModes: ["full", "workspace-write", "readonly"],
+              supportsArchive: true,
               supportsRename: true,
               supportsServiceTier: false,
             },
@@ -255,6 +282,37 @@ function createThreadDetailSuccessRoutes(
         ]),
     },
   ];
+}
+
+async function updateManagerSelectorThreadCache(
+  queryClient: QueryClient,
+  filters: ThreadListQueryFilters,
+): Promise<void> {
+  await act(async () => {
+    queryClient.setQueryData(threadListQueryKey(filters), [
+      createThreadListEntry({
+        id: "manager-1",
+        title: "Cached manager thread",
+        titleFallback: "Cached manager thread",
+        type: "manager",
+      }),
+    ]);
+  });
+}
+
+function getThreadListObserverCount(
+  queryClient: QueryClient,
+  filters: ThreadListQueryFilters,
+): number {
+  return (
+    queryClient
+      .getQueryCache()
+      .find({
+        exact: true,
+        queryKey: threadListQueryKey(filters),
+      })
+      ?.getObserversCount() ?? 0
+  );
 }
 
 afterEach(() => {
@@ -402,6 +460,7 @@ describe("ThreadDetailView", () => {
   });
 
   it("treats cached thread-list placeholder data as unresolved before the websocket connects", async () => {
+    let listThreadsRequestCount = 0;
     installFetchRoutes([
       {
         pathname: "/api/v1/threads/thr-1",
@@ -418,7 +477,10 @@ describe("ThreadDetailView", () => {
       },
       {
         pathname: "/api/v1/threads",
-        handler: () => jsonResponse([]),
+        handler: () => {
+          listThreadsRequestCount += 1;
+          return jsonResponse([]);
+        },
       },
       {
         pathname: "/api/v1/system/config",
@@ -450,5 +512,95 @@ describe("ThreadDetailView", () => {
     expect(screen.getByText("Loading...")).toBeTruthy();
     expect(screen.queryByText("Cached thread")).toBeNull();
     expect(screen.queryByText("Failed to load thread.")).toBeNull();
+    expect(listThreadsRequestCount).toBe(0);
+  });
+
+  it("loads project threads for root standard threads so they can be assigned to managers", async () => {
+    let listThreadsRequestCount = 0;
+    installThreadDetailSuccessFetchRoutes({
+      thread: createThreadResponse(),
+      listThreadsHandler: () => {
+        listThreadsRequestCount += 1;
+        return jsonResponse([
+          createThreadListEntry({
+            id: "manager-1",
+            title: "Manager thread",
+            titleFallback: "Manager thread",
+            type: "manager",
+          }),
+        ]);
+      },
+    });
+
+    await renderThreadDetailView();
+
+    await screen.findByText("Loaded thread");
+    await waitFor(() => {
+      expect(listThreadsRequestCount).toBe(1);
+    });
+  });
+
+  it("does not add a manager-selector thread-list observer for manager threads", async () => {
+    let listThreadsRequestCount = 0;
+    installThreadDetailSuccessFetchRoutes({
+      thread: createThreadResponse({ type: "manager" }),
+      listThreadsHandler: () => {
+        listThreadsRequestCount += 1;
+        return jsonResponse([]);
+      },
+    });
+
+    const { queryClient } = await renderThreadDetailView();
+    const projectThreadFilters: ThreadListQueryFilters = {
+      archived: false,
+      projectId: "project-1",
+    };
+
+    await screen.findByText("Loaded thread");
+    expect(getThreadListObserverCount(queryClient, projectThreadFilters)).toBe(
+      1,
+    );
+    await updateManagerSelectorThreadCache(queryClient, projectThreadFilters);
+
+    expect(listThreadsRequestCount).toBe(1);
+    expect(getThreadListObserverCount(queryClient, projectThreadFilters)).toBe(
+      1,
+    );
+  });
+
+  it("does not add a manager-selector thread-list observer for managed child threads", async () => {
+    let listThreadsRequestCount = 0;
+    const parentThread = createThreadResponse({
+      id: "manager-1",
+      title: "Manager thread",
+      titleFallback: "Manager thread",
+      type: "manager",
+    });
+    installThreadDetailSuccessFetchRoutes({
+      parentThread,
+      thread: createThreadResponse({ parentThreadId: parentThread.id }),
+      listThreadsHandler: () => {
+        listThreadsRequestCount += 1;
+        return jsonResponse([]);
+      },
+    });
+
+    const { queryClient } = await renderThreadDetailView();
+    const managerThreadFilters: ThreadListQueryFilters = {
+      archived: false,
+      projectId: "project-1",
+      type: "manager",
+    };
+
+    await screen.findByText("Loaded thread");
+    expect(getThreadListObserverCount(queryClient, managerThreadFilters)).toBe(
+      1,
+    );
+    await updateManagerSelectorThreadCache(queryClient, managerThreadFilters);
+
+    expect(listThreadsRequestCount).toBe(1);
+    expect(getThreadListObserverCount(queryClient, managerThreadFilters)).toBe(
+      1,
+    );
   });
 });
