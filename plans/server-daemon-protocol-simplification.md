@@ -600,6 +600,11 @@ Changes:
   from `HostDaemonCommand`.
 - Do not include replay command result schemas in production command result
   owner logic.
+- Phase 9 owns only the server/daemon transport boundary for development
+  replay. `plans/replay-fixture-format-unification.md` owns the on-disk
+  manifest/event format and the `@bb/agent-fixtures` fixture schema; do not move
+  fixture manifest schemas into the production host-daemon contract. Replay
+  list/get transport shapes belong to the dev-only RPC contract.
 
 Exit criteria:
 
