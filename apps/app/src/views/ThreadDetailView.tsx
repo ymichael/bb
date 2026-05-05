@@ -255,6 +255,7 @@ export function ThreadDetailView() {
     turnSummaryRowsById,
   } = useThreadDetailTurnSummaryRows({
     managerTimelineView,
+    timelineRows,
     threadId,
   });
   useThreadReadTracking({

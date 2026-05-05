@@ -1,21 +1,24 @@
 // @vitest-environment jsdom
 
 import { cleanup, renderHook } from "@testing-library/react";
-import type { ManagerTimelineView } from "@bb/server-contract";
+import type { ManagerTimelineView, TimelineRow } from "@bb/server-contract";
 import { afterEach, describe, expect, it } from "vitest";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
 import { useThreadDetailTurnSummaryRows } from "./useThreadDetailTurnSummaryRows";
 
 interface ThreadDetailTurnSummaryRowsHookProps {
   managerTimelineView: ManagerTimelineView | undefined;
+  timelineRows: readonly TimelineRow[];
   unrelatedValue: string;
 }
 
 function renderThreadDetailTurnSummaryRows({
   managerTimelineView,
+  timelineRows,
 }: ThreadDetailTurnSummaryRowsHookProps) {
   return useThreadDetailTurnSummaryRows({
     managerTimelineView,
+    timelineRows,
     threadId: "thr-1",
   });
 }
@@ -29,6 +32,7 @@ describe("useThreadDetailTurnSummaryRows", () => {
     const { wrapper } = createQueryClientTestHarness();
     const initialProps: ThreadDetailTurnSummaryRowsHookProps = {
       managerTimelineView: undefined,
+      timelineRows: [],
       unrelatedValue: "initial",
     };
     const { result, rerender } = renderHook(renderThreadDetailTurnSummaryRows, {
@@ -39,6 +43,7 @@ describe("useThreadDetailTurnSummaryRows", () => {
 
     rerender({
       managerTimelineView: undefined,
+      timelineRows: [],
       unrelatedValue: "updated",
     });
 
@@ -51,6 +56,7 @@ describe("useThreadDetailTurnSummaryRows", () => {
     const { wrapper } = createQueryClientTestHarness();
     const initialProps: ThreadDetailTurnSummaryRowsHookProps = {
       managerTimelineView: undefined,
+      timelineRows: [],
       unrelatedValue: "initial",
     };
     const { result, rerender } = renderHook(renderThreadDetailTurnSummaryRows, {
@@ -61,6 +67,7 @@ describe("useThreadDetailTurnSummaryRows", () => {
 
     rerender({
       managerTimelineView: "standard",
+      timelineRows: [],
       unrelatedValue: "initial",
     });
 

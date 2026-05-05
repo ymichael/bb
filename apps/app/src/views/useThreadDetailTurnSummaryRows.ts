@@ -1,5 +1,5 @@
 import { useCallback } from "react";
-import type { ManagerTimelineView } from "@bb/server-contract";
+import type { ManagerTimelineView, TimelineRow } from "@bb/server-contract";
 import { useThreadTimelineTurnSummaryDetails } from "@/hooks/queries/thread-queries";
 import {
   useTurnSummaryRowLoader,
@@ -8,11 +8,13 @@ import {
 
 interface UseThreadDetailTurnSummaryRowsArgs {
   managerTimelineView: ManagerTimelineView | undefined;
+  timelineRows: readonly TimelineRow[];
   threadId: string | undefined;
 }
 
 export function useThreadDetailTurnSummaryRows({
   managerTimelineView,
+  timelineRows,
   threadId,
 }: UseThreadDetailTurnSummaryRowsArgs) {
   const { mutateAsync: loadTimelineTurnSummaryDetails } =
@@ -28,6 +30,7 @@ export function useThreadDetailTurnSummaryRows({
 
   return useTurnSummaryRowLoader({
     managerTimelineView,
+    timelineRows,
     threadId,
     loadTurnSummaryRows,
   });

@@ -13,6 +13,12 @@ type HookProps = Parameters<typeof useTurnSummaryRowLoader>[0];
 type LoadTurnSummaryRows = HookProps["loadTurnSummaryRows"];
 type LoadTurnSummaryRowsArgs = Parameters<LoadTurnSummaryRows>[0];
 
+interface TurnSummaryRowTestOptions {
+  sourceSeqEnd?: number;
+  sourceSeqStart?: number;
+  turnId?: string;
+}
+
 interface Deferred<T> {
   promise: Promise<T>;
   resolve: (value: T) => void;
@@ -35,18 +41,23 @@ function createDeferred<T>(): Deferred<T> {
   };
 }
 
-function turnSummaryRow(): TimelineTurnRow {
+function turnSummaryRow(
+  options: TurnSummaryRowTestOptions = {},
+): TimelineTurnRow {
+  const turnId = options.turnId ?? "turn-1";
+  const sourceSeqStart = options.sourceSeqStart ?? 1;
+  const sourceSeqEnd = options.sourceSeqEnd ?? 3;
   return {
     id: "turn-summary-1",
     kind: "turn",
     threadId: "thread-1",
-    turnId: "turn-1",
+    turnId,
     status: "completed",
     summaryCount: 1,
     durationMs: 1_000,
     children: null,
-    sourceSeqStart: 1,
-    sourceSeqEnd: 3,
+    sourceSeqStart,
+    sourceSeqEnd,
     startedAt: 1,
     createdAt: 3,
   };
@@ -87,6 +98,7 @@ describe("useTurnSummaryRowLoader", () => {
         initialProps: {
           loadTurnSummaryRows,
           managerTimelineView: "conversation",
+          timelineRows: [turnSummaryRow()],
           threadId: "thread-1",
         },
       },
@@ -105,6 +117,7 @@ describe("useTurnSummaryRowLoader", () => {
     rerender({
       loadTurnSummaryRows,
       managerTimelineView: "standard",
+      timelineRows: [turnSummaryRow()],
       threadId: "thread-1",
     });
 
@@ -137,6 +150,7 @@ describe("useTurnSummaryRowLoader", () => {
         initialProps: {
           loadTurnSummaryRows,
           managerTimelineView: "conversation",
+          timelineRows: [turnSummaryRow()],
           threadId: "thread-1",
         },
       },
@@ -163,6 +177,7 @@ describe("useTurnSummaryRowLoader", () => {
     rerender({
       loadTurnSummaryRows,
       managerTimelineView: "standard",
+      timelineRows: [turnSummaryRow()],
       threadId: "thread-1",
     });
 
@@ -192,6 +207,7 @@ describe("useTurnSummaryRowLoader", () => {
         initialProps: {
           loadTurnSummaryRows,
           managerTimelineView: "standard",
+          timelineRows: [turnSummaryRow()],
           threadId: "thread-1",
         },
       },
@@ -228,9 +244,229 @@ describe("useTurnSummaryRowLoader", () => {
     rerender({
       loadTurnSummaryRows: nextLoadTurnSummaryRows,
       managerTimelineView: "standard",
+      timelineRows: [turnSummaryRow()],
       threadId: "thread-1",
     });
 
     expect(result.current.handleLoadTurnSummaryRows).toBe(initialLoadCallback);
+  });
+
+  it("drops cached details when a capped timeline removes the parent row", async () => {
+    const requests: LoadTurnSummaryRowsArgs[] = [];
+    const loadTurnSummaryRows: LoadTurnSummaryRows = (args) => {
+      requests.push(args);
+      return Promise.resolve({ rows: [detailRow("loaded detail")] });
+    };
+
+    const { result, rerender } = renderHook(
+      (props: HookProps) => useTurnSummaryRowLoader(props),
+      {
+        initialProps: {
+          loadTurnSummaryRows,
+          managerTimelineView: "standard",
+          timelineRows: [turnSummaryRow()],
+          threadId: "thread-1",
+        },
+      },
+    );
+
+    act(() => {
+      result.current.handleLoadTurnSummaryRows(turnSummaryRow());
+    });
+
+    await waitFor(() => {
+      expect(result.current.turnSummaryRowsById["turn-summary-1"]).toEqual([
+        detailRow("loaded detail"),
+      ]);
+    });
+
+    rerender({
+      loadTurnSummaryRows,
+      managerTimelineView: "standard",
+      timelineRows: [],
+      threadId: "thread-1",
+    });
+
+    await waitFor(() => {
+      expect(result.current.turnSummaryRowsById).toEqual({});
+      expect(result.current.loadingTurnSummaryIds.size).toBe(0);
+      expect(result.current.erroredTurnSummaryIds.size).toBe(0);
+    });
+
+    rerender({
+      loadTurnSummaryRows,
+      managerTimelineView: "standard",
+      timelineRows: [turnSummaryRow()],
+      threadId: "thread-1",
+    });
+
+    act(() => {
+      result.current.handleLoadTurnSummaryRows(turnSummaryRow());
+    });
+
+    await waitFor(() => {
+      expect(requests).toHaveLength(2);
+    });
+  });
+
+  it("hydrates details by turn id and source range when a visible row id is reused", async () => {
+    const initialRow = turnSummaryRow({
+      sourceSeqStart: 1,
+      sourceSeqEnd: 3,
+      turnId: "turn-1",
+    });
+    const nextRow = turnSummaryRow({
+      sourceSeqStart: 10,
+      sourceSeqEnd: 12,
+      turnId: "turn-1",
+    });
+    const requests: LoadTurnSummaryRowsArgs[] = [];
+    const loadTurnSummaryRows: LoadTurnSummaryRows = (args) => {
+      requests.push(args);
+      return Promise.resolve({
+        rows: [detailRow(`detail-${args.sourceSeqStart}`)],
+      });
+    };
+
+    const { result, rerender } = renderHook(
+      (props: HookProps) => useTurnSummaryRowLoader(props),
+      {
+        initialProps: {
+          loadTurnSummaryRows,
+          managerTimelineView: "standard",
+          timelineRows: [initialRow],
+          threadId: "thread-1",
+        },
+      },
+    );
+
+    act(() => {
+      result.current.handleLoadTurnSummaryRows(initialRow);
+    });
+
+    await waitFor(() => {
+      expect(result.current.turnSummaryRowsById["turn-summary-1"]).toEqual([
+        detailRow("detail-1"),
+      ]);
+    });
+
+    rerender({
+      loadTurnSummaryRows,
+      managerTimelineView: "standard",
+      timelineRows: [nextRow],
+      threadId: "thread-1",
+    });
+
+    await waitFor(() => {
+      expect(result.current.turnSummaryRowsById).toEqual({});
+    });
+
+    act(() => {
+      result.current.handleLoadTurnSummaryRows(nextRow);
+    });
+
+    await waitFor(() => {
+      expect(requests).toEqual([
+        {
+          id: "thread-1",
+          turnId: "turn-1",
+          sourceSeqStart: 1,
+          sourceSeqEnd: 3,
+        },
+        {
+          id: "thread-1",
+          turnId: "turn-1",
+          sourceSeqStart: 10,
+          sourceSeqEnd: 12,
+        },
+      ]);
+      expect(result.current.turnSummaryRowsById["turn-summary-1"]).toEqual([
+        detailRow("detail-10"),
+      ]);
+    });
+  });
+
+  it("ignores stale details that resolve after a visible row range changes", async () => {
+    const initialRow = turnSummaryRow({
+      sourceSeqStart: 1,
+      sourceSeqEnd: 3,
+    });
+    const nextRow = turnSummaryRow({
+      sourceSeqStart: 10,
+      sourceSeqEnd: 12,
+    });
+    const deferred = createDeferred<TimelineTurnSummaryDetailsResponse>();
+    const requests: LoadTurnSummaryRowsArgs[] = [];
+    const loadTurnSummaryRows: LoadTurnSummaryRows = (args) => {
+      requests.push(args);
+      if (args.sourceSeqStart === 1) {
+        return deferred.promise;
+      }
+      return Promise.resolve({ rows: [detailRow("fresh detail")] });
+    };
+
+    const { result, rerender } = renderHook(
+      (props: HookProps) => useTurnSummaryRowLoader(props),
+      {
+        initialProps: {
+          loadTurnSummaryRows,
+          managerTimelineView: "standard",
+          timelineRows: [initialRow],
+          threadId: "thread-1",
+        },
+      },
+    );
+
+    act(() => {
+      result.current.handleLoadTurnSummaryRows(initialRow);
+    });
+
+    await waitFor(() => {
+      expect(result.current.loadingTurnSummaryIds.has("turn-summary-1")).toBe(
+        true,
+      );
+    });
+
+    rerender({
+      loadTurnSummaryRows,
+      managerTimelineView: "standard",
+      timelineRows: [nextRow],
+      threadId: "thread-1",
+    });
+
+    await waitFor(() => {
+      expect(result.current.loadingTurnSummaryIds.size).toBe(0);
+    });
+
+    await act(async () => {
+      deferred.resolve({ rows: [detailRow("stale detail")] });
+      await deferred.promise;
+    });
+
+    expect(result.current.turnSummaryRowsById).toEqual({});
+
+    act(() => {
+      result.current.handleLoadTurnSummaryRows(nextRow);
+    });
+
+    await waitFor(() => {
+      expect(requests).toEqual([
+        {
+          id: "thread-1",
+          turnId: "turn-1",
+          sourceSeqStart: 1,
+          sourceSeqEnd: 3,
+        },
+        {
+          id: "thread-1",
+          turnId: "turn-1",
+          sourceSeqStart: 10,
+          sourceSeqEnd: 12,
+        },
+      ]);
+      expect(result.current.turnSummaryRowsById["turn-summary-1"]).toEqual([
+        detailRow("fresh detail"),
+      ]);
+    });
   });
 });
