@@ -263,7 +263,7 @@ describe("useTurnSummaryRowLoader", () => {
       {
         initialProps: {
           loadTurnSummaryRows,
-          managerTimelineView: "standard",
+          managerTimelineView: undefined,
           timelineRows: [turnSummaryRow()],
           threadId: "thread-1",
         },
@@ -282,7 +282,7 @@ describe("useTurnSummaryRowLoader", () => {
 
     rerender({
       loadTurnSummaryRows,
-      managerTimelineView: "standard",
+      managerTimelineView: undefined,
       timelineRows: [],
       threadId: "thread-1",
     });
@@ -295,7 +295,7 @@ describe("useTurnSummaryRowLoader", () => {
 
     rerender({
       loadTurnSummaryRows,
-      managerTimelineView: "standard",
+      managerTimelineView: undefined,
       timelineRows: [turnSummaryRow()],
       threadId: "thread-1",
     });

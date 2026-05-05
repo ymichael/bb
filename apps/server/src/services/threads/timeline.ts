@@ -44,7 +44,7 @@ interface BuildTimelineTurnSummaryDetailsOptions
 
 export type ThreadTimelineServiceViewMode = "manager-conversation" | "standard";
 
-export const STANDARD_MANAGER_TIMELINE_OLDER_ROW_LIMIT = 100;
+export const THREAD_TIMELINE_OLDER_ROW_LIMIT = 100;
 
 export interface ResolveThreadTimelineServiceViewModeArgs {
   managerTimelineView: ManagerTimelineView | undefined;
@@ -119,32 +119,20 @@ function isActiveTopLevelTimelineRow(row: TimelineRow): boolean {
   }
 }
 
-function capLatestStandardManagerTimelineRows(
+function capLatestTimelineRows(
   rows: readonly TimelineRow[],
 ): TimelineRow[] {
   const activeTailStartIndex = rows.findIndex(isActiveTopLevelTimelineRow);
   if (activeTailStartIndex === -1) {
-    return rows.slice(-STANDARD_MANAGER_TIMELINE_OLDER_ROW_LIMIT);
+    return rows.slice(-THREAD_TIMELINE_OLDER_ROW_LIMIT);
   }
 
   const olderRows = rows.slice(0, activeTailStartIndex);
   const activeTailRows = rows.slice(activeTailStartIndex);
   return [
-    ...olderRows.slice(-STANDARD_MANAGER_TIMELINE_OLDER_ROW_LIMIT),
+    ...olderRows.slice(-THREAD_TIMELINE_OLDER_ROW_LIMIT),
     ...activeTailRows,
   ];
-}
-
-function resolveLatestTimelineRows(
-  thread: Thread,
-  options: BuildThreadTimelineOptions,
-  rows: TimelineRow[],
-): TimelineRow[] {
-  if (thread.type !== "manager" || options.timelineViewMode !== "standard") {
-    return rows;
-  }
-
-  return capLatestStandardManagerTimelineRows(rows);
 }
 
 export function buildThreadTimeline(
@@ -197,7 +185,7 @@ export function buildThreadTimeline(
   });
 
   return {
-    rows: resolveLatestTimelineRows(thread, options, timeline.rows),
+    rows: capLatestTimelineRows(timeline.rows),
     activeThinking: timeline.activeThinking,
     contextWindowUsage: timeline.contextWindowUsage ?? undefined,
   };

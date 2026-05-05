@@ -2,7 +2,7 @@
 
 ## Goal
 
-Ship standard-manager timeline pagination in the order that reduces user-visible pain first and avoids baking in an unsafe patch transport. The latest timeline should return the active tail plus at most 100 older top-level rows, and older pages should eventually load backwards without reading every historical event or building the full historical row model.
+Ship timeline pagination in the order that reduces user-visible pain first and avoids baking in an unsafe patch transport. Every latest timeline surface should return the active tail plus at most 100 older top-level rows, and older pages should eventually load backwards without reading every historical event or building the full historical row model.
 
 The patch-route prototype from `bb/prototype-timeline-delta-patches-and-pagination-thr_2p348huhey` should not become the default transport. Park or delete it unless it is retained explicitly as an experiment, because the latest assessment concluded pagination and top-level caps are sound but patch-first sequencing is not.
 
@@ -27,27 +27,25 @@ Until patch prerequisites exist, realtime `events-appended` messages may refetch
 
 ## Phase 1: Capped Latest Timeline
 
-Goal: reduce payload size and client render cost for standard-manager timelines without taking on the full server-performance problem yet.
+Goal: reduce payload size and client render cost for all latest timeline surfaces without taking on the full server-performance problem yet.
 
 Server behavior:
 
-- Apply a fixed latest-page cap for standard-manager timelines: at most 100 older top-level rows plus active tail and pending rows.
+- Apply a fixed latest-page cap to all timeline surfaces/views: regular standard threads, manager standard timeline view, and manager conversation timeline view. Each latest response should include at most 100 older top-level rows plus active tail and pending rows.
 - Count only older top-level rows against the cap. Active tail rows, pending steers, pending interactions, and other currently-active rows remain visible even when that produces more than 100 total top-level rows.
-- Preserve current default behavior for non-standard-manager views unless the caller explicitly opts into the new limit.
 - This phase may still build the full timeline internally and cap after projection. That is acceptable only as payload and render relief; the implementation and tests should not claim DB or projection cost has been solved.
 
 Client behavior:
 
-- `useThreadTimeline` should receive the capped latest standard-manager response by default.
+- `useThreadTimeline` should receive capped latest responses by default for regular standard threads, manager standard timeline view, and manager conversation timeline view.
 - Existing lazy turn details must keep working for visible rows.
 - Expansion state can remain row-id based for visible rows; rows removed by the cap should be dropped from local expansion/detail state.
 
 Exit criteria:
 
-- Latest standard-manager timeline returns `<=100` older top-level rows plus active tail/pending rows.
-- Pending and active rows are still visible when they are older than the 100-row historical window.
-- Non-standard-manager timeline behavior is unchanged unless explicitly wired to the same cap.
-- Payload size and row render count are measurably lower on a long manager thread.
+- Latest regular standard, manager standard, and manager conversation timelines each return `<=100` older top-level rows plus active tail/pending rows.
+- Pending and active rows are still visible for each timeline surface when they are older than the 100-row historical window.
+- Payload size and row render count are measurably lower on long threads across all timeline surfaces.
 
 ## Phase 2: Page Metadata And Limit Semantics
 
@@ -89,7 +87,7 @@ Client query shape:
 Exit criteria:
 
 - Response metadata is required in `ThreadTimelineResponse` once introduced and is populated for latest and older responses.
-- Query keys distinguish latest page, older pages, manager view, `topLevelLimit`, and the full `beforeCursor` tuple.
+- Query keys distinguish latest page, older pages, timeline surface/view, `topLevelLimit`, and the full `beforeCursor` tuple.
 - Tests cover that `beforeCursor` uses the total `(topLevelSortSeq, rowId)` order and does not skip duplicate-sequence siblings.
 - The route fills default values once at the boundary and internal service calls receive explicit values.
 
@@ -165,7 +163,7 @@ Goal: revisit patch/delta transport only after pagination has stable row anchors
 Required prerequisites before a patch route can be reconsidered:
 
 - Stable row revisions or hashes that avoid `JSON.stringify` equality.
-- Full cursor inputs in every patch request: thread id, manager timeline view, page kind, `topLevelLimit`, `beforeCursor` or latest cursor state, and `tailMode`.
+- Full cursor inputs in every patch request: thread id, timeline surface/view, page kind, `topLevelLimit`, `beforeCursor` or latest cursor state, and `tailMode`.
 - Page-aware semantics for latest-page active tail, older pages, rows moving across page boundaries, and rows dropping out of the capped window.
 - Strict refetch fallback when an anchor is missing, a revision mismatches, a page cursor is stale, or a patch cannot prove correctness.
 - No previous-plus-current full-snapshot build as the default implementation path.
@@ -200,7 +198,7 @@ pnpm exec turbo run typecheck --filter=@bb/db
 
 Add or update tests that prove:
 
-- Latest standard-manager timeline returns `<=100` older top-level rows plus active tail/pending rows.
+- Latest regular standard, manager standard, and manager conversation timelines each return `<=100` older top-level rows plus active tail/pending rows.
 - Older page query returns the previous 100 rows without calling the full-event timeline loader.
 - `beforeCursor` compares against the total `(topLevelSortSeq, rowId)` tuple.
 - Duplicate-sequence top-level rows page without gaps, including multi-file-change siblings that share the same `sourceSeqStart/sourceSeqEnd` range and differ only by row id.
