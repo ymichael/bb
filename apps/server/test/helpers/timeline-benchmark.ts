@@ -19,7 +19,7 @@ import {
   THREAD_TIMELINE_EXCLUDED_EVENT_TYPES,
   type ThreadEventWithMeta,
 } from "@bb/thread-view";
-import { replayFixtures } from "@bb/agent-provider-audit";
+import { replayFixtures } from "@bb/agent-fixtures";
 import { buildThreadEvent } from "@bb/domain";
 import {
   buildThreadTimeline,
@@ -51,7 +51,7 @@ export interface TimelineBenchmarkScenario {
 
 const FIXTURE_ROOT = resolve(
   dirname(fileURLToPath(import.meta.url)),
-  "../../../../packages/agent-provider-audit/fixtures",
+  "../../../../packages/agent-fixtures/fixtures",
 );
 
 const TIMELINE_BENCHMARK_FIXTURES: TimelineBenchmarkFixture[] = [
@@ -86,7 +86,7 @@ function createTimelineBenchmarkScenario(
 
   if (!replay) {
     throw new Error(
-      `Missing provider-audit fixture ${fixture.corpusId}/${fixture.providerId}/${fixture.taskId}`,
+      `Missing agent fixture ${fixture.corpusId}/${fixture.providerId}/${fixture.taskId}`,
     );
   }
 

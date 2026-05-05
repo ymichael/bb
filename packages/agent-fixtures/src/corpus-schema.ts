@@ -2,7 +2,7 @@ import { z } from "zod";
 import {
   gitSnapshotSchema,
   replayCaptureManifestSchema,
-} from "@bb/replay-capture";
+} from "@bb/replay-capture/schema";
 
 export const fixtureManifestSchema = replayCaptureManifestSchema
   .extend({

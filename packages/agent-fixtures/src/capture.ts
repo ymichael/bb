@@ -2,14 +2,10 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import {
-  createAgentRuntime,
-  getProviderVisibilityMetadata,
-} from "@bb/agent-runtime";
+import { createAgentRuntime } from "@bb/agent-runtime";
 import type { AgentRuntimeCaptureEntry } from "@bb/agent-runtime/capture";
 import {
   buildThreadTimelineFromEvents,
-  buildTimelineViewRows,
   decodeThreadEventRow,
   formatThreadTimelineText,
 } from "@bb/thread-view";
@@ -25,7 +21,6 @@ import type {
   ToolCallRequest,
   ToolCallResponse,
 } from "@bb/domain";
-import type { TimelineRow, TimelineSystemRow } from "@bb/server-contract";
 import type { RuntimeThreadExecutionOptions } from "@bb/domain";
 import {
   REPLAY_CAPTURE_SCHEMA_VERSION,
@@ -40,43 +35,40 @@ import {
   serializeReplayRawProviderEventRecords,
   writeFixture,
 } from "@bb/replay-capture/writer";
+import {
+  fixtureManifestSchema,
+  type FixtureManifest,
+} from "./corpus-schema.js";
 import type {
-  ProviderAuditBundle,
-  ProviderAuditCliArgs,
-  ProviderAuditDebugRawEvent,
-  ProviderAuditGitSnapshot,
-  ProviderAuditManifest,
-  ProviderAuditObservedToolCallSummary,
-  ProviderAuditReport,
-  ProviderAuditRawEventKindSummary,
-  ProviderAuditRunResult,
-  ProviderAuditScenario,
-  ProviderAuditScenarioExecutionOptions,
-  ProviderAuditScenarioOverride,
-  ProviderAuditScenarioToolFixture,
-  ProviderAuditUntranslatedRawEvent,
+  FixtureCliArgs,
+  FixtureGitSnapshot,
+  FixtureReplayBundle,
+  FixtureRunResult,
+  FixtureScenario,
+  FixtureScenarioExecutionOptions,
+  FixtureScenarioOverride,
+  FixtureScenarioToolFixture,
 } from "./types.js";
-import { fixtureManifestSchema } from "./fixture-schema.js";
 
 const DEFAULT_PROVIDER_ID = "codex";
 const DEFAULT_SCENARIO_ID = "excalidraw-ttd-explanation";
-const DEFAULT_PROJECT_ID = "provider-audit";
-const DEFAULT_THREAD_ID = "provider-audit-thread";
+const DEFAULT_PROJECT_ID = "agent-fixtures";
+const DEFAULT_THREAD_ID = "agent-fixtures-thread";
 const DEFAULT_TIMEOUT_MS = 90_000;
-const CAPTURE_CORPUS_ID = "provider-audit";
+const CAPTURE_CORPUS_ID = "agent-fixtures";
 
 interface BuildExecutionOptionsArgs {
   model?: string;
-  execution?: ProviderAuditScenarioExecutionOptions;
+  execution?: FixtureScenarioExecutionOptions;
 }
 
-type ProviderAuditResolvedExecutionOptions = RuntimeThreadExecutionOptions;
+type FixtureResolvedExecutionOptions = RuntimeThreadExecutionOptions;
 type RuntimeRawProviderEventCaptureEntry = Extract<
   AgentRuntimeCaptureEntry,
   { kind: "raw-provider-event" }
 >;
 
-const BUILT_IN_SCENARIOS: Record<string, ProviderAuditScenario> = {
+const BUILT_IN_SCENARIOS: Record<string, FixtureScenario> = {
   "excalidraw-ttd-explanation": {
     id: "excalidraw-ttd-explanation",
     description:
@@ -238,7 +230,7 @@ const BUILT_IN_SCENARIOS: Record<string, ProviderAuditScenario> = {
   },
 };
 
-interface PreparedAuditWorkspace {
+interface PreparedFixtureWorkspace {
   runtimeWorkspacePath: string;
   envWorkspacePath: string;
 }
@@ -247,7 +239,7 @@ function printHelp(): void {
   const scenarioLines = Object.values(BUILT_IN_SCENARIOS)
     .map((scenario) => `  ${scenario.id.padEnd(24)} ${scenario.description}`)
     .join("\n");
-  console.log(`Usage: bb-provider-audit [options]
+  console.log(`Usage: bb-fixtures capture [options]
 
 Options:
   --provider <id>      Provider id. Default: ${DEFAULT_PROVIDER_ID}
@@ -255,7 +247,7 @@ Options:
   --prompt <text>      Override the first scenario prompt
   --model <id>         Optional model override
   --workspace <path>   Env/source workspace path. Default: current directory
-  --output <path>      Output directory. Default: ${join(tmpdir(), "bb-provider-audit")}
+  --output <path>      Output directory. Default: ${join(tmpdir(), "bb-fixtures")}
   --thread-id <id>     Override the bb thread id used for the capture
   --project-id <id>    Override the bb project id used for the capture
   --git-reset-ref <r>  Reset the repo workspace to this git ref before and after capture
@@ -266,8 +258,8 @@ Built-in scenarios:
 ${scenarioLines}`);
 }
 
-export function parseCliArgs(argv: string[]): ProviderAuditCliArgs {
-  const args: ProviderAuditCliArgs = {
+export function parseCliArgs(argv: string[]): FixtureCliArgs {
+  const args: FixtureCliArgs = {
     providerId: DEFAULT_PROVIDER_ID,
     scenarioId: DEFAULT_SCENARIO_ID,
     workspacePath: process.cwd(),
@@ -348,7 +340,7 @@ function defaultOutputDir(providerId: string, scenarioId: string): string {
   const stamp = new Date().toISOString().replace(/[:]/g, "-");
   return join(
     tmpdir(),
-    "bb-provider-audit",
+    "bb-fixtures",
     `${stamp}-${sanitizeSegment(providerId)}-${sanitizeSegment(scenarioId)}`,
   );
 }
@@ -384,9 +376,7 @@ function getGitStatusLines(workspacePath: string): string[] | null {
   }
 }
 
-function getGitSnapshot(
-  workspacePath: string,
-): ProviderAuditGitSnapshot | null {
+function getGitSnapshot(workspacePath: string): FixtureGitSnapshot | null {
   const headSha = getGitSha(workspacePath);
   const statusLines = getGitStatusLines(workspacePath);
   if (headSha === null || statusLines === null) {
@@ -442,14 +432,14 @@ function loadDotEnv(workspacePath: string): Record<string, string> {
 }
 
 function cloneWorkspaceFiles(
-  workspaceFiles: ProviderAuditScenario["workspaceFiles"],
-): ProviderAuditScenario["workspaceFiles"] {
+  workspaceFiles: FixtureScenario["workspaceFiles"],
+): FixtureScenario["workspaceFiles"] {
   return workspaceFiles?.map((file) => ({ ...file }));
 }
 
 function cloneToolFixtures(
-  toolFixtures: ProviderAuditScenario["toolFixtures"],
-): ProviderAuditScenario["toolFixtures"] {
+  toolFixtures: FixtureScenario["toolFixtures"],
+): FixtureScenario["toolFixtures"] {
   return toolFixtures?.map((fixture) => ({
     tool: {
       ...fixture.tool,
@@ -460,9 +450,9 @@ function cloneToolFixtures(
 }
 
 function applyScenarioOverride(
-  scenario: ProviderAuditScenario,
-  override: ProviderAuditScenarioOverride | undefined,
-): ProviderAuditScenario {
+  scenario: FixtureScenario,
+  override: FixtureScenarioOverride | undefined,
+): FixtureScenario {
   if (!override) {
     return scenario;
   }
@@ -483,13 +473,13 @@ function applyScenarioOverride(
   };
 }
 
-function resolveScenario(args: ProviderAuditCliArgs): ProviderAuditScenario {
+function resolveScenario(args: FixtureCliArgs): FixtureScenario {
   const scenarioTemplate = BUILT_IN_SCENARIOS[args.scenarioId];
   if (!scenarioTemplate) {
     throw new Error(`Unknown scenario "${args.scenarioId}"`);
   }
 
-  const baseScenario: ProviderAuditScenario = {
+  const baseScenario: FixtureScenario = {
     ...scenarioTemplate,
     turns: scenarioTemplate.turns.slice(),
     execution: scenarioTemplate.execution
@@ -544,9 +534,9 @@ function ensureDirectoryForFile(path: string): void {
 
 function prepareScenarioWorkspace(args: {
   outputDir: string;
-  scenario: ProviderAuditScenario;
+  scenario: FixtureScenario;
   workspacePath: string;
-}): PreparedAuditWorkspace {
+}): PreparedFixtureWorkspace {
   if (args.scenario.workspaceMode !== "scratch") {
     return {
       runtimeWorkspacePath: args.workspacePath,
@@ -559,7 +549,7 @@ function prepareScenarioWorkspace(args: {
 
   writeFileSync(
     join(runtimeWorkspacePath, "README.md"),
-    "# Provider Audit Scratch Workspace\n",
+    "# Fixture Scratch Workspace\n",
   );
 
   for (const file of args.scenario.workspaceFiles ?? []) {
@@ -580,7 +570,7 @@ function buildScenarioEnvironmentId(threadId: string): string {
 
 function buildExecutionOptions(
   args: BuildExecutionOptionsArgs,
-): ProviderAuditResolvedExecutionOptions {
+): FixtureResolvedExecutionOptions {
   const base = {
     model: args.model ?? "provider-default",
     serviceTier: args.execution?.serviceTier ?? "fast",
@@ -602,7 +592,7 @@ function buildExecutionOptions(
 }
 
 function buildResolvedExecutionOptions(args: {
-  execution?: ProviderAuditScenarioExecutionOptions;
+  execution?: FixtureScenarioExecutionOptions;
   model?: string;
 }): ResolvedThreadExecutionOptions {
   return {
@@ -622,7 +612,7 @@ function buildClientRequestRows(args: {
   return args.turns.map((turn, index) => {
     const isFirstTurn = index === 0;
     return buildThreadEventRow({
-      id: `audit-client-row-${index + 1}`,
+      id: `fixture-client-row-${index + 1}`,
       scope: threadScope(),
       threadId: args.threadId,
       seq: 0,
@@ -667,7 +657,7 @@ function buildThreadEventRows(args: {
 
   const providerRows = args.translatedCaptures.map((entry, index) => {
     return buildThreadEventRow({
-      id: `audit-row-${index + 1}`,
+      id: `fixture-row-${index + 1}`,
       scope: entry.event.scope,
       threadId: entry.event.threadId,
       seq: 0,
@@ -703,290 +693,6 @@ function buildThreadEventRows(args: {
     );
 }
 
-function buildRawEventKindSummaries(
-  rawProviderEvents: ReplayRawProviderCaptureEntry[],
-): ProviderAuditRawEventKindSummary[] {
-  if (rawProviderEvents.length === 0) {
-    return [];
-  }
-
-  const visibility = getProviderVisibilityMetadata(
-    rawProviderEvents[0].providerId,
-  );
-  const countsByKindAndClassification = new Map<
-    string,
-    ProviderAuditRawEventKindSummary
-  >();
-
-  for (const entry of rawProviderEvents) {
-    const parsedRawEvent = visibility.parseRawEvent(entry.rawEvent);
-    const description = visibility.describeParsedRawEvent(parsedRawEvent);
-    const mapKey = `${description.coverage}:${description.kind}`;
-    const existing = countsByKindAndClassification.get(mapKey);
-    if (existing) {
-      existing.count += 1;
-      continue;
-    }
-    countsByKindAndClassification.set(mapKey, {
-      kind: description.kind,
-      classification: description.coverage,
-      count: 1,
-    });
-  }
-
-  return [...countsByKindAndClassification.values()].sort((left, right) => {
-    if (left.kind !== right.kind) {
-      return left.kind.localeCompare(right.kind);
-    }
-    return left.classification.localeCompare(right.classification);
-  });
-}
-
-function buildUntranslatedRawProviderEvents(
-  rawProviderEvents: ReplayRawProviderCaptureEntry[],
-  translatedCaptures: Extract<
-    AgentRuntimeCaptureEntry,
-    { kind: "translated-thread-event" }
-  >[],
-): ProviderAuditUntranslatedRawEvent[] {
-  if (rawProviderEvents.length === 0) {
-    return [];
-  }
-
-  const visibility = getProviderVisibilityMetadata(
-    rawProviderEvents[0].providerId,
-  );
-  const translatedCountByRawCaptureId = new Map<string, number>();
-  for (const entry of translatedCaptures) {
-    if (!entry.rawCaptureId) continue;
-    translatedCountByRawCaptureId.set(
-      entry.rawCaptureId,
-      (translatedCountByRawCaptureId.get(entry.rawCaptureId) ?? 0) + 1,
-    );
-  }
-
-  return rawProviderEvents
-    .filter((entry) => !translatedCountByRawCaptureId.has(entry.captureId))
-    .map((entry) => {
-      const parsedRawEvent = visibility.parseRawEvent(entry.rawEvent);
-      const description = visibility.describeParsedRawEvent(parsedRawEvent);
-      return {
-        captureId: entry.captureId,
-        method: entry.rawEvent.method,
-        kind: description.kind,
-        capturedAt: entry.capturedAt,
-        classification: description.coverage,
-      };
-    });
-}
-
-function buildObservedToolCalls(
-  rawProviderEvents: ReplayRawProviderCaptureEntry[],
-): ProviderAuditObservedToolCallSummary[] {
-  if (rawProviderEvents.length === 0) {
-    return [];
-  }
-
-  const visibility = getProviderVisibilityMetadata(
-    rawProviderEvents[0].providerId,
-  );
-  const countsByToolKey = new Map<
-    string,
-    ProviderAuditObservedToolCallSummary
-  >();
-
-  for (const entry of rawProviderEvents) {
-    const parsedRawEvent = visibility.parseRawEvent(entry.rawEvent);
-    const observedToolCalls =
-      visibility.extractObservedToolCallsFromParsed(parsedRawEvent);
-    for (const observedToolCall of observedToolCalls) {
-      const existing = countsByToolKey.get(observedToolCall.key);
-      if (existing) {
-        existing.count += 1;
-        continue;
-      }
-      countsByToolKey.set(observedToolCall.key, {
-        key: observedToolCall.key,
-        displayName: observedToolCall.displayName,
-        coverage: observedToolCall.coverage,
-        count: 1,
-      });
-    }
-  }
-
-  return [...countsByToolKey.values()].sort((left, right) => {
-    if (left.key !== right.key) {
-      return left.key.localeCompare(right.key);
-    }
-    return left.coverage.localeCompare(right.coverage);
-  });
-}
-
-function flattenTimelineRows(rows: readonly TimelineRow[]): TimelineRow[] {
-  const flattenedRows: TimelineRow[] = [];
-  for (const row of rows) {
-    flattenedRows.push(row);
-    if (row.kind === "turn" && row.children) {
-      flattenedRows.push(...flattenTimelineRows(row.children));
-      continue;
-    }
-    if (row.kind === "work" && row.workKind === "delegation") {
-      flattenedRows.push(...flattenTimelineRows(row.childRows));
-    }
-  }
-  return flattenedRows;
-}
-
-function isDebugSystemRow(row: TimelineRow): row is TimelineSystemRow {
-  return row.kind === "system" && row.systemKind === "debug";
-}
-
-function buildDebugRawEvents(
-  timelineRows: readonly TimelineRow[],
-): ProviderAuditDebugRawEvent[] {
-  return flattenTimelineRows(timelineRows)
-    .filter(isDebugSystemRow)
-    .map((row) => ({
-      messageId: row.id,
-      rawType: row.title,
-      reason: "unhandled",
-      sourceSeqStart: row.sourceSeqStart,
-      sourceSeqEnd: row.sourceSeqEnd,
-    }));
-}
-
-function buildAuditReport(args: {
-  rawProviderEvents: ReplayRawProviderCaptureEntry[];
-  translatedCaptures: Extract<
-    AgentRuntimeCaptureEntry,
-    { kind: "translated-thread-event" }
-  >[];
-  timelineRows: ProviderAuditBundle["timelineRows"];
-  debugTimelineRows: TimelineRow[];
-  toolCallRequests: Extract<
-    AgentRuntimeCaptureEntry,
-    { kind: "tool-call-request" }
-  >[];
-  toolCallResults: Extract<
-    AgentRuntimeCaptureEntry,
-    { kind: "tool-call-result" }
-  >[];
-  providerStderr: Extract<
-    AgentRuntimeCaptureEntry,
-    { kind: "provider-stderr" }
-  >[];
-  processLifecycle: ProviderAuditBundle["processLifecycle"];
-}): ProviderAuditReport {
-  const rawEventKinds = buildRawEventKindSummaries(args.rawProviderEvents);
-  const untranslatedRawProviderEvents = buildUntranslatedRawProviderEvents(
-    args.rawProviderEvents,
-    args.translatedCaptures,
-  );
-  const unexpectedUntranslatedRawProviderEvents =
-    untranslatedRawProviderEvents.filter(
-      (entry) => entry.classification !== "noise",
-    );
-  const debugRawEvents = buildDebugRawEvents(args.debugTimelineRows);
-  const observedToolCalls = buildObservedToolCalls(args.rawProviderEvents);
-  const normalizedRawEventCount = rawEventKinds
-    .filter((entry) => entry.classification === "normalized")
-    .reduce((total, entry) => total + entry.count, 0);
-  const noiseRawEventCount = rawEventKinds
-    .filter((entry) => entry.classification === "noise")
-    .reduce((total, entry) => total + entry.count, 0);
-  const unknownRawEventCount = rawEventKinds
-    .filter((entry) => entry.classification === "unknown")
-    .reduce((total, entry) => total + entry.count, 0);
-  const wellKnownObservedToolCallCount = observedToolCalls
-    .filter((entry) => entry.coverage === "well-known")
-    .reduce((total, entry) => total + entry.count, 0);
-  const acceptedFallbackObservedToolCallCount = observedToolCalls
-    .filter((entry) => entry.coverage === "accepted-fallback")
-    .reduce((total, entry) => total + entry.count, 0);
-  const unknownObservedToolCallCount = observedToolCalls
-    .filter((entry) => entry.coverage === "unknown")
-    .reduce((total, entry) => total + entry.count, 0);
-  const wellKnownToolNames =
-    args.rawProviderEvents.length > 0
-      ? [
-          ...getProviderVisibilityMetadata(args.rawProviderEvents[0].providerId)
-            .wellKnownToolNames,
-        ]
-      : [];
-  const attentionNeeded: string[] = [];
-
-  if (unexpectedUntranslatedRawProviderEvents.length > 0) {
-    attentionNeeded.push(
-      `${unexpectedUntranslatedRawProviderEvents.length} raw provider event(s) expected translation but produced no ThreadEvent`,
-    );
-  }
-  if (debugRawEvents.length > 0) {
-    attentionNeeded.push(
-      `${debugRawEvents.length} provider-agnostic event(s) still fall back to debug/raw-event output`,
-    );
-  }
-  if (args.toolCallResults.some((entry) => entry.success === false)) {
-    attentionNeeded.push(
-      "At least one provider tool call failed in the runtime hook",
-    );
-  }
-  if (unknownObservedToolCallCount > 0) {
-    attentionNeeded.push(
-      `${unknownObservedToolCallCount} observed tool call(s) are not yet classified as well-known or accepted fallback`,
-    );
-  }
-
-  return {
-    summary: {
-      rawProviderEventCount: args.rawProviderEvents.length,
-      translatedThreadEventCount: args.translatedCaptures.length,
-      semanticTimelineRowCount: args.timelineRows.length,
-      renderedTimelineRowCount: buildTimelineViewRows(args.timelineRows).length,
-      debugRawEventCount: debugRawEvents.length,
-      unexpectedUntranslatedRawEventCount:
-        unexpectedUntranslatedRawProviderEvents.length,
-      toolCallRequestCount: args.toolCallRequests.length,
-      toolCallResultCount: args.toolCallResults.length,
-      providerStderrCount: args.providerStderr.length,
-      processLifecycleCount: args.processLifecycle.length,
-      normalizedRawEventCount,
-      noiseRawEventCount,
-      unknownRawEventCount,
-      wellKnownObservedToolCallCount,
-      acceptedFallbackObservedToolCallCount,
-      unknownObservedToolCallCount,
-    },
-    rawProviderMethods: [
-      ...new Set(args.rawProviderEvents.map((entry) => entry.rawEvent.method)),
-    ],
-    rawProviderEventKinds: [
-      ...new Set(rawEventKinds.map((entry) => entry.kind)),
-    ],
-    rawEventKinds,
-    translatedEventTypes: [
-      ...new Set(args.translatedCaptures.map((entry) => entry.event.type)),
-    ],
-    untranslatedRawProviderEvents,
-    unexpectedUntranslatedRawProviderEvents,
-    debugRawEvents,
-    toolCalls: {
-      requestCount: args.toolCallRequests.length,
-      resultCount: args.toolCallResults.length,
-      failedCount: args.toolCallResults.filter(
-        (entry) => entry.success === false,
-      ).length,
-    },
-    wellKnownToolNames,
-    observedToolCalls,
-    providerStderr: {
-      lineCount: args.providerStderr.length,
-      sample: args.providerStderr.slice(0, 20),
-    },
-    processLifecycle: args.processLifecycle,
-    attentionNeeded,
-  };
-}
-
 function writeJson(outputDir: string, fileName: string, value: object): void {
   writeFileSync(
     join(outputDir, fileName),
@@ -995,7 +701,7 @@ function writeJson(outputDir: string, fileName: string, value: object): void {
 }
 
 function buildRawProviderEventRecords(
-  bundle: ProviderAuditBundle,
+  bundle: FixtureReplayBundle,
 ): ReplayRawProviderEventRecord[] {
   return bundle.rawProviderEvents.map((entry, index) => ({
     ordinal: index + 1,
@@ -1016,12 +722,11 @@ function writeRawProviderEventRecords(
 
 function writeBundleArtifacts(
   outputDir: string,
-  bundle: ProviderAuditBundle,
+  bundle: FixtureReplayBundle,
 ): void {
   writeJson(outputDir, "thread-events.json", bundle.threadEvents);
   writeJson(outputDir, "thread-event-rows.json", bundle.threadEventRows);
   writeJson(outputDir, "timeline-rows.json", bundle.timelineRows);
-  writeJson(outputDir, "audit-report.json", bundle.auditReport);
   writeFileSync(join(outputDir, "timeline.txt"), bundle.timelineText + "\n");
   writeFileSync(
     join(outputDir, "timeline.verbose.txt"),
@@ -1048,9 +753,9 @@ function toReplayRawProviderCaptureEntry(
 }
 
 function buildToolFixturesByName(
-  scenario: ProviderAuditScenario,
-): Map<string, ProviderAuditScenarioToolFixture> {
-  const byName = new Map<string, ProviderAuditScenarioToolFixture>();
+  scenario: FixtureScenario,
+): Map<string, FixtureScenarioToolFixture> {
+  const byName = new Map<string, FixtureScenarioToolFixture>();
   for (const fixture of scenario.toolFixtures ?? []) {
     byName.set(fixture.tool.name, fixture);
   }
@@ -1072,7 +777,7 @@ function buildDefaultToolResponse(request: ToolCallRequest): ToolCallResponse {
 async function runScenario(args: {
   captureId: string;
   runtime: ReturnType<typeof createAgentRuntime>;
-  scenario: ProviderAuditScenario;
+  scenario: FixtureScenario;
   providerId: string;
   model?: string;
   threadId: string;
@@ -1132,7 +837,7 @@ function buildManifest(args: {
   captureId: string;
   corpusId: string;
   providerId: string;
-  scenario: ProviderAuditScenario;
+  scenario: FixtureScenario;
   model?: string;
   workspacePath: string;
   runtimeWorkspacePath: string;
@@ -1144,13 +849,13 @@ function buildManifest(args: {
   completedAt: number;
   gitResetRef?: string;
   rawProviderEventCount: number;
-  runtimeWorkspaceGitStart: ProviderAuditGitSnapshot | null;
-  runtimeWorkspaceGitEnd: ProviderAuditGitSnapshot | null;
+  runtimeWorkspaceGitStart: FixtureGitSnapshot | null;
+  runtimeWorkspaceGitEnd: FixtureGitSnapshot | null;
   turns: ReplayCaptureTurn[];
-}): ProviderAuditManifest {
+}): FixtureManifest {
   const firstTurn = args.turns[0];
   if (!firstTurn) {
-    throw new Error("Cannot build provider audit manifest without turns");
+    throw new Error("Cannot build fixture manifest without turns");
   }
 
   return fixtureManifestSchema.parse({
@@ -1192,10 +897,10 @@ function buildManifest(args: {
 }
 
 export function buildBundle(args: {
-  manifest: ProviderAuditManifest;
+  manifest: FixtureManifest;
   captures: AgentRuntimeCaptureEntry[];
   outputDir?: string;
-}): ProviderAuditBundle {
+}): FixtureReplayBundle {
   const rawProviderEvents = args.captures
     .filter(isRuntimeRawProviderEventCaptureEntry)
     .map(toReplayRawProviderCaptureEntry);
@@ -1277,23 +982,8 @@ export function buildBundle(args: {
       viewMode: "standard",
     },
   });
-  const debugTimelineProjection = buildThreadTimelineFromEvents({
-    contextWindowEvents: decodedRows,
-    events: decodedRows,
-    options: {
-      includeDebugRawEvents: true,
-      includeNestedRows: false,
-      includeOptionalOperations: false,
-      includeProviderUnhandledOperations: false,
-      systemClientRequestVisibility: "hidden",
-      threadStatus: "idle",
-      turnMessageDetail: "summary",
-      viewMode: "standard",
-    },
-  });
   const timelineRows = timelineProjection.rows;
   const verboseTimelineRows = verboseTimelineProjection.rows;
-  const debugTimelineRows = debugTimelineProjection.rows;
   const timelineText = formatThreadTimelineText(timelineRows, {
     verbose: false,
     color: false,
@@ -1301,16 +991,6 @@ export function buildBundle(args: {
   const timelineVerboseText = formatThreadTimelineText(verboseTimelineRows, {
     verbose: true,
     color: false,
-  });
-  const auditReport = buildAuditReport({
-    rawProviderEvents,
-    translatedCaptures,
-    timelineRows,
-    debugTimelineRows,
-    toolCallRequests,
-    toolCallResults,
-    providerStderr,
-    processLifecycle,
   });
 
   return {
@@ -1330,13 +1010,12 @@ export function buildBundle(args: {
     timelineText,
     timelineVerboseRows: verboseTimelineRows,
     timelineVerboseText,
-    auditReport,
   };
 }
 
-export function writeBundle(bundle: ProviderAuditBundle): void {
+export function writeBundle(bundle: FixtureReplayBundle): void {
   if (bundle.outputDir === null) {
-    throw new Error("Cannot write provider audit bundle without outputDir");
+    throw new Error("Cannot write fixture bundle without outputDir");
   }
   mkdirSync(bundle.outputDir, { recursive: true });
   writeJson(bundle.outputDir, "manifest.json", bundle.manifest);
@@ -1347,9 +1026,9 @@ export function writeBundle(bundle: ProviderAuditBundle): void {
   writeBundleArtifacts(bundle.outputDir, bundle);
 }
 
-async function writeCapturedBundle(bundle: ProviderAuditBundle): Promise<void> {
+async function writeCapturedBundle(bundle: FixtureReplayBundle): Promise<void> {
   if (bundle.outputDir === null) {
-    throw new Error("Cannot write provider audit capture without outputDir");
+    throw new Error("Cannot write fixture capture without outputDir");
   }
   await writeFixture({
     destinationDir: bundle.outputDir,
@@ -1359,9 +1038,9 @@ async function writeCapturedBundle(bundle: ProviderAuditBundle): Promise<void> {
   writeBundleArtifacts(bundle.outputDir, bundle);
 }
 
-export async function runProviderAuditCapture(
-  args: ProviderAuditCliArgs,
-): Promise<ProviderAuditRunResult> {
+export async function runFixtureCapture(
+  args: FixtureCliArgs,
+): Promise<FixtureRunResult> {
   const scenario = resolveScenario(args);
   const outputDir =
     args.outputDir ?? defaultOutputDir(args.providerId, args.scenarioId);

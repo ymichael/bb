@@ -46,7 +46,7 @@
   },
   "devDependencies": {
     "@bb/scripts": "workspace:*",
-    "@bb/agent-provider-audit": "workspace:*",
+    "@bb/agent-fixtures": "workspace:*",
     "@bb/test-helpers": "workspace:*",
     "@bb/tsconfig": "workspace:*",
     "@types/better-sqlite3": "^7.6.12",

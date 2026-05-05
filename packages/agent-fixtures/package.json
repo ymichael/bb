@@ -1,5 +1,5 @@
 {
-  "name": "@bb/replay-capture",
+  "name": "@bb/agent-fixtures",
   "version": "0.0.1",
   "type": "module",
   "exports": {
@@ -7,37 +7,29 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
-    "./reader": {
-      "types": "./dist/reader.d.ts",
-      "import": "./dist/reader.js"
-    },
-    "./playback": {
-      "types": "./dist/playback.d.ts",
-      "import": "./dist/playback.js"
-    },
-    "./schema": {
-      "types": "./dist/schema.d.ts",
-      "import": "./dist/schema.js"
-    },
-    "./writer": {
-      "types": "./dist/writer.d.ts",
-      "import": "./dist/writer.js"
+    "./load-browser": {
+      "types": "./dist/load-browser.d.ts",
+      "import": "./dist/load-browser.js"
     }
   },
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "bin": {
+    "bb-fixtures": "./dist/cli.js"
+  },
   "files": [
     "dist"
   ],
   "scripts": {
     "build": "rimraf dist tsconfig.tsbuildinfo && tsc",
     "clean": "rimraf dist tsconfig.tsbuildinfo",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc -p tsconfig.typecheck.json",
     "test": "vitest run --config vitest.config.ts"
   },
   "dependencies": {
     "@bb/agent-runtime": "workspace:*",
     "@bb/domain": "workspace:*",
+    "@bb/replay-capture": "workspace:*",
+    "@bb/server-contract": "workspace:*",
+    "@bb/thread-view": "workspace:*",
     "zod": "^4.3.6"
   },
   "devDependencies": {

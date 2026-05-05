@@ -390,9 +390,9 @@ importers:
         specifier: 4.3.6
         version: 4.3.6
     devDependencies:
-      '@bb/agent-provider-audit':
+      '@bb/agent-fixtures':
         specifier: workspace:*
-        version: link:../../packages/agent-provider-audit
+        version: link:../../packages/agent-fixtures
       '@bb/scripts':
         specifier: workspace:*
         version: link:../../packages/scripts
@@ -421,7 +421,7 @@ importers:
         specifier: ^8.19.0
         version: 8.19.0
 
-  packages/agent-provider-audit:
+  packages/agent-fixtures:
     dependencies:
       '@bb/agent-runtime':
         specifier: workspace:*
@@ -438,9 +438,6 @@ importers:
       '@bb/thread-view':
         specifier: workspace:*
         version: link:../thread-view
-      '@bb/ui-core':
-        specifier: workspace:*
-        version: link:../ui-core
       zod:
         specifier: 4.3.6
         version: 4.3.6
@@ -448,36 +445,15 @@ importers:
       '@bb/tsconfig':
         specifier: workspace:*
         version: link:../tsconfig
-      '@ladle/react':
-        specifier: ^5.0.3
-        version: 5.1.1(@types/node@22.19.10)(@types/react@19.2.13)(jiti@2.6.1)(lightningcss@1.30.2)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(tsx@4.21.0)(typescript@5.9.3)(yaml@2.8.2)
-      '@tailwindcss/vite':
-        specifier: ^4.0.0
-        version: 4.1.18(vite@7.3.1(@types/node@22.19.10)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)(yaml@2.8.2))
       '@types/node':
         specifier: ^22.0.0
         version: 22.19.10
-      '@types/react':
-        specifier: ^19.0.0
-        version: 19.2.13
-      '@types/react-dom':
-        specifier: ^19.0.0
-        version: 19.2.3(@types/react@19.2.13)
-      react:
-        specifier: ^19.0.0
-        version: 19.2.4
-      react-dom:
-        specifier: ^19.0.0
-        version: 19.2.4(react@19.2.4)
-      tailwindcss:
-        specifier: ^4.0.0
-        version: 4.1.18
+      rimraf:
+        specifier: ^6.1.0
+        version: 6.1.3
       typescript:
         specifier: ^5.7.0
         version: 5.9.3
-      vite:
-        specifier: ^7.3.1
-        version: 7.3.1(@types/node@22.19.10)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)(yaml@2.8.2)
       vitest:
         specifier: ^4.1.1
         version: 4.1.1(@opentelemetry/api@1.9.1)(@types/node@22.19.10)(jsdom@29.0.1(@noble/hashes@2.0.1))(msw@2.12.14(@types/node@22.19.10)(typescript@5.9.3))(vite@7.3.1(@types/node@22.19.10)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)(yaml@2.8.2))

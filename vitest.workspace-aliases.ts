@@ -32,6 +32,10 @@ export const workspaceTestAliases = {
     repoRoot,
     "packages/agent-runtime/src/index.ts",
   ),
+  "@bb/replay-capture/schema": path.resolve(
+    repoRoot,
+    "packages/replay-capture/src/schema.ts",
+  ),
   "@bb/config/common": path.resolve(repoRoot, "packages/config/src/common.ts"),
   "@bb/config/host-daemon": path.resolve(
     repoRoot,
@@ -71,9 +75,13 @@ export const workspaceTestAliases = {
   "@bb/server": path.resolve(repoRoot, "apps/server/src/index.ts"),
   "@bb/cli": path.resolve(repoRoot, "apps/cli/src/index.ts"),
   "@bb/logger": path.resolve(repoRoot, "packages/logger/src/index.ts"),
-  "@bb/agent-provider-audit": path.resolve(
+  "@bb/agent-fixtures": path.resolve(
     repoRoot,
-    "packages/agent-provider-audit/src/index.ts",
+    "packages/agent-fixtures/src/index.ts",
+  ),
+  "@bb/agent-fixtures/load-browser": path.resolve(
+    repoRoot,
+    "packages/agent-fixtures/src/load-browser.ts",
   ),
   "@bb/ui-core": path.resolve(repoRoot, "packages/ui-core/src/index.ts"),
   "@bb/sandbox-host": path.resolve(
