@@ -1,8 +1,6 @@
 import { z } from "zod";
 import type { HostDaemonCommandRow } from "@bb/db";
-import {
-  hostDaemonCommandTypeSchema,
-} from "@bb/host-daemon-contract";
+import { hostDaemonCommandTypeSchema } from "@bb/host-daemon-contract";
 import type { CommandResultWaiterResponse } from "./command-result-response.js";
 import type { CommandResultSideEffectReport } from "./command-result-owners.js";
 
@@ -49,32 +47,25 @@ export function buildStoredCommandResultReport(
 export function buildStoredCommandResultResponse(
   commandRow: HostDaemonCommandRow,
 ): CommandResultWaiterResponse | null {
-  if (!commandRow.completedAt || !commandRow.resultPayload) {
+  const report = buildStoredCommandResultReport(commandRow);
+  if (!report) {
     return null;
   }
-  const commandType = hostDaemonCommandTypeSchema.parse(commandRow.type);
 
-  if (commandRow.state === "success") {
+  if (report.ok) {
     return {
-      commandId: commandRow.id,
+      commandId: report.commandId,
       ok: true,
-      result: JSON.parse(commandRow.resultPayload),
-      type: commandType,
+      result: report.result,
+      type: report.type,
     };
   }
 
-  if (commandRow.state === "error") {
-    const payload = storedCommandErrorPayloadSchema.parse(
-      JSON.parse(commandRow.resultPayload),
-    );
-    return {
-      commandId: commandRow.id,
-      errorCode: payload.errorCode,
-      errorMessage: payload.errorMessage,
-      ok: false,
-      type: commandType,
-    };
-  }
-
-  return null;
+  return {
+    commandId: report.commandId,
+    errorCode: report.errorCode,
+    errorMessage: report.errorMessage,
+    ok: false,
+    type: report.type,
+  };
 }

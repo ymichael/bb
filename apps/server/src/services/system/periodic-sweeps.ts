@@ -26,7 +26,7 @@ import {
   completeEnvironmentProvisioning,
 } from "../environments/environment-provisioning.js";
 import { handleExpiredCommands } from "../hosts/expired-commands.js";
-import { failActiveLifecycleOperationsWithSettledCommands } from "../../internal/command-result-side-effect-failures.js";
+import { failActiveLifecycleOperationsWithSettledCommands } from "../../internal/command-result-side-effect-sweep.js";
 import {
   destroyHost,
   maybeSuspendIdleSandbox,

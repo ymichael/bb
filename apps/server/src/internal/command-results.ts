@@ -6,18 +6,18 @@ import {
 import type { HostDaemonCommandResultReport } from "@bb/host-daemon-contract";
 import {
   handleCommandResultSideEffects,
+  failCommandResultSideEffects,
   type CommandResultSideEffectsDeps,
+  failSettledCommandActiveSideEffects,
 } from "./command-result-owners.js";
 import type { CommandResultWaiterResponse } from "./command-result-response.js";
 import {
   buildCommandResultSideEffectFailureResponse,
   commandResultSideEffectFailureReason,
   errorDetail,
-  failCommandResultSideEffects,
-  failSettledCommandActiveSideEffects,
-  replaySettledCommandActiveSideEffects,
   settledCommandSideEffectFailureReason,
-} from "./command-result-side-effect-failures.js";
+} from "./command-result-side-effect-failure-common.js";
+import { replaySettledCommandActiveSideEffects } from "./command-result-side-effect-sweep.js";
 import { buildStoredCommandResultResponse } from "./stored-command-result-report.js";
 
 function buildCommandResultResponse(
