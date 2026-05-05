@@ -2,11 +2,11 @@
 
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import type { AvailableModel } from "@bb/domain";
-import type { SystemProviderInfo } from "@bb/server-contract";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as api from "@/lib/api";
 import { getProjectScopedStorageKey } from "@/lib/project-scoped-storage";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
+import { createTestSystemProvider } from "@/test/system-provider-test-utils";
 import {
   formatModelLabel,
   useThreadCreationOptions,
@@ -21,8 +21,6 @@ vi.mock("@/lib/api", async (importOriginal) => {
     listSystemProviders: vi.fn(),
   };
 });
-
-interface ProviderOverrides extends Partial<SystemProviderInfo> {}
 
 interface ModelOverrides extends Partial<AvailableModel> {}
 
@@ -41,20 +39,6 @@ const PERMISSION_MODE_OPTIONS = [
     label: "Readonly",
   },
 ] as const;
-
-function makeProvider(overrides: ProviderOverrides = {}): SystemProviderInfo {
-  return {
-    available: true,
-    capabilities: {
-      supportsRename: true,
-      supportsServiceTier: false,
-      supportedPermissionModes: ["full", "workspace-write", "readonly"],
-    },
-    displayName: "Codex",
-    id: "codex",
-    ...overrides,
-  };
-}
 
 function makeModel(overrides: ModelOverrides = {}): AvailableModel {
   return {
@@ -117,11 +101,9 @@ describe("useThreadCreationOptions", () => {
     );
 
     vi.mocked(api.listSystemProviders).mockResolvedValue([
-      makeProvider({
+      createTestSystemProvider({
         capabilities: {
-          supportsRename: true,
           supportsServiceTier: false,
-          supportedPermissionModes: ["full", "workspace-write", "readonly"],
         },
         displayName: "Codex",
         id: "codex",
@@ -178,8 +160,9 @@ describe("useThreadCreationOptions", () => {
     );
 
     vi.mocked(api.listSystemProviders).mockResolvedValue([
-      makeProvider({
+      createTestSystemProvider({
         capabilities: {
+          supportsArchive: false,
           supportsRename: false,
           supportsServiceTier: false,
           supportedPermissionModes: ["full"],
@@ -221,11 +204,9 @@ describe("useThreadCreationOptions", () => {
     const projectId = "project-storage";
 
     vi.mocked(api.listSystemProviders).mockResolvedValue([
-      makeProvider({
+      createTestSystemProvider({
         capabilities: {
-          supportsRename: true,
           supportsServiceTier: true,
-          supportedPermissionModes: ["full", "workspace-write", "readonly"],
         },
         id: "codex",
       }),
@@ -308,7 +289,7 @@ describe("useThreadCreationOptions", () => {
 
   it("preserves touched thread selections until the reset key changes", async () => {
     vi.mocked(api.listSystemProviders).mockResolvedValue([
-      makeProvider({
+      createTestSystemProvider({
         id: "codex",
       }),
     ]);
@@ -393,11 +374,14 @@ describe("useThreadCreationOptions", () => {
 
   it("switches to the new provider default model when the provider changes", async () => {
     vi.mocked(api.listSystemProviders).mockResolvedValue([
-      makeProvider({
+      createTestSystemProvider({
         displayName: "Codex",
         id: "codex",
       }),
-      makeProvider({
+      createTestSystemProvider({
+        capabilities: {
+          supportsArchive: false,
+        },
         displayName: "Claude Code",
         id: "claude-code",
       }),
@@ -459,11 +443,14 @@ describe("useThreadCreationOptions", () => {
 
   it("passes the current model to provider lookup for selected-only runtime models", async () => {
     vi.mocked(api.listSystemProviders).mockResolvedValue([
-      makeProvider({
+      createTestSystemProvider({
         displayName: "Codex",
         id: "codex",
       }),
-      makeProvider({
+      createTestSystemProvider({
+        capabilities: {
+          supportsArchive: false,
+        },
         displayName: "Claude Code",
         id: "claude-code",
       }),

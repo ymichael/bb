@@ -197,6 +197,40 @@ const commandHandlers: CommandHandlerMap = {
     });
     return {};
   },
+  "thread.archive": async (
+    command: Extract<HostDaemonCommand, { type: "thread.archive" }>,
+    options: CommandDispatchOptions,
+  ) => {
+    const entry = await requireWorkspaceEnvironment(
+      {
+        environmentId: command.environmentId,
+        workspaceContext: command.workspaceContext,
+      },
+      options.runtimeManager,
+    );
+    await entry.runtime.archiveThread({
+      threadId: command.threadId,
+      providerId: command.providerId,
+      providerThreadId: command.providerThreadId,
+    });
+    return {};
+  },
+  "thread.unarchive": async (
+    command: Extract<HostDaemonCommand, { type: "thread.unarchive" }>,
+    options: CommandDispatchOptions,
+  ) => {
+    const runtime = await options.runtimeManager.ensureProviderMaintenanceRuntime(
+      {
+        dataDir: options.dataDir,
+      },
+    );
+    await runtime.unarchiveThread({
+      threadId: command.threadId,
+      providerId: command.providerId,
+      providerThreadId: command.providerThreadId,
+    });
+    return {};
+  },
   "thread.deleted": async (
     command: Extract<HostDaemonCommand, { type: "thread.deleted" }>,
     options: CommandDispatchOptions,

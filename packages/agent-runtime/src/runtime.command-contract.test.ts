@@ -16,9 +16,10 @@ import { fakeProviderScriptPath } from "./test/index.js";
 import {
   createFakeAdapter,
   fullRuntimeOptions,
+  waitForRuntimeThreadEvent,
   waitForThreadTurnStarted,
 } from "./test/runtime-test-harness.js";
-import type { AgentRuntimeExecutionOptions } from "./types.js";
+import type { AgentRuntime, AgentRuntimeExecutionOptions } from "./types.js";
 
 interface RuntimeLinkedWorktreeFixture {
   expectedWritableRoots: string[];
@@ -27,6 +28,135 @@ interface RuntimeLinkedWorktreeFixture {
 
 interface CreateRuntimeLinkedWorktreeFixtureArgs {
   rootPath: string;
+}
+
+type RuntimeEventHandler = (event: ThreadEvent) => void;
+
+interface CreateContractRuntimeArgs {
+  onEvent?: RuntimeEventHandler;
+  scriptPath: string;
+  workspacePath: string;
+}
+
+interface WriteArchiveProviderScriptArgs {
+  archiveErrorMessage?: string;
+  expectedProviderThreadId: string;
+  threadId: string;
+  unarchiveErrorMessage?: string;
+}
+
+const missingProviderThreadId = "t-missing";
+const missingProviderThreadIdError =
+  /No provider thread id available for t-missing/;
+
+function createContractRuntime(args: CreateContractRuntimeArgs): AgentRuntime {
+  return createAgentRuntimeWithAdapters({
+    workspacePath: args.workspacePath,
+    onEvent: args.onEvent ?? (() => {}),
+    onToolCall: async () => ({
+      contentItems: [{ type: "inputText", text: "ok" }],
+      success: true,
+    }),
+    adapterFactory: () => createFakeAdapter(args.scriptPath),
+  });
+}
+
+async function registerThreadWithoutProviderThreadId(
+  runtime: AgentRuntime,
+): Promise<void> {
+  await expect(
+    runtime.resumeThread({
+      environmentId: "env-1",
+      threadId: missingProviderThreadId,
+      projectId: "p1",
+      providerId: "fake",
+      options: fullRuntimeOptions,
+    }),
+  ).rejects.toThrow(missingProviderThreadIdError);
+}
+
+function writeArchiveProviderScript(
+  scriptPath: string,
+  args: WriteArchiveProviderScriptArgs,
+): void {
+  writeFileSync(
+    scriptPath,
+    `
+const readline = require("node:readline");
+
+function send(message) {
+  process.stdout.write(JSON.stringify(message) + "\\n");
+}
+
+function paramsOf(message) {
+  return message && typeof message.params === "object" && message.params !== null
+    ? message.params
+    : {};
+}
+
+const rl = readline.createInterface({ input: process.stdin });
+rl.on("line", (line) => {
+  const message = JSON.parse(line);
+  const params = paramsOf(message);
+  if (message.method === "initialize") {
+    send({ jsonrpc: "2.0", id: message.id, result: {} });
+    return;
+  }
+  if (message.method === "thread/start") {
+    send({
+      jsonrpc: "2.0",
+      id: message.id,
+      result: { providerThreadId: "provider-started" },
+    });
+    send({
+      jsonrpc: "2.0",
+      method: "thread/identity",
+      params: {
+        threadId: ${JSON.stringify(args.threadId)},
+        providerThreadId: "provider-started",
+      },
+    });
+    return;
+  }
+  if (message.method === "thread/archive" || message.method === "thread/unarchive") {
+    if (
+      params.threadId !== ${JSON.stringify(args.threadId)} ||
+      params.providerThreadId !== ${JSON.stringify(args.expectedProviderThreadId)}
+    ) {
+      send({
+        jsonrpc: "2.0",
+        id: message.id,
+        error: {
+          code: -32000,
+          message: "wrong archive params " + JSON.stringify(params),
+        },
+      });
+      return;
+    }
+    const forcedError =
+      message.method === "thread/archive"
+        ? ${JSON.stringify(args.archiveErrorMessage ?? null)}
+        : ${JSON.stringify(args.unarchiveErrorMessage ?? null)};
+    if (forcedError) {
+      send({
+        jsonrpc: "2.0",
+        id: message.id,
+        error: { code: -32000, message: forcedError },
+      });
+      return;
+    }
+    send({ jsonrpc: "2.0", id: message.id, result: {} });
+    return;
+  }
+  send({
+    jsonrpc: "2.0",
+    id: message.id,
+    error: { code: -32601, message: "Method not found: " + message.method },
+  });
+});
+`,
+    "utf8",
+  );
 }
 
 function createRuntimeLinkedWorktreeFixture(
@@ -312,6 +442,181 @@ rl.on("line", (line) => {
     await expect(
       runtime.renameThread({ threadId: "t1", title: "New Title" }),
     ).rejects.toThrow(/does not support thread rename/);
+    await runtime.shutdown();
+  });
+
+  it("rejects thread resume when providerThreadId cannot be resolved", async () => {
+    const runtime = createContractRuntime({
+      scriptPath,
+      workspacePath: tmpDir,
+    });
+
+    await registerThreadWithoutProviderThreadId(runtime);
+    await runtime.shutdown();
+  });
+
+  it("rejects turn start when providerThreadId cannot be resolved", async () => {
+    const runtime = createContractRuntime({
+      scriptPath,
+      workspacePath: tmpDir,
+    });
+
+    await registerThreadWithoutProviderThreadId(runtime);
+    await expect(
+      runtime.runTurn({
+        threadId: missingProviderThreadId,
+        input: [{ type: "text", text: "hello" }],
+        options: fullRuntimeOptions,
+      }),
+    ).rejects.toThrow(missingProviderThreadIdError);
+    await runtime.shutdown();
+  });
+
+  it("rejects thread rename when providerThreadId cannot be resolved", async () => {
+    const runtime = createContractRuntime({
+      scriptPath,
+      workspacePath: tmpDir,
+    });
+
+    await registerThreadWithoutProviderThreadId(runtime);
+    await expect(
+      runtime.renameThread({
+        threadId: missingProviderThreadId,
+        title: "New Title",
+      }),
+    ).rejects.toThrow(missingProviderThreadIdError);
+    await runtime.shutdown();
+  });
+
+  it("archives threads using caller-provided provider ids without runtime registry state", async () => {
+    const archiveScriptPath = join(tmpDir, "archive-provider.cjs");
+    writeArchiveProviderScript(archiveScriptPath, {
+      expectedProviderThreadId: "provider-explicit",
+      threadId: "t-archive",
+    });
+    const runtime = createContractRuntime({
+      scriptPath: archiveScriptPath,
+      workspacePath: tmpDir,
+    });
+
+    await runtime.archiveThread({
+      threadId: "t-archive",
+      providerId: "fake",
+      providerThreadId: "provider-explicit",
+    });
+    await runtime.shutdown();
+  });
+
+  it("unarchives threads using caller-provided provider ids without runtime registry state", async () => {
+    const archiveScriptPath = join(tmpDir, "unarchive-provider.cjs");
+    writeArchiveProviderScript(archiveScriptPath, {
+      expectedProviderThreadId: "provider-explicit",
+      threadId: "t-unarchive",
+    });
+    const runtime = createContractRuntime({
+      scriptPath: archiveScriptPath,
+      workspacePath: tmpDir,
+    });
+
+    await runtime.unarchiveThread({
+      threadId: "t-unarchive",
+      providerId: "fake",
+      providerThreadId: "provider-explicit",
+    });
+    await runtime.shutdown();
+  });
+
+  it("accepts Codex duplicate archive and unarchive state errors", async () => {
+    const archiveScriptPath = join(tmpDir, "archive-idempotency-provider.cjs");
+    writeArchiveProviderScript(archiveScriptPath, {
+      archiveErrorMessage: "no rollout found for thread id provider-explicit",
+      expectedProviderThreadId: "provider-explicit",
+      threadId: "t-archive-idempotency",
+      unarchiveErrorMessage:
+        "no archived rollout found for thread id provider-explicit",
+    });
+    const runtime = createContractRuntime({
+      scriptPath: archiveScriptPath,
+      workspacePath: tmpDir,
+    });
+
+    await runtime.archiveThread({
+      threadId: "t-archive-idempotency",
+      providerId: "fake",
+      providerThreadId: "provider-explicit",
+    });
+    await runtime.unarchiveThread({
+      threadId: "t-archive-idempotency",
+      providerId: "fake",
+      providerThreadId: "provider-explicit",
+    });
+    await runtime.shutdown();
+  });
+
+  it("rejects turn steer when providerThreadId cannot be resolved", async () => {
+    const events: ThreadEvent[] = [];
+    const activeTurnScriptPath = join(tmpDir, "active-turn-provider.cjs");
+    writeFileSync(
+      activeTurnScriptPath,
+      `
+const readline = require("node:readline");
+
+function send(message) {
+  process.stdout.write(JSON.stringify(message) + "\\n");
+}
+
+let turnStartedInterval = null;
+const rl = readline.createInterface({ input: process.stdin });
+rl.on("line", (line) => {
+  const message = JSON.parse(line);
+  if (message.method === "initialize") {
+    send({ jsonrpc: "2.0", id: message.id, result: {} });
+    turnStartedInterval = setInterval(() => {
+      send({
+        jsonrpc: "2.0",
+        method: "turn/started",
+        params: { threadId: "${missingProviderThreadId}", turnId: "turn-1" },
+      });
+    }, 10);
+    return;
+  }
+
+  send({ jsonrpc: "2.0", id: message.id, result: {} });
+});
+process.on("SIGTERM", () => {
+  if (turnStartedInterval) {
+    clearInterval(turnStartedInterval);
+  }
+  process.exit(0);
+});
+`,
+      "utf8",
+    );
+    const runtime = createContractRuntime({
+      onEvent: (event) => events.push(event),
+      scriptPath: activeTurnScriptPath,
+      workspacePath: tmpDir,
+    });
+
+    await registerThreadWithoutProviderThreadId(runtime);
+    await waitForRuntimeThreadEvent({
+      events,
+      label: "synthetic active turn without provider identity",
+      predicate: (event) =>
+        event.type === "turn/started" &&
+        event.threadId === missingProviderThreadId,
+      runtime,
+      threadId: missingProviderThreadId,
+      timeoutMs: 1000,
+    });
+    await expect(
+      runtime.steerTurn({
+        threadId: missingProviderThreadId,
+        expectedTurnId: "turn-1",
+        input: [{ type: "text", text: "steer" }],
+        options: fullRuntimeOptions,
+      }),
+    ).rejects.toThrow(missingProviderThreadIdError);
     await runtime.shutdown();
   });
 

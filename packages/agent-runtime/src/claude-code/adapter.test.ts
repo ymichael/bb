@@ -61,6 +61,7 @@ describe("claude-code provider adapter", () => {
   it("advertises trimmed capabilities", () => {
     const adapter = createClaudeCodeProviderAdapter();
     expect(adapter.capabilities).toEqual({
+      supportsArchive: false,
       supportsRename: false,
       supportsServiceTier: false,
       supportedPermissionModes: ["full", "workspace-write", "readonly"],
@@ -371,22 +372,6 @@ describe("claude-code provider adapter", () => {
         },
       ]),
     ).toHaveLength(1);
-  });
-
-  it("buildCommand thread/resume uses null for missing providerThreadId", () => {
-    const adapter = createClaudeCodeProviderAdapter();
-    const cmd = adapter.buildCommandPlan({
-      type: "thread/resume",
-      cwd: "/tmp/worktree",
-      threadId: "bb-thread-1",
-      providerThreadId: undefined,
-      instructionMode: "append",
-      options: workspaceWriteProviderExecutionContext,
-    });
-    expect(cmd?.params).toMatchObject({
-      threadId: "bb-thread-1",
-      providerThreadId: null,
-    });
   });
 
   it("buildCommand thread/resume maps updated permission policy", () => {

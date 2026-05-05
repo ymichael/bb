@@ -102,6 +102,7 @@ describe("provider registry", () => {
         id: "codex",
         displayName: "Codex",
         capabilities: {
+          supportsArchive: true,
           supportsRename: true,
           supportsServiceTier: true,
           supportedPermissionModes: ["full", "workspace-write", "readonly"],
@@ -112,6 +113,7 @@ describe("provider registry", () => {
         id: "claude-code",
         displayName: "Claude Code",
         capabilities: {
+          supportsArchive: false,
           supportsRename: false,
           supportsServiceTier: false,
           supportedPermissionModes: ["full", "workspace-write", "readonly"],
@@ -122,6 +124,7 @@ describe("provider registry", () => {
         id: "pi",
         displayName: "Pi",
         capabilities: {
+          supportsArchive: false,
           supportsRename: false,
           supportsServiceTier: false,
           supportedPermissionModes: ["full"],

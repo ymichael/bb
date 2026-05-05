@@ -112,7 +112,7 @@ export type AdapterCommand =
       type: "thread/resume";
       threadId: string;
       cwd: string;
-      providerThreadId?: string;
+      providerThreadId: string;
       options: ProviderExecutionContext;
       dynamicTools?: DynamicTool[];
       instructionMode: InstructionMode;
@@ -120,7 +120,7 @@ export type AdapterCommand =
   | {
       type: "turn/start";
       threadId: string;
-      providerThreadId?: string;
+      providerThreadId: string;
       input: PromptInput[];
       clientRequestSequence?: number;
       options: ProviderExecutionContext;
@@ -128,7 +128,7 @@ export type AdapterCommand =
   | {
       type: "turn/steer";
       threadId: string;
-      providerThreadId?: string;
+      providerThreadId: string;
       expectedTurnId: string;
       input: PromptInput[];
       clientRequestSequence?: number;
@@ -143,8 +143,18 @@ export type AdapterCommand =
   | {
       type: "thread/name/set";
       threadId: string;
-      providerThreadId?: string;
+      providerThreadId: string;
       title: string;
+    }
+  | {
+      type: "thread/archive";
+      threadId: string;
+      providerThreadId: string;
+    }
+  | {
+      type: "thread/unarchive";
+      threadId: string;
+      providerThreadId: string;
     };
 
 export type TurnStartAdapterCommand = Extract<

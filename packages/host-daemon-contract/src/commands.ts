@@ -21,7 +21,7 @@ import {
 import { z } from "zod";
 import { hostRuntimeMaterialSnapshotSchema } from "./local-state.js";
 
-export const HOST_DAEMON_PROTOCOL_VERSION = 11 as const;
+export const HOST_DAEMON_PROTOCOL_VERSION = 12 as const;
 
 export const FILE_LIST_QUERY_MAX_LENGTH = 256;
 export const FILE_LIST_LIMIT_MAX = 10_000;
@@ -31,6 +31,8 @@ export const HOST_DAEMON_COMMAND_TYPES = [
   "turn.submit",
   "thread.stop",
   "thread.rename",
+  "thread.archive",
+  "thread.unarchive",
   "thread.deleted",
   "interactive.resolve",
   "host.sync_runtime_material",
@@ -81,6 +83,10 @@ const hostDaemonThreadTargetSchema = z.object({
   threadId: z.string().min(1),
 });
 
+const hostDaemonProviderThreadTargetSchema = z.object({
+  threadId: z.string().min(1),
+});
+
 const hostDaemonThreadRuntimeContextSchema = z.object({
   workspaceContext: workspaceContextSchema,
   projectId: z.string().min(1),
@@ -107,6 +113,11 @@ const hostDaemonEnvironmentTargetSchema = z.object({
 
 const hostDaemonWorkspaceTargetSchema =
   hostDaemonEnvironmentTargetSchema.extend({
+    workspaceContext: workspaceContextSchema,
+  });
+
+const hostDaemonThreadWorkspaceTargetSchema =
+  hostDaemonThreadTargetSchema.extend({
     workspaceContext: workspaceContextSchema,
   });
 
@@ -155,6 +166,20 @@ export const threadRenameCommandSchema = hostDaemonThreadTargetSchema.extend({
   type: z.literal("thread.rename"),
   title: z.string().min(1),
 });
+
+export const threadArchiveCommandSchema =
+  hostDaemonThreadWorkspaceTargetSchema.extend({
+    type: z.literal("thread.archive"),
+    providerId: z.string().min(1),
+    providerThreadId: z.string().min(1),
+  });
+
+export const threadUnarchiveCommandSchema =
+  hostDaemonProviderThreadTargetSchema.extend({
+    type: z.literal("thread.unarchive"),
+    providerId: z.string().min(1),
+    providerThreadId: z.string().min(1),
+  });
 
 export const threadDeletedCommandSchema = hostDaemonThreadTargetSchema.extend({
   type: z.literal("thread.deleted"),
@@ -369,6 +394,8 @@ const hostDaemonNonProvisionCommandSchema = z.discriminatedUnion("type", [
   turnSubmitCommandSchema,
   threadStopCommandSchema,
   threadRenameCommandSchema,
+  threadArchiveCommandSchema,
+  threadUnarchiveCommandSchema,
   threadDeletedCommandSchema,
   replayCaptureListCommandSchema,
   replayCaptureGetCommandSchema,
@@ -418,7 +445,9 @@ export function shouldFlushEventsBeforeReportingCommandResult(
     case "replay.capture_list":
     case "replay.run":
     case "thread.deleted":
+    case "thread.archive":
     case "thread.rename":
+    case "thread.unarchive":
     case "workspace.commit":
     case "workspace.demote":
     case "workspace.diff":
@@ -453,6 +482,8 @@ export const hostDaemonCommandResultSchemaByType = {
   }),
   "thread.stop": z.object({}),
   "thread.rename": z.object({}),
+  "thread.archive": z.object({}),
+  "thread.unarchive": z.object({}),
   "thread.deleted": z.object({}),
   "replay.capture_list": replayCaptureDaemonListResponseSchema,
   "replay.capture_get": replayCaptureManifestSchema,

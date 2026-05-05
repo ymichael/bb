@@ -214,6 +214,7 @@ export class CommandRouter {
     return (
       type === "environment.provision" ||
       type === "environment.destroy" ||
+      type === "thread.archive" ||
       type.startsWith("workspace.")
     );
   }

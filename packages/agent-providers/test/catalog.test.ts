@@ -15,6 +15,7 @@ describe("agent provider catalog", () => {
         id: "codex",
         displayName: "Codex",
         capabilities: {
+          supportsArchive: true,
           supportsRename: true,
           supportsServiceTier: true,
           supportedPermissionModes: ["full", "workspace-write", "readonly"],
@@ -25,6 +26,7 @@ describe("agent provider catalog", () => {
         id: "claude-code",
         displayName: "Claude Code",
         capabilities: {
+          supportsArchive: false,
           supportsRename: false,
           supportsServiceTier: false,
           supportedPermissionModes: ["full", "workspace-write", "readonly"],
@@ -35,6 +37,7 @@ describe("agent provider catalog", () => {
         id: "pi",
         displayName: "Pi",
         capabilities: {
+          supportsArchive: false,
           supportsRename: false,
           supportsServiceTier: false,
           supportedPermissionModes: ["full"],

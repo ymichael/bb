@@ -198,6 +198,7 @@ export function createWarningEventAdapter(scriptPath: string): ProviderAdapter {
     id: "warning-fake",
     displayName: "Warning Fake",
     capabilities: {
+      supportsArchive: false,
       supportsRename: false,
       supportsServiceTier: false,
       supportedPermissionModes: ["full", "workspace-write", "readonly"],
@@ -232,13 +233,15 @@ export function createWarningEventAdapter(scriptPath: string): ProviderAdapter {
             kind: "request",
             method: "turn/start",
             params: {
-              threadId: command.providerThreadId ?? command.threadId,
+              threadId: command.providerThreadId,
             },
           };
         case "thread/resume":
         case "turn/steer":
         case "thread/stop":
         case "thread/name/set":
+        case "thread/archive":
+        case "thread/unarchive":
           return unsupportedRuntimeTestCommand(command);
       }
     },
@@ -302,6 +305,7 @@ export function createStartedEventAdapter(scriptPath: string): ProviderAdapter {
     id: "started-fake",
     displayName: "Started Fake",
     capabilities: {
+      supportsArchive: false,
       supportsRename: false,
       supportsServiceTier: false,
       supportedPermissionModes: ["full", "workspace-write", "readonly"],
@@ -336,6 +340,8 @@ export function createStartedEventAdapter(scriptPath: string): ProviderAdapter {
         case "turn/steer":
         case "thread/stop":
         case "thread/name/set":
+        case "thread/archive":
+        case "thread/unarchive":
           return unsupportedRuntimeTestCommand(command);
       }
     },

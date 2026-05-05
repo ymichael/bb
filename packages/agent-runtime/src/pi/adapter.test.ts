@@ -157,6 +157,7 @@ describe("pi provider adapter", () => {
   it("advertises trimmed capabilities", () => {
     const adapter = createPiProviderAdapter();
     expect(adapter.capabilities).toEqual({
+      supportsArchive: false,
       supportsRename: false,
       supportsServiceTier: false,
       supportedPermissionModes: ["full"],

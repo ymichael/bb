@@ -2,6 +2,7 @@ import {
   archiveThread,
   createDraft,
   deleteDraft,
+  getEnvironment,
   getDraft,
   unarchiveThread,
   updateThread,
@@ -43,7 +44,11 @@ import {
   pruneThreadEventHistoryBestEffort,
   resetActiveThreadEventPruningState,
 } from "../../services/system/event-pruning.js";
-import { buildExecutionOptions } from "../../services/threads/thread-commands.js";
+import {
+  buildExecutionOptions,
+  queueThreadArchiveCommand,
+  queueThreadUnarchiveCommand,
+} from "../../services/threads/thread-commands.js";
 import { getLastProviderThreadId } from "../../services/threads/thread-events.js";
 import { requestThreadStopIfNeeded } from "../../services/threads/thread-lifecycle.js";
 import { toThreadResponseFromThread } from "../../services/threads/thread-runtime-display.js";
@@ -211,7 +216,20 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
         deps,
         thread,
       });
+      const providerThreadId = getLastProviderThreadId(deps, thread.id);
       archiveThread(deps.db, deps.hub, thread.id);
+      if (providerThreadId) {
+        queueThreadArchiveCommand(deps, {
+          environment: {
+            id: environment.id,
+            hostId: environment.hostId,
+            path: environment.path,
+            workspaceProvisionType: environment.workspaceProvisionType,
+          },
+          providerThreadId,
+          thread,
+        });
+      }
       requestThreadStopIfNeeded(deps, thread, environment);
       resetActiveThreadEventPruningState(thread.id);
       pruneThreadEventHistoryBestEffort(deps, {
@@ -232,8 +250,21 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
   );
 
   post("/threads/:id/unarchive", (context) => {
-    requirePublicThread(deps.db, context.req.param("id"));
-    unarchiveThread(deps.db, deps.hub, context.req.param("id"));
+    const thread = requirePublicThread(deps.db, context.req.param("id"));
+    const providerThreadId = getLastProviderThreadId(deps, thread.id);
+    const environment = thread.environmentId
+      ? getEnvironment(deps.db, thread.environmentId)
+      : null;
+    unarchiveThread(deps.db, deps.hub, thread.id);
+    if (providerThreadId && environment) {
+      queueThreadUnarchiveCommand(deps, {
+        host: {
+          hostId: environment.hostId,
+        },
+        providerThreadId,
+        thread,
+      });
+    }
     return context.json({ ok: true });
   });
 

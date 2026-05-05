@@ -145,6 +145,18 @@ export interface RenameThreadArgs {
   title: string;
 }
 
+export interface ArchiveThreadArgs {
+  providerId: string;
+  providerThreadId: string;
+  threadId: string;
+}
+
+export interface UnarchiveThreadArgs {
+  providerId: string;
+  providerThreadId: string;
+  threadId: string;
+}
+
 export interface ListModelsArgs {
   providerId: string;
   selectedModel?: string;
@@ -164,6 +176,10 @@ export interface AgentRuntime {
   stopThread(args: StopThreadArgs): Promise<void>;
 
   renameThread(args: RenameThreadArgs): Promise<void>;
+
+  archiveThread(args: ArchiveThreadArgs): Promise<void>;
+
+  unarchiveThread(args: UnarchiveThreadArgs): Promise<void>;
 
   listModels(args: ListModelsArgs): Promise<AvailableModel[]>;
 

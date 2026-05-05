@@ -160,6 +160,12 @@ export function createFakeRuntime() {
     steeredTurnInstructions: undefined as string | undefined,
     stoppedThreadId: undefined as string | undefined,
     renamedTitle: undefined as string | undefined,
+    archivedThreadId: undefined as string | undefined,
+    archivedProviderId: undefined as string | undefined,
+    archivedProviderThreadId: undefined as string | undefined,
+    unarchivedThreadId: undefined as string | undefined,
+    unarchivedProviderId: undefined as string | undefined,
+    unarchivedProviderThreadId: undefined as string | undefined,
     runningProviders: [] as string[],
     shutdownCount: 0,
   };
@@ -228,6 +234,24 @@ export function createFakeRuntime() {
     },
     async renameThread(args: { title: string }) {
       state.renamedTitle = args.title;
+    },
+    async archiveThread(args: {
+      providerId: string;
+      providerThreadId: string;
+      threadId: string;
+    }) {
+      state.archivedThreadId = args.threadId;
+      state.archivedProviderId = args.providerId;
+      state.archivedProviderThreadId = args.providerThreadId;
+    },
+    async unarchiveThread(args: {
+      providerId: string;
+      providerThreadId: string;
+      threadId: string;
+    }) {
+      state.unarchivedThreadId = args.threadId;
+      state.unarchivedProviderId = args.providerId;
+      state.unarchivedProviderThreadId = args.providerThreadId;
     },
     listRunningProviders() {
       return state.runningProviders;

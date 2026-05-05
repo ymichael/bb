@@ -53,6 +53,29 @@ describe("thread command dispatch", () => {
       },
       harness.dispatchOptions(),
     );
+    const archiveResult = await dispatchCommand(
+      {
+        type: "thread.archive",
+        environmentId: "env-1",
+        threadId: "thread-1",
+        workspaceContext: {
+          workspacePath: "/tmp/env-1",
+          workspaceProvisionType: "unmanaged",
+        },
+        providerId: "fake",
+        providerThreadId: "provider-thread-1",
+      },
+      harness.dispatchOptions(),
+    );
+    const unarchiveResult = await dispatchCommand(
+      {
+        type: "thread.unarchive",
+        threadId: "thread-1",
+        providerId: "fake",
+        providerThreadId: "provider-thread-1",
+      },
+      harness.dispatchOptions(),
+    );
     const stopResult = await dispatchCommand(
       {
         type: "thread.stop",
@@ -65,14 +88,88 @@ describe("thread command dispatch", () => {
     expect(startResult).toEqual({ providerThreadId: "provider-thread-1" });
     expect(harness.runtimeState.startedEnvironmentId).toBe("env-1");
     expect(renameResult).toEqual({});
+    expect(archiveResult).toEqual({});
+    expect(unarchiveResult).toEqual({});
     expect(stopResult).toEqual({});
     expect(harness.runtimeState.startedThreadId).toBe("thread-1");
     expect(harness.runtimeState.startedInstructions).toBe(
       "Be a helpful coding agent.",
     );
     expect(harness.runtimeState.renamedTitle).toBe("Renamed");
+    expect(harness.runtimeState.archivedThreadId).toBe("thread-1");
+    expect(harness.runtimeState.archivedProviderId).toBe("fake");
+    expect(harness.runtimeState.archivedProviderThreadId).toBe(
+      "provider-thread-1",
+    );
+    expect(harness.runtimeState.unarchivedThreadId).toBe("thread-1");
+    expect(harness.runtimeState.unarchivedProviderId).toBe("fake");
+    expect(harness.runtimeState.unarchivedProviderThreadId).toBe(
+      "provider-thread-1",
+    );
     expect(harness.runtimeState.stoppedThreadId).toBe("thread-1");
     expect(harness.manager.listActiveThreads()).toEqual([]);
+  });
+
+  it("creates the environment runtime for archive commands when needed", async () => {
+    const harness = createHarness({ workspacePath: "/tmp/recreated-env" });
+
+    const result = await dispatchCommand(
+      {
+        type: "thread.archive",
+        environmentId: "env-recreated",
+        threadId: "thread-archive",
+        workspaceContext: {
+          workspacePath: "/tmp/recreated-env",
+          workspaceProvisionType: "unmanaged",
+        },
+        providerId: "fake",
+        providerThreadId: "provider-archive",
+      },
+      harness.dispatchOptions(),
+    );
+
+    expect(result).toEqual({});
+    expect(harness.provisions).toEqual([
+      {
+        workspaceProvisionType: "unmanaged",
+        path: "/tmp/recreated-env",
+      },
+    ]);
+    expect(harness.runtimeState.archivedThreadId).toBe("thread-archive");
+    expect(harness.runtimeState.archivedProviderId).toBe("fake");
+    expect(harness.runtimeState.archivedProviderThreadId).toBe(
+      "provider-archive",
+    );
+  });
+
+  it("unarchives through provider maintenance runtime after managed workspace cleanup", async () => {
+    const dataDir = await makeTempDir("bb-daemon-data-");
+    const oldManagedWorkspacePath = path.join(dataDir, "destroyed-worktree");
+    const harness = createHarness({ workspacePath: oldManagedWorkspacePath });
+
+    const result = await dispatchCommand(
+      {
+        type: "thread.unarchive",
+        threadId: "thread-unarchive-cleaned",
+        providerId: "fake",
+        providerThreadId: "provider-unarchive-cleaned",
+      },
+      harness.dispatchOptions({ dataDir }),
+    );
+
+    expect(result).toEqual({});
+    expect(harness.provisions).toEqual([]);
+    const maintenanceWorkspace = await fs.stat(
+      path.join(dataDir, "provider-maintenance-workspace"),
+    );
+    expect(maintenanceWorkspace.isDirectory()).toBe(true);
+    expect(harness.runtimeState.unarchivedThreadId).toBe(
+      "thread-unarchive-cleaned",
+    );
+    expect(harness.runtimeState.unarchivedProviderId).toBe("fake");
+    expect(harness.runtimeState.unarchivedProviderThreadId).toBe(
+      "provider-unarchive-cleaned",
+    );
   });
 
   it("covers turn.submit start and auto targets", async () => {
@@ -600,6 +697,7 @@ describe("thread command dispatch", () => {
             id: "fake",
             displayName: "Fake Provider",
             capabilities: {
+              supportsArchive: false,
               supportsRename: false,
               supportsServiceTier: false,
               supportedPermissionModes: ["full", "workspace-write", "readonly"],
@@ -616,6 +714,7 @@ describe("thread command dispatch", () => {
           id: "fake",
           displayName: "Fake Provider",
           capabilities: {
+            supportsArchive: false,
             supportsRename: false,
             supportsServiceTier: false,
             supportedPermissionModes: ["full", "workspace-write", "readonly"],

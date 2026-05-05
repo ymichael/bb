@@ -12,10 +12,10 @@ import type {
   PendingInteraction,
   ThreadWithRuntime,
 } from "@bb/domain";
-import type { SystemProviderInfo } from "@bb/server-contract";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as api from "@/lib/api";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
+import { createTestSystemProvider } from "@/test/system-provider-test-utils";
 import { ThreadDetailPromptArea } from "./ThreadDetailPromptArea";
 
 const PROMPT_DRAFT_STORAGE_KEY = "bb.promptbox.contents-proj_1-thr_1-3";
@@ -35,8 +35,6 @@ vi.mock("@/lib/api", async (importOriginal) => {
     stopThread: vi.fn(),
   };
 });
-
-interface ProviderOverrides extends Partial<SystemProviderInfo> {}
 
 interface ModelOverrides extends Partial<AvailableModel> {}
 
@@ -98,20 +96,6 @@ function createPendingInteraction(): PendingInteraction {
   };
 }
 
-function makeProvider(overrides: ProviderOverrides = {}): SystemProviderInfo {
-  return {
-    available: true,
-    capabilities: {
-      supportsRename: true,
-      supportsServiceTier: false,
-      supportedPermissionModes: ["full", "workspace-write", "readonly"],
-    },
-    displayName: "Codex",
-    id: "codex",
-    ...overrides,
-  };
-}
-
 function makeModel(overrides: ModelOverrides = {}): AvailableModel {
   return {
     defaultReasoningEffort: "medium",
@@ -162,7 +146,9 @@ describe("ThreadDetailPromptArea", () => {
     vi.mocked(api.getThreadDefaultExecutionOptions).mockResolvedValue(null);
     vi.mocked(api.listThreadDrafts).mockResolvedValue([]);
     vi.mocked(api.listThreadPromptHistory).mockResolvedValue([]);
-    vi.mocked(api.listSystemProviders).mockResolvedValue([makeProvider()]);
+    vi.mocked(api.listSystemProviders).mockResolvedValue([
+      createTestSystemProvider(),
+    ]);
     vi.mocked(api.getAvailableModels).mockResolvedValue([makeModel()]);
     vi.mocked(api.listThreads).mockResolvedValue([]);
 
@@ -211,7 +197,9 @@ describe("ThreadDetailPromptArea", () => {
     vi.mocked(api.getThreadDefaultExecutionOptions).mockResolvedValue(null);
     vi.mocked(api.listThreadDrafts).mockResolvedValue([]);
     vi.mocked(api.listThreadPromptHistory).mockResolvedValue([]);
-    vi.mocked(api.listSystemProviders).mockResolvedValue([makeProvider()]);
+    vi.mocked(api.listSystemProviders).mockResolvedValue([
+      createTestSystemProvider(),
+    ]);
     vi.mocked(api.getAvailableModels).mockResolvedValue([makeModel()]);
     vi.mocked(api.listThreads).mockResolvedValue([]);
 
@@ -260,7 +248,9 @@ describe("ThreadDetailPromptArea", () => {
     vi.mocked(api.getThreadDefaultExecutionOptions).mockResolvedValue(null);
     vi.mocked(api.listThreadDrafts).mockResolvedValue([]);
     vi.mocked(api.listThreadPromptHistory).mockResolvedValue([]);
-    vi.mocked(api.listSystemProviders).mockResolvedValue([makeProvider()]);
+    vi.mocked(api.listSystemProviders).mockResolvedValue([
+      createTestSystemProvider(),
+    ]);
     vi.mocked(api.getAvailableModels).mockResolvedValue([makeModel()]);
     vi.mocked(api.listThreads).mockResolvedValue([]);
 
@@ -301,7 +291,9 @@ describe("ThreadDetailPromptArea", () => {
     vi.mocked(api.getThreadDefaultExecutionOptions).mockResolvedValue(null);
     vi.mocked(api.listThreadDrafts).mockResolvedValue([]);
     vi.mocked(api.listThreadPromptHistory).mockResolvedValue([]);
-    vi.mocked(api.listSystemProviders).mockResolvedValue([makeProvider()]);
+    vi.mocked(api.listSystemProviders).mockResolvedValue([
+      createTestSystemProvider(),
+    ]);
     vi.mocked(api.getAvailableModels).mockResolvedValue([makeModel()]);
     vi.mocked(api.listThreads).mockResolvedValue([]);
 
@@ -358,7 +350,9 @@ describe("ThreadDetailPromptArea", () => {
     vi.mocked(api.getThreadDefaultExecutionOptions).mockResolvedValue(null);
     vi.mocked(api.listThreadDrafts).mockResolvedValue([]);
     vi.mocked(api.listThreadPromptHistory).mockResolvedValue([]);
-    vi.mocked(api.listSystemProviders).mockResolvedValue([makeProvider()]);
+    vi.mocked(api.listSystemProviders).mockResolvedValue([
+      createTestSystemProvider(),
+    ]);
     vi.mocked(api.getAvailableModels).mockResolvedValue([makeModel()]);
     vi.mocked(api.listThreads).mockResolvedValue([]);
     vi.mocked(api.stopThread).mockResolvedValue(undefined);

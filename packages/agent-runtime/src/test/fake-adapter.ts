@@ -129,6 +129,24 @@ function buildCommandPlan(command: AdapterCommand): ProviderCommandPlan {
           title: command.title,
         },
       };
+    case "thread/archive":
+      return {
+        kind: "request",
+        method: "thread/archive",
+        params: {
+          providerThreadId: command.providerThreadId,
+          threadId: command.threadId,
+        },
+      };
+    case "thread/unarchive":
+      return {
+        kind: "request",
+        method: "thread/unarchive",
+        params: {
+          providerThreadId: command.providerThreadId,
+          threadId: command.threadId,
+        },
+      };
     default: {
       const _exhaustive: never = command;
       throw new Error(`Unhandled fake adapter command: ${String(_exhaustive)}`);
@@ -264,6 +282,7 @@ export function createFakeAdapter(
   return {
     buildCommandPlan,
     capabilities: {
+      supportsArchive: true,
       supportsRename: true,
       supportsServiceTier: false,
       supportedPermissionModes: ["full", "workspace-write", "readonly"],

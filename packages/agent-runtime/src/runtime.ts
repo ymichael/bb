@@ -283,6 +283,25 @@ function createAgentRuntimeInternal(
     });
   }
 
+  function requireProviderThreadId(threadId: string): string {
+    const providerThreadId =
+      threadIdentityRegistry.getProviderThreadId(threadId);
+    if (!providerThreadId) {
+      throw new Error(`No provider thread id available for ${threadId}`);
+    }
+    return providerThreadId;
+  }
+
+  function isAcceptedThreadArchiveError(
+    commandType: "thread/archive" | "thread/unarchive",
+    message: string,
+  ): boolean {
+    if (commandType === "thread/archive") {
+      return message.includes("no rollout found for thread id");
+    }
+    return message.includes("no archived rollout found for thread id");
+  }
+
   async function reconfigureThreadIfNeeded(
     args: ReconfigureThreadIfNeededArgs,
   ): Promise<void> {
@@ -316,9 +335,7 @@ function createAgentRuntimeInternal(
       type: "thread/resume",
       threadId: args.threadId,
       cwd: currentConfig.workspacePath,
-      providerThreadId: threadIdentityRegistry.getProviderThreadId(
-        args.threadId,
-      ),
+      providerThreadId: requireProviderThreadId(args.threadId),
       options: toProviderExecutionContext({
         envVars,
         execOpts: nextOptions,
@@ -727,9 +744,7 @@ function createAgentRuntimeInternal(
         type: "thread/resume",
         threadId,
         cwd: options.workspacePath,
-        providerThreadId:
-          providerThreadId ??
-          threadIdentityRegistry.getProviderThreadId(threadId),
+        providerThreadId: providerThreadId ?? requireProviderThreadId(threadId),
         options: toProviderExecutionContext({
           envVars,
           execOpts,
@@ -802,7 +817,7 @@ function createAgentRuntimeInternal(
       const adapterCommand: AdapterCommand = {
         type: "turn/start",
         threadId,
-        providerThreadId: threadIdentityRegistry.getProviderThreadId(threadId),
+        providerThreadId: requireProviderThreadId(threadId),
         input,
         ...(clientRequestSequence !== undefined
           ? { clientRequestSequence }
@@ -876,7 +891,7 @@ function createAgentRuntimeInternal(
       const adapterCommand: AdapterCommand = {
         type: "turn/steer",
         threadId,
-        providerThreadId: threadIdentityRegistry.getProviderThreadId(threadId),
+        providerThreadId: requireProviderThreadId(threadId),
         expectedTurnId,
         input,
         ...(clientRequestSequence !== undefined
@@ -913,11 +928,7 @@ function createAgentRuntimeInternal(
     async stopThread({ threadId }) {
       const pid = resolveProviderForThread(threadId);
       const proc = requireProviderProcess(pid);
-      const providerThreadId =
-        threadIdentityRegistry.getProviderThreadId(threadId);
-      if (!providerThreadId) {
-        throw new Error(`No provider thread id available for ${threadId}`);
-      }
+      const providerThreadId = requireProviderThreadId(threadId);
       const activeTurnId = turnState.getActiveTurnId(threadId);
       const adapterCommand: AdapterCommand = {
         type: "thread/stop",
@@ -967,7 +978,7 @@ function createAgentRuntimeInternal(
       const adapterCommand: AdapterCommand = {
         type: "thread/name/set",
         threadId,
-        providerThreadId: threadIdentityRegistry.getProviderThreadId(threadId),
+        providerThreadId: requireProviderThreadId(threadId),
         title,
       };
       const cmd = requireProviderRequestPlan({
@@ -986,6 +997,102 @@ function createAgentRuntimeInternal(
         command: adapterCommand,
         proc,
         providerId: pid,
+        rawMethod: cmd.method,
+        sourceThreadId: threadId,
+      });
+    },
+
+    async archiveThread({ threadId, providerId, providerThreadId }) {
+      await runtime.ensureProvider({ providerId });
+      const proc = requireProviderProcess(providerId);
+      if (!proc.adapter.capabilities.supportsArchive) {
+        throw new Error(
+          `Provider "${providerId}" does not support thread archive.`,
+        );
+      }
+
+      const adapterCommand: AdapterCommand = {
+        type: "thread/archive",
+        threadId,
+        providerThreadId,
+      };
+      const cmd = requireProviderRequestPlan({
+        commandType: adapterCommand.type,
+        plan: proc.adapter.buildCommandPlan(adapterCommand),
+        providerId,
+      });
+      try {
+        await sendJsonRpcRequest({
+          child: proc.child,
+          message: cmd,
+          pending: proc.pending,
+          getNextId: () => nextRequestId++,
+          resultSchema: ignoredJsonRpcResultSchema,
+        });
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          isAcceptedThreadArchiveError(adapterCommand.type, error.message)
+        ) {
+          // Codex archive/unarchive is not idempotent at the protocol layer;
+          // duplicate-state errors mean the requested final state is already
+          // reached from bb's perspective.
+        } else {
+          throw error;
+        }
+      }
+      emitAcceptedCommandEvents({
+        command: adapterCommand,
+        proc,
+        providerId,
+        rawMethod: cmd.method,
+        sourceThreadId: threadId,
+      });
+    },
+
+    async unarchiveThread({ threadId, providerId, providerThreadId }) {
+      await runtime.ensureProvider({ providerId });
+      const proc = requireProviderProcess(providerId);
+      if (!proc.adapter.capabilities.supportsArchive) {
+        throw new Error(
+          `Provider "${providerId}" does not support thread archive.`,
+        );
+      }
+
+      const adapterCommand: AdapterCommand = {
+        type: "thread/unarchive",
+        threadId,
+        providerThreadId,
+      };
+      const cmd = requireProviderRequestPlan({
+        commandType: adapterCommand.type,
+        plan: proc.adapter.buildCommandPlan(adapterCommand),
+        providerId,
+      });
+      try {
+        await sendJsonRpcRequest({
+          child: proc.child,
+          message: cmd,
+          pending: proc.pending,
+          getNextId: () => nextRequestId++,
+          resultSchema: ignoredJsonRpcResultSchema,
+        });
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          isAcceptedThreadArchiveError(adapterCommand.type, error.message)
+        ) {
+          // Codex archive/unarchive is not idempotent at the protocol layer;
+          // duplicate-state errors mean the requested final state is already
+          // reached from bb's perspective.
+        } else {
+          throw error;
+        }
+      }
+      emitAcceptedCommandEvents({
+        command: adapterCommand,
+        proc,
+        providerId,
         rawMethod: cmd.method,
         sourceThreadId: threadId,
       });

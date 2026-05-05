@@ -553,6 +553,7 @@ export function createClaudeCodeProviderAdapter(
   const additionalWorkspaceWriteRoots = opts?.additionalWorkspaceWriteRoots ?? [];
   const providerInfo = getBuiltInAgentProviderInfo("claude-code");
   const capabilities: ProviderCapabilities = {
+    supportsArchive: providerInfo.capabilities.supportsArchive,
     supportsRename: providerInfo.capabilities.supportsRename,
     supportsServiceTier: providerInfo.capabilities.supportsServiceTier,
     supportedPermissionModes:
@@ -856,7 +857,7 @@ export function createClaudeCodeProviderAdapter(
               baseInstructions,
               threadId: command.threadId,
               cwd: command.cwd,
-              providerThreadId: command.providerThreadId ?? null,
+              providerThreadId: command.providerThreadId,
               instructionMode: command.instructionMode,
               permissionMode: toClaudePermissionMode(permissionPolicy),
               permissionEscalation: permissionPolicy.permissionEscalation,
@@ -888,7 +889,7 @@ export function createClaudeCodeProviderAdapter(
             method: "turn/start",
             params: {
               threadId: command.threadId,
-              providerThreadId: command.providerThreadId ?? null,
+              providerThreadId: command.providerThreadId,
               input: command.input,
               ...(command.options?.model
                 ? { model: command.options.model }
@@ -901,7 +902,7 @@ export function createClaudeCodeProviderAdapter(
             method: "turn/steer",
             params: {
               threadId: command.threadId,
-              providerThreadId: command.providerThreadId ?? null,
+              providerThreadId: command.providerThreadId,
               expectedTurnId: command.expectedTurnId,
               input: command.input,
             },
@@ -920,6 +921,9 @@ export function createClaudeCodeProviderAdapter(
           };
         case "thread/name/set":
           return { kind: "noop", reason: "rename unsupported" };
+        case "thread/archive":
+        case "thread/unarchive":
+          return { kind: "noop", reason: "archive unsupported" };
       }
     },
 
@@ -951,7 +955,7 @@ export function createClaudeCodeProviderAdapter(
         if (turnId) {
           return buildAcceptedUserMessageEvent({
             clientRequestSequence: command.clientRequestSequence,
-            providerThreadId: command.providerThreadId ?? "",
+            providerThreadId: command.providerThreadId,
             threadId: command.threadId,
             turnId,
           });
@@ -965,7 +969,7 @@ export function createClaudeCodeProviderAdapter(
       if (command.type === "turn/steer") {
         return buildAcceptedUserMessageEvent({
           clientRequestSequence: command.clientRequestSequence,
-          providerThreadId: command.providerThreadId ?? "",
+          providerThreadId: command.providerThreadId,
           threadId: command.threadId,
           turnId: command.expectedTurnId,
         });

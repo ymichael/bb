@@ -774,8 +774,10 @@ const commandResultOwners: CommandResultOwnerRegistry = {
   "replay.capture_get": null,
   "replay.capture_list": null,
   "replay.run": null,
+  "thread.archive": null,
   "thread.deleted": null,
   "thread.rename": null,
+  "thread.unarchive": null,
   "thread.start": defineCommandResultOwner({
     replaySettledSideEffects: true,
     failSettledSideEffects: true,

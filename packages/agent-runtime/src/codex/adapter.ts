@@ -861,6 +861,7 @@ export function createCodexProviderAdapter(
     opts?.additionalWorkspaceWriteRoots ?? [];
   const providerInfo = getBuiltInAgentProviderInfo("codex");
   const capabilities: ProviderCapabilities = {
+    supportsArchive: providerInfo.capabilities.supportsArchive,
     supportsRename: providerInfo.capabilities.supportsRename,
     supportsServiceTier: providerInfo.capabilities.supportsServiceTier,
     supportedPermissionModes:
@@ -1348,10 +1349,9 @@ export function createCodexProviderAdapter(
         }
         case "thread/resume": {
           const dynamicTools = toCodexDynamicTools(command.dynamicTools);
-          const providerThreadId = command.providerThreadId ?? command.threadId;
           const preparedGitRoots = prepareWorkspaceWriteGitRoots({ command });
           const params: ThreadResumeParams = {
-            threadId: providerThreadId,
+            threadId: command.providerThreadId,
             approvalPolicy: preparedGitRoots.permissionSettings.approvalPolicy,
             sandbox: preparedGitRoots.permissionSettings.sandbox,
             cwd: command.cwd,
@@ -1383,7 +1383,7 @@ export function createCodexProviderAdapter(
             kind: "request",
             method: "turn/start",
             params: {
-              threadId: command.providerThreadId ?? command.threadId,
+              threadId: command.providerThreadId,
               input: toCodexUserInput(command.input),
               approvalPolicy: permissionSettings.approvalPolicy,
               sandboxPolicy: permissionSettings.sandboxPolicy,
@@ -1397,7 +1397,7 @@ export function createCodexProviderAdapter(
             kind: "request",
             method: "turn/steer",
             params: {
-              threadId: command.providerThreadId ?? command.threadId,
+              threadId: command.providerThreadId,
               expectedTurnId: command.expectedTurnId,
               input: toCodexUserInput(command.input),
             },
@@ -1410,8 +1410,30 @@ export function createCodexProviderAdapter(
             kind: "request",
             method: "thread/name/set",
             params: {
-              threadId: command.providerThreadId ?? command.threadId,
+              threadId: command.providerThreadId,
               name: command.title,
+            },
+          };
+        case "thread/archive":
+          if (!capabilities.supportsArchive) {
+            return { kind: "noop", reason: "archive unsupported" };
+          }
+          return {
+            kind: "request",
+            method: "thread/archive",
+            params: {
+              threadId: command.providerThreadId,
+            },
+          };
+        case "thread/unarchive":
+          if (!capabilities.supportsArchive) {
+            return { kind: "noop", reason: "archive unsupported" };
+          }
+          return {
+            kind: "request",
+            method: "thread/unarchive",
+            params: {
+              threadId: command.providerThreadId,
             },
           };
         case "thread/stop":
@@ -1433,7 +1455,7 @@ export function createCodexProviderAdapter(
     prepareTurnStart(command) {
       return queueNativeTurnStartClientRequestSequence({
         clientRequestSequence: command.clientRequestSequence,
-        providerThreadId: command.providerThreadId ?? command.threadId,
+        providerThreadId: command.providerThreadId,
       });
     },
 
@@ -1465,7 +1487,7 @@ export function createCodexProviderAdapter(
       }
       return buildAcceptedUserMessageEvent({
         clientRequestSequence: command.clientRequestSequence,
-        providerThreadId: command.providerThreadId ?? command.threadId,
+        providerThreadId: command.providerThreadId,
         threadId: command.threadId,
         turnId: command.expectedTurnId,
       });

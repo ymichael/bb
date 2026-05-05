@@ -37,18 +37,21 @@ export interface BuiltInAgentProviderCatalogEntry {
 type PiDefaultModelPerProvider = Partial<Record<string, string>>;
 
 const CODEX_CAPABILITIES: ProviderCapabilities = {
+  supportsArchive: true,
   supportsRename: true,
   supportsServiceTier: true,
   supportedPermissionModes: ["full", "workspace-write", "readonly"],
 };
 
 const CLAUDE_CAPABILITIES: ProviderCapabilities = {
+  supportsArchive: false,
   supportsRename: false,
   supportsServiceTier: false,
   supportedPermissionModes: ["full", "workspace-write", "readonly"],
 };
 
 const PI_CAPABILITIES: ProviderCapabilities = {
+  supportsArchive: false,
   supportsRename: false,
   supportsServiceTier: false,
   supportedPermissionModes: ["full"],
@@ -166,6 +169,7 @@ function cloneCapabilities(
   capabilities: ProviderCapabilities,
 ): ProviderCapabilities {
   return {
+    supportsArchive: capabilities.supportsArchive,
     supportsRename: capabilities.supportsRename,
     supportsServiceTier: capabilities.supportsServiceTier,
     supportedPermissionModes: [...capabilities.supportedPermissionModes],

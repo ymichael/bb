@@ -1,3 +1,5 @@
+import { mkdir } from "node:fs/promises";
+import path from "node:path";
 import {
   createAgentRuntime,
   type AgentRuntime,
@@ -27,6 +29,7 @@ import {
 } from "@bb/host-workspace";
 
 const STOP_WATCHING = () => undefined;
+const PROVIDER_MAINTENANCE_WORKSPACE_DIR = "provider-maintenance-workspace";
 const LOCAL_WORKSPACE_WATCH_CHANGE_KINDS: readonly WorkspaceStatusWatchChangeKind[] =
   ["workspace-content-changed", "workspace-git-changed"];
 
@@ -146,6 +149,9 @@ export class RuntimeManager {
     string,
     ThreadStorageTarget
   >();
+  private providerMaintenanceRuntime: AgentRuntime | null = null;
+  private pendingProviderMaintenanceRuntime: Promise<AgentRuntime> | null =
+    null;
   private managedShellEnv: NonNullable<AgentRuntimeOptions["shellEnv"]> = {};
   private stopWatchingThreadStorageRoot: () => void = STOP_WATCHING;
 
@@ -380,6 +386,28 @@ export class RuntimeManager {
     });
   }
 
+  async ensureProviderMaintenanceRuntime(args: {
+    dataDir: string;
+  }): Promise<AgentRuntime> {
+    if (this.providerMaintenanceRuntime) {
+      return this.providerMaintenanceRuntime;
+    }
+    if (this.pendingProviderMaintenanceRuntime) {
+      return this.pendingProviderMaintenanceRuntime;
+    }
+
+    const creation = this.createProviderMaintenanceRuntime(args).then(
+      (runtime) => {
+        this.providerMaintenanceRuntime = runtime;
+        return runtime;
+      },
+    );
+    this.pendingProviderMaintenanceRuntime = creation.finally(() => {
+      this.pendingProviderMaintenanceRuntime = null;
+    });
+    return this.pendingProviderMaintenanceRuntime;
+  }
+
   async ensureEnvironment(args: EnsureEnvironmentArgs): Promise<RuntimeEntry> {
     const existing = this.entries.get(args.environmentId);
     if (existing) {
@@ -476,8 +504,62 @@ export class RuntimeManager {
       // lifecycle via explicit environment.destroy commands. Daemon shutdown
       // should only release in-memory state and stop provider processes.
     }
+    const providerMaintenanceRuntime =
+      this.providerMaintenanceRuntime ??
+      (this.pendingProviderMaintenanceRuntime
+        ? await this.pendingProviderMaintenanceRuntime.catch(() => null)
+        : null);
+    this.providerMaintenanceRuntime = null;
+    this.pendingProviderMaintenanceRuntime = null;
+    if (providerMaintenanceRuntime) {
+      await providerMaintenanceRuntime.shutdown();
+    }
     this.stopWatchingThreadStorageRoot();
     this.stopWatchingThreadStorageRoot = STOP_WATCHING;
+  }
+
+  private async createProviderMaintenanceRuntime(args: {
+    dataDir: string;
+  }): Promise<AgentRuntime> {
+    const workspacePath = path.join(
+      args.dataDir,
+      PROVIDER_MAINTENANCE_WORKSPACE_DIR,
+    );
+    await mkdir(workspacePath, { recursive: true });
+
+    let runtime: AgentRuntime | null = null;
+    runtime = this.createRuntime({
+      workspacePath,
+      additionalWorkspaceWriteRoots: [],
+      shellEnv: this.getShellEnv(),
+      bridgeBundleDir: this.options.bridgeBundleDir,
+      onCapture: this.options.onCapture,
+      onEvent: (event) => {
+        this.options.onStderr?.(
+          `Dropping provider maintenance event ${event.type}; no environment owns provider-only maintenance commands.`,
+          event.threadId,
+        );
+      },
+      onToolCall:
+        this.options.onToolCall ??
+        (async () => ({
+          contentItems: [],
+          success: true,
+        })),
+      onInteractiveRequest: this.options.onInteractiveRequest,
+      onStderr: this.options.onStderr,
+      onProcessExit: (info) => {
+        if (
+          runtime &&
+          this.providerMaintenanceRuntime === runtime &&
+          runtime.listRunningProviders().length === 0
+        ) {
+          this.providerMaintenanceRuntime = null;
+        }
+        this.options.onProcessExit?.(info);
+      },
+    });
+    return runtime;
   }
 
   private async createEntry(

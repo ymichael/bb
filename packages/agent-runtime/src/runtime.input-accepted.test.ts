@@ -149,7 +149,7 @@ rl.on("line", (line) => {
             {
               type: "turn/input/accepted",
               threadId: command.threadId,
-              providerThreadId: command.providerThreadId ?? "",
+              providerThreadId: command.providerThreadId,
               turnId: command.expectedTurnId,
               scope: turnScope(command.expectedTurnId),
               clientRequestSequence: command.clientRequestSequence,

@@ -20,6 +20,8 @@ type RunTurnArgs = Parameters<AgentRuntime["runTurn"]>[0];
 type SteerTurnArgs = Parameters<AgentRuntime["steerTurn"]>[0];
 type StopThreadArgs = Parameters<AgentRuntime["stopThread"]>[0];
 type RenameThreadArgs = Parameters<AgentRuntime["renameThread"]>[0];
+type ArchiveThreadArgs = Parameters<AgentRuntime["archiveThread"]>[0];
+type UnarchiveThreadArgs = Parameters<AgentRuntime["unarchiveThread"]>[0];
 
 async function makeTempDir(prefix: string): Promise<string> {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), prefix));
@@ -117,6 +119,8 @@ function createFakeRuntime(): AgentRuntime {
     })),
     stopThread: vi.fn(async (_args: StopThreadArgs) => undefined),
     renameThread: vi.fn(async (_args: RenameThreadArgs) => undefined),
+    archiveThread: vi.fn(async (_args: ArchiveThreadArgs) => undefined),
+    unarchiveThread: vi.fn(async (_args: UnarchiveThreadArgs) => undefined),
     listModels: vi.fn(async () => []),
     listRunningProviders: vi.fn(() => []),
     shutdown: vi.fn(async () => undefined),
@@ -483,6 +487,96 @@ describe("CommandRouter", () => {
     await handling;
 
     expect(workspace.getStatus).toHaveBeenCalledTimes(1);
+  });
+
+  it("serializes thread.archive before environment.destroy for the same environment", async () => {
+    const calls: string[] = [];
+    const workspace = createFakeWorkspace("/tmp/env-1");
+    workspace.destroy.mockImplementation(async () => {
+      calls.push("destroy:workspace");
+    });
+
+    const runtime = createFakeRuntime();
+    const archiveStarted = createDeferred<void>();
+    const archiveDeferred = createDeferred<void>();
+    runtime.archiveThread.mockImplementation(
+      async (_args: ArchiveThreadArgs) => {
+        calls.push("archive:start");
+        archiveStarted.resolve(undefined);
+        await archiveDeferred.promise;
+        calls.push("archive:done");
+      },
+    );
+    runtime.shutdown.mockImplementation(async () => {
+      calls.push("destroy:runtime");
+    });
+
+    const manager = new RuntimeManager({
+      provisionWorkspace: vi.fn(async () => workspace),
+      createRuntime: vi.fn(() => runtime),
+    });
+    await manager.ensureEnvironment({
+      environmentId: "env-1",
+      workspacePath: "/tmp/env-1",
+    });
+
+    const router = new CommandRouter({
+      dataDir: "/tmp/bb-test-data",
+      fetchRuntimeMaterial: vi.fn(),
+      readPersistedRuntimeMaterial: vi.fn(async () => null),
+      runtimeManager: manager,
+      eventSink: noopEventSink,
+      threadStorageRootPath: "/tmp/bb-test-thread-storage",
+      logger: createLogger(),
+    });
+
+    const workspaceContext = {
+      workspacePath: "/tmp/env-1",
+      workspaceProvisionType: "managed-worktree" as const,
+    };
+    const handling = router.handleCommands([
+      {
+        id: "archive",
+        cursor: 1,
+        command: {
+          type: "thread.archive",
+          environmentId: "env-1",
+          threadId: "thread-1",
+          workspaceContext,
+          providerId: "fake",
+          providerThreadId: "provider-thread-1",
+        },
+      },
+      {
+        id: "destroy",
+        cursor: 2,
+        command: {
+          type: "environment.destroy",
+          environmentId: "env-1",
+          workspaceContext,
+        },
+      },
+    ]);
+
+    await archiveStarted.promise;
+
+    expect(runtime.archiveThread).toHaveBeenCalledWith({
+      providerId: "fake",
+      providerThreadId: "provider-thread-1",
+      threadId: "thread-1",
+    });
+    expect(runtime.shutdown).not.toHaveBeenCalled();
+    expect(workspace.destroy).not.toHaveBeenCalled();
+
+    archiveDeferred.resolve(undefined);
+    await handling;
+
+    expect(calls).toEqual([
+      "archive:start",
+      "archive:done",
+      "destroy:runtime",
+      "destroy:workspace",
+    ]);
   });
 
   it("runs provider commands for different threads concurrently", async () => {

@@ -2,8 +2,11 @@ import {
   getActiveSession,
   queueCommand,
   queueCommandInTransaction,
+  events,
   transitionThreadStatus,
+  threads,
 } from "@bb/db";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import {
   getBuiltInAgentProviderInfo,
   isAgentProviderId,
@@ -22,6 +25,7 @@ import type { CreateThreadRequest } from "@bb/server-contract";
 import type {
   HostDaemonCommand,
   TurnSubmitTarget,
+  WorkspaceContext,
 } from "@bb/host-daemon-contract";
 import type { AppDeps, SandboxWorkSessionDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
@@ -57,6 +61,16 @@ export interface QueueThreadStartCommandEnvironment {
 export interface ThreadHostCommandEnvironment {
   hostId: string;
   id: string;
+}
+
+export interface ThreadCommandHost {
+  hostId: string;
+}
+
+export interface ThreadWorkspaceCommandEnvironment
+  extends ThreadHostCommandEnvironment {
+  path: string | null;
+  workspaceProvisionType: WorkspaceProvisionType;
 }
 
 export interface QueueThreadStartCommandArgs {
@@ -142,6 +156,18 @@ export interface QueueThreadRenameCommandArgs {
   title: string;
 }
 
+export interface QueueThreadArchiveCommandArgs {
+  environment: ThreadWorkspaceCommandEnvironment;
+  providerThreadId: string;
+  thread: Thread;
+}
+
+export interface QueueThreadUnarchiveCommandArgs {
+  host: ThreadCommandHost;
+  providerThreadId: string;
+  thread: Thread;
+}
+
 export interface QueueThreadDeletedCommandArgs {
   environment: ThreadHostCommandEnvironment;
   threadId: string;
@@ -153,6 +179,14 @@ function providerSupportsThreadRename(providerId: string): boolean {
   }
 
   return getBuiltInAgentProviderInfo(providerId).capabilities.supportsRename;
+}
+
+function providerSupportsThreadArchive(providerId: string): boolean {
+  if (!isAgentProviderId(providerId)) {
+    return false;
+  }
+
+  return getBuiltInAgentProviderInfo(providerId).capabilities.supportsArchive;
 }
 
 function toRuntimeExecutionOptions(
@@ -345,6 +379,67 @@ function requireProviderThreadId(
   return providerThreadId;
 }
 
+function threadHasLiveChildren(
+  deps: Pick<AppDeps, "db">,
+  threadId: string,
+): boolean {
+  const row = deps.db
+    .select({ id: threads.id })
+    .from(threads)
+    .where(
+      and(
+        eq(threads.parentThreadId, threadId),
+        isNull(threads.archivedAt),
+        isNull(threads.deletedAt),
+      ),
+    )
+    .limit(1)
+    .get();
+  return row !== undefined;
+}
+
+function threadHasCodexSpawnAgentToolCall(
+  deps: Pick<AppDeps, "db">,
+  threadId: string,
+): boolean {
+  const row = deps.db
+    .select({ id: events.id })
+    .from(events)
+    .where(
+      and(
+        eq(events.threadId, threadId),
+        eq(events.itemKind, "toolCall"),
+        sql`json_extract(${events.data}, '$.item.tool') = 'spawnAgent'`,
+      ),
+    )
+    .limit(1)
+    .get();
+  return row !== undefined;
+}
+
+function shouldSkipArchiveForwardingForCascadeRisk(
+  deps: Pick<AppDeps, "db">,
+  thread: Thread,
+): boolean {
+  return (
+    threadHasLiveChildren(deps, thread.id) ||
+    threadHasCodexSpawnAgentToolCall(deps, thread.id)
+  );
+}
+
+function buildThreadWorkspaceContext(
+  environment: ThreadWorkspaceCommandEnvironment,
+): WorkspaceContext | null {
+  if (!environment.path) {
+    return null;
+  }
+
+  return {
+    workspacePath: environment.path,
+    workspaceProvisionType: environment.workspaceProvisionType,
+  };
+}
+
 export function queueThreadRenameCommand(
   deps: Pick<AppDeps, "db" | "hub">,
   args: QueueThreadRenameCommandArgs,
@@ -363,6 +458,61 @@ export function queueThreadRenameCommand(
       environmentId: args.environment.id,
       threadId: args.threadId,
       title: args.title,
+    }),
+  });
+}
+
+export function queueThreadArchiveCommand(
+  deps: Pick<AppDeps, "db" | "hub">,
+  args: QueueThreadArchiveCommandArgs,
+): void {
+  if (!providerSupportsThreadArchive(args.thread.providerId)) {
+    return;
+  }
+
+  if (shouldSkipArchiveForwardingForCascadeRisk(deps, args.thread)) {
+    return;
+  }
+
+  const workspaceContext = buildThreadWorkspaceContext(args.environment);
+  if (!workspaceContext) {
+    return;
+  }
+
+  const session = getActiveSession(deps.db, args.environment.hostId);
+  queueCommand(deps.db, deps.hub, {
+    hostId: args.environment.hostId,
+    sessionId: session?.id ?? null,
+    type: "thread.archive",
+    payload: JSON.stringify({
+      type: "thread.archive",
+      environmentId: args.environment.id,
+      threadId: args.thread.id,
+      workspaceContext,
+      providerId: args.thread.providerId,
+      providerThreadId: args.providerThreadId,
+    }),
+  });
+}
+
+export function queueThreadUnarchiveCommand(
+  deps: Pick<AppDeps, "db" | "hub">,
+  args: QueueThreadUnarchiveCommandArgs,
+): void {
+  if (!providerSupportsThreadArchive(args.thread.providerId)) {
+    return;
+  }
+
+  const session = getActiveSession(deps.db, args.host.hostId);
+  queueCommand(deps.db, deps.hub, {
+    hostId: args.host.hostId,
+    sessionId: session?.id ?? null,
+    type: "thread.unarchive",
+    payload: JSON.stringify({
+      type: "thread.unarchive",
+      threadId: args.thread.id,
+      providerId: args.thread.providerId,
+      providerThreadId: args.providerThreadId,
     }),
   });
 }

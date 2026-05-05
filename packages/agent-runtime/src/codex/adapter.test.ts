@@ -246,6 +246,7 @@ describe("codex provider adapter", () => {
   it("advertises trimmed capabilities", () => {
     const adapter = createCodexProviderAdapter();
     expect(adapter.capabilities).toEqual({
+      supportsArchive: true,
       supportsRename: true,
       supportsServiceTier: true,
       supportedPermissionModes: ["full", "workspace-write", "readonly"],
@@ -343,35 +344,6 @@ describe("codex provider adapter", () => {
     );
 
     expect(echoEvents).toMatchObject([]);
-  });
-
-  it("uses the command thread id when queuing input before provider identity exists", () => {
-    const adapter = createCodexProviderAdapter();
-
-    prepareTurnStart(adapter, {
-      type: "turn/start",
-      threadId: "thread-1",
-      clientRequestSequence: 42,
-      input: [{ type: "text", text: "normal turn" }],
-      options: fullProviderExecutionContext,
-    });
-
-    expect(
-      adapter.translateEvent(
-        codexEvent("turn/started", {
-          threadId: "thread-1",
-          turn: { id: "turn-1", items: [], status: "inProgress", error: null },
-        }),
-      ),
-    ).toContainEqual(
-      expect.objectContaining({
-        type: "turn/input/accepted",
-        threadId: "thread-1",
-        providerThreadId: "thread-1",
-        scope: turnScope("turn-1"),
-        clientRequestSequence: 42,
-      }),
-    );
   });
 
   it("rolls back queued input acceptance when turn/start dispatch fails", () => {
@@ -1539,25 +1511,6 @@ describe("codex provider adapter", () => {
     });
   });
 
-  it("buildCommand thread/resume falls back to context threadId", () => {
-    const adapter = createCodexProviderAdapter();
-    const cmd = adapter.buildCommandPlan({
-      type: "thread/resume",
-      cwd: "/tmp/worktree",
-      threadId: "bb-t1",
-      providerThreadId: undefined,
-      instructionMode: "append",
-      options: fullProviderExecutionContext,
-    });
-    expect(cmd).toMatchObject({
-      method: "thread/resume",
-      params: {
-        threadId: "bb-t1",
-        cwd: "/tmp/worktree",
-      },
-    });
-  });
-
   it("buildCommand thread/stop maps active turns to turn/interrupt", () => {
     const adapter = createCodexProviderAdapter();
     const cmd = adapter.buildCommandPlan({
@@ -1761,6 +1714,34 @@ describe("codex provider adapter", () => {
     expect(cmd).toMatchObject({
       method: "thread/name/set",
       params: { threadId: "codex-1", name: "New title" },
+    });
+  });
+
+  it("buildCommand thread/archive routes to provider thread id", () => {
+    const adapter = createCodexProviderAdapter();
+    const cmd = adapter.buildCommandPlan({
+      type: "thread/archive",
+      threadId: "bb-thread-1",
+      providerThreadId: "codex-thread-1",
+    });
+    expect(cmd).toEqual({
+      kind: "request",
+      method: "thread/archive",
+      params: { threadId: "codex-thread-1" },
+    });
+  });
+
+  it("buildCommand thread/unarchive routes to provider thread id", () => {
+    const adapter = createCodexProviderAdapter();
+    const cmd = adapter.buildCommandPlan({
+      type: "thread/unarchive",
+      threadId: "bb-thread-1",
+      providerThreadId: "codex-thread-1",
+    });
+    expect(cmd).toEqual({
+      kind: "request",
+      method: "thread/unarchive",
+      params: { threadId: "codex-thread-1" },
     });
   });
 

@@ -698,6 +698,7 @@ export function createPiProviderAdapter(
 ): ProviderAdapter {
   const providerInfo = getBuiltInAgentProviderInfo("pi");
   const capabilities: ProviderCapabilities = {
+    supportsArchive: providerInfo.capabilities.supportsArchive,
     supportsRename: providerInfo.capabilities.supportsRename,
     supportsServiceTier: providerInfo.capabilities.supportsServiceTier,
     supportedPermissionModes:
@@ -1256,7 +1257,7 @@ export function createPiProviderAdapter(
           resetPiCommandOutputSnapshots(
             turnState.getOrCreate({ threadId: command.threadId }),
           );
-          const threadId = command.providerThreadId ?? command.threadId;
+          const threadId = command.providerThreadId;
           const config = buildPiConfig(command.threadId, command.options);
           const dynamicTools = command.dynamicTools?.map((t) => ({
             name: t.name,
@@ -1288,7 +1289,7 @@ export function createPiProviderAdapter(
             kind: "request",
             method: "turn/start",
             params: {
-              threadId: command.providerThreadId ?? command.threadId,
+              threadId: command.providerThreadId,
               input: command.input,
               ...(command.options?.model
                 ? { model: command.options.model }
@@ -1300,7 +1301,7 @@ export function createPiProviderAdapter(
             kind: "request",
             method: "turn/steer",
             params: {
-              threadId: command.providerThreadId ?? command.threadId,
+              threadId: command.providerThreadId,
               expectedTurnId: command.expectedTurnId,
               input: command.input,
             },
@@ -1322,6 +1323,9 @@ export function createPiProviderAdapter(
           };
         case "thread/name/set":
           return { kind: "noop", reason: "rename unsupported" };
+        case "thread/archive":
+        case "thread/unarchive":
+          return { kind: "noop", reason: "archive unsupported" };
       }
     },
 
@@ -1353,7 +1357,7 @@ export function createPiProviderAdapter(
         if (turnId) {
           return buildAcceptedUserMessageEvent({
             clientRequestSequence: command.clientRequestSequence,
-            providerThreadId: command.providerThreadId ?? command.threadId,
+            providerThreadId: command.providerThreadId,
             threadId: command.threadId,
             turnId,
           });
@@ -1367,7 +1371,7 @@ export function createPiProviderAdapter(
       if (command.type === "turn/steer") {
         return buildAcceptedUserMessageEvent({
           clientRequestSequence: command.clientRequestSequence,
-          providerThreadId: command.providerThreadId ?? command.threadId,
+          providerThreadId: command.providerThreadId,
           threadId: command.threadId,
           turnId: command.expectedTurnId,
         });

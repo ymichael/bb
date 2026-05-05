@@ -19,6 +19,7 @@ export const availableModelSchema = z.object({
 export type AvailableModel = z.infer<typeof availableModelSchema>;
 
 export const providerCapabilitiesSchema = z.object({
+  supportsArchive: z.boolean(),
   supportsRename: z.boolean(),
   supportsServiceTier: z.boolean(),
   supportedPermissionModes: z.array(permissionModeSchema).min(1),

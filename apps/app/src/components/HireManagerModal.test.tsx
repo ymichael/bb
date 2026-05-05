@@ -10,7 +10,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import type { AvailableModel, Host, Thread } from "@bb/domain";
-import type { ProjectResponse, SystemProviderInfo } from "@bb/server-contract";
+import type { ProjectResponse } from "@bb/server-contract";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { availableModelsQueryKey, threadQueryKey } from "@/hooks/queries/query-keys";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
@@ -20,6 +20,7 @@ import {
   jsonResponse,
   type FetchRoute,
 } from "@/test/http-test-utils";
+import { createTestSystemProvider } from "@/test/system-provider-test-utils";
 import { HireManagerModal } from "./HireManagerModal";
 
 vi.mock("partysocket/ws", async () => {
@@ -61,23 +62,6 @@ function createSuspenseWrapper() {
       baseWrapper({
         children: <Suspense fallback={null}>{children}</Suspense>,
       }),
-  };
-}
-
-function makeProvider(
-  id: string,
-  displayName: string,
-  supportedPermissionModes: SystemProviderInfo["capabilities"]["supportedPermissionModes"],
-): SystemProviderInfo {
-  return {
-    id,
-    displayName,
-    capabilities: {
-      supportsRename: true,
-      supportsServiceTier: true,
-      supportedPermissionModes: [...supportedPermissionModes],
-    },
-    available: true,
   };
 }
 
@@ -172,8 +156,22 @@ function installHireManagerRoutes(args: InstallHireManagerRoutesArgs = {}) {
   const managerRequests: unknown[] = [];
   const requestedModelProviders: Array<string | null> = [];
   const providers = [
-    makeProvider("pi", "Pi", ["full"]),
-    makeProvider("codex", "Codex", ["full", "workspace-write", "readonly"]),
+    createTestSystemProvider({
+      capabilities: {
+        supportsArchive: false,
+        supportsServiceTier: true,
+        supportedPermissionModes: ["full"],
+      },
+      displayName: "Pi",
+      id: "pi",
+    }),
+    createTestSystemProvider({
+      capabilities: {
+        supportsServiceTier: true,
+      },
+      displayName: "Codex",
+      id: "codex",
+    }),
   ];
   const projects = [makeProjectResponse()];
   const hosts = [makeHost("host-local", "Local Host")];

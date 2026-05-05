@@ -5,6 +5,7 @@ import {
 } from "./public-thread-test-harness.js";
 
 import {
+  archiveThread,
   createEnvironment,
   createThread,
   getEnvironment,
@@ -13,7 +14,7 @@ import {
   listThreads,
   threads,
 } from "@bb/db";
-import { threadSchema, type Thread } from "@bb/domain";
+import { threadSchema, turnScope, type Thread } from "@bb/domain";
 import {
   reportQueuedCommandSuccess,
   waitForQueuedCommand,
@@ -25,7 +26,9 @@ import {
   seedHost,
   seedHostSession,
   seedProjectWithSource,
+  seedEvent,
   seedThread,
+  seedThreadRuntimeState,
 } from "../helpers/seed.js";
 import { createTestAppHarness } from "../helpers/test-app.js";
 import type { TestAppHarness } from "../helpers/test-app.js";
@@ -184,6 +187,376 @@ describe("public thread archive delete cleanup routes", () => {
       expect(getThread(harness.db, childThread.id)).toMatchObject({
         id: childThread.id,
         deletedAt: null,
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("queues Codex thread archive with the stored provider thread id", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "idle",
+      });
+      seedThreadRuntimeState(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-archive-forward",
+      });
+
+      const response = await harness.app.request(
+        `/api/v1/threads/${thread.id}/archive`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            force: false,
+            managerChildThreadsConfirmed: false,
+          }),
+        },
+      );
+
+      expect(response.status).toBe(200);
+      const queued = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "thread.archive" && command.threadId === thread.id,
+      );
+      expect(queued.command).toMatchObject({
+        environmentId: environment.id,
+        providerId: thread.providerId,
+        providerThreadId: "provider-archive-forward",
+        threadId: thread.id,
+        workspaceContext: {
+          workspacePath: environment.path,
+          workspaceProvisionType: environment.workspaceProvisionType,
+        },
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("skips Codex thread archive forwarding when no provider thread id is stored", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "idle",
+      });
+
+      const response = await harness.app.request(
+        `/api/v1/threads/${thread.id}/archive`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            force: false,
+            managerChildThreadsConfirmed: false,
+          }),
+        },
+      );
+
+      expect(response.status).toBe(200);
+      await expect(
+        waitForQueuedCommand(
+          harness,
+          ({ command }) =>
+            command.type === "thread.archive" && command.threadId === thread.id,
+          100,
+        ),
+      ).rejects.toThrow("Timed out waiting for queued command");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  for (const providerId of ["claude-code", "pi"]) {
+    it(`skips archive forwarding for ${providerId} threads`, async () => {
+      const harness = await createTestAppHarness();
+      try {
+        const { host } = seedHostSession(harness.deps);
+        const { project } = seedProjectWithSource(harness.deps, {
+          hostId: host.id,
+        });
+        const environment = seedEnvironment(harness.deps, {
+          hostId: host.id,
+          projectId: project.id,
+        });
+        const thread = seedThread(harness.deps, {
+          projectId: project.id,
+          environmentId: environment.id,
+          providerId,
+          status: "idle",
+        });
+        seedThreadRuntimeState(harness.deps, {
+          threadId: thread.id,
+          environmentId: environment.id,
+          providerThreadId: `provider-${providerId}-archive-forward`,
+        });
+
+        const response = await harness.app.request(
+          `/api/v1/threads/${thread.id}/archive`,
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              force: false,
+              managerChildThreadsConfirmed: false,
+            }),
+          },
+        );
+
+        expect(response.status).toBe(200);
+        await expect(
+          waitForQueuedCommand(
+            harness,
+            ({ command }) =>
+              command.type === "thread.archive" &&
+              command.threadId === thread.id,
+            100,
+          ),
+        ).rejects.toThrow("Timed out waiting for queued command");
+      } finally {
+        await harness.cleanup();
+      }
+    });
+  }
+
+  it("skips Codex archive forwarding when stored events show spawnAgent children", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "idle",
+      });
+      seedThreadRuntimeState(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-spawn-cascade-risk",
+      });
+      seedEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-spawn-cascade-risk",
+        sequence: 3,
+        type: "item/completed",
+        scope: turnScope("turn-1"),
+        data: {
+          item: {
+            type: "toolCall",
+            id: "spawn-1",
+            tool: "spawnAgent",
+            status: "completed",
+            arguments: {
+              senderThreadId: "provider-spawn-cascade-risk",
+              receiverThreadIds: ["provider-child-1"],
+            },
+          },
+        },
+      });
+
+      const response = await harness.app.request(
+        `/api/v1/threads/${thread.id}/archive`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            force: false,
+            managerChildThreadsConfirmed: false,
+          }),
+        },
+      );
+
+      expect(response.status).toBe(200);
+      await expect(
+        waitForQueuedCommand(
+          harness,
+          ({ command }) =>
+            command.type === "thread.archive" && command.threadId === thread.id,
+          100,
+        ),
+      ).rejects.toThrow("Timed out waiting for queued command");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("skips Codex archive forwarding when BB child threads are still live", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const parentThread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "idle",
+        type: "manager",
+      });
+      seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        parentThreadId: parentThread.id,
+        status: "idle",
+      });
+      seedThreadRuntimeState(harness.deps, {
+        threadId: parentThread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-live-child-risk",
+      });
+
+      const response = await harness.app.request(
+        `/api/v1/threads/${parentThread.id}/archive`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            force: false,
+            managerChildThreadsConfirmed: true,
+          }),
+        },
+      );
+
+      expect(response.status).toBe(200);
+      await expect(
+        waitForQueuedCommand(
+          harness,
+          ({ command }) =>
+            command.type === "thread.archive" &&
+            command.threadId === parentThread.id,
+          100,
+        ),
+      ).rejects.toThrow("Timed out waiting for queued command");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("queues Codex thread unarchive with the stored provider thread id", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "idle",
+      });
+      seedThreadRuntimeState(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-unarchive-forward",
+      });
+      archiveThread(harness.db, harness.hub, thread.id);
+
+      const response = await harness.app.request(
+        `/api/v1/threads/${thread.id}/unarchive`,
+        { method: "POST" },
+      );
+
+      expect(response.status).toBe(200);
+      const queued = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "thread.unarchive" &&
+          command.threadId === thread.id,
+      );
+      expect(queued.command).toEqual({
+        type: "thread.unarchive",
+        providerId: thread.providerId,
+        providerThreadId: "provider-unarchive-forward",
+        threadId: thread.id,
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("queues provider-only Codex unarchive after managed environment cleanup", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        managed: true,
+        path: "/tmp/destroyed-managed-worktree",
+        status: "destroyed",
+        workspaceProvisionType: "managed-worktree",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "idle",
+      });
+      seedThreadRuntimeState(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-unarchive-cleaned",
+      });
+      archiveThread(harness.db, harness.hub, thread.id);
+
+      const response = await harness.app.request(
+        `/api/v1/threads/${thread.id}/unarchive`,
+        { method: "POST" },
+      );
+
+      expect(response.status).toBe(200);
+      const queued = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "thread.unarchive" &&
+          command.threadId === thread.id,
+      );
+      expect(queued.command).toEqual({
+        type: "thread.unarchive",
+        providerId: thread.providerId,
+        providerThreadId: "provider-unarchive-cleaned",
+        threadId: thread.id,
       });
     } finally {
       await harness.cleanup();

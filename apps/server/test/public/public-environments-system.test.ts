@@ -1279,6 +1279,7 @@ describe("public environment and system routes", () => {
             id: "codex",
             displayName: "Codex",
             capabilities: {
+              supportsArchive: true,
               supportsRename: true,
               supportsServiceTier: true,
               supportedPermissionModes: ["full", "workspace-write", "readonly"],
@@ -1294,6 +1295,7 @@ describe("public environment and system routes", () => {
           id: "codex",
           displayName: "Codex",
           capabilities: {
+            supportsArchive: true,
             supportsRename: true,
             supportsServiceTier: true,
             supportedPermissionModes: ["full", "workspace-write", "readonly"],
@@ -1346,6 +1348,7 @@ describe("public environment and system routes", () => {
               id: "codex",
               displayName: "Codex",
               capabilities: {
+                supportsArchive: true,
                 supportsRename: true,
                 supportsServiceTier: true,
                 supportedPermissionModes: [
@@ -1418,6 +1421,7 @@ describe("public environment and system routes", () => {
               id: "codex",
               displayName: "Codex",
               capabilities: {
+                supportsArchive: true,
                 supportsRename: true,
                 supportsServiceTier: true,
                 supportedPermissionModes: [
