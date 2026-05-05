@@ -40,8 +40,10 @@ interface RunPromptArgs {
   text: string;
 }
 
-const PI_TRANSIENT_AUTH_MAX_RETRIES = 2;
 const PI_TRANSIENT_AUTH_RETRY_DELAY_MS = 250;
+// Pi auth storage can briefly miss credentials during concurrent session startup;
+// allow roughly two seconds before surfacing a real auth failure.
+const PI_TRANSIENT_AUTH_MAX_RETRIES = 8;
 
 interface CreateBashToolWithShellEnvOverlayArgs {
   cwd: string;

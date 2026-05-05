@@ -130,6 +130,12 @@ vi.mock("@mariozechner/pi-ai", () => ({
 
 import { PiSdkSession } from "../sdk-session.js";
 
+function rejectPromptWithTransientAuthError(count: number, error: Error): void {
+  for (let index = 0; index < count; index += 1) {
+    mockPrompt.mockRejectedValueOnce(error);
+  }
+}
+
 describe("PiSdkSession", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -343,18 +349,32 @@ describe("PiSdkSession", () => {
     ]);
   });
 
-  it("retries transient Pi auth storage misses before failing the session", async () => {
-    mockPrompt
-      .mockRejectedValueOnce(new Error("No API key found for anthropic."))
-      .mockResolvedValueOnce(undefined);
+  it("allows eight transient Pi auth storage misses before succeeding", async () => {
+    const authError = new Error("No API key found for anthropic.");
+    rejectPromptWithTransientAuthError(8, authError);
+    mockPrompt.mockResolvedValueOnce(undefined);
     const onDone = vi.fn();
     const session = new PiSdkSession({ cwd: "/tmp/project" }, vi.fn(), onDone);
 
     await session.start();
     await session.prompt("retry after auth storage miss");
 
-    expect(mockPrompt).toHaveBeenCalledTimes(2);
+    expect(mockPrompt).toHaveBeenCalledTimes(9);
     expect(onDone).not.toHaveBeenCalled();
+  });
+
+  it("fails after nine transient Pi auth storage misses", async () => {
+    const authError = new Error("No API key found for anthropic.");
+    rejectPromptWithTransientAuthError(9, authError);
+    const onDone = vi.fn();
+    const session = new PiSdkSession({ cwd: "/tmp/project" }, vi.fn(), onDone);
+
+    await session.start();
+    await session.prompt("fail after retry budget");
+
+    expect(mockPrompt).toHaveBeenCalledTimes(9);
+    expect(onDone).toHaveBeenCalledTimes(1);
+    expect(onDone).toHaveBeenCalledWith(authError);
   });
 
   it("waits for abort before disposing during graceful close", async () => {
