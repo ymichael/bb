@@ -94,6 +94,9 @@ export type HostPlatform = z.infer<typeof hostPlatformSchema>;
 export const statusResponseSchema = z.object({
   hostId: z.string().min(1),
   connected: z.boolean(),
+  // Informational local-daemon protocol marker. Dev restart tooling uses it
+  // to detect stale host-daemons; product UI must not gate behavior on it.
+  protocolVersion: z.number().int().positive(),
   serverUrl: z.string(),
   supportsNativeFolderPicker: z.boolean(),
   platform: hostPlatformSchema,

@@ -58,6 +58,35 @@ function servicesForTarget(target: RestartTarget): DevServiceName[] {
   return target === "both" ? [...devServiceNameValues] : [target];
 }
 
+async function hasServiceChanged(
+  dependencies: DevEnvStatusDependencies,
+  runtime: DevEnvRuntime,
+  serviceName: DevServiceName,
+): Promise<boolean> {
+  const baselineFingerprint = runtime.baselineFingerprints.get(serviceName);
+  if (!baselineFingerprint) {
+    throw new Error(`Missing ${serviceName} baseline fingerprint`);
+  }
+  return (
+    baselineFingerprint !==
+    (await dependencies.computeServiceFingerprint(serviceName))
+  );
+}
+
+async function resolveEffectiveRestartTarget(
+  dependencies: DevEnvStatusDependencies,
+  runtime: DevEnvRuntime,
+  requestedTarget: RestartTarget,
+): Promise<RestartTarget> {
+  if (requestedTarget !== "server") {
+    return requestedTarget;
+  }
+
+  return (await hasServiceChanged(dependencies, runtime, "host-daemon"))
+    ? "both"
+    : requestedTarget;
+}
+
 function runCommand(args: RunCommandArgs): Promise<void> {
   return new Promise((resolve, reject) => {
     const child = spawn(args.command, args.args, {
@@ -186,8 +215,13 @@ export function createDevEnvStatusApp(
   app.post("/restart", async (context) => {
     const body = await parseRestartRequestBody(context);
     try {
-      await dependencies.runRestartScript(body.target);
-      await updateBaselines(dependencies, runtime, body.target);
+      const target = await resolveEffectiveRestartTarget(
+        dependencies,
+        runtime,
+        body.target,
+      );
+      await dependencies.runRestartScript(target);
+      await updateBaselines(dependencies, runtime, target);
       return context.json(await computeStatus(dependencies, runtime));
     } catch (error) {
       throw new HTTPException(409, {

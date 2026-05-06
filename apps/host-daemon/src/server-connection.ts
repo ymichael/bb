@@ -88,8 +88,7 @@ export class ServerConnection {
     this.stopped = true;
     this.stopPollingFallback();
     this.clearHeartbeat();
-    this.session = null;
-    this.options.setSession?.(null);
+    this.clearSession();
 
     if (this.websocket) {
       this.websocket.close();
@@ -116,7 +115,6 @@ export class ServerConnection {
         activeThreads: this.options.getActiveThreads?.() ?? [],
       });
       this.session = session;
-      this.options.setSession?.(session);
       return session;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -193,6 +191,7 @@ export class ServerConnection {
           this.clearTimeoutFn(startupTimer);
           this.stopPollingFallback();
           this.resetHeartbeat();
+          this.options.setSession?.(session);
           this.options.logger.info(
             { sessionId: session.sessionId },
             "Connected to server",
@@ -222,6 +221,7 @@ export class ServerConnection {
 
       websocket.onclose = (event) => {
         this.clearHeartbeat();
+        this.clearSession();
         if (!hasOpened) {
           this.options.logger.warn(
             { code: event.code, reason: event.reason },
@@ -296,6 +296,25 @@ export class ServerConnection {
     this.heartbeatInterval = null;
   }
 
+  private clearSession(): void {
+    if (!this.session) {
+      return;
+    }
+
+    this.session = null;
+    this.options.setSession?.(null);
+  }
+
+  private requestCommandsIfSessionOpen(): void {
+    if (!this.session) {
+      return;
+    }
+
+    void Promise.resolve(this.options.onCommandsAvailable?.()).catch(
+      () => undefined,
+    );
+  }
+
   private startPollingFallback(): void {
     if (this.pollingDelayTimer || this.pollingInterval || this.stopped) {
       return;
@@ -303,13 +322,9 @@ export class ServerConnection {
 
     this.pollingDelayTimer = this.setTimeoutFn(() => {
       this.pollingDelayTimer = null;
-      void Promise.resolve(this.options.onCommandsAvailable?.()).catch(
-        () => undefined,
-      );
+      this.requestCommandsIfSessionOpen();
       this.pollingInterval = this.setIntervalFn(() => {
-        void Promise.resolve(this.options.onCommandsAvailable?.()).catch(
-          () => undefined,
-        );
+        this.requestCommandsIfSessionOpen();
       }, this.pollIntervalMs);
     }, this.pollAfterDisconnectMs);
   }

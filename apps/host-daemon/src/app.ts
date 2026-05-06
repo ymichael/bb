@@ -633,6 +633,12 @@ export async function createHostDaemonApp(
       runtimeManager.replaceTrackedThreadStorageTargets(
         session.trackedThreadTargets,
       );
+      void eventBuffer.flush().catch((error) => {
+        options.logger.warn(
+          { err: error, sessionId: session.sessionId },
+          "Failed to flush buffered events after session opened",
+        );
+      });
       void flushPendingInteractiveInterrupts();
       void commandFetchLoop.request();
     },

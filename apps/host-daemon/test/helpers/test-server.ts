@@ -86,6 +86,7 @@ function getRawCommandId(rawCommand: unknown): string | null {
 export interface CreateTestServerOptions {
   commandResultFailures?: number;
   commandResultFailureStatus?: number;
+  enforceActiveSessions?: boolean;
   heartbeatIntervalMs?: number;
   leaseTimeoutMs?: number;
   trackedThreadTargets?: HostDaemonTrackedThreadTarget[];
@@ -96,6 +97,10 @@ export interface TestServer {
   commandFetches: Array<{ sessionId: string }>;
   commandResultReports: HostDaemonCommandResultReport[];
   commandResults: HostDaemonCommandResultReport[];
+  eventBatchRequests: Array<{
+    events: HostDaemonEventEnvelope[];
+    sessionId: string;
+  }>;
   environmentChanges: HostDaemonEnvironmentChangeRequest[];
   events: HostDaemonEventEnvelope[];
   heartbeats: Array<{
@@ -103,6 +108,10 @@ export interface TestServer {
     message: HostDaemonDaemonWsMessage;
   }>;
   interactiveRequests: HostDaemonInteractiveRequest[];
+  rejectedSessionRequests: Array<{
+    path: string;
+    sessionId: string;
+  }>;
   sessionOpenCalls: HostDaemonSessionOpenRequest[];
   toolCalls: Array<{ sessionId: string; tool: string }>;
   queueCommand(command: HostDaemonCommand): HostDaemonCommandEnvelope;
@@ -127,11 +136,14 @@ export async function createTestServer(
   }> = [];
   const commandFetches: Array<{ sessionId: string }> = [];
   const commandResultReports: HostDaemonCommandResultReport[] = [];
+  const eventBatchRequests: TestServer["eventBatchRequests"] = [];
   const environmentChanges: TestServer["environmentChanges"] = [];
   const toolCalls: Array<{ sessionId: string; tool: string }> = [];
   const interactiveRequests: HostDaemonInteractiveRequest[] = [];
+  const rejectedSessionRequests: TestServer["rejectedSessionRequests"] = [];
   const events: HostDaemonEventEnvelope[] = [];
   const activeSockets = new Set<WebSocket>();
+  const activeSessionIds = new Set<string>();
   const commands = new Map<number, HostDaemonCommandEnvelope>();
   // Raw commands bypass Zod validation — used to test unknown command types
   const rawCommands = new Map<number, unknown>();
@@ -148,8 +160,31 @@ export async function createTestServer(
 
   const app = new Hono();
 
-  // This fixture intentionally omits auth validation, session lease expiry,
-  // and true long-poll semantics. Tests use it only for protocol flow.
+  function rejectInactiveSession(
+    path: string,
+    sessionId: string,
+  ): Response | null {
+    if (!options.enforceActiveSessions || activeSessionIds.has(sessionId)) {
+      return null;
+    }
+
+    rejectedSessionRequests.push({ path, sessionId });
+    return new Response(
+      JSON.stringify({
+        code: "invalid_session",
+        message: "Session is not open",
+        retryable: false,
+      }),
+      {
+        status: 401,
+        headers: { "content-type": "application/json" },
+      },
+    );
+  }
+
+  // This fixture intentionally omits session lease expiry and true long-poll
+  // semantics. Tests use enforceActiveSessions when they need closed-session
+  // behavior to match the real server.
   app.post("/internal/hosts/enroll", async (context) => {
     const authorization = context.req.header("authorization");
     if (authorization !== `Bearer ${enrollKey}`) {
@@ -183,6 +218,13 @@ export async function createTestServer(
   });
   app.get("/internal/session/commands", (context) => {
     const query = hostDaemonCommandsQuerySchema.parse(context.req.query());
+    const rejectedResponse = rejectInactiveSession(
+      "/internal/session/commands",
+      query.sessionId,
+    );
+    if (rejectedResponse) {
+      return rejectedResponse;
+    }
     commandFetches.push({
       sessionId: query.sessionId,
     });
@@ -231,6 +273,13 @@ export async function createTestServer(
       // Store as-is for unknown command error reports
       payload = json as HostDaemonCommandResultReport;
     }
+    const rejectedResponse = rejectInactiveSession(
+      "/internal/session/command-result",
+      payload.sessionId,
+    );
+    if (rejectedResponse) {
+      return rejectedResponse;
+    }
     commandResultReports.push(payload);
     commandResultAttemptCount += 1;
     if (commandResultAttemptCount <= (options.commandResultFailures ?? 0)) {
@@ -249,6 +298,17 @@ export async function createTestServer(
     const payload = hostDaemonEventBatchRequestSchema.parse(
       await context.req.json(),
     );
+    eventBatchRequests.push({
+      events: payload.events,
+      sessionId: payload.sessionId,
+    });
+    const rejectedResponse = rejectInactiveSession(
+      "/internal/session/events",
+      payload.sessionId,
+    );
+    if (rejectedResponse) {
+      return rejectedResponse;
+    }
     events.push(...payload.events);
     const acceptedEvents = payload.events.map((event) => ({
       producerEventId: event.producerEventId,
@@ -261,6 +321,13 @@ export async function createTestServer(
     const payload = hostDaemonEnvironmentChangeRequestSchema.parse(
       await context.req.json(),
     );
+    const rejectedResponse = rejectInactiveSession(
+      "/internal/session/environment-change",
+      payload.sessionId,
+    );
+    if (rejectedResponse) {
+      return rejectedResponse;
+    }
     environmentChanges.push(payload);
     return context.json({ ok: true });
   });
@@ -268,6 +335,13 @@ export async function createTestServer(
     const payload = hostDaemonToolCallRequestSchema.parse(
       await context.req.json(),
     );
+    const rejectedResponse = rejectInactiveSession(
+      "/internal/session/tool-call",
+      payload.sessionId,
+    );
+    if (rejectedResponse) {
+      return rejectedResponse;
+    }
     toolCalls.push({
       sessionId: payload.sessionId,
       tool: payload.tool,
@@ -281,6 +355,13 @@ export async function createTestServer(
     const payload = hostDaemonInteractiveRequestSchema.parse(
       await context.req.json(),
     );
+    const rejectedResponse = rejectInactiveSession(
+      "/internal/session/interactive-request",
+      payload.sessionId,
+    );
+    if (rejectedResponse) {
+      return rejectedResponse;
+    }
     interactiveRequests.push(payload);
     return context.json({
       outcome: "created",
@@ -313,18 +394,21 @@ export async function createTestServer(
       socket,
       head,
       (websocket: WebSocket) => {
+        const sessionId = url.searchParams.get("sessionId") ?? "";
         activeSockets.add(websocket);
+        activeSessionIds.add(sessionId);
         websocket.on("message", (data: RawData) => {
           const message = hostDaemonDaemonWsMessageSchema.parse(
             JSON.parse(data.toString("utf8")),
           );
           heartbeats.push({
-            sessionId: url.searchParams.get("sessionId") ?? "",
+            sessionId,
             message,
           });
         });
         websocket.on("close", () => {
           activeSockets.delete(websocket);
+          activeSessionIds.delete(sessionId);
         });
         websocketServer.emit("connection", websocket, request);
       },
@@ -347,10 +431,12 @@ export async function createTestServer(
     get commandResults() {
       return commandResultReports;
     },
+    eventBatchRequests,
     environmentChanges,
     events,
     heartbeats,
     interactiveRequests,
+    rejectedSessionRequests,
     sessionOpenCalls,
     toolCalls,
     queueCommand(command: HostDaemonCommand): HostDaemonCommandEnvelope {

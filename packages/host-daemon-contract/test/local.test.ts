@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  HOST_DAEMON_PROTOCOL_VERSION,
   PATHS_EXIST_MAX_PATHS,
   hostPlatformSchema,
   pathsExistRequestSchema,
@@ -26,6 +27,7 @@ describe("statusResponseSchema", () => {
       statusResponseSchema.parse({
         hostId: "host_1",
         connected: true,
+        protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
         serverUrl: "http://localhost:3334",
         supportsNativeFolderPicker: false,
       }),
@@ -37,6 +39,7 @@ describe("statusResponseSchema", () => {
       statusResponseSchema.parse({
         hostId: "host_1",
         connected: true,
+        protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
         serverUrl: "http://localhost:3334",
         supportsNativeFolderPicker: true,
         platform: "darwin",

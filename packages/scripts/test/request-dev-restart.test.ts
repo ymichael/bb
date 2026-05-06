@@ -2,9 +2,11 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { HOST_DAEMON_PROTOCOL_VERSION } from "@bb/host-daemon-contract";
 import {
   parseTarget,
   readRunningSupervisorPid,
+  resolveEffectiveRestartTarget,
 } from "../src/commands/request-dev-restart.js";
 
 const tempDirs: string[] = [];
@@ -44,6 +46,92 @@ describe("request-dev-restart", () => {
     );
 
     await expect(readRunningSupervisorPid("server")).resolves.toBe(process.pid);
+  });
+
+  it("keeps server-only restarts when the running host-daemon protocol matches", async () => {
+    const output = { write: vi.fn() };
+    const fetchFn = vi.fn<typeof fetch>(async () =>
+      Response.json({
+        hostId: "host-1",
+        connected: true,
+        protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
+        serverUrl: "http://127.0.0.1:3334",
+        supportsNativeFolderPicker: false,
+        platform: "darwin",
+      }),
+    );
+
+    await expect(
+      resolveEffectiveRestartTarget("server", {
+        fetchFn,
+        hostDaemonLocalPort: 1234,
+        output,
+      }),
+    ).resolves.toBe("server");
+    expect(fetchFn).toHaveBeenCalledWith("http://127.0.0.1:1234/status");
+    expect(output.write).not.toHaveBeenCalled();
+  });
+
+  it("expands server restarts when the running host-daemon protocol is stale", async () => {
+    const output = { write: vi.fn() };
+    const fetchFn = vi.fn<typeof fetch>(async () =>
+      Response.json({
+        hostId: "host-1",
+        connected: true,
+        protocolVersion: HOST_DAEMON_PROTOCOL_VERSION - 1,
+        serverUrl: "http://127.0.0.1:3334",
+        supportsNativeFolderPicker: false,
+        platform: "darwin",
+      }),
+    );
+
+    await expect(
+      resolveEffectiveRestartTarget("server", {
+        fetchFn,
+        hostDaemonLocalPort: 1234,
+        output,
+      }),
+    ).resolves.toBe("both");
+    expect(output.write).toHaveBeenCalledWith(
+      "[dev] Host-daemon protocol differs from the rebuilt server; restarting host-daemon too.\n",
+    );
+  });
+
+  it("expands server restarts for pre-protocol-status host-daemons", async () => {
+    const output = { write: vi.fn() };
+    const fetchFn = vi.fn<typeof fetch>(async () =>
+      Response.json({
+        hostId: "host-1",
+        connected: true,
+        serverUrl: "http://127.0.0.1:3334",
+        supportsNativeFolderPicker: false,
+        platform: "darwin",
+      }),
+    );
+
+    await expect(
+      resolveEffectiveRestartTarget("server", {
+        fetchFn,
+        hostDaemonLocalPort: 1234,
+        output,
+      }),
+    ).resolves.toBe("both");
+  });
+
+  it("keeps server-only restarts when host-daemon status is unavailable", async () => {
+    const output = { write: vi.fn() };
+    const fetchFn = vi.fn<typeof fetch>(async () => {
+      throw new Error("offline");
+    });
+
+    await expect(
+      resolveEffectiveRestartTarget("server", {
+        fetchFn,
+        hostDaemonLocalPort: 1234,
+        output,
+      }),
+    ).resolves.toBe("server");
+    expect(output.write).not.toHaveBeenCalled();
   });
 
   it("removes stale pid files", async () => {

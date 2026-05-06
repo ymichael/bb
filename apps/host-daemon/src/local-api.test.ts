@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  HOST_DAEMON_PROTOCOL_VERSION,
   createHostDaemonLocalClient,
   type WorkspaceOpenTarget,
 } from "@bb/host-daemon-contract";
@@ -73,6 +74,7 @@ describe("local API server", () => {
     expect(await statusResponse.json()).toEqual({
       hostId: "host-1",
       connected: true,
+      protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
       serverUrl: "http://server.test",
       supportsNativeFolderPicker:
         resolveNativeFolderPicker({

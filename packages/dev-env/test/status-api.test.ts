@@ -118,6 +118,28 @@ describe("dev-env status API", () => {
     });
   });
 
+  it("upgrades a server restart to both services when the host-daemon build changed", async () => {
+    const state = createState();
+    state.currentFingerprints["host-daemon"] = "host-changed";
+    const runtime = createRuntime();
+    const app = createDevEnvStatusApp(runtime, createDependencies(state));
+
+    const response = await app.request("/restart", {
+      body: JSON.stringify({ target: "server" }),
+      headers: {
+        "Content-Type": "application/json",
+      },
+      method: "POST",
+    });
+
+    expect(response.status).toBe(200);
+    expect(state.restartTargets).toEqual(["both"]);
+    expect(runtime.baselineFingerprints.get("server")).toBe("server-changed");
+    expect(runtime.baselineFingerprints.get("host-daemon")).toBe(
+      "host-changed",
+    );
+  });
+
   it("refreshes both baselines after a combined restart", async () => {
     const state = createState();
     const runtime = createRuntime();

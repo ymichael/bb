@@ -10,6 +10,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import type { Host } from "@bb/domain";
+import { HOST_DAEMON_PROTOCOL_VERSION } from "@bb/host-daemon-contract";
 import type { HostDaemonStatusSnapshot } from "@/lib/api-host-daemon";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
 import { resetFakeReconnectingWebSockets } from "@/test/fake-reconnecting-websocket";
@@ -195,6 +196,7 @@ describe("useHostDaemon", () => {
       daemonStatus: {
         connected: true,
         hostId: "host-1",
+        protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
         serverUrl: "http://localhost:3334",
         supportsNativeFolderPicker: true,
         platform: "darwin",
@@ -298,6 +300,7 @@ describe("useHostDaemon", () => {
       daemonStatus: {
         connected: true,
         hostId: "host-1",
+        protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
         serverUrl: "http://localhost:3334",
         supportsNativeFolderPicker: false,
         platform: "linux",
@@ -329,6 +332,7 @@ describe("useHostDaemon", () => {
     state.daemonStatus = {
       connected: true,
       hostId: "host-1",
+      protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
       serverUrl: "http://localhost:3334",
       supportsNativeFolderPicker: true,
       platform: "linux",
@@ -349,6 +353,7 @@ describe("useHostDaemon", () => {
       daemonStatus: {
         connected: true,
         hostId: "host-1",
+        protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
         serverUrl: "http://localhost:3334",
         supportsNativeFolderPicker: false,
         platform: "linux",

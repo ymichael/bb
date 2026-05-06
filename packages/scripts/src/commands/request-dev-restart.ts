@@ -1,5 +1,8 @@
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { hostDaemonConfig } from "@bb/config/host-daemon";
+import { HOST_DAEMON_PROTOCOL_VERSION } from "@bb/host-daemon-contract";
+import { statusResponseSchema } from "@bb/host-daemon-contract/local";
 import {
   createTurboBuildCommand,
   resolveSupervisorPidPath,
@@ -8,11 +11,27 @@ import { readRunningPid } from "../lib/pid-file.js";
 import { runScriptProcess } from "../lib/process-helpers.js";
 
 type RestartTarget = "both" | "host-daemon" | "server";
+type HostDaemonProtocolCompatibility = "compatible" | "mismatch" | "unknown";
 
 interface RestartTargetConfig {
   filters: string[];
   label: string;
   services: string[];
+}
+
+interface RestartOutput {
+  write(text: string): void;
+}
+
+interface ResolveEffectiveRestartTargetOptions {
+  fetchFn?: typeof fetch;
+  hostDaemonLocalPort?: number;
+  output?: RestartOutput;
+}
+
+interface ResolveHostDaemonProtocolCompatibilityArgs {
+  fetchFn: typeof fetch;
+  hostDaemonLocalPort: number;
 }
 
 const restartTargets: Record<RestartTarget, RestartTargetConfig> = {
@@ -41,6 +60,54 @@ export function parseTarget(value: string): RestartTarget {
   throw new Error('Expected one of: "both", "server", "host-daemon"');
 }
 
+async function resolveHostDaemonProtocolCompatibility({
+  fetchFn,
+  hostDaemonLocalPort,
+}: ResolveHostDaemonProtocolCompatibilityArgs): Promise<HostDaemonProtocolCompatibility> {
+  try {
+    const response = await fetchFn(
+      `http://127.0.0.1:${hostDaemonLocalPort}/status`,
+    );
+    if (!response.ok) {
+      return "unknown";
+    }
+
+    const status = statusResponseSchema.safeParse(await response.json());
+    if (!status.success) {
+      return "mismatch";
+    }
+
+    return status.data.protocolVersion === HOST_DAEMON_PROTOCOL_VERSION
+      ? "compatible"
+      : "mismatch";
+  } catch {
+    return "unknown";
+  }
+}
+
+export async function resolveEffectiveRestartTarget(
+  target: RestartTarget,
+  options: ResolveEffectiveRestartTargetOptions = {},
+): Promise<RestartTarget> {
+  if (target !== "server") {
+    return target;
+  }
+
+  const compatibility = await resolveHostDaemonProtocolCompatibility({
+    fetchFn: options.fetchFn ?? fetch,
+    hostDaemonLocalPort:
+      options.hostDaemonLocalPort ?? hostDaemonConfig.BB_HOST_DAEMON_PORT,
+  });
+  if (compatibility !== "mismatch") {
+    return target;
+  }
+
+  (options.output ?? process.stdout).write(
+    `[dev] Host-daemon protocol differs from the rebuilt server; restarting host-daemon too.\n`,
+  );
+  return "both";
+}
+
 export async function readRunningSupervisorPid(
   serviceName: string,
 ): Promise<number> {
@@ -66,7 +133,9 @@ async function runBuild(filters: string[]): Promise<boolean> {
 export async function main(
   argv: string[] = process.argv.slice(2),
 ): Promise<void> {
-  const target = parseTarget(argv[0] ?? "both");
+  const target = await resolveEffectiveRestartTarget(
+    parseTarget(argv[0] ?? "both"),
+  );
   const targetConfig = restartTargets[target];
   const supervisorPids = new Map<string, number>();
 

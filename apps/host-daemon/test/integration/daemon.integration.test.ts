@@ -1,13 +1,20 @@
 import fs from "node:fs/promises";
+import { existsSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import Database from "better-sqlite3";
 import {
   createAgentRuntimeWithAdapters,
   createFakeAdapter,
   type ProviderAdapter,
 } from "@bb/agent-runtime/test";
-import { jsonValueSchema, type JsonValue } from "@bb/domain";
+import {
+  jsonValueSchema,
+  threadEventSchema,
+  type JsonValue,
+  type ThreadEvent,
+} from "@bb/domain";
 import { HOST_AUTH_FILE_NAME } from "@bb/host-daemon-contract";
 import { startHostDaemon } from "../../src/index.js";
 import {
@@ -30,6 +37,18 @@ interface InteractiveRequestParams {
 interface JsonValueObject {
   [key: string]: JsonValue;
 }
+
+interface EventSpoolPayloadRow {
+  payloadJson: string;
+}
+
+interface EventSpoolHasEventArgs {
+  dataDir: string;
+  eventType: ThreadEvent["type"];
+  threadId: string;
+}
+
+type EventSpoolLookupParams = [threadId: string, eventType: string];
 
 function parseInteractiveRequestParams(
   value: JsonValue,
@@ -85,6 +104,45 @@ async function pathExists(pathToCheck: string): Promise<boolean> {
       return false;
     }
     throw error;
+  }
+}
+
+function eventSpoolHasEvent(args: EventSpoolHasEventArgs): boolean {
+  const spoolPath = path.join(args.dataDir, "event-spool.sqlite");
+  if (!existsSync(spoolPath)) {
+    return false;
+  }
+
+  let db: Database.Database | null = null;
+  try {
+    db = new Database(spoolPath, {
+      fileMustExist: true,
+      readonly: true,
+    });
+    const rows = db
+      .prepare<EventSpoolLookupParams, EventSpoolPayloadRow>(
+        `
+          SELECT payloadJson
+          FROM outbound_events
+          WHERE threadId = ? AND eventType = ?
+        `,
+      )
+      .all(args.threadId, args.eventType);
+    return rows.some((row) => {
+      const parsed = threadEventSchema.safeParse(JSON.parse(row.payloadJson));
+      return (
+        parsed.success &&
+        parsed.data.threadId === args.threadId &&
+        parsed.data.type === args.eventType
+      );
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("no such table")) {
+      return false;
+    }
+    throw error;
+  } finally {
+    db?.close();
   }
 }
 
@@ -204,6 +262,7 @@ async function writeWorkspaceEchoProviderScript(
   await fs.writeFile(
     scriptPath,
     `
+const fs = require("node:fs");
 const path = require("node:path");
 const readline = require("node:readline");
 const threads = new Map();
@@ -234,6 +293,11 @@ function delayMsForInput(input) {
   return match ? Number(match[1]) : 0;
 }
 
+function completionGatePathForInput(input) {
+  const match = /(?:^|\\s)completionGate:(\\S+)(?:\\s|$)/.exec(inputText(input));
+  return match ? match[1] : null;
+}
+
 function completeTurn(threadId, turnId, providerThreadId, input) {
   send({
     jsonrpc: "2.0",
@@ -261,6 +325,22 @@ function completeTurn(threadId, turnId, providerThreadId, input) {
   });
 }
 
+function completeTurnWhenReady(threadId, turnId, providerThreadId, input) {
+  const gatePath = completionGatePathForInput(input);
+  if (gatePath && !fs.existsSync(gatePath)) {
+    setTimeout(
+      () => completeTurnWhenReady(threadId, turnId, providerThreadId, input),
+      10,
+    );
+    return;
+  }
+
+  setTimeout(
+    () => completeTurn(threadId, turnId, providerThreadId, input),
+    delayMsForInput(input),
+  );
+}
+
 function beginTurn(threadId, input) {
   const thread = threads.get(threadId);
   if (!thread) {
@@ -273,10 +353,7 @@ function beginTurn(threadId, input) {
     method: "turn/started",
     params: { threadId, turnId, providerThreadId: thread.providerThreadId },
   });
-  setTimeout(
-    () => completeTurn(threadId, turnId, thread.providerThreadId, input),
-    delayMsForInput(input),
-  );
+  completeTurnWhenReady(threadId, turnId, thread.providerThreadId, input);
 }
 
 const rl = readline.createInterface({ input: process.stdin });
@@ -792,6 +869,89 @@ describe("host daemon integration", () => {
           (fetch) => fetch.sessionId === "session-2",
         ),
       ).toBe(true);
+    } finally {
+      await harness.daemon.shutdown("test");
+      await harness.server.close();
+    }
+  });
+
+  it("does not post buffered events with a closed session while reconnecting", async () => {
+    const scriptDir = await makeTempDir("bb-host-daemon-reconnect-events-");
+    const scriptPath = path.join(scriptDir, "workspace-echo-provider.cjs");
+    const completionGatePath = path.join(scriptDir, "complete-turn");
+    await writeWorkspaceEchoProviderScript(scriptPath);
+    const harness = await setupDaemonHarness({
+      adapterFactory: () => createFakeAdapter({ scriptPath }),
+      serverOptions: { enforceActiveSessions: true },
+    });
+
+    try {
+      harness.server.queueCommand({
+        ...createStandardThreadStartCommand({
+          environmentId: "env-a",
+          threadId: "thread-a",
+          workspacePath: harness.envAPath,
+          projectId: "project-1",
+          providerId: "fake",
+          requestId: "creq_23456789ab",
+          input: [
+            {
+              type: "text",
+              text: `completionGate:${completionGatePath} reconnect event`,
+            },
+          ],
+        }),
+      });
+      harness.server.sendWebSocketMessage({ type: "commands-available" });
+
+      await waitFor(() =>
+        harness.server.events.some(
+          (event) =>
+            event.threadId === "thread-a" &&
+            event.event.type === "turn/started",
+        ),
+      );
+
+      const acceptedEventsBeforeDisconnect = harness.server.events.length;
+      const eventBatchRequestsBeforeDisconnect =
+        harness.server.eventBatchRequests.length;
+      harness.server.setWebSocketAvailable(false);
+      harness.server.closeWebSockets();
+      await waitFor(() => harness.server.socketCount() === 0);
+
+      await fs.writeFile(completionGatePath, "ready", "utf8");
+      await waitFor(() =>
+        eventSpoolHasEvent({
+          dataDir: harness.dataDir,
+          eventType: "turn/completed",
+          threadId: "thread-a",
+        }),
+      );
+
+      expect(harness.server.rejectedSessionRequests).toEqual([]);
+      expect(harness.server.events).toHaveLength(
+        acceptedEventsBeforeDisconnect,
+      );
+      expect(harness.server.eventBatchRequests).toHaveLength(
+        eventBatchRequestsBeforeDisconnect,
+      );
+
+      harness.server.setWebSocketAvailable(true);
+      await waitFor(() => harness.server.socketCount() === 1);
+      await waitFor(() =>
+        harness.server.events.some(
+          (event) =>
+            event.threadId === "thread-a" &&
+            event.event.type === "turn/completed",
+        ),
+      );
+
+      expect(harness.server.rejectedSessionRequests).toEqual([]);
+      expect(
+        harness.server.eventBatchRequests
+          .slice(eventBatchRequestsBeforeDisconnect)
+          .map((request) => request.sessionId),
+      ).not.toContain("session-1");
     } finally {
       await harness.daemon.shutdown("test");
       await harness.server.close();

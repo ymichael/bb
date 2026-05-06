@@ -4,6 +4,7 @@ import { promisify } from "node:util";
 import { serve } from "@hono/node-server";
 import {
   healthResponseSchema,
+  HOST_DAEMON_PROTOCOL_VERSION,
   openInTargetRequestSchema,
   pathsExistRequestSchema,
   typedRoutes,
@@ -103,6 +104,7 @@ export async function startLocalApiServer(
     c.json({
       hostId: options.hostId,
       connected: options.getConnected(),
+      protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
       serverUrl: options.serverUrl,
       supportsNativeFolderPicker: nativeFolderPicker !== null,
       platform,

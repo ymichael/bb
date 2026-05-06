@@ -242,22 +242,29 @@ describe("ServerConnection", () => {
 
   it("reconnects after the websocket disconnects", async () => {
     testServer = await createTestServer();
+    const publishedSessions: Array<string | null> = [];
     const { connection } = createConnection(testServer, {
       connectionOverrides: {
         minReconnectionDelay: 20,
         maxReconnectionDelay: 20,
         pollAfterDisconnectMs: 40,
         pollIntervalMs: 40,
+        setSession: (session) => {
+          publishedSessions.push(session?.sessionId ?? null);
+        },
       },
     });
 
     await connection.start();
     expect(testServer.sessionOpenCalls).toHaveLength(1);
+    expect(publishedSessions).toEqual(["session-1"]);
 
     testServer.closeWebSockets();
 
     await waitFor(() => testServer!.sessionOpenCalls.length >= 2);
     expect(testServer.sessionOpenCalls).toHaveLength(2);
+    await waitFor(() => publishedSessions.includes("session-2"));
+    expect(publishedSessions).toEqual(["session-1", null, "session-2"]);
 
     await connection.shutdown();
   });
@@ -510,7 +517,7 @@ describe("ServerConnection", () => {
     await connection.shutdown();
   });
 
-  it("polls for commands while the websocket stays down and stops after reconnect", async () => {
+  it("does not poll for commands while the websocket session is disconnected", async () => {
     vi.useFakeTimers();
     testServer = await createTestServer();
     const onCommandsAvailable = vi.fn();
@@ -540,17 +547,16 @@ describe("ServerConnection", () => {
     socket.disconnect();
 
     await vi.advanceTimersByTimeAsync(5_000);
-    expect(onCommandsAvailable).toHaveBeenCalledTimes(1);
+    expect(onCommandsAvailable).not.toHaveBeenCalled();
 
     await vi.advanceTimersByTimeAsync(10_000);
-    expect(onCommandsAvailable).toHaveBeenCalledTimes(2);
+    expect(onCommandsAvailable).not.toHaveBeenCalled();
 
     await socket.open();
     expect(testServer.sessionOpenCalls).toHaveLength(2);
 
-    const callsAfterReconnect = onCommandsAvailable.mock.calls.length;
     await vi.advanceTimersByTimeAsync(20_000);
-    expect(onCommandsAvailable).toHaveBeenCalledTimes(callsAfterReconnect);
+    expect(onCommandsAvailable).not.toHaveBeenCalled();
 
     await connection.shutdown();
   });

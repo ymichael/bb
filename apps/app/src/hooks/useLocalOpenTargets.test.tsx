@@ -11,6 +11,7 @@ import {
 } from "@testing-library/react";
 import type { Host } from "@bb/domain";
 import {
+  HOST_DAEMON_PROTOCOL_VERSION,
   openInTargetRequestSchema,
   type WorkspaceOpenTarget,
 } from "@bb/host-daemon-contract";
@@ -229,6 +230,7 @@ describe("useLocalOpenTargets", () => {
       daemonStatus: {
         connected: true,
         hostId: "host-1",
+        protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
         serverUrl: "http://localhost:3334",
         supportsNativeFolderPicker: false,
         platform: "darwin",
@@ -291,6 +293,7 @@ describe("useLocalOpenTargets", () => {
       daemonStatus: {
         connected: true,
         hostId: "host-1",
+        protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
         serverUrl: "http://localhost:3334",
         supportsNativeFolderPicker: false,
         platform: "darwin",
@@ -315,10 +318,9 @@ describe("useLocalOpenTargets", () => {
     );
 
     await act(async () => {
-      render(
-        <LocalOpenTargetsProbe enabled={true} onSnapshot={() => {}} />,
-        { wrapper: createSuspenseWrapper() },
-      );
+      render(<LocalOpenTargetsProbe enabled={true} onSnapshot={() => {}} />, {
+        wrapper: createSuspenseWrapper(),
+      });
     });
 
     fireEvent.click(screen.getByRole("button", { name: "open finder" }));
@@ -343,6 +345,7 @@ describe("useLocalOpenTargets", () => {
       daemonStatus: {
         connected: false,
         hostId: "host-1",
+        protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
         serverUrl: "http://localhost:3334",
         supportsNativeFolderPicker: false,
         platform: "darwin",
@@ -393,6 +396,7 @@ describe("useLocalOpenTargets", () => {
       daemonStatus: {
         connected: true,
         hostId: "host-1",
+        protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
         serverUrl: "http://localhost:3334",
         supportsNativeFolderPicker: false,
         platform: "darwin",

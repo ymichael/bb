@@ -10,6 +10,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import {
+  HOST_DAEMON_PROTOCOL_VERSION,
   openInTargetRequestSchema,
   type OpenInTargetRequest,
   type WorkspaceOpenTarget,
@@ -215,6 +216,7 @@ describe("useWorkspaceOpenTargets", () => {
       daemonStatus: {
         connected: true,
         hostId: "host-1",
+        protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
         serverUrl: "http://localhost:3334",
         supportsNativeFolderPicker: false,
         platform: "darwin",
@@ -270,6 +272,7 @@ describe("useWorkspaceOpenTargets", () => {
       daemonStatus: {
         connected: true,
         hostId: "host-1",
+        protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
         serverUrl: "http://localhost:3334",
         supportsNativeFolderPicker: false,
         platform: "linux",
@@ -320,6 +323,7 @@ describe("useWorkspaceOpenTargets", () => {
       daemonStatus: {
         connected: true,
         hostId: "host-1",
+        protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
         serverUrl: "http://localhost:3334",
         supportsNativeFolderPicker: false,
         platform: "darwin",

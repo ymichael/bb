@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import {
+  HOST_DAEMON_PROTOCOL_VERSION,
   openInTargetRequestSchema,
   type WorkspaceOpenTarget,
 } from "@bb/host-daemon-contract";
@@ -40,6 +41,7 @@ describe("api-host-daemon", () => {
           jsonResponse({
             connected: true,
             hostId: "host_1",
+            protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
             serverUrl: "http://localhost:3334",
             supportsNativeFolderPicker: true,
             platform: "darwin",
@@ -52,6 +54,7 @@ describe("api-host-daemon", () => {
     await expect(fetchHostStatus(3002)).resolves.toEqual({
       connected: true,
       hostId: "host_1",
+      protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
       serverUrl: "http://localhost:3334",
       supportsNativeFolderPicker: true,
       platform: "darwin",
@@ -137,6 +140,7 @@ describe("api-host-daemon", () => {
           jsonResponse({
             connected: false,
             hostId: "host_1",
+            protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
             serverUrl: "http://localhost:3334",
             supportsNativeFolderPicker: false,
             platform: "linux",
