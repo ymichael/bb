@@ -115,9 +115,11 @@ export function findWebActivityInHistoryCells(
 
 export function interruptWebActivityMessage(
   message: ViewWebActivityMessage,
+  completedAt: number | null,
 ): void {
   if (message.status === "pending") {
     message.status = "interrupted";
+    message.completedAt = completedAt;
   }
 }
 

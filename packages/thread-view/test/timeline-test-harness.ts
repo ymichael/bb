@@ -15,6 +15,7 @@ import type {
   ThreadEventRow,
   ThreadEventRowOfType,
   ThreadEventUserContent,
+  SystemThreadInterruptedReason,
   ThreadEventWarningCategory,
   ThreadTurnInitiator,
   TurnRequestTarget,
@@ -222,6 +223,10 @@ interface SystemOperationArgs extends EventFactoryRowOptions {
   status?: string;
 }
 
+interface SystemThreadInterruptedArgs extends EventFactoryRowOptions {
+  reason?: SystemThreadInterruptedReason;
+}
+
 interface PermissionGrantLifecycleArgs extends DefaultTurnEventOptions {
   interactionId?: string;
   itemId?: string;
@@ -314,6 +319,9 @@ export interface TimelineEventFactory {
   systemOperation(
     args: SystemOperationArgs,
   ): ThreadEventRowOfType<"system/operation">;
+  systemThreadInterrupted(
+    args?: SystemThreadInterruptedArgs,
+  ): ThreadEventRowOfType<"system/thread/interrupted">;
   threadProvisioning(
     args: ThreadProvisioningArgs,
   ): ThreadEventRowOfType<"system/thread-provisioning">;
@@ -807,6 +815,16 @@ export function createTimelineEventFactory(
           status: args.status ?? "running",
           message: args.message,
           ...(args.metadata ? { metadata: args.metadata } : {}),
+        },
+      };
+    },
+    systemThreadInterrupted(args = {}) {
+      const base = nextThreadScopedRowBase("system-thread-interrupted", args);
+      return {
+        ...base,
+        type: "system/thread/interrupted",
+        data: {
+          reason: args.reason ?? "manual-stop",
         },
       };
     },

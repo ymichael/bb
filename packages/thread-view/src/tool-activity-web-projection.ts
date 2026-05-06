@@ -122,7 +122,7 @@ export function onWebActivityBegin(
     active.callId === payload.callId &&
     active.kind !== payload.itemKind
   ) {
-    interruptWebActivityMessage(active);
+    interruptWebActivityMessage(active, meta.createdAt);
     flushActiveToolCell(state);
   }
 
@@ -163,7 +163,7 @@ export function onWebActivityEnd(
     active.callId === payload.callId &&
     active.kind !== payload.itemKind
   ) {
-    interruptWebActivityMessage(active);
+    interruptWebActivityMessage(active, meta.createdAt);
     flushActiveToolCell(state);
   }
 
@@ -189,7 +189,7 @@ export function onWebActivityEnd(
     conflictingHistoryMatch &&
     conflictingHistoryMatch.kind !== payload.itemKind
   ) {
-    interruptWebActivityMessage(conflictingHistoryMatch);
+    interruptWebActivityMessage(conflictingHistoryMatch, meta.createdAt);
   }
 
   const historyMatch = findWebActivityInHistoryCells(state, {

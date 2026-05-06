@@ -599,6 +599,12 @@ function mapWebSearchTitle(row: TimelineWebSearchWorkRow): TimelineTitle {
     case "interrupted":
       return makeTitle({
         segments: [segment("Interrupted web search:"), querySegment],
+        decorations: [
+          statusDecoration(
+            "interrupted",
+            row.completedAt !== null ? row.completedAt - row.startedAt : null,
+          ),
+        ],
       });
     default:
       return assertNever(row.status);
@@ -626,6 +632,12 @@ function mapWebFetchTitle(row: TimelineWebFetchWorkRow): TimelineTitle {
     case "interrupted":
       return makeTitle({
         segments: [segment("Interrupted fetch:"), urlSegment],
+        decorations: [
+          statusDecoration(
+            "interrupted",
+            row.completedAt !== null ? row.completedAt - row.startedAt : null,
+          ),
+        ],
       });
     default:
       return assertNever(row.status);

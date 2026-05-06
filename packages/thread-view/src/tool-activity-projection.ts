@@ -47,14 +47,16 @@ type InterruptibleToolMessage =
   | ViewWebActivityMessage;
 type InterruptibleToolCall = Pick<
   ViewProviderExecutionMessage,
-  "output" | "status"
+  "completedAt" | "output" | "status"
 >;
 interface ExecutionCompletionTarget {
   completedAt: number | null;
+  status: ViewProviderExecutionMessage["status"];
 }
 
 interface ExecutionCompletionSource {
   completedAt?: number | null;
+  status?: ViewProviderExecutionMessage["status"];
 }
 
 interface RunningExecutionBase {
@@ -142,8 +144,14 @@ interface MergeCallSummaryOptions {
 }
 
 export interface InterruptPendingToolActivityArgs {
+  completedAt: number | null;
   turnIds?: ReadonlySet<string>;
 }
+
+const DEFAULT_INTERRUPT_PENDING_TOOL_ACTIVITY_ARGS: InterruptPendingToolActivityArgs =
+  {
+    completedAt: null,
+  };
 
 export function createToolActivityState(): ToolActivityState {
   return {
@@ -459,9 +467,15 @@ function mergeExecutionCompletion(
   target: ExecutionCompletionTarget,
   incoming: ExecutionCompletionSource,
 ): void {
-  if (incoming.completedAt !== undefined && incoming.completedAt !== null) {
-    target.completedAt = incoming.completedAt;
+  if (incoming.completedAt === undefined || incoming.completedAt === null) {
+    return;
   }
+
+  if (target.status === "interrupted" && incoming.status !== "error") {
+    return;
+  }
+
+  target.completedAt = incoming.completedAt;
 }
 
 function mergeRunningExecutionMetadata(
@@ -673,27 +687,35 @@ function shouldInterruptToolScope(
   );
 }
 
-function interruptPendingToolCall(call: InterruptibleToolCall): void {
+function interruptPendingToolCall(
+  call: InterruptibleToolCall,
+  completedAt: number | null,
+): void {
   if (call.status !== "pending") {
     return;
   }
   call.status = "interrupted";
+  call.completedAt = completedAt;
   if (!call.output) {
     call.output = "Tool execution interrupted";
   }
 }
 
-function interruptPendingToolMessage(message: InterruptibleToolMessage): void {
+function interruptPendingToolMessage(
+  message: InterruptibleToolMessage,
+  completedAt: number | null,
+): void {
   switch (message.kind) {
     case "command":
     case "tool-call":
     case "delegation":
-      interruptPendingToolCall(message);
+      interruptPendingToolCall(message, completedAt);
       return;
     case "web-search":
     case "web-fetch":
       if (message.status === "pending") {
         message.status = "interrupted";
+        message.completedAt = completedAt;
       }
       return;
   }
@@ -807,7 +829,7 @@ export function flushPendingToolActivityOutput(
 
 export function interruptPendingToolActivity(
   state: ToolActivityProjectionState,
-  args: InterruptPendingToolActivityArgs = {},
+  args: InterruptPendingToolActivityArgs = DEFAULT_INTERRUPT_PENDING_TOOL_ACTIVITY_ARGS,
 ): void {
   const interruptedRunningCallIds: string[] = [];
   for (const call of state.toolActivity.runningCallsById.values()) {
@@ -817,7 +839,7 @@ export function interruptPendingToolActivity(
 
     flushVisibleTextBuffer(call.outputBuffer);
     syncRunningCallVisibleOutput(call);
-    interruptPendingToolCall(call);
+    interruptPendingToolCall(call, args.completedAt);
 
     const activeCall = findExecMessageInActiveCell(
       state.toolActivity.activeCell,
@@ -848,12 +870,15 @@ export function interruptPendingToolActivity(
     state.toolActivity.activeCell &&
     shouldInterruptToolScope(state.toolActivity.activeCell.scope, args)
   ) {
-    interruptPendingToolMessage(state.toolActivity.activeCell);
+    interruptPendingToolMessage(
+      state.toolActivity.activeCell,
+      args.completedAt,
+    );
   }
 
   for (const cell of state.toolActivity.historyCells) {
     if (shouldInterruptToolScope(cell.scope, args)) {
-      interruptPendingToolMessage(cell);
+      interruptPendingToolMessage(cell, args.completedAt);
     }
   }
 
@@ -862,7 +887,7 @@ export function interruptPendingToolActivity(
       isInterruptibleToolMessage(message) &&
       shouldInterruptToolScope(message.scope, args)
     ) {
-      interruptPendingToolMessage(message);
+      interruptPendingToolMessage(message, args.completedAt);
     }
   }
 }

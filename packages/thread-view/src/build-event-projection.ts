@@ -248,6 +248,7 @@ function buildFlatProjectionData(
     if (isTerminalBufferedTextFlushEvent(eventType)) {
       if (decoded.type === "turn/completed") {
         onTurnCompleted({
+          completedAt: meta.createdAt,
           state,
           turnId: requireThreadEventScopeTurnId({
             type: decoded.type,
@@ -256,7 +257,10 @@ function buildFlatProjectionData(
           status: decoded.status,
         });
       } else {
-        onThreadInterrupted(state);
+        onThreadInterrupted({
+          completedAt: meta.createdAt,
+          state,
+        });
       }
       flushProjectionBufferedOutputs(state);
     }

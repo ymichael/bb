@@ -49,6 +49,7 @@ interface ToolCallUpdateArgs {
 }
 
 interface DelegationUpdateArgs {
+  completedAt?: number | null;
   output?: string;
   status: NonNullable<DelegationExecutionUpdate["status"]>;
 }
@@ -106,6 +107,7 @@ function toolCallUpdate({
 }
 
 function delegationUpdate({
+  completedAt = null,
   output,
   status,
 }: DelegationUpdateArgs): DelegationExecutionUpdate {
@@ -116,7 +118,7 @@ function delegationUpdate({
     subagentType: "reviewer",
     description: "Review implementation",
     status,
-    completedAt: null,
+    completedAt,
     ...(output !== undefined ? { output } : {}),
   };
 }
@@ -556,11 +558,27 @@ describe("tool activity projection", () => {
   it("keeps interrupted command status when stale completion arrives", () => {
     const state = createProjectionState();
     beginCommand(state);
-    interruptPendingToolActivity(state, { turnIds: new Set(["turn-1"]) });
-    endCommand(state, 2, "completed");
+    interruptPendingToolActivity(state, {
+      completedAt: 2,
+      turnIds: new Set(["turn-1"]),
+    });
+    onExecEnd(
+      state,
+      eventMeta(3),
+      "thread-1",
+      "turn-1",
+      commandUpdate({
+        completedAt: 3,
+        output: "completed",
+        status: "completed",
+      }),
+    );
 
-    expect(commandMessages(state).map((message) => message.status)).toEqual([
-      "interrupted",
+    expect(commandMessages(state)).toMatchObject([
+      {
+        completedAt: 2,
+        status: "interrupted",
+      },
     ]);
   });
 
@@ -574,22 +592,56 @@ describe("tool activity projection", () => {
       "turn-1",
       delegationUpdate({ output: "reviewing", status: "pending" }),
     );
-    interruptPendingToolActivity(state, { turnIds: new Set(["turn-1"]) });
+    interruptPendingToolActivity(state, {
+      completedAt: 2,
+      turnIds: new Set(["turn-1"]),
+    });
 
-    expect(activeDelegationMessage(state)?.status).toBe("interrupted");
+    expect(activeDelegationMessage(state)).toMatchObject({
+      completedAt: 2,
+      status: "interrupted",
+    });
 
     onExecEnd(
       state,
-      eventMeta(2),
+      eventMeta(3),
       "thread-1",
       "turn-1",
-      delegationUpdate({ output: "done", status: "completed" }),
+      delegationUpdate({ completedAt: 3, output: "done", status: "completed" }),
     );
 
     expect(delegationMessages(state)).toMatchObject([
       {
+        completedAt: 2,
         output: "done",
         status: "interrupted",
+      },
+    ]);
+  });
+
+  it("lets error replace an interrupted command timestamp", () => {
+    const state = createProjectionState();
+    beginCommand(state);
+    interruptPendingToolActivity(state, {
+      completedAt: 2,
+      turnIds: new Set(["turn-1"]),
+    });
+    onExecEnd(
+      state,
+      eventMeta(4),
+      "thread-1",
+      "turn-1",
+      commandUpdate({
+        completedAt: 4,
+        output: "error",
+        status: "error",
+      }),
+    );
+
+    expect(commandMessages(state)).toMatchObject([
+      {
+        completedAt: 4,
+        status: "error",
       },
     ]);
   });

@@ -40,12 +40,17 @@ type TurnPendingFinalizationStatus = Extract<
   EventProjectionTurnStatus,
   "interrupted"
 >;
+interface TurnPendingFinalization {
+  completedAt: number;
+  status: TurnPendingFinalizationStatus;
+}
 type TurnCompletedStatus = Extract<
   ThreadEvent,
   { type: "turn/completed" }
 >["status"];
 
 interface CompleteTurnArgs {
+  completedAt: number;
   state: ProjectionState;
   status: TurnCompletedStatus;
   turnId: string;
@@ -56,6 +61,11 @@ interface FinalizeProjectionMessagesArgs {
   state: ProjectionState;
 }
 
+interface ThreadInterruptedArgs {
+  completedAt: number;
+  state: ProjectionState;
+}
+
 export interface ProjectionState
   extends AssistantStreamProjectionState,
     OperationProjectionState,
@@ -63,7 +73,8 @@ export interface ProjectionState
   seenUserKeys: Set<string>;
   openTurnIds: Set<string>;
   closedTurnIds: Set<string>;
-  pendingFinalizationByTurnId: Map<string, TurnPendingFinalizationStatus>;
+  pendingFinalizationByTurnId: Map<string, TurnPendingFinalization>;
+  threadInterruptedAt: number | null;
   delegationParentToolCallIdsByProviderThreadId: Map<string, string>;
 }
 
@@ -75,6 +86,7 @@ export function createProjectionState(): ProjectionState {
     openTurnIds: new Set(),
     closedTurnIds: new Set(),
     pendingFinalizationByTurnId: new Map(),
+    threadInterruptedAt: null,
     openAssistantMessagesByKey: new Map(),
     assistantTextBuffersByKey: new Map(),
     visibleAssistantMessageKeys: new Set(),
@@ -100,14 +112,24 @@ export function onTurnCompleted(args: CompleteTurnArgs): void {
   args.state.closedTurnIds.add(args.turnId);
   args.state.openTurnIds.delete(args.turnId);
   if (args.status === "interrupted") {
-    args.state.pendingFinalizationByTurnId.set(args.turnId, "interrupted");
+    args.state.pendingFinalizationByTurnId.set(args.turnId, {
+      completedAt: args.completedAt,
+      status: "interrupted",
+    });
   }
   finalizeOpenReasoningLifecycles(args.state);
 }
 
-export function onThreadInterrupted(state: ProjectionState): void {
-  closeOpenTurns(state);
-  finalizeOpenReasoningLifecycles(state);
+export function onThreadInterrupted(args: ThreadInterruptedArgs): void {
+  args.state.threadInterruptedAt = args.completedAt;
+  for (const turnId of args.state.openTurnIds) {
+    args.state.pendingFinalizationByTurnId.set(turnId, {
+      completedAt: args.completedAt,
+      status: "interrupted",
+    });
+  }
+  closeOpenTurns(args.state);
+  finalizeOpenReasoningLifecycles(args.state);
 }
 
 export function flushProjectionBufferedOutputs(state: ProjectionState): void {
@@ -129,7 +151,9 @@ function finalizePendingMessages(args: FinalizeProjectionMessagesArgs): void {
 
   flushPendingToolActivityOutput(args.state);
   flushPendingFileEditOutput(args.state);
-  interruptPendingToolActivity(args.state);
+  interruptPendingToolActivity(args.state, {
+    completedAt: args.state.threadInterruptedAt,
+  });
 
   for (const fileEdits of args.state.fileEditsByCallId.values()) {
     for (const fileEdit of fileEdits) {
@@ -151,22 +175,24 @@ function finalizePendingMessages(args: FinalizeProjectionMessagesArgs): void {
   flushActiveToolCell(args.state);
 }
 
-function isMessageScopedToFinalizedTurn(
+function getMessageTurnFinalization(
   message: EventProjectionMessage,
-  pendingFinalizationByTurnId: ReadonlyMap<
-    string,
-    TurnPendingFinalizationStatus
-  >,
-): boolean {
-  return (
-    message.scope.kind === "turn" &&
-    pendingFinalizationByTurnId.has(message.scope.turnId)
-  );
+  pendingFinalizationByTurnId: ReadonlyMap<string, TurnPendingFinalization>,
+): TurnPendingFinalization | null {
+  if (message.scope.kind !== "turn") {
+    return null;
+  }
+  return pendingFinalizationByTurnId.get(message.scope.turnId) ?? null;
 }
 
 function finalizePendingMessageForInterruptedTurn(
   message: EventProjectionMessage,
+  finalization: TurnPendingFinalization,
 ): void {
+  if (finalization.status !== "interrupted") {
+    return;
+  }
+
   switch (message.kind) {
     case "command":
     case "tool-call":
@@ -201,26 +227,28 @@ function finalizeInterruptedTurnPendingMessages(state: ProjectionState): void {
     return;
   }
 
-  interruptPendingToolActivity(state, {
-    turnIds: new Set(state.pendingFinalizationByTurnId.keys()),
-  });
+  for (const [turnId, finalization] of state.pendingFinalizationByTurnId) {
+    interruptPendingToolActivity(state, {
+      completedAt: finalization.completedAt,
+      turnIds: new Set([turnId]),
+    });
+  }
 
   for (const message of state.messages) {
-    if (
-      !isMessageScopedToFinalizedTurn(
-        message,
-        state.pendingFinalizationByTurnId,
-      )
-    ) {
+    const finalization = getMessageTurnFinalization(
+      message,
+      state.pendingFinalizationByTurnId,
+    );
+    if (!finalization) {
       continue;
     }
-    finalizePendingMessageForInterruptedTurn(message);
+    finalizePendingMessageForInterruptedTurn(message, finalization);
   }
 }
 
 export function finalizeProjectionState(
   args: FinalizeProjectionMessagesArgs,
 ): void {
-  finalizePendingMessages(args);
   finalizeInterruptedTurnPendingMessages(args.state);
+  finalizePendingMessages(args);
 }

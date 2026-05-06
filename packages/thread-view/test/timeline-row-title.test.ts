@@ -279,6 +279,47 @@ describe("buildTimelineRowTitle", () => {
     ]);
   });
 
+  it("keeps elapsed duration visible on interrupted command rows", () => {
+    const title = buildTimelineRowTitle(
+      {
+        ...commandRow(),
+        status: "interrupted",
+        exitCode: null,
+        completedAt: 3_001,
+      },
+      DEFAULT_OPTIONS,
+    );
+
+    expect(title.plain).toBe(
+      "Ran pnpm exec turbo run test --filter=@bb/app (3s, interrupted)",
+    );
+    expect(title.decorations).toEqual([
+      { kind: "status", status: "interrupted", durationMs: 3_000 },
+    ]);
+  });
+
+  it("keeps elapsed duration visible on interrupted tool rows", () => {
+    const title = buildTimelineRowTitle(
+      {
+        ...toolRow(),
+        activityIntents: [],
+        label: "LookupTool select:TodoWrite",
+        status: "interrupted",
+        toolArgs: { query: "select:TodoWrite" },
+        toolName: "LookupTool",
+        completedAt: 3_001,
+      },
+      DEFAULT_OPTIONS,
+    );
+
+    expect(title.plain).toBe(
+      "Ran tool: LookupTool select:TodoWrite (3s, interrupted)",
+    );
+    expect(title.decorations).toEqual([
+      { kind: "status", status: "interrupted", durationMs: 3_000 },
+    ]);
+  });
+
   it("can render completed work leaves with muted summary title treatment", () => {
     const title = buildTimelineRowTitle(commandRow(), {
       summaryStyle: "background",
@@ -560,6 +601,36 @@ describe("buildTimelineRowTitle", () => {
 
     expect(title.plain).toBe("Worked");
   });
+
+  it.each([
+    {
+      row: {
+        ...webSearchRow(),
+        status: "interrupted",
+        completedAt: 3_001,
+      } satisfies TimelineWebSearchWorkRow,
+      expectedPlain: "Interrupted web search: timeline renderer (3s, interrupted)",
+    },
+    {
+      row: {
+        ...webFetchRow(),
+        status: "interrupted",
+        completedAt: 3_001,
+      } satisfies TimelineWebFetchWorkRow,
+      expectedPlain:
+        "Interrupted fetch: https://example.com/thread-view (3s, interrupted)",
+    },
+  ])(
+    "renders interrupted $row.workKind titles with elapsed duration",
+    ({ row, expectedPlain }) => {
+      const title = buildTimelineRowTitle(row, DEFAULT_OPTIONS);
+
+      expect(title.plain).toBe(expectedPlain);
+      expect(title.decorations).toEqual([
+        { kind: "status", status: "interrupted", durationMs: 3_000 },
+      ]);
+    },
+  );
 
   it("can render step summaries as bundle titles or muted background summaries", () => {
     const row = workSummaryRow([webSearchRow(), webFetchRow()]);
