@@ -87,10 +87,23 @@ export interface CreateTestServerOptions {
   commandResultFailures?: number;
   commandResultFailureStatus?: number;
   enforceActiveSessions?: boolean;
+  eventPostFailures?: number;
   heartbeatIntervalMs?: number;
+  interactiveRequestFailures?: number;
   leaseTimeoutMs?: number;
+  requireTurnStartedForInteractiveRequests?: boolean;
   trackedThreadTargets?: HostDaemonTrackedThreadTarget[];
 }
+
+export type TestServerRequestLogEntry =
+  | {
+      kind: "events";
+      events: HostDaemonEventEnvelope[];
+    }
+  | {
+      kind: "interactive-request";
+      request: HostDaemonInteractiveRequest;
+    };
 
 export interface TestServer {
   baseUrl: string;
@@ -102,6 +115,7 @@ export interface TestServer {
     sessionId: string;
   }>;
   environmentChanges: HostDaemonEnvironmentChangeRequest[];
+  eventPostAttemptCount: number;
   events: HostDaemonEventEnvelope[];
   heartbeats: Array<{
     sessionId: string;
@@ -112,8 +126,11 @@ export interface TestServer {
     path: string;
     sessionId: string;
   }>;
+  registeredInteractiveRequests: HostDaemonInteractiveRequest[];
+  requestLog: TestServerRequestLogEntry[];
   sessionOpenCalls: HostDaemonSessionOpenRequest[];
   toolCalls: Array<{ sessionId: string; tool: string }>;
+  failNextEventPosts(count: number): void;
   queueCommand(command: HostDaemonCommand): HostDaemonCommandEnvelope;
   queueRawCommand(raw: unknown): number;
   sendWebSocketMessage(message: HostDaemonServerWsMessage): void;
@@ -141,6 +158,8 @@ export async function createTestServer(
   const toolCalls: Array<{ sessionId: string; tool: string }> = [];
   const interactiveRequests: HostDaemonInteractiveRequest[] = [];
   const rejectedSessionRequests: TestServer["rejectedSessionRequests"] = [];
+  const registeredInteractiveRequests: HostDaemonInteractiveRequest[] = [];
+  const requestLog: TestServerRequestLogEntry[] = [];
   const events: HostDaemonEventEnvelope[] = [];
   const activeSockets = new Set<WebSocket>();
   const activeSessionIds = new Set<string>();
@@ -151,6 +170,10 @@ export async function createTestServer(
   const fetchedRawCommandCursors = new Set<number>();
   const completedCommandIds = new Set<string>();
   let commandResultAttemptCount = 0;
+  let eventPostAttemptCount = 0;
+  let eventPostFailuresRemaining = options.eventPostFailures ?? 0;
+  let interactiveRequestFailuresRemaining =
+    options.interactiveRequestFailures ?? 0;
   let nextCursor = 1;
   let nextEventSequence = 1;
   let nextSessionId = 1;
@@ -179,6 +202,18 @@ export async function createTestServer(
         status: 401,
         headers: { "content-type": "application/json" },
       },
+    );
+  }
+
+  function hasPostedTurnStarted(
+    request: HostDaemonInteractiveRequest,
+  ): boolean {
+    return events.some(
+      (event) =>
+        event.threadId === request.interaction.threadId &&
+        event.event.type === "turn/started" &&
+        event.event.scope.kind === "turn" &&
+        event.event.scope.turnId === request.interaction.turnId,
     );
   }
 
@@ -309,7 +344,26 @@ export async function createTestServer(
     if (rejectedResponse) {
       return rejectedResponse;
     }
+    eventPostAttemptCount += 1;
+    if (eventPostFailuresRemaining > 0) {
+      eventPostFailuresRemaining -= 1;
+      return new Response(
+        JSON.stringify({
+          code: "event_post_unavailable",
+          message: "Event post is temporarily unavailable",
+          retryable: true,
+        }),
+        {
+          headers: { "content-type": "application/json" },
+          status: 503,
+        },
+      );
+    }
     events.push(...payload.events);
+    requestLog.push({
+      kind: "events",
+      events: payload.events,
+    });
     const acceptedEvents = payload.events.map((event) => ({
       producerEventId: event.producerEventId,
       threadId: event.threadId,
@@ -363,9 +417,46 @@ export async function createTestServer(
       return rejectedResponse;
     }
     interactiveRequests.push(payload);
+    requestLog.push({
+      kind: "interactive-request",
+      request: payload,
+    });
+    if (
+      options.requireTurnStartedForInteractiveRequests === true &&
+      !hasPostedTurnStarted(payload)
+    ) {
+      return new Response(
+        JSON.stringify({
+          code: "turn_start_not_ready",
+          message:
+            "Turn start has not been stored yet; retry interactive request registration",
+          retryable: true,
+        }),
+        {
+          headers: { "content-type": "application/json" },
+          status: 503,
+        },
+      );
+    }
+    if (interactiveRequestFailuresRemaining > 0) {
+      interactiveRequestFailuresRemaining -= 1;
+      return new Response(
+        JSON.stringify({
+          code: "turn_start_not_ready",
+          message:
+            "Turn start has not been stored yet; retry interactive request registration",
+          retryable: true,
+        }),
+        {
+          headers: { "content-type": "application/json" },
+          status: 503,
+        },
+      );
+    }
+    registeredInteractiveRequests.push(payload);
     return context.json({
       outcome: "created",
-      interactionId: `interaction-${interactiveRequests.length}`,
+      interactionId: `interaction-${registeredInteractiveRequests.length}`,
       status: "pending",
     });
   });
@@ -433,12 +524,20 @@ export async function createTestServer(
     },
     eventBatchRequests,
     environmentChanges,
+    get eventPostAttemptCount() {
+      return eventPostAttemptCount;
+    },
     events,
     heartbeats,
     interactiveRequests,
     rejectedSessionRequests,
+    registeredInteractiveRequests,
+    requestLog,
     sessionOpenCalls,
     toolCalls,
+    failNextEventPosts(count: number): void {
+      eventPostFailuresRemaining += count;
+    },
     queueCommand(command: HostDaemonCommand): HostDaemonCommandEnvelope {
       const envelope = {
         id: `command-${nextCursor}`,

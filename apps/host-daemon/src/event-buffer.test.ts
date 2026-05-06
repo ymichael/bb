@@ -16,6 +16,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createEventBuffer,
+  EventBufferRequiredFlushError,
   shouldFlushThreadEventImmediately,
   type CreateEventBufferOptions,
   type EventPostResult,
@@ -288,7 +289,9 @@ describe("event buffer", () => {
         "hdevt_23456789abcdefghijkm",
       ]),
       dataDir,
+      debounceMs: 60_000,
       logger: createLogger(),
+      maxWaitMs: 60_000,
       postEvents,
     });
 
@@ -331,7 +334,9 @@ describe("event buffer", () => {
         "hdevt_23456789abcdefghijkm",
       ]),
       dataDir,
+      debounceMs: 60_000,
       logger: createLogger(),
+      maxWaitMs: 60_000,
       postEvents,
     });
 
@@ -350,6 +355,74 @@ describe("event buffer", () => {
       "hdevt_23456789abcdefghijkm",
     );
     expect(buffer.depth()).toBe(0);
+    await buffer.dispose();
+  });
+
+  it("requires current events to settle before returning", async () => {
+    const dataDir = nextDataDir();
+    let calls = 0;
+    const postEvents = vi.fn<CreateEventBufferOptions["postEvents"]>(
+      async (events) => {
+        calls++;
+        if (calls === 1) {
+          throw new Error("lost response");
+        }
+        return acceptedPostResult(events);
+      },
+    );
+    const buffer = createEventBuffer({
+      createProducerEventId: createProducerEventIdGenerator([
+        "hdevt_23456789abcdefghijkm",
+      ]),
+      dataDir,
+      debounceMs: 60_000,
+      logger: createLogger(),
+      maxWaitMs: 60_000,
+      postEvents,
+    });
+
+    buffer.push({
+      threadId: "threadA",
+      event: createThreadIdentityEvent("threadA"),
+    });
+    await buffer.flushRequired();
+
+    const firstBatch = postEvents.mock.calls[0]?.[0];
+    const secondBatch = postEvents.mock.calls[1]?.[0];
+    expect(firstBatch).toEqual(secondBatch);
+    expect(postEvents).toHaveBeenCalledTimes(2);
+    expect(buffer.depth()).toBe(0);
+    await buffer.dispose();
+  });
+
+  it("throws when required events never settle", async () => {
+    const dataDir = nextDataDir();
+    const postEvents = vi.fn<CreateEventBufferOptions["postEvents"]>(
+      async () => {
+        throw new Error("server unavailable");
+      },
+    );
+    const buffer = createEventBuffer({
+      createProducerEventId: createProducerEventIdGenerator([
+        "hdevt_23456789abcdefghijkm",
+      ]),
+      dataDir,
+      debounceMs: 60_000,
+      logger: createLogger(),
+      maxWaitMs: 60_000,
+      postEvents,
+    });
+
+    buffer.push({
+      threadId: "threadA",
+      event: createThreadIdentityEvent("threadA"),
+    });
+    await expect(buffer.flushRequired()).rejects.toBeInstanceOf(
+      EventBufferRequiredFlushError,
+    );
+
+    expect(postEvents).toHaveBeenCalledTimes(5);
+    expect(buffer.depth()).toBe(1);
     await buffer.dispose();
   });
 

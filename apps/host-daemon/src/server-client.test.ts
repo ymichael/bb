@@ -166,7 +166,7 @@ describe("createServerClient", () => {
     });
   });
 
-  it("retries retryable 409 interactive request registration responses", async () => {
+  it("retries retryable interactive request registration responses after the attempt hook", async () => {
     let calls = 0;
     const fetchFn = vi.fn<typeof fetch>(async () => {
       calls += 1;
@@ -182,7 +182,7 @@ describe("createServerClient", () => {
             headers: {
               "content-type": "application/json",
             },
-            status: 409,
+            status: 503,
           },
         );
       }
@@ -201,8 +201,10 @@ describe("createServerClient", () => {
         },
       );
     });
+    const beforeAttempt = vi.fn(async () => undefined);
     const logger = createLogger();
     const client = createServerClient({
+      beforeInteractiveRequestRegistrationAttempt: beforeAttempt,
       fetchFn,
       getSessionId: () => "session-1",
       hostKey: "host-key",
@@ -218,6 +220,7 @@ describe("createServerClient", () => {
       status: "pending",
     });
     expect(fetchFn).toHaveBeenCalledTimes(2);
+    expect(beforeAttempt).toHaveBeenCalledTimes(2);
     expect(logger.warn).toHaveBeenCalledWith(
       expect.objectContaining({
         attempt: 1,

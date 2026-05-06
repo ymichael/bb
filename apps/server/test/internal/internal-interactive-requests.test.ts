@@ -397,63 +397,6 @@ describe("internal interactive request lifecycle", () => {
     }
   });
 
-  it("waits for daemon-spooled turn/started before registering an interactive request", async () => {
-    const harness = await createTestAppHarness();
-    try {
-      const { host, session } = seedHostSession(harness.deps, {
-        id: "host-interaction-wait-turn-start",
-      });
-      const { project } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
-      });
-      const environment = seedEnvironment(harness.deps, {
-        hostId: host.id,
-        projectId: project.id,
-      });
-      const thread = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: environment.id,
-      });
-      const body = buildCommandApprovalInteractiveRequest({
-        sessionId: session.id,
-        suffix: "wait-turn-start",
-        threadId: thread.id,
-      });
-
-      const responsePromise = postInteractiveRequest({ body, harness });
-      await sleep(50);
-      expect(
-        harness.deps.pendingInteractions.listThreadInteractions(thread.id),
-      ).toEqual([]);
-
-      seedTurnStarted(harness.deps, {
-        threadId: thread.id,
-        environmentId: environment.id,
-        turnId: body.interaction.turnId,
-        providerThreadId: body.interaction.providerThreadId,
-      });
-
-      const response = await responsePromise;
-
-      expect(response.status).toBe(200);
-      await expect(readJson(response)).resolves.toMatchObject({
-        outcome: "created",
-        status: "pending",
-      });
-      expect(
-        harness.deps.pendingInteractions.listThreadInteractions(thread.id),
-      ).toEqual([
-        expect.objectContaining({
-          providerRequestId: body.interaction.providerRequestId,
-          status: "pending",
-          turnId: body.interaction.turnId,
-        }),
-      ]);
-    } finally {
-      await harness.cleanup();
-    }
-  });
-
   it("returns retryable 503 when interactive request turn/started has not landed", async () => {
     const harness = await createTestAppHarness();
     try {

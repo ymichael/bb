@@ -190,6 +190,8 @@ export interface CreateServerClientOptions {
   hostKey: string;
   logger: HostDaemonLogger;
   getSessionId: () => string;
+  /** Runs before each POST attempt so retryable ordering preconditions can be repaired. */
+  beforeInteractiveRequestRegistrationAttempt?: () => Promise<void>;
   commandResultRetryOptions?: CommandResultRetryOptions;
   fetchFn?: FetchFn;
 }
@@ -601,6 +603,7 @@ export function createServerClient(
     ): Promise<HostDaemonInteractiveRequestResponse> {
       return pRetry(
         async () => {
+          await options.beforeInteractiveRequestRegistrationAttempt?.();
           const payload = hostDaemonInteractiveRequestSchema.parse({
             sessionId: requireSessionId(),
             interaction: request,

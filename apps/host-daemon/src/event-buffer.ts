@@ -16,6 +16,7 @@ import {
 import { createHash, randomBytes } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 import { ServerResponseError } from "./server-client.js";
 import type { HostDaemonLogger } from "./logger.js";
 
@@ -25,6 +26,8 @@ const EVENT_SPOOL_SCHEMA_VERSION = 1;
 const EVENT_SPOOL_FILE_NAME = "event-spool.sqlite";
 const MAX_CONSECUTIVE_NO_PROGRESS_FLUSHES = 3;
 const MAX_NON_RETRYABLE_POST_FAILURES = 3;
+const REQUIRED_FLUSH_MAX_ATTEMPTS = 5;
+const REQUIRED_FLUSH_RETRY_DELAY_MS = 100;
 const PRODUCER_EVENT_ID_ALPHABET = "23456789abcdefghijkmnpqrstuvwxyz";
 const FIRST_PROTOCOL_VERSION_WITH_DURABLE_EVENT_SPOOL = 13;
 const LAST_PROTOCOL_VERSION_WITH_PROTOCOL_VERSIONED_SPOOL_HASH = 14;
@@ -85,6 +88,15 @@ interface SettlePostedBatchArgs {
 interface SettlePostedBatchResult {
   deletedCount: number;
   rejectedEvents: HostDaemonRejectedEvent[];
+}
+
+interface ListPendingProducerEventIdsArgs {
+  producerEventIds: readonly HostDaemonProducerEventId[];
+}
+
+export interface EventBufferRequiredFlushErrorDetails {
+  attemptCount: number;
+  pendingEventCount: number;
 }
 
 interface CreateBufferedEventRecordArgs {
@@ -184,9 +196,26 @@ export interface EventBuffer {
    */
   push(event: BufferedEventInput): BufferedEvent;
   flush(): Promise<void>;
+  /**
+   * Stronger boundary primitive for call sites that must not proceed while the
+   * events already in the spool remain unacknowledged by the server.
+   */
+  flushRequired(): Promise<void>;
   depth(): number;
   snapshot(): BufferedEvent[];
   dispose(): Promise<void>;
+}
+
+export class EventBufferRequiredFlushError extends Error {
+  readonly details: EventBufferRequiredFlushErrorDetails;
+
+  constructor(details: EventBufferRequiredFlushErrorDetails) {
+    super(
+      `Required event flush did not settle ${details.pendingEventCount} event(s) after ${details.attemptCount} attempts`,
+    );
+    this.name = "EventBufferRequiredFlushError";
+    this.details = details;
+  }
 }
 
 export class EventBufferDisposedError extends Error {
@@ -977,6 +1006,45 @@ export function createEventBuffer(
     return snapshotTransaction();
   }
 
+  function listPendingProducerEventIds(
+    args: ListPendingProducerEventIdsArgs,
+  ): HostDaemonProducerEventId[] {
+    return args.producerEventIds.filter(
+      (producerEventId) =>
+        selectEventByProducerId.get(producerEventId) !== undefined,
+    );
+  }
+
+  async function flushRequired(): Promise<void> {
+    if (disposed) {
+      throw new EventBufferDisposedError();
+    }
+
+    const requiredProducerEventIds = snapshot().map(
+      (event) => event.producerEventId,
+    );
+    if (requiredProducerEventIds.length === 0) {
+      return;
+    }
+
+    for (let attempt = 1; attempt <= REQUIRED_FLUSH_MAX_ATTEMPTS; attempt++) {
+      await flush();
+      const pendingProducerEventIds = listPendingProducerEventIds({
+        producerEventIds: requiredProducerEventIds,
+      });
+      if (pendingProducerEventIds.length === 0) {
+        return;
+      }
+      if (attempt === REQUIRED_FLUSH_MAX_ATTEMPTS) {
+        throw new EventBufferRequiredFlushError({
+          attemptCount: attempt,
+          pendingEventCount: pendingProducerEventIds.length,
+        });
+      }
+      await sleep(REQUIRED_FLUSH_RETRY_DELAY_MS);
+    }
+  }
+
   async function dispose(): Promise<void> {
     if (disposePromise) {
       return disposePromise;
@@ -999,6 +1067,7 @@ export function createEventBuffer(
   return {
     push,
     flush,
+    flushRequired,
     depth,
     snapshot,
     dispose,

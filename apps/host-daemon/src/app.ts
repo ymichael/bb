@@ -317,6 +317,13 @@ export async function createHostDaemonApp(
   let flushPendingInteractiveInterruptsPromise: Promise<void> | null = null;
   let interactiveInterruptRetryTimeout: ReturnType<typeof setTimeout> | null =
     null;
+  let eventBuffer: EventBuffer;
+
+  async function flushThreadEventsBeforeInteractiveRegistration(): Promise<void> {
+    // Interactive registration creates server-owned turn-scoped timeline state,
+    // so the server must first observe the provider turn/started for that turn.
+    await eventBuffer.flushRequired();
+  }
 
   const serverClient = createServerClient({
     serverUrl: options.serverUrl,
@@ -328,6 +335,8 @@ export async function createHostDaemonApp(
       }
       return sessionState.value;
     },
+    beforeInteractiveRequestRegistrationAttempt:
+      flushThreadEventsBeforeInteractiveRegistration,
     fetchFn: options.fetchFn,
   });
 
@@ -421,7 +430,7 @@ export async function createHostDaemonApp(
     void flushPendingInteractiveInterrupts();
   }
 
-  const eventBuffer = createEventBuffer({
+  eventBuffer = createEventBuffer({
     dataDir: options.dataDir,
     logger: options.logger,
     postEvents: (events) => serverClient.postEvents(events),

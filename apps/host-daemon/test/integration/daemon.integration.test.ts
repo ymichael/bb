@@ -162,6 +162,16 @@ function send(message) {
   process.stdout.write(JSON.stringify(message) + "\\n");
 }
 
+function inputText(input) {
+  if (!Array.isArray(input)) {
+    return "";
+  }
+  return input
+    .filter((item) => item && item.type === "text" && typeof item.text === "string")
+    .map((item) => item.text)
+    .join(" ");
+}
+
 function completeTurn(providerThreadId, turnId, text) {
   send({
     jsonrpc: "2.0",
@@ -233,22 +243,29 @@ rl.on("line", (line) => {
       params: { threadId: providerThreadId, turnId, providerThreadId },
     });
     send({ jsonrpc: "2.0", id: message.id, result: { ok: true } });
+    const text = inputText(message.params.input);
+    if (!text.includes("trigger approval")) {
+      completeTurn(providerThreadId, turnId, "noninteractive:" + text);
+      return;
+    }
     const requestId = nextRequestId++;
     pendingInteractive.set(requestId, { providerThreadId, turnId });
-    send({
-      jsonrpc: "2.0",
-      id: requestId,
-      method: "request_interaction",
-      params: {
-        threadId: providerThreadId,
-        turnId,
-        itemId: "item-host-daemon",
-        kind: "command_approval",
-        command: "git push",
-        cwd: "/tmp/project",
-        reason: "Needs approval",
-      },
-    });
+    setTimeout(() => {
+      send({
+        jsonrpc: "2.0",
+        id: requestId,
+        method: "request_interaction",
+        params: {
+          threadId: providerThreadId,
+          turnId,
+          itemId: "item-host-daemon",
+          kind: "command_approval",
+          command: "git push",
+          cwd: "/tmp/project",
+          reason: "Needs approval",
+        },
+      });
+    }, 0);
   }
 });
 `,
@@ -773,10 +790,28 @@ describe("host daemon integration", () => {
         if (!interactiveRequest) {
           throw new Error("Expected an interactive request");
         }
+        const interactiveRequestLogIndex = harness.server.requestLog.findIndex(
+          (entry) => entry.kind === "interactive-request",
+        );
+        expect(interactiveRequestLogIndex).toBeGreaterThan(0);
+        const eventsBeforeInteractiveRequest = harness.server.requestLog
+          .slice(0, interactiveRequestLogIndex)
+          .flatMap((entry) => (entry.kind === "events" ? entry.events : []));
+        expect(eventsBeforeInteractiveRequest).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              threadId: "thread-a",
+              event: expect.objectContaining({
+                type: "turn/started",
+                scope: { kind: "turn", turnId: "turn-2" },
+              }),
+            }),
+          ]),
+        );
         expect(interactiveRequest.sessionId).toBe("session-1");
         expect(interactiveRequest.interaction).toMatchObject({
           threadId: "thread-a",
-          turnId: "turn-1",
+          turnId: "turn-2",
           providerId: "fake",
           providerThreadId: "prov-1",
           payload: {
@@ -818,6 +853,201 @@ describe("host daemon integration", () => {
                 event.event.item.text === "interactive:allow_for_session",
             ),
         );
+
+        await waitFor(() =>
+          harness.server.commandResults.some(
+            (result) => result.type === "turn.submit" && result.ok,
+          ),
+        );
+      } finally {
+        await harness.daemon.shutdown("test");
+        await harness.server.close();
+      }
+    },
+    INTERACTIVE_PROVIDER_TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "settles turn-start events before interactive registration after transient event post failure",
+    async () => {
+      const dataDir = await makeTempDir("bb-host-daemon-interactive-provider-");
+      const scriptPath = path.join(dataDir, "interactive-provider.cjs");
+      await writeInteractiveProviderScript(scriptPath);
+      const harness = await setupDaemonHarness({
+        adapterFactory: () => createInteractiveRequestAdapter(scriptPath),
+        serverOptions: {
+          requireTurnStartedForInteractiveRequests: true,
+        },
+      });
+
+      try {
+        harness.server.queueCommand({
+          ...createStandardThreadStartCommand({
+            environmentId: "env-a",
+            threadId: "thread-a",
+            workspacePath: harness.envAPath,
+            projectId: "project-1",
+            providerId: "fake",
+            requestId: "creq_23456789ab",
+            input: [{ type: "text", text: "start" }],
+          }),
+        });
+        harness.server.sendWebSocketMessage({ type: "commands-available" });
+        await waitFor(() => harness.server.commandResults.length === 1);
+
+        const eventPostAttemptCountBeforeTurn =
+          harness.server.eventPostAttemptCount;
+        harness.server.failNextEventPosts(1);
+        harness.server.queueCommand({
+          ...createTurnSubmitCommand({
+            environmentId: "env-a",
+            threadId: "thread-a",
+            workspacePath: harness.envAPath,
+            projectId: "project-1",
+            providerId: "fake",
+            providerThreadId: "prov-1",
+            requestId: "creq_23456789ab",
+            input: [{ type: "text", text: "trigger approval" }],
+          }),
+        });
+        harness.server.sendWebSocketMessage({ type: "commands-available" });
+
+        await waitFor(
+          () =>
+            harness.server.interactiveRequests.length === 1 &&
+            harness.server.registeredInteractiveRequests.length === 1,
+        );
+        expect(harness.server.eventPostAttemptCount).toBeGreaterThanOrEqual(
+          eventPostAttemptCountBeforeTurn + 2,
+        );
+        const interactiveRequestLogIndexes = harness.server.requestLog
+          .map((entry, index) =>
+            entry.kind === "interactive-request" ? index : -1,
+          )
+          .filter((index) => index >= 0);
+        const interactiveRequestLogIndex =
+          interactiveRequestLogIndexes[interactiveRequestLogIndexes.length - 1];
+        if (interactiveRequestLogIndex === undefined) {
+          throw new Error("Expected an interactive request");
+        }
+        const eventsBeforeInteractiveRequest = harness.server.requestLog
+          .slice(0, interactiveRequestLogIndex)
+          .flatMap((entry) => (entry.kind === "events" ? entry.events : []));
+        expect(eventsBeforeInteractiveRequest).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              threadId: "thread-a",
+              event: expect.objectContaining({
+                type: "turn/started",
+                scope: { kind: "turn", turnId: "turn-2" },
+              }),
+            }),
+          ]),
+        );
+
+        const registeredRequest =
+          harness.server.registeredInteractiveRequests[0];
+        if (!registeredRequest) {
+          throw new Error("Expected a registered interactive request");
+        }
+        harness.server.queueCommand({
+          type: "interactive.resolve",
+          environmentId: "env-a",
+          threadId: "thread-a",
+          interactionId: "interaction-1",
+          providerId: "fake",
+          providerThreadId: registeredRequest.interaction.providerThreadId,
+          providerRequestId: registeredRequest.interaction.providerRequestId,
+          resolution: {
+            decision: "allow_for_session",
+            grantedPermissions: null,
+          },
+        });
+        harness.server.sendWebSocketMessage({ type: "commands-available" });
+
+        await waitFor(() =>
+          harness.server.commandResults.some(
+            (result) => result.type === "turn.submit" && result.ok,
+          ),
+        );
+      } finally {
+        await harness.daemon.shutdown("test");
+        await harness.server.close();
+      }
+    },
+    INTERACTIVE_PROVIDER_TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "retries interactive registration after retryable turn-start precondition responses",
+    async () => {
+      const dataDir = await makeTempDir("bb-host-daemon-interactive-provider-");
+      const scriptPath = path.join(dataDir, "interactive-provider.cjs");
+      await writeInteractiveProviderScript(scriptPath);
+      const harness = await setupDaemonHarness({
+        adapterFactory: () => createInteractiveRequestAdapter(scriptPath),
+        serverOptions: {
+          interactiveRequestFailures: 1,
+        },
+      });
+
+      try {
+        harness.server.queueCommand({
+          ...createStandardThreadStartCommand({
+            environmentId: "env-a",
+            threadId: "thread-a",
+            workspacePath: harness.envAPath,
+            projectId: "project-1",
+            providerId: "fake",
+            requestId: "creq_23456789ab",
+            input: [{ type: "text", text: "start" }],
+          }),
+        });
+        harness.server.sendWebSocketMessage({ type: "commands-available" });
+        await waitFor(() => harness.server.commandResults.length === 1);
+
+        harness.server.queueCommand({
+          ...createTurnSubmitCommand({
+            environmentId: "env-a",
+            threadId: "thread-a",
+            workspacePath: harness.envAPath,
+            projectId: "project-1",
+            providerId: "fake",
+            providerThreadId: "prov-1",
+            requestId: "creq_23456789ab",
+            input: [{ type: "text", text: "trigger approval" }],
+          }),
+        });
+        harness.server.sendWebSocketMessage({ type: "commands-available" });
+
+        await waitFor(
+          () =>
+            harness.server.interactiveRequests.length === 2 &&
+            harness.server.registeredInteractiveRequests.length === 1,
+        );
+        const firstRequest = harness.server.interactiveRequests[0];
+        const retriedRequest = harness.server.interactiveRequests[1];
+        if (!firstRequest || !retriedRequest) {
+          throw new Error("Expected retried interactive requests");
+        }
+        expect(retriedRequest.interaction.providerRequestId).toBe(
+          firstRequest.interaction.providerRequestId,
+        );
+
+        harness.server.queueCommand({
+          type: "interactive.resolve",
+          environmentId: "env-a",
+          threadId: "thread-a",
+          interactionId: "interaction-1",
+          providerId: "fake",
+          providerThreadId: retriedRequest.interaction.providerThreadId,
+          providerRequestId: retriedRequest.interaction.providerRequestId,
+          resolution: {
+            decision: "allow_for_session",
+            grantedPermissions: null,
+          },
+        });
+        harness.server.sendWebSocketMessage({ type: "commands-available" });
 
         await waitFor(() =>
           harness.server.commandResults.some(
