@@ -93,12 +93,7 @@ interface TimelineRowsListProps {
   rows: readonly ThreadTimelineViewRow[];
   scopeActive: boolean;
   spacing: TimelineRowsListSpacing;
-}
-
-
-interface TimelineRowWrapperClassNameArgs {
-  row: ThreadTimelineViewRow;
-  spacing: TimelineRowsListSpacing;
+  className?: string;
 }
 
 interface TimelineRowViewProps {
@@ -320,7 +315,9 @@ function areReadonlySetsEqual(
   return true;
 }
 
-function useStableReadonlySet(values: ReadonlySet<string>): ReadonlySet<string> {
+function useStableReadonlySet(
+  values: ReadonlySet<string>,
+): ReadonlySet<string> {
   const valuesRef = useRef(values);
   if (!areReadonlySetsEqual(valuesRef.current, values)) {
     valuesRef.current = values;
@@ -427,7 +424,10 @@ function shouldRenderCompactActivityIntentRows(
 function isNonExpandableSummary(
   children: readonly TimelineViewWorkRow[],
 ): boolean {
-  return children.length > 0 && children.every((child) => !isWorkRowExpandable(child));
+  return (
+    children.length > 0 &&
+    children.every((child) => !isWorkRowExpandable(child))
+  );
 }
 
 function isActiveLatestBundleSummary({
@@ -531,8 +531,7 @@ function timelineRowTitleOptions({
   });
   return {
     summaryStyle: useActiveBundleLabel ? "bundle" : "background",
-    workStyle:
-      row.kind === "work" && row.inClosedStep ? "summary" : "default",
+    workStyle: row.kind === "work" && row.inClosedStep ? "summary" : "default",
     isActiveLatestBundle: useActiveBundleLabel,
   };
 }
@@ -569,33 +568,17 @@ function timelineRowsListGapClassName(
 ): string {
   switch (spacing) {
     case "top-level":
-      return "gap-1";
+      return "gap-4";
     case "nested":
-      return "gap-0.5";
+      return "gap-3";
     case "bundle":
       return "gap-0";
   }
 }
 
-function timelineRowWrapperClassName({
-  row,
-  spacing,
-}: TimelineRowWrapperClassNameArgs): string | undefined {
-  if (spacing !== "top-level") {
-    return undefined;
-  }
-  if (row.kind === "conversation" && row.role === "user") {
-    return undefined;
-  }
-  return "pb-2";
-}
-
 function ConversationRow({ row }: ConversationRowProps) {
-  const {
-    onOpenLocalFileLink,
-    projectId,
-    resolveUserAttachmentImageSrc,
-  } = useTimelineRendererContext();
+  const { onOpenLocalFileLink, projectId, resolveUserAttachmentImageSrc } =
+    useTimelineRendererContext();
   return (
     <ConversationMessageContent
       attachments={row.attachments}
@@ -705,20 +688,18 @@ function TimelineExpandableBody({
             size="delegation"
             streaming={scopeActive}
             contentKey={`${timelineRowsSignature(row.childRows)}|${row.output.length}`}
-            className="rounded-md border border-border/60 bg-background/40"
+            className="border-l-1 border-border/60 my-1 px-2"
           >
-            {row.childRows.length > 0 ? (
-              <div className="px-1 py-1">
+            <div className="flex flex-col gap-3">
+              {row.childRows.length > 0 ? (
                 <TimelineRowsList
                   rows={row.childRows}
                   scopeActive={scopeActive}
                   compactActivityIntents={false}
                   spacing="nested"
                 />
-              </div>
-            ) : null}
-            {row.output.trim().length > 0 ? (
-              <div className="px-2 py-2">
+              ) : null}
+              {row.output.trim().length > 0 ? (
                 <ConversationMessageContent
                   attachments={null}
                   onOpenLocalFileLink={onOpenLocalFileLink}
@@ -728,8 +709,8 @@ function TimelineExpandableBody({
                   text={row.output}
                   userRequest={null}
                 />
-              </div>
-            ) : null}
+              ) : null}
+            </div>
           </TimelineDetailScroll>
         );
       }
@@ -753,10 +734,7 @@ function TimelineExpandableBody({
   }
 }
 
-function TurnRowBody({
-  compactActivityIntents,
-  row,
-}: TurnRowBodyProps) {
+function TurnRowBody({ compactActivityIntents, row }: TurnRowBodyProps) {
   const {
     getViewRows,
     loadingTurnSummaryIds,
@@ -825,6 +803,7 @@ function TurnRowBody({
         scopeActive={false}
         compactActivityIntents={compactActivityIntents}
         spacing="nested"
+        className="border-l-1 border-border/60 my-1 px-2"
       />
     );
   }
@@ -970,6 +949,7 @@ function TimelineRowsList({
   rows,
   scopeActive,
   spacing,
+  className,
 }: TimelineRowsListProps) {
   const activeLatestBundleId = useMemo(
     () => findActiveLatestBundleId(rows),
@@ -980,22 +960,19 @@ function TimelineRowsList({
       className={cn(
         "flex min-w-0 flex-col",
         timelineRowsListGapClassName(spacing),
+        className,
       )}
       data-timeline-row-list={spacing}
     >
       {rows.map((row) => (
-        <div
+        <MemoizedTimelineRowView
           key={row.id}
-          className={timelineRowWrapperClassName({ row, spacing })}
-        >
-          <MemoizedTimelineRowView
-            activeLatestBundleId={activeLatestBundleId}
-            row={row}
-            scopeActive={scopeActive}
-            spacing={spacing}
-            compactActivityIntents={compactActivityIntents}
-          />
-        </div>
+          activeLatestBundleId={activeLatestBundleId}
+          row={row}
+          scopeActive={scopeActive}
+          spacing={spacing}
+          compactActivityIntents={compactActivityIntents}
+        />
       ))}
     </div>
   );

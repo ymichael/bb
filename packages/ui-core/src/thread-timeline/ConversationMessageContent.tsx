@@ -323,7 +323,7 @@ function UserConversationMessage({
   const requestLabel = userRequestLabel(userRequest);
 
   return (
-    <div className="group mt-2 w-full">
+    <div className="group w-full">
       <div className="ml-auto w-fit max-w-[80%]">
         <div className="rounded-md bg-primary/10 p-2 text-sm leading-relaxed text-foreground">
           {messageText ? (
@@ -361,20 +361,16 @@ function AssistantConversationMessage({
   text,
 }: AssistantConversationMessageProps) {
   return (
-    <div className="group w-full">
-      <div className="mr-auto w-full">
-        <div className="rounded-md p-2 text-sm leading-relaxed">
-          <MarkdownPreview
-            content={text}
-            onOpenLocalFileLink={onOpenLocalFileLink}
-          />
-          <ConversationAttachments
-            filePaths={attachmentItems.filePaths}
-            imageItems={attachmentItems.imageItems}
-            onOpenLocalFileLink={onOpenLocalFileLink}
-          />
-        </div>
-      </div>
+    <div className="group w-full px-2 text-sm leading-relaxed">
+      <MarkdownPreview
+        content={text}
+        onOpenLocalFileLink={onOpenLocalFileLink}
+      />
+      <ConversationAttachments
+        filePaths={attachmentItems.filePaths}
+        imageItems={attachmentItems.imageItems}
+        onOpenLocalFileLink={onOpenLocalFileLink}
+      />
     </div>
   );
 }
