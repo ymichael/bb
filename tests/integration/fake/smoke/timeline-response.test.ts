@@ -57,8 +57,8 @@ describe("timeline response helpers", () => {
       activeThinking: null,
       timelinePage: {
         kind: "latest",
-        topLevelLimit: 100,
-        returnedOlderTopLevelRowCount: 1,
+        turnLimit: 5,
+        returnedTopLevelRowCount: 1,
         hasOlderRows: false,
         olderCursor: null,
       },
@@ -96,8 +96,8 @@ describe("timeline response helpers", () => {
       activeThinking: null,
       timelinePage: {
         kind: "latest",
-        topLevelLimit: 100,
-        returnedOlderTopLevelRowCount: 1,
+        turnLimit: 5,
+        returnedTopLevelRowCount: 1,
         hasOlderRows: false,
         olderCursor: null,
       },
@@ -115,8 +115,8 @@ describe("timeline response helpers", () => {
       activeThinking: null,
       timelinePage: {
         kind: "latest",
-        topLevelLimit: 100,
-        returnedOlderTopLevelRowCount: 1,
+        turnLimit: 5,
+        returnedTopLevelRowCount: 1,
         hasOlderRows: false,
         olderCursor: null,
       },

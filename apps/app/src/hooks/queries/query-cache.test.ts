@@ -20,8 +20,8 @@ function emptyTimelineResponse(kind: TimelinePageKind): ThreadTimelineResponse {
     rows: [],
     timelinePage: {
       kind,
-      topLevelLimit: 100,
-      returnedOlderTopLevelRowCount: 0,
+      turnLimit: 5,
+      returnedTopLevelRowCount: 0,
       hasOlderRows: false,
       olderCursor: null,
     },
@@ -57,8 +57,8 @@ describe("timeline query cache updates", () => {
     const { queryClient } = createQueryClientTestHarness();
     const latestKey = threadTimelineLatestQueryKey("thread-1", undefined);
     const olderKey = threadTimelineOlderQueryKey("thread-1", undefined, {
-      topLevelSortSeq: 10,
-      rowId: "row-10",
+      seq: 10,
+      id: "row-10",
     });
     queryClient.setQueryData<ThreadTimelineResponse>(
       latestKey,

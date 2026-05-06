@@ -6,7 +6,7 @@ import {
   type SystemClientRequestVisibility,
   type ThreadEventWithMeta,
 } from "@bb/thread-view";
-import type { Thread } from "@bb/domain";
+import type { ClientTurnRequestId, Thread } from "@bb/domain";
 import type {
   ManagerTimelineView,
   TimelinePaginationCursor,
@@ -14,16 +14,22 @@ import type {
   TimelineRow,
   TimelineTurnSummaryDetailsResponse,
 } from "@bb/server-contract";
-import { THREAD_TIMELINE_DEFAULT_TOP_LEVEL_LIMIT } from "@bb/server-contract";
 import {
   listContextWindowUsageRows,
+  listStoredClientTurnRequestedRowsByRequestIds,
   listRecentStoredEventRows,
   listStoredClientTurnRequestIdsInRange,
   listStoredEventRowsInRange,
+  listStoredEventRowsInSequenceWindow,
   listStoredTurnInputAcceptedRowsByClientRequestIds,
   listStoredTurnStartedRowsByTurnIdsUpToSequence,
+  listTimelineTurnPageAnchorRows,
 } from "@bb/db";
-import type { DbConnection, StoredEventRow } from "@bb/db";
+import type {
+  DbConnection,
+  StoredEventRow,
+  TimelineTurnPageAnchorRow,
+} from "@bb/db";
 import { ApiError } from "../../errors.js";
 import { parseStoredEvent } from "./thread-data.js";
 
@@ -47,18 +53,22 @@ interface BuildTimelineTurnSummaryDetailsOptions extends TimelineTurnSummarySele
 
 export type ThreadTimelineServiceViewMode = "manager-conversation" | "standard";
 
-export const THREAD_TIMELINE_OLDER_ROW_LIMIT =
-  THREAD_TIMELINE_DEFAULT_TOP_LEVEL_LIMIT;
+export type ThreadTimelinePageKind = "latest" | "older";
+
+export const STANDARD_THREAD_TIMELINE_INITIAL_TURN_LIMIT = 5;
+export const MANAGER_THREAD_TIMELINE_INITIAL_TURN_LIMIT = 20;
+export const THREAD_TIMELINE_OLDER_TURN_LIMIT = 20;
+export const THREAD_TIMELINE_TURN_LIMIT_MAX = 100;
 
 export interface LatestThreadTimelinePageRequest {
   kind: "latest";
-  topLevelLimit: number;
+  turnLimit: number;
 }
 
 export interface OlderThreadTimelinePageRequest {
   beforeCursor: TimelinePaginationCursor;
   kind: "older";
-  topLevelLimit: number;
+  turnLimit: number;
 }
 
 export type ThreadTimelinePageRequest =
@@ -80,13 +90,51 @@ interface PaginatedTimelineRowsResult {
   hasOlderRows: boolean;
   kind: ThreadTimelinePageRequest["kind"];
   olderCursor: TimelinePaginationCursor | null;
-  returnedOlderTopLevelRowCount: number;
+  returnedTopLevelRowCount: number;
   rows: TimelineRow[];
-  topLevelLimit: number;
+  turnLimit: number;
+}
+
+interface TimelineEventRowsResult {
+  hasOlderRows: boolean;
+  olderCursor: TimelinePaginationCursor | null;
+  requiresProjectedRowPagination: boolean;
+  rows: StoredEventRow[];
+}
+
+interface ListTimelineEventRowsArgs {
+  db: DbConnection;
+  page: ThreadTimelinePageRequest;
+  threadId: string;
+}
+
+interface BuildTurnPageEventRowsArgs extends ListTimelineEventRowsArgs {
+  anchors: readonly TimelineTurnPageAnchorRow[];
+}
+
+interface BuildProjectedRowPaginationEventRowsArgs extends ListTimelineEventRowsArgs {
+  hasKnownTurnAnchors: boolean;
+}
+
+interface TimelineEventRowsPageMetadata {
+  hasOlderRows: boolean;
+  olderCursor: TimelinePaginationCursor | null;
+}
+
+interface FilterDirectClientTurnRequestedRowsArgs {
+  acceptedClientRequestIdsInWindow: readonly ClientTurnRequestId[];
+  db: DbConnection;
+  rows: readonly StoredEventRow[];
+  threadId: string;
 }
 
 export interface ResolveThreadTimelineServiceViewModeArgs {
   managerTimelineView: ManagerTimelineView | undefined;
+  thread: Thread;
+}
+
+export interface ResolveThreadTimelineDefaultTurnLimitArgs {
+  kind: ThreadTimelinePageKind;
   thread: Thread;
 }
 
@@ -103,6 +151,19 @@ export function resolveThreadTimelineServiceViewMode({
     return "manager-conversation";
   }
   return "standard";
+}
+
+export function resolveThreadTimelineDefaultTurnLimit({
+  kind,
+  thread,
+}: ResolveThreadTimelineDefaultTurnLimitArgs): number {
+  if (kind === "older") {
+    return THREAD_TIMELINE_OLDER_TURN_LIMIT;
+  }
+
+  return thread.type === "manager"
+    ? MANAGER_THREAD_TIMELINE_INITIAL_TURN_LIMIT
+    : STANDARD_THREAD_TIMELINE_INITIAL_TURN_LIMIT;
 }
 
 export function resolveSystemClientRequestVisibility({
@@ -179,8 +240,8 @@ function toTimelinePaginationCursor(
   row: TimelineRow,
 ): TimelinePaginationCursor {
   return {
-    topLevelSortSeq: row.sourceSeqStart,
-    rowId: row.id,
+    seq: row.sourceSeqStart,
+    id: row.id,
   };
 }
 
@@ -188,10 +249,10 @@ function isTimelineRowBeforeCursor(
   row: TimelineRow,
   cursor: TimelinePaginationCursor,
 ): boolean {
-  if (row.sourceSeqStart !== cursor.topLevelSortSeq) {
-    return row.sourceSeqStart < cursor.topLevelSortSeq;
+  if (row.sourceSeqStart !== cursor.seq) {
+    return row.sourceSeqStart < cursor.seq;
   }
-  return row.id < cursor.rowId;
+  return row.id < cursor.id;
 }
 
 function paginateHistoricalTimelineRows(
@@ -202,7 +263,10 @@ function paginateHistoricalTimelineRows(
     page.kind === "latest"
       ? rows
       : rows.filter((row) => isTimelineRowBeforeCursor(row, page.beforeCursor));
-  const selectedRows = candidateRows.slice(-page.topLevelLimit);
+  // No-anchor fallback has no turn boundaries, so the resolved turn limit is
+  // reused as a conservative cap on projected top-level rows.
+  const topLevelRowLimit = page.turnLimit;
+  const selectedRows = candidateRows.slice(-topLevelRowLimit);
   const hasOlderRows = candidateRows.length > selectedRows.length;
   const oldestSelectedRow = selectedRows[0];
 
@@ -231,10 +295,230 @@ function paginateTimelineRows(
   return {
     rows: returnedRows,
     kind: page.kind,
-    topLevelLimit: page.topLevelLimit,
-    returnedOlderTopLevelRowCount: pageRows.rows.length,
+    turnLimit: page.turnLimit,
+    returnedTopLevelRowCount: pageRows.rows.length,
     hasOlderRows: pageRows.hasOlderRows,
     olderCursor: pageRows.olderCursor,
+  };
+}
+
+function toTurnAnchorCursor(
+  anchor: TimelineTurnPageAnchorRow,
+): TimelinePaginationCursor {
+  return {
+    seq: anchor.sequence,
+    id: anchor.id,
+  };
+}
+
+function compareStoredEventRowsBySequence(
+  left: StoredEventRow,
+  right: StoredEventRow,
+): number {
+  if (left.sequence !== right.sequence) {
+    return left.sequence - right.sequence;
+  }
+  if (left.id === right.id) {
+    return 0;
+  }
+  return left.id < right.id ? -1 : 1;
+}
+
+function mergeStoredEventRows(
+  rows: readonly StoredEventRow[],
+): StoredEventRow[] {
+  const rowsById = new Map<string, StoredEventRow>();
+  for (const row of rows) {
+    rowsById.set(row.id, row);
+  }
+  return [...rowsById.values()].sort(compareStoredEventRowsBySequence);
+}
+
+function collectAcceptedClientRequestIds(
+  rows: readonly StoredEventRow[],
+): ClientTurnRequestId[] {
+  const requestIds: ClientTurnRequestId[] = [];
+  for (const row of rows) {
+    const event = parseStoredEvent(row);
+    if (event.type === "turn/input/accepted") {
+      requestIds.push(event.clientRequestId);
+    }
+  }
+  return requestIds;
+}
+
+function collectRequestedClientRequestIds(
+  rows: readonly StoredEventRow[],
+): ClientTurnRequestId[] {
+  const requestIds: ClientTurnRequestId[] = [];
+  for (const row of rows) {
+    const event = parseStoredEvent(row);
+    if (event.type === "client/turn/requested") {
+      requestIds.push(event.requestId);
+    }
+  }
+  return requestIds;
+}
+
+function filterDirectClientTurnRequestedRows({
+  acceptedClientRequestIdsInWindow,
+  db,
+  rows,
+  threadId,
+}: FilterDirectClientTurnRequestedRowsArgs): readonly StoredEventRow[] {
+  const acceptedInWindow = new Set(acceptedClientRequestIdsInWindow);
+  const requestIdsToCheck = collectRequestedClientRequestIds(rows).filter(
+    (requestId) => !acceptedInWindow.has(requestId),
+  );
+  if (requestIdsToCheck.length === 0) {
+    return rows;
+  }
+
+  const acceptedRows = listStoredTurnInputAcceptedRowsByClientRequestIds(db, {
+    threadId,
+    clientRequestIds: requestIdsToCheck,
+    afterSequence: 0,
+  });
+  const acceptedOutsideWindow = new Set(
+    collectAcceptedClientRequestIds(acceptedRows),
+  );
+  if (acceptedOutsideWindow.size === 0) {
+    return rows;
+  }
+
+  return rows.filter((row) => {
+    const event = parseStoredEvent(row);
+    return (
+      event.type !== "client/turn/requested" ||
+      !acceptedOutsideWindow.has(event.requestId)
+    );
+  });
+}
+
+function buildTurnPageEventRows({
+  anchors,
+  db,
+  page,
+  threadId,
+}: BuildTurnPageEventRowsArgs): TimelineEventRowsResult {
+  const selectedAnchors = anchors.slice(0, page.turnLimit).reverse();
+  const hasOlderRows = anchors.length > selectedAnchors.length;
+  const oldestSelectedAnchor = selectedAnchors[0];
+  if (!oldestSelectedAnchor) {
+    return {
+      hasOlderRows: false,
+      olderCursor: null,
+      requiresProjectedRowPagination: false,
+      rows: [],
+    };
+  }
+
+  const seqStart = hasOlderRows ? oldestSelectedAnchor.sequence : 0;
+  const eventRows = listStoredEventRowsInSequenceWindow(db, {
+    threadId,
+    seqStart,
+    seqEndExclusive: page.kind === "older" ? page.beforeCursor.seq : undefined,
+    excludedTypes: THREAD_TIMELINE_EXCLUDED_EVENT_TYPES,
+  });
+  const acceptedClientRequestIds = collectAcceptedClientRequestIds(eventRows);
+  const directEventRows = filterDirectClientTurnRequestedRows({
+    acceptedClientRequestIdsInWindow: acceptedClientRequestIds,
+    db,
+    rows: eventRows,
+    threadId,
+  });
+  const clientRequestRows = listStoredClientTurnRequestedRowsByRequestIds(db, {
+    threadId,
+    requestIds: acceptedClientRequestIds,
+  });
+
+  return {
+    hasOlderRows,
+    olderCursor: hasOlderRows ? toTurnAnchorCursor(oldestSelectedAnchor) : null,
+    requiresProjectedRowPagination: false,
+    rows: mergeStoredEventRows([...clientRequestRows, ...directEventRows]),
+  };
+}
+
+function buildProjectedRowPaginationEventRows({
+  db,
+  hasKnownTurnAnchors,
+  page,
+  threadId,
+}: BuildProjectedRowPaginationEventRowsArgs): TimelineEventRowsResult {
+  const seqEndExclusive =
+    page.kind === "older" && hasKnownTurnAnchors
+      ? page.beforeCursor.seq
+      : undefined;
+  const rows =
+    seqEndExclusive === undefined
+      ? listRecentStoredEventRows(db, {
+          threadId,
+          excludedTypes: THREAD_TIMELINE_EXCLUDED_EVENT_TYPES,
+        })
+      : listStoredEventRowsInSequenceWindow(db, {
+          threadId,
+          seqStart: 0,
+          seqEndExclusive,
+          excludedTypes: THREAD_TIMELINE_EXCLUDED_EVENT_TYPES,
+        });
+
+  return {
+    hasOlderRows: false,
+    olderCursor: null,
+    requiresProjectedRowPagination: true,
+    rows,
+  };
+}
+
+function listTimelineEventRows({
+  db,
+  page,
+  threadId,
+}: ListTimelineEventRowsArgs): TimelineEventRowsResult {
+  const anchors = listTimelineTurnPageAnchorRows(db, {
+    threadId,
+    before:
+      page.kind === "older"
+        ? {
+            sequence: page.beforeCursor.seq,
+            id: page.beforeCursor.id,
+          }
+        : undefined,
+    limit: page.turnLimit + 1,
+  });
+
+  if (anchors.length > 0) {
+    return buildTurnPageEventRows({
+      anchors,
+      db,
+      page,
+      threadId,
+    });
+  }
+
+  return buildProjectedRowPaginationEventRows({
+    db,
+    hasKnownTurnAnchors: page.kind === "older",
+    page,
+    threadId,
+  });
+}
+
+function resolveTimelinePageMetadata(
+  eventRowsPage: TimelineEventRowsResult,
+  paginatedTimeline: PaginatedTimelineRowsResult,
+): TimelineEventRowsPageMetadata {
+  if (!eventRowsPage.requiresProjectedRowPagination) {
+    return {
+      hasOlderRows: eventRowsPage.hasOlderRows,
+      olderCursor: eventRowsPage.olderCursor,
+    };
+  }
+
+  return {
+    hasOlderRows: paginatedTimeline.hasOlderRows,
+    olderCursor: paginatedTimeline.olderCursor,
   };
 }
 
@@ -245,10 +529,12 @@ export function buildThreadTimeline(
 ): ThreadTimelineResponse {
   const includeNestedRows = options.includeNestedRows ?? false;
   const includeProviderUnhandledOperations = options.isDevelopment;
-  const rawEventRows = listRecentStoredEventRows(db, {
+  const eventRowsPage = listTimelineEventRows({
+    db,
+    page: options.page,
     threadId: thread.id,
-    excludedTypes: THREAD_TIMELINE_EXCLUDED_EVENT_TYPES,
   });
+  const rawEventRows = eventRowsPage.rows;
   const decodedRawEvents = rawEventRows.map((row) =>
     toThreadEventWithMeta(row),
   );
@@ -286,7 +572,20 @@ export function buildThreadTimeline(
             viewMode,
           },
   });
-  const paginatedTimeline = paginateTimelineRows(timeline.rows, options.page);
+  const paginatedTimeline = eventRowsPage.requiresProjectedRowPagination
+    ? paginateTimelineRows(timeline.rows, options.page)
+    : {
+        rows: timeline.rows,
+        kind: options.page.kind,
+        turnLimit: options.page.turnLimit,
+        returnedTopLevelRowCount: timeline.rows.length,
+        hasOlderRows: eventRowsPage.hasOlderRows,
+        olderCursor: eventRowsPage.olderCursor,
+      };
+  const timelinePageMetadata = resolveTimelinePageMetadata(
+    eventRowsPage,
+    paginatedTimeline,
+  );
 
   return {
     rows: paginatedTimeline.rows,
@@ -298,11 +597,10 @@ export function buildThreadTimeline(
         : undefined,
     timelinePage: {
       kind: paginatedTimeline.kind,
-      topLevelLimit: paginatedTimeline.topLevelLimit,
-      returnedOlderTopLevelRowCount:
-        paginatedTimeline.returnedOlderTopLevelRowCount,
-      hasOlderRows: paginatedTimeline.hasOlderRows,
-      olderCursor: paginatedTimeline.olderCursor,
+      turnLimit: paginatedTimeline.turnLimit,
+      returnedTopLevelRowCount: paginatedTimeline.returnedTopLevelRowCount,
+      hasOlderRows: timelinePageMetadata.hasOlderRows,
+      olderCursor: timelinePageMetadata.olderCursor,
     },
   };
 }

@@ -7,10 +7,7 @@ import type {
   TimelineRow,
 } from "@bb/server-contract";
 import { useThreadTimeline } from "@/hooks/queries/thread-queries";
-import {
-  DEFAULT_THREAD_TIMELINE_TOP_LEVEL_LIMIT,
-  threadTimelineOlderQueryKey,
-} from "@/hooks/queries/query-keys";
+import { threadTimelineOlderQueryKey } from "@/hooks/queries/query-keys";
 import * as api from "@/lib/api";
 
 interface UseThreadTimelinePagesArgs {
@@ -29,16 +26,23 @@ interface UseThreadTimelinePagesResult {
   timelineRows: TimelineRow[];
 }
 
+type NullableTimelinePaginationCursor = TimelinePaginationCursor | null;
+
 interface LoadedTimelineState {
-  olderCursor: TimelinePaginationCursor | null;
+  olderCursor: NullableTimelinePaginationCursor;
   rows: TimelineRow[];
   surfaceKey: string;
 }
 
 interface BuildLoadedTimelineStateArgs {
   latestRows: readonly TimelineRow[];
-  olderCursor: TimelinePaginationCursor | null;
+  olderCursor: NullableTimelinePaginationCursor;
   surfaceKey: string;
+}
+
+interface AreTimelinePaginationCursorsEqualArgs {
+  left: NullableTimelinePaginationCursor;
+  right: NullableTimelinePaginationCursor;
 }
 
 interface MergeLatestTimelineRowsArgs {
@@ -83,6 +87,16 @@ function compareTimelineRows(rowA: TimelineRow, rowB: TimelineRow): number {
     return 0;
   }
   return rowA.id < rowB.id ? -1 : 1;
+}
+
+function areTimelinePaginationCursorsEqual({
+  left,
+  right,
+}: AreTimelinePaginationCursorsEqualArgs): boolean {
+  if (left === null || right === null) {
+    return left === right;
+  }
+  return left.seq === right.seq && left.id === right.id;
 }
 
 function prependOlderTimelineRows({
@@ -224,7 +238,6 @@ export function useThreadTimelinePages({
             beforeCursor: nextOlderCursor,
             id: threadId,
             managerTimelineView,
-            topLevelLimit: DEFAULT_THREAD_TIMELINE_TOP_LEVEL_LIMIT,
           }),
       });
       setLoadedTimeline((current) => {
@@ -232,7 +245,12 @@ export function useThreadTimelinePages({
           return current;
         }
         return {
-          olderCursor: response.timelinePage.olderCursor,
+          olderCursor: areTimelinePaginationCursorsEqual({
+            left: current.olderCursor,
+            right: nextOlderCursor,
+          })
+            ? response.timelinePage.olderCursor
+            : current.olderCursor,
           rows: prependOlderTimelineRows({
             loadedRows: current.rows,
             olderRows: response.rows,

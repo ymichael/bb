@@ -24,7 +24,6 @@ import {
   resolveThreadTimelinePlaceholder,
 } from "./query-placeholders";
 import {
-  DEFAULT_THREAD_TIMELINE_TOP_LEVEL_LIMIT,
   disabledThreadListQueryKey,
   threadDefaultExecutionOptionsQueryKey,
   threadDraftsQueryKey,
@@ -208,7 +207,6 @@ export function useThreadTimeline(
       api.getThreadTimeline({
         id: requireThreadId(id, "useThreadTimeline"),
         managerTimelineView,
-        topLevelLimit: DEFAULT_THREAD_TIMELINE_TOP_LEVEL_LIMIT,
       }),
     enabled: (options?.enabled ?? true) && Boolean(id),
     refetchOnMount: options?.refetchOnMount ?? true,

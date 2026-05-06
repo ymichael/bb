@@ -4,10 +4,9 @@ import {
   DEFAULT_THREAD_STORAGE_FILE_LIST_OPTIONS,
   type ThreadStorageFileListOptions,
 } from "@/lib/thread-storage-files";
-import {
-  THREAD_TIMELINE_DEFAULT_TOP_LEVEL_LIMIT,
-  type ManagerTimelineView,
-  type TimelinePaginationCursor,
+import type {
+  ManagerTimelineView,
+  TimelinePaginationCursor,
 } from "@bb/server-contract";
 
 export const HOSTS_QUERY_KEY = "hosts";
@@ -49,18 +48,14 @@ export const CONVERSATION_MANAGER_TIMELINE_VIEW =
   "conversation" satisfies ManagerTimelineView;
 export const STANDARD_MANAGER_TIMELINE_VIEW =
   "standard" satisfies ManagerTimelineView;
-export const DEFAULT_THREAD_TIMELINE_TOP_LEVEL_LIMIT =
-  THREAD_TIMELINE_DEFAULT_TOP_LEVEL_LIMIT;
 
 export interface LatestThreadTimelineQueryPage {
   kind: "latest";
-  topLevelLimit: number;
 }
 
 export interface OlderThreadTimelineQueryPage {
   beforeCursor: TimelinePaginationCursor;
   kind: "older";
-  topLevelLimit: number;
 }
 
 export type ThreadTimelineQueryPage =
@@ -496,7 +491,6 @@ export function threadTimelineQueryKey(
   managerTimelineView: ManagerTimelineView | undefined,
   page: ThreadTimelineQueryPage = {
     kind: "latest",
-    topLevelLimit: DEFAULT_THREAD_TIMELINE_TOP_LEVEL_LIMIT,
   },
 ): ThreadTimelineQueryKey {
   return [THREAD_TIMELINE_QUERY_KEY, threadId, managerTimelineView, page];
@@ -508,7 +502,6 @@ export function threadTimelineLatestQueryKey(
 ): ThreadTimelineQueryKey {
   return threadTimelineQueryKey(threadId, managerTimelineView, {
     kind: "latest",
-    topLevelLimit: DEFAULT_THREAD_TIMELINE_TOP_LEVEL_LIMIT,
   });
 }
 
@@ -520,7 +513,6 @@ export function threadTimelineOlderQueryKey(
   return threadTimelineQueryKey(threadId, managerTimelineView, {
     beforeCursor,
     kind: "older",
-    topLevelLimit: DEFAULT_THREAD_TIMELINE_TOP_LEVEL_LIMIT,
   });
 }
 

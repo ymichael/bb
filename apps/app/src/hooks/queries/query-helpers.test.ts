@@ -203,8 +203,8 @@ describe("resolveThreadTimelinePlaceholder", () => {
       activeThinking: null,
       timelinePage: {
         kind: "latest",
-        topLevelLimit: 100,
-        returnedOlderTopLevelRowCount: 1,
+        turnLimit: 5,
+        returnedTopLevelRowCount: 1,
         hasOlderRows: false,
         olderCursor: null,
       },
@@ -241,8 +241,8 @@ describe("resolveThreadTimelinePlaceholder", () => {
       activeThinking: null,
       timelinePage: {
         kind: "latest",
-        topLevelLimit: 100,
-        returnedOlderTopLevelRowCount: 1,
+        turnLimit: 5,
+        returnedTopLevelRowCount: 1,
         hasOlderRows: false,
         olderCursor: null,
       },
@@ -279,8 +279,8 @@ describe("resolveThreadTimelinePlaceholder", () => {
       activeThinking: null,
       timelinePage: {
         kind: "latest",
-        topLevelLimit: 100,
-        returnedOlderTopLevelRowCount: 0,
+        turnLimit: 5,
+        returnedTopLevelRowCount: 0,
         hasOlderRows: false,
         olderCursor: null,
       },
@@ -302,8 +302,8 @@ describe("resolveThreadTimelinePlaceholder", () => {
       activeThinking: null,
       timelinePage: {
         kind: "older",
-        topLevelLimit: 100,
-        returnedOlderTopLevelRowCount: 1,
+        turnLimit: 5,
+        returnedTopLevelRowCount: 1,
         hasOlderRows: false,
         olderCursor: null,
       },
@@ -314,8 +314,8 @@ describe("resolveThreadTimelinePlaceholder", () => {
       resolveThreadTimelinePlaceholder(
         previousTimeline,
         threadTimelineOlderQueryKey("thread-1", undefined, {
-          topLevelSortSeq: 10,
-          rowId: "row-10",
+          seq: 10,
+          id: "row-10",
         }),
         "thread-1",
         undefined,

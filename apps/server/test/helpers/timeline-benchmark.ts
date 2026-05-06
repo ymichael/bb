@@ -24,7 +24,7 @@ import { buildThreadEvent } from "@bb/domain";
 import {
   buildThreadTimeline,
   compactSummaryStoredEventRows,
-  THREAD_TIMELINE_OLDER_ROW_LIMIT,
+  THREAD_TIMELINE_TURN_LIMIT_MAX,
   toThreadEventWithMeta,
 } from "../../src/services/threads/timeline.js";
 
@@ -161,7 +161,7 @@ function createTimelineBenchmarkScenario(
       isDevelopment: true,
       page: {
         kind: "latest",
-        topLevelLimit: THREAD_TIMELINE_OLDER_ROW_LIMIT,
+        turnLimit: THREAD_TIMELINE_TURN_LIMIT_MAX,
       },
       timelineViewMode,
     });

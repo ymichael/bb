@@ -107,8 +107,8 @@ function emptyThreadTimelineResponse(): ThreadTimelineResponse {
     rows: [],
     timelinePage: {
       kind: "latest",
-      topLevelLimit: 100,
-      returnedOlderTopLevelRowCount: 0,
+      turnLimit: 5,
+      returnedTopLevelRowCount: 0,
       hasOlderRows: false,
       olderCursor: null,
     },

@@ -6,6 +6,7 @@ import type {
   TimelinePaginationCursor,
   TimelineRow,
 } from "@bb/server-contract";
+import { threadTimelineResponseSchema } from "@bb/server-contract";
 import { createTestAppHarness } from "../helpers/test-app.js";
 import {
   seedEnvironment,
@@ -18,15 +19,19 @@ import { getTimelineBenchmarkScenarios } from "../helpers/timeline-benchmark.js"
 import {
   buildThreadTimeline as buildThreadTimelineWithResolvedMode,
   buildTimelineTurnSummaryDetails as buildTimelineTurnSummaryDetailsWithResolvedMode,
+  MANAGER_THREAD_TIMELINE_INITIAL_TURN_LIMIT,
+  resolveThreadTimelineDefaultTurnLimit,
   resolveThreadTimelineServiceViewMode,
-  THREAD_TIMELINE_OLDER_ROW_LIMIT,
+  STANDARD_THREAD_TIMELINE_INITIAL_TURN_LIMIT,
+  THREAD_TIMELINE_OLDER_TURN_LIMIT,
+  THREAD_TIMELINE_TURN_LIMIT_MAX,
 } from "../../src/services/threads/timeline.js";
 
 interface TimelineServiceTestOptions {
   beforeCursor?: TimelinePaginationCursor;
   includeNestedRows?: boolean;
   isDevelopment: boolean;
-  topLevelLimit?: number;
+  turnLimit?: number;
 }
 
 interface TimelineTurnSummaryDetailsTestOptions {
@@ -65,6 +70,14 @@ interface SeedFileChangeSiblingRowsArgs {
   sequence: number;
   thread: Thread;
   turnId: string;
+}
+
+interface SeedCompletedTurnRowsArgs {
+  count: number;
+  environmentId: string;
+  sequenceStart: number;
+  thread: Thread;
+  turnPrefix: string;
 }
 
 interface SeedPendingCommandRowArgs {
@@ -122,13 +135,11 @@ function buildThreadTimeline(
       ? {
           beforeCursor: options.beforeCursor,
           kind: "older",
-          topLevelLimit:
-            options.topLevelLimit ?? THREAD_TIMELINE_OLDER_ROW_LIMIT,
+          turnLimit: options.turnLimit ?? THREAD_TIMELINE_TURN_LIMIT_MAX,
         }
       : {
           kind: "latest",
-          topLevelLimit:
-            options.topLevelLimit ?? THREAD_TIMELINE_OLDER_ROW_LIMIT,
+          turnLimit: options.turnLimit ?? THREAD_TIMELINE_TURN_LIMIT_MAX,
         },
     timelineViewMode: "standard",
   });
@@ -146,13 +157,11 @@ function buildManagerConversationTimeline(
       ? {
           beforeCursor: options.beforeCursor,
           kind: "older",
-          topLevelLimit:
-            options.topLevelLimit ?? THREAD_TIMELINE_OLDER_ROW_LIMIT,
+          turnLimit: options.turnLimit ?? THREAD_TIMELINE_TURN_LIMIT_MAX,
         }
       : {
           kind: "latest",
-          topLevelLimit:
-            options.topLevelLimit ?? THREAD_TIMELINE_OLDER_ROW_LIMIT,
+          turnLimit: options.turnLimit ?? THREAD_TIMELINE_TURN_LIMIT_MAX,
         },
     timelineViewMode: "manager-conversation",
   });
@@ -166,6 +175,25 @@ function requireOlderCursor(
     throw new Error("Expected older timeline cursor");
   }
   return cursor;
+}
+
+function collectPaginatedTimelineRows(
+  db: DbConnection,
+  thread: Thread,
+  options: TimelineServiceTestOptions,
+): TimelineRow[] {
+  let page = buildThreadTimeline(db, thread, options);
+  const rows = [...page.rows];
+
+  while (page.timelinePage.olderCursor !== null) {
+    page = buildThreadTimeline(db, thread, {
+      ...options,
+      beforeCursor: page.timelinePage.olderCursor,
+    });
+    rows.unshift(...page.rows);
+  }
+
+  return rows;
 }
 
 function buildTimelineTurnSummaryDetails(
@@ -278,6 +306,51 @@ function seedFileChangeSiblingRows(
       },
     },
   });
+}
+
+function seedCompletedTurnRows(
+  harness: Awaited<ReturnType<typeof createTestAppHarness>>,
+  args: SeedCompletedTurnRowsArgs,
+): void {
+  for (let offset = 0; offset < args.count; offset += 1) {
+    const sequence = args.sequenceStart + offset * 3;
+    const turnId = `${args.turnPrefix}-${offset + 1}`;
+    seedEvent(harness.deps, {
+      threadId: args.thread.id,
+      environmentId: args.environmentId,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope(turnId),
+      sequence,
+      type: "turn/started",
+      data: {},
+    });
+    seedEvent(harness.deps, {
+      threadId: args.thread.id,
+      environmentId: args.environmentId,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope(turnId),
+      sequence: sequence + 1,
+      type: "item/completed",
+      data: {
+        item: {
+          type: "agentMessage",
+          id: `${turnId}-assistant`,
+          text: `Answer ${offset + 1}.`,
+        },
+      },
+    });
+    seedEvent(harness.deps, {
+      threadId: args.thread.id,
+      environmentId: args.environmentId,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope(turnId),
+      sequence: sequence + 2,
+      type: "turn/completed",
+      data: {
+        status: "completed",
+      },
+    });
+  }
 }
 
 function seedPendingCommandRow(
@@ -420,6 +493,113 @@ describe("buildThreadTimeline", () => {
         thread: managerThread,
       }),
     ).toBe("manager-conversation");
+  });
+
+  it("defaults timeline turn limits by thread type at the public route", async () => {
+    const harness = await createTestAppHarness();
+    harnesses.push(harness);
+
+    const host = seedHost(harness.deps);
+    const { project } = seedProjectWithSource(harness.deps, {
+      hostId: host.id,
+    });
+    const environment = seedEnvironment(harness.deps, {
+      hostId: host.id,
+      projectId: project.id,
+    });
+    const thread = seedThread(harness.deps, {
+      projectId: project.id,
+      environmentId: environment.id,
+    });
+    const managerThread = seedThread(harness.deps, {
+      projectId: project.id,
+      environmentId: environment.id,
+      type: "manager",
+    });
+    seedCompletedTurnRows(harness, {
+      count: 6,
+      environmentId: environment.id,
+      sequenceStart: 1,
+      thread,
+      turnPrefix: "standard-turn",
+    });
+    seedCompletedTurnRows(harness, {
+      count: 6,
+      environmentId: environment.id,
+      sequenceStart: 1,
+      thread: managerThread,
+      turnPrefix: "manager-turn",
+    });
+
+    expect(
+      resolveThreadTimelineDefaultTurnLimit({ kind: "latest", thread }),
+    ).toBe(STANDARD_THREAD_TIMELINE_INITIAL_TURN_LIMIT);
+    expect(
+      resolveThreadTimelineDefaultTurnLimit({
+        kind: "latest",
+        thread: managerThread,
+      }),
+    ).toBe(MANAGER_THREAD_TIMELINE_INITIAL_TURN_LIMIT);
+    expect(
+      resolveThreadTimelineDefaultTurnLimit({ kind: "older", thread }),
+    ).toBe(THREAD_TIMELINE_OLDER_TURN_LIMIT);
+    expect(
+      resolveThreadTimelineDefaultTurnLimit({
+        kind: "older",
+        thread: managerThread,
+      }),
+    ).toBe(THREAD_TIMELINE_OLDER_TURN_LIMIT);
+
+    const standardResponse = await harness.app.request(
+      `/api/v1/threads/${thread.id}/timeline`,
+    );
+    const managerResponse = await harness.app.request(
+      `/api/v1/threads/${managerThread.id}/timeline?managerTimelineView=standard`,
+    );
+    const standardOlderResponse = await harness.app.request(
+      `/api/v1/threads/${thread.id}/timeline?beforeSeq=999&beforeId=cursor-test`,
+    );
+    const managerOlderResponse = await harness.app.request(
+      `/api/v1/threads/${managerThread.id}/timeline?beforeSeq=999&beforeId=cursor-test&managerTimelineView=standard`,
+    );
+    expect(standardResponse.status).toBe(200);
+    expect(managerResponse.status).toBe(200);
+    expect(standardOlderResponse.status).toBe(200);
+    expect(managerOlderResponse.status).toBe(200);
+
+    const standardTimeline = threadTimelineResponseSchema.parse(
+      await standardResponse.json(),
+    );
+    const managerTimeline = threadTimelineResponseSchema.parse(
+      await managerResponse.json(),
+    );
+    const standardOlderTimeline = threadTimelineResponseSchema.parse(
+      await standardOlderResponse.json(),
+    );
+    const managerOlderTimeline = threadTimelineResponseSchema.parse(
+      await managerOlderResponse.json(),
+    );
+
+    expect(standardTimeline.timelinePage.turnLimit).toBe(
+      STANDARD_THREAD_TIMELINE_INITIAL_TURN_LIMIT,
+    );
+    expect(standardTimeline.rows).toHaveLength(5);
+    expect(standardTimeline.timelinePage.returnedTopLevelRowCount).toBe(5);
+    expect(standardTimeline.timelinePage.hasOlderRows).toBe(true);
+    expect(standardTimeline.timelinePage.olderCursor).not.toBeNull();
+    expect(managerTimeline.timelinePage.turnLimit).toBe(
+      MANAGER_THREAD_TIMELINE_INITIAL_TURN_LIMIT,
+    );
+    expect(managerTimeline.rows).toHaveLength(6);
+    expect(managerTimeline.timelinePage.returnedTopLevelRowCount).toBe(6);
+    expect(managerTimeline.timelinePage.hasOlderRows).toBe(false);
+    expect(managerTimeline.timelinePage.olderCursor).toBeNull();
+    expect(standardOlderTimeline.timelinePage.turnLimit).toBe(
+      THREAD_TIMELINE_OLDER_TURN_LIMIT,
+    );
+    expect(managerOlderTimeline.timelinePage.turnLimit).toBe(
+      THREAD_TIMELINE_OLDER_TURN_LIMIT,
+    );
   });
 
   it("preserves completed assistant content and excludes summary-noise rows after compaction", async () => {
@@ -1750,9 +1930,11 @@ describe("buildThreadTimeline", () => {
     });
     const turnSummary = timeline.rows.find((row) => row.kind === "turn");
 
-    expect(turnSummary).toBeUndefined();
-    expect(timeline.rows).toHaveLength(THREAD_TIMELINE_OLDER_ROW_LIMIT);
-    expect(timeline.rows[0]?.sourceSeqStart).toBe(36);
+    expect(turnSummary).toMatchObject({
+      sourceSeqStart: 1,
+      sourceSeqEnd: 5,
+    });
+    expect(timeline.timelinePage.hasOlderRows).toBe(false);
 
     const details = buildTimelineTurnSummaryDetails(harness.db, thread, {
       isDevelopment: true,
@@ -2588,6 +2770,262 @@ describe("buildThreadTimeline", () => {
     );
   });
 
+  it("matches the full projection after following every pagination cursor", async () => {
+    const harness = await createTestAppHarness();
+    harnesses.push(harness);
+    const { environmentId, thread } = seedTimelineThread(harness, {
+      type: "standard",
+    });
+
+    seedOperationRows(harness, {
+      count: 1,
+      environmentId,
+      sequenceStart: 1,
+      status: "completed",
+      thread,
+      titlePrefix: "before first turn",
+    });
+    seedFileChangeSiblingRows(harness, {
+      environmentId,
+      sequence: 2,
+      thread,
+      turnId: "turn-1",
+    });
+    seedOperationRows(harness, {
+      count: 1,
+      environmentId,
+      sequenceStart: 4,
+      status: "completed",
+      thread,
+      titlePrefix: "between turns 1 and 2",
+    });
+    seedFileChangeSiblingRows(harness, {
+      environmentId,
+      sequence: 5,
+      thread,
+      turnId: "turn-2",
+    });
+    seedOperationRows(harness, {
+      count: 1,
+      environmentId,
+      sequenceStart: 7,
+      status: "completed",
+      thread,
+      titlePrefix: "between turns 2 and 3",
+    });
+    seedFileChangeSiblingRows(harness, {
+      environmentId,
+      sequence: 8,
+      thread,
+      turnId: "turn-3",
+    });
+    seedOperationRows(harness, {
+      count: 1,
+      environmentId,
+      sequenceStart: 10,
+      status: "completed",
+      thread,
+      titlePrefix: "between turns 3 and 4",
+    });
+    seedFileChangeSiblingRows(harness, {
+      environmentId,
+      sequence: 11,
+      thread,
+      turnId: "turn-4",
+    });
+    seedOperationRows(harness, {
+      count: 1,
+      environmentId,
+      sequenceStart: 13,
+      status: "completed",
+      thread,
+      titlePrefix: "between turns 4 and 5",
+    });
+    seedFileChangeSiblingRows(harness, {
+      environmentId,
+      sequence: 14,
+      thread,
+      turnId: "turn-5",
+    });
+    seedOperationRows(harness, {
+      count: 1,
+      environmentId,
+      sequenceStart: 16,
+      status: "completed",
+      thread,
+      titlePrefix: "between turns 5 and 6",
+    });
+    seedFileChangeSiblingRows(harness, {
+      environmentId,
+      sequence: 17,
+      thread,
+      turnId: "turn-6",
+    });
+    seedOperationRows(harness, {
+      count: 1,
+      environmentId,
+      sequenceStart: 19,
+      status: "completed",
+      thread,
+      titlePrefix: "after last turn",
+    });
+
+    const fullTimeline = buildThreadTimeline(harness.db, thread, {
+      isDevelopment: false,
+      turnLimit: THREAD_TIMELINE_TURN_LIMIT_MAX,
+    });
+    const paginatedRows = collectPaginatedTimelineRows(harness.db, thread, {
+      isDevelopment: false,
+      turnLimit: 2,
+    });
+
+    expect(fullTimeline.timelinePage.hasOlderRows).toBe(false);
+    expect(new Set(paginatedRows.map((row) => row.id)).size).toBe(
+      paginatedRows.length,
+    );
+    expect(paginatedRows).toEqual(fullTimeline.rows);
+  });
+
+  it("owns accepted client requests on the page containing their accepted event", async () => {
+    const harness = await createTestAppHarness();
+    harnesses.push(harness);
+    const { environmentId, thread } = seedTimelineThread(harness, {
+      type: "standard",
+    });
+
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-1"),
+      sequence: 2,
+      type: "turn/started",
+      data: {},
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-1"),
+      sequence: 3,
+      type: "item/completed",
+      data: {
+        item: {
+          type: "agentMessage",
+          id: "assistant-1",
+          text: "First answer.",
+        },
+      },
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-1"),
+      sequence: 4,
+      type: "turn/completed",
+      data: {
+        status: "completed",
+      },
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId,
+      sequence: 7,
+      type: "client/turn/requested",
+      scope: threadScope(),
+      data: {
+        direction: "outbound",
+        requestId: "creq_23456789bc",
+        source: "tell",
+        initiator: "user",
+        request: { method: "turn/start", params: {} },
+        input: [{ type: "text", text: "Follow-up" }],
+        target: { kind: "new-turn" },
+        execution: {
+          model: "gpt-5",
+          serviceTier: "default",
+          reasoningLevel: "medium",
+          permissionMode: "full",
+          source: "client/turn/requested",
+        },
+      },
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-2"),
+      sequence: 8,
+      type: "turn/started",
+      data: {},
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-2"),
+      sequence: 9,
+      type: "turn/input/accepted",
+      data: {
+        clientRequestId: "creq_23456789bc",
+      },
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-2"),
+      sequence: 10,
+      type: "item/completed",
+      data: {
+        item: {
+          type: "agentMessage",
+          id: "assistant-2",
+          text: "Second answer.",
+        },
+      },
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-2"),
+      sequence: 11,
+      type: "turn/completed",
+      data: {
+        status: "completed",
+      },
+    });
+
+    const fullTimeline = buildThreadTimeline(harness.db, thread, {
+      includeNestedRows: true,
+      isDevelopment: false,
+      turnLimit: THREAD_TIMELINE_TURN_LIMIT_MAX,
+    });
+    const paginatedRows = collectPaginatedTimelineRows(harness.db, thread, {
+      includeNestedRows: true,
+      isDevelopment: false,
+      turnLimit: 1,
+    });
+    const paginatedSourceRows = flattenTimelineSourceRows(paginatedRows);
+    const followUpRows = paginatedSourceRows.filter(
+      (
+        row,
+      ): row is Extract<TimelineRow, { kind: "conversation"; role: "user" }> =>
+        row.kind === "conversation" &&
+        row.role === "user" &&
+        row.text === "Follow-up",
+    );
+
+    expect(new Set(paginatedSourceRows.map((row) => row.id)).size).toBe(
+      paginatedSourceRows.length,
+    );
+    expect(followUpRows).toHaveLength(1);
+    expect(followUpRows[0]?.userRequest.status).toBe("accepted");
+    expect(paginatedRows).toEqual(fullTimeline.rows);
+  });
+
   it("caps regular standard latest timelines to the last 100 older top-level rows", async () => {
     const harness = await createTestAppHarness();
     harnesses.push(harness);
@@ -2596,7 +3034,7 @@ describe("buildThreadTimeline", () => {
     });
 
     seedOperationRows(harness, {
-      count: THREAD_TIMELINE_OLDER_ROW_LIMIT + 5,
+      count: THREAD_TIMELINE_TURN_LIMIT_MAX + 5,
       environmentId,
       sequenceStart: 1,
       status: "completed",
@@ -2608,17 +3046,17 @@ describe("buildThreadTimeline", () => {
       isDevelopment: false,
     });
 
-    expect(timeline.rows).toHaveLength(THREAD_TIMELINE_OLDER_ROW_LIMIT);
+    expect(timeline.rows).toHaveLength(THREAD_TIMELINE_TURN_LIMIT_MAX);
     expect(timeline.rows[0]?.sourceSeqStart).toBe(6);
     expect(timeline.rows.at(-1)?.sourceSeqStart).toBe(105);
     expect(timeline.timelinePage).toEqual({
       kind: "latest",
-      topLevelLimit: THREAD_TIMELINE_OLDER_ROW_LIMIT,
-      returnedOlderTopLevelRowCount: THREAD_TIMELINE_OLDER_ROW_LIMIT,
+      turnLimit: THREAD_TIMELINE_TURN_LIMIT_MAX,
+      returnedTopLevelRowCount: THREAD_TIMELINE_TURN_LIMIT_MAX,
       hasOlderRows: true,
       olderCursor: {
-        topLevelSortSeq: 6,
-        rowId: timeline.rows[0]?.id,
+        seq: 6,
+        id: timeline.rows[0]?.id,
       },
     });
   });
@@ -2631,7 +3069,7 @@ describe("buildThreadTimeline", () => {
     });
 
     seedOperationRows(harness, {
-      count: THREAD_TIMELINE_OLDER_ROW_LIMIT + 5,
+      count: THREAD_TIMELINE_TURN_LIMIT_MAX + 5,
       environmentId,
       sequenceStart: 1,
       status: "completed",
@@ -2643,16 +3081,16 @@ describe("buildThreadTimeline", () => {
       isDevelopment: false,
     });
 
-    expect(timeline.rows).toHaveLength(THREAD_TIMELINE_OLDER_ROW_LIMIT);
+    expect(timeline.rows).toHaveLength(THREAD_TIMELINE_TURN_LIMIT_MAX);
     expect(timeline.rows[0]?.sourceSeqStart).toBe(6);
     expect(timeline.rows.at(-1)?.sourceSeqStart).toBe(105);
     expect(timeline.timelinePage).toMatchObject({
       kind: "latest",
-      returnedOlderTopLevelRowCount: THREAD_TIMELINE_OLDER_ROW_LIMIT,
+      returnedTopLevelRowCount: THREAD_TIMELINE_TURN_LIMIT_MAX,
       hasOlderRows: true,
       olderCursor: {
-        topLevelSortSeq: 6,
-        rowId: timeline.rows[0]?.id,
+        seq: 6,
+        id: timeline.rows[0]?.id,
       },
     });
   });
@@ -2665,7 +3103,7 @@ describe("buildThreadTimeline", () => {
     });
 
     seedOperationRows(harness, {
-      count: THREAD_TIMELINE_OLDER_ROW_LIMIT + 5,
+      count: THREAD_TIMELINE_TURN_LIMIT_MAX + 5,
       environmentId,
       sequenceStart: 1,
       status: "completed",
@@ -2677,16 +3115,16 @@ describe("buildThreadTimeline", () => {
       isDevelopment: false,
     });
 
-    expect(timeline.rows).toHaveLength(THREAD_TIMELINE_OLDER_ROW_LIMIT);
+    expect(timeline.rows).toHaveLength(THREAD_TIMELINE_TURN_LIMIT_MAX);
     expect(timeline.rows[0]?.sourceSeqStart).toBe(6);
     expect(timeline.rows.at(-1)?.sourceSeqStart).toBe(105);
     expect(timeline.timelinePage).toMatchObject({
       kind: "latest",
-      returnedOlderTopLevelRowCount: THREAD_TIMELINE_OLDER_ROW_LIMIT,
+      returnedTopLevelRowCount: THREAD_TIMELINE_TURN_LIMIT_MAX,
       hasOlderRows: true,
       olderCursor: {
-        topLevelSortSeq: 6,
-        rowId: timeline.rows[0]?.id,
+        seq: 6,
+        id: timeline.rows[0]?.id,
       },
     });
   });
@@ -2699,7 +3137,7 @@ describe("buildThreadTimeline", () => {
     });
 
     seedOperationRows(harness, {
-      count: THREAD_TIMELINE_OLDER_ROW_LIMIT + 5,
+      count: THREAD_TIMELINE_TURN_LIMIT_MAX + 5,
       environmentId,
       sequenceStart: 1,
       status: "completed",
@@ -2720,8 +3158,8 @@ describe("buildThreadTimeline", () => {
     ]);
     expect(olderTimeline.timelinePage).toEqual({
       kind: "older",
-      topLevelLimit: THREAD_TIMELINE_OLDER_ROW_LIMIT,
-      returnedOlderTopLevelRowCount: 5,
+      turnLimit: THREAD_TIMELINE_TURN_LIMIT_MAX,
+      returnedTopLevelRowCount: 5,
       hasOlderRows: false,
       olderCursor: null,
     });
@@ -2743,7 +3181,7 @@ describe("buildThreadTimeline", () => {
     });
 
     seedOperationRows(harness, {
-      count: THREAD_TIMELINE_OLDER_ROW_LIMIT + 5,
+      count: THREAD_TIMELINE_TURN_LIMIT_MAX + 5,
       environmentId,
       sequenceStart: 1,
       status: "completed",
@@ -2774,7 +3212,7 @@ describe("buildThreadTimeline", () => {
     });
 
     seedOperationRows(harness, {
-      count: THREAD_TIMELINE_OLDER_ROW_LIMIT + 5,
+      count: THREAD_TIMELINE_TURN_LIMIT_MAX + 5,
       environmentId,
       sequenceStart: 1,
       status: "completed",
@@ -2801,59 +3239,58 @@ describe("buildThreadTimeline", () => {
     expect(olderTimeline.timelinePage.hasOlderRows).toBe(false);
   });
 
-  it("uses the cursor tuple to include duplicate-sequence siblings before the cursor row", async () => {
+  it("uses the turn cursor to load previous turns without splitting duplicate-sequence siblings", async () => {
     const harness = await createTestAppHarness();
     harnesses.push(harness);
     const { environmentId, thread } = seedTimelineThread(harness, {
       type: "standard",
     });
 
-    seedOperationRows(harness, {
-      count: THREAD_TIMELINE_OLDER_ROW_LIMIT + 5,
+    seedFileChangeSiblingRows(harness, {
       environmentId,
-      sequenceStart: 1,
-      status: "completed",
+      sequence: 1,
       thread,
-      titlePrefix: "completed operation",
+      turnId: "turn-older-file-change",
     });
     seedFileChangeSiblingRows(harness, {
       environmentId,
-      sequence: THREAD_TIMELINE_OLDER_ROW_LIMIT + 6,
+      sequence: 10,
       thread,
-      turnId: "turn-file-change",
+      turnId: "turn-latest-file-change",
     });
 
     const latestTimeline = buildThreadTimeline(harness.db, thread, {
       isDevelopment: false,
+      turnLimit: 1,
     });
-    const fileChangeRows = latestTimeline.rows.filter(
+    const latestFileChangeRows = latestTimeline.rows.filter(
       (row) => row.kind === "work" && row.workKind === "file-change",
     );
-    expect(fileChangeRows).toHaveLength(2);
-    const secondFileChangeRow = fileChangeRows[1];
-    if (!secondFileChangeRow) {
-      throw new Error("Expected second file change row");
-    }
+    expect(latestFileChangeRows).toHaveLength(2);
+    expect(latestFileChangeRows.map((row) => row.change.path)).toEqual([
+      "first.txt",
+      "second.txt",
+    ]);
+    expect(latestFileChangeRows[0]?.sourceSeqStart).toBe(11);
 
     const olderTimeline = buildThreadTimeline(harness.db, thread, {
-      beforeCursor: {
-        topLevelSortSeq: secondFileChangeRow.sourceSeqStart,
-        rowId: secondFileChangeRow.id,
-      },
+      beforeCursor: requireOlderCursor(latestTimeline.timelinePage.olderCursor),
       isDevelopment: false,
+      turnLimit: 1,
     });
     const olderFileChangeRows = olderTimeline.rows.filter(
       (row) => row.kind === "work" && row.workKind === "file-change",
     );
 
-    expect(olderFileChangeRows).toHaveLength(1);
-    expect(olderFileChangeRows[0]?.change.path).toBe("first.txt");
-    expect(olderTimeline.rows).not.toContainEqual(
-      expect.objectContaining({ id: secondFileChangeRow.id }),
-    );
+    expect(olderFileChangeRows).toHaveLength(2);
+    expect(olderFileChangeRows.map((row) => row.change.path)).toEqual([
+      "first.txt",
+      "second.txt",
+    ]);
+    expect(olderFileChangeRows[0]?.sourceSeqStart).toBe(2);
   });
 
-  it("keeps the active tail outside the regular standard older-row cap", async () => {
+  it("keeps the active standard turn intact when standalone rows surround it", async () => {
     const harness = await createTestAppHarness();
     harnesses.push(harness);
     const { environmentId, thread } = seedTimelineThread(harness, {
@@ -2862,7 +3299,7 @@ describe("buildThreadTimeline", () => {
     });
 
     seedOperationRows(harness, {
-      count: THREAD_TIMELINE_OLDER_ROW_LIMIT + 5,
+      count: THREAD_TIMELINE_TURN_LIMIT_MAX + 5,
       environmentId,
       sequenceStart: 1,
       status: "completed",
@@ -2876,7 +3313,7 @@ describe("buildThreadTimeline", () => {
       turnId: "turn-active-command",
     });
     seedOperationRows(harness, {
-      count: THREAD_TIMELINE_OLDER_ROW_LIMIT + 20,
+      count: THREAD_TIMELINE_TURN_LIMIT_MAX + 20,
       environmentId,
       sequenceStart: 108,
       status: "completed",
@@ -2891,10 +3328,8 @@ describe("buildThreadTimeline", () => {
       (row) => row.kind === "work" && row.status === "pending",
     );
 
-    expect(timeline.rows).toHaveLength(
-      THREAD_TIMELINE_OLDER_ROW_LIMIT + 1 + 120,
-    );
-    expect(timeline.rows[0]?.sourceSeqStart).toBe(6);
+    expect(timeline.rows).toHaveLength(226);
+    expect(timeline.rows[0]?.sourceSeqStart).toBe(1);
     expect(activeRow).toMatchObject({
       kind: "work",
       sourceSeqStart: 107,
@@ -2902,20 +3337,10 @@ describe("buildThreadTimeline", () => {
       workKind: "command",
     });
     expect(timeline.rows.at(-1)?.sourceSeqStart).toBe(227);
-
-    const olderTimeline = buildThreadTimeline(harness.db, thread, {
-      beforeCursor: requireOlderCursor(timeline.timelinePage.olderCursor),
-      isDevelopment: false,
-    });
-    expect(olderTimeline.rows.map((row) => row.sourceSeqStart)).toEqual([
-      1, 2, 3, 4, 5,
-    ]);
-    expect(olderTimeline.rows).not.toContainEqual(
-      expect.objectContaining({ id: activeRow?.id }),
-    );
+    expect(timeline.timelinePage.olderCursor).toBeNull();
   });
 
-  it("keeps pending steers outside the manager standard older-row cap", async () => {
+  it("keeps pending manager steers with their surrounding standard timeline rows", async () => {
     const harness = await createTestAppHarness();
     harnesses.push(harness);
     const { environmentId, thread } = seedTimelineThread(harness, {
@@ -2924,7 +3349,7 @@ describe("buildThreadTimeline", () => {
     });
 
     seedOperationRows(harness, {
-      count: THREAD_TIMELINE_OLDER_ROW_LIMIT + 5,
+      count: THREAD_TIMELINE_TURN_LIMIT_MAX + 5,
       environmentId,
       sequenceStart: 1,
       status: "completed",
@@ -2939,7 +3364,7 @@ describe("buildThreadTimeline", () => {
       turnId: "turn-active-steer",
     });
     seedOperationRows(harness, {
-      count: THREAD_TIMELINE_OLDER_ROW_LIMIT + 20,
+      count: THREAD_TIMELINE_TURN_LIMIT_MAX + 20,
       environmentId,
       sequenceStart: 108,
       status: "completed",
@@ -2958,8 +3383,8 @@ describe("buildThreadTimeline", () => {
         row.userRequest.status === "pending",
     );
 
-    expect(timeline.rows).toHaveLength(THREAD_TIMELINE_OLDER_ROW_LIMIT + 1);
-    expect(timeline.rows[0]?.sourceSeqStart).toBe(128);
+    expect(timeline.rows).toHaveLength(226);
+    expect(timeline.rows[0]?.sourceSeqStart).toBe(1);
     expect(pendingSteerRow).toMatchObject({
       role: "user",
       sourceSeqStart: 107,
@@ -2970,6 +3395,7 @@ describe("buildThreadTimeline", () => {
       },
     });
     expect(timeline.rows.at(-1)).toBe(pendingSteerRow);
+    expect(timeline.timelinePage.olderCursor).toBeNull();
   });
 
   it("keeps the active tail outside the manager conversation older-row cap", async () => {
@@ -2981,7 +3407,7 @@ describe("buildThreadTimeline", () => {
     });
 
     seedOperationRows(harness, {
-      count: THREAD_TIMELINE_OLDER_ROW_LIMIT + 5,
+      count: THREAD_TIMELINE_TURN_LIMIT_MAX + 5,
       environmentId,
       sequenceStart: 1,
       status: "completed",
@@ -2997,7 +3423,7 @@ describe("buildThreadTimeline", () => {
       titlePrefix: "active operation",
     });
     seedOperationRows(harness, {
-      count: THREAD_TIMELINE_OLDER_ROW_LIMIT + 20,
+      count: THREAD_TIMELINE_TURN_LIMIT_MAX + 20,
       environmentId,
       sequenceStart: 107,
       status: "completed",
@@ -3013,7 +3439,7 @@ describe("buildThreadTimeline", () => {
     );
 
     expect(timeline.rows).toHaveLength(
-      THREAD_TIMELINE_OLDER_ROW_LIMIT + 1 + 120,
+      THREAD_TIMELINE_TURN_LIMIT_MAX + 1 + 120,
     );
     expect(timeline.rows[0]?.sourceSeqStart).toBe(6);
     expect(activeRow).toMatchObject({
@@ -3024,7 +3450,7 @@ describe("buildThreadTimeline", () => {
     expect(timeline.rows.at(-1)?.sourceSeqStart).toBe(226);
   });
 
-  it("preserves duplicate-sequence top-level siblings at the regular standard cap boundary", async () => {
+  it("preserves duplicate-sequence top-level siblings in a selected turn", async () => {
     const harness = await createTestAppHarness();
     harnesses.push(harness);
     const { environmentId, thread } = seedTimelineThread(harness, {
@@ -3032,7 +3458,7 @@ describe("buildThreadTimeline", () => {
     });
 
     seedOperationRows(harness, {
-      count: THREAD_TIMELINE_OLDER_ROW_LIMIT - 1,
+      count: THREAD_TIMELINE_TURN_LIMIT_MAX - 1,
       environmentId,
       sequenceStart: 1,
       status: "completed",
@@ -3041,7 +3467,7 @@ describe("buildThreadTimeline", () => {
     });
     seedFileChangeSiblingRows(harness, {
       environmentId,
-      sequence: THREAD_TIMELINE_OLDER_ROW_LIMIT,
+      sequence: THREAD_TIMELINE_TURN_LIMIT_MAX,
       thread,
       turnId: "turn-file-change",
     });
@@ -3053,12 +3479,12 @@ describe("buildThreadTimeline", () => {
       (row) => row.kind === "work" && row.workKind === "file-change",
     );
 
-    expect(timeline.rows).toHaveLength(THREAD_TIMELINE_OLDER_ROW_LIMIT);
-    expect(timeline.rows[0]?.sourceSeqStart).toBe(2);
+    expect(timeline.rows).toHaveLength(THREAD_TIMELINE_TURN_LIMIT_MAX + 1);
+    expect(timeline.rows[0]?.sourceSeqStart).toBe(1);
     expect(fileChangeRows).toHaveLength(2);
     expect(fileChangeRows.map((row) => row.sourceSeqStart)).toEqual([
-      THREAD_TIMELINE_OLDER_ROW_LIMIT + 1,
-      THREAD_TIMELINE_OLDER_ROW_LIMIT + 1,
+      THREAD_TIMELINE_TURN_LIMIT_MAX + 1,
+      THREAD_TIMELINE_TURN_LIMIT_MAX + 1,
     ]);
     expect(fileChangeRows.map((row) => row.change.path)).toEqual([
       "first.txt",

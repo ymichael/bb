@@ -8,7 +8,7 @@ import {
 } from "../../src/services/system/event-pruning.js";
 import {
   buildThreadTimeline,
-  THREAD_TIMELINE_OLDER_ROW_LIMIT,
+  THREAD_TIMELINE_TURN_LIMIT_MAX,
 } from "../../src/services/threads/timeline.js";
 import {
   createTestDaemonEventEnvelope,
@@ -259,7 +259,7 @@ describe("thread event pruning", () => {
         isDevelopment: true,
         page: {
           kind: "latest",
-          topLevelLimit: THREAD_TIMELINE_OLDER_ROW_LIMIT,
+          turnLimit: THREAD_TIMELINE_TURN_LIMIT_MAX,
         },
         timelineViewMode: "standard",
       });
@@ -468,14 +468,14 @@ describe("thread event pruning", () => {
       });
       // The append validator requires `turn/started` to be stored before any
       // turn-scoped event can be appended for that turn. Without this seed,
-      // the new `thread/tokenUsage/updated` event we POST below — which is
+      // the new `thread/tokenUsage/updated` event we POST below, which is
       // turn-scoped on `turn-1` — gets a 409 from the validator.
       seedStoredEvent(harness.deps, {
         threadId: thread.id,
-        scope: turnScope("turn-1"),
-        sequence: 1_006,
-        type: "turn/started",
         providerThreadId: "provider-thread-1",
+        sequence: 0,
+        scope: turnScope("turn-1"),
+        type: "turn/started",
         itemId: null,
         itemKind: null,
         data: {
@@ -539,7 +539,7 @@ describe("thread event pruning", () => {
           threadId: thread.id,
           type: "thread/tokenUsage/updated",
         }).at(0),
-      ).toBe(8);
+      ).toBe(7);
       expect(
         listEventSequencesForType(harness, {
           threadId: thread.id,

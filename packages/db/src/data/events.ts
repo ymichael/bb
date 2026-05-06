@@ -6,6 +6,7 @@ import {
   gte,
   inArray,
   isNotNull,
+  lt,
   lte,
   max,
   notInArray,
@@ -651,6 +652,35 @@ export interface StoredEventSequenceRow extends StoredEventRow {
   environmentId: string | null;
 }
 
+export interface TimelineTurnPageAnchorBoundary {
+  id: string;
+  sequence: number;
+}
+
+export interface TimelineTurnPageAnchorRow {
+  id: string;
+  sequence: number;
+  turnId: string;
+}
+
+export interface ListTimelineTurnPageAnchorRowsArgs {
+  before?: TimelineTurnPageAnchorBoundary;
+  limit: number;
+  threadId: string;
+}
+
+export interface ListStoredEventRowsInSequenceWindowArgs {
+  excludedTypes: readonly ThreadEventType[];
+  seqEndExclusive?: number;
+  seqStart: number;
+  threadId: string;
+}
+
+export interface ListStoredClientTurnRequestedRowsByRequestIdsArgs {
+  requestIds: readonly ClientTurnRequestId[];
+  threadId: string;
+}
+
 export interface ListStoredTurnInputAcceptedRowsByClientRequestIdsArgs {
   afterSequence: number;
   clientRequestIds: readonly ClientTurnRequestId[];
@@ -810,6 +840,86 @@ export function listStoredEventRowsInRange(
     .all();
 }
 
+export function listTimelineTurnPageAnchorRows(
+  db: DbConnection,
+  args: ListTimelineTurnPageAnchorRowsArgs,
+): TimelineTurnPageAnchorRow[] {
+  const beforeCondition =
+    args.before === undefined
+      ? undefined
+      : or(
+          lt(events.sequence, args.before.sequence),
+          and(
+            eq(events.sequence, args.before.sequence),
+            sql`${events.turnId} < ${args.before.id}`,
+          ),
+        );
+  const condition =
+    beforeCondition === undefined
+      ? and(
+          eq(events.threadId, args.threadId),
+          eq(events.type, "turn/started"),
+          isNotNull(events.turnId),
+        )
+      : and(
+          eq(events.threadId, args.threadId),
+          eq(events.type, "turn/started"),
+          isNotNull(events.turnId),
+          beforeCondition,
+        );
+
+  return db
+    .select({
+      id: events.turnId,
+      sequence: events.sequence,
+      turnId: events.turnId,
+    })
+    .from(events)
+    .where(condition)
+    .orderBy(desc(events.sequence), desc(events.turnId))
+    .limit(args.limit)
+    .all()
+    .flatMap((row) =>
+      row.turnId === null || row.id === null
+        ? []
+        : [
+            {
+              id: row.id,
+              sequence: row.sequence,
+              turnId: row.turnId,
+            },
+          ],
+    );
+}
+
+export function listStoredEventRowsInSequenceWindow(
+  db: DbConnection,
+  args: ListStoredEventRowsInSequenceWindowArgs,
+): StoredEventRow[] {
+  const startCondition = and(
+    eq(events.threadId, args.threadId),
+    gte(events.sequence, args.seqStart),
+  );
+  const boundedCondition =
+    args.seqEndExclusive === undefined
+      ? startCondition
+      : and(startCondition, lt(events.sequence, args.seqEndExclusive));
+  const condition =
+    args.excludedTypes.length === 0
+      ? boundedCondition
+      : and(
+          boundedCondition,
+          notInArray(events.type, [...args.excludedTypes]),
+        );
+
+  return db
+    .select(storedEventRowFields)
+    .from(events)
+    .where(condition)
+    .orderBy(events.sequence)
+    .all();
+}
+
 function buildThreadSequenceKey(key: ThreadSequenceKey): string {
   return `${key.threadId}:${key.sequence}`;
 }
@@ -906,6 +1016,33 @@ export function listStoredClientTurnRequestIdsInRange(
     .all();
 
   return rows.map((row) => clientTurnRequestIdSchema.parse(row.requestId));
+}
+
+export function listStoredClientTurnRequestedRowsByRequestIds(
+  db: DbConnection,
+  args: ListStoredClientTurnRequestedRowsByRequestIdsArgs,
+): StoredEventRow[] {
+  if (args.requestIds.length === 0) {
+    return [];
+  }
+
+  const uniqueRequestIds = [...new Set(args.requestIds)];
+  const requestIdConditions = uniqueRequestIds.map(
+    (requestId) => sql`json_extract(${events.data}, '$.requestId') = ${requestId}`,
+  );
+
+  return db
+    .select(storedEventRowFields)
+    .from(events)
+    .where(
+      and(
+        eq(events.threadId, args.threadId),
+        eq(events.type, "client/turn/requested"),
+        or(...requestIdConditions),
+      ),
+    )
+    .orderBy(events.sequence)
+    .all();
 }
 
 export function listStoredTurnInputAcceptedRowsByClientRequestIds(

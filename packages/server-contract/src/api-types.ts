@@ -523,12 +523,10 @@ export type ThreadListQuery = z.infer<typeof threadListQuerySchema>;
 export const managerTimelineViewSchema = z.enum(["conversation", "standard"]);
 export type ManagerTimelineView = z.infer<typeof managerTimelineViewSchema>;
 
-export const THREAD_TIMELINE_DEFAULT_TOP_LEVEL_LIMIT = 100;
-
 export const timelinePaginationCursorSchema = z
   .object({
-    topLevelSortSeq: z.number().int().nonnegative(),
-    rowId: z.string().min(1),
+    seq: z.number().int().nonnegative(),
+    id: z.string().min(1),
   })
   .strict();
 export type TimelinePaginationCursor = z.infer<
@@ -538,8 +536,8 @@ export type TimelinePaginationCursor = z.infer<
 export const timelinePageMetadataSchema = z
   .object({
     kind: z.enum(["latest", "older"]),
-    topLevelLimit: z.number().int().positive(),
-    returnedOlderTopLevelRowCount: z.number().int().nonnegative(),
+    turnLimit: z.number().int().positive(),
+    returnedTopLevelRowCount: z.number().int().nonnegative(),
     hasOlderRows: z.boolean(),
     olderCursor: timelinePaginationCursorSchema.nullable(),
   })
@@ -550,23 +548,22 @@ export const threadTimelineQuerySchema = z
   .object({
     managerTimelineView: managerTimelineViewSchema,
     includeNestedRows: z.enum(["true", "false"]),
-    topLevelLimit: z.string().regex(/^\d+$/),
-    beforeTopLevelSortSeq: z.string().regex(/^\d+$/),
-    beforeRowId: z.string().min(1),
+    turnLimit: z.string().regex(/^\d+$/),
+    beforeSeq: z.string().regex(/^\d+$/),
+    beforeId: z.string().min(1),
   })
   .partial()
   .superRefine((query, context) => {
-    const hasBeforeTopLevelSortSeq = query.beforeTopLevelSortSeq !== undefined;
-    const hasBeforeRowId = query.beforeRowId !== undefined;
+    const hasBeforeSeq = query.beforeSeq !== undefined;
+    const hasBeforeId = query.beforeId !== undefined;
 
-    if (hasBeforeTopLevelSortSeq === hasBeforeRowId) {
+    if (hasBeforeSeq === hasBeforeId) {
       return;
     }
 
     context.addIssue({
       code: z.ZodIssueCode.custom,
-      message:
-        "beforeTopLevelSortSeq and beforeRowId must be provided together",
+      message: "beforeSeq and beforeId must be provided together",
     });
   });
 export type ThreadTimelineQuery = z.infer<typeof threadTimelineQuerySchema>;

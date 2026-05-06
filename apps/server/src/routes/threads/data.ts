@@ -2,6 +2,7 @@ import path from "node:path";
 import { listDrafts } from "@bb/db";
 import { FILE_LIST_LIMIT_MAX } from "@bb/host-daemon-contract";
 import type { Hono } from "hono";
+import type { Thread } from "@bb/domain";
 import { PROMPT_HISTORY_ENTRY_LIMIT, threadEventTypeSchema } from "@bb/domain";
 import {
   promptHistoryQuerySchema,
@@ -32,8 +33,10 @@ import { toQueuedMessage } from "../../services/threads/drafts.js";
 import {
   buildThreadTimeline,
   buildTimelineTurnSummaryDetails,
+  resolveThreadTimelineDefaultTurnLimit,
   resolveThreadTimelineServiceViewMode,
-  THREAD_TIMELINE_OLDER_ROW_LIMIT,
+  THREAD_TIMELINE_TURN_LIMIT_MAX,
+  type ThreadTimelinePageKind,
   type ThreadTimelinePageRequest,
 } from "../../services/threads/timeline.js";
 import {
@@ -82,24 +85,23 @@ function parseThreadStorageFileListLimit(rawLimit: string | undefined): number {
   return limit;
 }
 
-function parseThreadTimelineTopLevelLimit(
+function parseThreadTimelineTurnLimit(
+  defaultLimit: number,
   rawLimit: string | undefined,
 ): number {
-  const limit =
-    parseOptionalInteger(rawLimit, "topLevelLimit") ??
-    THREAD_TIMELINE_OLDER_ROW_LIMIT;
+  const limit = parseOptionalInteger(rawLimit, "turnLimit") ?? defaultLimit;
   if (limit <= 0) {
     throw new ApiError(
       400,
       "invalid_request",
-      "topLevelLimit must be a positive integer",
+      "turnLimit must be a positive integer",
     );
   }
-  if (limit > THREAD_TIMELINE_OLDER_ROW_LIMIT) {
+  if (limit > THREAD_TIMELINE_TURN_LIMIT_MAX) {
     throw new ApiError(
       400,
       "invalid_request",
-      `topLevelLimit must be less than or equal to ${THREAD_TIMELINE_OLDER_ROW_LIMIT}`,
+      `turnLimit must be less than or equal to ${THREAD_TIMELINE_TURN_LIMIT_MAX}`,
     );
   }
   return limit;
@@ -107,39 +109,46 @@ function parseThreadTimelineTopLevelLimit(
 
 function parseThreadTimelinePage(
   query: ThreadTimelineQuery,
+  thread: Thread,
 ): ThreadTimelinePageRequest {
-  const topLevelLimit = parseThreadTimelineTopLevelLimit(query.topLevelLimit);
-  if (
-    query.beforeTopLevelSortSeq === undefined &&
-    query.beforeRowId === undefined
-  ) {
-    return {
-      kind: "latest",
-      topLevelLimit,
-    };
-  }
-
-  if (
-    query.beforeTopLevelSortSeq === undefined ||
-    query.beforeRowId === undefined
-  ) {
+  const hasBeforeSeq = query.beforeSeq !== undefined;
+  const hasBeforeId = query.beforeId !== undefined;
+  if (hasBeforeSeq !== hasBeforeId) {
     throw new ApiError(
       400,
       "invalid_request",
-      "beforeTopLevelSortSeq and beforeRowId must be provided together",
+      "beforeSeq and beforeId must be provided together",
+    );
+  }
+
+  const kind: ThreadTimelinePageKind = hasBeforeSeq ? "older" : "latest";
+  const turnLimit = parseThreadTimelineTurnLimit(
+    resolveThreadTimelineDefaultTurnLimit({ kind, thread }),
+    query.turnLimit,
+  );
+
+  if (kind === "latest") {
+    return {
+      kind: "latest",
+      turnLimit,
+    };
+  }
+
+  if (query.beforeSeq === undefined || query.beforeId === undefined) {
+    throw new ApiError(
+      400,
+      "invalid_request",
+      "beforeSeq and beforeId must be provided together",
     );
   }
 
   return {
     beforeCursor: {
-      topLevelSortSeq: parseInteger(
-        query.beforeTopLevelSortSeq,
-        "beforeTopLevelSortSeq",
-      ),
-      rowId: query.beforeRowId,
+      seq: parseInteger(query.beforeSeq, "beforeSeq"),
+      id: query.beforeId,
     },
     kind: "older",
-    topLevelLimit,
+    turnLimit,
   };
 }
 
@@ -171,7 +180,7 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
     return context.json(
       buildThreadTimeline(deps.db, thread, {
         isDevelopment: deps.config.isDevelopment,
-        page: parseThreadTimelinePage(query),
+        page: parseThreadTimelinePage(query, thread),
         timelineViewMode: resolveThreadTimelineServiceViewMode({
           managerTimelineView: query.managerTimelineView,
           thread,

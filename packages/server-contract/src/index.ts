@@ -178,7 +178,6 @@ export {
   reuseEnvironmentSchema,
   hostEnvironmentSchema,
   sandboxHostEnvironmentSchema,
-  THREAD_TIMELINE_DEFAULT_TOP_LEVEL_LIMIT,
   SCHEDULE_CRON_MAX_LENGTH,
   SCHEDULE_NAME_MAX_LENGTH,
   SCHEDULE_TIMEZONE_MAX_LENGTH,

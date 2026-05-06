@@ -83,7 +83,7 @@ export interface GetThreadTimelineArgs {
   id: string;
   includeNestedRows?: boolean;
   managerTimelineView?: ManagerTimelineView;
-  topLevelLimit: number;
+  turnLimit?: number;
 }
 export type AppCreateManagerThreadRequest = Omit<
   CreateManagerThreadRequest,
@@ -768,7 +768,7 @@ export async function getThreadTimeline({
   id,
   includeNestedRows = false,
   managerTimelineView,
-  topLevelLimit,
+  turnLimit,
 }: GetThreadTimelineArgs): Promise<ThreadTimelineResponse> {
   return request<ThreadTimelineResponse>(
     apiClient.threads[":id"].timeline.$get({
@@ -776,11 +776,11 @@ export async function getThreadTimeline({
       query: {
         ...(includeNestedRows ? { includeNestedRows: "true" } : {}),
         ...(managerTimelineView ? { managerTimelineView } : {}),
-        topLevelLimit: String(topLevelLimit),
+        ...(turnLimit !== undefined ? { turnLimit: String(turnLimit) } : {}),
         ...(beforeCursor
           ? {
-              beforeTopLevelSortSeq: String(beforeCursor.topLevelSortSeq),
-              beforeRowId: beforeCursor.rowId,
+              beforeSeq: String(beforeCursor.seq),
+              beforeId: beforeCursor.id,
             }
           : {}),
       },
