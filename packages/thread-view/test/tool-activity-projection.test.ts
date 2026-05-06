@@ -429,6 +429,54 @@ describe("tool activity projection", () => {
     ]);
   });
 
+  it("applies late command output to the newest finalized row for a reused call id", () => {
+    const state = createProjectionState();
+
+    onExecBegin(
+      state,
+      eventMeta(1),
+      "thread-1",
+      "turn-1",
+      commandUpdate({ output: "first started\n", status: "pending" }),
+    );
+    onExecEnd(
+      state,
+      eventMeta(2),
+      "thread-1",
+      "turn-1",
+      commandUpdate({ output: "first done\n", status: "completed" }),
+    );
+
+    onExecBegin(
+      state,
+      eventMeta(3),
+      "thread-1",
+      "turn-1",
+      commandUpdate({ output: "second started\n", status: "pending" }),
+    );
+    onExecEnd(
+      state,
+      eventMeta(4),
+      "thread-1",
+      "turn-1",
+      commandUpdate({ output: "second done\n", status: "completed" }),
+    );
+
+    expect(state.toolActivity.execHistoryCellIndexByCallId.size).toBe(1);
+
+    applyCommandOutput(state, {
+      appendOutput: true,
+      output: "late\n",
+      replaceOutput: false,
+      seq: 5,
+    });
+
+    expect(commandMessages(state).map((message) => message.output)).toEqual([
+      "first done\n",
+      "second done\nlate\n",
+    ]);
+  });
+
   it("replaces command output on reset deltas", () => {
     const state = createProjectionState();
 

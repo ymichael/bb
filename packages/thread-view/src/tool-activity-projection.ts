@@ -130,6 +130,7 @@ export interface ToolActivityState {
   pendingOutputsByCallId: Map<string, PendingExecutionOutput>;
   activeCell: ToolActivityCell | null;
   historyCells: ToolActivityCell[];
+  execHistoryCellIndexByCallId: Map<string, number>;
   finalizedExecCallIds: Set<string>;
   finalizedWebActivityCallIds: Set<string>;
 }
@@ -150,6 +151,7 @@ export function createToolActivityState(): ToolActivityState {
     pendingOutputsByCallId: new Map(),
     activeCell: null,
     historyCells: [],
+    execHistoryCellIndexByCallId: new Map(),
     finalizedExecCallIds: new Set(),
     finalizedWebActivityCallIds: new Set(),
   };

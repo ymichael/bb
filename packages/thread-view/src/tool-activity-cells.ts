@@ -21,11 +21,14 @@ export type WebActivityKind = ViewWebActivityMessage["kind"];
 
 interface ToolActivityCellStateOwner {
   messages: EventProjectionMessage[];
-  toolActivity: {
-    activeCell: ToolActivityCell | null;
-    finalizedExecCallIds: Set<string>;
-    historyCells: ToolActivityCell[];
-  };
+  toolActivity: ToolActivityCellState;
+}
+
+interface ToolActivityCellState {
+  activeCell: ToolActivityCell | null;
+  execHistoryCellIndexByCallId: Map<string, number>;
+  finalizedExecCallIds: Set<string>;
+  historyCells: ToolActivityCell[];
 }
 
 type MaybeToolActivityCell =
@@ -37,6 +40,11 @@ type MaybeToolActivityCell =
 interface FindWebActivityInHistoryCellsArgs {
   callId: string;
   itemKind?: WebActivityKind;
+}
+
+interface FindExecMessageInHistoryCellsResult {
+  cell: ViewProviderExecutionMessage;
+  call: ViewProviderExecutionMessage;
 }
 
 export function isProviderExecutionMessage(
@@ -69,30 +77,21 @@ export function findExecMessageInActiveCell(
 export function findExecMessageInHistoryCells(
   state: ToolActivityCellStateOwner,
   callId: string,
-): {
-  cell: ViewProviderExecutionMessage;
-  call: ViewProviderExecutionMessage;
-} | null {
-  for (
-    let index = state.toolActivity.historyCells.length - 1;
-    index >= 0;
-    index -= 1
-  ) {
-    const cell = state.toolActivity.historyCells[index];
-    if (!cell || isWebActivityMessage(cell)) {
-      continue;
-    }
+): FindExecMessageInHistoryCellsResult | null {
+  const historyIndex =
+    state.toolActivity.execHistoryCellIndexByCallId.get(callId);
+  if (historyIndex === undefined) return null;
 
-    const call = findExecMessageInActiveCell(cell, callId);
-    if (!call) continue;
+  const cell = state.toolActivity.historyCells[historyIndex];
+  if (!isProviderExecutionMessage(cell)) return null;
 
-    return {
-      cell,
-      call,
-    };
-  }
+  const call = findExecMessageInActiveCell(cell, callId);
+  if (!call) return null;
 
-  return null;
+  return {
+    cell,
+    call,
+  };
 }
 
 export function findWebActivityInHistoryCells(
@@ -128,11 +127,19 @@ export function flushActiveToolCell(
   const active = state.toolActivity.activeCell;
   if (!active) return;
 
-  if (isProviderExecutionMessage(active) && active.status !== "pending") {
-    state.toolActivity.finalizedExecCallIds.add(active.callId);
+  const historyIndex = state.toolActivity.historyCells.length;
+  state.toolActivity.historyCells.push(active);
+
+  if (isProviderExecutionMessage(active)) {
+    state.toolActivity.execHistoryCellIndexByCallId.set(
+      active.callId,
+      historyIndex,
+    );
+    if (active.status !== "pending") {
+      state.toolActivity.finalizedExecCallIds.add(active.callId);
+    }
   }
 
-  state.toolActivity.historyCells.push(active);
   state.messages.push(active);
   state.toolActivity.activeCell = null;
 }
