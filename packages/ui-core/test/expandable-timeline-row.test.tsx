@@ -7,12 +7,12 @@ import { ExpandableTimelineRow } from "../src/thread-timeline/ExpandableTimeline
 
 const TITLE: TimelineTitle = {
   action: null,
-  content: "details",
-  contentTone: "emphasis",
-  motion: "none",
+  segments: [
+    { text: "Ran", em: false, shimmer: false, truncate: false },
+    { text: "details", em: true, shimmer: false, truncate: true },
+  ],
+  decorations: [],
   plain: "Ran details",
-  prefix: "Ran",
-  suffix: null,
   tone: "default",
 };
 

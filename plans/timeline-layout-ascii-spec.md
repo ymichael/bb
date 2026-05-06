@@ -11,60 +11,10 @@ of prose-only requirements.
 
 ## Source Notes
 
-Required context read before drafting:
-
-- `AGENTS.md`
-- `docs/CODE_REVIEW.md`
-- `/Users/michael/.bb-dev/thread-storage/thr_bj3p5vk9py/timeline-ui-behavior-investigation.md`
-- `/Users/michael/.bb-dev/thread-storage/thr_bj3p5vk9py/STATUS.md`
-- `/Users/michael/.bb-dev/thread-storage/thr_bj3p5vk9py/reports/timeline-visual-state-consistency-plan.md`
-
-The requested `plans/timeline-visual-state-consistency.md` was not present in
-this worktree. The manager status pointed to the copied report above, which was
-used instead.
-
-DB mining used read-only SQLite queries against `~/.bb-dev/bb.db`. No DB writes
-were performed. Query families used:
-
-```sql
-SELECT type, COALESCE(item_kind,''), COUNT(*)
-FROM events
-GROUP BY type, item_kind
-ORDER BY COUNT(*) DESC;
-
-SELECT t.id, COALESCE(t.title,t.title_fallback,'(untitled)') AS title,
-       t.status, t.type, COUNT(e.id) AS events, COUNT(DISTINCT e.turn_id) AS turns
-FROM threads t
-LEFT JOIN events e ON e.thread_id=t.id
-WHERE t.deleted_at IS NULL
-GROUP BY t.id
-ORDER BY events DESC;
-
-SELECT t.id, COALESCE(t.title,t.title_fallback,'(untitled)') AS title,
-       t.status, t.type, t.parent_thread_id, COUNT(e.id) AS events,
-       COUNT(DISTINCT e.turn_id) AS turns,
-       SUM(CASE WHEN e.item_kind='commandExecution'
-                 OR e.type='item/commandExecution/outputDelta' THEN 1 ELSE 0 END) AS command_events,
-       SUM(CASE WHEN e.item_kind='fileChange'
-                 OR e.type='item/fileChange/outputDelta' THEN 1 ELSE 0 END) AS file_events,
-       SUM(CASE WHEN e.item_kind='toolCall' THEN 1 ELSE 0 END) AS tool_events,
-       SUM(CASE WHEN e.item_kind IN ('webSearch','webFetch') THEN 1 ELSE 0 END) AS web_events,
-       SUM(CASE WHEN e.item_kind='contextCompaction'
-                 OR e.type='thread/compacted' THEN 1 ELSE 0 END) AS compaction_events,
-       SUM(CASE WHEN e.type='system/manager/user_message' THEN 1 ELSE 0 END) AS manager_msgs,
-       SUM(CASE WHEN e.type='system/operation' THEN 1 ELSE 0 END) AS operations
-FROM threads t
-LEFT JOIN events e ON e.thread_id=t.id
-WHERE t.id IN (...)
-GROUP BY t.id;
-```
-
-Data gaps:
-
-- `pending_interactions` has 0 rows in this dev DB.
-- `queued_thread_messages` has 0 rows in this dev DB.
-- Pending approvals and resolving interactions therefore use contract/test
-  shapes plus observed approval fields in event JSON, not live pending rows.
+This file is the design reference. The companion engineering plan is
+`plans/timeline-visual-state-consistency.md`. When a behavior in this file
+disagrees with current code, update the code or update this file — not both at
+once and not silently.
 
 ## How To Review This Doc
 
@@ -85,17 +35,17 @@ Use this as a review artifact, not a requirements dump.
 | --- | --- | --- | --- |
 | Four timeline concepts | Use `turn summary`, `step summary`, `bundle summary`, and `leaf rows` consistently. | Agreed intent | Confirm names are right. |
 | App conversation rows | Content-first; no literal `User` / `Assistant` title in normal App timeline. | Agreed intent | None unless debug mode should differ. |
-| User/steer Ladle coverage | Add stories showing regular user, accepted steer, pending steer, copy affordance, toolbar label placement, and pending motion. | Known follow-up | Confirm story sweep is complete. |
+| User/steer Ladle coverage | Add stories showing regular user, accepted steer, pending steer, copy affordance, toolbar label placement, and pending shimmer. | Known follow-up | Confirm story sweep is complete. |
 | `Worked on N items` | Parallel audit is being started to enumerate dev-DB cases and remove avoidable fallback paths. | Known follow-up | Confirm audit owner/scope. |
 | Command failure display | Do not make failed command rows visually error-toned by default; show command/output/exit detail. | Agreed intent | Confirm exact failure affordance if any. |
 | Read/list/search treatment | Keep rows muted for now; exact emphasis needs design audit. | Needs audit | Confirm whether any object emphasis is desired later. |
-| Step boundary behavior | Step summaries appear at completed assistant-step boundaries. Boundary edge cases need review. | Open question | Decide merge/split rules across assistant messages and steers. |
+| Step boundary behavior | Each assistant-message boundary inside an unfinished turn closes the current step. Completed work between two assistant messages becomes one muted step summary; the next assistant message is its sibling. The final assistant message of a finished turn renders outside the `Worked for <duration>` block. | Agreed intent | None remaining. |
 
 ## Michael's Review Notes: Answers
 
 | # | Question / note | Answer | Status | Source / follow-up |
 | --- | --- | --- | --- | --- |
-| 1 | Need Ladle fixtures/stories for regular user, steer, and steer pending; pending steer should shimmer; copy icon always visible; steer label on toolbar line; labels should be `Steer message` and `Steer requested`. | This is a follow-up implementation/story task: add Ladle stories that showcase the exact sweep of user-message states and affordances. Do not treat this doc as proof that all states already exist. | Known follow-up | See `Conversation And Steer Rows` and checklist. Use `thr_8drzzydfdy` as visual coverage after reconciliation. |
+| 1 | Need Ladle fixtures/stories for regular user, steer, and steer pending; pending steer should shimmer; copy icon always visible; steer label on toolbar line; labels should be `Steer message` and `Steer requested`. | This is a follow-up implementation/story task: add Ladle stories that showcase the exact sweep of user-message states and affordances. Do not treat this doc as proof that all states already exist. | Known follow-up | See `Conversation And Steer Rows` and checklist. The isolated Ladle row stories landed on main; verify which states are still missing. |
 | 2 | Does the Label And Title Matrix apply to CLI, App, or both? | Visible-copy matrices now compare App and CLI/debug in columns. Semantic model is a separate column; status stays as current/agreed/open context instead of driving the table shape. | Doc corrected | See `Conversation And Steer Rows`, `Work Row Titles`, `Grouping Titles By Concept`, and `System And Interaction Rows`. |
 | C1 | Correction: should app conversation rows render literal `User` or `Assistant` titles? | No. `user` and `assistant` are semantic row kinds. App-visible conversation rows are content-first with affordances, not literal `User` / `Assistant` headings. CLI/debug surfaces can use speaker labels depending on mode. | Agreed intent | See `Conversation And Steer Rows` and `Canonical Layout Skeletons`. |
 | 3 | Should expanded command detail show exit code always, or only if useful? | Always. Expanded terminal command detail order is `$ <command>`, output, then exit code, including `exit 0`. | Agreed intent | See `Command Details` and `Command Output Detail`. Implementation should be audited for parity. |
@@ -105,12 +55,12 @@ Use this as a review artifact, not a requirements dump.
 | 7 | Approval labels: remove the OR between `Command (waiting)` and `Waiting for approval on 1 command`. | Deterministic leaf title is `Command (waiting for approval)`. The approval summary can say `Waiting for approval on 1 command`, but the command row title is not nondeterministic. | Doc corrected | See `System And Interaction Rows`, `Command Details`, and `Pending Approval Interaction`. |
 | 8 | `Worked on N items` is jarring; when/why does it appear? | The doc should not settle this by assertion. A parallel audit is being started to cover known dev-DB prefix/case patterns and identify/remediate avoidable fallback paths. | Known follow-up | Track audit results back into `Grouping Titles By Concept` and `Open Questions`. |
 | 9 | Clarify `Loading ... Skeleton or spinner, not shimmer-as-work`. | Loading means client-local fetch/lazy-load state. It can use a skeleton or spinner, but not ongoing agent-work shimmer; it is not durable timeline work. | Doc corrected | See `Lifecycle Treatment Matrix` and `Loading, Retry, Empty`. |
-| 10 | Clarify `Ongoing motion on whole title`. | Ongoing motion applies to the whole title text/label concept, not only to a title prefix segment. This covers content-only titles and pending steer labels. | Agreed intent | See `Lifecycle Treatment Matrix`, pending steer rows, and context compaction rules. |
+| 10 | Clarify `Shimmer on whole title`. | Shimmer applies to the whole title text/label concept, not only to a title prefix segment. This covers content-only titles and pending steer labels. | Agreed intent | See `Lifecycle Treatment Matrix`, pending steer rows, and context compaction rules. |
 | 11 | Clarify why historical completed turns "may" collapse. | Completed historical turns are eligible for lazy turn summaries; active turns stay expanded and leaf-first. | Doc corrected | See `Historical Turn, Collapsed`. |
 | 12 | Remove or clarify confusing consecutive `Worked for...` / `Worked on...` rows. | The confusing consecutive worked rows were removed from examples. `Worked on N items` remains only as an explicit current/open fallback note, not agreed UX. | Doc corrected | See `Timeline Grouping Model`, `Historical Turn, Collapsed`, and `Grouping Titles By Concept`. |
 | 13 | Is `Read 6 files, listed 2 directories` real, or should it be `Explored 6 files, 2 lists`? | The observed/agreed summary style is `Explored 6 files, 2 lists`; the old read/list wording is documented only as a corrected stale example. | Doc corrected | See `Grouping Titles By Concept`, `Historical Turn, Expanded`, and `Exploration And Generic Tool Fallback`. |
-| 14 | Clarify examples where User and final Assistant appear inside a `Worked for` block. | The initial user request that starts a turn is outside the turn summary. Steer/user leaves that occur inside the finished turn can appear in expanded `Worked for <duration>` detail. Final-assistant boundary cases remain open. | Doc corrected | See `Historical Turn, Expanded`; completed assistant-boundary placement remains an open question. |
-| 15 | Active tail should not have `Working on`; use Michael's snapshot progression. | Active tail uses visible leaf rows or bundle summaries such as `Exploring 2 files, 1 list` and `Running 2 commands`. `Working on N items` is not agreed active-tail copy. | Agreed intent | See `Timeline Grouping Model`, `Active Streaming Progression`, and `Grouping Rules By Concept`; `thr_c2wjru47fm` is the branch-current source. |
+| 14 | Clarify examples where User and final Assistant appear inside a `Worked for` block. | The initial user request that starts a turn is outside the turn summary. The final assistant message of the turn renders outside `Worked for <duration>` as its sibling. Earlier in-turn assistant messages and steer/user leaves remain inside the block. | Agreed intent | See `Historical Turn, Expanded` and `Active Streaming Progression`. |
+| 15 | Active tail should not have `Working on`; use Michael's snapshot progression. | Active tail uses visible leaf rows or bundle summaries such as `Exploring 2 files, 1 list` and `Running 2 commands`. `Working on N items` is not agreed active-tail copy. | Agreed intent | See `Timeline Grouping Model`, `Active Streaming Progression`, and `Grouping Rules By Concept`. |
 
 ## Timeline Grouping Model
 
@@ -131,8 +81,8 @@ Visible treatment:
 | Concept | App visible treatment | CLI text | Status |
 | --- | --- | --- | --- |
 | Turn summary | `[muted]Worked for <duration>[/muted]`; static, not shimmered. | `Worked for <duration>` with nested detail in verbose/expanded mode. | Observed/current and agreed terminology. |
-| Step summary | `[muted]Explored 2 files, 1 list, edited 1 file[/muted]`; lower emphasis than active work. | `Explored 2 files, 1 list, edited 1 file`. | Agreed intent; placement edge cases open. |
-| Bundle summary | Active: `[shimmer]Exploring[/shimmer] 2 files, 1 list` or `[shimmer]Running[/shimmer] 2 commands`; live child remains visible/expanded. Completed before boundary: `[muted]Explored 2 files, 1 list[/muted]`. | `Exploring 2 files, 1 list`; `Running 2 commands`; `Explored 2 files, 1 list`. | Branch-current / needs audit for completed-before-boundary form. |
+| Step summary | `[muted]Explored 2 files, 1 list, edited 1 file[/muted]`; lower emphasis than active work. | `Explored 2 files, 1 list, edited 1 file`. | Agreed intent. |
+| Bundle summary | Active: `[shimmer]Exploring[/shimmer] 2 files, 1 list` or `[shimmer]Running[/shimmer] 2 commands`; live child remains visible/expanded. Completed before boundary: `[muted]Explored 2 files, 1 list[/muted]`. | `Exploring 2 files, 1 list`; `Running 2 commands`; `Explored 2 files, 1 list`. | Observed/current for completed-before-boundary form. |
 | Leaf rows | Treatment depends on leaf type. Conversation leaves are content-first; command/file/read leaves use the row rules below. | Direct row text, optionally verbose detail. | Mixed current/agreed; see row tables. |
 
 Rules:
@@ -176,7 +126,7 @@ Observed global event distribution highlights:
 | `item/started/completed reasoning` | 8833 | Thinking/reasoning should not create noisy timeline rows unless summarized intentionally. |
 | `item/started/completed fileChange` plus deltas | 2639 | Diffs need predictable nested detail spacing. |
 | `system/manager/user_message` | 122 | Manager user-facing updates need app and CLI parity. |
-| `contextCompaction` item rows plus `thread/compacted` | 80 | Compaction needs explicit wording and motion policy. |
+| `contextCompaction` item rows plus `thread/compacted` | 80 | Compaction needs explicit wording and shimmer policy. |
 | `webSearch` and `webFetch` item rows | 13 | Web rows are rare but distinct from read/list exploration. |
 | `system/operation` | 5 | Manager assignment and ownership rows are rare but high-signal. |
 | `system/thread/interrupted` | 14 | Interrupted terminal rows need visible but non-error treatment. |
@@ -201,7 +151,7 @@ conversation rows.
 [+] collapsed expandable row
 [-] expanded expandable row
 [ ] non-expandable row
-[~] ongoing row or ongoing title motion
+[~] shimmer
 [!] error row
 [x] interrupted or denied row
     child indentation level
@@ -219,7 +169,6 @@ Keep status visible, but do not let it drive the table shape.
 | Status | Meaning |
 | --- | --- |
 | Observed/current | Behavior or data observed in current code, DB, or branch reports. Not automatically agreed intent. |
-| Branch-current | Behavior observed in an active branch listed in `In-Flight Timeline Changes`; reconcile before treating as merged. |
 | Agreed intent | Michael's stated direction or agreed terminology. |
 | Known follow-up | Implementation, story, or audit work to schedule. |
 | Doc corrected | This artifact was changed to remove stale or confusing wording. |
@@ -230,8 +179,8 @@ Keep status visible, but do not let it drive the table shape.
 
 These matrices compare product-facing surfaces directly. `Semantic model` names
 the internal concept only so it does not leak into App copy. App cells include
-visual treatment when it affects shippability: emphasis, muted state, ongoing
-motion, affordance placement, expansion defaults, and warning/error treatment.
+visual treatment when it affects shippability: emphasis, muted state, shimmer,
+affordance placement, expansion defaults, and warning/error treatment.
 
 ### Conversation And Steer Rows
 
@@ -240,20 +189,20 @@ motion, affordance placement, expansion defaults, and warning/error treatment.
 | Regular user message | row kind `user` | Content-first message row. No literal `User` title. | Can print `User` in transcript/debug modes. | Agreed intent | The initial user request stays outside its turn summary. Steer/user leaves inside a finished turn can appear in expanded turn-summary detail. User leaves are excluded from step and bundle summaries. |
 | Assistant message | row kind `assistant` | Content-first response. No literal `Assistant` title. | Can print `Assistant` in transcript/debug modes. | Agreed intent | Interrupted assistant text remains visible. |
 | Accepted steer | row kind `user` plus steer metadata | Content-first message row. Toolbar label: `Steer message`. | Observed CLI/debug can print `steer`. | Agreed intent / needs audit | CLI copy should be audited if shared labels change. |
-| Pending steer | row kind `user` plus pending steer metadata | Content-first tail row. `[shimmer]Steer requested[/shimmer]` on toolbar line; body remains readable. | Observed CLI/debug can print `steer pending`. | Branch-current / needs audit | Shared semantic row, not an App-only side channel. |
-| User row toolbar | user row affordances | Copy icon always visible; steer label shares toolbar line. | n/a | Known follow-up | Add Ladle stories for regular, accepted steer, pending steer, copy affordance, label placement, and pending motion. |
+| Pending steer | row kind `user` plus pending steer metadata | Content-first tail row. `[shimmer]Steer requested[/shimmer]` on toolbar line; body remains readable. | Observed CLI/debug can print `steer pending`. | Observed/current | Shared semantic row, not an App-only side channel. |
+| User row toolbar | user row affordances | Copy icon always visible; steer label shares toolbar line. | n/a | Known follow-up | Add Ladle stories for regular, accepted steer, pending steer, copy affordance, label placement, and pending shimmer. |
 | Manager user update | manager-visible assistant update semantic row | Body visible in manager conversation mode; do not force an `Assistant` title in the App. | CLI/debug can print speaker labels depending on view mode. | Observed/current | Hidden from standard worker timeline unless standard manager view is requested. |
 
 ### Work Row Titles
 
 | Concept | Semantic model | App visible treatment | CLI text | Status | Notes / follow-up |
 | --- | --- | --- | --- | --- | --- |
-| Completed single successful work | single terminal work item | `[muted]Ran [em]<command>[/em] <duration if over 1s>[/muted]` or `[muted]Edited [em]<path>[/em] +A -R[/muted]`. | `Ran <command> <duration>`; `Edited <path> +A -R`. | Branch-current | Do not force a one-child step summary. |
+| Completed single work, any terminal status | single terminal work item | `[muted]Ran [em]<command>[/em] <duration if over 1s>[/muted]`. Append a status suffix when the row is non-success: `(error)`, `(denied)`, `(interrupted)`. Tone shifts on the suffix only; the row stays muted/leaf. | `Ran <command> <duration>`; with suffix when applicable. | Agreed intent | Single terminal rows are always muted leaves regardless of status. No summary wrapper around one child. |
 | Command row | command execution | Running: `[shimmer]Running[/shimmer] [em]<command>[/em] <duration if over 1s>`. Completed and failed terminal titles use the same neutral/muted structure, for example `[muted]Ran [em]<command>[/em] 2s[/muted]`; failure is shown by detail/output/exit. | `Running <command> <duration>`; `Ran <command> <duration>` plus detail exit. | Agreed intent / needs audit | Exact App emphasis and terminal failed-title copy need implementation audit. |
 | Command approval row | command awaiting approval | `[shimmer]Waiting for approval[/shimmer] for [em]<command>[/em]`. | `Command (waiting for approval)` or approval summary text. | Agreed intent | Observed CLI can still show `Command (waiting)`. |
 | File change row | file change item | `[muted]Edited [em]<path>[/em] +A -R[/muted]`; active title can shimmer on verb. Stats remain visible. | `Edited <path> +A -R`; `Created <path> +A -R`; `Deleted <path> +A -R`. | Agreed intent / needs audit | Create/delete active and failure equivalents need implementation audit. |
 | Read/list/search row | local exploration item | Muted throughout for now: `[muted]Searched for <query> [in <path>][/muted]`. No App emphasis until design audit. | `Searched for <query> [in <path>]`; `Listed <pattern> [in <path>]`. | Agreed intent / needs audit | Search title parity has current gaps. |
-| Web search/fetch row | web item | Muted row showing query or URL only; suppress result payload. Active rows can shimmer on verb. | `Running web search: <query>`; `Fetched: <url>`. | Branch-current | Future detail view needs separate security/product decision. |
+| Web search/fetch row | web item | Muted row showing query or URL only; suppress result payload. Active rows can shimmer on verb. | `Running web search: <query>`; `Fetched: <url>`. | Observed/current | Future detail view needs separate security/product decision. |
 | Generic tool fallback | typed or unknown tool call | Muted tool label; arguments/results appear only in expanded detail. | `Ran tool: <label>` or `Running tool: <label>`. | Agreed intent | Do not expose raw JSON in title. |
 | Delegation/subagent | subagent work item | `[shimmer]Running subagent[/shimmer]: <description> (<type>)`; expanded detail opens with nested timeline. | `Running subagent: <description> (<type>)`. | Observed/current / needs audit | Child timeline owns its own rail and indentation. |
 
@@ -263,11 +212,11 @@ motion, affordance placement, expansion defaults, and warning/error treatment.
 | --- | --- | --- | --- | --- |
 | Turn summary | `[muted]Worked for <duration>[/muted]`; finished turn only. | `Worked for <duration>`. | Observed/current | Expanded detail can contain messages, step summaries, bundle summaries, and leaf rows. |
 | Step summary, exploration | `[muted]Explored 2 files, 1 list[/muted]`. | `Explored 2 files, 1 list`. | Agreed intent | `Read 6 files, listed 2 directories` is stale wording. |
-| Step summary, commands | `[muted]Ran 2 commands[/muted]`; failed child must still be discoverable in detail. | `Ran 2 commands`. | Agreed intent | Boundary/merge rules remain open. |
+| Step summary, commands | `[muted]Ran 2 commands[/muted]`; failed child must still be discoverable in detail. | `Ran 2 commands`. | Agreed intent | Closed at each assistant-message boundary. |
 | Step summary, mixed | `[muted]Explored 2 files, 1 list, edited 1 file[/muted]`. | `Explored 2 files, 1 list, edited 1 file`. | Agreed intent | Used at completed assistant-step boundaries. |
-| Bundle summary, exploration | `[shimmer]Exploring[/shimmer] 2 files, 1 list`; live leaf rows remain visible enough to understand progress. | `Exploring 2 files, 1 list`. | Branch-current / needs audit | Not a turn summary. |
-| Bundle summary, commands | `[shimmer]Running[/shimmer] 2 commands`; latest running command expands to output. | `Running 2 commands`. | Branch-current / needs audit | Active tail targets latest expandable bundle summary or leaf row. |
-| Bundle summary, completed before boundary | `[muted]Explored 2 files, 1 list[/muted]`; same-type completed bundle inside an unfinished assistant step. | `Explored 2 files, 1 list`. | Needs audit | This preserves Michael's snapshot without naming a fifth grouping concept. It can merge into the step summary at the assistant boundary. |
+| Bundle summary, exploration | `[shimmer]Exploring[/shimmer] 2 files, 1 list`; live leaf rows remain visible enough to understand progress. | `Exploring 2 files, 1 list`. | Observed/current | Not a turn summary. |
+| Bundle summary, commands | `[shimmer]Running[/shimmer] 2 commands`; latest running command expands to output. | `Running 2 commands`. | Observed/current | Active tail targets latest expandable bundle summary or leaf row. |
+| Bundle summary, completed before boundary | `[muted]Explored 2 files, 1 list[/muted]`; same-type completed bundle inside an unfinished assistant step. | `Explored 2 files, 1 list`. | Agreed intent | Merges into the step summary at the next assistant-message boundary. |
 | Unknown fallback | Low-confidence current fallback. Avoid for active tails. | `Worked on N items`. | Known follow-up | Parallel audit is being started to enumerate and eliminate avoidable fallback paths. |
 
 ### File Operation Titles
@@ -285,15 +234,15 @@ motion, affordance placement, expansion defaults, and warning/error treatment.
 | --- | --- | --- | --- | --- |
 | Running command detail | `$ <command>` first, then streaming output. Row title: `[shimmer]Running[/shimmer] [em]<command>[/em] <duration if over 1s>`. | `$ <command>`, output stream. | Agreed intent | Exit appears once terminal. |
 | Completed command detail | Command first, output next, exit last. Row title stays neutral/muted. | `$ <command>`, output, `exit 0`. | Agreed intent | Exit code is always shown. |
-| Failed command detail | Title keeps neutral/muted terminal-command treatment, for example `[muted]Ran [em]<command>[/em] 2s[/muted]`. Failure is shown through output and `exit <code>`. | `$ <command>`, failure output, `exit 1`. | Agreed intent | Failure is terminal work, not a new row kind. |
+| Failed command detail | Title is muted with status suffix: `[muted]Ran [em]<command>[/em] 2s (error)[/muted]`. Suffix carries the status tone; the rest of the title stays neutral/muted. Detail still shows output and `exit <code>`. | `$ <command>`, failure output, `exit 1`. | Agreed intent | Status suffix is the same one rule across success, error, denied, interrupted. |
 | Approval command detail | Row title: `[shimmer]Waiting for approval[/shimmer] for [em]<command>[/em]`; no fake output. | `$ git push origin main`. | Agreed intent / needs audit | CLI leaf title needs audit. |
 
 ### System And Interaction Rows
 
 | Concept | Semantic model | App visible treatment | CLI text | Status | Notes / follow-up |
 | --- | --- | --- | --- | --- | --- |
-| Approval summary | pending/resolving approval lifecycle | Waiting treatment and expanded actionable row. Resolving uses ongoing motion until terminal. | `Waiting for approval on 1 command`; `Delivering approval for Bash`. | Agreed intent | Denied/expired are terminal and not animated. |
-| Context compaction | context compaction item/system event | Pending title uses ongoing motion on the full title. Completed is static and usually non-expandable. | `Compacting context`; `Context compacted`. | Agreed intent / needs audit | Prefer this over `Context compacting...` if implementation audit confirms path. |
+| Approval summary | pending/resolving approval lifecycle | Waiting treatment and expanded actionable row. Resolving uses shimmer until terminal. | `Waiting for approval on 1 command`; `Delivering approval for Bash`. | Agreed intent | Denied/expired are terminal and not animated. |
+| Context compaction | context compaction item/system event | Pending title uses shimmer on the full title. Completed is static and usually non-expandable. | `Compacting context`; `Context compacted`. | Agreed intent / needs audit | Prefer this over `Context compacting...` if implementation audit confirms path. |
 | Manager assignment | system operation | Single non-expandable system row unless detail adds value. | `Thread assigned to manager`. | Observed/current | Names/links require typed metadata. |
 | Loading/retry | client-local load state | Skeleton/spinner, not work shimmer. Retry row uses warning treatment and action affordance. | Usually omitted unless interactive; otherwise `Loading turn...` / retry text. | Agreed intent | Not durable timeline work. |
 | Global activity | thread/global activity state | Tail indicator adjacent to timeline content: `Working...`, `Waiting for approval`, `Reconnecting...`. | Usually omitted if active rows already show state. | Needs audit | Distinct from row-level durable work. |
@@ -303,13 +252,13 @@ motion, affordance placement, expansion defaults, and warning/error treatment.
 | Lifecycle | App visible treatment | CLI text/rendering | Default expansion | Status |
 | --- | --- | --- | --- | --- |
 | Loading | Client-local skeleton or spinner. Muted. Never shimmer like agent work. | Usually omitted unless interactive; otherwise `Loading ...`. | Inline placeholder, no children. | Agreed intent |
-| Pending | Ongoing motion on the whole title or label, not only a prefix. | `waiting` status or explicit waiting title. | Auto-expand if actionable. | Agreed intent |
-| Resolving | Ongoing motion until terminal. | `resolving` or `delivering`, not `running`. | Auto-expand until terminal. | Agreed intent |
-| Active | Ongoing motion on the title/label. Active leaf output is visible when useful. | `running` status and live title. | Auto-expand active leaf and bundle summary. | Agreed intent |
-| Retryable error | Retry affordance; no ongoing motion. | `Retry: <thing>` line if shown. | Expanded retry affordance visible. | Agreed intent |
+| Pending | Shimmer on the whole title or label, not only a prefix. | `waiting` status or explicit waiting title. | Auto-expand if actionable. | Agreed intent |
+| Resolving | Shimmer until terminal. | `resolving` or `delivering`, not `running`. | Auto-expand until terminal. | Agreed intent |
+| Active | Shimmer on the title/label. Active leaf output is visible when useful. | `running` status and live title. | Auto-expand active leaf and bundle summary. | Agreed intent |
+| Retryable error | Retry affordance; no shimmer. | `Retry: <thing>` line if shown. | Expanded retry affordance visible. | Agreed intent |
 | Error | Problem detail visible without hunting through output. | `error` or `exit N`; detail visible in verbose. | Auto-expand problem detail. | Agreed intent |
 | Interrupted | Muted/interrupted treatment, not fatal error styling. | `interrupted`. | Expanded only if detail explains interruption. | Agreed intent |
-| Completed | Static. Step summaries and single successful leaves are muted when branch-current. | `completed` suffix only where status matters. | Collapsed unless user expanded or policy keeps detail. | Branch-current for muted single leaves. |
+| Completed | Static. Step summaries and single successful leaves render muted. | `completed` suffix only where status matters. | Collapsed unless user expanded or policy keeps detail. | Observed/current. |
 
 ## Spacing, Indent, And Nesting Rules
 
@@ -427,7 +376,7 @@ Nested delegation/subagent timeline:
   |     $ rg -n "shimmerPrefix" packages
   |
   [ ] Assistant
-      I found the content-only title motion bug.
+      I found the content-only shimmer bug.
 .
 [ ] Assistant
     Started the worker and linked it to the manager plan.
@@ -556,8 +505,9 @@ Rules:
 - The user request that starts the turn is outside the completed turn summary.
 - Assistant messages and work produced within that turn are inside the expanded
   `Worked for <duration>` block.
-- Final assistant placement at the turn-summary boundary remains an open product
-  question; examples should not lock that behavior.
+- The final assistant message of the turn renders outside the turn summary, as
+  a sibling after `Worked for <duration>`. Earlier in-turn assistant messages
+  remain inside the block.
 - Parent-to-child spacing is tight; child rows share one nested rail.
 
 ### Active Streaming Progression
@@ -729,10 +679,11 @@ Rules:
   summary.
 - Step summaries are muted and collapsed unless user expanded, problem policy
   expands, or CLI verbose mode is selected.
-- One-child step summaries are not the intended default. If implementation still
-  creates them, capture that as a follow-up audit.
-- Completed assistant-boundary placement remains an open product question when
-  assistant messages split work into multiple steps.
+- One-child step summaries do not exist; single terminal work rows render as
+  muted leaves regardless of status (Q1).
+- Each assistant-message boundary inside an unfinished turn closes the current
+  step. Completed work between two assistant messages becomes one muted step
+  summary; the next assistant message is a sibling after it.
 
 ### Nested Subagent Timeline
 
@@ -914,7 +865,7 @@ Rules:
 - `pending` means waiting for a user or provider.
 - `resolving` means the answer exists and is being delivered/reconciled.
 - Banner/global copy and row title copy must use the same lifecycle vocabulary.
-- Denied is terminal and should not use ongoing motion.
+- Denied is terminal and should not use shimmer.
 
 ### Manager Assignment
 
@@ -998,10 +949,9 @@ Pending optimistic steer:
 
 Rules:
 
-- Branch-current from `thr_c2wjru47fm`: pending steers are
-  shared semantic conversation rows, not an app-only side channel.
+- Pending steers are shared semantic conversation rows, not an app-only side channel.
 - Pending steers sit at the active tail and should not be buried in a step
-  summary or bundle summary. The pending label has ongoing motion.
+  summary or bundle summary. The pending label has shimmer.
 - Accepted steers are conversation rows. Observed/current behavior can split
   completed turn groups; this remains an open question.
 - Current CLI labels are `steer` / `steer pending`; agreed shared copy is
@@ -1039,7 +989,7 @@ Interrupted:
 Rules:
 
 - Prefer `Compacting context` over `Context compacting...` for title grammar.
-- Pending compaction uses ongoing title motion even though system rows have no
+- Pending compaction uses shimmer even though system rows have no
   prefix segment.
 - Completed compaction is static and usually non-expandable.
 
@@ -1089,7 +1039,7 @@ Rules:
 | Step summary | Assistant step has completed work and reaches an assistant-message boundary. | Collapsed and muted unless expanded, problem, or verbose. | Aggregates completed work types: `Explored...`, `Ran...`, `edited...`. |
 | Bundle summary | Similar work belongs to the current unfinished assistant step. | Active form expands enough to expose the live child; completed-before-boundary form can collapse same-type completed leaves. | Active title: `Exploring...` or `Running...`; completed-before-boundary title: `Explored...`. Never `Worked for` or `Working on`. |
 | Single active work leaf | One current work row exists. | Auto-expanded if detail explains live state. | Show the leaf directly instead of wrapping it. |
-| Single completed successful work | One completed successful work row exists. | Muted direct leaf. | Branch-current from `thr_c2wjru47fm`; avoid one-child step summaries. |
+| Single terminal work row | One completed work row exists, any terminal status (success, error, denied, interrupted). | Muted direct leaf. Status suffix `(error)`, `(denied)`, `(interrupted)` appended to title for non-success. | One rule for all terminal statuses; no summary wrapper around a single child. |
 | Completed bundle summary before step boundary | Same-type work has completed but no new assistant message has closed the step. | Muted/collapsed; no shimmer. | Still a bundle summary, not the all-type step summary. Exact implementation support needs audit. |
 | Failed or interrupted child | Child failed or was interrupted. | Show the problem even inside step summaries or bundle summaries. | Problem detail must not disappear behind muted completed treatment. |
 | Approval work row | Waiting/resolving user interaction exists. | Auto-expanded while actionable. | Approval is actionable, not low-value work noise. |
@@ -1102,11 +1052,11 @@ Rules:
 
 | Area | Shared model/policy | App visible treatment | CLI text/rendering | Notes |
 | --- | --- | --- | --- | --- |
-| Row concepts | Same row kinds, status vocabulary, and grouping boundaries. | Icons, affordances, hover/focus, color, motion, and emphasis carry much of the meaning. | Labels, suffixes, separators, and indentation carry the meaning. | Visible copy aligns only when the surfaces intentionally show the same string. |
+| Row concepts | Same row kinds, status vocabulary, and grouping boundaries. | Icons, affordances, hover/focus, color, shimmer, and emphasis carry much of the meaning. | Labels, suffixes, separators, and indentation carry the meaning. | Visible copy aligns only when the surfaces intentionally show the same string. |
 | Conversation messages | Same semantic row kinds and ordering. | Content-first; no literal `User` / `Assistant` title. Copy and steer affordances live with the row. | Can print speaker labels in transcript/debug modes. | This is the main App/CLI divergence. |
 | Turn summary | Finished-turn lazy detail contract. | Historical row `Worked for <duration>`; static, collapsed when old. | Same text with nested detail in verbose/expanded mode. | Not used for active work. |
 | Step summary | Completed work at assistant boundary. | Muted row; lower visual priority than active work. | Example: `Explored 2 files, 1 list, edited 1 file`; collapsed by default unless verbose/problem. | Not the same as turn summary. |
-| Bundle summary | Same-type grouping inside an unfinished assistant step. | Active form uses ongoing motion and keeps live child visible; completed-before-boundary form is muted/collapsed. | Active title such as `Exploring 2 files`; completed-before-boundary title such as `Explored 2 files`. | Not `Working on N items` or a turn summary. |
+| Bundle summary | Same-type grouping inside an unfinished assistant step. | Active form uses shimmer and keeps live child visible; completed-before-boundary form is muted/collapsed. | Active title such as `Exploring 2 files`; completed-before-boundary title such as `Explored 2 files`. | Not `Working on N items` or a turn summary. |
 | Expansion defaults | Same policy for active tail, pending, error, and lazy turns. | Persist manual expansion; auto-expand active/actionable rows. | Minimal vs verbose/audit modes control detail volume. | Active tail targets latest expandable active leaf or bundle summary. |
 | Nesting | Same parent-child model and order. | Rail and pixel indentation; no nested cards. | Two-space indentation and `|` rail in ASCII/debug. | Child timeline ids are scoped. |
 | Command/file details | Same ordering: title, command or path, detail, exit/diff. | Can clamp or virtualize output; object emphasis should be consistent. | Truncate with explicit notices in audit mode. | Exact emphasis tokens need design audit. |
@@ -1116,38 +1066,20 @@ Rules:
 | Global activity | Same state source. | Tail indicator adjacent to timeline content. | Usually omitted if active rows already show running state. | Keep distinct from durable work rows. |
 | Loading/retry | Client loading is not durable work. | Skeleton/spinner and retry affordance; no work shimmer. | Usually omitted unless interactive. | Loading rows are not grouped into step summaries or bundle summaries. |
 
-## In-Flight Timeline Changes
-
-Use this table as the source-of-truth check before treating an example as
-current behavior. Newer shippability work overrides older review/legacy branches.
-
-| Thread | Branch | Head | Behavior area | Spec treatment | Open question |
-| --- | --- | --- | --- | --- | --- |
-| `thr_c2wjru47fm` | `bb/timeline-ui-behavior-consistency-follow-ups-thr_c2wjru47fm` | `3153cd7e` | Active leaf visibility, active-tail expansion predicate, pending steer shared rows, completed-single muted leaf, web result suppression, loading/shimmer/`Working...` placement, ownership/manager row wording. | Treat as branch-current behavior to reconcile against this review model. Updates affect grouping model, visible-copy matrices, streaming examples, steers, web rows, loading, and manager assignment. | Completed assistant-boundary placement still needs explicit product choice. |
-| `thr_8drzzydfdy` | `bb/timeline-isolated-ladle-row-stories-impl-thr_8drzzydfdy` | `70c6e8fb` | Isolated Ladle row stories and reusable fixtures for tool/web/delegation errors, interrupted rows, debug/system rows, attachments, approvals. | Use as concrete visual/reference coverage after reconciling with this spec. Do not treat story fixtures as independent product intent. | None new. |
-| `thr_nqakvta53m` | `bb/timeline-projection-error-main-worker-thr_nqakvta53m` / `bb/fix-timeline-projection-error-thr_nqakvta53m` | `a8b85298` | Projection/protocol reliability: daemon event ingestion, sequence corruption, event-buffer retries, manager nudge revalidation. | Mostly not layout material. Relevant only as a guarantee that row order and lifecycle data are stable enough for this layout. | None for layout. |
-| `thr_98ajm2vnvw` | `bb/timeline-ascii-layout-artifact-thr_98ajm2vnvw` | `0212949c` | Original ASCII layout artifact. | This document. Reconciled here against `thr_c2wjru47fm`; older pending-steer and completed-single examples were stale. | Narrowed below. |
-| `thr_g8takbci9n` | `bb/timeline-toolsearch-fix-main-worker-thr_g8takbci9n` | `2c611030` | ToolSearch/tool-call suppression, provider status noise, patch metadata lines, manager standard system visibility, web/search/tool labels. | Branch-dependent unless confirmed as still merge-target. Use only for historical label context here. | Confirm whether superseded by shippability branch before updating spec from it. |
-| `thr_nknt8eykb6` | `bb/timeline-turn-summary-details-main-worker-thr_nknt8eykb6` | `f49ae132` | Lazy turn summary/details loading and details contract behavior. | Relevant to loading/retry and historical turn expansion sections. Mark current-vs-branch behavior if product code diverges. | None found. |
-| unknown contract companion | `bb/timeline-turn-summary-details-contract-thr` | `14193920` | Server-contract side of turn summary details. | Same as above. | None found. |
-| review-only | `bb/review-timeline-bundle-unification-thr_2mp6rkmsxy`, `bb/review-timeline-bundle-unification-thr_sxrbtxeqnx` | `fbfc6126`, `cdc9566e` | Older bundle-unification review context. | Historical only. Do not override newer shippability decisions. | Legacy branch status only. |
-
 ## Open Questions
 
-1. Should step summaries be split exactly at assistant-message
-   boundaries, or can adjacent completed work merge across boundaries?
-2. Should accepted steers continue to split finished-turn grouping as visible
+1. Should accepted steers continue to split finished-turn grouping as visible
    conversation rows?
-3. Should manager assignment rows include manager names, links, avatars, or only
+2. Should manager assignment rows include manager names, links, avatars, or only
    non-expandable status text?
-4. Should command and file approval interactions emit explicit `resolving`
+3. Should command and file approval interactions emit explicit `resolving`
    timeline rows, or should resolving remain banner/global-only?
-5. Should nested subagent timelines always be expandable inside the delegation
+4. Should nested subagent timelines always be expandable inside the delegation
    row, or should historical child timelines collapse to a one-line child turn
    summary first?
-6. Should CLI minimal mode print active global `Working...`, or rely entirely on
+5. Should CLI minimal mode print active global `Working...`, or rely entirely on
    row-level active titles?
-7. Should context compaction wording change globally to `Compacting context` /
+6. Should context compaction wording change globally to `Compacting context` /
    `Context compacted`, and should all ongoing system rows animate the full
    title?
 8. Should web search/fetch stay grouped with local exploration when adjacent, or

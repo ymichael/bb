@@ -1,27 +1,51 @@
 // @vitest-environment jsdom
 
 import { renderToStaticMarkup } from "react-dom/server";
+import { act } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type {
   TimelineTitle,
   TimelineTitleAction,
+  TimelineTitleDecoration,
+  TimelineTitleSegment,
 } from "@bb/thread-view";
 import { TimelineTitleView } from "../src/thread-timeline/TimelineTitleView.js";
 
-type TimelineTitleOverrides = Partial<TimelineTitle>;
+interface TitleArgs {
+  segments: TimelineTitleSegment[];
+  decorations?: TimelineTitleDecoration[];
+  tone?: TimelineTitle["tone"];
+  action?: TimelineTitleAction | null;
+  plain?: string;
+}
 
-function title(parts: TimelineTitleOverrides): TimelineTitle {
+function title({
+  segments,
+  decorations = [],
+  tone = "default",
+  action = null,
+  plain,
+}: TitleArgs): TimelineTitle {
   return {
-    action: null,
-    content: "pnpm exec turbo run test --filter=@bb/app",
-    contentTone: "emphasis",
-    motion: "none",
-    plain: "Ran pnpm exec turbo run test --filter=@bb/app 2s",
-    prefix: "Ran",
-    suffix: { kind: "text", text: "2s", truncate: false },
-    tone: "default",
-    ...parts,
+    segments,
+    decorations,
+    tone,
+    action,
+    plain: plain ?? segments.map((s) => s.text).join(" "),
+  };
+}
+
+function seg(
+  text: string,
+  opts: Partial<Omit<TimelineTitleSegment, "text">> = {},
+): TimelineTitleSegment {
+  return {
+    text,
+    em: opts.em ?? false,
+    shimmer: opts.shimmer ?? false,
+    truncate: opts.truncate ?? false,
+    ...(opts.plainText !== undefined ? { plainText: opts.plainText } : {}),
   };
 }
 
@@ -35,14 +59,24 @@ afterEach(() => {
 });
 
 describe("TimelineTitleView", () => {
-  it("truncates the content segment while keeping prefix and duration fixed", () => {
+  it("truncates the em segment while keeping non-em segments and decorations fixed", () => {
     const html = renderToStaticMarkup(
-      <TimelineTitleView title={title({})} />,
+      <TimelineTitleView
+        title={title({
+          segments: [
+            seg("Ran"),
+            seg("pnpm exec turbo run test --filter=@bb/app", {
+              em: true,
+              truncate: true,
+            }),
+          ],
+          decorations: [{ kind: "duration", durationMs: 2_100, live: false }],
+          plain: "Ran pnpm exec turbo run test --filter=@bb/app 2s",
+        })}
+      />,
     );
 
     expect(html).toContain("shrink-0 whitespace-pre");
-    expect(html).not.toContain("leading-none");
-    expect(html).not.toContain("leading-4");
     expect(html).toContain("leading-5");
     expect(html).toContain(">Ran</span>");
     expect(html).toContain("min-w-0 truncate");
@@ -50,15 +84,20 @@ describe("TimelineTitleView", () => {
     expect(html).toContain(">2s</span>");
   });
 
-  it("uses the full plain title as the browser title while rendering compact content", () => {
+  it("uses the full plain title as the browser title while rendering compact text", () => {
     const html = renderToStaticMarkup(
       <TimelineTitleView
         title={title({
-          content: "appSettingsAtoms.ts",
-          contentTone: "muted",
+          segments: [
+            seg("Created"),
+            seg("appSettingsAtoms.ts", {
+              em: true,
+              truncate: true,
+              plainText: "apps/app/src/state/appSettingsAtoms.ts",
+            }),
+          ],
+          decorations: [{ kind: "diff-stats", added: 16, removed: 0 }],
           plain: "Created apps/app/src/state/appSettingsAtoms.ts +16",
-          prefix: "Created",
-          suffix: { kind: "diff-stats", added: 16, removed: 0 },
         })}
       />,
     );
@@ -72,26 +111,31 @@ describe("TimelineTitleView", () => {
     );
   });
 
-  it("allows long suffix metadata to shrink and truncate", () => {
+  it("allows truncating segments to shrink with ellipsis", () => {
     const html = renderToStaticMarkup(
       <TimelineTitleView
         title={title({
-          content: "Review correctness + plan adherence",
+          segments: [
+            seg("Ran subagent"),
+            seg("Review correctness + plan adherence", {
+              em: true,
+              truncate: true,
+            }),
+            seg("(general-purpose-with-long-provider-controlled-name)", {
+              em: false,
+              truncate: true,
+            }),
+          ],
+          decorations: [{ kind: "duration", durationMs: 45_000, live: false }],
           plain:
-            "Ran subagent: Review correctness + plan adherence (general-purpose-with-long-provider-controlled-name) 45s",
-          prefix: "Ran subagent:",
-          suffix: {
-            kind: "text",
-            text: "(general-purpose-with-long-provider-controlled-name) 45s",
-            truncate: true,
-          },
+            "Ran subagent Review correctness + plan adherence (general-purpose-with-long-provider-controlled-name) 45s",
         })}
       />,
     );
 
     expect(html).toContain("min-w-0 truncate whitespace-pre");
     expect(html).toContain(
-      "(general-purpose-with-long-provider-controlled-name) 45s",
+      "(general-purpose-with-long-provider-controlled-name)",
     );
   });
 
@@ -99,10 +143,12 @@ describe("TimelineTitleView", () => {
     const html = renderToStaticMarkup(
       <TimelineTitleView
         title={title({
-          content: "react-perf-audit.md",
+          segments: [
+            seg("Deleted"),
+            seg("react-perf-audit.md", { em: true, truncate: true }),
+          ],
+          decorations: [{ kind: "diff-stats", added: 0, removed: 39 }],
           plain: "Deleted react-perf-audit.md -39",
-          prefix: "Deleted",
-          suffix: { kind: "diff-stats", added: 0, removed: 39 },
         })}
       />,
     );
@@ -116,11 +162,9 @@ describe("TimelineTitleView", () => {
     const html = renderToStaticMarkup(
       <TimelineTitleView
         title={title({
-          content: "Explored 3 files, 2 searches",
-          contentTone: "muted",
-          plain: "Explored 3 files, 2 searches",
-          prefix: null,
-          suffix: null,
+          segments: [
+            seg("Explored 3 files, 2 searches", { em: false, truncate: true }),
+          ],
           tone: "summary",
         })}
       />,
@@ -130,15 +174,11 @@ describe("TimelineTitleView", () => {
     expect(html).not.toContain("font-semibold");
   });
 
-  it("applies ongoing motion to content-only titles", () => {
+  it("applies shimmer to a single content-only segment", () => {
     render(
       <TimelineTitleView
         title={title({
-          content: "Provisioning thread",
-          motion: "shimmer",
-          plain: "Provisioning thread",
-          prefix: null,
-          suffix: null,
+          segments: [seg("Provisioning thread", { shimmer: true })],
         })}
       />,
     );
@@ -148,10 +188,13 @@ describe("TimelineTitleView", () => {
     );
   });
 
-  it("renders title content as a plain span when no resolver is provided", () => {
+  it("renders em segments as plain spans when no resolver is provided", () => {
     render(
       <TimelineTitleView
-        title={title({ content: "src/foo.ts", action: fileDiffAction })}
+        title={title({
+          segments: [seg("src/foo.ts", { em: true, truncate: true })],
+          action: fileDiffAction,
+        })}
       />,
     );
 
@@ -162,12 +205,15 @@ describe("TimelineTitleView", () => {
     expect(node.getAttribute("tabindex")).toBeNull();
   });
 
-  it("renders title content as a plain span when the resolver returns null", () => {
+  it("renders em segments as plain spans when the resolver returns null", () => {
     const resolver = vi.fn(() => null);
 
     render(
       <TimelineTitleView
-        title={title({ content: "src/foo.ts", action: fileDiffAction })}
+        title={title({
+          segments: [seg("src/foo.ts", { em: true, truncate: true })],
+          action: fileDiffAction,
+        })}
         onTitleAction={resolver}
       />,
     );
@@ -176,10 +222,13 @@ describe("TimelineTitleView", () => {
     expect(screen.queryByRole("link")).toBeNull();
   });
 
-  it("renders title content as a focusable role=link and never as a nested <button>", () => {
+  it("renders em segments as a focusable role=link and never a nested button", () => {
     render(
       <TimelineTitleView
-        title={title({ content: "src/foo.ts", action: fileDiffAction })}
+        title={title({
+          segments: [seg("src/foo.ts", { em: true, truncate: true })],
+          action: fileDiffAction,
+        })}
         onTitleAction={() => () => {}}
       />,
     );
@@ -194,7 +243,10 @@ describe("TimelineTitleView", () => {
     const onAction = vi.fn();
     render(
       <TimelineTitleView
-        title={title({ content: "src/foo.ts", action: fileDiffAction })}
+        title={title({
+          segments: [seg("src/foo.ts", { em: true, truncate: true })],
+          action: fileDiffAction,
+        })}
         onTitleAction={() => onAction}
       />,
     );
@@ -208,7 +260,10 @@ describe("TimelineTitleView", () => {
     const onAction = vi.fn();
     render(
       <TimelineTitleView
-        title={title({ content: "src/foo.ts", action: fileDiffAction })}
+        title={title({
+          segments: [seg("src/foo.ts", { em: true, truncate: true })],
+          action: fileDiffAction,
+        })}
         onTitleAction={() => onAction}
       />,
     );
@@ -224,7 +279,10 @@ describe("TimelineTitleView", () => {
     const onAction = vi.fn();
     render(
       <TimelineTitleView
-        title={title({ content: "src/foo.ts", action: fileDiffAction })}
+        title={title({
+          segments: [seg("src/foo.ts", { em: true, truncate: true })],
+          action: fileDiffAction,
+        })}
         onTitleAction={() => onAction}
       />,
     );
@@ -241,13 +299,45 @@ describe("TimelineTitleView", () => {
 
     render(
       <TimelineTitleView
-        title={title({ content: "src/foo.ts", action: null })}
+        title={title({
+          segments: [seg("src/foo.ts", { em: true, truncate: true })],
+          action: null,
+        })}
         onTitleAction={resolver}
       />,
     );
 
     expect(resolver).not.toHaveBeenCalled();
     expect(screen.queryByRole("link")).toBeNull();
+  });
+
+  it("ticks live duration forward without re-rendering from the server", () => {
+    vi.useFakeTimers();
+    try {
+      const baselineMs = 2_100;
+      const liveTitle = title({
+        segments: [
+          seg("Running", { shimmer: true }),
+          seg("pnpm test", { em: true, truncate: true }),
+        ],
+        decorations: [
+          { kind: "duration", durationMs: baselineMs, live: true },
+        ],
+      });
+
+      render(<TimelineTitleView title={liveTitle} />);
+
+      expect(screen.getByText("2s")).toBeTruthy();
+
+      act(() => {
+        vi.advanceTimersByTime(3_000);
+      });
+
+      // baseline 2.1s + 3s tick = 5.1s, formatted as "5s"
+      expect(screen.getByText("5s")).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("stops click and keyboard propagation so the surrounding row header doesn't toggle", () => {
@@ -258,7 +348,10 @@ describe("TimelineTitleView", () => {
     render(
       <div onClick={onWrapperClick} onKeyDown={onWrapperKeyDown}>
         <TimelineTitleView
-          title={title({ content: "src/foo.ts", action: fileDiffAction })}
+          title={title({
+            segments: [seg("src/foo.ts", { em: true, truncate: true })],
+            action: fileDiffAction,
+          })}
           onTitleAction={() => onAction}
         />
       </div>,

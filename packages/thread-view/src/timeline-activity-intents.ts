@@ -17,12 +17,6 @@ type TimelineReadActivityIntent = Extract<
   { type: "read" }
 >;
 
-export interface FormatTimelineActivityIntentTitleArgs {
-  intent: TimelineActivityIntent;
-  pathMode: TimelinePathDisplayMode;
-  pending: boolean;
-}
-
 export interface FormatTimelineActivityIntentDetailArgs {
   intent: TimelineActivityIntent;
   pathMode: TimelinePathDisplayMode;
@@ -40,13 +34,10 @@ export interface FormatTimelineActivityIntentDetailPartsArgs {
   pending: boolean;
 }
 
-type TimelineActivityIntentTextRole = "detail" | "title";
-
 interface FormatTimelineActivityIntentTextArgs {
   intent: TimelineActivityIntent;
   pathMode: TimelinePathDisplayMode;
   pending: boolean;
-  role: TimelineActivityIntentTextRole;
 }
 
 export function primaryTimelineActivityIntent(
@@ -74,21 +65,6 @@ function formatReadTarget(
   return formatTimelinePath({ path: readTarget(intent), mode: pathMode });
 }
 
-export function formatTimelineActivityIntentTitle({
-  intent,
-  pathMode,
-  pending,
-}: FormatTimelineActivityIntentTitleArgs): string {
-  return joinTimelineActivityIntentTextParts(
-    formatTimelineActivityIntentText({
-      intent,
-      pathMode,
-      pending,
-      role: "title",
-    }),
-  );
-}
-
 export function formatTimelineActivityIntentDetail({
   intent,
   pathMode,
@@ -104,12 +80,7 @@ export function formatTimelineActivityIntentDetailParts({
   pathMode,
   pending,
 }: FormatTimelineActivityIntentDetailPartsArgs): TimelineActivityIntentTextParts {
-  return formatTimelineActivityIntentText({
-    intent,
-    pathMode,
-    pending,
-    role: "detail",
-  });
+  return formatTimelineActivityIntentText({ intent, pathMode, pending });
 }
 
 function joinTimelineActivityIntentTextParts({
@@ -123,7 +94,6 @@ function formatTimelineActivityIntentText({
   intent,
   pathMode,
   pending,
-  role,
 }: FormatTimelineActivityIntentTextArgs): TimelineActivityIntentTextParts {
   switch (intent.type) {
     case "read": {
@@ -134,12 +104,6 @@ function formatTimelineActivityIntentText({
     }
     case "list_files": {
       const verb = pending ? "Listing" : "Listed";
-      if (role === "title") {
-        return {
-          prefix: verb,
-          content: intent.path ?? "files",
-        };
-      }
       return {
         prefix: verb,
         content: intent.path ? `files in ${intent.path}` : "files",
@@ -147,34 +111,22 @@ function formatTimelineActivityIntentText({
     }
     case "search": {
       const verb = pending ? "Searching" : "Searched";
-      if (role === "title") {
-        if (intent.path) {
-          return {
-            prefix: verb,
-            content: intent.path,
-          };
-        }
-        return {
-          prefix: verb,
-          content: intent.query ?? "files",
-        };
-      }
       if (intent.query && intent.path) {
         return {
           prefix: verb,
           content: `for ${intent.query} in ${intent.path}`,
         };
       }
-      if (intent.path) {
-        return {
-          prefix: verb,
-          content: `in ${intent.path}`,
-        };
-      }
       if (intent.query) {
         return {
           prefix: verb,
           content: `for ${intent.query}`,
+        };
+      }
+      if (intent.path) {
+        return {
+          prefix: verb,
+          content: `in ${intent.path}`,
         };
       }
       return {

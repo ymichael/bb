@@ -13,6 +13,7 @@ import { assertNever } from "./assert-never.js";
 import {
   formatFileChangePath,
   getFileChangeAction,
+  getFileChangeActionInfinitive,
   getFileChangeActionPastTense,
   getFileChangeActionPresentTense,
 } from "./file-change-summary.js";
@@ -24,7 +25,8 @@ import {
   type TimelineExplorationWorkRow,
 } from "./timeline-activity-intents.js";
 import {
-  buildTimelineWorkSummaryLabel,
+  buildTimelineWorkSummaryLabelParts,
+  isTimelineStepBoundary,
   type ThreadTimelineViewRow,
   type TimelineWorkSummaryRow,
   type TimelineViewDelegationWorkRow,
@@ -33,20 +35,43 @@ import {
 } from "./timeline-view.js";
 
 export type TimelineTitleTone = "default" | "destructive" | "summary";
-export type TimelineTitleContentTone = "emphasis" | "muted";
-export type TimelineTitleMotion = "none" | "shimmer";
 
-export type TimelineTitleSuffix =
+/**
+ * One slice of the title's text. Renderers walk the segment list and apply
+ * `em`/`shimmer`/`truncate` per slice. There is no implicit "prefix vs content"
+ * positional meaning — segment order is the only positional cue.
+ */
+export interface TimelineTitleSegment {
+  text: string;
+  /** Optional plain-text override for CLI rendering. Defaults to `text`. */
+  plainText?: string;
+  em: boolean;
+  shimmer: boolean;
+  truncate: boolean;
+}
+
+export type TimelineTitleDecoration =
   | {
-      kind: "text";
-      text: string;
-      truncate: boolean;
+      kind: "duration";
+      durationMs: number;
+      /**
+       * `true` when the row is still actively running and the App should
+       * tick the duration locally between server snapshots. CLI rendering
+       * always shows the static `durationMs`.
+       */
+      live: boolean;
     }
   | {
-      kind: "diff-stats";
-      added: number;
-      removed: number;
-    };
+      kind: "status";
+      status: "error" | "interrupted";
+      durationMs: number | null;
+    }
+  | {
+      kind: "summary-status";
+      errorCount: number;
+      interruptedCount: number;
+    }
+  | { kind: "diff-stats"; added: number; removed: number };
 
 /**
  * Describes what the title's content semantically represents when it's also an
@@ -61,41 +86,29 @@ export type TimelineTitleAction = {
 };
 
 export interface TimelineTitle {
-  /**
-   * When set, the title's `content` represents an actionable target. Renderers
-   * MAY surface the action (e.g. as a clickable button) when a handler is
-   * available; when no handler is available, the content renders as plain
-   * text.
-   */
-  action: TimelineTitleAction | null;
-  content: string;
-  contentTone: TimelineTitleContentTone;
-  motion: TimelineTitleMotion;
-  plain: string;
-  prefix: string | null;
-  suffix: TimelineTitleSuffix | null;
+  segments: TimelineTitleSegment[];
+  decorations: TimelineTitleDecoration[];
   tone: TimelineTitleTone;
+  action: TimelineTitleAction | null;
+  /** CLI plain rendering — segments + decorations joined per `renderTitlePlain`. */
+  plain: string;
 }
 
 export interface BuildTimelineRowTitleOptions {
   summaryStyle: "bundle" | "background";
   workStyle: "default" | "summary";
+  /**
+   * Whether this row is the open step's currently-active bundle. Determined by
+   * the list-level renderer that walks the row sequence; only bundles that are
+   * the latest bundle-summary in the trailing open step set this to `true`.
+   * Defaults to `false` so non-bundle rows and displaced bundles render past.
+   */
+  isActiveLatestBundle?: boolean;
 }
 
 export interface TimelineActivityIntentTitle {
   id: string;
   title: TimelineTitle;
-}
-
-interface TitlePartsArgs {
-  action?: TimelineTitleAction | null;
-  content: string;
-  contentTone?: TimelineTitleContentTone;
-  motion?: TimelineTitleMotion;
-  plainContent?: string;
-  prefix?: string | null;
-  suffix?: TimelineTitleSuffix | null;
-  tone?: TimelineTitleTone;
 }
 
 interface BuildTimelineActivityIntentTitleArgs {
@@ -119,111 +132,146 @@ type TimelineConversationViewRow = Extract<
   { kind: "conversation" }
 >;
 
-function plainSuffixText(suffix: TimelineTitleSuffix | null): string {
-  if (!suffix) {
-    return "";
-  }
-  switch (suffix.kind) {
-    case "text":
-      return ` ${suffix.text}`;
-    case "diff-stats": {
-      const parts = [
-        suffix.added > 0 ? `+${suffix.added}` : null,
-        suffix.removed > 0 ? `-${suffix.removed}` : null,
-      ].filter((part): part is string => part !== null);
-      return parts.length > 0 ? ` ${parts.join(" ")}` : "";
-    }
-    default:
-      return assertNever(suffix);
-  }
+interface SegmentOptions {
+  em?: boolean;
+  shimmer?: boolean;
+  truncate?: boolean;
+  plainText?: string;
 }
 
-function titleFromParts({
-  action = null,
-  content,
-  contentTone = "emphasis",
-  motion = "none",
-  plainContent,
-  prefix = null,
-  suffix = null,
-  tone = "default",
-}: TitlePartsArgs): TimelineTitle {
-  const plainContentText = plainContent ?? content;
-  const head = prefix ? `${prefix} ${plainContentText}` : plainContentText;
+function segment(text: string, opts: SegmentOptions = {}): TimelineTitleSegment {
   return {
-    action,
-    content,
-    contentTone,
-    motion,
-    plain: `${head}${plainSuffixText(suffix)}`,
-    prefix,
-    suffix,
-    tone,
+    text,
+    em: opts.em ?? false,
+    shimmer: opts.shimmer ?? false,
+    truncate: opts.truncate ?? false,
+    ...(opts.plainText !== undefined ? { plainText: opts.plainText } : {}),
   };
 }
 
-function pendingMotion(pending: boolean): TimelineTitleMotion {
-  return pending ? "shimmer" : "none";
+function filterNull<T>(values: (T | null)[]): T[] {
+  return values.filter((v): v is T => v !== null);
 }
 
-function durationSuffix(durationMs: number | null): TimelineTitleSuffix | null {
-  if (durationMs === null || durationMs <= 1_000) {
-    return null;
-  }
-  return {
-    kind: "text",
-    text: durationToCompactString(durationMs),
-    truncate: false,
-  };
+function visibleDurationMs(durationMs: number | null): number | null {
+  return durationMs !== null && durationMs > 1_000 ? durationMs : null;
 }
 
-function visibleDurationText(durationMs: number | null): string | null {
-  return durationMs === null || durationMs <= 1_000
-    ? null
-    : durationToCompactString(durationMs);
-}
-
-function metadataDurationSuffix(
-  metadata: string | null,
+function durationDecoration(
   durationMs: number | null,
-): TimelineTitleSuffix | null {
-  const duration = visibleDurationText(durationMs);
-  const parts = [metadata ? `(${metadata})` : null, duration].filter(
-    (part): part is string => part !== null,
-  );
-  if (parts.length === 0) {
-    return null;
-  }
-  return {
-    kind: "text",
-    text: parts.join(" "),
-    truncate: metadata !== null,
-  };
+  options: { live?: boolean } = {},
+): TimelineTitleDecoration | null {
+  const visible = visibleDurationMs(durationMs);
+  if (visible === null) return null;
+  return { kind: "duration", durationMs: visible, live: options.live ?? false };
 }
 
-function statusDurationSuffix(
+function statusDecoration(
   status: "error" | "interrupted",
   durationMs: number | null,
-): TimelineTitleSuffix {
-  const duration = visibleDurationText(durationMs);
-  return {
-    kind: "text",
-    text: duration ? `(${status}, ${duration})` : `(${status})`,
-    truncate: false,
-  };
+): TimelineTitleDecoration {
+  return { kind: "status", status, durationMs: visibleDurationMs(durationMs) };
 }
 
-function diffStatsSuffix(
+function summaryStatusDecoration(
+  row: TimelineWorkSummaryRow,
+): TimelineTitleDecoration | null {
+  let errorCount = 0;
+  let interruptedCount = 0;
+  for (const child of row.children) {
+    if (child.status === "error") errorCount += 1;
+    if (child.status === "interrupted") interruptedCount += 1;
+  }
+  if (errorCount === 0 && interruptedCount === 0) {
+    return null;
+  }
+  return { kind: "summary-status", errorCount, interruptedCount };
+}
+
+function diffStatsDecoration(
   change: TimelineFileChange,
-): TimelineTitleSuffix | null {
+): TimelineTitleDecoration | null {
   const { added, removed } = change.diffStats;
   if (added === 0 && removed === 0) {
     return null;
   }
+  return { kind: "diff-stats", added, removed };
+}
+
+/**
+ * Canonical text rendering for a decoration. Used by the CLI plain renderer
+ * directly and by the App renderer when it falls back to a plain text node
+ * (App may also render structured spans for tone/styling).
+ */
+export function formatTimelineDecorationText(
+  d: TimelineTitleDecoration,
+): string {
+  switch (d.kind) {
+    case "duration":
+      return `(${durationToCompactString(d.durationMs)})`;
+    case "status":
+      return d.durationMs !== null
+        ? `(${durationToCompactString(d.durationMs)}, ${d.status})`
+        : `(${d.status})`;
+    case "summary-status": {
+      const parts: string[] = [];
+      if (d.errorCount > 0) {
+        parts.push(
+          `${d.errorCount} error${d.errorCount > 1 ? "s" : ""}`,
+        );
+      }
+      if (d.interruptedCount > 0) {
+        parts.push(`${d.interruptedCount} interrupted`);
+      }
+      return parts.length === 0 ? "" : `(${parts.join(", ")})`;
+    }
+    case "diff-stats": {
+      const parts: string[] = [];
+      if (d.added > 0) parts.push(`+${d.added}`);
+      if (d.removed > 0) parts.push(`-${d.removed}`);
+      return parts.join(" ");
+    }
+    default:
+      return assertNever(d);
+  }
+}
+
+export function renderTitlePlain(
+  segments: readonly TimelineTitleSegment[],
+  decorations: readonly TimelineTitleDecoration[],
+): string {
+  const segmentsText = segments
+    .map((s) => s.plainText ?? s.text)
+    .filter((t) => t.length > 0)
+    .join(" ");
+  const decorationsText = decorations
+    .map(formatTimelineDecorationText)
+    .filter((t) => t.length > 0)
+    .join(" ");
+  if (decorationsText.length === 0) return segmentsText;
+  if (segmentsText.length === 0) return decorationsText;
+  return `${segmentsText} ${decorationsText}`;
+}
+
+interface MakeTitleArgs {
+  segments: TimelineTitleSegment[];
+  decorations?: TimelineTitleDecoration[];
+  tone?: TimelineTitleTone;
+  action?: TimelineTitleAction | null;
+}
+
+function makeTitle({
+  segments,
+  decorations = [],
+  tone = "default",
+  action = null,
+}: MakeTitleArgs): TimelineTitle {
   return {
-    kind: "diff-stats",
-    added,
-    removed,
+    segments,
+    decorations,
+    tone,
+    action,
+    plain: renderTitlePlain(segments, decorations),
   };
 }
 
@@ -240,203 +288,484 @@ function displayStatus({
   return status;
 }
 
-function executionPrefix(row: TimelineExecutionWorkRow): string {
+// ---------------------------------------------------------------------------
+// Mappers — one per row kind. Each produces a structured Title.
+// ---------------------------------------------------------------------------
+
+function mapExecutionTitle(row: TimelineExecutionWorkRow): TimelineTitle {
+  const explorationTitle = mapSingleExplorationIntentTitle(row);
+  if (explorationTitle !== null) {
+    return explorationTitle;
+  }
   const status = displayStatus({
     approvalStatus: row.approvalStatus,
     status: row.status,
   });
+  const isCommand = row.workKind === "command";
+  const content = isCommand ? row.command : row.label;
   switch (status) {
     case "waiting":
-      return row.workKind === "command"
-        ? "Waiting for approval to run"
-        : "Waiting for approval to use";
+      return makeTitle({
+        segments: [
+          segment("Waiting for approval", { shimmer: true }),
+          segment(isCommand ? "to run" : "to use"),
+          segment(content, { em: true, truncate: true }),
+        ],
+      });
     case "denied":
-      return "Permission denied:";
+      return makeTitle({
+        segments: [
+          segment("Permission denied:"),
+          segment(content, { em: true, truncate: true }),
+        ],
+        decorations: filterNull([durationDecoration(row.durationMs)]),
+        tone: "destructive",
+      });
     case "pending":
-      return row.workKind === "command" ? "Running" : "Running tool:";
+      return makeTitle({
+        segments: [
+          segment(isCommand ? "Running" : "Running tool:", { shimmer: true }),
+          segment(content, { em: true, truncate: true }),
+        ],
+        decorations: filterNull([
+          durationDecoration(row.durationMs, { live: true }),
+        ]),
+      });
     case "completed":
-      return row.workKind === "command" ? "Ran" : "Ran tool:";
+      return makeTitle({
+        segments: [
+          segment(isCommand ? "Ran" : "Ran tool:"),
+          segment(content, { em: true, truncate: true }),
+        ],
+        decorations: filterNull([durationDecoration(row.durationMs)]),
+      });
     case "error":
-      return row.workKind === "command" ? "Ran" : "Ran tool:";
+      return makeTitle({
+        segments: [
+          segment(isCommand ? "Ran" : "Ran tool:"),
+          segment(content, { em: true, truncate: true }),
+        ],
+        decorations: [statusDecoration("error", row.durationMs)],
+      });
     case "interrupted":
-      return "Interrupted";
+      return makeTitle({
+        segments: [
+          segment(isCommand ? "Ran" : "Ran tool:"),
+          segment(content, { em: true, truncate: true }),
+        ],
+        decorations: [statusDecoration("interrupted", row.durationMs)],
+      });
     default:
       return assertNever(status);
   }
 }
 
-function titleToneForExecution(
+function mapSingleExplorationIntentTitle(
   row: TimelineExecutionWorkRow,
-): TimelineTitleTone {
-  return row.approvalStatus === "denied" ? "destructive" : "default";
-}
-
-function buildExecutionTitle(row: TimelineExecutionWorkRow): TimelineTitle {
-  const prefix = executionPrefix(row);
-  const content = row.workKind === "command" ? row.command : row.label;
-  const statusSuffix =
-    row.status === "interrupted"
-        ? statusDurationSuffix("interrupted", row.durationMs)
-        : durationSuffix(row.durationMs);
-  return titleFromParts({
-    prefix,
-    content,
-    suffix: statusSuffix,
-    motion: pendingMotion(
-      row.status === "pending" && row.approvalStatus !== "denied",
-    ),
-    tone: titleToneForExecution(row),
-  });
-}
-
-function buildFileChangeTitle(row: TimelineFileChangeWorkRow): TimelineTitle {
+): TimelineTitle | null {
+  if (!hasTimelineExplorationIntent(row)) {
+    return null;
+  }
+  const knownIntents = row.activityIntents.filter(
+    (intent) => intent.type !== "unknown",
+  );
+  if (knownIntents.length !== 1) {
+    return null;
+  }
+  const intent = knownIntents[0];
+  if (!intent) {
+    return null;
+  }
   const status = displayStatus({
     approvalStatus: row.approvalStatus,
     status: row.status,
   });
-  const prefix = (() => {
-    const action = getFileChangeAction(row.change);
-    switch (status) {
-      case "waiting":
-        return "Waiting for approval to edit";
-      case "denied":
-        return "Permission denied:";
-      case "pending":
-        return getFileChangeActionPresentTense(action);
-      case "completed":
-        return getFileChangeActionPastTense(action);
-      case "error":
-        return "Failed";
-      case "interrupted":
-        return "Interrupted";
-      default:
-        return assertNever(status);
-    }
-  })();
-  return titleFromParts({
-    action: {
-      kind: "open-file-diff",
-      // For renames, the destination path is the canonical workspace location
-      // and matches what TimelineFileDiffBlock renders against.
-      path: row.change.movePath ?? row.change.path,
-    },
-    prefix,
-    content: formatFileChangePath({ change: row.change, mode: "compact" }),
-    plainContent: formatFileChangePath({ change: row.change, mode: "full" }),
-    suffix: diffStatsSuffix(row.change),
-    motion: pendingMotion(status === "pending"),
-    tone: status === "denied" || status === "error" ? "destructive" : "default",
+  const pending = status === "pending";
+  const detail = formatTimelineActivityIntentDetailParts({
+    intent,
+    pathMode: "compact",
+    pending,
   });
-}
-
-function buildWebSearchTitle(row: TimelineWebSearchWorkRow): TimelineTitle {
-  const query = row.queries.join(", ") || "web search";
-  switch (row.status) {
-    case "pending":
-      return titleFromParts({
-        prefix: "Running web search:",
-        content: query,
-        contentTone: "muted",
-        motion: "shimmer",
-      });
-    case "completed":
-      return titleFromParts({
-        prefix: "Ran web search:",
-        content: query,
-        contentTone: "muted",
-      });
-    case "error":
-      return titleFromParts({
-        prefix: "Ran web search:",
-        content: query,
-        contentTone: "muted",
-        suffix: { kind: "text", text: "error", truncate: false },
-        tone: "destructive",
-      });
-    case "interrupted":
-      return titleFromParts({
-        prefix: "Interrupted web search:",
-        content: query,
-        contentTone: "muted",
-      });
-    default:
-      return assertNever(row.status);
-  }
-}
-
-function buildWebFetchTitle(row: TimelineWebFetchWorkRow): TimelineTitle {
-  switch (row.status) {
-    case "pending":
-      return titleFromParts({
-        prefix: "Fetching:",
-        content: row.url,
-        contentTone: "muted",
-        motion: "shimmer",
-      });
-    case "completed":
-      return titleFromParts({
-        prefix: "Fetched:",
-        content: row.url,
-        contentTone: "muted",
-      });
-    case "error":
-      return titleFromParts({
-        prefix: "Fetched:",
-        content: row.url,
-        contentTone: "muted",
-        suffix: { kind: "text", text: "error", truncate: false },
-        tone: "destructive",
-      });
-    case "interrupted":
-      return titleFromParts({
-        prefix: "Interrupted fetch:",
-        content: row.url,
-        contentTone: "muted",
-      });
-    default:
-      return assertNever(row.status);
-  }
-}
-
-function buildDelegationTitle(
-  row: TimelineViewDelegationWorkRow,
-): TimelineTitle {
-  const prefix = delegationTitlePrefix(row.status);
-  const content = row.description ?? (row.output.trim() || row.toolName);
-  return titleFromParts({
-    prefix,
-    content,
-    suffix: metadataDurationSuffix(row.subagentType, row.durationMs),
-    motion: pendingMotion(row.status === "pending"),
-    tone: row.status === "error" ? "destructive" : "default",
+  const plainDetail = formatTimelineActivityIntentDetailParts({
+    intent,
+    pathMode: "full",
+    pending,
   });
+
+  if (status === "denied") {
+    const verbContent = detail.prefix
+      ? `${detail.prefix} ${detail.content}`
+      : detail.content;
+    const plainVerbContent = plainDetail.prefix
+      ? `${plainDetail.prefix} ${plainDetail.content}`
+      : plainDetail.content;
+    return makeTitle({
+      segments: [
+        segment("Permission denied:"),
+        segment(verbContent, {
+          em: true,
+          truncate: true,
+          plainText: plainVerbContent,
+        }),
+      ],
+      tone: "destructive",
+    });
+  }
+  if (status === "waiting") {
+    const verbContent = detail.prefix
+      ? `${detail.prefix} ${detail.content}`
+      : detail.content;
+    const plainVerbContent = plainDetail.prefix
+      ? `${plainDetail.prefix} ${plainDetail.content}`
+      : plainDetail.content;
+    return makeTitle({
+      segments: [
+        segment("Waiting for approval", { shimmer: true }),
+        segment("to use"),
+        segment(verbContent, {
+          em: true,
+          truncate: true,
+          plainText: plainVerbContent,
+        }),
+      ],
+    });
+  }
+
+  const segments: TimelineTitleSegment[] = [];
+  if (detail.prefix) {
+    segments.push(segment(detail.prefix, { shimmer: pending }));
+  }
+  segments.push(
+    segment(detail.content, {
+      em: false,
+      truncate: true,
+      plainText: plainDetail.content,
+    }),
+  );
+
+  const decorations: TimelineTitleDecoration[] =
+    status === "error"
+      ? [statusDecoration("error", null)]
+      : status === "interrupted"
+        ? [statusDecoration("interrupted", null)]
+        : [];
+
+  return makeTitle({ segments, decorations });
 }
 
-function delegationTitlePrefix(status: TimelineRowStatus): string {
+function mapFileChangeTitle(row: TimelineFileChangeWorkRow): TimelineTitle {
+  const status = displayStatus({
+    approvalStatus: row.approvalStatus,
+    status: row.status,
+  });
+  const action = getFileChangeAction(row.change);
+  const compactPath = formatFileChangePath({ change: row.change, mode: "compact" });
+  const fullPath = formatFileChangePath({ change: row.change, mode: "full" });
+  const titleAction: TimelineTitleAction = {
+    kind: "open-file-diff",
+    // For renames, the destination path is the canonical workspace location
+    // and matches what TimelineFileDiffBlock renders against.
+    path: row.change.movePath ?? row.change.path,
+  };
+  const pathSegment = segment(compactPath, {
+    em: true,
+    truncate: true,
+    plainText: fullPath,
+  });
+
   switch (status) {
+    case "waiting":
+      return makeTitle({
+        segments: [
+          segment("Waiting for approval", { shimmer: true }),
+          segment("to edit"),
+          pathSegment,
+        ],
+        decorations: filterNull([diffStatsDecoration(row.change)]),
+        action: titleAction,
+      });
+    case "denied":
+      return makeTitle({
+        segments: [segment("Permission denied:"), pathSegment],
+        decorations: filterNull([diffStatsDecoration(row.change)]),
+        tone: "destructive",
+        action: titleAction,
+      });
     case "pending":
-      return "Running subagent:";
+      return makeTitle({
+        segments: [
+          segment(getFileChangeActionPresentTense(action), { shimmer: true }),
+          pathSegment,
+        ],
+        decorations: filterNull([diffStatsDecoration(row.change)]),
+        action: titleAction,
+      });
     case "completed":
-      return "Ran subagent:";
+      return makeTitle({
+        segments: [
+          segment(getFileChangeActionPastTense(action)),
+          pathSegment,
+        ],
+        decorations: filterNull([diffStatsDecoration(row.change)]),
+        action: titleAction,
+      });
     case "error":
-      return "Failed subagent:";
+      return makeTitle({
+        segments: [
+          segment(`Failed to ${getFileChangeActionInfinitive(action)}`),
+          pathSegment,
+        ],
+        decorations: [statusDecoration("error", null)],
+        action: titleAction,
+      });
     case "interrupted":
-      return "Interrupted subagent:";
+      return makeTitle({
+        segments: [
+          segment(
+            `Interrupted while ${getFileChangeActionPresentTense(action).toLowerCase()}`,
+          ),
+          pathSegment,
+        ],
+        action: titleAction,
+      });
     default:
       return assertNever(status);
   }
 }
 
-function buildApprovalTitle(row: TimelineApprovalWorkRow): TimelineTitle {
-  return titleFromParts({
-    content: row.title,
-    contentTone: "muted",
-    motion: pendingMotion(row.status === "pending"),
-    tone: row.status === "error" ? "destructive" : "default",
+function mapWebSearchTitle(row: TimelineWebSearchWorkRow): TimelineTitle {
+  const query = row.queries.join(", ") || "web search";
+  const querySegment = segment(query, {
+    em: false,
+    truncate: true,
+  });
+  switch (row.status) {
+    case "pending":
+      return makeTitle({
+        segments: [
+          segment("Running web search:", { shimmer: true }),
+          querySegment,
+        ],
+      });
+    case "completed":
+      return makeTitle({
+        segments: [segment("Ran web search:"), querySegment],
+      });
+    case "error":
+      return makeTitle({
+        segments: [segment("Ran web search:"), querySegment],
+        decorations: [statusDecoration("error", null)],
+      });
+    case "interrupted":
+      return makeTitle({
+        segments: [segment("Interrupted web search:"), querySegment],
+      });
+    default:
+      return assertNever(row.status);
+  }
+}
+
+function mapWebFetchTitle(row: TimelineWebFetchWorkRow): TimelineTitle {
+  const urlSegment = segment(row.url, { em: false, truncate: true });
+  switch (row.status) {
+    case "pending":
+      return makeTitle({
+        segments: [segment("Fetching:", { shimmer: true }), urlSegment],
+      });
+    case "completed":
+      return makeTitle({
+        segments: [segment("Fetched:"), urlSegment],
+      });
+    case "error":
+      return makeTitle({
+        segments: [segment("Fetched:"), urlSegment],
+        decorations: [statusDecoration("error", null)],
+      });
+    case "interrupted":
+      return makeTitle({
+        segments: [segment("Interrupted fetch:"), urlSegment],
+      });
+    default:
+      return assertNever(row.status);
+  }
+}
+
+function delegationVerbForStatus(status: TimelineRowStatus): {
+  text: string;
+  shimmer: boolean;
+} {
+  switch (status) {
+    case "pending":
+      return { text: "Running subagent:", shimmer: true };
+    case "completed":
+      return { text: "Ran subagent:", shimmer: false };
+    case "error":
+      return { text: "Failed subagent:", shimmer: false };
+    case "interrupted":
+      return { text: "Interrupted subagent:", shimmer: false };
+    default:
+      return assertNever(status);
+  }
+}
+
+function mapDelegationTitle(
+  row: TimelineViewDelegationWorkRow,
+): TimelineTitle {
+  const description = row.description ?? (row.output.trim() || row.toolName);
+  const verb = delegationVerbForStatus(row.status);
+  const segments: TimelineTitleSegment[] = [
+    segment(verb.text, { shimmer: verb.shimmer }),
+    segment(description, { em: true, truncate: true }),
+  ];
+  if (row.subagentType) {
+    segments.push(
+      segment(`(${row.subagentType})`, { em: false, truncate: true }),
+    );
+  }
+  // The verb prefix (Failed/Interrupted/Ran subagent) already conveys the
+  // status, so the decoration only carries duration. Tone stays neutral —
+  // destructive tone is reserved for the system-error row kind.
+  return makeTitle({
+    segments,
+    decorations: filterNull([
+      durationDecoration(row.durationMs, { live: row.status === "pending" }),
+    ]),
   });
 }
 
-function buildTimelineActivityIntentTitle({
+function mapApprovalTitle(row: TimelineApprovalWorkRow): TimelineTitle {
+  return makeTitle({
+    segments: [
+      segment(row.title, {
+        em: false,
+        truncate: true,
+        shimmer: row.status === "pending",
+      }),
+    ],
+  });
+}
+
+function mapWorkTitle(
+  row: TimelineViewWorkRow,
+  options: BuildTimelineRowTitleOptions,
+): TimelineTitle {
+  const title = (() => {
+    switch (row.workKind) {
+      case "command":
+      case "tool":
+        return mapExecutionTitle(row);
+      case "file-change":
+        return mapFileChangeTitle(row);
+      case "web-search":
+        return mapWebSearchTitle(row);
+      case "web-fetch":
+        return mapWebFetchTitle(row);
+      case "delegation":
+        return mapDelegationTitle(row);
+      case "approval":
+        return mapApprovalTitle(row);
+      default:
+        return assertNever(row);
+    }
+  })();
+  if (options.workStyle === "default" || title.tone === "destructive") {
+    return title;
+  }
+  // Summary work-style mutes the title via tone; segment-level `em` is kept
+  // so content emphasis stays visible inside the muted wrapper, per spec.
+  return {
+    ...title,
+    tone: "summary",
+  };
+}
+
+function mapWorkSummaryTitle(
+  row: TimelineWorkSummaryRow,
+  options: BuildTimelineRowTitleOptions,
+): TimelineTitle {
+  // Bundles only render with active/present-tense treatment when the caller
+  // (a list-level renderer) tells us this is the open step's latest bundle.
+  const isActive =
+    row.kind === "bundle-summary" && options.isActiveLatestBundle === true;
+  const { verb, rest } = buildTimelineWorkSummaryLabelParts(row, {
+    active: isActive,
+  });
+  const decorations = filterNull([summaryStatusDecoration(row)]);
+  if (options.summaryStyle === "background") {
+    const labelText = rest.length === 0 ? verb : `${verb} ${rest}`;
+    return makeTitle({
+      segments: [segment(labelText, { em: false, truncate: true })],
+      decorations,
+      tone: "summary",
+    });
+  }
+  const verbSegment = segment(verb, { shimmer: isActive });
+  if (rest.length === 0) {
+    return makeTitle({
+      segments: [{ ...verbSegment, truncate: true }],
+      decorations,
+    });
+  }
+  return makeTitle({
+    segments: [
+      verbSegment,
+      segment(rest, { em: false, truncate: true, shimmer: isActive }),
+    ],
+    decorations,
+  });
+}
+
+function mapTurnTitle(row: TimelineViewTurnRow): TimelineTitle {
+  const status = row.status;
+  const durationDeco = durationDecoration(row.durationMs, {
+    live: status === "pending",
+  });
+  if (durationDeco !== null) {
+    return makeTitle({
+      segments: [
+        segment(status === "pending" ? "Working for" : "Worked for", {
+          shimmer: status === "pending",
+        }),
+      ],
+      decorations: [durationDeco],
+    });
+  }
+  return makeTitle({
+    segments: [
+      segment(status === "pending" ? "Working" : "Worked", {
+        shimmer: status === "pending",
+      }),
+    ],
+  });
+}
+
+function mapSystemTitle(row: TimelineSystemViewRow): TimelineTitle {
+  const hasErrorTone = row.systemKind === "error" || row.status === "error";
+  const text =
+    row.systemKind === "error" ? `Error: ${row.title}` : row.title;
+  return makeTitle({
+    segments: [
+      segment(text, {
+        em: hasErrorTone,
+        shimmer: row.status === "pending",
+        truncate: true,
+      }),
+    ],
+    tone: hasErrorTone ? "destructive" : "default",
+  });
+}
+
+function mapConversationTitle(
+  row: TimelineConversationViewRow,
+): TimelineTitle {
+  return makeTitle({
+    segments: [
+      segment(row.role === "user" ? "User" : "Assistant", { em: false }),
+    ],
+  });
+}
+
+function mapTimelineActivityIntentTitle({
   intent,
   pending,
 }: BuildTimelineActivityIntentTitleArgs): TimelineTitle {
@@ -450,130 +779,23 @@ function buildTimelineActivityIntentTitle({
     pathMode: "full",
     pending,
   });
-  return titleFromParts({
-    prefix: detail.prefix,
-    content: detail.content,
-    contentTone: "muted",
-    motion: pendingMotion(pending),
-    plainContent: plainDetail.content,
-  });
-}
-
-function buildWorkTitle(
-  row: TimelineViewWorkRow,
-  options: BuildTimelineRowTitleOptions,
-): TimelineTitle {
-  const title = (() => {
-    switch (row.workKind) {
-      case "command":
-      case "tool":
-        return buildExecutionTitle(row);
-      case "file-change":
-        return buildFileChangeTitle(row);
-      case "web-search":
-        return buildWebSearchTitle(row);
-      case "web-fetch":
-        return buildWebFetchTitle(row);
-      case "delegation":
-        return buildDelegationTitle(row);
-      case "approval":
-        return buildApprovalTitle(row);
-      default:
-        return assertNever(row);
-    }
-  })();
-
-  if (options.workStyle === "default" || title.tone === "destructive") {
-    return title;
+  const segments: TimelineTitleSegment[] = [];
+  if (detail.prefix) {
+    segments.push(segment(detail.prefix, { shimmer: pending }));
   }
-  return {
-    ...title,
-    contentTone: "muted",
-    tone: "summary",
-  };
+  segments.push(
+    segment(detail.content, {
+      em: false,
+      truncate: true,
+      plainText: plainDetail.content,
+    }),
+  );
+  return makeTitle({ segments });
 }
 
-function buildWorkSummaryTitle(
-  row: TimelineWorkSummaryRow,
-  options: BuildTimelineRowTitleOptions,
-): TimelineTitle {
-  const label = buildTimelineWorkSummaryLabel(row);
-  const suffix = workSummaryStatusSuffix(row.status);
-  if (options.summaryStyle === "background") {
-    return titleFromParts({
-      content: label,
-      contentTone: "muted",
-      suffix,
-      tone: "summary",
-    });
-  }
-  const spaceIndex = label.indexOf(" ");
-  if (spaceIndex === -1) {
-    return titleFromParts({
-      content: label,
-      contentTone: "emphasis",
-      motion: pendingMotion(row.kind === "bundle-summary"),
-      suffix,
-    });
-  }
-  return titleFromParts({
-    prefix: label.slice(0, spaceIndex),
-    content: label.slice(spaceIndex + 1),
-    motion: pendingMotion(row.kind === "bundle-summary"),
-    suffix,
-  });
-}
-
-function workSummaryStatusSuffix(
-  status: TimelineRowStatus,
-): TimelineTitleSuffix | null {
-  switch (status) {
-    case "error":
-      return { kind: "text", text: "(error)", truncate: false };
-    case "interrupted":
-      return { kind: "text", text: "(interrupted)", truncate: false };
-    case "completed":
-    case "pending":
-      return null;
-    default:
-      return assertNever(status);
-  }
-}
-
-function buildTurnTitle(row: TimelineViewTurnRow): TimelineTitle {
-  const status = row.status;
-  const duration = visibleDurationText(row.durationMs);
-  if (duration !== null) {
-    return titleFromParts({
-      prefix: status === "pending" ? "Working for" : "Worked for",
-      content: duration,
-      motion: pendingMotion(status === "pending"),
-    });
-  }
-  return titleFromParts({
-    content: status === "pending" ? "Working" : "Worked",
-    motion: pendingMotion(status === "pending"),
-  });
-}
-
-function buildSystemTitle(row: TimelineSystemViewRow): TimelineTitle {
-  const hasErrorTone = row.systemKind === "error" || row.status === "error";
-  return titleFromParts({
-    content: row.systemKind === "error" ? `Error: ${row.title}` : row.title,
-    contentTone: hasErrorTone ? "emphasis" : "muted",
-    motion: pendingMotion(row.status === "pending"),
-    tone: hasErrorTone ? "destructive" : "default",
-  });
-}
-
-function buildConversationTitle(
-  row: TimelineConversationViewRow,
-): TimelineTitle {
-  return titleFromParts({
-    content: row.role === "user" ? "User" : "Assistant",
-    contentTone: "muted",
-  });
-}
+// ---------------------------------------------------------------------------
+// Public dispatch
+// ---------------------------------------------------------------------------
 
 export function buildTimelineActivityIntentTitles(
   row: TimelineExplorationWorkRow,
@@ -598,7 +820,7 @@ export function buildTimelineActivityIntentTitles(
     }
     titles.push({
       id: `${row.id}:activity-intent:${index}`,
-      title: buildTimelineActivityIntentTitle({
+      title: mapTimelineActivityIntentTitle({
         intent,
         pending: row.status === "pending",
       }),
@@ -608,22 +830,54 @@ export function buildTimelineActivityIntentTitles(
   return titles;
 }
 
+/**
+ * Returns the `id` of the bundle-summary that should render as the open step's
+ * active-latest bundle, or `null` when no such bundle exists. The active-latest
+ * bundle is the *most recent work row* after the last step boundary, but only
+ * when that row is itself a `bundle-summary`. A trailing leaf (single same-step
+ * work row of a different concept) displaces any earlier bundle, so the
+ * earlier bundle renders completed-not-latest. Pending steers (user
+ * conversation rows with `userRequest.status === "pending"`) sit at the tail
+ * outside the open step and do not count as boundaries.
+ */
+export function findActiveLatestBundleId(
+  rows: readonly ThreadTimelineViewRow[],
+): string | null {
+  // Single backward pass: the first work or bundle-summary we hit is the
+  // step's most recent activity. If we hit a step boundary first, the open
+  // step has no work yet.
+  for (let i = rows.length - 1; i >= 0; i -= 1) {
+    const row = rows[i];
+    if (!row) continue;
+    if (isTimelineStepBoundary(row)) {
+      return null;
+    }
+    if (row.kind === "bundle-summary") {
+      return row.id;
+    }
+    if (row.kind === "work") {
+      return null;
+    }
+  }
+  return null;
+}
+
 export function buildTimelineRowTitle(
   row: ThreadTimelineViewRow,
   options: BuildTimelineRowTitleOptions,
 ): TimelineTitle {
   switch (row.kind) {
     case "conversation":
-      return buildConversationTitle(row);
+      return mapConversationTitle(row);
     case "system":
-      return buildSystemTitle(row);
+      return mapSystemTitle(row);
     case "work":
-      return buildWorkTitle(row, options);
+      return mapWorkTitle(row, options);
     case "bundle-summary":
     case "step-summary":
-      return buildWorkSummaryTitle(row, options);
+      return mapWorkSummaryTitle(row, options);
     case "turn":
-      return buildTurnTitle(row);
+      return mapTurnTitle(row);
     default:
       return assertNever(row);
   }

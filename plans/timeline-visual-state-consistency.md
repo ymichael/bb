@@ -2,15 +2,17 @@
 
 ## Status
 
-Implementation in progress on high-confidence shippability fixes. The remaining open items are product-intent decisions and broader visual/layout verification, not blockers for the local consistency fixes already committed.
+The first batch of high-confidence shippability fixes shipped to main. This plan now drives the remaining work: a small set of product-intent decisions, the durable visual-state policy contract, and the broader grouping/system-operation product behavior.
+
+The companion design spec is `plans/timeline-layout-ascii-spec.md`. That file holds the concrete copy/layout/lifecycle reference; this file holds the engineering plan. Code work should match the spec; misalignments update the spec or the code, not both at once.
 
 ## Problem
 
 Timeline visual behavior does not have one durable policy for "something is happening". Ongoing affordances are currently split between row statuses, title builders, renderer options, app-level indicators, row-local detail fallbacks, and pending-interaction banners.
 
-The visible symptom that triggered this plan was narrow: pending system titles requested ongoing motion, but `buildSystemTitle` had no prefix, and `TimelineTitleView` only applied shine to the prefix segment. The broader issue is architectural: visual state is inferred ad hoc from row type, title segment layout, renderer scope, and tail position. That makes behavior inconsistent across system operations, work rows, summaries, steers, pending interactions, and global "Working..." UI.
+The visible symptom that triggered this plan was narrow: pending system titles requested shimmer, but `buildSystemTitle` had no prefix, and `TimelineTitleView` only applied shimmer to the prefix segment. The broader issue is architectural: visual state is inferred ad hoc from row type, title segment layout, renderer scope, and tail position. That makes behavior inconsistent across system operations, work rows, summaries, steers, pending interactions, and global "Working..." UI.
 
-The durable fix is to define a shared timeline visual-state taxonomy and make one policy produce labels, motion, expansion intent, and loading/error treatment for every row concept.
+The durable fix is to define a shared timeline visual-state taxonomy and make one policy produce labels, shimmer, expansion intent, and loading/error treatment for every row concept.
 
 ## Relevant Existing And Historical Plans
 
@@ -149,7 +151,7 @@ The taxonomy should separate resource lifecycle, visual treatment, and row conce
 ### Visual Treatment
 
 - `tone`: neutral, muted, success, warning, danger, interactive-waiting.
-- `motion`: none or ongoing. Motion should attach to the title as a whole visual concept, not to whichever segment happened to be named `prefix`.
+- `shimmer`: on or off. Shimmer should attach to the title as a whole visual concept, not to whichever segment happened to be named `prefix`.
 - `copy`: present-tense, past-tense, waiting, resolving, loading, retry, interrupted, error.
 - `expansion`: never, available, auto-while-ongoing, auto-tail-while-scope-active, auto-on-error.
 - `detail priority`: inline only, expandable detail, pinned detail, child rows.
@@ -165,31 +167,30 @@ The current implementation distributes the same decision across several layers.
   - Active turns render raw rows; completed turns can become lazy turn rows.
   - Pending steers are appended to the canonical row stream after projection/grouping, so they appear at the tail without splitting completed-turn summaries.
 - `packages/thread-view/src/timeline-view.ts`
-  - Summarizes all contiguous summarizable work rows into `activity-summary` rows.
-  - `shouldSummarizeRun` currently returns true for any non-empty run, so even a single completed command becomes a summary row.
+  - `shouldSummarizeRun` keeps single non-terminal work rows and single completed non-denied work rows as direct leaves; multi-row runs and single denied/error/interrupted rows still summarize.
   - Summary label tense is based on row status.
   - Summary status is merged from child statuses using error, pending, interrupted, completed precedence.
-  - This partially conflicts with historical plans that say grouping should be active-run only or should avoid bundles for their own sake.
+  - Whether multi-work runs should continue to summarize at all remains an open product question against the historical "no bundles for bundling's sake" direction.
 - `packages/thread-view/src/operation-projection.ts`
-  - Emits compaction begin/end/failure/interruption titles such as `Context compacting...` and `Context compacted`.
+  - Emits compaction begin/end/failure/interruption titles. Pending uses `Compacting context`; completed/failed/interrupted retain their existing copy.
   - Compaction visual state is encoded as system-row status and title text rather than a shared operation policy.
 - `packages/thread-view/src/parse-operation-message.ts`
   - Maps permission-grant `pending` and `resolving` to the same pending row status.
-  - Ownership rows have title-like detail text, which makes them expandable while duplicating the title.
-  - Ownership metadata currently includes ids/action/status but not display names or link-ready labels.
+  - Ownership rows suppress detail text when it duplicates the title and use production action titles for `assign`, `release`, and `transfer`.
+  - Ownership metadata still carries only ids/action/status, not display names or link-ready labels.
 - `packages/thread-view/src/user-message-parsing.ts`
-  - Pending steers are parsed from unaccepted active-turn client requests and rendered as tail conversation rows.
+  - Pending steers are parsed from unaccepted active-turn client requests and emitted as canonical tail conversation rows that stay outside projection/grouping.
   - Accepted steers become conversation rows and can split completed turn grouping.
 
 ### Title And Ongoing Affordances
 
 - `packages/thread-view/src/timeline-row-title.ts`
-  - `TimelineTitle` now encodes semantic title `motion`.
+  - `TimelineTitle` now encodes a semantic shimmer flag (`TimelineTitle.motion`).
   - Work row title builders independently decide active copy and shimmer.
   - Activity summary title wording comes from summary row status; renderer summary style still decides whether a summary looks like an active bundle or muted background.
-  - Pending system rows request ongoing title motion through the title motion field; content-only title rendering honors that request.
+  - Pending system rows request shimmer through `TimelineTitle.motion`; content-only title rendering honors that request.
 - `packages/ui-core/src/thread-timeline/TimelineTitleView.tsx`
-  - Applies ongoing motion to the prefix when present, and to content-only titles when no prefix exists.
+  - Applies shimmer to the prefix when present, and to content-only titles when no prefix exists.
 - `packages/ui-core/src/thread-timeline/TimelineRowDetails.tsx`
   - Delegation details render a local `Working...` shimmer fallback for pending empty output.
   - This is another row-local ongoing affordance outside the title and expansion policy.
@@ -209,7 +210,7 @@ The current implementation distributes the same decision across several layers.
   - Computes `showOngoingIndicator` from runtime status and pending interactions.
   - Uses global labels such as `Waiting for approval` independently of timeline row policy.
 - `packages/ui-core/src/thread-timeline/ConversationWorkingIndicator.tsx`
-  - Always applies shine to its label, with default copy `Working...` or `Thinking...`.
+  - Always applies shimmer to its label, with default copy `Working...` or `Thinking...`.
 
 ### Pending Interactions
 
@@ -227,28 +228,27 @@ The current implementation distributes the same decision across several layers.
 ### Current Test Coverage
 
 - `packages/thread-view/test/timeline-view.test.ts`
-  - Locks current all-work activity-summary behavior, including single command summaries.
-  - Tests active summary labels for pending command, delegation, and file-change summaries.
+  - Tests direct-leaf behavior for single non-terminal and completed non-denied work rows.
+  - Tests active summary labels for pending command, delegation, and file-change summaries when runs contain multiple rows.
 - `packages/thread-view/test/timeline-row-title.test.ts`
-  - Tests active wording and semantic title motion for active summaries.
+  - Tests active wording and semantic shimmer for active summaries.
 - `packages/ui-core/test/thread-timeline-rows.test.tsx`
   - Tests auto-expansion for pending summaries and lazy turn behavior.
-  - Tests that pending work summarized by an active bundle does not auto-expand child rows.
+  - Tests that pending work summarized by an active bundle still expands its pending children.
   - Tests system rows with detail are expandable/pinned.
   - Tests accepted and pending steer metadata rendering.
 - `packages/ui-core/test/timeline-title-view.test.tsx`
-  - Tests title segment emphasis and truncation.
-  - Does not cover content-only shimmer.
+  - Tests title segment emphasis and truncation, including content-only shimmer.
 
 ## Systemic Failures
 
 - There is no single visual-state resolver. Present-tense copy, shimmer, expansion, and global activity are each decided in different files.
 - `pending`, `active`, `ongoing`, `loading`, and `resolving` are treated as interchangeable in several surfaces.
-- Title motion is now encoded semantically, but broader visual state still lacks one resolver for copy, tone, expansion, and loading/error treatment.
+- Shimmer is now encoded semantically, but broader visual state still lacks one resolver for copy, tone, expansion, and loading/error treatment.
 - Active-tail policy lives in React renderer options, while title text lives in `@bb/thread-view`; the same state is not available to server, CLI, audit, and React equally.
 - Activity-summary grouping is broader than the latest plans describe. Current tests lock "summarize every work run", while current plans point toward active-run grouping and fewer bundles.
 - Pending interactions have richer lifecycle state in the app banner than they have in timeline work rows.
-- System operations are a mixed bucket: compaction, reconnect, ownership, permission grants, and errors share row shape but need different copy, detail, motion, and expansion behavior.
+- System operations are a mixed bucket: compaction, reconnect, ownership, permission grants, and errors share row shape but need different copy, detail, shimmer, and expansion behavior.
 - The global `Working...` indicator is still app-level state rather than a semantic timeline row, even though scroll plans treat it as bottom timeline content.
 
 ## Shippability Discrepancy And Intent Matrix
@@ -269,18 +269,18 @@ The ASCII artifact is the concrete layout reference for spacing, title matrices,
 | Active and streaming work visibility | Old renderer before the semantic cutover kept the active trailing buffer as leaf rows in `595c4f21^:packages/thread-view/src/thread-detail-rows.ts` (`buildAssistantStepSummaryRows(..., "active")` pushes trailing buffered rows directly). Old-behavior audit cites final plans that group active tails only when `>1` or active multi-row. Current `packages/thread-view/src/timeline-view.ts` summarized every non-empty work run via `shouldSummarizeRun`, and ui-core tests asserted pending work summarized by an active bundle did not auto-expand children. Historical plans `76b266ca^:plans/timeline-bundle-unification.md`, `09f8489a^:plans/thread-timeline-grouping-and-auto-expansion.md`, and current `plans/thread-view-package-boundary.md` all point toward active-tail grouping only, not hiding active leaves. User intent says streaming/active/non-terminal steps should prioritize WHAT and individual leaf rows should stay visible. | High-confidence regression for active/non-terminal app UX. | Active/non-terminal work should keep leaf rows visible. Active single work rows should render as leaves. Active multi-row summaries may exist, but pending child output must be visible/expanded even if completed work follows. | Done in `be71b62f`, `c59a78dc`, and `e687c5de` for non-terminal leaf visibility, pending-child expansion, and non-tail pending summary visibility; completed single-work intent is now handled separately in `0966e50f`. |
 | Completed historical single work | Old renderer summarized completed terminal turn segments in `595c4f21^:packages/thread-view/src/thread-detail-rows.ts` via `buildTerminalTurnRows` and assistant-step summaries. The semantic renderer initially summarized every completed work run, including single commands/file changes. The user resolved the ambiguity: a completed single work item should be a direct leaf row, but that leaf title should use the same muted visual weight as a summary row so historical review stays quiet. | Product intent resolved. | Completed single work items render as direct leaf rows with muted summary-style titles in the app. CLI uses the same semantic direct leaf stream without inventing an extra one-item wrapper. Completed multi-work runs remain summaries. Denied approval and non-success terminal single rows keep their existing terminal summary behavior until separately decided. | Done in `0966e50f` with grouping, title, app rendering, and CLI snapshot coverage. The one-child detail-title question remains separate. |
 | Single-row summary nesting | Old rendering-recovery plan explicitly rejected `Ran 1 command` expanding into a nested duplicate `Ran command`. Completed successful single work rows no longer use this path after `0966e50f`, but remaining one-child summaries can still exist for denied approval, error, interrupted, and other terminal exception states. User agrees duplicate nested titles should be avoided but wants back-and-forth before locking behavior. | Open product/design discussion; do not implement yet. | Detail bodies are mostly standalone: command details include the command line, tool details include `Tool: <name>`, and file diffs include file context. Web/approval bodies are currently null. Delegation details need care because the current delegation expandable body combines child rows and output. | Prepare options before implementation: keep nested title, direct detail-body extraction for one-child summaries, or a hybrid with titleless detail only when a standalone body exists. |
-| Ongoing visual-state mechanics | `packages/thread-view/src/timeline-row-title.ts` now exposes semantic `TimelineTitle.motion`; pending system and approval rows can request motion without depending on prefix structure. `packages/ui-core/src/thread-timeline/TimelineTitleView.tsx` applies shine to the prefix when present and to content-only titles when no prefix exists. Historical plans still require a broader shared visual policy. | Local shippability bug fixed; durable policy remains future design work. | If a title requests ongoing motion, a content-only title should display ongoing motion. | Done in `7b977b2e` and the final readiness cleanup; broader resolver remains in the durable design batch. |
+| Ongoing visual-state mechanics | `packages/thread-view/src/timeline-row-title.ts` now exposes semantic `TimelineTitle.motion`; pending system and approval rows can request motion without depending on prefix structure. `packages/ui-core/src/thread-timeline/TimelineTitleView.tsx` applies shimmer to the prefix when present and to content-only titles when no prefix exists. Historical plans still require a broader shared visual policy. | Local shippability bug fixed; durable policy remains future design work. | If a title requests shimmer, a content-only title should display shimmer. | Done in `7b977b2e` and the final readiness cleanup; broader resolver remains in the durable design batch. |
 | Loading versus ongoing | `apps/app/src/views/ThreadTimelinePane.tsx` previously used `ConversationWorkingIndicator` for `Loading thread...`, while durable activity used the same primitive for `Working...` and pending approval labels. Lazy turn loading in `ThreadTimelineRows.tsx` has separate retry UI. User intent says loading means loading. | High-confidence consistency bug for initial thread loading; broader loading skeleton/spinner treatment is product/design. | Loading is client-local fetch state and should not be styled or narrated as durable thread work. | Initial thread loading fixed in `7d55c038`; broader loading visual policy remains in the durable design batch. |
 | `Working...` indicator placement | `ThreadTimelinePane.tsx` rendered `ConversationWorkingIndicator` after a `ConversationTimeline className="flex-1"` sibling. Old-behavior audit found the old app also placed the indicator after the timeline, but manager investigation traced the new distance bug to commit `007c722d9` adding `flex-1`. ASCII artifact says global activity should be adjacent to the timeline tail and not pushed away by empty flex space. | High-confidence layout regression. | Keep the app-level tail indicator, but render it inside the timeline column so it stays visually attached to the latest timeline content while preserving composer pinning. CLI minimal global `Working...` remains an intent question. | Done in `0aca094a` with an app render test. |
 | Active-tail label and expansion predicate | Old `595c4f21^:packages/ui-core/src/thread-timeline/NestedTimelineRows.tsx` built one auto-expand map from pending/error state and child rows. `ThreadTimelineRows.tsx` previously passed `preferOngoingLabel` for active tail summaries separately from `shouldAutoExpandRow`; a completed tail could get ongoing copy without matching expansion. Review then found `[pending,pending,completed,completed]` can leave real pending summaries before completed rows. | High-confidence consistency bug. | The same pending-summary predicate should decide active summary copy and default expansion, even when completed work follows. Completed summaries stay past tense/collapsed. | Done in `c59a78dc` and `e687c5de`. |
-| Compaction and system rows | Current compaction titles come from `packages/thread-view/src/operation-projection.ts`; generic system operations and ownership come through `packages/thread-view/src/parse-operation-message.ts`. Historical `7d4e5f73^:plans/context-usage-and-compaction.md` and `3b68244b^:plans/provider-event-visibility.md` require compaction/provider operations to be visible, but not necessarily bundled. Current system rows share one title/detail/motion path. | Mixed: visible compaction is intentional; visual treatment inconsistency is a bug; exact broader system copy is product intent. | Compaction uses `Compacting context`, `Context compacted`, `Context compaction interrupted`, and `Context compaction failed`; provider/system operations still need sub-policies under the shared visual-state resolver. | Pending compaction title fixed in `df72e830`; content-only ongoing motion already fixed in `7b977b2e`. |
+| Compaction and system rows | Current compaction titles come from `packages/thread-view/src/operation-projection.ts`; generic system operations and ownership come through `packages/thread-view/src/parse-operation-message.ts`. Historical `7d4e5f73^:plans/context-usage-and-compaction.md` and `3b68244b^:plans/provider-event-visibility.md` require compaction/provider operations to be visible, but not necessarily bundled. Current system rows share one title/detail/shimmer path. | Mixed: visible compaction is intentional; visual treatment inconsistency is a bug; exact broader system copy is product intent. | Compaction uses `Compacting context`, `Context compacted`, `Context compaction interrupted`, and `Context compaction failed`; provider/system operations still need sub-policies under the shared visual-state resolver. | Pending compaction title fixed in `df72e830`; content-only shimmer already fixed in `7b977b2e`. |
 | Failed system operations | Current-UX audit found operation failures map to `status: "error"` but app title tone only checks `systemKind === "error"`. | P1 shippability bug. | Failed system operations should render destructive/error treatment even when the system kind is `operation`. | Done in `b2fbf81c` with title/tone coverage. |
 | Delegation error/interrupted wording | Current-UX audit found app delegation titles use only pending vs ran, while CLI has failed/interrupted verbs. | P2 app/CLI consistency bug. | App and CLI should share delegation lifecycle wording. | Done in `b2fbf81c` with failed/interrupted title coverage. |
 | Active exploration tense | Current-UX audit found compact exploration detail labels always use completed tense (`Read`, `Listed`, `Searched`) even when active. | P1 consistency bug. | Active exploration labels should use present tense in active contexts. | Done in `b2fbf81c` for shared title/text formatters; active leaf visibility remains a separate grouping batch. |
 | Manager assignment / ownership rows | Server ownership events in `apps/server/src/services/threads/thread-events.ts` persist ids/action/status and message, not display names. Current `parse-operation-message.ts` previously built detail from `decoded.message`, which could duplicate the row title, and mapped release/transfer to misleading titles. Manager timeline tests in `apps/server/test/threads/timeline-service.test.ts` intentionally keep manager-visible operations. | Duplicate detail and action titles fixed; names/links remain ambiguous product intent. | Ownership rows should not expand only to repeat their title. Titles should mirror production `assign`, `release`, and `transfer` messages. Rich manager labels need a product/data decision. | Done in `7a1b0c50` and `00764ab6`. Ask intent question 4 before adding names/links. |
 | Steers | Steer grouping audit `/Users/michael/.bb-dev/thread-storage/thr_bj3p5vk9py/reports/timeline-steer-turn-grouping-audit.md` verified pending steers previously never entered projection/grouping, while accepted steers intentionally become normal user conversation rows at acceptance position and split completed-turn/activity grouping. User aligned that pending steers should be shared semantic rows, with the invariant that a trailing pending steer must not block pending/latest expandable work expansion. | Product intent resolved and implemented. | Accepted steers stay canonical accepted user rows at acceptance position. Pending steers are canonical tail conversation rows but remain outside projection/grouping, so they do not split historical turn summaries. Manager-conversation timelines continue hiding pending steers unless standard manager view is requested. | Done in `4f11c810` with app/CLI side-channel removal, server-contract cleanup, manager visibility tests, grouping guard assertions, and active-expansion coverage for a trailing pending steer. |
 | Command/file-edit/tool bundling | Old `595c4f21^:thread-detail-rows.ts` bundled exploration, commands, web, and delegations; file edits were counted in assistant-step summaries. Current `timeline-view.ts` summarizes multi-work command/tool/file-change/web/delegation runs uniformly and excludes approval only. Current `timeline-cli-rendering.snapshots.test.ts` locks summary text such as `Working on 3 items` and `Worked on 2 items`. Historical `992fe1b5^:plans/timeline-tool-shell-separation.md` says source messages should distinguish command, generic tool, file changes, and web; `76b266ca^` says no bundles for bundling's sake. | Mixed: active leaf hiding was a regression and is fixed; completed single direct leaf is now intentional; broader multi-work summary style remains a product/design area. | Keep concept-specific leaf rendering and summary labels; do not collapse generic tools, commands, and file edits into indistinguishable rows. Active and completed single work leaves stay visible; completed multi-work runs stay summarized unless product changes that rule. | Done for active/non-terminal and completed-single cases in `be71b62f`, `c59a78dc`, `e687c5de`, and `0966e50f`. Revisit only broader multi-work bundling and remaining one-child exception summaries. |
-| App versus CLI divergence | Current CLI `packages/thread-view/src/format-timeline-text.ts` formats the same `buildTimelineViewRows` model with text-only hierarchy, status labels, and verbose detail. App has lazy loading, motion, expansion, file actions, and global indicators. Audit code records semantic and rendered row counts in `packages/agent-provider-audit/src/build-artifacts.ts`. | Acceptable divergence if documented. | App and CLI should share semantic rows and summary decisions; presentation-only differences are acceptable. | Document this explicitly in the plan and add tests when behavior changes. |
+| App versus CLI divergence | Current CLI `packages/thread-view/src/format-timeline-text.ts` formats the same `buildTimelineViewRows` model with text-only hierarchy, status labels, and verbose detail. App has lazy loading, shimmer, expansion, file actions, and global indicators. Audit code records semantic and rendered row counts in `packages/agent-provider-audit/src/build-artifacts.ts`. | Acceptable divergence if documented. | App and CLI should share semantic rows and summary decisions; presentation-only differences are acceptable. | Document this explicitly in the plan and add tests when behavior changes. |
 | Web search/fetch result text | App web rows are non-expandable and `TimelineRowDetails.tsx` returns null for web-search/web-fetch. CLI verbose previously rendered `row.resultText` for direct web rows. Keeping `resultText` on timeline rows or internal projection messages would be an accepted-but-unrenderable payload. Raw provider events still carry provider result text, but projection lifecycle/message state and the shared timeline row contract ignore it. | High-confidence shippability bug for CLI and projection/contract cleanup. | Neither app nor CLI should expose web result text. Timeline row conversion should not populate result payloads for consumers, and the CLI formatter should not render them defensively. | Done in `0f7465a0`, `33a50f84`, and the internal projection cleanup with regression coverage for direct active web rows and completed web rows inside summaries. |
 | Performance parity | Old renderer computed row activity and auto-expand maps with recursive walks in `595c4f21^:NestedTimelineRows.tsx`. Current `ThreadTimelineRows.tsx` memoizes `buildTimelineViewRows` through `useTimelineViewRowsCache` and records rendered/semantic counts in provider audit. Any richer visual policy must not add per-frame or per-row unstable work during streaming. | Risk area, not proven regression. | Policy resolution should be linear in row count, memoized by stable row identity, and should not expand lazy turn details automatically outside active needs. | Add perf guard notes to implementation batches; use existing timeline benchmark fixtures if grouping changes are broad. |
 
@@ -300,19 +300,11 @@ The ASCII artifact is the concrete layout reference for spacing, title matrices,
 
 ## Open Product Intent Questions
 
-1. What is the intended behavior for remaining one-child summary expansion now that successful completed single work is a muted direct leaf?
-   - Completed successful single command/tool/file-change/web/delegation rows no longer expand through a duplicate one-item summary after `0966e50f`.
-   - Remaining one-child summaries can still repeat summary and child titles for exception states, e.g. denied approval, failed/error, interrupted, or future terminal states that should stay heavier than quiet historical success.
-   - Option A: keep current nested child row. Lowest risk, but duplicates copy in these exception cases.
-   - Option B: render the child detail body directly when the body is standalone. This is clean for command/tool/file-change rows; web/approval have no detail body; delegation needs a shared titleless detail renderer because its current body includes nested child rows plus output.
-   - Option C: hybrid fallback: direct titleless body for command/tool/file-change exception rows, nested child row for delegation/web/approval until a broader detail-body contract exists.
-   - Default recommendation: Option C first, then extract a shared work-detail body contract if product likes the titleless direction.
-2. What is the intended behavior for completed assistant-boundary steps: should an assistant -> work -> assistant -> work -> final assistant turn expand into separate muted summaries after each assistant boundary, or is the current turn-level summary enough?
-   - Earlier plans wanted assistant-delimited step summaries; later boundary plans rejected a separate public step-summary row outside turn rows.
-   - Default recommendation: keep active leaf behavior independent now; defer completed assistant-boundary reshaping until a realistic fixture is reviewed.
+1. ~~Remaining one-child summary expansion behavior for exception states~~ **Resolved.** Single terminal work rows are muted direct leaves regardless of status. Non-success rows append a status suffix to the title — `Ran <cmd> 2s (error)`, `(denied)`, `(interrupted)` — and tone shifts on the suffix. No summary wrapper around a single child. `shouldSummarizeRun` should treat all single terminal rows uniformly. (See Q1 in `plans/timeline-layout-ascii-spec.md`.)
+2. ~~Intended behavior for completed assistant-boundary steps~~ **Resolved.** Each assistant-message boundary inside an unfinished turn closes the current step. Completed work between two assistant messages becomes one muted step summary; the next assistant message is its sibling. The final assistant message of a finished turn renders outside `Worked for <duration>` as its sibling. This matches the existing `Active Streaming Progression` and `Historical Turn, Expanded` examples in the ASCII spec.
 3. What is the intended compaction/system-operation copy hierarchy?
    - Old plans require compaction to be visible, but do not settle exact labels.
-   - Default recommendation: `Compacting context`, `Compacted context`, `Context compaction interrupted`, `Context compaction failed`, with ongoing motion only for non-terminal compaction.
+   - Default recommendation: `Compacting context`, `Compacted context`, `Context compaction interrupted`, `Context compaction failed`, with shimmer only for non-terminal compaction.
 4. What should manager assignment rows show: plain status text only, manager/thread display names, links, avatars, or other ownership metadata?
    - Current events do not persist names.
    - Default recommendation: use production action titles already fixed; defer rich labels until event metadata or lookup policy is chosen.
@@ -325,34 +317,29 @@ The ASCII artifact is the concrete layout reference for spacing, title matrices,
 7. Should nested subagent timelines move from the current bordered detail container to the ASCII spec's rail-only treatment?
    - Default recommendation: handle this in the broader timeline visual design pass, not as a local patch.
 
-## Recommended First Implementation Batch
+## Shipped Shippability Fixes
 
-Completed high-confidence local consistency fixes:
+The following local consistency fixes shipped to main and no longer need plan tracking. They are listed once for context; future work should not re-litigate them without a separate proposal:
 
-1. Done in `7b977b2e`: fix content-only ongoing title motion so pending system and approval rows honor the existing ongoing request.
-2. Done in `7a1b0c50`: suppress duplicate ownership/manager assignment detail when the operation detail is identical to the title.
-3. Done in `00764ab6`: align ownership action titles with production `assign`, `release`, and `transfer` messages.
-4. Done in `b6bba144` and `0be5f97f`: include manager timeline view mode in placeholder reuse, lazy turn-row reset/stale-response handling, and ui-core lazy-load suppression.
-5. Done in `b2fbf81c`: align active exploration tense, failed system-operation tone, and delegation failed/interrupted wording.
-6. Done in `52c1cde7`: reuse the shared lazy turn summary response type in app loader tests.
-7. Done in `be71b62f`: keep active/non-terminal single work rows visible as leaves and split completed/non-terminal runs.
-8. Done in `c59a78dc`: make active summary style and default expansion use the same predicate, and expand pending children inside active bundles.
-9. Done in `c585d34a`: remove the stale `preferOngoingLabel` title option and add CLI snapshot coverage for the active streaming command leaf.
-10. Done in `e687c5de`: keep pending summaries active and expanded even when completed work follows.
-11. Done in `0aca094a`: keep the app `Working...` indicator attached to the timeline content.
-12. Done in `df72e830`: normalize pending compaction copy to `Compacting context`.
-13. Done in `7d55c038`: render initial thread loading as neutral loading state instead of durable work shimmer.
-14. Done in `0f7465a0`: suppress web search/fetch result text in timeline rows and CLI verbose rendering.
-15. Done in `33a50f84`: remove web search/fetch `resultText` from the public timeline row contract and public-row fixtures.
-16. Done in the internal projection cleanup: stop copying web search/fetch `resultText` into projection lifecycle and message state.
-17. Done in `20d0a705`: clarify that CLI verbose manager logs expand the manager conversation view but do not switch to internal manager/debug timeline.
-18. Done in `4f11c810`: move pending steers into canonical timeline rows while keeping them outside projection/grouping and hidden from manager-conversation timelines.
+- Content-only shimmer for pending system and approval rows.
+- Ownership/manager-assignment duplicate-detail suppression and production-aligned action titles.
+- Manager timeline view mode propagated through placeholder reuse, lazy turn-row reset/stale-response handling, and ui-core lazy-load suppression.
+- Active exploration tense, failed system-operation tone, and delegation failed/interrupted wording aligned across app and CLI.
+- Active/non-terminal single work rows kept as leaves; completed runs split correctly.
+- Active summary style and default expansion now share one predicate; pending children inside active bundles auto-expand even when completed work follows.
+- App `Working...` indicator stays attached to timeline content; initial thread loading uses neutral loading state instead of durable shimmer.
+- Pending compaction copy normalized to `Compacting context`.
+- Web search/fetch result text suppressed in timeline rows, CLI verbose rendering, contract types, and projection lifecycle/message state.
+- Pending steers moved into canonical timeline rows while staying outside projection/grouping and hidden from manager-conversation timelines.
+- Stale `preferOngoingLabel` title option removed.
 
-Recommended next implementation order:
+## Remaining Work
 
-1. After product answers, revisit one-child summary expansion, completed assistant-boundary step summaries, manager CLI mode, and nested subagent rail/card treatment.
-2. If the visual-state policy work continues before those product answers, introduce the shared policy contract in compatibility mode without changing completed grouping behavior.
-3. Measure large expanded command output behavior before changing height, truncation, or virtualization.
+In rough priority order:
+
+1. Lock the open product-intent questions below (one-child summary expansion for exception states, manager assignment metadata, nested subagent rail vs bordered container, multi-work bundling direction).
+2. Introduce the durable visual-state policy contract (Batch 1) once the product answers above are stable enough to encode.
+3. Measure large expanded command-output behavior before changing height, truncation, or virtualization.
 
 ## Local Bugs Or Safe Fix Candidates
 
@@ -380,7 +367,7 @@ The policy should produce a required, strongly typed presentation contract for e
 - row lifecycle display state: pending, resolving, active, loading, retryable-error, error, completed, interrupted, expired.
 - row concept: system-operation, assistant-activity-summary, work-row, turn, steer, manager-assignment, pending-interaction, global-thread-activity, loading-placeholder.
 - title copy and tense.
-- title motion as a semantic value.
+- title shimmer as a semantic value.
 - tone and icon treatment.
 - expansion intent.
 - whether this row participates in active-tail policy.
@@ -396,8 +383,8 @@ The transition can preserve current behavior first by adding an adapter that exp
 
 - Define shared timeline visual-state types in the appropriate `@bb/thread-view` type module.
 - Add a resolver that takes row, runtime scope context, tail context, and row concept, then returns a required visual-state object.
-- Keep `TimelineTitle.motion` as the current semantic title-motion field and avoid prefix-specific motion contracts.
-- Update `TimelineTitleView` to apply ongoing motion to the semantic title target, including content-only titles.
+- Keep `TimelineTitle.motion` as the current semantic shimmer field and avoid prefix-specific shimmer contracts.
+- Update `TimelineTitleView` to apply shimmer to the semantic title target, including content-only titles.
 - Keep existing labels and expansion outcomes unless tests reveal contradictions that must be decided.
 
 Validation:
@@ -507,9 +494,9 @@ Behavior tests:
 
 ## Exit Criteria
 
-- One shared visual-state policy determines ongoing copy, motion, expansion intent, loading, retry, and terminal treatment for timeline rows.
+- One shared visual-state policy determines copy, shimmer, expansion intent, loading, retry, and terminal treatment for timeline rows.
 - `pending`, `active`, `ongoing`, `loading`, and `resolving` have explicit meanings and are not used interchangeably.
-- Ongoing motion is not tied to `prefix` segment existence.
+- Shimmer is not tied to `prefix` segment existence.
 - Active-tail labels and auto-expansion are driven by the same predicate.
 - Global thread activity, lazy loading, and pending interaction banners have distinct visual concepts and copy.
 - System operations have explicit sub-policies for compaction, reconnect, permission grants, ownership, generic operations, errors, and interruptions.

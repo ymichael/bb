@@ -1,8 +1,14 @@
-import type { KeyboardEvent, MouseEvent } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
+import type { KeyboardEvent, MouseEvent, ReactNode } from "react";
 import {
   assertNever,
+  durationToCompactString,
+  formatTimelineDecorationText,
   type TimelineTitle,
   type TimelineTitleAction,
+  type TimelineTitleDecoration,
+  type TimelineTitleSegment,
+  type TimelineTitleTone,
 } from "@bb/thread-view";
 import { cn } from "../primitives/cn.js";
 
@@ -21,94 +27,180 @@ export interface TimelineTitleViewProps {
   onTitleAction?: TimelineTitleActionResolver;
 }
 
-function titleToneClass(title: TimelineTitle): string {
-  switch (title.tone) {
+function emToneClass(tone: TimelineTitleTone): string {
+  switch (tone) {
+    case "default":
+      return "font-semibold text-foreground/85";
+    case "destructive":
+      return "text-destructive";
+    case "summary":
+      return "text-muted-foreground/60";
+    default:
+      return assertNever(tone);
+  }
+}
+
+function plainToneClass(tone: TimelineTitleTone): string {
+  switch (tone) {
     case "default":
       return "text-muted-foreground/90";
     case "destructive":
       return "text-destructive";
     case "summary":
       return "text-muted-foreground/60";
+    default:
+      return assertNever(tone);
   }
-  return assertNever(title.tone);
 }
 
-function contentToneClass(title: TimelineTitle): string {
-  if (title.tone === "destructive") {
-    return "text-destructive";
-  }
-  if (title.tone === "summary") {
-    return "text-muted-foreground/60";
-  }
-  return title.contentTone === "emphasis"
-    ? "font-semibold text-foreground/85"
-    : "text-muted-foreground/90";
-}
-
-function suffixToneClass(title: TimelineTitle): string {
-  switch (title.tone) {
+function decorationToneClass(tone: TimelineTitleTone): string {
+  switch (tone) {
     case "default":
       return "text-muted-foreground/75";
     case "destructive":
       return "text-destructive/80";
     case "summary":
       return "text-muted-foreground/60";
+    default:
+      return assertNever(tone);
   }
-  return assertNever(title.tone);
 }
 
-function renderDiffStatsSuffix(
-  title: TimelineTitle,
-  added: number,
-  removed: number,
-) {
-  if (title.tone === "summary") {
-    const parts = [
-      added > 0 ? `+${added}` : null,
-      removed > 0 ? `-${removed}` : null,
-    ].filter((part): part is string => part !== null);
+function renderSegment(
+  segment: TimelineTitleSegment,
+  index: number,
+  tone: TimelineTitleTone,
+  interactive: { onClick: (() => void) | null },
+): ReactNode {
+  const widthClass = segment.truncate
+    ? "min-w-0 truncate whitespace-pre"
+    : "shrink-0 whitespace-pre";
+  const toneClass = segment.em ? emToneClass(tone) : plainToneClass(tone);
+  const baseClass = cn(
+    widthClass,
+    toneClass,
+    segment.shimmer ? "animate-shine" : null,
+  );
+
+  if (segment.em && interactive.onClick) {
+    const onClick = interactive.onClick;
     return (
-      <span className={cn("shrink-0 whitespace-pre", suffixToneClass(title))}>
-        {parts.join(" ")}
+      <span
+        // Title actions live inside a row-level CollapsibleHeader button; HTML
+        // forbids nested <button> elements, so the action renders as a span
+        // with role="link" and explicit keyboard handling. stopPropagation
+        // keeps a click/Enter on the segment from also toggling the row.
+        key={index}
+        role="link"
+        tabIndex={0}
+        className={cn(
+          baseClass,
+          "cursor-pointer text-left underline-offset-2 hover:underline focus-visible:underline focus-visible:outline-none",
+        )}
+        onClick={(event: MouseEvent<HTMLSpanElement>) => {
+          event.stopPropagation();
+          onClick();
+        }}
+        onKeyDown={(event: KeyboardEvent<HTMLSpanElement>) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            event.stopPropagation();
+            onClick();
+          }
+        }}
+      >
+        {segment.text}
       </span>
     );
   }
+
   return (
-    <span className="shrink-0 whitespace-pre">
-      {added > 0 ? <span className="text-diff-added">+{added}</span> : null}
-      {added > 0 && removed > 0 ? " " : null}
-      {removed > 0 ? (
-        <span className="text-diff-removed">-{removed}</span>
-      ) : null}
+    <span key={index} className={baseClass}>
+      {segment.text}
     </span>
   );
 }
 
-function renderSuffix(title: TimelineTitle) {
-  if (!title.suffix) {
-    return null;
-  }
+/**
+ * Ticks the displayed duration locally while the row is still active.
+ * Resets to the latest server snapshot whenever `durationMs` changes (each
+ * server-driven re-render passes the freshest snapshot in).
+ */
+function LiveDurationText({ durationMs }: { durationMs: number }) {
+  const [tick, setTick] = useState(durationMs);
+  const baselineMs = useRef(durationMs);
+  const baselineAt = useRef(Date.now());
 
-  switch (title.suffix.kind) {
-    case "diff-stats":
-      return renderDiffStatsSuffix(
-        title,
-        title.suffix.added,
-        title.suffix.removed,
-      );
-    case "text":
+  useEffect(() => {
+    baselineMs.current = durationMs;
+    baselineAt.current = Date.now();
+    setTick(durationMs);
+    const interval = window.setInterval(() => {
+      setTick(baselineMs.current + (Date.now() - baselineAt.current));
+    }, 1_000);
+    return () => window.clearInterval(interval);
+  }, [durationMs]);
+
+  return <>{durationToCompactString(tick)}</>;
+}
+
+function renderDecoration(
+  decoration: TimelineTitleDecoration,
+  index: number,
+  tone: TimelineTitleTone,
+): ReactNode {
+  const baseClass = cn(
+    "shrink-0 whitespace-pre",
+    decorationToneClass(tone),
+  );
+
+  switch (decoration.kind) {
+    case "duration":
       return (
-        <span
-          className={cn(
-            suffixToneClass(title),
-            title.suffix.truncate
-              ? "min-w-0 truncate whitespace-pre"
-              : "shrink-0 whitespace-pre",
+        <span key={index} className={baseClass}>
+          {decoration.live ? (
+            <LiveDurationText durationMs={decoration.durationMs} />
+          ) : (
+            durationToCompactString(decoration.durationMs)
           )}
-        >
-          {title.suffix.text}
         </span>
       );
+    case "status":
+    case "summary-status": {
+      const text = formatTimelineDecorationText(decoration);
+      if (text.length === 0) return null;
+      return (
+        <span key={index} className={baseClass}>
+          {text}
+        </span>
+      );
+    }
+    case "diff-stats": {
+      if (tone === "summary") {
+        const parts = [
+          decoration.added > 0 ? `+${decoration.added}` : null,
+          decoration.removed > 0 ? `-${decoration.removed}` : null,
+        ].filter((part): part is string => part !== null);
+        return (
+          <span key={index} className={baseClass}>
+            {parts.join(" ")}
+          </span>
+        );
+      }
+      return (
+        <span key={index} className="shrink-0 whitespace-pre">
+          {decoration.added > 0 ? (
+            <span className="text-diff-added">+{decoration.added}</span>
+          ) : null}
+          {decoration.added > 0 && decoration.removed > 0 ? " " : null}
+          {decoration.removed > 0 ? (
+            <span className="text-diff-removed">-{decoration.removed}</span>
+          ) : null}
+        </span>
+      );
+    }
+    default:
+      return assertNever(decoration);
   }
 }
 
@@ -119,11 +211,6 @@ export function TimelineTitleView({
 }: TimelineTitleViewProps) {
   const onClick =
     title.action && onTitleAction ? onTitleAction(title.action) : null;
-  const contentClassName = cn(
-    "min-w-0 truncate",
-    contentToneClass(title),
-    title.motion === "shimmer" && !title.prefix ? "animate-shine" : null,
-  );
 
   return (
     <span
@@ -132,50 +219,24 @@ export function TimelineTitleView({
         className,
       )}
       title={title.plain}
-      aria-label={title.plain}
     >
-      {title.prefix ? (
-        <span
-          className={cn(
-            "shrink-0 whitespace-pre",
-            titleToneClass(title),
-            title.motion === "shimmer" ? "animate-shine" : null,
-          )}
-        >
-          {title.prefix}
-        </span>
-      ) : null}
-      {onClick ? (
-        // Title actions live inside a row-level CollapsibleHeader button; HTML
-        // forbids nested <button> elements, so the action is rendered as a
-        // span with role="link" and explicit keyboard handling. stopPropagation
-        // keeps a click/Enter on the title from also toggling the surrounding
-        // row.
-        <span
-          role="link"
-          tabIndex={0}
-          className={cn(
-            contentClassName,
-            "cursor-pointer text-left underline-offset-2 hover:underline focus-visible:underline focus-visible:outline-none",
-          )}
-          onClick={(event: MouseEvent<HTMLSpanElement>) => {
-            event.stopPropagation();
-            onClick();
-          }}
-          onKeyDown={(event: KeyboardEvent<HTMLSpanElement>) => {
-            if (event.key === "Enter" || event.key === " ") {
-              event.preventDefault();
-              event.stopPropagation();
-              onClick();
-            }
-          }}
-        >
-          {title.content}
-        </span>
-      ) : (
-        <span className={contentClassName}>{title.content}</span>
-      )}
-      {renderSuffix(title)}
+      {/* Literal whitespace text nodes between flex items keep the
+          accessible name well-formed: the browser concatenates text content
+          to compute the role's name, so without spaces siblings would join as
+          "Runningpnpm test". gap-1 handles visual spacing; the spaces handle
+          accessibility. */}
+      {title.segments.map((segment, index) => (
+        <Fragment key={`segment-${index}`}>
+          {index > 0 ? " " : null}
+          {renderSegment(segment, index, title.tone, { onClick })}
+        </Fragment>
+      ))}
+      {title.decorations.map((decoration, index) => (
+        <Fragment key={`decoration-${index}`}>
+          {" "}
+          {renderDecoration(decoration, index, title.tone)}
+        </Fragment>
+      ))}
     </span>
   );
 }

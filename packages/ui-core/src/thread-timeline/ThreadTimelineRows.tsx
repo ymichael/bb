@@ -20,6 +20,7 @@ import {
   buildTimelineActivityIntentTitles,
   buildTimelineRowTitle,
   buildTimelineViewRows,
+  findActiveLatestBundleId,
   isCompletedNonDeniedWorkRow,
   type BuildTimelineRowTitleOptions,
   type ThreadTimelineViewRow,
@@ -89,12 +90,14 @@ interface TimelineRowsListProps {
   spacing: TimelineRowsListSpacing;
 }
 
+
 interface TimelineRowWrapperClassNameArgs {
   row: ThreadTimelineViewRow;
   spacing: TimelineRowsListSpacing;
 }
 
 interface TimelineRowViewProps {
+  activeLatestBundleId: string | null;
   compactActivityIntents: boolean;
   row: ThreadTimelineViewRow;
   scopeActive: boolean;
@@ -138,6 +141,7 @@ interface CollectTimelineAutoExpandedRowIdsArgs {
 }
 
 interface ActiveSummaryTreatmentArgs {
+  activeLatestBundleId: string | null;
   row: ThreadTimelineViewRow;
   scopeActive: boolean;
 }
@@ -383,6 +387,7 @@ function timelineRowRenderSignature(row: ThreadTimelineViewRow): string {
 }
 
 function timelineRowTitleRenderStateKey({
+  activeLatestBundleId,
   compactActivityIntents,
   row,
   scopeActive,
@@ -393,10 +398,12 @@ function timelineRowTitleRenderStateKey({
     compactActivityIntents,
     scopeActive,
     spacing,
+    activeLatestBundleId === row.id,
   ]);
 }
 
 function buildTimelineRowTitleRenderState({
+  activeLatestBundleId,
   compactActivityIntents,
   row,
   scopeActive,
@@ -415,6 +422,7 @@ function buildTimelineRowTitleRenderState({
   const title = buildTimelineRowTitle(
     row,
     timelineRowTitleOptions({
+      activeLatestBundleId,
       row,
       scopeActive,
       spacing,
@@ -458,6 +466,7 @@ function areTimelineRowViewPropsEqual(
     previous.compactActivityIntents === next.compactActivityIntents &&
     previous.scopeActive === next.scopeActive &&
     previous.spacing === next.spacing &&
+    previous.activeLatestBundleId === next.activeLatestBundleId &&
     // The view-row cache keys by the raw rows array, so unchanged query data
     // preserves row object identity and can skip recursive signature work.
     (previous.row === next.row ||
@@ -625,6 +634,7 @@ function buildExpandableStructuredToolTitle(
 }
 
 function shouldAutoExpandRow({
+  activeLatestBundleId,
   defaultExpandAllRows,
   row,
   scopeActive,
@@ -638,8 +648,20 @@ function shouldAutoExpandRow({
   if (!scopeActive) {
     return false;
   }
+  // Bundles auto-expand either when they're the active-latest bundle
+  // (positional) or when they still have pending child work (so the user
+  // can see what's running, even if a later bundle has displaced the label).
   if (row.kind === "bundle-summary") {
-    return shouldUseActiveSummaryTreatment({ row, scopeActive });
+    if (
+      shouldUseActiveSummaryTreatment({
+        activeLatestBundleId,
+        row,
+        scopeActive,
+      })
+    ) {
+      return true;
+    }
+    return rowHasPendingStatus(row);
   }
   if (!rowHasPendingStatus(row)) {
     return false;
@@ -648,13 +670,14 @@ function shouldAutoExpandRow({
 }
 
 function shouldUseActiveSummaryTreatment({
+  activeLatestBundleId,
   row,
   scopeActive,
 }: ActiveSummaryTreatmentArgs): boolean {
   return (
     row.kind === "bundle-summary" &&
     scopeActive &&
-    rowHasPendingStatus(row)
+    row.id === activeLatestBundleId
   );
 }
 
@@ -675,9 +698,12 @@ function collectTimelineAutoExpandedRowIds({
       return;
     }
 
+    const currentActiveLatestBundleId = findActiveLatestBundleId(currentRows);
+
     currentRows.forEach((row) => {
       if (
         shouldAutoExpandRow({
+          activeLatestBundleId: currentActiveLatestBundleId,
           defaultExpandAllRows,
           row,
           scopeActive: currentScopeActive,
@@ -717,11 +743,13 @@ function collectTimelineAutoExpandedRowIds({
 }
 
 function timelineRowTitleOptions({
+  activeLatestBundleId,
   row,
   scopeActive,
   spacing,
 }: TimelineRowTitleOptionsArgs): BuildTimelineRowTitleOptions {
   const useActiveBundleLabel = shouldUseActiveSummaryTreatment({
+    activeLatestBundleId,
     row,
     scopeActive,
   });
@@ -731,6 +759,7 @@ function timelineRowTitleOptions({
       isCompletedNonDeniedWorkRow(row) && spacing !== "bundle"
         ? "summary"
         : "default",
+    isActiveLatestBundle: useActiveBundleLabel,
   };
 }
 
@@ -990,6 +1019,7 @@ function TurnRowBody({
 }
 
 function TimelineRowView({
+  activeLatestBundleId,
   compactActivityIntents,
   row,
   scopeActive,
@@ -998,6 +1028,7 @@ function TimelineRowView({
   const { onTitleAction } = useTimelineRendererContext();
   const horizontalPadding = timelineRowHorizontalPadding(spacing);
   const titleState = useTimelineRowTitleRenderState({
+    activeLatestBundleId,
     compactActivityIntents,
     row,
     scopeActive,
@@ -1119,6 +1150,10 @@ function TimelineRowsList({
   scopeActive,
   spacing,
 }: TimelineRowsListProps) {
+  const activeLatestBundleId = useMemo(
+    () => findActiveLatestBundleId(rows),
+    [rows],
+  );
   return (
     <div
       className={cn(
@@ -1133,6 +1168,7 @@ function TimelineRowsList({
           className={timelineRowWrapperClassName({ row, spacing })}
         >
           <MemoizedTimelineRowView
+            activeLatestBundleId={activeLatestBundleId}
             row={row}
             scopeActive={scopeActive}
             spacing={spacing}

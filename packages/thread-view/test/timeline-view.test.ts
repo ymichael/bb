@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type {
   TimelineActivityIntent,
   TimelineCommandWorkRow,
+  TimelineConversationRow,
   TimelineDelegationWorkRow,
   TimelineFileChangeWorkRow,
   TimelineRowBase,
@@ -43,6 +44,21 @@ function baseRow(id: string, overrides: WorkRowOverrides = {}): TimelineRowBase 
     sourceSeqEnd: overrides.sourceSeqEnd ?? 1,
     startedAt: overrides.startedAt ?? 1,
     createdAt: overrides.createdAt ?? 1,
+  };
+}
+
+function assistantRow({
+  id,
+  text = "",
+  ...overrides
+}: WorkRowOverrides & { id: string; text?: string }): TimelineConversationRow {
+  return {
+    ...baseRow(id, overrides),
+    kind: "conversation",
+    role: "assistant",
+    text,
+    attachments: null,
+    userRequest: null,
   };
 }
 
@@ -247,109 +263,47 @@ describe("buildTimelineViewRows", () => {
     });
   });
 
-  it("keeps terminal and denied single work rows summarized", () => {
-    const cases: readonly TerminalSingleWorkSummaryCase[] = [
+  it("keeps single terminal work rows as direct leaves regardless of status", () => {
+    // Per Q1: single terminal rows are always muted leaves; the old behavior
+    // of wrapping single denied/error/interrupted in a 1-child summary is gone.
+    const cases = [
+      commandRow({ id: "command-error", status: "error" }),
+      commandRow({ id: "command-interrupted", status: "interrupted" }),
       {
-        expectedSummaryLabel: "Ran 1 command",
-        label: "command-error",
-        row: commandRow({ id: "command-error", status: "error" }),
-        status: "error",
+        ...commandRow({ id: "command-denied" }),
+        approvalStatus: "denied" as const,
       },
+      fileChangeRow({ id: "file-change-error", status: "error" }),
+      fileChangeRow({ id: "file-change-interrupted", status: "interrupted" }),
       {
-        expectedSummaryLabel: "Ran 1 command",
-        label: "command-interrupted",
-        row: commandRow({
-          id: "command-interrupted",
-          status: "interrupted",
-        }),
-        status: "interrupted",
+        ...fileChangeRow({ id: "file-change-denied" }),
+        approvalStatus: "denied" as const,
       },
+      toolRow({ id: "tool-error", status: "error" }),
+      toolRow({ id: "tool-interrupted", status: "interrupted" }),
       {
-        expectedSummaryLabel: "Denied 1 command",
-        label: "command-denied",
-        row: {
-          ...commandRow({ id: "command-denied" }),
-          approvalStatus: "denied",
-        },
-        status: "completed",
+        ...toolRow({ id: "tool-denied" }),
+        approvalStatus: "denied" as const,
       },
-      {
-        expectedSummaryLabel: "Edited 1 file",
-        label: "file-change-error",
-        row: fileChangeRow({ id: "file-change-error", status: "error" }),
-        status: "error",
-      },
-      {
-        expectedSummaryLabel: "Edited 1 file",
-        label: "file-change-interrupted",
-        row: fileChangeRow({
-          id: "file-change-interrupted",
-          status: "interrupted",
-        }),
-        status: "interrupted",
-      },
-      {
-        expectedSummaryLabel: "Denied 1 file change",
-        label: "file-change-denied",
-        row: {
-          ...fileChangeRow({ id: "file-change-denied" }),
-          approvalStatus: "denied",
-        },
-        status: "completed",
-      },
-      {
-        expectedSummaryLabel: "Ran 1 tool",
-        label: "tool-error",
-        row: toolRow({ id: "tool-error", status: "error" }),
-        status: "error",
-      },
-      {
-        expectedSummaryLabel: "Ran 1 tool",
-        label: "tool-interrupted",
-        row: toolRow({ id: "tool-interrupted", status: "interrupted" }),
-        status: "interrupted",
-      },
-      {
-        expectedSummaryLabel: "Denied 1 tool",
-        label: "tool-denied",
-        row: {
-          ...toolRow({ id: "tool-denied" }),
-          approvalStatus: "denied",
-        },
-        status: "completed",
-      },
-    ];
+    ] as const;
 
-    for (const testCase of cases) {
-      const rows = buildTimelineViewRows([testCase.row]);
+    for (const inputRow of cases) {
+      const rows = buildTimelineViewRows([inputRow]);
 
       expect(rows).toHaveLength(1);
-      const row = expectStepSummaryRow(rows[0]);
-      expect(buildTimelineWorkSummaryLabel(row)).toBe(
-        testCase.expectedSummaryLabel,
-      );
-      expect(row.status).toBe(testCase.status);
-      expect(row.children).toHaveLength(1);
-      expect(row.children[0]).toMatchObject({
-        id: testCase.label,
-        status: testCase.status,
-      });
+      expect(rows[0]?.kind).toBe("work");
+      expect(rows[0]?.id).toBe(inputRow.id);
     }
   });
 
-  it("does not label a denied command summary as ran work", () => {
+  it("keeps a single denied command as a leaf row", () => {
     const rows = buildTimelineViewRows([deniedCommandRow()]);
 
     expect(rows).toHaveLength(1);
-    const row = expectStepSummaryRow(rows[0]);
-
-    expect(buildTimelineWorkSummaryLabel(row)).toBe("Denied 1 command");
-    expect(row.status).toBe("completed");
-    expect(row.children).toHaveLength(1);
-    expect(row.children[0]).toMatchObject({
+    expect(rows[0]?.kind).toBe("work");
+    expect(rows[0]).toMatchObject({
       id: "command-denied-1",
       approvalStatus: "denied",
-      command: "git push",
     });
   });
 
@@ -373,7 +327,7 @@ describe("buildTimelineViewRows", () => {
         sourceSeqEnd: 2,
       }),
     ]);
-    const nextSummary = expectStepSummaryRow(nextRows[0]);
+    const nextSummary = expectBundleSummaryRow(nextRows[0]);
 
     expect(firstRows[0]).toMatchObject({
       kind: "work",
@@ -395,7 +349,7 @@ describe("buildTimelineViewRows", () => {
     );
   });
 
-  it("keeps summary row identity stable when an active bundle completes", () => {
+  it("keeps bundle row identity stable across activity transitions", () => {
     const pendingRows = buildTimelineViewRows([
       commandRow({
         id: "command-1",
@@ -422,11 +376,13 @@ describe("buildTimelineViewRows", () => {
     ]);
 
     const pendingSummary = expectBundleSummaryRow(pendingRows[0]);
-    const completedSummary = expectStepSummaryRow(completedRows[0]);
+    const completedSummary = expectBundleSummaryRow(completedRows[0]);
 
     expect(pendingSummary.id).toBe("thread-1:turn-1:work-summary:command-1");
     expect(completedSummary.id).toBe(pendingSummary.id);
-    expect(buildTimelineWorkSummaryLabel(pendingSummary)).toBe(
+    // Active-latest treatment is decided by list-level renderers, not by the
+    // grouper. The label generator opts in to active wording only when asked.
+    expect(buildTimelineWorkSummaryLabel(pendingSummary, { active: true })).toBe(
       "Running 2 commands",
     );
     expect(buildTimelineWorkSummaryLabel(completedSummary)).toBe(
@@ -461,7 +417,9 @@ describe("buildTimelineViewRows", () => {
     });
   });
 
-  it("splits completed and non-terminal work instead of mixing one summary", () => {
+  it("groups same-concept consecutive work into a bundle regardless of status mix", () => {
+    // The new grouping is concept-based; mixing completed and pending of the
+    // same concept stays in one bundle (active-latest decided by the renderer).
     const rows = buildTimelineViewRows([
       commandRow({ id: "command-completed", sourceSeqStart: 1 }),
       commandRow({
@@ -471,19 +429,12 @@ describe("buildTimelineViewRows", () => {
       }),
     ]);
 
-    expect(rows).toHaveLength(2);
-    expect(rows[0]).toMatchObject({
-      kind: "work",
-      workKind: "command",
-      id: "command-completed",
-      status: "completed",
-    });
-    expect(rows[1]).toMatchObject({
-      kind: "work",
-      workKind: "command",
-      id: "command-pending",
-      status: "pending",
-    });
+    expect(rows).toHaveLength(1);
+    const bundle = expectBundleSummaryRow(rows[0]);
+    expect(bundle.children.map((c) => c.id)).toEqual([
+      "command-completed",
+      "command-pending",
+    ]);
   });
 
   it("uses active labels for command, subagent, and file-edit runs", () => {
@@ -532,15 +483,15 @@ describe("buildTimelineViewRows", () => {
       ])[0],
     );
 
-    expect(buildTimelineWorkSummaryLabel(commandSummary)).toBe(
-      "Running 2 commands",
-    );
-    expect(buildTimelineWorkSummaryLabel(delegationSummary)).toBe(
-      "Running 2 subagents",
-    );
-    expect(buildTimelineWorkSummaryLabel(fileEditSummary)).toBe(
-      "Editing 2 files",
-    );
+    expect(
+      buildTimelineWorkSummaryLabel(commandSummary, { active: true }),
+    ).toBe("Running 2 commands");
+    expect(
+      buildTimelineWorkSummaryLabel(delegationSummary, { active: true }),
+    ).toBe("Running 2 subagents");
+    expect(
+      buildTimelineWorkSummaryLabel(fileEditSummary, { active: true }),
+    ).toBe("Editing 2 files");
     expect(commandSummary.status).toBe("pending");
     expect(delegationSummary.status).toBe("pending");
     expect(fileEditSummary.children[0]).toMatchObject({
@@ -555,25 +506,28 @@ describe("buildTimelineViewRows", () => {
     });
   });
 
-  it("uses semantic phrases for mixed active bundle summaries", () => {
+  it("emits multi-concept step-summary phrasing once an assistant boundary closes the step", () => {
+    // Before the assistant boundary the step is open and concepts render as
+    // separate leaves/bundles. After the assistant arrives, the step closes
+    // into a single multi-concept step-summary.
     const rows = buildTimelineViewRows([
       commandRow({
         activityIntents: [readIntent("src/app.ts")],
         id: "read-1",
         sourceSeqStart: 1,
-        status: "pending",
       }),
       commandRow({
-        id: "command-pending",
+        id: "command-1",
         sourceSeqStart: 2,
-        status: "pending",
       }),
+      assistantRow({ id: "assistant-1", sourceSeqStart: 3 }),
     ]);
-    const summary = expectBundleSummaryRow(rows[0]);
 
+    const summary = expectStepSummaryRow(rows[0]);
     expect(buildTimelineWorkSummaryLabel(summary)).toBe(
-      "Exploring 1 file, running 1 command",
+      "Explored 1 file, ran 1 command",
     );
+    expect(rows[1]?.kind).toBe("conversation");
   });
 
   it("uses active labels for tool-only bundle summaries", () => {
@@ -593,7 +547,9 @@ describe("buildTimelineViewRows", () => {
     ]);
     const summary = expectBundleSummaryRow(rows[0]);
 
-    expect(buildTimelineWorkSummaryLabel(summary)).toBe("Running 2 tools");
+    expect(
+      buildTimelineWorkSummaryLabel(summary, { active: true }),
+    ).toBe("Running 2 tools");
   });
 
   it("groups child work under nested delegation rows", () => {
@@ -621,7 +577,7 @@ describe("buildTimelineViewRows", () => {
     ]);
 
     const delegation = expectDelegationWorkRow(rows[0]);
-    const childSummary = expectStepSummaryRow(delegation.childRows[0]);
+    const childSummary = expectBundleSummaryRow(delegation.childRows[0]);
 
     expect(rows).toHaveLength(1);
     expect(delegation.childRows).toHaveLength(1);

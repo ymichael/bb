@@ -99,6 +99,21 @@ export function getFileChangeActionPresentTense(
   }
 }
 
+export function getFileChangeActionInfinitive(
+  action: FileChangeAction,
+): string {
+  switch (action) {
+    case "created":
+      return "create";
+    case "deleted":
+      return "delete";
+    case "renamed":
+      return "rename";
+    case "edited":
+      return "edit";
+  }
+}
+
 export function formatFileChangePath({
   change,
   mode,

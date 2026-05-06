@@ -15,8 +15,8 @@ import {
   type TimelineExplorationWorkRow,
 } from "./timeline-activity-intents.js";
 import {
-  buildTimelineActivityIntentTitles,
   buildTimelineRowTitle,
+  findActiveLatestBundleId,
   type BuildTimelineRowTitleOptions,
 } from "./timeline-row-title.js";
 import type {
@@ -39,12 +39,30 @@ interface TimelineTextFormatContext {
   color: boolean;
   depth: number;
   truncateForAudit: boolean;
+  /**
+   * `id` of the bundle-summary that is the open step's active-latest bundle
+   * for the row list currently being formatted. Computed once per list via
+   * `findActiveLatestBundleId` and passed down so per-row title formatting can
+   * mark only the matching bundle as active.
+   */
+  activeLatestBundleId: string | null;
 }
 
-const CLI_TITLE_OPTIONS = {
+const BASE_CLI_TITLE_OPTIONS = {
   summaryStyle: "bundle",
   workStyle: "default",
 } satisfies BuildTimelineRowTitleOptions;
+
+function cliTitleOptions(
+  row: ThreadTimelineViewRow,
+  context: TimelineTextFormatContext,
+): BuildTimelineRowTitleOptions {
+  return {
+    ...BASE_CLI_TITLE_OPTIONS,
+    isActiveLatestBundle:
+      row.kind === "bundle-summary" && row.id === context.activeLatestBundleId,
+  };
+}
 
 type TimelineConversationViewRow = Extract<
   ThreadTimelineViewRow,
@@ -97,10 +115,12 @@ function rowHeader(label: string, context: TimelineTextFormatContext): string {
 
 function nestedContext(
   context: TimelineTextFormatContext,
+  nestedRows: readonly ThreadTimelineViewRow[],
 ): TimelineTextFormatContext {
   return {
     ...context,
     depth: context.depth + 1,
+    activeLatestBundleId: findActiveLatestBundleId(nestedRows),
   };
 }
 
@@ -211,23 +231,11 @@ function workStatusLabel(row: TimelineViewWorkRow, color: boolean): string {
   return statusLabel(row.status, color);
 }
 
-function formatWorkTitle(row: TimelineViewWorkRow): string {
-  const explorationTitle = formatExplorationWorkTitle(row);
-  if (explorationTitle !== null) {
-    return explorationTitle;
-  }
-  return buildTimelineRowTitle(row, CLI_TITLE_OPTIONS).plain;
-}
-
-function formatExplorationWorkTitle(row: TimelineViewWorkRow): string | null {
-  if (
-    (row.workKind !== "command" && row.workKind !== "tool") ||
-    !hasTimelineExplorationIntent(row)
-  ) {
-    return null;
-  }
-  const titles = buildTimelineActivityIntentTitles(row);
-  return titles.length === 1 ? (titles[0]?.title.plain ?? null) : null;
+function formatWorkTitle(
+  row: TimelineViewWorkRow,
+  context: TimelineTextFormatContext,
+): string {
+  return buildTimelineRowTitle(row, cliTitleOptions(row, context)).plain;
 }
 
 function formatWorkOutput(output: string, color: boolean): string {
@@ -301,7 +309,10 @@ function formatWorkBody(
     case "delegation":
       if (row.childRows.length > 0) {
         lines.push(
-          indentBlock(formatRows(row.childRows, nestedContext(context)), "  "),
+          indentBlock(
+            formatRows(row.childRows, nestedContext(context, row.childRows)),
+            "  ",
+          ),
         );
       }
       return lines;
@@ -314,7 +325,7 @@ function formatWorkRow(
   row: TimelineViewWorkRow,
   context: TimelineTextFormatContext,
 ): string {
-  const lines = [rowHeader(formatWorkTitle(row), context)];
+  const lines = [rowHeader(formatWorkTitle(row, context), context)];
   const bodyLines = formatWorkBody(row, context);
   lines.push(
     ...(row.workKind === "delegation"
@@ -357,7 +368,9 @@ function formatWorkSummaryDetails(
 ): string[] {
   const lines: string[] = [];
   const dedupedDetailKeys = new Set<string>();
-  const childContext = nestedContext(context);
+  // Summary children are leaves (no nested bundles), so no active-latest
+  // bundle exists in this scope.
+  const childContext = nestedContext(context, []);
   for (const child of row.children) {
     if (
       (child.workKind === "command" || child.workKind === "tool") &&
@@ -371,7 +384,7 @@ function formatWorkSummaryDetails(
       continue;
     }
     if (child.workKind === "web-search" || child.workKind === "web-fetch") {
-      lines.push(rowHeader(formatWorkTitle(child), childContext));
+      lines.push(rowHeader(formatWorkTitle(child, childContext), childContext));
       continue;
     }
     lines.push(formatWorkRow(child, childContext));
@@ -383,7 +396,11 @@ function formatWorkSummary(
   row: TimelineWorkSummaryRow,
   context: TimelineTextFormatContext,
 ): string {
-  const lines = [rowHeader(buildTimelineWorkSummaryLabel(row), context)];
+  const isActive =
+    row.kind === "bundle-summary" && row.id === context.activeLatestBundleId;
+  const lines = [
+    rowHeader(buildTimelineWorkSummaryLabel(row, { active: isActive }), context),
+  ];
   if (context.verbose || row.kind === "bundle-summary") {
     const details = formatWorkSummaryDetails(row, context);
     if (details.length > 0) {
@@ -393,8 +410,11 @@ function formatWorkSummary(
   return lines.join("\n");
 }
 
-function formatTurnTitle(row: TimelineViewTurnRow): string {
-  return buildTimelineRowTitle(row, CLI_TITLE_OPTIONS).plain;
+function formatTurnTitle(
+  row: TimelineViewTurnRow,
+  context: TimelineTextFormatContext,
+): string {
+  return buildTimelineRowTitle(row, cliTitleOptions(row, context)).plain;
 }
 
 function formatConversationRequestLabel(
@@ -445,13 +465,16 @@ function formatRow(
     case "step-summary":
       return formatWorkSummary(row, context);
     case "turn": {
-      const label = formatTurnTitle(row);
+      const label = formatTurnTitle(row, context);
       if (!row.children || row.children.length === 0) {
         return rowHeader(label, context);
       }
       return [
         rowHeader(label, context),
-        indentBlock(formatRows(row.children, nestedContext(context)), "  "),
+        indentBlock(
+          formatRows(row.children, nestedContext(context, row.children)),
+          "  ",
+        ),
       ].join("\n");
     }
     default:
@@ -476,5 +499,6 @@ export function formatThreadTimelineText(
     color: options?.color ?? false,
     depth: 0,
     truncateForAudit: options?.truncateForAudit ?? false,
+    activeLatestBundleId: findActiveLatestBundleId(viewRows),
   });
 }

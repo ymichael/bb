@@ -208,7 +208,11 @@ describe("ThreadTimelineRows", () => {
     });
   });
 
-  it("keeps completed activity summaries in past tense in an active scope", () => {
+  it("uses active-latest treatment for trailing completed bundles in an active scope", () => {
+    // New spec: a bundle that is the trailing/latest bundle in the open step
+    // gets active-latest treatment (present tense + shimmer) regardless of
+    // whether its children have completed. The displaced (non-latest) bundle
+    // would render past-tense; see the displacement coverage below.
     const html = renderRowsToStaticMarkup({
       timelineRows: [
         commandRow({
@@ -229,8 +233,7 @@ describe("ThreadTimelineRows", () => {
       },
     });
 
-    expect(html).toContain("Explored");
-    expect(html).not.toContain("Exploring");
+    expect(html).toContain("Exploring");
     expect(html).toContain("2 files");
   });
 
@@ -287,11 +290,11 @@ describe("ThreadTimelineRows", () => {
     fireEvent.click(screen.getByRole("button"));
 
     expect(
-      view.container.querySelector('[aria-label="Read src/app.ts"]'),
+      view.container.querySelector('[title="Read src/app.ts"]'),
     ).not.toBeNull();
     expect(view.container.textContent ?? "").not.toContain("Read src/app.ts");
     expect(
-      view.container.querySelector('[aria-label="Searched for TODO in src"]'),
+      view.container.querySelector('[title="Searched for TODO in src"]'),
     ).not.toBeNull();
     expect(view.container.textContent ?? "").not.toContain("$ cat src/app.ts");
     expect(view.container.textContent ?? "").not.toContain(
@@ -310,7 +313,7 @@ describe("ThreadTimelineRows", () => {
       "Final subagent answer.",
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /Ran subagent:/u }));
+    fireEvent.click(screen.getByRole("button", { name: /Ran subagent/u }));
     expect(view.container.textContent ?? "").toContain(
       "Final subagent answer.",
     );
@@ -334,8 +337,8 @@ describe("ThreadTimelineRows", () => {
     expect(screen.getAllByRole("button")).toHaveLength(1);
     fireEvent.click(screen.getByRole("button"));
 
-    expect(view.container.textContent ?? "").toContain("Ran web search:");
-    expect(view.container.textContent ?? "").toContain("Fetched:");
+    expect(view.container.textContent ?? "").toContain("Ran web search");
+    expect(view.container.textContent ?? "").toContain("Fetched");
     expect(screen.getAllByRole("button")).toHaveLength(1);
   });
 
@@ -545,10 +548,10 @@ describe("ThreadTimelineRows", () => {
     fireEvent.click(screen.getByRole("button", { name: /Ran 1 web search/u }));
 
     const staticTitle = view.container.querySelector(
-      '[aria-label="Ran web search: timeline renderer"]',
+      '[title="Ran web search: timeline renderer"]',
     );
-    const staticHeader = staticTitle?.closest(".timeline-row-header");
     expect(staticTitle).not.toBeNull();
+    const staticHeader = staticTitle?.closest(".timeline-row-header");
     expect(staticHeader?.classList.contains("px-0")).toBe(true);
     expect(staticHeader?.classList.contains("px-2")).toBe(false);
   });
@@ -729,7 +732,7 @@ describe("ThreadTimelineRows", () => {
     });
 
     fireEvent.click(
-      screen.getByRole("button", { name: /Ran tool:\s+LookupTool/u }),
+      screen.getByRole("button", { name: /Ran tool: LookupTool/u }),
     );
 
     const text = view.container.textContent ?? "";
@@ -778,7 +781,7 @@ describe("ThreadTimelineRows", () => {
     expect(view.container.textContent ?? "").not.toContain("first chunk");
   });
 
-  it("renders error command summaries with neutral status metadata", () => {
+  it("renders error command bundles with neutral status metadata", () => {
     renderTimelineRows({
       timelineRows: [
         commandRow({
@@ -786,43 +789,56 @@ describe("ThreadTimelineRows", () => {
           command: "pnpm test",
           status: "error",
         }),
-      ],
-    });
-
-    const summaryButton = screen.getByRole("button", {
-      name: /Ran 1 command \(error\)/u,
-    });
-
-    fireEvent.click(summaryButton);
-
-    const button = screen.getByRole("button", {
-      name: /Ran\s+pnpm test\s+2s/u,
-    });
-    expect(button.textContent ?? "").not.toContain("(error");
-  });
-
-  it("renders failed structured tools with intent titles and no error decorations", () => {
-    const view = renderTimelineRows({
-      timelineRows: [
-        toolRow({
-          activityIntents: [readIntent({ path: "/repo/src/app.ts" })],
-          output: "ENOENT: no such file or directory",
+        commandRow({
+          id: "command-error-2",
+          command: "pnpm lint",
           status: "error",
+          sourceSeqStart: 2,
         }),
       ],
     });
 
     const summaryButton = screen.getByRole("button", {
-      name: /Explored 1 file \(error\)/u,
+      name: /Ran 2 commands \(2 errors\)/u,
     });
 
     fireEvent.click(summaryButton);
 
     const button = screen.getByRole("button", {
-      name: /Read\s+\/repo\/src\/app\.ts/u,
+      name: /Ran\s+pnpm test\s+\(2s, error\)/u,
     });
-    expect(button.textContent ?? "").not.toContain("Ran tool:");
-    expect(button.textContent ?? "").not.toContain("(error");
+    expect(button).toBeTruthy();
+  });
+
+  it("renders failed structured tools with intent titles inside an exploration bundle", () => {
+    const view = renderTimelineRows({
+      timelineRows: [
+        toolRow({
+          id: "tool-1",
+          activityIntents: [readIntent({ path: "/repo/src/app.ts" })],
+          output: "ENOENT: no such file or directory",
+          status: "error",
+          sourceSeqStart: 1,
+        }),
+        toolRow({
+          id: "tool-2",
+          activityIntents: [readIntent({ path: "/repo/src/lib.ts" })],
+          status: "completed",
+          sourceSeqStart: 2,
+        }),
+      ],
+    });
+
+    const summaryButton = screen.getByRole("button", {
+      name: /Explored 2 files \(1 error\)/u,
+    });
+
+    fireEvent.click(summaryButton);
+
+    const button = screen.getByRole("button", {
+      name: /Read\s+app\.ts/u,
+    });
+    expect(button.textContent ?? "").not.toContain("Ran tool ");
 
     fireEvent.click(button);
 
@@ -831,7 +847,7 @@ describe("ThreadTimelineRows", () => {
     );
   });
 
-  it("does not auto-expand error command details", () => {
+  it("does not auto-expand error command leaves", () => {
     const view = renderTimelineRows({
       timelineRows: [
         commandRow({
@@ -843,13 +859,6 @@ describe("ThreadTimelineRows", () => {
       ],
     });
 
-    const summaryButton = screen.getByRole("button", {
-      name: /Ran 1 command/u,
-    });
-    expect(summaryButton.getAttribute("aria-expanded")).toBe("false");
-    expect(view.container.textContent ?? "").not.toContain("test failure");
-
-    fireEvent.click(summaryButton);
     const commandButton = screen.getByRole("button", {
       name: /Ran\s+pnpm test/u,
     });
@@ -974,7 +983,10 @@ describe("ThreadTimelineRows", () => {
     expect(screen.getByText("steer pending")).toBeTruthy();
   });
 
-  it("auto-expands pending summaries even when completed work follows", () => {
+  it("auto-expands a mixed-status command bundle to show pending output", () => {
+    // Same-concept consecutive work groups into a single bundle regardless of
+    // child status; pending children in the bundle keep it auto-expanded so
+    // active output stays visible.
     const view = renderTimelineRows({
       timelineRows: [
         commandRow({
@@ -1011,19 +1023,12 @@ describe("ThreadTimelineRows", () => {
       },
     });
 
-    const pendingBundleButton = screen.getByRole("button", {
-      name: /Running 2 commands/u,
+    const bundleButton = screen.getByRole("button", {
+      name: /Running 4 commands/u,
     });
-    expect(pendingBundleButton.getAttribute("aria-expanded")).toBe("true");
+    expect(bundleButton.getAttribute("aria-expanded")).toBe("true");
     expect(view.container.textContent ?? "").toContain("first still running");
     expect(view.container.textContent ?? "").toContain("second still running");
-
-    const completedBundleButton = screen.getByRole("button", {
-      name: /Ran 2 commands/u,
-    });
-    expect(completedBundleButton.getAttribute("aria-expanded")).toBe("false");
-    expect(view.container.textContent ?? "").not.toContain("today");
-    expect(view.container.textContent ?? "").not.toContain("/repo");
   });
 
   it("omits command cwd metadata and mutes exit code detail", () => {
@@ -1076,7 +1081,7 @@ describe("ThreadTimelineRows", () => {
     ).toBeNull();
 
     fireEvent.click(
-      screen.getByRole("button", { name: /Edited\s+src\/app\.ts/u }),
+      screen.getByRole("button", { name: /Edited\s+app\.ts/u }),
     );
 
     expect(
@@ -1107,7 +1112,7 @@ describe("ThreadTimelineRows", () => {
     });
 
     fireEvent.click(
-      screen.getByRole("button", { name: /Edited\s+src\/app\.ts/u }),
+      screen.getByRole("button", { name: /Edited\s+app\.ts/u }),
     );
 
     expect(view.container.textContent ?? "").not.toContain(
@@ -1134,13 +1139,13 @@ describe("ThreadTimelineRows", () => {
 
     expect(
       screen.getByRole("button", {
-        name: /Created\s+src\/new-file\.ts\s+\+2/u,
+        name: /Created\s+new-file\.ts\s+\+2/u,
       }),
     ).toBeTruthy();
 
     fireEvent.click(
       screen.getByRole("button", {
-        name: /Created\s+src\/new-file\.ts\s+\+2/u,
+        name: /Created\s+new-file\.ts\s+\+2/u,
       }),
     );
 

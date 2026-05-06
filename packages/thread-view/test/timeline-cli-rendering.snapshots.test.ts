@@ -146,14 +146,14 @@ describe("timeline CLI rendering snapshots", () => {
     expect(timeline.turnRows).toHaveLength(0);
     expect(timeline.text).not.toContain("Worked for");
     expect(timeline.text).toMatchInlineSnapshot(`
-      "── Ran pnpm test 5s ────────────────────────────────────────
+      "── Ran pnpm test (5s) ──────────────────────────────────────
         $ pnpm test
 
       ── User ────────────────────────────────────────────────────
       Please keep going
       steer
 
-      ── Ran pnpm lint 6s ────────────────────────────────────────
+      ── Ran pnpm lint (6s) ──────────────────────────────────────
         $ pnpm lint"
     `);
   });
@@ -338,9 +338,10 @@ describe("timeline CLI rendering snapshots", () => {
           "text": "── User ────────────────────────────────────────────────────
       Patch the timeline output
 
-      ── Explored 1 search, ran 1 web search ─────────────────────
-        ── Searched for timeline in packages/core-ui
-        ── Ran web search: timeline rendering
+      ── Searched for timeline in packages/core-ui ───────────────
+        $ rg timeline packages/core-ui
+
+      ── Ran web search: timeline rendering ──────────────────────
 
       ── Editing /repo/packages/core-ui/src/format-timeline-text.ts",
         },
@@ -1398,9 +1399,8 @@ describe("timeline CLI rendering snapshots", () => {
     expect(timeline.text).toMatchInlineSnapshot(`
       "── Waiting for approval to grant Bash ──────────────────────
 
-      ── Denied 1 command ────────────────────────────────────────
-        ── Permission denied: git push
-          $ git push"
+      ── Permission denied: git push ─────────────────────────────
+        $ git push"
     `);
   });
 
@@ -1424,11 +1424,10 @@ describe("timeline CLI rendering snapshots", () => {
     ]);
 
     expect(timeline.text).toMatchInlineSnapshot(`
-      "── Ran 1 command ───────────────────────────────────────────
-        ── Ran pnpm test 2s
-          $ pnpm test
-          Tests failed
-          exit 1"
+      "── Ran pnpm test (2s, error) ───────────────────────────────
+        $ pnpm test
+        Tests failed
+        exit 1"
     `);
 
     const coloredText = formatThreadTimelineText(timeline.rows, {
@@ -1460,7 +1459,7 @@ describe("timeline CLI rendering snapshots", () => {
     ]);
 
     expect(timeline.text).toMatchInlineSnapshot(`
-      "── Ran pnpm exec turbo run typecheck --filter=@bb/app > /tmp/typecheck.txt 2>&1 4s
+      "── Ran pnpm exec turbo run typecheck --filter=@bb/app > /tmp/typecheck.txt 2>&1 (4s)
         $ pnpm exec turbo run typecheck --filter=@bb/app > /tmp/typecheck.txt 2>&1
         exit code 0"
     `);

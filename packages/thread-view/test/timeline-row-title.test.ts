@@ -240,15 +240,16 @@ describe("buildTimelineRowTitle", () => {
     const title = buildTimelineRowTitle(commandRow(), DEFAULT_OPTIONS);
 
     expect(title.plain).toBe(
-      "Ran pnpm exec turbo run test --filter=@bb/app 2s",
+      "Ran pnpm exec turbo run test --filter=@bb/app (2s)",
     );
-    expect(title.prefix).toBe("Ran");
-    expect(title.content).toBe("pnpm exec turbo run test --filter=@bb/app");
-    expect(title.suffix).toEqual({
-      kind: "text",
-      text: "2s",
-      truncate: false,
-    });
+    expect(title.segments.map((s) => s.text)).toEqual([
+      "Ran",
+      "pnpm exec turbo run test --filter=@bb/app",
+    ]);
+    expect(title.segments[1]?.em).toBe(true);
+    expect(title.decorations).toEqual([
+      { kind: "duration", durationMs: 2_100, live: false },
+    ]);
   });
 
   it("shows pending command duration once it is over one second", () => {
@@ -263,16 +264,13 @@ describe("buildTimelineRowTitle", () => {
     );
 
     expect(title.plain).toBe(
-      "Running pnpm exec turbo run test --filter=@bb/app 2s",
+      "Running pnpm exec turbo run test --filter=@bb/app (2s)",
     );
-    expect(title.prefix).toBe("Running");
-    expect(title.content).toBe("pnpm exec turbo run test --filter=@bb/app");
-    expect(title.suffix).toEqual({
-      kind: "text",
-      text: "2s",
-      truncate: false,
-    });
-    expect(title.motion).toBe("shimmer");
+    expect(title.segments[0]?.text).toBe("Running");
+    expect(title.segments[0]?.shimmer).toBe(true);
+    expect(title.decorations).toEqual([
+      { kind: "duration", durationMs: 2_100, live: true },
+    ]);
   });
 
   it("can render completed work leaves with muted summary title treatment", () => {
@@ -282,18 +280,20 @@ describe("buildTimelineRowTitle", () => {
     });
 
     expect(title.plain).toBe(
-      "Ran pnpm exec turbo run test --filter=@bb/app 2s",
+      "Ran pnpm exec turbo run test --filter=@bb/app (2s)",
     );
-    expect(title.prefix).toBe("Ran");
-    expect(title.content).toBe("pnpm exec turbo run test --filter=@bb/app");
-    expect(title.contentTone).toBe("muted");
+    // Summary work-style mutes via tone; per-segment em is preserved so
+    // content emphasis stays visible inside the muted wrapper.
     expect(title.tone).toBe("summary");
+    expect(title.segments.find((s) => s.em)?.text).toBe(
+      "pnpm exec turbo run test --filter=@bb/app",
+    );
   });
 
   it.each([
     {
       expectedPlain:
-        "Permission denied: pnpm exec turbo run test --filter=@bb/app 2s",
+        "Permission denied: pnpm exec turbo run test --filter=@bb/app (2s)",
       row: {
         ...commandRow(),
         approvalStatus: "denied",
@@ -307,7 +307,7 @@ describe("buildTimelineRowTitle", () => {
       } satisfies TimelineFileChangeWorkRow,
     },
     {
-      expectedPlain: "Permission denied: Read /repo/src/app.ts 2s",
+      expectedPlain: "Permission denied: Read /repo/src/app.ts",
       row: {
         ...toolRow(),
         approvalStatus: "denied",
@@ -322,8 +322,7 @@ describe("buildTimelineRowTitle", () => {
       });
 
       expect(title.plain).toBe(expectedPlain);
-      expect(title.prefix).toBe("Permission denied:");
-      expect(title.contentTone).toBe("emphasis");
+      expect(title.segments[0]?.text).toBe("Permission denied:");
       expect(title.tone).toBe("destructive");
     },
   );
@@ -338,11 +337,13 @@ describe("buildTimelineRowTitle", () => {
 
     const title = buildTimelineRowTitle(row, DEFAULT_OPTIONS);
 
-    expect(title.plain).toBe("Ran pnpm exec turbo run test --filter=@bb/app 2s");
+    expect(title.plain).toBe(
+      "Ran pnpm exec turbo run test --filter=@bb/app (2s, error)",
+    );
     expect(title.tone).toBe("default");
   });
 
-  it("keeps error tools in the normal tool title style", () => {
+  it("renders failed exploration intents using the intent verb", () => {
     const row = {
       ...toolRow(),
       status: "error",
@@ -350,38 +351,32 @@ describe("buildTimelineRowTitle", () => {
 
     const title = buildTimelineRowTitle(row, DEFAULT_OPTIONS);
 
-    expect(title.plain).toBe("Ran tool: Read /repo/src/app.ts 2s");
+    expect(title.plain).toBe("Read /repo/src/app.ts (error)");
     expect(title.tone).toBe("default");
-    expect(title.suffix).toEqual({
-      kind: "text",
-      text: "2s",
-      truncate: false,
-    });
+    expect(title.decorations).toEqual([
+      { kind: "status", status: "error", durationMs: null },
+    ]);
   });
 
   it("omits zero-sided diff stats from file change suffixes", () => {
     const title = buildTimelineRowTitle(deletedFileRow(), DEFAULT_OPTIONS);
 
     expect(title.plain).toBe("Deleted docs/react-perf-audit.md -2");
-    expect(title.content).toBe("react-perf-audit.md");
-    expect(title.suffix).toEqual({
-      kind: "diff-stats",
-      added: 0,
-      removed: 2,
-    });
+    expect(title.segments.find((s) => s.em)?.text).toBe("react-perf-audit.md");
+    expect(title.decorations).toEqual([
+      { kind: "diff-stats", added: 0, removed: 2 },
+    ]);
   });
 
   it("keeps created file diff stats in the title suffix", () => {
     const title = buildTimelineRowTitle(createdFileRow(), DEFAULT_OPTIONS);
 
     expect(title.plain).toBe("Created src/new-file.ts +2");
-    expect(title.prefix).toBe("Created");
-    expect(title.content).toBe("new-file.ts");
-    expect(title.suffix).toEqual({
-      kind: "diff-stats",
-      added: 2,
-      removed: 0,
-    });
+    expect(title.segments[0]?.text).toBe("Created");
+    expect(title.segments.find((s) => s.em)?.text).toBe("new-file.ts");
+    expect(title.decorations).toEqual([
+      { kind: "diff-stats", added: 2, removed: 0 },
+    ]);
   });
 
   it("declares an open-file-diff action on file-change titles using the canonical path", () => {
@@ -430,14 +425,15 @@ describe("buildTimelineRowTitle", () => {
       kind: "work" as const,
       workKind: "command" as const,
       status: "completed" as const,
+      callId: "cmd-call-1",
       command: "ls",
+      cwd: null,
       source: null,
-      output: null,
+      output: "",
       exitCode: 0,
       durationMs: 0,
-      stdout: null,
-      stderr: null,
       approvalStatus: null,
+      activityIntents: [],
     } satisfies TimelineCommandWorkRow;
 
     const title = buildTimelineRowTitle(commandRow, DEFAULT_OPTIONS);
@@ -445,30 +441,33 @@ describe("buildTimelineRowTitle", () => {
     expect(title.action).toBeNull();
   });
 
-  it("marks long delegation metadata as a truncating suffix", () => {
+  it("emits the delegation type as its own truncating segment", () => {
     const title = buildTimelineRowTitle(delegationRow(), DEFAULT_OPTIONS);
 
     expect(title.plain).toBe(
-      "Ran subagent: Review correctness + plan adherence (general-purpose-review-agent-with-a-long-name) 45s",
+      "Ran subagent: Review correctness + plan adherence (general-purpose-review-agent-with-a-long-name) (45s)",
     );
-    expect(title.suffix).toEqual({
-      kind: "text",
-      text: "(general-purpose-review-agent-with-a-long-name) 45s",
-      truncate: true,
-    });
+    const typeSegment = title.segments.find(
+      (s) => s.text === "(general-purpose-review-agent-with-a-long-name)",
+    );
+    expect(typeSegment?.truncate).toBe(true);
+    expect(typeSegment?.em).toBe(false);
+    expect(title.decorations).toEqual([
+      { kind: "duration", durationMs: 45_000, live: false },
+    ]);
   });
 
   it.each([
     {
       status: "error" as const,
       expectedPlain:
-        "Failed subagent: Review correctness + plan adherence (general-purpose-review-agent-with-a-long-name) 45s",
-      expectedTone: "destructive",
+        "Failed subagent: Review correctness + plan adherence (general-purpose-review-agent-with-a-long-name) (45s)",
+      expectedTone: "default",
     },
     {
       status: "interrupted" as const,
       expectedPlain:
-        "Interrupted subagent: Review correctness + plan adherence (general-purpose-review-agent-with-a-long-name) 45s",
+        "Interrupted subagent: Review correctness + plan adherence (general-purpose-review-agent-with-a-long-name) (45s)",
       expectedTone: "default",
     },
   ])(
@@ -490,14 +489,13 @@ describe("buildTimelineRowTitle", () => {
     const title = buildTimelineRowTitle(systemOperationRow(), DEFAULT_OPTIONS);
 
     expect(title.plain).toBe("Thread release failed");
-    expect(title.contentTone).toBe("emphasis");
     expect(title.tone).toBe("destructive");
   });
 
   it("formats turn durations over 60 minutes as hours", () => {
     const title = buildTimelineRowTitle(turnRow(), DEFAULT_OPTIONS);
 
-    expect(title.plain).toBe("Worked for 1h 1m 1s");
+    expect(title.plain).toBe("Worked for (1h 1m 1s)");
   });
 
   it("hides subsecond turn durations", () => {
@@ -522,7 +520,7 @@ describe("buildTimelineRowTitle", () => {
     const title = buildTimelineRowTitle(row, DEFAULT_OPTIONS);
 
     expect(title.plain).toBe("Working");
-    expect(title.motion).toBe("shimmer");
+    expect(title.segments[0]?.shimmer).toBe(true);
   });
 
   it("does not use item-count fallback titles when turn duration is missing", () => {
@@ -547,12 +545,19 @@ describe("buildTimelineRowTitle", () => {
     });
 
     expect(bundleTitle.plain).toBe("Ran 1 web search, fetched 1 web page");
-    expect(bundleTitle.prefix).toBe("Ran");
-    expect(bundleTitle.content).toBe("1 web search, fetched 1 web page");
-    expect(bundleTitle.contentTone).toBe("emphasis");
+    expect(bundleTitle.segments[0]?.text).toBe("Ran");
+    expect(bundleTitle.segments[1]?.text).toBe(
+      "1 web search, fetched 1 web page",
+    );
     expect(backgroundTitle.plain).toBe("Ran 1 web search, fetched 1 web page");
-    expect(backgroundTitle.prefix).toBeNull();
-    expect(backgroundTitle.contentTone).toBe("muted");
+    expect(backgroundTitle.segments).toEqual([
+      {
+        text: "Ran 1 web search, fetched 1 web page",
+        em: false,
+        shimmer: false,
+        truncate: true,
+      },
+    ]);
     expect(backgroundTitle.tone).toBe("summary");
   });
 
@@ -576,7 +581,7 @@ describe("buildTimelineRowTitle", () => {
     });
 
     expect(title.plain).toBe("Ran 1 web search");
-    expect(title.motion).toBe("none");
+    expect(title.segments.every((s) => !s.shimmer)).toBe(true);
   });
 
   it("keeps non-success summary status visible without destructive tone", () => {
@@ -595,12 +600,10 @@ describe("buildTimelineRowTitle", () => {
       workStyle: "default",
     });
 
-    expect(title.plain).toBe("Ran 1 command (error)");
-    expect(title.suffix).toEqual({
-      kind: "text",
-      text: "(error)",
-      truncate: false,
-    });
+    expect(title.plain).toBe("Ran 1 command (1 error)");
+    expect(title.decorations).toEqual([
+      { kind: "summary-status", errorCount: 1, interruptedCount: 0 },
+    ]);
     expect(title.tone).toBe("summary");
   });
 
@@ -620,7 +623,7 @@ describe("buildTimelineRowTitle", () => {
       workStyle: "default",
     });
 
-    expect(title.plain).toBe("Ran 1 command (interrupted)");
+    expect(title.plain).toBe("Ran 1 command (1 interrupted)");
     expect(title.tone).toBe("summary");
   });
 
@@ -640,10 +643,11 @@ describe("buildTimelineRowTitle", () => {
     const title = buildTimelineRowTitle(row, {
       summaryStyle: "bundle",
       workStyle: "default",
+      isActiveLatestBundle: true,
     });
 
     expect(title.plain).toBe("Running 1 web search");
-    expect(title.motion).toBe("shimmer");
+    expect(title.segments.some((s) => s.shimmer)).toBe(true);
   });
 
   it("uses semantic active wording for mixed bundle summaries", () => {
@@ -666,10 +670,11 @@ describe("buildTimelineRowTitle", () => {
     const title = buildTimelineRowTitle(row, {
       summaryStyle: "bundle",
       workStyle: "default",
+      isActiveLatestBundle: true,
     });
 
     expect(title.plain).toBe("Exploring 1 file, running 1 command");
-    expect(title.motion).toBe("shimmer");
+    expect(title.segments.some((s) => s.shimmer)).toBe(true);
   });
 
   it("uses active wording for tool-only bundle summaries", () => {
@@ -691,10 +696,11 @@ describe("buildTimelineRowTitle", () => {
     const title = buildTimelineRowTitle(row, {
       summaryStyle: "bundle",
       workStyle: "default",
+      isActiveLatestBundle: true,
     });
 
     expect(title.plain).toBe("Running 1 tool");
-    expect(title.motion).toBe("shimmer");
+    expect(title.segments.some((s) => s.shimmer)).toBe(true);
   });
 
   it("builds compact exploration intent titles with read de-duping", () => {
@@ -713,11 +719,11 @@ describe("buildTimelineRowTitle", () => {
       "Read src/app.ts",
       "Searched for TODO in src",
     ]);
-    expect(titles[0]?.title.prefix).toBe("Read");
-    expect(titles[0]?.title.content).toBe("app.ts");
-    expect(titles.every((entry) => entry.title.contentTone === "muted")).toBe(
-      true,
-    );
+    expect(titles[0]?.title.segments[0]?.text).toBe("Read");
+    expect(titles[0]?.title.segments[1]?.text).toBe("app.ts");
+    expect(
+      titles.every((entry) => entry.title.segments.every((s) => !s.em)),
+    ).toBe(true);
   });
 
   it("uses active wording for pending compact exploration intent titles", () => {
@@ -734,10 +740,8 @@ describe("buildTimelineRowTitle", () => {
       "Reading src/app.ts",
       "Searching for TODO in src",
     ]);
-    expect(titles[0]?.title.prefix).toBe("Reading");
-    expect(titles[0]?.title.content).toBe("app.ts");
-    expect(titles.every((entry) => entry.title.motion === "shimmer")).toBe(
-      true,
-    );
+    expect(titles[0]?.title.segments[0]?.text).toBe("Reading");
+    expect(titles[0]?.title.segments[0]?.shimmer).toBe(true);
+    expect(titles[0]?.title.segments[1]?.text).toBe("app.ts");
   });
 });

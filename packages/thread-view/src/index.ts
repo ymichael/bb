@@ -5,15 +5,18 @@ export { fileNameFromPath } from "./timeline-path-display.js";
 export {
   buildTimelineActivityIntentTitles,
   buildTimelineRowTitle,
+  findActiveLatestBundleId,
+  formatTimelineDecorationText,
+  renderTitlePlain,
 } from "./timeline-row-title.js";
+export { durationToCompactString } from "./format-helpers.js";
 export type {
   BuildTimelineRowTitleOptions,
   TimelineActivityIntentTitle,
   TimelineTitle,
   TimelineTitleAction,
-  TimelineTitleContentTone,
-  TimelineTitleMotion,
-  TimelineTitleSuffix,
+  TimelineTitleDecoration,
+  TimelineTitleSegment,
   TimelineTitleTone,
 } from "./timeline-row-title.js";
 export { THREAD_TIMELINE_EXCLUDED_EVENT_TYPES } from "./timeline-noise-events.js";
@@ -31,7 +34,9 @@ export type { SystemClientRequestVisibility } from "./event-projection-message.j
 export {
   buildTimelineViewRows,
   buildTimelineWorkSummaryLabel,
+  buildTimelineWorkSummaryLabelParts,
   isCompletedNonDeniedWorkRow,
+  isTimelineStepBoundary,
 } from "./timeline-view.js";
 export type {
   ThreadTimelineViewRow,
