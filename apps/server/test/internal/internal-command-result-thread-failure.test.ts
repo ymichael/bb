@@ -12,6 +12,7 @@ import {
   seedHostSession,
   seedProjectWithSource,
   seedThread,
+  seedTurnStarted,
 } from "../helpers/seed.js";
 import { createTestAppHarness } from "../helpers/test-app.js";
 
@@ -116,6 +117,12 @@ describe("thread command failure side effects", () => {
         projectId: project.id,
         environmentId: environment.id,
         status: "active",
+      });
+      seedTurnStarted(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        turnId: "turn-active",
+        providerThreadId: "provider-thread-1",
       });
 
       const command = queueCommand(harness.db, harness.hub, {

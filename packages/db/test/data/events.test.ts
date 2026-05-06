@@ -28,6 +28,7 @@ import {
   listStoredEventRowsByThreadSequences,
   listStoredThreadProvisioningRowsByProvisioningId,
   listStoredTurnInputAcceptedRowsByClientRequestIds,
+  MissingStoredTurnStartedError,
   listThreadTurnInterruptionEventStates,
   pruneContextWindowUsageEventsBeforeSequence,
   pruneTokenUsageEventsBeforeSequence,
@@ -331,6 +332,246 @@ describe("events", () => {
         producerEventPayloadHash: "hash-b",
       },
     ]);
+  });
+
+  it("rejects daemon turn-scoped events before turn/started is stored", () => {
+    const { db, thread } = setup();
+
+    expect(() =>
+      db.transaction(
+        (tx) =>
+          appendDaemonEventsInTransaction(tx, [
+            {
+              producerEventId: "hdevt_23456789abcdefghijkt",
+              producerEventPayloadHash: "hash-missing-start",
+              threadId: thread.id,
+              type: "turn/completed",
+              ...createTurnEventFields({ turnId: "turn_missing" }),
+              environmentId: null,
+              providerThreadId: "provider_thr_missing",
+              data: JSON.stringify({
+                providerThreadId: "provider_thr_missing",
+                status: "completed",
+                turnId: "turn_missing",
+              }),
+            },
+          ]),
+        { behavior: "immediate" },
+      ),
+    ).toThrow(MissingStoredTurnStartedError);
+    expect(listEvents(db, { threadId: thread.id })).toHaveLength(0);
+  });
+
+  it("rejects daemon turn-scoped events before turn/started in the same batch", () => {
+    const { db, thread } = setup();
+
+    expect(() =>
+      db.transaction(
+        (tx) =>
+          appendDaemonEventsInTransaction(tx, [
+            {
+              producerEventId: "hdevt_23456789abcdefghijkv",
+              producerEventPayloadHash: "hash-before-start",
+              threadId: thread.id,
+              type: "turn/completed",
+              ...createTurnEventFields({ turnId: "turn_late_start" }),
+              environmentId: null,
+              providerThreadId: "provider_thr_late",
+              data: JSON.stringify({
+                providerThreadId: "provider_thr_late",
+                status: "completed",
+                turnId: "turn_late_start",
+              }),
+            },
+            {
+              producerEventId: "hdevt_23456789abcdefghijkw",
+              producerEventPayloadHash: "hash-late-start",
+              threadId: thread.id,
+              type: "turn/started",
+              ...createTurnEventFields({ turnId: "turn_late_start" }),
+              environmentId: null,
+              providerThreadId: "provider_thr_late",
+              data: JSON.stringify({
+                providerThreadId: "provider_thr_late",
+                turnId: "turn_late_start",
+              }),
+            },
+          ]),
+        { behavior: "immediate" },
+      ),
+    ).toThrow(MissingStoredTurnStartedError);
+    expect(listEvents(db, { threadId: thread.id })).toHaveLength(0);
+  });
+
+  it("accepts daemon turn-scoped events after earlier turn/started in the same batch", () => {
+    const { db, thread } = setup();
+
+    const result = db.transaction(
+      (tx) =>
+        appendDaemonEventsInTransaction(tx, [
+          {
+            producerEventId: "hdevt_23456789abcdefghijkx",
+            producerEventPayloadHash: "hash-start",
+            threadId: thread.id,
+            type: "turn/started",
+            ...createTurnEventFields({ turnId: "turn_ordered" }),
+            environmentId: null,
+            providerThreadId: "provider_thr_ordered",
+            data: JSON.stringify({
+              providerThreadId: "provider_thr_ordered",
+              turnId: "turn_ordered",
+            }),
+          },
+          {
+            producerEventId: "hdevt_23456789abcdefghijky",
+            producerEventPayloadHash: "hash-completed",
+            threadId: thread.id,
+            type: "turn/completed",
+            ...createTurnEventFields({ turnId: "turn_ordered" }),
+            environmentId: null,
+            providerThreadId: "provider_thr_ordered",
+            data: JSON.stringify({
+              providerThreadId: "provider_thr_ordered",
+              status: "completed",
+              turnId: "turn_ordered",
+            }),
+          },
+        ]),
+      { behavior: "immediate" },
+    );
+
+    expect(result).toMatchObject({
+      acceptedEvents: [
+        { producerEventId: "hdevt_23456789abcdefghijkx", sequence: 1 },
+        { producerEventId: "hdevt_23456789abcdefghijky", sequence: 2 },
+      ],
+      insertedInputIndexes: [0, 1],
+    });
+    expect(listEvents(db, { threadId: thread.id })).toHaveLength(2);
+  });
+
+  it("accepts daemon turn-scoped events after turn/started is stored", () => {
+    const { db, thread } = setup();
+
+    db.transaction(
+      (tx) =>
+        appendDaemonEventsInTransaction(tx, [
+          {
+            producerEventId: "hdevt_23456789abcdefghijkz",
+            producerEventPayloadHash: "hash-prior-start",
+            threadId: thread.id,
+            type: "turn/started",
+            ...createTurnEventFields({ turnId: "turn_prior" }),
+            environmentId: null,
+            providerThreadId: "provider_thr_prior",
+            data: JSON.stringify({
+              providerThreadId: "provider_thr_prior",
+              turnId: "turn_prior",
+            }),
+          },
+        ]),
+      { behavior: "immediate" },
+    );
+
+    const result = db.transaction(
+      (tx) =>
+        appendDaemonEventsInTransaction(tx, [
+          {
+            producerEventId: "hdevt_23456789abcdefghijk2",
+            producerEventPayloadHash: "hash-prior-completed",
+            threadId: thread.id,
+            type: "turn/completed",
+            ...createTurnEventFields({ turnId: "turn_prior" }),
+            environmentId: null,
+            providerThreadId: "provider_thr_prior",
+            data: JSON.stringify({
+              providerThreadId: "provider_thr_prior",
+              status: "completed",
+              turnId: "turn_prior",
+            }),
+          },
+        ]),
+      { behavior: "immediate" },
+    );
+
+    expect(result).toMatchObject({
+      acceptedEvents: [
+        { producerEventId: "hdevt_23456789abcdefghijk2", sequence: 2 },
+      ],
+      insertedInputIndexes: [0],
+    });
+    expect(listEvents(db, { threadId: thread.id })).toHaveLength(2);
+  });
+
+  it("accepts daemon turn-scoped retries idempotently by producerEventId and payload hash", () => {
+    const { db, thread } = setup();
+
+    db.transaction(
+      (tx) =>
+        appendDaemonEventsInTransaction(tx, [
+          {
+            producerEventId: "hdevt_23456789abcdefghijk3",
+            producerEventPayloadHash: "hash-retry-start",
+            threadId: thread.id,
+            type: "turn/started",
+            ...createTurnEventFields({ turnId: "turn_retry" }),
+            environmentId: null,
+            providerThreadId: "provider_thr_retry",
+            data: JSON.stringify({
+              providerThreadId: "provider_thr_retry",
+              turnId: "turn_retry",
+            }),
+          },
+          {
+            producerEventId: "hdevt_23456789abcdefghijk4",
+            producerEventPayloadHash: "hash-retry-completed",
+            threadId: thread.id,
+            type: "turn/completed",
+            ...createTurnEventFields({ turnId: "turn_retry" }),
+            environmentId: null,
+            providerThreadId: "provider_thr_retry",
+            data: JSON.stringify({
+              providerThreadId: "provider_thr_retry",
+              status: "completed",
+              turnId: "turn_retry",
+            }),
+          },
+        ]),
+      { behavior: "immediate" },
+    );
+
+    const retry = db.transaction(
+      (tx) =>
+        appendDaemonEventsInTransaction(tx, [
+          {
+            producerEventId: "hdevt_23456789abcdefghijk4",
+            producerEventPayloadHash: "hash-retry-completed",
+            threadId: thread.id,
+            type: "turn/completed",
+            ...createTurnEventFields({ turnId: "turn_retry" }),
+            environmentId: null,
+            providerThreadId: "provider_thr_retry",
+            data: JSON.stringify({
+              providerThreadId: "provider_thr_retry",
+              status: "completed",
+              turnId: "turn_retry",
+            }),
+          },
+        ]),
+      { behavior: "immediate" },
+    );
+
+    expect(retry).toEqual({
+      acceptedEvents: [
+        {
+          producerEventId: "hdevt_23456789abcdefghijk4",
+          threadId: thread.id,
+          sequence: 2,
+        },
+      ],
+      insertedInputIndexes: [],
+    });
+    expect(listEvents(db, { threadId: thread.id })).toHaveLength(2);
   });
 
   it("accepts daemon retries idempotently by producerEventId and payload hash", () => {

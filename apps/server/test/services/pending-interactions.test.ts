@@ -4,11 +4,13 @@ import { describe, expect, it, vi } from "vitest";
 import { pendingInteractions as pendingInteractionTable } from "@bb/db";
 import type { PendingInteractionCreate } from "@bb/domain";
 import { PendingInteractionLifecycle } from "../../src/services/interactions/pending-interactions.js";
+import type { AppDeps } from "../../src/types.js";
 import {
   seedEnvironment,
   seedHostSession,
   seedProjectWithSource,
   seedThread,
+  seedTurnStarted,
 } from "../helpers/seed.js";
 import {
   createAllowForSessionResolution,
@@ -20,10 +22,16 @@ import {
 import { createTestAppHarness } from "../helpers/test-app.js";
 
 function registerPendingInteraction(
+  deps: Pick<AppDeps, "db" | "hub">,
   lifecycle: PendingInteractionLifecycle,
   interaction: PendingInteractionCreate,
   sessionId: string,
 ) {
+  seedTurnStarted(deps, {
+    threadId: interaction.threadId,
+    turnId: interaction.turnId,
+    providerThreadId: interaction.providerThreadId,
+  });
   return lifecycle.registerPendingInteraction({
     interaction,
     sessionId,
@@ -61,6 +69,7 @@ describe("pending interaction lifecycle", () => {
       });
 
       const corrupt = registerPendingInteraction(
+        harness.deps,
         lifecycle,
         {
           threadId: thread.id,
@@ -94,6 +103,7 @@ describe("pending interaction lifecycle", () => {
         .run();
 
       const valid = registerPendingInteraction(
+        harness.deps,
         lifecycle,
         {
           threadId: thread.id,
@@ -156,6 +166,7 @@ describe("pending interaction lifecycle", () => {
       });
 
       const created = registerPendingInteraction(
+        harness.deps,
         harness.deps.pendingInteractions,
         {
           threadId: thread.id,
@@ -190,6 +201,7 @@ describe("pending interaction lifecycle", () => {
 
       expect(
         registerPendingInteraction(
+          harness.deps,
           harness.deps.pendingInteractions,
           {
             threadId: thread.id,
@@ -238,6 +250,7 @@ describe("pending interaction lifecycle", () => {
 
       expect(
         registerPendingInteraction(
+          harness.deps,
           harness.deps.pendingInteractions,
           {
             threadId: thread.id,
@@ -283,6 +296,7 @@ describe("pending interaction lifecycle", () => {
       });
 
       const created = registerPendingInteraction(
+        harness.deps,
         harness.deps.pendingInteractions,
         {
           threadId: thread.id,
@@ -392,6 +406,7 @@ describe("pending interaction lifecycle", () => {
       });
 
       const created = registerPendingInteraction(
+        harness.deps,
         harness.deps.pendingInteractions,
         {
           threadId: thread.id,
@@ -460,6 +475,7 @@ describe("pending interaction lifecycle", () => {
       });
 
       const created = registerPendingInteraction(
+        harness.deps,
         harness.deps.pendingInteractions,
         {
           threadId: thread.id,
@@ -530,6 +546,7 @@ describe("pending interaction lifecycle", () => {
       });
 
       const created = registerPendingInteraction(
+        harness.deps,
         harness.deps.pendingInteractions,
         {
           threadId: thread.id,
@@ -594,6 +611,7 @@ describe("pending interaction lifecycle", () => {
       });
 
       const created = registerPendingInteraction(
+        harness.deps,
         harness.deps.pendingInteractions,
         {
           threadId: thread.id,
@@ -652,6 +670,7 @@ describe("pending interaction lifecycle", () => {
       });
 
       const created = registerPendingInteraction(
+        harness.deps,
         harness.deps.pendingInteractions,
         {
           threadId: thread.id,
@@ -713,6 +732,7 @@ describe("pending interaction lifecycle", () => {
       });
 
       const created = registerPendingInteraction(
+        harness.deps,
         harness.deps.pendingInteractions,
         {
           threadId: thread.id,
@@ -737,6 +757,7 @@ describe("pending interaction lifecycle", () => {
 
       expect(
         registerPendingInteraction(
+          harness.deps,
           harness.deps.pendingInteractions,
           {
             threadId: thread.id,
@@ -780,6 +801,7 @@ describe("pending interaction lifecycle", () => {
 
       expect(
         registerPendingInteraction(
+          harness.deps,
           harness.deps.pendingInteractions,
           {
             threadId: thread.id,
@@ -825,6 +847,7 @@ describe("pending interaction lifecycle", () => {
       });
 
       const created = registerPendingInteraction(
+        harness.deps,
         harness.deps.pendingInteractions,
         {
           threadId: thread.id,
@@ -892,6 +915,7 @@ describe("pending interaction lifecycle", () => {
       });
 
       const created = registerPendingInteraction(
+        harness.deps,
         pendingInteractions,
         {
           threadId: thread.id,
@@ -958,6 +982,7 @@ describe("pending interaction lifecycle", () => {
       });
 
       const created = registerPendingInteraction(
+        harness.deps,
         originalLifecycle,
         {
           threadId: thread.id,
@@ -1030,6 +1055,7 @@ describe("pending interaction lifecycle", () => {
       });
 
       const created = registerPendingInteraction(
+        harness.deps,
         pendingInteractions,
         {
           threadId: thread.id,

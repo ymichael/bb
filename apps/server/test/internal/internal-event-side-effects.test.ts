@@ -36,6 +36,7 @@ import {
   seedProjectWithSource,
   seedThreadRuntimeState,
   seedThread,
+  seedTurnStarted,
 } from "../helpers/seed.js";
 import { createCommandApprovalPayload } from "../helpers/pending-interactions.js";
 import { queueManagerSystemMessage } from "../../src/services/threads/manager-system-messages.js";
@@ -246,6 +247,12 @@ describe("internal event side effects", () => {
         content: [{ type: "text", text: "Queued manager follow-up" }],
         model: "gpt-5",
         serviceTier: "default",
+      });
+      seedTurnStarted(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        turnId: "turn-manager-draft-auto-send",
+        providerThreadId: "provider-manager-draft-auto-send",
       });
 
       const responsePromise = harness.app.request("/internal/session/events", {
@@ -598,6 +605,12 @@ describe("internal event side effects", () => {
         parentThreadId: managerThread.id,
         title: "Backend port validation cleanup",
       });
+      seedTurnStarted(harness.deps, {
+        threadId: childThread.id,
+        environmentId: environment.id,
+        turnId: "turn-child-follow-up",
+        providerThreadId: "provider-child-follow-up",
+      });
 
       const responsePromise = harness.app.request("/internal/session/events", {
         method: "POST",
@@ -719,6 +732,12 @@ describe("internal event side effects", () => {
         parentThreadId: managerThread.id,
         title: "Backend port validation cleanup",
       });
+      seedTurnStarted(harness.deps, {
+        threadId: childThread.id,
+        environmentId: environment.id,
+        turnId: "turn-child-deleted-manager-follow-up",
+        providerThreadId: "provider-child-deleted-manager-follow-up",
+      });
 
       const response = await harness.app.request("/internal/session/events", {
         method: "POST",
@@ -786,6 +805,12 @@ describe("internal event side effects", () => {
         status: "active",
         parentThreadId: managerThread.id,
         title: "Backend port validation cleanup",
+      });
+      seedTurnStarted(harness.deps, {
+        threadId: childThread.id,
+        environmentId: environment.id,
+        turnId: "turn-child-failed-follow-up",
+        providerThreadId: "provider-child-failed-follow-up",
       });
 
       const responsePromise = harness.app.request("/internal/session/events", {
@@ -904,6 +929,12 @@ describe("internal event side effects", () => {
         status: "active",
         parentThreadId: managerThread.id,
         title: "Backend port validation cleanup",
+      });
+      seedTurnStarted(harness.deps, {
+        threadId: childThread.id,
+        environmentId: environment.id,
+        turnId: "turn-child-interrupted-follow-up",
+        providerThreadId: "provider-child-interrupted-follow-up",
       });
 
       const responsePromise = harness.app.request("/internal/session/events", {
@@ -1072,6 +1103,12 @@ describe("internal event side effects", () => {
         status: "active",
         type: "manager",
       });
+      seedTurnStarted(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        turnId: "turn-manager-sync",
+        providerThreadId: "provider-manager-sync",
+      });
 
       const responsePromise = harness.app.request("/internal/session/events", {
         method: "POST",
@@ -1183,6 +1220,12 @@ describe("internal event side effects", () => {
         .set({ automationId: automation.id })
         .where(eq(threads.id, thread.id))
         .run();
+      seedTurnStarted(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        turnId: "turn-auto-archive",
+        providerThreadId: "provider-auto-archive",
+      });
 
       const response = await harness.app.request("/internal/session/events", {
         method: "POST",
@@ -1220,6 +1263,12 @@ describe("internal event side effects", () => {
         .set({ archivedAt: null, status: "active" })
         .where(eq(threads.id, thread.id))
         .run();
+      seedTurnStarted(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        turnId: "turn-auto-archive-2",
+        providerThreadId: "provider-auto-archive",
+      });
 
       const secondResponse = await harness.app.request(
         "/internal/session/events",
@@ -1302,6 +1351,12 @@ describe("internal event side effects", () => {
         .set({ automationId: automation.id })
         .where(eq(threads.id, thread.id))
         .run();
+      seedTurnStarted(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        turnId: "turn-no-auto-archive",
+        providerThreadId: "provider-no-auto-archive",
+      });
 
       const response = await harness.app.request("/internal/session/events", {
         method: "POST",
@@ -1616,6 +1671,12 @@ describe("internal event side effects", () => {
         providerThreadId: "provider-manager-awaiting-interaction",
         inputText: "Initial manager task",
         model: "gpt-5.4",
+      });
+      seedTurnStarted(harness.deps, {
+        threadId: managerThread.id,
+        environmentId: environment.id,
+        turnId: "turn-manager-awaiting-interaction",
+        providerThreadId: "provider-manager-awaiting-interaction",
       });
       const pending =
         harness.deps.pendingInteractions.registerPendingInteraction({

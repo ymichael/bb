@@ -1,18 +1,19 @@
 import { z } from "zod";
 import {
-  appendStoredThreadEvent,
   appendStoredThreadEventInTransaction,
   appendStoredThreadEventsInTransaction,
   createEventId,
   getActiveStoredTurnId,
   getLastStoredProviderThreadId,
   getLastStoredTurnRequestEvent,
+  listStoredTurnStartedKeys,
   type StoredTurnRequestEventRow,
 } from "@bb/db";
 import {
   CLIENT_TURN_REQUEST_ID_ALPHABET,
   CLIENT_TURN_REQUEST_ID_SUFFIX_LENGTH,
   encodeClientTurnRequestIdAlphabetIndexes,
+  getThreadEventScopeTurnId,
   parseStoredThreadEvent,
   systemErrorEventDataSchema,
   threadScope,
@@ -34,7 +35,7 @@ import type {
   ThreadEventScope,
   ThreadTurnInitiator,
 } from "@bb/domain";
-import { ApiError } from "../../errors.js";
+import { ApiError, TurnStartGuardError } from "../../errors.js";
 import type { AppDeps } from "../../types.js";
 import type { DbNotifier, DbQueryConnection, DbTransaction } from "@bb/db";
 import type { AppendStoredThreadEventArgs as AppendThreadEventArgs } from "@bb/db";
@@ -127,6 +128,11 @@ const LEGACY_TURN_REQUEST_TARGET_BY_TYPE = {
   "client/thread/start": LEGACY_THREAD_START_TARGET,
   "client/turn/start": LEGACY_NEW_TURN_TARGET,
 } satisfies Record<LegacyTurnRequestEventType, TurnRequestTarget>;
+
+interface TurnStartKey {
+  threadId: string;
+  turnId: string;
+}
 
 interface ReconnectProgress {
   attempt: number;
@@ -255,6 +261,85 @@ function appendBuiltClientTurnEvent(
   }
 }
 
+function getTurnStartKey(args: TurnStartKey): string {
+  return `${args.threadId}\0${args.turnId}`;
+}
+
+function collectTurnStartRequirements(
+  eventArgs: readonly AppendThreadEventArgs[],
+): TurnStartKey[] {
+  return eventArgs.flatMap((args) => {
+    if (args.type === "turn/started") {
+      return [];
+    }
+
+    const turnId = getThreadEventScopeTurnId(args.scope);
+    if (turnId === undefined) {
+      return [];
+    }
+
+    return [
+      {
+        threadId: args.threadId,
+        turnId,
+      },
+    ];
+  });
+}
+
+function listExistingTurnStartKeys(
+  db: DbQueryConnection,
+  requirements: readonly TurnStartKey[],
+): Set<string> {
+  return new Set(
+    listStoredTurnStartedKeys(db, { keys: requirements }).map((key) =>
+      getTurnStartKey(key),
+    ),
+  );
+}
+
+function assertStoredTurnStartedForEvents(
+  db: DbQueryConnection,
+  eventArgs: readonly AppendThreadEventArgs[],
+): void {
+  // Same-batch satisfaction is ordered: turn/started only unlocks later events
+  // in this append list. Daemon batches enforce the same invariant separately.
+  const existingTurnKeys = listExistingTurnStartKeys(
+    db,
+    collectTurnStartRequirements(eventArgs),
+  );
+  const startedTurnKeys = new Set<string>();
+
+  for (const args of eventArgs) {
+    if (args.type === "turn/started") {
+      const turnId = getThreadEventScopeTurnId(args.scope);
+      if (turnId !== undefined) {
+        startedTurnKeys.add(
+          getTurnStartKey({ threadId: args.threadId, turnId }),
+        );
+      }
+      continue;
+    }
+
+    const turnId = getThreadEventScopeTurnId(args.scope);
+    if (turnId === undefined) {
+      continue;
+    }
+
+    const key = getTurnStartKey({ threadId: args.threadId, turnId });
+    if (startedTurnKeys.has(key) || existingTurnKeys.has(key)) {
+      continue;
+    }
+
+    throw new TurnStartGuardError({
+      eventType: args.type,
+      scopeKind: args.scope.kind,
+      threadId: args.threadId,
+      turnId,
+    });
+  }
+}
+
 export function appendThreadEvent<TType extends ThreadEventType>(
   deps: Pick<AppDeps, "db" | "hub">,
   args: AppendThreadEventArgs<TType>,
@@ -263,7 +348,15 @@ export function appendThreadEvent(
   deps: Pick<AppDeps, "db" | "hub">,
   args: AppendThreadEventArgs,
 ): number {
-  return appendStoredThreadEvent(deps.db, deps.hub, args);
+  const sequence = deps.db.transaction(
+    (tx) => {
+      assertStoredTurnStartedForEvents(tx, [args]);
+      return appendStoredThreadEventInTransaction(tx, args);
+    },
+    { behavior: "immediate" },
+  );
+  deps.hub.notifyThread(args.threadId, ["events-appended"]);
+  return sequence;
 }
 
 export function appendThreadEventInTransaction<TType extends ThreadEventType>(
@@ -274,6 +367,7 @@ export function appendThreadEventInTransaction(
   db: DbTransaction,
   args: AppendThreadEventArgs,
 ): number {
+  assertStoredTurnStartedForEvents(db, [args]);
   return appendStoredThreadEventInTransaction(db, args);
 }
 
@@ -281,6 +375,7 @@ export function appendThreadEventsInTransaction(
   db: DbTransaction,
   args: readonly AppendThreadEventArgs[],
 ): number[] {
+  assertStoredTurnStartedForEvents(db, args);
   return appendStoredThreadEventsInTransaction(db, args);
 }
 

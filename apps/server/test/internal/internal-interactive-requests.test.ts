@@ -13,6 +13,7 @@ import {
   seedHostSession,
   seedProjectWithSource,
   seedThread,
+  seedTurnStarted,
 } from "../helpers/seed.js";
 import {
   createAllowForSessionResolution,
@@ -83,7 +84,7 @@ function buildCommandApprovalInteractiveRequest(
   };
 }
 
-function registerInteractiveRequest(
+function postInteractiveRequest(
   args: RegisterInteractiveRequestArgs,
 ): Promise<Response> {
   return args.harness.app.request("/internal/session/interactive-request", {
@@ -91,6 +92,17 @@ function registerInteractiveRequest(
     headers: internalAuthHeaders(args.harness),
     body: JSON.stringify(args.body),
   });
+}
+
+function registerInteractiveRequest(
+  args: RegisterInteractiveRequestArgs,
+): Promise<Response> {
+  seedTurnStarted(args.harness.deps, {
+    threadId: args.body.interaction.threadId,
+    turnId: args.body.interaction.turnId,
+    providerThreadId: args.body.interaction.providerThreadId,
+  });
+  return postInteractiveRequest(args);
 }
 
 describe("internal interactive request lifecycle", () => {
@@ -110,6 +122,12 @@ describe("internal interactive request lifecycle", () => {
       const thread = seedThread(harness.deps, {
         projectId: project.id,
         environmentId: environment.id,
+      });
+      seedTurnStarted(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        turnId: "turn-1",
+        providerThreadId: "provider-thread-1",
       });
 
       const response = await harness.app.request(
@@ -225,6 +243,12 @@ describe("internal interactive request lifecycle", () => {
       const thread = seedThread(harness.deps, {
         projectId: project.id,
         environmentId: environment.id,
+      });
+      seedTurnStarted(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        turnId: "turn-session-1",
+        providerThreadId: "provider-thread-session-1",
       });
       const sessionGrant = {
         network: { enabled: true },
@@ -370,6 +394,103 @@ describe("internal interactive request lifecycle", () => {
     }
   });
 
+  it("waits for daemon-spooled turn/started before registering an interactive request", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-interaction-wait-turn-start",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+      });
+      const body = buildCommandApprovalInteractiveRequest({
+        sessionId: session.id,
+        suffix: "wait-turn-start",
+        threadId: thread.id,
+      });
+
+      const responsePromise = postInteractiveRequest({ body, harness });
+      await sleep(50);
+      expect(
+        harness.deps.pendingInteractions.listThreadInteractions(thread.id),
+      ).toEqual([]);
+
+      seedTurnStarted(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        turnId: body.interaction.turnId,
+        providerThreadId: body.interaction.providerThreadId,
+      });
+
+      const response = await responsePromise;
+
+      expect(response.status).toBe(200);
+      await expect(readJson(response)).resolves.toMatchObject({
+        outcome: "created",
+        status: "pending",
+      });
+      expect(
+        harness.deps.pendingInteractions.listThreadInteractions(thread.id),
+      ).toEqual([
+        expect.objectContaining({
+          providerRequestId: body.interaction.providerRequestId,
+          status: "pending",
+          turnId: body.interaction.turnId,
+        }),
+      ]);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("returns retryable 503 when interactive request turn/started has not landed", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-interaction-turn-start-timeout",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+      });
+      const body = buildCommandApprovalInteractiveRequest({
+        sessionId: session.id,
+        suffix: "turn-start-timeout",
+        threadId: thread.id,
+      });
+
+      const response = await postInteractiveRequest({ body, harness });
+
+      expect(response.status).toBe(503);
+      await expect(readJson(response)).resolves.toEqual({
+        code: "turn_start_not_ready",
+        message:
+          "Turn start has not been stored yet; retry interactive request registration",
+        retryable: true,
+      });
+      expect(
+        harness.deps.pendingInteractions.listThreadInteractions(thread.id),
+      ).toEqual([]);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("returns the existing resolving interaction when registration retry arrives after user resolution", async () => {
     const harness = await createTestAppHarness();
     try {
@@ -446,6 +567,12 @@ describe("internal interactive request lifecycle", () => {
       const thread = seedThread(harness.deps, {
         projectId: project.id,
         environmentId: environment.id,
+      });
+      seedTurnStarted(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        turnId: "turn-1",
+        providerThreadId: "provider-thread-1",
       });
 
       const response = await harness.app.request(
@@ -537,6 +664,12 @@ describe("internal interactive request lifecycle", () => {
         environmentId: environment.id,
       });
       deleteThread(harness.db, harness.hub, deletedThread.id);
+      seedTurnStarted(harness.deps, {
+        threadId: liveThread.id,
+        environmentId: environment.id,
+        turnId: "turn-interrupt-live",
+        providerThreadId: "provider-thread-interrupt-live",
+      });
 
       const response = await harness.app.request(
         "/internal/session/interactive-request",
@@ -622,6 +755,12 @@ describe("internal interactive request lifecycle", () => {
       const thread = seedThread(harness.deps, {
         projectId: project.id,
         environmentId: environment.id,
+      });
+      seedTurnStarted(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        turnId: "turn-delete-1",
+        providerThreadId: "provider-thread-delete-1",
       });
 
       const response = await harness.app.request(
@@ -709,6 +848,12 @@ describe("internal interactive request lifecycle", () => {
         projectId: project.id,
         environmentId: environment.id,
         providerId: "claude-code",
+      });
+      seedTurnStarted(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        turnId: "turn-claude-1",
+        providerThreadId: "claude-thread-1",
       });
 
       const response = await harness.app.request(

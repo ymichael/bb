@@ -2,6 +2,8 @@ import {
   createEnvironment,
   createDraft,
   deriveStoredEventItemFields,
+  getLatestThreadSequence,
+  hasStoredTurnStarted,
   insertEvents,
   createProject,
   createThread,
@@ -13,6 +15,7 @@ import {
   encodeClientTurnRequestIdNumber,
   parseStoredThreadEvent,
   threadScope,
+  turnScope,
 } from "@bb/domain";
 import type {
   EnvironmentStatus,
@@ -47,6 +50,14 @@ export interface SeedStoredEventArgs {
   sequence: number;
   threadId: string;
   type: ThreadEventType;
+}
+
+export interface SeedTurnStartedArgs {
+  environmentId?: string | null;
+  providerThreadId?: string;
+  sequence?: number;
+  threadId: string;
+  turnId: string;
 }
 
 export function seedHost(
@@ -204,6 +215,37 @@ export function seedEvent<TType extends ThreadEventType>(
       data: JSON.stringify(args.data),
     },
   ]);
+}
+
+/**
+ * Seeds a stored provider turn for tests that exercise server-side behavior
+ * after daemon ingestion has already persisted turn/started.
+ */
+export function seedTurnStarted(
+  deps: Pick<AppDeps, "db" | "hub">,
+  args: SeedTurnStartedArgs,
+): void {
+  if (
+    hasStoredTurnStarted(deps.db, {
+      threadId: args.threadId,
+      turnId: args.turnId,
+    })
+  ) {
+    return;
+  }
+
+  const providerThreadId = args.providerThreadId ?? `provider-${args.turnId}`;
+  seedEvent(deps, {
+    threadId: args.threadId,
+    environmentId: args.environmentId ?? null,
+    providerThreadId,
+    sequence:
+      args.sequence ??
+      getLatestThreadSequence(deps.db, { threadId: args.threadId }) + 1,
+    type: "turn/started",
+    scope: turnScope(args.turnId),
+    data: { providerThreadId },
+  });
 }
 
 export function seedThreadRuntimeState(

@@ -18,6 +18,7 @@ import type {
   StoredThreadEventDataForType,
   ThreadEventItemType,
   ThreadEventScope,
+  ThreadEventScopeKind,
   ThreadEventType,
 } from "@bb/domain";
 import { clientTurnRequestIdSchema, getThreadEventScopeTurnId } from "@bb/domain";
@@ -93,12 +94,31 @@ export interface ProducerEventPayloadMismatchDetails {
   receivedHash: string;
 }
 
+export interface MissingStoredTurnStartedDetails {
+  eventType: ThreadEventType;
+  scopeKind: ThreadEventScopeKind;
+  threadId: string;
+  turnId: string;
+}
+
 export class ProducerEventPayloadMismatchError extends Error {
   readonly details: ProducerEventPayloadMismatchDetails;
 
   constructor(details: ProducerEventPayloadMismatchDetails) {
     super("Producer event id was reused with a different payload");
     this.name = "ProducerEventPayloadMismatchError";
+    this.details = details;
+  }
+}
+
+export class MissingStoredTurnStartedError extends Error {
+  readonly details: MissingStoredTurnStartedDetails;
+
+  constructor(details: MissingStoredTurnStartedDetails) {
+    super(
+      `Cannot append ${details.eventType} for turn ${details.turnId} before turn/started is stored`,
+    );
+    this.name = "MissingStoredTurnStartedError";
     this.details = details;
   }
 }
@@ -237,6 +257,88 @@ function assertProducerPayloadMatches(
   });
 }
 
+function buildThreadTurnKey(args: ThreadTurnKey): string {
+  return `${args.threadId}\0${args.turnId}`;
+}
+
+function listUniqueThreadTurnKeys(
+  keys: readonly ThreadTurnKey[],
+): ThreadTurnKey[] {
+  const uniqueKeys: ThreadTurnKey[] = [];
+  const seenKeys = new Set<string>();
+
+  for (const key of keys) {
+    const lookupKey = buildThreadTurnKey(key);
+    if (seenKeys.has(lookupKey)) {
+      continue;
+    }
+    seenKeys.add(lookupKey);
+    uniqueKeys.push(key);
+  }
+
+  return uniqueKeys;
+}
+
+function collectDaemonTurnStartLookupKeys(
+  eventInputs: readonly AppendDaemonEventInput[],
+  acceptedByProducerEventId: ReadonlyMap<string, AcceptedDaemonEvent>,
+): ThreadTurnKey[] {
+  const keys: ThreadTurnKey[] = [];
+
+  for (const input of eventInputs) {
+    if (acceptedByProducerEventId.has(input.producerEventId)) {
+      continue;
+    }
+    if (input.type === "turn/started") {
+      continue;
+    }
+    const turnId = getThreadEventScopeTurnId(input.scope);
+    if (turnId === undefined) {
+      continue;
+    }
+    keys.push({ threadId: input.threadId, turnId });
+  }
+
+  return keys;
+}
+
+function listStoredTurnStartedKeySet(
+  db: DbQueryConnection,
+  keys: readonly ThreadTurnKey[],
+): Set<string> {
+  return new Set(
+    listStoredTurnStartedKeys(db, { keys }).map((key) =>
+      buildThreadTurnKey(key),
+    ),
+  );
+}
+
+function assertDaemonTurnStartedForInput(
+  input: AppendDaemonEventInput,
+  startedTurnKeys: ReadonlySet<string>,
+): void {
+  if (input.type === "turn/started") {
+    return;
+  }
+
+  const turnId = getThreadEventScopeTurnId(input.scope);
+  if (turnId === undefined) {
+    return;
+  }
+
+  const key = buildThreadTurnKey({ threadId: input.threadId, turnId });
+  if (startedTurnKeys.has(key)) {
+    return;
+  }
+
+  throw new MissingStoredTurnStartedError({
+    eventType: input.type,
+    scopeKind: input.scope.kind,
+    threadId: input.threadId,
+    turnId,
+  });
+}
+
 export function appendDaemonEventsInTransaction(
   db: DbTransaction,
   eventInputs: readonly AppendDaemonEventInput[],
@@ -283,6 +385,10 @@ export function appendDaemonEventsInTransaction(
     });
   }
 
+  const startedTurnKeys = listStoredTurnStartedKeySet(
+    db,
+    collectDaemonTurnStartLookupKeys(eventInputs, acceptedByProducerEventId),
+  );
   const now = Date.now();
   for (const [index, input] of eventInputs.entries()) {
     const accepted = acceptedByProducerEventId.get(input.producerEventId);
@@ -298,6 +404,8 @@ export function appendDaemonEventsInTransaction(
       });
       continue;
     }
+
+    assertDaemonTurnStartedForInput(input, startedTurnKeys);
 
     const sequence = nextSequencesByThreadId.get(input.threadId);
     if (sequence === undefined) {
@@ -336,6 +444,14 @@ export function appendDaemonEventsInTransaction(
       ...acceptedEvent,
       producerEventPayloadHash: input.producerEventPayloadHash,
     });
+    if (input.type === "turn/started") {
+      const turnId = getThreadEventScopeTurnId(input.scope);
+      if (turnId !== undefined) {
+        startedTurnKeys.add(
+          buildThreadTurnKey({ threadId: input.threadId, turnId }),
+        );
+      }
+    }
     nextSequencesByThreadId.set(input.threadId, sequence + 1);
   }
 
@@ -556,6 +672,20 @@ export interface ListStoredTurnStartedRowsByTurnIdsUpToSequenceArgs {
   sequenceCutoff: number;
   threadId: string;
   turnIds: readonly string[];
+}
+
+export interface HasStoredTurnStartedArgs {
+  threadId: string;
+  turnId: string;
+}
+
+export interface ThreadTurnKey {
+  threadId: string;
+  turnId: string;
+}
+
+export interface ListStoredTurnStartedKeysArgs {
+  keys: readonly ThreadTurnKey[];
 }
 
 export interface ListRecentStoredEventRowsArgs {
@@ -845,6 +975,75 @@ export function listStoredTurnStartedRowsByTurnIdsUpToSequence(
     )
     .orderBy(events.sequence)
     .all();
+}
+
+function listStoredTurnStartedKeysChunk(
+  db: DbQueryConnection,
+  keys: readonly ThreadTurnKey[],
+): ThreadTurnKey[] {
+  const turnConditions = keys.map((key) =>
+    and(eq(events.threadId, key.threadId), eq(events.turnId, key.turnId)),
+  );
+
+  const rows = db
+    .select({ threadId: events.threadId, turnId: events.turnId })
+    .from(events)
+    .where(and(eq(events.type, "turn/started"), or(...turnConditions)))
+    .all();
+
+  return rows.flatMap((row) =>
+    row.turnId === null
+      ? []
+      : [{ threadId: row.threadId, turnId: row.turnId }],
+  );
+}
+
+export function listStoredTurnStartedKeys(
+  db: DbQueryConnection,
+  args: ListStoredTurnStartedKeysArgs,
+): ThreadTurnKey[] {
+  if (args.keys.length === 0) {
+    return [];
+  }
+
+  const uniqueKeys = listUniqueThreadTurnKeys(args.keys);
+  const rows: ThreadTurnKey[] = [];
+  for (
+    let offset = 0;
+    offset < uniqueKeys.length;
+    offset += STORED_EVENT_SEQUENCE_LOOKUP_CHUNK_SIZE
+  ) {
+    rows.push(
+      ...listStoredTurnStartedKeysChunk(
+        db,
+        uniqueKeys.slice(
+          offset,
+          offset + STORED_EVENT_SEQUENCE_LOOKUP_CHUNK_SIZE,
+        ),
+      ),
+    );
+  }
+  return rows;
+}
+
+export function hasStoredTurnStarted(
+  db: DbQueryConnection,
+  args: HasStoredTurnStartedArgs,
+): boolean {
+  const row = db
+    .select({ sequence: events.sequence })
+    .from(events)
+    .where(
+      and(
+        eq(events.threadId, args.threadId),
+        eq(events.type, "turn/started"),
+        eq(events.turnId, args.turnId),
+      ),
+    )
+    .limit(1)
+    .get();
+
+  return row !== undefined;
 }
 
 export function listRecentStoredEventRows(

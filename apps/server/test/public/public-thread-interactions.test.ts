@@ -2,6 +2,7 @@ import { createDraft } from "@bb/db";
 import { turnScope } from "@bb/domain";
 import type { PendingInteractionCreate } from "@bb/domain";
 import { describe, expect, it } from "vitest";
+import type { AppDeps } from "../../src/types.js";
 import type { PendingInteractionLifecycle } from "../../src/services/interactions/pending-interactions.js";
 import { readJson } from "../helpers/json.js";
 import {
@@ -22,15 +23,22 @@ import {
   seedProjectWithSource,
   seedThread,
   seedThreadRuntimeState,
+  seedTurnStarted,
 } from "../helpers/seed.js";
 import { createTestAppHarness } from "../helpers/test-app.js";
 import { appendThreadEvent } from "../../src/services/threads/thread-events.js";
 
 function registerPendingInteraction(
+  deps: Pick<AppDeps, "db" | "hub">,
   lifecycle: PendingInteractionLifecycle,
   interaction: PendingInteractionCreate,
   sessionId: string,
 ) {
+  seedTurnStarted(deps, {
+    threadId: interaction.threadId,
+    turnId: interaction.turnId,
+    providerThreadId: interaction.providerThreadId,
+  });
   return lifecycle.registerPendingInteraction({
     interaction,
     sessionId,
@@ -61,6 +69,7 @@ describe("public thread interaction routes", () => {
       });
 
       const registered = registerPendingInteraction(
+        harness.deps,
         harness.deps.pendingInteractions,
         {
           threadId: thread.id,
@@ -221,6 +230,7 @@ describe("public thread interaction routes", () => {
       });
 
       const commandApproval = registerPendingInteraction(
+        harness.deps,
         harness.deps.pendingInteractions,
         {
           threadId: thread.id,
@@ -327,6 +337,7 @@ describe("public thread interaction routes", () => {
       });
 
       const permissionRequest = registerPendingInteraction(
+        harness.deps,
         harness.deps.pendingInteractions,
         {
           threadId: thread.id,
@@ -399,6 +410,7 @@ describe("public thread interaction routes", () => {
       expect(grantCommandResponse.status).toBe(200);
 
       const deniedPermissionRequest = registerPendingInteraction(
+        harness.deps,
         harness.deps.pendingInteractions,
         {
           threadId: thread.id,
@@ -454,6 +466,7 @@ describe("public thread interaction routes", () => {
       expect(denyCommandResponse.status).toBe(200);
 
       const invalidPermissionRequest = registerPendingInteraction(
+        harness.deps,
         harness.deps.pendingInteractions,
         {
           threadId: thread.id,
@@ -531,6 +544,7 @@ describe("public thread interaction routes", () => {
       });
 
       const commandApproval = registerPendingInteraction(
+        harness.deps,
         harness.deps.pendingInteractions,
         {
           threadId: thread.id,
@@ -609,6 +623,7 @@ describe("public thread interaction routes", () => {
         permissionMode: "full",
       });
       const pending = registerPendingInteraction(
+        harness.deps,
         harness.deps.pendingInteractions,
         {
           threadId: thread.id,
@@ -746,6 +761,7 @@ describe("public thread interaction routes", () => {
       });
 
       const fileChange = registerPendingInteraction(
+        harness.deps,
         harness.deps.pendingInteractions,
         {
           threadId: thread.id,
@@ -819,6 +835,7 @@ describe("public thread interaction routes", () => {
       });
 
       const registered = registerPendingInteraction(
+        harness.deps,
         harness.deps.pendingInteractions,
         {
           threadId: thread.id,
@@ -915,6 +932,7 @@ describe("public thread interaction routes", () => {
       });
 
       const registered = registerPendingInteraction(
+        harness.deps,
         harness.deps.pendingInteractions,
         {
           threadId: thread.id,
@@ -1011,6 +1029,7 @@ describe("public thread interaction routes", () => {
       });
 
       const registered = registerPendingInteraction(
+        harness.deps,
         harness.deps.pendingInteractions,
         {
           threadId: thread.id,
@@ -1085,6 +1104,7 @@ describe("public thread interaction routes", () => {
       });
 
       const registered = registerPendingInteraction(
+        harness.deps,
         harness.deps.pendingInteractions,
         {
           threadId: thread.id,

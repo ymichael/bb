@@ -17,6 +17,7 @@ import {
   type CreateEventBufferOptions,
   type EventPostResult,
 } from "./event-buffer.js";
+import { ServerResponseError } from "./server-client.js";
 
 interface OutboundCountRow {
   count: number;
@@ -86,6 +87,18 @@ function acceptedPostResult(
     kind: "accepted",
     rejectedEvents: [],
   };
+}
+
+function createNonRetryablePostError(): ServerResponseError {
+  return new ServerResponseError({
+    action: "post events",
+    bodyMessage:
+      "Cannot append item/started for turn turn-threadA before turn/started is stored",
+    code: "invalid_request",
+    retryable: false,
+    status: 409,
+    statusText: "Conflict",
+  });
 }
 
 function createThreadIdentityEvent(threadId: string): ThreadEvent {
@@ -512,6 +525,59 @@ describe("event buffer", () => {
         noProgressLimit: 3,
       }),
       "event flush made no progress; failing closed",
+    );
+    expect(buffer.depth()).toBe(1);
+    await buffer.dispose();
+  });
+
+  it("fails closed after repeated non-retryable server post failures", async () => {
+    const dataDir = nextDataDir();
+    const logger = createLogger();
+    const postEvents = vi.fn<CreateEventBufferOptions["postEvents"]>(
+      async () => {
+        throw createNonRetryablePostError();
+      },
+    );
+    const buffer = createEventBuffer({
+      createProducerEventId: createProducerEventIdGenerator([
+        "hdevt_23456789abcdefghijkm",
+      ]),
+      dataDir,
+      debounceMs: 60_000,
+      logger,
+      maxWaitMs: 60_000,
+      postEvents,
+    });
+
+    buffer.push({
+      threadId: "threadA",
+      event: createThreadIdentityEvent("threadA"),
+    });
+
+    await buffer.flush();
+    await buffer.flush();
+    await expect(buffer.flush()).rejects.toThrow(
+      /non-retryable server response after 3 attempts/u,
+    );
+
+    expect(postEvents).toHaveBeenCalledTimes(3);
+    expect(logger.warn).toHaveBeenCalledTimes(2);
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.objectContaining({
+        bufferDepth: 1,
+        code: "invalid_request",
+        events: [
+          expect.objectContaining({
+            localOrder: 1,
+            producerEventId: "hdevt_23456789abcdefghijkm",
+          }),
+        ],
+        nonRetryableFailureCount: 3,
+        nonRetryableFailureLimit: 3,
+        retryable: false,
+        status: 409,
+      }),
+      "event flush received non-retryable server response; failing closed",
     );
     expect(buffer.depth()).toBe(1);
     await buffer.dispose();

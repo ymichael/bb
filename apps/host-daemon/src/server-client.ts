@@ -44,9 +44,24 @@ interface JsonRecord {
   readonly [key: string]: unknown;
 }
 
+interface ApiErrorResponseBody {
+  code: string;
+  message: string;
+  retryable?: boolean;
+}
+
 interface RawCommandHeader {
   commandId?: string;
   type?: string;
+}
+
+interface ServerResponseErrorArgs {
+  action: string;
+  bodyMessage: string | null;
+  code: string | null;
+  retryable: boolean;
+  status: number;
+  statusText: string;
 }
 
 interface ReportCommandErrorArgs {
@@ -54,6 +69,29 @@ interface ReportCommandErrorArgs {
   errorCode: string;
   errorMessage: string;
   type: string;
+}
+
+export class ServerResponseError extends Error {
+  readonly action: string;
+  readonly bodyMessage: string | null;
+  readonly code: string | null;
+  readonly retryable: boolean;
+  readonly status: number;
+  readonly statusText: string;
+
+  constructor(args: ServerResponseErrorArgs) {
+    const detail = args.bodyMessage ? ` - ${args.bodyMessage}` : "";
+    super(
+      `Failed to ${args.action}: ${args.status} ${args.statusText}${detail}`,
+    );
+    this.name = "ServerResponseError";
+    this.action = args.action;
+    this.bodyMessage = args.bodyMessage;
+    this.code = args.code;
+    this.retryable = args.retryable;
+    this.status = args.status;
+    this.statusText = args.statusText;
+  }
 }
 
 function isJsonRecord(value: unknown): value is JsonRecord {
@@ -83,6 +121,59 @@ function readRawCommandHeader(rawCommand: unknown): RawCommandHeader {
     type:
       command && typeof command.type === "string" ? command.type : undefined,
   };
+}
+
+function parseApiErrorResponseBody(text: string): ApiErrorResponseBody | null {
+  if (text.trim() === "") {
+    return null;
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return null;
+  }
+
+  const record = toJsonRecord(parsed);
+  if (
+    !record ||
+    typeof record.code !== "string" ||
+    typeof record.message !== "string"
+  ) {
+    return null;
+  }
+
+  if (typeof record.retryable === "boolean") {
+    return {
+      code: record.code,
+      message: record.message,
+      retryable: record.retryable,
+    };
+  }
+
+  return {
+    code: record.code,
+    message: record.message,
+  };
+}
+
+async function readApiErrorResponseBody(
+  response: Response,
+): Promise<ApiErrorResponseBody | null> {
+  try {
+    return parseApiErrorResponseBody(await response.text());
+  } catch {
+    return null;
+  }
+}
+
+function defaultRetryableForStatus(status: number): boolean {
+  return status < 400 || status >= 500;
+}
+
+function toRetryControlError(error: ServerResponseError): Error {
+  return error.retryable ? error : new AbortError(error);
 }
 
 type FetchFn = typeof fetch;
@@ -199,12 +290,19 @@ export function createServerClient(
     return url.toString();
   }
 
-  function createResponseError(action: string, response: Response): Error {
-    const message = `Failed to ${action}: ${response.status} ${response.statusText}`;
-    if (response.status >= 400 && response.status < 500) {
-      return new AbortError(message);
-    }
-    return new Error(message);
+  async function createResponseError(
+    action: string,
+    response: Response,
+  ): Promise<ServerResponseError> {
+    const body = await readApiErrorResponseBody(response);
+    return new ServerResponseError({
+      action,
+      bodyMessage: body?.message ?? null,
+      code: body?.code ?? null,
+      retryable: body?.retryable ?? defaultRetryableForStatus(response.status),
+      status: response.status,
+      statusText: response.statusText,
+    });
   }
 
   async function reportCommandError(
@@ -379,7 +477,7 @@ export function createServerClient(
       );
 
       if (!response.ok) {
-        throw createResponseError("fetch runtime material", response);
+        throw await createResponseError("fetch runtime material", response);
       }
 
       return hostRuntimeMaterialSnapshotSchema.parse(await response.json());
@@ -404,7 +502,9 @@ export function createServerClient(
           );
 
           if (!response.ok) {
-            throw createResponseError("report command result", response);
+            throw toRetryControlError(
+              await createResponseError("report command result", response),
+            );
           }
 
           return hostDaemonCommandResultResponseSchema.parse(
@@ -446,7 +546,7 @@ export function createServerClient(
       );
 
       if (!response.ok) {
-        throw createResponseError("post environment change", response);
+        throw await createResponseError("post environment change", response);
       }
     },
 
@@ -464,7 +564,7 @@ export function createServerClient(
       });
 
       if (!response.ok) {
-        throw createResponseError("post events", response);
+        throw await createResponseError("post events", response);
       }
 
       const json = await response.json();
@@ -490,9 +590,7 @@ export function createServerClient(
       });
 
       if (!response.ok) {
-        throw new Error(
-          `Failed to call tool: ${response.status} ${response.statusText}`,
-        );
+        throw await createResponseError("call tool", response);
       }
 
       return hostDaemonToolCallResponseSchema.parse(await response.json());
@@ -517,7 +615,12 @@ export function createServerClient(
           );
 
           if (!response.ok) {
-            throw createResponseError("register interactive request", response);
+            throw toRetryControlError(
+              await createResponseError(
+                "register interactive request",
+                response,
+              ),
+            );
           }
 
           return hostDaemonInteractiveRequestResponseSchema.parse(
@@ -562,8 +665,9 @@ export function createServerClient(
       );
 
       if (!response.ok) {
-        throw new Error(
-          `Failed to interrupt interactive requests: ${response.status} ${response.statusText}`,
+        throw await createResponseError(
+          "interrupt interactive requests",
+          response,
         );
       }
 

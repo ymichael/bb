@@ -4,6 +4,8 @@ import {
   typedRoutes,
   type HostDaemonInternalSchema,
 } from "@bb/host-daemon-contract";
+import { setTimeout as sleep } from "node:timers/promises";
+import { hasStoredTurnStarted } from "@bb/db";
 import type { Hono } from "hono";
 import type { AppDeps } from "../types.js";
 import { ApiError } from "../errors.js";
@@ -11,6 +13,45 @@ import { requireThreadEnvironment } from "../services/lib/entity-lookup.js";
 import { runWithDaemonCommandWaitForbidden } from "../services/hosts/command-wait-context.js";
 import { getAuthenticatedDaemon } from "./auth.js";
 import { requireAuthorizedActiveSession } from "./session-state.js";
+
+const INTERACTIVE_REQUEST_TURN_START_WAIT_TIMEOUT_MS = 1_000;
+const INTERACTIVE_REQUEST_TURN_START_WAIT_INTERVAL_MS = 25;
+
+interface WaitForInteractiveRequestTurnStartedArgs {
+  db: AppDeps["db"];
+  threadId: string;
+  turnId: string;
+}
+
+async function waitForInteractiveRequestTurnStarted(
+  args: WaitForInteractiveRequestTurnStartedArgs,
+): Promise<boolean> {
+  const deadline = Date.now() + INTERACTIVE_REQUEST_TURN_START_WAIT_TIMEOUT_MS;
+
+  while (Date.now() <= deadline) {
+    if (
+      hasStoredTurnStarted(args.db, {
+        threadId: args.threadId,
+        turnId: args.turnId,
+      })
+    ) {
+      return true;
+    }
+
+    const remainingMs = deadline - Date.now();
+    if (remainingMs <= 0) {
+      break;
+    }
+    await sleep(
+      Math.min(remainingMs, INTERACTIVE_REQUEST_TURN_START_WAIT_INTERVAL_MS),
+    );
+  }
+
+  return hasStoredTurnStarted(args.db, {
+    threadId: args.threadId,
+    turnId: args.turnId,
+  });
+}
 
 export function registerInternalInteractiveRequestRoutes(
   app: Hono,
@@ -42,6 +83,30 @@ export function registerInternalInteractiveRequestRoutes(
               403,
               "invalid_request",
               "Thread does not belong to the session host",
+            );
+          }
+
+          const turnStarted = await waitForInteractiveRequestTurnStarted({
+            db: deps.db,
+            threadId: payload.interaction.threadId,
+            turnId: payload.interaction.turnId,
+          });
+          if (!turnStarted) {
+            deps.logger.warn(
+              {
+                providerId: payload.interaction.providerId,
+                providerRequestId: payload.interaction.providerRequestId,
+                providerThreadId: payload.interaction.providerThreadId,
+                threadId: payload.interaction.threadId,
+                turnId: payload.interaction.turnId,
+              },
+              "interactive request arrived before turn/started; asking daemon to retry",
+            );
+            throw new ApiError(
+              503,
+              "turn_start_not_ready",
+              "Turn start has not been stored yet; retry interactive request registration",
+              true,
             );
           }
 

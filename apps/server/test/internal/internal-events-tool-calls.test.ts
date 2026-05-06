@@ -9,6 +9,7 @@ import { describe, expect, it } from "vitest";
 import { internalAuthHeaders } from "../helpers/commands.js";
 import { readJson } from "../helpers/json.js";
 import {
+  seedEvent,
   seedEnvironment,
   seedHostSession,
   seedProjectWithSource,
@@ -103,6 +104,58 @@ describe("internal event and tool-call routes", () => {
           .where(eq(events.threadId, thread.id))
           .all(),
       ).toHaveLength(2);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("rejects daemon turn-scoped events before turn/started is stored", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { session } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: session.hostId,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: session.hostId,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "active",
+      });
+
+      const response = await postEventBatch({
+        harness,
+        sessionId: session.id,
+        events: [
+          {
+            producerEventId: "hdevt_23456789abcdefghijkz",
+            threadId: thread.id,
+            event: {
+              type: "turn/completed",
+              threadId: thread.id,
+              providerThreadId: "provider-missing-start",
+              turnId: "turn-missing-start",
+              scope: turnScope("turn-missing-start"),
+              status: "completed",
+            },
+          },
+        ],
+      });
+
+      expect(response.status).toBe(409);
+      await expect(readJson(response)).resolves.toMatchObject({
+        code: "invalid_request",
+      });
+      expect(
+        harness.db
+          .select()
+          .from(events)
+          .where(eq(events.threadId, thread.id))
+          .all(),
+      ).toHaveLength(0);
     } finally {
       await harness.cleanup();
     }
@@ -439,7 +492,7 @@ describe("internal event and tool-call routes", () => {
     }
   });
 
-  it("accepts message_user tool calls and appends a manager message event", async () => {
+  it("rejects message_user tool calls before the turn start is stored", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host, session } = seedHostSession(harness.deps);
@@ -464,6 +517,69 @@ describe("internal event and tool-call routes", () => {
           body: JSON.stringify({
             sessionId: session.id,
             threadId: managerThread.id,
+            providerThreadId: "provider-manager-missing-turn",
+            turnId: "turn-missing",
+            callId: "call-missing-turn",
+            tool: "message_user",
+            arguments: {
+              text: "Need input from the user",
+            },
+          }),
+        },
+      );
+
+      expect(response.status).toBe(409);
+      await expect(readJson(response)).resolves.toMatchObject({
+        code: "invalid_request",
+      });
+      expect(
+        harness.db
+          .select()
+          .from(events)
+          .where(eq(events.threadId, managerThread.id))
+          .all(),
+      ).toHaveLength(0);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("accepts message_user tool calls after the turn start is stored", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host, session } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const managerThread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        type: "manager",
+      });
+      seedEvent(harness.deps, {
+        threadId: managerThread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-manager-message-user",
+        sequence: 1,
+        type: "turn/started",
+        scope: turnScope("turn-2"),
+        data: {
+          providerThreadId: "provider-manager-message-user",
+        },
+      });
+
+      const response = await harness.app.request(
+        "/internal/session/tool-call",
+        {
+          method: "POST",
+          headers: internalAuthHeaders(harness),
+          body: JSON.stringify({
+            sessionId: session.id,
+            threadId: managerThread.id,
             providerThreadId: "provider-manager-message-user",
             turnId: "turn-2",
             callId: "call-2",
@@ -476,9 +592,14 @@ describe("internal event and tool-call routes", () => {
       );
 
       expect(response.status).toBe(200);
-      const storedEvents = harness.db.select().from(events).all();
-      expect(storedEvents).toHaveLength(1);
-      expect(storedEvents[0]?.type).toBe("system/manager/user_message");
+      const storedEvents = harness.db
+        .select()
+        .from(events)
+        .where(eq(events.threadId, managerThread.id))
+        .orderBy(events.sequence)
+        .all();
+      expect(storedEvents).toHaveLength(2);
+      expect(storedEvents[1]?.type).toBe("system/manager/user_message");
     } finally {
       await harness.cleanup();
     }

@@ -51,6 +51,7 @@ import {
   seedProjectWithSource,
   seedThread,
   seedThreadRuntimeState,
+  seedTurnStarted,
 } from "../helpers/seed.js";
 import { createCommandApprovalPayload } from "../helpers/pending-interactions.js";
 import { createTestAppHarness } from "../helpers/test-app.js";
@@ -1123,6 +1124,12 @@ describe("periodic sweeps", () => {
         projectId: project.id,
         environmentId: environment.id,
         status: "active",
+      });
+      seedTurnStarted(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        turnId: "turn-periodic-expired-interaction",
+        providerThreadId: "provider-thread-periodic-expired-interaction",
       });
 
       const registered =

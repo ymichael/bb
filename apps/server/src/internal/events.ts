@@ -6,6 +6,7 @@ import {
   getThread,
   listCompletedTurnsByThreadIds,
   listThreadEnvironmentAssignmentsOnHost,
+  MissingStoredTurnStartedError,
   ProducerEventPayloadMismatchError,
   updateThread,
 } from "@bb/db";
@@ -797,6 +798,13 @@ export function registerInternalEventRoutes(app: Hono, deps: AppDeps): void {
                 "producer_event_payload_mismatch",
                 "Producer event id was reused with a different payload",
               );
+            }
+            if (error instanceof MissingStoredTurnStartedError) {
+              deps.logger.warn(
+                { err: error, ...error.details, sessionId: session.id },
+                "Rejected daemon event before turn/started",
+              );
+              throw new ApiError(409, "invalid_request", error.message);
             }
             throw error;
           }

@@ -16,6 +16,7 @@ import {
 import { createHash, randomBytes } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
+import { ServerResponseError } from "./server-client.js";
 import type { HostDaemonLogger } from "./logger.js";
 
 const DEFAULT_DEBOUNCE_MS = 100;
@@ -23,6 +24,7 @@ const DEFAULT_MAX_WAIT_MS = 500;
 const EVENT_SPOOL_SCHEMA_VERSION = 1;
 const EVENT_SPOOL_FILE_NAME = "event-spool.sqlite";
 const MAX_CONSECUTIVE_NO_PROGRESS_FLUSHES = 3;
+const MAX_NON_RETRYABLE_POST_FAILURES = 3;
 const PRODUCER_EVENT_ID_ALPHABET = "23456789abcdefghijkmnpqrstuvwxyz";
 
 interface EventSpoolRow {
@@ -459,6 +461,12 @@ function summarizeRejectedEvents(
   }));
 }
 
+function isNonRetryableServerPostError(
+  error: unknown,
+): error is ServerResponseError {
+  return error instanceof ServerResponseError && !error.retryable;
+}
+
 export function createEventBuffer(
   options: CreateEventBufferOptions,
 ): EventBuffer {
@@ -537,6 +545,7 @@ export function createEventBuffer(
   let flushPromise: Promise<boolean> | null = null;
   let disposePromise: Promise<void> | null = null;
   let consecutiveNoProgressFlushes = 0;
+  let nonRetryablePostFailureCount = 0;
   const flushScheduler = createDebouncedCallbackScheduler({
     debounceMs,
     maxWaitMs,
@@ -703,6 +712,36 @@ export function createEventBuffer(
               snapshot.events.map(toPostEvent),
             );
           } catch (error) {
+            if (isNonRetryableServerPostError(error)) {
+              nonRetryablePostFailureCount++;
+              const logContext = {
+                err: error,
+                bufferDepth: snapshot.events.length,
+                code: error.code,
+                events: summarizeBufferedEvents(snapshot.events),
+                nonRetryableFailureCount: nonRetryablePostFailureCount,
+                nonRetryableFailureLimit: MAX_NON_RETRYABLE_POST_FAILURES,
+                retryable: error.retryable,
+                status: error.status,
+              };
+              if (
+                nonRetryablePostFailureCount >= MAX_NON_RETRYABLE_POST_FAILURES
+              ) {
+                options.logger.error(
+                  logContext,
+                  "event flush received non-retryable server response; failing closed",
+                );
+                throw new Error(
+                  `Event spool flush received non-retryable server response after ${nonRetryablePostFailureCount} attempts`,
+                );
+              }
+              options.logger.warn(
+                logContext,
+                "event flush received non-retryable server response",
+              );
+              scheduleFlush();
+              return false;
+            }
             options.logger.warn(
               {
                 err: error,
@@ -753,6 +792,7 @@ export function createEventBuffer(
             return false;
           }
           consecutiveNoProgressFlushes = 0;
+          nonRetryablePostFailureCount = 0;
           return depth() > 0;
         } finally {
           flushPromise = null;

@@ -74,6 +74,7 @@ import {
   seedProjectWithSource,
   seedStoredEvent,
   seedThread,
+  seedTurnStarted,
 } from "../helpers/seed.js";
 import { createCommandApprovalPayload } from "../helpers/pending-interactions.js";
 import { createTestAppHarness } from "../helpers/test-app.js";
@@ -763,6 +764,12 @@ describe("internal session routes", () => {
       const thread = seedThread(harness.deps, {
         projectId: project.id,
         environmentId: environment.id,
+      });
+      seedTurnStarted(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        turnId: "turn-replace-interaction-session",
+        providerThreadId: "provider-thread-replace-interaction-session",
       });
 
       const registered =
@@ -2506,6 +2513,12 @@ describe("internal session routes", () => {
       });
       markThreadStopRequested(harness.db, harness.hub, {
         threadId: thread.id,
+      });
+      seedTurnStarted(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        turnId: "turn-stop-interaction",
+        providerThreadId: "provider-thread-stop-interaction",
       });
 
       const interaction =

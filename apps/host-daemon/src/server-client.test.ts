@@ -1,7 +1,7 @@
 import { AbortError } from "p-retry";
 import { describe, expect, it, vi } from "vitest";
 import type { PendingInteractionCreate } from "@bb/domain";
-import { createServerClient } from "./server-client.js";
+import { createServerClient, ServerResponseError } from "./server-client.js";
 
 function createLogger() {
   return {
@@ -166,12 +166,25 @@ describe("createServerClient", () => {
     });
   });
 
-  it("retries transient interactive request registration failures", async () => {
+  it("retries retryable 409 interactive request registration responses", async () => {
     let calls = 0;
     const fetchFn = vi.fn<typeof fetch>(async () => {
       calls += 1;
       if (calls === 1) {
-        return new Response("unavailable", { status: 503 });
+        return new Response(
+          JSON.stringify({
+            code: "turn_start_not_ready",
+            message:
+              "Turn start has not been stored yet; retry interactive request registration",
+            retryable: true,
+          }),
+          {
+            headers: {
+              "content-type": "application/json",
+            },
+            status: 409,
+          },
+        );
       }
 
       return new Response(
@@ -188,11 +201,12 @@ describe("createServerClient", () => {
         },
       );
     });
+    const logger = createLogger();
     const client = createServerClient({
       fetchFn,
       getSessionId: () => "session-1",
       hostKey: "host-key",
-      logger: createLogger(),
+      logger,
       serverUrl: "https://bb.example.test",
     });
 
@@ -204,5 +218,52 @@ describe("createServerClient", () => {
       status: "pending",
     });
     expect(fetchFn).toHaveBeenCalledTimes(2);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attempt: 1,
+        retriesLeft: expect.any(Number),
+      }),
+      "interactive request registration failed, retrying",
+    );
+  });
+
+  it("does not retry non-retryable 503 interactive request registration responses", async () => {
+    const fetchFn = vi.fn<typeof fetch>(
+      async () =>
+        new Response(
+          JSON.stringify({
+            code: "maintenance",
+            message: "Registration is disabled for this session",
+            retryable: false,
+          }),
+          {
+            headers: {
+              "content-type": "application/json",
+            },
+            status: 503,
+          },
+        ),
+    );
+    const logger = createLogger();
+    const client = createServerClient({
+      fetchFn,
+      getSessionId: () => "session-1",
+      hostKey: "host-key",
+      logger,
+      serverUrl: "https://bb.example.test",
+    });
+
+    const result = client.registerInteractiveRequest(
+      createInteractiveRequest(),
+    );
+
+    await expect(result).rejects.toBeInstanceOf(ServerResponseError);
+    await expect(result).rejects.toMatchObject({
+      code: "maintenance",
+      retryable: false,
+      status: 503,
+    });
+    expect(fetchFn).toHaveBeenCalledTimes(1);
+    expect(logger.warn).not.toHaveBeenCalled();
   });
 });

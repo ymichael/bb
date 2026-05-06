@@ -9,6 +9,7 @@ import {
   seedHostSession,
   seedProjectWithSource,
   seedThread,
+  seedTurnStarted,
 } from "../helpers/seed.js";
 import { createTestAppHarness } from "../helpers/test-app.js";
 
@@ -29,6 +30,12 @@ describe("sendThreadMessage", () => {
       const thread = seedThread(harness.deps, {
         environmentId: environment.id,
         projectId: project.id,
+      });
+      seedTurnStarted(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        turnId: "turn-send-blocked",
+        providerThreadId: "provider-thread-send-blocked",
       });
 
       const registered = harness.deps.pendingInteractions.registerPendingInteraction(
@@ -89,6 +96,12 @@ describe("sendThreadMessage", () => {
       const thread = seedThread(harness.deps, {
         environmentId: environment.id,
         projectId: project.id,
+      });
+      seedTurnStarted(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        turnId: "turn-send-auto-dispatch",
+        providerThreadId: "provider-thread-send-auto-dispatch",
       });
 
       const registered = harness.deps.pendingInteractions.registerPendingInteraction(

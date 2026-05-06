@@ -22,6 +22,7 @@ import {
   seedHostSession,
   seedProjectWithSource,
   seedThread,
+  seedTurnStarted,
 } from "../helpers/seed.js";
 import { createCommandApprovalPayload } from "../helpers/pending-interactions.js";
 import { readJson } from "../helpers/json.js";
@@ -523,6 +524,12 @@ describe("internal session correctness", () => {
         projectId: project.id,
         environmentId: environment.id,
       });
+      seedTurnStarted(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        turnId: "turn-disconnect-pending-interaction",
+        providerThreadId: "provider-thread-disconnect-pending-interaction",
+      });
 
       const registered =
         harness.deps.pendingInteractions.registerPendingInteraction({
@@ -642,6 +649,12 @@ describe("internal session correctness", () => {
       const thread = seedThread(harness.deps, {
         projectId: project.id,
         environmentId: environment.id,
+      });
+      seedTurnStarted(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        turnId: "turn-session-restart-interaction",
+        providerThreadId: "provider-thread-session-restart-interaction",
       });
 
       const registered =
