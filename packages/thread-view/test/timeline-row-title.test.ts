@@ -42,6 +42,7 @@ function commandRow(): TimelineCommandWorkRow {
     ...baseRow("command-1"),
     kind: "work",
     workKind: "command",
+    inClosedStep: false,
     status: "completed",
     callId: "call-1",
     command: "pnpm exec turbo run test --filter=@bb/app",
@@ -60,6 +61,7 @@ function toolRow(): TimelineToolWorkRow {
     ...baseRow("tool-1"),
     kind: "work",
     workKind: "tool",
+    inClosedStep: false,
     status: "completed",
     callId: "tool-call-1",
     toolName: "Read",
@@ -97,6 +99,7 @@ function deletedFileRow(): TimelineFileChangeWorkRow {
     ...baseRow("file-1"),
     kind: "work",
     workKind: "file-change",
+    inClosedStep: false,
     status: "completed",
     callId: "file-call-1",
     change: {
@@ -120,6 +123,7 @@ function createdFileRow(): TimelineFileChangeWorkRow {
     ...baseRow("file-created-1"),
     kind: "work",
     workKind: "file-change",
+    inClosedStep: false,
     status: "completed",
     callId: "file-call-2",
     change: {
@@ -143,6 +147,7 @@ function editedFileRow(): TimelineFileChangeWorkRow {
     ...baseRow("file-edited-1"),
     kind: "work",
     workKind: "file-change",
+    inClosedStep: false,
     status: "completed",
     callId: "file-call-3",
     change: {
@@ -166,9 +171,11 @@ function webSearchRow(): TimelineWebSearchWorkRow {
     ...baseRow("web-search-1"),
     kind: "work",
     workKind: "web-search",
+    inClosedStep: false,
     status: "completed",
     callId: "web-search-call-1",
     queries: ["timeline renderer"],
+    durationMs: null,
   };
 }
 
@@ -177,11 +184,13 @@ function webFetchRow(): TimelineWebFetchWorkRow {
     ...baseRow("web-fetch-1"),
     kind: "work",
     workKind: "web-fetch",
+    inClosedStep: false,
     status: "completed",
     callId: "web-fetch-call-1",
     url: "https://example.com/thread-view",
     prompt: null,
     pattern: null,
+    durationMs: null,
   };
 }
 
@@ -190,6 +199,7 @@ function delegationRow(): TimelineViewDelegationWorkRow {
     ...baseRow("delegation-1"),
     kind: "work",
     workKind: "delegation",
+    inClosedStep: false,
     status: "completed",
     callId: "delegation-call-1",
     toolName: "spawnAgent",
@@ -228,6 +238,7 @@ function turnRow(): TimelineViewTurnRow {
   return {
     ...baseRow("turn-1"),
     kind: "turn",
+    turnId: "turn-1",
     status: "completed",
     summaryCount: 1,
     durationMs: 3_661_000,
@@ -314,7 +325,7 @@ describe("buildTimelineRowTitle", () => {
       } satisfies TimelineToolWorkRow,
     },
   ])(
-    "keeps denied $row.workKind titles destructive when summary work style is requested",
+    "keeps denied $row.workKind titles muted (non-destructive) when summary work style is requested",
     ({ expectedPlain, row }) => {
       const title = buildTimelineRowTitle(row, {
         summaryStyle: "background",
@@ -323,7 +334,7 @@ describe("buildTimelineRowTitle", () => {
 
       expect(title.plain).toBe(expectedPlain);
       expect(title.segments[0]?.text).toBe("Permission denied:");
-      expect(title.tone).toBe("destructive");
+      expect(title.tone).not.toBe("destructive");
     },
   );
 
@@ -424,6 +435,7 @@ describe("buildTimelineRowTitle", () => {
       ...baseRow("cmd-1"),
       kind: "work" as const,
       workKind: "command" as const,
+      inClosedStep: false,
       status: "completed" as const,
       callId: "cmd-call-1",
       command: "ls",
@@ -540,7 +552,7 @@ describe("buildTimelineRowTitle", () => {
     expect(title.plain).toBe("Working for (5s)");
     expect(title.segments[0]?.shimmer).toBe(true);
     expect(title.decorations).toEqual([
-      { kind: "duration", durationMs: 5_000, live: true },
+      { kind: "duration", durationMs: 5_000, live: true, em: true },
     ]);
   });
 

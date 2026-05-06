@@ -1186,15 +1186,15 @@ describe("ThreadTimelineRows", () => {
     expect(view.container.textContent ?? "").not.toContain("applied");
   });
 
-  it("style contract: mutes completed single file change title diff stats", () => {
+  it("style contract: keeps completed single file change diff stats color-coded at top level", () => {
     const html = renderRowsToStaticMarkup({
       timelineRows: [fileChangeRow()],
     });
 
     expect(html).toContain("+1");
     expect(html).toContain("-1");
-    expect(html).not.toContain("text-diff-added");
-    expect(html).not.toContain("text-diff-removed");
+    expect(html).toContain("text-diff-added");
+    expect(html).toContain("text-diff-removed");
   });
 
   it("renders file-change stderr without rendering stdout below diffs", () => {

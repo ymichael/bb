@@ -39,6 +39,7 @@ function commandRow(): TimelineCommandWorkRow {
     createdAt: 10,
     kind: "work",
     workKind: "command",
+    inClosedStep: false,
     status: "pending",
     callId: "command-1",
     command: "pnpm test",

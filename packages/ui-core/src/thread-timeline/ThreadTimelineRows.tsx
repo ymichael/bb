@@ -22,7 +22,7 @@ import {
   buildTimelineViewRows,
   findActiveLatestBundleId,
   findTimelineFrontierRow,
-  isCompletedNonDeniedWorkRow,
+  hasTimelineExplorationIntent,
   type BuildTimelineRowTitleOptions,
   type BuildTimelineViewRowsOptions,
   type ThreadTimelineViewRow,
@@ -151,9 +151,7 @@ interface TimelineRowTitleRenderStateArgs extends ActiveSummaryTreatmentArgs {
   spacing: TimelineRowsListSpacing;
 }
 
-interface TimelineRowTitleOptionsArgs extends ActiveSummaryTreatmentArgs {
-  spacing: TimelineRowsListSpacing;
-}
+interface TimelineRowTitleOptionsArgs extends ActiveSummaryTreatmentArgs {}
 
 interface TimelineRowTitleRenderStateCache {
   key: string;
@@ -269,6 +267,7 @@ function timelineWorkRowRenderSignature(row: TimelineViewWorkRow): string {
     timelineRowBaseSignature(row),
     row.status,
     row.workKind,
+    row.inClosedStep,
   ];
 
   switch (row.workKind) {
@@ -309,6 +308,7 @@ function timelineWorkRowRenderSignature(row: TimelineViewWorkRow): string {
         ...baseParts,
         row.callId,
         row.queries.join("\u001e"),
+        row.durationMs,
       ]);
     case "web-fetch":
       return joinSignatureParts([
@@ -317,6 +317,7 @@ function timelineWorkRowRenderSignature(row: TimelineViewWorkRow): string {
         row.url,
         row.prompt,
         row.pattern,
+        row.durationMs,
       ]);
     case "delegation":
       return joinSignatureParts([
@@ -389,13 +390,11 @@ function timelineRowTitleRenderStateKey({
   compactActivityIntents,
   row,
   scopeActive,
-  spacing,
 }: TimelineRowTitleRenderStateArgs): string {
   return joinSignatureParts([
     timelineRowRenderSignature(row),
     compactActivityIntents,
     scopeActive,
-    spacing,
     activeLatestBundleId === row.id,
   ]);
 }
@@ -423,7 +422,6 @@ function buildTimelineRowTitleRenderState({
       activeLatestBundleId,
       row,
       scopeActive,
-      spacing,
     }),
   );
   return {
@@ -562,6 +560,7 @@ function isWorkRowExpandable(row: TimelineViewWorkRow): boolean {
       return false;
     case "command":
     case "tool":
+      return !hasTimelineExplorationIntent(row);
     case "file-change":
       return true;
     case "delegation":
@@ -692,7 +691,6 @@ function timelineRowTitleOptions({
   activeLatestBundleId,
   row,
   scopeActive,
-  spacing,
 }: TimelineRowTitleOptionsArgs): BuildTimelineRowTitleOptions {
   const useActiveBundleLabel = isActiveLatestBundleSummary({
     activeLatestBundleId,
@@ -702,9 +700,7 @@ function timelineRowTitleOptions({
   return {
     summaryStyle: useActiveBundleLabel ? "bundle" : "background",
     workStyle:
-      isCompletedNonDeniedWorkRow(row) && spacing !== "bundle"
-        ? "summary"
-        : "default",
+      row.kind === "work" && row.inClosedStep ? "summary" : "default",
     isActiveLatestBundle: useActiveBundleLabel,
   };
 }

@@ -70,7 +70,7 @@ describe("TimelineTitleView", () => {
               truncate: true,
             }),
           ],
-          decorations: [{ kind: "duration", durationMs: 2_100, live: false }],
+          decorations: [{ kind: "duration", durationMs: 2_100, live: false, em: false }],
           plain: "Ran pnpm exec turbo run test --filter=@bb/app 2s",
         })}
       />,
@@ -126,7 +126,7 @@ describe("TimelineTitleView", () => {
               truncate: true,
             }),
           ],
-          decorations: [{ kind: "duration", durationMs: 45_000, live: false }],
+          decorations: [{ kind: "duration", durationMs: 45_000, live: false, em: false }],
           plain:
             "Ran subagent Review correctness + plan adherence (general-purpose-with-long-provider-controlled-name) 45s",
         })}
@@ -321,7 +321,7 @@ describe("TimelineTitleView", () => {
           seg("pnpm test", { em: true, truncate: true }),
         ],
         decorations: [
-          { kind: "duration", durationMs: baselineMs, live: true },
+          { kind: "duration", durationMs: baselineMs, live: true, em: false },
         ],
       });
 

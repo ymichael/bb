@@ -84,6 +84,7 @@ describe("timeline response helpers", () => {
           createdAt: 1,
           status: "completed",
           workKind: "delegation",
+          inClosedStep: false,
           callId: "call_test",
           toolName: "spawnAgent",
           subagentType: null,

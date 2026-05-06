@@ -28,13 +28,6 @@ interface WorkRowOverrides {
   turnId?: string | null;
 }
 
-interface TerminalSingleWorkSummaryCase {
-  expectedSummaryLabel: string;
-  label: string;
-  row: TimelineCommandWorkRow | TimelineFileChangeWorkRow | TimelineToolWorkRow;
-  status: TimelineRowStatus;
-}
-
 function baseRow(id: string, overrides: WorkRowOverrides = {}): TimelineRowBase {
   return {
     id,
@@ -84,6 +77,7 @@ function commandRow({
     ...baseRow(id, { ...baseOverrides, sourceSeqEnd, sourceSeqStart }),
     kind: "work",
     workKind: "command",
+    inClosedStep: false,
     status,
     callId,
     command,
@@ -122,6 +116,7 @@ function fileChangeRow({
     ...baseRow(id, baseOverrides),
     kind: "work",
     workKind: "file-change",
+    inClosedStep: false,
     status,
     callId,
     change: {
@@ -166,6 +161,7 @@ function toolRow({
     ...baseRow(id, baseOverrides),
     kind: "work",
     workKind: "tool",
+    inClosedStep: false,
     status,
     callId,
     toolName,
@@ -194,6 +190,7 @@ function delegationRow({
     ...baseRow(id, baseOverrides),
     kind: "work",
     workKind: "delegation",
+    inClosedStep: false,
     status,
     callId,
     toolName: "spawnAgent",
@@ -595,7 +592,7 @@ describe("buildTimelineViewRows", () => {
     expect(
       childSummary.children.map((child) => ({
         id: child.id,
-        callId: child.callId,
+        callId: child.workKind === "approval" ? null : child.callId,
         command: child.workKind === "command" ? child.command : null,
       })),
     ).toEqual([

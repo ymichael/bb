@@ -55,7 +55,7 @@ function userRow(text: string): TimelineConversationRow {
     role: "user",
     text,
     attachments: null,
-    userRequest: { kind: "send", status: "accepted" },
+    userRequest: { kind: "message", status: "accepted" },
   };
 }
 
@@ -97,6 +97,7 @@ function commandRow(args: {
     ...baseRow(args.id),
     kind: "work",
     workKind: "command",
+    inClosedStep: false,
     status: args.status ?? "completed",
     callId: `${args.id}-call`,
     command: args.command,
@@ -131,6 +132,7 @@ function editRow(path: string): TimelineFileChangeWorkRow {
     ...baseRow(`edit-${path}`),
     kind: "work",
     workKind: "file-change",
+    inClosedStep: false,
     status: "completed",
     callId: `edit-${path}-call`,
     change: {
@@ -140,6 +142,8 @@ function editRow(path: string): TimelineFileChangeWorkRow {
       diff: "-old\n+new",
       diffStats: { added: 1, removed: 1 },
     },
+    stdout: null,
+    stderr: null,
     approvalStatus: null,
   };
 }

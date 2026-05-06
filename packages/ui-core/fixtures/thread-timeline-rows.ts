@@ -93,6 +93,7 @@ export interface FileChangeRowArgs {
 
 export interface WebSearchRowArgs {
   callId?: string;
+  durationMs?: number | null;
   id?: string;
   queries?: string[];
   seq?: number;
@@ -104,6 +105,7 @@ export interface WebSearchRowArgs {
 
 export interface WebFetchRowArgs {
   callId?: string;
+  durationMs?: number | null;
   id?: string;
   pattern?: string | null;
   prompt?: string | null;
@@ -333,6 +335,7 @@ export function commandRow({
     ...baseRow({ id, seq, sourceSeqEnd, sourceSeqStart, turnId }),
     kind: "work",
     workKind: "command",
+    inClosedStep: false,
     status,
     callId: id,
     command,
@@ -365,6 +368,7 @@ export function toolRow({
     ...baseRow({ id, seq, sourceSeqEnd, sourceSeqStart, turnId }),
     kind: "work",
     workKind: "tool",
+    inClosedStep: false,
     status,
     callId: id,
     toolName,
@@ -417,6 +421,7 @@ export function fileChangeRow(
     ...baseRow({ id, seq, sourceSeqEnd, sourceSeqStart, turnId }),
     kind: "work",
     workKind: "file-change",
+    inClosedStep: false,
     status,
     callId: id,
     change: fileChangeFromArgs(args),
@@ -428,6 +433,7 @@ export function fileChangeRow(
 
 export function webSearchRow({
   callId,
+  durationMs = null,
   id = DEFAULT_WEB_SEARCH_ID,
   queries = ["timeline renderer"],
   seq,
@@ -440,14 +446,17 @@ export function webSearchRow({
     ...baseRow({ id, seq, sourceSeqEnd, sourceSeqStart, turnId }),
     kind: "work",
     workKind: "web-search",
+    inClosedStep: false,
     status,
     callId: callId ?? id,
     queries,
+    durationMs,
   };
 }
 
 export function webFetchRow({
   callId,
+  durationMs = null,
   id = DEFAULT_WEB_FETCH_ID,
   pattern = null,
   prompt = null,
@@ -462,11 +471,13 @@ export function webFetchRow({
     ...baseRow({ id, seq, sourceSeqEnd, sourceSeqStart, turnId }),
     kind: "work",
     workKind: "web-fetch",
+    inClosedStep: false,
     status,
     callId: callId ?? id,
     url,
     prompt,
     pattern,
+    durationMs,
   };
 }
 
@@ -486,6 +497,7 @@ export function approvalRow({
     ...baseRow({ id, seq, sourceSeqEnd, sourceSeqStart, turnId }),
     kind: "work",
     workKind: "approval",
+    inClosedStep: false,
     status,
     interactionId,
     title,
@@ -541,6 +553,7 @@ export function delegationRow({
     ...baseRow({ id, seq, sourceSeqEnd, sourceSeqStart, turnId }),
     kind: "work",
     workKind: "delegation",
+    inClosedStep: false,
     status,
     callId: id,
     toolName,

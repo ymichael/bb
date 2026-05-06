@@ -59,6 +59,8 @@ export type TimelineTitleDecoration =
        * always shows the static `durationMs`.
        */
       live: boolean;
+      /** Render the duration with title-emphasis tone instead of the default muted decoration tone. */
+      em: boolean;
     }
   | {
       kind: "status";
@@ -177,11 +179,16 @@ function visibleDurationMs(durationMs: number | null): number | null {
 
 function durationDecoration(
   durationMs: number | null,
-  options: { live?: boolean } = {},
+  options: { live?: boolean; em?: boolean } = {},
 ): TimelineTitleDecoration | null {
   const visible = visibleDurationMs(durationMs);
   if (visible === null) return null;
-  return { kind: "duration", durationMs: visible, live: options.live ?? false };
+  return {
+    kind: "duration",
+    durationMs: visible,
+    live: options.live ?? false,
+    em: options.em ?? false,
+  };
 }
 
 function statusDecoration(
@@ -337,7 +344,6 @@ function mapExecutionTitle(row: TimelineExecutionWorkRow): TimelineTitle {
           segment(content, { em: true, truncate: true }),
         ],
         decorations: filterNull([durationDecoration(row.durationMs)]),
-        tone: "destructive",
       });
     case "pending":
       return makeTitle({
@@ -426,7 +432,6 @@ function mapSingleExplorationIntentTitle(
           plainText: plainVerbContent,
         }),
       ],
-      tone: "destructive",
     });
   }
   if (status === "waiting") {
@@ -506,7 +511,6 @@ function mapFileChangeTitle(row: TimelineFileChangeWorkRow): TimelineTitle {
       return makeTitle({
         segments: [segment("Permission denied:"), pathSegment],
         decorations: filterNull([diffStatsDecoration(row.change)]),
-        tone: "destructive",
         action: titleAction,
       });
     case "pending":
@@ -559,6 +563,7 @@ function mapWebSearchTitle(row: TimelineWebSearchWorkRow): TimelineTitle {
   });
   switch (row.status) {
     case "pending":
+      // No live duration: the projection only sets `durationMs` at completion.
       return makeTitle({
         segments: [
           segment("Running web search:", { shimmer: true }),
@@ -568,11 +573,12 @@ function mapWebSearchTitle(row: TimelineWebSearchWorkRow): TimelineTitle {
     case "completed":
       return makeTitle({
         segments: [segment("Ran web search:"), querySegment],
+        decorations: filterNull([durationDecoration(row.durationMs)]),
       });
     case "error":
       return makeTitle({
         segments: [segment("Ran web search:"), querySegment],
-        decorations: [statusDecoration("error", null)],
+        decorations: [statusDecoration("error", row.durationMs)],
       });
     case "interrupted":
       return makeTitle({
@@ -587,17 +593,19 @@ function mapWebFetchTitle(row: TimelineWebFetchWorkRow): TimelineTitle {
   const urlSegment = segment(row.url, { em: false, truncate: true });
   switch (row.status) {
     case "pending":
+      // No live duration: the projection only sets `durationMs` at completion.
       return makeTitle({
         segments: [segment("Fetching:", { shimmer: true }), urlSegment],
       });
     case "completed":
       return makeTitle({
         segments: [segment("Fetched:"), urlSegment],
+        decorations: filterNull([durationDecoration(row.durationMs)]),
       });
     case "error":
       return makeTitle({
         segments: [segment("Fetched:"), urlSegment],
-        decorations: [statusDecoration("error", null)],
+        decorations: [statusDecoration("error", row.durationMs)],
       });
     case "interrupted":
       return makeTitle({
@@ -717,6 +725,10 @@ function mapWorkSummaryTitle(
       tone: "summary",
     });
   }
+  // Bundle summaryStyle: when this bundle is the active-latest, verb shimmers
+  // and the rest carries em. When a caller requests bundle styling without
+  // active-latest (defensive — production pairs them), render statically with
+  // no shimmer/em so we never claim activity that isn't there.
   const verbSegment = segment(verb, { shimmer: isActive });
   if (rest.length === 0) {
     return makeTitle({
@@ -727,7 +739,7 @@ function mapWorkSummaryTitle(
   return makeTitle({
     segments: [
       verbSegment,
-      segment(rest, { em: false, truncate: true, shimmer: isActive }),
+      segment(rest, { em: isActive, truncate: true }),
     ],
     decorations,
   });
@@ -737,6 +749,7 @@ function mapTurnTitle(row: TimelineViewTurnRow): TimelineTitle {
   const status = row.status;
   const durationDeco = durationDecoration(row.durationMs, {
     live: status === "pending",
+    em: true,
   });
   if (durationDeco !== null) {
     return makeTitle({
@@ -759,11 +772,9 @@ function mapTurnTitle(row: TimelineViewTurnRow): TimelineTitle {
 
 function mapSystemTitle(row: TimelineSystemViewRow): TimelineTitle {
   const hasErrorTone = row.systemKind === "error" || row.status === "error";
-  const text =
-    row.systemKind === "error" ? `Error: ${row.title}` : row.title;
   return makeTitle({
     segments: [
-      segment(text, {
+      segment(row.title, {
         em: hasErrorTone,
         shimmer: row.status === "pending",
         truncate: true,

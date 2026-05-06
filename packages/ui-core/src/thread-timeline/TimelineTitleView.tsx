@@ -155,9 +155,12 @@ function renderDecoration(
   );
 
   switch (decoration.kind) {
-    case "duration":
+    case "duration": {
+      const durationClass = decoration.em
+        ? cn("shrink-0 whitespace-pre", emToneClass(tone))
+        : baseClass;
       return (
-        <span key={index} className={baseClass}>
+        <span key={index} className={durationClass}>
           {decoration.live ? (
             <LiveDurationText durationMs={decoration.durationMs} />
           ) : (
@@ -165,6 +168,7 @@ function renderDecoration(
           )}
         </span>
       );
+    }
     case "status":
     case "summary-status": {
       const text = formatTimelineDecorationText(decoration);

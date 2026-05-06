@@ -146,11 +146,19 @@ export type TimelineFileChange = z.infer<typeof timelineFileChangeSchema>;
 const timelineWorkRowBaseSchema = timelineRowBaseSchema.extend({
   kind: z.literal("work"),
   status: timelineRowStatusSchema,
+  /**
+   * True when this row is the sole leaf of an already-closed step (an
+   * assistant-message boundary followed it). Multi-item closed steps wrap
+   * in `step-summary`; single-item closed steps stay bare and use this flag
+   * so the renderer can still apply muted "closed-step" treatment.
+   */
+  inClosedStep: z.boolean(),
 });
 
 interface TimelineWorkRowBase extends TimelineRowBase {
   kind: "work";
   status: TimelineRowStatus;
+  inClosedStep: boolean;
 }
 
 export const timelineCommandWorkRowSchema = timelineWorkRowBaseSchema.extend({
@@ -200,6 +208,7 @@ export const timelineWebSearchWorkRowSchema = timelineWorkRowBaseSchema.extend({
   workKind: z.literal("web-search"),
   callId: z.string(),
   queries: z.array(z.string()),
+  durationMs: z.number().nullable(),
 });
 export type TimelineWebSearchWorkRow = z.infer<
   typeof timelineWebSearchWorkRowSchema
@@ -211,6 +220,7 @@ export const timelineWebFetchWorkRowSchema = timelineWorkRowBaseSchema.extend({
   url: z.string(),
   prompt: z.string().nullable(),
   pattern: z.string().nullable(),
+  durationMs: z.number().nullable(),
 });
 export type TimelineWebFetchWorkRow = z.infer<
   typeof timelineWebFetchWorkRowSchema

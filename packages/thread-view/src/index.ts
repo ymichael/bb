@@ -10,6 +10,7 @@ export {
   formatTimelineDecorationText,
   renderTitlePlain,
 } from "./timeline-row-title.js";
+export { hasTimelineExplorationIntent } from "./timeline-activity-intents.js";
 export { durationToCompactString } from "./format-helpers.js";
 export type {
   BuildTimelineRowTitleOptions,
@@ -36,7 +37,6 @@ export {
   buildTimelineViewRows,
   buildTimelineWorkSummaryLabel,
   buildTimelineWorkSummaryLabelParts,
-  isCompletedNonDeniedWorkRow,
   isTimelineStepBoundary,
 } from "./timeline-view.js";
 export type {

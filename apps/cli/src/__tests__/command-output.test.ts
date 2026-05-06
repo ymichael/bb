@@ -3203,6 +3203,7 @@ describe("CLI JSON output contracts", () => {
           }),
           kind: "work",
           workKind: "command",
+          inClosedStep: false,
           status: "pending",
           callId: "cmd-1",
           command: "git push",
@@ -3221,6 +3222,7 @@ describe("CLI JSON output contracts", () => {
           }),
           kind: "work",
           workKind: "file-change",
+          inClosedStep: false,
           status: "interrupted",
           callId: "file-1",
           change: {

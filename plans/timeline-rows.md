@@ -62,7 +62,7 @@ the next assistant-message boundary; pending steers (user messages with
   - `≥2 consecutive same-concept` work rows form a `bundle-summary`.
   - Single rows stay as `work` leaves.
   - Concepts: `exploration` (read/list/search via `activityIntents`), `commands`, `tools`, `fileChanges`, `webResearch`, `delegations`.
-- **Closed step** (after a boundary) — emits ONE `step-summary` aggregating all work, OR a single leaf if the step had only one item.
+- **Closed step** (after a boundary) — emits ONE `step-summary` aggregating all work, OR a single leaf if the step had only one item. The single leaf is tagged with `inClosedStep: true` so the renderer can apply the closed-step muted treatment without wrapping it in a redundant summary.
 - **Lazy turn detail** (children of a completed `turn` row) — treated as a closed scope, so the trailing step collapses into a step-summary even without an explicit closing assistant.
 
 ## Active-latest determination
@@ -328,10 +328,11 @@ DETAIL: streaming diff if available
 
 LIFECYCLE: completed-success
 TITLE (cli): <Edited|Created|Deleted> `<path>` +<A> -<R>
-TITLE (formatted): [muted]<Edited|Created|Deleted> [em]<path>[/em] +<A> -<R>[/muted]
+TITLE (formatted): [muted]<Edited|Created|Deleted> [em]<path>[/em][/muted] [diff-added]+<A>[/diff-added] [diff-removed]-<R>[/diff-removed]
 EXAMPLES: Edited packages/thread-view/src/timeline-view.ts +8 -2
 EXPANDED: collapsed; expandable to diff
 DETAIL: unified diff
+NOTE: +/- diff stats stay color-coded at the top level; only inside step/bundle summaries do they render muted alongside the rest of the wrapper.
 
 LIFECYCLE: completed-error
 TITLE (cli): Failed to <edit|create|delete> `<path>` (error)
@@ -353,28 +354,28 @@ DETAIL: partial diff if any
 
 LIFECYCLE: active
 TITLE (cli): Running web search: `<query>` [optional](duration)[/optional]
-TITLE (formatted): [shimmer]Running web search:[/shimmer] [em]<query>[/em] [optional][muted]<duration>[/muted][/optional]
+TITLE (formatted): [shimmer]Running web search:[/shimmer] <query> [optional][muted]<duration>[/muted][/optional]
 EXAMPLES: Running web search: React Suspense docs
 EXPANDED: not expandable
 DETAIL: none (web result text suppressed)
 
 LIFECYCLE: completed-success
 TITLE (cli): Ran web search: `<query>` [optional](duration)[/optional]
-TITLE (formatted): [muted]Ran web search: [em]<query>[/em] [optional]<duration>[/optional][/muted]
+TITLE (formatted): [muted]Ran web search: <query> [optional]<duration>[/optional][/muted]
 EXAMPLES: Ran web search: React Suspense docs
 EXPANDED: not expandable
 DETAIL: none
 
 LIFECYCLE: completed-error
 TITLE (cli): Ran web search: `<query>` ([optional]<duration>[/optional], error)
-TITLE (formatted): [muted]Ran web search: [em]<query>[/em] [optional]<duration>[/optional][/muted] [muted](error)[/muted]
+TITLE (formatted): [muted]Ran web search: <query> [optional]<duration>[/optional][/muted] [muted](error)[/muted]
 EXAMPLES: Ran web search: React Suspense docs (error)
 EXPANDED: not expandable
 DETAIL: none
 
 LIFECYCLE: interrupted
 TITLE (cli): Interrupted web search: `<query>`
-TITLE (formatted): [muted]Interrupted web search: [em]<query>[/em][/muted]
+TITLE (formatted): [muted]Interrupted web search: <query>[/muted]
 EXAMPLES: Interrupted web search: React Suspense docs
 EXPANDED: not expandable
 DETAIL: none
@@ -385,28 +386,28 @@ DETAIL: none
 
 LIFECYCLE: active
 TITLE (cli): Fetching: `<url>` [optional](duration)[/optional]
-TITLE (formatted): [shimmer]Fetching:[/shimmer] [em]<url>[/em] [optional][muted]<duration>[/muted][/optional]
+TITLE (formatted): [shimmer]Fetching:[/shimmer] <url> [optional][muted]<duration>[/muted][/optional]
 EXAMPLES: Fetching: https://react.dev/reference/react/Suspense
 EXPANDED: not expandable
 DETAIL: none
 
 LIFECYCLE: completed-success
 TITLE (cli): Fetched: `<url>` [optional](duration)[/optional]
-TITLE (formatted): [muted]Fetched: [em]<url>[/em] [optional]<duration>[/optional][/muted]
+TITLE (formatted): [muted]Fetched: <url> [optional]<duration>[/optional][/muted]
 EXAMPLES: Fetched: https://react.dev/reference/react/Suspense
 EXPANDED: not expandable
 DETAIL: none
 
 LIFECYCLE: completed-error
 TITLE (cli): Fetched: `<url>` ([optional]<duration>[/optional], error)
-TITLE (formatted): [muted]Fetched: [em]<url>[/em] [optional]<duration>[/optional][/muted] [muted](error)[/muted]
+TITLE (formatted): [muted]Fetched: <url> [optional]<duration>[/optional][/muted] [muted](error)[/muted]
 EXAMPLES: Fetched: https://react.dev/reference/react/Suspense (error)
 EXPANDED: not expandable
 DETAIL: none
 
 LIFECYCLE: interrupted
 TITLE (cli): Interrupted fetch: `<url>`
-TITLE (formatted): [muted]Interrupted fetch: [em]<url>[/em][/muted]
+TITLE (formatted): [muted]Interrupted fetch: <url>[/muted]
 EXAMPLES: Interrupted fetch: https://react.dev/reference/react/Suspense
 EXPANDED: not expandable
 DETAIL: none
@@ -588,7 +589,7 @@ DETAIL: provider/system supplied detail
 
 LIFECYCLE: completed (only state)
 TITLE (cli): Worked for <duration>
-TITLE (formatted): [muted]Worked for <duration>[/muted]
+TITLE (formatted): [muted]Worked for[/muted] [em]<duration>[/em]
 EXAMPLES: Worked for 8m 14s
 EXPANDED: collapsed by default; expand triggers lazy detail load
 DETAIL: nested rows — assistant messages, step summaries, leaves — except the final assistant message of the turn, which renders as a sibling outside the turn summary
@@ -620,7 +621,7 @@ A bundle exists when ≥2 same-concept leaves are in the open step. One clause f
 
 LIFECYCLE: active-latest (this bundle's concept is the latest activity in the open step)
 TITLE (cli): <clause-active>
-TITLE (formatted): [shimmer]<clause-active>[/shimmer]
+TITLE (formatted): [shimmer]<verb>[/shimmer] [em]<rest>[/em]
 CLAUSES (active):
   exploration:  Exploring N files[, M lists][, K searches]
   commands:     Running N commands

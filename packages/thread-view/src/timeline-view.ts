@@ -602,31 +602,6 @@ export function isTimelineStepBoundary(row: ThreadTimelineViewRow): boolean {
   return true;
 }
 
-function isDeniedApprovalGatedWorkRow(row: TimelineViewWorkRow): boolean {
-  switch (row.workKind) {
-    case "command":
-    case "file-change":
-    case "tool":
-      return row.approvalStatus === "denied";
-    case "delegation":
-    case "web-fetch":
-    case "web-search":
-    case "approval":
-      return false;
-    default:
-      return assertNever(row);
-  }
-}
-
-export function isCompletedNonDeniedWorkRow(
-  row: ThreadTimelineViewRow,
-): row is TimelineViewWorkRow {
-  return (
-    row.kind === "work" &&
-    row.status === "completed" &&
-    !isDeniedApprovalGatedWorkRow(row)
-  );
-}
 
 /**
  * Concept identifier used for bundling. Same-concept consecutive leaves in an
@@ -679,14 +654,17 @@ function buildBundleSummaryRow(
 
 /**
  * Closes an open step at an assistant-message boundary. A multi-item step
- * collapses into one step-summary; a single-item step keeps the leaf so single
- * terminal work doesn't grow a redundant wrapper (Q1).
+ * collapses into one step-summary; a single-item step keeps the leaf bare
+ * (Q1) and tags it with `inClosedStep` so the renderer applies the closed-
+ * step muted treatment without a wrapper row.
  */
 function closeOpenStepAtBoundary(
   work: TimelineViewWorkRow[],
 ): ThreadTimelineViewRow[] {
   if (work.length === 0) return [];
-  if (work.length === 1) return [work[0]!];
+  if (work.length === 1) {
+    return [{ ...work[0]!, inClosedStep: true }];
+  }
   return [buildStepSummaryRow(work)];
 }
 
