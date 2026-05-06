@@ -121,9 +121,6 @@ function applyTurnMessageDetail(
     status: turn.status,
     summaryCount,
   };
-  if (turn.durationMs !== undefined) {
-    detailedTurn.durationMs = turn.durationMs;
-  }
   if (terminalMessage) {
     detailedTurn.terminalMessage = terminalMessage;
   }

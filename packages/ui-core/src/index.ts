@@ -229,6 +229,7 @@ export {
   getDetailScrollMaxHeightClass,
   type DetailScrollSize,
 } from "./primitives/detail-scroll-size.js";
+export { isRunningThreadRuntimeDisplayStatus } from "./thread-runtime-status.js";
 export { ThreadTimelineRows } from "./thread-timeline/ThreadTimelineRows.js";
 export type { TimelineTitleActionResolver } from "./thread-timeline/TimelineTitleView.js";
 export {

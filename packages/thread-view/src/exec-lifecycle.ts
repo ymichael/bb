@@ -42,20 +42,6 @@ function parseToolArgs(
   return toolArgs;
 }
 
-export interface ExecLifecycleContext {
-  /**
-   * Tracks call start timestamps so projection can synthesize durations when a
-   * provider completion event omits `durationMs`.
-   */
-  callStartedAtById: Map<string, number>;
-}
-
-export function createExecLifecycleContext(): ExecLifecycleContext {
-  return {
-    callStartedAtById: new Map(),
-  };
-}
-
 type ExecItemViewStatus = EventProjectionToolCallMessage["status"];
 
 function itemStatusToExecStatus(
@@ -101,7 +87,12 @@ export function itemStatusToFileEditStatus(
 export interface ExecutionUpdateBase {
   callId: string;
   output?: string;
-  durationMs?: number | null;
+  /**
+   * Wall-clock millis when the work reached a terminal status. `null` while
+   * pending. The projection records this on `end` events so the renderer
+   * can derive duration from `(message.startedAt, completedAt)`.
+   */
+  completedAt: number | null;
   status?: EventProjectionToolCallMessage["status"];
   parentToolCallId?: string;
 }
@@ -260,43 +251,10 @@ function formatToolCallResultOutput(toolName: string, output: string): string {
   return formatToolCallOutput(toolName, output);
 }
 
-function trackCallStart(
-  context: ExecLifecycleContext | undefined,
-  callId: string,
-  startedAt: number,
-): void {
-  if (!context || context.callStartedAtById.has(callId)) {
-    return;
-  }
-  context.callStartedAtById.set(callId, startedAt);
-}
-
-function resolveCallDurationMs(
-  context: ExecLifecycleContext | undefined,
-  callId: string,
-  completedAt: number,
-  providerDurationMs: number | undefined,
-): number | undefined {
-  if (providerDurationMs !== undefined) {
-    context?.callStartedAtById.delete(callId);
-    return providerDurationMs;
-  }
-
-  const startedAt = context?.callStartedAtById.get(callId);
-  context?.callStartedAtById.delete(callId);
-  if (startedAt === undefined) {
-    return undefined;
-  }
-
-  const durationMs = completedAt - startedAt;
-  return durationMs >= 0 ? durationMs : undefined;
-}
-
 export function parseExecLifecycleEvent(
   decoded: ThreadEvent,
   meta: EventMeta,
   parentToolCallIdOverride?: string,
-  context?: ExecLifecycleContext,
 ): ExecLifecycleEvent | null {
   const parentToolCallId =
     parentToolCallIdOverride ?? getEventParentToolCallId(decoded);
@@ -329,18 +287,7 @@ export function parseExecLifecycleEvent(
         ? "error"
         : (itemStatusToToolStatus(decoded.item.status) ??
           toExecDefaultStatus(kind));
-    const durationMs =
-      kind === "end"
-        ? resolveCallDurationMs(
-            context,
-            callId,
-            meta.createdAt,
-            decoded.item.durationMs,
-          )
-        : decoded.item.durationMs;
-    if (kind === "begin") {
-      trackCallStart(context, callId, meta.createdAt);
-    }
+    const completedAt = kind === "end" ? meta.createdAt : null;
 
     const command = extractShellCommandFromString(decoded.item.command);
     return {
@@ -353,7 +300,7 @@ export function parseExecLifecycleEvent(
         parsedIntents: parseShellCommandIntents(command),
         output: decoded.item.aggregatedOutput,
         exitCode,
-        durationMs,
+        completedAt,
         approvalStatus: itemStatusToApprovalStatus(decoded.item.approvalStatus),
         status,
         ...(parentToolCallId ? { parentToolCallId } : {}),
@@ -368,7 +315,6 @@ export function parseToolCallLifecycleEvent(
   decoded: ThreadEvent,
   meta: EventMeta,
   parentToolCallIdOverride?: string,
-  context?: ExecLifecycleContext,
 ): ExecLifecycleEvent | null {
   const parentToolCallId =
     parentToolCallIdOverride ?? getEventParentToolCallId(decoded);
@@ -402,18 +348,7 @@ export function parseToolCallLifecycleEvent(
       kind === "end"
         ? (itemStatusToToolStatus(decoded.item.status) ?? "completed")
         : "pending";
-    const durationMs =
-      kind === "end"
-        ? resolveCallDurationMs(
-            context,
-            callId,
-            meta.createdAt,
-            decoded.item.durationMs,
-          )
-        : decoded.item.durationMs;
-    if (kind === "begin") {
-      trackCallStart(context, callId, meta.createdAt);
-    }
+    const completedAt = kind === "end" ? meta.createdAt : null;
     const result = decoded.item.result;
     const rawOutput =
       typeof result === "string"
@@ -440,7 +375,7 @@ export function parseToolCallLifecycleEvent(
       callId,
       toolName: fullToolName,
       output: kind === "end" ? (output ?? errorField) : undefined,
-      durationMs,
+      completedAt,
       status,
       ...(parentToolCallId ? { parentToolCallId } : {}),
     };

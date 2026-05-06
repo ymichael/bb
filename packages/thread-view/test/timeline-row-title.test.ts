@@ -42,7 +42,6 @@ function commandRow(): TimelineCommandWorkRow {
     ...baseRow("command-1"),
     kind: "work",
     workKind: "command",
-    inClosedStep: false,
     status: "completed",
     callId: "call-1",
     command: "pnpm exec turbo run test --filter=@bb/app",
@@ -50,7 +49,7 @@ function commandRow(): TimelineCommandWorkRow {
     source: null,
     output: "",
     exitCode: 0,
-    durationMs: 2_100,
+    completedAt: 2_101,
     approvalStatus: null,
     activityIntents: [],
   };
@@ -61,7 +60,6 @@ function toolRow(): TimelineToolWorkRow {
     ...baseRow("tool-1"),
     kind: "work",
     workKind: "tool",
-    inClosedStep: false,
     status: "completed",
     callId: "tool-call-1",
     toolName: "Read",
@@ -70,7 +68,7 @@ function toolRow(): TimelineToolWorkRow {
     },
     label: "Read /repo/src/app.ts",
     output: "",
-    durationMs: 2_100,
+    completedAt: 2_101,
     approvalStatus: null,
     activityIntents: [readIntent("/repo/src/app.ts")],
   };
@@ -99,7 +97,6 @@ function deletedFileRow(): TimelineFileChangeWorkRow {
     ...baseRow("file-1"),
     kind: "work",
     workKind: "file-change",
-    inClosedStep: false,
     status: "completed",
     callId: "file-call-1",
     change: {
@@ -123,7 +120,6 @@ function createdFileRow(): TimelineFileChangeWorkRow {
     ...baseRow("file-created-1"),
     kind: "work",
     workKind: "file-change",
-    inClosedStep: false,
     status: "completed",
     callId: "file-call-2",
     change: {
@@ -147,7 +143,6 @@ function editedFileRow(): TimelineFileChangeWorkRow {
     ...baseRow("file-edited-1"),
     kind: "work",
     workKind: "file-change",
-    inClosedStep: false,
     status: "completed",
     callId: "file-call-3",
     change: {
@@ -171,11 +166,10 @@ function webSearchRow(): TimelineWebSearchWorkRow {
     ...baseRow("web-search-1"),
     kind: "work",
     workKind: "web-search",
-    inClosedStep: false,
     status: "completed",
     callId: "web-search-call-1",
     queries: ["timeline renderer"],
-    durationMs: null,
+    completedAt: null,
   };
 }
 
@@ -184,13 +178,12 @@ function webFetchRow(): TimelineWebFetchWorkRow {
     ...baseRow("web-fetch-1"),
     kind: "work",
     workKind: "web-fetch",
-    inClosedStep: false,
     status: "completed",
     callId: "web-fetch-call-1",
     url: "https://example.com/thread-view",
     prompt: null,
     pattern: null,
-    durationMs: null,
+    completedAt: null,
   };
 }
 
@@ -199,14 +192,13 @@ function delegationRow(): TimelineViewDelegationWorkRow {
     ...baseRow("delegation-1"),
     kind: "work",
     workKind: "delegation",
-    inClosedStep: false,
     status: "completed",
     callId: "delegation-call-1",
     toolName: "spawnAgent",
     subagentType: "general-purpose-review-agent-with-a-long-name",
     description: "Review correctness + plan adherence",
     output: "",
-    durationMs: 45_000,
+    completedAt: 45_001,
     childRows: [],
   };
 }
@@ -241,7 +233,7 @@ function turnRow(): TimelineViewTurnRow {
     turnId: "turn-1",
     status: "completed",
     summaryCount: 1,
-    durationMs: 3_661_000,
+    completedAt: 3_661_001,
     children: null,
   };
 }
@@ -259,28 +251,31 @@ describe("buildTimelineRowTitle", () => {
     ]);
     expect(title.segments[1]?.em).toBe(true);
     expect(title.decorations).toEqual([
-      { kind: "duration", durationMs: 2_100, live: false },
+      { kind: "duration", startedAt: 1, completedAt: 2_101, em: false },
     ]);
   });
 
-  it("shows pending command duration once it is over one second", () => {
+  it("emits a live-tick duration decoration on pending command rows", () => {
+    // Pending rows carry `completedAt: null`. The renderer emits a decoration
+    // sourced from `startedAt`; the App ticks `now - startedAt` locally and
+    // CLI prints nothing (no captured end yet).
     const title = buildTimelineRowTitle(
       {
         ...commandRow(),
         status: "pending",
         exitCode: null,
-        durationMs: 2_100,
+        completedAt: null,
       },
       DEFAULT_OPTIONS,
     );
 
     expect(title.plain).toBe(
-      "Running pnpm exec turbo run test --filter=@bb/app (2s)",
+      "Running pnpm exec turbo run test --filter=@bb/app",
     );
     expect(title.segments[0]?.text).toBe("Running");
     expect(title.segments[0]?.shimmer).toBe(true);
     expect(title.decorations).toEqual([
-      { kind: "duration", durationMs: 2_100, live: true },
+      { kind: "duration", startedAt: 1, completedAt: null, em: false },
     ]);
   });
 
@@ -343,7 +338,7 @@ describe("buildTimelineRowTitle", () => {
       ...commandRow(),
       status: "error",
       exitCode: 1,
-      durationMs: 2_000,
+      completedAt: 2001,
     } satisfies TimelineCommandWorkRow;
 
     const title = buildTimelineRowTitle(row, DEFAULT_OPTIONS);
@@ -435,7 +430,6 @@ describe("buildTimelineRowTitle", () => {
       ...baseRow("cmd-1"),
       kind: "work" as const,
       workKind: "command" as const,
-      inClosedStep: false,
       status: "completed" as const,
       callId: "cmd-call-1",
       command: "ls",
@@ -443,7 +437,7 @@ describe("buildTimelineRowTitle", () => {
       source: null,
       output: "",
       exitCode: 0,
-      durationMs: 0,
+      completedAt: 1,
       approvalStatus: null,
       activityIntents: [],
     } satisfies TimelineCommandWorkRow;
@@ -465,7 +459,7 @@ describe("buildTimelineRowTitle", () => {
     expect(typeSegment?.truncate).toBe(true);
     expect(typeSegment?.em).toBe(false);
     expect(title.decorations).toEqual([
-      { kind: "duration", durationMs: 45_000, live: false },
+      { kind: "duration", startedAt: 1, completedAt: 45_001, em: false },
     ]);
   });
 
@@ -513,7 +507,7 @@ describe("buildTimelineRowTitle", () => {
   it("hides subsecond turn durations", () => {
     const row = {
       ...turnRow(),
-      durationMs: 250,
+      completedAt: 251,
       summaryCount: 3,
     } satisfies TimelineViewTurnRow;
 
@@ -525,7 +519,7 @@ describe("buildTimelineRowTitle", () => {
   it("hides one-second turn durations", () => {
     const row = {
       ...turnRow(),
-      durationMs: 1_000,
+      completedAt: 1001,
       status: "pending",
     } satisfies TimelineViewTurnRow;
 
@@ -535,31 +529,30 @@ describe("buildTimelineRowTitle", () => {
     expect(title.segments[0]?.shimmer).toBe(true);
   });
 
-  it("emits a live duration decoration for pending turns above the threshold", () => {
-    // Once the projection's `nowMs - startedAt` crosses the >1s display
-    // threshold the title gains a live duration decoration; the App's
-    // `LiveDurationText` keeps ticking from there. The visibility
-    // threshold deliberately skips the noisy first second on both pending
-    // and completed rows.
+  it("emits a live duration decoration for pending turns so the App ticks elapsed", () => {
+    // Pending turns carry `completedAt: null`; the CLI prints just "Working"
+    // (no captured duration to format), but the renderer still emits the
+    // duration decoration so the App's `LiveDurationText` can tick `now -
+    // startedAt` once the elapsed time crosses the visible threshold.
     const row = {
       ...turnRow(),
-      durationMs: 5_000,
+      completedAt: null,
       status: "pending",
     } satisfies TimelineViewTurnRow;
 
     const title = buildTimelineRowTitle(row, DEFAULT_OPTIONS);
 
-    expect(title.plain).toBe("Working for (5s)");
+    expect(title.plain).toBe("Working");
     expect(title.segments[0]?.shimmer).toBe(true);
     expect(title.decorations).toEqual([
-      { kind: "duration", durationMs: 5_000, live: true, em: true },
+      { kind: "duration", startedAt: 1, completedAt: null, em: true },
     ]);
   });
 
   it("does not use item-count fallback titles when turn duration is missing", () => {
     const row = {
       ...turnRow(),
-      durationMs: null,
+      completedAt: null,
       summaryCount: 3,
     } satisfies TimelineViewTurnRow;
 

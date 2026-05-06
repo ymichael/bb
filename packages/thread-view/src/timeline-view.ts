@@ -1,4 +1,5 @@
 import type {
+  TimelineActivityIntent,
   TimelineCommandWorkRow,
   TimelineConversationRow,
   TimelineDelegationWorkRow,
@@ -14,17 +15,38 @@ import type {
 import { assertNever } from "./assert-never.js";
 import { getFileChangeAction } from "./file-change-summary.js";
 import { plural } from "./format-helpers.js";
-import { hasTimelineExplorationIntent } from "./timeline-activity-intents.js";
+import {
+  getTimelineActivityIntentDetailDedupeKey,
+  hasTimelineExplorationIntent,
+} from "./timeline-activity-intents.js";
 
 export interface TimelineViewDelegationWorkRow extends Omit<
   TimelineDelegationWorkRow,
   "childRows"
 > {
   childRows: ThreadTimelineViewRow[];
+  /**
+   * Set to `true` for the sole leaf of an already-closed step (assistant
+   * message boundary follows). Multi-item closed steps wrap in `step-summary`;
+   * single-item closed steps stay bare and use this flag so the renderer can
+   * apply muted "closed-step" treatment. Absent or `false` means the row is in
+   * an open or active step.
+   *
+   * View-only — set by `closeOpenStepAtBoundary` during `buildTimelineViewRows`,
+   * never persisted on the wire.
+   */
+  inClosedStep?: boolean;
 }
 
+export type TimelineViewLeafWorkRow = Exclude<
+  TimelineWorkRow,
+  TimelineDelegationWorkRow
+> & {
+  inClosedStep?: boolean;
+};
+
 export type TimelineViewWorkRow =
-  | Exclude<TimelineWorkRow, TimelineDelegationWorkRow>
+  | TimelineViewLeafWorkRow
   | TimelineViewDelegationWorkRow;
 
 export type TimelineViewSourceRow =
@@ -632,23 +654,81 @@ function rowConcept(row: TimelineViewWorkRow): TimelineWorkSummaryCategory {
   }
 }
 
+/**
+ * Drop activity intents whose dedupe key matches the previous *emitted* intent
+ * across the bundle's child sequence. Within each child this collapses runs of
+ * the same intent (e.g. a tool that emits two consecutive `Read foo` intents);
+ * across children it collapses sibling rows whose lone intent matches the
+ * previous row's last intent (e.g. `Read foo` then `Read foo` rendered as one
+ * line). Non-exploration children break the chain so a `Read foo` row that
+ * follows a delegation or file-edit isn't suppressed.
+ *
+ * Children whose activity intents were originally exploration content but are
+ * fully suppressed by the dedupe pass are dropped from the returned list — if
+ * we kept them with empty `activityIntents`, downstream code would treat them
+ * as plain command/tool rows and render them as "Ran ..." entries.
+ */
+function dedupeBundleChildIntents(
+  children: TimelineViewWorkRow[],
+): TimelineViewWorkRow[] {
+  let lastEmittedKey: string | null = null;
+  const out: TimelineViewWorkRow[] = [];
+  for (const child of children) {
+    if (
+      (child.workKind !== "command" && child.workKind !== "tool") ||
+      child.activityIntents.length === 0
+    ) {
+      lastEmittedKey = null;
+      out.push(child);
+      continue;
+    }
+    const wasExploration = hasTimelineExplorationIntent(child);
+    const filtered: TimelineActivityIntent[] = [];
+    for (const intent of child.activityIntents) {
+      if (intent.type === "unknown") {
+        filtered.push(intent);
+        continue;
+      }
+      const key = getTimelineActivityIntentDetailDedupeKey(intent);
+      if (key !== null && key === lastEmittedKey) {
+        continue;
+      }
+      filtered.push(intent);
+      lastEmittedKey = key;
+    }
+    if (filtered.length === child.activityIntents.length) {
+      out.push(child);
+      continue;
+    }
+    if (wasExploration && !filtered.some((intent) => intent.type !== "unknown")) {
+      // Every visible intent was a duplicate of a sibling's; the row would
+      // render as a bare command/tool, which is misleading. Drop it.
+      continue;
+    }
+    out.push({ ...child, activityIntents: filtered });
+  }
+  return out;
+}
+
 function buildStepSummaryRow(
   children: TimelineViewWorkRow[],
 ): TimelineStepSummaryRow {
+  const dedupedChildren = dedupeBundleChildIntents(children);
   return {
-    ...summarizeRange(children),
+    ...summarizeRange(dedupedChildren),
     kind: "step-summary",
-    children,
+    children: dedupedChildren,
   };
 }
 
 function buildBundleSummaryRow(
   children: TimelineViewWorkRow[],
 ): TimelineBundleSummaryRow {
+  const dedupedChildren = dedupeBundleChildIntents(children);
   return {
-    ...summarizeRange(children),
+    ...summarizeRange(dedupedChildren),
     kind: "bundle-summary",
-    children,
+    children: dedupedChildren,
   };
 }
 
@@ -705,31 +785,56 @@ function flushOpenStepAsBundles(
   return out;
 }
 
-function toTimelineViewWorkRow(row: TimelineWorkRow): TimelineViewWorkRow {
+/**
+ * Identity cache for `buildTimelineViewRows`. Each `rows` reference is
+ * consumed under one scope (top-level or lazy turn detail) — so identity is a
+ * sufficient key. Callers create one cache per render and reuse it across the
+ * top-level call and any recursive child-row builds (delegation `childRows`,
+ * lazy turn `children`).
+ */
+export type TimelineViewRowsCache = WeakMap<
+  readonly TimelineRow[],
+  ThreadTimelineViewRow[]
+>;
+
+export function createTimelineViewRowsCache(): TimelineViewRowsCache {
+  return new WeakMap();
+}
+
+function toTimelineViewWorkRow(
+  row: TimelineWorkRow,
+  cache: TimelineViewRowsCache,
+): TimelineViewWorkRow {
   if (row.workKind !== "delegation") {
     return row;
   }
 
   return {
     ...row,
-    childRows: buildTimelineViewRows(row.childRows),
+    childRows: buildTimelineViewRows(row.childRows, { cache }),
   };
 }
 
-function toTimelineViewRow(row: TimelineRow): ThreadTimelineViewRow {
+function toTimelineViewRow(
+  row: TimelineRow,
+  cache: TimelineViewRowsCache,
+): ThreadTimelineViewRow {
   switch (row.kind) {
     case "conversation":
     case "system":
       return row;
     case "work":
-      return toTimelineViewWorkRow(row);
+      return toTimelineViewWorkRow(row, cache);
     case "turn":
       return {
         ...row,
         // Lazy turn details represent a completed turn; trailing work inside
         // them collapses to a step-summary at end-of-children.
         children: row.children
-          ? buildTimelineViewRows(row.children, { closedScope: true })
+          ? buildTimelineViewRows(row.children, {
+              cache,
+              closedScope: true,
+            })
           : null,
       };
     default:
@@ -745,13 +850,26 @@ export interface BuildTimelineViewRowsOptions {
    * step-summary instead of leaving its bundles + leaves visible.
    */
   closedScope?: boolean;
+  /**
+   * Identity cache reused across recursive child-row builds. Without it, every
+   * top-level rebuild reprojects every delegation `childRows` and lazy turn
+   * `children` from scratch. Reuse the same cache across nested calls in a
+   * single render.
+   */
+  cache?: TimelineViewRowsCache;
 }
 
 export function buildTimelineViewRows(
   rows: readonly TimelineRow[],
   options: BuildTimelineViewRowsOptions = {},
 ): ThreadTimelineViewRow[] {
-  const viewRows = rows.map(toTimelineViewRow);
+  const cache = options.cache;
+  if (cache) {
+    const cached = cache.get(rows);
+    if (cached) return cached;
+  }
+  const childCache = cache ?? createTimelineViewRowsCache();
+  const viewRows = rows.map((row) => toTimelineViewRow(row, childCache));
   const result: ThreadTimelineViewRow[] = [];
   let openStep: TimelineViewWorkRow[] = [];
 
@@ -780,6 +898,9 @@ export function buildTimelineViewRows(
     result.push(...closeOpenStepAtBoundary(openStep));
   } else {
     result.push(...flushOpenStepAsBundles(openStep));
+  }
+  if (cache) {
+    cache.set(rows, result);
   }
   return result;
 }

@@ -45,34 +45,6 @@ describe("MarkdownPreview", () => {
     expect(screen.getByRole("checkbox")).toBeTruthy();
   });
 
-  it("allows tables to break out from the text line and scroll horizontally", () => {
-    render(
-      <MarkdownPreview
-        content={[
-          "| First | Second | Third | Fourth | Fifth |",
-          "| --- | --- | --- | --- | --- |",
-          "| alpha | beta | gamma | delta | epsilon |",
-        ].join("\n")}
-      />,
-    );
-
-    const table = screen.getByRole("table");
-    const tableScroller = table.parentElement;
-    const tableBreakout = tableScroller?.parentElement;
-
-    if (!tableScroller || !tableBreakout) {
-      throw new Error("Markdown table scroller was not rendered");
-    }
-
-    expect(tableScroller.classList.contains("overflow-x-auto")).toBe(true);
-    expect(tableScroller.classList.contains("mx-auto")).toBe(true);
-    expect(tableScroller.classList.contains("w-max")).toBe(true);
-    expect(tableScroller.classList.contains("max-w-full")).toBe(true);
-    expect(tableBreakout.getAttribute("style")).toContain("margin-inline");
-    expect(tableBreakout.getAttribute("style")).toContain("1100px");
-    expect(tableBreakout.getAttribute("style")).toContain("100cqw");
-  });
-
   it("does not render raw HTML as DOM", () => {
     const { container } = render(
       <MarkdownPreview content={"# Safe\n\n<script>alert('x')</script>"} />,

@@ -37,6 +37,7 @@ export {
   buildTimelineViewRows,
   buildTimelineWorkSummaryLabel,
   buildTimelineWorkSummaryLabelParts,
+  createTimelineViewRowsCache,
   isTimelineStepBoundary,
 } from "./timeline-view.js";
 export type {
@@ -45,6 +46,7 @@ export type {
   TimelineBundleSummaryRow,
   TimelineStepSummaryRow,
   TimelineViewDelegationWorkRow,
+  TimelineViewRowsCache,
   TimelineViewTurnRow,
   TimelineViewWorkRow,
   TimelineWorkSummaryKind,

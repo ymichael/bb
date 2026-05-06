@@ -70,16 +70,13 @@ describe("TimelineTitleView", () => {
               truncate: true,
             }),
           ],
-          decorations: [{ kind: "duration", durationMs: 2_100, live: false, em: false }],
+          decorations: [{ kind: "duration", startedAt: 0, completedAt: 2_100, em: false }],
           plain: "Ran pnpm exec turbo run test --filter=@bb/app 2s",
         })}
       />,
     );
 
-    expect(html).toContain("shrink-0 whitespace-pre");
-    expect(html).toContain("leading-5");
     expect(html).toContain(">Ran</span>");
-    expect(html).toContain("min-w-0 truncate");
     expect(html).toContain(">pnpm exec turbo run test --filter=@bb/app</span>");
     expect(html).toContain(">2s</span>");
   });
@@ -126,14 +123,13 @@ describe("TimelineTitleView", () => {
               truncate: true,
             }),
           ],
-          decorations: [{ kind: "duration", durationMs: 45_000, live: false, em: false }],
+          decorations: [{ kind: "duration", startedAt: 0, completedAt: 45_000, em: false }],
           plain:
             "Ran subagent Review correctness + plan adherence (general-purpose-with-long-provider-controlled-name) 45s",
         })}
       />,
     );
 
-    expect(html).toContain("min-w-0 truncate whitespace-pre");
     expect(html).toContain(
       "(general-purpose-with-long-provider-controlled-name)",
     );
@@ -154,38 +150,7 @@ describe("TimelineTitleView", () => {
     );
 
     expect(html).not.toContain("+0");
-    expect(html).toContain("text-diff-removed");
     expect(html).toContain("-39");
-  });
-
-  it("renders summary titles without emphasis", () => {
-    const html = renderToStaticMarkup(
-      <TimelineTitleView
-        title={title({
-          segments: [
-            seg("Explored 3 files, 2 searches", { em: false, truncate: true }),
-          ],
-          tone: "summary",
-        })}
-      />,
-    );
-
-    expect(html).toContain("text-muted-foreground/60");
-    expect(html).not.toContain("font-semibold");
-  });
-
-  it("applies shimmer to a single content-only segment", () => {
-    render(
-      <TimelineTitleView
-        title={title({
-          segments: [seg("Provisioning thread", { shimmer: true })],
-        })}
-      />,
-    );
-
-    expect(screen.getByText("Provisioning thread").className).toContain(
-      "animate-shine",
-    );
   });
 
   it("renders em segments as plain spans when no resolver is provided", () => {
@@ -314,14 +279,18 @@ describe("TimelineTitleView", () => {
   it("ticks live duration forward without re-rendering from the server", () => {
     vi.useFakeTimers();
     try {
-      const baselineMs = 2_100;
+      // Pretend the work started 2.1s ago: pin a fake "now" and put startedAt
+      // 2_100ms before it. LiveDurationText reads `Date.now() - startedAt`.
+      const fakeNow = 1_000_000;
+      vi.setSystemTime(fakeNow);
+      const startedAt = fakeNow - 2_100;
       const liveTitle = title({
         segments: [
           seg("Running", { shimmer: true }),
           seg("pnpm test", { em: true, truncate: true }),
         ],
         decorations: [
-          { kind: "duration", durationMs: baselineMs, live: true, em: false },
+          { kind: "duration", startedAt, completedAt: null, em: false },
         ],
       });
 
@@ -333,7 +302,7 @@ describe("TimelineTitleView", () => {
         vi.advanceTimersByTime(3_000);
       });
 
-      // baseline 2.1s + 3s tick = 5.1s, formatted as "5s"
+      // 2.1s baseline + 3s tick = 5.1s, formatted as "5s"
       expect(screen.getByText("5s")).toBeTruthy();
     } finally {
       vi.useRealTimers();

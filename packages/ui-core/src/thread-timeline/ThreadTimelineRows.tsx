@@ -10,16 +10,13 @@ import {
 import type { ReactNode } from "react";
 import { RotateCcw } from "lucide-react";
 import type { ThreadRuntimeDisplayStatus } from "@bb/domain";
-import type {
-  TimelineActivityIntent,
-  TimelineRow,
-  TimelineTurnRow,
-} from "@bb/server-contract";
+import type { TimelineRow, TimelineTurnRow } from "@bb/server-contract";
 import {
   assertNever,
   buildTimelineActivityIntentTitles,
   buildTimelineRowTitle,
   buildTimelineViewRows,
+  createTimelineViewRowsCache,
   findActiveLatestBundleId,
   findTimelineFrontierRow,
   hasTimelineExplorationIntent,
@@ -32,6 +29,7 @@ import {
   type TimelineViewWorkRow,
 } from "@bb/thread-view";
 import { cn } from "../primitives/cn.js";
+import { isRunningThreadRuntimeDisplayStatus } from "../thread-runtime-status.js";
 import type {
   ThreadTimelineLocalFileLinkHandler,
   ThreadTimelineTheme,
@@ -48,8 +46,13 @@ import {
   type TimelineTitleActionResolver,
 } from "./TimelineTitleView.js";
 import { WorkRowBody } from "./TimelineRowDetails.js";
-import { useStickyBottomScroll } from "./useStickyBottomScroll.js";
+import { TimelineDetailScroll } from "./TimelineDetailScroll.js";
 import { Button } from "../primitives/ui/button.js";
+import {
+  joinSignatureParts,
+  timelineRowRenderSignature,
+  timelineRowsSignature,
+} from "./timelineRowSignatures.js";
 
 export interface ThreadTimelineRowsProps {
   /**
@@ -126,6 +129,7 @@ interface TimelineExpandableBodyProps {
 
 interface TimelineSystemDetailBlockProps {
   detail: string;
+  streaming: boolean;
   tone: "default" | "danger";
 }
 
@@ -173,7 +177,6 @@ type TimelineRowTitleRenderState =
       title: TimelineTitle;
     };
 
-type TimelineRowSignaturePart = boolean | number | string | null | undefined;
 type TimelineRowsListSpacing = "top-level" | "nested" | "bundle";
 type TimelineRawRows = readonly TimelineRow[];
 type GetTimelineViewRows = (
@@ -199,190 +202,6 @@ function useTimelineRendererContext(): TimelineRendererContextValue {
     throw new Error("Thread timeline renderer context is missing");
   }
   return context;
-}
-
-function signaturePart(value: TimelineRowSignaturePart): string {
-  if (value === null) return "<null>";
-  if (value === undefined) return "<undefined>";
-  return String(value);
-}
-
-function joinSignatureParts(parts: readonly TimelineRowSignaturePart[]): string {
-  return parts.map(signaturePart).join("\u001f");
-}
-
-function activityIntentSignature(intent: TimelineActivityIntent): string {
-  switch (intent.type) {
-    case "read":
-      return joinSignatureParts([
-        intent.type,
-        intent.command,
-        intent.name,
-        intent.path,
-      ]);
-    case "list_files":
-      return joinSignatureParts([intent.type, intent.command, intent.path]);
-    case "search":
-      return joinSignatureParts([
-        intent.type,
-        intent.command,
-        intent.query,
-        intent.path,
-      ]);
-    case "unknown":
-      return joinSignatureParts([intent.type, intent.command]);
-    default:
-      return assertNever(intent);
-  }
-}
-
-function activityIntentsSignature(
-  intents: readonly TimelineActivityIntent[],
-): string {
-  return intents.map(activityIntentSignature).join("\u001e");
-}
-
-function timelineRowsSignature(rows: readonly ThreadTimelineViewRow[]): string {
-  return rows.map(timelineRowRenderSignature).join("\u001e");
-}
-
-function timelineRowBaseSignature(row: ThreadTimelineViewRow): string {
-  // sourceSeqEnd guards high-mutation fields omitted from signatures below,
-  // including output, text, and diffs. In-place row content mutations must
-  // advance the source sequence to avoid stale memoized UI.
-  return joinSignatureParts([
-    row.kind,
-    row.id,
-    row.threadId,
-    row.turnId,
-    row.sourceSeqStart,
-    row.sourceSeqEnd,
-    row.startedAt,
-    row.createdAt,
-  ]);
-}
-
-function timelineWorkRowRenderSignature(row: TimelineViewWorkRow): string {
-  const baseParts: TimelineRowSignaturePart[] = [
-    timelineRowBaseSignature(row),
-    row.status,
-    row.workKind,
-    row.inClosedStep,
-  ];
-
-  switch (row.workKind) {
-    case "command":
-      return joinSignatureParts([
-        ...baseParts,
-        row.callId,
-        row.command,
-        row.source,
-        row.exitCode,
-        row.durationMs,
-        row.approvalStatus,
-        activityIntentsSignature(row.activityIntents),
-      ]);
-    case "tool":
-      return joinSignatureParts([
-        ...baseParts,
-        row.callId,
-        row.toolName,
-        row.label,
-        row.durationMs,
-        row.approvalStatus,
-        activityIntentsSignature(row.activityIntents),
-      ]);
-    case "file-change":
-      return joinSignatureParts([
-        ...baseParts,
-        row.callId,
-        row.approvalStatus,
-        row.change.kind,
-        row.change.path,
-        row.change.movePath,
-        row.change.diffStats.added,
-        row.change.diffStats.removed,
-      ]);
-    case "web-search":
-      return joinSignatureParts([
-        ...baseParts,
-        row.callId,
-        row.queries.join("\u001e"),
-        row.durationMs,
-      ]);
-    case "web-fetch":
-      return joinSignatureParts([
-        ...baseParts,
-        row.callId,
-        row.url,
-        row.prompt,
-        row.pattern,
-        row.durationMs,
-      ]);
-    case "delegation":
-      return joinSignatureParts([
-        ...baseParts,
-        row.callId,
-        row.toolName,
-        row.subagentType,
-        row.description,
-        row.durationMs,
-        timelineRowsSignature(row.childRows),
-      ]);
-    case "approval":
-      return joinSignatureParts([
-        ...baseParts,
-        row.interactionId,
-        row.title,
-        row.target.itemId,
-        row.target.toolName,
-      ]);
-    default:
-      return assertNever(row);
-  }
-}
-
-function timelineRowRenderSignature(row: ThreadTimelineViewRow): string {
-  const baseSignature = timelineRowBaseSignature(row);
-  switch (row.kind) {
-    case "conversation":
-      return joinSignatureParts([
-        baseSignature,
-        row.role,
-        row.userRequest?.kind,
-        row.userRequest?.status,
-        row.attachments?.localFiles,
-        row.attachments?.localImages,
-        row.attachments?.webImages,
-      ]);
-    case "system":
-      return joinSignatureParts([
-        baseSignature,
-        row.status,
-        row.systemKind,
-        row.title,
-        row.detail,
-      ]);
-    case "bundle-summary":
-    case "step-summary":
-      return joinSignatureParts([
-        baseSignature,
-        row.status,
-        timelineRowsSignature(row.children),
-      ]);
-    case "turn":
-      return joinSignatureParts([
-        baseSignature,
-        row.status,
-        row.summaryCount,
-        row.durationMs,
-        row.children ? timelineRowsSignature(row.children) : null,
-      ]);
-    case "work":
-      return timelineWorkRowRenderSignature(row);
-    default:
-      return assertNever(row);
-  }
 }
 
 function timelineRowTitleRenderStateKey({
@@ -515,7 +334,7 @@ function toLazyTurnRequest(row: TimelineViewTurnRow): TimelineTurnRow {
     kind: "turn",
     status: row.status,
     summaryCount: row.summaryCount,
-    durationMs: row.durationMs,
+    completedAt: row.completedAt,
     children: null,
   };
 }
@@ -527,29 +346,22 @@ function requestLazyTurnRows({
   onLoadTurnSummaryRows(toLazyTurnRequest(row));
 }
 
-function isRuntimeScopeActive(status: ThreadRuntimeDisplayStatus): boolean {
-  return status === "active" || status === "host-reconnecting";
-}
-
 function useTimelineViewRowsCache(): GetTimelineViewRows {
   // Each `rawRows` reference is consumed under exactly one scope: the
   // top-level prop ("open" — pending work may still arrive) or a lazily
   // loaded turn-detail array ("closed" — the turn is complete and won't
   // grow). Caching by identity is correct because the per-array scope is
   // stable; passing a different `closedScope` for the same `rawRows`
-  // reference would be a bug.
-  const cacheRef = useRef(
-    new WeakMap<TimelineRawRows, ThreadTimelineViewRow[]>(),
+  // reference would be a bug. The cache also covers nested recursion —
+  // delegation `childRows` and lazy turn `children` — so a streaming update
+  // that replaces the top-level rows array doesn't reproject every untouched
+  // delegation subtree.
+  const cacheRef = useRef(createTimelineViewRowsCache());
+  return useCallback<GetTimelineViewRows>(
+    (rawRows, options) =>
+      buildTimelineViewRows(rawRows, { ...options, cache: cacheRef.current }),
+    [],
   );
-  return useCallback<GetTimelineViewRows>((rawRows, options) => {
-    const cached = cacheRef.current.get(rawRows);
-    if (cached) {
-      return cached;
-    }
-    const viewRows = buildTimelineViewRows(rawRows, options);
-    cacheRef.current.set(rawRows, viewRows);
-    return viewRows;
-  }, []);
 }
 
 function isWorkRowExpandable(row: TimelineViewWorkRow): boolean {
@@ -596,6 +408,20 @@ function shouldRenderCompactActivityIntentRows(
     (row.workKind === "command" || row.workKind === "tool") &&
     row.approvalStatus === null
   );
+}
+
+/**
+ * Bundle and step summaries whose children are all non-expandable get the
+ * base max-height cap with overflow fades. Summaries that contain any
+ * expandable child do not — capping then would put the child's own scroll
+ * body inside a scrolling parent, which is poor UX. The expandability test
+ * reuses `isWorkRowExpandable` so the cap rule and the per-row expand
+ * affordance can never disagree.
+ */
+function isNonExpandableSummary(
+  children: readonly TimelineViewWorkRow[],
+): boolean {
+  return children.length > 0 && children.every((child) => !isWorkRowExpandable(child));
 }
 
 function isActiveLatestBundleSummary({
@@ -779,29 +605,30 @@ function ConversationRow({ row }: ConversationRowProps) {
 
 function TimelineSystemDetailBlock({
   detail,
+  streaming,
   tone,
 }: TimelineSystemDetailBlockProps) {
-  const detailScroll = useStickyBottomScroll<HTMLPreElement>({
-    contentKey: detail,
-  });
-
   return (
-    <pre
-      ref={detailScroll.ref}
-      onPointerDown={detailScroll.onPointerDown}
-      onScroll={detailScroll.onScroll}
-      onTouchMove={detailScroll.onTouchMove}
-      onTouchStart={detailScroll.onTouchStart}
-      onWheel={detailScroll.onWheel}
+    <TimelineDetailScroll
+      size="base"
+      streaming={streaming}
+      contentKey={detail}
       className={cn(
-        "max-h-96 overflow-auto whitespace-pre rounded-md border px-3 py-2 font-mono text-xs leading-5",
+        "rounded-md border",
         tone === "danger"
-          ? "border-destructive/30 bg-destructive/5 text-destructive/90"
-          : "border-border/60 bg-background/40 text-muted-foreground",
+          ? "border-destructive/30 bg-destructive/5"
+          : "border-border/60 bg-background/40",
       )}
     >
-      {detail}
-    </pre>
+      <pre
+        className={cn(
+          "whitespace-pre px-3 py-2 font-mono text-xs leading-5",
+          tone === "danger" ? "text-destructive/90" : "text-muted-foreground",
+        )}
+      >
+        {detail}
+      </pre>
+    </TimelineDetailScroll>
   );
 }
 
@@ -818,8 +645,8 @@ function TimelineExpandableBody({
 
   switch (row.kind) {
     case "bundle-summary":
-    case "step-summary":
-      return (
+    case "step-summary": {
+      const list = (
         <TimelineRowsList
           rows={row.children}
           scopeActive={false}
@@ -827,6 +654,26 @@ function TimelineExpandableBody({
           spacing="bundle"
         />
       );
+      // Summaries whose children are themselves expandable (commands, tools
+      // without exploration intents, file-changes, delegations, or any mix
+      // including those) leave the cap off — capping would force a child's
+      // own scroll body to live inside a parent scroll, and nested
+      // scrollbars are bad UX. Only summaries whose children are all flat
+      // and non-expandable (exploration intent listings, web search/fetch)
+      // keep the base cap with overflow fades.
+      if (!isNonExpandableSummary(row.children)) {
+        return list;
+      }
+      return (
+        <TimelineDetailScroll
+          size="summary"
+          streaming={row.status === "pending"}
+          contentKey={timelineRowsSignature(row.children)}
+        >
+          {list}
+        </TimelineDetailScroll>
+      );
+    }
     case "turn":
       return (
         <TurnRowBody
@@ -837,7 +684,12 @@ function TimelineExpandableBody({
     case "work":
       if (row.workKind === "delegation") {
         return (
-          <div className="overflow-auto rounded-md border border-border/60 bg-background/40">
+          <TimelineDetailScroll
+            size="delegation"
+            streaming={row.status === "pending"}
+            contentKey={`${timelineRowsSignature(row.childRows)}|${row.output.length}`}
+            className="rounded-md border border-border/60 bg-background/40"
+          >
             {row.childRows.length > 0 ? (
               <div className="px-1 py-1">
                 <TimelineRowsList
@@ -861,7 +713,7 @@ function TimelineExpandableBody({
                 />
               </div>
             ) : null}
-          </div>
+          </TimelineDetailScroll>
         );
       }
       return <WorkRowBody row={row} themeType={themeType} />;
@@ -869,6 +721,7 @@ function TimelineExpandableBody({
       return row.detail ? (
         <TimelineSystemDetailBlock
           detail={row.detail}
+          streaming={row.status === "pending"}
           tone={
             row.systemKind === "error" || row.status === "error"
               ? "danger"
@@ -1140,7 +993,9 @@ function ThreadTimelineRowsForIdentity(props: ThreadTimelineRowsProps) {
     () => getViewRows(props.timelineRows),
     [getViewRows, props.timelineRows],
   );
-  const scopeActive = isRuntimeScopeActive(props.threadRuntimeDisplayStatus);
+  const scopeActive = isRunningThreadRuntimeDisplayStatus(
+    props.threadRuntimeDisplayStatus,
+  );
   const themeType = props.themeType ?? "light";
   const computedAutoExpandedRowIds = useMemo(
     () =>

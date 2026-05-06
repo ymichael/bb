@@ -1,6 +1,7 @@
 import { assertNever, type TimelineViewWorkRow } from "@bb/thread-view";
 import { EventCodeBlock } from "../primitives/event-content.js";
 import { TerminalOutputBlock } from "./TerminalOutputBlock.js";
+import { TimelineDetailScroll } from "./TimelineDetailScroll.js";
 import { TimelineFileDiffBlock } from "./TimelineFileDiffBlock.js";
 import { ToolCallDetailBlock } from "./ToolCallDetailBlock.js";
 import type { ThreadTimelineTheme } from "./types.js";
@@ -38,6 +39,7 @@ export function WorkRowBody({ row, themeType }: WorkRowBodyProps) {
           ])}
           output={row.output}
           exitCode={row.exitCode}
+          streaming={row.status === "pending"}
         />
       );
     case "tool": {
@@ -47,6 +49,7 @@ export function WorkRowBody({ row, themeType }: WorkRowBodyProps) {
           argsText={toolArgs}
           output={row.output}
           toolName={row.toolName}
+          streaming={row.status === "pending"}
         />
       );
     }
@@ -55,27 +58,26 @@ export function WorkRowBody({ row, themeType }: WorkRowBodyProps) {
         <div className="space-y-2">
           <TimelineFileDiffBlock change={row.change} themeType={themeType} />
           {row.stderr ? (
-            <EventCodeBlock tone="danger" maxHeightClassName="max-h-48">
-              {row.stderr}
-            </EventCodeBlock>
+            <TimelineDetailScroll
+              size="base"
+              contentKey={row.stderr}
+              className="rounded-md"
+            >
+              <EventCodeBlock
+                tone="danger"
+                className="rounded-none border-0 px-2 py-1.5"
+              >
+                {row.stderr}
+              </EventCodeBlock>
+            </TimelineDetailScroll>
           ) : null}
         </div>
       );
     case "delegation":
-      if (row.output.trim().length > 0) {
-        return (
-          <EventCodeBlock maxHeightClassName="max-h-96">
-            {row.output}
-          </EventCodeBlock>
-        );
-      }
-      if (row.status === "pending") {
-        return (
-          <div className="px-2 py-2 text-sm text-muted-foreground/90">
-            <span className="animate-shine">Working…</span>
-          </div>
-        );
-      }
+      // Delegation expanded bodies are dispatched by `TimelineExpandableBody`
+      // (in `ThreadTimelineRows.tsx`), which wraps childRows + output text in
+      // a delegation-tier scroll container. This branch is unreachable for
+      // the App renderer; kept exhaustive for the type.
       return null;
     case "approval":
     case "web-search":

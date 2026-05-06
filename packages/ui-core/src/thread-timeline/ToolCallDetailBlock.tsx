@@ -1,15 +1,23 @@
 import { EventCodeBlock } from "../primitives/event-content.js";
+import { TimelineDetailScroll } from "./TimelineDetailScroll.js";
 
 export interface ToolCallDetailBlockProps {
   argsText: string;
   output: string;
   toolName: string;
+  /**
+   * Whether the producing row is still pending. Drives sticky-bottom for the
+   * output scroll so streamed bytes land visible. Args don't grow, so the
+   * args scroll never sticky-bottoms regardless.
+   */
+  streaming?: boolean;
 }
 
 export function ToolCallDetailBlock({
   argsText,
   output,
   toolName,
+  streaming = false,
 }: ToolCallDetailBlockProps) {
   const hasArgs = argsText.trim().length > 0;
   const hasOutput = output.trim().length > 0;
@@ -20,17 +28,25 @@ export function ToolCallDetailBlock({
       {hasArgs ? (
         <div className="mt-2 space-y-1.5">
           <div className="text-muted-foreground">Arguments</div>
-          <EventCodeBlock maxHeightClassName="max-h-48">
-            {argsText}
-          </EventCodeBlock>
+          <TimelineDetailScroll size="base" contentKey={argsText}>
+            <EventCodeBlock className="rounded-none border-0 bg-transparent">
+              {argsText}
+            </EventCodeBlock>
+          </TimelineDetailScroll>
         </div>
       ) : null}
       {hasOutput ? (
         <div className="mt-2 space-y-1.5">
           <div className="text-muted-foreground">Output</div>
-          <EventCodeBlock maxHeightClassName="max-h-96">
-            {output}
-          </EventCodeBlock>
+          <TimelineDetailScroll
+            size="base"
+            streaming={streaming}
+            contentKey={output}
+          >
+            <EventCodeBlock className="rounded-none border-0 bg-transparent">
+              {output}
+            </EventCodeBlock>
+          </TimelineDetailScroll>
         </div>
       ) : null}
     </div>

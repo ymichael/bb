@@ -349,19 +349,16 @@ function formatWorkRow(
 
 function formatExplorationWorkDetails(
   row: TimelineExplorationWorkRow,
-  dedupedDetailKeys: Set<string>,
 ): string[] {
+  let lastEmittedKey: string | null = null;
   const details: string[] = [];
   for (const intent of row.activityIntents) {
     if (intent.type === "unknown") {
       continue;
     }
     const dedupeKey = getTimelineActivityIntentDetailDedupeKey(intent);
-    if (dedupeKey !== null) {
-      if (dedupedDetailKeys.has(dedupeKey)) {
-        continue;
-      }
-      dedupedDetailKeys.add(dedupeKey);
+    if (dedupeKey !== null && dedupeKey === lastEmittedKey) {
+      continue;
     }
     details.push(
       formatTimelineActivityIntentDetail({
@@ -370,6 +367,7 @@ function formatExplorationWorkDetails(
         pending: row.status === "pending",
       }),
     );
+    lastEmittedKey = dedupeKey;
   }
   return details;
 }
@@ -379,7 +377,6 @@ function formatWorkSummaryDetails(
   context: TimelineTextFormatContext,
 ): string[] {
   const lines: string[] = [];
-  const dedupedDetailKeys = new Set<string>();
   const childContext = nestedContext(context, null);
   for (const child of row.children) {
     if (
@@ -387,8 +384,8 @@ function formatWorkSummaryDetails(
       hasTimelineExplorationIntent(child)
     ) {
       lines.push(
-        ...formatExplorationWorkDetails(child, dedupedDetailKeys).map(
-          (detail) => rowHeader(detail, childContext),
+        ...formatExplorationWorkDetails(child).map((detail) =>
+          rowHeader(detail, childContext),
         ),
       );
       continue;

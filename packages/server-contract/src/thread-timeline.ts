@@ -146,19 +146,11 @@ export type TimelineFileChange = z.infer<typeof timelineFileChangeSchema>;
 const timelineWorkRowBaseSchema = timelineRowBaseSchema.extend({
   kind: z.literal("work"),
   status: timelineRowStatusSchema,
-  /**
-   * True when this row is the sole leaf of an already-closed step (an
-   * assistant-message boundary followed it). Multi-item closed steps wrap
-   * in `step-summary`; single-item closed steps stay bare and use this flag
-   * so the renderer can still apply muted "closed-step" treatment.
-   */
-  inClosedStep: z.boolean(),
 });
 
 interface TimelineWorkRowBase extends TimelineRowBase {
   kind: "work";
   status: TimelineRowStatus;
-  inClosedStep: boolean;
 }
 
 export const timelineCommandWorkRowSchema = timelineWorkRowBaseSchema.extend({
@@ -169,7 +161,7 @@ export const timelineCommandWorkRowSchema = timelineWorkRowBaseSchema.extend({
   source: z.string().nullable(),
   output: z.string(),
   exitCode: z.number().nullable(),
-  durationMs: z.number().nullable(),
+  completedAt: z.number().nullable(),
   approvalStatus: timelineApprovalStatusSchema,
   activityIntents: z.array(timelineActivityIntentSchema),
 });
@@ -184,7 +176,7 @@ export const timelineToolWorkRowSchema = timelineWorkRowBaseSchema.extend({
   toolArgs: z.record(z.string(), jsonValueSchema).nullable(),
   label: z.string(),
   output: z.string(),
-  durationMs: z.number().nullable(),
+  completedAt: z.number().nullable(),
   approvalStatus: timelineApprovalStatusSchema,
   activityIntents: z.array(timelineActivityIntentSchema),
 });
@@ -208,7 +200,7 @@ export const timelineWebSearchWorkRowSchema = timelineWorkRowBaseSchema.extend({
   workKind: z.literal("web-search"),
   callId: z.string(),
   queries: z.array(z.string()),
-  durationMs: z.number().nullable(),
+  completedAt: z.number().nullable(),
 });
 export type TimelineWebSearchWorkRow = z.infer<
   typeof timelineWebSearchWorkRowSchema
@@ -220,7 +212,7 @@ export const timelineWebFetchWorkRowSchema = timelineWorkRowBaseSchema.extend({
   url: z.string(),
   prompt: z.string().nullable(),
   pattern: z.string().nullable(),
-  durationMs: z.number().nullable(),
+  completedAt: z.number().nullable(),
 });
 export type TimelineWebFetchWorkRow = z.infer<
   typeof timelineWebFetchWorkRowSchema
@@ -246,7 +238,7 @@ export interface TimelineDelegationWorkRow extends TimelineWorkRowBase {
   subagentType: string | null;
   description: string | null;
   output: string;
-  durationMs: number | null;
+  completedAt: number | null;
   childRows: TimelineRow[];
 }
 
@@ -258,7 +250,7 @@ export const timelineDelegationWorkRowSchema: z.ZodType<TimelineDelegationWorkRo
     subagentType: z.string().nullable(),
     description: z.string().nullable(),
     output: z.string(),
-    durationMs: z.number().nullable(),
+    completedAt: z.number().nullable(),
     childRows: z.array(z.lazy(() => timelineRowSchema)),
   });
 
@@ -286,7 +278,7 @@ export interface TimelineTurnRow extends TimelineRowBase {
   turnId: string;
   status: TimelineRowStatus;
   summaryCount: number;
-  durationMs: number | null;
+  completedAt: number | null;
   children: TimelineRow[] | null;
 }
 
@@ -296,7 +288,7 @@ export const timelineTurnRowSchema: z.ZodType<TimelineTurnRow> = z.lazy(() =>
     turnId: z.string().min(1),
     status: timelineRowStatusSchema,
     summaryCount: z.number().int().nonnegative(),
-    durationMs: z.number().nullable(),
+    completedAt: z.number().nullable(),
     children: z.array(timelineRowSchema).nullable(),
   }),
 );

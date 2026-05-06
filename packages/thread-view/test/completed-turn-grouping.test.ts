@@ -65,7 +65,6 @@ function completedTurn(
     completedAt: messages.length,
     status: "completed",
     summaryCount: messages.length,
-    durationMs: 10,
     messages,
     ...(terminalMessage ? { terminalMessage } : {}),
   };
@@ -90,7 +89,8 @@ describe("groupCompletedTurnMessages", () => {
     expect(groups.summaryItems).toMatchObject([
       {
         kind: "summary",
-        durationMs: 10,
+        startedAt: 1,
+        completedAt: 2,
         segmentIndex: null,
         summaryCount: 2,
       },
@@ -114,7 +114,8 @@ describe("groupCompletedTurnMessages", () => {
     expect(groups.summaryItems).toMatchObject([
       {
         kind: "summary",
-        durationMs: null,
+        startedAt: 1,
+        completedAt: null,
         segmentIndex: 0,
         summaryCount: 1,
       },
@@ -126,7 +127,8 @@ describe("groupCompletedTurnMessages", () => {
       },
       {
         kind: "summary",
-        durationMs: null,
+        startedAt: 1,
+        completedAt: null,
         segmentIndex: 1,
         summaryCount: 1,
       },

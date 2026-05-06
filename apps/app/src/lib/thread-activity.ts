@@ -1,9 +1,6 @@
 import { assertNever } from "@bb/core-ui";
-import type {
-  Thread,
-  ThreadRuntimeDisplayStatus,
-  ThreadWithRuntime,
-} from "@bb/domain";
+import type { Thread, ThreadWithRuntime } from "@bb/domain";
+import { isRunningThreadRuntimeDisplayStatus } from "@bb/ui-core";
 import { isThreadRead } from "@/lib/thread-read-state";
 
 type ThreadStatusShape = Pick<
@@ -12,24 +9,6 @@ type ThreadStatusShape = Pick<
 >;
 
 type ThreadRuntimeShape = Pick<ThreadWithRuntime, "runtime">;
-
-export function isRunningThreadRuntimeDisplayStatus(
-  status: ThreadRuntimeDisplayStatus,
-): boolean {
-  switch (status) {
-    case "active":
-    case "created":
-    case "host-reconnecting":
-    case "provisioning":
-      return true;
-    case "error":
-    case "idle":
-    case "waiting-for-host":
-      return false;
-    default:
-      return assertNever(status);
-  }
-}
 
 export function isBusyThread(thread: ThreadRuntimeShape): boolean {
   return isRunningThreadRuntimeDisplayStatus(thread.runtime.displayStatus);

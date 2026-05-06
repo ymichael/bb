@@ -54,7 +54,7 @@ function turnSummaryRow(
     turnId,
     status: "completed",
     summaryCount: 1,
-    durationMs: 1_000,
+    completedAt: 1_001,
     children: null,
     sourceSeqStart,
     sourceSeqEnd,

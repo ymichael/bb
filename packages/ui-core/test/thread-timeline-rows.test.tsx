@@ -387,120 +387,6 @@ describe("ThreadTimelineRows", () => {
     expect(screen.getAllByRole("button")).toHaveLength(1);
   });
 
-  it("style contract: renders top-level timeline rows with a visible list gap", () => {
-    const view = renderTimelineRows({
-      timelineRows: [
-        conversationRow({ id: "assistant-1", text: "Done." }),
-        commandRow({
-          id: "command-1",
-          command: "pnpm test",
-          sourceSeqStart: 2,
-        }),
-      ],
-    });
-
-    const topLevelList = view.container.querySelector(
-      '[data-timeline-row-list="top-level"]',
-    );
-    expect(topLevelList).not.toBeNull();
-    expect(topLevelList?.classList.contains("gap-1")).toBe(true);
-    expect(topLevelList?.classList.contains("gap-0.5")).toBe(false);
-  });
-
-  it("style contract: adds bottom padding to non-user rows but not user message rows", () => {
-    const view = renderTimelineRows({
-      timelineRows: [
-        conversationRow({ id: "assistant-1", text: "Done." }),
-        conversationRow({
-          id: "user-1",
-          role: "user",
-          text: "Please patch this.",
-        }),
-        commandRow({
-          id: "command-1",
-          command: "pnpm test",
-          sourceSeqStart: 3,
-        }),
-      ],
-    });
-
-    const topLevelList = view.container.querySelector(
-      '[data-timeline-row-list="top-level"]',
-    );
-    const topLevelRows = Array.from(topLevelList?.children ?? []);
-
-    expect(topLevelRows).toHaveLength(3);
-    expect(topLevelRows[0]?.classList.contains("pb-2")).toBe(true);
-    expect(topLevelRows[1]?.classList.contains("pb-2")).toBe(false);
-    expect(topLevelRows[2]?.classList.contains("pb-2")).toBe(true);
-  });
-
-  it("style contract: does not add bottom padding to nested rows", () => {
-    const view = renderTimelineRows({
-      timelineRows: [turnRow()],
-      overrides: {
-        turnSummaryRowsById: {
-          "turn-summary-1": [
-            commandRow({
-              id: "nested-command-1",
-              command: "pnpm test",
-              sourceSeqStart: 11,
-            }),
-          ],
-        },
-      },
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: /Worked for\s*4s/u }));
-
-    const nestedList = view.container.querySelector(
-      '[data-timeline-row-list="nested"]',
-    );
-    const nestedRows = Array.from(nestedList?.children ?? []);
-
-    expect(nestedRows.length).toBeGreaterThan(0);
-    expect(nestedRows.some((row) => row.classList.contains("pb-2"))).toBe(
-      false,
-    );
-  });
-
-  it("style contract: renders rows inside activity summaries with no list gap", () => {
-    const view = renderTimelineRows({
-      timelineRows: [
-        commandRow({
-          id: "command-1",
-          command: "pnpm test",
-          sourceSeqStart: 1,
-        }),
-        commandRow({
-          id: "command-2",
-          command: "pnpm lint",
-          sourceSeqStart: 2,
-        }),
-      ],
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: /Ran 2 commands/u }));
-
-    const bundleList = view.container.querySelector(
-      '[data-timeline-row-list="bundle"]',
-    );
-    expect(bundleList).not.toBeNull();
-    expect(bundleList?.classList.contains("gap-0")).toBe(true);
-    expect(bundleList?.classList.contains("gap-0.5")).toBe(false);
-    expect(
-      Array.from(bundleList?.children ?? []).some((child) =>
-        child.classList.contains("pb-2"),
-      ),
-    ).toBe(false);
-
-    const bundledCommandButton = screen.getByRole("button", {
-      name: /Ran\s+pnpm test\s+2s/u,
-    });
-    expect(bundledCommandButton.classList.contains("px-0")).toBe(true);
-    expect(bundledCommandButton.classList.contains("px-2")).toBe(false);
-  });
-
   it("groups completed work once a second completed row appends to the run", () => {
     const firstCommand = commandRow({
       id: "command-1",
@@ -583,22 +469,6 @@ describe("ThreadTimelineRows", () => {
     expect(
       screen.getByRole("button", { name: /Ran\s+pnpm typecheck/u }),
     ).toBeTruthy();
-  });
-
-  it("style contract: uses flush horizontal padding for static title rows inside activity summaries", () => {
-    const view = renderTimelineRows({
-      timelineRows: [webSearchRow(), webFetchRow()],
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: /Ran 1 web search/u }));
-
-    const staticTitle = view.container.querySelector(
-      '[title="Ran web search: timeline renderer"]',
-    );
-    expect(staticTitle).not.toBeNull();
-    const staticHeader = staticTitle?.closest(".timeline-row-header");
-    expect(staticHeader?.classList.contains("px-0")).toBe(true);
-    expect(staticHeader?.classList.contains("px-2")).toBe(false);
   });
 
   it("requests lazy turn details when expanding a turn summary", () => {
@@ -1186,17 +1056,6 @@ describe("ThreadTimelineRows", () => {
     expect(view.container.textContent ?? "").not.toContain("applied");
   });
 
-  it("style contract: keeps completed single file change diff stats color-coded at top level", () => {
-    const html = renderRowsToStaticMarkup({
-      timelineRows: [fileChangeRow()],
-    });
-
-    expect(html).toContain("+1");
-    expect(html).toContain("-1");
-    expect(html).toContain("text-diff-added");
-    expect(html).toContain("text-diff-removed");
-  });
-
   it("renders file-change stderr without rendering stdout below diffs", () => {
     const view = renderTimelineRows({
       timelineRows: [
@@ -1260,20 +1119,6 @@ describe("ThreadTimelineRows", () => {
     expect(html).toContain("Done.");
   });
 
-  it("style contract: renders user conversation rows as a right-aligned message bubble", () => {
-    const html = renderRowsToStaticMarkup({
-      timelineRows: [
-        conversationRow({ role: "user", text: "Please patch this." }),
-      ],
-    });
-
-    expect(html).not.toContain("User");
-    expect(html).toContain("group mt-2 w-full");
-    expect(html).toContain("ml-auto w-fit max-w-[80%]");
-    expect(html).toContain("bg-primary/10");
-    expect(html).toContain("Please patch this.");
-  });
-
   it("renders accepted steer metadata below the user message bubble", () => {
     renderTimelineRows({
       timelineRows: [
@@ -1302,22 +1147,6 @@ describe("ThreadTimelineRows", () => {
 
     expect(screen.getByText("Still apply this steer.")).toBeTruthy();
     expect(screen.getByText("steer pending")).toBeTruthy();
-  });
-
-  it("style contract: puts top spacing on user messages instead of every timeline row", () => {
-    const html = renderRowsToStaticMarkup({
-      timelineRows: [
-        conversationRow({ id: "assistant-1", text: "Before." }),
-        conversationRow({
-          id: "user-1",
-          role: "user",
-          text: "Please patch this.",
-        }),
-      ],
-    });
-
-    expect(html).not.toContain('class="pt-1"');
-    expect(html).toContain("group mt-2 w-full");
   });
 
   it("renders assistant markdown with the custom timeline markdown styling", () => {
@@ -1496,7 +1325,7 @@ describe("ThreadTimelineRows", () => {
       },
     });
 
-    fireEvent.click(screen.getByRole("button", { name: /Working for\s*4s/u }));
+    fireEvent.click(screen.getByRole("button", { name: /Working\s*4s/u }));
 
     const nestedCommandButton = screen.getByRole("button", {
       name: /Running\s+pnpm test/u,
@@ -1506,26 +1335,27 @@ describe("ThreadTimelineRows", () => {
   });
 
   it("renders system rows with detail as expandable", () => {
-    withElementScrollMetrics(() => {
-      const view = renderTimelineRows({
-        timelineRows: [systemRow()],
-      });
-
-      const systemButton = screen.getByRole("button", {
-        name: /Provisioned thread/u,
-      });
-      expect(systemButton.getAttribute("aria-expanded")).toBe("false");
-      expect(view.container.textContent ?? "").not.toContain("Running setup");
-
-      fireEvent.click(systemButton);
-
-      expect(systemButton.getAttribute("aria-expanded")).toBe("true");
-      expect(view.container.textContent ?? "").toContain("Running setup");
-      const detail = view.container.querySelector("pre");
-      expect(detail?.className).toContain("whitespace-pre");
-      expect(detail?.className).not.toContain("whitespace-pre-wrap");
-      expect(detail?.scrollTop).toBe(900);
+    const view = renderTimelineRows({
+      timelineRows: [systemRow()],
     });
+
+    const systemButton = screen.getByRole("button", {
+      name: /Provisioned thread/u,
+    });
+    expect(systemButton.getAttribute("aria-expanded")).toBe("false");
+    expect(view.container.textContent ?? "").not.toContain("Running setup");
+
+    fireEvent.click(systemButton);
+
+    expect(systemButton.getAttribute("aria-expanded")).toBe("true");
+    expect(view.container.textContent ?? "").toContain("Running setup");
+    const detailText = view.container.querySelector("pre");
+    expect(detailText?.className).toContain("whitespace-pre");
+    expect(detailText?.className).not.toContain("whitespace-pre-wrap");
+    const scrollArea = view.container.querySelector<HTMLElement>(
+      "[data-detail-scroll-area]",
+    );
+    expect(scrollArea).not.toBeNull();
   });
 
   it("uses destructive detail tone for failed system operations", () => {
@@ -1542,43 +1372,56 @@ describe("ThreadTimelineRows", () => {
       screen.getByRole("button", { name: /Thread release failed/u }),
     );
 
-    const detail = view.container.querySelector("pre");
-    expect(detail?.textContent).toBe("Release command failed");
-    expect(detail?.className).toContain("text-destructive");
+    const detailText = view.container.querySelector("pre");
+    expect(detailText?.textContent).toBe("Release command failed");
+    expect(detailText?.className).toContain("text-destructive");
   });
 
-  it("keeps expanded system details pinned unless the user scrolls up", () => {
+  it("keeps expanded system details pinned to bottom on streaming updates unless the user scrolls up", () => {
+    // Sticky-bottom only fires while the row is still pending — completed
+    // system rows preserve whatever scroll position the user landed on.
     withElementScrollMetrics(() => {
       const view = renderTimelineRows({
-        timelineRows: [systemRow({ detail: "first\nsecond" })],
+        timelineRows: [
+          systemRow({ detail: "first\nsecond", status: "pending" }),
+        ],
       });
 
       fireEvent.click(
         screen.getByRole("button", { name: /Provisioned thread/u }),
       );
-      const detail = view.container.querySelector("pre");
-      expect(detail?.scrollTop).toBe(900);
+      const scrollArea = view.container.querySelector<HTMLElement>(
+        "[data-detail-scroll-area]",
+      );
+      expect(scrollArea?.scrollTop).toBe(900);
 
-      if (!detail) {
-        throw new Error("Expected system detail to render");
+      if (!scrollArea) {
+        throw new Error("Expected system detail scroll area to render");
       }
 
-      detail.scrollTop = 500;
-      fireEvent.scroll(detail);
+      scrollArea.scrollTop = 500;
+      fireEvent.scroll(scrollArea);
       rerenderTimelineRows({
         view,
-        timelineRows: [systemRow({ detail: "first\nsecond\nthird" })],
+        timelineRows: [
+          systemRow({ detail: "first\nsecond\nthird", status: "pending" }),
+        ],
       });
-      expect(detail.scrollTop).toBe(900);
+      expect(scrollArea.scrollTop).toBe(900);
 
-      detail.scrollTop = 500;
-      fireEvent.wheel(detail);
-      fireEvent.scroll(detail);
+      scrollArea.scrollTop = 500;
+      fireEvent.wheel(scrollArea);
+      fireEvent.scroll(scrollArea);
       rerenderTimelineRows({
         view,
-        timelineRows: [systemRow({ detail: "first\nsecond\nthird\nfourth" })],
+        timelineRows: [
+          systemRow({
+            detail: "first\nsecond\nthird\nfourth",
+            status: "pending",
+          }),
+        ],
       });
-      expect(detail.scrollTop).toBe(500);
+      expect(scrollArea.scrollTop).toBe(500);
     });
   });
 

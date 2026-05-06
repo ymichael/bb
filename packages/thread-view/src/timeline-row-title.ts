@@ -52,14 +52,16 @@ export interface TimelineTitleSegment {
 export type TimelineTitleDecoration =
   | {
       kind: "duration";
-      durationMs: number;
+      /** Wall-clock millis when the work began. */
+      startedAt: number;
       /**
-       * `true` when the row is still actively running and the App should
-       * tick the duration locally between server snapshots. CLI rendering
-       * always shows the static `durationMs`.
+       * Wall-clock millis when the work reached a terminal status. `null`
+       * while pending; renderers derive elapsed from `now - startedAt` and
+       * tick locally. When non-null the decoration renders statically as
+       * `completedAt - startedAt`.
        */
-      live: boolean;
-      /** Render the duration with title-emphasis tone instead of the default muted decoration tone. */
+      completedAt: number | null;
+      /** Render with title-emphasis tone instead of the default muted decoration tone. */
       em: boolean;
     }
   | {
@@ -177,16 +179,25 @@ function visibleDurationMs(durationMs: number | null): number | null {
   return durationMs !== null && durationMs > 1_000 ? durationMs : null;
 }
 
+/**
+ * Below-threshold elapsed durations don't render — sub-second flickers
+ * would be noisy. We skip emitting the decoration entirely until either
+ * the captured terminal duration crosses the threshold (terminal rows)
+ * or the live tick will reach it (pending rows).
+ */
 function durationDecoration(
-  durationMs: number | null,
-  options: { live?: boolean; em?: boolean } = {},
+  startedAt: number,
+  completedAt: number | null,
+  options: { em?: boolean } = {},
 ): TimelineTitleDecoration | null {
-  const visible = visibleDurationMs(durationMs);
-  if (visible === null) return null;
+  if (completedAt !== null) {
+    const finalMs = completedAt - startedAt;
+    if (visibleDurationMs(finalMs) === null) return null;
+  }
   return {
     kind: "duration",
-    durationMs: visible,
-    live: options.live ?? false,
+    startedAt,
+    completedAt,
     em: options.em ?? false,
   };
 }
@@ -232,8 +243,13 @@ export function formatTimelineDecorationText(
   d: TimelineTitleDecoration,
 ): string {
   switch (d.kind) {
-    case "duration":
-      return `(${durationToCompactString(d.durationMs)})`;
+    case "duration": {
+      // CLI is a static snapshot; pending rows have no captured end yet,
+      // so we omit the duration entirely rather than print a placeholder
+      // or a sub-second number.
+      if (d.completedAt === null) return "";
+      return `(${durationToCompactString(d.completedAt - d.startedAt)})`;
+    }
     case "status":
       return d.durationMs !== null
         ? `(${durationToCompactString(d.durationMs)}, ${d.status})`
@@ -343,7 +359,7 @@ function mapExecutionTitle(row: TimelineExecutionWorkRow): TimelineTitle {
           segment("Permission denied:"),
           segment(content, { em: true, truncate: true }),
         ],
-        decorations: filterNull([durationDecoration(row.durationMs)]),
+        decorations: filterNull([durationDecoration(row.startedAt, row.completedAt)]),
       });
     case "pending":
       return makeTitle({
@@ -352,7 +368,7 @@ function mapExecutionTitle(row: TimelineExecutionWorkRow): TimelineTitle {
           segment(content, { em: true, truncate: true }),
         ],
         decorations: filterNull([
-          durationDecoration(row.durationMs, { live: true }),
+          durationDecoration(row.startedAt, row.completedAt),
         ]),
       });
     case "completed":
@@ -361,7 +377,7 @@ function mapExecutionTitle(row: TimelineExecutionWorkRow): TimelineTitle {
           segment(isCommand ? "Ran" : "Ran tool:"),
           segment(content, { em: true, truncate: true }),
         ],
-        decorations: filterNull([durationDecoration(row.durationMs)]),
+        decorations: filterNull([durationDecoration(row.startedAt, row.completedAt)]),
       });
     case "error":
       return makeTitle({
@@ -369,7 +385,7 @@ function mapExecutionTitle(row: TimelineExecutionWorkRow): TimelineTitle {
           segment(isCommand ? "Ran" : "Ran tool:"),
           segment(content, { em: true, truncate: true }),
         ],
-        decorations: [statusDecoration("error", row.durationMs)],
+        decorations: [statusDecoration("error", row.completedAt !== null ? row.completedAt - row.startedAt : null)],
       });
     case "interrupted":
       return makeTitle({
@@ -377,7 +393,7 @@ function mapExecutionTitle(row: TimelineExecutionWorkRow): TimelineTitle {
           segment(isCommand ? "Ran" : "Ran tool:"),
           segment(content, { em: true, truncate: true }),
         ],
-        decorations: [statusDecoration("interrupted", row.durationMs)],
+        decorations: [statusDecoration("interrupted", row.completedAt !== null ? row.completedAt - row.startedAt : null)],
       });
     default:
       return assertNever(status);
@@ -573,12 +589,12 @@ function mapWebSearchTitle(row: TimelineWebSearchWorkRow): TimelineTitle {
     case "completed":
       return makeTitle({
         segments: [segment("Ran web search:"), querySegment],
-        decorations: filterNull([durationDecoration(row.durationMs)]),
+        decorations: filterNull([durationDecoration(row.startedAt, row.completedAt)]),
       });
     case "error":
       return makeTitle({
         segments: [segment("Ran web search:"), querySegment],
-        decorations: [statusDecoration("error", row.durationMs)],
+        decorations: [statusDecoration("error", row.completedAt !== null ? row.completedAt - row.startedAt : null)],
       });
     case "interrupted":
       return makeTitle({
@@ -600,12 +616,12 @@ function mapWebFetchTitle(row: TimelineWebFetchWorkRow): TimelineTitle {
     case "completed":
       return makeTitle({
         segments: [segment("Fetched:"), urlSegment],
-        decorations: filterNull([durationDecoration(row.durationMs)]),
+        decorations: filterNull([durationDecoration(row.startedAt, row.completedAt)]),
       });
     case "error":
       return makeTitle({
         segments: [segment("Fetched:"), urlSegment],
-        decorations: [statusDecoration("error", row.durationMs)],
+        decorations: [statusDecoration("error", row.completedAt !== null ? row.completedAt - row.startedAt : null)],
       });
     case "interrupted":
       return makeTitle({
@@ -654,7 +670,7 @@ function mapDelegationTitle(
   return makeTitle({
     segments,
     decorations: filterNull([
-      durationDecoration(row.durationMs, { live: row.status === "pending" }),
+      durationDecoration(row.startedAt, row.completedAt),
     ]),
   });
 }
@@ -746,27 +762,27 @@ function mapWorkSummaryTitle(
 }
 
 function mapTurnTitle(row: TimelineViewTurnRow): TimelineTitle {
-  const status = row.status;
-  const durationDeco = durationDecoration(row.durationMs, {
-    live: status === "pending",
+  const isPending = row.status === "pending";
+  const durationDeco = durationDecoration(row.startedAt, row.completedAt, {
     em: true,
   });
-  if (durationDeco !== null) {
+  const hasCapturedDuration =
+    !isPending && row.completedAt !== null && durationDeco !== null;
+  if (hasCapturedDuration) {
+    // Completed turn with a visible captured duration: "Worked for (8m 14s)".
     return makeTitle({
-      segments: [
-        segment(status === "pending" ? "Working for" : "Worked for", {
-          shimmer: status === "pending",
-        }),
-      ],
+      segments: [segment("Worked for", { shimmer: false })],
       decorations: [durationDeco],
     });
   }
   return makeTitle({
     segments: [
-      segment(status === "pending" ? "Working" : "Worked", {
-        shimmer: status === "pending",
-      }),
+      segment(isPending ? "Working" : "Worked", { shimmer: isPending }),
     ],
+    // Pending rows still emit the decoration so the App's `LiveDurationText`
+    // can tick locally; CLI formatters return "" for pending and
+    // `renderTitlePlain` filters that out.
+    decorations: isPending && durationDeco !== null ? [durationDeco] : [],
   });
 }
 
@@ -837,7 +853,7 @@ export function buildTimelineActivityIntentTitles(
     return [];
   }
 
-  const dedupedDetailKeys = new Set<string>();
+  let lastEmittedKey: string | null = null;
   const titles: TimelineActivityIntentTitle[] = [];
   const failureStatus =
     row.status === "error"
@@ -851,11 +867,8 @@ export function buildTimelineActivityIntentTitles(
       return;
     }
     const dedupeKey = getTimelineActivityIntentDetailDedupeKey(intent);
-    if (dedupeKey !== null) {
-      if (dedupedDetailKeys.has(dedupeKey)) {
-        return;
-      }
-      dedupedDetailKeys.add(dedupeKey);
+    if (dedupeKey !== null && dedupeKey === lastEmittedKey) {
+      return;
     }
     titles.push({
       id: `${row.id}:activity-intent:${index}`,
@@ -865,6 +878,7 @@ export function buildTimelineActivityIntentTitles(
         ...(failureStatus ? { failureStatus } : {}),
       }),
     });
+    lastEmittedKey = dedupeKey;
   });
 
   return titles;

@@ -1,7 +1,7 @@
 import type { EventMeta } from "./event-decode.js";
 import type { ToolActivityProjectionState } from "./tool-activity-projection.js";
 import type { WebActivityLifecycleEvent } from "./web-activity-lifecycle.js";
-import { getMessageStartedAt, messageId } from "./format-helpers.js";
+import { messageId } from "./format-helpers.js";
 import {
   areThreadEventScopesEqual,
   eventProjectionMessageThreadScopeFields,
@@ -44,7 +44,7 @@ function createWebActivityMessage(
         : {}),
       callId: payload.callId,
       queries: payload.queries,
-      durationMs: null,
+      completedAt: status === "pending" ? null : meta.createdAt,
       status,
     };
   }
@@ -67,7 +67,7 @@ function createWebActivityMessage(
     url: payload.url,
     prompt: payload.prompt,
     pattern: payload.pattern,
-    durationMs: null,
+    completedAt: status === "pending" ? null : meta.createdAt,
     status,
   };
 }
@@ -174,10 +174,7 @@ export function onWebActivityEnd(
   ) {
     mergeWebActivityMessage(active, meta, turnId, payload);
     active.status = "completed";
-    active.durationMs = Math.max(
-      0,
-      meta.createdAt - getMessageStartedAt(active),
-    );
+    active.completedAt = meta.createdAt;
     flushActiveToolCell(state);
     state.toolActivity.finalizedWebActivityCallIds.add(activityKey);
     return;
@@ -202,10 +199,7 @@ export function onWebActivityEnd(
   if (historyMatch) {
     mergeWebActivityMessage(historyMatch, meta, turnId, payload);
     historyMatch.status = "completed";
-    historyMatch.durationMs = Math.max(
-      0,
-      meta.createdAt - getMessageStartedAt(historyMatch),
-    );
+    historyMatch.completedAt = meta.createdAt;
     state.toolActivity.finalizedWebActivityCallIds.add(activityKey);
     return;
   }

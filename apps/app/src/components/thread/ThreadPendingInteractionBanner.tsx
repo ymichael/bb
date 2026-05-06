@@ -183,7 +183,7 @@ function buildBannerModel(interaction: PendingInteraction): BannerModel {
         <div className="overflow-hidden rounded-lg border border-border bg-card">
           <pre
             className={cn(
-              getDetailScrollMaxHeightClass("regular"),
+              getDetailScrollMaxHeightClass("base"),
               "overflow-auto whitespace-pre px-4 py-3 font-mono ui-text-sm leading-tight text-foreground",
             )}
           >

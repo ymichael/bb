@@ -212,6 +212,20 @@ function rowSequence({ seq, sourceSeqStart }: RowSequenceArgs): number {
   return seq ?? sourceSeqStart ?? 1;
 }
 
+/**
+ * Fixture inputs are written in terms of `durationMs` (intuitive when
+ * authoring "this run took 2 seconds"). Production rows store
+ * `completedAt = startedAt + durationMs`; this helper does the conversion
+ * so tests stay readable while the row shape remains canonical.
+ */
+function completedAtFromDuration(
+  startedAt: number,
+  durationMs: number | null | undefined,
+): number | null {
+  if (durationMs === null || durationMs === undefined) return null;
+  return startedAt + durationMs;
+}
+
 function commandExitCode({
   exitCode,
   status,
@@ -331,11 +345,11 @@ export function commandRow({
   status = "completed",
   turnId,
 }: CommandRowArgs): TimelineCommandWorkRow {
+  const base = baseRow({ id, seq, sourceSeqEnd, sourceSeqStart, turnId });
   return {
-    ...baseRow({ id, seq, sourceSeqEnd, sourceSeqStart, turnId }),
+    ...base,
     kind: "work",
     workKind: "command",
-    inClosedStep: false,
     status,
     callId: id,
     command,
@@ -343,7 +357,7 @@ export function commandRow({
     source,
     output,
     exitCode: commandExitCode({ exitCode, status }),
-    durationMs,
+    completedAt: completedAtFromDuration(base.startedAt, durationMs),
     approvalStatus,
     activityIntents,
   };
@@ -364,18 +378,18 @@ export function toolRow({
   toolName = "Read",
   turnId,
 }: ToolRowArgs = {}): TimelineToolWorkRow {
+  const base = baseRow({ id, seq, sourceSeqEnd, sourceSeqStart, turnId });
   return {
-    ...baseRow({ id, seq, sourceSeqEnd, sourceSeqStart, turnId }),
+    ...base,
     kind: "work",
     workKind: "tool",
-    inClosedStep: false,
     status,
     callId: id,
     toolName,
     toolArgs,
     label,
     output,
-    durationMs,
+    completedAt: completedAtFromDuration(base.startedAt, durationMs),
     approvalStatus,
     activityIntents,
   };
@@ -421,7 +435,6 @@ export function fileChangeRow(
     ...baseRow({ id, seq, sourceSeqEnd, sourceSeqStart, turnId }),
     kind: "work",
     workKind: "file-change",
-    inClosedStep: false,
     status,
     callId: id,
     change: fileChangeFromArgs(args),
@@ -442,15 +455,15 @@ export function webSearchRow({
   status = "completed",
   turnId,
 }: WebSearchRowArgs = {}): TimelineWebSearchWorkRow {
+  const base = baseRow({ id, seq, sourceSeqEnd, sourceSeqStart, turnId });
   return {
-    ...baseRow({ id, seq, sourceSeqEnd, sourceSeqStart, turnId }),
+    ...base,
     kind: "work",
     workKind: "web-search",
-    inClosedStep: false,
     status,
     callId: callId ?? id,
     queries,
-    durationMs,
+    completedAt: completedAtFromDuration(base.startedAt, durationMs),
   };
 }
 
@@ -467,17 +480,17 @@ export function webFetchRow({
   turnId,
   url = "https://example.com/docs",
 }: WebFetchRowArgs = {}): TimelineWebFetchWorkRow {
+  const base = baseRow({ id, seq, sourceSeqEnd, sourceSeqStart, turnId });
   return {
-    ...baseRow({ id, seq, sourceSeqEnd, sourceSeqStart, turnId }),
+    ...base,
     kind: "work",
     workKind: "web-fetch",
-    inClosedStep: false,
     status,
     callId: callId ?? id,
     url,
     prompt,
     pattern,
-    durationMs,
+    completedAt: completedAtFromDuration(base.startedAt, durationMs),
   };
 }
 
@@ -497,7 +510,6 @@ export function approvalRow({
     ...baseRow({ id, seq, sourceSeqEnd, sourceSeqStart, turnId }),
     kind: "work",
     workKind: "approval",
-    inClosedStep: false,
     status,
     interactionId,
     title,
@@ -549,18 +561,18 @@ export function delegationRow({
   toolName = "spawnAgent",
   turnId,
 }: DelegationRowArgs = {}): TimelineDelegationWorkRow {
+  const base = baseRow({ id, seq, sourceSeqEnd, sourceSeqStart, turnId });
   return {
-    ...baseRow({ id, seq, sourceSeqEnd, sourceSeqStart, turnId }),
+    ...base,
     kind: "work",
     workKind: "delegation",
-    inClosedStep: false,
     status,
     callId: id,
     toolName,
     subagentType,
     description,
     output,
-    durationMs,
+    completedAt: completedAtFromDuration(base.startedAt, durationMs),
     childRows,
   };
 }
@@ -576,13 +588,14 @@ export function turnRow({
   summaryCount = 1,
   turnId = DEFAULT_TURN_ID,
 }: TurnRowArgs = {}): TimelineTurnRow {
+  const base = baseRow({ id, seq, sourceSeqEnd, sourceSeqStart, turnId });
   return {
-    ...baseRow({ id, seq, sourceSeqEnd, sourceSeqStart, turnId }),
+    ...base,
     kind: "turn",
     turnId,
     status,
     summaryCount,
-    durationMs,
+    completedAt: completedAtFromDuration(base.startedAt, durationMs),
     children,
   };
 }

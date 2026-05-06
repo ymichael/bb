@@ -67,19 +67,7 @@ export interface ProjectionState
   delegationParentToolCallIdsByProviderThreadId: Map<string, string>;
 }
 
-export interface CreateProjectionStateArgs {
-  /**
-   * Snapshot time used for live-duration computations on pending tools.
-   * Pass the request time when serving a timeline (so a silent pending
-   * tool reports `now - startedAt`). Tests pass a fixed value for
-   * determinism.
-   */
-  nowMs: number;
-}
-
-export function createProjectionState(
-  args: CreateProjectionStateArgs,
-): ProjectionState {
+export function createProjectionState(): ProjectionState {
   const messages: EventProjectionMessage[] = [];
   return {
     ...createOperationProjectionState(messages),
@@ -93,7 +81,7 @@ export function createProjectionState(
     finalizedAssistantMessageKeys: new Set(),
     ...createReasoningProjectionState(),
     delegationParentToolCallIdsByProviderThreadId: new Map(),
-    toolActivity: createToolActivityState({ nowMs: args.nowMs }),
+    toolActivity: createToolActivityState(),
   };
 }
 

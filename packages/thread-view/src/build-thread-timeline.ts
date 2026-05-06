@@ -55,12 +55,6 @@ interface ThreadTimelineFromEventsBaseOptions {
   includeProviderUnhandledOperations: boolean;
   systemClientRequestVisibility: SystemClientRequestVisibility;
   threadStatus: Thread["status"];
-  /**
-   * Snapshot time forwarded to the projection so pending tools report
-   * `nowMs - startedAt` for elapsed duration. Defaults to `Date.now()`
-   * when omitted.
-   */
-  nowMs?: number;
 }
 
 export interface StandardThreadTimelineFromEventsOptions extends ThreadTimelineFromEventsBaseOptions {
@@ -100,8 +94,6 @@ export interface BuildThreadTimelineTurnDetailsFromEventsOptions extends ThreadT
   systemClientRequestVisibility: SystemClientRequestVisibility;
   threadStatus: Thread["status"];
   viewMode: ThreadTimelineViewMode;
-  /** Snapshot time for live-duration computation; see {@link ThreadTimelineFromEventsBaseOptions.nowMs}. */
-  nowMs?: number;
 }
 
 export interface BuildThreadTimelineTurnDetailsFromEventsArgs {
@@ -136,7 +128,7 @@ interface TimelineMessageBounds {
 }
 
 interface BuildTurnSummaryRowArgs {
-  durationMs: number | null;
+  completedAt: number | null;
   includeNestedRows: boolean;
   rowIdPrefix: string;
   segmentIndex: number | null;
@@ -345,7 +337,6 @@ function convertMessage(
           ...buildTimelineRowBase(message, options.rowIdPrefix),
           kind: "work",
           workKind: "command",
-          inClosedStep: false,
           status: message.status,
           callId: message.callId,
           command: message.command,
@@ -353,7 +344,7 @@ function convertMessage(
           source: message.source,
           output: message.output,
           exitCode: message.exitCode,
-          durationMs: message.durationMs,
+          completedAt: message.completedAt,
           approvalStatus: message.approvalStatus,
           activityIntents: message.parsedIntents.map(convertActivityIntent),
         },
@@ -364,14 +355,13 @@ function convertMessage(
           ...buildTimelineRowBase(message, options.rowIdPrefix),
           kind: "work",
           workKind: "tool",
-          inClosedStep: false,
           status: message.status,
           callId: message.callId,
           toolName: message.toolName,
           toolArgs: message.toolArgs,
           label: formatToolCallCommand(message.toolName, message.toolArgs),
           output: message.output,
-          durationMs: message.durationMs,
+          completedAt: message.completedAt,
           approvalStatus: message.approvalStatus,
           activityIntents: message.parsedIntents.map(convertActivityIntent),
         },
@@ -383,7 +373,6 @@ function convertMessage(
             ...buildTimelineRowBase(message, options.rowIdPrefix),
             kind: "work",
             workKind: "approval",
-            inClosedStep: false,
             status: message.status,
             interactionId: message.callId,
             title:
@@ -404,7 +393,6 @@ function convertMessage(
           id: `${base.id}:file-change:${index}`,
           kind: "work",
           workKind: "file-change",
-          inClosedStep: false,
           status: message.status,
           callId: message.callId,
           change: toTimelineFileChange(change),
@@ -419,11 +407,10 @@ function convertMessage(
           ...buildTimelineRowBase(message, options.rowIdPrefix),
           kind: "work",
           workKind: "web-search",
-          inClosedStep: false,
           status: message.status,
           callId: message.callId,
           queries: message.queries,
-          durationMs: message.durationMs,
+          completedAt: message.completedAt,
         },
       ];
     case "web-fetch":
@@ -432,13 +419,12 @@ function convertMessage(
           ...buildTimelineRowBase(message, options.rowIdPrefix),
           kind: "work",
           workKind: "web-fetch",
-          inClosedStep: false,
           status: message.status,
           callId: message.callId,
           url: message.url,
           prompt: message.prompt,
           pattern: message.pattern,
-          durationMs: message.durationMs,
+          completedAt: message.completedAt,
         },
       ];
     case "delegation": {
@@ -448,14 +434,13 @@ function convertMessage(
           ...base,
           kind: "work",
           workKind: "delegation",
-          inClosedStep: false,
           status: message.status,
           callId: message.callId,
           toolName: message.toolName,
           subagentType: message.subagentType ?? null,
           description: message.description ?? null,
           output: message.output,
-          durationMs: message.durationMs,
+          completedAt: message.completedAt,
           childRows: buildTimelineRows(message.childProjection, {
             includeNestedRows: true,
             rowIdPrefix: `${base.id}:child:`,
@@ -469,7 +454,6 @@ function convertMessage(
           ...buildTimelineRowBase(message, options.rowIdPrefix),
           kind: "work",
           workKind: "approval",
-          inClosedStep: false,
           status: message.status,
           interactionId: message.interactionId,
           title: message.title,
@@ -610,22 +594,17 @@ function getTimelineMessageBounds(
   };
 }
 
-function getTimelineMessageDurationMs(
+function getTimelineMessageCompletedAt(
   messages: readonly EventProjectionMessage[],
 ): number | null {
   if (messages.length === 0) {
     return null;
   }
-
-  let startedAt = getMessageStartedAt(messages[0]);
   let completedAt = messages[0].createdAt;
-
   for (const message of messages.slice(1)) {
-    startedAt = Math.min(startedAt, getMessageStartedAt(message));
     completedAt = Math.max(completedAt, message.createdAt);
   }
-
-  return Math.max(0, completedAt - startedAt);
+  return completedAt;
 }
 
 function getTurnBounds(turn: EventProjectionTurn): TimelineMessageBounds {
@@ -638,7 +617,7 @@ function getTurnBounds(turn: EventProjectionTurn): TimelineMessageBounds {
 }
 
 function buildTurnSummaryRow({
-  durationMs,
+  completedAt,
   includeNestedRows,
   rowIdPrefix,
   segmentIndex,
@@ -659,8 +638,8 @@ function buildTurnSummaryRow({
     segmentIndex === null
       ? `${rowIdPrefix}${turn.threadId}:${turn.turnId}:turn`
       : `${rowIdPrefix}${turn.threadId}:${turn.turnId}:turn:${segmentIndex}`;
-  const resolvedDurationMs =
-    durationMs ?? getTimelineMessageDurationMs(sourceMessages);
+  const resolvedCompletedAt =
+    completedAt ?? getTimelineMessageCompletedAt(sourceMessages);
 
   return {
     id: rowId,
@@ -673,7 +652,7 @@ function buildTurnSummaryRow({
     kind: "turn",
     status: turn.status,
     summaryCount,
-    durationMs: resolvedDurationMs,
+    completedAt: resolvedCompletedAt,
     children: includeNestedRows ? sourceRows : null,
   };
 }
@@ -704,7 +683,7 @@ function buildCompletedTurnSummaryRows({
       continue;
     }
     const turnRow = buildTurnSummaryRow({
-      durationMs: item.durationMs,
+      completedAt: item.completedAt,
       includeNestedRows,
       rowIdPrefix,
       segmentIndex: item.segmentIndex,
@@ -854,7 +833,6 @@ export function buildThreadTimelineFromEvents(
       args.options.viewMode === "manager-conversation"
         ? "full"
         : args.options.turnMessageDetail,
-    ...(args.options.nowMs !== undefined ? { nowMs: args.options.nowMs } : {}),
   } satisfies Parameters<typeof buildEventProjection>[1];
   const projection =
     args.options.viewMode === "manager-conversation"
@@ -897,7 +875,6 @@ export function buildThreadTimelineTurnDetailsFromEvents(
     threadType:
       args.options.viewMode === "manager-conversation" ? "manager" : "standard",
     turnMessageDetail: "full",
-    ...(args.options.nowMs !== undefined ? { nowMs: args.options.nowMs } : {}),
   });
   const nestedRows = buildTimelineRows(projection, {
     includeNestedRows: true,

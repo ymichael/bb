@@ -49,12 +49,12 @@ type InterruptibleToolCall = Pick<
   ViewProviderExecutionMessage,
   "output" | "status"
 >;
-interface ExecutionDurationTarget {
-  durationMs: number | null;
+interface ExecutionCompletionTarget {
+  completedAt: number | null;
 }
 
-interface ExecutionDurationSource {
-  durationMs?: number | null;
+interface ExecutionCompletionSource {
+  completedAt?: number | null;
 }
 
 interface RunningExecutionBase {
@@ -67,16 +67,9 @@ interface RunningExecutionBase {
   createdAt: number;
   startedAt: number;
   output: string;
-  durationMs: number | null;
+  completedAt: number | null;
   status: ViewProviderExecutionMessage["status"];
   outputBuffer: VisibleTextBuffer;
-}
-
-interface ExecutionTiming {
-  createdAt: number;
-  durationMs: number | null;
-  startedAt?: number;
-  status: ViewProviderExecutionMessage["status"];
 }
 
 interface PendingExecutionOutput {
@@ -139,15 +132,6 @@ export interface ToolActivityState {
   historyCells: ToolActivityCell[];
   finalizedExecCallIds: Set<string>;
   finalizedWebActivityCallIds: Set<string>;
-  /**
-   * Snapshot time used to compute pending-tool elapsed duration. Set once
-   * when the projection is created (typically the request time at the
-   * server, or a fixed value in tests). Pending rows compute
-   * `durationMs = nowMs - startedAt` so silent tools — those that emit no
-   * progress events between start and the snapshot — still report the true
-   * elapsed time the user has been waiting on them.
-   */
-  nowMs: number;
 }
 
 interface MergeCallSummaryOptions {
@@ -160,13 +144,7 @@ export interface InterruptPendingToolActivityArgs {
   turnIds?: ReadonlySet<string>;
 }
 
-export interface CreateToolActivityStateArgs {
-  nowMs: number;
-}
-
-export function createToolActivityState(
-  args: CreateToolActivityStateArgs,
-): ToolActivityState {
+export function createToolActivityState(): ToolActivityState {
   return {
     runningCallsById: new Map(),
     pendingOutputsByCallId: new Map(),
@@ -174,7 +152,6 @@ export function createToolActivityState(
     historyCells: [],
     finalizedExecCallIds: new Set(),
     finalizedWebActivityCallIds: new Set(),
-    nowMs: args.nowMs,
   };
 }
 
@@ -305,7 +282,7 @@ function createRunningExecutionBase({
       ? { parentToolCallId: incoming.parentToolCallId }
       : {}),
     output: getVisibleTextBufferText(outputBuffer) ?? "",
-    durationMs: incoming.durationMs ?? null,
+    completedAt: incoming.completedAt ?? null,
     status: incoming.status ?? "pending",
     sourceSeqStart: meta.seq,
     sourceSeqEnd: meta.seq,
@@ -476,12 +453,12 @@ function mergeDelegationExecutionFields(
   }
 }
 
-function mergeExecutionDuration(
-  target: ExecutionDurationTarget,
-  incoming: ExecutionDurationSource,
+function mergeExecutionCompletion(
+  target: ExecutionCompletionTarget,
+  incoming: ExecutionCompletionSource,
 ): void {
-  if (incoming.durationMs !== undefined && incoming.durationMs !== null) {
-    target.durationMs = incoming.durationMs;
+  if (incoming.completedAt !== undefined && incoming.completedAt !== null) {
+    target.completedAt = incoming.completedAt;
   }
 }
 
@@ -534,7 +511,7 @@ function upsertRunningExecCall(
     );
   }
   mergeRunningExecutionMetadata(existing, incoming);
-  mergeExecutionDuration(existing, incoming);
+  mergeExecutionCompletion(existing, incoming);
   if (!existing.parentToolCallId && incoming.parentToolCallId) {
     existing.parentToolCallId = incoming.parentToolCallId;
   }
@@ -736,33 +713,6 @@ type ExecutionMergeSource =
   | ProviderExecutionUpdate
   | ExecutionOutputUpdate;
 
-function resolveProjectedExecutionDurationMs(
-  timing: ExecutionTiming,
-  nowMs: number,
-): number | null {
-  if (timing.status !== "pending") {
-    return timing.durationMs;
-  }
-  // Silent pending tools emit no events between `started` and the snapshot,
-  // so `createdAt` (the latest event time) equals `startedAt` and the old
-  // `createdAt - startedAt` floor was always 0. Using `nowMs - startedAt`
-  // reflects the time the user has actually been waiting.
-  const startedAt = timing.startedAt ?? timing.createdAt;
-  return Math.max(
-    timing.durationMs ?? 0,
-    nowMs - startedAt,
-    timing.createdAt - startedAt,
-    0,
-  );
-}
-
-function refreshProjectedExecutionDuration(
-  target: ExecutionMergeTarget,
-  nowMs: number,
-): void {
-  target.durationMs = resolveProjectedExecutionDurationMs(target, nowMs);
-}
-
 function mergeExecutionOutput(
   target: ExecutionMergeTarget,
   incoming: ExecutionMergeSource,
@@ -811,7 +761,7 @@ function mergeExecutionSummary(
         mergeDelegationExecutionFields(target, incoming);
         break;
     }
-    mergeExecutionDuration(target, incoming);
+    mergeExecutionCompletion(target, incoming);
   }
   target.status =
     mergeCallStatus(target.status, incoming.status) ?? target.status;
@@ -884,7 +834,7 @@ export function interruptPendingToolActivity(
       continue;
     }
 
-    state.messages.push(createExecMessage(call, state.toolActivity.nowMs));
+    state.messages.push(createExecMessage(call));
     interruptedRunningCallIds.push(call.callId);
   }
 
@@ -917,10 +867,8 @@ export function interruptPendingToolActivity(
 
 function createExecMessage(
   call: RunningExecCall,
-  nowMs: number,
 ): ViewProviderExecutionMessage {
   const rowKindForId = call.kind === "tool-call" ? "tool" : call.kind;
-  const durationMs = resolveProjectedExecutionDurationMs(call, nowMs);
   const base = {
     id: messageId(call.threadId, rowKindForId, call.callId),
     threadId: call.threadId,
@@ -934,7 +882,7 @@ function createExecMessage(
       : {}),
     callId: call.callId,
     output: call.output,
-    durationMs,
+    completedAt: call.completedAt,
     status: call.status,
   };
 
@@ -1008,12 +956,11 @@ export function onExecBegin(
         call.createdAt,
       );
     }
-    refreshProjectedExecutionDuration(existingInActive, state.toolActivity.nowMs);
     return;
   }
 
   flushActiveToolCell(state);
-  state.toolActivity.activeCell = createExecMessage(call, state.toolActivity.nowMs);
+  state.toolActivity.activeCell = createExecMessage(call);
 }
 
 export function onExecOutput(
@@ -1068,7 +1015,6 @@ export function onExecOutput(
         meta.createdAt,
       );
     }
-    refreshProjectedExecutionDuration(activeCall, state.toolActivity.nowMs);
   }
 
   const historyMatch = findExecMessageInHistoryCells(state, incoming.callId);
@@ -1102,7 +1048,6 @@ export function onExecOutput(
   historyMatch.cell.status =
     mergeCallStatus(historyMatch.cell.status, incoming.status) ??
     historyMatch.cell.status;
-  refreshProjectedExecutionDuration(historyMatch.call, state.toolActivity.nowMs);
 }
 
 export function onExecEnd(
@@ -1169,7 +1114,7 @@ export function onExecEnd(
 
   flushActiveToolCell(state);
 
-  const execMessage = createExecMessage(merged, state.toolActivity.nowMs);
+  const execMessage = createExecMessage(merged);
   execMessage.status =
     mergeCallStatus(execMessage.status, incoming.status) ?? execMessage.status;
   state.toolActivity.activeCell = execMessage;

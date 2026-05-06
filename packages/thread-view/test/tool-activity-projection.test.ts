@@ -26,7 +26,7 @@ type CommandStatus = NonNullable<CommandExecutionUpdate["status"]>;
 
 interface CommandUpdateArgs {
   command?: string;
-  durationMs?: number | null;
+  completedAt?: number | null;
   output?: string;
   parsedIntents?: EventProjectionToolParsedIntent[];
   status: CommandStatus;
@@ -53,14 +53,10 @@ interface DelegationUpdateArgs {
   status: NonNullable<DelegationExecutionUpdate["status"]>;
 }
 
-// Tests pin a fixed `nowMs` so pending-duration assertions are deterministic.
-// Production paths default to `Date.now()`.
-const PROJECTION_NOW_MS = 2_001;
-
 function createProjectionState(): ToolActivityProjectionState {
   return {
     messages: [],
-    toolActivity: createToolActivityState({ nowMs: PROJECTION_NOW_MS }),
+    toolActivity: createToolActivityState(),
   };
 }
 
@@ -74,7 +70,7 @@ function eventMeta(seq: number): EventMeta {
 
 function commandUpdate({
   command = "pnpm test",
-  durationMs,
+  completedAt = null,
   output,
   parsedIntents,
   status,
@@ -86,7 +82,7 @@ function commandUpdate({
     cwd: "/repo",
     status,
     exitCode: status === "error" ? 1 : 0,
-    ...(durationMs !== undefined ? { durationMs } : {}),
+    completedAt,
     ...(output !== undefined ? { output } : {}),
     ...(parsedIntents !== undefined ? { parsedIntents } : {}),
   };
@@ -103,6 +99,7 @@ function toolCallUpdate({
     toolName: "Read",
     toolArgs: null,
     status,
+    completedAt: null,
     ...(output !== undefined ? { output } : {}),
     ...(parsedIntents !== undefined ? { parsedIntents } : {}),
   };
@@ -119,6 +116,7 @@ function delegationUpdate({
     subagentType: "reviewer",
     description: "Review implementation",
     status,
+    completedAt: null,
     ...(output !== undefined ? { output } : {}),
   };
 }
@@ -361,7 +359,7 @@ describe("tool activity projection", () => {
       "thread-1",
       "turn-1",
       commandUpdate({
-        durationMs: 10,
+        completedAt: 11,
         status: "completed",
       }),
     );
@@ -371,17 +369,21 @@ describe("tool activity projection", () => {
       "thread-1",
       "turn-1",
       commandUpdate({
-        durationMs: 25,
+        completedAt: 26,
         status: "error",
       }),
     );
 
-    expect(commandMessages(state).map((message) => message.durationMs)).toEqual([
-      25,
-    ]);
+    expect(
+      commandMessages(state).map((message) => message.completedAt),
+    ).toEqual([26]);
   });
 
-  it("derives pending command duration from the latest update timestamp", () => {
+  it("leaves pending commands without a captured completedAt", () => {
+    // The projection records work-start (`startedAt` on the message) and the
+    // terminal `completedAt` only when the work ends. Renderers derive any
+    // "elapsed since start" from `now - startedAt` themselves; the projection
+    // never computes a synthetic pending duration.
     const state = createProjectionState();
 
     beginCommandWithoutOutput(state);
@@ -393,23 +395,9 @@ describe("tool activity projection", () => {
       false,
     );
 
-    expect(activeCommandMessage(state)?.durationMs).toBe(2_000);
-  });
-
-  it("derives pending command duration from the projection's snapshot time when no progress events arrive", () => {
-    // Silent pending tools — those that emit no progress events between
-    // `started` and the projection snapshot — would otherwise report
-    // `createdAt - startedAt = 0` because the latest event time IS the
-    // start. The projection's `nowMs` provides a meaningful elapsed value
-    // so the user sees real wall-clock progress for tools that don't
-    // chatter on stdout.
-    const state = createProjectionState();
-
-    beginCommandWithoutOutput(state);
-
-    // No further events. Started at seq=1, snapshot time is
-    // PROJECTION_NOW_MS=2001 → elapsed should be 2000 ms.
-    expect(activeCommandMessage(state)?.durationMs).toBe(2_000);
+    expect(activeCommandMessage(state)?.completedAt).toBeNull();
+    expect(activeCommandMessage(state)?.status).toBe("pending");
+    expect(activeCommandMessage(state)?.startedAt).toBe(1);
   });
 
   it("applies late command output to a finalized history row", () => {

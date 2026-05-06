@@ -267,10 +267,6 @@ export function buildThreadTimeline(
     includeProviderUnhandledOperations,
     systemClientRequestVisibility,
     threadStatus: thread.status,
-    // Snapshot time for pending-tool elapsed duration. Recomputed per
-    // request so silent pending tools report `now - startedAt` and not
-    // the (often-stale) `createdAt - startedAt`.
-    nowMs: Date.now(),
   };
   const timeline = buildThreadTimelineFromEvents({
     contextWindowEvents: contextWindowUsageRows.map((row) =>
@@ -409,7 +405,6 @@ export function buildTimelineTurnSummaryDetails(
       sourceSeqStart: options.sourceSeqStart,
       threadStatus: thread.status,
       viewMode,
-      nowMs: Date.now(),
     },
   });
 

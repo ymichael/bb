@@ -1029,22 +1029,13 @@ export function createTimelineEventFactory(
   };
 }
 
-// Tests use small synthetic event timestamps (seq=1, 2, ...). Default the
-// projection's snapshot time to 0 so pending duration computations
-// (`nowMs - startedAt`) stay deterministic and below the >1s display
-// threshold. Tests that need a non-zero pending duration pass `nowMs`
-// explicitly via `projectionOptions`.
-const DEFAULT_FIXTURE_NOW_MS = 0;
-
 export function renderTimelineFixture(
   args: RenderTimelineFixtureArgs,
 ): RenderedTimelineFixture {
   const decodedEvents = args.events.map((row) => decodeThreadEventRow(row));
   const includeNestedRows = args.includeNestedRows ?? true;
-  const nowMs = args.projectionOptions.nowMs ?? DEFAULT_FIXTURE_NOW_MS;
   const projection = buildEventProjection(decodedEvents, {
     ...args.projectionOptions,
-    nowMs,
     turnMessageDetail: includeNestedRows
       ? "full"
       : args.projectionOptions.turnMessageDetail,
@@ -1063,7 +1054,6 @@ export function renderTimelineFixture(
     systemClientRequestVisibility:
       args.projectionOptions.systemClientRequestVisibility,
     threadStatus: args.projectionOptions.threadStatus ?? "idle",
-    nowMs,
   };
   const timeline = buildThreadTimelineFromEvents({
     contextWindowEvents: [],

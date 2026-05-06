@@ -97,7 +97,6 @@ function commandRow(args: {
     ...baseRow(args.id),
     kind: "work",
     workKind: "command",
-    inClosedStep: false,
     status: args.status ?? "completed",
     callId: `${args.id}-call`,
     command: args.command,
@@ -105,7 +104,7 @@ function commandRow(args: {
     source: null,
     output: "",
     exitCode: 0,
-    durationMs: 200,
+    completedAt: 200,
     approvalStatus: null,
     activityIntents: args.intents ?? [],
   };
@@ -132,7 +131,6 @@ function editRow(path: string): TimelineFileChangeWorkRow {
     ...baseRow(`edit-${path}`),
     kind: "work",
     workKind: "file-change",
-    inClosedStep: false,
     status: "completed",
     callId: `edit-${path}-call`,
     change: {

@@ -3,14 +3,19 @@ import Convert from "ansi-to-html";
 import { cn } from "../primitives/cn.js";
 import { getDetailScrollMaxHeightClass } from "../primitives/detail-scroll-size.js";
 import { ExpandableLine } from "../primitives/expandable-line.js";
-import { useStickyBottomScroll } from "./useStickyBottomScroll.js";
+import { TimelineDetailScroll } from "./TimelineDetailScroll.js";
 
 export interface TerminalOutputBlockProps {
   output: string;
   commandLine?: string;
   exitCode?: number | null;
-  maxHeightClassName?: string;
   metadataLines?: readonly string[];
+  /**
+   * Whether the producing row is still pending. Drives sticky-bottom for the
+   * output scroll so newly streamed bytes land visible unless the user has
+   * scrolled away.
+   */
+  streaming?: boolean;
 }
 
 interface TerminalScrollContentKeyArgs {
@@ -57,29 +62,22 @@ function terminalScrollContentKey({
 export function TerminalOutputBlock({
   commandLine,
   exitCode = null,
-  maxHeightClassName = "max-h-96",
   metadataLines = [],
   output,
+  streaming = false,
 }: TerminalOutputBlockProps) {
-  const scrollContentKey = terminalScrollContentKey({
-    commandLine,
-    exitCode,
-    metadataLines,
-    output,
-  });
-  const outputScroll = useStickyBottomScroll<HTMLPreElement>({
-    contentKey: scrollContentKey,
-  });
   const renderedOutputHtml = useMemo(
     () => (output.length > 0 ? ANSI_TO_HTML.toHtml(output) : null),
     [output],
   );
 
   const showExitCode = exitCode !== null;
-  const outputMaxHeightClassName =
-    maxHeightClassName === "max-h-96"
-      ? getDetailScrollMaxHeightClass("regular")
-      : maxHeightClassName;
+  const outputContentKey = terminalScrollContentKey({
+    commandLine,
+    exitCode,
+    metadataLines,
+    output,
+  });
 
   return (
     <div className="overflow-hidden rounded-lg border border-border bg-card">
@@ -91,7 +89,7 @@ export function TerminalOutputBlock({
             collapsedStyle={COMMAND_LINE_CLAMP_STYLE}
             expandedClassName={cn(
               "overflow-auto whitespace-pre-wrap break-words",
-              getDetailScrollMaxHeightClass("regular"),
+              getDetailScrollMaxHeightClass("base"),
             )}
           >
             {commandLine}
@@ -103,22 +101,17 @@ export function TerminalOutputBlock({
           </div>
         ))}
         {renderedOutputHtml ? (
-          <pre
-            ref={outputScroll.ref}
-            onPointerDown={outputScroll.onPointerDown}
-            onScroll={outputScroll.onScroll}
-            onTouchMove={outputScroll.onTouchMove}
-            onTouchStart={outputScroll.onTouchStart}
-            onWheel={outputScroll.onWheel}
+          <TimelineDetailScroll
+            size="base"
+            streaming={streaming}
+            contentKey={outputContentKey}
             className={cn(
               commandLine || metadataLines.length > 0 ? "mt-1.5" : null,
-              outputMaxHeightClassName,
-              "overflow-auto whitespace-pre leading-tight text-foreground",
             )}
-            dangerouslySetInnerHTML={{
-              __html: renderedOutputHtml,
-            }}
-          />
+            scrollClassName="whitespace-pre leading-tight text-foreground"
+          >
+            <div dangerouslySetInnerHTML={{ __html: renderedOutputHtml }} />
+          </TimelineDetailScroll>
         ) : null}
         {showExitCode ? (
           <div

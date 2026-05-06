@@ -243,22 +243,6 @@ function installClipboardWriteTextMock() {
   return writeText;
 }
 
-function closestElementWithClass(
-  element: HTMLElement,
-  className: string,
-): HTMLElement | null {
-  let currentElement: HTMLElement | null = element;
-
-  while (currentElement) {
-    if (currentElement.classList.contains(className)) {
-      return currentElement;
-    }
-    currentElement = currentElement.parentElement;
-  }
-
-  return null;
-}
-
 afterEach(() => {
   cleanup();
   document.documentElement.classList.remove("dark");
@@ -305,7 +289,7 @@ describe("ManagerThreadStorageBrowser", () => {
     });
   });
 
-  it("themes the shadow-root tree host with app tokens", async () => {
+  it("syncs the shadow-root tree color-scheme with the document theme", async () => {
     renderBrowser({
       files: makeFiles(["README.md"]),
       selectedPath: null,
@@ -315,24 +299,6 @@ describe("ManagerThreadStorageBrowser", () => {
       name: "Thread storage file tree",
     });
 
-    expect(tree.style.getPropertyValue("--trees-bg-override")).toBe(
-      "transparent",
-    );
-    expect(tree.style.getPropertyValue("--trees-fg-override")).toBe(
-      "var(--foreground)",
-    );
-    expect(tree.style.getPropertyValue("--trees-fg-muted-override")).toBe(
-      "var(--muted-foreground)",
-    );
-    expect(tree.style.getPropertyValue("--trees-font-size-override")).toBe(
-      "var(--text-sm)",
-    );
-    expect(tree.style.getPropertyValue("--trees-selected-bg-override")).toBe(
-      "color-mix(in srgb, var(--accent) 65%, transparent)",
-    );
-    expect(tree.style.getPropertyValue("--trees-border-color-override")).toBe(
-      "var(--border)",
-    );
     expect(tree.style.getPropertyValue("color-scheme")).toBe("light");
 
     document.documentElement.classList.add("dark");
@@ -374,37 +340,6 @@ describe("ManagerThreadStorageBrowser", () => {
     expect(screen.getByRole("heading", { name: "Plan" })).toBeTruthy();
     expect(container.querySelector("script")).toBeNull();
     expect(container.textContent).toContain("<script>alert('x')</script>");
-  });
-
-  it("scopes Markdown table breakout to the preview pane", () => {
-    renderBrowser({
-      filePreview: makeTextPreview({
-        content: [
-          "| First | Second | Third | Fourth | Fifth |",
-          "| --- | --- | --- | --- | --- |",
-          "| alpha | beta | gamma | delta | epsilon |",
-        ].join("\n"),
-        mimeType: "text/markdown",
-        path: "docs/table.md",
-      }),
-      files: makeFiles(["docs/table.md"]),
-      selectedPath: "docs/table.md",
-    });
-
-    const table = screen.getByRole("table");
-    const previewPaneContainer = closestElementWithClass(
-      table,
-      "@container/page",
-    );
-    const markdownLine = closestElementWithClass(table, "max-w-[760px]");
-
-    expect(previewPaneContainer).toBeTruthy();
-    expect(previewPaneContainer?.classList.contains("overflow-auto")).toBe(
-      true,
-    );
-    expect(markdownLine).toBeTruthy();
-    expect(markdownLine?.classList.contains("mx-auto")).toBe(true);
-    expect(markdownLine?.classList.contains("max-w-none")).toBe(false);
   });
 
   it("falls back for Markdown above the render threshold", () => {

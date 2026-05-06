@@ -88,10 +88,6 @@ function toEventProjectionTurnStatus(
   }
 }
 
-function getTurnDurationMs(startedAt: number, completedAt: number): number {
-  return Math.max(0, completedAt - startedAt);
-}
-
 function createProjectionTurn(
   event: TurnStartedEvent,
   meta: EventMeta,
@@ -145,10 +141,6 @@ function updateProjectionTurnCompletion(
   });
   draft.turn.completedAt = meta.createdAt;
   draft.turn.status = toEventProjectionTurnStatus(event.status);
-  draft.turn.durationMs = getTurnDurationMs(
-    draft.turn.startedAt,
-    meta.createdAt,
-  );
 }
 
 function addProjectionTurnMessage(

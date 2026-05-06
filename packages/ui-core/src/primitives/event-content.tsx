@@ -4,21 +4,25 @@ import { cx } from "./utils.js";
 export interface EventCodeBlockProps {
   children: ReactNode;
   className?: string;
-  maxHeightClassName?: string;
   tone?: "default" | "danger";
 }
 
+/**
+ * Code-styling primitive — renders monospace text with the standard event
+ * surface treatment, but does not own scroll behavior. Wrap with
+ * `TimelineDetailScroll` (or another scroll container) when the content can
+ * exceed its available height; this primitive only controls typography,
+ * padding, and tone.
+ */
 export function EventCodeBlock({
   children,
   className,
-  maxHeightClassName,
   tone = "default",
 }: EventCodeBlockProps) {
   return (
     <pre
       className={cx(
-        "overflow-auto whitespace-pre-wrap break-words rounded-md px-2 py-1.5 font-mono text-xs leading-tight",
-        maxHeightClassName,
+        "whitespace-pre-wrap break-words rounded-md px-2 py-1.5 font-mono text-xs leading-tight",
         tone === "danger"
           ? "text-destructive/90"
           : "border border-border/70 bg-background/70 text-muted-foreground",

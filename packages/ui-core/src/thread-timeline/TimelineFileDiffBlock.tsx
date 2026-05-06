@@ -8,6 +8,7 @@ import {
   type FileChangeAction,
 } from "@bb/thread-view";
 import { EventCodeBlock } from "../primitives/event-content.js";
+import { TimelineDetailScroll } from "./TimelineDetailScroll.js";
 import type { ThreadTimelineTheme } from "./types.js";
 
 export interface TimelineFileDiffBlockProps {
@@ -271,8 +272,14 @@ export const TimelineFileDiffBlock = memo(function TimelineFileDiffBlock({
     );
   }
 
+  const diffContentKey = `${renderablePatch ? "p" : "n"}:${renderedChange.plainDiff?.length ?? 0}`;
+
   return (
-    <div className="mt-1 max-h-96 overflow-auto rounded-md border border-border/60 bg-background/40">
+    <TimelineDetailScroll
+      size="base"
+      contentKey={diffContentKey}
+      className="mt-1 rounded-md border border-border/60 bg-background/40"
+    >
       <div className="min-w-fit">
         {renderablePatch && fileDiffOptions ? (
           <div data-timeline-file-diff="" style={DIFF_VIEW_STYLE}>
@@ -288,6 +295,6 @@ export const TimelineFileDiffBlock = memo(function TimelineFileDiffBlock({
           </EventCodeBlock>
         ) : null}
       </div>
-    </div>
+    </TimelineDetailScroll>
   );
 });

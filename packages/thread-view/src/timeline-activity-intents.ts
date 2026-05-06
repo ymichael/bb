@@ -149,9 +149,11 @@ export function getTimelineActivityIntentDetailDedupeKey(
 ): string | null {
   switch (intent.type) {
     case "read":
-      return `file:${intent.path ?? intent.name}`;
+      return `read:${intent.path ?? intent.name}`;
     case "list_files":
+      return `list:${intent.path ?? ""}`;
     case "search":
+      return `search:${intent.query ?? ""}|${intent.path ?? ""}`;
     case "unknown":
       return null;
     default:

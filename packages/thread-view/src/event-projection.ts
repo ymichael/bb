@@ -62,8 +62,6 @@ export interface EventProjectionTurn {
   completedAt: number | null;
   status: EventProjectionTurnStatus;
   summaryCount: number;
-  /** Present for completed turns; non-positive measured durations are clamped to 0. */
-  durationMs?: number;
   terminalMessage?: EventProjectionMessage;
   messages?: EventProjectionMessage[];
 }

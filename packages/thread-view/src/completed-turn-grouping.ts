@@ -7,7 +7,8 @@ import { isTimelineUngroupableMessage } from "./timeline-message-helpers.js";
 
 export interface CompletedTurnSummaryGroup {
   kind: "summary";
-  durationMs: number | null;
+  startedAt: number;
+  completedAt: number | null;
   segmentIndex: number | null;
   sourceMessages: EventProjectionMessage[];
   summaryCount: number;
@@ -79,7 +80,8 @@ function groupCompletedTurnSummaryMessages(
     return [
       {
         kind: "summary",
-        durationMs: turn.durationMs ?? null,
+        startedAt: turn.startedAt,
+        completedAt: turn.completedAt,
         segmentIndex: null,
         sourceMessages: summaryMessages,
         summaryCount: turn.summaryCount,
@@ -99,7 +101,8 @@ function groupCompletedTurnSummaryMessages(
     const sourceMessages = groupedMessages;
     items.push({
       kind: "summary",
-      durationMs: null,
+      startedAt: turn.startedAt,
+      completedAt: null,
       segmentIndex,
       sourceMessages,
       summaryCount: getProjectionSummaryCount(sourceMessages, undefined),

@@ -7,7 +7,6 @@ import {
   getEventTurnId,
 } from "./event-decode.js";
 import {
-  createExecLifecycleContext,
   parseExecLifecycleEvent,
   parseToolCallLifecycleEvent,
 } from "./exec-lifecycle.js";
@@ -203,9 +202,7 @@ function getCompactionTurnFinalization(
 function buildFlatProjectionData(
   args: BuildFlatProjectionDataArgs,
 ): BuildFlatProjectionDataResult {
-  const state = createProjectionState({
-    nowMs: args.options?.nowMs ?? Date.now(),
-  });
+  const state = createProjectionState();
   const includeDebugRawEvents = args.options?.includeDebugRawEvents ?? false;
   const shouldTrackActiveThinking = args.includeActiveThinking;
 
@@ -213,8 +210,6 @@ function buildFlatProjectionData(
   const acceptedClientRequestById =
     buildAcceptedClientRequestById(orderedEvents);
   const clientRequestById = buildClientTurnRequestById(orderedEvents);
-  const execLifecycleContext = createExecLifecycleContext();
-
   for (const { event: decoded, meta } of orderedEvents) {
     const eventType = decoded.type;
     const eventTurnId = getEventTurnId(decoded);
@@ -325,7 +320,6 @@ function buildFlatProjectionData(
       decoded,
       meta,
       eventParentToolCallId,
-      execLifecycleContext,
     );
     if (execEvent) {
       if (execEvent.kind === "begin") {
@@ -352,7 +346,6 @@ function buildFlatProjectionData(
       decoded,
       meta,
       eventParentToolCallId,
-      execLifecycleContext,
     );
     if (toolCallEvent) {
       const toolCallName = getToolCallName(decoded);

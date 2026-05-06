@@ -77,7 +77,6 @@ function commandRow({
     ...baseRow(id, { ...baseOverrides, sourceSeqEnd, sourceSeqStart }),
     kind: "work",
     workKind: "command",
-    inClosedStep: false,
     status,
     callId,
     command,
@@ -85,7 +84,9 @@ function commandRow({
     source: null,
     output: "",
     exitCode: 0,
-    durationMs,
+    completedAt: durationMs === null
+      ? null
+      : (baseOverrides.startedAt ?? 1) + durationMs,
     approvalStatus: null,
     activityIntents,
   };
@@ -98,6 +99,42 @@ function readIntent(path: string): TimelineActivityIntent {
     name: path.split("/").pop() ?? path,
     path,
   };
+}
+
+function listIntent(path: string | null): TimelineActivityIntent {
+  return {
+    type: "list_files",
+    command: path ? `ls ${path}` : "ls",
+    path,
+  };
+}
+
+function searchIntent(
+  query: string,
+  path: string | null,
+): TimelineActivityIntent {
+  return {
+    type: "search",
+    command: `rg ${query}${path ? ` ${path}` : ""}`,
+    query,
+    path,
+  };
+}
+
+function commandRowReadingPaths(paths: readonly string[], seq: number) {
+  return commandRow({
+    activityIntents: paths.map(readIntent),
+    callId: `read-call-${seq}`,
+    id: `read-${seq}`,
+    sourceSeqEnd: seq,
+    sourceSeqStart: seq,
+  });
+}
+
+function explorationIntents(row: ThreadTimelineViewRow): TimelineActivityIntent[] {
+  if (row.kind !== "work") return [];
+  if (row.workKind !== "command" && row.workKind !== "tool") return [];
+  return [...row.activityIntents];
 }
 
 interface FileChangeRowOverrides extends WorkRowOverrides {
@@ -116,7 +153,6 @@ function fileChangeRow({
     ...baseRow(id, baseOverrides),
     kind: "work",
     workKind: "file-change",
-    inClosedStep: false,
     status,
     callId,
     change: {
@@ -161,14 +197,15 @@ function toolRow({
     ...baseRow(id, baseOverrides),
     kind: "work",
     workKind: "tool",
-    inClosedStep: false,
     status,
     callId,
     toolName,
     toolArgs,
     label,
     output,
-    durationMs,
+    completedAt: durationMs === null
+      ? null
+      : (baseOverrides.startedAt ?? 1) + durationMs,
     approvalStatus: null,
     activityIntents,
   };
@@ -190,14 +227,13 @@ function delegationRow({
     ...baseRow(id, baseOverrides),
     kind: "work",
     workKind: "delegation",
-    inClosedStep: false,
     status,
     callId,
     toolName: "spawnAgent",
     subagentType: "reviewer",
     description: "Review timeline grouping",
     output: "",
-    durationMs: 500,
+    completedAt: (baseOverrides.startedAt ?? 1) + 500,
     childRows,
   };
 }
@@ -250,7 +286,7 @@ describe("buildTimelineViewRows", () => {
       id: "command-1",
       callId: "call-1",
       command: "pnpm test",
-      durationMs: 200,
+      completedAt: 201,
       status: "completed",
       sourceSeqStart: 1,
       sourceSeqEnd: 1,
@@ -607,5 +643,130 @@ describe("buildTimelineViewRows", () => {
         command: "pnpm test",
       },
     ]);
+  });
+});
+
+describe("bundle activity intent dedupe", () => {
+  it("collapses consecutive duplicate read intents across bundle children", () => {
+    const rows = buildTimelineViewRows([
+      commandRowReadingPaths(["a/b/c"], 1),
+      commandRowReadingPaths(["a/b/c"], 2),
+      commandRowReadingPaths(["a/b/d"], 3),
+      commandRowReadingPaths(["a/b/c"], 4),
+    ]);
+
+    const bundle = expectBundleSummaryRow(rows[0]);
+    const flatPaths = bundle.children
+      .flatMap(explorationIntents)
+      .map((intent) => (intent.type === "read" ? intent.path : null));
+    expect(flatPaths).toEqual(["a/b/c", "a/b/d", "a/b/c"]);
+  });
+
+  it("collapses consecutive duplicate list_files and search intents too", () => {
+    const rows = buildTimelineViewRows([
+      commandRow({
+        activityIntents: [listIntent("src")],
+        callId: "list-call-1",
+        id: "list-1",
+        sourceSeqEnd: 1,
+        sourceSeqStart: 1,
+      }),
+      commandRow({
+        activityIntents: [listIntent("src")],
+        callId: "list-call-2",
+        id: "list-2",
+        sourceSeqEnd: 2,
+        sourceSeqStart: 2,
+      }),
+      commandRow({
+        activityIntents: [searchIntent("TODO", "src")],
+        callId: "search-call-1",
+        id: "search-1",
+        sourceSeqEnd: 3,
+        sourceSeqStart: 3,
+      }),
+      commandRow({
+        activityIntents: [searchIntent("TODO", "src")],
+        callId: "search-call-2",
+        id: "search-2",
+        sourceSeqEnd: 4,
+        sourceSeqStart: 4,
+      }),
+    ]);
+
+    const bundle = expectBundleSummaryRow(rows[0]);
+    const flatTypes = bundle.children
+      .flatMap(explorationIntents)
+      .map((intent) => intent.type);
+    expect(flatTypes).toEqual(["list_files", "search"]);
+  });
+
+  it("dedupes consecutive duplicates within a single row's intents", () => {
+    const rows = buildTimelineViewRows([
+      commandRow({
+        activityIntents: [
+          readIntent("a"),
+          readIntent("a"),
+          readIntent("b"),
+          readIntent("a"),
+        ],
+        callId: "multi-call-1",
+        id: "multi-1",
+        sourceSeqEnd: 1,
+        sourceSeqStart: 1,
+      }),
+      commandRowReadingPaths(["c"], 2),
+    ]);
+
+    const bundle = expectBundleSummaryRow(rows[0]);
+    const flatPaths = bundle.children
+      .flatMap(explorationIntents)
+      .map((intent) => (intent.type === "read" ? intent.path : null));
+    expect(flatPaths).toEqual(["a", "b", "a", "c"]);
+  });
+
+  it("non-exploration siblings break the dedupe chain inside step-summary children", () => {
+    // closeOpenStepAtBoundary places the read, file-edit, read sequence into a
+    // single step-summary with mixed concepts. A file-edit between two same-
+    // path reads must reset the running dedupe key so the trailing read isn't
+    // suppressed against the leading one.
+    const rows = buildTimelineViewRows([
+      commandRowReadingPaths(["a"], 1),
+      fileChangeRow({ id: "edit-1", sourceSeqStart: 2, sourceSeqEnd: 2 }),
+      commandRowReadingPaths(["a"], 3),
+      assistantRow({ id: "assistant-1", sourceSeqStart: 4 }),
+    ]);
+
+    const step = expectStepSummaryRow(rows[0]);
+    const flatPaths = step.children
+      .flatMap(explorationIntents)
+      .map((intent) => (intent.type === "read" ? intent.path : null));
+    expect(flatPaths).toEqual(["a", "a"]);
+  });
+
+  it("does not modify activityIntents on standalone (non-bundled) rows", () => {
+    // A single same-concept row never bundles, so its activityIntents must
+    // pass through unchanged — within-row dedupe is a render-time concern for
+    // standalone rows, not a property of the row data.
+    const rows = buildTimelineViewRows([
+      commandRow({
+        activityIntents: [readIntent("a"), readIntent("a")],
+        callId: "solo-call",
+        id: "solo",
+        sourceSeqEnd: 1,
+        sourceSeqStart: 1,
+      }),
+    ]);
+
+    expect(rows).toHaveLength(1);
+    const [row] = rows;
+    if (!row || row.kind !== "work" || row.workKind !== "command") {
+      throw new Error("expected standalone command row");
+    }
+    expect(
+      row.activityIntents.map((intent) =>
+        intent.type === "read" ? intent.path : null,
+      ),
+    ).toEqual(["a", "a"]);
   });
 });

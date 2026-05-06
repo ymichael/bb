@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import type { KeyboardEvent, MouseEvent, ReactNode } from "react";
 import {
   assertNever,
@@ -122,25 +122,25 @@ function renderSegment(
 }
 
 /**
- * Ticks the displayed duration locally while the row is still active.
- * Resets to the latest server snapshot whenever `durationMs` changes (each
- * server-driven re-render passes the freshest snapshot in).
+ * Ticks the displayed elapsed time locally while the row is still active.
+ * The truth is `startedAt` (the wall-clock when the work began); the App
+ * derives `now - startedAt` and ticks once per second until the row reaches
+ * a terminal status (at which point a static `completedAt - startedAt` is
+ * shown by the caller instead). Stays empty until the elapsed time crosses
+ * the visible threshold (>1s) to avoid sub-second flicker on row entry.
  */
-function LiveDurationText({ durationMs }: { durationMs: number }) {
-  const [tick, setTick] = useState(durationMs);
-  const baselineMs = useRef(durationMs);
-  const baselineAt = useRef(Date.now());
+function LiveDurationText({ startedAt }: { startedAt: number }) {
+  const [tick, setTick] = useState(() => Date.now() - startedAt);
 
   useEffect(() => {
-    baselineMs.current = durationMs;
-    baselineAt.current = Date.now();
-    setTick(durationMs);
+    setTick(Date.now() - startedAt);
     const interval = window.setInterval(() => {
-      setTick(baselineMs.current + (Date.now() - baselineAt.current));
+      setTick(Date.now() - startedAt);
     }, 1_000);
     return () => window.clearInterval(interval);
-  }, [durationMs]);
+  }, [startedAt]);
 
+  if (tick <= 1_000) return null;
   return <>{durationToCompactString(tick)}</>;
 }
 
@@ -161,10 +161,10 @@ function renderDecoration(
         : baseClass;
       return (
         <span key={index} className={durationClass}>
-          {decoration.live ? (
-            <LiveDurationText durationMs={decoration.durationMs} />
+          {decoration.completedAt !== null ? (
+            durationToCompactString(decoration.completedAt - decoration.startedAt)
           ) : (
-            durationToCompactString(decoration.durationMs)
+            <LiveDurationText startedAt={decoration.startedAt} />
           )}
         </span>
       );

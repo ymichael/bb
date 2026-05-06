@@ -118,7 +118,7 @@ export interface EventProjectionToolCallMessage extends EventProjectionMessageBa
   callId: string;
   parsedIntents: EventProjectionToolParsedIntent[];
   output: string;
-  durationMs: number | null;
+  completedAt: number | null;
   approvalStatus: EventProjectionApprovalLifecycleStatus | null;
   status: Extract<
     EventProjectionMessageStatus,
@@ -135,7 +135,7 @@ export interface EventProjectionCommandMessage extends EventProjectionMessageBas
   source: string | null;
   output: string;
   exitCode: number | null;
-  durationMs: number | null;
+  completedAt: number | null;
   approvalStatus: EventProjectionApprovalLifecycleStatus | null;
   status: Extract<
     EventProjectionMessageStatus,
@@ -147,7 +147,7 @@ export interface EventProjectionWebSearchMessage extends EventProjectionMessageB
   kind: "web-search";
   callId: string;
   queries: string[];
-  durationMs: number | null;
+  completedAt: number | null;
   status: Extract<
     EventProjectionMessageStatus,
     "pending" | "completed" | "interrupted"
@@ -160,7 +160,7 @@ export interface EventProjectionWebFetchMessage extends EventProjectionMessageBa
   url: string;
   prompt: string | null;
   pattern: string | null;
-  durationMs: number | null;
+  completedAt: number | null;
   status: Extract<
     EventProjectionMessageStatus,
     "pending" | "completed" | "interrupted"
@@ -293,7 +293,7 @@ export interface EventProjectionDelegationMessage
   toolName: string;
   callId: string;
   output: string;
-  durationMs: number | null;
+  completedAt: number | null;
   status: Extract<
     EventProjectionMessageStatus,
     "pending" | "completed" | "error" | "interrupted"
@@ -337,11 +337,4 @@ export interface BuildEventProjectionMessagesOptions {
   systemClientRequestVisibility: SystemClientRequestVisibility;
   threadStatus?: Thread["status"];
   threadType?: Thread["type"];
-  /**
-   * Snapshot time used to compute pending-tool elapsed duration. Defaults
-   * to `Date.now()` when omitted. Pass an explicit value in tests for
-   * deterministic snapshots, and at the request boundary on the server so
-   * the projection reflects the request time.
-   */
-  nowMs?: number;
 }
