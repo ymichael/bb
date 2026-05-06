@@ -53,8 +53,6 @@ output.txt
 # codex, claude code
 .claude/settings.local.json
 .codex
-packages/agent-provider-audit/.ladle/fixture-story-data.ts
-packages/agent-provider-audit/build
 
 # turborepo
 .turbo

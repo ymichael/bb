@@ -1,2 +1,2 @@
 * text=auto eol=lf
-packages/agent-provider-audit/fixtures/**/raw-provider-events.json -diff linguist-generated=true
+packages/agent-fixtures/fixtures/**/raw-provider-events.ndjson -diff linguist-generated=true
