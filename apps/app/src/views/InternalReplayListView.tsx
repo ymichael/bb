@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronRight, Info, LoaderCircle, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { DetailCard, DetailRow, Pill } from "@bb/ui-core";
 import type { ReplayRunSpeed } from "@bb/server-contract";
 import { PageShell } from "@bb/ui-core";
@@ -37,7 +37,6 @@ function formatDate(timestamp: number): string {
 }
 
 export function InternalReplayListView() {
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [expandedIds, setExpandedIds] = useState<ReadonlySet<string>>(
     () => new Set(),
@@ -73,8 +72,10 @@ export function InternalReplayListView() {
     mutationFn: ({ captureId, speed }: StartReplayMutationRequest) =>
       api.startReplayRun(captureId, { speed }),
     onSuccess: (result) => {
-      navigate(
+      window.open(
         `/projects/${result.projectId}/threads/${result.replayThreadId}`,
+        "_blank",
+        "noopener",
       );
     },
   });
