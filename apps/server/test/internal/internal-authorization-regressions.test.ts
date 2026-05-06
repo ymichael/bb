@@ -123,7 +123,7 @@ describe("internal authorization regressions", () => {
     }
   });
 
-  it("rejects event batches for threads owned by a different host", async () => {
+  it("rejects event rows for threads owned by a different host", async () => {
     const harness = await createTestAppHarness();
     try {
       const hostA = seedHostSession(harness.deps, { id: "host-events-a" });
@@ -162,9 +162,16 @@ describe("internal authorization regressions", () => {
         }),
       });
 
-      expect(response.status).toBe(403);
-      await expect(readJson(response)).resolves.toMatchObject({
-        code: "invalid_request",
+      expect(response.status).toBe(200);
+      await expect(readJson(response)).resolves.toEqual({
+        acceptedEvents: [],
+        rejectedEvents: [
+          {
+            producerEventId: "hdevt_23456789abcdefghijkm",
+            reason: "thread_not_owned_by_host",
+            threadId: thread.id,
+          },
+        ],
       });
       expect(
         harness.db

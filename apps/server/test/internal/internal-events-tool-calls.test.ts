@@ -94,6 +94,7 @@ describe("internal event and tool-call routes", () => {
             sequence: 2,
           },
         ],
+        rejectedEvents: [],
       });
       expect(
         harness.db

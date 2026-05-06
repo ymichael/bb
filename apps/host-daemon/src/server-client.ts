@@ -468,10 +468,11 @@ export function createServerClient(
       }
 
       const json = await response.json();
+      const parsed = hostDaemonEventBatchResponseSchema.parse(json);
       return {
-        acceptedEvents:
-          hostDaemonEventBatchResponseSchema.parse(json).acceptedEvents,
+        acceptedEvents: parsed.acceptedEvents,
         kind: "accepted",
+        rejectedEvents: parsed.rejectedEvents,
       };
     },
 

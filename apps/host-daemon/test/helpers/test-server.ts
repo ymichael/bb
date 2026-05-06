@@ -255,7 +255,7 @@ export async function createTestServer(
       threadId: event.threadId,
       sequence: nextEventSequence++,
     }));
-    return context.json({ acceptedEvents });
+    return context.json({ acceptedEvents, rejectedEvents: [] });
   });
   app.post("/internal/session/environment-change", async (context) => {
     const payload = hostDaemonEnvironmentChangeRequestSchema.parse(

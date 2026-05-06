@@ -8,7 +8,7 @@ import {
 describe("canonicalizeProducerEventPayload", () => {
   it("uses stable object key ordering without semantic whitespace", () => {
     const left = canonicalizeProducerEventPayload({
-      protocolVersion: 13,
+      protocolVersion: 14,
       threadId: "thr_123",
       event: {
         type: "provider/unhandled",
@@ -31,7 +31,7 @@ describe("canonicalizeProducerEventPayload", () => {
       },
     });
     const right = canonicalizeProducerEventPayload({
-      protocolVersion: 13,
+      protocolVersion: 14,
       threadId: "thr_123",
       event: {
         scope: threadScope(),
@@ -61,7 +61,7 @@ describe("canonicalizeProducerEventPayload", () => {
 
   it("includes protocol version, thread id, event type, and payload semantics", () => {
     const base = canonicalizeProducerEventPayload({
-      protocolVersion: 13,
+      protocolVersion: 14,
       threadId: "thr_123",
       event: {
         type: "turn/started",
@@ -73,7 +73,7 @@ describe("canonicalizeProducerEventPayload", () => {
 
     expect(
       canonicalizeProducerEventPayload({
-        protocolVersion: 14,
+        protocolVersion: 15,
         threadId: "thr_123",
         event: {
           type: "turn/started",
@@ -85,7 +85,7 @@ describe("canonicalizeProducerEventPayload", () => {
     ).not.toBe(base);
     expect(
       canonicalizeProducerEventPayload({
-        protocolVersion: 13,
+        protocolVersion: 14,
         threadId: "thr_456",
         event: {
           type: "turn/started",
@@ -97,7 +97,7 @@ describe("canonicalizeProducerEventPayload", () => {
     ).not.toBe(base);
     expect(
       canonicalizeProducerEventPayload({
-        protocolVersion: 13,
+        protocolVersion: 14,
         threadId: "thr_123",
         event: {
           type: "turn/completed",

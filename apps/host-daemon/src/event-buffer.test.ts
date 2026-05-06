@@ -84,6 +84,7 @@ function acceptedPostResult(
       sequence: index + 1,
     })),
     kind: "accepted",
+    rejectedEvents: [],
   };
 }
 
@@ -367,6 +368,7 @@ describe("event buffer", () => {
             },
           ],
           kind: "accepted",
+          rejectedEvents: [],
         };
       },
     );
@@ -396,6 +398,74 @@ describe("event buffer", () => {
     await buffer.dispose();
   });
 
+  it("deletes rejected rows so stale events do not block valid events", async () => {
+    const dataDir = nextDataDir();
+    const logger = createLogger();
+    const postEvents = vi.fn<CreateEventBufferOptions["postEvents"]>(
+      async (events) => {
+        const rejected = events[0];
+        const accepted = events[1];
+        if (rejected === undefined || accepted === undefined) {
+          throw new Error("missing test events");
+        }
+        return {
+          acceptedEvents: [
+            {
+              producerEventId: accepted.producerEventId,
+              sequence: 1,
+              threadId: accepted.threadId,
+            },
+          ],
+          kind: "accepted",
+          rejectedEvents: [
+            {
+              producerEventId: rejected.producerEventId,
+              reason: "thread_not_owned_by_host",
+              threadId: rejected.threadId,
+            },
+          ],
+        };
+      },
+    );
+    const buffer = createEventBuffer({
+      createProducerEventId: createProducerEventIdGenerator([
+        "hdevt_23456789abcdefghijkm",
+        "hdevt_23456789abcdefghijkn",
+      ]),
+      dataDir,
+      debounceMs: 60_000,
+      logger,
+      maxWaitMs: 60_000,
+      postEvents,
+    });
+
+    buffer.push({
+      threadId: "stale-thread",
+      event: createThreadIdentityEvent("stale-thread"),
+    });
+    buffer.push({
+      threadId: "valid-thread",
+      event: createThreadIdentityEvent("valid-thread"),
+    });
+
+    await buffer.flush();
+
+    expect(buffer.depth()).toBe(0);
+    expect(logger.warn).toHaveBeenCalledWith(
+      {
+        rejectedEvents: [
+          {
+            producerEventId: "hdevt_23456789abcdefghijkm",
+            reason: "thread_not_owned_by_host",
+            threadId: "stale-thread",
+          },
+        ],
+      },
+      "event flush discarded rejected events",
+    );
+    await buffer.dispose();
+  });
+
   it("fails closed after repeated zero-ack flush responses", async () => {
     const dataDir = nextDataDir();
     const logger = createLogger();
@@ -403,6 +473,7 @@ describe("event buffer", () => {
       async () => ({
         acceptedEvents: [],
         kind: "accepted",
+        rejectedEvents: [],
       }),
     );
     const buffer = createEventBuffer({
@@ -456,6 +527,7 @@ describe("event buffer", () => {
           return {
             acceptedEvents: [],
             kind: "accepted",
+            rejectedEvents: [],
           };
         }
         return acceptedPostResult(events);

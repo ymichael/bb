@@ -18,8 +18,10 @@ import {
   HOST_DAEMON_PROTOCOL_VERSION,
   hostDaemonEventBatchRequestSchema,
   typedRoutes,
+  type HostDaemonEventBatchResponse,
   type HostDaemonEventEnvelope,
   type HostDaemonInternalSchema,
+  type HostDaemonRejectedEvent,
 } from "@bb/host-daemon-contract";
 import {
   canonicalizeProducerEventPayload,
@@ -60,13 +62,24 @@ interface ToStoredEventArgs {
   environmentId: string;
 }
 
-interface ValidateAndResolveCanonicalEventBatchEnvironmentsArgs {
+interface ResolvePostableEventBatchEntriesArgs {
   hostId: string;
   events: HostDaemonEventEnvelope[];
 }
 
-interface ValidateAndResolveCanonicalEventBatchEnvironmentsResult {
-  canonicalEnvironmentIds: string[];
+interface PostableEventBatchEntry {
+  envelope: HostDaemonEventEnvelope;
+  environmentId: string;
+}
+
+interface ResolvePostableEventBatchEntriesResult {
+  entries: PostableEventBatchEntry[];
+  rejectedEvents: HostDaemonEventBatchResponse["rejectedEvents"];
+}
+
+interface RejectedDaemonEventSummary {
+  count: number;
+  threadIds: string[];
 }
 
 interface ResolveEventsToApplyArgs {
@@ -661,14 +674,24 @@ function resolveActivePruneCandidates(
   );
 }
 
-function validateAndResolveCanonicalEventBatchEnvironments(
+function summarizeRejectedDaemonEvents(
+  rejectedEvents: readonly HostDaemonRejectedEvent[],
+): RejectedDaemonEventSummary {
+  return {
+    count: rejectedEvents.length,
+    threadIds: [...new Set(rejectedEvents.map((event) => event.threadId))],
+  };
+}
+
+function resolvePostableEventBatchEntries(
   deps: Pick<AppDeps, "db">,
-  args: ValidateAndResolveCanonicalEventBatchEnvironmentsArgs,
-): ValidateAndResolveCanonicalEventBatchEnvironmentsResult {
+  args: ResolvePostableEventBatchEntriesArgs,
+): ResolvePostableEventBatchEntriesResult {
   const threadIds = [...new Set(args.events.map((entry) => entry.threadId))];
   if (threadIds.length === 0) {
     return {
-      canonicalEnvironmentIds: [],
+      entries: [],
+      rejectedEvents: [],
     };
   }
 
@@ -676,13 +699,6 @@ function validateAndResolveCanonicalEventBatchEnvironments(
     hostId: args.hostId,
     threadIds,
   });
-  if (ownedThreads.length !== threadIds.length) {
-    throw new ApiError(
-      403,
-      "invalid_request",
-      "Event batch contains threads that do not belong to the session host",
-    );
-  }
 
   const canonicalEnvironmentIdByThreadId = new Map<string, string>();
   for (const ownedThread of ownedThreads) {
@@ -692,19 +708,29 @@ function validateAndResolveCanonicalEventBatchEnvironments(
     );
   }
 
-  const canonicalEnvironmentIds: string[] = [];
+  const entries: PostableEventBatchEntry[] = [];
+  const rejectedEvents: HostDaemonRejectedEvent[] = [];
   for (const entry of args.events) {
     const canonicalEnvironmentId = canonicalEnvironmentIdByThreadId.get(
       entry.threadId,
     );
     if (!canonicalEnvironmentId) {
-      throw new Error("Validated thread is missing a canonical environment");
+      rejectedEvents.push({
+        producerEventId: entry.producerEventId,
+        reason: "thread_not_owned_by_host",
+        threadId: entry.threadId,
+      });
+      continue;
     }
-    canonicalEnvironmentIds.push(canonicalEnvironmentId);
+    entries.push({
+      envelope: entry,
+      environmentId: canonicalEnvironmentId,
+    });
   }
 
   return {
-    canonicalEnvironmentIds,
+    entries,
+    rejectedEvents,
   };
 }
 
@@ -725,30 +751,30 @@ export function registerInternalEventRoutes(app: Hono, deps: AppDeps): void {
             hostId: daemon.hostId,
             sessionId: payload.sessionId,
           });
-          const { canonicalEnvironmentIds } =
-            validateAndResolveCanonicalEventBatchEnvironments(deps, {
+          const { entries, rejectedEvents } = resolvePostableEventBatchEntries(
+            deps,
+            {
               hostId: session.hostId,
               events: payload.events,
-            });
-          if (payload.events.length > 0) {
-            void markSandboxActivity(deps, {
-              hostId: session.hostId,
-              source: "events",
-            });
+            },
+          );
+          if (rejectedEvents.length > 0) {
+            deps.logger.warn(
+              {
+                hostId: session.hostId,
+                rejectedEvents: summarizeRejectedDaemonEvents(rejectedEvents),
+                sessionId: session.id,
+              },
+              "Rejected daemon events for threads outside the session host",
+            );
           }
-
-          const eventInputs = payload.events.map((entry, index) => {
-            const environmentId = canonicalEnvironmentIds[index];
-            if (!environmentId) {
-              throw new Error(
-                "Missing canonical environment for validated event",
-              );
-            }
+          const eventInputs = entries.map((entry) => {
             return toStoredEvent({
-              envelope: entry,
-              environmentId,
+              envelope: entry.envelope,
+              environmentId: entry.environmentId,
             });
           });
+          const postableEvents = entries.map((entry) => entry.envelope);
           let appendResult: AppendDaemonEventsResult;
           try {
             appendResult = appendDaemonEventInputsAtomically(deps, {
@@ -774,6 +800,12 @@ export function registerInternalEventRoutes(app: Hono, deps: AppDeps): void {
             }
             throw error;
           }
+          if (appendResult.acceptedEvents.length > 0) {
+            void markSandboxActivity(deps, {
+              hostId: session.hostId,
+              source: "events",
+            });
+          }
 
           notifyInsertedEventThreads(deps, {
             eventInputs,
@@ -784,13 +816,13 @@ export function registerInternalEventRoutes(app: Hono, deps: AppDeps): void {
             deps,
             resolveEventsToApply({
               db: deps.db,
-              events: payload.events,
+              events: postableEvents,
               insertedEventIndexes: appendResult.insertedInputIndexes,
             }),
           );
           for (const candidate of resolveActivePruneCandidates({
             acceptedEvents: appendResult.acceptedEvents,
-            events: payload.events,
+            events: postableEvents,
             insertedEventIndexes: appendResult.insertedInputIndexes,
           })) {
             maybePruneActiveThreadEventHistory(deps, candidate);
@@ -800,6 +832,7 @@ export function registerInternalEventRoutes(app: Hono, deps: AppDeps): void {
             followUps: eventEffectResult.followUps,
             response: context.json({
               acceptedEvents: appendResult.acceptedEvents,
+              rejectedEvents,
             }),
           };
         },

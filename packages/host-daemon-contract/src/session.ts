@@ -126,6 +126,24 @@ export type HostDaemonEventBatchRequest = z.infer<
   typeof hostDaemonEventBatchRequestSchema
 >;
 
+export const hostDaemonEventRejectionReasonSchema = z.enum([
+  "thread_not_owned_by_host",
+]);
+export type HostDaemonEventRejectionReason = z.infer<
+  typeof hostDaemonEventRejectionReasonSchema
+>;
+
+export const hostDaemonRejectedEventSchema = z
+  .object({
+    producerEventId: hostDaemonProducerEventIdSchema,
+    threadId: z.string().min(1),
+    reason: hostDaemonEventRejectionReasonSchema,
+  })
+  .strict();
+export type HostDaemonRejectedEvent = z.infer<
+  typeof hostDaemonRejectedEventSchema
+>;
+
 export const hostDaemonEventBatchResponseSchema = z
   .object({
     acceptedEvents: z.array(
@@ -137,6 +155,7 @@ export const hostDaemonEventBatchResponseSchema = z
         })
         .strict(),
     ),
+    rejectedEvents: z.array(hostDaemonRejectedEventSchema),
   })
   .strict();
 export type HostDaemonEventBatchResponse = z.infer<

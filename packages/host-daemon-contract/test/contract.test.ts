@@ -983,6 +983,13 @@ describe("host-daemon session schemas", () => {
             sequence: 42,
           },
         ],
+        rejectedEvents: [
+          {
+            producerEventId: "hdevt_23456789abcdefghijkn",
+            reason: "thread_not_owned_by_host",
+            threadId: "thr_stale",
+          },
+        ],
       }),
     ).toEqual({
       acceptedEvents: [
@@ -992,7 +999,33 @@ describe("host-daemon session schemas", () => {
           sequence: 42,
         },
       ],
+      rejectedEvents: [
+        {
+          producerEventId: "hdevt_23456789abcdefghijkn",
+          reason: "thread_not_owned_by_host",
+          threadId: "thr_stale",
+        },
+      ],
     });
+
+    expect(() =>
+      hostDaemonEventBatchResponseSchema.parse({
+        acceptedEvents: [],
+      }),
+    ).toThrow();
+
+    expect(() =>
+      hostDaemonEventBatchResponseSchema.parse({
+        acceptedEvents: [],
+        rejectedEvents: [
+          {
+            producerEventId: "hdevt_23456789abcdefghijkn",
+            reason: "unknown_reason",
+            threadId: "thr_stale",
+          },
+        ],
+      }),
+    ).toThrow();
 
     expect(() =>
       hostDaemonEventBatchRequestSchema.parse({
@@ -1022,6 +1055,7 @@ describe("host-daemon session schemas", () => {
             sequence: 42,
           },
         ],
+        rejectedEvents: [],
         threadHighWaterMarks: {
           thr_123: 42,
         },

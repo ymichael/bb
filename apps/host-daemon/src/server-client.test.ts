@@ -122,6 +122,7 @@ describe("createServerClient", () => {
               threadId: "thr_123",
             },
           ],
+          rejectedEvents: [],
         }),
         {
           headers: {
@@ -161,6 +162,7 @@ describe("createServerClient", () => {
         },
       ],
       kind: "accepted",
+      rejectedEvents: [],
     });
   });
 

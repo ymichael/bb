@@ -1,10 +1,11 @@
 import { eq } from "drizzle-orm";
-import { events } from "@bb/db";
+import { events, getHost, getThread, upsertHost } from "@bb/db";
 import { threadScope } from "@bb/domain";
 import {
   hostDaemonEventBatchResponseSchema,
   type HostDaemonEventEnvelope,
 } from "@bb/host-daemon-contract";
+import type { SandboxHost } from "@bb/sandbox-host";
 import { describe, expect, it, vi } from "vitest";
 import { internalAuthHeaders } from "../helpers/commands.js";
 import { readJson } from "../helpers/json.js";
@@ -28,6 +29,10 @@ interface PostEventBatchArgs {
   events: HostDaemonEventEnvelope[];
 }
 
+interface MockSandboxHost extends SandboxHost {
+  extendTimeout: ReturnType<typeof vi.fn>;
+}
+
 async function postEventBatch(args: PostEventBatchArgs): Promise<Response> {
   return args.harness.app.request("/internal/session/events", {
     method: "POST",
@@ -37,6 +42,20 @@ async function postEventBatch(args: PostEventBatchArgs): Promise<Response> {
       events: args.events,
     }),
   });
+}
+
+function createMockSandboxHost(
+  hostId: string,
+  externalId: string,
+): MockSandboxHost {
+  return {
+    destroy: vi.fn().mockResolvedValue(undefined),
+    extendTimeout: vi.fn().mockResolvedValue(undefined),
+    externalId,
+    hostId,
+    resume: vi.fn().mockResolvedValue(undefined),
+    suspend: vi.fn().mockResolvedValue(undefined),
+  };
 }
 
 function setupEventRoute(args: SeedEventRouteArgs = {}) {
@@ -121,6 +140,7 @@ describe("internal event append ownership", () => {
             sequence: 5,
           },
         ],
+        rejectedEvents: [],
       });
       expect(
         harness.db
@@ -275,6 +295,7 @@ describe("internal event append ownership", () => {
             sequence: 2,
           },
         ],
+        rejectedEvents: [],
       });
       expect(
         harness.db
@@ -349,6 +370,7 @@ describe("internal event append ownership", () => {
             sequence: 1,
           },
         ],
+        rejectedEvents: [],
       });
       expect(
         harness.db
@@ -424,6 +446,282 @@ describe("internal event append ownership", () => {
       ).toHaveLength(1);
     } finally {
       harness.deps.logger.error = originalLoggerError;
+      await harness.cleanup();
+    }
+  });
+
+  it("rejects unowned thread events without blocking owned events in the same batch", async () => {
+    const { harness, session, thread } = await setupEventRoute();
+    try {
+      const response = await postEventBatch({
+        harness,
+        sessionId: session.id,
+        events: [
+          {
+            producerEventId: "hdevt_23456789abcdefghijkm",
+            threadId: "thr_missing",
+            event: {
+              type: "system/error",
+              threadId: "thr_missing",
+              scope: threadScope(),
+              message: "stale daemon event",
+            },
+          },
+          {
+            producerEventId: "hdevt_23456789abcdefghijkn",
+            threadId: thread.id,
+            event: {
+              type: "system/error",
+              threadId: thread.id,
+              scope: threadScope(),
+              message: "owned daemon event",
+            },
+          },
+        ],
+      });
+
+      expect(response.status).toBe(200);
+      await expect(readJson(response)).resolves.toEqual({
+        acceptedEvents: [
+          {
+            producerEventId: "hdevt_23456789abcdefghijkn",
+            threadId: thread.id,
+            sequence: 1,
+          },
+        ],
+        rejectedEvents: [
+          {
+            producerEventId: "hdevt_23456789abcdefghijkm",
+            reason: "thread_not_owned_by_host",
+            threadId: "thr_missing",
+          },
+        ],
+      });
+      expect(
+        harness.db
+          .select()
+          .from(events)
+          .where(eq(events.threadId, thread.id))
+          .all(),
+      ).toHaveLength(1);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("does not mark sandbox activity for all-rejected event batches", async () => {
+    const { harness, host, session } = await setupEventRoute({
+      hostType: "ephemeral",
+    });
+    const sandboxHost = createMockSandboxHost(
+      host.id,
+      "sandbox-events-all-rejected",
+    );
+    try {
+      upsertHost(harness.db, harness.hub, {
+        externalId: sandboxHost.externalId,
+        id: host.id,
+        name: host.name,
+        provider: "e2b",
+        type: "ephemeral",
+      });
+      harness.deps.sandboxRegistry.set(host.id, sandboxHost);
+
+      const response = await postEventBatch({
+        harness,
+        sessionId: session.id,
+        events: [
+          {
+            producerEventId: "hdevt_23456789abcdefghijkm",
+            threadId: "thr_missing",
+            event: {
+              type: "system/error",
+              threadId: "thr_missing",
+              scope: threadScope(),
+              message: "stale daemon event",
+            },
+          },
+        ],
+      });
+
+      expect(response.status).toBe(200);
+      await expect(readJson(response)).resolves.toEqual({
+        acceptedEvents: [],
+        rejectedEvents: [
+          {
+            producerEventId: "hdevt_23456789abcdefghijkm",
+            reason: "thread_not_owned_by_host",
+            threadId: "thr_missing",
+          },
+        ],
+      });
+      expect(harness.db.select().from(events).all()).toHaveLength(0);
+      expect(getHost(harness.db, host.id)?.lastActivityAt).toBeNull();
+      expect(sandboxHost.extendTimeout).not.toHaveBeenCalled();
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("marks sandbox activity for mixed event batches with accepted rows", async () => {
+    const { harness, host, session, thread } = await setupEventRoute({
+      hostType: "ephemeral",
+    });
+    const sandboxHost = createMockSandboxHost(
+      host.id,
+      "sandbox-events-mixed",
+    );
+    try {
+      upsertHost(harness.db, harness.hub, {
+        externalId: sandboxHost.externalId,
+        id: host.id,
+        name: host.name,
+        provider: "e2b",
+        type: "ephemeral",
+      });
+      harness.deps.sandboxRegistry.set(host.id, sandboxHost);
+
+      const response = await postEventBatch({
+        harness,
+        sessionId: session.id,
+        events: [
+          {
+            producerEventId: "hdevt_23456789abcdefghijkm",
+            threadId: "thr_missing",
+            event: {
+              type: "system/error",
+              threadId: "thr_missing",
+              scope: threadScope(),
+              message: "stale daemon event",
+            },
+          },
+          {
+            producerEventId: "hdevt_23456789abcdefghijkn",
+            threadId: thread.id,
+            event: {
+              type: "system/error",
+              threadId: thread.id,
+              scope: threadScope(),
+              message: "owned daemon event",
+            },
+          },
+        ],
+      });
+
+      expect(response.status).toBe(200);
+      await expect(readJson(response)).resolves.toEqual({
+        acceptedEvents: [
+          {
+            producerEventId: "hdevt_23456789abcdefghijkn",
+            threadId: thread.id,
+            sequence: 1,
+          },
+        ],
+        rejectedEvents: [
+          {
+            producerEventId: "hdevt_23456789abcdefghijkm",
+            reason: "thread_not_owned_by_host",
+            threadId: "thr_missing",
+          },
+        ],
+      });
+      expect(getHost(harness.db, host.id)?.lastActivityAt).toEqual(
+        expect.any(Number),
+      );
+      await vi.waitFor(() => {
+        expect(sandboxHost.extendTimeout).toHaveBeenCalledTimes(1);
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("keeps owned event indexes aligned around an unowned middle row", async () => {
+    const { environment, harness, project, session, thread } =
+      await setupEventRoute();
+    const secondThread = seedThread(harness.deps, {
+      environmentId: environment.id,
+      projectId: project.id,
+      status: "active",
+      title: "Second Thread",
+    });
+    try {
+      const response = await postEventBatch({
+        harness,
+        sessionId: session.id,
+        events: [
+          {
+            producerEventId: "hdevt_23456789abcdefghijkm",
+            threadId: thread.id,
+            event: {
+              type: "thread/name/updated",
+              threadId: thread.id,
+              providerThreadId: "provider-owned-first",
+              scope: threadScope(),
+              threadName: "First owned rename",
+            },
+          },
+          {
+            producerEventId: "hdevt_23456789abcdefghijkn",
+            threadId: "thr_missing",
+            event: {
+              type: "thread/name/updated",
+              threadId: "thr_missing",
+              providerThreadId: "provider-unowned-middle",
+              scope: threadScope(),
+              threadName: "Rejected rename",
+            },
+          },
+          {
+            producerEventId: "hdevt_23456789abcdefghijkp",
+            threadId: secondThread.id,
+            event: {
+              type: "thread/name/updated",
+              threadId: secondThread.id,
+              providerThreadId: "provider-owned-second",
+              scope: threadScope(),
+              threadName: "Second owned rename",
+            },
+          },
+        ],
+      });
+
+      expect(response.status).toBe(200);
+      await expect(readJson(response)).resolves.toEqual({
+        acceptedEvents: [
+          {
+            producerEventId: "hdevt_23456789abcdefghijkm",
+            threadId: thread.id,
+            sequence: 1,
+          },
+          {
+            producerEventId: "hdevt_23456789abcdefghijkp",
+            threadId: secondThread.id,
+            sequence: 1,
+          },
+        ],
+        rejectedEvents: [
+          {
+            producerEventId: "hdevt_23456789abcdefghijkn",
+            reason: "thread_not_owned_by_host",
+            threadId: "thr_missing",
+          },
+        ],
+      });
+      expect(getThread(harness.db, thread.id)?.title).toBe(
+        "First owned rename",
+      );
+      expect(getThread(harness.db, secondThread.id)?.title).toBe(
+        "Second owned rename",
+      );
+      expect(
+        harness.db
+          .select()
+          .from(events)
+          .where(eq(events.threadId, "thr_missing"))
+          .all(),
+      ).toHaveLength(0);
+    } finally {
       await harness.cleanup();
     }
   });

@@ -11,6 +11,7 @@ import {
   HOST_DAEMON_PROTOCOL_VERSION,
   type HostDaemonEventBatchResponse,
   type HostDaemonEventEnvelope,
+  type HostDaemonRejectedEvent,
 } from "@bb/host-daemon-contract";
 import { createHash, randomBytes } from "node:crypto";
 import { mkdirSync } from "node:fs";
@@ -62,9 +63,15 @@ interface SnapshotAttemptResult {
   producerEventIds: HostDaemonProducerEventId[];
 }
 
-interface AcknowledgePostedBatchArgs {
+interface SettlePostedBatchArgs {
   acceptedEvents: HostDaemonEventBatchResponse["acceptedEvents"];
+  rejectedEvents: HostDaemonEventBatchResponse["rejectedEvents"];
   sentProducerEventIds: readonly HostDaemonProducerEventId[];
+}
+
+interface SettlePostedBatchResult {
+  deletedCount: number;
+  rejectedEvents: HostDaemonRejectedEvent[];
 }
 
 interface CreateBufferedEventRecordArgs {
@@ -81,6 +88,12 @@ interface BufferedEventLogSummary {
   threadId: string;
 }
 
+interface RejectedEventLogSummary {
+  producerEventId: HostDaemonProducerEventId;
+  reason: HostDaemonRejectedEvent["reason"];
+  threadId: string;
+}
+
 export interface BufferedEventInput {
   threadId: string;
   event: ThreadEvent;
@@ -94,6 +107,7 @@ export interface BufferedEvent extends HostDaemonEventEnvelope {
 
 export interface EventPostAcceptedResult {
   acceptedEvents: HostDaemonEventBatchResponse["acceptedEvents"];
+  rejectedEvents: HostDaemonEventBatchResponse["rejectedEvents"];
   kind: "accepted";
 }
 
@@ -435,6 +449,16 @@ function summarizeBufferedEvents(
   }));
 }
 
+function summarizeRejectedEvents(
+  events: readonly HostDaemonRejectedEvent[],
+): RejectedEventLogSummary[] {
+  return events.map((event) => ({
+    producerEventId: event.producerEventId,
+    reason: event.reason,
+    threadId: event.threadId,
+  }));
+}
+
 export function createEventBuffer(
   options: CreateEventBufferOptions,
 ): EventBuffer {
@@ -580,29 +604,46 @@ export function createEventBuffer(
     },
   );
 
-  const acknowledgePostedBatchTransaction = db.transaction(
-    (args: AcknowledgePostedBatchArgs): number => {
+  const settlePostedBatchTransaction = db.transaction(
+    (args: SettlePostedBatchArgs): SettlePostedBatchResult => {
       const sentProducerEventIds = new Set(args.sentProducerEventIds);
-      const acceptedProducerEventIds = new Set<HostDaemonProducerEventId>();
+      const settledProducerEventIds = new Set<HostDaemonProducerEventId>();
       for (const event of args.acceptedEvents) {
         if (!sentProducerEventIds.has(event.producerEventId)) {
           throw new Error(
             `Event spool received acknowledgement for unsent producerEventId: ${event.producerEventId}`,
           );
         }
-        acceptedProducerEventIds.add(event.producerEventId);
+        settledProducerEventIds.add(event.producerEventId);
+      }
+
+      for (const event of args.rejectedEvents) {
+        if (!sentProducerEventIds.has(event.producerEventId)) {
+          throw new Error(
+            `Event spool received rejection for unsent producerEventId: ${event.producerEventId}`,
+          );
+        }
+        if (settledProducerEventIds.has(event.producerEventId)) {
+          throw new Error(
+            `Event spool received conflicting settlement for producerEventId: ${event.producerEventId}`,
+          );
+        }
+        settledProducerEventIds.add(event.producerEventId);
       }
 
       let deletedCount = 0;
-      for (const producerEventId of acceptedProducerEventIds) {
+      for (const producerEventId of settledProducerEventIds) {
         deletedCount += deleteByProducerEventId.run(producerEventId).changes;
       }
-      if (deletedCount !== acceptedProducerEventIds.size) {
+      if (deletedCount !== settledProducerEventIds.size) {
         throw new Error(
-          "Event spool acknowledgement referenced an already-deleted event",
+          "Event spool settlement referenced an already-deleted event",
         );
       }
-      return deletedCount;
+      return {
+        deletedCount,
+        rejectedEvents: [...args.rejectedEvents],
+      };
     },
   );
 
@@ -672,11 +713,22 @@ export function createEventBuffer(
             scheduleFlush();
             return false;
           }
-          const acknowledgedCount = acknowledgePostedBatchTransaction({
+          const settledResult = settlePostedBatchTransaction({
             acceptedEvents: postResult.acceptedEvents,
+            rejectedEvents: postResult.rejectedEvents,
             sentProducerEventIds: snapshot.producerEventIds,
           });
-          if (acknowledgedCount === 0) {
+          if (settledResult.rejectedEvents.length > 0) {
+            options.logger.warn(
+              {
+                rejectedEvents: summarizeRejectedEvents(
+                  settledResult.rejectedEvents,
+                ),
+              },
+              "event flush discarded rejected events",
+            );
+          }
+          if (settledResult.deletedCount === 0) {
             consecutiveNoProgressFlushes++;
             const logContext = {
               bufferDepth: snapshot.events.length,
