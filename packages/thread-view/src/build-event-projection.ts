@@ -203,7 +203,9 @@ function getCompactionTurnFinalization(
 function buildFlatProjectionData(
   args: BuildFlatProjectionDataArgs,
 ): BuildFlatProjectionDataResult {
-  const state = createProjectionState();
+  const state = createProjectionState({
+    nowMs: args.options?.nowMs ?? Date.now(),
+  });
   const includeDebugRawEvents = args.options?.includeDebugRawEvents ?? false;
   const shouldTrackActiveThinking = args.includeActiveThinking;
 

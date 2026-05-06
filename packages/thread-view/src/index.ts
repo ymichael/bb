@@ -6,6 +6,7 @@ export {
   buildTimelineActivityIntentTitles,
   buildTimelineRowTitle,
   findActiveLatestBundleId,
+  findTimelineFrontierRow,
   formatTimelineDecorationText,
   renderTitlePlain,
 } from "./timeline-row-title.js";
@@ -39,6 +40,7 @@ export {
   isTimelineStepBoundary,
 } from "./timeline-view.js";
 export type {
+  BuildTimelineViewRowsOptions,
   ThreadTimelineViewRow,
   TimelineBundleSummaryRow,
   TimelineStepSummaryRow,

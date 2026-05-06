@@ -990,16 +990,84 @@ describe("timeline CLI rendering snapshots", () => {
         { kind: "work"; workKind: "delegation" }
       > => row.kind === "work" && row.workKind === "delegation",
     );
-    const nestedTurn = delegation?.childRows.find(
-      (row): row is Extract<TimelineRow, { kind: "turn" }> =>
-        row.kind === "turn",
-    );
 
     expect(rootTurn).toBeDefined();
     expect(delegation).toBeDefined();
-    expect(nestedTurn).toBeDefined();
-    expect(nestedTurn?.id).toBe(`${delegation?.id}:child:thread-1:turn-1:turn`);
-    expect(nestedTurn?.id).not.toBe(rootTurn?.id);
+    // Delegation children render flat — no synthetic turn wrapper. Each
+    // child row carries the delegation's scoped id prefix so it does not
+    // collide with rows from the root turn.
+    expect(
+      delegation?.childRows.some((row) => row.kind === "turn"),
+    ).toBe(false);
+    expect(delegation?.childRows.length ?? 0).toBeGreaterThan(0);
+    for (const childRow of delegation?.childRows ?? []) {
+      expect(childRow.id.startsWith(`${delegation?.id}:child:`)).toBe(true);
+    }
+  });
+
+  it("renders pending delegation children as flat rows even with mixed statuses", () => {
+    // Regression: a pending delegation whose subagent stream contains a mix
+    // of pending, errored, and completed messages must NOT synthesize a
+    // turn wrapper around its children. Previously a synthetic scoped turn
+    // aggregated child statuses (error > pending) and rendered as
+    // "Worked for X" while the subagent was still running.
+    const event = createTimelineEventFactory({
+      providerThreadId: "root-provider",
+      threadId: "thread-1",
+      turnId: "turn-1",
+    });
+    const timeline = renderActiveTimeline([
+      event.turnStarted(),
+      event.toolCallStarted({
+        itemId: "delegation-1",
+        tool: "spawnAgent",
+        arguments: {
+          prompt: "Investigate the timeline",
+          receiverThreadIds: ["child-provider"],
+        },
+      }),
+      event.commandCompleted({
+        providerThreadId: "child-provider",
+        itemId: "child-command-completed",
+        command: "git status",
+        aggregatedOutput: "clean",
+      }),
+      event.commandCompleted({
+        providerThreadId: "child-provider",
+        itemId: "child-command-errored",
+        command: "git diff main..HEAD",
+        aggregatedOutput: "",
+        status: "failed",
+      }),
+      event.commandStarted({
+        providerThreadId: "child-provider",
+        itemId: "child-command-pending",
+        command: "git log --oneline",
+      }),
+    ]);
+
+    const allRows = flattenTimelineRows(timeline.rows);
+    const delegation = allRows.find(
+      (
+        row,
+      ): row is Extract<
+        TimelineRow,
+        { kind: "work"; workKind: "delegation" }
+      > => row.kind === "work" && row.workKind === "delegation",
+    );
+
+    expect(delegation).toBeDefined();
+    expect(delegation?.status).toBe("pending");
+    expect(
+      delegation?.childRows.some((row) => row.kind === "turn"),
+    ).toBe(false);
+    expect(delegation?.childRows.length ?? 0).toBeGreaterThanOrEqual(3);
+    // A regression that re-introduces a synthetic turn wrapper would
+    // produce a "Worked for X" or "Working for X" label inside the
+    // delegation block. Pin the rendered text so the contract is checked
+    // end-to-end, not just via row-kind structure.
+    expect(timeline.text).not.toContain("Worked for");
+    expect(timeline.text).not.toContain("Working for");
   });
 
   it("counts lists separately while de-duping explored files", () => {

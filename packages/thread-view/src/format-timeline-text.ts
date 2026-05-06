@@ -113,14 +113,23 @@ function rowHeader(label: string, context: TimelineTextFormatContext): string {
   return dim(`── ${label}`, context.color);
 }
 
+// Active-latest bundle treatment fires only for the trailing bundle of a
+// "feed-like" container — top-level rows and delegation childRows. Turn
+// children and bundle/step children are excluded: a turn's children are an
+// archived completed-turn body, and bundle children are a single grouped
+// concept where there is no separate "frontier" to mark. `nestedRows`
+// drives the active-latest lookup for feed-like containers; pass `null`
+// for non-feed scopes to suppress active-latest treatment.
 function nestedContext(
   context: TimelineTextFormatContext,
-  nestedRows: readonly ThreadTimelineViewRow[],
+  nestedRows: readonly ThreadTimelineViewRow[] | null,
 ): TimelineTextFormatContext {
   return {
     ...context,
     depth: context.depth + 1,
-    activeLatestBundleId: findActiveLatestBundleId(nestedRows),
+    activeLatestBundleId: nestedRows
+      ? findActiveLatestBundleId(nestedRows)
+      : null,
   };
 }
 
@@ -310,7 +319,10 @@ function formatWorkBody(
       if (row.childRows.length > 0) {
         lines.push(
           indentBlock(
-            formatRows(row.childRows, nestedContext(context, row.childRows)),
+            formatRows(
+              row.childRows,
+              nestedContext(context, row.childRows),
+            ),
             "  ",
           ),
         );
@@ -368,9 +380,7 @@ function formatWorkSummaryDetails(
 ): string[] {
   const lines: string[] = [];
   const dedupedDetailKeys = new Set<string>();
-  // Summary children are leaves (no nested bundles), so no active-latest
-  // bundle exists in this scope.
-  const childContext = nestedContext(context, []);
+  const childContext = nestedContext(context, null);
   for (const child of row.children) {
     if (
       (child.workKind === "command" || child.workKind === "tool") &&
@@ -472,7 +482,7 @@ function formatRow(
       return [
         rowHeader(label, context),
         indentBlock(
-          formatRows(row.children, nestedContext(context, row.children)),
+          formatRows(row.children, nestedContext(context, null)),
           "  ",
         ),
       ].join("\n");

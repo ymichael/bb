@@ -55,6 +55,12 @@ interface ThreadTimelineFromEventsBaseOptions {
   includeProviderUnhandledOperations: boolean;
   systemClientRequestVisibility: SystemClientRequestVisibility;
   threadStatus: Thread["status"];
+  /**
+   * Snapshot time forwarded to the projection so pending tools report
+   * `nowMs - startedAt` for elapsed duration. Defaults to `Date.now()`
+   * when omitted.
+   */
+  nowMs?: number;
 }
 
 export interface StandardThreadTimelineFromEventsOptions extends ThreadTimelineFromEventsBaseOptions {
@@ -94,6 +100,8 @@ export interface BuildThreadTimelineTurnDetailsFromEventsOptions extends ThreadT
   systemClientRequestVisibility: SystemClientRequestVisibility;
   threadStatus: Thread["status"];
   viewMode: ThreadTimelineViewMode;
+  /** Snapshot time for live-duration computation; see {@link ThreadTimelineFromEventsBaseOptions.nowMs}. */
+  nowMs?: number;
 }
 
 export interface BuildThreadTimelineTurnDetailsFromEventsArgs {
@@ -836,6 +844,7 @@ export function buildThreadTimelineFromEvents(
       args.options.viewMode === "manager-conversation"
         ? "full"
         : args.options.turnMessageDetail,
+    ...(args.options.nowMs !== undefined ? { nowMs: args.options.nowMs } : {}),
   } satisfies Parameters<typeof buildEventProjection>[1];
   const projection =
     args.options.viewMode === "manager-conversation"
@@ -878,6 +887,7 @@ export function buildThreadTimelineTurnDetailsFromEvents(
     threadType:
       args.options.viewMode === "manager-conversation" ? "manager" : "standard",
     turnMessageDetail: "full",
+    ...(args.options.nowMs !== undefined ? { nowMs: args.options.nowMs } : {}),
   });
   const nestedRows = buildTimelineRows(projection, {
     includeNestedRows: true,

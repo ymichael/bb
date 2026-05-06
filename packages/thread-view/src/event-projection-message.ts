@@ -335,4 +335,11 @@ export interface BuildEventProjectionMessagesOptions {
   systemClientRequestVisibility: SystemClientRequestVisibility;
   threadStatus?: Thread["status"];
   threadType?: Thread["type"];
+  /**
+   * Snapshot time used to compute pending-tool elapsed duration. Defaults
+   * to `Date.now()` when omitted. Pass an explicit value in tests for
+   * deterministic snapshots, and at the request boundary on the server so
+   * the projection reflects the request time.
+   */
+  nowMs?: number;
 }

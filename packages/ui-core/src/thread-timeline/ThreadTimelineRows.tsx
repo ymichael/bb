@@ -21,8 +21,10 @@ import {
   buildTimelineRowTitle,
   buildTimelineViewRows,
   findActiveLatestBundleId,
+  findTimelineFrontierRow,
   isCompletedNonDeniedWorkRow,
   type BuildTimelineRowTitleOptions,
+  type BuildTimelineViewRowsOptions,
   type ThreadTimelineViewRow,
   type TimelineActivityIntentTitle,
   type TimelineTitle,
@@ -106,7 +108,7 @@ interface TimelineRowViewProps {
 
 interface TimelineExpandableRowViewProps {
   compactActivityIntents: boolean;
-  expandableTitle: TimelineTitle;
+  title: TimelineTitle;
   horizontalPadding: TimelineRowHorizontalPadding;
   row: Exclude<ThreadTimelineViewRow, { kind: "conversation" }>;
 }
@@ -134,20 +136,14 @@ interface RequestLazyTurnRowsArgs {
 
 interface CollectTimelineAutoExpandedRowIdsArgs {
   defaultExpandAllRows: boolean;
-  getViewRows: GetTimelineViewRows;
   rows: readonly ThreadTimelineViewRow[];
   scopeActive: boolean;
-  turnSummaryRowsById: Record<string, TimelineRow[]>;
 }
 
 interface ActiveSummaryTreatmentArgs {
   activeLatestBundleId: string | null;
   row: ThreadTimelineViewRow;
   scopeActive: boolean;
-}
-
-interface AutoExpandRowArgs extends ActiveSummaryTreatmentArgs {
-  defaultExpandAllRows: boolean;
 }
 
 interface TimelineRowTitleRenderStateArgs extends ActiveSummaryTreatmentArgs {
@@ -175,7 +171,6 @@ type TimelineRowTitleRenderState =
       titles: readonly TimelineActivityIntentTitle[];
     }
   | {
-      expandableTitle: TimelineTitle;
       kind: "row-title";
       title: TimelineTitle;
     };
@@ -183,7 +178,10 @@ type TimelineRowTitleRenderState =
 type TimelineRowSignaturePart = boolean | number | string | null | undefined;
 type TimelineRowsListSpacing = "top-level" | "nested" | "bundle";
 type TimelineRawRows = readonly TimelineRow[];
-type GetTimelineViewRows = (rows: TimelineRawRows) => ThreadTimelineViewRow[];
+type GetTimelineViewRows = (
+  rows: TimelineRawRows,
+  options?: BuildTimelineViewRowsOptions,
+) => ThreadTimelineViewRow[];
 
 interface ConversationRowProps {
   row: TimelineConversationViewRow;
@@ -431,12 +429,6 @@ function buildTimelineRowTitleRenderState({
   return {
     kind: "row-title",
     title,
-    expandableTitle:
-      compactActivityIntents &&
-      row.kind !== "conversation" &&
-      row.status === "error"
-        ? (buildExpandableStructuredToolTitle(row) ?? title)
-        : title,
   };
 }
 
@@ -481,7 +473,7 @@ function areTimelineExpandableRowViewPropsEqual(
 ): boolean {
   return (
     previous.compactActivityIntents === next.compactActivityIntents &&
-    previous.expandableTitle === next.expandableTitle &&
+    previous.title === next.title &&
     previous.horizontalPadding === next.horizontalPadding &&
     // The view-row cache keys by the raw rows array, so unchanged query data
     // preserves row object identity and can skip recursive signature work.
@@ -542,14 +534,21 @@ function isRuntimeScopeActive(status: ThreadRuntimeDisplayStatus): boolean {
 }
 
 function useTimelineViewRowsCache(): GetTimelineViewRows {
-  const cacheRef = useRef(new WeakMap<TimelineRawRows, ThreadTimelineViewRow[]>());
-  return useCallback<GetTimelineViewRows>((rawRows) => {
-    const cachedRows = cacheRef.current.get(rawRows);
-    if (cachedRows) {
-      return cachedRows;
+  // Each `rawRows` reference is consumed under exactly one scope: the
+  // top-level prop ("open" — pending work may still arrive) or a lazily
+  // loaded turn-detail array ("closed" — the turn is complete and won't
+  // grow). Caching by identity is correct because the per-array scope is
+  // stable; passing a different `closedScope` for the same `rawRows`
+  // reference would be a bug.
+  const cacheRef = useRef(
+    new WeakMap<TimelineRawRows, ThreadTimelineViewRow[]>(),
+  );
+  return useCallback<GetTimelineViewRows>((rawRows, options) => {
+    const cached = cacheRef.current.get(rawRows);
+    if (cached) {
+      return cached;
     }
-
-    const viewRows = buildTimelineViewRows(rawRows);
+    const viewRows = buildTimelineViewRows(rawRows, options);
     cacheRef.current.set(rawRows, viewRows);
     return viewRows;
   }, []);
@@ -590,86 +589,17 @@ function isRowExpandable(row: ThreadTimelineViewRow): boolean {
   }
 }
 
-function rowHasPendingStatus(row: ThreadTimelineViewRow): boolean {
-  switch (row.kind) {
-    case "conversation":
-      return false;
-    case "system":
-      return row.status === "pending";
-    case "bundle-summary":
-      return true;
-    case "step-summary":
-    case "turn":
-    case "work":
-      return row.status === "pending";
-    default:
-      return assertNever(row);
-  }
-}
-
 function shouldRenderCompactActivityIntentRows(
   row: ThreadTimelineViewRow,
 ): row is Extract<TimelineViewWorkRow, { workKind: "command" | "tool" }> {
   return (
     row.kind === "work" &&
     (row.workKind === "command" || row.workKind === "tool") &&
-    row.approvalStatus === null &&
-    row.status !== "error" &&
-    row.status !== "interrupted"
+    row.approvalStatus === null
   );
 }
 
-function buildExpandableStructuredToolTitle(
-  row: ThreadTimelineViewRow,
-): TimelineTitle | null {
-  if (
-    row.kind !== "work" ||
-    row.workKind !== "tool" ||
-    row.status !== "error"
-  ) {
-    return null;
-  }
-  const titles = buildTimelineActivityIntentTitles(row);
-  return titles.length === 1 ? (titles[0]?.title ?? null) : null;
-}
-
-function shouldAutoExpandRow({
-  activeLatestBundleId,
-  defaultExpandAllRows,
-  row,
-  scopeActive,
-}: AutoExpandRowArgs): boolean {
-  if (!isRowExpandable(row)) {
-    return false;
-  }
-  if (defaultExpandAllRows) {
-    return true;
-  }
-  if (!scopeActive) {
-    return false;
-  }
-  // Bundles auto-expand either when they're the active-latest bundle
-  // (positional) or when they still have pending child work (so the user
-  // can see what's running, even if a later bundle has displaced the label).
-  if (row.kind === "bundle-summary") {
-    if (
-      shouldUseActiveSummaryTreatment({
-        activeLatestBundleId,
-        row,
-        scopeActive,
-      })
-    ) {
-      return true;
-    }
-    return rowHasPendingStatus(row);
-  }
-  if (!rowHasPendingStatus(row)) {
-    return false;
-  }
-  return true;
-}
-
-function shouldUseActiveSummaryTreatment({
+function isActiveLatestBundleSummary({
   activeLatestBundleId,
   row,
   scopeActive,
@@ -681,65 +611,81 @@ function shouldUseActiveSummaryTreatment({
   );
 }
 
+// Auto-expand rule (single rule, applied uniformly):
+//
+//   In an active container, find the trailing row that the agent produced
+//   (skipping over user-role conversation rows — initial messages,
+//   follow-ups, accepted or pending steers — since those are inputs to
+//   the agent rather than events on the activity timeline). If that
+//   frontier row is expandable, auto-expand it. If it isn't expandable
+//   (assistant text, denied web fetch, system row without detail, ...),
+//   nothing in the container auto-expands. We do not search backward past
+//   a non-expandable frontier.
+//
+// Active containers are the timeline's top-level row list (when the thread
+// is active) and the childRows of pending delegations *inside an active
+// container*. A completed delegation closes its scope, so a pending
+// sub-delegation buried inside a completed parent does NOT auto-expand —
+// the active scope must propagate from the top-level thread runtime down
+// through every enclosing container. The rule does not apply to
+// bundle-summary, step-summary, or turn-summary children — those represent
+// grouped or archived work whose interior is not the current frontier.
+//
+// `defaultExpandAllRows` is a test/story override that bypasses the rule
+// and expands every expandable row in every container.
+function visitForAutoExpand(
+  rows: readonly ThreadTimelineViewRow[],
+  scopeActive: boolean,
+  ids: Set<string>,
+): void {
+  if (!scopeActive) {
+    return;
+  }
+  const frontier = findTimelineFrontierRow(rows);
+  if (frontier && isRowExpandable(frontier)) {
+    ids.add(frontier.id);
+  }
+  for (const row of rows) {
+    if (
+      row.kind === "work" &&
+      row.workKind === "delegation" &&
+      row.status === "pending"
+    ) {
+      visitForAutoExpand(row.childRows, true, ids);
+    }
+  }
+}
+
+function expandAllExpandableRows(
+  rows: readonly ThreadTimelineViewRow[],
+  ids: Set<string>,
+): void {
+  for (const row of rows) {
+    if (isRowExpandable(row)) {
+      ids.add(row.id);
+    }
+    if (row.kind === "bundle-summary" || row.kind === "step-summary") {
+      expandAllExpandableRows(row.children, ids);
+    } else if (row.kind === "work" && row.workKind === "delegation") {
+      expandAllExpandableRows(row.childRows, ids);
+    } else if (row.kind === "turn" && row.children) {
+      expandAllExpandableRows(row.children, ids);
+    }
+  }
+}
+
 function collectTimelineAutoExpandedRowIds({
   defaultExpandAllRows,
-  getViewRows,
   rows,
   scopeActive,
-  turnSummaryRowsById,
 }: CollectTimelineAutoExpandedRowIdsArgs): ReadonlySet<string> {
-  const autoExpandedRowIds = new Set<string>();
-
-  const visitRows = (
-    currentRows: readonly ThreadTimelineViewRow[],
-    currentScopeActive: boolean,
-  ): void => {
-    if (!defaultExpandAllRows && !currentScopeActive) {
-      return;
-    }
-
-    const currentActiveLatestBundleId = findActiveLatestBundleId(currentRows);
-
-    currentRows.forEach((row) => {
-      if (
-        shouldAutoExpandRow({
-          activeLatestBundleId: currentActiveLatestBundleId,
-          defaultExpandAllRows,
-          row,
-          scopeActive: currentScopeActive,
-        })
-      ) {
-        autoExpandedRowIds.add(row.id);
-      }
-
-      if (row.kind === "bundle-summary" || row.kind === "step-summary") {
-        visitRows(
-          row.children,
-          defaultExpandAllRows || rowHasPendingStatus(row),
-        );
-      } else if (row.kind === "work" && row.workKind === "delegation") {
-        visitRows(
-          row.childRows,
-          defaultExpandAllRows || row.status === "pending",
-        );
-      } else if (row.kind === "turn") {
-        const turnChildRows =
-          row.children ??
-          (turnSummaryRowsById[row.id]
-            ? getViewRows(turnSummaryRowsById[row.id] ?? [])
-            : null);
-        if (turnChildRows) {
-          visitRows(
-            turnChildRows,
-            defaultExpandAllRows || row.status === "pending",
-          );
-        }
-      }
-    });
-  };
-
-  visitRows(rows, scopeActive);
-  return autoExpandedRowIds;
+  const ids = new Set<string>();
+  if (defaultExpandAllRows) {
+    expandAllExpandableRows(rows, ids);
+    return ids;
+  }
+  visitForAutoExpand(rows, scopeActive, ids);
+  return ids;
 }
 
 function timelineRowTitleOptions({
@@ -748,7 +694,7 @@ function timelineRowTitleOptions({
   scopeActive,
   spacing,
 }: TimelineRowTitleOptionsArgs): BuildTimelineRowTitleOptions {
-  const useActiveBundleLabel = shouldUseActiveSummaryTreatment({
+  const useActiveBundleLabel = isActiveLatestBundleSummary({
     activeLatestBundleId,
     row,
     scopeActive,
@@ -880,7 +826,7 @@ function TimelineExpandableBody({
       return (
         <TimelineRowsList
           rows={row.children}
-          scopeActive={rowHasPendingStatus(row)}
+          scopeActive={false}
           compactActivityIntents={true}
           spacing="bundle"
         />
@@ -958,7 +904,10 @@ function TurnRowBody({
   const rows = hasInlineChildren
     ? row.children
     : loadedRows
-      ? getViewRows(loadedRows)
+      ? // Lazy turn-detail children belong to a completed turn — flag the
+        // scope as closed so trailing work in the children collapses into a
+        // step-summary at end-of-input, matching the inline-children path.
+        getViewRows(loadedRows, { closedScope: true })
       : null;
   const isLoading = loadingTurnSummaryIds.has(row.id);
   const isError = erroredTurnSummaryIds.has(row.id);
@@ -1007,7 +956,7 @@ function TurnRowBody({
     return (
       <TimelineRowsList
         rows={rows}
-        scopeActive={row.status === "pending"}
+        scopeActive={false}
         compactActivityIntents={compactActivityIntents}
         spacing="nested"
       />
@@ -1070,7 +1019,7 @@ function TimelineRowView({
   return (
     <MemoizedTimelineExpandableRowView
       row={row}
-      expandableTitle={titleState.expandableTitle}
+      title={titleState.title}
       horizontalPadding={horizontalPadding}
       compactActivityIntents={compactActivityIntents}
     />
@@ -1084,7 +1033,7 @@ const MemoizedTimelineRowView = memo(
 
 function TimelineExpandableRowView({
   compactActivityIntents,
-  expandableTitle,
+  title,
   horizontalPadding,
   row,
 }: TimelineExpandableRowViewProps) {
@@ -1129,7 +1078,7 @@ function TimelineExpandableRowView({
 
   return (
     <ExpandableTimelineRow
-      title={expandableTitle}
+      title={title}
       horizontalPadding={horizontalPadding}
       autoExpanded={autoExpandedRowIds.has(row.id)}
       onBeforeExpand={handleBeforeExpand}
@@ -1201,18 +1150,10 @@ function ThreadTimelineRowsForIdentity(props: ThreadTimelineRowsProps) {
     () =>
       collectTimelineAutoExpandedRowIds({
         defaultExpandAllRows: props.defaultExpandAllRows ?? false,
-        getViewRows,
         rows,
         scopeActive,
-        turnSummaryRowsById: props.turnSummaryRowsById,
       }),
-    [
-      getViewRows,
-      props.defaultExpandAllRows,
-      props.turnSummaryRowsById,
-      rows,
-      scopeActive,
-    ],
+    [props.defaultExpandAllRows, rows, scopeActive],
   );
   const autoExpandedRowIds = useStableReadonlySet(computedAutoExpandedRowIds);
   const loadingTurnSummaryIds = useStableReadonlySet(

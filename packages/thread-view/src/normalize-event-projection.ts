@@ -1,11 +1,9 @@
 import type {
   EventProjectionDelegationMessage,
   EventProjectionMessage,
-  EventProjectionMessageStatus,
   EventProjection,
   EventProjectionEntry,
   EventProjectionTurn,
-  EventProjectionTurnStatus,
 } from "./event-projection-types.js";
 import { findLastTerminalTimelineMessage } from "./timeline-message-helpers.js";
 import { getProjectionSummaryCount } from "./apply-turn-message-detail.js";
@@ -38,7 +36,6 @@ interface TurnMessageContext {
 }
 
 type SemanticMessageContext = StandaloneMessageContext | TurnMessageContext;
-type TurnMetadataMode = "source" | "scoped";
 
 function getStartedAt(message: MessageTimingSource): number {
   return message.startedAt ?? message.createdAt;
@@ -184,105 +181,6 @@ function getProjectionMessageBounds(
   return bounds;
 }
 
-function getMessageStatus(
-  message: EventProjectionMessage,
-): EventProjectionMessageStatus {
-  switch (message.kind) {
-    case "assistant-text":
-    case "command":
-    case "tool-call":
-    case "web-search":
-    case "web-fetch":
-    case "file-edit":
-    case "delegation":
-    case "permission-grant-lifecycle":
-      return message.status;
-    case "operation":
-      return message.status ?? "completed";
-    case "error":
-      return "error";
-    case "user":
-    case "debug/raw-event":
-      return "completed";
-  }
-}
-
-function getScopedTurnStatus(
-  messages: EventProjectionMessage[],
-): EventProjectionTurnStatus {
-  const statuses = messages.map((message) => getMessageStatus(message));
-  // Display aggregation prioritizes what users need to notice in a grouped
-  // turn. This intentionally differs from tool-activity-projection.ts:
-  // mergeCallStatus, where lifecycle terminal state is monotonic.
-  if (statuses.includes("error")) {
-    return "error";
-  }
-  if (statuses.includes("pending") || statuses.includes("streaming")) {
-    return "pending";
-  }
-  if (statuses.includes("interrupted")) {
-    return "interrupted";
-  }
-  return "completed";
-}
-
-function getDurationMs(
-  startedAt: number,
-  completedAt: number | null,
-): number | undefined {
-  if (completedAt === null) {
-    return undefined;
-  }
-  return Math.max(0, completedAt - startedAt);
-}
-
-function buildScopedTurn(
-  sourceTurn: EventProjectionTurn,
-  messages: EventProjectionMessage[],
-): EventProjectionTurn {
-  const firstMessage = messages[0];
-  if (!firstMessage) {
-    throw new Error(
-      `Cannot build scoped projection turn ${sourceTurn.turnId} without messages`,
-    );
-  }
-
-  const sourceSeqStart = Math.min(
-    ...messages.map((message) => message.sourceSeqStart),
-  );
-  const sourceSeqEnd = Math.max(
-    ...messages.map((message) => message.sourceSeqEnd),
-  );
-  const startedAt = Math.min(
-    ...messages.map((message) => getStartedAt(message)),
-  );
-  const createdAt = Math.max(...messages.map((message) => message.createdAt));
-  const status = getScopedTurnStatus(messages);
-  const completedAt = status === "pending" ? null : createdAt;
-  const terminalMessage = findLastTerminalTimelineMessage(messages);
-  const turn: EventProjectionTurn = {
-    turnId: sourceTurn.turnId,
-    threadId: firstMessage.threadId,
-    sourceSeqStart,
-    sourceSeqEnd,
-    startedAt,
-    createdAt,
-    completedAt,
-    status,
-    summaryCount: getProjectionSummaryCount(messages, terminalMessage),
-    messages,
-  };
-
-  if (terminalMessage) {
-    turn.terminalMessage = terminalMessage;
-  }
-  const durationMs = getDurationMs(startedAt, completedAt);
-  if (durationMs !== undefined) {
-    turn.durationMs = durationMs;
-  }
-  return turn;
-}
-
 function buildSourceTurn(
   sourceTurn: EventProjectionTurn,
   messages: EventProjectionMessage[],
@@ -389,7 +287,7 @@ class SemanticProjectionBuilder {
   }
 
   buildRootProjection(): EventProjection {
-    return this.buildProjection(this.rootContexts, "source");
+    return this.buildRootTurnProjection(this.rootContexts);
   }
 
   buildRootMessages(): EventProjectionMessage[] {
@@ -398,9 +296,8 @@ class SemanticProjectionBuilder {
     );
   }
 
-  private buildProjection(
+  private buildRootTurnProjection(
     contexts: SemanticMessageContext[],
-    turnMetadataMode: TurnMetadataMode,
   ): EventProjection {
     const entries: EventProjectionEntry[] = [];
     let index = 0;
@@ -436,10 +333,7 @@ class SemanticProjectionBuilder {
 
       entries.push({
         kind: "turn",
-        turn:
-          turnMetadataMode === "source"
-            ? buildSourceTurn(sourceTurn, messages)
-            : buildScopedTurn(sourceTurn, messages),
+        turn: buildSourceTurn(sourceTurn, messages),
       });
     }
 
@@ -451,6 +345,23 @@ class SemanticProjectionBuilder {
     };
   }
 
+  // Delegation children render as a flat sequence of messages under the
+  // delegation row. Their lifecycle is owned by the delegation tool call;
+  // wrapping them in a synthetic turn would require aggregating child
+  // statuses into a turn status, which has no meaningful answer while the
+  // subagent is still running.
+  private buildFlatChildProjection(
+    contexts: readonly SemanticMessageContext[],
+  ): EventProjection {
+    return {
+      state: { activeThinking: null },
+      entries: contexts.map((context) => ({
+        kind: "projected-message",
+        message: this.toSemanticMessage(context.message),
+      })),
+    };
+  }
+
   private toSemanticMessage(
     message: EventProjectionMessage,
   ): EventProjectionMessage {
@@ -458,9 +369,8 @@ class SemanticProjectionBuilder {
       return message;
     }
 
-    const childProjection = this.buildProjection(
+    const childProjection = this.buildFlatChildProjection(
       this.childrenByParentCallId.get(message.callId) ?? [],
-      "scoped",
     );
     return toDelegationMessage(message, childProjection);
   }

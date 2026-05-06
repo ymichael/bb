@@ -26,7 +26,6 @@ import {
 } from "./timeline-activity-intents.js";
 import {
   buildTimelineWorkSummaryLabelParts,
-  isTimelineStepBoundary,
   type ThreadTimelineViewRow,
   type TimelineWorkSummaryRow,
   type TimelineViewDelegationWorkRow,
@@ -114,6 +113,13 @@ export interface TimelineActivityIntentTitle {
 interface BuildTimelineActivityIntentTitleArgs {
   intent: TimelineActivityIntent;
   pending: boolean;
+  /**
+   * When set, append a status decoration ("(error)" / "(interrupted)") after
+   * the intent's title segments. The compact intent rendering used inside
+   * activity bundles relies on this to surface row-level outcomes — the
+   * bundle's own label only conveys an aggregate count.
+   */
+  failureStatus?: "error" | "interrupted";
 }
 
 interface DisplayStatusArgs {
@@ -139,13 +145,25 @@ interface SegmentOptions {
   plainText?: string;
 }
 
+// Titles are always rendered on a single line — both in the App (segments
+// use `whitespace-pre`, which would otherwise honor `\n` as a line break)
+// and in the CLI/tooltip plain text. Normalizing newlines at segment
+// construction means any caller that passes user-supplied content
+// (commands, tool labels, file paths) gets single-line rendering for free,
+// without each call site having to remember to sanitize.
+function collapseTitleNewlines(text: string): string {
+  return text.replace(/[\r\n]+/gu, " ");
+}
+
 function segment(text: string, opts: SegmentOptions = {}): TimelineTitleSegment {
   return {
-    text,
+    text: collapseTitleNewlines(text),
     em: opts.em ?? false,
     shimmer: opts.shimmer ?? false,
     truncate: opts.truncate ?? false,
-    ...(opts.plainText !== undefined ? { plainText: opts.plainText } : {}),
+    ...(opts.plainText !== undefined
+      ? { plainText: collapseTitleNewlines(opts.plainText) }
+      : {}),
   };
 }
 
@@ -768,6 +786,7 @@ function mapConversationTitle(
 function mapTimelineActivityIntentTitle({
   intent,
   pending,
+  failureStatus,
 }: BuildTimelineActivityIntentTitleArgs): TimelineTitle {
   const detail = formatTimelineActivityIntentDetailParts({
     intent,
@@ -790,7 +809,10 @@ function mapTimelineActivityIntentTitle({
       plainText: plainDetail.content,
     }),
   );
-  return makeTitle({ segments });
+  const decorations = failureStatus
+    ? [statusDecoration(failureStatus, null)]
+    : [];
+  return makeTitle({ segments, decorations });
 }
 
 // ---------------------------------------------------------------------------
@@ -806,6 +828,12 @@ export function buildTimelineActivityIntentTitles(
 
   const dedupedDetailKeys = new Set<string>();
   const titles: TimelineActivityIntentTitle[] = [];
+  const failureStatus =
+    row.status === "error"
+      ? "error"
+      : row.status === "interrupted"
+        ? "interrupted"
+        : undefined;
 
   row.activityIntents.forEach((intent, index) => {
     if (intent.type === "unknown") {
@@ -823,6 +851,7 @@ export function buildTimelineActivityIntentTitles(
       title: mapTimelineActivityIntentTitle({
         intent,
         pending: row.status === "pending",
+        ...(failureStatus ? { failureStatus } : {}),
       }),
     });
   });
@@ -830,36 +859,44 @@ export function buildTimelineActivityIntentTitles(
   return titles;
 }
 
+function isUserConversationRow(row: ThreadTimelineViewRow): boolean {
+  return row.kind === "conversation" && row.role === "user";
+}
+
 /**
- * Returns the `id` of the bundle-summary that should render as the open step's
- * active-latest bundle, or `null` when no such bundle exists. The active-latest
- * bundle is the *most recent work row* after the last step boundary, but only
- * when that row is itself a `bundle-summary`. A trailing leaf (single same-step
- * work row of a different concept) displaces any earlier bundle, so the
- * earlier bundle renders completed-not-latest. Pending steers (user
- * conversation rows with `userRequest.status === "pending"`) sit at the tail
- * outside the open step and do not count as boundaries.
+ * Returns the trailing row of `rows` for auto-expand and active-latest bundle
+ * styling. User-role conversation rows are transparent: they are *requests*
+ * to the agent rather than events the agent produced, so a user message at
+ * the tail (initial message, follow-up, pending steer, accepted steer) does
+ * not displace the previous frontier of activity.
+ */
+export function findTimelineFrontierRow(
+  rows: readonly ThreadTimelineViewRow[],
+): ThreadTimelineViewRow | null {
+  for (let i = rows.length - 1; i >= 0; i -= 1) {
+    const row = rows[i];
+    if (!row) continue;
+    if (isUserConversationRow(row)) continue;
+    return row;
+  }
+  return null;
+}
+
+/**
+ * Returns the `id` of the trailing bundle-summary in `rows`, or `null` if the
+ * trailing row is anything else. Callers pair this with a scope-active gate:
+ * in active scopes (top-level when the thread is active, delegation childRows
+ * when the delegation is pending), this id receives present-tense
+ * "Exploring/Running" treatment. We do not search backward past a non-bundle
+ * trailing row — a non-bundle tail means no bundle is currently the frontier
+ * of activity. User-role conversation rows are skipped because they are
+ * inputs to the agent, not events on the activity timeline.
  */
 export function findActiveLatestBundleId(
   rows: readonly ThreadTimelineViewRow[],
 ): string | null {
-  // Single backward pass: the first work or bundle-summary we hit is the
-  // step's most recent activity. If we hit a step boundary first, the open
-  // step has no work yet.
-  for (let i = rows.length - 1; i >= 0; i -= 1) {
-    const row = rows[i];
-    if (!row) continue;
-    if (isTimelineStepBoundary(row)) {
-      return null;
-    }
-    if (row.kind === "bundle-summary") {
-      return row.id;
-    }
-    if (row.kind === "work") {
-      return null;
-    }
-  }
-  return null;
+  const frontier = findTimelineFrontierRow(rows);
+  return frontier?.kind === "bundle-summary" ? frontier.id : null;
 }
 
 export function buildTimelineRowTitle(

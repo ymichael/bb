@@ -523,6 +523,27 @@ describe("buildTimelineRowTitle", () => {
     expect(title.segments[0]?.shimmer).toBe(true);
   });
 
+  it("emits a live duration decoration for pending turns above the threshold", () => {
+    // Once the projection's `nowMs - startedAt` crosses the >1s display
+    // threshold the title gains a live duration decoration; the App's
+    // `LiveDurationText` keeps ticking from there. The visibility
+    // threshold deliberately skips the noisy first second on both pending
+    // and completed rows.
+    const row = {
+      ...turnRow(),
+      durationMs: 5_000,
+      status: "pending",
+    } satisfies TimelineViewTurnRow;
+
+    const title = buildTimelineRowTitle(row, DEFAULT_OPTIONS);
+
+    expect(title.plain).toBe("Working for (5s)");
+    expect(title.segments[0]?.shimmer).toBe(true);
+    expect(title.decorations).toEqual([
+      { kind: "duration", durationMs: 5_000, live: true },
+    ]);
+  });
+
   it("does not use item-count fallback titles when turn duration is missing", () => {
     const row = {
       ...turnRow(),
@@ -743,5 +764,41 @@ describe("buildTimelineRowTitle", () => {
     expect(titles[0]?.title.segments[0]?.text).toBe("Reading");
     expect(titles[0]?.title.segments[0]?.shimmer).toBe(true);
     expect(titles[0]?.title.segments[1]?.text).toBe("app.ts");
+  });
+
+  it("appends an (error) decoration to compact exploration intents on errored rows", () => {
+    const row = {
+      ...commandRow(),
+      status: "error",
+      exitCode: 1,
+      activityIntents: [readIntent("src/app.ts")],
+    } satisfies TimelineCommandWorkRow;
+
+    const titles = buildTimelineActivityIntentTitles(row);
+
+    expect(titles).toHaveLength(1);
+    expect(titles[0]?.title.plain).toBe("Read src/app.ts (error)");
+    expect(titles[0]?.title.decorations).toEqual([
+      { kind: "status", status: "error", durationMs: null },
+    ]);
+  });
+
+  it("appends an (interrupted) decoration to compact exploration intents on interrupted rows", () => {
+    const row = {
+      ...commandRow(),
+      status: "interrupted",
+      exitCode: null,
+      activityIntents: [searchIntent("TODO", "src")],
+    } satisfies TimelineCommandWorkRow;
+
+    const titles = buildTimelineActivityIntentTitles(row);
+
+    expect(titles).toHaveLength(1);
+    expect(titles[0]?.title.plain).toBe(
+      "Searched for TODO in src (interrupted)",
+    );
+    expect(titles[0]?.title.decorations).toEqual([
+      { kind: "status", status: "interrupted", durationMs: null },
+    ]);
   });
 });

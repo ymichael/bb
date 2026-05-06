@@ -53,10 +53,14 @@ interface DelegationUpdateArgs {
   status: NonNullable<DelegationExecutionUpdate["status"]>;
 }
 
+// Tests pin a fixed `nowMs` so pending-duration assertions are deterministic.
+// Production paths default to `Date.now()`.
+const PROJECTION_NOW_MS = 2_001;
+
 function createProjectionState(): ToolActivityProjectionState {
   return {
     messages: [],
-    toolActivity: createToolActivityState(),
+    toolActivity: createToolActivityState({ nowMs: PROJECTION_NOW_MS }),
   };
 }
 
@@ -389,6 +393,22 @@ describe("tool activity projection", () => {
       false,
     );
 
+    expect(activeCommandMessage(state)?.durationMs).toBe(2_000);
+  });
+
+  it("derives pending command duration from the projection's snapshot time when no progress events arrive", () => {
+    // Silent pending tools — those that emit no progress events between
+    // `started` and the projection snapshot — would otherwise report
+    // `createdAt - startedAt = 0` because the latest event time IS the
+    // start. The projection's `nowMs` provides a meaningful elapsed value
+    // so the user sees real wall-clock progress for tools that don't
+    // chatter on stdout.
+    const state = createProjectionState();
+
+    beginCommandWithoutOutput(state);
+
+    // No further events. Started at seq=1, snapshot time is
+    // PROJECTION_NOW_MS=2001 → elapsed should be 2000 ms.
     expect(activeCommandMessage(state)?.durationMs).toBe(2_000);
   });
 

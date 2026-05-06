@@ -237,6 +237,51 @@ describe("ThreadTimelineRows", () => {
     expect(html).toContain("2 files");
   });
 
+  it("does not auto-expand a displaced completed bundle in an active scope", () => {
+    // Two completed bundles in an active scope: only the trailing/latest
+    // bundle should auto-expand. The earlier displaced bundle stays
+    // collapsed so the timeline doesn't surface stale, finished work.
+    renderTimelineRows({
+      timelineRows: [
+        commandRow({
+          id: "command-1",
+          command: "pnpm test",
+          sourceSeqStart: 1,
+        }),
+        commandRow({
+          id: "command-2",
+          command: "pnpm lint",
+          sourceSeqStart: 2,
+        }),
+        commandRow({
+          id: "explore-1",
+          command: "cat src/app.ts",
+          activityIntents: [readIntent({ path: "src/app.ts" })],
+          sourceSeqStart: 3,
+        }),
+        commandRow({
+          id: "explore-2",
+          command: "cat src/other.ts",
+          activityIntents: [readIntent({ path: "src/other.ts" })],
+          sourceSeqStart: 4,
+        }),
+      ],
+      overrides: {
+        threadRuntimeDisplayStatus: "active",
+      },
+    });
+
+    const ranBundleButton = screen.getByRole("button", {
+      name: /Ran 2 commands/u,
+    });
+    expect(ranBundleButton.getAttribute("aria-expanded")).toBe("false");
+
+    const exploringBundleButton = screen.getByRole("button", {
+      name: /Exploring 2 files/u,
+    });
+    expect(exploringBundleButton.getAttribute("aria-expanded")).toBe("true");
+  });
+
   it("uses active wording for pending tail activity summaries in an active scope", () => {
     const html = renderRowsToStaticMarkup({
       timelineRows: [
@@ -810,7 +855,12 @@ describe("ThreadTimelineRows", () => {
     expect(button).toBeTruthy();
   });
 
-  it("renders failed structured tools with intent titles inside an exploration bundle", () => {
+  it("renders failed structured tools as compact intent rows with an (error) marker", () => {
+    // Inside a bundle, an errored exploration tool stays in the compact
+    // static intent listing — same shape as its successful siblings — but
+    // its title carries an (error) decoration so the user can identify
+    // the failing row. The bundle's aggregate "(N errors)" label only
+    // counts errors; per-row marking is what tells you *which* row.
     const view = renderTimelineRows({
       timelineRows: [
         toolRow({
@@ -832,17 +882,32 @@ describe("ThreadTimelineRows", () => {
     const summaryButton = screen.getByRole("button", {
       name: /Explored 2 files \(1 error\)/u,
     });
-
     fireEvent.click(summaryButton);
 
-    const button = screen.getByRole("button", {
-      name: /Read\s+app\.ts/u,
-    });
-    expect(button.textContent ?? "").not.toContain("Ran tool ");
+    // The HTML title attribute carries the plain-text form of segments +
+    // decorations, so a successful read is "Read <path>" and a failed
+    // read is "Read <path> (error)". This is the per-row marker the
+    // bundle's aggregate count alone does not provide.
+    const errorRow = view.container.querySelector(
+      '[title="Read /repo/src/app.ts (error)"]',
+    );
+    expect(errorRow).not.toBeNull();
 
-    fireEvent.click(button);
+    const successRow = view.container.querySelector(
+      '[title="Read /repo/src/lib.ts"]',
+    );
+    expect(successRow).not.toBeNull();
 
-    expect(view.container.textContent ?? "").toContain(
+    // Errored intent rows in the bundle stay static — no button affordance,
+    // matching the rest of the compact listing. This is a deliberate
+    // tradeoff: the user loses the click-to-expand affordance that would
+    // have shown the error output. The (error) marker is the entire
+    // per-row signal; the underlying error body is intentionally
+    // unreachable from inside the bundle.
+    expect(
+      screen.queryByRole("button", { name: /Read\s+app\.ts/u }),
+    ).toBeNull();
+    expect(view.container.textContent ?? "").not.toContain(
       "ENOENT: no such file or directory",
     );
   });
@@ -909,7 +974,11 @@ describe("ThreadTimelineRows", () => {
     expect(view.container.textContent ?? "").toContain("completed output");
   });
 
-  it("auto-expands pending work summarized by an active bundle", () => {
+  it("auto-expands a trailing bundle in an active scope without expanding its children", () => {
+    // The single auto-expand rule: in an active container, expand the
+    // literal last row if it is expandable. The bundle is the trailing
+    // row, so it expands. Bundle children do not get the rule applied —
+    // they render collapsed until the user clicks them.
     const view = renderTimelineRows({
       timelineRows: [
         commandRow({
@@ -940,13 +1009,18 @@ describe("ThreadTimelineRows", () => {
     const commandButton = screen.getByRole("button", {
       name: /Running\s+pnpm test/u,
     });
-    expect(commandButton.getAttribute("aria-expanded")).toBe("true");
-    expect(view.container.textContent ?? "").toContain("first output");
-    expect(view.container.textContent ?? "").toContain("second output");
+    expect(commandButton.getAttribute("aria-expanded")).toBe("false");
+    expect(view.container.textContent ?? "").not.toContain("first output");
+    expect(view.container.textContent ?? "").not.toContain("second output");
   });
 
-  it("auto-expands pending summaries when a pending steer is the trailing row", () => {
-    const view = renderTimelineRows({
+  it("looks past trailing user conversation rows when finding the frontier", () => {
+    // User-role conversation rows (initial messages, follow-ups, pending
+    // or accepted steers) are inputs to the agent, not events the agent
+    // produced. The rule skips them when locating the frontier. Here a
+    // pending steer trails the bundle; the bundle is the agent's frontier
+    // and auto-expands.
+    renderTimelineRows({
       timelineRows: [
         commandRow({
           id: "command-pending-1",
@@ -978,44 +1052,34 @@ describe("ThreadTimelineRows", () => {
       name: /Running 2 commands/u,
     });
     expect(bundleButton.getAttribute("aria-expanded")).toBe("true");
-    expect(view.container.textContent ?? "").toContain("first output");
-    expect(view.container.textContent ?? "").toContain("second output");
     expect(screen.getByText("steer pending")).toBeTruthy();
   });
 
-  it("auto-expands a mixed-status command bundle to show pending output", () => {
-    // Same-concept consecutive work groups into a single bundle regardless of
-    // child status; pending children in the bundle keep it auto-expanded so
-    // active output stays visible.
+  it("does not auto-expand anything when an assistant message is the frontier", () => {
+    // Assistant-role conversation rows are events the agent produced, so
+    // they do count as the frontier. They are not expandable, so when
+    // they trail the timeline the rule produces no auto-expansion — even
+    // if a bundle sits just before them.
     const view = renderTimelineRows({
       timelineRows: [
         commandRow({
           id: "command-pending-1",
           command: "pnpm test",
-          output: "first still running",
+          output: "first output",
           sourceSeqStart: 1,
           status: "pending",
         }),
         commandRow({
           id: "command-pending-2",
           command: "pnpm lint",
-          output: "second still running",
+          output: "second output",
           sourceSeqStart: 2,
           status: "pending",
         }),
-        commandRow({
-          id: "command-completed-1",
-          command: "date",
-          output: "today",
-          sourceSeqStart: 3,
-          status: "completed",
-        }),
-        commandRow({
-          id: "command-completed-2",
-          command: "pwd",
-          output: "/repo",
-          sourceSeqStart: 4,
-          status: "completed",
+        conversationRow({
+          id: "assistant-final",
+          role: "assistant",
+          text: "All done.",
         }),
       ],
       overrides: {
@@ -1024,11 +1088,12 @@ describe("ThreadTimelineRows", () => {
     });
 
     const bundleButton = screen.getByRole("button", {
-      name: /Running 4 commands/u,
+      name: /Ran 2 commands/u,
     });
-    expect(bundleButton.getAttribute("aria-expanded")).toBe("true");
-    expect(view.container.textContent ?? "").toContain("first still running");
-    expect(view.container.textContent ?? "").toContain("second still running");
+    expect(bundleButton.getAttribute("aria-expanded")).toBe("false");
+    expect(view.container.textContent ?? "").not.toContain("first output");
+    expect(view.container.textContent ?? "").not.toContain("second output");
+    expect(view.container.textContent ?? "").toContain("All done.");
   });
 
   it("omits command cwd metadata and mutes exit code detail", () => {
@@ -1049,6 +1114,37 @@ describe("ThreadTimelineRows", () => {
 
     expect(view.container.textContent ?? "").not.toContain("cwd:");
     expect(view.container.textContent ?? "").toContain("exit code 0");
+  });
+
+  it("renders multi-line command titles on a single line", () => {
+    // Command content can include literal newlines (heredocs, scripts
+    // pasted as a single argument, etc.). The title segment renders with
+    // CSS `whitespace-pre`, which would honor `\n` as a line break — so
+    // titles must collapse newlines at segment construction time. Verifies
+    // the rendered title text and the HTML title (used for hover tooltip
+    // and CLI plain rendering) are both single-line.
+    const command = "node <<'EOF'\nconst x = 1;\nconsole.log(x);\nEOF";
+    renderTimelineRows({
+      timelineRows: [
+        commandRow({
+          id: "command-multiline-1",
+          command,
+        }),
+      ],
+    });
+
+    const button = screen.getByRole("button", { name: /Ran/u });
+    expect(button.textContent ?? "").not.toContain("\n");
+
+    // Every `[title]` descendant carries the plain-text rendering of
+    // some segment span — none of them may contain a newline. Iterating
+    // catches a regression even if a future change adds a sibling
+    // metadata pill that also has a `title` attribute.
+    const titleSpans = button.querySelectorAll("[title]");
+    expect(titleSpans.length).toBeGreaterThan(0);
+    for (const span of Array.from(titleSpans)) {
+      expect(span.getAttribute("title") ?? "").not.toContain("\n");
+    }
   });
 
   it("renders ANSI command output without leaking escape codes", () => {
@@ -1280,6 +1376,101 @@ describe("ThreadTimelineRows", () => {
     expect(bundleButton.getAttribute("aria-expanded")).toBe("true");
     expect(view.container.textContent ?? "").toContain("echo one");
     expect(view.container.textContent ?? "").toContain("echo two");
+  });
+
+  it("collapses lazy turn-detail trailing work into a step-summary", () => {
+    // Lazy turn-detail children belong to a completed turn. Its closure
+    // depends on the end-of-input flush taking the closed-scope branch.
+    // Without that flag, mixed-concept trailing work renders as a
+    // sequence of bundles and leaves instead of one step-summary,
+    // exactly the bug seen on the live timeline. See `timeline-view.ts`
+    // `closeOpenStepAtBoundary` vs `flushOpenStepAsBundles`.
+    renderTimelineRows({
+      timelineRows: [turnRow()],
+      overrides: {
+        turnSummaryRowsById: {
+          "turn-summary-1": [
+            commandRow({
+              id: "nested-tool-1",
+              command: "rg pattern",
+              sourceSeqStart: 11,
+            }),
+            commandRow({
+              id: "nested-tool-2",
+              command: "pnpm test",
+              sourceSeqStart: 12,
+            }),
+            fileChangeRow({
+              id: "nested-edit-1",
+              path: "src/a.ts",
+              sourceSeqStart: 13,
+            }),
+            fileChangeRow({
+              id: "nested-edit-2",
+              path: "src/b.ts",
+              sourceSeqStart: 14,
+            }),
+            commandRow({
+              id: "nested-tool-3",
+              command: "pnpm typecheck",
+              sourceSeqStart: 15,
+            }),
+            fileChangeRow({
+              id: "nested-edit-3",
+              path: "src/c.ts",
+              sourceSeqStart: 16,
+            }),
+          ],
+        },
+      },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /Worked for\s*4s/u }));
+
+    // Mixed-concept trailing run (commands + file edits) collapses into
+    // a single step-summary describing the combined work, not separate
+    // bundles per consecutive same-concept run.
+    const stepSummary = screen.getByRole("button", {
+      name: /Ran 3 commands, edited 3 files/u,
+    });
+    expect(stepSummary).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: /^Edited 2 files\b/u }),
+    ).toBeNull();
+  });
+
+  it("does not auto-expand a pending delegation's frontier on an idle thread", () => {
+    // Strict scope propagation: the active scope must come from the
+    // top-level thread runtime. A pending delegation does not magically
+    // open an active scope on an idle thread — the user is browsing
+    // history, not watching live work. Verifies the regression-prone
+    // "single rule" promise.
+    const view = renderTimelineRows({
+      timelineRows: [
+        delegationRow({
+          id: "idle-pending-delegation",
+          status: "pending",
+          childRows: [
+            commandRow({
+              id: "nested-pending-command",
+              command: "pnpm test",
+              output: "still running",
+              sourceSeqStart: 50,
+              status: "pending",
+            }),
+          ],
+        }),
+      ],
+      // threadRuntimeDisplayStatus defaults to "idle"
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /Running subagent/u }));
+
+    const nestedCommandButton = screen.getByRole("button", {
+      name: /Running\s+pnpm test/u,
+    });
+    expect(nestedCommandButton.getAttribute("aria-expanded")).toBe("false");
+    expect(view.container.textContent ?? "").not.toContain("still running");
   });
 
   it("does not auto-expand lazy turn children when the runtime scope is idle", () => {

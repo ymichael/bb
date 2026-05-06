@@ -139,6 +139,15 @@ export interface ToolActivityState {
   historyCells: ToolActivityCell[];
   finalizedExecCallIds: Set<string>;
   finalizedWebActivityCallIds: Set<string>;
+  /**
+   * Snapshot time used to compute pending-tool elapsed duration. Set once
+   * when the projection is created (typically the request time at the
+   * server, or a fixed value in tests). Pending rows compute
+   * `durationMs = nowMs - startedAt` so silent tools — those that emit no
+   * progress events between start and the snapshot — still report the true
+   * elapsed time the user has been waiting on them.
+   */
+  nowMs: number;
 }
 
 interface MergeCallSummaryOptions {
@@ -151,7 +160,13 @@ export interface InterruptPendingToolActivityArgs {
   turnIds?: ReadonlySet<string>;
 }
 
-export function createToolActivityState(): ToolActivityState {
+export interface CreateToolActivityStateArgs {
+  nowMs: number;
+}
+
+export function createToolActivityState(
+  args: CreateToolActivityStateArgs,
+): ToolActivityState {
   return {
     runningCallsById: new Map(),
     pendingOutputsByCallId: new Map(),
@@ -159,6 +174,7 @@ export function createToolActivityState(): ToolActivityState {
     historyCells: [],
     finalizedExecCallIds: new Set(),
     finalizedWebActivityCallIds: new Set(),
+    nowMs: args.nowMs,
   };
 }
 
@@ -176,8 +192,7 @@ function mergeCallStatus(
   incoming: EventProjectionToolCallMessage["status"] | undefined,
 ): EventProjectionToolCallMessage["status"] | undefined {
   // Lifecycle merge is monotonic: terminal call state sticks unless a later
-  // error wins. Turn display aggregation uses a different priority in
-  // normalize-event-projection.ts:getScopedTurnStatus.
+  // error wins.
   if (!incoming) return current;
   if (!current) return incoming;
   if (incoming === "error") return "error";
@@ -721,22 +736,31 @@ type ExecutionMergeSource =
   | ProviderExecutionUpdate
   | ExecutionOutputUpdate;
 
-function resolveProjectedExecutionDurationMs({
-  createdAt,
-  durationMs,
-  startedAt,
-  status,
-}: ExecutionTiming): number | null {
-  if (status !== "pending") {
-    return durationMs;
+function resolveProjectedExecutionDurationMs(
+  timing: ExecutionTiming,
+  nowMs: number,
+): number | null {
+  if (timing.status !== "pending") {
+    return timing.durationMs;
   }
-  return Math.max(durationMs ?? 0, createdAt - (startedAt ?? createdAt), 0);
+  // Silent pending tools emit no events between `started` and the snapshot,
+  // so `createdAt` (the latest event time) equals `startedAt` and the old
+  // `createdAt - startedAt` floor was always 0. Using `nowMs - startedAt`
+  // reflects the time the user has actually been waiting.
+  const startedAt = timing.startedAt ?? timing.createdAt;
+  return Math.max(
+    timing.durationMs ?? 0,
+    nowMs - startedAt,
+    timing.createdAt - startedAt,
+    0,
+  );
 }
 
 function refreshProjectedExecutionDuration(
   target: ExecutionMergeTarget,
+  nowMs: number,
 ): void {
-  target.durationMs = resolveProjectedExecutionDurationMs(target);
+  target.durationMs = resolveProjectedExecutionDurationMs(target, nowMs);
 }
 
 function mergeExecutionOutput(
@@ -860,7 +884,7 @@ export function interruptPendingToolActivity(
       continue;
     }
 
-    state.messages.push(createExecMessage(call));
+    state.messages.push(createExecMessage(call, state.toolActivity.nowMs));
     interruptedRunningCallIds.push(call.callId);
   }
 
@@ -893,9 +917,10 @@ export function interruptPendingToolActivity(
 
 function createExecMessage(
   call: RunningExecCall,
+  nowMs: number,
 ): ViewProviderExecutionMessage {
   const rowKindForId = call.kind === "tool-call" ? "tool" : call.kind;
-  const durationMs = resolveProjectedExecutionDurationMs(call);
+  const durationMs = resolveProjectedExecutionDurationMs(call, nowMs);
   const base = {
     id: messageId(call.threadId, rowKindForId, call.callId),
     threadId: call.threadId,
@@ -983,12 +1008,12 @@ export function onExecBegin(
         call.createdAt,
       );
     }
-    refreshProjectedExecutionDuration(existingInActive);
+    refreshProjectedExecutionDuration(existingInActive, state.toolActivity.nowMs);
     return;
   }
 
   flushActiveToolCell(state);
-  state.toolActivity.activeCell = createExecMessage(call);
+  state.toolActivity.activeCell = createExecMessage(call, state.toolActivity.nowMs);
 }
 
 export function onExecOutput(
@@ -1043,7 +1068,7 @@ export function onExecOutput(
         meta.createdAt,
       );
     }
-    refreshProjectedExecutionDuration(activeCall);
+    refreshProjectedExecutionDuration(activeCall, state.toolActivity.nowMs);
   }
 
   const historyMatch = findExecMessageInHistoryCells(state, incoming.callId);
@@ -1077,7 +1102,7 @@ export function onExecOutput(
   historyMatch.cell.status =
     mergeCallStatus(historyMatch.cell.status, incoming.status) ??
     historyMatch.cell.status;
-  refreshProjectedExecutionDuration(historyMatch.call);
+  refreshProjectedExecutionDuration(historyMatch.call, state.toolActivity.nowMs);
 }
 
 export function onExecEnd(
@@ -1144,7 +1169,7 @@ export function onExecEnd(
 
   flushActiveToolCell(state);
 
-  const execMessage = createExecMessage(merged);
+  const execMessage = createExecMessage(merged, state.toolActivity.nowMs);
   execMessage.status =
     mergeCallStatus(execMessage.status, incoming.status) ?? execMessage.status;
   state.toolActivity.activeCell = execMessage;
