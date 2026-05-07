@@ -1,12 +1,6 @@
 import { type ComponentProps, type ComponentType, type ReactNode } from "react";
 import { HostStatusBadge } from "@/components/HostStatusIndicator";
-import {
-  CornerDownRight,
-  GitMerge,
-  Pencil,
-  Trash2,
-  ChevronDown,
-} from "lucide-react";
+import { GitMerge, ChevronDown } from "lucide-react";
 import { copyToClipboardWithToast } from "@/lib/clipboard";
 import {
   type PermissionMode,
@@ -18,20 +12,19 @@ import {
   type WorkspaceStatus,
 } from "@bb/domain";
 import {
-  PromptBox,
-  type PromptBoxAttachmentsConfig,
-  type PromptBoxHistoryConfig,
-  type PromptBoxMentionsConfig,
-} from "@/components/promptbox/PromptBox";
+  PromptBoxInternal,
+  type AttachmentsConfig,
+  type HistoryConfig,
+  type MentionsConfig,
+} from "@/components/promptbox/PromptBoxInternal";
 import {
   OptionDisplay,
   type PickerOption,
 } from "@/components/pickers/OptionPicker";
 import { PermissionModePicker } from "@/components/pickers/PermissionModePicker";
-import { PromptExecutionControls } from "@/components/promptbox/PromptExecutionControls";
+import { ExecutionControls } from "@/components/promptbox/ExecutionControls";
 import { useBottomAnchoredScroll } from "@/components/ui";
-import { Button } from "@/components/ui";
-import { ThreadTimelineScrollToBottomButton } from "./ThreadTimelineScrollToBottomButton";
+import { ThreadTimelineScrollToBottomButton } from "@/views/ThreadTimelineScrollToBottomButton";
 import { WorkspaceChangesList } from "@/components/thread/WorkspaceChangesList";
 import {
   getMergeBaseBranchCandidates,
@@ -39,12 +32,9 @@ import {
 } from "@/components/pickers/BranchPicker";
 import { ThreadContextWindowIndicator } from "@/components/thread-timeline";
 import { cn } from "@/lib/utils";
-import {
-  countQueuedMessageAttachments,
-  formatQueuedFollowUpPreview,
-} from "./threadQueuedMessages";
+import { QueuedMessagesList } from "@/components/promptbox/QueuedMessagesList";
 
-type PromptBoxWithScrollAnchorProps = ComponentProps<typeof PromptBox>;
+type PromptBoxWithScrollAnchorProps = ComponentProps<typeof PromptBoxInternal>;
 
 function PromptBoxWithScrollAnchor({
   onSubmit,
@@ -55,131 +45,13 @@ function PromptBoxWithScrollAnchor({
     onSubmit();
     bottomAnchor?.scrollToBottom();
   };
-  return <PromptBox {...promptBoxProps} onSubmit={handleSubmit} />;
+  return <PromptBoxInternal {...promptBoxProps} onSubmit={handleSubmit} />;
 }
 
-function QueuedFollowUpList({
-  queuedMessages,
-  sendDisabled,
-  actionDisabled,
-  processingMessageId,
-  onSendImmediately,
-  onEdit,
-  onDelete,
-}: {
-  queuedMessages: readonly ThreadQueuedMessage[];
-  sendDisabled: boolean;
-  actionDisabled: boolean;
-  processingMessageId: string | null;
-  onSendImmediately: (id: string) => void;
-  onEdit: (id: string) => void;
-  onDelete: (id: string) => void;
-}) {
-  if (queuedMessages.length === 0) return null;
-
-  return (
-    <section
-      aria-label="Queued follow-up messages"
-      className="mb-2 overflow-hidden rounded-md border border-border/60 bg-muted/25"
-    >
-      <div className="flex items-center justify-between px-2.5 pb-1 pt-2.5">
-        <p className="text-xs text-muted-foreground">
-          Queued ({queuedMessages.length})
-        </p>
-      </div>
-      <ul>
-        {queuedMessages.map((queuedMessage, index) => {
-          const preview = formatQueuedFollowUpPreview(queuedMessage.content);
-          const attachmentCount = countQueuedMessageAttachments(
-            queuedMessage.content,
-          );
-          const isProcessing = processingMessageId === queuedMessage.id;
-          return (
-            <li key={queuedMessage.id} className="px-2.5 py-0.5">
-              <div className="flex items-center gap-1.5">
-                <div className="p-0.5 text-muted-foreground">
-                  <CornerDownRight className="size-3.5" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex min-w-0 items-center gap-1 text-xs leading-4">
-                    <p
-                      className="min-w-0 truncate text-foreground"
-                      title={preview}
-                    >
-                      {preview}
-                    </p>
-                    {attachmentCount > 0 ? (
-                      <>
-                        <span className="shrink-0 text-muted-foreground">
-                          .
-                        </span>
-                        <span className="shrink-0 text-muted-foreground">
-                          {attachmentCount === 1
-                            ? "1 attachment"
-                            : `${attachmentCount} attachments`}
-                        </span>
-                      </>
-                    ) : null}
-                    {isProcessing ? (
-                      <>
-                        <span className="shrink-0 text-muted-foreground">
-                          .
-                        </span>
-                        <span className="shrink-0 text-muted-foreground">
-                          Sending...
-                        </span>
-                      </>
-                    ) : null}
-                  </div>
-                </div>
-                <div className="ml-1 flex shrink-0 items-center gap-1">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="link"
-                    className="h-auto px-0 pr-1 text-xs text-muted-foreground underline"
-                    disabled={sendDisabled || isProcessing}
-                    onClick={() => onSendImmediately(queuedMessage.id)}
-                  >
-                    {isProcessing ? "Sending..." : "Send now"}
-                  </Button>
-                  <Button
-                    type="button"
-                    size="icon"
-                    variant="ghost"
-                    className="size-7 text-muted-foreground"
-                    disabled={actionDisabled || isProcessing}
-                    onClick={() => onEdit(queuedMessage.id)}
-                    aria-label={`Edit queued message ${index + 1}`}
-                    title="Edit queued message"
-                  >
-                    <Pencil className="size-3.5" />
-                  </Button>
-                  <Button
-                    type="button"
-                    size="icon"
-                    variant="ghost"
-                    className="size-7 text-muted-foreground hover:text-destructive"
-                    disabled={actionDisabled || isProcessing}
-                    onClick={() => onDelete(queuedMessage.id)}
-                    aria-label={`Delete queued message ${index + 1}`}
-                    title="Delete queued message"
-                  >
-                    <Trash2 className="size-3.5" />
-                  </Button>
-                </div>
-              </div>
-            </li>
-          );
-        })}
-      </ul>
-    </section>
-  );
-}
 
 export interface ComposerAttachmentsProps {
   attachmentError: string | null;
-  attachments: NonNullable<PromptBoxAttachmentsConfig["items"]>;
+  attachments: NonNullable<AttachmentsConfig["items"]>;
   isAttaching: boolean;
   onAttachFiles: (files: File[]) => void | Promise<void>;
   onRemoveAttachment: (path: string) => void;
@@ -207,7 +79,7 @@ export interface ComposerBannerProps {
 
 export interface ComposerCoreProps {
   canSendFollowUp: boolean;
-  history: PromptBoxHistoryConfig;
+  history: HistoryConfig;
   isFollowUpSubmitting: boolean;
   message: string;
   onChangeMessage: (value: string) => void;
@@ -254,8 +126,8 @@ export interface ComposerExecutionProps {
 export interface ComposerMentionsProps {
   mentionError: boolean;
   mentionLoading: boolean;
-  mentionSuggestions: PromptBoxMentionsConfig["suggestions"];
-  onMentionQueryChange: NonNullable<PromptBoxMentionsConfig["onQueryChange"]>;
+  mentionSuggestions: MentionsConfig["suggestions"];
+  onMentionQueryChange: NonNullable<MentionsConfig["onQueryChange"]>;
 }
 
 export interface ComposerQueueProps {
@@ -266,7 +138,7 @@ export interface ComposerQueueProps {
   queuedMessages: readonly ThreadQueuedMessage[];
 }
 
-export interface ThreadFollowUpComposerProps {
+export interface FollowUpPromptBoxProps {
   attachments: ComposerAttachmentsProps;
   banner: ComposerBannerProps;
   composer: ComposerCoreProps;
@@ -276,7 +148,7 @@ export interface ThreadFollowUpComposerProps {
   queue: ComposerQueueProps;
 }
 
-export function ThreadFollowUpComposer({
+export function FollowUpPromptBox({
   attachments,
   banner,
   composer,
@@ -284,7 +156,7 @@ export function ThreadFollowUpComposer({
   execution,
   mentions,
   queue,
-}: ThreadFollowUpComposerProps) {
+}: FollowUpPromptBoxProps) {
   const promptBannerMergeBaseCandidates = getMergeBaseBranchCandidates({
     mergeBaseBranch: banner.promptBannerMergeBaseBranch,
     mergeBaseBranchOptions: banner.mergeBaseBranchOptions,
@@ -398,7 +270,7 @@ export function ThreadFollowUpComposer({
             ) : null}
           </div>
         ) : null}
-        <QueuedFollowUpList
+        <QueuedMessagesList
           queuedMessages={queue.queuedMessages}
           sendDisabled={
             !composer.canSendFollowUp ||
@@ -452,7 +324,7 @@ export function ThreadFollowUpComposer({
             resetOnSubmit: true,
           }}
           footerStart={
-            <PromptExecutionControls
+            <ExecutionControls
               provider={{
                 hasMultiple: execution.hasMultipleProviders,
                 options: execution.providerOptions,

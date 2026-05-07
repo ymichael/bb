@@ -43,19 +43,19 @@ export interface PromptExecutionPermissionConfig {
   supported: boolean;
 }
 
-export interface PromptExecutionControlsProps {
+export interface ExecutionControlsProps {
   provider: PromptExecutionProviderConfig;
   model: PromptExecutionModelConfig;
   serviceTier?: PromptExecutionServiceTierConfig;
   reasoning: PromptExecutionReasoningConfig;
 }
 
-export function PromptExecutionControls({
+export function ExecutionControls({
   provider,
   model,
   serviceTier,
   reasoning,
-}: PromptExecutionControlsProps) {
+}: ExecutionControlsProps) {
   const handleProviderChange = provider.onChange ?? (() => {});
   const handleServiceTierChange = serviceTier?.onChange ?? (() => {});
 

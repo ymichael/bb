@@ -11,7 +11,7 @@ function isImageAttachment(attachment: PromptDraftAttachment): boolean {
   );
 }
 
-interface PromptAttachmentPreviewProps {
+interface AttachmentPreviewProps {
   attachments: PromptDraftAttachment[];
   attachmentProjectId?: string;
   expandedImageIndex: number | null;
@@ -19,13 +19,13 @@ interface PromptAttachmentPreviewProps {
   onRemoveAttachment?: (path: string) => void;
 }
 
-export function PromptAttachmentPreview({
+export function AttachmentPreview({
   attachments,
   attachmentProjectId,
   expandedImageIndex,
   onExpandedImageIndexChange,
   onRemoveAttachment,
-}: PromptAttachmentPreviewProps) {
+}: AttachmentPreviewProps) {
   const imageAttachments = attachments.filter(isImageAttachment);
   const nonImageAttachments = attachments.filter(
     (attachment) => !isImageAttachment(attachment),

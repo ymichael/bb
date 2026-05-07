@@ -40,7 +40,7 @@ import { getMutationErrorMessage } from "@/lib/mutation-errors";
 import { promptHistoryEntriesToDrafts } from "@/lib/prompt-history";
 import { promptDraftToInput } from "@/lib/prompt-draft";
 import { toast } from "sonner";
-import { ThreadFollowUpComposer } from "./ThreadFollowUpComposer";
+import { FollowUpPromptBox } from "@/components/promptbox/FollowUpPromptBox";
 import { queuedInputToDraft } from "./threadQueuedMessages";
 import type { SendMessageMutationLike } from "./threadDetailMutationTypes";
 
@@ -459,7 +459,7 @@ export function ThreadDetailPromptArea({
   }
 
   return (
-    <ThreadFollowUpComposer
+    <FollowUpPromptBox
       attachments={{
         attachmentError,
         attachments: promptDraft.attachments,

@@ -11,7 +11,7 @@ import { useState } from "react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { PromptDraftState } from "@/lib/prompt-draft";
 import type { PromptMentionSuggestion } from "@/hooks/usePromptMentions";
-import { PromptBox } from "./PromptBox";
+import { PromptBoxInternal } from "./PromptBoxInternal";
 
 vi.mock("@/hooks/useAutoGrow", () => ({
   useAutoGrow: () => () => {},
@@ -74,7 +74,7 @@ function PromptBoxHarness(args: PromptBoxHarnessProps) {
   const [draft, setDraft] = useState(args.initialDraft);
 
   return (
-    <PromptBox
+    <PromptBoxInternal
       value={draft.text}
       onChange={(nextText) => {
         setDraft((currentDraft) => ({
@@ -136,7 +136,7 @@ function pressIgnoredHistoryArrow({
   expect(textarea.value).toBe(expectedValue);
 }
 
-describe("PromptBox history navigation", () => {
+describe("PromptBoxInternal history navigation", () => {
   it("places an autofocused existing draft caret at the end", () => {
     render(
       <PromptBoxHarness

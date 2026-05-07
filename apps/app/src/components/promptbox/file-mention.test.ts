@@ -42,14 +42,14 @@ describe("file mention helpers", () => {
     const result = insertFileMention(
       value,
       mention!,
-      "src/components/PromptBox.tsx",
+      "src/components/PromptBoxInternal.tsx",
     );
 
     expect(result.value).toBe(
-      "Please check @src/components/PromptBox.tsx and update tests",
+      "Please check @src/components/PromptBoxInternal.tsx and update tests",
     );
     expect(result.caretPosition).toBe(
-      "Please check @src/components/PromptBox.tsx".length,
+      "Please check @src/components/PromptBoxInternal.tsx".length,
     );
   });
 });

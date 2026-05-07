@@ -43,8 +43,8 @@ import {
   type PromptDraftState,
 } from "@/lib/prompt-draft";
 import { cn } from "@/lib/utils";
-import { PromptAttachmentPreview } from "./PromptAttachmentPreview";
-import { PromptMentionMenu } from "./PromptMentionMenu";
+import { AttachmentPreview } from "./AttachmentPreview";
+import { MentionMenu } from "./MentionMenu";
 import {
   findActiveFileMention,
   insertFileMention,
@@ -76,14 +76,14 @@ export interface PromptBoxSubmissionConfig {
   onStop?: () => void;
 }
 
-export interface PromptBoxMentionsConfig {
+export interface MentionsConfig {
   suggestions?: PromptMentionSuggestion[];
   isLoading?: boolean;
   isError?: boolean;
   onQueryChange?: (query: string | null) => void;
 }
 
-export interface PromptBoxAttachmentsConfig {
+export interface AttachmentsConfig {
   items?: PromptDraftAttachment[];
   isAttaching?: boolean;
   error?: string | null;
@@ -99,14 +99,14 @@ export interface PromptBoxZenModeConfig {
   resetOnSubmit?: boolean;
 }
 
-export interface PromptBoxHistoryConfig {
+export interface HistoryConfig {
   currentDraft: PromptDraftState;
   entries: readonly PromptDraftState[];
   onSelectEntry: (draft: PromptDraftState) => void;
   resetKey?: string | number;
 }
 
-export interface PromptBoxProps {
+export interface PromptBoxInternalProps {
   id?: string;
   value: string;
   onChange: (value: string) => void;
@@ -116,10 +116,10 @@ export interface PromptBoxProps {
   footerStart?: ReactNode;
   autoFocus?: boolean;
   submission?: PromptBoxSubmissionConfig;
-  mentions?: PromptBoxMentionsConfig;
-  attachments?: PromptBoxAttachmentsConfig;
+  mentions?: MentionsConfig;
+  attachments?: AttachmentsConfig;
   zenMode?: PromptBoxZenModeConfig;
-  history?: PromptBoxHistoryConfig;
+  history?: HistoryConfig;
 }
 
 interface DismissedMentionRange {
@@ -175,7 +175,7 @@ function summarizeVoiceErrorMessage(input: string): string {
   return normalized || "Voice input failed.";
 }
 
-export function PromptBox({
+export function PromptBoxInternal({
   id,
   value,
   onChange,
@@ -189,7 +189,7 @@ export function PromptBox({
   attachments: attachmentConfig = {},
   zenMode = {},
   history,
-}: PromptBoxProps) {
+}: PromptBoxInternalProps) {
   const {
     isSubmitting = false,
     disabled: submitDisabled = false,
@@ -942,7 +942,7 @@ export function PromptBox({
       />
 
       {showMentionMenu ? (
-        <PromptMentionMenu
+        <MentionMenu
           showQueryHint={showQueryHint}
           mentionLoading={mentionLoading}
           mentionError={mentionError}
@@ -953,7 +953,7 @@ export function PromptBox({
         />
       ) : null}
 
-      <PromptAttachmentPreview
+      <AttachmentPreview
         attachments={attachments}
         attachmentProjectId={attachmentProjectId}
         expandedImageIndex={expandedImageIndex}

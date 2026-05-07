@@ -4,7 +4,7 @@ import { TruncateStart } from "@/components/ui";
 import type { PromptMentionSuggestion } from "@/hooks/usePromptMentions";
 import { cn } from "@/lib/utils";
 
-interface PromptMentionMenuProps {
+interface MentionMenuProps {
   showQueryHint: boolean;
   mentionLoading: boolean;
   mentionError: boolean;
@@ -26,7 +26,7 @@ function splitFilePath(filePath: string): { name: string; directory: string } {
   };
 }
 
-export function PromptMentionMenu({
+export function MentionMenu({
   showQueryHint,
   mentionLoading,
   mentionError,
@@ -34,7 +34,7 @@ export function PromptMentionMenu({
   selectedMentionIndex,
   mentionItemRefs,
   onApplyMention,
-}: PromptMentionMenuProps) {
+}: MentionMenuProps) {
   return (
     <div className="mx-3 mb-1 mt-1 overflow-hidden rounded-md border border-border/70 bg-popover text-popover-foreground shadow-sm">
       <div className="max-h-48 overflow-y-auto p-1">

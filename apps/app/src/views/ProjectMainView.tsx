@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import { PromptBox } from "@/components/promptbox/PromptBox";
+import { PromptBoxInternal } from "@/components/promptbox/PromptBoxInternal";
 import { PermissionModePicker } from "@/components/pickers/PermissionModePicker";
-import { PromptExecutionControls } from "@/components/promptbox/PromptExecutionControls";
+import { ExecutionControls } from "@/components/promptbox/ExecutionControls";
 import {
   EnvironmentPicker,
   parseEnvironmentValue,
@@ -275,7 +275,7 @@ export function ProjectMainView() {
             </div>
           ) : null}
         </div>
-        <PromptBox
+        <PromptBoxInternal
           id="project-main-prompt"
           value={prompt}
           onChange={promptDraft.setText}
@@ -313,7 +313,7 @@ export function ProjectMainView() {
             storageKey: projectMainZenModeStorageKey,
           }}
           footerStart={
-            <PromptExecutionControls
+            <ExecutionControls
               provider={{
                 options: providerOptions,
                 selectedId: selectedProviderId,
