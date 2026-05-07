@@ -394,13 +394,23 @@ function addRow(state: ReplayBuildState, row: TimelineRow): void {
 }
 
 function addSystemRow(state: ReplayBuildState, args: AddSystemRowArgs): void {
+  const base = rowBase(state, { id: args.id, createdAt: args.createdAt });
+  if (args.status === "error") {
+    addRow(state, {
+      ...base,
+      kind: "system",
+      systemKind: "error",
+      title: args.title,
+      detail: args.detail,
+      status: "error",
+    });
+    return;
+  }
   addRow(state, {
-    ...rowBase(state, {
-      id: args.id,
-      createdAt: args.createdAt,
-    }),
+    ...base,
     kind: "system",
-    systemKind: args.status === "error" ? "error" : "operation",
+    systemKind: "operation",
+    operationKind: "generic",
     title: args.title,
     detail: args.detail,
     status: args.status,
