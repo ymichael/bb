@@ -95,7 +95,7 @@ interface HostSection {
 }
 
 function buildHostSections(
-  hosts: Host[],
+  hosts: readonly Host[],
   sources: readonly ProjectSource[],
   isLocalHost: (hostId: string | null | undefined) => boolean,
 ): HostSection[] {
@@ -122,7 +122,8 @@ function buildHostSections(
 }
 
 // ---------------------------------------------------------------------------
-// Component
+// Pure presentational picker. Use directly in stories with mocked data.
+// App callers should use EnvironmentPicker (the connected wrapper below).
 // ---------------------------------------------------------------------------
 
 interface SelectedEnvironment {
@@ -132,28 +133,36 @@ interface SelectedEnvironment {
   hostConnected?: boolean;
 }
 
-interface EnvironmentPickerProps {
+export interface EnvironmentPickerUIProps {
   value: string;
   onChange: (value: string) => void;
   projectId: string | null;
   sources: readonly ProjectSource[];
+  hosts: readonly Host[];
+  sandboxBackends: readonly SandboxBackendInfo[];
+  sandboxHostSupported: boolean;
+  isLocalHost: (hostId: string | null | undefined) => boolean;
   /** Render with the dim, hover-to-foreground treatment used inside the prompt box. */
   muted?: boolean;
+  /** Render with the menu open on mount. Story-only escape hatch. */
+  defaultOpen?: boolean;
+  /** Whether the menu blocks page interaction. Defaults to Radix's true; pass false in stories. */
+  modal?: boolean;
 }
 
-export function EnvironmentPicker({
+export function EnvironmentPickerUI({
   value,
   onChange,
   projectId,
   sources,
+  hosts,
+  sandboxBackends,
+  sandboxHostSupported,
+  isLocalHost,
   muted,
-}: EnvironmentPickerProps) {
-  const { isLocalHost } = useHostDaemon();
-  const { data: hosts = [] } = useEffectiveHosts();
-  const sandboxHostSupported = useAtomValue(sandboxHostSupportedAtom);
-  const { data: sandboxBackends = [] } =
-    useSandboxBackends(sandboxHostSupported);
-
+  defaultOpen,
+  modal,
+}: EnvironmentPickerUIProps) {
   const hostSections = useMemo(
     () => buildHostSections(hosts, sources, isLocalHost),
     [hosts, sources, isLocalHost],
@@ -187,7 +196,7 @@ export function EnvironmentPicker({
   }, [value, hosts, sandboxBackends, isLocalHost]);
 
   return (
-    <DropdownMenu>
+    <DropdownMenu defaultOpen={defaultOpen} modal={modal}>
       <DropdownMenuTrigger asChild>
         <Button
           type="button"
@@ -259,6 +268,48 @@ export function EnvironmentPicker({
 }
 
 // ---------------------------------------------------------------------------
+// Connected variant — wires app-wide hooks (jotai atoms + React Query) into
+// the presentational EnvironmentPickerUI. App callers use this; stories use
+// EnvironmentPickerUI directly with mocks.
+// ---------------------------------------------------------------------------
+
+export interface EnvironmentPickerProps {
+  value: string;
+  onChange: (value: string) => void;
+  projectId: string | null;
+  sources: readonly ProjectSource[];
+  muted?: boolean;
+}
+
+export function EnvironmentPicker({
+  value,
+  onChange,
+  projectId,
+  sources,
+  muted,
+}: EnvironmentPickerProps) {
+  const { isLocalHost } = useHostDaemon();
+  const { data: hosts = [] } = useEffectiveHosts();
+  const sandboxHostSupported = useAtomValue(sandboxHostSupportedAtom);
+  const { data: sandboxBackends = [] } =
+    useSandboxBackends(sandboxHostSupported);
+
+  return (
+    <EnvironmentPickerUI
+      value={value}
+      onChange={onChange}
+      projectId={projectId}
+      sources={sources}
+      hosts={hosts}
+      sandboxBackends={sandboxBackends}
+      sandboxHostSupported={sandboxHostSupported}
+      isLocalHost={isLocalHost}
+      muted={muted}
+    />
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Host section
 // ---------------------------------------------------------------------------
 
@@ -318,7 +369,7 @@ function HostSectionGroup({
 // ---------------------------------------------------------------------------
 
 interface SandboxSectionProps {
-  backends: SandboxBackendInfo[];
+  backends: readonly SandboxBackendInfo[];
   hasGitHubSource: boolean;
   projectId: string | null;
   value: string;

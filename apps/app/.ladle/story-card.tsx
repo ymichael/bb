@@ -7,7 +7,7 @@ import {
 import { cn } from "../src/components/ui";
 
 const ROW_GRID =
-  "grid grid-cols-[var(--story-label-width,140px)_minmax(0,1fr)] gap-x-4";
+  "grid grid-cols-[var(--story-label-width,210px)_minmax(0,1fr)] gap-x-4";
 
 function labelWidthStyle(
   labelWidth: string | undefined,
@@ -37,7 +37,7 @@ export function StoryCard({
 }: StoryCardProps) {
   if (columns && columns.length > 0) {
     const style: CSSProperties = {
-      "--story-label-width": labelWidth ?? "140px",
+      "--story-label-width": labelWidth ?? "210px",
       gridTemplateColumns: `var(--story-label-width) repeat(${columns.length}, minmax(0, 1fr))`,
     } as CSSProperties;
     return (

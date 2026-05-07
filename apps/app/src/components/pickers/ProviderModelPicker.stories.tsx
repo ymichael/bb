@@ -36,6 +36,15 @@ const claudeModels: readonly PickerOption<string>[] = [
   { value: "claude-haiku-4-5", label: "Claude Haiku 4.5" },
 ];
 
+// Pi proxies through other backends — its model list is a cross-provider mix.
+// Mirrors PI_DEFAULT_MODEL_PER_PROVIDER in @bb/agent-providers.
+const piModels: readonly PickerOption<string>[] = [
+  { value: "claude-opus-4-7", label: "Claude Opus 4.7" },
+  { value: "gpt-5.5", label: "GPT-5.5" },
+  { value: "gemini-2.5-pro", label: "Gemini 2.5 Pro" },
+  { value: "grok-4-fast-non-reasoning", label: "Grok 4 Fast" },
+];
+
 const noop = () => {};
 
 const codexBase = {
@@ -60,6 +69,14 @@ const claudeBase = {
   showFastModeToggle: false,
 };
 
+const piBase = {
+  ...codexBase,
+  selectedProviderId: "pi",
+  modelValue: "claude-opus-4-7",
+  modelOptions: piModels,
+  showFastModeToggle: false,
+};
+
 export function Overview() {
   return (
     <StoryCard>
@@ -72,14 +89,11 @@ export function Overview() {
       <StoryRow label="claude-code selected" hint="no fast mode toggle">
         <ProviderModelPicker {...claudeBase} />
       </StoryRow>
+      <StoryRow label="pi selected" hint="cross-provider model list">
+        <ProviderModelPicker {...piBase} />
+      </StoryRow>
       <StoryRow label="fast mode active" hint="codex + fastModeEnabled">
         <ProviderModelPicker {...codexBase} fastModeEnabled />
-      </StoryRow>
-      <StoryRow
-        label="single provider"
-        hint="hasMultipleProviders=false hides tabs"
-      >
-        <ProviderModelPicker {...claudeBase} hasMultipleProviders={false} />
       </StoryRow>
       <StoryRow label="open popover" hint="defaultOpen + modal=false">
         <ProviderModelPicker {...codexBase} defaultOpen modal={false} />
