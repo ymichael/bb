@@ -10,10 +10,10 @@ import {
 export interface ExecutionProviderConfig {
   options?: readonly PickerOption<string>[];
   selectedId?: string;
+  /** Omit to render the provider as locked (used by FollowUp where the thread is committed). */
   onChange?: (value: string) => void;
   hasMultiple?: boolean;
   displayName?: string;
-  readOnly?: boolean;
 }
 
 export interface ExecutionModelConfig {
@@ -56,14 +56,14 @@ export function ExecutionControls({
   serviceTier,
   reasoning,
 }: ExecutionControlsProps) {
-  const handleProviderChange = provider.onChange ?? (() => {});
   const handleServiceTierChange = serviceTier?.onChange ?? (() => {});
+  const isProviderLocked = provider.onChange === undefined;
 
   // Show read-only provider label when provider is locked (thread follow-up)
   // and there's no model list to show in the unified picker.
   const showReadOnlyProvider =
     provider.hasMultiple &&
-    provider.readOnly &&
+    isProviderLocked &&
     provider.displayName &&
     model.options.length === 0;
 
@@ -87,9 +87,8 @@ export function ExecutionControls({
         <ProviderModelPicker
           providerOptions={provider.options ?? []}
           selectedProviderId={provider.selectedId ?? ""}
-          onSelectedProviderChange={handleProviderChange}
+          onSelectedProviderChange={provider.onChange}
           hasMultipleProviders={provider.hasMultiple ?? false}
-          providerReadOnly={provider.readOnly}
           modelValue={model.active?.model ?? model.selected}
           modelOptions={model.options}
           onModelChange={model.onChange}

@@ -1,8 +1,5 @@
 import { useRef, type ComponentProps, type ReactNode } from "react";
-import {
-  type ThreadQueuedMessage,
-  type ThreadRuntimeDisplayStatus,
-} from "@bb/domain";
+import { type ThreadRuntimeDisplayStatus } from "@bb/domain";
 import {
   PromptBoxInternal,
   type AttachmentsConfig,
@@ -20,11 +17,6 @@ import {
 import { useBottomAnchoredScroll } from "@/components/ui";
 import { ThreadTimelineScrollToBottomButton } from "@/views/ThreadTimelineScrollToBottomButton";
 import { ThreadContextWindowIndicator } from "@/components/thread-timeline";
-import { QueuedMessagesList } from "@/components/promptbox/banner/QueuedMessagesList";
-import {
-  ThreadEnvironmentSummary,
-  type ThreadEnvironmentSummaryProps,
-} from "@/components/promptbox/ThreadEnvironmentSummary";
 
 type PromptBoxWithScrollAnchorProps = ComponentProps<typeof PromptBoxInternal>;
 
@@ -41,15 +33,6 @@ function PromptBoxWithScrollAnchor({
 }
 
 
-export interface ComposerAttachmentsProps {
-  attachmentError: string | null;
-  attachments: NonNullable<AttachmentsConfig["items"]>;
-  isAttaching: boolean;
-  onAttachFiles: (files: File[]) => void | Promise<void>;
-  onRemoveAttachment: (path: string) => void;
-  projectId: string;
-}
-
 /**
  * Discriminated state for the composer's submit affordances. Replaces the
  * previous canSendFollowUp / canQueueFollowUp / canStopRuntime / onStop
@@ -57,12 +40,12 @@ export interface ComposerAttachmentsProps {
  * pending-interaction state and passes it down; the composer reads .kind to
  * render submit/queue/stop affordances.
  */
-export type ComposerBlockedReason =
+export type FollowUpBlockedReason =
   | "pending-interaction"
   | "provisioning"
   | "stopping";
 
-export type ComposerSubmitMode =
+export type FollowUpSubmitMode =
   /** Idle thread — submit creates a new turn; no stop affordance. */
   | { kind: "ready" }
   /** Runtime is active or host-reconnecting — submit queues the message; stop the runtime. */
@@ -70,9 +53,9 @@ export type ComposerSubmitMode =
   /** Runtime is waiting on the host — can't send/queue, but can stop. */
   | { kind: "stop-only"; onStop: () => void }
   /** Can't submit and can't stop — show why. */
-  | { kind: "blocked"; reason: ComposerBlockedReason };
+  | { kind: "blocked"; reason: FollowUpBlockedReason };
 
-export interface ComposerCoreProps {
+export interface FollowUpComposerProps {
   history: HistoryConfig;
   /** True while the send/queue mutation is in flight. Orthogonal to submitMode. */
   isFollowUpSubmitting: boolean;
@@ -80,7 +63,7 @@ export interface ComposerCoreProps {
   onChangeMessage: (value: string) => void;
   onSubmit: () => void;
   promptPlaceholder: string;
-  submitMode: ComposerSubmitMode;
+  submitMode: FollowUpSubmitMode;
   /** Used by the scroll-to-bottom button to know whether the runtime is actively streaming. */
   threadRuntimeDisplayStatus: ThreadRuntimeDisplayStatus;
 }
@@ -90,59 +73,47 @@ type ContextWindowUsage = ComponentProps<
 >["usage"];
 
 
-export interface ComposerMentionsProps {
-  mentionError: boolean;
-  mentionLoading: boolean;
-  mentionSuggestions: MentionsConfig["suggestions"];
-  onMentionQueryChange: NonNullable<MentionsConfig["onQueryChange"]>;
-}
-
-export interface ComposerQueueProps {
-  isQueueMutationPending: boolean;
-  onDeleteQueuedMessage: (messageId: string) => void;
-  onEditQueuedMessage: (messageId: string) => void;
-  onSendQueuedImmediately: (messageId: string) => void;
-  processingQueuedMessageId: string | null;
-  queuedMessages: readonly ThreadQueuedMessage[];
-}
-
 export interface FollowUpPromptBoxProps {
-  attachments: ComposerAttachmentsProps;
+  attachments: AttachmentsConfig;
   /**
-   * Slot for the prompt context banner above the composer. Pass null to hide.
-   * Today this is rendered as a ContextBanner element by the
-   * caller; FollowUpPromptBox no longer knows the banner's data shape.
+   * Slot for the stack of context cards above the prompt input — today
+   * <ContextBanner> + <QueuedMessagesList>, both wrapped in PromptStackCard
+   * chrome. The caller composes whatever should render above the composer
+   * and passes it as a single element. Pass null to hide the stack entirely.
    */
-  banner: ReactNode | null;
-  composer: ComposerCoreProps;
-  /** Read-only environment strip rendered in the bottom row. Pass null to hide. */
-  environmentSummary: ThreadEnvironmentSummaryProps | null;
-  /** Token usage indicator shown to the right of the permission picker. */
-  contextWindowUsage?: ContextWindowUsage;
+  stack: ReactNode | null;
+  composer: FollowUpComposerProps;
+  /** Slot for the read-only environment strip in the bottom row. Pass null to hide. */
+  environmentSummary: ReactNode | null;
+  /**
+   * Token usage indicator shown to the right of the permission picker. Null
+   * means no usage available yet (e.g. thread just created); the indicator is
+   * hidden in that case.
+   */
+  contextWindowUsage: ContextWindowUsage | null;
   /**
    * Execution controls (provider + model + service tier + reasoning) rendered
-   * in PromptBox's footer slot. The composer forces provider.readOnly because
-   * follow-ups can't change provider — the thread is already committed.
+   * in PromptBox's footer slot. Callers omit provider.onChange so the picker
+   * renders the provider as locked — follow-ups can't change provider, the
+   * thread is already committed.
    */
   execution: ExecutionControlsProps;
   /** Permission mode picker rendered in the bottom row. */
   permission: ExecutionPermissionConfig;
-  mentions: ComposerMentionsProps;
-  queue: ComposerQueueProps;
+  mentions: MentionsConfig;
   /** zenMode resetKey — typically the active thread id, so zen-mode collapses on thread change. */
-  zenModeResetKey: string | number | undefined;
+  zenModeResetKey: string | number;
 }
 
 export function FollowUpPromptBox({
   attachments,
-  banner,
+  stack,
   composer,
   environmentSummary,
   contextWindowUsage,
   execution,
   permission,
   mentions,
-  queue,
   zenModeResetKey,
 }: FollowUpPromptBoxProps) {
   const submitMode = composer.submitMode;
@@ -163,20 +134,7 @@ export function FollowUpPromptBox({
         active={composer.threadRuntimeDisplayStatus === "active"}
       />
       <div className="space-y-2">
-        {banner}
-        <QueuedMessagesList
-          queuedMessages={queue.queuedMessages}
-          sendDisabled={
-            !canSubmit ||
-            composer.isFollowUpSubmitting ||
-            queue.isQueueMutationPending
-          }
-          actionDisabled={queue.isQueueMutationPending}
-          processingMessageId={queue.processingQueuedMessageId}
-          onSendImmediately={queue.onSendQueuedImmediately}
-          onEdit={queue.onEditQueuedMessage}
-          onDelete={queue.onDeleteQueuedMessage}
-        />
+        {stack}
         <PromptBoxWithScrollAnchor
           promptBoxRef={promptBoxRef}
           voice={voice}
@@ -196,38 +154,19 @@ export function FollowUpPromptBox({
             isRunning: canStopRuntime,
             mode: "enter",
           }}
-          mentions={{
-            suggestions: mentions.mentionSuggestions,
-            isLoading: mentions.mentionLoading,
-            isError: mentions.mentionError,
-            onQueryChange: mentions.onMentionQueryChange,
-          }}
-          attachments={{
-            items: attachments.attachments,
-            projectId: attachments.projectId,
-            onAttachFiles: attachments.onAttachFiles,
-            onRemove: attachments.onRemoveAttachment,
-            isAttaching: attachments.isAttaching,
-            error: attachments.attachmentError,
-          }}
+          mentions={mentions}
+          attachments={attachments}
           zenMode={{
             layout: "thread",
             storageKey: null,
             resetKey: zenModeResetKey,
             resetOnSubmit: true,
           }}
-          footerStart={
-            <ExecutionControls
-              {...execution}
-              provider={{ ...execution.provider, readOnly: true }}
-            />
-          }
+          footerStart={<ExecutionControls {...execution} />}
         />
         <div className="mt-1 flex min-h-6 items-center justify-between gap-2 pl-[15px] pr-3.5">
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
-            {environmentSummary ? (
-              <ThreadEnvironmentSummary {...environmentSummary} />
-            ) : null}
+            {environmentSummary}
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <PermissionModePicker

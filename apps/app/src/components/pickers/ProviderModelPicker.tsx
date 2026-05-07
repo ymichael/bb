@@ -24,9 +24,9 @@ interface ProviderModelPickerProps {
   // Provider state
   providerOptions: readonly PickerOption<string>[];
   selectedProviderId: string;
-  onSelectedProviderChange: (value: string) => void;
+  /** Omit to render the provider as locked (provider tabs hidden, can't preview). */
+  onSelectedProviderChange?: (value: string) => void;
   hasMultipleProviders: boolean;
-  providerReadOnly?: boolean;
   // Model state
   modelValue: string;
   modelOptions: readonly PickerOption<string>[];
@@ -51,7 +51,6 @@ export function ProviderModelPicker({
   selectedProviderId,
   onSelectedProviderChange,
   hasMultipleProviders,
-  providerReadOnly,
   modelValue,
   modelOptions,
   onModelChange,
@@ -90,7 +89,9 @@ export function ProviderModelPicker({
   const selectedModelLabel = selectedModelOption?.label ?? modelValue;
 
   const showProviderTabs =
-    hasMultipleProviders && !providerReadOnly && providerOptions.length > 1;
+    hasMultipleProviders &&
+    onSelectedProviderChange !== undefined &&
+    providerOptions.length > 1;
 
   // When previewing a different provider, fetch its models independently
   // so we don't disturb the committed state in the hook.
@@ -129,9 +130,11 @@ export function ProviderModelPicker({
 
   const handleModelSelect = useCallback(
     (model: string) => {
-      // Commit the previewed provider if it differs from the current one
+      // Commit the previewed provider if it differs from the current one.
+      // Preview is only reachable when the picker is unlocked, so onChange
+      // is guaranteed to be set when isPreviewing is true.
       if (isPreviewing) {
-        onSelectedProviderChange(previewProviderId!);
+        onSelectedProviderChange?.(previewProviderId!);
       }
       onModelChange(model);
       setOpen(false);

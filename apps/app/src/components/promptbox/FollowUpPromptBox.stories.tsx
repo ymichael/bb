@@ -4,9 +4,15 @@ import type { ThreadContextWindowUsage } from "@bb/server-contract";
 import { Monitor } from "lucide-react";
 import {
   FollowUpPromptBox,
-  type ComposerSubmitMode,
+  type FollowUpSubmitMode,
 } from "@/components/promptbox/FollowUpPromptBox";
+import type {
+  AttachmentsConfig,
+  MentionsConfig,
+} from "@/components/promptbox/PromptBoxInternal";
 import { ContextBanner } from "@/components/promptbox/banner/ContextBanner";
+import { QueuedMessagesList } from "@/components/promptbox/banner/QueuedMessagesList";
+import { ThreadEnvironmentSummary } from "@/components/promptbox/ThreadEnvironmentSummary";
 import type { ExecutionControlsProps } from "@/components/promptbox/ExecutionControls";
 import { ClaudeIcon } from "@/components/icons/ClaudeIcon";
 import { OpenAiIcon } from "@/components/icons/OpenAiIcon";
@@ -32,7 +38,8 @@ const baseExecution: ExecutionControlsProps = {
   provider: {
     options: providerOptions,
     selectedId: "codex",
-    onChange: noop,
+    // FollowUp omits onChange — the thread is committed to a provider, the
+    // picker renders the provider segment as locked.
     hasMultiple: true,
     displayName: "Codex",
   },
@@ -77,15 +84,17 @@ const basePermission = {
 };
 
 // ---------------------------------------------------------------------------
-// Environment summary (left of the bottom row)
+// Environment summary slot — pre-built element passed straight through.
 // ---------------------------------------------------------------------------
 
-const localEnvironmentSummary = {
-  environmentLabel: "Direct",
-  environmentHostConnected: true,
-  environmentIcon: Monitor,
-  environmentBranchName: "bb/promptbox-stories",
-};
+const localEnvironmentSummary: ReactNode = (
+  <ThreadEnvironmentSummary
+    environmentLabel="Direct"
+    environmentHostConnected
+    environmentIcon={Monitor}
+    environmentBranchName="bb/promptbox-stories"
+  />
+);
 
 const usage: ThreadContextWindowUsage = {
   usedTokens: 32_400,
@@ -94,27 +103,23 @@ const usage: ThreadContextWindowUsage = {
 };
 
 // ---------------------------------------------------------------------------
-// Mentions (no suggestions in default — would need to seed value)
+// Mentions + attachments + history (mostly empty fixtures)
 // ---------------------------------------------------------------------------
 
-const mentionsBase = {
-  mentionError: false,
-  mentionLoading: false,
-  mentionSuggestions: [],
-  onMentionQueryChange: noop,
+const mentionsBase: MentionsConfig = {
+  suggestions: [],
+  isLoading: false,
+  isError: false,
+  onQueryChange: noop,
 };
 
-// ---------------------------------------------------------------------------
-// Attachments + history (mostly empty)
-// ---------------------------------------------------------------------------
-
-const attachmentsBase = {
-  attachmentError: null,
-  attachments: [],
-  isAttaching: false,
-  onAttachFiles: noop,
-  onRemoveAttachment: noop,
+const attachmentsBase: AttachmentsConfig = {
+  items: [],
   projectId: "proj_demo",
+  isAttaching: false,
+  error: null,
+  onAttachFiles: noop,
+  onRemove: noop,
 };
 
 const historyEntries = [
@@ -123,12 +128,11 @@ const historyEntries = [
 ];
 
 // ---------------------------------------------------------------------------
-// Banner — passed as a ReactNode slot. Most rows pass null. The "with banner"
-// row passes a fixture <ContextBanner> element so FollowUpPromptBox
-// stays decoupled from the banner's data shape.
+// Stack slot fixtures — both ContextBanner and QueuedMessagesList stack above
+// the prompt input. The caller composes them as a single ReactNode.
 // ---------------------------------------------------------------------------
 
-const bannerWithChanges: ReactNode = (
+const contextBannerElement: ReactNode = (
   <ContextBanner
     canExpandPromptChangeList
     isChangeListExpanded={false}
@@ -157,19 +161,6 @@ const bannerWithChanges: ReactNode = (
     onPromptBannerMergeBaseBranchChange={noop}
   />
 );
-
-// ---------------------------------------------------------------------------
-// Queue
-// ---------------------------------------------------------------------------
-
-const emptyQueue = {
-  isQueueMutationPending: false,
-  onDeleteQueuedMessage: noop,
-  onEditQueuedMessage: noop,
-  onSendQueuedImmediately: noop,
-  processingQueuedMessageId: null,
-  queuedMessages: [] as readonly ThreadQueuedMessage[],
-};
 
 const queuedMessages: readonly ThreadQueuedMessage[] = [
   {
@@ -201,24 +192,34 @@ const queuedMessages: readonly ThreadQueuedMessage[] = [
   },
 ];
 
+const queuedMessagesElement: ReactNode = (
+  <QueuedMessagesList
+    queuedMessages={queuedMessages}
+    sendDisabled={false}
+    actionDisabled={false}
+    processingMessageId={null}
+    onSendImmediately={noop}
+    onEdit={noop}
+    onDelete={noop}
+  />
+);
+
 // ---------------------------------------------------------------------------
-// Per-row component (one controlled instance + variant config)
+// Per-row component
 // ---------------------------------------------------------------------------
 
 interface RowConfig {
   initialMessage?: string;
-  submitMode: ComposerSubmitMode;
+  submitMode: FollowUpSubmitMode;
   isFollowUpSubmitting?: boolean;
   threadRuntimeDisplayStatus?: ComposerCoreRuntimeStatus;
   promptPlaceholder?: string;
-  environmentSummary?: typeof localEnvironmentSummary | null;
-  contextWindowUsage?: ThreadContextWindowUsage;
-  banner?: ReactNode | null;
-  queue?: typeof emptyQueue;
+  environmentSummary?: ReactNode | null;
+  contextWindowUsage?: ThreadContextWindowUsage | null;
+  stack?: ReactNode | null;
   zenModeResetKey?: string;
 }
 
-// re-export the runtime display status type narrowly for stories
 type ComposerCoreRuntimeStatus = Parameters<typeof FollowUpPromptBox>[0]["composer"]["threadRuntimeDisplayStatus"];
 
 // Match production: ThreadTimelinePane's PageShell footer caps content at
@@ -235,9 +236,8 @@ function Row({
   threadRuntimeDisplayStatus = "idle",
   promptPlaceholder = "Ask a follow-up...",
   environmentSummary = localEnvironmentSummary,
-  contextWindowUsage,
-  banner = null,
-  queue = emptyQueue,
+  contextWindowUsage = null,
+  stack = null,
   zenModeResetKey = "thr_demo",
 }: RowConfig) {
   const [message, setMessage] = useState(initialMessage);
@@ -245,7 +245,7 @@ function Row({
     <PromptStage>
       <FollowUpPromptBox
         attachments={attachmentsBase}
-        banner={banner}
+        stack={stack}
         composer={{
           history: {
             currentDraft: { text: message, attachments: [] },
@@ -265,7 +265,6 @@ function Row({
         execution={baseExecution}
         permission={basePermission}
         mentions={mentionsBase}
-        queue={queue}
         zenModeResetKey={zenModeResetKey}
       />
     </PromptStage>
@@ -330,30 +329,34 @@ export function Overview() {
       </StoryRow>
       <StoryRow
         label="with queued messages"
-        hint="two follow-ups already queued behind the active turn"
+        hint="queued cards stack above the prompt input"
       >
         <Row
           submitMode={{ kind: "queue", onStop: noop }}
           threadRuntimeDisplayStatus="active"
-          queue={{ ...emptyQueue, queuedMessages }}
+          stack={queuedMessagesElement}
           contextWindowUsage={usage}
         />
       </StoryRow>
       <StoryRow label="with promptbox context banner">
         <Row
           submitMode={{ kind: "ready" }}
-          banner={bannerWithChanges}
+          stack={contextBannerElement}
         />
       </StoryRow>
       <StoryRow
         label="stacked cards"
-        hint="banner + queued messages share the PromptStackCard chrome"
+        hint="banner + queued messages composed in the same stack slot"
       >
         <Row
           submitMode={{ kind: "queue", onStop: noop }}
           threadRuntimeDisplayStatus="active"
-          banner={bannerWithChanges}
-          queue={{ ...emptyQueue, queuedMessages }}
+          stack={
+            <>
+              {contextBannerElement}
+              {queuedMessagesElement}
+            </>
+          }
           contextWindowUsage={usage}
         />
       </StoryRow>

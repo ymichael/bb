@@ -21,6 +21,8 @@ import type {
 import type { ThreadTimelineResponse } from "@bb/server-contract";
 import { ThreadPendingInteractionBanner } from "@/components/thread/ThreadPendingInteractionBanner";
 import { ContextBanner } from "@/components/promptbox/banner/ContextBanner";
+import { QueuedMessagesList } from "@/components/promptbox/banner/QueuedMessagesList";
+import { ThreadEnvironmentSummary } from "@/components/promptbox/ThreadEnvironmentSummary";
 import { usePromptDraftStorage } from "@/hooks/usePromptDraftStorage";
 import { usePromptMentions } from "@/hooks/usePromptMentions";
 import { useThreadCreationOptions } from "@/hooks/useThreadCreationOptions";
@@ -43,7 +45,7 @@ import { promptDraftToInput } from "@/lib/prompt-draft";
 import { toast } from "sonner";
 import {
   FollowUpPromptBox,
-  type ComposerSubmitMode,
+  type FollowUpSubmitMode,
 } from "@/components/promptbox/FollowUpPromptBox";
 import { queuedInputToDraft } from "./threadQueuedMessages";
 import type { SendMessageMutationLike } from "./threadDetailMutationTypes";
@@ -220,7 +222,7 @@ export function ThreadDetailPromptArea({
     sendMessage.isPending ||
     isEnvironmentActionPending ||
     createDraft.isPending;
-  const submitMode: ComposerSubmitMode = (() => {
+  const submitMode: FollowUpSubmitMode = (() => {
     if (hasPendingInteraction) {
       return { kind: "blocked", reason: "pending-interaction" };
     }
@@ -478,40 +480,55 @@ export function ThreadDetailPromptArea({
   return (
     <FollowUpPromptBox
       attachments={{
-        attachmentError,
-        attachments: promptDraft.attachments,
-        isAttaching: uploadPromptAttachment.isPending,
-        onAttachFiles: handleAttachFiles,
-        onRemoveAttachment: promptDraft.removeAttachment,
+        items: promptDraft.attachments,
         projectId,
+        isAttaching: uploadPromptAttachment.isPending,
+        error: attachmentError,
+        onAttachFiles: handleAttachFiles,
+        onRemove: promptDraft.removeAttachment,
       }}
-      banner={
-        showPromptGitStatsBanner ? (
-          <ContextBanner
-            canExpandPromptChangeList={canExpandPromptChangeList}
-            isChangeListExpanded={isChangeListExpanded}
-            isDiffPanelActive={canUseGitUi && isDiffPanelActive}
-            mergeBaseBranchOptions={mergeBaseBranchOptions}
-            mergeBaseBranchOptionsLoading={isLoadingMergeBaseBranchOptions}
-            onPromptBannerFileClick={
-              canUseGitUi ? handlePromptBannerFileClick : () => {}
+      stack={
+        <>
+          {showPromptGitStatsBanner ? (
+            <ContextBanner
+              canExpandPromptChangeList={canExpandPromptChangeList}
+              isChangeListExpanded={isChangeListExpanded}
+              isDiffPanelActive={canUseGitUi && isDiffPanelActive}
+              mergeBaseBranchOptions={mergeBaseBranchOptions}
+              mergeBaseBranchOptionsLoading={isLoadingMergeBaseBranchOptions}
+              onPromptBannerFileClick={
+                canUseGitUi ? handlePromptBannerFileClick : () => {}
+              }
+              onPromptBannerMergeBaseBranchChange={
+                showBranchComparisonUi ? onMergeBaseBranchChange : undefined
+              }
+              onPromptGitStatsBannerClick={
+                canUseGitUi ? openThreadDiffPanel : () => {}
+              }
+              onToggleChangeListExpanded={() => {
+                setIsChangeListExpanded((previousValue) => !previousValue);
+              }}
+              promptBannerFiles={promptBannerFiles}
+              promptBannerMergeBaseBranch={promptBannerMergeBaseBranch}
+              promptBannerSummary={promptBannerSummary}
+              showBranchComparisonUi={showBranchComparisonUi}
+              workspaceStatus={workspaceStatus}
+            />
+          ) : null}
+          <QueuedMessagesList
+            queuedMessages={queuedMessages}
+            sendDisabled={
+              !(submitMode.kind === "ready" || submitMode.kind === "queue") ||
+              isFollowUpSubmitting ||
+              isQueueMutationPending
             }
-            onPromptBannerMergeBaseBranchChange={
-              showBranchComparisonUi ? onMergeBaseBranchChange : undefined
-            }
-            onPromptGitStatsBannerClick={
-              canUseGitUi ? openThreadDiffPanel : () => {}
-            }
-            onToggleChangeListExpanded={() => {
-              setIsChangeListExpanded((previousValue) => !previousValue);
-            }}
-            promptBannerFiles={promptBannerFiles}
-            promptBannerMergeBaseBranch={promptBannerMergeBaseBranch}
-            promptBannerSummary={promptBannerSummary}
-            showBranchComparisonUi={showBranchComparisonUi}
-            workspaceStatus={workspaceStatus}
+            actionDisabled={isQueueMutationPending}
+            processingMessageId={processingQueuedMessageId}
+            onSendImmediately={handleSendQueuedImmediately}
+            onEdit={handleEditQueuedMessage}
+            onDelete={handleDeleteQueuedMessage}
           />
-        ) : null
+        </>
       }
       composer={{
         history: {
@@ -533,16 +550,16 @@ export function ThreadDetailPromptArea({
       }}
       zenModeResetKey={thread.id}
       environmentSummary={
-        environmentLabel || environmentHostConnected !== undefined
-          ? {
-              environmentLabel,
-              environmentHostConnected,
-              environmentIcon,
-              environmentBranchName,
-            }
-          : null
+        environmentLabel || environmentHostConnected !== undefined ? (
+          <ThreadEnvironmentSummary
+            environmentLabel={environmentLabel}
+            environmentHostConnected={environmentHostConnected}
+            environmentIcon={environmentIcon}
+            environmentBranchName={environmentBranchName}
+          />
+        ) : null
       }
-      contextWindowUsage={contextWindowUsage}
+      contextWindowUsage={contextWindowUsage ?? null}
       execution={{
         provider: {
           options: providerOptions,
@@ -575,18 +592,10 @@ export function ThreadDetailPromptArea({
         supported: supportsPermissionModeSelection,
       }}
       mentions={{
-        mentionError: promptMentions.isError,
-        mentionLoading: promptMentions.isLoading,
-        mentionSuggestions: promptMentions.suggestions,
-        onMentionQueryChange: promptMentions.setQuery,
-      }}
-      queue={{
-        isQueueMutationPending,
-        onDeleteQueuedMessage: handleDeleteQueuedMessage,
-        onEditQueuedMessage: handleEditQueuedMessage,
-        onSendQueuedImmediately: handleSendQueuedImmediately,
-        processingQueuedMessageId,
-        queuedMessages,
+        suggestions: promptMentions.suggestions,
+        isLoading: promptMentions.isLoading,
+        isError: promptMentions.isError,
+        onQueryChange: promptMentions.setQuery,
       }}
     />
   );
