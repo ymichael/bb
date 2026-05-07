@@ -3,6 +3,7 @@ import { RESET, atomWithStorage } from "jotai/utils";
 import {
   useCallback,
   useEffect,
+  useImperativeHandle,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -11,6 +12,7 @@ import {
   type FormEvent,
   type KeyboardEvent,
   type ReactNode,
+  type Ref,
 } from "react";
 import {
   ArrowUp,
@@ -33,8 +35,6 @@ import {
   COARSE_POINTER_TEXT_BASE_CLASS,
 } from "@/components/ui";
 import { useAutoGrow } from "@/hooks/useAutoGrow";
-import { useVoiceInput } from "@/hooks/useVoiceInput";
-import { transcribeVoiceInput } from "@/lib/api";
 import { createJsonLocalStorage } from "@/lib/browser-storage";
 import {
   arePromptDraftStatesEqual,
@@ -106,6 +106,29 @@ export interface HistoryConfig {
   resetKey?: string | number;
 }
 
+export type PromptVoiceState =
+  | "idle"
+  | "recording"
+  | "transcribing"
+  | "error";
+
+export interface PromptVoiceConfig {
+  state: PromptVoiceState;
+  /** Display-ready summary of the last error. Only set when state === "error". */
+  errorMessage?: string;
+  isSupported: boolean;
+  start: () => void | Promise<void>;
+  stop: () => void;
+  cancel: () => void;
+}
+
+export interface PromptBoxHandle {
+  /** Insert text at the textarea's current cursor position, with smart spacing. */
+  insertTextAtCursor: (text: string) => void;
+  /** Return the trimmed text before the cursor, used as voice transcript context. */
+  getTextBeforeCursor: () => string | undefined;
+}
+
 export interface PromptBoxInternalProps {
   id?: string;
   value: string;
@@ -120,6 +143,9 @@ export interface PromptBoxInternalProps {
   attachments?: AttachmentsConfig;
   zenMode?: PromptBoxZenModeConfig;
   history?: HistoryConfig;
+  /** When omitted, the mic button is hidden. Wrappers wire this via usePromptVoice. */
+  voice?: PromptVoiceConfig;
+  promptBoxRef?: Ref<PromptBoxHandle>;
 }
 
 interface DismissedMentionRange {
@@ -147,34 +173,6 @@ function createTransientZenModeAtom() {
   );
 }
 
-function summarizeVoiceErrorMessage(input: string): string {
-  const normalized = input.replace(/\s+/g, " ").trim();
-  const lowered = normalized.toLowerCase();
-
-  if (
-    lowered.includes("authentication failed") ||
-    lowered.includes("not configured") ||
-    lowered.includes("codex login") ||
-    lowered.includes("openai_api_key")
-  ) {
-    return "Voice auth required. Run codex login or set OPENAI_API_KEY.";
-  }
-  if (lowered.includes("rate limited")) {
-    return "Voice transcription is rate limited. Try again shortly.";
-  }
-  if (lowered.includes("temporarily unavailable")) {
-    return "Voice transcription is unavailable. Try again.";
-  }
-  if (lowered.includes("recording too short")) {
-    return "Recording too short. Hold for at least 1 second.";
-  }
-  if (lowered.includes("no audio was captured")) {
-    return "No audio captured. Check your microphone and try again.";
-  }
-
-  return normalized || "Voice input failed.";
-}
-
 export function PromptBoxInternal({
   id,
   value,
@@ -189,6 +187,8 @@ export function PromptBoxInternal({
   attachments: attachmentConfig = {},
   zenMode = {},
   history,
+  voice,
+  promptBoxRef,
 }: PromptBoxInternalProps) {
   const {
     isSubmitting = false,
@@ -510,18 +510,18 @@ export function PromptBoxInternal({
     ],
   );
 
-  const insertVoiceTranscript = useCallback(
-    (transcript: string) => {
-      const normalizedTranscript = transcript.replace(/\s+/g, " ").trim();
-      if (normalizedTranscript.length === 0) return;
+  const insertTextAtCursor = useCallback(
+    (rawText: string) => {
+      const normalizedText = rawText.replace(/\s+/g, " ").trim();
+      if (normalizedText.length === 0) return;
 
       const textarea = textareaRef.current;
       const currentValue = valueRef.current;
       if (!textarea) {
         const nextValue =
           currentValue.length === 0 || /\s$/.test(currentValue)
-            ? `${currentValue}${normalizedTranscript}`
-            : `${currentValue} ${normalizedTranscript}`;
+            ? `${currentValue}${normalizedText}`
+            : `${currentValue} ${normalizedText}`;
         onChange(nextValue);
         return;
       }
@@ -532,7 +532,7 @@ export function PromptBoxInternal({
       const after = currentValue.slice(selectionEnd);
       const needsLeadingWhitespace = before.length > 0 && !/\s$/.test(before);
       const needsTrailingWhitespace = after.length > 0 && !/^\s/.test(after);
-      const insertedText = `${needsLeadingWhitespace ? " " : ""}${normalizedTranscript}${needsTrailingWhitespace ? " " : ""}`;
+      const insertedText = `${needsLeadingWhitespace ? " " : ""}${normalizedText}${needsTrailingWhitespace ? " " : ""}`;
       const nextValue = `${before}${insertedText}${after}`;
       const nextCursor = before.length + insertedText.length;
 
@@ -553,7 +553,7 @@ export function PromptBoxInternal({
     [isZenMode, onChange, resizeTextarea, syncMentionState],
   );
 
-  const getVoicePromptContext = useCallback(() => {
+  const getTextBeforeCursor = useCallback((): string | undefined => {
     const currentValue = valueRef.current;
     const textarea = textareaRef.current;
     if (!textarea) {
@@ -565,47 +565,26 @@ export function PromptBoxInternal({
     return beforeCursor.length > 0 ? beforeCursor : undefined;
   }, []);
 
-  const requestVoiceTranscription = useCallback(
-    async ({
-      file,
-      promptContext,
-      signal,
-    }: {
-      file: File;
-      promptContext?: string;
-      signal?: AbortSignal;
-    }) => {
-      const transcription = await transcribeVoiceInput(
-        file,
-        promptContext,
-        signal,
-      );
-      return transcription.text;
-    },
-    [],
+  useImperativeHandle(
+    promptBoxRef,
+    () => ({
+      insertTextAtCursor,
+      getTextBeforeCursor,
+    }),
+    [insertTextAtCursor, getTextBeforeCursor],
   );
 
-  const voiceInput = useVoiceInput({
-    onTranscript: insertVoiceTranscript,
-    onTranscribe: requestVoiceTranscription,
-    getPromptContext: getVoicePromptContext,
-  });
-  const isVoiceRecording = voiceInput.isRecording;
-  const isVoiceProcessing = voiceInput.isProcessing;
+  const isVoiceRecording = voice?.state === "recording";
+  const isVoiceProcessing = voice?.state === "transcribing";
   const isVoiceBusy = isVoiceRecording || isVoiceProcessing;
   const voiceErrorMessage =
-    voiceInput.state === "error"
-      ? summarizeVoiceErrorMessage(
-          voiceInput.errorMessage ??
-            voiceInput.statusLabel ??
-            "Voice input failed.",
-        )
-      : null;
+    voice?.state === "error" ? voice.errorMessage ?? "Voice input failed." : null;
   const showVoiceActionGroup = isVoiceRecording || isVoiceProcessing;
   const canSubmit =
     hasSubmittableInput && !isSubmitting && !submitDisabled && !isVoiceBusy;
   const showStop = Boolean(isRunning && onStop && !canSubmit && !isVoiceBusy);
-  const canStartVoiceInput = voiceInput.isSupported && !isSubmitting;
+  const canStartVoiceInput =
+    voice !== undefined && voice.isSupported && !isSubmitting;
   const effectiveSubmitMode: SubmitMode = submitMode;
   const effectiveSubmitTitle = isZenMode
     ? submitTitle.replace(/^Submit\s+/, "")
@@ -998,18 +977,18 @@ export function PromptBoxInternal({
               <Paperclip className="size-4" />
             )}
           </Button>
-          {!showVoiceActionGroup ? (
+          {voice && !showVoiceActionGroup ? (
             <Button
               type="button"
               size="icon"
               variant="ghost"
               title={
-                !voiceInput.isSupported
+                !voice.isSupported
                   ? "Voice input is not supported in this browser"
                   : "Start voice input"
               }
               disabled={!canStartVoiceInput}
-              onClick={voiceInput.start}
+              onClick={voice.start}
               className={COARSE_POINTER_PROMPT_ICON_ACTION_BUTTON_CLASS}
             >
               <Mic className="size-4" />
@@ -1030,14 +1009,14 @@ export function PromptBoxInternal({
                 strokeWidth={0}
               />
             </Button>
-          ) : isVoiceRecording ? (
+          ) : voice && isVoiceRecording ? (
             <div className="relative inline-flex">
               <Button
                 type="button"
                 size="sm"
                 variant="default"
                 title="Stop and transcribe recording"
-                onClick={voiceInput.stop}
+                onClick={voice.stop}
                 className={cn(
                   "rounded-r-none",
                   COARSE_POINTER_PROMPT_ACTION_BUTTON_CLASS,
@@ -1050,13 +1029,13 @@ export function PromptBoxInternal({
                 size="sm"
                 variant="default"
                 title="Cancel recording"
-                onClick={voiceInput.cancel}
+                onClick={voice.cancel}
                 className={COARSE_POINTER_PROMPT_COMBO_BUTTON_CLASS}
               >
                 <X className="size-3.5" />
               </Button>
             </div>
-          ) : isVoiceProcessing ? (
+          ) : voice && isVoiceProcessing ? (
             <div className="relative inline-flex">
               <Button
                 type="button"
@@ -1077,7 +1056,7 @@ export function PromptBoxInternal({
                 size="sm"
                 variant="default"
                 title="Cancel transcription"
-                onClick={voiceInput.cancel}
+                onClick={voice.cancel}
                 className={COARSE_POINTER_PROMPT_COMBO_BUTTON_CLASS}
               >
                 <X className="size-3.5" />

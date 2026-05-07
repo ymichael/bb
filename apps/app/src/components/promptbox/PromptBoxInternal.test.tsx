@@ -17,20 +17,6 @@ vi.mock("@/hooks/useAutoGrow", () => ({
   useAutoGrow: () => () => {},
 }));
 
-vi.mock("@/hooks/useVoiceInput", () => ({
-  useVoiceInput: () => ({
-    cancel: vi.fn(),
-    errorMessage: null,
-    isProcessing: false,
-    isRecording: false,
-    isSupported: false,
-    start: vi.fn(),
-    state: "idle",
-    statusLabel: null,
-    stop: vi.fn(),
-  }),
-}));
-
 beforeAll(() => {
   Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
     configurable: true,

@@ -1,4 +1,4 @@
-import { type ComponentProps, type ReactNode } from "react";
+import { useRef, type ComponentProps, type ReactNode } from "react";
 import { ChevronDown } from "lucide-react";
 import {
   type ThreadQueuedMessage,
@@ -11,7 +11,9 @@ import {
   type AttachmentsConfig,
   type HistoryConfig,
   type MentionsConfig,
+  type PromptBoxHandle,
 } from "@/components/promptbox/PromptBoxInternal";
+import { usePromptVoice } from "@/components/promptbox/usePromptVoice";
 import { PermissionModePicker } from "@/components/pickers/PermissionModePicker";
 import {
   ExecutionControls,
@@ -185,6 +187,8 @@ export function FollowUpPromptBox({
       ? submitMode.onStop
       : undefined;
   const canStopRuntime = onStopRuntime !== undefined;
+  const promptBoxRef = useRef<PromptBoxHandle>(null);
+  const voice = usePromptVoice(promptBoxRef);
 
   return (
     <>
@@ -298,6 +302,8 @@ export function FollowUpPromptBox({
           onDelete={queue.onDeleteQueuedMessage}
         />
         <PromptBoxWithScrollAnchor
+          promptBoxRef={promptBoxRef}
+          voice={voice}
           value={composer.message}
           onChange={composer.onChangeMessage}
           onSubmit={composer.onSubmit}
