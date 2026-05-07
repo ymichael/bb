@@ -2,7 +2,7 @@ import { BranchPicker } from "./BranchPicker";
 import { StoryCard, StoryRow } from "../../../.ladle/story-card";
 
 export default {
-  title: "ui/pickers/Branch Picker",
+  title: "pickers/Branch Picker",
 };
 
 const branches = [

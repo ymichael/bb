@@ -6,7 +6,7 @@ import { ProviderModelPicker } from "./ProviderModelPicker";
 import { StoryCard, StoryRow } from "../../../.ladle/story-card";
 
 export default {
-  title: "ui/pickers/Provider Model Picker",
+  title: "pickers/Provider Model Picker",
 };
 
 // Real bb providers in the order useThreadCreationOptions emits them:

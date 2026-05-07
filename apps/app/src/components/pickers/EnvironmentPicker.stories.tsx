@@ -7,7 +7,7 @@ import { EnvironmentPickerUI } from "./EnvironmentPicker";
 import { StoryCard, StoryRow } from "../../../.ladle/story-card";
 
 export default {
-  title: "ui/pickers/Environment Picker",
+  title: "pickers/Environment Picker",
 };
 
 const mockHosts: Host[] = [

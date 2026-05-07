@@ -5,7 +5,7 @@ import {
 import { StoryCard, StoryRow } from "../../../.ladle/story-card";
 
 export default {
-  title: "ui/pickers/Option Picker",
+  title: "pickers/Option Picker",
 };
 
 // Mirrors REASONING_LABELS from useThreadCreationOptions.ts

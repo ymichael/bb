@@ -4,7 +4,7 @@ import type { PickerOption } from "./OptionPicker";
 import { StoryCard, StoryRow } from "../../../.ladle/story-card";
 
 export default {
-  title: "ui/pickers/Permission Mode Picker",
+  title: "pickers/Permission Mode Picker",
 };
 
 // Mirrors PERMISSION_MODE_OPTIONS in useThreadCreationOptions.ts

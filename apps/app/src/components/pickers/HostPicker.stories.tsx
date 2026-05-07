@@ -3,7 +3,7 @@ import { HostPicker } from "./HostPicker";
 import { StoryCard, StoryRow } from "../../../.ladle/story-card";
 
 export default {
-  title: "ui/pickers/Host Picker",
+  title: "pickers/Host Picker",
 };
 
 const localOnly: Host[] = [
