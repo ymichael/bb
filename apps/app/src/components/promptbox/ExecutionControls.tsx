@@ -7,7 +7,7 @@ import {
   type PickerOption,
 } from "@/components/pickers/OptionPicker";
 
-export interface PromptExecutionProviderConfig {
+export interface ExecutionProviderConfig {
   options?: readonly PickerOption<string>[];
   selectedId?: string;
   onChange?: (value: string) => void;
@@ -16,27 +16,27 @@ export interface PromptExecutionProviderConfig {
   readOnly?: boolean;
 }
 
-export interface PromptExecutionModelConfig {
+export interface ExecutionModelConfig {
   active?: { model: string } | null;
   selected: string;
   options: readonly PickerOption<string>[];
   onChange: (value: string) => void;
 }
 
-export interface PromptExecutionServiceTierConfig {
+export interface ExecutionServiceTierConfig {
   value?: ServiceTier;
   onChange: (value: ServiceTier | undefined) => void;
   supported: boolean;
   supportByProvider?: Record<string, boolean>;
 }
 
-export interface PromptExecutionReasoningConfig {
+export interface ExecutionReasoningConfig {
   value: ReasoningLevel;
   options: readonly PickerOption<ReasoningLevel>[];
   onChange: (value: ReasoningLevel) => void;
 }
 
-export interface PromptExecutionPermissionConfig {
+export interface ExecutionPermissionConfig {
   value?: PermissionMode;
   options: readonly PickerOption<PermissionMode>[];
   onChange: (value: PermissionMode) => void;
@@ -44,10 +44,10 @@ export interface PromptExecutionPermissionConfig {
 }
 
 export interface ExecutionControlsProps {
-  provider: PromptExecutionProviderConfig;
-  model: PromptExecutionModelConfig;
-  serviceTier?: PromptExecutionServiceTierConfig;
-  reasoning: PromptExecutionReasoningConfig;
+  provider: ExecutionProviderConfig;
+  model: ExecutionModelConfig;
+  serviceTier?: ExecutionServiceTierConfig;
+  reasoning: ExecutionReasoningConfig;
 }
 
 export function ExecutionControls({

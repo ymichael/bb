@@ -1,7 +1,5 @@
 import { type ComponentProps, type ComponentType, type ReactNode } from "react";
-import { HostStatusBadge } from "@/components/HostStatusIndicator";
-import { GitMerge, ChevronDown } from "lucide-react";
-import { copyToClipboardWithToast } from "@/lib/clipboard";
+import { ChevronDown } from "lucide-react";
 import {
   type PermissionMode,
   type ReasoningLevel,
@@ -17,10 +15,7 @@ import {
   type HistoryConfig,
   type MentionsConfig,
 } from "@/components/promptbox/PromptBoxInternal";
-import {
-  OptionDisplay,
-  type PickerOption,
-} from "@/components/pickers/OptionPicker";
+import { type PickerOption } from "@/components/pickers/OptionPicker";
 import { PermissionModePicker } from "@/components/pickers/PermissionModePicker";
 import { ExecutionControls } from "@/components/promptbox/ExecutionControls";
 import { useBottomAnchoredScroll } from "@/components/ui";
@@ -33,6 +28,7 @@ import {
 import { ThreadContextWindowIndicator } from "@/components/thread-timeline";
 import { cn } from "@/lib/utils";
 import { QueuedMessagesList } from "@/components/promptbox/QueuedMessagesList";
+import { ThreadEnvironmentSummary } from "@/components/promptbox/ThreadEnvironmentSummary";
 
 type PromptBoxWithScrollAnchorProps = ComponentProps<typeof PromptBoxInternal>;
 
@@ -354,56 +350,12 @@ export function FollowUpPromptBox({
         />
         <div className="mt-1 flex min-h-6 items-center justify-between gap-2 pl-[15px] pr-3.5">
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
-            {environment.environmentLabel ||
-            environment.environmentHostConnected !== undefined ? (
-              <div className="flex min-w-0 items-center gap-2 pr-1.5">
-                {environment.environmentLabel ? (
-                  <OptionDisplay
-                    label="Environment"
-                    value={
-                      <span className="flex min-w-0 items-center gap-1.5">
-                        <span className="truncate">
-                          {environment.environmentLabel}
-                        </span>
-                        {environment.environmentHostConnected !== undefined ? (
-                          <HostStatusBadge
-                            connected={environment.environmentHostConnected}
-                            className="translate-y-px"
-                          />
-                        ) : null}
-                      </span>
-                    }
-                    icon={environment.environmentIcon}
-                    className="h-6 min-w-[80px]"
-                    muted
-                  />
-                ) : environment.environmentHostConnected !== undefined ? (
-                  <HostStatusBadge
-                    connected={environment.environmentHostConnected}
-                  />
-                ) : null}
-                {environment.environmentBranchName ? (
-                  <button
-                    type="button"
-                    className="hidden min-w-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-xs text-muted-foreground/75 transition-colors hover:bg-accent hover:text-foreground md:flex"
-                    title={`Copy branch name: ${environment.environmentBranchName}`}
-                    onClick={() => {
-                      const branchName = environment.environmentBranchName;
-                      if (!branchName) return;
-                      void copyToClipboardWithToast(branchName, {
-                        successMessage: "Branch name copied",
-                        errorMessage: "Failed to copy branch name",
-                      });
-                    }}
-                  >
-                    <GitMerge className="size-3.5 shrink-0" />
-                    <span className="truncate">
-                      {environment.environmentBranchName}
-                    </span>
-                  </button>
-                ) : null}
-              </div>
-            ) : null}
+            <ThreadEnvironmentSummary
+              environmentLabel={environment.environmentLabel}
+              environmentHostConnected={environment.environmentHostConnected}
+              environmentIcon={environment.environmentIcon}
+              environmentBranchName={environment.environmentBranchName}
+            />
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <PermissionModePicker

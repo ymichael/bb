@@ -1,12 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import { PromptBoxInternal } from "@/components/promptbox/PromptBoxInternal";
-import { PermissionModePicker } from "@/components/pickers/PermissionModePicker";
-import { ExecutionControls } from "@/components/promptbox/ExecutionControls";
-import {
-  EnvironmentPicker,
-  parseEnvironmentValue,
-} from "@/components/pickers/EnvironmentPicker";
+import { NewThreadPromptBox } from "@/components/promptbox/NewThreadPromptBox";
+import { parseEnvironmentValue } from "@/components/pickers/EnvironmentPicker";
 import { OptionPicker } from "@/components/pickers/OptionPicker";
 import { PageShell } from "@/components/ui";
 import { useUploadPromptAttachment } from "@/hooks/mutations/project-mutations";
@@ -275,11 +270,14 @@ export function ProjectMainView() {
             </div>
           ) : null}
         </div>
-        <PromptBoxInternal
+        <NewThreadPromptBox
           id="project-main-prompt"
           value={prompt}
           onChange={promptDraft.setText}
           onSubmit={submitPrompt}
+          isSubmitting={createThread.isPending}
+          disabled={isSubmitDisabled}
+          zenModeStorageKey={projectMainZenModeStorageKey}
           history={{
             currentDraft: {
               text: promptDraft.text,
@@ -288,11 +286,6 @@ export function ProjectMainView() {
             entries: promptHistoryDrafts,
             onSelectEntry: promptDraft.setDraft,
             resetKey: projectId,
-          }}
-          submission={{
-            isSubmitting: createThread.isPending,
-            disabled: isSubmitDisabled,
-            title: createThread.isPending ? "Submitting..." : "Submit (Enter)",
           }}
           mentions={{
             suggestions: promptMentions.suggestions,
@@ -308,53 +301,44 @@ export function ProjectMainView() {
             isAttaching: uploadPromptAttachment.isPending,
             error: attachmentError,
           }}
-          zenMode={{
-            layout: "project-main",
-            storageKey: projectMainZenModeStorageKey,
+          execution={{
+            provider: {
+              options: providerOptions,
+              selectedId: selectedProviderId,
+              onChange: setSelectedProviderId,
+              hasMultiple: hasMultipleProviders,
+            },
+            model: {
+              active: activeModel,
+              selected: selectedModel,
+              options: modelOptions,
+              onChange: setSelectedModel,
+            },
+            serviceTier: {
+              value: serviceTier,
+              onChange: setServiceTier,
+              supported: supportsServiceTier,
+              supportByProvider: serviceTierSupportByProvider,
+            },
+            reasoning: {
+              value: reasoningLevel,
+              options: reasoningOptions,
+              onChange: setReasoningLevel,
+            },
           }}
-          footerStart={
-            <ExecutionControls
-              provider={{
-                options: providerOptions,
-                selectedId: selectedProviderId,
-                onChange: setSelectedProviderId,
-                hasMultiple: hasMultipleProviders,
-              }}
-              model={{
-                active: activeModel,
-                selected: selectedModel,
-                options: modelOptions,
-                onChange: setSelectedModel,
-              }}
-              serviceTier={{
-                value: serviceTier,
-                onChange: setServiceTier,
-                supported: supportsServiceTier,
-                supportByProvider: serviceTierSupportByProvider,
-              }}
-              reasoning={{
-                value: reasoningLevel,
-                options: reasoningOptions,
-                onChange: setReasoningLevel,
-              }}
-            />
-          }
+          environment={{
+            value: effectiveEnvironmentValue,
+            onChange: setEnvironmentSelectionValue,
+            projectId,
+            sources: projectSources,
+          }}
+          permission={{
+            value: permissionMode,
+            options: permissionModeOptions,
+            onChange: setPermissionMode,
+            supported: supportsPermissionModeSelection,
+          }}
         />
-        <div className="flex items-center justify-between gap-2 px-3.5">
-          <EnvironmentPicker
-            value={effectiveEnvironmentValue}
-            onChange={setEnvironmentSelectionValue}
-            projectId={projectId}
-            sources={projectSources}
-            muted
-          />
-          <PermissionModePicker
-            value={permissionMode}
-            options={permissionModeOptions}
-            onChange={setPermissionMode}
-            supported={supportsPermissionModeSelection}
-          />
-        </div>
       </div>
     </PageShell>
   );
