@@ -380,6 +380,85 @@ describe("nudge sweep", () => {
     }
   });
 
+  it("skips due nudges that already have a pending native archive command", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-nudge-pending-native-archive",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/nudge-pending-native-archive-environment",
+      });
+      const thread = seedRunnableManagerThread({
+        harness,
+        environmentId: environment.id,
+        projectId: project.id,
+      });
+      const now = Date.now();
+      const nudge = createManagerThreadNudge(harness.db, harness.hub, {
+        projectId: project.id,
+        threadId: thread.id,
+        name: "archive-sync-check",
+        cron: "0 8 * * *",
+        timezone: "UTC",
+        enabled: true,
+        nextFireAt: now - 1,
+      });
+
+      harness.db
+        .insert(hostDaemonCommands)
+        .values({
+          id: "cmd_pending_native_archive",
+          hostId: host.id,
+          sessionId: session.id,
+          cursor: 1,
+          type: "thread.archive",
+          payload: JSON.stringify({
+            type: "thread.archive",
+            environmentId: environment.id,
+            threadId: thread.id,
+            workspaceContext: {
+              workspacePath: environment.path,
+              workspaceProvisionType: environment.workspaceProvisionType,
+            },
+            providerId: thread.providerId,
+            providerThreadId: "provider-manager-thread",
+          }),
+          state: "pending",
+          retryCount: 0,
+          createdAt: now,
+        })
+        .run();
+
+      await sweepDueNudges(harness.deps, { now });
+
+      expect(
+        harness.db
+          .select()
+          .from(hostDaemonCommands)
+          .where(eq(hostDaemonCommands.type, "turn.submit"))
+          .all(),
+      ).toHaveLength(0);
+      expect(
+        harness.db
+          .select()
+          .from(hostDaemonCommands)
+          .where(eq(hostDaemonCommands.type, "thread.archive"))
+          .all(),
+      ).toHaveLength(1);
+      const updatedNudge = getManagerThreadNudge(harness.db, nudge.id);
+      expect(updatedNudge?.lastFiredAt).toBe(now);
+      expect(updatedNudge?.nextFireAt).toBeGreaterThan(now);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("ignores disabled nudges even if nextFireAt is in the past", async () => {
     const harness = await createTestAppHarness();
     try {

@@ -196,6 +196,10 @@ const commandHandlers: CommandHandlerMap = {
       providerId: command.providerId,
       providerThreadId: command.providerThreadId,
     });
+    options.runtimeManager.forgetThread(
+      command.environmentId,
+      command.threadId,
+    );
     return {};
   },
   "thread.unarchive": async (

@@ -60,6 +60,7 @@ import { tryTransitionInTransaction } from "./thread-transitions.js";
 import {
   buildThreadStartCommand,
   buildThreadStopCommand,
+  queueArchivedThreadProviderArchiveCommand,
   queueThreadDeletedCommandInTransaction,
   queueTurnSubmitCommand,
   type QueueThreadStartCommandArgs,
@@ -146,6 +147,10 @@ export interface FailThreadOperationForCommandArgs extends ThreadOperationComman
   failureReason: string;
 }
 
+export interface QueueSettledArchivedThreadProviderArchiveCommandArgs {
+  threadId: string;
+}
+
 function nextStatusForInterruptedThread(
   reason: SystemThreadInterruptedReason,
 ): Extract<ThreadStatus, "idle" | "error"> {
@@ -175,6 +180,11 @@ interface ThreadLifecycleReadDeps {
 
 interface ThreadLifecycleWriteDeps extends ThreadLifecycleReadDeps {
   hub: DbNotifier;
+}
+
+interface ThreadLifecycleCommandQueueDeps {
+  db: AppDeps["db"];
+  hub: AppDeps["hub"];
 }
 
 interface ThreadLifecycleTransactionDeps extends ThreadLifecycleWriteDeps {
@@ -278,6 +288,38 @@ export function hasActiveThreadStartOperation(
       kind: "start",
     }) !== null
   );
+}
+
+export function hasActiveThreadStopOperation(
+  deps: ThreadLifecycleReadDeps,
+  threadId: string,
+): boolean {
+  return (
+    getActiveThreadOperation(deps, {
+      threadId,
+      kind: "stop",
+    }) !== null
+  );
+}
+
+export function queueSettledArchivedThreadProviderArchiveCommand(
+  deps: ThreadLifecycleCommandQueueDeps,
+  args: QueueSettledArchivedThreadProviderArchiveCommandArgs,
+): boolean {
+  const thread = getThread(deps.db, args.threadId);
+  if (!thread || thread.status === "active") {
+    return false;
+  }
+  if (
+    hasActiveThreadStartOperation(deps, thread.id) ||
+    hasActiveThreadStopOperation(deps, thread.id)
+  ) {
+    return false;
+  }
+
+  return queueArchivedThreadProviderArchiveCommand(deps, {
+    threadId: thread.id,
+  });
 }
 
 export function ensureThreadCanQueueStartRequest(
@@ -873,6 +915,11 @@ export function finalizeStoppedThread(
     { behavior: "immediate" },
   );
   notificationBuffer.flushInto(deps.hub);
+  if (finalized) {
+    queueSettledArchivedThreadProviderArchiveCommand(deps, {
+      threadId: args.threadId,
+    });
+  }
   return finalized;
 }
 

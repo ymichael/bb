@@ -1,5 +1,5 @@
 import { setTimeout as sleep } from "node:timers/promises";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { hostDaemonCommands, hostDaemonSessions } from "@bb/db";
 import {
   hostDaemonCommandResultSchemaByType,
@@ -25,6 +25,24 @@ export interface QueuedCommand<
 > {
   command: TCommand;
   row: typeof hostDaemonCommands.$inferSelect;
+}
+
+export function listQueuedThreadCommands(
+  harness: TestAppHarness,
+  type: HostDaemonCommand["type"],
+  threadId: string,
+): HostDaemonCommand[] {
+  return harness.db
+    .select({ payload: hostDaemonCommands.payload })
+    .from(hostDaemonCommands)
+    .where(
+      and(
+        eq(hostDaemonCommands.type, type),
+        sql`json_extract(${hostDaemonCommands.payload}, '$.threadId') = ${threadId}`,
+      ),
+    )
+    .all()
+    .map((row) => hostDaemonCommandSchema.parse(JSON.parse(row.payload)));
 }
 
 const TEST_PRODUCER_EVENT_ID_PREFIX = "hdevt_";

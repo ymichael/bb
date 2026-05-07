@@ -2,17 +2,21 @@ import {
   getActiveSession,
   queueCommand,
   queueCommandInTransaction,
+  hasPendingHostCommandForThread,
+  hostDaemonCommands,
+  environments,
   events,
   transitionThreadStatus,
   threads,
 } from "@bb/db";
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import {
   getBuiltInAgentProviderInfo,
   isAgentProviderId,
 } from "@bb/agent-providers";
 import type { DbTransaction } from "@bb/db";
 import type {
+  Environment,
   PromptInput,
   ProjectExecutionDefaults,
   PermissionEscalation,
@@ -168,6 +172,26 @@ export interface QueueThreadUnarchiveCommandArgs {
   thread: Thread;
 }
 
+export interface EnsureThreadNativeArchiveSettledArgs {
+  environment: Pick<Environment, "hostId">;
+  thread: Pick<Thread, "id">;
+}
+
+export interface QueueArchivedThreadProviderArchiveCommandArgs {
+  threadId: string;
+}
+
+interface ExistingThreadArchiveCommandLookup {
+  hostId: string;
+  providerId: string;
+  providerThreadId: string;
+  threadId: string;
+}
+
+interface ThreadCommandReadDeps {
+  db: AppDeps["db"];
+}
+
 export interface QueueThreadDeletedCommandArgs {
   environment: ThreadHostCommandEnvironment;
   threadId: string;
@@ -181,15 +205,20 @@ function providerSupportsThreadRename(providerId: string): boolean {
   return getBuiltInAgentProviderInfo(providerId).capabilities.supportsRename;
 }
 
-function providerSupportsThreadArchiveForwarding(providerId: string): boolean {
+type ThreadArchiveForwardingAction = "archive" | "unarchive";
+
+function providerSupportsThreadArchiveForwarding(
+  providerId: string,
+  action: ThreadArchiveForwardingAction,
+): boolean {
   if (!isAgentProviderId(providerId)) {
     return false;
   }
 
-  // BB archive is server-owned product state. Codex native archive removes the
-  // provider thread before our async unarchive command is guaranteed to drain,
-  // so forwarding it can break the next unarchived turn.
-  if (providerId === "codex") {
+  // Codex archived threads remain follow-up-capable through thread/resume.
+  // Native unarchive would expose them in Codex's active list again, which is
+  // not needed for BB follow-ups and can fight BB-owned archive state.
+  if (providerId === "codex" && action === "unarchive") {
     return false;
   }
 
@@ -355,6 +384,10 @@ export async function queueTurnSubmitCommand(
   deps: SandboxWorkSessionDeps,
   args: QueueTurnSubmitCommandArgs,
 ): Promise<void> {
+  ensureThreadNativeArchiveSettled(deps, {
+    environment: args.environment,
+    thread: args.thread,
+  });
   const session = await ensureHostSessionReadyForWork(deps, {
     hostId: args.environment.hostId,
   });
@@ -447,6 +480,32 @@ function buildThreadWorkspaceContext(
   };
 }
 
+function hasExistingThreadArchiveCommand(
+  deps: ThreadCommandReadDeps,
+  args: ExistingThreadArchiveCommandLookup,
+): boolean {
+  const row = deps.db
+    .select({ id: hostDaemonCommands.id })
+    .from(hostDaemonCommands)
+    .where(
+      and(
+        eq(hostDaemonCommands.hostId, args.hostId),
+        eq(hostDaemonCommands.type, "thread.archive"),
+        // Completed command payload pruning rewrites old terminal payloads to
+        // "{}" after 24h, so successful-command dedupe is intentionally bounded
+        // by that retention window. Pending/fetched commands remain durable
+        // enough to block active archive sync.
+        inArray(hostDaemonCommands.state, ["pending", "fetched", "success"]),
+        sql`json_extract(${hostDaemonCommands.payload}, '$.threadId') = ${args.threadId}`,
+        sql`json_extract(${hostDaemonCommands.payload}, '$.providerId') = ${args.providerId}`,
+        sql`json_extract(${hostDaemonCommands.payload}, '$.providerThreadId') = ${args.providerThreadId}`,
+      ),
+    )
+    .get();
+
+  return row !== undefined;
+}
+
 export function queueThreadRenameCommand(
   deps: Pick<AppDeps, "db" | "hub">,
   args: QueueThreadRenameCommandArgs,
@@ -495,18 +554,31 @@ export function queueThreadRenameCommandInTransaction(
 export function queueThreadArchiveCommand(
   deps: Pick<AppDeps, "db" | "hub">,
   args: QueueThreadArchiveCommandArgs,
-): void {
-  if (!providerSupportsThreadArchiveForwarding(args.thread.providerId)) {
-    return;
+): boolean {
+  if (
+    !providerSupportsThreadArchiveForwarding(args.thread.providerId, "archive")
+  ) {
+    return false;
   }
 
   if (shouldSkipArchiveForwardingForCascadeRisk(deps, args.thread)) {
-    return;
+    return false;
   }
 
   const workspaceContext = buildThreadWorkspaceContext(args.environment);
   if (!workspaceContext) {
-    return;
+    return false;
+  }
+
+  if (
+    hasExistingThreadArchiveCommand(deps, {
+      hostId: args.environment.hostId,
+      providerId: args.thread.providerId,
+      providerThreadId: args.providerThreadId,
+      threadId: args.thread.id,
+    })
+  ) {
+    return false;
   }
 
   const session = getActiveSession(deps.db, args.environment.hostId);
@@ -523,13 +595,79 @@ export function queueThreadArchiveCommand(
       providerThreadId: args.providerThreadId,
     }),
   });
+  return true;
+}
+
+export function ensureThreadNativeArchiveSettled(
+  deps: Pick<AppDeps, "db">,
+  args: EnsureThreadNativeArchiveSettledArgs,
+): void {
+  if (
+    !hasPendingHostCommandForThread(deps.db, {
+      hostId: args.environment.hostId,
+      threadId: args.thread.id,
+      type: "thread.archive",
+    })
+  ) {
+    return;
+  }
+
+  throw new ApiError(
+    409,
+    "thread_archive_in_progress",
+    "Thread archive is still syncing with the provider",
+  );
+}
+
+export function queueArchivedThreadProviderArchiveCommand(
+  deps: Pick<AppDeps, "db" | "hub">,
+  args: QueueArchivedThreadProviderArchiveCommandArgs,
+): boolean {
+  const thread = deps.db
+    .select()
+    .from(threads)
+    .where(eq(threads.id, args.threadId))
+    .get();
+  if (!thread || thread.archivedAt === null || thread.deletedAt !== null) {
+    return false;
+  }
+
+  const providerThreadId = getLastProviderThreadId(deps, thread.id);
+  if (!providerThreadId || !thread.environmentId) {
+    return false;
+  }
+
+  const environment = deps.db
+    .select()
+    .from(environments)
+    .where(eq(environments.id, thread.environmentId))
+    .get();
+  if (!environment) {
+    return false;
+  }
+
+  return queueThreadArchiveCommand(deps, {
+    environment: {
+      id: environment.id,
+      hostId: environment.hostId,
+      path: environment.path,
+      workspaceProvisionType: environment.workspaceProvisionType,
+    },
+    providerThreadId,
+    thread,
+  });
 }
 
 export function queueThreadUnarchiveCommand(
   deps: Pick<AppDeps, "db" | "hub">,
   args: QueueThreadUnarchiveCommandArgs,
 ): void {
-  if (!providerSupportsThreadArchiveForwarding(args.thread.providerId)) {
+  if (
+    !providerSupportsThreadArchiveForwarding(
+      args.thread.providerId,
+      "unarchive",
+    )
+  ) {
     return;
   }
 

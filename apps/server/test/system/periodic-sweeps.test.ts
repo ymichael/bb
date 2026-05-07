@@ -15,6 +15,7 @@ import {
   getThreadOperation,
   hostDaemonCommands,
   hostDaemonSessions,
+  markThreadDeleted,
   markEphemeralHostActivity,
   openSession,
   queueCommand,
@@ -59,6 +60,7 @@ import {
 import { createCommandApprovalPayload } from "../helpers/pending-interactions.js";
 import { createTestAppHarness } from "../helpers/test-app.js";
 import {
+  listQueuedThreadCommands,
   reportQueuedCommandError,
   reportNextRuntimeMaterialSyncSuccess,
   waitForQueuedCommand,
@@ -1289,6 +1291,11 @@ describe("periodic sweeps", () => {
         environmentId: environment.id,
         status: "active",
       });
+      seedThreadRuntimeState(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-periodic-thread-stop-finalize",
+      });
 
       archiveThread(harness.db, harness.hub, thread.id);
       requestEnvironmentCleanup(harness.deps, {
@@ -1321,6 +1328,21 @@ describe("periodic sweeps", () => {
           .where(eq(hostDaemonCommands.id, queuedStop.row.id))
           .get(),
       ).toEqual({ state: "error" });
+      expect(
+        listQueuedThreadCommands(harness, "thread.archive", thread.id),
+      ).toEqual([
+        {
+          type: "thread.archive",
+          environmentId: environment.id,
+          threadId: thread.id,
+          workspaceContext: {
+            workspacePath: environment.path,
+            workspaceProvisionType: environment.workspaceProvisionType,
+          },
+          providerId: "codex",
+          providerThreadId: "provider-periodic-thread-stop-finalize",
+        },
+      ]);
       expect(getEnvironment(harness.db, environment.id)?.status).toBe(
         "destroying",
       );
@@ -1335,6 +1357,67 @@ describe("periodic sweeps", () => {
       expect(destroyCommand.command).toMatchObject({
         environmentId: environment.id,
       });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("skips native archive forwarding when a deleted archived thread is finalized", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-periodic-deleted-archive-skip",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/periodic-deleted-archive-skip",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        managed: true,
+        path: "/tmp/periodic-deleted-archive-skip",
+        projectId: project.id,
+        workspaceProvisionType: "managed-worktree",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "active",
+      });
+      seedThreadRuntimeState(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-deleted-archive-skip",
+      });
+
+      archiveThread(harness.db, harness.hub, thread.id);
+      markThreadDeleted(harness.db, harness.hub, { threadId: thread.id });
+      requestThreadStop(harness.deps, {
+        environmentId: environment.id,
+        hostId: host.id,
+        stopRequestedAt: null,
+        threadId: thread.id,
+      });
+      const queuedStop = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "thread.stop" && command.threadId === thread.id,
+      );
+      transitionThreadStatus(harness.db, harness.hub, thread.id, "idle");
+
+      await runThreadLifecycleSweep(harness.deps);
+
+      expect(getThread(harness.db, thread.id)).toBeNull();
+      expect(
+        harness.db
+          .select({ state: hostDaemonCommands.state })
+          .from(hostDaemonCommands)
+          .where(eq(hostDaemonCommands.id, queuedStop.row.id))
+          .get(),
+      ).toEqual({ state: "error" });
+      expect(
+        listQueuedThreadCommands(harness, "thread.archive", thread.id),
+      ).toEqual([]);
     } finally {
       await harness.cleanup();
     }

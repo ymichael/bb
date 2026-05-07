@@ -18,7 +18,7 @@ export type HostDaemonCommandRow = typeof hostDaemonCommands.$inferSelect;
 export interface HasPendingHostCommandForThreadArgs {
   hostId: string;
   threadId: string;
-  type: "thread.stop" | "turn.submit";
+  type: "thread.archive" | "thread.stop" | "turn.submit";
 }
 
 export interface GetPendingEnvironmentCommandArgs {

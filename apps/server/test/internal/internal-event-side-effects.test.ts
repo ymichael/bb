@@ -19,6 +19,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createTestDaemonEventEnvelope,
   internalAuthHeaders,
+  listQueuedThreadCommands,
   reportQueuedCommandError,
   reportQueuedCommandSuccess,
   waitForQueuedCommand,
@@ -1247,6 +1248,21 @@ describe("internal event side effects", () => {
       expect(
         getEnvironment(harness.db, environment.id)?.cleanupRequestedAt,
       ).toBeTypeOf("number");
+      expect(
+        listQueuedThreadCommands(harness, "thread.archive", thread.id),
+      ).toEqual([
+        {
+          type: "thread.archive",
+          environmentId: environment.id,
+          threadId: thread.id,
+          workspaceContext: {
+            workspacePath: environment.path,
+            workspaceProvisionType: environment.workspaceProvisionType,
+          },
+          providerId: "codex",
+          providerThreadId: "provider-auto-archive",
+        },
+      ]);
 
       deleteAutomation(harness.db, harness.hub, automation.id);
       harness.db
@@ -1289,6 +1305,9 @@ describe("internal event side effects", () => {
         harness.db.select().from(threads).where(eq(threads.id, thread.id)).get()
           ?.archivedAt,
       ).toBeNull();
+      expect(
+        listQueuedThreadCommands(harness, "thread.archive", thread.id),
+      ).toHaveLength(1);
     } finally {
       await harness.cleanup();
     }

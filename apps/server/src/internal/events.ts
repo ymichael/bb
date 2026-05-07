@@ -48,6 +48,7 @@ import {
 import { syncManagerThreadSchedules } from "../services/scheduling/manager-schedule-sync.js";
 import { queueManagerSystemMessage } from "../services/threads/manager-system-messages.js";
 import { runQueuedDraftAutoSendForThread } from "../services/threads/queued-drafts.js";
+import { queueSettledArchivedThreadProviderArchiveCommand } from "../services/threads/thread-lifecycle.js";
 import {
   runWithDaemonCommandWaitForbidden,
   scheduleAfterDaemonIngressResponse,
@@ -364,7 +365,17 @@ async function archiveCompletedAutomationThreadIfNeeded(
       environmentId: args.latestThread.environmentId,
       excludeThreadId: args.latestThread.id,
     });
-    archiveThread(deps.db, deps.hub, args.latestThread.id);
+    const archivedThread = archiveThread(
+      deps.db,
+      deps.hub,
+      args.latestThread.id,
+    );
+    if (!archivedThread) {
+      return;
+    }
+    queueSettledArchivedThreadProviderArchiveCommand(deps, {
+      threadId: archivedThread.id,
+    });
     if (shouldRequestCleanup) {
       requestEnvironmentCleanup(deps, {
         environmentId: args.latestThread.environmentId,

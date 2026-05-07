@@ -46,11 +46,13 @@ import {
 } from "../../services/system/event-pruning.js";
 import {
   buildExecutionOptions,
-  queueThreadArchiveCommand,
   queueThreadUnarchiveCommand,
 } from "../../services/threads/thread-commands.js";
 import { getLastProviderThreadId } from "../../services/threads/thread-events.js";
-import { requestThreadStopIfNeeded } from "../../services/threads/thread-lifecycle.js";
+import {
+  queueSettledArchivedThreadProviderArchiveCommand,
+  requestThreadStopIfNeeded,
+} from "../../services/threads/thread-lifecycle.js";
 import { toThreadResponseFromThread } from "../../services/threads/thread-runtime-display.js";
 
 async function validateArchiveCleanupRequest(
@@ -216,21 +218,14 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
         deps,
         thread,
       });
-      const providerThreadId = getLastProviderThreadId(deps, thread.id);
-      archiveThread(deps.db, deps.hub, thread.id);
-      if (providerThreadId) {
-        queueThreadArchiveCommand(deps, {
-          environment: {
-            id: environment.id,
-            hostId: environment.hostId,
-            path: environment.path,
-            workspaceProvisionType: environment.workspaceProvisionType,
-          },
-          providerThreadId,
-          thread,
-        });
+      const archivedThread = archiveThread(deps.db, deps.hub, thread.id);
+      if (!archivedThread) {
+        throw new ApiError(404, "thread_not_found", "Thread not found");
       }
-      requestThreadStopIfNeeded(deps, thread, environment);
+      requestThreadStopIfNeeded(deps, archivedThread, environment);
+      queueSettledArchivedThreadProviderArchiveCommand(deps, {
+        threadId: archivedThread.id,
+      });
       resetActiveThreadEventPruningState(thread.id);
       pruneThreadEventHistoryBestEffort(deps, {
         mode: "archived",

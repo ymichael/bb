@@ -26,6 +26,7 @@ import {
 import {
   addRequestIdToTurnSubmitCommandPayload,
   buildExecutionOptions,
+  ensureThreadNativeArchiveSettled,
   prepareTurnSubmitCommandPayload,
 } from "./thread-commands.js";
 import { appendClientTurnEventInTransaction } from "./thread-events.js";
@@ -141,6 +142,7 @@ async function sendClaimedDraftForIdleProviderThread(
   const environment = requireReadyThreadEnvironment(
     requireEnvironment(deps.db, thread.environmentId),
   );
+  ensureThreadNativeArchiveSettled(deps, { environment, thread });
   const queuedMessage = toQueuedMessage(args.draft);
   ensureThreadCanQueueStartRequest(deps, thread);
   await demoteEnvironmentIfPromoted(deps, { environment });

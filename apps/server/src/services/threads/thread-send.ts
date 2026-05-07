@@ -5,6 +5,7 @@ import { ApiError } from "../../errors.js";
 import { demoteEnvironmentIfPromoted } from "../environments/environment-promotion.js";
 import {
   buildExecutionOptions,
+  ensureThreadNativeArchiveSettled,
   queueTurnSubmitCommand,
 } from "./thread-commands.js";
 import { appendClientTurnEvent, getActiveTurnId } from "./thread-events.js";
@@ -101,6 +102,7 @@ export async function sendThreadMessage(
 ): Promise<void> {
   const { environment, payload, thread } = args;
   ensureThreadIsWritable(thread);
+  ensureThreadNativeArchiveSettled(deps, { environment, thread });
   if (args.trigger === "user") {
     ensureThreadIsNotAwaitingUserInteraction(deps, thread.id);
   }

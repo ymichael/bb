@@ -158,6 +158,97 @@ describe("thread command dispatch", () => {
     );
   });
 
+  it("forgets archived runtime threads so later sends resume the provider thread", async () => {
+    const harness = createHarness();
+
+    await dispatchCommand(
+      {
+        type: "thread.start",
+        environmentId: "env-resume-after-archive",
+        threadId: "thread-resume-after-archive",
+        workspaceContext: {
+          workspacePath: "/tmp/env-resume-after-archive",
+          workspaceProvisionType: "unmanaged",
+        },
+        projectId: "project-1",
+        providerId: "fake",
+        requestId: nextClientRequestId(),
+        input: [{ type: "text", text: "hello" }],
+        options: {
+          model: "gpt-5",
+          serviceTier: "default",
+          reasoningLevel: "medium",
+          permissionMode: "full",
+          permissionEscalation: null,
+        },
+        instructions: "Be a helpful coding agent.",
+        dynamicTools: [],
+        instructionMode: "append",
+      },
+      harness.dispatchOptions(),
+    );
+
+    await dispatchCommand(
+      {
+        type: "thread.archive",
+        environmentId: "env-resume-after-archive",
+        threadId: "thread-resume-after-archive",
+        workspaceContext: {
+          workspacePath: "/tmp/env-resume-after-archive",
+          workspaceProvisionType: "unmanaged",
+        },
+        providerId: "fake",
+        providerThreadId: "provider-thread-resume-after-archive",
+      },
+      harness.dispatchOptions(),
+    );
+    expect(
+      harness.manager.hasThread(
+        "env-resume-after-archive",
+        "thread-resume-after-archive",
+      ),
+    ).toBe(false);
+
+    await dispatchCommand(
+      {
+        type: "turn.submit",
+        environmentId: "env-resume-after-archive",
+        threadId: "thread-resume-after-archive",
+        requestId: nextClientRequestId(),
+        input: [{ type: "text", text: "follow up" }],
+        options: {
+          model: "gpt-5",
+          serviceTier: "default",
+          reasoningLevel: "medium",
+          permissionMode: "full",
+          permissionEscalation: null,
+        },
+        resumeContext: {
+          workspaceContext: {
+            workspacePath: "/tmp/env-resume-after-archive",
+            workspaceProvisionType: "unmanaged",
+          },
+          projectId: "project-1",
+          providerId: "fake",
+          providerThreadId: "provider-thread-resume-after-archive",
+          instructions: "Be a helpful coding agent.",
+          dynamicTools: [],
+          instructionMode: "append",
+        },
+        target: { mode: "start" },
+      },
+      harness.dispatchOptions(),
+    );
+
+    expect(harness.runtimeState.resumedThreadId).toBe(
+      "thread-resume-after-archive",
+    );
+    expect(harness.runtimeState.resumedProviderThreadId).toBe(
+      "provider-thread-resume-after-archive",
+    );
+    expect(harness.runtimeState.ranTurnText).toBe("follow up");
+  });
+
   it("unarchives through provider maintenance runtime after managed workspace cleanup", async () => {
     const dataDir = await makeTempDir("bb-daemon-data-");
     const oldManagedWorkspacePath = path.join(dataDir, "destroyed-worktree");

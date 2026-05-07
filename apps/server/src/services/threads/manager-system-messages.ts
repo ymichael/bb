@@ -8,6 +8,7 @@ import type { PendingInteractionWorkSessionDeps } from "../../types.js";
 import { requireThreadEnvironment } from "../lib/entity-lookup.js";
 import {
   buildExecutionOptions,
+  ensureThreadNativeArchiveSettled,
   queueTurnSubmitCommand,
 } from "./thread-commands.js";
 import {
@@ -133,6 +134,10 @@ export async function queueManagerSystemMessage(
     deps.db,
     args.managerThreadId,
   );
+  ensureThreadNativeArchiveSettled(deps, {
+    environment,
+    thread: managerThread,
+  });
   const input = buildSystemInput(args.messageText);
   const execution = await buildExecutionOptions(
     deps,

@@ -65,6 +65,7 @@ import {
   finalizeStoppedThreadInTransaction,
   hasActiveThreadStartOperationForCommand,
   hasActiveThreadStopOperationForCommand,
+  queueSettledArchivedThreadProviderArchiveCommand,
 } from "../services/threads/thread-lifecycle.js";
 import { tryTransitionInTransaction } from "../services/threads/thread-transitions.js";
 
@@ -583,6 +584,18 @@ function handleThreadStopResult(
     cancelPendingCommand: false,
     expectedCommandId: args.commandRow.id,
     threadId: args.command.threadId,
+  });
+  postCommitActions.push({
+    name: "Provider archive forwarding after thread stop",
+    context: {
+      environmentId: args.command.environmentId,
+      threadId: args.command.threadId,
+    },
+    run: (deps) => {
+      queueSettledArchivedThreadProviderArchiveCommand(deps, {
+        threadId: args.command.threadId,
+      });
+    },
   });
   postCommitActions.push({
     name: "Environment cleanup advance after thread stop",

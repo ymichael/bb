@@ -411,6 +411,19 @@ async function prepareDueNudge(
     };
   }
 
+  if (
+    hasPendingHostCommandForThread(deps.db, {
+      hostId: environment.hostId,
+      threadId: thread.id,
+      type: "thread.archive",
+    })
+  ) {
+    return {
+      kind: "skip",
+      reason: "pending-native-archive",
+    };
+  }
+
   try {
     const session = await ensureHostSessionReadyForWork(deps, {
       hostId: environment.hostId,
@@ -497,6 +510,16 @@ function queueDueNudgeInTransaction(
   }
 
   if (!isNudgePreparationCurrent(tx, { preparation: args.preparation })) {
+    return { kind: "lost-race" };
+  }
+
+  if (
+    hasPendingHostCommandForThread(tx, {
+      hostId: args.preparation.environment.hostId,
+      threadId: args.preparation.thread.id,
+      type: "thread.archive",
+    })
+  ) {
     return { kind: "lost-race" };
   }
 

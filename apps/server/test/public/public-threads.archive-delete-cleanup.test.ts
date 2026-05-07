@@ -12,11 +12,18 @@ import {
   getThread,
   hostDaemonCommands,
   listThreads,
+  queueCommand,
+  reportCommandResult,
 } from "@bb/db";
-import { threadSchema, turnScope, type Thread } from "@bb/domain";
-import { hostDaemonCommandSchema } from "@bb/host-daemon-contract";
+import {
+  threadSchema,
+  turnScope,
+  type Thread,
+  type WorkspaceProvisionType,
+} from "@bb/domain";
 import type { HostDaemonCommand } from "@bb/host-daemon-contract";
 import {
+  listQueuedThreadCommands,
   reportQueuedCommandSuccess,
   waitForQueuedCommand,
   waitForQueuedCommandAfter,
@@ -39,6 +46,27 @@ import { eq } from "drizzle-orm";
 interface ManagerWithAssignedChildFixture {
   childThread: Thread;
   managerThread: Thread;
+}
+
+type ThreadArchiveCommand = Extract<
+  HostDaemonCommand,
+  { type: "thread.archive" }
+>;
+type ExistingArchiveCommandState = "pending" | "fetched" | "success";
+
+interface ExistingArchiveCommandEnvironment {
+  id: string;
+  path: string | null;
+  workspaceProvisionType: WorkspaceProvisionType;
+}
+
+interface QueueExistingNativeArchiveCommandArgs {
+  environment: ExistingArchiveCommandEnvironment;
+  hostId: string;
+  providerThreadId: string;
+  sessionId: string | null;
+  state: ExistingArchiveCommandState;
+  thread: Thread;
 }
 
 function seedManagerWithAssignedChild(
@@ -64,20 +92,47 @@ function seedManagerWithAssignedChild(
   return { childThread, managerThread };
 }
 
-function listQueuedThreadCommands(
+function queueExistingNativeArchiveCommand(
   harness: TestAppHarness,
-  type: HostDaemonCommand["type"],
-  threadId: string,
-): HostDaemonCommand[] {
-  return harness.db
-    .select({ payload: hostDaemonCommands.payload })
-    .from(hostDaemonCommands)
-    .where(eq(hostDaemonCommands.type, type))
-    .all()
-    .map((row) => hostDaemonCommandSchema.parse(JSON.parse(row.payload)))
-    .filter(
-      (command) => "threadId" in command && command.threadId === threadId,
-    );
+  args: QueueExistingNativeArchiveCommandArgs,
+): void {
+  if (!args.environment.path) {
+    throw new Error("Native archive command fixture requires a workspace path");
+  }
+
+  const command: ThreadArchiveCommand = {
+    type: "thread.archive",
+    environmentId: args.environment.id,
+    threadId: args.thread.id,
+    workspaceContext: {
+      workspacePath: args.environment.path,
+      workspaceProvisionType: args.environment.workspaceProvisionType,
+    },
+    providerId: args.thread.providerId,
+    providerThreadId: args.providerThreadId,
+  };
+  const queuedCommand = queueCommand(harness.db, harness.hub, {
+    hostId: args.hostId,
+    sessionId: args.sessionId,
+    type: command.type,
+    payload: JSON.stringify(command),
+  });
+
+  if (args.state === "fetched") {
+    harness.db
+      .update(hostDaemonCommands)
+      .set({ state: "fetched", fetchedAt: Date.now() })
+      .where(eq(hostDaemonCommands.id, queuedCommand.id))
+      .run();
+  }
+  if (args.state === "success") {
+    reportCommandResult(harness.db, harness.hub, {
+      commandId: queuedCommand.id,
+      completedAt: Date.now(),
+      resultPayload: JSON.stringify({}),
+      state: "success",
+    });
+  }
 }
 
 describe("public thread archive delete cleanup routes", () => {
@@ -210,7 +265,7 @@ describe("public thread archive delete cleanup routes", () => {
     }
   });
 
-  it("skips Codex archive forwarding so unarchived BB threads can continue", async () => {
+  it("queues Codex archive forwarding for idle threads", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps);
@@ -247,7 +302,240 @@ describe("public thread archive delete cleanup routes", () => {
       expect(response.status).toBe(200);
       expect(
         listQueuedThreadCommands(harness, "thread.archive", thread.id),
+      ).toEqual([
+        {
+          type: "thread.archive",
+          environmentId: environment.id,
+          threadId: thread.id,
+          workspaceContext: {
+            workspacePath: environment.path,
+            workspaceProvisionType: environment.workspaceProvisionType,
+          },
+          providerId: "codex",
+          providerThreadId: "provider-archive-forward",
+        },
+      ]);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  for (const existingCommandState of [
+    "pending",
+    "fetched",
+    "success",
+  ] satisfies readonly ExistingArchiveCommandState[]) {
+    it(`skips duplicate Codex archive forwarding when a ${existingCommandState} native archive command already exists`, async () => {
+      const harness = await createTestAppHarness();
+      try {
+        const { host, session } = seedHostSession(harness.deps);
+        const { project } = seedProjectWithSource(harness.deps, {
+          hostId: host.id,
+        });
+        const environment = seedEnvironment(harness.deps, {
+          hostId: host.id,
+          projectId: project.id,
+        });
+        const thread = seedThread(harness.deps, {
+          projectId: project.id,
+          environmentId: environment.id,
+          status: "idle",
+        });
+        seedThreadRuntimeState(harness.deps, {
+          threadId: thread.id,
+          environmentId: environment.id,
+          providerThreadId: "provider-existing-native-archive",
+        });
+        queueExistingNativeArchiveCommand(harness, {
+          environment,
+          hostId: host.id,
+          providerThreadId: "provider-existing-native-archive",
+          sessionId: session.id,
+          state: existingCommandState,
+          thread,
+        });
+
+        const response = await harness.app.request(
+          `/api/v1/threads/${thread.id}/archive`,
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              force: false,
+              managerChildThreadsConfirmed: false,
+            }),
+          },
+        );
+
+        expect(response.status).toBe(200);
+        expect(
+          listQueuedThreadCommands(harness, "thread.archive", thread.id),
+        ).toHaveLength(1);
+      } finally {
+        await harness.cleanup();
+      }
+    });
+  }
+
+  it("queues Codex archive forwarding after active threads stop", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "active",
+      });
+      seedThreadRuntimeState(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-active-archive",
+      });
+
+      const response = await harness.app.request(
+        `/api/v1/threads/${thread.id}/archive`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            force: false,
+            managerChildThreadsConfirmed: false,
+          }),
+        },
+      );
+
+      expect(response.status).toBe(200);
+      expect(
+        listQueuedThreadCommands(harness, "thread.archive", thread.id),
       ).toEqual([]);
+      const stopCommand = await waitForQueuedCommand(harness, ({ command }) => {
+        return command.type === "thread.stop" && command.threadId === thread.id;
+      });
+
+      const stopResponse = await reportQueuedCommandSuccess(
+        harness,
+        stopCommand,
+        {},
+      );
+      expect(stopResponse.status).toBe(200);
+
+      const archiveCommand = await waitForQueuedCommandAfter(
+        harness,
+        stopCommand.row.cursor,
+        ({ command }) =>
+          command.type === "thread.archive" && command.threadId === thread.id,
+      );
+      expect(archiveCommand.command).toMatchObject({
+        type: "thread.archive",
+        environmentId: environment.id,
+        threadId: thread.id,
+        providerId: "codex",
+        providerThreadId: "provider-active-archive",
+      });
+      expect(
+        listQueuedThreadCommands(harness, "thread.archive", thread.id),
+      ).toHaveLength(1);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("queues Codex archive forwarding once when stop finalizes during archive validation", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        managed: true,
+        path: "/tmp/archive-stop-race",
+        projectId: project.id,
+        workspaceProvisionType: "managed-worktree",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "active",
+      });
+      seedThreadRuntimeState(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-archive-stop-race",
+      });
+
+      const stopResponse = await harness.app.request(
+        `/api/v1/threads/${thread.id}/stop`,
+        { method: "POST" },
+      );
+      expect(stopResponse.status).toBe(200);
+      const stopCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "thread.stop" && command.threadId === thread.id,
+      );
+
+      const archivePromise = harness.app.request(
+        `/api/v1/threads/${thread.id}/archive`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            force: false,
+            managerChildThreadsConfirmed: false,
+          }),
+        },
+      );
+      const statusCommand = await waitForQueuedCommandAfter(
+        harness,
+        stopCommand.row.cursor,
+        ({ command }) =>
+          command.type === "workspace.status" &&
+          command.environmentId === environment.id,
+      );
+
+      const stopResultResponse = await reportQueuedCommandSuccess(
+        harness,
+        stopCommand,
+        {},
+      );
+      expect(stopResultResponse.status).toBe(200);
+      expect(
+        listQueuedThreadCommands(harness, "thread.archive", thread.id),
+      ).toHaveLength(0);
+
+      await reportQueuedCommandSuccess(harness, statusCommand, {
+        workspaceStatus: cleanWorkspaceStatus(),
+      });
+      const archiveCommand = await waitForQueuedCommandAfter(
+        harness,
+        statusCommand.row.cursor,
+        ({ command }) =>
+          command.type === "thread.archive" && command.threadId === thread.id,
+      );
+      const cleanupStatusCommand = await waitForQueuedCommandAfter(
+        harness,
+        archiveCommand.row.cursor,
+        ({ command }) =>
+          command.type === "workspace.status" &&
+          command.environmentId === environment.id,
+      );
+      await reportQueuedCommandSuccess(harness, cleanupStatusCommand, {
+        workspaceStatus: cleanWorkspaceStatus(),
+      });
+      const archiveResponse = await archivePromise;
+      expect(archiveResponse.status).toBe(200);
+      expect(
+        listQueuedThreadCommands(harness, "thread.archive", thread.id),
+      ).toHaveLength(1);
     } finally {
       await harness.cleanup();
     }
@@ -504,6 +792,71 @@ describe("public thread archive delete cleanup routes", () => {
       expect(
         listQueuedThreadCommands(harness, "thread.unarchive", thread.id),
       ).toEqual([]);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("blocks follow-up sends while Codex native archive forwarding is pending", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "idle",
+      });
+      seedThreadRuntimeState(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-pending-native-archive",
+      });
+
+      const archiveResponse = await harness.app.request(
+        `/api/v1/threads/${thread.id}/archive`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            force: false,
+            managerChildThreadsConfirmed: false,
+          }),
+        },
+      );
+      expect(archiveResponse.status).toBe(200);
+      expect(
+        listQueuedThreadCommands(harness, "thread.archive", thread.id),
+      ).toHaveLength(1);
+
+      const unarchiveResponse = await harness.app.request(
+        `/api/v1/threads/${thread.id}/unarchive`,
+        { method: "POST" },
+      );
+      expect(unarchiveResponse.status).toBe(200);
+
+      const sendResponse = await harness.app.request(
+        `/api/v1/threads/${thread.id}/send`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            input: [{ type: "text", text: "follow up" }],
+            mode: "start",
+          }),
+        },
+      );
+
+      expect(sendResponse.status).toBe(409);
+      await expect(readJson(sendResponse)).resolves.toMatchObject({
+        code: "thread_archive_in_progress",
+      });
     } finally {
       await harness.cleanup();
     }
