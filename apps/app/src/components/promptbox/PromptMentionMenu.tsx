@@ -1,6 +1,6 @@
 import type { MutableRefObject } from "react";
 import { Loader2 } from "lucide-react";
-import { TruncateStart } from "@bb/ui-core";
+import { TruncateStart } from "@/components/ui";
 import type { PromptMentionSuggestion } from "@/hooks/usePromptMentions";
 import { cn } from "@/lib/utils";
 

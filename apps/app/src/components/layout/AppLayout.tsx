@@ -1,9 +1,4 @@
-import {
-  Fragment,
-  type CSSProperties,
-  type Ref,
-  type ReactNode,
-} from "react";
+import { Fragment, type CSSProperties, type Ref, type ReactNode } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { atom, useAtom } from "jotai";
 import { atomWithStorage } from "jotai/utils";
@@ -11,11 +6,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Archive, ChevronRight, Settings, UserRoundPlus } from "lucide-react";
 import type { Thread } from "@bb/domain";
 import type { ProjectResponse } from "@bb/server-contract";
-import {
-  SidebarProvider,
-  SidebarInset,
-  SidebarTrigger,
-} from "@bb/ui-core";
+import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui";
 import { AppSidebar } from "./AppSidebar";
 import { AppPageHeader, HEADER_ICON_BUTTON_CLASS } from "./AppPageHeader";
 import { useHireProjectManager } from "@/hooks/mutations/project-mutations";

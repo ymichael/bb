@@ -3,7 +3,7 @@
 import { Suspense, type ReactNode } from "react";
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { BrowserRouter } from "react-router-dom";
-import { SidebarProvider } from "@bb/ui-core";
+import { SidebarProvider } from "@/components/ui";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { QuickCreateProjectProvider } from "@/hooks/useQuickCreateProject";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";

@@ -17,7 +17,12 @@ import {
   Image as ImageIcon,
   Search,
 } from "lucide-react";
-import { CopyButton, EmptyState, Input, MarkdownPreview } from "@bb/ui-core";
+import {
+  CopyButton,
+  EmptyState,
+  Input,
+  MarkdownPreview,
+} from "@/components/ui";
 import { usePreferredTheme } from "@/hooks/useTheme";
 import { cn } from "@/lib/utils";
 import {

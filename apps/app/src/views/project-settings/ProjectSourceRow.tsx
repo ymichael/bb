@@ -4,15 +4,15 @@ import {
   type LocalPathProjectSource,
   type ProjectSource,
 } from "@bb/domain";
-import { LocalhostBadge, SettingsRow, StatusPill } from "@bb/ui-core";
+import { LocalhostBadge, SettingsRow, StatusPill } from "@/components/ui";
 import { GitHubIcon } from "@/components/icons/GitHubIcon";
-import { Button } from "@bb/ui-core";
+import { Button } from "@/components/ui";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@bb/ui-core";
+} from "@/components/ui";
 
 interface ProjectSourceRowProps {
   source: ProjectSource;

@@ -1,4 +1,4 @@
-import type { ThreadTimelineLocalFileLink } from "@bb/ui-core";
+import type { ThreadTimelineLocalFileLink } from "@/components/thread-timeline";
 import { matchPath } from "react-router-dom";
 import { APP_ROUTE_PATTERNS } from "./app-route-paths";
 
@@ -72,9 +72,7 @@ function normalizeAbsolutePath(candidatePath: string): string | null {
     : `/${normalizedSegments.join("/")}`;
 }
 
-function isPathWithinWorkspaceRoot(
-  args: WorkspacePathWithinRootArgs,
-): boolean {
+function isPathWithinWorkspaceRoot(args: WorkspacePathWithinRootArgs): boolean {
   if (args.workspaceRootPath === "/") {
     return args.candidatePath.startsWith("/");
   }

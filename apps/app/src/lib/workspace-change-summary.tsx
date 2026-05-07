@@ -4,7 +4,7 @@ import type {
   WorkspaceFileStatus,
   WorkspaceStatus,
 } from "@bb/domain";
-import { DiffStatsTally } from "@bb/ui-core";
+import { DiffStatsTally } from "@/components/ui";
 
 export interface ChangeTally {
   filesCount: number;

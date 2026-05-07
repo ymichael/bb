@@ -1,4 +1,4 @@
-import { Toaster, type ToasterProps } from "@bb/ui-core";
+import { Toaster, type ToasterProps } from "@/components/ui";
 import { usePreferredTheme } from "@/hooks/useTheme";
 
 export function AppToaster(props: ToasterProps) {

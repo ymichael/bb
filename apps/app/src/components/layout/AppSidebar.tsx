@@ -10,8 +10,8 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   useSidebar,
-} from "@bb/ui-core";
-import { COARSE_POINTER_CHILD_ICON_BUTTON_CLASS } from "@bb/ui-core";
+} from "@/components/ui";
+import { COARSE_POINTER_CHILD_ICON_BUTTON_CLASS } from "@/components/ui";
 import { ProjectList } from "./ProjectList";
 import { useQuickCreateProjectController } from "@/hooks/useQuickCreateProject";
 import { setPreferredTheme, usePreferredTheme } from "@/hooks/useTheme";

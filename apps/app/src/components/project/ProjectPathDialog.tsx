@@ -5,7 +5,7 @@ import {
   normalizeProjectPathInput,
 } from "@bb/domain";
 import type { HostPlatform } from "@bb/host-daemon-contract";
-import { Button } from "@bb/ui-core";
+import { Button } from "@/components/ui";
 import {
   Dialog,
   DialogContent,
@@ -13,8 +13,8 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@bb/ui-core";
-import { Input } from "@bb/ui-core";
+} from "@/components/ui";
+import { Input } from "@/components/ui";
 
 export type ProjectPathDialogTarget =
   | {

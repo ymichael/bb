@@ -5,7 +5,7 @@ import {
   SidebarMenuBadge,
   SidebarStickyTier,
   StatusPill,
-} from "@bb/ui-core";
+} from "@/components/ui";
 import {
   ChevronDown,
   ChevronRight,
@@ -22,7 +22,7 @@ import {
   COARSE_POINTER_ICON_SIZE_CLASS,
   COARSE_POINTER_ROW_ACTION_SIZE_CLASS,
   COARSE_POINTER_ROW_HEIGHT_CLASS,
-} from "@bb/ui-core";
+} from "@/components/ui";
 import {
   getEnvironmentWorkspaceDisplayIcon,
   getEnvironmentWorkspaceDisplayIconLabel,

@@ -1,11 +1,11 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { assertNever } from "@bb/core-ui";
 import type { ThreadType, WorkspaceStatus } from "@bb/domain";
-import { DetailCard, DetailRow } from "@bb/ui-core";
+import { DetailCard, DetailRow } from "@/components/ui";
 import type { ThreadGitStatusDisplay } from "@/lib/workspace-status";
-import { WorkspaceChangesList } from "@/components/shared/WorkspaceChangesList";
-import { FormError } from "@bb/ui-core";
-import { Button } from "@bb/ui-core";
+import { WorkspaceChangesList } from "@/components/thread/WorkspaceChangesList";
+import { FormError } from "@/components/ui";
+import { Button } from "@/components/ui";
 import {
   Dialog,
   DialogContent,
@@ -13,7 +13,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@bb/ui-core";
+} from "@/components/ui";
 import {
   getMergeBaseBranchCandidates,
   MergeBaseBranchPicker,

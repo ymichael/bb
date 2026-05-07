@@ -1,8 +1,8 @@
 import { Navigate } from "react-router-dom";
 import { useProjects } from "../hooks/queries/project-queries";
 import { useQuickCreateProjectController } from "@/hooks/useQuickCreateProject";
-import { Button } from "@bb/ui-core";
-import { PageShell } from "@bb/ui-core";
+import { Button } from "@/components/ui";
+import { PageShell } from "@/components/ui";
 
 export function MainView() {
   const { data: projects, isLoading: projectsLoading } = useProjects();

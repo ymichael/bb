@@ -4,28 +4,28 @@ import { HostStatusBadge } from "@/components/HostStatusIndicator";
 import { Check, ChevronDown, Copy, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Panel, PanelGroup } from "react-resizable-panels";
-import { Button } from "@bb/ui-core";
-import { COARSE_POINTER_ICON_SIZE_CLASS } from "@bb/ui-core";
-import { ResponsiveDrawerShell } from "@bb/ui-core";
-import { useIsMobile } from "@bb/ui-core";
+import { Button } from "@/components/ui";
+import { COARSE_POINTER_ICON_SIZE_CLASS } from "@/components/ui";
+import { ResponsiveDrawerShell } from "@/components/ui";
+import { useIsMobile } from "@/components/ui";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@bb/ui-core";
+} from "@/components/ui";
 import {
   WorkspaceChangesList,
   type WorkspaceChangedFile,
-} from "@/components/shared/WorkspaceChangesList";
-import { ArchiveTimestampAction } from "@/components/shared/ArchiveTimestampAction";
+} from "@/components/thread/WorkspaceChangesList";
+import { ArchiveTimestampAction } from "@/components/thread/ArchiveTimestampAction";
 import { MergeBaseBranchPicker } from "@/components/thread/MergeBaseBranchPicker";
 import { useIsSecondaryPanelOpen } from "@/lib/thread-secondary-panel";
 import type { ThreadGitStatusDisplay } from "@/lib/workspace-status";
 import { ThreadSecondaryPanel } from "./ThreadSecondaryPanel";
 import { ThreadTimelinePane } from "./ThreadTimelinePane";
 import { ManagerThreadStorageBrowser } from "./ManagerThreadStorageBrowser";
-import { DetailCard, DetailRow, LocalhostBadge } from "@bb/ui-core";
+import { DetailCard, DetailRow, LocalhostBadge } from "@/components/ui";
 import type { Thread } from "@bb/domain";
 import type { WorkspaceFile } from "@bb/server-contract";
 import type { FilePreview } from "@/lib/file-preview";

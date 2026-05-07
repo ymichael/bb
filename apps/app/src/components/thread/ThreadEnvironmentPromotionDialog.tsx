@@ -12,7 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
   FormError,
-} from "@bb/ui-core";
+} from "@/components/ui";
 import type { EnvironmentPromotionUnavailableReason } from "@bb/server-contract";
 import { getMutationErrorMessage } from "@/lib/mutation-errors";
 import { PROMOTION_UNAVAILABLE_COPY } from "@/lib/promotion-copy";

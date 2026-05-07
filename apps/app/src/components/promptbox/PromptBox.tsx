@@ -25,13 +25,13 @@ import {
   X,
 } from "lucide-react";
 import type { PromptMentionSuggestion } from "@/hooks/usePromptMentions";
-import { Button } from "@bb/ui-core";
+import { Button } from "@/components/ui";
 import {
   COARSE_POINTER_PROMPT_ACTION_BUTTON_CLASS,
   COARSE_POINTER_PROMPT_COMBO_BUTTON_CLASS,
   COARSE_POINTER_PROMPT_ICON_ACTION_BUTTON_CLASS,
   COARSE_POINTER_TEXT_BASE_CLASS,
-} from "@bb/ui-core";
+} from "@/components/ui";
 import { useAutoGrow } from "@/hooks/useAutoGrow";
 import { useVoiceInput } from "@/hooks/useVoiceInput";
 import { transcribeVoiceInput } from "@/lib/api";
@@ -721,9 +721,9 @@ export function PromptBox({
         : null;
     const hasSelectedHistoryEntry = Boolean(
       history &&
-        activeHistoryEntry !== null &&
-        activeHistoryEntry !== undefined &&
-        arePromptDraftStatesEqual(history.currentDraft, activeHistoryEntry),
+      activeHistoryEntry !== null &&
+      activeHistoryEntry !== undefined &&
+      arePromptDraftStatesEqual(history.currentDraft, activeHistoryEntry),
     );
     const canNavigateHistory =
       history !== undefined &&

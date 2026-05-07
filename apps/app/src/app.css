@@ -1,4 +1,4 @@
-@import "@bb/ui-core/theme.css";
+@import "@/components/ui/theme.css";
 
 @layer base {
   .chat-prompt-box {

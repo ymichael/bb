@@ -1,13 +1,9 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { Check, ChevronDown, Search } from "lucide-react";
-import { Button } from "@bb/ui-core";
-import { COARSE_POINTER_ICON_SIZE_SHRINK_CLASS } from "@bb/ui-core";
-import { Input } from "@bb/ui-core";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@bb/ui-core";
+import { Button } from "@/components/ui";
+import { COARSE_POINTER_ICON_SIZE_SHRINK_CLASS } from "@/components/ui";
+import { Input } from "@/components/ui";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui";
 import { cn } from "@/lib/utils";
 
 export function getMergeBaseBranchCandidates({
@@ -163,14 +159,8 @@ export function MergeBaseBranchPicker({
                 <Check
                   className={
                     branch === value
-                      ? cn(
-                          "opacity-100",
-                          COARSE_POINTER_ICON_SIZE_SHRINK_CLASS,
-                        )
-                      : cn(
-                          "opacity-0",
-                          COARSE_POINTER_ICON_SIZE_SHRINK_CLASS,
-                        )
+                      ? cn("opacity-100", COARSE_POINTER_ICON_SIZE_SHRINK_CLASS)
+                      : cn("opacity-0", COARSE_POINTER_ICON_SIZE_SHRINK_CLASS)
                   }
                 />
               </button>

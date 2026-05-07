@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
-import { SidebarTrigger } from "@bb/ui-core";
-import { COARSE_POINTER_HEADER_ICON_BUTTON_CLASS } from "@bb/ui-core";
+import { SidebarTrigger } from "@/components/ui";
+import { COARSE_POINTER_HEADER_ICON_BUTTON_CLASS } from "@/components/ui";
 import { cn } from "@/lib/utils";
 
 /**
@@ -8,8 +8,7 @@ import { cn } from "@/lib/utils";
  * menu, secondary-panel toggle, etc.). Keeps button dimensions and SVG sizing
  * consistent across coarse touch and desktop contexts.
  */
-export const HEADER_ICON_BUTTON_CLASS =
-  COARSE_POINTER_HEADER_ICON_BUTTON_CLASS;
+export const HEADER_ICON_BUTTON_CLASS = COARSE_POINTER_HEADER_ICON_BUTTON_CLASS;
 
 interface AppPageHeaderProps {
   center?: ReactNode;

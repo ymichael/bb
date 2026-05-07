@@ -1,5 +1,5 @@
 import type { Thread } from "@bb/domain";
-import { Button } from "@bb/ui-core";
+import { Button } from "@/components/ui";
 import {
   Dialog,
   DialogContent,
@@ -7,7 +7,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@bb/ui-core";
+} from "@/components/ui";
 import { threadTypeLabel } from "@/lib/thread-title";
 
 interface ThreadDeleteDialogProps {

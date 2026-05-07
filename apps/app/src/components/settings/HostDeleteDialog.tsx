@@ -1,4 +1,4 @@
-import { Button } from "@bb/ui-core";
+import { Button } from "@/components/ui";
 import {
   Dialog,
   DialogContent,
@@ -6,7 +6,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@bb/ui-core";
+} from "@/components/ui";
 
 export interface HostDeleteDialogTarget {
   id: string;

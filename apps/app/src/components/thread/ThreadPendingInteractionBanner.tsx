@@ -13,12 +13,12 @@ import {
   ExpandableLine,
   StatusPill,
   getDetailScrollMaxHeightClass,
-} from "@bb/ui-core";
+} from "@/components/ui";
 import { useResolveThreadPendingInteraction } from "@/hooks/mutations/thread-interaction-mutations";
 import { getMutationErrorMessage } from "@/lib/mutation-errors";
 import { cn } from "@/lib/utils";
 import { labelForApprovalDecision } from "./pending-interactions/banner-helpers";
-import { Button } from "@bb/ui-core";
+import { Button } from "@/components/ui";
 
 interface ThreadPendingInteractionBannerProps {
   interaction: PendingInteraction;

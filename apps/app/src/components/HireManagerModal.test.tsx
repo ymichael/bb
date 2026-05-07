@@ -10,7 +10,11 @@ import {
   waitFor,
 } from "@testing-library/react";
 import type { AvailableModel, Host, Thread } from "@bb/domain";
-import type { ProjectResponse, SystemProviderInfo } from "@bb/server-contract";
+import type {
+  CreateManagerThreadRequest,
+  ProjectResponse,
+  SystemProviderInfo,
+} from "@bb/server-contract";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   availableModelsQueryKey,
@@ -28,9 +32,8 @@ import { createTestSystemProvider } from "@/test/system-provider-test-utils";
 import { HireManagerModal } from "./HireManagerModal";
 
 vi.mock("partysocket/ws", async () => {
-  const { FakeReconnectingWebSocket } = await import(
-    "@/test/fake-reconnecting-websocket"
-  );
+  const { FakeReconnectingWebSocket } =
+    await import("@/test/fake-reconnecting-websocket");
   return {
     default: FakeReconnectingWebSocket,
   };
@@ -42,7 +45,9 @@ interface InstallHireManagerRoutesArgs {
   systemProviders?: SystemProvidersFixture;
 }
 
-type SystemProvidersFixture = SystemProviderInfo[] | (() => SystemProviderInfo[]);
+type SystemProvidersFixture =
+  | SystemProviderInfo[]
+  | (() => SystemProviderInfo[]);
 
 function installMatchMedia() {
   Object.defineProperty(window, "matchMedia", {
@@ -158,6 +163,32 @@ function findOptionLabel(text: string): HTMLElement {
   return label;
 }
 
+function getProviderModelButton(): HTMLElement {
+  return screen.getByRole("button", { name: "Provider and model" });
+}
+
+async function openProviderModelPicker(): Promise<void> {
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Provider and model" }),
+  );
+}
+
+function expectProviderModelTitle(parts: readonly string[]): void {
+  const title = getProviderModelButton().title;
+  for (const part of parts) {
+    expect(title).toContain(part);
+  }
+}
+
+async function selectProviderModel(args: {
+  provider: string;
+  model: string;
+}): Promise<void> {
+  await openProviderModelPicker();
+  fireEvent.click(await screen.findByTitle(args.provider));
+  fireEvent.click(await waitFor(() => findOptionLabel(args.model)));
+}
+
 function createDefaultSystemProviders(): SystemProviderInfo[] {
   return [
     createTestSystemProvider({
@@ -189,7 +220,7 @@ function resolveSystemProviders(
 
 function installHireManagerRoutes(args: InstallHireManagerRoutesArgs = {}) {
   const managerThread = args.managerThread ?? makeThread();
-  const managerRequests: unknown[] = [];
+  const managerRequests: CreateManagerThreadRequest[] = [];
   const requestedModelProviders: Array<string | null> = [];
   const systemProviders =
     args.systemProviders ?? createDefaultSystemProviders();
@@ -229,7 +260,8 @@ function installHireManagerRoutes(args: InstallHireManagerRoutesArgs = {}) {
     },
     {
       pathname: "/api/v1/system/providers",
-      handler: async () => jsonResponse(resolveSystemProviders(systemProviders)),
+      handler: async () =>
+        jsonResponse(resolveSystemProviders(systemProviders)),
     },
     {
       method: "POST",
@@ -249,9 +281,7 @@ function installHireManagerRoutes(args: InstallHireManagerRoutesArgs = {}) {
         const providerId = url.searchParams.get("providerId");
         requestedModelProviders.push(providerId);
         return jsonResponse(
-          providerId
-            ? (args.modelResponsesByProvider?.[providerId] ?? [])
-            : [],
+          providerId ? (args.modelResponsesByProvider?.[providerId] ?? []) : [],
         );
       },
     });
@@ -339,23 +369,12 @@ describe("HireManagerModal", () => {
       );
     });
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Provider" }).title).toContain(
-        "Pi",
-      );
-      expect(screen.getByRole("button", { name: "Model" }).title).toContain(
-        "Claude Opus 4.7",
-      );
+      expectProviderModelTitle(["Pi", "Claude Opus 4.7"]);
     });
 
-    fireEvent.pointerDown(screen.getByRole("button", { name: "Provider" }), {
-      button: 0,
-      ctrlKey: false,
-    });
-    await waitFor(() => findOptionLabel("Pi"));
+    await openProviderModelPicker();
+    fireEvent.click(await waitFor(() => findOptionLabel("Claude Opus 4.7")));
     expect(screen.queryByText("Server Default")).toBeNull();
-    fireEvent.keyDown(screen.getByRole("menu", { name: "Provider" }), {
-      key: "Escape",
-    });
 
     fireEvent.click(screen.getByRole("button", { name: "Hire Manager" }));
 
@@ -407,39 +426,32 @@ describe("HireManagerModal", () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Provider" }).title).toContain(
-        "Pi",
-      );
+      expectProviderModelTitle(["Pi"]);
     });
 
-    fireEvent.pointerDown(screen.getByRole("button", { name: "Provider" }), {
-      button: 0,
-      ctrlKey: false,
+    await selectProviderModel({
+      provider: "Codex",
+      model: "GPT-5.4",
     });
-    fireEvent.click(await waitFor(() => findOptionLabel("Codex")));
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Provider" }).title).toContain(
-        "Codex",
-      );
+      expectProviderModelTitle(["Codex", "GPT-5.4"]);
     });
 
-    systemProviders = systemProviders.filter((provider) => provider.id === "pi");
+    systemProviders = systemProviders.filter(
+      (provider) => provider.id === "pi",
+    );
     await queryClient.refetchQueries({ queryKey: systemProvidersQueryKey() });
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Provider" }).title).toContain(
-        "Pi",
-      );
+      expectProviderModelTitle(["Pi"]);
     });
 
     systemProviders = createDefaultSystemProviders();
     await queryClient.refetchQueries({ queryKey: systemProvidersQueryKey() });
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Provider" }).title).toContain(
-        "Pi",
-      );
+      expectProviderModelTitle(["Pi"]);
     });
   });
 
@@ -487,21 +499,18 @@ describe("HireManagerModal", () => {
       );
     });
 
-    fireEvent.pointerDown(screen.getByRole("button", { name: "Provider" }), {
-      button: 0,
-      ctrlKey: false,
+    await selectProviderModel({
+      provider: "Codex",
+      model: "GPT-5.4",
     });
-    fireEvent.click(await waitFor(() => findOptionLabel("Codex")));
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Model" }).title).toContain(
-        "GPT-5.4",
-      );
+      expectProviderModelTitle(["Codex", "GPT-5.4"]);
     });
     await waitFor(() => {
-      expect(
-        screen.getByRole("button", { name: "Reasoning" }).title,
-      ).toContain("Medium");
+      expect(screen.getByRole("button", { name: "Reasoning" }).title).toContain(
+        "Medium",
+      );
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Hire Manager" }));
@@ -560,9 +569,9 @@ describe("HireManagerModal", () => {
     });
 
     await waitFor(() => {
-      expect(
-        screen.getByRole("button", { name: "Reasoning" }).title,
-      ).toContain("Extra High");
+      expect(screen.getByRole("button", { name: "Reasoning" }).title).toContain(
+        "Extra High",
+      );
     });
 
     fireEvent.pointerDown(screen.getByRole("button", { name: "Reasoning" }), {
@@ -572,9 +581,9 @@ describe("HireManagerModal", () => {
     fireEvent.click(await waitFor(() => findOptionLabel("Medium")));
 
     await waitFor(() => {
-      expect(
-        screen.getByRole("button", { name: "Reasoning" }).title,
-      ).toContain("Medium");
+      expect(screen.getByRole("button", { name: "Reasoning" }).title).toContain(
+        "Medium",
+      );
     });
 
     modelResponsesByProvider.pi = [
@@ -601,9 +610,9 @@ describe("HireManagerModal", () => {
     });
 
     await waitFor(() => {
-      expect(
-        screen.getByRole("button", { name: "Reasoning" }).title,
-      ).toContain("Medium");
+      expect(screen.getByRole("button", { name: "Reasoning" }).title).toContain(
+        "Medium",
+      );
     });
   });
 });

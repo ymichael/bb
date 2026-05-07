@@ -1,21 +1,17 @@
 import { useCallback, useMemo, useState } from "react";
 import { Check, ChevronDown, Zap } from "lucide-react";
-import { Button } from "@bb/ui-core";
+import { Button } from "@/components/ui";
 import {
   COARSE_POINTER_ICON_SIZE_CLASS,
   COARSE_POINTER_ICON_SIZE_SHRINK_CLASS,
   COARSE_POINTER_PROVIDER_TAB_SIZE_CLASS,
   COARSE_POINTER_TEXT_SM_CLASS,
-} from "@bb/ui-core";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@bb/ui-core";
-import { Switch } from "@bb/ui-core";
+} from "@/components/ui";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui";
+import { Switch } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { useAvailableModels } from "@/hooks/queries/system-queries";
-import { useIsMobile } from "@bb/ui-core";
+import { useIsMobile } from "@/components/ui";
 import {
   PROMPT_OPTION_BASE_CLASS_NAME,
   PROMPT_OPTION_INTERACTIVE_CLASS_NAME,
@@ -91,6 +87,7 @@ export function PromptProviderModelPicker({
   const isPreviewing =
     previewProviderId !== null && previewProviderId !== selectedProviderId;
   const previewModelsQuery = useAvailableModels({
+    enabled: isPreviewing,
     providerId: isPreviewing ? previewProviderId : undefined,
   });
 

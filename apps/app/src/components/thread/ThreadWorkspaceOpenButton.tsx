@@ -14,10 +14,7 @@ import terminalIcon from "@/assets/workspace-open-target-icons/terminal.png";
 import iterm2Icon from "@/assets/workspace-open-target-icons/iterm2.png";
 import ghosttyIcon from "@/assets/workspace-open-target-icons/ghostty.png";
 import xcodeIcon from "@/assets/workspace-open-target-icons/xcode.png";
-import {
-  SplitButton,
-  type SplitButtonAction,
-} from "@bb/ui-core";
+import { SplitButton, type SplitButtonAction } from "@/components/ui";
 
 const WORKSPACE_OPEN_TARGET_ICONS: Record<WorkspaceOpenTargetId, string> = {
   vscode: vscodeIcon,

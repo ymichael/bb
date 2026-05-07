@@ -9,7 +9,7 @@ import {
 import type { ReasoningLevel, Thread } from "@bb/domain";
 import type { SystemProviderInfo } from "@bb/server-contract";
 import { findLocalPathProjectSourceForHost } from "@bb/domain";
-import { DetailCard, DetailRow } from "@bb/ui-core";
+import { DetailCard, DetailRow } from "@/components/ui";
 import {
   Dialog,
   DialogContent,
@@ -17,10 +17,10 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@bb/ui-core";
-import { Button } from "@bb/ui-core";
-import { FormError } from "@bb/ui-core";
-import { Input } from "@bb/ui-core";
+} from "@/components/ui";
+import { Button } from "@/components/ui";
+import { FormError } from "@/components/ui";
+import { Input } from "@/components/ui";
 import { useHireProjectManager } from "@/hooks/mutations/project-mutations";
 import {
   useAvailableModels,
@@ -85,18 +85,15 @@ export function HireManagerModal({
   const [selectedHostId, setSelectedHostId] = useState<string>("");
   const [isPending, setIsPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const selectedProvider = useMemo(
-    () => {
-      if (selectedProviderId) {
-        const matchingProvider = providers.find(
-          (provider) => provider.id === selectedProviderId,
-        );
-        if (matchingProvider) return matchingProvider;
-      }
-      return providers[0] ?? null;
-    },
-    [providers, selectedProviderId],
-  );
+  const selectedProvider = useMemo(() => {
+    if (selectedProviderId) {
+      const matchingProvider = providers.find(
+        (provider) => provider.id === selectedProviderId,
+      );
+      if (matchingProvider) return matchingProvider;
+    }
+    return providers[0] ?? null;
+  }, [providers, selectedProviderId]);
   const selectedProviderValue = selectedProvider?.id ?? "";
   const hasSelectedProvider = selectedProvider !== null;
   const unavailableProviderMessage = providersAreLoaded
@@ -159,7 +156,9 @@ export function HireManagerModal({
       !models.some((m) => m.model === selectedModel)
     ) {
       setSelectedModel(
-        models.find((model) => model.isDefault)?.model ?? models[0]?.model ?? "",
+        models.find((model) => model.isDefault)?.model ??
+          models[0]?.model ??
+          "",
       );
     }
   }, [hasSelectedProvider, models, selectedModel]);
@@ -173,15 +172,14 @@ export function HireManagerModal({
     const currentReasoningStillSupported = reasoningOptions.some(
       (option) => option.value === selectedReasoningLevel,
     );
-    if (
-      reasoningSelectionSource === "user" &&
-      currentReasoningStillSupported
-    ) {
+    if (reasoningSelectionSource === "user" && currentReasoningStillSupported) {
       return;
     }
 
     setSelectedReasoningLevel(
-      selectedModelData.defaultReasoningEffort ?? reasoningOptions[0]?.value ?? "",
+      selectedModelData.defaultReasoningEffort ??
+        reasoningOptions[0]?.value ??
+        "",
     );
   }, [
     reasoningOptions,
@@ -348,7 +346,10 @@ export function HireManagerModal({
                       {reasoningOptions.length > 0 ? (
                         <PromptOptionPicker
                           label="Reasoning"
-                          value={effectiveReasoningLevel ?? reasoningOptions[0]!.value}
+                          value={
+                            effectiveReasoningLevel ??
+                            reasoningOptions[0]!.value
+                          }
                           options={reasoningOptions}
                           onChange={handleReasoningLevelChange}
                           className="text-foreground"

@@ -11,7 +11,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
   useIsMobile,
-} from "@bb/ui-core";
+} from "@/components/ui";
 import {
   AppPageHeader,
   HEADER_ICON_BUTTON_CLASS,
@@ -51,10 +51,7 @@ interface PromotionActionButtonProps {
   onOpen: (target: ThreadEnvironmentPromotionDialogTarget) => void;
 }
 
-function PromotionActionButton({
-  action,
-  onOpen,
-}: PromotionActionButtonProps) {
+function PromotionActionButton({ action, onOpen }: PromotionActionButtonProps) {
   if (action.kind === "hard-disabled") {
     return (
       <TooltipProvider delayDuration={150}>

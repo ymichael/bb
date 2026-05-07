@@ -2,16 +2,14 @@ import { useEffect, useState, type ReactNode } from "react";
 import { ChevronUp } from "lucide-react";
 import type { ActiveThinking, ThreadRuntimeDisplayStatus } from "@bb/domain";
 import type { TimelineRow, TimelineTurnRow } from "@bb/server-contract";
+import { Button, ConversationTimeline, PageShell } from "@/components/ui";
 import {
-  ConversationTimeline,
   ThreadTimelineRows,
   type ThreadTimelineLocalFileLinkHandler,
   type TimelineTitleActionResolver,
-} from "@bb/ui-core";
-import { PageShell } from "@bb/ui-core";
-import { Button } from "@bb/ui-core";
-import { ConversationStatusIndicator } from "@bb/ui-core";
-import { ConversationWorkingIndicator } from "@bb/ui-core";
+} from "@/components/thread-timeline";
+import { ConversationStatusIndicator } from "@/components/thread-timeline";
+import { ConversationWorkingIndicator } from "@/components/thread-timeline";
 import { usePreferredTheme } from "@/hooks/useTheme";
 import { toUserAttachmentImageSrc } from "@/lib/user-attachment-images";
 

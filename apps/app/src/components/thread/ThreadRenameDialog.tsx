@@ -1,6 +1,6 @@
 import type { ThreadType } from "@bb/domain";
 import { useId, useState, type FormEvent } from "react";
-import { Button } from "@bb/ui-core";
+import { Button } from "@/components/ui";
 import {
   Dialog,
   DialogContent,
@@ -8,8 +8,8 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@bb/ui-core";
-import { Input } from "@bb/ui-core";
+} from "@/components/ui";
+import { Input } from "@/components/ui";
 import { threadTypeLabel } from "@/lib/thread-title";
 
 export interface ThreadRenameDialogTarget {

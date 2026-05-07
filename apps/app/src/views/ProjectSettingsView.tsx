@@ -11,8 +11,8 @@ import {
   type LocalPathProjectSource,
   type ProjectSource,
 } from "@bb/domain";
-import { Button } from "@bb/ui-core";
-import { Input } from "@bb/ui-core";
+import { Button } from "@/components/ui";
+import { Input } from "@/components/ui";
 import {
   Dialog,
   DialogContent,
@@ -20,10 +20,10 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@bb/ui-core";
-import { PageShell } from "@bb/ui-core";
+} from "@/components/ui";
+import { PageShell } from "@/components/ui";
 import { ProjectPathDialog } from "@/components/project/ProjectPathDialog";
-import { SettingsRowList, SettingsSection } from "@bb/ui-core";
+import { SettingsRowList, SettingsSection } from "@/components/ui";
 import { ProjectSourceRow } from "@/views/project-settings/ProjectSourceRow";
 import {
   useAddLocalProjectSource,

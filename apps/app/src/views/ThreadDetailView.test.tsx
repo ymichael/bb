@@ -6,7 +6,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import type { QueryClient } from "@tanstack/react-query";
 import type { ThreadListEntry, ThreadWithRuntime } from "@bb/domain";
 import type { ThreadTimelineResponse } from "@bb/server-contract";
-import { SidebarProvider } from "@bb/ui-core";
+import { SidebarProvider } from "@/components/ui";
 import { resetFakeReconnectingWebSockets } from "@/test/fake-reconnecting-websocket";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
 import {

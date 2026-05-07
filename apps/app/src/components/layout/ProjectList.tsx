@@ -32,7 +32,7 @@ import { useServerConnectionState } from "@/hooks/useServerConnectionState";
 import type { WebSocketConnectionState } from "@/lib/ws";
 import * as api from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { EmptyState } from "@bb/ui-core";
+import { EmptyState } from "@/components/ui";
 import {
   SidebarGroupContent,
   SidebarMenu,
@@ -40,11 +40,11 @@ import {
   SidebarMenuSkeleton,
   SidebarStickyStack,
   SidebarStickyTier,
-} from "@bb/ui-core";
+} from "@/components/ui";
 import {
   COARSE_POINTER_ADD_PROJECT_BUTTON_SIZE_CLASS,
   COARSE_POINTER_ICON_SIZE_CLASS,
-} from "@bb/ui-core";
+} from "@/components/ui";
 import { ProjectRow } from "./project-list/ProjectRow";
 import type { ProjectThreadListState } from "./project-list/ProjectRow";
 import {
@@ -366,8 +366,9 @@ function ProjectListComponent({
                 status: threadState?.status,
                 threads: threadsByProject.get(project.id),
               });
-              const localSourcePath =
-                localSourcePathsByProjectId.get(project.id);
+              const localSourcePath = localSourcePathsByProjectId.get(
+                project.id,
+              );
               const isLocalPathInvalid = isLocalPathMissing(
                 pathExistence,
                 localSourcePath,

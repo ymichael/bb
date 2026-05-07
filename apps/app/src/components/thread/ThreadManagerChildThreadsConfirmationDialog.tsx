@@ -1,5 +1,5 @@
 import type { Thread } from "@bb/domain";
-import { Button } from "@bb/ui-core";
+import { Button } from "@/components/ui";
 import {
   Dialog,
   DialogContent,
@@ -7,7 +7,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@bb/ui-core";
+} from "@/components/ui";
 
 export type ThreadManagerChildThreadsAction = "archive" | "delete";
 
@@ -31,14 +31,10 @@ interface DialogCopy {
 }
 
 function formatNonDeletedAssignedChildThreadCount(count: number): string {
-  return `${count} non-deleted assigned child thread${
-    count === 1 ? "" : "s"
-  }`;
+  return `${count} non-deleted assigned child thread${count === 1 ? "" : "s"}`;
 }
 
-function getDialogCopy(
-  action: ThreadManagerChildThreadsAction,
-): DialogCopy {
+function getDialogCopy(action: ThreadManagerChildThreadsAction): DialogCopy {
   if (action === "archive") {
     return {
       confirmLabel: "Archive manager",

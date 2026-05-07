@@ -1,1 +1,1 @@
-export { cn } from "@bb/ui-core";
+export { cn } from "@/components/ui";

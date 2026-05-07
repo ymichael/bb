@@ -1,14 +1,14 @@
 import { FolderPlus, MoreHorizontal, PencilLine, Trash2 } from "lucide-react";
 import { findLocalPathProjectSourceForHost } from "@bb/domain";
 import type { ProjectResponse } from "@bb/server-contract";
-import { Button } from "@bb/ui-core";
-import { COARSE_POINTER_ICON_SIZE_CLASS } from "@bb/ui-core";
+import { Button } from "@/components/ui";
+import { COARSE_POINTER_ICON_SIZE_CLASS } from "@/components/ui";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@bb/ui-core";
+} from "@/components/ui";
 import { useHostDaemon } from "@/hooks/useHostDaemon";
 import { cn } from "@/lib/utils";
 import { useProjectActions } from "./ProjectActionsProvider";

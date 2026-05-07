@@ -1,9 +1,6 @@
 import { useEffect } from "react";
 import { X } from "lucide-react";
-import {
-  ImageLightbox,
-  getWrappedImageIndex,
-} from "@bb/ui-core";
+import { ImageLightbox, getWrappedImageIndex } from "@/components/ui";
 import type { PromptDraftAttachment } from "@/lib/prompt-draft";
 import { toUserAttachmentImageSrc } from "@/lib/user-attachment-images";
 

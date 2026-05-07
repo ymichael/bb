@@ -4,12 +4,12 @@ import { useNavigate } from "react-router-dom";
 import { Check, ChevronDown, Monitor } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { Host, ProjectSource, SandboxBackendInfo } from "@bb/domain";
-import { LocalhostBadge } from "@bb/ui-core";
+import { LocalhostBadge } from "@/components/ui";
 import {
   findLocalPathProjectSourceForHost,
   isGitHubRepoProjectSource,
 } from "@bb/domain";
-import { Button } from "@bb/ui-core";
+import { Button } from "@/components/ui";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,12 +17,12 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuTrigger,
-} from "@bb/ui-core";
+} from "@/components/ui";
 import {
   COARSE_POINTER_COMPACT_ICON_SIZE_CLASS,
   COARSE_POINTER_COMPACT_ICON_SIZE_SHRINK_CLASS,
   COARSE_POINTER_ICON_SIZE_CLASS,
-} from "@bb/ui-core";
+} from "@/components/ui";
 import { useHostDaemon } from "@/hooks/useHostDaemon";
 import { useSandboxBackends } from "@/hooks/queries/system-queries";
 import { useEffectiveHosts } from "@/hooks/queries/effective-hosts";

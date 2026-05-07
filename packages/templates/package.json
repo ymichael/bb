@@ -14,7 +14,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "rimraf dist tsconfig.build.tsbuildinfo && node ./scripts/generate-templates.mjs && esbuild src/index.ts --bundle --platform=node --target=node20 --format=esm --outfile=dist/index.js --sourcemap && tsc -p tsconfig.build.json --emitDeclarationOnly",
+    "build": "rimraf dist tsconfig.build.tsbuildinfo && node ./scripts/generate-templates.mjs && esbuild src/index.ts --bundle --platform=node --target=node20 --format=esm --outfile=dist/index.js --sourcemap && tsc -p tsconfig.build.json --emitDeclarationOnly --declaration --declarationMap --outDir dist",
     "clean": "rimraf dist tsconfig.build.tsbuildinfo",
     "typecheck": "node ./scripts/generate-templates.mjs && tsc --noEmit",
     "test": "node ./scripts/generate-templates.mjs && vitest run --config vitest.config.ts"

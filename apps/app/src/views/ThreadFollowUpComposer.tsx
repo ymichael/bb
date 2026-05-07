@@ -31,15 +31,15 @@ import {
   PromptExecutionControls,
   PromptPermissionModePicker,
 } from "@/components/promptbox/PromptExecutionControls";
-import { useBottomAnchoredScroll } from "@bb/ui-core";
-import { Button } from "@bb/ui-core";
+import { useBottomAnchoredScroll } from "@/components/ui";
+import { Button } from "@/components/ui";
 import { ThreadTimelineScrollToBottomButton } from "./ThreadTimelineScrollToBottomButton";
-import { WorkspaceChangesList } from "@/components/shared/WorkspaceChangesList";
+import { WorkspaceChangesList } from "@/components/thread/WorkspaceChangesList";
 import {
   getMergeBaseBranchCandidates,
   MergeBaseBranchPicker,
 } from "@/components/thread/MergeBaseBranchPicker";
-import { ThreadContextWindowIndicator } from "@bb/ui-core";
+import { ThreadContextWindowIndicator } from "@/components/thread-timeline";
 import { cn } from "@/lib/utils";
 import {
   countQueuedMessageAttachments,

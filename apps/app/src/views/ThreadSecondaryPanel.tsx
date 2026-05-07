@@ -17,7 +17,7 @@ import {
   X,
 } from "lucide-react";
 import { FileDiff as DiffView } from "@pierre/diffs/react";
-import { DiffStatsTally, FilePathLink, Skeleton } from "@bb/ui-core";
+import { DiffStatsTally, FilePathLink, Skeleton } from "@/components/ui";
 import { copyToClipboardWithToast } from "@/lib/clipboard";
 import { Panel, PanelResizeHandle } from "react-resizable-panels";
 import {
@@ -32,7 +32,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@bb/ui-core";
+} from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { type ThreadSecondaryPanel as ThreadSecondaryPanelTab } from "@/lib/thread-secondary-panel";
 import {

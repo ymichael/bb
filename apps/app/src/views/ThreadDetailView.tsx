@@ -3,7 +3,7 @@ import { useParams } from "react-router-dom";
 import type {
   ThreadTimelineLocalFileLink,
   TimelineTitleActionResolver,
-} from "@bb/ui-core";
+} from "@/components/thread-timeline";
 import type { ThreadListEntry, ThreadWithRuntime } from "@bb/domain";
 import { toast } from "sonner";
 import { useThreadSecondaryPanelUrlSync } from "@/lib/thread-secondary-panel";
@@ -27,7 +27,7 @@ import {
 } from "../hooks/queries/thread-queries";
 import { ThreadGitActionDialog } from "@/components/thread/ThreadGitActionDialog";
 import { ThreadEnvironmentPromotionDialog } from "@/components/thread/ThreadEnvironmentPromotionDialog";
-import { PageShell } from "@bb/ui-core";
+import { PageShell } from "@/components/ui";
 import { HEADER_ICON_BUTTON_CLASS } from "@/components/layout/AppPageHeader";
 import { ThreadActionsMenu } from "@/components/thread/ThreadActionsMenu";
 import { ThreadWorkspaceOpenButton } from "@/components/thread/ThreadWorkspaceOpenButton";

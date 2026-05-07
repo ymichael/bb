@@ -1,7 +1,7 @@
 import { Link, useParams } from "react-router-dom";
 import type { ThreadListEntry } from "@bb/domain";
-import { PageShell, Pill } from "@bb/ui-core";
-import { ArchiveTimestampAction } from "@/components/shared/ArchiveTimestampAction";
+import { PageShell, Pill } from "@/components/ui";
+import { ArchiveTimestampAction } from "@/components/thread/ArchiveTimestampAction";
 import { useUnarchiveThread } from "@/hooks/mutations/thread-state-mutations";
 import { useThreads } from "@/hooks/queries/thread-queries";
 import { getThreadDisplayTitle } from "@/lib/thread-title";
