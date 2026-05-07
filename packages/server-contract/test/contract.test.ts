@@ -145,6 +145,12 @@ const INTENTIONAL_OPTIONAL_SERVER_FIELDS: Record<string, string> = {
     "Timeline queries may omit managerTimelineView unless explicitly requesting the standard manager timeline.",
   "threadTimelineQuerySchema.includeNestedRows":
     "Timeline queries may omit nested rows unless explicitly requested.",
+  "threadTimelineQuerySchema.segmentLimit":
+    "Timeline queries may omit segmentLimit to use the server-side default page size.",
+  "threadTimelineQuerySchema.beforeAnchorSeq":
+    "Timeline queries omit beforeAnchorSeq when requesting the latest page.",
+  "threadTimelineQuerySchema.beforeAnchorId":
+    "Timeline queries omit beforeAnchorId when requesting the latest page.",
   "threadTimelineResponseSchema.contextWindowUsage":
     "Timeline responses omit context window usage when the provider did not report it.",
   "timelineTurnSummaryDetailsQuerySchema.managerTimelineView":
@@ -751,6 +757,21 @@ describe("server-contract clients", () => {
     ).toMatchObject({ query: maxQuery });
     expect(() =>
       contract.threadStorageFilesQuerySchema.parse({ query: longQuery }),
+    ).toThrow();
+  });
+
+  it("rejects zero timeline pagination cursor sequences", () => {
+    expect(() =>
+      contract.timelinePaginationCursorSchema.parse({
+        anchorSeq: 0,
+        anchorId: "row-1",
+      }),
+    ).toThrow();
+    expect(() =>
+      contract.threadTimelineQuerySchema.parse({
+        beforeAnchorSeq: "0",
+        beforeAnchorId: "row-1",
+      }),
     ).toThrow();
   });
 

@@ -9,7 +9,9 @@ import {
 import type { ClientTurnRequestId, Thread } from "@bb/domain";
 import type {
   ManagerTimelineView,
+  TimelinePaginationCursor,
   ThreadTimelineResponse,
+  TimelineRow,
   TimelineTurnSummaryDetailsResponse,
 } from "@bb/server-contract";
 import {
@@ -64,19 +66,59 @@ interface ResolveTurnSummaryDetailsSourceRangeArgs {
 interface BuildThreadTimelineOptions {
   isDevelopment: boolean;
   includeNestedRows?: boolean;
+  page: ThreadTimelinePageRequest;
   timelineViewMode: ThreadTimelineServiceViewMode;
 }
 
-interface BuildTimelineTurnSummaryDetailsOptions
-  extends TimelineTurnSummarySelection {
+interface BuildTimelineTurnSummaryDetailsOptions extends TimelineTurnSummarySelection {
   isDevelopment: boolean;
   timelineViewMode: ThreadTimelineServiceViewMode;
 }
 
 export type ThreadTimelineServiceViewMode = "manager-conversation" | "standard";
+export type ThreadTimelinePageKind = "latest" | "older";
+
+export const STANDARD_THREAD_TIMELINE_INITIAL_SEGMENT_LIMIT = 20;
+export const MANAGER_THREAD_TIMELINE_INITIAL_SEGMENT_LIMIT = 30;
+export const THREAD_TIMELINE_OLDER_SEGMENT_LIMIT = 20;
+export const THREAD_TIMELINE_SEGMENT_LIMIT_MAX = 100;
+
+export interface LatestThreadTimelinePageRequest {
+  kind: "latest";
+  segmentLimit: number;
+}
+
+export interface OlderThreadTimelinePageRequest {
+  beforeCursor: TimelinePaginationCursor;
+  kind: "older";
+  segmentLimit: number;
+}
+
+export type ThreadTimelinePageRequest =
+  | LatestThreadTimelinePageRequest
+  | OlderThreadTimelinePageRequest;
+
+interface TimelineLogicalSegment {
+  cursor: TimelinePaginationCursor;
+  rows: TimelineRow[];
+}
+
+interface PaginatedTimelineRowsResult {
+  hasOlderRows: boolean;
+  kind: ThreadTimelinePageKind;
+  olderCursor: TimelinePaginationCursor | null;
+  returnedSegmentCount: number;
+  rows: TimelineRow[];
+  segmentLimit: number;
+}
 
 export interface ResolveThreadTimelineServiceViewModeArgs {
   managerTimelineView: ManagerTimelineView | undefined;
+  thread: Thread;
+}
+
+export interface ResolveThreadTimelineDefaultSegmentLimitArgs {
+  kind: ThreadTimelinePageKind;
   thread: Thread;
 }
 
@@ -93,6 +135,19 @@ export function resolveThreadTimelineServiceViewMode({
     return "manager-conversation";
   }
   return "standard";
+}
+
+export function resolveThreadTimelineDefaultSegmentLimit({
+  kind,
+  thread,
+}: ResolveThreadTimelineDefaultSegmentLimitArgs): number {
+  if (kind === "older") {
+    return THREAD_TIMELINE_OLDER_SEGMENT_LIMIT;
+  }
+
+  return thread.type === "manager"
+    ? MANAGER_THREAD_TIMELINE_INITIAL_SEGMENT_LIMIT
+    : STANDARD_THREAD_TIMELINE_INITIAL_SEGMENT_LIMIT;
 }
 
 export function resolveSystemClientRequestVisibility({
@@ -142,8 +197,7 @@ function tryReadClientTurnRequestedRequestId(
 function partitionAcceptedInputRowsByRequestedTurn(
   args: PartitionAcceptedInputRowsByRequestedTurnArgs,
 ): PartitionAcceptedInputRowsByRequestedTurnResult {
-  const acceptedClientRequestIdsForOtherTurns =
-    new Set<ClientTurnRequestId>();
+  const acceptedClientRequestIdsForOtherTurns = new Set<ClientTurnRequestId>();
   const requestedTurnRows: StoredEventRow[] = [];
   for (const row of args.acceptedInputRows) {
     if (row.scopeKind !== "turn" || row.turnId === null) {
@@ -242,6 +296,134 @@ export function compactSummaryStoredEventRows(
   return rows.filter((row) => retainedEventIds.has(row.id));
 }
 
+function isTimelineSegmentAnchorRow(row: TimelineRow): boolean {
+  return (
+    row.kind === "conversation" &&
+    row.role === "user" &&
+    row.userRequest.kind === "message"
+  );
+}
+
+function toTimelinePaginationCursor(
+  row: TimelineRow,
+): TimelinePaginationCursor {
+  return {
+    anchorSeq: row.sourceSeqStart,
+    anchorId: row.id,
+  };
+}
+
+function buildTimelineLogicalSegment(
+  rows: TimelineRow[],
+): TimelineLogicalSegment {
+  const anchorRow = rows[0];
+  if (!anchorRow) {
+    throw new Error("Cannot build a timeline segment without rows");
+  }
+
+  return {
+    cursor: toTimelinePaginationCursor(anchorRow),
+    rows,
+  };
+}
+
+function buildTimelineLogicalSegments(
+  rows: readonly TimelineRow[],
+): TimelineLogicalSegment[] {
+  const segments: TimelineLogicalSegment[] = [];
+  let currentRows: TimelineRow[] = [];
+
+  for (const row of rows) {
+    if (isTimelineSegmentAnchorRow(row) && currentRows.length > 0) {
+      segments.push(buildTimelineLogicalSegment(currentRows));
+      currentRows = [row];
+      continue;
+    }
+
+    currentRows.push(row);
+  }
+
+  if (currentRows.length > 0) {
+    segments.push(buildTimelineLogicalSegment(currentRows));
+  }
+
+  return segments;
+}
+
+function isTimelinePaginationCursorMatch(
+  segment: TimelineLogicalSegment,
+  cursor: TimelinePaginationCursor,
+): boolean {
+  return (
+    segment.cursor.anchorSeq === cursor.anchorSeq &&
+    segment.cursor.anchorId === cursor.anchorId
+  );
+}
+
+function findTimelineSegmentCursorIndex(
+  segments: readonly TimelineLogicalSegment[],
+  cursor: TimelinePaginationCursor,
+): number {
+  return segments.findIndex((segment) =>
+    isTimelinePaginationCursorMatch(segment, cursor),
+  );
+}
+
+function requireTimelineSegmentCursorIndex(
+  segments: readonly TimelineLogicalSegment[],
+  cursor: TimelinePaginationCursor,
+): number {
+  const index = findTimelineSegmentCursorIndex(segments, cursor);
+  if (index !== -1) {
+    return index;
+  }
+
+  throw new ApiError(
+    400,
+    "invalid_request",
+    "Timeline pagination cursor is no longer available",
+  );
+}
+
+function flattenTimelineSegments(
+  segments: readonly TimelineLogicalSegment[],
+): TimelineRow[] {
+  const rows: TimelineRow[] = [];
+  for (const segment of segments) {
+    rows.push(...segment.rows);
+  }
+  return rows;
+}
+
+function paginateTimelineRows(
+  rows: readonly TimelineRow[],
+  page: ThreadTimelinePageRequest,
+): PaginatedTimelineRowsResult {
+  const segments = buildTimelineLogicalSegments(rows);
+  const candidateSegments =
+    page.kind === "latest"
+      ? segments
+      : segments.slice(
+          0,
+          requireTimelineSegmentCursorIndex(segments, page.beforeCursor),
+        );
+  const selectedSegments = candidateSegments.slice(-page.segmentLimit);
+  const hasOlderRows = candidateSegments.length > selectedSegments.length;
+  const oldestSelectedSegment = selectedSegments[0];
+
+  return {
+    hasOlderRows,
+    kind: page.kind,
+    olderCursor:
+      hasOlderRows && oldestSelectedSegment
+        ? oldestSelectedSegment.cursor
+        : null,
+    returnedSegmentCount: selectedSegments.length,
+    rows: flattenTimelineSegments(selectedSegments),
+    segmentLimit: page.segmentLimit,
+  };
+}
+
 export function buildThreadTimeline(
   db: DbConnection,
   thread: Thread,
@@ -290,11 +472,23 @@ export function buildThreadTimeline(
             viewMode,
           },
   });
+  const paginatedTimeline = paginateTimelineRows(timeline.rows, options.page);
 
   return {
-    rows: timeline.rows,
-    activeThinking: timeline.activeThinking,
-    contextWindowUsage: timeline.contextWindowUsage ?? undefined,
+    rows: paginatedTimeline.rows,
+    activeThinking:
+      options.page.kind === "latest" ? timeline.activeThinking : null,
+    contextWindowUsage:
+      options.page.kind === "latest"
+        ? (timeline.contextWindowUsage ?? undefined)
+        : undefined,
+    timelinePage: {
+      kind: paginatedTimeline.kind,
+      segmentLimit: paginatedTimeline.segmentLimit,
+      returnedSegmentCount: paginatedTimeline.returnedSegmentCount,
+      hasOlderRows: paginatedTimeline.hasOlderRows,
+      olderCursor: paginatedTimeline.olderCursor,
+    },
   };
 }
 

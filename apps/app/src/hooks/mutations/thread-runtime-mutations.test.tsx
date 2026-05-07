@@ -101,6 +101,22 @@ function makeThreadWithRuntime(
   };
 }
 
+function makeTimelineResponse(
+  rows: ThreadTimelineResponse["rows"] = [],
+): ThreadTimelineResponse {
+  return {
+    rows,
+    activeThinking: null,
+    timelinePage: {
+      kind: "latest",
+      segmentLimit: 20,
+      returnedSegmentCount: rows.length > 0 ? 1 : 0,
+      hasOlderRows: false,
+      olderCursor: null,
+    },
+  };
+}
+
 afterEach(() => {
   vi.clearAllMocks();
 });
@@ -175,7 +191,7 @@ describe("thread runtime mutations", () => {
     const { queryClient, wrapper } = createQueryClientTestHarness();
     queryClient.setQueryData<ThreadTimelineResponse>(
       threadTimelineQueryKey("thread-1", undefined),
-      { rows: [], activeThinking: null },
+      makeTimelineResponse(),
     );
     const { result } = renderHook(() => useSendThreadMessage(), { wrapper });
 
@@ -262,7 +278,7 @@ describe("thread runtime mutations", () => {
     );
     queryClient.setQueryData<ThreadTimelineResponse>(
       threadTimelineQueryKey("thread-1", undefined),
-      { rows: [], activeThinking: null },
+      makeTimelineResponse(),
     );
     const { result } = renderHook(() => useSendThreadMessage(), { wrapper });
 
@@ -315,11 +331,11 @@ describe("thread runtime mutations", () => {
     );
     queryClient.setQueryData<ThreadTimelineResponse>(
       threadTimelineQueryKey("thread-1", undefined),
-      { rows: [], activeThinking: null },
+      makeTimelineResponse(),
     );
     queryClient.setQueryData<ThreadTimelineResponse>(
       threadTimelineQueryKey("thread-1", "standard"),
-      { rows: [], activeThinking: null },
+      makeTimelineResponse(),
     );
     const { result } = renderHook(() => useSendThreadMessage(), { wrapper });
 
@@ -361,11 +377,11 @@ describe("thread runtime mutations", () => {
     const { queryClient, wrapper } = createQueryClientTestHarness();
     queryClient.setQueryData<ThreadTimelineResponse>(
       threadTimelineQueryKey("thread-1", undefined),
-      { rows: [], activeThinking: null },
+      makeTimelineResponse(),
     );
     queryClient.setQueryData<ThreadTimelineResponse>(
       threadTimelineQueryKey("thread-1", "standard"),
-      { rows: [], activeThinking: null },
+      makeTimelineResponse(),
     );
     const { result } = renderHook(() => useSendThreadMessage(), { wrapper });
 
@@ -403,7 +419,7 @@ describe("thread runtime mutations", () => {
     const { queryClient, wrapper } = createQueryClientTestHarness();
     queryClient.setQueryData<ThreadTimelineResponse>(
       threadTimelineQueryKey("thread-1", undefined),
-      { rows: [], activeThinking: null },
+      makeTimelineResponse(),
     );
     const { result } = renderHook(() => useSendThreadMessage(), { wrapper });
 
@@ -432,7 +448,7 @@ describe("thread runtime mutations", () => {
     );
     queryClient.setQueryData<ThreadTimelineResponse>(
       threadTimelineQueryKey("thread-1", undefined),
-      { rows: [], activeThinking: null },
+      makeTimelineResponse(),
     );
     const { result } = renderHook(() => useSendThreadMessage(), { wrapper });
 

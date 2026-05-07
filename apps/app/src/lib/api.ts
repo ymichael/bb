@@ -38,6 +38,7 @@ import type {
   SendMessageRequest,
   SystemProviderInfo,
   ManagerTimelineView,
+  TimelinePaginationCursor,
   SandboxEnvVar,
   SandboxEnvVarsResponse,
   SystemVoiceTranscriptionResponse,
@@ -72,6 +73,14 @@ import {
 import { buildThreadStorageContentUrl } from "./file-content-urls";
 import type { ThreadStorageFileListOptions } from "./thread-storage-files";
 export type { FilePreview } from "./file-preview";
+
+interface GetThreadTimelineArgs {
+  beforeCursor?: TimelinePaginationCursor;
+  id: string;
+  includeNestedRows?: boolean;
+  managerTimelineView?: ManagerTimelineView;
+  segmentLimit?: number;
+}
 
 interface GetThreadTimelineTurnSummaryDetailsArgs extends TimelineTurnSummaryDetailsRequest {
   id: string;
@@ -754,17 +763,28 @@ export async function requestEnvironmentAction(
   );
 }
 
-export async function getThreadTimeline(
-  id: string,
-  includeNestedRows: boolean = false,
-  managerTimelineView?: ManagerTimelineView,
-): Promise<ThreadTimelineResponse> {
+export async function getThreadTimeline({
+  beforeCursor,
+  id,
+  includeNestedRows = false,
+  managerTimelineView,
+  segmentLimit,
+}: GetThreadTimelineArgs): Promise<ThreadTimelineResponse> {
   return request<ThreadTimelineResponse>(
     apiClient.threads[":id"].timeline.$get({
       param: { id },
       query: {
         ...(includeNestedRows ? { includeNestedRows: "true" } : {}),
         ...(managerTimelineView ? { managerTimelineView } : {}),
+        ...(segmentLimit !== undefined
+          ? { segmentLimit: String(segmentLimit) }
+          : {}),
+        ...(beforeCursor
+          ? {
+              beforeAnchorSeq: String(beforeCursor.anchorSeq),
+              beforeAnchorId: beforeCursor.anchorId,
+            }
+          : {}),
       },
     }),
   );

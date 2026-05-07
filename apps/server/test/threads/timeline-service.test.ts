@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { threadScope, turnScope } from "@bb/domain";
-import type { Thread } from "@bb/domain";
+import type { StoredThreadEventDataForType, Thread } from "@bb/domain";
 import type { DbConnection } from "@bb/db";
 import type { TimelineRow } from "@bb/server-contract";
 import { createTestAppHarness } from "../helpers/test-app.js";
@@ -16,11 +16,23 @@ import {
   buildThreadTimeline as buildThreadTimelineWithResolvedMode,
   buildTimelineTurnSummaryDetails as buildTimelineTurnSummaryDetailsWithResolvedMode,
   resolveThreadTimelineServiceViewMode,
+  type ThreadTimelinePageRequest,
 } from "../../src/services/threads/timeline.js";
+import { ApiError } from "../../src/errors.js";
+
+const UNPAGINATED_TIMELINE_SEGMENT_LIMIT = Number.MAX_SAFE_INTEGER;
+
+type TimelineTestHarness = Awaited<ReturnType<typeof createTestAppHarness>>;
+type TimelineClientTurnRequestTarget =
+  StoredThreadEventDataForType<"client/turn/requested">["target"];
+type TimelineClientTurnRequestInitiator = NonNullable<
+  StoredThreadEventDataForType<"client/turn/requested">["initiator"]
+>;
 
 interface TimelineServiceTestOptions {
   includeNestedRows?: boolean;
   isDevelopment: boolean;
+  page?: ThreadTimelinePageRequest;
 }
 
 interface TimelineTurnSummaryDetailsTestOptions {
@@ -43,6 +55,16 @@ interface SeedTimelineThreadResult {
 interface SeedTimelineThreadArgs {
   status?: Thread["status"];
   type: Thread["type"];
+}
+
+interface SeedTimelineClientTurnRequestedArgs {
+  environmentId: string;
+  initiator?: TimelineClientTurnRequestInitiator;
+  requestId: string;
+  sequence: number;
+  target: TimelineClientTurnRequestTarget;
+  text: string;
+  threadId: string;
 }
 
 function flattenTimelineSourceRows(
@@ -80,6 +102,10 @@ function buildThreadTimeline(
 ) {
   return buildThreadTimelineWithResolvedMode(db, thread, {
     ...options,
+    page: options.page ?? {
+      kind: "latest",
+      segmentLimit: UNPAGINATED_TIMELINE_SEGMENT_LIMIT,
+    },
     timelineViewMode: "standard",
   });
 }
@@ -91,6 +117,10 @@ function buildManagerConversationTimeline(
 ) {
   return buildThreadTimelineWithResolvedMode(db, thread, {
     ...options,
+    page: options.page ?? {
+      kind: "latest",
+      segmentLimit: UNPAGINATED_TIMELINE_SEGMENT_LIMIT,
+    },
     timelineViewMode: "manager-conversation",
   });
 }
@@ -118,7 +148,7 @@ function buildManagerConversationTurnSummaryDetails(
 }
 
 function seedTimelineThread(
-  harness: Awaited<ReturnType<typeof createTestAppHarness>>,
+  harness: TimelineTestHarness,
   args: SeedTimelineThreadArgs,
 ): SeedTimelineThreadResult {
   const host = seedHost(harness.deps);
@@ -142,9 +172,38 @@ function seedTimelineThread(
   };
 }
 
+function seedTimelineClientTurnRequested(
+  harness: TimelineTestHarness,
+  args: SeedTimelineClientTurnRequestedArgs,
+): void {
+  seedEvent(harness.deps, {
+    threadId: args.threadId,
+    environmentId: args.environmentId,
+    sequence: args.sequence,
+    type: "client/turn/requested",
+    scope: threadScope(),
+    data: {
+      direction: "outbound",
+      requestId: args.requestId,
+      source: "tell",
+      initiator: args.initiator ?? "user",
+      request: { method: "turn/start", params: {} },
+      input: [{ type: "text", text: args.text }],
+      target: args.target,
+      execution: {
+        model: "gpt-5",
+        serviceTier: "default",
+        reasoningLevel: "medium",
+        permissionMode: "full",
+        source: "client/turn/requested",
+      },
+    },
+  });
+}
+
 describe("buildThreadTimeline", () => {
   const scenarios = getTimelineBenchmarkScenarios();
-  const harnesses: Array<Awaited<ReturnType<typeof createTestAppHarness>>> = [];
+  const harnesses: TimelineTestHarness[] = [];
 
   afterEach(async () => {
     while (harnesses.length > 0) {
@@ -209,6 +268,512 @@ describe("buildThreadTimeline", () => {
         thread: managerThread,
       }),
     ).toBe("manager-conversation");
+  });
+
+  it("paginates logical segments in server row order", async () => {
+    const harness = await createTestAppHarness();
+    harnesses.push(harness);
+
+    const { environmentId, thread } = seedTimelineThread(harness, {
+      type: "standard",
+    });
+
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId,
+      sequence: 1,
+      type: "client/turn/requested",
+      scope: threadScope(),
+      data: {
+        direction: "outbound",
+        requestId: "creq_23456789ab",
+        source: "tell",
+        initiator: "user",
+        request: { method: "turn/start", params: {} },
+        input: [{ type: "text", text: "First request" }],
+        target: { kind: "thread-start" },
+        execution: {
+          model: "gpt-5",
+          serviceTier: "default",
+          reasoningLevel: "medium",
+          permissionMode: "full",
+          source: "client/turn/requested",
+        },
+      },
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-1"),
+      sequence: 2,
+      type: "turn/started",
+      data: {},
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-1"),
+      sequence: 3,
+      type: "turn/input/accepted",
+      data: {
+        clientRequestId: "creq_23456789ab",
+      },
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-1"),
+      sequence: 4,
+      type: "item/completed",
+      data: {
+        item: {
+          type: "toolCall",
+          id: "tool-1",
+          tool: "exec_command",
+          arguments: { cmd: "pnpm test" },
+          status: "completed",
+        },
+      },
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-1"),
+      sequence: 5,
+      type: "item/completed",
+      data: {
+        item: {
+          type: "agentMessage",
+          id: "assistant-1",
+          text: "First answer",
+        },
+      },
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-1"),
+      sequence: 6,
+      type: "turn/completed",
+      data: {
+        status: "completed",
+      },
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId,
+      scope: threadScope(),
+      sequence: 7,
+      type: "system/operation",
+      data: {
+        operation: "ownership_change",
+        operationId: "op-1",
+        status: "completed",
+        message: "Thread operation completed",
+      },
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId,
+      sequence: 8,
+      type: "client/turn/requested",
+      scope: threadScope(),
+      data: {
+        direction: "outbound",
+        requestId: "creq_3456789abc",
+        source: "tell",
+        initiator: "user",
+        request: { method: "turn/start", params: {} },
+        input: [{ type: "text", text: "Second request" }],
+        target: { kind: "new-turn" },
+        execution: {
+          model: "gpt-5",
+          serviceTier: "default",
+          reasoningLevel: "medium",
+          permissionMode: "full",
+          source: "client/turn/requested",
+        },
+      },
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-2"),
+      sequence: 9,
+      type: "turn/started",
+      data: {},
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-2"),
+      sequence: 10,
+      type: "turn/input/accepted",
+      data: {
+        clientRequestId: "creq_3456789abc",
+      },
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-2"),
+      sequence: 11,
+      type: "item/completed",
+      data: {
+        item: {
+          type: "agentMessage",
+          id: "assistant-2",
+          text: "Second answer",
+        },
+      },
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-2"),
+      sequence: 12,
+      type: "turn/completed",
+      data: {
+        status: "completed",
+      },
+    });
+
+    const fullTimeline = buildThreadTimeline(harness.db, thread, {
+      isDevelopment: true,
+    });
+    const latestPage = buildThreadTimeline(harness.db, thread, {
+      isDevelopment: true,
+      page: {
+        kind: "latest",
+        segmentLimit: 1,
+      },
+    });
+    const latestOlderCursor = latestPage.timelinePage.olderCursor;
+    expect(latestOlderCursor).not.toBeNull();
+    if (latestOlderCursor === null) {
+      throw new Error("Expected an older cursor for the latest page");
+    }
+
+    const olderPage = buildThreadTimeline(harness.db, thread, {
+      isDevelopment: true,
+      page: {
+        kind: "older",
+        beforeCursor: latestOlderCursor,
+        segmentLimit: 1,
+      },
+    });
+    const pagedRows = [...olderPage.rows, ...latestPage.rows];
+
+    expect(pagedRows.map((row) => row.id)).toEqual(
+      fullTimeline.rows.map((row) => row.id),
+    );
+    expect(olderPage.rows[0]).toMatchObject({
+      kind: "conversation",
+      role: "user",
+      text: "First request",
+    });
+    expect(
+      olderPage.rows.findIndex(
+        (row) => row.kind === "turn" || row.kind === "work",
+      ),
+    ).toBeGreaterThan(0);
+    expect(olderPage.timelinePage).toMatchObject({
+      kind: "older",
+      segmentLimit: 1,
+      returnedSegmentCount: 1,
+      hasOlderRows: false,
+      olderCursor: null,
+    });
+  });
+
+  it("keeps accepted in-turn steers inside the primary message segment", async () => {
+    const harness = await createTestAppHarness();
+    harnesses.push(harness);
+
+    const { environmentId, thread } = seedTimelineThread(harness, {
+      type: "standard",
+    });
+
+    seedTimelineClientTurnRequested(harness, {
+      threadId: thread.id,
+      environmentId,
+      sequence: 1,
+      requestId: "creq_23456789ab",
+      text: "Initial request",
+      target: { kind: "thread-start" },
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-1"),
+      sequence: 2,
+      type: "turn/started",
+      data: {},
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-1"),
+      sequence: 3,
+      type: "turn/input/accepted",
+      data: {
+        clientRequestId: "creq_23456789ab",
+      },
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-1"),
+      sequence: 4,
+      type: "item/completed",
+      data: {
+        item: {
+          type: "toolCall",
+          id: "tool-before-steer",
+          tool: "exec_command",
+          arguments: { cmd: "pnpm test" },
+          status: "completed",
+        },
+      },
+    });
+    seedTimelineClientTurnRequested(harness, {
+      threadId: thread.id,
+      environmentId,
+      sequence: 5,
+      requestId: "creq_3456789abc",
+      text: "Accepted steer",
+      target: { kind: "auto", expectedTurnId: "turn-1" },
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-1"),
+      sequence: 6,
+      type: "turn/input/accepted",
+      data: {
+        clientRequestId: "creq_3456789abc",
+      },
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-1"),
+      sequence: 7,
+      type: "item/completed",
+      data: {
+        item: {
+          type: "agentMessage",
+          id: "assistant-1",
+          text: "Done.",
+        },
+      },
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-1"),
+      sequence: 8,
+      type: "turn/completed",
+      data: {
+        status: "completed",
+      },
+    });
+
+    const latestPage = buildThreadTimeline(harness.db, thread, {
+      isDevelopment: true,
+      page: {
+        kind: "latest",
+        segmentLimit: 1,
+      },
+    });
+    const userRows = latestPage.rows.filter(
+      (row) => row.kind === "conversation" && row.role === "user",
+    );
+
+    expect(latestPage.timelinePage).toMatchObject({
+      kind: "latest",
+      returnedSegmentCount: 1,
+      hasOlderRows: false,
+      olderCursor: null,
+    });
+    expect(latestPage.rows[0]).toMatchObject({
+      kind: "conversation",
+      role: "user",
+      text: "Initial request",
+      userRequest: {
+        kind: "message",
+        status: "accepted",
+      },
+    });
+    expect(userRows.map((row) => row.text)).toEqual([
+      "Initial request",
+      "Accepted steer",
+    ]);
+    expect(userRows.map((row) => row.userRequest)).toEqual([
+      { kind: "message", status: "accepted" },
+      { kind: "steer", status: "accepted" },
+    ]);
+  });
+
+  it("keeps pending steers inside the active primary message segment", async () => {
+    const harness = await createTestAppHarness();
+    harnesses.push(harness);
+
+    const { environmentId, thread } = seedTimelineThread(harness, {
+      status: "active",
+      type: "standard",
+    });
+
+    seedTimelineClientTurnRequested(harness, {
+      threadId: thread.id,
+      environmentId,
+      sequence: 1,
+      requestId: "creq_456789abcd",
+      text: "Initial request",
+      target: { kind: "thread-start" },
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-1"),
+      sequence: 2,
+      type: "turn/started",
+      data: {},
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-1"),
+      sequence: 3,
+      type: "turn/input/accepted",
+      data: {
+        clientRequestId: "creq_456789abcd",
+      },
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-1"),
+      sequence: 4,
+      type: "item/completed",
+      data: {
+        item: {
+          type: "toolCall",
+          id: "tool-before-pending-steer",
+          tool: "exec_command",
+          arguments: { cmd: "pnpm test" },
+          status: "completed",
+        },
+      },
+    });
+    seedTimelineClientTurnRequested(harness, {
+      threadId: thread.id,
+      environmentId,
+      sequence: 5,
+      requestId: "creq_56789abcde",
+      text: "Pending steer",
+      target: { kind: "auto", expectedTurnId: "turn-1" },
+    });
+
+    const latestPage = buildThreadTimeline(harness.db, thread, {
+      isDevelopment: true,
+      page: {
+        kind: "latest",
+        segmentLimit: 1,
+      },
+    });
+    const userRows = latestPage.rows.filter(
+      (row) => row.kind === "conversation" && row.role === "user",
+    );
+
+    expect(latestPage.timelinePage).toMatchObject({
+      kind: "latest",
+      returnedSegmentCount: 1,
+      hasOlderRows: false,
+      olderCursor: null,
+    });
+    expect(latestPage.rows[0]).toMatchObject({
+      kind: "conversation",
+      role: "user",
+      text: "Initial request",
+      userRequest: {
+        kind: "message",
+        status: "accepted",
+      },
+    });
+    expect(userRows.map((row) => row.text)).toEqual([
+      "Initial request",
+      "Pending steer",
+    ]);
+    expect(userRows.map((row) => row.userRequest)).toEqual([
+      { kind: "message", status: "accepted" },
+      { kind: "steer", status: "pending" },
+    ]);
+  });
+
+  it("returns a 400 invalid_request for stale timeline pagination cursors", async () => {
+    const harness = await createTestAppHarness();
+    harnesses.push(harness);
+
+    const { environmentId, thread } = seedTimelineThread(harness, {
+      type: "standard",
+    });
+
+    seedTimelineClientTurnRequested(harness, {
+      threadId: thread.id,
+      environmentId,
+      sequence: 1,
+      requestId: "creq_6789abcdef",
+      text: "Initial request",
+      target: { kind: "thread-start" },
+    });
+
+    let thrownError: ApiError | null = null;
+    try {
+      buildThreadTimeline(harness.db, thread, {
+        isDevelopment: true,
+        page: {
+          kind: "older",
+          beforeCursor: {
+            anchorSeq: 999,
+            anchorId: "missing-anchor",
+          },
+          segmentLimit: 1,
+        },
+      });
+    } catch (error) {
+      if (error instanceof ApiError) {
+        thrownError = error;
+      } else {
+        throw error;
+      }
+    }
+
+    expect(thrownError).toMatchObject({
+      status: 400,
+      body: {
+        code: "invalid_request",
+        message: "Timeline pagination cursor is no longer available",
+      },
+    });
   });
 
   it("preserves completed assistant content and excludes summary-noise rows after compaction", async () => {
@@ -2398,9 +2963,13 @@ describe("buildThreadTimeline", () => {
     });
 
     // Default view — should show only operation, message_user, and user message
-    const defaultTimeline = buildManagerConversationTimeline(harness.db, thread, {
-      isDevelopment: true,
-    });
+    const defaultTimeline = buildManagerConversationTimeline(
+      harness.db,
+      thread,
+      {
+        isDevelopment: true,
+      },
+    );
     const defaultKinds = defaultTimeline.rows.map((row) =>
       row.kind === "conversation" ? row.role : row.kind,
     );
@@ -2435,9 +3004,7 @@ describe("buildThreadTimeline", () => {
     expect(standardRowsText).not.toContain("found something");
     expect(standardRowsText).toContain("[bb system] Welcome!");
 
-    const standardSourceRows = flattenTimelineSourceRows(
-      standardTimeline.rows,
-    );
+    const standardSourceRows = flattenTimelineSourceRows(standardTimeline.rows);
     expect(standardSourceRows).toContainEqual(
       expect.objectContaining({
         kind: "conversation",
@@ -2663,14 +3230,13 @@ describe("buildThreadTimeline", () => {
         isDevelopment: false,
       },
     );
-    const managerStandardPendingSteerRows =
-      managerStandardTimeline.rows.filter(
-        (row) =>
-          row.kind === "conversation" &&
-          row.role === "user" &&
-          row.userRequest.kind === "steer" &&
-          row.userRequest.status === "pending",
-      );
+    const managerStandardPendingSteerRows = managerStandardTimeline.rows.filter(
+      (row) =>
+        row.kind === "conversation" &&
+        row.role === "user" &&
+        row.userRequest.kind === "steer" &&
+        row.userRequest.status === "pending",
+    );
     expect(managerStandardPendingSteerRows).toHaveLength(1);
     expect(managerStandardPendingSteerRows[0]).toMatchObject({
       role: "user",

@@ -2,7 +2,11 @@ import path from "node:path";
 import { listDrafts } from "@bb/db";
 import { FILE_LIST_LIMIT_MAX } from "@bb/host-daemon-contract";
 import type { Hono } from "hono";
-import { PROMPT_HISTORY_ENTRY_LIMIT, threadEventTypeSchema } from "@bb/domain";
+import {
+  PROMPT_HISTORY_ENTRY_LIMIT,
+  threadEventTypeSchema,
+  type Thread,
+} from "@bb/domain";
 import {
   promptHistoryQuerySchema,
   threadStorageContentQuerySchema,
@@ -13,6 +17,7 @@ import {
   timelineTurnSummaryDetailsQuerySchema,
   typedRoutes,
   type PublicApiSchema,
+  type ThreadTimelineQuery,
 } from "@bb/server-contract";
 import type { AppDeps, SandboxWorkSessionDeps } from "../../types.js";
 import { COMMAND_TIMEOUT_MS } from "../../constants.js";
@@ -32,6 +37,10 @@ import {
   buildThreadTimeline,
   buildTimelineTurnSummaryDetails,
   resolveThreadTimelineServiceViewMode,
+  resolveThreadTimelineDefaultSegmentLimit,
+  THREAD_TIMELINE_SEGMENT_LIMIT_MAX,
+  type ThreadTimelinePageKind,
+  type ThreadTimelinePageRequest,
 } from "../../services/threads/timeline.js";
 import {
   findThreadEvent,
@@ -79,6 +88,67 @@ function parseThreadStorageFileListLimit(rawLimit: string | undefined): number {
   return limit;
 }
 
+function parseThreadTimelineSegmentLimit(
+  defaultLimit: number,
+  rawLimit: string | undefined,
+): number {
+  const limit = parseOptionalInteger(rawLimit, "segmentLimit") ?? defaultLimit;
+  if (limit <= 0) {
+    throw new ApiError(
+      400,
+      "invalid_request",
+      "segmentLimit must be a positive integer",
+    );
+  }
+  if (limit > THREAD_TIMELINE_SEGMENT_LIMIT_MAX) {
+    throw new ApiError(
+      400,
+      "invalid_request",
+      `segmentLimit must be less than or equal to ${THREAD_TIMELINE_SEGMENT_LIMIT_MAX}`,
+    );
+  }
+  return limit;
+}
+
+function parseThreadTimelinePage(
+  query: ThreadTimelineQuery,
+  thread: Thread,
+): ThreadTimelinePageRequest {
+  const hasBeforeAnchorSeq = query.beforeAnchorSeq !== undefined;
+  const kind: ThreadTimelinePageKind = hasBeforeAnchorSeq ? "older" : "latest";
+  const segmentLimit = parseThreadTimelineSegmentLimit(
+    resolveThreadTimelineDefaultSegmentLimit({ kind, thread }),
+    query.segmentLimit,
+  );
+
+  if (kind === "latest") {
+    return {
+      kind,
+      segmentLimit,
+    };
+  }
+
+  if (
+    query.beforeAnchorSeq === undefined ||
+    query.beforeAnchorId === undefined
+  ) {
+    throw new ApiError(
+      400,
+      "invalid_request",
+      "beforeAnchorSeq and beforeAnchorId must be provided together",
+    );
+  }
+
+  return {
+    beforeCursor: {
+      anchorSeq: parseInteger(query.beforeAnchorSeq, "beforeAnchorSeq"),
+      anchorId: query.beforeAnchorId,
+    },
+    kind,
+    segmentLimit,
+  };
+}
+
 async function requireThreadStorageTarget(
   deps: SandboxWorkSessionDeps,
   args: RequireThreadStorageTargetArgs,
@@ -112,6 +182,7 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
           thread,
         }),
         includeNestedRows: query.includeNestedRows === "true",
+        page: parseThreadTimelinePage(query, thread),
       }),
     );
   });

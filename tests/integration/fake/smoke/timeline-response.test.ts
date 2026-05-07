@@ -35,27 +35,40 @@ const USER_ROW = {
   userRequest: { kind: "message", status: "accepted" },
 } satisfies TimelineRow;
 
+function makeTimelineResponse(
+  rows: ThreadTimelineResponse["rows"],
+): ThreadTimelineResponse {
+  return {
+    rows,
+    activeThinking: null,
+    timelinePage: {
+      kind: "latest",
+      segmentLimit: 20,
+      returnedSegmentCount: rows.length > 0 ? 1 : 0,
+      hasOlderRows: false,
+      olderCursor: null,
+    },
+  };
+}
+
 describe("timeline response helpers", () => {
   it("finds assistant conversation rows nested inside turn rows", () => {
-    const timeline = {
-      rows: [
-        {
-          kind: "turn",
-          id: "row_turn",
-          threadId: "thr_test",
-          turnId: "turn_test",
-          sourceSeqStart: 1,
-          sourceSeqEnd: 1,
-          startedAt: 1,
-          createdAt: 1,
-          status: "completed",
-          summaryCount: 1,
-          completedAt: null,
-          children: [ASSISTANT_ROW],
-        },
-      ],
-      activeThinking: null,
-    } satisfies ThreadTimelineResponse;
+    const timeline = makeTimelineResponse([
+      {
+        kind: "turn",
+        id: "row_turn",
+        threadId: "thr_test",
+        turnId: "turn_test",
+        sourceSeqStart: 1,
+        sourceSeqEnd: 1,
+        startedAt: 1,
+        createdAt: 1,
+        status: "completed",
+        summaryCount: 1,
+        completedAt: null,
+        children: [ASSISTANT_ROW],
+      },
+    ]);
 
     expect(timelineHasAssistantConversation(timeline)).toBe(true);
     expect(formatTimelineRowKindsForDiagnostics(timeline)).toBe(
@@ -64,30 +77,27 @@ describe("timeline response helpers", () => {
   });
 
   it("finds assistant conversation rows nested inside delegations", () => {
-    const timeline = {
-      rows: [
-        {
-          kind: "work",
-          id: "row_delegation",
-          threadId: "thr_test",
-          turnId: "turn_test",
-          sourceSeqStart: 1,
-          sourceSeqEnd: 1,
-          startedAt: 1,
-          createdAt: 1,
-          status: "completed",
-          workKind: "delegation",
-          callId: "call_test",
-          toolName: "spawnAgent",
-          subagentType: null,
-          description: null,
-          output: "",
-          completedAt: null,
-          childRows: [ASSISTANT_ROW],
-        },
-      ],
-      activeThinking: null,
-    } satisfies ThreadTimelineResponse;
+    const timeline = makeTimelineResponse([
+      {
+        kind: "work",
+        id: "row_delegation",
+        threadId: "thr_test",
+        turnId: "turn_test",
+        sourceSeqStart: 1,
+        sourceSeqEnd: 1,
+        startedAt: 1,
+        createdAt: 1,
+        status: "completed",
+        workKind: "delegation",
+        callId: "call_test",
+        toolName: "spawnAgent",
+        subagentType: null,
+        description: null,
+        output: "",
+        completedAt: null,
+        childRows: [ASSISTANT_ROW],
+      },
+    ]);
 
     expect(timelineHasAssistantConversation(timeline)).toBe(true);
     expect(formatTimelineRowKindsForDiagnostics(timeline)).toBe(
@@ -96,10 +106,7 @@ describe("timeline response helpers", () => {
   });
 
   it("does not treat user conversation rows as assistant output", () => {
-    const timeline = {
-      rows: [USER_ROW],
-      activeThinking: null,
-    } satisfies ThreadTimelineResponse;
+    const timeline = makeTimelineResponse([USER_ROW]);
 
     expect(timelineHasAssistantConversation(timeline)).toBe(false);
     expect(formatTimelineRowKindsForDiagnostics(timeline)).toBe(

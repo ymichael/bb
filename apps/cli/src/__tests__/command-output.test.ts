@@ -74,6 +74,13 @@ function makeTimelineResponse(rows: TimelineRow[]): ThreadTimelineResponse {
   return {
     rows,
     activeThinking: null,
+    timelinePage: {
+      kind: "latest",
+      segmentLimit: 20,
+      returnedSegmentCount: rows.length > 0 ? 1 : 0,
+      hasOlderRows: false,
+      olderCursor: null,
+    },
   };
 }
 
@@ -3266,10 +3273,7 @@ describe("CLI JSON output contracts", () => {
   it("bb thread log --self resolves from BB_THREAD_ID", async () => {
     vi.stubEnv("BB_THREAD_ID", "thread-log-self");
     const getEvents = vi.fn(async () => []);
-    const getTimeline = vi.fn(async () => ({
-      rows: [],
-      activeThinking: null,
-    }));
+    const getTimeline = vi.fn(async () => makeTimelineResponse([]));
     createClientMock.mockReturnValue(
       asServerClient({
         api: {

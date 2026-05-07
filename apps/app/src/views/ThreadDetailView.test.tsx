@@ -73,6 +73,13 @@ type ThreadStorageFilesHandler = (request: Request) => Response;
 const EMPTY_THREAD_TIMELINE_RESPONSE = {
   activeThinking: null,
   rows: [],
+  timelinePage: {
+    kind: "latest",
+    segmentLimit: 20,
+    returnedSegmentCount: 0,
+    hasOlderRows: false,
+    olderCursor: null,
+  },
 } satisfies ThreadTimelineResponse;
 
 function createThreadResponse(

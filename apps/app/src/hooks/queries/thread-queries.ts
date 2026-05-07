@@ -70,9 +70,7 @@ export function useThreads(filters: UseThreadsFilters, options?: QueryOptions) {
   const queryKey =
     enabled && projectId
       ? threadListQueryKey({ ...rest, projectId })
-      : disabledThreadListQueryKey(
-          projectId ? { ...rest, projectId } : rest,
-        );
+      : disabledThreadListQueryKey(projectId ? { ...rest, projectId } : rest);
 
   return useQuery<ThreadListResponse>({
     queryKey,
@@ -206,11 +204,10 @@ export function useThreadTimeline(
   return useQuery<ThreadTimelineResponse>({
     queryKey: threadTimelineQueryKey(id, managerTimelineView),
     queryFn: () =>
-      api.getThreadTimeline(
-        requireThreadId(id, "useThreadTimeline"),
-        false,
+      api.getThreadTimeline({
+        id: requireThreadId(id, "useThreadTimeline"),
         managerTimelineView,
-      ),
+      }),
     enabled: (options?.enabled ?? true) && Boolean(id),
     refetchOnMount: options?.refetchOnMount ?? true,
     placeholderData: (previousData, previousQuery) =>

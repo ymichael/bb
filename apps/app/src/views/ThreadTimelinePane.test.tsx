@@ -43,12 +43,15 @@ function renderTimelinePane(rows: TimelineRow[]): HTMLElement {
     <ThreadTimelinePane
       activeThinking={null}
       footer={<div>Composer</div>}
+      hasOlderTimelineRows={false}
       header={<div>Header</div>}
       hostConnectionNotice={null}
+      isLoadingOlderTimelineRows={false}
       isThreadTimelinePending={false}
       timelineError={false}
       loadingTurnSummaryIds={new Set()}
       erroredTurnSummaryIds={new Set()}
+      onLoadOlderRows={() => {}}
       onLoadTurnSummaryRows={() => {}}
       showOngoingIndicator={true}
       timelineRows={rows}
@@ -66,12 +69,15 @@ function renderLoadingTimelinePane(): RenderResult {
     <ThreadTimelinePane
       activeThinking={null}
       footer={<div>Composer</div>}
+      hasOlderTimelineRows={false}
       header={<div>Header</div>}
       hostConnectionNotice={null}
+      isLoadingOlderTimelineRows={false}
       isThreadTimelinePending={true}
       timelineError={false}
       loadingTurnSummaryIds={new Set()}
       erroredTurnSummaryIds={new Set()}
+      onLoadOlderRows={() => {}}
       onLoadTurnSummaryRows={() => {}}
       showOngoingIndicator={false}
       timelineRows={[]}
@@ -126,12 +132,15 @@ describe("ThreadTimelinePane", () => {
       <ThreadTimelinePane
         activeThinking={null}
         footer={<div>Composer</div>}
+        hasOlderTimelineRows={false}
         header={<div>Header</div>}
         hostConnectionNotice={null}
+        isLoadingOlderTimelineRows={false}
         isThreadTimelinePending={false}
         timelineError={false}
         loadingTurnSummaryIds={new Set()}
         erroredTurnSummaryIds={new Set()}
+        onLoadOlderRows={() => {}}
         onLoadTurnSummaryRows={() => {}}
         showOngoingIndicator={false}
         timelineRows={[]}

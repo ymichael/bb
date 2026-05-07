@@ -81,6 +81,22 @@ function makeThreadWithRuntime(
   };
 }
 
+function makeThreadTimelineResponse(
+  rows: ThreadTimelineResponse["rows"],
+): ThreadTimelineResponse {
+  return {
+    activeThinking: null,
+    rows,
+    timelinePage: {
+      kind: "latest",
+      segmentLimit: 20,
+      returnedSegmentCount: rows.length > 0 ? 1 : 0,
+      hasOlderRows: false,
+      olderCursor: null,
+    },
+  };
+}
+
 describe("resolveEnvironmentWorkStatusPlaceholder", () => {
   it("keeps previous data when only merge-base selection changes", () => {
     const previousStatus = makeStatus("clean");
@@ -197,25 +213,22 @@ describe("resolveThreadPlaceholder", () => {
 
 describe("resolveThreadTimelinePlaceholder", () => {
   it("keeps previous timeline rows when the same thread query refreshes", () => {
-    const previousTimeline: ThreadTimelineResponse = {
-      activeThinking: null,
-      rows: [
-        {
-          id: "assistant-1",
-          kind: "conversation",
-          role: "assistant",
-          threadId: "thread-1",
-          turnId: "turn-1",
-          text: "Done",
-          sourceSeqStart: 1,
-          sourceSeqEnd: 1,
-          startedAt: 1,
-          createdAt: 1,
-          attachments: null,
-          userRequest: null,
-        },
-      ],
-    };
+    const previousTimeline = makeThreadTimelineResponse([
+      {
+        id: "assistant-1",
+        kind: "conversation",
+        role: "assistant",
+        threadId: "thread-1",
+        turnId: "turn-1",
+        text: "Done",
+        sourceSeqStart: 1,
+        sourceSeqEnd: 1,
+        startedAt: 1,
+        createdAt: 1,
+        attachments: null,
+        userRequest: null,
+      },
+    ]);
 
     expect(
       resolveThreadTimelinePlaceholder(
@@ -228,25 +241,22 @@ describe("resolveThreadTimelinePlaceholder", () => {
   });
 
   it("drops previous timeline rows when switching manager timeline view", () => {
-    const previousTimeline: ThreadTimelineResponse = {
-      activeThinking: null,
-      rows: [
-        {
-          id: "manager-conversation-row",
-          kind: "conversation",
-          role: "assistant",
-          threadId: "thread-1",
-          turnId: null,
-          text: "Manager conversation row",
-          sourceSeqStart: 1,
-          sourceSeqEnd: 1,
-          startedAt: 1,
-          createdAt: 1,
-          attachments: null,
-          userRequest: null,
-        },
-      ],
-    };
+    const previousTimeline = makeThreadTimelineResponse([
+      {
+        id: "manager-conversation-row",
+        kind: "conversation",
+        role: "assistant",
+        threadId: "thread-1",
+        turnId: null,
+        text: "Manager conversation row",
+        sourceSeqStart: 1,
+        sourceSeqEnd: 1,
+        startedAt: 1,
+        createdAt: 1,
+        attachments: null,
+        userRequest: null,
+      },
+    ]);
 
     expect(
       resolveThreadTimelinePlaceholder(
@@ -259,10 +269,7 @@ describe("resolveThreadTimelinePlaceholder", () => {
   });
 
   it("drops previous timeline rows when switching to a different thread", () => {
-    const previousTimeline: ThreadTimelineResponse = {
-      activeThinking: null,
-      rows: [],
-    };
+    const previousTimeline = makeThreadTimelineResponse([]);
 
     expect(
       resolveThreadTimelinePlaceholder(
