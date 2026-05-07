@@ -170,7 +170,7 @@ export function ProviderModelPicker({
       </PopoverTrigger>
       <PopoverContent
         align="start"
-        className="flex w-auto min-w-52 max-w-80 flex-col p-0"
+        className="flex w-auto min-w-52 max-w-80 flex-col p-0 max-md:w-full max-md:max-w-none"
       >
         {/* Provider icon tabs */}
         {showProviderTabs ? (
