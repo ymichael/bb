@@ -50,34 +50,6 @@ export interface PromptExecutionControlsProps {
   reasoning: PromptExecutionReasoningConfig;
 }
 
-export interface PromptPermissionModePickerProps extends PromptExecutionPermissionConfig {
-  className?: string;
-}
-
-export function PromptPermissionModePicker({
-  value,
-  options,
-  onChange,
-  supported,
-  className,
-}: PromptPermissionModePickerProps) {
-  if (!supported || options.length <= 1) {
-    return null;
-  }
-  const resolved = value ?? options[0]?.value ?? "full";
-  return (
-    <OptionPicker
-      label="Permission mode"
-      value={resolved}
-      options={options}
-      onChange={onChange}
-      className={className}
-      contentClassName="max-w-72"
-      muted
-    />
-  );
-}
-
 export function PromptExecutionControls({
   provider,
   model,

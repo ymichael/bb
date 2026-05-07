@@ -1,10 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { PromptBox } from "@/components/promptbox/PromptBox";
-import {
-  PromptExecutionControls,
-  PromptPermissionModePicker,
-} from "@/components/promptbox/PromptExecutionControls";
+import { PermissionModePicker } from "@/components/pickers/PermissionModePicker";
+import { PromptExecutionControls } from "@/components/promptbox/PromptExecutionControls";
 import {
   EnvironmentPicker,
   parseEnvironmentValue,
@@ -350,7 +348,7 @@ export function ProjectMainView() {
             sources={projectSources}
             muted
           />
-          <PromptPermissionModePicker
+          <PermissionModePicker
             value={permissionMode}
             options={permissionModeOptions}
             onChange={setPermissionMode}

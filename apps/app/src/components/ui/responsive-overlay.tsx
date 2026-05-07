@@ -23,9 +23,10 @@ export interface ResponsiveOverlayContextValue {
 export function useResponsiveRoot(
   controlledOpen: boolean | undefined,
   controlledOnChange: ((open: boolean) => void) | undefined,
+  defaultOpen: boolean = false,
 ): ResponsiveOverlayContextValue {
   const isMobile = useIsMobile();
-  const [internalOpen, setInternalOpen] = React.useState(false);
+  const [internalOpen, setInternalOpen] = React.useState(defaultOpen);
   const isControlled = controlledOpen !== undefined;
   const open = isControlled ? controlledOpen : internalOpen;
 

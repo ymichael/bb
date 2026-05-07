@@ -35,9 +35,14 @@ function Popover({
   children,
   open: controlledOpen,
   onOpenChange: controlledOnChange,
+  defaultOpen,
   ...props
 }: React.ComponentProps<typeof PopoverPrimitive.Root>) {
-  const ctx = useResponsiveRoot(controlledOpen, controlledOnChange);
+  const ctx = useResponsiveRoot(
+    controlledOpen,
+    controlledOnChange,
+    defaultOpen,
+  );
 
   if (ctx.isMobile) {
     return (

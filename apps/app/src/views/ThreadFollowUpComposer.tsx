@@ -27,10 +27,8 @@ import {
   OptionDisplay,
   type PickerOption,
 } from "@/components/pickers/OptionPicker";
-import {
-  PromptExecutionControls,
-  PromptPermissionModePicker,
-} from "@/components/promptbox/PromptExecutionControls";
+import { PermissionModePicker } from "@/components/pickers/PermissionModePicker";
+import { PromptExecutionControls } from "@/components/promptbox/PromptExecutionControls";
 import { useBottomAnchoredScroll } from "@/components/ui";
 import { Button } from "@/components/ui";
 import { ThreadTimelineScrollToBottomButton } from "./ThreadTimelineScrollToBottomButton";
@@ -536,7 +534,7 @@ export function ThreadFollowUpComposer({
             ) : null}
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            <PromptPermissionModePicker
+            <PermissionModePicker
               value={execution.permissionMode}
               options={execution.permissionModeOptions}
               onChange={execution.onPermissionModeChange}

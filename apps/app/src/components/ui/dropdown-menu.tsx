@@ -37,9 +37,14 @@ function DropdownMenu({
   children,
   open: controlledOpen,
   onOpenChange: controlledOnChange,
+  defaultOpen,
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Root>) {
-  const ctx = useResponsiveRoot(controlledOpen, controlledOnChange);
+  const ctx = useResponsiveRoot(
+    controlledOpen,
+    controlledOnChange,
+    defaultOpen,
+  );
 
   if (ctx.isMobile) {
     return (
