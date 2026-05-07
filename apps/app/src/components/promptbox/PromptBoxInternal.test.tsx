@@ -10,7 +10,7 @@ import {
 import { useState } from "react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { PromptDraftState } from "@/lib/prompt-draft";
-import type { PromptMentionSuggestion } from "@/hooks/usePromptMentions";
+import type { PromptMentionSuggestion } from "@/components/promptbox/mentions/types";
 import { PromptBoxInternal } from "./PromptBoxInternal";
 
 vi.mock("@/hooks/useAutoGrow", () => ({

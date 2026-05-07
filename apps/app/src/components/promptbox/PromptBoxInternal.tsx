@@ -26,7 +26,10 @@ import {
   Square,
   X,
 } from "lucide-react";
-import type { PromptMentionSuggestion } from "@/hooks/usePromptMentions";
+import type {
+  MentionMenuState,
+  PromptMentionSuggestion,
+} from "@/components/promptbox/mentions/types";
 import { Button } from "@/components/ui";
 import {
   COARSE_POINTER_PROMPT_ACTION_BUTTON_CLASS,
@@ -44,12 +47,12 @@ import {
 } from "@/lib/prompt-draft";
 import { cn } from "@/lib/utils";
 import { AttachmentPreview } from "./AttachmentPreview";
-import { MentionMenu } from "./MentionMenu";
+import { MentionMenu } from "./mentions/MentionMenu";
 import {
   findActiveFileMention,
   insertFileMention,
   type ActiveFileMention,
-} from "./file-mention";
+} from "./mentions/file-mention";
 
 const PROMPTBOX_MIN_HEIGHT = 68;
 const PROMPTBOX_MAX_HEIGHT = 158;
@@ -77,10 +80,11 @@ export interface PromptBoxSubmissionConfig {
 }
 
 export interface MentionsConfig {
-  suggestions?: PromptMentionSuggestion[];
-  isLoading?: boolean;
-  isError?: boolean;
-  onQueryChange?: (query: string | null) => void;
+  suggestions: readonly PromptMentionSuggestion[];
+  isLoading: boolean;
+  isError: boolean;
+  /** Called whenever the active @-mention query changes; null when no mention is active. */
+  onQueryChange: (query: string | null) => void;
 }
 
 export interface AttachmentsConfig {
@@ -139,7 +143,7 @@ export interface PromptBoxInternalProps {
   footerStart?: ReactNode;
   autoFocus?: boolean;
   submission?: PromptBoxSubmissionConfig;
-  mentions?: MentionsConfig;
+  mentions: MentionsConfig;
   attachments?: AttachmentsConfig;
   zenMode?: PromptBoxZenModeConfig;
   history?: HistoryConfig;
@@ -183,7 +187,7 @@ export function PromptBoxInternal({
   footerStart,
   autoFocus = false,
   submission = {},
-  mentions = {},
+  mentions,
   attachments: attachmentConfig = {},
   zenMode = {},
   history,
@@ -199,9 +203,9 @@ export function PromptBoxInternal({
     onStop,
   } = submission;
   const {
-    suggestions: mentionSuggestions = [],
-    isLoading: mentionLoading = false,
-    isError: mentionError = false,
+    suggestions: mentionSuggestions,
+    isLoading: mentionLoading,
+    isError: mentionError,
     onQueryChange: onMentionQueryChange,
   } = mentions;
   const {
@@ -227,7 +231,6 @@ export function PromptBoxInternal({
     minHeight: PROMPTBOX_MIN_HEIGHT,
     maxHeight: PROMPTBOX_MAX_HEIGHT,
   });
-  const mentionItemRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const mentionKeyRef = useRef("");
   const dismissedMentionRef = useRef<DismissedMentionRange | null>(null);
   const [activeMention, setActiveMention] = useState<ActiveFileMention | null>(
@@ -418,7 +421,7 @@ export function PromptBoxInternal({
       }
       setActiveMention(nextMention);
 
-      onMentionQueryChange?.(nextMention ? nextMention.query : null);
+      onMentionQueryChange(nextMention ? nextMention.query : null);
     },
     [onMentionQueryChange],
   );
@@ -431,10 +434,16 @@ export function PromptBoxInternal({
   const trimmedValue = value.trim();
   const hasAttachments = attachments.length > 0;
   const hasSubmittableInput = trimmedValue.length > 0 || hasAttachments;
-  const hasMentionContext = activeMention !== null;
-  const showMentionMenu = hasMentionContext;
+  const showMentionMenu = activeMention !== null;
   const activeMentionQuery = activeMention?.query.trim() ?? "";
-  const showQueryHint = activeMentionQuery.length === 0;
+  const mentionMenuState: MentionMenuState =
+    activeMentionQuery.length === 0
+      ? { kind: "hint" }
+      : mentionLoading
+        ? { kind: "loading" }
+        : mentionError
+          ? { kind: "error" }
+          : { kind: "results", suggestions: mentionSuggestions };
 
   useEffect(() => {
     if (mentionSuggestions.length === 0) {
@@ -445,22 +454,6 @@ export function PromptBoxInternal({
       setSelectedMentionIndex(0);
     }
   }, [mentionSuggestions.length, selectedMentionIndex]);
-
-  useEffect(() => {
-    mentionItemRefs.current = mentionItemRefs.current.slice(
-      0,
-      mentionSuggestions.length,
-    );
-  }, [mentionSuggestions.length]);
-
-  useEffect(() => {
-    if (!showMentionMenu || mentionSuggestions.length === 0) return;
-    const selectedItem = mentionItemRefs.current[selectedMentionIndex];
-    if (!selectedItem) return;
-    selectedItem.scrollIntoView({
-      block: "nearest",
-    });
-  }, [mentionSuggestions.length, selectedMentionIndex, showMentionMenu]);
 
   const applyMention = useCallback(
     (item: PromptMentionSuggestion) => {
@@ -483,7 +476,7 @@ export function PromptBoxInternal({
       };
       setActiveMention(null);
       setSelectedMentionIndex(0);
-      onMentionQueryChange?.(null);
+      onMentionQueryChange(null);
 
       requestAnimationFrame(() => {
         const nextTextarea = textareaRef.current;
@@ -752,7 +745,7 @@ export function PromptBoxInternal({
         event.preventDefault();
         mentionKeyRef.current = "";
         setActiveMention(null);
-        onMentionQueryChange?.(null);
+        onMentionQueryChange(null);
         return;
       }
     }
@@ -889,7 +882,7 @@ export function PromptBoxInternal({
             };
           }
           setActiveMention(null);
-          onMentionQueryChange?.(null);
+          onMentionQueryChange(null);
         }}
         onPaste={(event) => {
           if (!onAttachFiles) return;
@@ -922,13 +915,9 @@ export function PromptBoxInternal({
 
       {showMentionMenu ? (
         <MentionMenu
-          showQueryHint={showQueryHint}
-          mentionLoading={mentionLoading}
-          mentionError={mentionError}
-          mentionSuggestions={mentionSuggestions}
-          selectedMentionIndex={selectedMentionIndex}
-          mentionItemRefs={mentionItemRefs}
-          onApplyMention={applyMention}
+          state={mentionMenuState}
+          selectedIndex={selectedMentionIndex}
+          onApply={applyMention}
         />
       ) : null}
 

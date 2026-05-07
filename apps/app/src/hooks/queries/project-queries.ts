@@ -84,6 +84,9 @@ export function useProjectFileSuggestions(args: {
     staleTime: 15_000,
     retry: false,
     refetchOnWindowFocus: false,
+    // Hold the previous query's results while a new query is fetching so the
+    // mention menu doesn't flicker through "loading" between every keystroke.
+    placeholderData: (previousData) => previousData,
   });
 }
 

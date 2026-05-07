@@ -1,53 +1,14 @@
-import type { ThreadType } from "@bb/domain";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useDebounceValue } from "usehooks-ts";
 import { useProjectFileSuggestions } from "./queries/project-queries";
 import {
   useThreads,
   type UseThreadsFilters,
 } from "./queries/thread-queries";
-
-export type PromptMentionSuggestion =
-  | { kind: "file"; path: string; replacement: string }
-  | {
-      kind: "thread";
-      path: string;
-      replacement: string;
-      threadId: string;
-      title?: string;
-      threadType: ThreadType;
-    };
+import type { PromptMentionSuggestion } from "@/components/promptbox/mentions/types";
 
 const FILE_MENTION_DEBOUNCE_MS = 120;
 const FILE_MENTION_LIMIT = 8;
-
-function areSuggestionsEqual(
-  left: PromptMentionSuggestion[],
-  right: PromptMentionSuggestion[],
-): boolean {
-  if (left.length !== right.length) return false;
-  for (let index = 0; index < left.length; index += 1) {
-    const leftItem = left[index];
-    const rightItem = right[index];
-    if (
-      leftItem.kind !== rightItem.kind ||
-      leftItem.path !== rightItem.path ||
-      leftItem.replacement !== rightItem.replacement
-    ) {
-      return false;
-    }
-    if (leftItem.kind === "thread" && rightItem.kind === "thread") {
-      if (
-        leftItem.threadId !== rightItem.threadId ||
-        leftItem.title !== rightItem.title ||
-        leftItem.threadType !== rightItem.threadType
-      ) {
-        return false;
-      }
-    }
-  }
-  return true;
-}
 
 export function usePromptMentions(
   projectId: string | undefined,
@@ -60,10 +21,10 @@ export function usePromptMentions(
   const [query, setQuery] = useState<string | null>(null);
   const [debouncedNonNull] = useDebounceValue(query, FILE_MENTION_DEBOUNCE_MS);
   const debouncedQuery = query === null ? null : debouncedNonNull;
-  const [staleSuggestions, setStaleSuggestions] = useState<
-    PromptMentionSuggestion[]
-  >([]);
 
+  // useProjectFileSuggestions uses placeholderData to keep the previous
+  // query's results visible while a new query is fetching, so the menu does
+  // not flicker through "loading" between every keystroke.
   const search = useProjectFileSuggestions({
     projectId,
     query: debouncedQuery,
@@ -129,41 +90,32 @@ export function usePromptMentions(
         threadType: thread.type,
       }));
   }, [currentThreadId, threadSuggestionMode, threadsQuery.data, trimmedQuery]);
-  const nextSuggestions = useMemo(
+  const suggestions = useMemo(
     () =>
-      [...threadSuggestions, ...fileSuggestions].slice(0, FILE_MENTION_LIMIT),
-    [fileSuggestions, threadSuggestions],
+      hasQuery
+        ? [...threadSuggestions, ...fileSuggestions].slice(
+            0,
+            FILE_MENTION_LIMIT,
+          )
+        : [],
+    [hasQuery, fileSuggestions, threadSuggestions],
   );
-  const suggestions = hasQuery
-    ? nextSuggestions.length > 0
-      ? nextSuggestions
-      : staleSuggestions
-    : [];
 
-  useEffect(() => {
-    if (!hasQuery) {
-      setStaleSuggestions((previous) =>
-        previous.length === 0 ? previous : [],
-      );
-      return;
-    }
-    if (search.data) {
-      setStaleSuggestions((previous) =>
-        areSuggestionsEqual(previous, nextSuggestions)
-          ? previous
-          : nextSuggestions,
-      );
-    }
-  }, [hasQuery, nextSuggestions, search.data]);
+  // Loading flips on only when there are zero suggestions to show. Once the
+  // first fetch returns (or placeholderData carries prior results across a
+  // refetch), suggestions stay populated and the menu never collapses back
+  // to the loading state mid-typing.
+  const isLoading =
+    hasQuery &&
+    suggestions.length === 0 &&
+    (isDebouncing || search.isPending || search.isFetching);
+  const isError = search.isError;
 
   return {
     query,
     setQuery,
     suggestions,
-    isLoading:
-      hasQuery &&
-      suggestions.length === 0 &&
-      (isDebouncing || search.isPending || search.isFetching),
-    isError: search.isError,
+    isLoading,
+    isError,
   };
 }
