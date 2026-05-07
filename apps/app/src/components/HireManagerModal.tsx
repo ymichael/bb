@@ -36,6 +36,7 @@ import {
   PromptOptionPicker,
   type PromptOption,
 } from "@/components/promptbox/PromptOptionPicker";
+import { PromptProviderModelPicker } from "@/components/promptbox/PromptProviderModelPicker";
 import { HostPicker } from "@/components/promptbox/HostPicker";
 
 const REASONING_LABELS: Record<ReasoningLevel, string> = {
@@ -150,13 +151,6 @@ export function HireManagerModal({
     }
     setSelectedProviderId(selectedProviderValue);
   }, [providersAreLoaded, selectedProviderId, selectedProviderValue]);
-
-  // Reset model and reasoning when provider changes.
-  useEffect(() => {
-    setSelectedModel("");
-    setSelectedReasoningLevel("");
-    setReasoningSelectionSource("default");
-  }, [selectedProviderValue]);
 
   useEffect(() => {
     if (
@@ -334,24 +328,22 @@ export function HireManagerModal({
             </DetailRow>
             <DetailRow label="Model" valueClassName="min-w-0">
               <div className="flex min-w-0 flex-wrap items-center gap-2">
-                <PromptOptionPicker
-                  label="Provider"
-                  value={selectedProviderValue}
-                  options={providerOptions}
-                  onChange={handleProviderChange}
-                  className="text-foreground"
-                  contentClassName="min-w-64"
-                />
                 {hasSelectedProvider ? (
                   modelOptions.length > 0 ? (
                     <>
-                      <PromptOptionPicker
-                        label="Model"
-                        value={selectedModel}
-                        options={modelOptions}
-                        onChange={handleModelChange}
+                      <PromptProviderModelPicker
+                        providerOptions={providerOptions}
+                        selectedProviderId={selectedProviderValue}
+                        onSelectedProviderChange={handleProviderChange}
+                        hasMultipleProviders={providers.length > 1}
+                        modelValue={selectedModel}
+                        modelOptions={modelOptions}
+                        onModelChange={handleModelChange}
+                        formatModelLabel={formatModelLabel}
+                        fastModeEnabled={false}
+                        onFastModeChange={() => {}}
+                        showFastModeToggle={false}
                         className="text-foreground"
-                        contentClassName="min-w-64"
                       />
                       {reasoningOptions.length > 0 ? (
                         <PromptOptionPicker
