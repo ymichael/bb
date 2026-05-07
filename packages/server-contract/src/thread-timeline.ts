@@ -119,13 +119,106 @@ export type TimelineConversationRow = z.infer<
   typeof timelineConversationRowSchema
 >;
 
-export const timelineSystemRowSchema = timelineRowBaseSchema.extend({
+export const timelineSystemOperationKindValues = [
+  "generic",
+  "compaction",
+  "manager-assignment",
+  "thread-provisioning",
+  "thread-interrupted",
+  "provider-unhandled",
+  "warning",
+  "deprecation",
+  "turn-diff",
+  "plan-updated",
+] as const;
+export const timelineSystemOperationKindSchema = z.enum(
+  timelineSystemOperationKindValues,
+);
+export type TimelineSystemOperationKind = z.infer<
+  typeof timelineSystemOperationKindSchema
+>;
+const timelineGenericSystemOperationKindSchema = z.enum([
+  "generic",
+  "compaction",
+  "thread-provisioning",
+  "thread-interrupted",
+  "provider-unhandled",
+  "warning",
+  "deprecation",
+  "turn-diff",
+  "plan-updated",
+] as const);
+
+export const timelineManagerAssignmentActionValues = [
+  "assign",
+  "release",
+  "transfer",
+] as const;
+export const timelineManagerAssignmentActionSchema = z.enum(
+  timelineManagerAssignmentActionValues,
+);
+export type TimelineManagerAssignmentAction = z.infer<
+  typeof timelineManagerAssignmentActionSchema
+>;
+
+export const timelineManagerAssignmentSchema = z.object({
+  action: timelineManagerAssignmentActionSchema,
+  details: z.string().nullable(),
+});
+export type TimelineManagerAssignment = z.infer<
+  typeof timelineManagerAssignmentSchema
+>;
+
+const timelineSystemRowBaseSchema = timelineRowBaseSchema.extend({
   kind: z.literal("system"),
-  systemKind: z.enum(["debug", "error", "operation", "reconnect"]),
   title: z.string(),
   detail: z.string().nullable(),
   status: timelineRowStatusSchema.nullable(),
 });
+
+export const timelineNonOperationSystemRowSchema =
+  timelineSystemRowBaseSchema.extend({
+    systemKind: z.enum(["debug", "error", "reconnect"]),
+  });
+export type TimelineNonOperationSystemRow = z.infer<
+  typeof timelineNonOperationSystemRowSchema
+>;
+
+export const timelineGenericOperationSystemRowSchema =
+  timelineSystemRowBaseSchema.extend({
+    systemKind: z.literal("operation"),
+    operationKind: timelineGenericSystemOperationKindSchema,
+  });
+export type TimelineGenericOperationSystemRow = z.infer<
+  typeof timelineGenericOperationSystemRowSchema
+>;
+
+export const timelineManagerAssignmentSystemRowSchema =
+  timelineSystemRowBaseSchema.extend({
+    systemKind: z.literal("operation"),
+    operationKind: z.literal("manager-assignment"),
+    status: timelineRowStatusSchema,
+    managerAssignment: timelineManagerAssignmentSchema,
+  });
+export type TimelineManagerAssignmentSystemRow = z.infer<
+  typeof timelineManagerAssignmentSystemRowSchema
+>;
+
+export const timelineOperationSystemRowSchema = z.discriminatedUnion(
+  "operationKind",
+  [
+    timelineGenericOperationSystemRowSchema,
+    timelineManagerAssignmentSystemRowSchema,
+  ],
+);
+export type TimelineOperationSystemRow = z.infer<
+  typeof timelineOperationSystemRowSchema
+>;
+
+export const timelineSystemRowSchema = z.union([
+  timelineNonOperationSystemRowSchema,
+  timelineOperationSystemRowSchema,
+]);
 export type TimelineSystemRow = z.infer<typeof timelineSystemRowSchema>;
 
 export const timelineDiffStatsSchema = z.object({
@@ -218,15 +311,61 @@ export type TimelineWebFetchWorkRow = z.infer<
   typeof timelineWebFetchWorkRowSchema
 >;
 
-export const timelineApprovalWorkRowSchema = timelineWorkRowBaseSchema.extend({
+export const timelineFileEditApprovalLifecycleValues = [
+  "waiting",
+  "denied",
+] as const;
+export const timelinePermissionGrantApprovalLifecycleValues = [
+  "pending",
+  "resolving",
+  "granted",
+  "denied",
+  "interrupted",
+  "expired",
+] as const;
+export const timelinePermissionGrantApprovalGrantScopeValues = [
+  "turn",
+  "session",
+] as const;
+export const timelinePermissionGrantApprovalGrantScopeSchema = z.enum(
+  timelinePermissionGrantApprovalGrantScopeValues,
+);
+export type TimelinePermissionGrantApprovalGrantScope = z.infer<
+  typeof timelinePermissionGrantApprovalGrantScopeSchema
+>;
+
+const timelineApprovalTargetSchema = z.object({
+  itemId: z.string(),
+  toolName: z.string().nullable(),
+});
+
+const timelineApprovalWorkRowBaseSchema = timelineWorkRowBaseSchema.extend({
   workKind: z.literal("approval"),
   interactionId: z.string(),
-  title: z.string(),
-  target: z.object({
-    itemId: z.string(),
-    toolName: z.string().nullable(),
-  }),
+  target: timelineApprovalTargetSchema,
 });
+
+export const timelineFileEditApprovalWorkRowSchema =
+  timelineApprovalWorkRowBaseSchema.extend({
+    approvalKind: z.literal("file-edit"),
+    lifecycle: z.enum(timelineFileEditApprovalLifecycleValues),
+  });
+
+export const timelinePermissionGrantApprovalWorkRowSchema =
+  timelineApprovalWorkRowBaseSchema.extend({
+    approvalKind: z.literal("permission-grant"),
+    lifecycle: z.enum(timelinePermissionGrantApprovalLifecycleValues),
+    grantScope: timelinePermissionGrantApprovalGrantScopeSchema.nullable(),
+    statusReason: z.string().nullable(),
+  });
+
+export const timelineApprovalWorkRowSchema = z.discriminatedUnion(
+  "approvalKind",
+  [
+    timelineFileEditApprovalWorkRowSchema,
+    timelinePermissionGrantApprovalWorkRowSchema,
+  ],
+);
 export type TimelineApprovalWorkRow = z.infer<
   typeof timelineApprovalWorkRowSchema
 >;

@@ -31,6 +31,17 @@ export const eventProjectionApprovalLifecycleStatusValues = [
 export type EventProjectionApprovalLifecycleStatus =
   (typeof eventProjectionApprovalLifecycleStatusValues)[number];
 
+export const eventProjectionPermissionGrantLifecycleValues = [
+  "pending",
+  "resolving",
+  "granted",
+  "denied",
+  "interrupted",
+  "expired",
+] as const;
+export type EventProjectionPermissionGrantLifecycle =
+  (typeof eventProjectionPermissionGrantLifecycleValues)[number];
+
 export interface EventProjectionMessageBase {
   id: string;
   threadId: string;
@@ -263,6 +274,8 @@ export interface EventProjectionApprovalTarget {
   toolName: string | null;
 }
 
+export type EventProjectionPermissionGrantGrantScope = "turn" | "session";
+
 export interface EventProjectionOperationMessage extends EventProjectionMessageBase {
   kind: "operation";
   opType: EventProjectionOperationType;
@@ -279,12 +292,14 @@ export interface EventProjectionOperationMessage extends EventProjectionMessageB
 export interface EventProjectionPermissionGrantLifecycleMessage extends EventProjectionMessageBase {
   kind: "permission-grant-lifecycle";
   interactionId: string;
-  title: string;
+  lifecycle: EventProjectionPermissionGrantLifecycle;
   status: Extract<
     EventProjectionMessageStatus,
     "pending" | "completed" | "error" | "interrupted"
   >;
   approvalTarget: EventProjectionApprovalTarget;
+  grantScope: EventProjectionPermissionGrantGrantScope | null;
+  statusReason: string | null;
 }
 
 export interface EventProjectionDelegationMessage

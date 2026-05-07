@@ -266,11 +266,11 @@ function mergePermissionGrantLifecycleMessage(
   existing: EventProjectionPermissionGrantLifecycleMessage,
   incoming: EventProjectionPermissionGrantLifecycleMessage,
 ): void {
+  const wasTerminal = isTerminalLifecycleStatus(existing.status);
   const mergedStatus = mergeLifecycleStatus(existing.status, incoming.status);
-  const shouldUseIncomingLifecycle = existing.status !== mergedStatus;
   existing.status = mergedStatus;
-  if (shouldUseIncomingLifecycle) {
-    existing.title = incoming.title;
+  if (!wasTerminal) {
+    existing.lifecycle = incoming.lifecycle;
   }
   existing.approvalTarget = incoming.approvalTarget;
 }

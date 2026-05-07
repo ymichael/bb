@@ -1,7 +1,4 @@
-import {
-  formatPendingInteractionPermissionResolutionMessage,
-  assertNever,
-} from "@bb/core-ui";
+import { assertNever } from "@bb/core-ui";
 import type {
   PendingInteraction,
   PendingInteractionApprovalSubject,
@@ -31,31 +28,6 @@ type ApprovalTimelineItemStatus = Extract<
   "pending" | "interrupted"
 >;
 
-function permissionGrantLifecycleMessage(
-  interaction: PendingInteraction,
-  subject: PendingInteractionPermissionGrantApprovalSubject,
-): string {
-  switch (interaction.status) {
-    case "pending":
-      return subject.toolName
-        ? `Waiting for approval to grant ${subject.toolName}`
-        : "Waiting for approval to grant permissions";
-    case "resolving":
-      return "Delivering user response to provider";
-    case "resolved":
-      if (interaction.resolution === null) {
-        return "Interaction resolved";
-      }
-      return formatPendingInteractionPermissionResolutionMessage(
-        interaction.resolution,
-      );
-    case "interrupted":
-      return interaction.statusReason ?? "Interaction interrupted";
-    case "expired":
-      return interaction.statusReason ?? "Interaction expired";
-  }
-}
-
 function appendPermissionGrantTimelineEvent(
   deps: Pick<AppDeps, "db" | "hub">,
   interaction: PendingInteraction,
@@ -69,10 +41,11 @@ function appendPermissionGrantTimelineEvent(
     scope: turnScope(interaction.turnId),
     data: {
       status: interaction.status,
-      message: permissionGrantLifecycleMessage(interaction, subject),
+      resolution: interaction.resolution,
       interactionId: interaction.id,
       providerId: interaction.providerId,
       providerRequestId: interaction.providerRequestId,
+      statusReason: interaction.statusReason,
       subject,
     },
   });
@@ -91,10 +64,11 @@ function appendPermissionGrantTimelineEventInTransaction(
     scope: turnScope(interaction.turnId),
     data: {
       status: interaction.status,
-      message: permissionGrantLifecycleMessage(interaction, subject),
+      resolution: interaction.resolution,
       interactionId: interaction.id,
       providerId: interaction.providerId,
       providerRequestId: interaction.providerRequestId,
+      statusReason: interaction.statusReason,
       subject,
     },
   });

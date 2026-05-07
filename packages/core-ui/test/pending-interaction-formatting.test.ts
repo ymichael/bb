@@ -3,7 +3,6 @@ import type { PendingInteraction } from "@bb/domain";
 import {
   buildPendingInteractionApprovalResolution,
   formatPendingInteractionApprovalResolutionOutcome,
-  formatPendingInteractionPermissionResolutionMessage,
   formatPendingInteractionSubjectDetailLines,
   summarizePendingInteractionRequestedPermissions,
 } from "../src/index.js";
@@ -57,22 +56,13 @@ describe("pending interaction formatting", () => {
     ]);
   });
 
-  it("formats approval outcomes and timeline messages consistently", () => {
+  it("formats approval outcomes consistently", () => {
     expect(
       formatPendingInteractionApprovalResolutionOutcome("allow_for_session"),
     ).toBe("approved for this session");
     expect(formatPendingInteractionApprovalResolutionOutcome("deny")).toBe(
       "denied",
     );
-    expect(
-      formatPendingInteractionPermissionResolutionMessage({
-        decision: "allow_for_session",
-        grantedPermissions: {
-          network: { enabled: true },
-          fileSystem: null,
-        },
-      }),
-    ).toBe("Permissions granted for this session");
   });
 
   it("builds session approval resolutions with explicit command session grants", () => {

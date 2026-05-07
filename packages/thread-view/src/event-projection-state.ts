@@ -210,7 +210,7 @@ function finalizePendingMessageForInterruptedTurn(
     case "permission-grant-lifecycle":
       if (message.status === "pending") {
         message.status = "interrupted";
-        message.title = "Permission grant interrupted";
+        message.lifecycle = "interrupted";
       }
       return;
     case "assistant-text":

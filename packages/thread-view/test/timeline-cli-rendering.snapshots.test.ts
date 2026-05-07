@@ -1485,7 +1485,7 @@ describe("timeline CLI rendering snapshots", () => {
       "command",
     ]);
     expect(timeline.text).toMatchInlineSnapshot(`
-      "── Waiting for approval to grant Bash ──────────────────────
+      "── Waiting for permission to use Bash ──────────────────────
 
       ── Permission denied: git push ─────────────────────────────
         $ git push"

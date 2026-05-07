@@ -3,9 +3,13 @@ import type {
   TimelineActivityIntent,
   TimelineConversationAttachments,
   TimelineFileChange,
+  TimelineManagerAssignment,
   TimelineRow,
   TimelineRowBase,
+  TimelineRowStatus,
   TimelineSourceRow,
+  TimelineSystemOperationKind,
+  TimelineSystemRow,
   TimelineTurnRow,
   TimelineUserConversationRow,
 } from "@bb/server-contract";
@@ -181,12 +185,109 @@ interface BuildTimelineRowsOptions {
   rowIdPrefix: string;
 }
 
+interface BuildGenericOperationSystemRowArgs {
+  base: TimelineRowBase;
+  message: TimelineOperationMessage;
+  operationKind: TimelineGenericSystemOperationKind;
+}
+
+interface BuildManagerAssignmentSystemRowArgs {
+  base: TimelineRowBase;
+  managerAssignment: TimelineManagerAssignment;
+  message: TimelineOperationMessage;
+}
+
 const ROOT_TIMELINE_ROW_ID_PREFIX = "";
 
 type TimelineOperationMessage = Extract<
   EventProjectionMessage,
   { kind: "operation" }
 >;
+type TimelineGenericSystemOperationKind = Exclude<
+  TimelineSystemOperationKind,
+  "manager-assignment"
+>;
+
+function operationKindForMessage(
+  message: TimelineOperationMessage,
+  managerAssignment: TimelineManagerAssignment | null,
+): TimelineSystemOperationKind {
+  switch (message.opType) {
+    case "compaction":
+    case "thread-provisioning":
+    case "thread-interrupted":
+    case "provider-unhandled":
+    case "warning":
+    case "deprecation":
+    case "turn-diff":
+    case "plan-updated":
+      return message.opType;
+    case "operation":
+      return managerAssignment !== null ? "manager-assignment" : "generic";
+    default:
+      return assertNever(message.opType);
+  }
+}
+
+function managerAssignmentForMessage(
+  message: TimelineOperationMessage,
+): TimelineManagerAssignment | null {
+  if (
+    message.opType !== "operation" ||
+    message.threadOperation?.operation !== "ownership_change"
+  ) {
+    return null;
+  }
+
+  const action = message.threadOperation.metadata?.action;
+  switch (action) {
+    case "assign":
+    case "release":
+    case "transfer":
+      return { action, details: null };
+    case undefined:
+      return null;
+    default:
+      return assertNever(action);
+  }
+}
+
+function buildGenericOperationSystemRow({
+  base,
+  message,
+  operationKind,
+}: BuildGenericOperationSystemRowArgs): TimelineSystemRow {
+  return {
+    ...base,
+    kind: "system",
+    systemKind: "operation",
+    operationKind,
+    title: message.title,
+    detail: buildTimelineOperationDetail(message),
+    status: message.status ?? null,
+  };
+}
+
+function buildManagerAssignmentSystemRow({
+  base,
+  managerAssignment,
+  message,
+}: BuildManagerAssignmentSystemRowArgs): TimelineSystemRow {
+  if (message.status === undefined) {
+    throw new Error("Manager assignment operation message requires a status");
+  }
+  const status: TimelineRowStatus = message.status;
+  return {
+    ...base,
+    kind: "system",
+    systemKind: "operation",
+    operationKind: "manager-assignment",
+    managerAssignment,
+    title: message.title,
+    detail: buildTimelineOperationDetail(message),
+    status,
+  };
+}
 
 function buildTimelineRowBase(
   message: EventProjectionMessage,
@@ -406,10 +507,9 @@ function convertMessage(
             workKind: "approval",
             status: message.status,
             interactionId: message.callId,
-            title:
-              message.approvalStatus === "denied"
-                ? "Denied file changes"
-                : "Waiting for approval to edit files",
+            approvalKind: "file-edit",
+            lifecycle:
+              message.approvalStatus === "denied" ? "denied" : "waiting",
             target: {
               itemId: message.callId,
               toolName: null,
@@ -487,21 +587,42 @@ function convertMessage(
           workKind: "approval",
           status: message.status,
           interactionId: message.interactionId,
-          title: message.title,
+          approvalKind: "permission-grant",
+          lifecycle: message.lifecycle,
+          grantScope: message.grantScope,
+          statusReason: message.statusReason,
           target: message.approvalTarget,
         },
       ];
-    case "operation":
+    case "operation": {
+      const managerAssignment = managerAssignmentForMessage(message);
+      const operationKind = operationKindForMessage(message, managerAssignment);
+      const base = buildTimelineRowBase(message, options.rowIdPrefix);
+      if (operationKind === "manager-assignment") {
+        return managerAssignment !== null
+          ? [
+              buildManagerAssignmentSystemRow({
+                base,
+                managerAssignment,
+                message,
+              }),
+            ]
+          : [
+              buildGenericOperationSystemRow({
+                base,
+                message,
+                operationKind: "generic",
+              }),
+            ];
+      }
       return [
-        {
-          ...buildTimelineRowBase(message, options.rowIdPrefix),
-          kind: "system",
-          systemKind: "operation",
-          title: message.title,
-          detail: buildTimelineOperationDetail(message),
-          status: message.status ?? null,
-        },
+        buildGenericOperationSystemRow({
+          base,
+          message,
+          operationKind,
+        }),
       ];
+    }
     case "error":
       return [
         {

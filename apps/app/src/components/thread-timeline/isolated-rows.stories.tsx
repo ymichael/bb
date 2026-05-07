@@ -18,10 +18,7 @@ import {
   TimelineCaseGrid,
   type TimelineStoryCase,
 } from "./timeline-story-fixtures.js";
-import {
-  permissionGrantStoryTitles,
-  storyFileChange,
-} from "./timeline-row-story-data.js";
+import { storyFileChange } from "./timeline-row-story-data.js";
 
 export default {
   title: "Thread Timeline/Isolated Rows",
@@ -510,7 +507,7 @@ const commandRowCases: TimelineStoryCase[] = [
         interactionId: "pi_perm_123",
         itemId: "call_write_fixture",
         toolName: "Bash",
-        title: permissionGrantStoryTitles.pending,
+        lifecycle: "pending",
         seq: 55,
       }),
     ],
@@ -524,7 +521,7 @@ const commandRowCases: TimelineStoryCase[] = [
         interactionId: "pi_perm_accepted",
         itemId: "call_write_fixture_accepted",
         toolName: "Bash",
-        title: permissionGrantStoryTitles.completed,
+        lifecycle: "granted",
         status: "completed",
         seq: 56,
       }),
@@ -539,7 +536,7 @@ const commandRowCases: TimelineStoryCase[] = [
         interactionId: "pi_perm_error",
         itemId: "call_write_fixture_error",
         toolName: "Bash",
-        title: permissionGrantStoryTitles.error,
+        lifecycle: "expired",
         status: "error",
         seq: 57,
       }),
@@ -554,7 +551,7 @@ const commandRowCases: TimelineStoryCase[] = [
         interactionId: "pi_perm_interrupted",
         itemId: "call_write_fixture_interrupted",
         toolName: "Bash",
-        title: permissionGrantStoryTitles.interrupted,
+        lifecycle: "interrupted",
         status: "interrupted",
         seq: 58,
       }),
@@ -838,6 +835,11 @@ const systemAndManagerCases: TimelineStoryCase[] = [
       systemRow({
         id: "manager-assignment-system",
         seq: 80,
+        operationKind: "manager-assignment",
+        managerAssignment: {
+          action: "assign",
+          details: null,
+        },
         title: "Thread assigned to manager",
         detail:
           "Assigned to Core Product Manager\nBranch: bb/timeline-ui-behavior-consistency-follow-ups-thr_c2wjru47fm",

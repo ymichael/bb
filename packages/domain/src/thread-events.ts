@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   pendingInteractionPermissionGrantApprovalSubjectSchema,
+  pendingInteractionResolutionSchema,
   pendingInteractionStatusSchema,
 } from "./pending-interactions.js";
 import {
@@ -170,7 +171,8 @@ export const systemPermissionGrantLifecycleEventDataSchema = z.object({
   providerId: z.string(),
   providerRequestId: z.string(),
   status: pendingInteractionStatusSchema,
-  message: z.string(),
+  resolution: pendingInteractionResolutionSchema.nullable().default(null),
+  statusReason: z.string().nullable().default(null),
   subject: pendingInteractionPermissionGrantApprovalSubjectSchema,
 });
 export type SystemPermissionGrantLifecycleEventData = z.infer<

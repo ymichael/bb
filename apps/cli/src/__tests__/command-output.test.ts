@@ -3068,6 +3068,7 @@ describe("CLI JSON output contracts", () => {
           }),
           kind: "system",
           systemKind: "operation",
+          operationKind: "thread-provisioning",
           title: "Provisioned thread",
           detail: null,
           status: "completed",

@@ -17,10 +17,7 @@ import {
   TimelineCaseGrid,
   type TimelineStoryCase,
 } from "./timeline-story-fixtures.js";
-import {
-  permissionGrantStoryTitles,
-  storyFileChange,
-} from "./timeline-row-story-data.js";
+import { storyFileChange } from "./timeline-row-story-data.js";
 
 export default {
   title: "Thread Timeline/Row State Sweeps",
@@ -930,7 +927,7 @@ const approvalCases: TimelineStoryCase[] = [
         interactionId: "pi_perm_pending",
         itemId: "call_bash_pending",
         toolName: "Bash",
-        title: permissionGrantStoryTitles.pending,
+        lifecycle: "pending",
         seq: 100,
       }),
     ],
@@ -944,7 +941,7 @@ const approvalCases: TimelineStoryCase[] = [
         interactionId: "pi_perm_completed",
         itemId: "call_bash_completed",
         toolName: "Bash",
-        title: permissionGrantStoryTitles.completed,
+        lifecycle: "granted",
         status: "completed",
         seq: 101,
       }),
@@ -959,7 +956,7 @@ const approvalCases: TimelineStoryCase[] = [
         interactionId: "pi_perm_error",
         itemId: "call_bash_error",
         toolName: "Bash",
-        title: permissionGrantStoryTitles.error,
+        lifecycle: "expired",
         status: "error",
         seq: 102,
       }),
@@ -974,7 +971,7 @@ const approvalCases: TimelineStoryCase[] = [
         interactionId: "pi_perm_interrupted",
         itemId: "call_bash_interrupted",
         toolName: "Bash",
-        title: permissionGrantStoryTitles.interrupted,
+        lifecycle: "interrupted",
         status: "interrupted",
         seq: 103,
       }),
@@ -1004,6 +1001,11 @@ const systemCases: TimelineStoryCase[] = [
     rows: [
       systemRow({
         id: "system-manager-assignment",
+        operationKind: "manager-assignment",
+        managerAssignment: {
+          action: "assign",
+          details: null,
+        },
         title: "Thread assigned to manager",
         detail:
           "Manager thread thr_c2wjru47fm is coordinating timeline shippability.",

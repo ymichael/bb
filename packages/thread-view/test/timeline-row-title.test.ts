@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type {
   TimelineActivityIntent,
+  TimelineApprovalWorkRow,
   TimelineCommandWorkRow,
   TimelineFileChangeWorkRow,
+  TimelineManagerAssignment,
   TimelineRowBase,
+  TimelineRowStatus,
   TimelineSystemRow,
   TimelineToolWorkRow,
   TimelineWebFetchWorkRow,
@@ -12,6 +15,7 @@ import type {
 import {
   buildTimelineActivityIntentTitles,
   buildTimelineRowTitle,
+  formatTimelineDecorationText,
   type BuildTimelineRowTitleOptions,
   type TimelineViewDelegationWorkRow,
   type TimelineViewTurnRow,
@@ -24,6 +28,30 @@ const DEFAULT_OPTIONS: BuildTimelineRowTitleOptions = {
   summaryStyle: "bundle",
   workStyle: "default",
 };
+
+type PermissionGrantApprovalLifecycle = Extract<
+  TimelineApprovalWorkRow,
+  { approvalKind: "permission-grant" }
+>["lifecycle"];
+type TimelinePermissionGrantApprovalWorkRow = Extract<
+  TimelineApprovalWorkRow,
+  { approvalKind: "permission-grant" }
+>;
+type FileEditApprovalLifecycle = Extract<
+  TimelineApprovalWorkRow,
+  { approvalKind: "file-edit" }
+>["lifecycle"];
+interface PermissionGrantApprovalRowArgs {
+  grantScope?: TimelinePermissionGrantApprovalWorkRow["grantScope"];
+  lifecycle: PermissionGrantApprovalLifecycle;
+  statusReason?: string | null;
+  toolName?: string | null;
+}
+
+interface ManagerAssignmentSystemRowArgs {
+  managerAssignment: TimelineManagerAssignment;
+  status?: TimelineRowStatus;
+}
 
 function baseRow(id: string): TimelineRowBase {
   return {
@@ -203,14 +231,86 @@ function delegationRow(): TimelineViewDelegationWorkRow {
   };
 }
 
+function permissionGrantApprovalRow({
+  grantScope = null,
+  lifecycle,
+  statusReason = null,
+  toolName = "Bash",
+}: PermissionGrantApprovalRowArgs): TimelineApprovalWorkRow {
+  const status = (() => {
+    switch (lifecycle) {
+      case "pending":
+      case "resolving":
+        return "pending";
+      case "granted":
+      case "denied":
+        return "completed";
+      case "interrupted":
+        return "interrupted";
+      case "expired":
+        return "error";
+    }
+  })();
+  return {
+    ...baseRow(`permission-grant-${lifecycle}`),
+    kind: "work",
+    workKind: "approval",
+    status,
+    interactionId: "pi-permission-grant",
+    approvalKind: "permission-grant",
+    lifecycle,
+    grantScope,
+    statusReason,
+    target: {
+      itemId: "item-permission-grant",
+      toolName,
+    },
+  };
+}
+
+function fileEditApprovalRow(
+  lifecycle: FileEditApprovalLifecycle,
+): TimelineApprovalWorkRow {
+  return {
+    ...baseRow(`file-edit-approval-${lifecycle}`),
+    kind: "work",
+    workKind: "approval",
+    status: lifecycle === "waiting" ? "pending" : "interrupted",
+    interactionId: "file-edit-call",
+    approvalKind: "file-edit",
+    lifecycle,
+    target: {
+      itemId: "file-edit-call",
+      toolName: null,
+    },
+  };
+}
+
 function systemOperationRow(): TimelineSystemRow {
   return {
     ...baseRow("system-1"),
     kind: "system",
     systemKind: "operation",
+    operationKind: "generic",
     title: "Thread release failed",
     detail: null,
     status: "error",
+  };
+}
+
+function managerAssignmentSystemRow({
+  managerAssignment,
+  status = "completed",
+}: ManagerAssignmentSystemRowArgs): TimelineSystemRow {
+  return {
+    ...baseRow(`system-manager-${managerAssignment.action}`),
+    kind: "system",
+    systemKind: "operation",
+    operationKind: "manager-assignment",
+    managerAssignment,
+    title: "Thread assigned to manager",
+    detail: null,
+    status,
   };
 }
 
@@ -374,6 +474,169 @@ describe("buildTimelineRowTitle", () => {
     },
   );
 
+  it.each([
+    {
+      decorationTexts: [],
+      expectedPlain: "Waiting for permission to use Bash",
+      lifecycle: "pending",
+      shimmer: true,
+      expectedSegments: ["Waiting for permission", "to use", "Bash"],
+    },
+    {
+      decorationTexts: [],
+      expectedPlain: "Delivering permission to use Bash",
+      lifecycle: "resolving",
+      shimmer: true,
+      expectedSegments: ["Delivering permission", "to use", "Bash"],
+    },
+    {
+      decorationTexts: [],
+      expectedPlain: "Permission granted for this turn: Bash",
+      grantScope: "turn",
+      lifecycle: "granted",
+      shimmer: false,
+      expectedSegments: ["Permission granted for this turn:", "Bash"],
+    },
+    {
+      decorationTexts: [],
+      expectedPlain: "Permission granted for this session: Bash",
+      grantScope: "session",
+      lifecycle: "granted",
+      shimmer: false,
+      expectedSegments: ["Permission granted for this session:", "Bash"],
+    },
+    {
+      decorationTexts: [],
+      expectedPlain: "Permission denied: Bash",
+      lifecycle: "denied",
+      shimmer: false,
+      expectedSegments: ["Permission denied:", "Bash"],
+    },
+    {
+      decorationTexts: [],
+      expectedPlain: "Permission grant interrupted: Bash",
+      lifecycle: "interrupted",
+      shimmer: false,
+      expectedSegments: ["Permission grant interrupted:", "Bash"],
+    },
+    {
+      decorationTexts: [],
+      expectedPlain: "Permission grant expired: Bash",
+      lifecycle: "expired",
+      shimmer: false,
+      expectedSegments: ["Permission grant expired:", "Bash"],
+    },
+  ] satisfies Array<{
+    decorationTexts: string[];
+    expectedPlain: string;
+    expectedSegments: string[];
+    grantScope?: TimelinePermissionGrantApprovalWorkRow["grantScope"];
+    lifecycle: PermissionGrantApprovalLifecycle;
+    shimmer: boolean;
+  }>)(
+    "renders typed permission grant approval lifecycle $lifecycle",
+    ({
+      decorationTexts,
+      expectedPlain,
+      expectedSegments,
+      grantScope,
+      lifecycle,
+      shimmer,
+    }) => {
+      const title = buildTimelineRowTitle(
+        permissionGrantApprovalRow({ grantScope, lifecycle }),
+        DEFAULT_OPTIONS,
+      );
+
+      expect(title.plain).toBe(expectedPlain);
+      expect(title.segments.map((s) => s.text)).toEqual(expectedSegments);
+      expect(title.segments[0]?.shimmer).toBe(shimmer);
+      expect(title.segments.some((s) => s.em)).toBe(true);
+      expect(title.decorations.map(formatTimelineDecorationText)).toEqual(
+        decorationTexts,
+      );
+    },
+  );
+
+  it.each([
+    {
+      expectedPlain:
+        "Permission grant interrupted: Bash (Thread stopped by user request)",
+      lifecycle: "interrupted",
+    },
+    {
+      expectedPlain:
+        "Permission grant expired: Bash (Pending interaction expired)",
+      lifecycle: "expired",
+    },
+  ] satisfies Array<{
+    expectedPlain: string;
+    lifecycle: Extract<
+      PermissionGrantApprovalLifecycle,
+      "expired" | "interrupted"
+    >;
+  }>)(
+    "renders permission grant $lifecycle status reason",
+    ({ expectedPlain, lifecycle }) => {
+      const statusReason =
+        lifecycle === "interrupted"
+          ? "Thread stopped by user request"
+          : "Pending interaction expired";
+      const title = buildTimelineRowTitle(
+        permissionGrantApprovalRow({ lifecycle, statusReason }),
+        DEFAULT_OPTIONS,
+      );
+
+      expect(title.plain).toBe(expectedPlain);
+      expect(title.segments.map((s) => s.text)).toContain(`(${statusReason})`);
+    },
+  );
+
+  it("uses a permissions fallback for grant requests without a tool name", () => {
+    const title = buildTimelineRowTitle(
+      permissionGrantApprovalRow({ lifecycle: "pending", toolName: null }),
+      DEFAULT_OPTIONS,
+    );
+
+    expect(title.plain).toBe("Waiting for permissions");
+  });
+
+  it.each([
+    {
+      expectedPlain: "Waiting for approval to edit files",
+      lifecycle: "waiting",
+      shimmer: true,
+      verb: "Waiting for approval to edit",
+    },
+    {
+      expectedPlain: "Permission denied: file changes",
+      lifecycle: "denied",
+      shimmer: false,
+      verb: "Permission denied:",
+    },
+  ] satisfies Array<{
+    expectedPlain: string;
+    lifecycle: FileEditApprovalLifecycle;
+    shimmer: boolean;
+    verb: string;
+  }>)(
+    "renders typed file edit approval lifecycle $lifecycle",
+    ({ expectedPlain, lifecycle, shimmer, verb }) => {
+      const title = buildTimelineRowTitle(
+        fileEditApprovalRow(lifecycle),
+        DEFAULT_OPTIONS,
+      );
+
+      expect(title.plain).toBe(expectedPlain);
+      expect(title.segments.map((s) => s.text)).toEqual([
+        verb,
+        lifecycle === "waiting" ? "files" : "file changes",
+      ]);
+      expect(title.segments[0]?.shimmer).toBe(shimmer);
+      expect(title.segments[1]?.em).toBe(true);
+    },
+  );
+
   it("keeps error commands as command rows with status metadata", () => {
     const row = {
       ...commandRow(),
@@ -389,6 +652,101 @@ describe("buildTimelineRowTitle", () => {
     );
     expect(title.tone).toBe("default");
   });
+
+  it.each([
+    {
+      action: "assign",
+      expectedPlain: "Thread assigned to manager",
+      expectedSegments: ["Thread assigned", "to manager"],
+    },
+    {
+      action: "release",
+      expectedPlain: "Thread released from manager",
+      expectedSegments: ["Thread released", "from manager"],
+    },
+    {
+      action: "transfer",
+      expectedPlain: "Thread transferred to new manager",
+      expectedSegments: ["Thread transferred", "to new manager"],
+    },
+  ] satisfies Array<{
+    action: TimelineManagerAssignment["action"];
+    expectedPlain: string;
+    expectedSegments: [string, string];
+  }>)(
+    "renders typed manager assignment system action $action",
+    ({ action, expectedPlain, expectedSegments }) => {
+      const title = buildTimelineRowTitle(
+        managerAssignmentSystemRow({
+          managerAssignment: { action, details: null },
+        }),
+        DEFAULT_OPTIONS,
+      );
+
+      expect(title.plain).toBe(expectedPlain);
+      expect(title.segments.map((s) => s.text)).toEqual(expectedSegments);
+      expect(title.segments[0]?.em).toBe(false);
+      expect(title.segments[1]?.em).toBe(true);
+    },
+  );
+
+  it("uses explicit manager assignment details when present", () => {
+    const title = buildTimelineRowTitle(
+      managerAssignmentSystemRow({
+        managerAssignment: {
+          action: "assign",
+          details: "to Core Product Manager",
+        },
+      }),
+      DEFAULT_OPTIONS,
+    );
+
+    expect(title.plain).toBe("Thread assigned to Core Product Manager");
+    expect(title.segments.map((s) => s.text)).toEqual([
+      "Thread assigned",
+      "to Core Product Manager",
+    ]);
+    expect(title.segments[1]?.em).toBe(true);
+  });
+
+  it.each([
+    {
+      expectedPlain: "Assigning thread to manager",
+      expectedShimmer: true,
+      status: "pending",
+    },
+    {
+      expectedPlain: "Thread assignment failed to manager",
+      expectedShimmer: false,
+      expectedTone: "destructive",
+      status: "error",
+    },
+    {
+      expectedPlain: "Thread assignment interrupted to manager",
+      expectedShimmer: false,
+      status: "interrupted",
+    },
+  ] satisfies Array<{
+    expectedPlain: string;
+    expectedShimmer: boolean;
+    expectedTone?: "destructive";
+    status: Exclude<TimelineSystemRow["status"], "completed" | null>;
+  }>)(
+    "renders manager assignment $status status with typed wording",
+    ({ expectedPlain, expectedShimmer, expectedTone, status }) => {
+      const title = buildTimelineRowTitle(
+        managerAssignmentSystemRow({
+          managerAssignment: { action: "assign", details: null },
+          status,
+        }),
+        DEFAULT_OPTIONS,
+      );
+
+      expect(title.plain).toBe(expectedPlain);
+      expect(title.segments[0]?.shimmer).toBe(expectedShimmer);
+      expect(title.tone).toBe(expectedTone ?? "default");
+    },
+  );
 
   it("renders failed exploration intents using the intent verb", () => {
     const row = {

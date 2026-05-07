@@ -10,9 +10,12 @@ import type {
   TimelineDiffStats,
   TimelineFileChange,
   TimelineFileChangeWorkRow,
+  TimelineManagerAssignment,
+  TimelinePermissionGrantApprovalGrantScope,
   TimelineRow,
   TimelineRowBase,
   TimelineRowStatus,
+  TimelineSystemOperationKind,
   TimelineSystemRow,
   TimelineToolWorkRow,
   TimelineTurnRow,
@@ -118,21 +121,31 @@ export interface WebFetchRowArgs {
 }
 
 export interface ApprovalRowArgs {
+  approvalKind?: TimelineApprovalWorkRow["approvalKind"];
   id?: string;
   interactionId?: string;
   itemId?: string;
+  lifecycle?: TimelineApprovalWorkRow["lifecycle"];
   seq?: number;
   sourceSeqEnd?: number;
   sourceSeqStart?: number;
+  grantScope?: TimelinePermissionGrantApprovalGrantScope | null;
   status?: TimelineRowStatus;
-  title: string;
+  statusReason?: string | null;
   toolName?: string | null;
   turnId?: string | null;
 }
 
+type PermissionGrantApprovalLifecycle = Extract<
+  TimelineApprovalWorkRow,
+  { approvalKind: "permission-grant" }
+>["lifecycle"];
+
 export interface SystemRowArgs {
   detail?: string | null;
   id?: string;
+  managerAssignment?: TimelineManagerAssignment;
+  operationKind?: TimelineSystemOperationKind;
   seq?: number;
   sourceSeqEnd?: number;
   sourceSeqStart?: number;
@@ -140,6 +153,13 @@ export interface SystemRowArgs {
   systemKind?: TimelineSystemRow["systemKind"];
   title?: string;
   turnId?: string | null;
+}
+
+interface SystemRowBase extends TimelineRowBase {
+  detail: string | null;
+  kind: "system";
+  status: TimelineSystemRow["status"];
+  title: string;
 }
 
 export interface DelegationRowArgs {
@@ -224,6 +244,21 @@ function completedAtFromDuration(
 ): number | null {
   if (durationMs === null || durationMs === undefined) return null;
   return startedAt + durationMs;
+}
+
+function permissionGrantLifecycleFromStatus(
+  status: TimelineRowStatus,
+): PermissionGrantApprovalLifecycle {
+  switch (status) {
+    case "pending":
+      return "pending";
+    case "completed":
+      return "granted";
+    case "error":
+      return "expired";
+    case "interrupted":
+      return "interrupted";
+  }
 }
 
 function commandExitCode({
@@ -495,24 +530,58 @@ export function webFetchRow({
 }
 
 export function approvalRow({
+  approvalKind = "permission-grant",
   id = "approval-1",
   interactionId = "approval-interaction-1",
   itemId = "approval-item-1",
+  lifecycle,
   seq,
   sourceSeqEnd,
   sourceSeqStart,
+  grantScope = null,
   status = "pending",
-  title,
+  statusReason = null,
   toolName = null,
   turnId,
 }: ApprovalRowArgs): TimelineApprovalWorkRow {
+  if (approvalKind === "file-edit") {
+    return {
+      ...baseRow({ id, seq, sourceSeqEnd, sourceSeqStart, turnId }),
+      kind: "work",
+      workKind: "approval",
+      status,
+      interactionId,
+      approvalKind,
+      lifecycle:
+        lifecycle === "denied" || lifecycle === "waiting"
+          ? lifecycle
+          : status === "pending"
+            ? "waiting"
+            : "denied",
+      target: {
+        itemId,
+        toolName,
+      },
+    };
+  }
   return {
     ...baseRow({ id, seq, sourceSeqEnd, sourceSeqStart, turnId }),
     kind: "work",
     workKind: "approval",
     status,
     interactionId,
-    title,
+    approvalKind,
+    lifecycle:
+      lifecycle === "pending" ||
+      lifecycle === "resolving" ||
+      lifecycle === "granted" ||
+      lifecycle === "denied" ||
+      lifecycle === "interrupted" ||
+      lifecycle === "expired"
+        ? lifecycle
+        : permissionGrantLifecycleFromStatus(status),
+    grantScope,
+    statusReason,
     target: {
       itemId,
       toolName,
@@ -523,6 +592,8 @@ export function approvalRow({
 export function systemRow({
   detail = "Running setup\nProvisioned thread (2s)",
   id = DEFAULT_SYSTEM_ID,
+  managerAssignment,
+  operationKind,
   seq,
   sourceSeqEnd,
   sourceSeqStart,
@@ -531,13 +602,40 @@ export function systemRow({
   title = "Provisioned thread",
   turnId = null,
 }: SystemRowArgs = {}): TimelineSystemRow {
-  return {
+  const base: SystemRowBase = {
     ...baseRow({ id, seq, sourceSeqEnd, sourceSeqStart, turnId }),
     kind: "system",
-    systemKind,
     title,
     detail,
     status,
+  };
+  if (systemKind !== "operation") {
+    return {
+      ...base,
+      systemKind,
+    };
+  }
+  const resolvedOperationKind =
+    operationKind ?? (managerAssignment ? "manager-assignment" : "generic");
+  if (resolvedOperationKind === "manager-assignment") {
+    if (status === null) {
+      throw new Error("Manager assignment system row requires a status");
+    }
+    return {
+      ...base,
+      systemKind,
+      operationKind: resolvedOperationKind,
+      status,
+      managerAssignment: managerAssignment ?? {
+        action: "assign",
+        details: null,
+      },
+    };
+  }
+  return {
+    ...base,
+    systemKind,
+    operationKind: resolvedOperationKind,
   };
 }
 

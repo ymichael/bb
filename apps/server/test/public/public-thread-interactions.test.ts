@@ -1058,7 +1058,9 @@ describe("public thread interaction routes", () => {
             expect.objectContaining({
               kind: "work",
               workKind: "approval",
+              approvalKind: "file-edit",
               interactionId: "item-file-timeline",
+              lifecycle: "waiting",
               status: "pending",
             }),
           ]),
@@ -1135,8 +1137,11 @@ describe("public thread interaction routes", () => {
             expect.objectContaining({
               kind: "work",
               workKind: "approval",
-              title: "Waiting for approval to grant Bash",
+              approvalKind: "permission-grant",
+              lifecycle: "pending",
               status: "pending",
+              grantScope: null,
+              statusReason: null,
               target: {
                 itemId: "item-permission-timeline",
                 toolName: "Bash",

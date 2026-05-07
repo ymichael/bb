@@ -2,7 +2,6 @@ import type {
   ThreadEvent,
   SystemThreadProvisioningStatus,
   SystemThreadInterruptedReason,
-  PendingInteractionStatus,
 } from "@bb/domain";
 import { ownershipChangeOperationMetadataSchema } from "@bb/domain";
 import { assertNever } from "./assert-never.js";
@@ -13,7 +12,9 @@ import { buildProviderUnhandledDetail } from "./provider-unhandled-detail.js";
 import { readProvisioningTranscript } from "./provisioning-helpers.js";
 import type {
   BuildEventProjectionMessagesOptions,
+  EventProjectionPermissionGrantGrantScope,
   EventProjectionPermissionGrantLifecycleMessage,
+  EventProjectionPermissionGrantLifecycle,
   EventProjectionOperationMessage,
   EventProjectionOwnershipChangeThreadOperationMetadata,
   EventProjectionThreadOperationMetadata,
@@ -24,6 +25,11 @@ import type {
 type ParseOperationMessageOptions = Pick<
   BuildEventProjectionMessagesOptions,
   "includeOptionalOperations" | "includeProviderUnhandledOperations"
+>;
+
+type PermissionGrantLifecycleEvent = Extract<
+  ThreadEvent,
+  { type: "system/permissionGrant/lifecycle" }
 >;
 
 function providerDisplayName(providerId: string): string {
@@ -179,20 +185,85 @@ function provisioningOperationStatus(
   }
 }
 
+function permissionGrantLifecycle(
+  decoded: PermissionGrantLifecycleEvent,
+): EventProjectionPermissionGrantLifecycle {
+  switch (decoded.status) {
+    case "pending":
+      return "pending";
+    case "resolving":
+      return "resolving";
+    case "resolved":
+      return decoded.resolution?.decision === "deny" ? "denied" : "granted";
+    case "interrupted":
+      return "interrupted";
+    case "expired":
+      return "expired";
+    default:
+      return assertNever(decoded.status);
+  }
+}
+
 function permissionGrantLifecycleStatus(
-  status: PendingInteractionStatus,
+  lifecycle: EventProjectionPermissionGrantLifecycle,
 ): EventProjectionPermissionGrantLifecycleMessage["status"] {
-  switch (status) {
+  switch (lifecycle) {
     case "pending":
     case "resolving":
       return "pending";
-    case "resolved":
+    case "granted":
+    case "denied":
       return "completed";
     case "interrupted":
       return "interrupted";
     case "expired":
       return "error";
+    default:
+      return assertNever(lifecycle);
   }
+}
+
+function permissionGrantScope(
+  decoded: PermissionGrantLifecycleEvent,
+): EventProjectionPermissionGrantGrantScope | null {
+  const decision = decoded.resolution?.decision;
+  switch (decision) {
+    case "allow_once":
+      return "turn";
+    case "allow_for_session":
+      return "session";
+    case "deny":
+    case undefined:
+      return null;
+    default:
+      return assertNever(decision);
+  }
+}
+
+function buildPermissionGrantLifecycleMessage(
+  decoded: PermissionGrantLifecycleEvent,
+  meta: EventMeta,
+): EventProjectionPermissionGrantLifecycleMessage {
+  const lifecycle = permissionGrantLifecycle(decoded);
+  return {
+    kind: "permission-grant-lifecycle",
+    id: messageId(decoded.threadId, "approval", decoded.interactionId),
+    threadId: decoded.threadId,
+    sourceSeqStart: meta.seq,
+    sourceSeqEnd: meta.seq,
+    createdAt: meta.createdAt,
+    startedAt: meta.createdAt,
+    scope: decoded.scope,
+    interactionId: decoded.interactionId,
+    lifecycle,
+    status: permissionGrantLifecycleStatus(lifecycle),
+    approvalTarget: {
+      itemId: decoded.subject.itemId,
+      toolName: decoded.subject.toolName,
+    },
+    grantScope: permissionGrantScope(decoded),
+    statusReason: decoded.statusReason,
+  };
 }
 
 /** Build the common scaffolding shared by all operation messages. */
@@ -338,23 +409,7 @@ export function parseOperationMessage(
   }
 
   if (decoded.type === "system/permissionGrant/lifecycle") {
-    return {
-      kind: "permission-grant-lifecycle",
-      id: messageId(decoded.threadId, "approval", decoded.interactionId),
-      threadId: decoded.threadId,
-      sourceSeqStart: meta.seq,
-      sourceSeqEnd: meta.seq,
-      createdAt: meta.createdAt,
-      startedAt: meta.createdAt,
-      scope: decoded.scope,
-      interactionId: decoded.interactionId,
-      title: decoded.message,
-      status: permissionGrantLifecycleStatus(decoded.status),
-      approvalTarget: {
-        itemId: decoded.subject.itemId,
-        toolName: decoded.subject.toolName,
-      },
-    };
+    return buildPermissionGrantLifecycleMessage(decoded, meta);
   }
 
   if (decoded.type === "thread/compacted") {

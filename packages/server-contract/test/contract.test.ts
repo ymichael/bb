@@ -775,6 +775,54 @@ describe("server-contract clients", () => {
     ).toThrow();
   });
 
+  it("requires manager assignment timeline system rows to carry status", () => {
+    const baseRow = {
+      id: "row-1",
+      threadId: "thr_123",
+      turnId: null,
+      sourceSeqStart: 1,
+      sourceSeqEnd: 1,
+      startedAt: 1,
+      createdAt: 1,
+      kind: "system",
+      title: "Thread assigned to manager",
+      detail: null,
+    };
+    const managerAssignmentRow = {
+      ...baseRow,
+      systemKind: "operation",
+      operationKind: "manager-assignment",
+      status: "completed",
+      managerAssignment: {
+        action: "assign",
+        details: null,
+      },
+    };
+
+    expect(
+      contract.timelineManagerAssignmentSystemRowSchema.parse(
+        managerAssignmentRow,
+      ),
+    ).toMatchObject({
+      status: "completed",
+    });
+    expect(() =>
+      contract.timelineManagerAssignmentSystemRowSchema.parse({
+        ...managerAssignmentRow,
+        status: null,
+      }),
+    ).toThrow();
+    expect(
+      contract.timelineSystemRowSchema.parse({
+        ...baseRow,
+        systemKind: "debug",
+        status: null,
+      }),
+    ).toMatchObject({
+      status: null,
+    });
+  });
+
   it("keeps contract optional fields on an explicit allowlist", () => {
     const optionalFieldPaths = collectOptionalFieldPaths({
       apiErrorSchema: contract.apiErrorSchema,

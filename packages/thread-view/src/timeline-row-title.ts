@@ -4,6 +4,8 @@ import type {
   TimelineCommandWorkRow,
   TimelineFileChange,
   TimelineFileChangeWorkRow,
+  TimelineManagerAssignment,
+  TimelineManagerAssignmentSystemRow,
   TimelineRowStatus,
   TimelineToolWorkRow,
   TimelineWebFetchWorkRow,
@@ -34,6 +36,11 @@ import {
 } from "./timeline-view.js";
 
 export type TimelineTitleTone = "default" | "destructive" | "summary";
+export type TimelineStatusDecorationStatus =
+  | "denied"
+  | "error"
+  | "expired"
+  | "interrupted";
 
 /**
  * One slice of the title's text. Renderers walk the segment list and apply
@@ -66,7 +73,7 @@ export type TimelineTitleDecoration =
     }
   | {
       kind: "status";
-      status: "error" | "interrupted";
+      status: TimelineStatusDecorationStatus;
       durationMs: number | null;
     }
   | {
@@ -136,7 +143,16 @@ type TimelineApprovalWorkRow = Extract<
   TimelineViewWorkRow,
   { workKind: "approval" }
 >;
+type TimelineFileEditApprovalWorkRow = Extract<
+  TimelineApprovalWorkRow,
+  { approvalKind: "file-edit" }
+>;
+type TimelinePermissionGrantApprovalWorkRow = Extract<
+  TimelineApprovalWorkRow,
+  { approvalKind: "permission-grant" }
+>;
 type TimelineSystemViewRow = Extract<ThreadTimelineViewRow, { kind: "system" }>;
+type TimelineManagerAssignmentAction = TimelineManagerAssignment["action"];
 type TimelineConversationViewRow = Extract<
   ThreadTimelineViewRow,
   { kind: "conversation" }
@@ -203,7 +219,7 @@ function durationDecoration(
 }
 
 function statusDecoration(
-  status: "error" | "interrupted",
+  status: TimelineStatusDecorationStatus,
   durationMs: number | null,
 ): TimelineTitleDecoration {
   return { kind: "status", status, durationMs: visibleDurationMs(durationMs) };
@@ -687,16 +703,139 @@ function mapDelegationTitle(
   });
 }
 
+function mapFileEditApprovalTitle(
+  row: TimelineFileEditApprovalWorkRow,
+): TimelineTitle {
+  switch (row.lifecycle) {
+    case "waiting":
+      return makeTitle({
+        segments: [
+          segment("Waiting for approval to edit", { shimmer: true }),
+          segment("files", { em: true, truncate: true }),
+        ],
+      });
+    case "denied":
+      return makeTitle({
+        segments: [
+          segment("Permission denied:"),
+          segment("file changes", { em: true, truncate: true }),
+        ],
+      });
+    default:
+      return assertNever(row.lifecycle);
+  }
+}
+
+function mapPermissionGrantApprovalTitle(
+  row: TimelinePermissionGrantApprovalWorkRow,
+): TimelineTitle {
+  const toolName = row.target.toolName;
+  const reason =
+    row.statusReason !== null && row.statusReason.trim().length > 0
+      ? row.statusReason.trim()
+      : null;
+  const reasonSegment =
+    reason !== null ? segment(`(${reason})`, { truncate: true }) : null;
+  switch (row.lifecycle) {
+    case "pending": {
+      const segments =
+        toolName !== null
+          ? [
+              segment("Waiting for permission", { shimmer: true }),
+              segment("to use"),
+              segment(toolName, { em: true, truncate: true }),
+            ]
+          : [segment("Waiting for permissions", { shimmer: true })];
+      return makeTitle({
+        segments,
+      });
+    }
+    case "resolving": {
+      const segments =
+        toolName !== null
+          ? [
+              segment("Delivering permission", { shimmer: true }),
+              segment("to use"),
+              segment(toolName, { em: true, truncate: true }),
+            ]
+          : [segment("Delivering permissions", { shimmer: true })];
+      return makeTitle({
+        segments,
+      });
+    }
+    case "granted": {
+      const scopeText =
+        row.grantScope === "turn"
+          ? "for this turn"
+          : row.grantScope === "session"
+            ? "for this session"
+            : null;
+      const prefix =
+        scopeText !== null
+          ? `Permission granted ${scopeText}:`
+          : "Permission granted:";
+      const segments =
+        toolName !== null
+          ? [segment(prefix), segment(toolName, { em: true, truncate: true })]
+          : [
+              segment(
+                scopeText !== null
+                  ? `Permission granted ${scopeText}`
+                  : "Permission granted",
+              ),
+            ];
+      return makeTitle({
+        segments,
+      });
+    }
+    case "denied":
+      return makeTitle({
+        segments:
+          toolName !== null
+            ? [
+                segment("Permission denied:"),
+                segment(toolName, { em: true, truncate: true }),
+              ]
+            : [segment("Permission denied")],
+      });
+    case "interrupted":
+      return makeTitle({
+        segments: filterNull([
+          toolName !== null
+            ? segment("Permission grant interrupted:")
+            : segment("Permission grant interrupted"),
+          toolName !== null
+            ? segment(toolName, { em: true, truncate: true })
+            : null,
+          reasonSegment,
+        ]),
+      });
+    case "expired":
+      return makeTitle({
+        segments: filterNull([
+          toolName !== null
+            ? segment("Permission grant expired:")
+            : segment("Permission grant expired"),
+          toolName !== null
+            ? segment(toolName, { em: true, truncate: true })
+            : null,
+          reasonSegment,
+        ]),
+      });
+    default:
+      return assertNever(row.lifecycle);
+  }
+}
+
 function mapApprovalTitle(row: TimelineApprovalWorkRow): TimelineTitle {
-  return makeTitle({
-    segments: [
-      segment(row.title, {
-        em: false,
-        truncate: true,
-        shimmer: row.status === "pending",
-      }),
-    ],
-  });
+  switch (row.approvalKind) {
+    case "file-edit":
+      return mapFileEditApprovalTitle(row);
+    case "permission-grant":
+      return mapPermissionGrantApprovalTitle(row);
+    default:
+      return assertNever(row);
+  }
 }
 
 function mapWorkTitle(
@@ -798,8 +937,108 @@ function mapTurnTitle(row: TimelineViewTurnRow): TimelineTitle {
   });
 }
 
+function managerAssignmentDefaultDetails(
+  action: TimelineManagerAssignmentAction,
+): string {
+  switch (action) {
+    case "assign":
+      return "to manager";
+    case "release":
+      return "from manager";
+    case "transfer":
+      return "to new manager";
+    default:
+      return assertNever(action);
+  }
+}
+
+function managerAssignmentCompletedVerb(
+  action: TimelineManagerAssignmentAction,
+): string {
+  switch (action) {
+    case "assign":
+      return "Thread assigned";
+    case "release":
+      return "Thread released";
+    case "transfer":
+      return "Thread transferred";
+    default:
+      return assertNever(action);
+  }
+}
+
+function managerAssignmentPendingVerb(
+  action: TimelineManagerAssignmentAction,
+): string {
+  switch (action) {
+    case "assign":
+      return "Assigning thread";
+    case "release":
+      return "Releasing thread";
+    case "transfer":
+      return "Transferring thread";
+    default:
+      return assertNever(action);
+  }
+}
+
+function managerAssignmentNoun(
+  action: TimelineManagerAssignmentAction,
+): string {
+  switch (action) {
+    case "assign":
+      return "assignment";
+    case "release":
+      return "release";
+    case "transfer":
+      return "transfer";
+    default:
+      return assertNever(action);
+  }
+}
+
+function mapManagerAssignmentSystemTitle(
+  row: TimelineManagerAssignmentSystemRow,
+): TimelineTitle {
+  const assignment = row.managerAssignment;
+  const details =
+    assignment.details !== null
+      ? assignment.details
+      : managerAssignmentDefaultDetails(assignment.action);
+  const verb = (() => {
+    switch (row.status) {
+      case "completed":
+        return managerAssignmentCompletedVerb(assignment.action);
+      case "pending":
+        return managerAssignmentPendingVerb(assignment.action);
+      case "error":
+        return `Thread ${managerAssignmentNoun(assignment.action)} failed`;
+      case "interrupted":
+        return `Thread ${managerAssignmentNoun(assignment.action)} interrupted`;
+      default:
+        return assertNever(row.status);
+    }
+  })();
+  const segments: TimelineTitleSegment[] = [
+    segment(verb, { shimmer: row.status === "pending" }),
+  ];
+  if (details.trim().length > 0) {
+    segments.push(segment(details, { em: true, truncate: true }));
+  }
+  return makeTitle({
+    segments,
+    tone: row.status === "error" ? "destructive" : "default",
+  });
+}
+
 function mapSystemTitle(row: TimelineSystemViewRow): TimelineTitle {
   const hasErrorTone = row.systemKind === "error" || row.status === "error";
+  if (
+    row.systemKind === "operation" &&
+    row.operationKind === "manager-assignment"
+  ) {
+    return mapManagerAssignmentSystemTitle(row);
+  }
   return makeTitle({
     segments: [
       segment(row.title, {

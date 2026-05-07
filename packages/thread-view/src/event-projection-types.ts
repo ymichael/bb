@@ -27,6 +27,8 @@ export type {
   EventProjectionOperationMessage,
   EventProjectionOperationType,
   EventProjectionOwnershipChangeThreadOperationMetadata,
+  EventProjectionPermissionGrantLifecycle,
+  EventProjectionPermissionGrantGrantScope,
   EventProjectionPermissionGrantLifecycleMessage,
   EventProjectionProvisioningMetadata,
   EventProjectionProvisioningTranscriptEntry,

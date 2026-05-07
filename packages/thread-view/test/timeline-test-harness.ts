@@ -12,6 +12,7 @@ import type {
   ResolvedThreadExecutionOptions,
   SystemThreadProvisioningStatus,
   JsonValue,
+  PendingInteractionResolution,
   ThreadEventRow,
   ThreadEventRowOfType,
   ThreadEventUserContent,
@@ -230,10 +231,11 @@ interface SystemThreadInterruptedArgs extends EventFactoryRowOptions {
 interface PermissionGrantLifecycleArgs extends DefaultTurnEventOptions {
   interactionId?: string;
   itemId?: string;
-  message?: string;
   providerId?: string;
   providerRequestId?: string;
+  resolution?: PendingInteractionResolution | null;
   status?: "pending" | "resolving" | "resolved" | "interrupted" | "expired";
+  statusReason?: string | null;
   toolName?: string;
 }
 
@@ -745,9 +747,8 @@ export function createTimelineEventFactory(
           providerId: args.providerId ?? "codex",
           providerRequestId: args.providerRequestId ?? "request-123",
           status: args.status ?? "pending",
-          message:
-            args.message ??
-            `Waiting for approval to grant ${args.toolName ?? "Bash"}`,
+          resolution: args.resolution ?? null,
+          statusReason: args.statusReason ?? null,
           subject: {
             kind: "permission_grant",
             itemId: args.itemId ?? "item_123",

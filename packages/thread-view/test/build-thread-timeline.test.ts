@@ -2,12 +2,15 @@ import { threadScope, turnScope } from "@bb/domain";
 import type {
   JsonObject,
   OwnershipChangeOperationAction,
+  PendingInteractionResolution,
   ThreadEventFileChange,
   ThreadEventItemStatus,
 } from "@bb/domain";
 import type {
+  TimelineApprovalWorkRow,
   ThreadContextWindowUsage,
   TimelineFileChangeWorkRow,
+  TimelineManagerAssignment,
   TimelineRow,
   TimelineSystemRow,
   TimelineToolWorkRow,
@@ -57,8 +60,20 @@ interface SystemOperationEventArgs {
   status?: "running" | "completed" | "failed";
 }
 
+interface PermissionGrantLifecycleEventArgs {
+  interactionId?: string;
+  resolution?: PendingInteractionResolution | null;
+  seq: number;
+  status?: "pending" | "resolving" | "resolved" | "interrupted" | "expired";
+  statusReason?: string | null;
+  toolName?: string | null;
+}
+
+type BuildTimelineRowsThreadStatus = "active" | "idle";
+
 interface OwnershipOperationCase {
   action: OwnershipChangeOperationAction;
+  managerAssignmentAction: TimelineManagerAssignment["action"];
   message: string;
   nextParentThreadId: string | null;
   previousParentThreadId: string | null;
@@ -67,18 +82,21 @@ interface OwnershipOperationCase {
 const ownershipOperationCases: OwnershipOperationCase[] = [
   {
     action: "assign",
+    managerAssignmentAction: "assign",
     message: "Thread assigned to manager",
     nextParentThreadId: "thr-manager",
     previousParentThreadId: null,
   },
   {
     action: "release",
+    managerAssignmentAction: "release",
     message: "Thread released from manager",
     nextParentThreadId: null,
     previousParentThreadId: "thr-manager",
   },
   {
     action: "transfer",
+    managerAssignmentAction: "transfer",
     message: "Thread transferred to new manager",
     nextParentThreadId: "thr-manager-next",
     previousParentThreadId: "thr-manager-previous",
@@ -215,6 +233,43 @@ function systemOperationEvent({
   };
 }
 
+function permissionGrantLifecycleEvent({
+  interactionId = "pi-permission-grant",
+  resolution = null,
+  seq,
+  status = "pending",
+  statusReason = null,
+  toolName = "Bash",
+}: PermissionGrantLifecycleEventArgs): ThreadEventWithMeta {
+  return {
+    event: {
+      type: "system/permissionGrant/lifecycle",
+      threadId: "thread-1",
+      scope: turnScope("turn-1"),
+      interactionId,
+      providerId: "codex",
+      providerRequestId: "request-permission-grant",
+      status,
+      resolution,
+      statusReason,
+      subject: {
+        kind: "permission_grant",
+        itemId: "item-permission-grant",
+        toolName,
+        permissions: {
+          network: { enabled: true },
+          fileSystem: null,
+        },
+      },
+    },
+    meta: {
+      id: `event-${seq}`,
+      seq,
+      createdAt: seq,
+    },
+  };
+}
+
 function buildContextWindowUsage(
   contextWindowEvents: ThreadEventWithMeta[],
 ): ThreadContextWindowUsage | null {
@@ -234,7 +289,10 @@ function buildContextWindowUsage(
   }).contextWindowUsage;
 }
 
-function buildTimelineRows(events: ThreadEventWithMeta[]): TimelineRow[] {
+function buildTimelineRows(
+  events: ThreadEventWithMeta[],
+  threadStatus: BuildTimelineRowsThreadStatus = "idle",
+): TimelineRow[] {
   return buildThreadTimelineFromEvents({
     contextWindowEvents: [],
     events,
@@ -244,7 +302,7 @@ function buildTimelineRows(events: ThreadEventWithMeta[]): TimelineRow[] {
       includeOptionalOperations: false,
       includeProviderUnhandledOperations: false,
       systemClientRequestVisibility: "hidden",
-      threadStatus: "idle",
+      threadStatus,
       turnMessageDetail: "full",
       viewMode: "standard",
     },
@@ -295,6 +353,26 @@ function collectToolRows(rows: readonly TimelineRow[]): TimelineToolWorkRow[] {
     }
   }
   return toolRows;
+}
+
+function collectApprovalRows(
+  rows: readonly TimelineRow[],
+): TimelineApprovalWorkRow[] {
+  const approvalRows: TimelineApprovalWorkRow[] = [];
+  for (const row of rows) {
+    if (row.kind === "work" && row.workKind === "approval") {
+      approvalRows.push(row);
+      continue;
+    }
+    if (row.kind === "turn" && row.children) {
+      approvalRows.push(...collectApprovalRows(row.children));
+      continue;
+    }
+    if (row.kind === "work" && row.workKind === "delegation") {
+      approvalRows.push(...collectApprovalRows(row.childRows));
+    }
+  }
+  return approvalRows;
 }
 
 function collectSystemRows(rows: readonly TimelineRow[]): TimelineSystemRow[] {
@@ -365,7 +443,13 @@ describe("buildThreadTimelineFromEvents", () => {
 
   it.each(ownershipOperationCases)(
     "does not duplicate $action ownership operation titles as row detail",
-    ({ action, message, nextParentThreadId, previousParentThreadId }) => {
+    ({
+      action,
+      managerAssignmentAction,
+      message,
+      nextParentThreadId,
+      previousParentThreadId,
+    }) => {
       const rows = buildTimelineRows([
         systemOperationEvent({
           message,
@@ -381,6 +465,11 @@ describe("buildThreadTimelineFromEvents", () => {
       expect(collectSystemRows(rows)).toEqual([
         expect.objectContaining({
           detail: null,
+          managerAssignment: {
+            action: managerAssignmentAction,
+            details: null,
+          },
+          operationKind: "manager-assignment",
           systemKind: "operation",
           title: message,
         }),
@@ -404,11 +493,155 @@ describe("buildThreadTimelineFromEvents", () => {
     expect(collectSystemRows(rows)).toEqual([
       expect.objectContaining({
         detail: "Thread ownership updated by migration",
+        operationKind: "generic",
         systemKind: "operation",
         title: "Ownership change completed",
       }),
     ]);
+    expect(collectSystemRows(rows)[0]).not.toHaveProperty("managerAssignment");
   });
+
+  it.each([
+    {
+      expectedRowStatus: "pending",
+      operationStatus: "running",
+      threadStatus: "active",
+    },
+    {
+      expectedRowStatus: "error",
+      operationStatus: "failed",
+      threadStatus: "idle",
+    },
+  ] satisfies Array<{
+    expectedRowStatus: "error" | "pending";
+    operationStatus: "failed" | "running";
+    threadStatus: BuildTimelineRowsThreadStatus;
+  }>)(
+    "keeps manager assignment typing for $operationStatus operation status",
+    ({ expectedRowStatus, operationStatus, threadStatus }) => {
+      const rows = buildTimelineRows(
+        [
+          systemOperationEvent({
+            message: `Ownership change ${operationStatus}`,
+            metadata: {
+              action: "assign",
+              nextParentThreadId: "thr-manager",
+              previousParentThreadId: null,
+            },
+            seq: 1,
+            status: operationStatus,
+          }),
+        ],
+        threadStatus,
+      );
+
+      expect(collectSystemRows(rows)).toEqual([
+        expect.objectContaining({
+          managerAssignment: {
+            action: "assign",
+            details: null,
+          },
+          operationKind: "manager-assignment",
+          status: expectedRowStatus,
+          systemKind: "operation",
+        }),
+      ]);
+    },
+  );
+
+  it.each([
+    {
+      expectedGrantScope: "turn",
+      resolution: {
+        decision: "allow_once",
+        grantedPermissions: {
+          network: { enabled: true },
+          fileSystem: null,
+        },
+      },
+    },
+    {
+      expectedGrantScope: "session",
+      resolution: {
+        decision: "allow_for_session",
+        grantedPermissions: {
+          network: { enabled: true },
+          fileSystem: null,
+        },
+      },
+    },
+  ] satisfies Array<{
+    expectedGrantScope: "turn" | "session";
+    resolution: PendingInteractionResolution;
+  }>)(
+    "preserves permission grant $expectedGrantScope scope on timeline rows",
+    ({ expectedGrantScope, resolution }) => {
+      const rows = buildTimelineRows([
+        turnStartedEvent({ seq: 0 }),
+        permissionGrantLifecycleEvent({
+          resolution,
+          seq: 1,
+          status: "resolved",
+        }),
+      ]);
+
+      expect(collectApprovalRows(rows)).toEqual([
+        expect.objectContaining({
+          approvalKind: "permission-grant",
+          grantScope: expectedGrantScope,
+          lifecycle: "granted",
+          statusReason: null,
+          target: {
+            itemId: "item-permission-grant",
+            toolName: "Bash",
+          },
+        }),
+      ]);
+      expect(collectApprovalRows(rows)[0]).not.toHaveProperty("toolName");
+    },
+  );
+
+  it.each([
+    {
+      expectedLifecycle: "interrupted",
+      expectedStatus: "interrupted",
+      status: "interrupted",
+      statusReason: "Thread stopped by user request",
+    },
+    {
+      expectedLifecycle: "expired",
+      expectedStatus: "error",
+      status: "expired",
+      statusReason: "Pending interaction expired",
+    },
+  ] satisfies Array<{
+    expectedLifecycle: "interrupted" | "expired";
+    expectedStatus: "error" | "interrupted";
+    status: "interrupted" | "expired";
+    statusReason: string;
+  }>)(
+    "preserves permission grant $status status reason on timeline rows",
+    ({ expectedLifecycle, expectedStatus, status, statusReason }) => {
+      const rows = buildTimelineRows([
+        turnStartedEvent({ seq: 0 }),
+        permissionGrantLifecycleEvent({
+          seq: 1,
+          status,
+          statusReason,
+        }),
+      ]);
+
+      expect(collectApprovalRows(rows)).toEqual([
+        expect.objectContaining({
+          approvalKind: "permission-grant",
+          grantScope: null,
+          lifecycle: expectedLifecycle,
+          status: expectedStatus,
+          statusReason,
+        }),
+      ]);
+    },
+  );
 
   it("suppresses low-value ToolSearch rows", () => {
     const rows = buildTimelineRows([

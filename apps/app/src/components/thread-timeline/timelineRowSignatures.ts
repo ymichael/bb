@@ -159,7 +159,10 @@ function timelineWorkRowRenderSignature(row: TimelineViewWorkRow): string {
       return joinSignatureParts([
         ...baseParts,
         row.interactionId,
-        row.title,
+        row.approvalKind,
+        row.lifecycle,
+        row.approvalKind === "permission-grant" ? row.grantScope : null,
+        row.approvalKind === "permission-grant" ? row.statusReason : null,
         row.target.itemId,
         row.target.toolName,
       ]);
@@ -190,6 +193,22 @@ function computeTimelineRowRenderSignature(row: ThreadTimelineViewRow): string {
         row.attachments?.webImages,
       ]);
     case "system":
+      if (row.systemKind === "operation") {
+        return joinSignatureParts([
+          baseSignature,
+          row.status,
+          row.systemKind,
+          row.operationKind,
+          row.operationKind === "manager-assignment"
+            ? row.managerAssignment.action
+            : null,
+          row.operationKind === "manager-assignment"
+            ? row.managerAssignment.details
+            : null,
+          row.title,
+          row.detail,
+        ]);
+      }
       return joinSignatureParts([
         baseSignature,
         row.status,
