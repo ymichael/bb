@@ -2,7 +2,7 @@
 
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { PromptOptionPicker } from "./PromptOptionPicker";
+import { OptionPicker } from "./OptionPicker";
 
 function createMatchMediaResult(query: string): MediaQueryList {
   return {
@@ -28,11 +28,11 @@ afterEach(() => {
   cleanup();
 });
 
-describe("PromptOptionPicker", () => {
+describe("OptionPicker", () => {
   it("renders option descriptions in the existing prompt control menu", () => {
     const onChange = vi.fn();
     render(
-      <PromptOptionPicker
+      <OptionPicker
         label="Permissions"
         value="full"
         onChange={onChange}

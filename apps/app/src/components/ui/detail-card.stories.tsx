@@ -5,9 +5,9 @@ import { DetailCard, DetailRow } from "./detail-card";
 import { Input } from "./input";
 import { LocalhostBadge } from "./localhost-badge";
 import { HostStatusBadge } from "../HostStatusIndicator";
-import { HostPicker } from "../promptbox/HostPicker";
-import { PromptOptionPicker } from "../promptbox/PromptOptionPicker";
-import { MergeBaseBranchPicker } from "../thread/MergeBaseBranchPicker";
+import { BranchPicker } from "../pickers/BranchPicker";
+import { HostPicker } from "../pickers/HostPicker";
+import { OptionPicker } from "../pickers/OptionPicker";
 import {
   WorkspaceChangesList,
   type WorkspaceChangedFile,
@@ -107,7 +107,7 @@ export function Overview() {
             </button>
           </DetailRow>
           <DetailRow label="Merge base" valueClassName="min-w-0 truncate">
-            <MergeBaseBranchPicker
+            <BranchPicker
               value="origin/main"
               options={mockMergeBaseOptions}
               variant="minimal"
@@ -144,7 +144,7 @@ export function Overview() {
             />
           </DetailRow>
           <DetailRow label="Model" valueClassName="min-w-0">
-            <PromptOptionPicker
+            <OptionPicker
               label="Model"
               value="claude-sonnet-4-6"
               options={mockModelOptions}

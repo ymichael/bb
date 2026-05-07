@@ -33,11 +33,11 @@ import { formatModelLabel } from "@/hooks/useThreadCreationOptions";
 import { getMutationErrorMessage } from "@/lib/mutation-errors";
 import { getProviderIconInfo } from "@/lib/provider-icon";
 import {
-  PromptOptionPicker,
-  type PromptOption,
-} from "@/components/promptbox/PromptOptionPicker";
-import { PromptProviderModelPicker } from "@/components/promptbox/PromptProviderModelPicker";
-import { HostPicker } from "@/components/promptbox/HostPicker";
+  OptionPicker,
+  type PickerOption,
+} from "@/components/pickers/OptionPicker";
+import { ProviderModelPicker } from "@/components/pickers/ProviderModelPicker";
+import { HostPicker } from "@/components/pickers/HostPicker";
 
 const REASONING_LABELS: Record<ReasoningLevel, string> = {
   low: "Low",
@@ -111,7 +111,7 @@ export function HireManagerModal({
   );
 
   const reasoningOptions =
-    useMemo((): readonly PromptOption<ReasoningLevel>[] => {
+    useMemo((): readonly PickerOption<ReasoningLevel>[] => {
       if (!selectedModelData?.supportedReasoningEfforts?.length) return [];
       return selectedModelData.supportedReasoningEfforts.map((effort) => ({
         value: effort.reasoningEffort,
@@ -121,7 +121,7 @@ export function HireManagerModal({
     }, [selectedModelData]);
 
   const providerOptions = useMemo(
-    (): readonly PromptOption<string>[] =>
+    (): readonly PickerOption<string>[] =>
       providers.map((p) => ({
         value: p.id,
         label: p.displayName,
@@ -131,7 +131,7 @@ export function HireManagerModal({
   );
 
   const modelOptions = useMemo(
-    (): readonly PromptOption<string>[] =>
+    (): readonly PickerOption<string>[] =>
       models.map((model) => ({
         value: model.model,
         label: formatModelLabel(
@@ -329,7 +329,7 @@ export function HireManagerModal({
                 {hasSelectedProvider ? (
                   modelOptions.length > 0 ? (
                     <>
-                      <PromptProviderModelPicker
+                      <ProviderModelPicker
                         providerOptions={providerOptions}
                         selectedProviderId={selectedProviderValue}
                         onSelectedProviderChange={handleProviderChange}
@@ -344,7 +344,7 @@ export function HireManagerModal({
                         className="text-foreground"
                       />
                       {reasoningOptions.length > 0 ? (
-                        <PromptOptionPicker
+                        <OptionPicker
                           label="Reasoning"
                           value={
                             effectiveReasoningLevel ??

@@ -19,7 +19,7 @@ import {
   type WorkspaceChangedFile,
 } from "@/components/thread/WorkspaceChangesList";
 import { ArchiveTimestampAction } from "@/components/thread/ArchiveTimestampAction";
-import { MergeBaseBranchPicker } from "@/components/thread/MergeBaseBranchPicker";
+import { BranchPicker } from "@/components/pickers/BranchPicker";
 import { useIsSecondaryPanelOpen } from "@/lib/thread-secondary-panel";
 import type { ThreadGitStatusDisplay } from "@/lib/workspace-status";
 import { ThreadSecondaryPanel } from "./ThreadSecondaryPanel";
@@ -301,7 +301,7 @@ function ThreadMetadataContent({
       {!isManagerThread && showMergeBase ? (
         <DetailRow label="Merge base" valueClassName="min-w-0 truncate">
           {canSelectMergeBase && mergeBaseBranch ? (
-            <MergeBaseBranchPicker
+            <BranchPicker
               value={mergeBaseBranch}
               options={mergeBaseCandidates}
               variant="minimal"

@@ -13,22 +13,22 @@ import { cn } from "@/lib/utils";
 import { useAvailableModels } from "@/hooks/queries/system-queries";
 import { useIsMobile } from "@/components/ui";
 import {
-  PROMPT_OPTION_BASE_CLASS_NAME,
-  PROMPT_OPTION_INTERACTIVE_CLASS_NAME,
-  PROMPT_OPTION_CONTENT_CLASS_NAME,
-  type PromptOption,
-} from "./PromptOptionPicker";
+  OPTION_BASE_CLASS_NAME,
+  OPTION_INTERACTIVE_CLASS_NAME,
+  OPTION_CONTENT_CLASS_NAME,
+  type PickerOption,
+} from "./OptionPicker";
 
-interface PromptProviderModelPickerProps {
+interface ProviderModelPickerProps {
   // Provider state
-  providerOptions: readonly PromptOption<string>[];
+  providerOptions: readonly PickerOption<string>[];
   selectedProviderId: string;
   onSelectedProviderChange: (value: string) => void;
   hasMultipleProviders: boolean;
   providerReadOnly?: boolean;
   // Model state
   modelValue: string;
-  modelOptions: readonly PromptOption<string>[];
+  modelOptions: readonly PickerOption<string>[];
   onModelChange: (value: string) => void;
   formatModelLabel?: (displayName: string, providerId: string) => string;
   // Fast mode / service tier
@@ -39,7 +39,7 @@ interface PromptProviderModelPickerProps {
   className?: string;
 }
 
-export function PromptProviderModelPicker({
+export function ProviderModelPicker({
   providerOptions,
   selectedProviderId,
   onSelectedProviderChange,
@@ -54,7 +54,7 @@ export function PromptProviderModelPicker({
   showFastModeToggle,
   serviceTierSupportByProvider,
   className,
-}: PromptProviderModelPickerProps) {
+}: ProviderModelPickerProps) {
   const isMobile = useIsMobile();
   const [open, setOpen] = useState(false);
   // While the popover is open, the user can browse other providers without
@@ -91,7 +91,7 @@ export function PromptProviderModelPicker({
     providerId: isPreviewing ? previewProviderId : undefined,
   });
 
-  const previewModelOptions = useMemo((): readonly PromptOption<string>[] => {
+  const previewModelOptions = useMemo((): readonly PickerOption<string>[] => {
     if (!isPreviewing) return modelOptions;
     const models = previewModelsQuery.data;
     if (!models || models.length === 0) return [];
@@ -142,12 +142,12 @@ export function PromptProviderModelPicker({
           aria-label="Provider and model"
           title={`${selectedProvider?.label ?? selectedProviderId}: ${selectedModelLabel}${fastModeEnabled ? " (Fast mode)" : ""}`}
           className={cn(
-            PROMPT_OPTION_BASE_CLASS_NAME,
-            PROMPT_OPTION_INTERACTIVE_CLASS_NAME,
+            OPTION_BASE_CLASS_NAME,
+            OPTION_INTERACTIVE_CLASS_NAME,
             className,
           )}
         >
-          <span className={PROMPT_OPTION_CONTENT_CLASS_NAME}>
+          <span className={OPTION_CONTENT_CLASS_NAME}>
             {TriggerIcon ? <TriggerIcon className="size-3.5 shrink-0" /> : null}
             {fastModeEnabled ? (
               <Zap className="size-3.5 shrink-0 fill-current text-muted-foreground/75" />

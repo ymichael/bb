@@ -16,8 +16,8 @@ import {
 } from "@/components/ui";
 import {
   getMergeBaseBranchCandidates,
-  MergeBaseBranchPicker,
-} from "@/components/thread/MergeBaseBranchPicker";
+  BranchPicker,
+} from "@/components/pickers/BranchPicker";
 
 export type ThreadGitActionDialogTarget =
   | { kind: "commit" }
@@ -230,7 +230,7 @@ function ThreadGitActionDialogContent({
             {canShowMergeBase && selectedMergeBaseBranch ? (
               <DetailRow label="Merge base" valueClassName="min-w-0">
                 {canSelectMergeBase ? (
-                  <MergeBaseBranchPicker
+                  <BranchPicker
                     value={selectedMergeBaseBranch}
                     options={mergeBaseCandidates}
                     loading={mergeBaseBranchOptionsLoading}

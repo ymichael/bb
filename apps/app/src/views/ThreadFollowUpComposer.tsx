@@ -24,9 +24,9 @@ import {
   type PromptBoxMentionsConfig,
 } from "@/components/promptbox/PromptBox";
 import {
-  PromptOptionDisplay,
-  type PromptOption,
-} from "@/components/promptbox/PromptOptionPicker";
+  OptionDisplay,
+  type PickerOption,
+} from "@/components/pickers/OptionPicker";
 import {
   PromptExecutionControls,
   PromptPermissionModePicker,
@@ -37,8 +37,8 @@ import { ThreadTimelineScrollToBottomButton } from "./ThreadTimelineScrollToBott
 import { WorkspaceChangesList } from "@/components/thread/WorkspaceChangesList";
 import {
   getMergeBaseBranchCandidates,
-  MergeBaseBranchPicker,
-} from "@/components/thread/MergeBaseBranchPicker";
+  BranchPicker,
+} from "@/components/pickers/BranchPicker";
 import { ThreadContextWindowIndicator } from "@/components/thread-timeline";
 import { cn } from "@/lib/utils";
 import {
@@ -196,7 +196,7 @@ export interface ComposerBannerProps {
   mergeBaseBranchOptionsLoading?: boolean;
   onPromptBannerFileClick: (file: { path: string }) => void;
   onPromptBannerMergeBaseBranchChange?: (branch: string) => void;
-  onPromptBannerMergeBaseBranchPickerOpenChange?: (open: boolean) => void;
+  onPromptBannerBranchPickerOpenChange?: (open: boolean) => void;
   onPromptGitStatsBannerClick: () => void;
   onToggleChangeListExpanded: () => void;
   promptBannerFiles?: WorkspaceFileStatus[];
@@ -234,17 +234,17 @@ export interface ComposerEnvironmentProps {
 export interface ComposerExecutionProps {
   activeModel?: { model: string } | null;
   hasMultipleProviders?: boolean;
-  modelOptions: readonly PromptOption<string>[];
+  modelOptions: readonly PickerOption<string>[];
   onPermissionModeChange: (value: PermissionMode) => void;
   onReasoningLevelChange: (value: ReasoningLevel) => void;
   onSelectedModelChange: (value: string) => void;
   onServiceTierChange: (value: ServiceTier | undefined) => void;
   permissionMode?: PermissionMode;
-  permissionModeOptions: readonly PromptOption<PermissionMode>[];
+  permissionModeOptions: readonly PickerOption<PermissionMode>[];
   providerDisplayName?: string;
-  providerOptions?: readonly PromptOption<string>[];
+  providerOptions?: readonly PickerOption<string>[];
   reasoningLevel: ReasoningLevel;
-  reasoningOptions: readonly PromptOption<ReasoningLevel>[];
+  reasoningOptions: readonly PickerOption<ReasoningLevel>[];
   selectedModel: string;
   selectedProviderId?: string;
   serviceTier?: ServiceTier;
@@ -350,7 +350,7 @@ export function ThreadFollowUpComposer({
                     }}
                   >
                     <span className="shrink-0">Merge base:</span>
-                    <MergeBaseBranchPicker
+                    <BranchPicker
                       value={banner.promptBannerMergeBaseBranch}
                       options={promptBannerMergeBaseCandidates}
                       variant="minimal"
@@ -359,7 +359,7 @@ export function ThreadFollowUpComposer({
                         banner.onPromptBannerMergeBaseBranchChange?.(branch);
                       }}
                       onOpenChange={
-                        banner.onPromptBannerMergeBaseBranchPickerOpenChange
+                        banner.onPromptBannerBranchPickerOpenChange
                       }
                       className="max-w-[10rem] text-muted-foreground/90"
                     />
@@ -487,7 +487,7 @@ export function ThreadFollowUpComposer({
             environment.environmentHostConnected !== undefined ? (
               <div className="flex min-w-0 items-center gap-2 pr-1.5">
                 {environment.environmentLabel ? (
-                  <PromptOptionDisplay
+                  <OptionDisplay
                     label="Environment"
                     value={
                       <span className="flex min-w-0 items-center gap-1.5">

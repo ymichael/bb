@@ -40,7 +40,7 @@ const REASONING_LABELS: Record<ReasoningLevel, string> = {
   xhigh: "Extra High",
 };
 
-const PERMISSION_MODE_OPTIONS: PromptOption<PermissionMode>[] = [
+const PERMISSION_MODE_OPTIONS: PickerOption<PermissionMode>[] = [
   {
     value: "full",
     label: "Full Access",
@@ -56,7 +56,7 @@ const PERMISSION_MODE_OPTIONS: PromptOption<PermissionMode>[] = [
   },
 ];
 
-interface PromptOption<T extends string> {
+interface PickerOption<T extends string> {
   value: T;
   label: string;
   description?: string;
@@ -381,7 +381,7 @@ export function useThreadCreationOptions(
   );
 
   const providerOptions = useMemo(
-    (): PromptOption<string>[] =>
+    (): PickerOption<string>[] =>
       providers.map((p) => ({
         value: p.id,
         label: p.displayName,
@@ -433,7 +433,7 @@ export function useThreadCreationOptions(
   }, [availableModels, rawSelectedModel]);
 
   const modelOptions = useMemo(
-    (): PromptOption<string>[] =>
+    (): PickerOption<string>[] =>
       availableModels.map((model) => ({
         value: model.model,
         label: formatModelLabel(
@@ -452,12 +452,12 @@ export function useThreadCreationOptions(
     [availableModels, selectedModel],
   );
 
-  const reasoningOptions = useMemo((): PromptOption<ReasoningLevel>[] => {
+  const reasoningOptions = useMemo((): PickerOption<ReasoningLevel>[] => {
     if (!activeModel) {
       return [];
     }
 
-    const options: PromptOption<ReasoningLevel>[] = [];
+    const options: PickerOption<ReasoningLevel>[] = [];
     const seen = new Set<ReasoningLevel>();
     const efforts = activeModel.supportedReasoningEfforts;
 

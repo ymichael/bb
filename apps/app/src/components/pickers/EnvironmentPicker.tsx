@@ -34,10 +34,10 @@ import {
 } from "@/components/HostStatusIndicator";
 import { cn } from "@/lib/utils";
 import {
-  PROMPT_OPTION_BASE_CLASS_NAME,
-  PROMPT_OPTION_CONTENT_CLASS_NAME,
-  PROMPT_OPTION_INTERACTIVE_CLASS_NAME,
-} from "./PromptOptionPicker";
+  OPTION_BASE_CLASS_NAME,
+  OPTION_CONTENT_CLASS_NAME,
+  OPTION_INTERACTIVE_CLASS_NAME,
+} from "./OptionPicker";
 
 // ---------------------------------------------------------------------------
 // Value encoding
@@ -192,11 +192,11 @@ export function EnvironmentPicker({
           aria-label="Environment"
           title={`Environment: ${selected.modeLabel}${selected.hostLabel ? ` · ${selected.hostLabel}` : ""}`}
           className={cn(
-            PROMPT_OPTION_BASE_CLASS_NAME,
-            PROMPT_OPTION_INTERACTIVE_CLASS_NAME,
+            OPTION_BASE_CLASS_NAME,
+            OPTION_INTERACTIVE_CLASS_NAME,
           )}
         >
-          <span className={PROMPT_OPTION_CONTENT_CLASS_NAME}>
+          <span className={OPTION_CONTENT_CLASS_NAME}>
             <selected.icon
               className={COARSE_POINTER_COMPACT_ICON_SIZE_SHRINK_CLASS}
             />

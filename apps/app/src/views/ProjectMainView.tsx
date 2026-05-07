@@ -8,8 +8,8 @@ import {
 import {
   EnvironmentPicker,
   parseEnvironmentValue,
-} from "@/components/promptbox/EnvironmentPicker";
-import { PromptOptionPicker } from "@/components/promptbox/PromptOptionPicker";
+} from "@/components/pickers/EnvironmentPicker";
+import { OptionPicker } from "@/components/pickers/OptionPicker";
 import { PageShell } from "@/components/ui";
 import { useUploadPromptAttachment } from "@/hooks/mutations/project-mutations";
 import { useCreateThread } from "@/hooks/mutations/thread-runtime-mutations";
@@ -267,7 +267,7 @@ export function ProjectMainView() {
         <div className="flex items-center px-3.5">
           {projectId ? (
             <div className="flex items-center gap-3">
-              <PromptOptionPicker
+              <OptionPicker
                 label="Project"
                 value={projectId}
                 options={projectOptions}

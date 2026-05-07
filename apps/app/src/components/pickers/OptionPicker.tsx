@@ -11,17 +11,17 @@ import {
 } from "@/components/ui";
 import { cn } from "@/lib/utils";
 
-export const PROMPT_OPTION_BASE_CLASS_NAME =
+export const OPTION_BASE_CLASS_NAME =
   "h-8 w-fit max-w-full min-w-0 items-center gap-1 px-1 text-xs leading-tight text-muted-foreground/75";
-export const PROMPT_OPTION_INTERACTIVE_CLASS_NAME =
+export const OPTION_INTERACTIVE_CLASS_NAME =
   "border-none bg-transparent shadow-none hover:bg-transparent hover:text-foreground";
-export const PROMPT_OPTION_CONTENT_CLASS_NAME =
+export const OPTION_CONTENT_CLASS_NAME =
   "flex min-w-0 items-center gap-1.5";
-const PROMPT_OPTION_WARNING_TEXT_CLASS_NAME = "text-warning";
-const PROMPT_OPTION_WARNING_INTERACTIVE_CLASS_NAME = "hover:text-warning/80";
-const PROMPT_OPTION_WARNING_ICON_CLASS_NAME = "text-warning/90";
+const OPTION_WARNING_TEXT_CLASS_NAME = "text-warning";
+const OPTION_WARNING_INTERACTIVE_CLASS_NAME = "hover:text-warning/80";
+const OPTION_WARNING_ICON_CLASS_NAME = "text-warning/90";
 
-export interface PromptOption<T extends string> {
+export interface PickerOption<T extends string> {
   value: T;
   label: string;
   description?: string;
@@ -29,7 +29,7 @@ export interface PromptOption<T extends string> {
   icon?: ComponentType<{ className?: string }>;
 }
 
-interface PromptOptionDisplayProps {
+interface OptionDisplayProps {
   label: string;
   value: ReactNode;
   tone?: "default" | "warning";
@@ -38,23 +38,23 @@ interface PromptOptionDisplayProps {
   title?: string;
 }
 
-interface PromptOptionPickerProps<T extends string> {
+interface OptionPickerProps<T extends string> {
   label: string;
   value: T;
-  options: readonly PromptOption<T>[];
+  options: readonly PickerOption<T>[];
   onChange: (value: T) => void;
   className?: string;
   contentClassName?: string;
 }
 
-export function PromptOptionDisplay({
+export function OptionDisplay({
   label,
   value,
   tone = "default",
   icon: Icon,
   className,
   title,
-}: PromptOptionDisplayProps) {
+}: OptionDisplayProps) {
   const defaultTitle =
     typeof value === "string" ? `${label}: ${value}` : undefined;
 
@@ -63,12 +63,12 @@ export function PromptOptionDisplay({
       title={title ?? defaultTitle}
       className={cn(
         "inline-flex",
-        PROMPT_OPTION_BASE_CLASS_NAME,
-        tone === "warning" && PROMPT_OPTION_WARNING_TEXT_CLASS_NAME,
+        OPTION_BASE_CLASS_NAME,
+        tone === "warning" && OPTION_WARNING_TEXT_CLASS_NAME,
         className,
       )}
     >
-      <span className={PROMPT_OPTION_CONTENT_CLASS_NAME}>
+      <span className={OPTION_CONTENT_CLASS_NAME}>
         {Icon ? <Icon className="size-4 shrink-0" /> : null}
         <span className="sr-only">{label}: </span>
         <span className="truncate">{value}</span>
@@ -77,14 +77,14 @@ export function PromptOptionDisplay({
   );
 }
 
-export function PromptOptionPicker<T extends string>({
+export function OptionPicker<T extends string>({
   label,
   value,
   options,
   onChange,
   className,
   contentClassName,
-}: PromptOptionPickerProps<T>) {
+}: OptionPickerProps<T>) {
   const selectedOption = options.find((option) => option.value === value);
   const selectedIsWarning = selectedOption?.tone === "warning";
   const SelectedIcon = selectedOption?.icon;
@@ -103,14 +103,14 @@ export function PromptOptionPicker<T extends string>({
           aria-label={label}
           title={selectedTitle}
           className={cn(
-            PROMPT_OPTION_BASE_CLASS_NAME,
-            PROMPT_OPTION_INTERACTIVE_CLASS_NAME,
-            selectedIsWarning && PROMPT_OPTION_WARNING_TEXT_CLASS_NAME,
-            selectedIsWarning && PROMPT_OPTION_WARNING_INTERACTIVE_CLASS_NAME,
+            OPTION_BASE_CLASS_NAME,
+            OPTION_INTERACTIVE_CLASS_NAME,
+            selectedIsWarning && OPTION_WARNING_TEXT_CLASS_NAME,
+            selectedIsWarning && OPTION_WARNING_INTERACTIVE_CLASS_NAME,
             className,
           )}
         >
-          <span className={PROMPT_OPTION_CONTENT_CLASS_NAME}>
+          <span className={OPTION_CONTENT_CLASS_NAME}>
             {SelectedIcon ? (
               <SelectedIcon className="size-3.5 shrink-0" />
             ) : null}
@@ -120,7 +120,7 @@ export function PromptOptionPicker<T extends string>({
             className={cn(
               "size-3.5",
               selectedIsWarning
-                ? PROMPT_OPTION_WARNING_ICON_CLASS_NAME
+                ? OPTION_WARNING_ICON_CLASS_NAME
                 : "text-muted-foreground",
             )}
           />

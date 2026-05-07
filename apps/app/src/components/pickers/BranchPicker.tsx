@@ -20,7 +20,7 @@ export function getMergeBaseBranchCandidates({
   return [mergeBaseBranch, ...fromProps];
 }
 
-export function MergeBaseBranchPicker({
+export function BranchPicker({
   value,
   options,
   loading = false,

@@ -1,14 +1,14 @@
 import type { PermissionMode, ReasoningLevel, ServiceTier } from "@bb/domain";
 import { formatModelLabel } from "@/hooks/useThreadCreationOptions";
-import { PromptProviderModelPicker } from "./PromptProviderModelPicker";
+import { ProviderModelPicker } from "@/components/pickers/ProviderModelPicker";
 import {
-  PromptOptionPicker,
-  PromptOptionDisplay,
-  type PromptOption,
-} from "./PromptOptionPicker";
+  OptionPicker,
+  OptionDisplay,
+  type PickerOption,
+} from "@/components/pickers/OptionPicker";
 
 export interface PromptExecutionProviderConfig {
-  options?: readonly PromptOption<string>[];
+  options?: readonly PickerOption<string>[];
   selectedId?: string;
   onChange?: (value: string) => void;
   hasMultiple?: boolean;
@@ -19,7 +19,7 @@ export interface PromptExecutionProviderConfig {
 export interface PromptExecutionModelConfig {
   active?: { model: string } | null;
   selected: string;
-  options: readonly PromptOption<string>[];
+  options: readonly PickerOption<string>[];
   onChange: (value: string) => void;
 }
 
@@ -32,13 +32,13 @@ export interface PromptExecutionServiceTierConfig {
 
 export interface PromptExecutionReasoningConfig {
   value: ReasoningLevel;
-  options: readonly PromptOption<ReasoningLevel>[];
+  options: readonly PickerOption<ReasoningLevel>[];
   onChange: (value: ReasoningLevel) => void;
 }
 
 export interface PromptExecutionPermissionConfig {
   value?: PermissionMode;
-  options: readonly PromptOption<PermissionMode>[];
+  options: readonly PickerOption<PermissionMode>[];
   onChange: (value: PermissionMode) => void;
   supported: boolean;
 }
@@ -66,7 +66,7 @@ export function PromptPermissionModePicker({
   }
   const resolved = value ?? options[0]?.value ?? "full";
   return (
-    <PromptOptionPicker
+    <OptionPicker
       label="Permission mode"
       value={resolved}
       options={options}
@@ -99,7 +99,7 @@ export function PromptExecutionControls({
   return (
     <>
       {showReadOnlyProvider ? (
-        <PromptOptionDisplay
+        <OptionDisplay
           label="Provider"
           value={provider.displayName}
           icon={
@@ -110,7 +110,7 @@ export function PromptExecutionControls({
         />
       ) : null}
       {showModelPicker ? (
-        <PromptProviderModelPicker
+        <ProviderModelPicker
           providerOptions={provider.options ?? []}
           selectedProviderId={provider.selectedId ?? ""}
           onSelectedProviderChange={handleProviderChange}
@@ -129,7 +129,7 @@ export function PromptExecutionControls({
         />
       ) : null}
       {reasoning.options.length > 0 ? (
-        <PromptOptionPicker
+        <OptionPicker
           label="Reasoning level"
           value={reasoning.value}
           options={reasoning.options}

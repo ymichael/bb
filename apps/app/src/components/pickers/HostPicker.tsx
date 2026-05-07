@@ -12,10 +12,10 @@ import {
 import { HostStatusBadge } from "@/components/HostStatusIndicator";
 import { cn } from "@/lib/utils";
 import {
-  PROMPT_OPTION_BASE_CLASS_NAME,
-  PROMPT_OPTION_CONTENT_CLASS_NAME,
-  PROMPT_OPTION_INTERACTIVE_CLASS_NAME,
-} from "./PromptOptionPicker";
+  OPTION_BASE_CLASS_NAME,
+  OPTION_CONTENT_CLASS_NAME,
+  OPTION_INTERACTIVE_CLASS_NAME,
+} from "./OptionPicker";
 
 interface HostPickerProps {
   hosts: Host[];
@@ -47,12 +47,12 @@ export function HostPicker({
           aria-label="Host"
           title={`Host: ${label}`}
           className={cn(
-            PROMPT_OPTION_BASE_CLASS_NAME,
-            PROMPT_OPTION_INTERACTIVE_CLASS_NAME,
+            OPTION_BASE_CLASS_NAME,
+            OPTION_INTERACTIVE_CLASS_NAME,
             "text-foreground",
           )}
         >
-          <span className={PROMPT_OPTION_CONTENT_CLASS_NAME}>
+          <span className={OPTION_CONTENT_CLASS_NAME}>
             <Monitor className="size-3.5 shrink-0" />
             <span className="truncate">{label}</span>
             {isLocal ? <LocalhostBadge /> : null}
