@@ -1,7 +1,8 @@
 import { Pill, type PillVariant } from "./pill";
+import { StoryCard, StoryRow } from "../../../.ladle/story-card";
 
 export default {
-  title: "Primitives/Pill",
+  title: "ui/Pill",
 };
 
 const variants: readonly PillVariant[] = [
@@ -12,26 +13,29 @@ const variants: readonly PillVariant[] = [
   "emphasis",
 ];
 
-export function Variants() {
+export function Overview() {
   return (
-    <div className="flex max-w-2xl flex-wrap gap-3 p-6">
-      {variants.map((variant) => (
-        <Pill key={variant} variant={variant}>
-          {variant}
-        </Pill>
-      ))}
-    </div>
-  );
-}
-
-export function ContentWidths() {
-  return (
-    <div className="flex max-w-xl flex-wrap items-center gap-3 p-6">
-      <Pill variant="secondary">A</Pill>
-      <Pill variant="outline">manager-thread</Pill>
-      <Pill variant="emphasis" className="max-w-40 truncate">
-        very-long-status-label-that-truncates
-      </Pill>
-    </div>
+    <>
+      <StoryCard>
+        {variants.map((variant) => (
+          <StoryRow key={variant} label={variant}>
+            <Pill variant={variant}>{variant}</Pill>
+          </StoryRow>
+        ))}
+      </StoryCard>
+      <StoryCard>
+        <StoryRow label="single character">
+          <Pill variant="secondary">A</Pill>
+        </StoryRow>
+        <StoryRow label="standard">
+          <Pill variant="outline">manager-thread</Pill>
+        </StoryRow>
+        <StoryRow label="truncated" hint="max-w-40">
+          <Pill variant="emphasis" className="max-w-40">
+            very-long-status-label-that-truncates
+          </Pill>
+        </StoryRow>
+      </StoryCard>
+    </>
   );
 }

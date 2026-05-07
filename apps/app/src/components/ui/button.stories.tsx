@@ -1,8 +1,9 @@
-import { Archive, Check, Plus, Trash2 } from "lucide-react";
+import { ArrowRight, Check, Plus } from "lucide-react";
 import { Button, type ButtonProps } from "./button";
+import { StoryCard, StoryRow } from "../../../.ladle/story-card";
 
 export default {
-  title: "Primitives/Button",
+  title: "ui/Button",
 };
 
 type ButtonVariant = NonNullable<ButtonProps["variant"]>;
@@ -19,35 +20,49 @@ const variants: readonly ButtonVariant[] = [
 
 const sizes: readonly ButtonSize[] = ["sm", "default", "lg", "icon"];
 
-export function Variants() {
+export function Overview() {
   return (
-    <div className="flex max-w-3xl flex-col gap-6 p-6">
-      <div className="flex flex-wrap items-center gap-3">
+    <>
+      <StoryCard columns={sizes}>
         {variants.map((variant) => (
-          <Button key={variant} variant={variant}>
-            {variant === "destructive" ? <Trash2 /> : <Check />}
-            {variant}
-          </Button>
+          <StoryRow key={variant} label={variant}>
+            {sizes.map((size) => (
+              <Button
+                key={size}
+                variant={variant}
+                size={size}
+                aria-label={size === "icon" ? "Add" : undefined}
+              >
+                {size === "icon" ? <Plus /> : size}
+              </Button>
+            ))}
+          </StoryRow>
         ))}
-      </div>
-      <div className="flex flex-wrap items-center gap-3">
-        {sizes.map((size) => (
-          <Button
-            key={size}
-            size={size}
-            aria-label={size === "icon" ? "Add item" : undefined}
-          >
-            {size === "icon" ? <Plus /> : <Archive />}
-            {size === "icon" ? null : size}
+      </StoryCard>
+      <StoryCard>
+        <StoryRow label="with icons">
+          <Button>
+            <Check />
+            Save
           </Button>
-        ))}
-      </div>
-      <div className="flex flex-wrap items-center gap-3">
-        <Button disabled>Disabled</Button>
-        <Button variant="outline" disabled>
-          Disabled outline
-        </Button>
-      </div>
-    </div>
+          <Button>
+            Open
+            <ArrowRight />
+          </Button>
+          <Button>
+            <Check />
+            Save
+            <ArrowRight />
+          </Button>
+        </StoryRow>
+        <StoryRow label="disabled">
+          {variants.map((variant) => (
+            <Button key={variant} variant={variant} disabled>
+              {variant}
+            </Button>
+          ))}
+        </StoryRow>
+      </StoryCard>
+    </>
   );
 }

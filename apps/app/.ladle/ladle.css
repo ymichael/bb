@@ -1,3 +1,14 @@
 @import "../src/app.css";
 @source "../src";
 @source ".";
+
+.ladle-main {
+  padding: 0;
+}
+
+:root,
+.dark {
+  --ladle-bg-color-primary: var(--background);
+  --ladle-bg-color-secondary: var(--sidebar);
+  --ladle-color-primary: var(--foreground);
+}

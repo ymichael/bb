@@ -31,7 +31,7 @@ export function Pill({ variant, className, children }: PillProps) {
         className,
       )}
     >
-      {children}
+      <span className="min-w-0 truncate">{children}</span>
     </span>
   );
 }
