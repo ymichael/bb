@@ -6,7 +6,7 @@ import type {
 import { resolveEnvironmentWorkspaceDisplayKind } from "@bb/domain";
 
 export interface EnvironmentDisplayInfo {
-  /** Human-readable mode: "Direct" or "Worktree", or the sandbox provider name for cloud. */
+  /** Human-readable mode: "Working locally", "Working remotely", or "Worktree" — or the sandbox provider name for cloud. */
   modeLabel: string;
   /** Host display name, if available. Null for cloud environments or when the host has no name. */
   hostLabel: string | null;
@@ -51,7 +51,12 @@ export function formatEnvironmentDisplay({
     hostType: hostType ?? null,
   });
 
-  const modeLabel = mode === "worktree" ? "Worktree" : "Direct";
+  const modeLabel =
+    mode === "worktree"
+      ? "Worktree"
+      : isLocalHost
+        ? "Working locally"
+        : "Working remotely";
 
   if (hostType === "ephemeral") {
     const providerName = hostProvider

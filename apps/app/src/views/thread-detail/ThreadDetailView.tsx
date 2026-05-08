@@ -46,6 +46,11 @@ import { useGitDiffPanel } from "./git-diff/useGitDiffPanel";
 import { useThreadDetailTurnSummaryRows } from "./turn-summary/useThreadDetailTurnSummaryRows";
 import { ThreadDetailHeader } from "./ThreadDetailHeader";
 import { ThreadDetailPromptArea } from "./ThreadDetailPromptArea";
+import {
+  isThreadDisplayStatusBannerActive,
+  type ThreadPromptManagedBySection,
+  type ThreadPromptManagerChildrenSection,
+} from "@/components/promptbox/banner/ThreadPromptContextBanner";
 import { ThreadDetailSecondaryContent } from "./ThreadDetailSecondaryContent";
 import type { HostConnectionNotice } from "./ThreadTimelinePane";
 import { useThreadStorageViewer } from "./useThreadStorageViewer";
@@ -166,6 +171,7 @@ export function ThreadDetailView() {
     hasOlderTimelineRows,
     isLoadingOlderTimelineRows,
     loadOlderTimelineRows,
+    pendingTodos,
     timelineError,
     timelineLoading,
     timelineRows,
@@ -239,6 +245,60 @@ export function ThreadDetailView() {
     enabled: localWorkspaceRootPath !== null,
   });
   const { data: environmentHost } = useEffectiveHost(environment?.hostId);
+  const managedChildrenQuery = useThreads(
+    {
+      archived: false,
+      projectId,
+      parentThreadId: thread?.id,
+    },
+    {
+      enabled: isManagerThread && Boolean(thread?.id),
+    },
+  );
+  const managedBySection: ThreadPromptManagedBySection | null = useMemo(() => {
+    if (!thread?.parentThreadId) return null;
+    const href = `/projects/${projectId}/threads/${thread.parentThreadId}`;
+    if (parentThread === undefined) {
+      // Parent record not yet loaded — show id-based fallback so the user
+      // doesn't get a flicker of "no manager" before resolution.
+      return {
+        managerName: `Manager ${thread.parentThreadId.slice(0, 8)}`,
+        href,
+      };
+    }
+    // Plan ownership invariants: silently exclude dirty references rather
+    // than rendering a stale or unreachable manager link.
+    if (
+      parentThread.type !== "manager" ||
+      parentThread.archivedAt !== null ||
+      parentThread.deletedAt !== null ||
+      parentThread.projectId !== thread.projectId
+    ) {
+      return null;
+    }
+    return {
+      managerName: getThreadDisplayTitle(parentThread),
+      href,
+    };
+  }, [parentThread, projectId, thread?.parentThreadId, thread?.projectId]);
+  const managerChildrenSection: ThreadPromptManagerChildrenSection | null =
+    useMemo(() => {
+      if (!isManagerThread) return null;
+      const list = managedChildrenQuery.data ?? [];
+      // Server already filters archived: false; the banner predicate only
+      // gates on runtime display status.
+      const activeItems = list
+        .filter((entry) =>
+          isThreadDisplayStatusBannerActive(entry.runtime.displayStatus),
+        )
+        .map((entry) => ({
+          id: entry.id,
+          title: getThreadDisplayTitle(entry),
+          href: `/projects/${projectId}/threads/${entry.id}`,
+        }));
+      if (activeItems.length === 0) return null;
+      return { items: activeItems };
+    }, [isManagerThread, managedChildrenQuery.data, projectId]);
   const isThreadTimelinePending = timelineLoading && timelineRows.length === 0;
   const {
     erroredTurnSummaryIds,
@@ -551,10 +611,17 @@ export function ThreadDetailView() {
       contextWindowUsage={contextWindowUsage}
       environmentBranchName={threadBranchName}
       environmentHostConnected={
-        environmentHost ? environmentHost.status === "connected" : undefined
+        environmentHost && !threadEnvironmentIsLocal
+          ? environmentHost.status === "connected"
+          : undefined
       }
       environmentIcon={threadEnvironmentIcon ?? undefined}
-      environmentLabel={threadEnvironmentValue}
+      environmentLabel={threadEnvironmentDisplay?.modeLabel}
+      environmentHostLabel={
+        threadEnvironmentDisplay?.location === "remote"
+          ? (threadEnvironmentDisplay.hostLabel ?? undefined)
+          : undefined
+      }
       isEnvironmentActionPending={requestEnvironmentAction.isPending}
       openDiffFile={openDiffFile}
       openThreadDiffPanel={openThreadDiffPanel}
@@ -574,6 +641,9 @@ export function ThreadDetailView() {
       }
       sendMessage={sendMessage}
       pendingInteractions={pendingInteractions}
+      pendingTodos={pendingTodos}
+      managedBySection={managedBySection}
+      managerChildrenSection={managerChildrenSection}
       thread={thread}
     />
   );

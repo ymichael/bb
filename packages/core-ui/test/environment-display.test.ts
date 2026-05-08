@@ -26,13 +26,13 @@ function makeEnvironment(overrides?: Partial<Environment>): Environment {
 
 describe("formatEnvironmentDisplay", () => {
   describe("local host", () => {
-    it("returns 'Direct' for unmanaged workspace", () => {
+    it("returns 'Working locally' for unmanaged workspace", () => {
       const result = formatEnvironmentDisplay({
         environment: makeEnvironment(),
         isLocalHost: true,
       });
       expect(result).toEqual({
-        modeLabel: "Direct",
+        modeLabel: "Working locally",
         hostLabel: null,
         id: "env_test",
         location: "local",
@@ -65,7 +65,7 @@ describe("formatEnvironmentDisplay", () => {
         isLocalHost: true,
         hostName: "My Machine",
       });
-      expect(result.modeLabel).toBe("Direct");
+      expect(result.modeLabel).toBe("Working locally");
       expect(result.hostLabel).toBe("My Machine");
     });
   });
@@ -78,7 +78,7 @@ describe("formatEnvironmentDisplay", () => {
         hostName: "Remote Server",
       });
       expect(result).toEqual({
-        modeLabel: "Direct",
+        modeLabel: "Working remotely",
         hostLabel: "Remote Server",
         id: "env_test",
         location: "remote",
@@ -108,7 +108,7 @@ describe("formatEnvironmentDisplay", () => {
         environment: makeEnvironment(),
         isLocalHost: false,
       });
-      expect(result.modeLabel).toBe("Direct");
+      expect(result.modeLabel).toBe("Working remotely");
       expect(result.hostLabel).toBeNull();
       expect(result.location).toBe("remote");
     });

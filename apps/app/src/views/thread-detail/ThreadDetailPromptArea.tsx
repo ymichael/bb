@@ -3,10 +3,8 @@ import {
   useMemo,
   useState,
   type ComponentType,
-  type ReactNode,
 } from "react";
 import { assertNever } from "@bb/core-ui";
-import { useActiveSecondaryPanel } from "@/lib/thread-secondary-panel";
 import type {
   PendingInteraction,
   PermissionMode,
@@ -14,14 +12,18 @@ import type {
   ReasoningLevel,
   ServiceTier,
   ThreadRuntimeDisplayStatus,
+  ThreadTimelinePendingTodos,
   ThreadWithRuntime,
 } from "@bb/domain";
 import type { ThreadTimelineResponse } from "@bb/server-contract";
 import { ThreadPendingInteractionBanner } from "@/components/thread/pending-interactions/ThreadPendingInteractionBanner";
 import {
-  ContextBanner,
+  ThreadPromptContextBanner,
   type ContextBannerMergeBaseConfig,
-} from "@/components/promptbox/banner/ContextBanner";
+  type ThreadPromptContextBannerExpandedSection,
+  type ThreadPromptManagedBySection,
+  type ThreadPromptManagerChildrenSection,
+} from "@/components/promptbox/banner/ThreadPromptContextBanner";
 import type { WorkspaceChangedFilesSection } from "@/components/workspace/workspace-change-summary";
 import { QueuedMessagesList } from "@/components/promptbox/banner/QueuedMessagesList";
 import { ThreadEnvironmentSummary } from "@/components/promptbox/ThreadEnvironmentSummary";
@@ -70,8 +72,9 @@ interface ThreadDetailPromptAreaProps {
   contextWindowUsage?: ThreadTimelineResponse["contextWindowUsage"];
   environmentBranchName?: string;
   environmentHostConnected?: boolean;
+  environmentHostLabel?: string;
   environmentIcon?: ComponentType<{ className?: string }>;
-  environmentLabel?: ReactNode;
+  environmentLabel?: string;
   isEnvironmentActionPending: boolean;
   pendingInteractions: readonly PendingInteraction[];
   openDiffFile: (path: string) => void;
@@ -89,6 +92,12 @@ interface ThreadDetailPromptAreaProps {
    * picker (e.g. thread is on default branch — no merge base to compare).
    */
   contextBannerMergeBase: ContextBannerMergeBaseConfig | null;
+  /** Latest TODO snapshot from the timeline projection. Null on older pages or when no candidate observed. */
+  pendingTodos: ThreadTimelinePendingTodos | null;
+  /** Manager reference for managed threads. Null for unmanaged or manager threads. */
+  managedBySection: ThreadPromptManagedBySection | null;
+  /** Active managed children for manager threads. Null otherwise. */
+  managerChildrenSection: ThreadPromptManagerChildrenSection | null;
   sendMessage: SendMessageMutationLike;
   thread: ThreadWithRuntime;
 }
@@ -134,6 +143,7 @@ export function ThreadDetailPromptArea({
   contextWindowUsage,
   environmentBranchName,
   environmentHostConnected,
+  environmentHostLabel,
   environmentIcon,
   environmentLabel,
   isEnvironmentActionPending,
@@ -143,10 +153,12 @@ export function ThreadDetailPromptArea({
   projectId,
   workspaceChangedFilesSection,
   contextBannerMergeBase,
+  pendingTodos,
+  managedBySection,
+  managerChildrenSection,
   sendMessage,
   thread,
 }: ThreadDetailPromptAreaProps) {
-  const isDiffPanelActive = useActiveSecondaryPanel() === "git-diff";
   const { data: defaultExecutionOptions } = useThreadDefaultExecutionOptions(
     thread.id,
   );
@@ -167,7 +179,10 @@ export function ThreadDetailPromptArea({
     environmentId: thread.environmentId ?? null,
   });
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
-  const [isChangeListExpanded, setIsChangeListExpanded] = useState(false);
+  const [
+    expandedBannerSection,
+    setExpandedBannerSection,
+  ] = useState<ThreadPromptContextBannerExpandedSection | null>(null);
   const [processingQueuedMessageId, setProcessingQueuedMessageId] = useState<
     string | null
   >(null);
@@ -464,6 +479,8 @@ export function ThreadDetailPromptArea({
     [openDiffFile],
   );
 
+
+
   if (activePendingInteraction) {
     return (
       <ThreadPendingInteractionBanner
@@ -485,23 +502,32 @@ export function ThreadDetailPromptArea({
       }}
       stack={
         <>
-          {workspaceChangedFilesSection ? (
-            <ContextBanner
-              section={workspaceChangedFilesSection}
-              isChangeListExpanded={isChangeListExpanded}
-              isDiffPanelActive={canUseGitUi && isDiffPanelActive}
-              mergeBase={contextBannerMergeBase}
-              onPromptBannerFileClick={
-                canUseGitUi ? handlePromptBannerFileClick : () => {}
-              }
-              onPromptGitStatsBannerClick={
-                canUseGitUi ? openThreadDiffPanel : () => {}
-              }
-              onToggleChangeListExpanded={() => {
-                setIsChangeListExpanded((previousValue) => !previousValue);
-              }}
-            />
-          ) : null}
+          <ThreadPromptContextBanner
+            todoSection={
+              thread.type === "manager" || !pendingTodos
+                ? null
+                : { pendingTodos }
+            }
+            managedBySection={managedBySection}
+            managerChildrenSection={managerChildrenSection}
+            gitSection={
+              workspaceChangedFilesSection
+                ? {
+                    changedFiles: workspaceChangedFilesSection,
+                    mergeBase: contextBannerMergeBase,
+                    onPromptBannerFileClick: canUseGitUi
+                      ? handlePromptBannerFileClick
+                      : () => {},
+                  }
+                : null
+            }
+            expandedSection={expandedBannerSection}
+            onToggleSection={(section) => {
+              setExpandedBannerSection((previous) =>
+                previous === section ? null : section,
+              );
+            }}
+          />
           <QueuedMessagesList
             queuedMessages={queuedMessages}
             sendDisabled={
@@ -540,6 +566,7 @@ export function ThreadDetailPromptArea({
         environmentLabel || environmentHostConnected !== undefined ? (
           <ThreadEnvironmentSummary
             environmentLabel={environmentLabel}
+            environmentHostLabel={environmentHostLabel}
             environmentHostConnected={environmentHostConnected}
             environmentIcon={environmentIcon}
             environmentBranchName={environmentBranchName}

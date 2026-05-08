@@ -5,16 +5,17 @@ import type {
   WorkspaceStatus,
 } from "@bb/domain";
 import type { ThreadContextWindowUsage } from "@bb/server-contract";
-import { Monitor } from "lucide-react";
 import {
   FollowUpPromptBox,
   type FollowUpSubmitMode,
 } from "@/components/promptbox/FollowUpPromptBox";
+import { PersistentHostIcon } from "@/lib/host-display";
+import { getEnvironmentWorkspaceLabelIcon } from "@/lib/environment-workspace-display";
 import type {
   AttachmentsConfig,
   MentionsConfig,
 } from "@/components/promptbox/PromptBoxInternal";
-import { ContextBanner } from "@/components/promptbox/banner/ContextBanner";
+import { ThreadPromptContextBanner } from "@/components/promptbox/banner/ThreadPromptContextBanner";
 import { QueuedMessagesList } from "@/components/promptbox/banner/QueuedMessagesList";
 import { ThreadEnvironmentSummary } from "@/components/promptbox/ThreadEnvironmentSummary";
 import type { ExecutionControlsProps } from "@/components/promptbox/ExecutionControls";
@@ -92,11 +93,38 @@ const basePermission = {
 // Environment summary slot — pre-built element passed straight through.
 // ---------------------------------------------------------------------------
 
+// Mirrors production: ThreadDetailView feeds these props from
+// formatEnvironmentDisplay, so the labels here track the same shape.
 const localEnvironmentSummary: ReactNode = (
   <ThreadEnvironmentSummary
-    environmentLabel="Direct"
+    environmentLabel="Working locally"
+    environmentIcon={PersistentHostIcon}
+    environmentBranchName="bb/promptbox-stories"
+  />
+);
+
+const remoteEnvironmentSummary: ReactNode = (
+  <ThreadEnvironmentSummary
+    environmentLabel="Working remotely"
+    environmentHostLabel="ec2-builder"
     environmentHostConnected
-    environmentIcon={Monitor}
+    environmentIcon={PersistentHostIcon}
+    environmentBranchName="bb/promptbox-stories"
+  />
+);
+
+const worktreeEnvironmentSummary: ReactNode = (
+  <ThreadEnvironmentSummary
+    environmentLabel="Worktree"
+    environmentIcon={getEnvironmentWorkspaceLabelIcon("managed-worktree")}
+    environmentBranchName="bb/promptbox-stories"
+  />
+);
+
+const sandboxEnvironmentSummary: ReactNode = (
+  <ThreadEnvironmentSummary
+    environmentLabel="E2B Sandbox"
+    environmentIcon={getEnvironmentWorkspaceLabelIcon("sandbox")}
     environmentBranchName="bb/promptbox-stories"
   />
 );
@@ -133,8 +161,8 @@ const historyEntries = [
 ];
 
 // ---------------------------------------------------------------------------
-// Stack slot fixtures — both ContextBanner and QueuedMessagesList stack above
-// the prompt input. The caller composes them as a single ReactNode.
+// Stack slot fixtures — ThreadPromptContextBanner + QueuedMessagesList stack
+// above the prompt input. The caller composes them as a single ReactNode.
 // ---------------------------------------------------------------------------
 
 const dirtyWorkspaceStatus: WorkspaceStatus = {
@@ -170,18 +198,21 @@ const dirtyContextBannerSection = selectWorkspaceChangedFilesSection(
 );
 
 const contextBannerElement: ReactNode = dirtyContextBannerSection ? (
-  <ContextBanner
-    section={dirtyContextBannerSection}
-    isChangeListExpanded={false}
-    isDiffPanelActive={false}
-    mergeBase={{
-      branch: "main",
-      options: ["main", "develop", "release/2026-05"],
-      onChange: noop,
+  <ThreadPromptContextBanner
+    todoSection={null}
+    gitSection={{
+      changedFiles: dirtyContextBannerSection,
+      mergeBase: {
+        branch: "main",
+        options: ["main", "develop", "release/2026-05"],
+        onChange: noop,
+      },
+      onPromptBannerFileClick: noop,
     }}
-    onPromptBannerFileClick={noop}
-    onPromptGitStatsBannerClick={noop}
-    onToggleChangeListExpanded={noop}
+    managedBySection={null}
+    managerChildrenSection={null}
+    expandedSection={null}
+    onToggleSection={noop}
   />
 ) : null;
 
@@ -381,6 +412,27 @@ export function Overview() {
             </>
           }
           contextWindowUsage={usage}
+        />
+      </StoryRow>
+      <StoryRow
+        label="env: remote host"
+        hint="Working remotely · host-name with connection dot"
+      >
+        <Row
+          submitMode={{ kind: "ready" }}
+          environmentSummary={remoteEnvironmentSummary}
+        />
+      </StoryRow>
+      <StoryRow label="env: worktree" hint="managed worktree label + icon">
+        <Row
+          submitMode={{ kind: "ready" }}
+          environmentSummary={worktreeEnvironmentSummary}
+        />
+      </StoryRow>
+      <StoryRow label="env: sandbox" hint="ephemeral host label + container icon">
+        <Row
+          submitMode={{ kind: "ready" }}
+          environmentSummary={sandboxEnvironmentSummary}
         />
       </StoryRow>
     </StoryCard>

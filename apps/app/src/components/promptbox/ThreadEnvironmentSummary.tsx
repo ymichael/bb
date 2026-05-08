@@ -1,12 +1,14 @@
-import { type ComponentType, type ReactNode } from "react";
+import { type ComponentType } from "react";
 import { GitMerge } from "lucide-react";
 import { HostStatusBadge } from "@/components/HostStatusIndicator";
 import { OptionDisplay } from "@/components/pickers/OptionPicker";
 import { copyToClipboardWithToast } from "@/lib/clipboard";
 
 export interface ThreadEnvironmentSummaryProps {
-  /** Display label for the environment (e.g. "Direct" / "Worktree" / sandbox name). */
-  environmentLabel?: ReactNode;
+  /** Mode label (e.g. "Working locally" / "Worktree" / "E2B Sandbox"). Never truncates. */
+  environmentLabel?: string;
+  /** Remote host name shown after the mode label as a muted suffix. Hidden below `lg`. */
+  environmentHostLabel?: string;
   /** Whether the host backing the environment is connected. */
   environmentHostConnected?: boolean;
   /** Icon for the environment (e.g. monitor / container). */
@@ -20,9 +22,15 @@ export interface ThreadEnvironmentSummaryProps {
  * current environment: label, host connection status, and (when on a
  * worktree) a copy-branch button. Read-only — environment editing happens
  * elsewhere.
+ *
+ * Responsive behavior:
+ * - Mode label always visible, never truncates.
+ * - Remote host suffix hidden below `lg` (1024px).
+ * - Branch chip hidden below `md` (768px), truncates within its space above.
  */
 export function ThreadEnvironmentSummary({
   environmentLabel,
+  environmentHostLabel,
   environmentHostConnected,
   environmentIcon,
   environmentBranchName,
@@ -37,8 +45,13 @@ export function ThreadEnvironmentSummary({
         <OptionDisplay
           label="Environment"
           value={
-            <span className="flex min-w-0 items-center gap-1.5">
-              <span className="truncate">{environmentLabel}</span>
+            <span className="flex items-center gap-1.5">
+              <span>{environmentLabel}</span>
+              {environmentHostLabel ? (
+                <span className="hidden text-muted-foreground/60 lg:inline">
+                  · {environmentHostLabel}
+                </span>
+              ) : null}
               {environmentHostConnected !== undefined ? (
                 <HostStatusBadge
                   connected={environmentHostConnected}
@@ -48,7 +61,7 @@ export function ThreadEnvironmentSummary({
             </span>
           }
           icon={environmentIcon}
-          className="h-6 min-w-[80px]"
+          className="h-6 shrink-0"
           muted
         />
       ) : environmentHostConnected !== undefined ? (
