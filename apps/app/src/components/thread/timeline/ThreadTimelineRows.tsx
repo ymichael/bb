@@ -28,7 +28,7 @@ import {
   type TimelineViewTurnRow,
   type TimelineViewWorkRow,
 } from "@bb/thread-view";
-import { cn } from "../../ui/cn.js";
+import { cn } from "@/lib/utils";
 import { isRunningThreadRuntimeDisplayStatus } from "./thread-runtime-status.js";
 import type {
   ThreadTimelineLocalFileLinkHandler,

@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { cx } from "./utils.js";
+import { cn } from "@/lib/utils";
 
 export interface EventCodeBlockProps {
   children: ReactNode;
@@ -21,7 +21,7 @@ export function EventCodeBlock({
 }: EventCodeBlockProps) {
   return (
     <pre
-      className={cx(
+      className={cn(
         "whitespace-pre-wrap break-words rounded-md px-2 py-1.5 font-mono text-xs leading-tight",
         tone === "danger"
           ? "text-destructive/90"

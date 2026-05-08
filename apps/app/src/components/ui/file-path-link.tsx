@@ -1,5 +1,5 @@
 import { ExternalLink } from "lucide-react";
-import { cn } from "./cn.js";
+import { cn } from "@/lib/utils";
 import { TruncateStart } from "./truncate-start.js";
 
 interface FilePathLinkProps {

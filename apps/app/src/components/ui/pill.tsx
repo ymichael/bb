@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { cx } from "./utils.js";
+import { cn } from "@/lib/utils";
 
 export type PillVariant =
   | "default"
@@ -25,7 +25,7 @@ export interface PillProps {
 export function Pill({ variant, className, children }: PillProps) {
   return (
     <span
-      className={cx(
+      className={cn(
         "inline-flex items-center rounded-sm border px-1.5 py-0 text-xs leading-none",
         PILL_VARIANT_CLASS[variant],
         className,

@@ -4,7 +4,7 @@ import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { Slot } from "@radix-ui/react-slot";
 import { X } from "lucide-react";
 
-import { cn } from "./cn.js";
+import { cn } from "@/lib/utils";
 import {
   DrawerDescription as DrawerDescriptionPrimitive,
   DrawerTitle as DrawerTitlePrimitive,

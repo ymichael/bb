@@ -8,7 +8,7 @@ import type {
 import { fileNameFromPath } from "@bb/thread-view";
 import { ImageLightbox, getWrappedImageIndex } from "../../ui/image-lightbox.js";
 import { CopyButton } from "../../ui/copy-button.js";
-import { cn } from "../../ui/cn.js";
+import { cn } from "@/lib/utils";
 import { MarkdownPreview } from "../../ui/markdown-preview.js";
 import type {
   ThreadTimelineLocalFileLinkHandler,

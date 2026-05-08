@@ -1,6 +1,6 @@
 import { assertNever } from "@bb/core-ui";
 import type { ReactNode } from "react";
-import { cx } from "./utils.js";
+import { cn } from "@/lib/utils";
 
 type ConversationEmptyStateSpacing = "default" | "compact";
 type ConversationEmptyStateAlignment = "center" | "left";
@@ -41,7 +41,7 @@ export function ConversationTimeline({
   className,
 }: ConversationTimelineProps) {
   return (
-    <div className={cx("flex min-w-0 flex-col gap-1", className)}>
+    <div className={cn("flex min-w-0 flex-col gap-1", className)}>
       {children}
     </div>
   );
@@ -62,7 +62,7 @@ export function ConversationEmptyState({
 }: ConversationEmptyStateProps) {
   return (
     <div
-      className={cx(
+      className={cn(
         conversationEmptyStateSpacingClass(spacing),
         conversationEmptyStateAlignmentClass(alignment),
         "text-sm text-muted-foreground",

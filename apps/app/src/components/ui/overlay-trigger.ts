@@ -1,4 +1,4 @@
-import { cn } from "./cn.js";
+import { cn } from "@/lib/utils";
 
 const OVERLAY_TRIGGER_CLASS_NAME = "select-none";
 

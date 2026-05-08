@@ -2,7 +2,7 @@
 import * as React from "react";
 import { Drawer as DrawerPrimitive } from "vaul";
 
-import { cn } from "./cn.js";
+import { cn } from "@/lib/utils";
 import { getOverlayTriggerClassName } from "./overlay-trigger.js";
 
 const Drawer = ({

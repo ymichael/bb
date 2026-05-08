@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { cx } from "./utils.js";
+import { cn } from "@/lib/utils";
 
 export interface SettingsSectionProps {
   title: string;
@@ -74,7 +74,7 @@ export function SettingsWithControl({
 }: SettingsWithControlProps) {
   return (
     <div
-      className={cx(
+      className={cn(
         "flex flex-col gap-2 sm:flex-row sm:justify-between sm:gap-4",
         description ? "sm:items-start" : "sm:items-center",
       )}

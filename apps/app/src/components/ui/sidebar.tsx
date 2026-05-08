@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 
 import { useIsMobile } from "./hooks/use-mobile.js";
-import { cn } from "./cn.js";
+import { cn } from "@/lib/utils";
 import { Button } from "./button.js";
 import { COARSE_POINTER_HEADER_ICON_BUTTON_CLASS } from "./coarse-pointer-sizing.js";
 import { Input } from "./input.js";

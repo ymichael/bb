@@ -1,7 +1,7 @@
 import { Popover, PopoverContent, PopoverTrigger } from "../../ui/popover.js";
 import type { ThreadContextWindowUsage } from "@bb/server-contract";
 import { useHoverPopover } from "../../ui/hooks/use-hover-popover.js";
-import { cn } from "../../ui/cn.js";
+import { cn } from "@/lib/utils";
 import {
   calculateContextWindowUsagePercent,
   formatCompactTokenCount,

@@ -4,7 +4,7 @@ import {
   ExpandablePanel,
   getCollapsibleHeaderToneClass,
 } from "../../ui/disclosure.js";
-import { cn } from "../../ui/cn.js";
+import { cn } from "@/lib/utils";
 import {
   TIMELINE_ROW_HEADER_CONTENT_CLASS_NAME,
   timelineRowHeaderClassName,

@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { BottomAnchoredScrollBody } from "./bottom-anchored-scroll-body.js";
-import { cn } from "./cn.js";
+import { cn } from "@/lib/utils";
 import { OverflowFade } from "./overflow-fade.js";
 
 export type PageShellScrollBehavior = "bottom-anchor" | "static";

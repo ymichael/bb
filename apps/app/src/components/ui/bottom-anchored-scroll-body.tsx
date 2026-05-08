@@ -8,7 +8,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { cn } from "./cn.js";
+import { cn } from "@/lib/utils";
 
 // BottomAnchoredScrollBody owns "follow the bottom" behavior for streaming
 // surfaces. It combines two mechanisms because neither is sufficient alone:

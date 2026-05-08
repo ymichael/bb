@@ -5,7 +5,7 @@ import {
   COARSE_POINTER_INPUT_HEIGHT_CLASS,
   COARSE_POINTER_TEXT_BASE_CLASS,
 } from "./coarse-pointer-sizing.js";
-import { cn } from "./cn.js";
+import { cn } from "@/lib/utils";
 
 const Input = React.forwardRef<HTMLInputElement, React.ComponentProps<"input">>(
   ({ className, type, ...props }, ref) => {

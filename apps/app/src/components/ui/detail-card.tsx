@@ -1,5 +1,5 @@
 import { type CSSProperties, type ReactNode } from "react";
-import { cx } from "./utils.js";
+import { cn } from "@/lib/utils";
 
 const DETAIL_GRID_CLASS =
   "grid grid-cols-[var(--detail-label-width,96px)_minmax(0,1fr)] gap-x-3";
@@ -34,7 +34,7 @@ export function DetailCard({
 }: DetailCardProps) {
   return (
     <dl
-      className={cx(
+      className={cn(
         "flex flex-col gap-1 rounded-md border border-border/80 bg-background/40 px-2 py-1",
         className,
       )}
@@ -70,23 +70,23 @@ export function DetailRow({
 }: DetailRowProps) {
   if (orientation === "vertical") {
     return (
-      <div className={cx("flex flex-col gap-1 py-0.5", className)}>
-        <dt className={cx(DETAIL_LABEL_CLASS, labelClassName)}>{label}</dt>
-        <dd className={cx(DETAIL_VALUE_CLASS, valueClassName)}>{children}</dd>
+      <div className={cn("flex flex-col gap-1 py-0.5", className)}>
+        <dt className={cn(DETAIL_LABEL_CLASS, labelClassName)}>{label}</dt>
+        <dd className={cn(DETAIL_VALUE_CLASS, valueClassName)}>{children}</dd>
       </div>
     );
   }
 
   return (
     <div
-      className={cx(
+      className={cn(
         DETAIL_GRID_CLASS,
         align === "center" ? "items-center py-0.5" : "py-0.5",
         className,
       )}
     >
-      <dt className={cx(DETAIL_LABEL_CLASS, labelClassName)}>{label}</dt>
-      <dd className={cx(DETAIL_VALUE_CLASS, valueClassName)}>{children}</dd>
+      <dt className={cn(DETAIL_LABEL_CLASS, labelClassName)}>{label}</dt>
+      <dd className={cn(DETAIL_VALUE_CLASS, valueClassName)}>{children}</dd>
     </div>
   );
 }
@@ -103,7 +103,7 @@ export function DetailMessageRow({
   contentClassName,
 }: DetailMessageRowProps) {
   return (
-    <div className={cx(DETAIL_GRID_CLASS, "py-0.5", className)}>
+    <div className={cn(DETAIL_GRID_CLASS, "py-0.5", className)}>
       <div aria-hidden="true" />
       <div className={contentClassName}>{children}</div>
     </div>

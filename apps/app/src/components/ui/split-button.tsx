@@ -1,6 +1,6 @@
 import { Fragment, type ReactNode } from "react";
 import { ChevronDown } from "lucide-react";
-import { cn } from "./cn.js";
+import { cn } from "@/lib/utils";
 import { buttonVariants } from "./button.js";
 import { COARSE_POINTER_TOOLBAR_ACTION_BUTTON_CLASS } from "./coarse-pointer-sizing.js";
 import {

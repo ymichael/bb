@@ -1,6 +1,6 @@
 /* shadcn/ui-derived */
 import type { HTMLAttributes } from "react";
-import { cn } from "./cn.js";
+import { cn } from "@/lib/utils";
 
 export function Skeleton({
   className,

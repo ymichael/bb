@@ -13,7 +13,7 @@ import type { Components, ExtraProps } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ImageLightbox, getWrappedImageIndex } from "./image-lightbox.js";
 import { CopyButton } from "./copy-button.js";
-import { cn } from "./cn.js";
+import { cn } from "@/lib/utils";
 
 export interface MarkdownPreviewLocalFileLink {
   lineNumber: number | null;

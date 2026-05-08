@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useRef, useState } from "react";
 import type { TimelineToolArgs } from "@bb/server-contract";
-import { cn } from "../../ui/cn.js";
+import { cn } from "@/lib/utils";
 import { TimelineDetailScroll } from "./TimelineDetailScroll.js";
 
 export interface ToolCallDetailBlockProps {

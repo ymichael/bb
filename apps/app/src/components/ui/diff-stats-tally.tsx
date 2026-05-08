@@ -1,4 +1,4 @@
-import { cn } from "./cn.js";
+import { cn } from "@/lib/utils";
 
 export interface DiffStatsTallyProps {
   insertions: number;

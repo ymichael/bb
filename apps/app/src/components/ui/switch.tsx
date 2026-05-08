@@ -1,6 +1,6 @@
 /* shadcn/ui-derived */
 import * as React from "react";
-import { cn } from "./cn.js";
+import { cn } from "@/lib/utils";
 
 type SwitchProps = Omit<
   React.ComponentPropsWithoutRef<"button">,

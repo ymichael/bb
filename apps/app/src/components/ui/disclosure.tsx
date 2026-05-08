@@ -6,7 +6,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { cn } from "./cn.js";
+import { cn } from "@/lib/utils";
 
 const EXPANDABLE_PANEL_TRANSITION_MS = 200;
 const useBrowserLayoutEffect =

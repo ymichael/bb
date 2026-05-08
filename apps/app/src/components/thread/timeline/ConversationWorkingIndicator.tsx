@@ -3,7 +3,7 @@ import {
   ExpandablePanel,
   getCollapsibleHeaderToneClass,
 } from "../../ui/disclosure.js";
-import { cn } from "../../ui/cn.js";
+import { cn } from "@/lib/utils";
 import { ConversationStatusIndicator } from "./ConversationStatusIndicator.js";
 
 export interface ConversationWorkingIndicatorProps {
