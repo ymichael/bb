@@ -27,6 +27,7 @@ import {
   type Thread,
 } from "@bb/domain";
 import { SANDBOX_DATA_DIR } from "@bb/sandbox-host";
+import type { BaseBranchSpec } from "@bb/server-contract";
 import type { AppDeps } from "../../types.js";
 import type { LifecycleCoordinationDeps } from "../../lifecycle-coordination-deps.js";
 import { ApiError } from "../../errors.js";
@@ -180,6 +181,7 @@ interface ManagedEnvironmentPlanCommonArgs {
   dataDir: string;
   hostId: string;
   sourcePath: string;
+  baseBranch: BaseBranchSpec;
   thread: Thread;
   workspaceProvisionType: "managed-clone" | "managed-worktree";
 }
@@ -640,8 +642,22 @@ function buildDirectUnmanagedEnvironmentPlan(
       status: "provisioning",
     },
     hostInput: null,
-    buildRequest: ({ context, environment }) =>
-      buildDirectEnvironmentProvisionRequest({
+    buildRequest: ({ context, environment }) => {
+      // Resolve intent.branch to a daemon-side checkout payload. The daemon
+      // expects an explicit branch name in both kinds; for "new" we mint a
+      // thread-scoped name using the same scheme as managed worktrees.
+      const checkout = args.intent.branch
+        ? args.intent.branch.kind === "existing"
+          ? { kind: "existing" as const, name: args.intent.branch.name }
+          : {
+              kind: "new" as const,
+              name: buildManagedBranchName({
+                branchSlug: context.request.branchSlug,
+                threadId: args.thread.id,
+              }),
+            }
+        : undefined;
+      return buildDirectEnvironmentProvisionRequest({
         command: buildEnvironmentProvisionCommand({
           environmentId: environment.id,
           hostId: args.intent.hostId,
@@ -651,9 +667,11 @@ function buildDirectUnmanagedEnvironmentPlan(
           },
           path: args.intent.path,
           workspaceProvisionType: "unmanaged",
+          ...(checkout ? { checkout } : {}),
         }),
         provisioningId: context.state.provisioningId,
-      }),
+      });
+    },
   };
 }
 
@@ -675,6 +693,7 @@ function buildManagedEnvironmentPlan(
           branchSlug: context.request.branchSlug,
           threadId: args.thread.id,
         }),
+        baseBranch: args.baseBranch,
         environmentId: environment.id,
         hostId: args.hostId,
         initiator: {
@@ -728,6 +747,7 @@ async function resolveEnvironmentCreationPlan(
         hostInput: null,
         requestMode: "direct",
         sourcePath: intent.sourcePath,
+        baseBranch: intent.baseBranch,
         thread: args.thread,
         workspaceProvisionType: intent.workspaceProvisionType,
       });
@@ -747,6 +767,7 @@ async function resolveEnvironmentCreationPlan(
         requestMode: "sandbox-host",
         sandboxType: intent.sandboxType,
         sourcePath: intent.cloneRepoUrl,
+        baseBranch: intent.baseBranch,
         thread: args.thread,
         workspaceProvisionType: "managed-clone",
       });

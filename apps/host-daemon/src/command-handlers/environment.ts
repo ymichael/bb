@@ -129,6 +129,7 @@ export function toProvisionWorkspaceOptions(
       return {
         workspaceProvisionType: "unmanaged" as const,
         path: command.path,
+        ...(command.checkout ? { checkout: command.checkout } : {}),
         onProgress,
       };
     }
@@ -139,6 +140,7 @@ export function toProvisionWorkspaceOptions(
         sourcePath: command.sourcePath,
         targetPath: command.targetPath,
         branchName: command.branchName,
+        baseBranch: command.baseBranch,
         timeoutMs: command.setupTimeoutMs,
         onProgress,
       };

@@ -519,14 +519,11 @@ describe("public environment and system routes", () => {
       const branchesCommand = await waitForQueuedCommand(
         harness,
         ({ command }) =>
-          command.type === "workspace.list_branches" &&
-          command.environmentId === environment.id,
+          command.type === "host.list_branches" &&
+          command.path === "/tmp/environment-details/worktree",
       );
       expect(branchesCommand.command).toMatchObject({
-        workspaceContext: {
-          workspacePath: "/tmp/environment-details/worktree",
-          workspaceProvisionType: "managed-worktree",
-        },
+        path: "/tmp/environment-details/worktree",
       });
       await reportQueuedCommandSuccess(harness, branchesCommand, {
         branches: ["main", "bb/details"],

@@ -139,69 +139,6 @@ describe("workspace command dispatch", () => {
     ]);
   });
 
-  it("covers workspace.list_files", async () => {
-    const tempDir = await makeTempDir("bb-dispatch-list-files-");
-    await fs.writeFile(path.join(tempDir, "file-a.txt"), "hello");
-    await fs.mkdir(path.join(tempDir, "sub"));
-    await fs.writeFile(path.join(tempDir, "sub", "file-b.ts"), "world");
-
-    const harness = createHarness({ workspacePath: tempDir });
-    await harness.manager.ensureEnvironment({
-      environmentId: "env-1",
-      workspacePath: tempDir,
-    });
-
-    const result = await dispatchCommand(
-      {
-        type: "workspace.list_files",
-        environmentId: "env-1",
-        workspaceContext: {
-          workspacePath: tempDir,
-          workspaceProvisionType: "unmanaged",
-        },
-        limit: 1000,
-      },
-      harness.dispatchOptions(),
-    );
-
-    const paths = result.files.map((f: { path: string }) => f.path).sort();
-    expect(paths).toContain("file-a.txt");
-    expect(paths).toContain(path.join("sub", "file-b.ts"));
-    expect(result.truncated).toBe(false);
-
-    const filtered = await dispatchCommand(
-      {
-        type: "workspace.list_files",
-        environmentId: "env-1",
-        workspaceContext: {
-          workspacePath: tempDir,
-          workspaceProvisionType: "unmanaged",
-        },
-        query: "file-b",
-        limit: 1000,
-      },
-      harness.dispatchOptions(),
-    );
-    expect(filtered.files).toHaveLength(1);
-    expect(filtered.files[0].name).toBe("file-b.ts");
-    expect(filtered.truncated).toBe(false);
-
-    const limited = await dispatchCommand(
-      {
-        type: "workspace.list_files",
-        environmentId: "env-1",
-        workspaceContext: {
-          workspacePath: tempDir,
-          workspaceProvisionType: "unmanaged",
-        },
-        limit: 1,
-      },
-      harness.dispatchOptions(),
-    );
-    expect(limited.files).toHaveLength(1);
-    expect(limited.truncated).toBe(true);
-  });
-
   it("covers host.list_files", async () => {
     const tempDir = await makeTempDir("bb-dispatch-host-list-files-");
     await fs.writeFile(path.join(tempDir, "PREFERENCES.md"), "hello");
@@ -482,26 +419,4 @@ describe("workspace command dispatch", () => {
     expect(result.content).toBe(bytes.toString("base64"));
   });
 
-  it("covers workspace.list_branches", async () => {
-    const harness = createHarness();
-    await harness.manager.ensureEnvironment({
-      environmentId: "env-1",
-      workspacePath: "/tmp/env-1",
-    });
-
-    const result = await dispatchCommand(
-      {
-        type: "workspace.list_branches",
-        environmentId: "env-1",
-        workspaceContext: {
-          workspacePath: "/tmp/env-1",
-          workspaceProvisionType: "unmanaged",
-        },
-      },
-      harness.dispatchOptions(),
-    );
-
-    expect(result.branches).toEqual(["main"]);
-    expect(result.current).toBe("main");
-  });
 });

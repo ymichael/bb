@@ -34,6 +34,7 @@ import {
   threadScope,
 } from "@bb/domain";
 import { type HostDaemonCommand } from "@bb/host-daemon-contract";
+import type { BaseBranchSpec } from "@bb/server-contract";
 import type { SandboxHostProgressEvent } from "@bb/sandbox-host";
 import type { AppDeps, SandboxWorkSessionDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
@@ -860,9 +861,14 @@ export async function queueManagedEnvironmentReprovision(
   const branchName =
     args.environment.branchName ??
     buildManagedBranchName({ threadId: args.threadId });
+  // Reprovision doesn't track the originally-picked base branch on the env
+  // row, so we ask the daemon to use the source's default. (TODO: persist
+  // baseBranch on the env row so reprovision matches the original pick.)
+  const baseBranch: BaseBranchSpec = { kind: "default" };
 
   const command = buildEnvironmentProvisionCommand({
     branchName,
+    baseBranch,
     environmentId: args.environment.id,
     hostId: args.environment.hostId,
     initiator: {

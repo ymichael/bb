@@ -12,6 +12,7 @@ import { Workspace } from "./workspace.js";
 import { tryWithCheckoutMutationLock } from "./checkout-mutation-lock.js";
 import {
   pathExists,
+  readDefaultBranch,
   runGit,
   WorkspaceError,
   type GitCommandResult,
@@ -35,7 +36,14 @@ export interface CreateWorkspaceArgs {
   /** Local repo path for worktrees, or a clone URL for managed clones */
   sourcePath: string;
   targetPath: string;
+  /** Name of the new branch to create on the workspace. */
   branchName: string;
+  /**
+   * Branch to base the new branch on (start point for git worktree add / git
+   * checkout). Pass `null` to use the source's default branch (resolved by
+   * the daemon).
+   */
+  baseBranch: string | null;
   /** Setup script timeout in ms. Controlled by the server. */
   timeoutMs: number;
   onProgress?: ProgressCallback;
@@ -247,7 +255,22 @@ export async function createWorktree(
 
   await ensureWorkspaceParentDirectory(args.targetPath);
 
-  const gitArgs = ["worktree", "add", "-B", args.branchName, args.targetPath];
+  const baseBranch =
+    args.baseBranch ?? (await readDefaultBranch(args.sourcePath));
+  if (!baseBranch) {
+    throw new WorkspaceError(
+      "missing_default_branch",
+      `Cannot resolve default branch for source: ${args.sourcePath}`,
+    );
+  }
+  const gitArgs = [
+    "worktree",
+    "add",
+    "-B",
+    args.branchName,
+    args.targetPath,
+    baseBranch,
+  ];
   const commandText = `git ${gitArgs.join(" ")}`;
 
   const worktreeStartedAt = Date.now();
@@ -312,7 +335,12 @@ export async function createClone(
 
   const cloneArgs = ["clone", args.sourcePath, args.targetPath];
   const cloneText = `git ${cloneArgs.join(" ")}`;
-  const checkoutArgs = ["checkout", "-B", args.branchName];
+  // When baseBranch is null, the clone leaves HEAD on the remote's default
+  // branch — just create the new branch from there. Otherwise base off the
+  // explicitly-named remote branch.
+  const checkoutArgs = args.baseBranch
+    ? ["checkout", "-B", args.branchName, `origin/${args.baseBranch}`]
+    : ["checkout", "-B", args.branchName];
   const checkoutText = `git ${checkoutArgs.join(" ")}`;
   const cloneEnv = buildGitHubCloneEnv(args.sourcePath);
 

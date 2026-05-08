@@ -35,6 +35,10 @@ export function ProjectMainView() {
     useProjectPromptHistory(projectId);
   const promptMentions = usePromptMentions(projectId, { environmentId: null });
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
+  const [selectedBranch, setSelectedBranch] = useState<{
+    name: string;
+    isNew: boolean;
+  }>({ name: "main", isNew: false });
   const prompt = promptDraft.text;
   const promptInput = useMemo(
     () =>
@@ -109,13 +113,22 @@ export function ProjectMainView() {
         return {
           type: "host",
           hostId: parsed.hostId,
-          workspace: { type: "managed-worktree" },
+          workspace: {
+            type: "managed-worktree",
+            baseBranch: { kind: "named", name: selectedBranch.name },
+          },
         };
       }
       return {
         type: "host",
         hostId: parsed.hostId,
-        workspace: { type: "unmanaged", path: null },
+        workspace: {
+          type: "unmanaged",
+          path: null,
+          branch: selectedBranch.isNew
+            ? { kind: "new" }
+            : { kind: "existing", name: selectedBranch.name },
+        },
       };
     }
 
@@ -123,11 +136,17 @@ export function ProjectMainView() {
       return {
         type: "sandbox-host",
         sandboxType: parsed.backendId,
+        baseBranch: { kind: "named", name: selectedBranch.name },
       };
     }
 
     return null;
-  }, [effectiveEnvironmentValue, projectId]);
+  }, [
+    effectiveEnvironmentValue,
+    projectId,
+    selectedBranch.name,
+    selectedBranch.isNew,
+  ]);
 
   const projectOptions = useMemo(() => {
     const knownOptions =
@@ -331,6 +350,13 @@ export function ProjectMainView() {
             onChange: setEnvironmentSelectionValue,
             projectId,
             sources: projectSources,
+          }}
+          branch={{
+            value: selectedBranch.name,
+            isNew: selectedBranch.isNew,
+            onChange: (name) => setSelectedBranch({ name, isNew: false }),
+            onCreate: () =>
+              setSelectedBranch((prev) => ({ name: prev.name, isNew: true })),
           }}
           permission={{
             value: permissionMode,

@@ -15,6 +15,7 @@ import {
   sandboxBackendInfoSchema,
   serviceTierSchema,
   threadListEntrySchema,
+  threadTimelinePendingTodosSchema,
   threadTypeSchema,
   threadWithRuntimeSchema,
   threadQueuedMessageSchema,
@@ -43,17 +44,50 @@ export type ThreadContextWindowUsage = z.infer<
 
 // --- Thread creation: environment + workspace discriminated unions ---
 
+/**
+ * Pre-thread checkout intent for an unmanaged workspace. Omitting this from
+ * the workspace request means "don't touch HEAD"; including it asks the
+ * daemon to switch to (or create) the named branch before the thread starts.
+ */
+export const unmanagedBranchSpecSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("existing"), name: z.string().min(1) }),
+  z.object({ kind: z.literal("new") }),
+]);
+export type UnmanagedBranchSpec = z.infer<typeof unmanagedBranchSpecSchema>;
+
 export const unmanagedWorkspaceSchema = z.object({
   type: z.literal("unmanaged"),
   path: z.string().min(1).nullable(),
+  /**
+   * If set, the daemon checks out this branch in the unmanaged workspace
+   * before the thread starts. `existing` switches to a named branch; `new`
+   * asks the server to mint a thread-scoped branch name and create it.
+   */
+  branch: unmanagedBranchSpecSchema.optional(),
 });
+
+/**
+ * Identifies the base branch a managed worktree/clone should be created from.
+ * `named` carries an explicit branch name; `default` defers to the source's
+ * default branch (resolved server-side so the daemon always receives a real
+ * branch name).
+ */
+export const baseBranchSpecSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("named"), name: z.string().min(1) }),
+  z.object({ kind: z.literal("default") }),
+]);
+export type BaseBranchSpec = z.infer<typeof baseBranchSpecSchema>;
 
 export const managedWorktreeWorkspaceSchema = z.object({
   type: z.literal("managed-worktree"),
+  /** Branch the new worktree should be based on. */
+  baseBranch: baseBranchSpecSchema,
 });
 
 export const managedCloneWorkspaceSchema = z.object({
   type: z.literal("managed-clone"),
+  /** Branch the new clone should check out from. */
+  baseBranch: baseBranchSpecSchema,
 });
 
 export const workspaceArgsSchema = z.discriminatedUnion("type", [
@@ -77,6 +111,8 @@ export const hostEnvironmentSchema = z.object({
 export const sandboxHostEnvironmentSchema = z.object({
   type: z.literal("sandbox-host"),
   sandboxType: z.string().min(1),
+  /** Branch the new sandbox clone should be checked out at. */
+  baseBranch: baseBranchSpecSchema,
 });
 
 export const environmentArgsSchema = z.discriminatedUnion("type", [
@@ -457,6 +493,19 @@ export const projectFilesQuerySchema = z.object({
   ),
 });
 export type ProjectFilesQuery = z.infer<typeof projectFilesQuerySchema>;
+
+export const projectBranchesQuerySchema = z.object({
+  hostId: z.string().min(1),
+});
+export type ProjectBranchesQuery = z.infer<typeof projectBranchesQuerySchema>;
+
+export const projectBranchesResponseSchema = z.object({
+  branches: z.array(z.string()),
+  current: z.string().nullable(),
+});
+export type ProjectBranchesResponse = z.infer<
+  typeof projectBranchesResponseSchema
+>;
 
 export const projectAttachmentContentQuerySchema = z.object({
   path: z.string().min(1),
@@ -985,6 +1034,7 @@ export type TimelineTurnSummaryDetailsResponse = z.infer<
 export const threadTimelineResponseSchema = z.object({
   rows: z.array(timelineRowSchema),
   activeThinking: activeThinkingSchema.nullable(),
+  pendingTodos: threadTimelinePendingTodosSchema.nullable(),
   contextWindowUsage: threadContextWindowUsageSchema.optional(),
   timelinePage: timelinePageMetadataSchema,
 });

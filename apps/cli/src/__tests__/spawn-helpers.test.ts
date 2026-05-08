@@ -85,7 +85,10 @@ describe("buildSpawnEnvironment", () => {
     expect(result).toEqual({
       type: "host",
       hostId: HOST_ID,
-      workspace: { type: "managed-worktree" },
+      workspace: {
+        type: "managed-worktree",
+        baseBranch: { kind: "default" },
+      },
     });
   });
 
@@ -100,7 +103,11 @@ describe("buildSpawnEnvironment", () => {
       newEnvironmentKind: "sandbox/e2b",
       hostId: null,
     });
-    expect(result).toEqual({ type: "sandbox-host", sandboxType: "e2b" });
+    expect(result).toEqual({
+      type: "sandbox-host",
+      sandboxType: "e2b",
+      baseBranch: { kind: "default" },
+    });
   });
 
   it("returns sandbox for any sandbox/ prefix", () => {
@@ -108,7 +115,11 @@ describe("buildSpawnEnvironment", () => {
       newEnvironmentKind: "sandbox/daytona",
       hostId: null,
     });
-    expect(result).toEqual({ type: "sandbox-host", sandboxType: "daytona" });
+    expect(result).toEqual({
+      type: "sandbox-host",
+      sandboxType: "daytona",
+      baseBranch: { kind: "default" },
+    });
   });
 
   it("throws for sandbox/ with no type", () => {
@@ -189,7 +200,11 @@ describe("buildSpawnEnvironment", () => {
       newEnvironmentKind: "  sandbox/e2b  ",
       hostId: null,
     });
-    expect(result).toEqual({ type: "sandbox-host", sandboxType: "e2b" });
+    expect(result).toEqual({
+      type: "sandbox-host",
+      sandboxType: "e2b",
+      baseBranch: { kind: "default" },
+    });
   });
 });
 

@@ -74,6 +74,7 @@ function makeTimelineResponse(rows: TimelineRow[]): ThreadTimelineResponse {
   return {
     rows,
     activeThinking: null,
+    pendingTodos: null,
     timelinePage: {
       kind: "latest",
       segmentLimit: 20,
@@ -1830,7 +1831,10 @@ describe("CLI command output contracts", () => {
         environment: {
           type: "host",
           hostId: "host-test-001",
-          workspace: { type: "managed-worktree" },
+          workspace: {
+            type: "managed-worktree",
+            baseBranch: { kind: "default" },
+          },
         },
       },
     });
@@ -2474,7 +2478,7 @@ describe("CLI JSON output contracts", () => {
 
     expect(
       JSON.parse(String(vi.mocked(console.log).mock.calls[0]?.[0])),
-    ).toEqual({ thread, environment: null });
+    ).toEqual({ thread, environment: null, pendingTodos: null });
   });
 
   it("bb thread update sets the parent thread id", async () => {

@@ -21,4 +21,10 @@ export type {
   StatusOptions,
 } from "./workspace.js";
 
-export { WorkspaceError } from "./git.js";
+export {
+  WorkspaceError,
+  detectGitRepo,
+  getCurrentBranch,
+  listBranches,
+  readDefaultBranch,
+} from "./git.js";

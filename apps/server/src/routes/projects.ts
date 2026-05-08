@@ -7,6 +7,7 @@ import {
   getDefaultProjectSource,
   getProjectSourceByHost,
   getProjectSourceForProject,
+  listProjectSources,
   listPublicProjects,
   listProjectSourcesByProjectIds,
   listThreads,
@@ -19,6 +20,7 @@ import {
   createProjectRequestSchema,
   createProjectSourceRequestSchema,
   projectAttachmentContentQuerySchema,
+  projectBranchesQuerySchema,
   projectDefaultExecutionOptionsQuerySchema,
   projectFilesQuerySchema,
   promptHistoryQuerySchema,
@@ -43,14 +45,8 @@ import {
   requirePublicProject,
   requireReadyEnvironment,
 } from "../services/lib/entity-lookup.js";
-import {
-  PROMPT_HISTORY_ENTRY_LIMIT,
-  type WorkspaceProvisionType,
-} from "@bb/domain";
-import {
-  ensureProjectSourceEnvironment,
-  createThreadFromRequest,
-} from "../services/threads/thread-create.js";
+import { PROMPT_HISTORY_ENTRY_LIMIT } from "@bb/domain";
+import { createThreadFromRequest } from "../services/threads/thread-create.js";
 import { toThreadResponseFromThread } from "../services/threads/thread-runtime-display.js";
 import { queueCommandAndWait } from "../services/hosts/command-wait.js";
 import { parseOptionalInteger } from "../services/lib/validation.js";
@@ -59,6 +55,7 @@ import {
   requestProjectDeletion,
 } from "../services/projects/project-deletion.js";
 import { readProjectSourceWorkspaceStatus } from "../services/environments/environment-promotion.js";
+import { fetchGithubBranches } from "../services/github/branches.js";
 import { listProjectPromptHistory } from "../services/prompt-history.js";
 
 function buildProjectResponses(
@@ -106,50 +103,57 @@ function requireProjectSource(
   return source;
 }
 
-interface ResolveProjectFilesWorkspaceArgs {
-  projectId: string;
-  environmentId: string | null;
-}
-
-interface ResolvedProjectFilesWorkspace {
+interface ResolvedHostPath {
   hostId: string;
   path: string;
-  environmentId: string;
-  workspaceProvisionType: WorkspaceProvisionType;
 }
 
-async function resolveProjectFilesWorkspace(
-  deps: AppDeps,
-  args: ResolveProjectFilesWorkspaceArgs,
-): Promise<ResolvedProjectFilesWorkspace> {
-  if (args.environmentId !== null) {
-    const environment = requireReadyEnvironment(deps.db, args.environmentId);
-    if (environment.projectId !== args.projectId) {
-      throw new ApiError(404, "environment_not_found", "Environment not found");
-    }
-    return {
-      hostId: environment.hostId,
-      path: environment.path,
-      environmentId: environment.id,
-      workspaceProvisionType: environment.workspaceProvisionType,
-    };
+/**
+ * Resolve `(hostId, path)` from an existing project-bound environment.
+ * Pure DB lookup — no provisioning, no daemon roundtrip. Use this when a
+ * route narrows to a specific environment's workspace (e.g. a thread's
+ * worktree) and needs to dispatch a `host.*` daemon command against the
+ * environment's path.
+ */
+function resolveEnvironmentPath(
+  deps: Pick<AppDeps, "db">,
+  args: { projectId: string; environmentId: string },
+): ResolvedHostPath {
+  const environment = requireReadyEnvironment(deps.db, args.environmentId);
+  if (environment.projectId !== args.projectId) {
+    throw new ApiError(404, "environment_not_found", "Environment not found");
   }
+  return { hostId: environment.hostId, path: environment.path };
+}
 
-  const source = getDefaultProjectSource(deps.db, args.projectId);
+/**
+ * Resolve `(hostId, path)` from a project's local-path source. Pure DB
+ * lookup — never creates an environment row, never queues a provision
+ * command. Use for read-only listings issued before any thread environment
+ * exists (e.g. file mentions and branch listing in the new-thread prompt
+ * box).
+ *
+ * - When `hostId` is provided, returns the project's local-path source on
+ *   that host (404 if the project has no local-path source for that host).
+ * - When `hostId` is null, returns the project's default local-path source.
+ */
+function resolveProjectSourcePath(
+  deps: Pick<AppDeps, "db">,
+  args: { projectId: string; hostId: string | null },
+): ResolvedHostPath {
+  const source = args.hostId
+    ? getProjectSourceByHost(deps.db, args.projectId, args.hostId)
+    : getDefaultProjectSource(deps.db, args.projectId);
   if (!source || source.type !== "local_path") {
-    throw new ApiError(409, "invalid_request", "Project has no default source");
+    throw new ApiError(
+      args.hostId ? 404 : 409,
+      "invalid_request",
+      args.hostId
+        ? "Project has no local-path source for host"
+        : "Project has no default source",
+    );
   }
-  const environment = await ensureProjectSourceEnvironment(deps, {
-    hostId: source.hostId,
-    path: source.path,
-    projectId: args.projectId,
-  });
-  return {
-    hostId: source.hostId,
-    path: source.path,
-    environmentId: environment.id,
-    workspaceProvisionType: environment.workspaceProvisionType,
-  };
+  return { hostId: source.hostId, path: source.path };
 }
 
 export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
@@ -362,21 +366,23 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
         );
       }
 
-      const workspace = await resolveProjectFilesWorkspace(deps, {
-        projectId,
-        environmentId: query.environmentId,
-      });
-
+      // Both branches dispatch host.list_files against the resolved path —
+      // env-scoped requests narrow to a specific environment's workspace
+      // (e.g. a thread's worktree), pre-env requests fall back to the
+      // project's default source.
+      const target =
+        query.environmentId !== null
+          ? resolveEnvironmentPath(deps, {
+              projectId,
+              environmentId: query.environmentId,
+            })
+          : resolveProjectSourcePath(deps, { projectId, hostId: null });
       const result = await queueCommandAndWait(deps, {
-        hostId: workspace.hostId,
+        hostId: target.hostId,
         timeoutMs: COMMAND_TIMEOUT_MS,
         command: {
-          type: "workspace.list_files",
-          environmentId: workspace.environmentId,
-          workspaceContext: {
-            workspacePath: workspace.path,
-            workspaceProvisionType: workspace.workspaceProvisionType,
-          },
+          type: "host.list_files",
+          path: target.path,
           ...(query.query ? { query: query.query } : {}),
           limit,
         },
@@ -384,6 +390,60 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
       return context.json({ files: result.files, truncated: result.truncated });
     },
   );
+
+  get(
+    "/projects/:id/branches",
+    projectBranchesQuerySchema,
+    async (context, query) => {
+      const projectId = context.req.param("id");
+      requirePublicProject(deps.db, projectId);
+
+      const source = resolveProjectSourcePath(deps, {
+        projectId,
+        hostId: query.hostId,
+      });
+      const result = await queueCommandAndWait(deps, {
+        hostId: source.hostId,
+        timeoutMs: COMMAND_TIMEOUT_MS,
+        command: {
+          type: "host.list_branches",
+          path: source.path,
+        },
+      });
+      return context.json({
+        branches: result.branches,
+        current: result.current,
+      });
+    },
+  );
+
+  get("/projects/:id/github-branches", async (context) => {
+    const projectId = context.req.param("id");
+    requirePublicProject(deps.db, projectId);
+
+    if (!deps.config.githubPat) {
+      throw new ApiError(
+        501,
+        "not_configured",
+        "GitHub PAT is not configured",
+      );
+    }
+
+    const githubSource = listProjectSources(deps.db, projectId).find(
+      (source) => source.type === "github_repo",
+    );
+    if (!githubSource || githubSource.type !== "github_repo") {
+      throw new ApiError(
+        404,
+        "invalid_request",
+        "Project has no GitHub source",
+      );
+    }
+
+    return context.json(
+      await fetchGithubBranches(deps.config.githubPat, githubSource.repoUrl),
+    );
+  });
 
   post("/projects/:id/attachments", async (context) => {
     requirePublicProject(deps.db, context.req.param("id"));

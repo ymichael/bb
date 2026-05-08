@@ -103,8 +103,9 @@ describe("provisionWorkspace", () => {
       ).stdout.trim();
       const commonGitDir = path.resolve(
         ws.path,
-        (await runGit(["rev-parse", "--git-common-dir"], { cwd: ws.path }))
-          .stdout.trim(),
+        (
+          await runGit(["rev-parse", "--git-common-dir"], { cwd: ws.path })
+        ).stdout.trim(),
       );
 
       await expect(ws.getAdditionalWorkspaceWriteRoots()).resolves.toEqual([
@@ -149,6 +150,7 @@ describe("provisionWorkspace", () => {
         sourcePath: repoPath,
         targetPath,
         branchName: "bb/env-test",
+        baseBranch: "main",
         timeoutMs: 900000,
       });
 
@@ -169,6 +171,7 @@ describe("provisionWorkspace", () => {
         sourcePath: repoPath,
         targetPath,
         branchName: "bb/env-roots",
+        baseBranch: "main",
         timeoutMs: 900000,
       });
       const gitDir = (
@@ -176,13 +179,12 @@ describe("provisionWorkspace", () => {
       ).stdout.trim();
       const commonGitDir = path.resolve(
         ws.path,
-        (await runGit(["rev-parse", "--git-common-dir"], { cwd: ws.path }))
-          .stdout.trim(),
+        (
+          await runGit(["rev-parse", "--git-common-dir"], { cwd: ws.path })
+        ).stdout.trim(),
       );
 
-      await expect(
-        ws.getAdditionalWorkspaceWriteRoots(),
-      ).resolves.toEqual([
+      await expect(ws.getAdditionalWorkspaceWriteRoots()).resolves.toEqual([
         path.resolve(gitDir),
         path.join(commonGitDir, "objects"),
         path.join(commonGitDir, "refs"),
@@ -200,6 +202,7 @@ describe("provisionWorkspace", () => {
         sourcePath: repoPath,
         targetPath,
         branchName: "bb/env-destroy",
+        baseBranch: "main",
         timeoutMs: 900000,
       });
 
@@ -225,6 +228,7 @@ describe("provisionWorkspace", () => {
         sourcePath: repoPath,
         targetPath,
         branchName: "bb/env-script",
+        baseBranch: "main",
         timeoutMs: 900000,
       });
 
@@ -248,6 +252,7 @@ describe("provisionWorkspace", () => {
           sourcePath: repoPath,
           targetPath,
           branchName: "bb/env-fail",
+          baseBranch: "main",
           timeoutMs: 900000,
         }),
       ).rejects.toThrow(/Setup script failed/u);
@@ -267,6 +272,7 @@ describe("provisionWorkspace", () => {
         sourcePath: repoPath,
         targetPath,
         branchName: "bb/clone-branch",
+        baseBranch: "main",
         timeoutMs: 900000,
       });
 
@@ -287,6 +293,7 @@ describe("provisionWorkspace", () => {
         sourcePath: repoPath,
         targetPath,
         branchName: "bb/clone-roots",
+        baseBranch: "main",
         timeoutMs: 900000,
       });
 
@@ -303,6 +310,7 @@ describe("provisionWorkspace", () => {
         sourcePath: repoPath,
         targetPath,
         branchName: "bb/clone-destroy",
+        baseBranch: "main",
         timeoutMs: 900000,
       });
 
@@ -323,6 +331,7 @@ describe("provisionWorkspace", () => {
         sourcePath: repoPath,
         targetPath,
         branchName: "bb/clone-script",
+        baseBranch: "main",
         timeoutMs: 30_000,
       });
 
@@ -346,6 +355,7 @@ describe("provisionWorkspace", () => {
           sourcePath: repoPath,
           targetPath,
           branchName: "bb/clone-fail",
+          baseBranch: "main",
           timeoutMs: 900000,
         }),
       ).rejects.toThrow(/Setup script failed/u);

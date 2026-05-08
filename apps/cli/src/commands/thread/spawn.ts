@@ -1,6 +1,6 @@
 import { Command } from "commander";
 import type { Thread } from "@bb/domain";
-import type { EnvironmentArgs } from "@bb/server-contract";
+import type { BaseBranchSpec, EnvironmentArgs } from "@bb/server-contract";
 import { action } from "../../action.js";
 import { createClient, unwrap } from "../../client.js";
 import {
@@ -27,6 +27,7 @@ interface ThreadSpawnCommandOptions {
   project?: string;
   environment?: string;
   newEnvironment?: string;
+  baseBranch?: string;
   parentThread?: string;
   provider?: string;
   model?: string;
@@ -54,9 +55,14 @@ export function buildSpawnEnvironment(args: {
   newEnvironmentKind?: string;
   hostId: string | null;
   explicitHost?: boolean;
+  baseBranch?: string;
 }): EnvironmentArgs {
   const environmentValue = args.environmentValue?.trim();
   const newEnvironmentKind = args.newEnvironmentKind?.trim();
+  const trimmedBaseBranch = args.baseBranch?.trim();
+  const baseBranch: BaseBranchSpec = trimmedBaseBranch
+    ? { kind: "named", name: trimmedBaseBranch }
+    : { kind: "default" };
 
   if (environmentValue && newEnvironmentKind) {
     throw new Error("Cannot combine --environment with --new-environment.");
@@ -74,13 +80,13 @@ export function buildSpawnEnvironment(args: {
           "Cannot combine --host with sandbox environments. Sandbox environments provision their own hosts.",
         );
       }
-      return { type: "sandbox-host", sandboxType };
+      return { type: "sandbox-host", sandboxType, baseBranch };
     }
     if (newEnvironmentKind === "worktree") {
       return {
         type: "host",
         hostId: requireHostId(args.hostId),
-        workspace: { type: "managed-worktree" },
+        workspace: { type: "managed-worktree", baseBranch },
       };
     }
     throw new Error(
@@ -128,6 +134,10 @@ export function registerSpawnCommand(
       "Create a new managed environment of the given kind (worktree, sandbox/e2b)",
     )
     .option(
+      "--base-branch <branch>",
+      "Base branch for new managed environments (worktree/sandbox). Defaults to the source's default branch.",
+    )
+    .option(
       "--parent-thread <id>",
       "Parent thread ID for worker thread links (defaults to BB_THREAD_ID)",
     )
@@ -171,6 +181,7 @@ export function registerSpawnCommand(
           newEnvironmentKind: opts.newEnvironment,
           hostId,
           explicitHost: !!opts.host,
+          baseBranch: opts.baseBranch,
         });
         const reasoningLevel = parseReasoningLevel(opts.reasoningLevel);
         const serviceTier = parseServiceTier(opts.serviceTier);

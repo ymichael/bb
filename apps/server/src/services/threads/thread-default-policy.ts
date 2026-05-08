@@ -181,7 +181,7 @@ export function resolveCreateThreadEnvironment(
     return {
       type: "host",
       hostId: args.requestedEnvironment.hostId,
-      workspace: { type: "managed-worktree" },
+      workspace: { type: "managed-worktree", baseBranch: { kind: "default" } },
     };
   }
 

@@ -214,6 +214,7 @@ export async function createThreadFromRequest(
       environmentIntent = {
         type: "sandbox-managed",
         cloneRepoUrl: resolvedEnvironment.cloneSource.repoUrl,
+        baseBranch: resolvedEnvironment.baseBranch,
         sandboxType: resolvedEnvironment.sandboxType,
       };
       break;
@@ -257,6 +258,7 @@ export async function createThreadFromRequest(
           type: "direct-unmanaged",
           hostId,
           path: resolvedEnvironment.unmanagedPath,
+          ...(workspace.branch ? { branch: workspace.branch } : {}),
         };
         if (reuseIntent) {
           environmentId = reuseIntent.environmentId;
@@ -274,6 +276,7 @@ export async function createThreadFromRequest(
         type: "direct-managed",
         hostId,
         sourcePath: managedSource.path,
+        baseBranch: workspace.baseBranch,
         workspaceProvisionType: workspace.type,
       };
       break;

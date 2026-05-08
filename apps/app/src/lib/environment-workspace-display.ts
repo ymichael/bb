@@ -1,6 +1,7 @@
 import type { EnvironmentWorkspaceDisplayKind } from "@bb/domain";
-import { Container, FolderGit2, Monitor } from "lucide-react";
+import { Container, FolderGit2 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { PersistentHostIcon } from "@/lib/host-display";
 
 export function getEnvironmentWorkspaceDisplayIcon(
   kind: EnvironmentWorkspaceDisplayKind,
@@ -20,7 +21,7 @@ export function getEnvironmentWorkspaceDisplayIcon(
 export function getEnvironmentWorkspaceLabelIcon(
   kind: EnvironmentWorkspaceDisplayKind,
 ): LucideIcon {
-  return getEnvironmentWorkspaceDisplayIcon(kind) ?? Monitor;
+  return getEnvironmentWorkspaceDisplayIcon(kind) ?? PersistentHostIcon;
 }
 
 export function getEnvironmentWorkspaceDisplayIconLabel(

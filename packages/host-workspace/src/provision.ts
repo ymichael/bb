@@ -31,10 +31,21 @@ interface ProvisionBase {
   onProgress?: ProvisionProgressCallback;
 }
 
+export interface UnmanagedCheckoutOpts {
+  /**
+   * `existing` runs `git switch <name>` (no-op if HEAD is already there).
+   * `new` runs `git switch -C <name>` so the branch is created or reset.
+   */
+  kind: "existing" | "new";
+  name: string;
+}
+
 export interface UnmanagedWorkspaceOpts extends ProvisionBase {
   workspaceProvisionType: "unmanaged";
   /** Path to validate. Must exist. */
   path: string;
+  /** Pre-provision checkout. When set, the daemon switches branches before opening the workspace. */
+  checkout?: UnmanagedCheckoutOpts;
 }
 
 export interface ManagedWorkspaceBaseOpts extends ProvisionBase {
@@ -42,8 +53,13 @@ export interface ManagedWorkspaceBaseOpts extends ProvisionBase {
   sourcePath: string;
   /** Target path for worktree/clone creation */
   targetPath: string;
-  /** Branch name */
+  /** Name of the new branch to create on the workspace. */
   branchName: string;
+  /**
+   * Branch on the source repo that the new branch should be based on. Pass
+   * `null` to use the source's default branch.
+   */
+  baseBranch: string | null;
   /** Setup script timeout in ms. Controlled by the server. */
   timeoutMs: number;
 }
@@ -283,6 +299,61 @@ export async function provisionWorkspace(
   }
 }
 
+interface ApplyUnmanagedCheckoutArgs {
+  cwd: string;
+  checkout: UnmanagedCheckoutOpts;
+  onProgress: ProvisionProgressCallback | undefined;
+}
+
+async function applyUnmanagedCheckout(
+  args: ApplyUnmanagedCheckoutArgs,
+): Promise<void> {
+  const { cwd, checkout, onProgress } = args;
+  // `switch -C` for new (create-or-reset) and `switch` for existing.
+  const switchArgs =
+    checkout.kind === "new"
+      ? ["switch", "-C", checkout.name]
+      : ["switch", checkout.name];
+  const startedAt = Date.now();
+  onProgress?.({
+    type: "step",
+    key: "git-checkout-started",
+    text:
+      checkout.kind === "new"
+        ? `Creating branch ${checkout.name}`
+        : `Switching to branch ${checkout.name}`,
+    status: "started",
+    startedAt,
+  });
+  try {
+    await runGit(switchArgs, { cwd });
+    onProgress?.({
+      type: "step",
+      key: "git-checkout-completed",
+      text:
+        checkout.kind === "new"
+          ? `Created branch ${checkout.name}`
+          : `Switched to branch ${checkout.name}`,
+      status: "completed",
+      startedAt,
+      metadata: { durationMs: Date.now() - startedAt },
+    });
+  } catch (error) {
+    onProgress?.({
+      type: "step",
+      key: "git-checkout-failed",
+      text:
+        checkout.kind === "new"
+          ? `Failed to create branch ${checkout.name}`
+          : `Failed to switch to branch ${checkout.name}`,
+      status: "failed",
+      startedAt,
+      metadata: { durationMs: Date.now() - startedAt },
+    });
+    throw error;
+  }
+}
+
 async function provisionUnmanaged(
   opts: UnmanagedWorkspaceOpts,
 ): Promise<HostWorkspace> {
@@ -294,6 +365,19 @@ async function provisionUnmanaged(
   }
 
   const isGitRepo = await detectGitRepo(opts.path);
+  if (opts.checkout) {
+    if (!isGitRepo) {
+      throw new WorkspaceError(
+        "not_git_repo",
+        `Cannot checkout branch on non-git workspace: ${opts.path}`,
+      );
+    }
+    await applyUnmanagedCheckout({
+      cwd: opts.path,
+      checkout: opts.checkout,
+      onProgress: opts.onProgress,
+    });
+  }
   const isWorktree = isGitRepo ? await detectWorktree(opts.path) : false;
 
   return new ProvisionedHostWorkspace({
@@ -314,6 +398,7 @@ async function provisionWorktree(
     sourcePath: opts.sourcePath,
     targetPath: opts.targetPath,
     branchName: opts.branchName,
+    baseBranch: opts.baseBranch,
     timeoutMs: opts.timeoutMs,
     onProgress: opts.onProgress,
   });
@@ -332,6 +417,7 @@ async function provisionClone(opts: ManagedCloneOpts): Promise<HostWorkspace> {
     sourcePath: opts.sourcePath,
     targetPath: opts.targetPath,
     branchName: opts.branchName,
+    baseBranch: opts.baseBranch,
     timeoutMs: opts.timeoutMs,
     onProgress: opts.onProgress,
   });

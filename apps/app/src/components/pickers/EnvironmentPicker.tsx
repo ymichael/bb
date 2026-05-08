@@ -1,7 +1,7 @@
 import { useAtomValue } from "jotai";
 import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Check, ChevronDown, Monitor } from "lucide-react";
+import { Check, ChevronDown, Laptop } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { Host, ProjectSource, SandboxBackendInfo } from "@bb/domain";
 import { LocalhostBadge } from "@/components/ui";
@@ -170,22 +170,27 @@ export function EnvironmentPickerUI({
 
   const selected = useMemo((): SelectedEnvironment => {
     const parsed = parseEnvironmentValue(value);
-    if (!parsed) return { modeLabel: "Environment", icon: Monitor };
+    if (!parsed) return { modeLabel: "Environment", icon: Laptop };
     if (parsed.type === "host") {
-      const modeLabel = parsed.mode === "worktree" ? "Worktree" : "Direct";
+      const host = hosts.find((h) => h.id === parsed.hostId);
+      const isLocal = isLocalHost(parsed.hostId);
+      const modeLabel =
+        parsed.mode === "worktree"
+          ? "New worktree"
+          : isLocal
+            ? "Work locally"
+            : "Work remotely";
       const icon = getEnvironmentWorkspaceLabelIcon(
         parsed.mode === "worktree" ? "managed-worktree" : "other",
       );
-      const host = hosts.find((h) => h.id === parsed.hostId);
-      const hostConnected = host?.status === "connected";
-      if (isLocalHost(parsed.hostId)) {
-        return { modeLabel, icon, hostConnected };
+      if (isLocal) {
+        return { modeLabel, icon };
       }
       return {
         modeLabel,
         hostLabel: host?.name ?? "Unknown",
         icon,
-        hostConnected,
+        hostConnected: host?.status === "connected",
       };
     }
     const backend = sandboxBackends.find((b) => b.id === parsed.backendId);
@@ -339,14 +344,14 @@ function HostSectionGroup({
       {enabled ? (
         <>
           <EnvironmentMenuItem
-            label="Direct"
+            label={section.isLocal ? "Work locally" : "Work remotely"}
             icon={getEnvironmentWorkspaceLabelIcon("other")}
             itemValue={localValue}
             selectedValue={value}
             onSelect={onChange}
           />
           <EnvironmentMenuItem
-            label="Worktree"
+            label="New worktree"
             icon={getEnvironmentWorkspaceLabelIcon("managed-worktree")}
             itemValue={worktreeValue}
             selectedValue={value}

@@ -10,6 +10,8 @@ export const HOSTS_QUERY_KEY = "hosts";
 export const HOST_QUERY_KEY = "host";
 export const PROJECTS_QUERY_KEY = "projects";
 export const PROJECT_FILES_QUERY_KEY = "projectFiles";
+export const PROJECT_SOURCE_BRANCHES_QUERY_KEY = "projectSourceBranches";
+export const PROJECT_GITHUB_BRANCHES_QUERY_KEY = "projectGithubBranches";
 export const PROJECT_PROMPT_HISTORY_QUERY_KEY = "projectPromptHistory";
 export const THREADS_QUERY_KEY = "threads";
 export const THREADS_DISABLED_QUERY_KEY = "threadsDisabled";
@@ -86,6 +88,15 @@ export type ProjectFilesQueryKey = readonly [
 ];
 export type ProjectFilesQueryKeyPrefix = readonly [
   typeof PROJECT_FILES_QUERY_KEY,
+  string,
+];
+export type ProjectSourceBranchesQueryKey = readonly [
+  typeof PROJECT_SOURCE_BRANCHES_QUERY_KEY,
+  string,
+  string,
+];
+export type ProjectGithubBranchesQueryKey = readonly [
+  typeof PROJECT_GITHUB_BRANCHES_QUERY_KEY,
   string,
 ];
 export type ProjectSourceWorkspaceStatusQueryKey = readonly [
@@ -313,6 +324,19 @@ export function projectFilesQueryKeyPrefix(
   projectId: string,
 ): ProjectFilesQueryKeyPrefix {
   return [PROJECT_FILES_QUERY_KEY, projectId];
+}
+
+export function projectSourceBranchesQueryKey(
+  projectId: string,
+  hostId: string,
+): ProjectSourceBranchesQueryKey {
+  return [PROJECT_SOURCE_BRANCHES_QUERY_KEY, projectId, hostId];
+}
+
+export function projectGithubBranchesQueryKey(
+  projectId: string,
+): ProjectGithubBranchesQueryKey {
+  return [PROJECT_GITHUB_BRANCHES_QUERY_KEY, projectId];
 }
 
 export function projectSourceWorkspaceStatusQueryKey(

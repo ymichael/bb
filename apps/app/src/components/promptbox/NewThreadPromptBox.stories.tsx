@@ -4,6 +4,7 @@ import { ClaudeIcon } from "@/components/icons/ClaudeIcon";
 import { OpenAiIcon } from "@/components/icons/OpenAiIcon";
 import {
   NewThreadPromptBoxUI,
+  type NewThreadBranchConfig,
   type NewThreadEnvironmentConfig,
 } from "@/components/promptbox/NewThreadPromptBox";
 import type { ExecutionControlsProps } from "@/components/promptbox/ExecutionControls";
@@ -93,6 +94,21 @@ const baseEnvironment: NewThreadEnvironmentConfig = {
   isLocalHost: (hostId) => hostId === localHostId,
 };
 
+const baseBranch: NewThreadBranchConfig = {
+  value: "main",
+  isNew: false,
+  options: [
+    "main",
+    "develop",
+    "feat/timeline-pagination",
+    "fix/promote-thread",
+    "chore/upgrade-react",
+  ],
+  loading: false,
+  onChange: noop,
+  onCreate: noop,
+};
+
 const permissionModeOptions: readonly PickerOption<PermissionMode>[] = [
   { value: "full", label: "Full Access", tone: "warning" },
   { value: "workspace-write", label: "Workspace Write" },
@@ -164,6 +180,7 @@ function DefaultRow() {
         attachments={makeAttachments()}
         execution={baseExecution}
         environment={baseEnvironment}
+        branch={baseBranch}
         permission={basePermission}
       />
     </PromptStage>
@@ -189,6 +206,7 @@ function SubmittingRow() {
         attachments={makeAttachments()}
         execution={baseExecution}
         environment={baseEnvironment}
+        branch={baseBranch}
         permission={basePermission}
       />
     </PromptStage>
@@ -226,6 +244,7 @@ function ClaudeProviderRow() {
           serviceTier: { ...baseExecution.serviceTier!, supported: false },
         }}
         environment={baseEnvironment}
+        branch={baseBranch}
         permission={basePermission}
       />
     </PromptStage>
@@ -249,6 +268,7 @@ function FullAccessRow() {
         attachments={makeAttachments()}
         execution={baseExecution}
         environment={baseEnvironment}
+        branch={baseBranch}
         permission={{ ...basePermission, value: "full" }}
       />
     </PromptStage>

@@ -294,6 +294,7 @@ describe("RuntimeManager", () => {
         sourcePath: repoPath,
         targetPath,
         branchName: "bb/env-roots",
+        baseBranch: "main",
         timeoutMs: 900000,
       },
     });

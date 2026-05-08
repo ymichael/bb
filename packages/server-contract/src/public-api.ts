@@ -48,6 +48,8 @@ import type {
   ThreadStorageContentQuery,
   ThreadStorageFilesQuery,
   ProjectAttachmentContentQuery,
+  ProjectBranchesQuery,
+  ProjectBranchesResponse,
   ProjectDefaultExecutionOptionsQuery,
   ProjectAttachmentUploadForm,
   ProjectFilesQuery,
@@ -181,14 +183,35 @@ export type PublicApiSchema = {
   "/projects/:id/files": {
     /**
      * Search files in the project. Used for file mentions in the prompt box.
-     * Proxies to `workspace.list_files` on the workspace identified by
-     * `environmentId` (e.g. a worktree) when provided, falling back to the
-     * project's default source when `environmentId` is null.
+     * Proxies to `host.list_files` against the path of the environment
+     * identified by `environmentId` (e.g. a worktree) when provided, falling
+     * back to the project's default source path when `environmentId` is null.
      */
     $get: Endpoint<
       PathProjectId & { query: ProjectFilesQuery },
       WorkspaceFileListResponse
     >;
+  };
+  "/projects/:id/branches": {
+    /**
+     * List branches available on the project's local-path source for the
+     * given host. Used to populate the new-thread branch picker before any
+     * environment exists. Dispatches `host.list_branches` against the
+     * source's path — no provisioning, no env created.
+     */
+    $get: Endpoint<
+      PathProjectId & { query: ProjectBranchesQuery },
+      ProjectBranchesResponse
+    >;
+  };
+  "/projects/:id/github-branches": {
+    /**
+     * List branches for the project's GitHub source via the GitHub API. Used
+     * to populate the new-thread branch picker when the user picks a sandbox
+     * environment that will clone the GitHub repo. Returns `current` set to
+     * the repo's default branch so the picker can pre-select it.
+     */
+    $get: Endpoint<PathProjectId, ProjectBranchesResponse>;
   };
   "/projects/:id/attachments": {
     /** Upload a file attachment. Used to attach files to user messages. */
@@ -266,7 +289,7 @@ export type PublicApiSchema = {
     >;
   };
   "/environments/:id/diff/branches": {
-    /** List git branches. Proxies to `workspace.list_branches`. */
+    /** List git branches. Proxies to `host.list_branches` against the environment's path. */
     $get: Endpoint<PathId, string[]>;
   };
   "/environments/:id/actions": {

@@ -61,12 +61,14 @@ describe("workspace provisioning", () => {
       sourcePath: sourceRepo,
       targetPath,
       branchName: "feature",
+      baseBranch: "main",
       timeoutMs: 900000,
     });
     const second = await createWorktree({
       sourcePath: sourceRepo,
       targetPath,
       branchName: "feature",
+      baseBranch: "main",
       timeoutMs: 900000,
     });
 
@@ -87,6 +89,7 @@ describe("workspace provisioning", () => {
         sourcePath: sourceRepo,
         targetPath,
         branchName: "broken",
+        baseBranch: "main",
         timeoutMs: 900000,
       }),
     ).rejects.toThrow(/Setup script failed/u);
@@ -119,12 +122,14 @@ describe("workspace provisioning", () => {
         sourcePath: sourceRepo,
         targetPath: firstTargetPath,
         branchName: "feature-a",
+        baseBranch: "main",
         timeoutMs: 900000,
       }),
       createWorktree({
         sourcePath: sourceRepo,
         targetPath: secondTargetPath,
         branchName: "feature-b",
+        baseBranch: "main",
         timeoutMs: 900000,
       }),
     ]);
@@ -157,6 +162,7 @@ describe("workspace provisioning", () => {
       sourcePath: sourceRepo,
       targetPath,
       branchName: "clone-branch",
+      baseBranch: "main",
       timeoutMs: 900000,
     });
 
@@ -175,6 +181,7 @@ describe("workspace provisioning", () => {
         sourcePath: sourceRepo,
         targetPath,
         branchName: "broken-clone",
+        baseBranch: "main",
         timeoutMs: 900000,
       }),
     ).rejects.toThrow(/Setup script failed/u);
@@ -196,6 +203,7 @@ describe("workspace provisioning", () => {
       sourcePath: sourceRepo,
       targetPath,
       branchName: "clone-branch",
+      baseBranch: "main",
       timeoutMs: 900000,
     });
 
@@ -216,6 +224,7 @@ describe("workspace provisioning", () => {
       sourcePath: sourceRepo,
       targetPath,
       branchName: "feature",
+      baseBranch: "main",
       timeoutMs: 900000,
     });
 
@@ -323,6 +332,7 @@ describe("workspace provisioning", () => {
       sourcePath: sourceRepo,
       targetPath,
       branchName: "feature",
+      baseBranch: "main",
       timeoutMs: 900000,
     });
     await fs.writeFile(path.join(targetPath, "local.txt"), "dirty\n", "utf8");

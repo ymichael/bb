@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import type {
+  ProjectBranchesResponse,
   ProjectResponse,
   ProjectSourceWorkspaceStatusResponse,
   PromptHistoryResponse,
@@ -8,7 +9,9 @@ import type {
 import * as api from "@/lib/api";
 import {
   projectFilesQueryKey,
+  projectGithubBranchesQueryKey,
   projectPromptHistoryQueryKey,
+  projectSourceBranchesQueryKey,
   projectsQueryKey,
   projectSourceWorkspaceStatusQueryKey,
 } from "./query-keys";
@@ -38,6 +41,43 @@ export function useProjects() {
     queryKey: projectsQueryKey(),
     queryFn: () => api.listProjects(),
     staleTime: 30_000,
+  });
+}
+
+export function useProjectSourceBranches(
+  projectId: string | undefined,
+  hostId: string | null,
+  options?: QueryOptions,
+) {
+  const enabled =
+    (options?.enabled ?? true) && Boolean(projectId) && Boolean(hostId);
+  return useQuery<ProjectBranchesResponse>({
+    queryKey: projectSourceBranchesQueryKey(projectId ?? "", hostId ?? ""),
+    queryFn: () =>
+      api.getProjectSourceBranches(
+        requireProjectId(projectId, "useProjectSourceBranches"),
+        hostId ?? "",
+      ),
+    enabled,
+    refetchOnWindowFocus: false,
+    staleTime: 30_000,
+  });
+}
+
+export function useProjectGithubBranches(
+  projectId: string | undefined,
+  options?: QueryOptions,
+) {
+  const enabled = (options?.enabled ?? true) && Boolean(projectId);
+  return useQuery<ProjectBranchesResponse>({
+    queryKey: projectGithubBranchesQueryKey(projectId ?? ""),
+    queryFn: () =>
+      api.getProjectGithubBranches(
+        requireProjectId(projectId, "useProjectGithubBranches"),
+      ),
+    enabled,
+    refetchOnWindowFocus: false,
+    staleTime: 60_000,
   });
 }
 

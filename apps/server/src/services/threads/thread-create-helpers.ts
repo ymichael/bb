@@ -6,6 +6,7 @@ import {
 } from "@bb/db";
 import type { HostDaemonCommand } from "@bb/host-daemon-contract";
 import type { LocalPathProjectSource } from "@bb/domain";
+import type { BaseBranchSpec } from "@bb/server-contract";
 import type { AppDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
 import type { ThreadCreateServiceRequest } from "./thread-create-request.js";
@@ -13,6 +14,15 @@ import {
   deriveTitleFallback,
   sanitizeGeneratedBranchSlug,
 } from "./title-generation.js";
+
+/**
+ * Convert a {@link BaseBranchSpec} to the wire shape expected by the daemon's
+ * `environment.provision` command. `{ kind: "default" }` becomes `null`,
+ * which the daemon resolves to the source's default branch.
+ */
+export function baseBranchSpecToWire(spec: BaseBranchSpec): string | null {
+  return spec.kind === "named" ? spec.name : null;
+}
 
 type EnvironmentProvisionCommand = Extract<
   HostDaemonCommand,
@@ -64,6 +74,14 @@ export function requireSourceForHost(
   return source;
 }
 
+/**
+ * Pre-provision checkout for unmanaged workspaces, fully resolved on the
+ * server (the daemon receives an explicit branch name in both kinds).
+ */
+export type UnmanagedCheckoutCommand =
+  | { kind: "existing"; name: string }
+  | { kind: "new"; name: string };
+
 export type EnvironmentProvisionCommandArgs =
   | {
       workspaceProvisionType: "unmanaged";
@@ -71,6 +89,7 @@ export type EnvironmentProvisionCommandArgs =
       hostId: string;
       initiator: EnvironmentProvisionCommandInitiator;
       path: string;
+      checkout?: UnmanagedCheckoutCommand;
     }
   | {
       workspaceProvisionType: "managed-worktree" | "managed-clone";
@@ -80,6 +99,7 @@ export type EnvironmentProvisionCommandArgs =
       sourcePath: string;
       targetPath: string;
       branchName: string;
+      baseBranch: BaseBranchSpec;
       setupTimeoutMs: number;
     };
 
@@ -93,6 +113,7 @@ export function buildEnvironmentProvisionCommand(
         initiator: args.initiator,
         workspaceProvisionType: args.workspaceProvisionType,
         path: args.path,
+        ...(args.checkout ? { checkout: args.checkout } : {}),
       }
     : {
         type: "environment.provision" as const,
@@ -102,6 +123,7 @@ export function buildEnvironmentProvisionCommand(
         sourcePath: args.sourcePath,
         targetPath: args.targetPath,
         branchName: args.branchName,
+        baseBranch: baseBranchSpecToWire(args.baseBranch),
         setupTimeoutMs: args.setupTimeoutMs,
       };
 }

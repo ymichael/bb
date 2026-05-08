@@ -692,6 +692,7 @@ const commandResultOwners: CommandResultOwnerRegistry = {
   "host.sync_runtime_material": defineCommandResultOwner({
     applySideEffects: handleSandboxRuntimeMaterialResult,
   }),
+  "host.list_branches": null,
   "host.list_files": null,
   "host.read_file": null,
   "interactive.resolve": defineCommandResultOwner({
@@ -731,8 +732,6 @@ const commandResultOwners: CommandResultOwnerRegistry = {
     },
   }),
   "workspace.diff": null,
-  "workspace.list_branches": null,
-  "workspace.list_files": null,
   "workspace.promote": defineCommandResultOwner({
     applySideEffects: ({ deps, command, report }) => {
       handleWorkspaceMutationResult(deps, command, report);

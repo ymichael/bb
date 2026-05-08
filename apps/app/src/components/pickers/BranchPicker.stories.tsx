@@ -55,11 +55,15 @@ export function Overview() {
           onChange={noop}
         />
       </StoryRow>
-      <StoryRow label="open popover" hint="defaultOpen + modal=false">
+      <StoryRow
+        label="open popover"
+        hint="defaultOpen + modal=false + create-new affordance"
+      >
         <BranchPicker
           value="origin/main"
           options={branches}
           onChange={noop}
+          onCreate={noop}
           defaultOpen
           modal={false}
         />

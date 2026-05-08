@@ -38,6 +38,7 @@ export const HOST_DAEMON_COMMAND_TYPES = [
   "interactive.resolve",
   "host.sync_runtime_material",
   "host.list_files",
+  "host.list_branches",
   "host.read_file",
   "provider.list",
   "provider.list_models",
@@ -49,8 +50,6 @@ export const HOST_DAEMON_COMMAND_TYPES = [
   "workspace.squash_merge",
   "workspace.promote",
   "workspace.demote",
-  "workspace.list_files",
-  "workspace.list_branches",
   "replay.capture_list",
   "replay.capture_get",
   "replay.capture_delete",
@@ -248,6 +247,16 @@ export const hostListFilesCommandSchema = z.object({
   limit: z.number().int().positive().max(FILE_LIST_LIMIT_MAX),
 });
 
+/**
+ * List git branches at an absolute host path. Path-only sibling of
+ * `host.list_files`. Does not require an environment row, does not
+ * provision anything, and does not create daemon-side workspace state.
+ */
+export const hostListBranchesCommandSchema = z.object({
+  type: z.literal("host.list_branches"),
+  path: z.string().min(1),
+});
+
 export const providerListCommandSchema = z.object({
   type: z.literal("provider.list"),
 });
@@ -274,11 +283,23 @@ const environmentProvisionCommandBaseSchema =
     initiator: provisionInitiatorSchema.nullable(),
   });
 
+/**
+ * Pre-provision checkout for unmanaged workspaces. The server resolves the
+ * branch name (including server-minted names for the `new` case) before
+ * sending — daemon just runs the corresponding git checkout.
+ */
+const unmanagedCheckoutSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("existing"), name: z.string().min(1) }),
+  z.object({ kind: z.literal("new"), name: z.string().min(1) }),
+]);
+
 const unmanagedEnvironmentProvisionCommandSchema =
   environmentProvisionCommandBaseSchema.extend({
     workspaceProvisionType: z.literal("unmanaged"),
     /** Path to validate */
     path: z.string().min(1),
+    /** When set, the daemon checks out this branch before opening the workspace. */
+    checkout: unmanagedCheckoutSchema.optional(),
   });
 
 const managedEnvironmentProvisionFieldsSchema = z.object({
@@ -286,8 +307,13 @@ const managedEnvironmentProvisionFieldsSchema = z.object({
   sourcePath: z.string().min(1),
   /** Target path for worktree/clone creation */
   targetPath: z.string().min(1),
-  /** Branch name */
+  /** Name of the new branch the daemon should create for this environment. */
   branchName: z.string().min(1),
+  /**
+   * Branch on the source repo that the new branch should be based on. Pass
+   * `null` to use the source's default branch (resolved by the daemon).
+   */
+  baseBranch: z.string().min(1).nullable(),
   /** Maximum time in ms to wait for the setup script */
   setupTimeoutMs: z.number().int().positive(),
 });
@@ -382,18 +408,6 @@ export const workspaceDemoteCommandSchema =
     envBranch: z.string().min(1),
   });
 
-export const workspaceListFilesCommandSchema =
-  hostDaemonWorkspaceTargetSchema.extend({
-    type: z.literal("workspace.list_files"),
-    query: z.string().max(FILE_LIST_QUERY_MAX_LENGTH).optional(),
-    limit: z.number().int().positive().max(FILE_LIST_LIMIT_MAX),
-  });
-
-export const workspaceListBranchesCommandSchema =
-  hostDaemonWorkspaceTargetSchema.extend({
-    type: z.literal("workspace.list_branches"),
-  });
-
 const hostDaemonNonProvisionCommandSchema = z.discriminatedUnion("type", [
   threadStartCommandSchema,
   turnSubmitCommandSchema,
@@ -409,6 +423,7 @@ const hostDaemonNonProvisionCommandSchema = z.discriminatedUnion("type", [
   interactiveResolveCommandSchema,
   hostSyncRuntimeMaterialCommandSchema,
   hostListFilesCommandSchema,
+  hostListBranchesCommandSchema,
   hostReadFileCommandSchema,
   providerListCommandSchema,
   providerListModelsCommandSchema,
@@ -419,8 +434,6 @@ const hostDaemonNonProvisionCommandSchema = z.discriminatedUnion("type", [
   workspaceSquashMergeCommandSchema,
   workspacePromoteCommandSchema,
   workspaceDemoteCommandSchema,
-  workspaceListFilesCommandSchema,
-  workspaceListBranchesCommandSchema,
 ]);
 export const hostDaemonCommandSchema = z.union([
   hostDaemonNonProvisionCommandSchema,
@@ -440,6 +453,7 @@ export function shouldFlushEventsBeforeReportingCommandResult(
     case "environment.provision":
       return command.initiator !== null;
     case "environment.destroy":
+    case "host.list_branches":
     case "host.list_files":
     case "host.read_file":
     case "host.sync_runtime_material":
@@ -456,8 +470,6 @@ export function shouldFlushEventsBeforeReportingCommandResult(
     case "workspace.commit":
     case "workspace.demote":
     case "workspace.diff":
-    case "workspace.list_branches":
-    case "workspace.list_files":
     case "workspace.promote":
     case "workspace.squash_merge":
     case "workspace.status":
@@ -499,6 +511,10 @@ export const hostDaemonCommandResultSchemaByType = {
     appliedVersion: z.string().min(1),
   }),
   "host.list_files": fileListResultSchema,
+  "host.list_branches": z.object({
+    branches: z.array(z.string()),
+    current: z.string().nullable(),
+  }),
   "host.read_file": fileReadResultSchema,
   "provider.list": z.object({
     providers: z.array(providerInfoSchema),
@@ -530,11 +546,6 @@ export const hostDaemonCommandResultSchemaByType = {
   }),
   "workspace.demote": z.object({
     ok: z.boolean(),
-  }),
-  "workspace.list_files": fileListResultSchema,
-  "workspace.list_branches": z.object({
-    branches: z.array(z.string()),
-    current: z.string().nullable(),
   }),
 } as const satisfies Record<HostDaemonCommandType, z.ZodTypeAny>;
 

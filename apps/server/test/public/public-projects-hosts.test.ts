@@ -993,20 +993,15 @@ describe("public project and host routes", () => {
     }
   });
 
-  it("queues workspace.list_files for the default project source", async () => {
+  it("queues host.list_files for the default project source", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps, {
         id: "host-project-files",
       });
-      const { project, source } = seedProjectWithSource(harness.deps, {
+      const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
         path: "/tmp/project-files",
-      });
-      const environment = seedEnvironment(harness.deps, {
-        hostId: host.id,
-        projectId: project.id,
-        path: source.path,
       });
 
       const responsePromise = harness.app.request(
@@ -1015,14 +1010,11 @@ describe("public project and host routes", () => {
       const queued = await waitForQueuedCommand(
         harness,
         ({ command }) =>
-          command.type === "workspace.list_files" &&
-          command.environmentId === environment.id,
+          command.type === "host.list_files" &&
+          command.path === "/tmp/project-files",
       );
       expect(queued.command).toMatchObject({
-        workspaceContext: {
-          workspacePath: "/tmp/project-files",
-          workspaceProvisionType: "unmanaged",
-        },
+        path: "/tmp/project-files",
         query: "src",
         limit: 1,
       });
@@ -1042,7 +1034,7 @@ describe("public project and host routes", () => {
     }
   });
 
-  it("scopes workspace.list_files to a worktree environment when provided", async () => {
+  it("scopes host.list_files to a worktree environment when provided", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps, {
@@ -1067,14 +1059,11 @@ describe("public project and host routes", () => {
       const queued = await waitForQueuedCommand(
         harness,
         ({ command }) =>
-          command.type === "workspace.list_files" &&
-          command.environmentId === worktree.id,
+          command.type === "host.list_files" &&
+          command.path === "/tmp/project-files-worktree",
       );
       expect(queued.command).toMatchObject({
-        workspaceContext: {
-          workspacePath: "/tmp/project-files-worktree",
-          workspaceProvisionType: "managed-worktree",
-        },
+        path: "/tmp/project-files-worktree",
         query: "src",
         limit: 1,
       });

@@ -31,6 +31,7 @@ import type {
   EnvironmentPromotionResponse,
   EnvironmentStatusResponse,
   CreateThreadRequest,
+  ProjectBranchesResponse,
   ProjectResponse,
   ProjectSourceWorkspaceStatusResponse,
   PromptHistoryResponse,
@@ -411,6 +412,28 @@ export async function searchProjectFiles(args: {
         limit: String(args.limit),
         environmentId: args.environmentId ?? "",
       },
+    }),
+  );
+}
+
+export async function getProjectSourceBranches(
+  projectId: string,
+  hostId: string,
+): Promise<ProjectBranchesResponse> {
+  return request<ProjectBranchesResponse>(
+    apiClient.projects[":id"].branches.$get({
+      param: { id: projectId },
+      query: { hostId },
+    }),
+  );
+}
+
+export async function getProjectGithubBranches(
+  projectId: string,
+): Promise<ProjectBranchesResponse> {
+  return request<ProjectBranchesResponse>(
+    apiClient.projects[":id"]["github-branches"].$get({
+      param: { id: projectId },
     }),
   );
 }

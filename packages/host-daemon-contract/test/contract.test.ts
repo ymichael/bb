@@ -32,7 +32,7 @@ const INTENTIONAL_OPTIONAL_HOST_DAEMON_FIELDS: Record<string, string> = {
   "hostDaemonCommandSchema.mergeBaseBranch":
     "workspace.status may omit mergeBaseBranch when the caller only needs working-tree state.",
   "hostDaemonCommandSchema.query":
-    "host.list_files and workspace.list_files may omit a search string to list files without filtering.",
+    "host.list_files may omit a search string to list files without filtering.",
   "hostDaemonCommandSchema.selectedModel":
     "provider.list_models may omit selectedModel to list only active provider models.",
   "hostDaemonCommandSchema.threadStoragePath":
@@ -216,22 +216,24 @@ describe("host-daemon command schemas", () => {
 
     expect(
       hostDaemonCommandSchema.parse({
-        type: "workspace.list_files",
-        environmentId: "env_123",
-        environmentStatus: "ready",
-        workspaceContext: {
-          workspacePath: "/tmp/workspace",
-          workspaceProvisionType: "unmanaged",
-        },
+        type: "host.list_files",
+        path: "/tmp/workspace",
         limit: 1000,
       }),
     ).toMatchObject({
-      type: "workspace.list_files",
-      workspaceContext: {
-        workspacePath: "/tmp/workspace",
-        workspaceProvisionType: "unmanaged",
-      },
+      type: "host.list_files",
+      path: "/tmp/workspace",
       limit: 1000,
+    });
+
+    expect(
+      hostDaemonCommandSchema.parse({
+        type: "host.list_branches",
+        path: "/tmp/workspace",
+      }),
+    ).toMatchObject({
+      type: "host.list_branches",
+      path: "/tmp/workspace",
     });
 
     expect(
@@ -758,13 +760,8 @@ describe("host-daemon command schemas", () => {
 
     expect(() =>
       hostDaemonCommandSchema.parse({
-        type: "workspace.list_files",
-        environmentId: "env_123",
-        environmentStatus: "ready",
-        workspaceContext: {
-          workspacePath: "/tmp/workspace",
-          workspaceProvisionType: "unmanaged",
-        },
+        type: "host.list_files",
+        path: "/tmp/workspace",
         query: longQuery,
         limit: 100,
       }),
@@ -772,13 +769,8 @@ describe("host-daemon command schemas", () => {
 
     expect(() =>
       hostDaemonCommandSchema.parse({
-        type: "workspace.list_files",
-        environmentId: "env_123",
-        environmentStatus: "ready",
-        workspaceContext: {
-          workspacePath: "/tmp/workspace",
-          workspaceProvisionType: "unmanaged",
-        },
+        type: "host.list_files",
+        path: "/tmp/workspace",
         limit: contract.FILE_LIST_LIMIT_MAX + 1,
       }),
     ).toThrow();

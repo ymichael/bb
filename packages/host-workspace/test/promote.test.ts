@@ -39,6 +39,7 @@ async function createPrimaryAndWorktree(): Promise<{
     sourcePath: primaryRepo,
     targetPath: worktreePath,
     branchName: "bb/env-test",
+    baseBranch: "main",
     timeoutMs: 900000,
   });
   await fs.writeFile(

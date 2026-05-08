@@ -1,4 +1,4 @@
-import { Monitor, MoreHorizontal, PencilLine, Trash2 } from "lucide-react";
+import { MoreHorizontal, PencilLine, Trash2 } from "lucide-react";
 import {
   isLocalPathProjectSource,
   type LocalPathProjectSource,
@@ -6,6 +6,7 @@ import {
 } from "@bb/domain";
 import { LocalhostBadge, SettingsRow, StatusPill } from "@/components/ui";
 import { GitHubIcon } from "@/components/icons/GitHubIcon";
+import { PersistentHostIcon } from "@/lib/host-display";
 import { Button } from "@/components/ui";
 import {
   DropdownMenu,
@@ -40,7 +41,7 @@ export function ProjectSourceRow({
   return (
     <SettingsRow>
       {isLocalSource ? (
-        <Monitor className="size-4 shrink-0 text-muted-foreground" />
+        <PersistentHostIcon className="size-4 shrink-0 text-muted-foreground" />
       ) : (
         <GitHubIcon className="size-4 shrink-0" />
       )}

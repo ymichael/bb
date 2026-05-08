@@ -6,7 +6,7 @@ import {
   type LocalPathProjectSource,
   type ProjectSource,
 } from "@bb/domain";
-import type { EnvironmentArgs } from "@bb/server-contract";
+import type { BaseBranchSpec, EnvironmentArgs } from "@bb/server-contract";
 import { ApiError } from "../../errors.js";
 import type { AppDeps } from "../../types.js";
 import {
@@ -55,6 +55,7 @@ export interface ResolvedReuseThreadRequestEnvironment {
 
 export interface ResolvedSandboxHostThreadRequestEnvironment {
   cloneSource: GitHubRepoProjectSource;
+  baseBranch: BaseBranchSpec;
   sandboxType: SandboxHostThreadRequestEnvironment["sandboxType"];
   type: "sandbox-host";
 }
@@ -207,6 +208,7 @@ export function resolveStableThreadRequestEnvironmentFromProjectData(
 
       return {
         cloneSource,
+        baseBranch: environment.baseBranch,
         sandboxType: environment.sandboxType,
         type: "sandbox-host",
       };
@@ -307,6 +309,7 @@ export function resolveStableThreadRequestEnvironment(
         cloneSource: resolveSandboxCloneSourceForProject(deps, {
           projectId: args.projectId,
         }),
+        baseBranch: args.environment.baseBranch,
         sandboxType: args.environment.sandboxType,
         type: "sandbox-host",
       };

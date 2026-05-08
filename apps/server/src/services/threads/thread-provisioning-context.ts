@@ -9,23 +9,31 @@ import {
   type PromptInput,
   type ResolvedThreadExecutionOptions,
 } from "@bb/domain";
+import {
+  baseBranchSpecSchema,
+  unmanagedBranchSpecSchema,
+} from "@bb/server-contract";
 
 const directUnmanagedIntentSchema = z.object({
   type: z.literal("direct-unmanaged"),
   hostId: z.string().min(1),
   path: z.string().min(1),
+  /** Pre-thread checkout requested for the unmanaged workspace, if any. */
+  branch: unmanagedBranchSpecSchema.optional(),
 });
 
 const directManagedIntentSchema = z.object({
   type: z.literal("direct-managed"),
   hostId: z.string().min(1),
   sourcePath: z.string().min(1),
+  baseBranch: baseBranchSpecSchema,
   workspaceProvisionType: z.enum(["managed-worktree", "managed-clone"]),
 });
 
 const sandboxManagedIntentSchema = z.object({
   type: z.literal("sandbox-managed"),
   cloneRepoUrl: z.string().min(1),
+  baseBranch: baseBranchSpecSchema,
   sandboxType: z.string().min(1),
 });
 

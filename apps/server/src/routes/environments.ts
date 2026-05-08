@@ -166,12 +166,8 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
       hostId: environment.hostId,
       timeoutMs: COMMAND_TIMEOUT_MS,
       command: {
-        type: "workspace.list_branches",
-        environmentId: environment.id,
-        workspaceContext: {
-          workspacePath: environment.path,
-          workspaceProvisionType: environment.workspaceProvisionType,
-        },
+        type: "host.list_branches",
+        path: environment.path,
       },
     });
     return context.json(result.branches);

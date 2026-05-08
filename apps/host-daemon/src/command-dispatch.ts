@@ -15,6 +15,7 @@ import {
   type CommandDispatchOptions,
 } from "./command-dispatch-support.js";
 import { provisionEnvironment } from "./command-handlers/environment.js";
+import { listHostBranches } from "./command-handlers/host-branches.js";
 import { listHostFiles, readHostFile } from "./command-handlers/host-files.js";
 import { syncRuntimeMaterial } from "./command-handlers/host-runtime-material.js";
 import { resolveInteractiveRequest } from "./command-handlers/interactive.js";
@@ -36,10 +37,6 @@ import {
   promoteWorkspace,
   squashMerge,
 } from "./command-handlers/workspace.js";
-import {
-  listBranches,
-  listWorkspaceFiles,
-} from "./command-handlers/workspace-files.js";
 
 export {
   CommandDispatchError,
@@ -249,6 +246,10 @@ const commandHandlers: CommandHandlerMap = {
     command: Extract<HostDaemonCommand, { type: "host.list_files" }>,
     _options: CommandDispatchOptions,
   ) => listHostFiles(command),
+  "host.list_branches": async (
+    command: Extract<HostDaemonCommand, { type: "host.list_branches" }>,
+    _options: CommandDispatchOptions,
+  ) => listHostBranches(command),
   "host.read_file": async (
     command: Extract<HostDaemonCommand, { type: "host.read_file" }>,
     _options: CommandDispatchOptions,
@@ -343,14 +344,6 @@ const commandHandlers: CommandHandlerMap = {
     command: Extract<HostDaemonCommand, { type: "workspace.demote" }>,
     options: CommandDispatchOptions,
   ) => demoteWorkspace(command, options.runtimeManager),
-  "workspace.list_files": async (
-    command: Extract<HostDaemonCommand, { type: "workspace.list_files" }>,
-    options: CommandDispatchOptions,
-  ) => listWorkspaceFiles(command, options.runtimeManager),
-  "workspace.list_branches": async (
-    command: Extract<HostDaemonCommand, { type: "workspace.list_branches" }>,
-    options: CommandDispatchOptions,
-  ) => listBranches(command, options.runtimeManager),
 };
 
 function dispatchCommandByType<TType extends HostDaemonCommandType>(
