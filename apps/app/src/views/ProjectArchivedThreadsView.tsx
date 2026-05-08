@@ -138,21 +138,19 @@ export function ProjectArchivedThreadsView() {
           )}
 
           {archivedThreadsQuery.hasNextPage ? (
-            <div className="pt-1">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  archivedThreadsQuery.fetchNextPage();
-                }}
-                disabled={archivedThreadsQuery.isFetchingNextPage}
-              >
-                {archivedThreadsQuery.isFetchingNextPage
-                  ? "Loading…"
-                  : "Load more"}
-              </Button>
-            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => {
+                archivedThreadsQuery.fetchNextPage();
+              }}
+              disabled={archivedThreadsQuery.isFetchingNextPage}
+              className="h-9 w-full justify-center rounded-md px-3 text-sm font-normal text-muted-foreground"
+            >
+              {archivedThreadsQuery.isFetchingNextPage
+                ? "Loading…"
+                : "Load more"}
+            </Button>
           ) : null}
         </div>
       </div>
