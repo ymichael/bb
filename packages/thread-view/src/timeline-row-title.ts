@@ -4,7 +4,6 @@ import type {
   TimelineCommandWorkRow,
   TimelineFileChange,
   TimelineFileChangeWorkRow,
-  TimelineManagerAssignment,
   TimelineManagerAssignmentSystemRow,
   TimelineRowStatus,
   TimelineToolWorkRow,
@@ -44,6 +43,13 @@ export type TimelineStatusDecorationStatus =
   | "interrupted";
 
 /**
+ * Optional link target attached to a title segment. Renderers that support
+ * navigation (the App) can wrap the segment in a link; CLI renderers ignore
+ * the link and render the segment text directly.
+ */
+export type TimelineTitleLink = { kind: "thread"; threadId: string };
+
+/**
  * One slice of the title's text. Renderers walk the segment list and apply
  * `em`/`shimmer`/`truncate` per slice. There is no implicit "prefix vs content"
  * positional meaning — segment order is the only positional cue.
@@ -55,6 +61,11 @@ export interface TimelineTitleSegment {
   em: boolean;
   shimmer: boolean;
   truncate: boolean;
+  /**
+   * Optional navigation target. App renderers wrap the segment in a link;
+   * CLI/plain renderers ignore this field.
+   */
+  link?: TimelineTitleLink;
 }
 
 export type TimelineTitleDecoration =
@@ -153,7 +164,6 @@ type TimelinePermissionGrantApprovalWorkRow = Extract<
   { approvalKind: "permission-grant" }
 >;
 type TimelineSystemViewRow = Extract<ThreadTimelineViewRow, { kind: "system" }>;
-type TimelineManagerAssignmentAction = TimelineManagerAssignment["action"];
 type TimelineConversationViewRow = Extract<
   ThreadTimelineViewRow,
   { kind: "conversation" }
@@ -164,6 +174,7 @@ interface SegmentOptions {
   shimmer?: boolean;
   truncate?: boolean;
   plainText?: string;
+  link?: TimelineTitleLink;
 }
 
 // Titles are always rendered on a single line — both in the App (segments
@@ -185,6 +196,7 @@ function segment(text: string, opts: SegmentOptions = {}): TimelineTitleSegment 
     ...(opts.plainText !== undefined
       ? { plainText: collapseTitleNewlines(opts.plainText) }
       : {}),
+    ...(opts.link !== undefined ? { link: opts.link } : {}),
   };
 }
 
@@ -895,10 +907,9 @@ function mapWorkSummaryTitle(
       tone: "summary",
     });
   }
-  // Bundle summaryStyle: when this bundle is the active-latest, verb shimmers
-  // and the rest carries em. When a caller requests bundle styling without
-  // active-latest (defensive — production pairs them), render statically with
-  // no shimmer/em so we never claim activity that isn't there.
+  // Bundle summaryStyle: the rest always carries em — bundles are content
+  // recaps and should read emphasized regardless of frontier state. Shimmer
+  // is the active-latest tell on the verb.
   const verbSegment = segment(verb, { shimmer: isActive });
   if (rest.length === 0) {
     return makeTitle({
@@ -907,10 +918,7 @@ function mapWorkSummaryTitle(
     });
   }
   return makeTitle({
-    segments: [
-      verbSegment,
-      segment(rest, { em: isActive, truncate: true }),
-    ],
+    segments: [verbSegment, segment(rest, { em: true, truncate: true })],
     decorations,
   });
 }
@@ -940,63 +948,51 @@ function mapTurnTitle(row: TimelineViewTurnRow): TimelineTitle {
   });
 }
 
-function managerAssignmentDefaultDetails(
-  action: TimelineManagerAssignmentAction,
-): string {
-  switch (action) {
-    case "assign":
-      return "to manager";
-    case "release":
-      return "from manager";
-    case "transfer":
-      return "to new manager";
-    default:
-      return assertNever(action);
+function managerLinkSegment(
+  threadId: string | null,
+  title: string | null,
+): TimelineTitleSegment | null {
+  if (threadId === null) {
+    return null;
   }
+  return segment(title ?? threadId, {
+    em: true,
+    truncate: true,
+    link: { kind: "thread", threadId },
+  });
 }
 
-function managerAssignmentCompletedVerb(
-  action: TimelineManagerAssignmentAction,
-): string {
-  switch (action) {
-    case "assign":
-      return "Thread assigned";
-    case "release":
-      return "Thread released";
-    case "transfer":
-      return "Thread transferred";
-    default:
-      return assertNever(action);
-  }
+interface ManagerAssignmentVerbs {
+  assign: string;
+  release: string;
+  transferFrom: string;
+  transferTo: string;
 }
 
-function managerAssignmentPendingVerb(
-  action: TimelineManagerAssignmentAction,
-): string {
-  switch (action) {
-    case "assign":
-      return "Assigning thread";
-    case "release":
-      return "Releasing thread";
-    case "transfer":
-      return "Transferring thread";
+function managerAssignmentVerbs(
+  status: TimelineRowStatus,
+): ManagerAssignmentVerbs {
+  switch (status) {
+    case "completed":
+    case "error":
+    case "interrupted":
+      // Past-tense verb shared across terminal statuses; status decoration
+      // ("(failed)" / "(interrupted)") differentiates the outcome.
+      return {
+        assign: "Thread assigned to",
+        release: "Thread unassigned from",
+        transferFrom: "Thread reassigned from",
+        transferTo: "to",
+      };
+    case "pending":
+      return {
+        assign: "Assigning thread to",
+        release: "Releasing thread from",
+        transferFrom: "Reassigning thread from",
+        transferTo: "to",
+      };
     default:
-      return assertNever(action);
-  }
-}
-
-function managerAssignmentNoun(
-  action: TimelineManagerAssignmentAction,
-): string {
-  switch (action) {
-    case "assign":
-      return "assignment";
-    case "release":
-      return "release";
-    case "transfer":
-      return "transfer";
-    default:
-      return assertNever(action);
+      return assertNever(status);
   }
 }
 
@@ -1004,32 +1000,52 @@ function mapManagerAssignmentSystemTitle(
   row: TimelineManagerAssignmentSystemRow,
 ): TimelineTitle {
   const assignment = row.managerAssignment;
-  const details =
-    assignment.details !== null
-      ? assignment.details
-      : managerAssignmentDefaultDetails(assignment.action);
-  const verb = (() => {
+  const linkPrev = managerLinkSegment(
+    assignment.previousManagerThreadId,
+    assignment.previousManagerThreadTitle,
+  );
+  const linkNext = managerLinkSegment(
+    assignment.nextManagerThreadId,
+    assignment.nextManagerThreadTitle,
+  );
+  const shimmer = row.status === "pending";
+  const verbs = managerAssignmentVerbs(row.status);
+
+  const segments: TimelineTitleSegment[] = (() => {
+    switch (assignment.action) {
+      case "assign":
+        return filterNull([segment(verbs.assign, { shimmer }), linkNext]);
+      case "release":
+        return filterNull([segment(verbs.release, { shimmer }), linkPrev]);
+      case "transfer":
+        return filterNull([
+          segment(verbs.transferFrom, { shimmer }),
+          linkPrev,
+          linkNext !== null ? segment(verbs.transferTo, { shimmer }) : null,
+          linkNext,
+        ]);
+      default:
+        return assertNever(assignment.action);
+    }
+  })();
+
+  const decorations: TimelineTitleDecoration[] = (() => {
     switch (row.status) {
-      case "completed":
-        return managerAssignmentCompletedVerb(assignment.action);
-      case "pending":
-        return managerAssignmentPendingVerb(assignment.action);
       case "error":
-        return `Thread ${managerAssignmentNoun(assignment.action)} failed`;
+        return [statusDecoration("error", null)];
       case "interrupted":
-        return `Thread ${managerAssignmentNoun(assignment.action)} interrupted`;
+        return [statusDecoration("interrupted", null)];
+      case "pending":
+      case "completed":
+        return [];
       default:
         return assertNever(row.status);
     }
   })();
-  const segments: TimelineTitleSegment[] = [
-    segment(verb, { shimmer: row.status === "pending" }),
-  ];
-  if (details.trim().length > 0) {
-    segments.push(segment(details, { em: true, truncate: true }));
-  }
+
   return makeTitle({
     segments,
+    decorations,
     tone: row.status === "error" ? "destructive" : "default",
   });
 }

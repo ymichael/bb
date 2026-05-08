@@ -128,8 +128,6 @@ export const timelineSystemOperationKindValues = [
   "provider-unhandled",
   "warning",
   "deprecation",
-  "turn-diff",
-  "plan-updated",
 ] as const;
 export const timelineSystemOperationKindSchema = z.enum(
   timelineSystemOperationKindValues,
@@ -145,8 +143,6 @@ const timelineGenericSystemOperationKindSchema = z.enum([
   "provider-unhandled",
   "warning",
   "deprecation",
-  "turn-diff",
-  "plan-updated",
 ] as const);
 
 export const timelineManagerAssignmentActionValues = [
@@ -163,7 +159,10 @@ export type TimelineManagerAssignmentAction = z.infer<
 
 export const timelineManagerAssignmentSchema = z.object({
   action: timelineManagerAssignmentActionSchema,
-  details: z.string().nullable(),
+  previousManagerThreadId: z.string().nullable(),
+  previousManagerThreadTitle: z.string().nullable(),
+  nextManagerThreadId: z.string().nullable(),
+  nextManagerThreadTitle: z.string().nullable(),
 });
 export type TimelineManagerAssignment = z.infer<
   typeof timelineManagerAssignmentSchema

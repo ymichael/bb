@@ -14,6 +14,7 @@ import {
 import {
   TimelineTitleView,
   type TimelineTitleActionResolver,
+  type TimelineTitleLinkResolver,
 } from "./TimelineTitleView.js";
 
 export interface ExpandableTimelineRowProps {
@@ -24,6 +25,7 @@ export interface ExpandableTimelineRowProps {
   className?: string;
   horizontalPadding?: TimelineRowHorizontalPadding;
   onTitleAction?: TimelineTitleActionResolver;
+  resolveSegmentLinkHref?: TimelineTitleLinkResolver;
 }
 
 type ManualExpansionOverride = boolean | null;
@@ -45,6 +47,7 @@ function ExpandableTimelineRowComponent({
   onBeforeExpand,
   onTitleAction,
   renderBody,
+  resolveSegmentLinkHref,
   title,
 }: ExpandableTimelineRowProps) {
   const [manualExpansionOverride, setManualExpansionOverride] =
@@ -65,7 +68,11 @@ function ExpandableTimelineRowComponent({
       onToggle={handleToggle}
       headerToneClass={headerToneClass(title, isExpanded)}
       summaryContent={
-        <TimelineTitleView title={title} onTitleAction={onTitleAction} />
+        <TimelineTitleView
+          title={title}
+          onTitleAction={onTitleAction}
+          resolveSegmentLinkHref={resolveSegmentLinkHref}
+        />
       }
       summaryContentClassName={TIMELINE_ROW_HEADER_CONTENT_CLASS_NAME}
       className={cn("w-full", className)}

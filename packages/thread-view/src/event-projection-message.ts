@@ -199,7 +199,6 @@ export interface EventProjectionFileEditMessage extends EventProjectionMessageBa
 }
 
 export const eventProjectionOperationTypeValues = [
-  "plan-updated",
   "provider-unhandled",
   "warning",
   "deprecation",
@@ -207,7 +206,6 @@ export const eventProjectionOperationTypeValues = [
   "thread-provisioning",
   "operation",
   "compaction",
-  "turn-diff",
 ] as const;
 export type EventProjectionOperationType =
   (typeof eventProjectionOperationTypeValues)[number];
@@ -348,7 +346,6 @@ export type EventProjectionMessage =
 export interface BuildEventProjectionMessagesOptions {
   includeDebugRawEvents?: boolean;
   includeProviderUnhandledOperations?: boolean;
-  includeOptionalOperations?: boolean;
   systemClientRequestVisibility: SystemClientRequestVisibility;
   threadStatus?: Thread["status"];
   threadType?: Thread["type"];

@@ -85,7 +85,6 @@ export const MANAGER_CONVERSATION_TIMELINE_EVENT_SELECTION = {
 
 interface ThreadTimelineFromEventsBaseOptions {
   includeDebugRawEvents: boolean;
-  includeOptionalOperations: boolean;
   includeProviderUnhandledOperations: boolean;
   systemClientRequestVisibility: SystemClientRequestVisibility;
   threadStatus: Thread["status"];
@@ -123,7 +122,6 @@ export interface ThreadTimelineSourceSeqRange {
 }
 
 export interface BuildThreadTimelineTurnDetailsFromEventsOptions extends ThreadTimelineSourceSeqRange {
-  includeOptionalOperations: boolean;
   includeProviderUnhandledOperations: boolean;
   systemClientRequestVisibility: SystemClientRequestVisibility;
   threadStatus: Thread["status"];
@@ -218,8 +216,6 @@ function operationKindForMessage(
     case "provider-unhandled":
     case "warning":
     case "deprecation":
-    case "turn-diff":
-    case "plan-updated":
       return message.opType;
     case "operation":
       return managerAssignment !== null ? "manager-assignment" : "generic";
@@ -238,14 +234,22 @@ function managerAssignmentForMessage(
     return null;
   }
 
-  const action = message.threadOperation.metadata?.action;
+  const metadata = message.threadOperation.metadata;
+  if (metadata === null) {
+    return null;
+  }
+  const action = metadata.action;
   switch (action) {
     case "assign":
     case "release":
     case "transfer":
-      return { action, details: null };
-    case undefined:
-      return null;
+      return {
+        action,
+        previousManagerThreadId: metadata.previousParentThreadId,
+        previousManagerThreadTitle: metadata.previousParentThreadTitle,
+        nextManagerThreadId: metadata.nextParentThreadId,
+        nextManagerThreadTitle: metadata.nextParentThreadTitle,
+      };
     default:
       return assertNever(action);
   }
@@ -970,7 +974,6 @@ export function buildThreadTimelineFromEvents(
 ): ThreadTimelineFromEventsResult {
   const projectionOptions = {
     includeDebugRawEvents: args.options.includeDebugRawEvents,
-    includeOptionalOperations: args.options.includeOptionalOperations,
     includeProviderUnhandledOperations:
       args.options.includeProviderUnhandledOperations,
     systemClientRequestVisibility: args.options.systemClientRequestVisibility,
@@ -1015,7 +1018,6 @@ export function buildThreadTimelineTurnDetailsFromEvents(
 ): ThreadTimelineTurnDetailsFromEventsResult {
   const projection = buildEventProjectionEntries(args.events, {
     includeDebugRawEvents: false,
-    includeOptionalOperations: args.options.includeOptionalOperations,
     includeProviderUnhandledOperations:
       args.options.includeProviderUnhandledOperations,
     systemClientRequestVisibility: args.options.systemClientRequestVisibility,

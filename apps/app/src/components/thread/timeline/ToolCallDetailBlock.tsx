@@ -52,7 +52,7 @@ function CollapsibleHeader({ toolName, argEntries }: CollapsibleHeaderProps) {
       <div
         ref={expanded ? null : ref}
         className={cn(
-          "whitespace-pre-wrap break-words leading-tight",
+          "relative whitespace-pre-wrap break-words leading-tight",
           expanded ? null : "line-clamp-3",
         )}
       >
@@ -64,16 +64,37 @@ function CollapsibleHeader({ toolName, argEntries }: CollapsibleHeaderProps) {
             <span>{formatArgValue(value)}</span>
           </Fragment>
         ))}
+        {overflows && !expanded ? (
+          // The "Show more" pill sits over solid `bg-card` so the text stays
+          // fully legible. The fade lives in a separate spacer to the left so
+          // it never bleeds across the pill. `items-stretch` makes the
+          // gradient div fill the row's height.
+          <div
+            className="pointer-events-none absolute inset-x-0 bottom-0 flex h-[1lh] items-stretch justify-end"
+            aria-hidden
+          >
+            <div className="w-24 bg-gradient-to-l from-card to-transparent" />
+            <button
+              type="button"
+              onClick={() => setExpanded(true)}
+              aria-expanded={false}
+              aria-hidden={false}
+              className="pointer-events-auto cursor-pointer bg-card pl-2 text-muted-foreground hover:text-foreground"
+            >
+              Show more
+            </button>
+          </div>
+        ) : null}
       </div>
-      {overflows || expanded ? (
+      {expanded ? (
         <div className="mt-1 flex justify-end">
           <button
             type="button"
-            onClick={() => setExpanded((prev) => !prev)}
+            onClick={() => setExpanded(false)}
             className="text-muted-foreground hover:text-foreground"
-            aria-expanded={expanded}
+            aria-expanded={true}
           >
-            {expanded ? "Show less" : "Show more"}
+            Show less
           </button>
         </div>
       ) : null}

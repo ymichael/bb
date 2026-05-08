@@ -76,7 +76,9 @@ interface OwnershipOperationCase {
   managerAssignmentAction: TimelineManagerAssignment["action"];
   message: string;
   nextParentThreadId: string | null;
+  nextParentThreadTitle: string | null;
   previousParentThreadId: string | null;
+  previousParentThreadTitle: string | null;
 }
 
 const ownershipOperationCases: OwnershipOperationCase[] = [
@@ -85,21 +87,27 @@ const ownershipOperationCases: OwnershipOperationCase[] = [
     managerAssignmentAction: "assign",
     message: "Thread assigned to manager",
     nextParentThreadId: "thr-manager",
+    nextParentThreadTitle: "Manager",
     previousParentThreadId: null,
+    previousParentThreadTitle: null,
   },
   {
     action: "release",
     managerAssignmentAction: "release",
     message: "Thread released from manager",
     nextParentThreadId: null,
+    nextParentThreadTitle: null,
     previousParentThreadId: "thr-manager",
+    previousParentThreadTitle: "Manager",
   },
   {
     action: "transfer",
     managerAssignmentAction: "transfer",
     message: "Thread transferred to new manager",
     nextParentThreadId: "thr-manager-next",
+    nextParentThreadTitle: "Next Manager",
     previousParentThreadId: "thr-manager-previous",
+    previousParentThreadTitle: "Previous Manager",
   },
 ];
 
@@ -279,7 +287,6 @@ function buildContextWindowUsage(
     options: {
       includeDebugRawEvents: false,
       includeNestedRows: false,
-      includeOptionalOperations: false,
       includeProviderUnhandledOperations: false,
       systemClientRequestVisibility: "hidden",
       threadStatus: "idle",
@@ -299,7 +306,6 @@ function buildTimelineRows(
     options: {
       includeDebugRawEvents: false,
       includeNestedRows: true,
-      includeOptionalOperations: false,
       includeProviderUnhandledOperations: false,
       systemClientRequestVisibility: "hidden",
       threadStatus,
@@ -406,13 +412,22 @@ function fileChangeRowIdByPath(
 describe("buildThreadTimelineFromEvents", () => {
   it.each(ownershipOperationCases)(
     "uses $action ownership metadata rather than event message for operation titles",
-    ({ action, message, nextParentThreadId, previousParentThreadId }) => {
+    ({
+      action,
+      message,
+      nextParentThreadId,
+      nextParentThreadTitle,
+      previousParentThreadId,
+      previousParentThreadTitle,
+    }) => {
       const event = systemOperationEvent({
         message: "Ownership operation completed",
         metadata: {
           action,
           nextParentThreadId,
+          nextParentThreadTitle,
           previousParentThreadId,
+          previousParentThreadTitle,
         },
         seq: 1,
       });
@@ -430,7 +445,9 @@ describe("buildThreadTimelineFromEvents", () => {
       metadata: {
         action: "unknown-action",
         nextParentThreadId: null,
+        nextParentThreadTitle: null,
         previousParentThreadId: null,
+        previousParentThreadTitle: null,
       },
       seq: 1,
     });
@@ -448,7 +465,9 @@ describe("buildThreadTimelineFromEvents", () => {
       managerAssignmentAction,
       message,
       nextParentThreadId,
+      nextParentThreadTitle,
       previousParentThreadId,
+      previousParentThreadTitle,
     }) => {
       const rows = buildTimelineRows([
         systemOperationEvent({
@@ -456,7 +475,9 @@ describe("buildThreadTimelineFromEvents", () => {
           metadata: {
             action,
             nextParentThreadId,
+            nextParentThreadTitle,
             previousParentThreadId,
+            previousParentThreadTitle,
           },
           seq: 1,
         }),
@@ -467,7 +488,10 @@ describe("buildThreadTimelineFromEvents", () => {
           detail: null,
           managerAssignment: {
             action: managerAssignmentAction,
-            details: null,
+            previousManagerThreadId: previousParentThreadId,
+            previousManagerThreadTitle: previousParentThreadTitle,
+            nextManagerThreadId: nextParentThreadId,
+            nextManagerThreadTitle: nextParentThreadTitle,
           },
           operationKind: "manager-assignment",
           systemKind: "operation",
@@ -484,7 +508,9 @@ describe("buildThreadTimelineFromEvents", () => {
         metadata: {
           action: "migrate",
           nextParentThreadId: "thr-manager",
+          nextParentThreadTitle: "Manager",
           previousParentThreadId: null,
+          previousParentThreadTitle: null,
         },
         seq: 1,
       }),
@@ -526,7 +552,9 @@ describe("buildThreadTimelineFromEvents", () => {
             metadata: {
               action: "assign",
               nextParentThreadId: "thr-manager",
+              nextParentThreadTitle: "Manager",
               previousParentThreadId: null,
+              previousParentThreadTitle: null,
             },
             seq: 1,
             status: operationStatus,
@@ -539,7 +567,10 @@ describe("buildThreadTimelineFromEvents", () => {
         expect.objectContaining({
           managerAssignment: {
             action: "assign",
-            details: null,
+            previousManagerThreadId: null,
+            previousManagerThreadTitle: null,
+            nextManagerThreadId: "thr-manager",
+            nextManagerThreadTitle: "Manager",
           },
           operationKind: "manager-assignment",
           status: expectedRowStatus,

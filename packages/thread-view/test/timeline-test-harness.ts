@@ -1066,8 +1066,6 @@ export function renderTimelineFixture(
   const commonProjectionOptions = {
     includeDebugRawEvents:
       args.projectionOptions.includeDebugRawEvents ?? false,
-    includeOptionalOperations:
-      args.projectionOptions.includeOptionalOperations ?? false,
     includeProviderUnhandledOperations:
       args.projectionOptions.includeProviderUnhandledOperations ?? false,
     systemClientRequestVisibility:

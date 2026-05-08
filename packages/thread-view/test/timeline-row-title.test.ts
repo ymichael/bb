@@ -411,7 +411,7 @@ describe("buildTimelineRowTitle", () => {
     );
 
     expect(title.plain).toBe(
-      "Ran tool: LookupTool select:TodoWrite (3s, interrupted)",
+      "Ran tool: LookupTool { query: select:TodoWrite } (3s, interrupted)",
     );
     expect(title.decorations).toEqual([
       { kind: "status", status: "interrupted", durationMs: 3_000 },
@@ -654,87 +654,149 @@ describe("buildTimelineRowTitle", () => {
   it.each([
     {
       action: "assign",
-      expectedPlain: "Thread assigned to manager",
-      expectedSegments: ["Thread assigned", "to manager"],
+      managerAssignment: {
+        action: "assign" as const,
+        previousManagerThreadId: null,
+        previousManagerThreadTitle: null,
+        nextManagerThreadId: "thr_next",
+        nextManagerThreadTitle: "Frontend Manager",
+      },
+      expectedPlain: "Thread assigned to Frontend Manager",
+      expectedSegments: ["Thread assigned to", "Frontend Manager"],
+      expectedLinkIndex: 1,
+      expectedLinkThreadId: "thr_next",
     },
     {
       action: "release",
-      expectedPlain: "Thread released from manager",
-      expectedSegments: ["Thread released", "from manager"],
+      managerAssignment: {
+        action: "release" as const,
+        previousManagerThreadId: "thr_prev",
+        previousManagerThreadTitle: "Frontend Manager",
+        nextManagerThreadId: null,
+        nextManagerThreadTitle: null,
+      },
+      expectedPlain: "Thread unassigned from Frontend Manager",
+      expectedSegments: ["Thread unassigned from", "Frontend Manager"],
+      expectedLinkIndex: 1,
+      expectedLinkThreadId: "thr_prev",
     },
     {
       action: "transfer",
-      expectedPlain: "Thread transferred to new manager",
-      expectedSegments: ["Thread transferred", "to new manager"],
+      managerAssignment: {
+        action: "transfer" as const,
+        previousManagerThreadId: "thr_prev",
+        previousManagerThreadTitle: "Frontend Manager",
+        nextManagerThreadId: "thr_next",
+        nextManagerThreadTitle: "Backend Manager",
+      },
+      expectedPlain: "Thread reassigned from Frontend Manager to Backend Manager",
+      expectedSegments: [
+        "Thread reassigned from",
+        "Frontend Manager",
+        "to",
+        "Backend Manager",
+      ],
+      expectedLinkIndex: 1,
+      expectedLinkThreadId: "thr_prev",
     },
   ] satisfies Array<{
     action: TimelineManagerAssignment["action"];
+    managerAssignment: TimelineManagerAssignment;
     expectedPlain: string;
-    expectedSegments: [string, string];
+    expectedSegments: string[];
+    expectedLinkIndex: number;
+    expectedLinkThreadId: string;
   }>)(
     "renders typed manager assignment system action $action",
-    ({ action, expectedPlain, expectedSegments }) => {
+    ({
+      managerAssignment,
+      expectedPlain,
+      expectedSegments,
+      expectedLinkIndex,
+      expectedLinkThreadId,
+    }) => {
       const title = buildTimelineRowTitle(
-        managerAssignmentSystemRow({
-          managerAssignment: { action, details: null },
-        }),
+        managerAssignmentSystemRow({ managerAssignment }),
         DEFAULT_OPTIONS,
       );
 
       expect(title.plain).toBe(expectedPlain);
       expect(title.segments.map((s) => s.text)).toEqual(expectedSegments);
-      expect(title.segments[0]?.em).toBe(false);
-      expect(title.segments[1]?.em).toBe(true);
+      const linkSegment = title.segments[expectedLinkIndex];
+      expect(linkSegment?.em).toBe(true);
+      expect(linkSegment?.link).toEqual({
+        kind: "thread",
+        threadId: expectedLinkThreadId,
+      });
     },
   );
 
-  it("uses explicit manager assignment details when present", () => {
+  it("falls back to the manager thread id when title is null", () => {
     const title = buildTimelineRowTitle(
       managerAssignmentSystemRow({
         managerAssignment: {
           action: "assign",
-          details: "to Core Product Manager",
+          previousManagerThreadId: null,
+          previousManagerThreadTitle: null,
+          nextManagerThreadId: "thr_xyz",
+          nextManagerThreadTitle: null,
         },
       }),
       DEFAULT_OPTIONS,
     );
 
-    expect(title.plain).toBe("Thread assigned to Core Product Manager");
-    expect(title.segments.map((s) => s.text)).toEqual([
-      "Thread assigned",
-      "to Core Product Manager",
-    ]);
-    expect(title.segments[1]?.em).toBe(true);
+    expect(title.plain).toBe("Thread assigned to thr_xyz");
+    expect(title.segments[1]?.text).toBe("thr_xyz");
+    expect(title.segments[1]?.link).toEqual({
+      kind: "thread",
+      threadId: "thr_xyz",
+    });
   });
 
   it.each([
     {
-      expectedPlain: "Assigning thread to manager",
+      expectedPlain: "Assigning thread to Frontend Manager",
       expectedShimmer: true,
+      expectedDecorationText: "",
       status: "pending",
     },
     {
-      expectedPlain: "Thread assignment failed to manager",
+      expectedPlain: "Thread assigned to Frontend Manager (error)",
       expectedShimmer: false,
+      expectedDecorationText: "(error)",
       expectedTone: "destructive",
       status: "error",
     },
     {
-      expectedPlain: "Thread assignment interrupted to manager",
+      expectedPlain: "Thread assigned to Frontend Manager (interrupted)",
       expectedShimmer: false,
+      expectedDecorationText: "(interrupted)",
       status: "interrupted",
     },
   ] satisfies Array<{
     expectedPlain: string;
     expectedShimmer: boolean;
+    expectedDecorationText: string;
     expectedTone?: "destructive";
     status: Exclude<TimelineSystemRow["status"], "completed" | null>;
   }>)(
     "renders manager assignment $status status with typed wording",
-    ({ expectedPlain, expectedShimmer, expectedTone, status }) => {
+    ({
+      expectedPlain,
+      expectedShimmer,
+      expectedDecorationText,
+      expectedTone,
+      status,
+    }) => {
       const title = buildTimelineRowTitle(
         managerAssignmentSystemRow({
-          managerAssignment: { action: "assign", details: null },
+          managerAssignment: {
+            action: "assign",
+            previousManagerThreadId: null,
+            previousManagerThreadTitle: null,
+            nextManagerThreadId: "thr_next",
+            nextManagerThreadTitle: "Frontend Manager",
+          },
           status,
         }),
         DEFAULT_OPTIONS,
@@ -743,6 +805,13 @@ describe("buildTimelineRowTitle", () => {
       expect(title.plain).toBe(expectedPlain);
       expect(title.segments[0]?.shimmer).toBe(expectedShimmer);
       expect(title.tone).toBe(expectedTone ?? "default");
+      if (expectedDecorationText.length > 0) {
+        expect(title.decorations.map(formatTimelineDecorationText)).toContain(
+          expectedDecorationText,
+        );
+      } else {
+        expect(title.decorations).toEqual([]);
+      }
     },
   );
 
@@ -997,15 +1066,17 @@ describe("buildTimelineRowTitle", () => {
       workStyle: "default",
     });
 
-    expect(bundleTitle.plain).toBe("Ran 1 web search, fetched 1 web page");
-    expect(bundleTitle.segments[0]?.text).toBe("Ran");
-    expect(bundleTitle.segments[1]?.text).toBe(
-      "1 web search, fetched 1 web page",
+    expect(bundleTitle.plain).toBe(
+      "Researched 1 search query, 1 web page",
     );
-    expect(backgroundTitle.plain).toBe("Ran 1 web search, fetched 1 web page");
+    expect(bundleTitle.segments[0]?.text).toBe("Researched");
+    expect(bundleTitle.segments[1]?.text).toBe("1 search query, 1 web page");
+    expect(backgroundTitle.plain).toBe(
+      "Researched 1 search query, 1 web page",
+    );
     expect(backgroundTitle.segments).toEqual([
       {
-        text: "Ran 1 web search, fetched 1 web page",
+        text: "Researched 1 search query, 1 web page",
         em: false,
         shimmer: false,
         truncate: true,
@@ -1024,7 +1095,7 @@ describe("buildTimelineRowTitle", () => {
       DEFAULT_OPTIONS,
     );
 
-    expect(title.plain).toBe("Created 1 file, deleted 1 file, edited 1 file");
+    expect(title.plain).toBe("Edited 3 files");
   });
 
   it("does not relabel completed summaries as active", () => {
@@ -1033,7 +1104,7 @@ describe("buildTimelineRowTitle", () => {
       workStyle: "default",
     });
 
-    expect(title.plain).toBe("Ran 1 web search");
+    expect(title.plain).toBe("Researched 1 search query");
     expect(title.segments.every((s) => !s.shimmer)).toBe(true);
   });
 
@@ -1099,7 +1170,7 @@ describe("buildTimelineRowTitle", () => {
       isActiveLatestBundle: true,
     });
 
-    expect(title.plain).toBe("Running 1 web search");
+    expect(title.plain).toBe("Researching 1 search query");
     expect(title.segments.some((s) => s.shimmer)).toBe(true);
   });
 

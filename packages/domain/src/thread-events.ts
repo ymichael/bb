@@ -149,7 +149,9 @@ export type OwnershipChangeOperationAction = z.infer<
 export const ownershipChangeOperationMetadataSchema = z.object({
   action: ownershipChangeOperationActionSchema,
   nextParentThreadId: z.string().nullable(),
+  nextParentThreadTitle: z.string().nullable(),
   previousParentThreadId: z.string().nullable(),
+  previousParentThreadTitle: z.string().nullable(),
 });
 export type OwnershipChangeOperationMetadata = z.infer<
   typeof ownershipChangeOperationMetadataSchema

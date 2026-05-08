@@ -960,7 +960,6 @@ export function buildBundle(args: {
     options: {
       includeDebugRawEvents: false,
       includeNestedRows: false,
-      includeOptionalOperations: false,
       includeProviderUnhandledOperations: false,
       systemClientRequestVisibility: "hidden",
       threadStatus: "idle",
@@ -974,7 +973,6 @@ export function buildBundle(args: {
     options: {
       includeDebugRawEvents: false,
       includeNestedRows: true,
-      includeOptionalOperations: false,
       includeProviderUnhandledOperations: false,
       systemClientRequestVisibility: "hidden",
       threadStatus: "idle",

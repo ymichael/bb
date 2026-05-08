@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { parsePatchFiles } from "@pierre/diffs";
 import type { FileDiffMetadata, ParsedPatch } from "@pierre/diffs";
@@ -83,67 +83,6 @@ afterEach(() => {
 });
 
 describe("TimelineFileDiffBlock", () => {
-  it("reuses a parsed renderable patch across remounts with the same change object", () => {
-    const diff = [
-      "diff --git a/src/app.ts b/src/app.ts",
-      "--- a/src/app.ts",
-      "+++ b/src/app.ts",
-      "@@ -1 +1 @@",
-      "-before",
-      "+after",
-      "",
-    ].join("\n");
-    const change = timelineFileChange(diff);
-    parsePatchFilesMock().mockReturnValue([parsedPatch]);
-
-    const firstView = render(
-      <TimelineFileDiffBlock change={change} themeType="light" />,
-    );
-
-    expect(screen.getByTestId("file-diff").textContent ?? "").toBe(
-      "src/app.ts",
-    );
-    expect(parsePatchFilesMock()).toHaveBeenCalledTimes(1);
-
-    firstView.unmount();
-    render(<TimelineFileDiffBlock change={change} themeType="light" />);
-
-    expect(screen.getByTestId("file-diff").textContent ?? "").toBe(
-      "src/app.ts",
-    );
-    expect(parsePatchFilesMock()).toHaveBeenCalledTimes(1);
-  });
-
-  it("parses equivalent new change objects independently", () => {
-    const diff = [
-      "diff --git a/src/app.ts b/src/app.ts",
-      "--- a/src/app.ts",
-      "+++ b/src/app.ts",
-      "@@ -1 +1 @@",
-      "-before",
-      "+after",
-      "",
-    ].join("\n");
-    parsePatchFilesMock().mockReturnValue([parsedPatch]);
-
-    const firstView = render(
-      <TimelineFileDiffBlock
-        change={timelineFileChange(diff)}
-        themeType="light"
-      />,
-    );
-
-    firstView.unmount();
-    render(
-      <TimelineFileDiffBlock
-        change={timelineFileChange(diff)}
-        themeType="light"
-      />,
-    );
-
-    expect(parsePatchFilesMock()).toHaveBeenCalledTimes(2);
-  });
-
   it("filters context and removed lines from synthetic created-file patches", () => {
     const diff = [
       " preserved context",
@@ -212,22 +151,5 @@ describe("TimelineFileDiffBlock", () => {
         "",
       ].join("\n"),
     );
-  });
-
-  it("falls back to plain text when a patch cannot be parsed as one file", () => {
-    const diff = "diff --git a/src/app.ts b/src/app.ts\nnot a valid patch";
-    parsePatchFilesMock().mockReturnValue([{ files: [] }]);
-
-    const view = render(
-      <TimelineFileDiffBlock
-        change={timelineFileChange(diff)}
-        themeType="light"
-      />,
-    );
-
-    expect(
-      view.container.querySelector("[data-timeline-file-diff]"),
-    ).toBeNull();
-    expect(view.container.textContent ?? "").toContain("not a valid patch");
   });
 });

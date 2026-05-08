@@ -762,7 +762,6 @@ function buildThreadTimelineInternal(
   }
   const commonProjectionOptions = {
     includeDebugRawEvents: false,
-    includeOptionalOperations: false,
     includeProviderUnhandledOperations,
     systemClientRequestVisibility,
     threadStatus: thread.status,
@@ -971,7 +970,6 @@ export function buildTimelineTurnSummaryDetails(
       toThreadEventWithMeta(row),
     ),
     options: {
-      includeOptionalOperations: false,
       includeProviderUnhandledOperations,
       systemClientRequestVisibility,
       sourceSeqEnd: sourceRange.sourceSeqEnd,

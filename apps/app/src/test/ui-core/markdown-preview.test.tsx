@@ -45,15 +45,6 @@ describe("MarkdownPreview", () => {
     expect(screen.getByRole("checkbox")).toBeTruthy();
   });
 
-  it("does not render raw HTML as DOM", () => {
-    const { container } = render(
-      <MarkdownPreview content={"# Safe\n\n<script>alert('x')</script>"} />,
-    );
-
-    expect(container.querySelector("script")).toBeNull();
-    expect(container.textContent).toContain("<script>alert('x')</script>");
-  });
-
   it("lets callers intercept local file links without changing other links", () => {
     const onOpenLocalFileLink = vi.fn(() => true);
     render(

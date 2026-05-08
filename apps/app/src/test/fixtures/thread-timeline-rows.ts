@@ -625,7 +625,10 @@ export function systemRow({
       status,
       managerAssignment: managerAssignment ?? {
         action: "assign",
-        details: null,
+        previousManagerThreadId: null,
+        previousManagerThreadTitle: null,
+        nextManagerThreadId: null,
+        nextManagerThreadTitle: null,
       },
     };
   }

@@ -585,7 +585,7 @@ describe("buildTimelineViewRows", () => {
     ).toBe("Running 2 tools");
   });
 
-  it("groups child work under nested delegation rows", () => {
+  it("collapses completed delegation children into a step-summary", () => {
     const rows = buildTimelineViewRows([
       delegationRow({
         childRows: [
@@ -610,7 +610,7 @@ describe("buildTimelineViewRows", () => {
     ]);
 
     const delegation = expectDelegationWorkRow(rows[0]);
-    const childSummary = expectBundleSummaryRow(delegation.childRows[0]);
+    const childSummary = expectStepSummaryRow(delegation.childRows[0]);
 
     expect(rows).toHaveLength(1);
     expect(delegation.childRows).toHaveLength(1);

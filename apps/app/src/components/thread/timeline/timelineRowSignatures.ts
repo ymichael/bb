@@ -202,7 +202,16 @@ function computeTimelineRowRenderSignature(row: ThreadTimelineViewRow): string {
             ? row.managerAssignment.action
             : null,
           row.operationKind === "manager-assignment"
-            ? row.managerAssignment.details
+            ? row.managerAssignment.previousManagerThreadId
+            : null,
+          row.operationKind === "manager-assignment"
+            ? row.managerAssignment.previousManagerThreadTitle
+            : null,
+          row.operationKind === "manager-assignment"
+            ? row.managerAssignment.nextManagerThreadId
+            : null,
+          row.operationKind === "manager-assignment"
+            ? row.managerAssignment.nextManagerThreadTitle
             : null,
           row.title,
           row.detail,

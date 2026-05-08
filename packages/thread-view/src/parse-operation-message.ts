@@ -24,7 +24,7 @@ import type {
 
 type ParseOperationMessageOptions = Pick<
   BuildEventProjectionMessagesOptions,
-  "includeOptionalOperations" | "includeProviderUnhandledOperations"
+  "includeProviderUnhandledOperations"
 >;
 
 type PermissionGrantLifecycleEvent = Extract<
@@ -425,17 +425,6 @@ export function parseOperationMessage(
         `compaction:${getCompactionKey(decoded, meta)}`,
       ),
     };
-  }
-
-  if (
-    options?.includeOptionalOperations &&
-    decoded.type === "turn/diff/updated"
-  ) {
-    return op(decoded, meta, "turn-diff", {
-      opType: "turn-diff",
-      title: "Turn diff updated",
-      detail: decoded.diff,
-    });
   }
 
   return null;

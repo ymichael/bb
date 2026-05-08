@@ -338,4 +338,88 @@ describe("TimelineTitleView", () => {
     expect(onWrapperClick).not.toHaveBeenCalled();
     expect(onWrapperKeyDown).not.toHaveBeenCalled();
   });
+
+  it("renders linked segments as anchors using the resolver href", () => {
+    const resolver = vi.fn(() => "/projects/proj_1/threads/thr_manager");
+
+    render(
+      <TimelineTitleView
+        title={title({
+          segments: [
+            seg("Thread assigned to"),
+            {
+              text: "Manager",
+              em: true,
+              shimmer: false,
+              truncate: true,
+              link: { kind: "thread", threadId: "thr_manager" },
+            },
+          ],
+        })}
+        resolveSegmentLinkHref={resolver}
+      />,
+    );
+
+    expect(resolver).toHaveBeenCalledWith({
+      kind: "thread",
+      threadId: "thr_manager",
+    });
+    const link = screen.getByRole("link", { name: "Manager" });
+    expect(link.tagName).toBe("A");
+    expect(link.getAttribute("href")).toBe(
+      "/projects/proj_1/threads/thr_manager",
+    );
+  });
+
+  it("falls back to a plain span when the link resolver returns null", () => {
+    const resolver = vi.fn(() => null);
+
+    render(
+      <TimelineTitleView
+        title={title({
+          segments: [
+            {
+              text: "Manager",
+              em: true,
+              shimmer: false,
+              truncate: true,
+              link: { kind: "thread", threadId: "thr_manager" },
+            },
+          ],
+        })}
+        resolveSegmentLinkHref={resolver}
+      />,
+    );
+
+    expect(resolver).toHaveBeenCalled();
+    expect(screen.queryByRole("link")).toBeNull();
+    expect(screen.getByText("Manager").tagName).toBe("SPAN");
+  });
+
+  it("stops link click propagation so the row header doesn't toggle", () => {
+    const onWrapperClick = vi.fn();
+
+    render(
+      <div onClick={onWrapperClick}>
+        <TimelineTitleView
+          title={title({
+            segments: [
+              {
+                text: "Manager",
+                em: true,
+                shimmer: false,
+                truncate: true,
+                link: { kind: "thread", threadId: "thr_manager" },
+              },
+            ],
+          })}
+          resolveSegmentLinkHref={() => "/projects/p/threads/thr_manager"}
+        />
+      </div>,
+    );
+
+    fireEvent.click(screen.getByRole("link", { name: "Manager" }));
+
+    expect(onWrapperClick).not.toHaveBeenCalled();
+  });
 });

@@ -484,7 +484,9 @@ describe("public thread manager and ownership routes", () => {
         metadata: {
           action: "assign",
           previousParentThreadId: null,
+          previousParentThreadTitle: null,
           nextParentThreadId: managerThread.id,
+          nextParentThreadTitle: "Manager thread",
         },
       });
 

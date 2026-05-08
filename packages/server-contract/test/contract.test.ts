@@ -795,7 +795,10 @@ describe("server-contract clients", () => {
       status: "completed",
       managerAssignment: {
         action: "assign",
-        details: null,
+        previousManagerThreadId: null,
+        previousManagerThreadTitle: null,
+        nextManagerThreadId: "thr_manager",
+        nextManagerThreadTitle: "Manager",
       },
     };
 

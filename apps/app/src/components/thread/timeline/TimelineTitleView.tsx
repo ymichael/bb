@@ -7,6 +7,7 @@ import {
   type TimelineTitle,
   type TimelineTitleAction,
   type TimelineTitleDecoration,
+  type TimelineTitleLink,
   type TimelineTitleSegment,
   type TimelineTitleTone,
 } from "@bb/thread-view";
@@ -21,10 +22,21 @@ export type TimelineTitleActionResolver = (
   action: TimelineTitleAction,
 ) => (() => void) | null;
 
+/**
+ * Resolves a segment-level link target (e.g. a manager thread) to an href the
+ * renderer uses for an `<a>` element. Return `null` to render the segment as
+ * plain (non-interactive) text — useful when the target is not navigable from
+ * the current surface (e.g. a story without routing context).
+ */
+export type TimelineTitleLinkResolver = (
+  link: TimelineTitleLink,
+) => string | null;
+
 export interface TimelineTitleViewProps {
   title: TimelineTitle;
   className?: string;
   onTitleAction?: TimelineTitleActionResolver;
+  resolveSegmentLinkHref?: TimelineTitleLinkResolver;
 }
 
 function emToneClass(tone: TimelineTitleTone): string {
@@ -70,7 +82,10 @@ function renderSegment(
   segment: TimelineTitleSegment,
   index: number,
   tone: TimelineTitleTone,
-  interactive: { onClick: (() => void) | null },
+  interactive: {
+    onClick: (() => void) | null;
+    linkHref: string | null;
+  },
 ): ReactNode {
   const widthClass = segment.truncate
     ? "min-w-0 truncate whitespace-pre"
@@ -81,6 +96,35 @@ function renderSegment(
     toneClass,
     segment.shimmer ? "animate-shine" : null,
   );
+
+  if (interactive.linkHref !== null) {
+    const href = interactive.linkHref;
+    return (
+      <a
+        // Title segments live inside a row-level CollapsibleHeader button; HTML
+        // forbids nested <button> elements, so we render a stopped-propagation
+        // anchor — the click/Enter on the link must not also toggle the row.
+        // We render <a> directly (not react-router <Link>) so the title view
+        // stays decoupled from routing; the resolver provides the final href.
+        key={index}
+        href={href}
+        className={cn(
+          baseClass,
+          "cursor-pointer text-left underline underline-offset-2 focus-visible:outline-none",
+        )}
+        onClick={(event: MouseEvent<HTMLAnchorElement>) => {
+          event.stopPropagation();
+        }}
+        onKeyDown={(event: KeyboardEvent<HTMLAnchorElement>) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.stopPropagation();
+          }
+        }}
+      >
+        {segment.text}
+      </a>
+    );
+  }
 
   if (segment.em && interactive.onClick) {
     const onClick = interactive.onClick;
@@ -211,6 +255,7 @@ export function TimelineTitleView({
   title,
   className,
   onTitleAction,
+  resolveSegmentLinkHref,
 }: TimelineTitleViewProps) {
   const onClick =
     title.action && onTitleAction ? onTitleAction(title.action) : null;
@@ -228,12 +273,18 @@ export function TimelineTitleView({
           to compute the role's name, so without spaces siblings would join as
           "Runningpnpm test". gap-1 handles visual spacing; the spaces handle
           accessibility. */}
-      {title.segments.map((segment, index) => (
-        <Fragment key={`segment-${index}`}>
-          {index > 0 ? " " : null}
-          {renderSegment(segment, index, title.tone, { onClick })}
-        </Fragment>
-      ))}
+      {title.segments.map((segment, index) => {
+        const linkHref =
+          segment.link && resolveSegmentLinkHref
+            ? resolveSegmentLinkHref(segment.link)
+            : null;
+        return (
+          <Fragment key={`segment-${index}`}>
+            {index > 0 ? " " : null}
+            {renderSegment(segment, index, title.tone, { onClick, linkHref })}
+          </Fragment>
+        );
+      })}
       {title.decorations.map((decoration, index) => (
         <Fragment key={`decoration-${index}`}>
           {" "}

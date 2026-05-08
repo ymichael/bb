@@ -6,6 +6,7 @@ import {
   getActiveStoredTurnId,
   getLastStoredProviderThreadId,
   getLastStoredTurnRequestEvent,
+  getThread,
   listStoredTurnStartedKeys,
   type StoredTurnRequestEventRow,
 } from "@bb/db";
@@ -651,6 +652,20 @@ function threadOwnershipChangeMessage(
   }
 }
 
+function resolveParentThreadTitle(
+  db: DbQueryConnection,
+  parentThreadId: string | null,
+): string | null {
+  if (parentThreadId === null) {
+    return null;
+  }
+  const thread = getThread(db, parentThreadId);
+  if (!thread) {
+    return null;
+  }
+  return thread.title ?? thread.titleFallback ?? null;
+}
+
 export function appendThreadOwnershipChangeEvent(
   deps: Pick<AppDeps, "db" | "hub">,
   args: AppendThreadOwnershipChangeEventArgs,
@@ -659,6 +674,15 @@ export function appendThreadOwnershipChangeEvent(
   if (!action) {
     return null;
   }
+
+  const previousParentThreadTitle = resolveParentThreadTitle(
+    deps.db,
+    args.previousParentThreadId,
+  );
+  const nextParentThreadTitle = resolveParentThreadTitle(
+    deps.db,
+    args.nextParentThreadId,
+  );
 
   return appendThreadEvent(deps, {
     threadId: args.threadId,
@@ -673,7 +697,9 @@ export function appendThreadOwnershipChangeEvent(
       metadata: {
         action,
         previousParentThreadId: args.previousParentThreadId,
+        previousParentThreadTitle,
         nextParentThreadId: args.nextParentThreadId,
+        nextParentThreadTitle,
       },
     },
   });

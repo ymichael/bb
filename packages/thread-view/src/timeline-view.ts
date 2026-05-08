@@ -13,7 +13,10 @@ import type {
   TimelineWorkRow,
 } from "@bb/server-contract";
 import { assertNever } from "./assert-never.js";
-import { getFileChangeAction } from "./file-change-summary.js";
+import {
+  getFileChangeAction,
+  type FileChangeAction,
+} from "./file-change-summary.js";
 import { plural } from "./format-helpers.js";
 import {
   getTimelineActivityIntentDetailDedupeKey,
@@ -81,6 +84,8 @@ export type ThreadTimelineViewRow =
   | TimelineWorkSummaryRow
   | TimelineViewTurnRow;
 
+export type TimelineExplorationKind = "files" | "searches" | "lists";
+
 export interface TimelineWorkSummaryCounts {
   commands: number;
   createdFiles: number;
@@ -95,6 +100,8 @@ export interface TimelineWorkSummaryCounts {
   tools: number;
   webFetches: number;
   webSearches: number;
+  /** First-seen order of exploration kinds across the bundle's children. */
+  explorationKindOrder: readonly TimelineExplorationKind[];
 }
 
 type TimelineWorkSummaryCategory =
@@ -136,6 +143,7 @@ function countExplorationIntents(
   row: TimelineCommandWorkRow | TimelineToolWorkRow,
   counts: TimelineWorkSummaryCounts,
   exploredFileIdentities: Set<string>,
+  noteExplorationKind: (kind: TimelineExplorationKind) => void,
 ): void {
   for (const intent of row.activityIntents) {
     switch (intent.type) {
@@ -143,14 +151,17 @@ function countExplorationIntents(
         const identity = getExploredFileIdentity(intent);
         if (identity) {
           exploredFileIdentities.add(identity);
+          noteExplorationKind("files");
         }
         break;
       }
       case "list_files":
         counts.lists += 1;
+        noteExplorationKind("lists");
         break;
       case "search":
         counts.searches += 1;
+        noteExplorationKind("searches");
         break;
       case "unknown":
         break;
@@ -167,6 +178,15 @@ function getFileChangeIdentity(row: TimelineFileChangeWorkRow): string {
 export function summarizeTimelineWork(
   rows: readonly TimelineViewWorkRow[],
 ): TimelineWorkSummaryCounts {
+  const explorationKindOrder: TimelineExplorationKind[] = [];
+  const seenExplorationKinds = new Set<TimelineExplorationKind>();
+  const noteExplorationKind = (kind: TimelineExplorationKind) => {
+    if (!seenExplorationKinds.has(kind)) {
+      seenExplorationKinds.add(kind);
+      explorationKindOrder.push(kind);
+    }
+  };
+
   const counts: TimelineWorkSummaryCounts = {
     commands: 0,
     createdFiles: 0,
@@ -181,6 +201,7 @@ export function summarizeTimelineWork(
     tools: 0,
     webFetches: 0,
     webSearches: 0,
+    explorationKindOrder,
   };
   const exploredFileIdentities = new Set<string>();
   const createdFileIdentities = new Set<string>();
@@ -192,14 +213,24 @@ export function summarizeTimelineWork(
     switch (row.workKind) {
       case "command":
         if (hasTimelineExplorationIntent(row)) {
-          countExplorationIntents(row, counts, exploredFileIdentities);
+          countExplorationIntents(
+            row,
+            counts,
+            exploredFileIdentities,
+            noteExplorationKind,
+          );
         } else {
           counts.commands += 1;
         }
         break;
       case "tool":
         if (hasTimelineExplorationIntent(row)) {
-          countExplorationIntents(row, counts, exploredFileIdentities);
+          countExplorationIntents(
+            row,
+            counts,
+            exploredFileIdentities,
+            noteExplorationKind,
+          );
         } else {
           counts.tools += 1;
         }
@@ -252,11 +283,22 @@ export function summarizeTimelineWork(
 function explorationDetail(
   counts: TimelineWorkSummaryCounts,
 ): string | null {
-  const parts = [
-    counts.files > 0 ? plural(counts.files, "file") : null,
-    counts.searches > 0 ? plural(counts.searches, "search", "searches") : null,
-    counts.lists > 0 ? plural(counts.lists, "list") : null,
-  ].filter((part): part is string => part !== null);
+  const parts = counts.explorationKindOrder
+    .map((kind): string | null => {
+      switch (kind) {
+        case "files":
+          return counts.files > 0 ? plural(counts.files, "file") : null;
+        case "searches":
+          return counts.searches > 0
+            ? plural(counts.searches, "search", "searches")
+            : null;
+        case "lists":
+          return counts.lists > 0 ? plural(counts.lists, "list") : null;
+        default:
+          return assertNever(kind);
+      }
+    })
+    .filter((part): part is string => part !== null);
   return parts.length === 0 ? null : parts.join(", ");
 }
 
@@ -359,41 +401,52 @@ function getOrderedSummaryCategories(
   return categories;
 }
 
+const FILE_CHANGE_VERBS_PRESENT: Record<FileChangeAction, string> = {
+  created: "Creating",
+  deleted: "Deleting",
+  edited: "Editing",
+  renamed: "Renaming",
+};
+
+const FILE_CHANGE_VERBS_PAST: Record<FileChangeAction, string> = {
+  created: "Created",
+  deleted: "Deleted",
+  edited: "Edited",
+  renamed: "Renamed",
+};
+
 function fileChangeSummaryPhrase(
   counts: TimelineWorkSummaryCounts,
   active: boolean,
 ): string | null {
-  const parts = [
-    counts.createdFiles > 0
-      ? `${active ? "Creating" : "Created"} ${plural(
-          counts.createdFiles,
-          "file",
-        )}`
-      : null,
-    counts.deletedFiles > 0
-      ? `${active ? "Deleting" : "Deleted"} ${plural(
-          counts.deletedFiles,
-          "file",
-        )}`
-      : null,
-    counts.renamedFiles > 0
-      ? `${active ? "Renaming" : "Renamed"} ${plural(
-          counts.renamedFiles,
-          "file",
-        )}`
-      : null,
-    counts.editedFiles > 0
-      ? `${active ? "Editing" : "Edited"} ${plural(
-          counts.editedFiles,
-          "file",
-        )}`
-      : null,
-  ].filter((part): part is string => part !== null);
-  return parts.length === 0
-    ? null
-    : parts
-        .map((part, index) => (index === 0 ? part : lowerFirst(part)))
-        .join(", ");
+  const present: { action: FileChangeAction; count: number }[] = (
+    [
+      ["created", counts.createdFiles],
+      ["deleted", counts.deletedFiles],
+      ["edited", counts.editedFiles],
+      ["renamed", counts.renamedFiles],
+    ] as const
+  )
+    .filter(([, count]) => count > 0)
+    .map(([action, count]) => ({ action, count }));
+
+  if (present.length === 0) return null;
+
+  // Single action kind — verb matches the action.
+  if (present.length === 1) {
+    const { action, count } = present[0]!;
+    const verb = active
+      ? FILE_CHANGE_VERBS_PRESENT[action]
+      : FILE_CHANGE_VERBS_PAST[action];
+    return `${verb} ${plural(count, "file")}`;
+  }
+
+  // Mixed — collapse under the umbrella "Edited" verb with the total count.
+  // Avoids the awkward verb-soup of "Editing 4 files, deleting 1 file" and
+  // sidesteps the parallel-verb emphasis problem in the title splitter.
+  const total = present.reduce((sum, p) => sum + p.count, 0);
+  const verb = active ? "Editing" : "Edited";
+  return `${verb} ${plural(total, "file")}`;
 }
 
 function completedSummaryPhrase(
@@ -467,26 +520,15 @@ function webResearchSummaryPhrase(
   const parts: string[] = [];
   if (counts.webSearches > 0) {
     parts.push(
-      `${active ? "Running" : "Ran"} ${plural(
-        counts.webSearches,
-        "web search",
-        "web searches",
-      )}`,
+      plural(counts.webSearches, "search query", "search queries"),
     );
   }
   if (counts.webFetches > 0) {
-    const verb =
-      parts.length === 0
-        ? active
-          ? "Fetching"
-          : "Fetched"
-        : active
-          ? "fetching"
-          : "fetched";
-    parts.push(`${verb} ${plural(counts.webFetches, "web page")}`);
+    parts.push(plural(counts.webFetches, "web page"));
   }
-
-  return parts.length === 0 ? null : parts.join(", ");
+  if (parts.length === 0) return null;
+  const verb = active ? "Researching" : "Researched";
+  return `${verb} ${parts.join(", ")}`;
 }
 
 /**
@@ -809,9 +851,15 @@ function toTimelineViewWorkRow(
     return row;
   }
 
+  // A delegation that's no longer pending is a closed scope: no more child
+  // work is going to arrive, so the trailing run of children should collapse
+  // into a step-summary (mirrors the lazy-turn-detail handling). Pending
+  // delegations stay open so the live frontier keeps showing as bundles +
+  // leaves.
+  const closedScope = row.status !== "pending";
   return {
     ...row,
-    childRows: buildTimelineViewRows(row.childRows, { cache }),
+    childRows: buildTimelineViewRows(row.childRows, { cache, closedScope }),
   };
 }
 

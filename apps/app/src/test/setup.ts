@@ -1,9 +1,10 @@
 /**
  * Shared vitest setup.
  *
- * jsdom doesn't implement `window.matchMedia`. Several of our hooks
- * (`useMediaQuery`, `useHoverPopover`) call it during mount; without a polyfill
- * they throw in every test that indirectly renders a component using them.
+ * jsdom doesn't implement `window.matchMedia` or `ResizeObserver`. Several of
+ * our hooks and detail blocks (`useMediaQuery`, `useHoverPopover`,
+ * `ToolCallDetailBlock` overflow probe) reach for them during mount; without
+ * polyfills they throw in every test that indirectly renders such a component.
  */
 if (typeof window !== "undefined" && !window.matchMedia) {
   window.matchMedia = (query: string) => ({
@@ -16,4 +17,12 @@ if (typeof window !== "undefined" && !window.matchMedia) {
     removeEventListener: () => {},
     dispatchEvent: () => false,
   });
+}
+
+if (typeof window !== "undefined" && !window.ResizeObserver) {
+  window.ResizeObserver = class ResizeObserverPolyfill {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };
 }

@@ -42,7 +42,7 @@ const lintCommand: TimelineRow = {
   "command": "pnpm exec turbo run lint --filter=@bb/core-ui --filter=@bb/server --concurrency=1",
   "cwd": "/Users/michael/.bb-dev/worktrees/env_33i22gvcqe/bb",
   "source": null,
-  "output": "\u2022 turbo 2.8.3\n\u2022 Packages in scope: @bb/core-ui, @bb/server\n\u2022 Running lint in 2 packages\n\u2022 Remote caching disabled, using shared worktree cache\n\nNo tasks were executed as part of this run.\n\n Tasks:    0 successful, 0 total\nCached:    0 cached, 0 total\n  Time:    90ms \n\n",
+  "output": "• turbo 2.8.3\n• Packages in scope: @bb/core-ui, @bb/server\n• Running lint in 2 packages\n• Remote caching disabled, using shared worktree cache\n\nNo tasks were executed as part of this run.\n\n Tasks:    0 successful, 0 total\nCached:    0 cached, 0 total\n  Time:    90ms \n\n",
   "exitCode": 0,
   "completedAt": 1777337400998,
   "approvalStatus": null,
@@ -93,6 +93,80 @@ const failedTestCommand: TimelineRow = {
   "activityIntents": []
 };
 
+// Real interrupted command from thr_gnkq5q3vnt — `pnpm ladle` was killed by
+// the agent's controlling timeout (exit -1 = interrupted). The output ends
+// mid-stream with a SIGTERM rejection from pnpm.
+const interruptedCommand: TimelineRow = {
+  "id": "thr_gnkq5q3vnt:command:call_ladle_interrupted",
+  "threadId": "thr_gnkq5q3vnt",
+  "turnId": "019dd185-ef12-7d50-aa48-47882e9c8aaf",
+  "sourceSeqStart": 0,
+  "sourceSeqEnd": 0,
+  "startedAt": 1777337000000,
+  "createdAt": 1777337000000,
+  "kind": "work",
+  "workKind": "command",
+  "status": "interrupted",
+  "callId": "call_ladle_interrupted",
+  "command": "pnpm --filter @bb/app ladle -- --host 127.0.0.1 --port 6167",
+  "cwd": "/Users/michael/.bb-dev/worktrees/env_ec5gx8y7mm/bb",
+  "source": null,
+  "output": "   ╭────────────────────────────────────────────────────╮\n   │                                                    │\n   │   🥄 Ladle.dev served at http://localhost:61000/   │\n   │                                                    │\n   ╰────────────────────────────────────────────────────╯\n\n8:12:55 PM [vite] (client) ✨ new dependencies optimized: axe-core, msw/browser\n8:12:55 PM [vite] (client) ✨ optimized dependencies changed. reloading\n\n  Error: read ECONNRESET\n      at TCP.onStreamRead (node:internal/stream_base_commons:216:20)\n\n/Users/michael/.bb-dev/worktrees/env_ec5gx8y7mm/bb/apps/app:\n ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @bb/app@0.0.1 ladle: `ladle serve \"--\" \"--host\" \"127.0.0.1\" \"--port\" \"6167\"`\nCommand failed with signal \"SIGTERM\"\n",
+  "exitCode": -1,
+  "completedAt": 1777337010000,
+  "approvalStatus": null,
+  "activityIntents": []
+};
+
+// Running command — status=pending, no exitCode/completedAt yet. Realistic
+// long-running test-watch command: the agent kicked off vitest and the row
+// is mid-flight.
+const runningCommand: TimelineRow = {
+  "id": "thr_zeb7z9afmw:command:call_running",
+  "threadId": "thr_zeb7z9afmw",
+  "turnId": "019dd185-ef12-7d50-aa48-47882e9c8aaf",
+  "sourceSeqStart": 36500,
+  "sourceSeqEnd": 36500,
+  "startedAt": Date.now(),
+  "createdAt": Date.now(),
+  "kind": "work",
+  "workKind": "command",
+  "status": "pending",
+  "callId": "call_running",
+  "command": "pnpm exec turbo run test --filter=@bb/server",
+  "cwd": "/Users/michael/.bb-dev/worktrees/env_33i22gvcqe/bb",
+  "source": null,
+  "output": "",
+  "exitCode": null,
+  "completedAt": null,
+  "approvalStatus": null,
+  "activityIntents": []
+};
+
+// Waiting for approval — destructive-looking command parked on the approval
+// gate. status=pending, approvalStatus=waiting_for_approval.
+const waitingApprovalCommand: TimelineRow = {
+  "id": "thr_zeb7z9afmw:command:call_waiting_approval",
+  "threadId": "thr_zeb7z9afmw",
+  "turnId": "019dd185-ef12-7d50-aa48-47882e9c8aaf",
+  "sourceSeqStart": 36600,
+  "sourceSeqEnd": 36600,
+  "startedAt": 1777337700000,
+  "createdAt": 1777337700000,
+  "kind": "work",
+  "workKind": "command",
+  "status": "pending",
+  "callId": "call_waiting_approval",
+  "command": "git push --force-with-lease origin main",
+  "cwd": "/Users/michael/.bb-dev/worktrees/env_33i22gvcqe/bb",
+  "source": null,
+  "output": "",
+  "exitCode": null,
+  "completedAt": null,
+  "approvalStatus": "waiting_for_approval",
+  "activityIntents": []
+};
+
 const gitStatusCommand: TimelineRow = {
   "id": "thr_zeb7z9afmw:command:call_mGiBdXdFLpyTGMucYCnI82LR",
   "threadId": "thr_zeb7z9afmw",
@@ -115,11 +189,34 @@ const gitStatusCommand: TimelineRow = {
   "activityIntents": []
 };
 
+// Denied — user rejected the approval request, command never ran.
+const deniedCommand: TimelineRow = {
+  "id": "thr_zeb7z9afmw:command:call_denied",
+  "threadId": "thr_zeb7z9afmw",
+  "turnId": "019dd185-ef12-7d50-aa48-47882e9c8aaf",
+  "sourceSeqStart": 36700,
+  "sourceSeqEnd": 36700,
+  "startedAt": 1777337800000,
+  "createdAt": 1777337800000,
+  "kind": "work",
+  "workKind": "command",
+  "status": "completed",
+  "callId": "call_denied",
+  "command": "rm -rf node_modules",
+  "cwd": "/Users/michael/.bb-dev/worktrees/env_33i22gvcqe/bb",
+  "source": null,
+  "output": "",
+  "exitCode": null,
+  "completedAt": 1777337805000,
+  "approvalStatus": "denied",
+  "activityIntents": []
+};
+
 export function Overview() {
   return (
     <StoryCard>
       <StoryRow
-        label="collapsed (default)"
+        label="collapsed — completed"
         hint="production-default — header only, click to expand"
       >
         <TimelineStage>
@@ -129,11 +226,66 @@ export function Overview() {
           />
         </TimelineStage>
       </StoryRow>
+      <StoryRow
+        label="collapsed — running"
+        hint="status=pending, no exit code yet, output streaming"
+      >
+        <TimelineStage>
+          <ThreadTimelineRows
+            {...baseProps}
+            timelineRows={[runningCommand]}
+          />
+        </TimelineStage>
+      </StoryRow>
+      <StoryRow
+        label="collapsed — error"
+        hint="status=error, exit 1"
+      >
+        <TimelineStage>
+          <ThreadTimelineRows
+            {...baseProps}
+            timelineRows={[failedTestCommand]}
+          />
+        </TimelineStage>
+      </StoryRow>
+      <StoryRow
+        label="collapsed — interrupted"
+        hint="killed by controlling timeout (SIGTERM, exit -1)"
+      >
+        <TimelineStage>
+          <ThreadTimelineRows
+            {...baseProps}
+            timelineRows={[interruptedCommand]}
+          />
+        </TimelineStage>
+      </StoryRow>
+      <StoryRow
+        label="collapsed — waiting for approval"
+        hint="approvalStatus=waiting_for_approval, parked before execution"
+      >
+        <TimelineStage>
+          <ThreadTimelineRows
+            {...baseProps}
+            timelineRows={[waitingApprovalCommand]}
+          />
+        </TimelineStage>
+      </StoryRow>
+      <StoryRow
+        label="collapsed — denied"
+        hint="approvalStatus=denied, user rejected the approval request"
+      >
+        <TimelineStage>
+          <ThreadTimelineRows
+            {...baseProps}
+            timelineRows={[deniedCommand]}
+          />
+        </TimelineStage>
+      </StoryRow>
       <StoryRow label="git status" hint="short clean output, exit 0">
         <TimelineStage>
           <ThreadTimelineRows
             {...baseProps}
-            defaultExpandAllRows
+            initialExpanded={new Set([gitStatusCommand.id])}
             timelineRows={[gitStatusCommand]}
           />
         </TimelineStage>
@@ -145,7 +297,7 @@ export function Overview() {
         <TimelineStage>
           <ThreadTimelineRows
             {...baseProps}
-            defaultExpandAllRows
+            initialExpanded={new Set([lintCommand.id])}
             timelineRows={[lintCommand]}
           />
         </TimelineStage>
@@ -157,7 +309,7 @@ export function Overview() {
         <TimelineStage>
           <ThreadTimelineRows
             {...baseProps}
-            defaultExpandAllRows
+            initialExpanded={new Set([buildCommand.id])}
             timelineRows={[buildCommand]}
           />
         </TimelineStage>
@@ -169,7 +321,7 @@ export function Overview() {
         <TimelineStage>
           <ThreadTimelineRows
             {...baseProps}
-            defaultExpandAllRows
+            initialExpanded={new Set([failedTestCommand.id])}
             timelineRows={[failedTestCommand]}
           />
         </TimelineStage>

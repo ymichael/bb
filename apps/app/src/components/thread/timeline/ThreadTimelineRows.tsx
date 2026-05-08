@@ -44,6 +44,7 @@ import {
 import {
   TimelineTitleView,
   type TimelineTitleActionResolver,
+  type TimelineTitleLinkResolver,
 } from "./TimelineTitleView.js";
 import { WorkRowBody } from "./TimelineRowDetails.js";
 import { TimelineDetailScroll } from "./TimelineDetailScroll.js";
@@ -55,12 +56,14 @@ import {
 } from "./timelineRowSignatures.js";
 
 export interface ThreadTimelineRowsProps {
-  /**
-   * Starts every expandable row open for story/test visual audit surfaces.
-   * Product timeline views should rely on runtime-driven auto expansion.
-   */
-  defaultExpandAllRows?: boolean;
   erroredTurnSummaryIds: ReadonlySet<string>;
+  /**
+   * Row ids to start expanded on first render. Non-recursive: an id only
+   * applies to the row it names — bundle/step/turn children are unaffected.
+   * Used by stories and audit surfaces to seed an open body without faking
+   * a running runtime status.
+   */
+  initialExpanded?: ReadonlySet<string>;
   loadingTurnSummaryIds: ReadonlySet<string>;
   onLoadTurnSummaryRows: (entry: TimelineTurnRow) => void;
   onOpenLocalFileLink?: ThreadTimelineLocalFileLinkHandler;
@@ -83,6 +86,7 @@ interface TimelineRendererContextValue {
   onOpenLocalFileLink: ThreadTimelineLocalFileLinkHandler | undefined;
   onTitleAction: TimelineTitleActionResolver | undefined;
   projectId: string | undefined;
+  resolveSegmentLinkHref: TimelineTitleLinkResolver | undefined;
   resolveUserAttachmentImageSrc: UserAttachmentImageSrcResolver | undefined;
   themeType: ThreadTimelineTheme;
   turnSummaryRowsById: Record<string, TimelineRow[]>;
@@ -136,7 +140,6 @@ interface RequestLazyTurnRowsArgs {
 }
 
 interface CollectTimelineAutoExpandedRowIdsArgs {
-  defaultExpandAllRows: boolean;
   rows: readonly ThreadTimelineViewRow[];
   scopeActive: boolean;
 }
@@ -458,9 +461,6 @@ function isActiveLatestBundleSummary({
 // through every enclosing container. The rule does not apply to
 // bundle-summary, step-summary, or turn-summary children — those represent
 // grouped or archived work whose interior is not the current frontier.
-//
-// `defaultExpandAllRows` is a test/story override that bypasses the rule
-// and expands every expandable row in every container.
 function visitForAutoExpand(
   rows: readonly ThreadTimelineViewRow[],
   scopeActive: boolean,
@@ -484,34 +484,11 @@ function visitForAutoExpand(
   }
 }
 
-function expandAllExpandableRows(
-  rows: readonly ThreadTimelineViewRow[],
-  ids: Set<string>,
-): void {
-  for (const row of rows) {
-    if (isRowExpandable(row)) {
-      ids.add(row.id);
-    }
-    if (row.kind === "bundle-summary" || row.kind === "step-summary") {
-      expandAllExpandableRows(row.children, ids);
-    } else if (row.kind === "work" && row.workKind === "delegation") {
-      expandAllExpandableRows(row.childRows, ids);
-    } else if (row.kind === "turn" && row.children) {
-      expandAllExpandableRows(row.children, ids);
-    }
-  }
-}
-
 function collectTimelineAutoExpandedRowIds({
-  defaultExpandAllRows,
   rows,
   scopeActive,
 }: CollectTimelineAutoExpandedRowIdsArgs): ReadonlySet<string> {
   const ids = new Set<string>();
-  if (defaultExpandAllRows) {
-    expandAllExpandableRows(rows, ids);
-    return ids;
-  }
   visitForAutoExpand(rows, scopeActive, ids);
   return ids;
 }
@@ -526,8 +503,12 @@ function timelineRowTitleOptions({
     row,
     scopeActive,
   });
+  // Bundle summaries always render with the bundle (verb + rest) split so the
+  // verb can shimmer and the rest can carry em when the bundle is the
+  // active-latest. Step summaries collapse to the flat muted single-segment
+  // "background" style — they're a recap of finished work, not a frontier.
   return {
-    summaryStyle: useActiveBundleLabel ? "bundle" : "background",
+    summaryStyle: row.kind === "step-summary" ? "background" : "bundle",
     workStyle: row.kind === "work" && row.inClosedStep ? "summary" : "default",
     isActiveLatestBundle: useActiveBundleLabel,
   };
@@ -815,7 +796,8 @@ function TimelineRowView({
   scopeActive,
   spacing,
 }: TimelineRowViewProps) {
-  const { onTitleAction } = useTimelineRendererContext();
+  const { onTitleAction, resolveSegmentLinkHref } =
+    useTimelineRendererContext();
   const horizontalPadding = timelineRowHorizontalPadding(spacing);
   const titleState = useTimelineRowTitleRenderState({
     activeLatestBundleId,
@@ -839,6 +821,7 @@ function TimelineRowView({
             <TimelineTitleView
               title={entry.title}
               onTitleAction={onTitleAction}
+              resolveSegmentLinkHref={resolveSegmentLinkHref}
             />
           </TimelineStaticRow>
         ))}
@@ -852,6 +835,7 @@ function TimelineRowView({
         <TimelineTitleView
           title={titleState.title}
           onTitleAction={onTitleAction}
+          resolveSegmentLinkHref={resolveSegmentLinkHref}
         />
       </TimelineStaticRow>
     );
@@ -886,6 +870,7 @@ function TimelineExpandableRowView({
     erroredTurnSummaryIds,
     onLoadTurnSummaryRows,
     onTitleAction,
+    resolveSegmentLinkHref,
     turnSummaryRowsById,
   } = useTimelineRendererContext();
 
@@ -927,6 +912,7 @@ function TimelineExpandableRowView({
       autoExpanded={autoExpandedRowIds.has(row.id)}
       onBeforeExpand={handleBeforeExpand}
       onTitleAction={onTitleAction}
+      resolveSegmentLinkHref={resolveSegmentLinkHref}
       renderBody={renderBody}
     />
   );
@@ -990,15 +976,17 @@ function ThreadTimelineRowsForIdentity(props: ThreadTimelineRowsProps) {
     props.threadRuntimeDisplayStatus,
   );
   const themeType = props.themeType ?? "light";
-  const computedAutoExpandedRowIds = useMemo(
-    () =>
-      collectTimelineAutoExpandedRowIds({
-        defaultExpandAllRows: props.defaultExpandAllRows ?? false,
-        rows,
-        scopeActive,
-      }),
-    [props.defaultExpandAllRows, rows, scopeActive],
-  );
+  const computedAutoExpandedRowIds = useMemo(() => {
+    const ids = new Set<string>(
+      collectTimelineAutoExpandedRowIds({ rows, scopeActive }),
+    );
+    if (props.initialExpanded) {
+      for (const id of props.initialExpanded) {
+        ids.add(id);
+      }
+    }
+    return ids;
+  }, [rows, scopeActive, props.initialExpanded]);
   const autoExpandedRowIds = useStableReadonlySet(computedAutoExpandedRowIds);
   const loadingTurnSummaryIds = useStableReadonlySet(
     props.loadingTurnSummaryIds,
@@ -1022,6 +1010,22 @@ function ThreadTimelineRowsForIdentity(props: ThreadTimelineRowsProps) {
     },
     [props.onLoadTurnSummaryRows],
   );
+  const projectId = props.projectId;
+  const resolveSegmentLinkHref = useMemo<
+    TimelineTitleLinkResolver | undefined
+  >(() => {
+    if (projectId === undefined) {
+      return undefined;
+    }
+    return (link) => {
+      switch (link.kind) {
+        case "thread":
+          return `/projects/${projectId}/threads/${link.threadId}`;
+        default:
+          return assertNever(link.kind);
+      }
+    };
+  }, [projectId]);
   const rendererContextValue = useMemo<TimelineRendererContextValue>(
     () => ({
       autoExpandedRowIds,
@@ -1031,7 +1035,8 @@ function ThreadTimelineRowsForIdentity(props: ThreadTimelineRowsProps) {
       onLoadTurnSummaryRows: handleLoadTurnSummaryRows,
       onOpenLocalFileLink: props.onOpenLocalFileLink,
       onTitleAction: props.onTitleAction,
-      projectId: props.projectId,
+      projectId,
+      resolveSegmentLinkHref,
       resolveUserAttachmentImageSrc: props.resolveUserAttachmentImageSrc,
       themeType,
       turnSummaryRowsById: props.turnSummaryRowsById,
@@ -1044,7 +1049,8 @@ function ThreadTimelineRowsForIdentity(props: ThreadTimelineRowsProps) {
       loadingTurnSummaryIds,
       props.onOpenLocalFileLink,
       props.onTitleAction,
-      props.projectId,
+      projectId,
+      resolveSegmentLinkHref,
       props.resolveUserAttachmentImageSrc,
       props.turnSummaryRowsById,
       themeType,

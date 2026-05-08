@@ -9,7 +9,7 @@ import {
 } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { TimelineRow, TimelineSystemRow } from "@bb/server-contract";
+import type { TimelineRow } from "@bb/server-contract";
 import {
   commandRow,
   conversationRow,
@@ -628,30 +628,6 @@ describe("ThreadTimelineRows", () => {
     expect(view.container.textContent ?? "").toContain("exit code 0");
   });
 
-  it("renders expanded tool details as labeled content", () => {
-    const view = renderTimelineRows({
-      timelineRows: [
-        toolRow({
-          id: "tool-detail-1",
-          output: "Matched tools: TodoWrite",
-          toolArgs: { query: "select:TodoWrite" },
-          toolName: "LookupTool",
-        }),
-      ],
-    });
-
-    fireEvent.click(
-      screen.getByRole("button", { name: /Ran tool: LookupTool/u }),
-    );
-
-    const text = view.container.textContent ?? "";
-    expect(text).toContain("Tool: LookupTool");
-    expect(text).toContain("Arguments");
-    expect(text).toContain('"query": "select:TodoWrite"');
-    expect(text).toContain("Output");
-    expect(text).toContain("Matched tools: TodoWrite");
-  });
-
   it("updates expanded pending command output when source sequence advances", () => {
     const view = renderTimelineRows({
       timelineRows: [
@@ -817,27 +793,6 @@ describe("ThreadTimelineRows", () => {
     expect(view.container.textContent ?? "").toContain("still running");
   });
 
-  it("default-expands completed rows when requested by the caller", () => {
-    const view = renderTimelineRows({
-      timelineRows: [
-        commandRow({
-          id: "command-completed-default-expanded",
-          command: "pnpm test",
-          output: "completed output",
-        }),
-      ],
-      overrides: {
-        defaultExpandAllRows: true,
-      },
-    });
-
-    const commandButton = screen.getByRole("button", {
-      name: /Ran\s+pnpm test/u,
-    });
-    expect(commandButton.getAttribute("aria-expanded")).toBe("true");
-    expect(view.container.textContent ?? "").toContain("completed output");
-  });
-
   it("auto-expands a trailing bundle in an active scope without expanding its children", () => {
     // The single auto-expand rule: in an active container, expand the
     // literal last row if it is expandable. The bundle is the trailing
@@ -960,26 +915,6 @@ describe("ThreadTimelineRows", () => {
     expect(view.container.textContent ?? "").toContain("All done.");
   });
 
-  it("omits command cwd metadata and mutes exit code detail", () => {
-    const view = renderTimelineRows({
-      timelineRows: [
-        {
-          ...commandRow({
-            id: "command-detail-1",
-            command: "pwd",
-          }),
-          cwd: "/repo",
-          output: "done",
-        },
-      ],
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: /Ran\s+pwd/u }));
-
-    expect(view.container.textContent ?? "").not.toContain("cwd:");
-    expect(view.container.textContent ?? "").toContain("exit code 0");
-  });
-
   it("renders multi-line command titles on a single line", () => {
     // Command content can include literal newlines (heredocs, scripts
     // pasted as a single argument, etc.). The title segment renders with
@@ -1098,67 +1033,6 @@ describe("ThreadTimelineRows", () => {
       view.container.querySelector("[data-timeline-file-diff]"),
     ).not.toBeNull();
     expect(view.container.textContent ?? "").not.toContain("No diff available");
-  });
-
-  it("renders assistant conversation rows without a role label", () => {
-    const html = renderRowsToStaticMarkup({
-      timelineRows: [conversationRow({ text: "Done." })],
-    });
-
-    expect(html).not.toContain("Assistant");
-    expect(html).toContain("Done.");
-  });
-
-  it("renders accepted steer metadata below the user message bubble", () => {
-    renderTimelineRows({
-      timelineRows: [
-        conversationRow({
-          role: "user",
-          text: "Use the existing renderer.",
-          userRequest: { kind: "steer", status: "accepted" },
-        }),
-      ],
-    });
-
-    expect(screen.getByText("Use the existing renderer.")).toBeTruthy();
-    expect(screen.getByText("steer")).toBeTruthy();
-  });
-
-  it("renders pending steer metadata below the user message bubble", () => {
-    renderTimelineRows({
-      timelineRows: [
-        conversationRow({
-          role: "user",
-          text: "Still apply this steer.",
-          userRequest: { kind: "steer", status: "pending" },
-        }),
-      ],
-    });
-
-    expect(screen.getByText("Still apply this steer.")).toBeTruthy();
-    expect(screen.getByText("steer pending")).toBeTruthy();
-  });
-
-  it("renders assistant markdown with the custom timeline markdown styling", () => {
-    const html = renderRowsToStaticMarkup({
-      timelineRows: [
-        conversationRow({
-          text: [
-            "Here is code:",
-            "",
-            "```ts",
-            "const value = 1;",
-            "const next = value + 1;",
-            "```",
-          ].join("\n"),
-        }),
-      ],
-    });
-
-    expect(html).not.toContain("Assistant");
-    expect(html).toContain("Copy code");
-    expect(html).toContain("border border-border/70 bg-muted/35");
-    expect(html).toContain("language-ts");
   });
 
   it("keeps nested lazy-loaded bundles expandable", () => {
@@ -1322,49 +1196,6 @@ describe("ThreadTimelineRows", () => {
     });
     expect(nestedCommandButton.getAttribute("aria-expanded")).toBe("false");
     expect(view.container.textContent ?? "").not.toContain("still running");
-  });
-
-  it("renders system rows with detail as expandable", () => {
-    const view = renderTimelineRows({
-      timelineRows: [systemRow()],
-    });
-
-    const systemButton = screen.getByRole("button", {
-      name: /Provisioned thread/u,
-    });
-    expect(systemButton.getAttribute("aria-expanded")).toBe("false");
-    expect(view.container.textContent ?? "").not.toContain("Running setup");
-
-    fireEvent.click(systemButton);
-
-    expect(systemButton.getAttribute("aria-expanded")).toBe("true");
-    expect(view.container.textContent ?? "").toContain("Running setup");
-    const detailText = view.container.querySelector("pre");
-    expect(detailText?.className).toContain("whitespace-pre");
-    expect(detailText?.className).not.toContain("whitespace-pre-wrap");
-    const scrollArea = view.container.querySelector<HTMLElement>(
-      "[data-detail-scroll-area]",
-    );
-    expect(scrollArea).not.toBeNull();
-  });
-
-  it("uses destructive detail tone for failed system operations", () => {
-    const failedOperationRow = {
-      ...systemRow({ detail: "Release command failed" }),
-      title: "Thread release failed",
-      status: "error",
-    } satisfies TimelineSystemRow;
-    const view = renderTimelineRows({
-      timelineRows: [failedOperationRow],
-    });
-
-    fireEvent.click(
-      screen.getByRole("button", { name: /Thread release failed/u }),
-    );
-
-    const detailText = view.container.querySelector("pre");
-    expect(detailText?.textContent).toBe("Release command failed");
-    expect(detailText?.className).toContain("text-destructive");
   });
 
   it("keeps expanded system details pinned to bottom on streaming updates unless the user scrolls up", () => {

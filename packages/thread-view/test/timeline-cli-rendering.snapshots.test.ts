@@ -368,7 +368,7 @@ describe("timeline CLI rendering snapshots", () => {
       Patch the timeline output
 
       ── Worked ──────────────────────────────────────────────────
-        ── Explored 1 search, ran 1 web search, edited 1 file
+        ── Explored 1 search, researched 1 search query, edited 1 file
           ── Searched for timeline in packages/core-ui
           ── Ran web search: timeline rendering
           ── Edited /repo/packages/core-ui/src/format-timeline-text.ts +1 -1
@@ -1123,7 +1123,7 @@ describe("timeline CLI rendering snapshots", () => {
 
     expect(timeline.text).toMatchInlineSnapshot(`
       "── Worked ──────────────────────────────────────────────────
-        ── Explored 1 file, 1 search, 2 lists
+        ── Explored 1 file, 2 lists, 1 search
           ── Read src/a.ts
           ── Listed files in src
           ── Listed files in test
@@ -1187,7 +1187,7 @@ describe("timeline CLI rendering snapshots", () => {
 
     expect(timeline.text).toMatchInlineSnapshot(`
       "── Worked ──────────────────────────────────────────────────
-        ── Created 1 file, deleted 1 file, edited 2 files
+        ── Edited 4 files
           ── Created /repo/src/a.ts +1
             @@ -0,0 +1 @@
             +first
@@ -1232,7 +1232,7 @@ describe("timeline CLI rendering snapshots", () => {
 
     expect(timeline.text).toMatchInlineSnapshot(`
       "── Worked ──────────────────────────────────────────────────
-        ── Created 1 file, deleted 1 file
+        ── Edited 2 files
           ── Created /repo/src/created.ts +2
             first line
             second line
@@ -1329,7 +1329,7 @@ describe("timeline CLI rendering snapshots", () => {
       "assistant-text",
     ]);
     expect(timeline.text).toMatchInlineSnapshot(`
-      "── Ran 1 web search, edited 1 file ─────────────────────────
+      "── Researched 1 search query, edited 1 file ────────────────
         ── Ran web search: React suspense docs
         ── Edited /repo/packages/core-ui/src/timeline.ts +1 -1
           @@ -1 +1 @@
@@ -1381,7 +1381,7 @@ describe("timeline CLI rendering snapshots", () => {
     }
     expect(timeline.text).toMatchInlineSnapshot(`
       "── Worked ──────────────────────────────────────────────────
-        ── Ran 1 web search, fetched 2 web pages
+        ── Researched 1 search query, 2 web pages
           ── Ran web search: EyeDropper API browser compatibility
           ── Fetched: https://developer.mozilla.org/en-US/docs/Web/API/EyeDropper_API
           ── Fetched: https://caniuse.com/mdn-api_eyedropper
@@ -1412,7 +1412,7 @@ describe("timeline CLI rendering snapshots", () => {
     expect(timeline.text).not.toContain("Streaming search payload");
     expect(timeline.text).not.toContain("Streaming fetch payload");
     expect(timeline.text).toMatchInlineSnapshot(`
-      "── Running 1 web search, fetching 1 web page ───────────────
+      "── Researching 1 search query, 1 web page ──────────────────
         ── Running web search: React Suspense docs
         ── Fetching: https://react.dev/reference/react/Suspense"
     `);

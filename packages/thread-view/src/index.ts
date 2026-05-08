@@ -18,6 +18,7 @@ export type {
   TimelineTitle,
   TimelineTitleAction,
   TimelineTitleDecoration,
+  TimelineTitleLink,
   TimelineTitleSegment,
   TimelineTitleTone,
 } from "./timeline-row-title.js";
