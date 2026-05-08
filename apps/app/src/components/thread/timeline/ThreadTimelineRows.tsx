@@ -575,22 +575,24 @@ function TimelineSystemDetailBlock({
   streaming,
   tone,
 }: TimelineSystemDetailBlockProps) {
+  // Mirror the card chrome from TerminalOutputBlock so operation detail
+  // bodies (provisioning transcripts, provider-unhandled payloads) read as
+  // the same "output" surface as command output. Danger tone overlays the
+  // destructive palette without changing the card shape.
   return (
     <TimelineDetailScroll
       size="base"
       streaming={streaming}
       contentKey={detail}
       className={cn(
-        "rounded-md border",
-        tone === "danger"
-          ? "border-destructive/30 bg-destructive/5"
-          : "border-border/60 bg-background/40",
+        "overflow-hidden rounded-lg border bg-card",
+        tone === "danger" ? "border-destructive/30" : "border-border",
       )}
     >
       <pre
         className={cn(
-          "whitespace-pre px-3 py-2 font-mono text-xs leading-5",
-          tone === "danger" ? "text-destructive/90" : "text-muted-foreground",
+          "whitespace-pre px-4 py-3 font-mono text-xs leading-tight",
+          tone === "danger" ? "text-destructive/90" : "text-foreground",
         )}
       >
         {detail}

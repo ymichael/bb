@@ -5,14 +5,8 @@ import {
   getDetailScrollMaxHeightClass,
   type DetailScrollSize,
 } from "../../ui/detail-scroll-size.js";
-import {
-  useStickyBottomScroll,
-  type StickyBottomScrollBinding,
-} from "./useStickyBottomScroll.js";
-import {
-  useScrollOverflowState,
-  type ScrollOverflowStateBinding,
-} from "./useScrollOverflowState.js";
+import { useStickyBottomScroll } from "./useStickyBottomScroll.js";
+import { useScrollOverflowState } from "./useScrollOverflowState.js";
 
 export interface TimelineDetailScrollProps {
   size: DetailScrollSize;
@@ -40,73 +34,41 @@ export interface TimelineDetailScrollProps {
   children: ReactNode;
 }
 
-type StreamingBinding = {
-  kind: "streaming";
-  overflow: ScrollOverflowStateBinding<HTMLDivElement>;
-  sticky: StickyBottomScrollBinding<HTMLDivElement>;
-};
-
-type StaticBinding = {
-  kind: "static";
-  overflow: ScrollOverflowStateBinding<HTMLDivElement>;
-};
-
-function StreamingDetailScroll(props: TimelineDetailScrollProps) {
-  const sticky = useStickyBottomScroll<HTMLDivElement>({
-    contentKey: props.contentKey,
-    streaming: true,
-  });
-  const overflow = useScrollOverflowState<HTMLDivElement>();
-  return (
-    <DetailScrollContent
-      {...props}
-      binding={{ kind: "streaming", overflow, sticky }}
-    />
-  );
-}
-
-function StaticDetailScroll(props: TimelineDetailScrollProps) {
-  const overflow = useScrollOverflowState<HTMLDivElement>();
-  return (
-    <DetailScrollContent {...props} binding={{ kind: "static", overflow }} />
-  );
-}
-
-function DetailScrollContent({
-  binding,
+// Single component for both streaming and static modes. The previous design
+// rendered separate `<StreamingDetailScroll>` / `<StaticDetailScroll>`
+// subtrees, but flipping `streaming` on completion swapped one for the other,
+// remounting a fresh scroll container with `scrollTop: 0` and snapping the
+// view back to the top. `useStickyBottomScroll` is already dormant when
+// `streaming === false` (see its `if (!streaming) return;` guards), so the
+// hook can stay wired through the lifecycle while the auto-scroll effect
+// flips off without remounting.
+export function TimelineDetailScroll({
   size,
+  streaming = false,
+  contentKey,
   className,
   scrollClassName,
   children,
-}: TimelineDetailScrollProps & {
-  binding: StreamingBinding | StaticBinding;
-}) {
+}: TimelineDetailScrollProps) {
+  const sticky = useStickyBottomScroll<HTMLDivElement>({
+    contentKey,
+    streaming,
+  });
+  const overflow = useScrollOverflowState<HTMLDivElement>();
   const maxHeightClassName = getDetailScrollMaxHeightClass(size);
-  const { aboveOverflow, belowOverflow } = binding.overflow;
+  const { aboveOverflow, belowOverflow } = overflow;
 
   const handleScroll = useCallback(
     (event: UIEvent<HTMLDivElement>) => {
-      if (binding.kind === "streaming") {
-        binding.sticky.onScroll(event);
-      }
+      sticky.onScroll(event);
     },
-    [binding],
+    [sticky],
   );
 
   const refCallback = useComposedRefs<HTMLDivElement>(
-    binding.kind === "streaming" ? binding.sticky.ref : undefined,
-    binding.overflow.scrollRef,
+    sticky.ref,
+    overflow.scrollRef,
   );
-
-  const stickyHandlers =
-    binding.kind === "streaming"
-      ? {
-          onPointerDown: binding.sticky.onPointerDown,
-          onTouchMove: binding.sticky.onTouchMove,
-          onTouchStart: binding.sticky.onTouchStart,
-          onWheel: binding.sticky.onWheel,
-        }
-      : {};
 
   return (
     <div
@@ -116,7 +78,10 @@ function DetailScrollContent({
       <div
         ref={refCallback}
         onScroll={handleScroll}
-        {...stickyHandlers}
+        onPointerDown={sticky.onPointerDown}
+        onTouchMove={sticky.onTouchMove}
+        onTouchStart={sticky.onTouchStart}
+        onWheel={sticky.onWheel}
         data-detail-scroll-area={size}
         className={cn(
           "min-w-0 overflow-auto",
@@ -125,13 +90,13 @@ function DetailScrollContent({
         )}
       >
         <div
-          ref={binding.overflow.topSentinelRef}
+          ref={overflow.topSentinelRef}
           aria-hidden
           className="h-px w-full"
         />
         {children}
         <div
-          ref={binding.overflow.bottomSentinelRef}
+          ref={overflow.bottomSentinelRef}
           aria-hidden
           className="h-px w-full"
         />
@@ -151,13 +116,5 @@ function DetailScrollContent({
         />
       ) : null}
     </div>
-  );
-}
-
-export function TimelineDetailScroll(props: TimelineDetailScrollProps) {
-  return props.streaming ? (
-    <StreamingDetailScroll {...props} />
-  ) : (
-    <StaticDetailScroll {...props} />
   );
 }

@@ -65,11 +65,22 @@ export function useStickyBottomScroll<TElement extends HTMLElement>({
   const userScrollIntentUntilRef = useRef(0);
   const lastScrollAtRef = useRef(0);
   const isFirstScrollRef = useRef(true);
+  const wasStreamingRef = useRef(streaming);
 
   useEffect(() => {
-    if (!streaming) {
+    const wasStreaming = wasStreamingRef.current;
+    wasStreamingRef.current = streaming;
+    // Streaming has been off for at least one render — fully dormant. Bail
+    // before touching scrollTop so user scroll position is preserved.
+    if (!streaming && !wasStreaming) {
       return;
     }
+    // Streaming is still on, OR it just flipped off. The flip case is the
+    // "final flush": content typically grows in the same render that flips
+    // streaming false (the last output chunk arrives with status=completed).
+    // We still want one last scroll-to-bottom so the user lands on the very
+    // bottom of the now-static content rather than just below the previous
+    // tick's bottom.
     const element = scrollRef.current;
     if (!element || !shouldStickToBottomRef.current) {
       return;
