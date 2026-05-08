@@ -29,6 +29,7 @@ import type {
   ThreadResponse,
   UpdateEnvironmentRequest,
   UpdateThreadRequest,
+  WorkspaceArgs,
 } from "@bb/server-contract";
 import {
   createPublicApiClient,
@@ -111,6 +112,15 @@ function defaultModelForProvider(providerId: string): string {
   return listPreferredTestModels(providerId)[0] ?? `${providerId}-model`;
 }
 
+function toWorkspaceArgs(
+  workspace: CreateHostThreadOptions["workspace"],
+): WorkspaceArgs {
+  if (workspace.type === "unmanaged") {
+    return workspace;
+  }
+  return { ...workspace, baseBranch: { kind: "default" } };
+}
+
 async function requireMergeBaseBranch(
   api: PublicApiClient,
   environmentId: string,
@@ -179,7 +189,7 @@ export async function createHostThread(
       environment: {
         type: "host",
         hostId: options.hostId,
-        workspace: options.workspace,
+        workspace: toWorkspaceArgs(options.workspace),
       },
       input: options.input ?? defaultThreadInput(DEFAULT_THREAD_BOOTSTRAP_TEXT),
       origin,
