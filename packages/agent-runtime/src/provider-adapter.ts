@@ -149,6 +149,11 @@ export type AdapterCommand =
       type: "thread/stop";
       threadId: string;
       providerThreadId: string;
+      /**
+       * Non-null means the stop interrupted an active provider turn. Adapters
+       * may treat that provider session as poisoned for future resume. Null
+       * means idle/no-active-turn stop and should not invalidate the session.
+       */
       activeTurnId: string | null;
     }
   | {

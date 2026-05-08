@@ -23,6 +23,7 @@ import type {
   CanUseTool,
   PermissionResult,
   SDKMessage,
+  SDKResultMessage,
 } from "@anthropic-ai/claude-agent-sdk";
 import type {
   PendingInteractionGrantedPermissionProfile,
@@ -35,7 +36,7 @@ import {
   type BridgeToolCallRequest,
 } from "../../shared/bridge-tool-calls.js";
 import { shouldAutoDenyInteractiveRequest } from "../../shared/permission-policy.js";
-import { SdkSession } from "./sdk-session.js";
+import { SdkSession, type SdkSessionOptions } from "./sdk-session.js";
 import { listClaudeCodeBridgeModels } from "./model-list.js";
 import {
   decodeClaudeCodeJsonRpcRequest,
@@ -75,6 +76,15 @@ const promptTextInputSchema = z.object({
   type: z.literal("text"),
   text: z.string(),
 });
+
+// Claude Agent SDK 0.2.111 types stale resume failures as generic
+// SDKResultError.errors. The bundled Claude Code CLI can also emit the same
+// text on a legacy result field; keep that compatibility at this boundary.
+const legacyClaudeErrorResultTextSchema = z
+  .object({
+    result: z.string(),
+  })
+  .passthrough();
 
 interface JsonRpcResponse {
   jsonrpc: "2.0";
@@ -143,6 +153,7 @@ interface ClaudeSessionPermissionGrantCoverageArgs {
 
 interface ThreadSession {
   session: SdkSession;
+  sessionOptions: SdkSessionOptions;
   sessionSerial: number;
   closing: boolean;
   pendingToolCalls: Map<string | number, PendingToolCall>;
@@ -150,7 +161,9 @@ interface ThreadSession {
   permissionEscalation: PermissionEscalation | null;
   permissionMode: ClaudePermissionMode;
   providerThreadId?: string;
+  resumeRecovery: ClaudeResumeRecoveryState | null;
   sessionPermissionGrants: ClaudeSessionPermissionGrant[];
+  threadIdRef: ThreadIdRef;
 }
 
 interface CloseThreadSessionArgs {
@@ -158,6 +171,43 @@ interface CloseThreadSessionArgs {
   message: string;
   threadId: string;
 }
+
+interface ClaudeResumeRecoveryState {
+  acceptedInputTexts: string[];
+  attemptedProviderThreadId: string;
+  retryAttempted: boolean;
+}
+
+interface CreateThreadSessionArgs {
+  permissionEscalation: PermissionEscalation | null;
+  permissionMode: ClaudePermissionMode;
+  providerThreadId?: string;
+  resumeRecovery: ClaudeResumeRecoveryState | null;
+  sessionOptions: SdkSessionOptions;
+  sessionPermissionGrants?: ClaudeSessionPermissionGrant[];
+  threadIdRef: ThreadIdRef;
+}
+
+interface RecoverStaleResumeArgs {
+  message: SDKMessage;
+  threadId: string;
+  threadSession: ThreadSession;
+}
+
+interface StartFreshSessionAfterStaleResumeArgs {
+  threadId: string;
+  threadSession: ThreadSession;
+}
+
+interface ReplaceThreadSessionArgs {
+  acceptedInputTexts: string[];
+  providerThreadId: string;
+  replacementSession: ThreadSession;
+  threadId: string;
+  threadSession: ThreadSession;
+}
+
+type StaleResumeRecoveryOutcome = "forward" | "suppress";
 
 interface ClaudeCodeThreadStopResult {
   ok: true;
@@ -330,6 +380,158 @@ function nextSessionSerial(): number {
   return sessionSerialCounter;
 }
 
+function createThreadSession(args: CreateThreadSessionArgs): ThreadSession {
+  const sessionSerial = nextSessionSerial();
+  const session = new SdkSession(
+    args.sessionOptions,
+    createOnSdkMessage({
+      sessionSerial,
+      threadIdRef: args.threadIdRef,
+    }),
+    createOnSdkDone({
+      sessionSerial,
+      threadIdRef: args.threadIdRef,
+    }),
+  );
+
+  return {
+    session,
+    sessionOptions: args.sessionOptions,
+    sessionSerial,
+    closing: false,
+    pendingToolCalls: new Map(),
+    pendingInteractiveRequests: new Map(),
+    permissionEscalation: args.permissionEscalation,
+    permissionMode: args.permissionMode,
+    ...(args.providerThreadId
+      ? { providerThreadId: args.providerThreadId }
+      : {}),
+    resumeRecovery: args.resumeRecovery,
+    sessionPermissionGrants: [...(args.sessionPermissionGrants ?? [])],
+    threadIdRef: args.threadIdRef,
+  };
+}
+
+function readLegacyClaudeErrorResultText(
+  message: SDKResultMessage,
+): string | null {
+  const parsed = legacyClaudeErrorResultTextSchema.safeParse(message);
+  return parsed.success ? parsed.data.result : null;
+}
+
+function readSingleClaudeErrorText(message: SDKResultMessage): string | null {
+  if (message.subtype !== "error_during_execution") {
+    return null;
+  }
+  const typedErrorText =
+    Array.isArray(message.errors) && message.errors.length === 1
+      ? message.errors[0]
+      : null;
+  const legacyResultText =
+    !Array.isArray(message.errors) || message.errors.length === 0
+      ? readLegacyClaudeErrorResultText(message)
+      : null;
+  return typedErrorText ?? legacyResultText;
+}
+
+function readExactClaudeStaleResumeError(
+  args: Pick<ClaudeResumeRecoveryState, "attemptedProviderThreadId"> & {
+    message: SDKMessage;
+  },
+): string | null {
+  const expectedMessage = `No conversation found with session ID: ${args.attemptedProviderThreadId}`;
+  const { message } = args;
+  if (message.type !== "result") {
+    return null;
+  }
+  if (message.is_error !== true) {
+    return null;
+  }
+  const errorText = readSingleClaudeErrorText(message);
+  if (errorText !== expectedMessage) {
+    return null;
+  }
+  return expectedMessage;
+}
+
+function startFreshSessionAfterStaleResume(
+  args: StartFreshSessionAfterStaleResumeArgs,
+): void {
+  const providerThreadId = randomUUID();
+  const replacementOptions: SdkSessionOptions = {
+    ...args.threadSession.sessionOptions,
+    sessionId: providerThreadId,
+  };
+  const acceptedInputTexts = [
+    ...(args.threadSession.resumeRecovery?.acceptedInputTexts ?? []),
+  ];
+  const replacementSession = createThreadSession({
+    permissionEscalation: args.threadSession.permissionEscalation,
+    permissionMode: args.threadSession.permissionMode,
+    providerThreadId,
+    resumeRecovery: null,
+    sessionOptions: replacementOptions,
+    sessionPermissionGrants: args.threadSession.sessionPermissionGrants,
+    threadIdRef: args.threadSession.threadIdRef,
+  });
+
+  replaceThreadSession({
+    acceptedInputTexts,
+    providerThreadId,
+    replacementSession,
+    threadId: args.threadId,
+    threadSession: args.threadSession,
+  });
+}
+
+function replaceThreadSession(args: ReplaceThreadSessionArgs): void {
+  args.threadSession.closing = true;
+  resolvePendingSessionWork(
+    args.threadSession,
+    "Thread session replaced after stale Claude resume",
+  );
+  args.threadSession.session.stop();
+
+  // This is not a user-requested thread close: the thread remains active and
+  // immediately owns the replacement session. `closingSessions` only gates
+  // external stop/replace requests, so a stop after this point should target
+  // the replacement, not wait on the poisoned resume session.
+  sessions.set(args.threadId, args.replacementSession);
+  args.replacementSession.session.start();
+  sendThreadIdentity(args.threadId, args.providerThreadId);
+
+  for (const inputText of args.acceptedInputTexts) {
+    args.replacementSession.session.pushInput(inputText);
+  }
+}
+
+function handleStaleResumeRecovery(
+  args: RecoverStaleResumeArgs,
+): StaleResumeRecoveryOutcome {
+  const { resumeRecovery } = args.threadSession;
+  if (!resumeRecovery || resumeRecovery.retryAttempted) {
+    return "forward";
+  }
+
+  const staleErrorMessage = readExactClaudeStaleResumeError({
+    attemptedProviderThreadId: resumeRecovery.attemptedProviderThreadId,
+    message: args.message,
+  });
+  if (!staleErrorMessage) {
+    if (args.message.type === "result") {
+      args.threadSession.resumeRecovery = null;
+    }
+    return "forward";
+  }
+
+  resumeRecovery.retryAttempted = true;
+  startFreshSessionAfterStaleResume({
+    threadId: args.threadId,
+    threadSession: args.threadSession,
+  });
+  return "suppress";
+}
+
 function getCurrentThreadSession(
   args: CurrentThreadSessionArgs,
 ): ThreadSession | undefined {
@@ -353,6 +555,14 @@ function createOnSdkMessage(
       threadId: args.threadIdRef.current,
     });
     if (!threadSession) return;
+    const recoveryOutcome = handleStaleResumeRecovery({
+      message,
+      threadId: args.threadIdRef.current,
+      threadSession,
+    });
+    if (recoveryOutcome === "suppress") {
+      return;
+    }
     const providerThreadId = message.session_id?.trim() ?? "";
     if (
       providerThreadId.length > 0 &&
@@ -841,26 +1051,17 @@ async function handleThreadStart(
     sessionOptions.allowedTools = getAllowedToolNames(params.dynamicTools);
   }
 
-  const sessionSerial = nextSessionSerial();
-  const session = new SdkSession(
-    sessionOptions,
-    createOnSdkMessage({ sessionSerial, threadIdRef }),
-    createOnSdkDone({ sessionSerial, threadIdRef }),
-  );
-
-  const threadSession: ThreadSession = {
-    session,
-    sessionSerial,
-    closing: false,
-    pendingToolCalls: new Map(),
-    pendingInteractiveRequests: new Map(),
+  const threadSession = createThreadSession({
     permissionEscalation: params.permissionEscalation,
     permissionMode: params.permissionMode,
     providerThreadId,
+    resumeRecovery: null,
+    sessionOptions,
     sessionPermissionGrants: [],
-  };
+    threadIdRef,
+  });
   sessions.set(threadIdRef.current, threadSession);
-  session.start();
+  threadSession.session.start();
 
   sendResult(id, { threadId: threadIdRef.current, providerThreadId });
   sendThreadIdentity(threadIdRef.current, providerThreadId);
@@ -871,7 +1072,7 @@ async function handleThreadResume(
   params: ThreadResumeParams,
 ): Promise<void> {
   const threadId = params.threadId;
-  const providerThreadId = params.providerThreadId ?? undefined;
+  const requestedProviderThreadId = params.providerThreadId ?? undefined;
 
   const existing = sessions.get(threadId);
   if (existing) {
@@ -895,28 +1096,30 @@ async function handleThreadResume(
     sessionOptions.mcpServers = { [BRIDGE_MCP_SERVER_NAME]: mcpServer };
     sessionOptions.allowedTools = getAllowedToolNames(params.dynamicTools);
   }
-  const sessionSerial = nextSessionSerial();
-  const session = new SdkSession(
-    sessionOptions,
-    createOnSdkMessage({ sessionSerial, threadIdRef }),
-    createOnSdkDone({ sessionSerial, threadIdRef }),
-  );
-
-  const threadSession: ThreadSession = {
-    session,
-    sessionSerial,
-    closing: false,
-    pendingToolCalls: new Map(),
-    pendingInteractiveRequests: new Map(),
+  const threadSession = createThreadSession({
     permissionEscalation: params.permissionEscalation,
     permissionMode: params.permissionMode,
-    ...(providerThreadId ? { providerThreadId } : {}),
+    ...(requestedProviderThreadId
+      ? { providerThreadId: requestedProviderThreadId }
+      : {}),
+    resumeRecovery: requestedProviderThreadId
+      ? {
+          acceptedInputTexts: [],
+          attemptedProviderThreadId: requestedProviderThreadId,
+          retryAttempted: false,
+        }
+      : null,
+    sessionOptions,
     sessionPermissionGrants: [],
-  };
+    threadIdRef,
+  });
   sessions.set(threadId, threadSession);
-  session.start(providerThreadId);
+  threadSession.session.start(requestedProviderThreadId);
 
-  sendResult(id, { threadId, providerThreadId: providerThreadId ?? null });
+  sendResult(id, {
+    threadId,
+    providerThreadId: requestedProviderThreadId ?? null,
+  });
 }
 
 function handleTurnStart(id: string | number, params: TurnStartParams): void {
@@ -932,6 +1135,7 @@ function handleTurnStart(id: string | number, params: TurnStartParams): void {
     return;
   }
 
+  threadSession.resumeRecovery?.acceptedInputTexts.push(input);
   threadSession.session.pushInput(input);
   sendResult(id, { threadId: params.threadId });
 }
@@ -949,6 +1153,7 @@ function handleTurnSteer(id: string | number, params: TurnSteerParams): void {
     return;
   }
 
+  threadSession.resumeRecovery?.acceptedInputTexts.push(input);
   threadSession.session.pushInput(input);
   sendResult(id, { threadId: params.threadId });
 }
