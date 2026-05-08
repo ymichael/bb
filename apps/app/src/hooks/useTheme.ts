@@ -5,26 +5,24 @@ import { createLocalStorageEnumStorage } from "@/lib/browser-storage";
 
 export const THEME_STORAGE_KEY = "bb.theme";
 
-type Theme = "light" | "dark";
-type StoredThemePreference = "" | Theme;
+export type Theme = "light" | "dark";
+export type ThemePreference = Theme | "system";
+
+type ThemeListener = () => void;
 
 const themePreferenceStorage =
-  createLocalStorageEnumStorage<StoredThemePreference>(
-    (value): value is StoredThemePreference =>
-      value === "" || value === "light" || value === "dark",
+  createLocalStorageEnumStorage<ThemePreference>(
+    (value): value is ThemePreference =>
+      value === "light" || value === "dark" || value === "system",
   );
-const themePreferenceAtom = atomWithStorage<StoredThemePreference>(
+const themePreferenceAtom = atomWithStorage<ThemePreference>(
   THEME_STORAGE_KEY,
-  "",
+  "system",
   themePreferenceStorage,
   { getOnInit: true },
 );
 
-function isTheme(value: string | null): value is Theme {
-  return value === "light" || value === "dark";
-}
-
-function getStoredThemePreference(): StoredThemePreference {
+function getThemePreference(): ThemePreference {
   return getDefaultStore().get(themePreferenceAtom);
 }
 
@@ -33,64 +31,73 @@ function applyThemeClass(theme: Theme): void {
   document.documentElement.classList.toggle("dark", theme === "dark");
 }
 
-function getPreferredTheme(): Theme {
-  const storedTheme = getStoredThemePreference();
-  if (isTheme(storedTheme)) return storedTheme;
+function getSystemTheme(): Theme {
   if (typeof window === "undefined") return "light";
-
-  if (document.documentElement.classList.contains("dark")) return "dark";
-
+  if (typeof window.matchMedia !== "function") return "light";
   return window.matchMedia("(prefers-color-scheme: dark)").matches
     ? "dark"
     : "light";
 }
 
-export function setPreferredTheme(theme: Theme): void {
-  getDefaultStore().set(themePreferenceAtom, theme);
-  applyThemeClass(theme);
+function getPreferredTheme(): Theme {
+  const themePreference = getThemePreference();
+  return themePreference === "system" ? getSystemTheme() : themePreference;
+}
+
+export function setPreferredTheme(themePreference: ThemePreference): void {
+  getDefaultStore().set(themePreferenceAtom, themePreference);
+  applyThemeClass(getPreferredTheme());
   emitTheme();
 }
 
 let currentTheme: Theme = "light";
-const subscribers = new Set<() => void>();
+let currentThemePreference: ThemePreference = "system";
+const themeSubscribers = new Set<ThemeListener>();
+const themePreferenceSubscribers = new Set<ThemeListener>();
 let initialized = false;
 
 function emitTheme() {
+  const nextThemePreference = getThemePreference();
   const nextTheme = getPreferredTheme();
   applyThemeClass(nextTheme);
-  if (nextTheme === currentTheme) return;
+
+  const themePreferenceChanged =
+    nextThemePreference !== currentThemePreference;
+  const themeChanged = nextTheme !== currentTheme;
+
+  currentThemePreference = nextThemePreference;
   currentTheme = nextTheme;
-  subscribers.forEach((listener) => listener());
+
+  if (themePreferenceChanged) {
+    themePreferenceSubscribers.forEach((listener) => listener());
+  }
+  if (themeChanged) {
+    themeSubscribers.forEach((listener) => listener());
+  }
 }
 
 function ensureThemeObserver() {
   if (initialized || typeof window === "undefined") return;
   initialized = true;
+  currentThemePreference = getThemePreference();
   currentTheme = getPreferredTheme();
   applyThemeClass(currentTheme);
-
-  const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-  const observer = new MutationObserver(() => {
-    emitTheme();
-  });
-
-  mediaQuery.addEventListener("change", emitTheme);
   getDefaultStore().sub(themePreferenceAtom, emitTheme);
-  observer.observe(document.documentElement, {
-    attributes: true,
-    attributeFilter: ["class"],
-  });
+
+  if (typeof window.matchMedia !== "function") return;
+  const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+  mediaQuery.addEventListener("change", emitTheme);
 }
 
 export function initializePreferredTheme(): void {
   ensureThemeObserver();
 }
 
-function subscribePreferredTheme(listener: () => void): () => void {
+function subscribePreferredTheme(listener: ThemeListener): () => void {
   ensureThemeObserver();
-  subscribers.add(listener);
+  themeSubscribers.add(listener);
   return () => {
-    subscribers.delete(listener);
+    themeSubscribers.delete(listener);
   };
 }
 
@@ -103,5 +110,21 @@ export function usePreferredTheme(): Theme {
       return currentTheme;
     },
     () => "light",
+  );
+}
+
+function subscribeThemePreference(listener: ThemeListener): () => void {
+  ensureThemeObserver();
+  themePreferenceSubscribers.add(listener);
+  return () => {
+    themePreferenceSubscribers.delete(listener);
+  };
+}
+
+export function useThemePreference(): ThemePreference {
+  return React.useSyncExternalStore(
+    subscribeThemePreference,
+    getThemePreference,
+    () => "system",
   );
 }

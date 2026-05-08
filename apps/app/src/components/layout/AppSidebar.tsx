@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { Link, useLocation } from "react-router-dom";
-import { Moon, Settings, Sun } from "lucide-react";
+import { Settings } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -14,7 +14,6 @@ import {
 import { COARSE_POINTER_CHILD_ICON_BUTTON_CLASS } from "@/components/ui";
 import { ProjectList } from "./ProjectList";
 import { useQuickCreateProjectController } from "@/hooks/useQuickCreateProject";
-import { setPreferredTheme, usePreferredTheme } from "@/hooks/useTheme";
 
 interface AppSidebarProps {
   onResizeMouseDown: (event: React.MouseEvent<HTMLDivElement>) => void;
@@ -25,7 +24,6 @@ export function AppSidebar({ onResizeMouseDown, isResizing }: AppSidebarProps) {
   const quickCreateProject = useQuickCreateProjectController();
   const location = useLocation();
   const { isMobile, setOpenMobile } = useSidebar();
-  const theme = usePreferredTheme();
   const isMobileRef = useRef(isMobile);
   // Keep the ProjectList callback stable while reading the latest breakpoint.
   isMobileRef.current = isMobile;
@@ -36,10 +34,6 @@ export function AppSidebar({ onResizeMouseDown, isResizing }: AppSidebarProps) {
     }
   }, [setOpenMobile]);
 
-  const isDarkTheme = theme === "dark";
-  const toggleTheme = useCallback(() => {
-    setPreferredTheme(isDarkTheme ? "light" : "dark");
-  }, [isDarkTheme]);
   const selectedProjectId = useMemo(
     () => location.pathname.match(/^\/projects\/([^/]+)/)?.[1],
     [location.pathname],
@@ -62,20 +56,6 @@ export function AppSidebar({ onResizeMouseDown, isResizing }: AppSidebarProps) {
         </SidebarContent>
         <SidebarFooter>
           <SidebarMenu className="flex-row items-center">
-            <SidebarMenuItem>
-              <SidebarMenuButton
-                onClick={toggleTheme}
-                className={COARSE_POINTER_CHILD_ICON_BUTTON_CLASS}
-                tooltip={
-                  isDarkTheme ? "Switch to light mode" : "Switch to dark mode"
-                }
-                aria-label={
-                  isDarkTheme ? "Switch to light mode" : "Switch to dark mode"
-                }
-              >
-                {isDarkTheme ? <Sun /> : <Moon />}
-              </SidebarMenuButton>
-            </SidebarMenuItem>
             <SidebarMenuItem>
               <SidebarMenuButton
                 asChild

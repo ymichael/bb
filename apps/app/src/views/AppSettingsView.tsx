@@ -33,7 +33,11 @@ import {
   HostRenameDialog,
   type HostRenameDialogTarget,
 } from "@/components/settings/HostRenameDialog";
-import { setPreferredTheme, usePreferredTheme } from "@/hooks/useTheme";
+import {
+  setPreferredTheme,
+  useThemePreference,
+  type ThemePreference,
+} from "@/hooks/useTheme";
 import {
   useCloudAuthAttempt,
   useCloudAuthSettings,
@@ -71,8 +75,25 @@ interface SaveEnvVarsMutationRequest {
 
 type CloudAuthNoticeMap = Partial<Record<CloudAuthProviderId, string>>;
 
+interface ThemePreferenceOption {
+  label: string;
+  value: ThemePreference;
+}
+
+const THEME_PREFERENCE_OPTIONS: ReadonlyArray<ThemePreferenceOption> = [
+  { label: "System", value: "system" },
+  { label: "Light", value: "light" },
+  { label: "Dark", value: "dark" },
+];
+
+const THEME_PREFERENCE_LABELS: Record<ThemePreference, string> = {
+  dark: "Dark",
+  light: "Light",
+  system: "System",
+};
+
 export function AppSettingsView() {
-  const theme = usePreferredTheme();
+  const themePreference = useThemePreference();
   const { data: hosts = [], isLoading: hostsLoading } = useEffectiveHosts();
   const sandboxHostSupported = useAtomValue(sandboxHostSupportedAtom);
   const { data: cloudAuthSettings, isLoading: cloudAuthLoading } =
@@ -228,37 +249,26 @@ export function AppSettingsView() {
                   className="w-full justify-between sm:w-48"
                   aria-label="Theme"
                 >
-                  {theme === "dark" ? "Dark" : "Light"}
+                  {THEME_PREFERENCE_LABELS[themePreference]}
                   <ChevronDown className="size-3.5 text-muted-foreground" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-48">
-                <DropdownMenuItem onSelect={() => setPreferredTheme("light")}>
-                  Light
-                  <Check
-                    className={
-                      theme === "light"
-                        ? cn("ml-auto", COARSE_POINTER_ICON_SIZE_CLASS)
-                        : cn(
-                            "ml-auto opacity-0",
-                            COARSE_POINTER_ICON_SIZE_CLASS,
-                          )
-                    }
-                  />
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => setPreferredTheme("dark")}>
-                  Dark
-                  <Check
-                    className={
-                      theme === "dark"
-                        ? cn("ml-auto", COARSE_POINTER_ICON_SIZE_CLASS)
-                        : cn(
-                            "ml-auto opacity-0",
-                            COARSE_POINTER_ICON_SIZE_CLASS,
-                          )
-                    }
-                  />
-                </DropdownMenuItem>
+                {THEME_PREFERENCE_OPTIONS.map((option) => (
+                  <DropdownMenuItem
+                    key={option.value}
+                    onSelect={() => setPreferredTheme(option.value)}
+                  >
+                    {option.label}
+                    <Check
+                      className={cn(
+                        "ml-auto",
+                        themePreference !== option.value && "opacity-0",
+                        COARSE_POINTER_ICON_SIZE_CLASS,
+                      )}
+                    />
+                  </DropdownMenuItem>
+                ))}
               </DropdownMenuContent>
             </DropdownMenu>
           </SettingsWithControl>

@@ -996,6 +996,7 @@ function ThreadTimelineRowsForIdentity(props: ThreadTimelineRowsProps) {
   const erroredTurnSummaryIds = useStableReadonlySet(
     props.erroredTurnSummaryIds,
   );
+  const onLoadTurnSummaryRows = props.onLoadTurnSummaryRows;
   const requestedTurnSummaryRowIdsRef = useRef(new Set<string>());
   useEffect(() => {
     for (const rowId of erroredTurnSummaryIds) {

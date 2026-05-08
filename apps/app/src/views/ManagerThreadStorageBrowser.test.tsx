@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -10,6 +11,7 @@ import {
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { WorkspaceFile } from "@bb/server-contract";
+import { setPreferredTheme } from "@/hooks/useTheme";
 import type { FilePreview } from "@/lib/file-preview";
 import {
   MARKDOWN_PREVIEW_RENDER_MAX_CHARS,
@@ -245,6 +247,7 @@ function installClipboardWriteTextMock() {
 
 afterEach(() => {
   cleanup();
+  setPreferredTheme("system");
   document.documentElement.classList.remove("dark");
   treeResetCalls.length = 0;
   vi.clearAllMocks();
@@ -289,7 +292,7 @@ describe("ManagerThreadStorageBrowser", () => {
     });
   });
 
-  it("syncs the shadow-root tree color-scheme with the document theme", async () => {
+  it("syncs the shadow-root tree color-scheme with the selected theme", async () => {
     renderBrowser({
       files: makeFiles(["README.md"]),
       selectedPath: null,
@@ -301,7 +304,9 @@ describe("ManagerThreadStorageBrowser", () => {
 
     expect(tree.style.getPropertyValue("color-scheme")).toBe("light");
 
-    document.documentElement.classList.add("dark");
+    act(() => {
+      setPreferredTheme("dark");
+    });
 
     await waitFor(() => {
       expect(tree.style.getPropertyValue("color-scheme")).toBe("dark");
