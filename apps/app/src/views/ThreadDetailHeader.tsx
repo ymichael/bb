@@ -17,8 +17,8 @@ import {
   HEADER_ICON_BUTTON_CLASS,
 } from "@/components/layout/AppPageHeader";
 import { cn } from "@/lib/utils";
-import type { ThreadGitActionDialogTarget } from "@/components/thread/ThreadGitActionDialog";
-import type { ThreadEnvironmentPromotionDialogTarget } from "@/components/thread/ThreadEnvironmentPromotionDialog";
+import type { ThreadGitActionDialogTarget } from "@/components/thread/dialogs/ThreadGitActionDialog";
+import type { ThreadEnvironmentPromotionDialogTarget } from "@/components/thread/dialogs/ThreadEnvironmentPromotionDialog";
 import type { ThreadEnvironmentPromotionHeaderAction } from "@/views/threadEnvironmentPromotionActions";
 
 const THREAD_HEADER_ACTION_BUTTON_CLASS =

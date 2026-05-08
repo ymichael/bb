@@ -18,7 +18,7 @@ import {
   WorkspaceChangesList,
   type WorkspaceChangedFile,
 } from "@/components/thread/WorkspaceChangesList";
-import { ArchiveTimestampAction } from "@/components/thread/ArchiveTimestampAction";
+import { ThreadUnarchiveButton } from "@/components/thread/ThreadUnarchiveButton";
 import { BranchPicker } from "@/components/pickers/BranchPicker";
 import { useIsSecondaryPanelOpen } from "@/lib/thread-secondary-panel";
 import type { ThreadGitStatusDisplay } from "@/lib/workspace-status";
@@ -333,7 +333,7 @@ function ThreadMetadataContent({
       ) : null}
       {thread.archivedAt != null ? (
         <DetailRow label="Archived" valueClassName="min-w-0 truncate">
-          <ArchiveTimestampAction
+          <ThreadUnarchiveButton
             isPending={unarchivePending}
             onUnarchive={onUnarchive}
             threadType={thread.type}

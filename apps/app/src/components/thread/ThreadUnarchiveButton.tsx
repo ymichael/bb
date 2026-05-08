@@ -3,7 +3,7 @@ import { ArchiveRestore, LoaderCircle } from "lucide-react";
 import { Button } from "@/components/ui";
 import { threadTypeLabel } from "@/lib/thread-title";
 
-export function ArchiveTimestampAction({
+export function ThreadUnarchiveButton({
   isPending,
   onUnarchive,
   buttonLabel,

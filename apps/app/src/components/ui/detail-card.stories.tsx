@@ -54,7 +54,7 @@ const mockMergeBaseOptions = ["origin/main", "origin/develop"] as const;
 const mockChangedFiles: WorkspaceChangedFile[] = [
   { path: "apps/app/src/components/ui/detail-card.tsx", status: "M" },
   { path: "apps/app/src/components/HireManagerModal.tsx", status: "M" },
-  { path: "apps/app/src/components/thread/ThreadGitActionDialog.tsx", status: "A" },
+  { path: "apps/app/src/components/thread/dialogs/ThreadGitActionDialog.tsx", status: "A" },
 ];
 
 export function Overview() {

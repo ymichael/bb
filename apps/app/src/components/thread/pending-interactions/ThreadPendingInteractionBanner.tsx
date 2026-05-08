@@ -7,9 +7,11 @@ import {
 import { extractShellCommandFromString } from "@bb/thread-view";
 import {
   type PendingInteraction,
+  type PendingInteractionApprovalDecision,
   type PendingInteractionResolution,
 } from "@bb/domain";
 import {
+  Button,
   ExpandableLine,
   StatusPill,
   getDetailScrollMaxHeightClass,
@@ -17,8 +19,6 @@ import {
 import { useResolveThreadPendingInteraction } from "@/hooks/mutations/thread-interaction-mutations";
 import { getMutationErrorMessage } from "@/lib/mutation-errors";
 import { cn } from "@/lib/utils";
-import { labelForApprovalDecision } from "./pending-interactions/banner-helpers";
-import { Button } from "@/components/ui";
 
 interface ThreadPendingInteractionBannerProps {
   interaction: PendingInteraction;
@@ -244,5 +244,18 @@ function buildBannerModel(interaction: PendingInteraction): BannerModel {
     }
     default:
       return assertNever(interaction.payload.subject);
+  }
+}
+
+function labelForApprovalDecision(
+  decision: PendingInteractionApprovalDecision,
+): string {
+  switch (decision) {
+    case "allow_once":
+      return "Allow once";
+    case "allow_for_session":
+      return "Allow for session";
+    case "deny":
+      return "Deny";
   }
 }

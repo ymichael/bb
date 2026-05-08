@@ -30,17 +30,17 @@ import { getThreadDisplayTitle, threadTypeLabel } from "@/lib/thread-title";
 import {
   ThreadRenameDialog,
   type ThreadRenameDialogTarget,
-} from "@/components/thread/ThreadRenameDialog";
-import { ThreadDeleteDialog } from "@/components/thread/ThreadDeleteDialog";
+} from "@/components/thread/dialogs/ThreadRenameDialog";
+import { ThreadDeleteDialog } from "@/components/thread/dialogs/ThreadDeleteDialog";
 import {
   ThreadArchiveConfirmationDialog,
   type ThreadArchiveConfirmationDialogTarget,
-} from "@/components/thread/ThreadArchiveConfirmationDialog";
+} from "@/components/thread/dialogs/ThreadArchiveConfirmationDialog";
 import {
   ThreadManagerChildThreadsConfirmationDialog,
   type ThreadManagerChildThreadsAction,
   type ThreadManagerChildThreadsDialogTarget,
-} from "@/components/thread/ThreadManagerChildThreadsConfirmationDialog";
+} from "@/components/thread/dialogs/ThreadManagerChildThreadsConfirmationDialog";
 import { getThreadReadToggleAction } from "@/components/layout/project-list/threadReadState";
 
 export interface ThreadActionsContextValue {

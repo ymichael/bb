@@ -5,7 +5,7 @@ import { useDialogState } from "@/hooks/useDialogState";
 import { useHostDaemon } from "@/hooks/useHostDaemon";
 import { useEnvironmentPromotion } from "@/hooks/queries/environment-queries";
 import { useProjects } from "@/hooks/queries/project-queries";
-import type { ThreadEnvironmentPromotionDialogTarget } from "@/components/thread/ThreadEnvironmentPromotionDialog";
+import type { ThreadEnvironmentPromotionDialogTarget } from "@/components/thread/dialogs/ThreadEnvironmentPromotionDialog";
 import type { RequestEnvironmentActionMutationLike } from "./threadDetailMutationTypes";
 import {
   findPromotionProjectSourceForHost,

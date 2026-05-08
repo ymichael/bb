@@ -1,6 +1,6 @@
 import type { PendingInteraction } from "@bb/domain";
-import { ThreadPendingInteractionBanner } from "@/components/thread/ThreadPendingInteractionBanner";
-import { StoryCard, StoryRow } from "../../../.ladle/story-card";
+import { ThreadPendingInteractionBanner } from "@/components/thread/pending-interactions/ThreadPendingInteractionBanner";
+import { StoryCard, StoryRow } from "../../../../.ladle/story-card";
 
 export default {
   title: "thread/Pending Interaction Banner",

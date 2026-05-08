@@ -1,7 +1,7 @@
 import { Link, useParams } from "react-router-dom";
 import type { ThreadListEntry } from "@bb/domain";
 import { PageShell, Pill } from "@/components/ui";
-import { ArchiveTimestampAction } from "@/components/thread/ArchiveTimestampAction";
+import { ThreadUnarchiveButton } from "@/components/thread/ThreadUnarchiveButton";
 import { useUnarchiveThread } from "@/hooks/mutations/thread-state-mutations";
 import { useThreads } from "@/hooks/queries/thread-queries";
 import { getThreadDisplayTitle } from "@/lib/thread-title";
@@ -67,7 +67,7 @@ export function ProjectArchivedThreadsView() {
                     ) : null}
                   </span>
                 </Link>
-                <ArchiveTimestampAction
+                <ThreadUnarchiveButton
                   isPending={
                     unarchiveThread.isPending &&
                     unarchiveThread.variables?.id === thread.id

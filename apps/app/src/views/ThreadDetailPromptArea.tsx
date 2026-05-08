@@ -17,7 +17,7 @@ import type {
   ThreadWithRuntime,
 } from "@bb/domain";
 import type { ThreadTimelineResponse } from "@bb/server-contract";
-import { ThreadPendingInteractionBanner } from "@/components/thread/ThreadPendingInteractionBanner";
+import { ThreadPendingInteractionBanner } from "@/components/thread/pending-interactions/ThreadPendingInteractionBanner";
 import {
   ContextBanner,
   type ContextBannerMergeBaseConfig,
