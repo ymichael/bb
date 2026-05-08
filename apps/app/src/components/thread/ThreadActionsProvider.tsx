@@ -41,7 +41,7 @@ import {
   type ThreadManagerChildThreadsAction,
   type ThreadManagerChildThreadsDialogTarget,
 } from "@/components/thread/dialogs/ThreadManagerChildThreadsConfirmationDialog";
-import { getThreadReadToggleAction } from "@/components/layout/project-list/threadReadState";
+import { getThreadReadToggleAction } from "@/components/sidebar/threadReadState";
 
 export interface ThreadActionsContextValue {
   requestRename: (thread: Thread) => void;

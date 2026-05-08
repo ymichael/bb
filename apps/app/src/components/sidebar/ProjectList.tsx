@@ -45,12 +45,12 @@ import {
   COARSE_POINTER_ADD_PROJECT_BUTTON_SIZE_CLASS,
   COARSE_POINTER_ICON_SIZE_CLASS,
 } from "@/components/ui";
-import { ProjectRow } from "./project-list/ProjectRow";
-import type { ProjectThreadListState } from "./project-list/ProjectRow";
+import { ProjectRow } from "./ProjectRow";
+import type { ProjectThreadListState } from "./ProjectRow";
 import {
   collapsedManagerIdsAtom,
   collapsedProjectIdsAtom,
-} from "./project-list/sidebarCollapsedAtoms";
+} from "./sidebarCollapsedAtoms";
 
 interface ProjectListProps {
   onNewProject?: () => void;
@@ -353,7 +353,7 @@ function ProjectListComponent({
         ) : null}
       </SidebarStickyTier>
       <SidebarGroupContent>
-        <SidebarMenu className="gap-2">
+        <SidebarMenu className="gap-1">
           {projectsState.status === "loading" ? (
             <>
               <SidebarMenuSkeleton />

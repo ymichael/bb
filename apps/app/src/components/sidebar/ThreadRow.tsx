@@ -280,7 +280,9 @@ function ThreadRowComponent({
   const hasManagedChildren = managedChildCount > 0;
   const managedChildBusyCount = managerOptions?.managedChildBusyCount ?? 0;
   const isManagerBusy =
-    isManager && (threadIsBusy || managedChildBusyCount > 0);
+    isManager &&
+    (threadIsBusy ||
+      (isManagerCollapsed && managedChildBusyCount > 0));
   const EnvironmentIcon = getEnvironmentWorkspaceDisplayIcon(
     thread.environmentWorkspaceDisplayKind,
   );
@@ -339,12 +341,12 @@ function ThreadRowComponent({
             manager
           </StatusPill>
         ) : null}
+        {isPromoted ? (
+          <Pill variant="emphasis" className="shrink-0">
+            promoted
+          </Pill>
+        ) : null}
       </span>
-      {isPromoted ? (
-        <Pill variant="emphasis" className="relative z-10">
-          promoted
-        </Pill>
-      ) : null}
       <span
         className={cn(
           "flex shrink-0 items-center justify-end",

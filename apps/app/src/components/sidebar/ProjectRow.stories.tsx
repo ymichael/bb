@@ -1,0 +1,484 @@
+import { useCallback, useState, type ReactNode } from "react";
+import type { ThreadListEntry } from "@bb/domain";
+import type { ProjectResponse } from "@bb/server-contract";
+import {
+  SidebarMenu,
+  SidebarStickyStack,
+} from "@/components/ui";
+import { ProjectActionsProvider } from "@/components/project/ProjectActionsProvider";
+import { ThreadActionsProvider } from "@/components/thread/ThreadActionsProvider";
+import { ProjectRow, type ProjectThreadListState } from "./ProjectRow";
+import { StoryCard, StoryRow } from "../../../.ladle/story-card";
+
+export default {
+  title: "sidebar/Projects",
+};
+
+// Caps at the production sidebar max (460px) but shrinks with the parent so
+// truncation behavior is visible at any container width.
+function SidebarStage({ children }: { children: ReactNode }) {
+  return (
+    <ProjectActionsProvider>
+      <ThreadActionsProvider>
+        <div className="w-full max-w-[460px] min-w-0 rounded-md bg-sidebar p-2 text-sidebar-foreground">
+          <SidebarStickyStack>
+            <SidebarMenu className="gap-1">{children}</SidebarMenu>
+          </SidebarStickyStack>
+        </div>
+      </ThreadActionsProvider>
+    </ProjectActionsProvider>
+  );
+}
+
+function makeProject(overrides: Partial<ProjectResponse> = {}): ProjectResponse {
+  return {
+    id: "proj_demo",
+    name: "bb",
+    sources: [],
+    createdAt: 1,
+    updatedAt: 2,
+    ...overrides,
+  };
+}
+
+function makeThread(overrides: Partial<ThreadListEntry> = {}): ThreadListEntry {
+  return {
+    id: "thr_default",
+    projectId: "proj_demo",
+    environmentId: null,
+    automationId: null,
+    providerId: "codex",
+    type: "standard",
+    title: "Audit recurring permission failures",
+    titleFallback: "Audit recurring permission failures",
+    status: "idle",
+    parentThreadId: null,
+    archivedAt: null,
+    stopRequestedAt: null,
+    deletedAt: null,
+    lastReadAt: 100,
+    latestAttentionAt: 100,
+    createdAt: 0,
+    updatedAt: 100,
+    hasPendingInteraction: false,
+    environmentHostId: null,
+    environmentBranchName: null,
+    environmentWorkspaceDisplayKind: "other",
+    runtime: {
+      displayStatus: "idle",
+      hostReconnectGraceExpiresAt: null,
+    },
+    ...overrides,
+  };
+}
+
+interface InteractiveProjectRowArgs {
+  project?: ProjectResponse;
+  threadListState: ProjectThreadListState;
+  initialCollapsed?: boolean;
+  initialCollapsedManagerIds?: ReadonlySet<string>;
+  isActive?: boolean;
+  isLocalPathInvalid?: boolean;
+  promotedBranchName?: string | null;
+}
+
+// Holds local collapse state so the chevrons in stories actually toggle. The
+// component is fully controlled in production (by jotai atoms in ProjectList),
+// so here we just stand in for that owner.
+function InteractiveProjectRow({
+  project = makeProject(),
+  threadListState,
+  initialCollapsed = false,
+  initialCollapsedManagerIds,
+  isActive = false,
+  isLocalPathInvalid = false,
+  promotedBranchName = null,
+}: InteractiveProjectRowArgs) {
+  const [isCollapsed, setIsCollapsed] = useState(initialCollapsed);
+  const [collapsedManagerIds, setCollapsedManagerIds] = useState<Set<string>>(
+    () => new Set(initialCollapsedManagerIds ?? []),
+  );
+  const onToggleProjectCollapsed = useCallback(() => {
+    setIsCollapsed((current) => !current);
+  }, []);
+  const onToggleManagerCollapsed = useCallback((threadId: string) => {
+    setCollapsedManagerIds((current) => {
+      const next = new Set(current);
+      if (next.has(threadId)) {
+        next.delete(threadId);
+      } else {
+        next.add(threadId);
+      }
+      return next;
+    });
+  }, []);
+  return (
+    <ProjectRow
+      project={project}
+      threadListState={threadListState}
+      isActive={isActive}
+      isCollapsed={isCollapsed}
+      collapsedManagerIds={collapsedManagerIds}
+      isLocalPathInvalid={isLocalPathInvalid}
+      localHostId="host_local"
+      onToggleProjectCollapsed={onToggleProjectCollapsed}
+      onToggleManagerCollapsed={onToggleManagerCollapsed}
+      promotedBranchName={promotedBranchName}
+    />
+  );
+}
+
+function singleProject(args: InteractiveProjectRowArgs) {
+  return (
+    <SidebarStage>
+      <InteractiveProjectRow {...args} />
+    </SidebarStage>
+  );
+}
+
+const idleThread = makeThread({
+  id: "thr_idle",
+  title: "Audit and reduce codebase cognitive load",
+  titleFallback: "Audit and reduce codebase cognitive load",
+});
+const busyThread = makeThread({
+  id: "thr_busy",
+  title: "Implement timeline pagination v2",
+  titleFallback: "Implement timeline pagination v2",
+  status: "active",
+  runtime: {
+    displayStatus: "active",
+    hostReconnectGraceExpiresAt: null,
+  },
+});
+const pendingThread = makeThread({
+  id: "thr_pending",
+  title: "Diagnose Claude provider auth path",
+  titleFallback: "Diagnose Claude provider auth path",
+  hasPendingInteraction: true,
+});
+const promotedThread = makeThread({
+  id: "thr_promoted",
+  title: "Stabilize Pnpm Dev Environment",
+  titleFallback: "Stabilize Pnpm Dev Environment",
+  environmentHostId: "host_local",
+  environmentBranchName: "main",
+  environmentWorkspaceDisplayKind: "managed-worktree",
+});
+const manager = makeThread({
+  id: "thr_manager",
+  type: "manager",
+  title: "Frontend Manager",
+  titleFallback: "Frontend Manager",
+});
+const managerChildA = makeThread({
+  id: "thr_manager_child_a",
+  title: "Update Timeline Row Types",
+  titleFallback: "Update Timeline Row Types",
+  parentThreadId: manager.id,
+});
+const managerChildB = makeThread({
+  id: "thr_manager_child_b",
+  title: "Fix Timeline Pagination Bugs",
+  titleFallback: "Fix Timeline Pagination Bugs",
+  parentThreadId: manager.id,
+  status: "active",
+  runtime: {
+    displayStatus: "active",
+    hostReconnectGraceExpiresAt: null,
+  },
+});
+
+interface MultiProjectEntry extends InteractiveProjectRowArgs {
+  key: string;
+}
+
+const multipleProjects: MultiProjectEntry[] = [
+  {
+    key: "bb",
+    project: makeProject({ id: "proj_bb", name: "bb" }),
+    isActive: true,
+    promotedBranchName: "main",
+    threadListState: {
+      status: "ready",
+      threads: [
+        { ...promotedThread, projectId: "proj_bb" },
+        { ...manager, projectId: "proj_bb" },
+        { ...managerChildA, projectId: "proj_bb" },
+        { ...managerChildB, projectId: "proj_bb" },
+        { ...busyThread, projectId: "proj_bb" },
+        { ...pendingThread, projectId: "proj_bb" },
+      ],
+    },
+  },
+  {
+    key: "pierre",
+    project: makeProject({
+      id: "proj_pierre",
+      name: "pierre — long project name that should truncate cleanly",
+    }),
+    initialCollapsed: true,
+    threadListState: {
+      status: "ready",
+      threads: [{ ...idleThread, projectId: "proj_pierre" }],
+    },
+  },
+  {
+    key: "ingest",
+    project: makeProject({ id: "proj_ingest", name: "ingest-pipeline" }),
+    threadListState: {
+      status: "ready",
+      threads: [
+        { ...idleThread, id: "thr_ingest_1", projectId: "proj_ingest" },
+        { ...idleThread, id: "thr_ingest_2", projectId: "proj_ingest" },
+      ],
+    },
+  },
+  {
+    key: "experiment",
+    project: makeProject({ id: "proj_empty", name: "fresh-experiment" }),
+    threadListState: { status: "ready", threads: [] },
+  },
+];
+
+export function Overview() {
+  return (
+    <StoryCard>
+      <StoryRow
+        label="loading threads"
+        hint="project header rendered, skeleton stands in for the thread list"
+      >
+        {singleProject({ threadListState: { status: "loading" } })}
+      </StoryRow>
+      <StoryRow
+        label="ready, no threads"
+        hint='empty state: "No threads"'
+      >
+        {singleProject({
+          threadListState: { status: "ready", threads: [] },
+        })}
+      </StoryRow>
+      <StoryRow
+        label="unavailable"
+        hint="thread query failed (e.g., server disconnected)"
+      >
+        {singleProject({ threadListState: { status: "unavailable" } })}
+      </StoryRow>
+      <StoryRow
+        label="starts collapsed"
+        hint="children hidden by default — click the folder to expand"
+      >
+        {singleProject({
+          initialCollapsed: true,
+          threadListState: {
+            status: "ready",
+            threads: [idleThread],
+          },
+        })}
+      </StoryRow>
+      <StoryRow
+        label="active project route"
+        hint="header has the selected sidebar-border background"
+      >
+        {singleProject({
+          isActive: true,
+          threadListState: { status: "ready", threads: [] },
+        })}
+      </StoryRow>
+      <StoryRow
+        label="local path missing"
+        hint="warning triangle navigates to project settings to repair"
+      >
+        {singleProject({
+          isLocalPathInvalid: true,
+          threadListState: { status: "ready", threads: [idleThread] },
+        })}
+      </StoryRow>
+      <StoryRow
+        label="manager + standard"
+        hint="ProjectRow groups managers before unmanaged standards — click the manager chevron to collapse its children"
+      >
+        {singleProject({
+          threadListState: {
+            status: "ready",
+            threads: [manager, managerChildA, managerChildB, idleThread],
+          },
+        })}
+      </StoryRow>
+      <StoryRow
+        label="manager starts collapsed"
+        hint="children hidden by default; count badge stays visible"
+      >
+        {singleProject({
+          initialCollapsedManagerIds: new Set([manager.id]),
+          threadListState: {
+            status: "ready",
+            threads: [manager, managerChildA, managerChildB],
+          },
+        })}
+      </StoryRow>
+      <StoryRow
+        label="multiple projects"
+        hint="four projects stacked — active project at the top with a promoted thread, manager group, and busy/pending threads; another collapsed with a long truncated name; one with two idle threads; an empty one at the bottom"
+      >
+        <SidebarStage>
+          {multipleProjects.map(({ key, ...args }) => (
+            <InteractiveProjectRow key={key} {...args} />
+          ))}
+        </SidebarStage>
+      </StoryRow>
+    </StoryCard>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Full sidebar — three realistic projects expanded together. Helpful for
+// eyeballing the vertical rhythm: project↔project separation vs. the tighter
+// grouping inside a manager.
+// ---------------------------------------------------------------------------
+
+const fullManagerA = makeThread({
+  id: "thr_full_a_manager",
+  projectId: "proj_full_a",
+  type: "manager",
+  title: "Codex Manager",
+  titleFallback: "Codex Manager",
+});
+
+interface FullChildSpec {
+  title: string;
+  busy?: boolean;
+  pending?: boolean;
+}
+
+const fullProjectAChildSpecs: FullChildSpec[] = [
+  { title: "Implement UI and stories consolidation" },
+  { title: "Fix Claude active stop recovery", busy: true },
+  { title: "Update React Performance Audit" },
+  { title: "Investigate Multiple Hosts Setup", pending: true },
+];
+
+const fullProjectAThreads: ThreadListEntry[] = [
+  fullManagerA,
+  ...fullProjectAChildSpecs.map((spec, index) =>
+    makeThread({
+      id: `thr_full_a_child_${index}`,
+      projectId: "proj_full_a",
+      title: spec.title,
+      titleFallback: spec.title,
+      parentThreadId: fullManagerA.id,
+      ...(spec.busy
+        ? {
+            status: "active",
+            runtime: {
+              displayStatus: "active",
+              hostReconnectGraceExpiresAt: null,
+            },
+          }
+        : {}),
+      ...(spec.pending ? { hasPendingInteraction: true } : {}),
+    }),
+  ),
+  makeThread({
+    id: "thr_full_a_standalone_1",
+    projectId: "proj_full_a",
+    title: "Stabilize Pnpm Dev Environment",
+    titleFallback: "Stabilize Pnpm Dev Environment",
+    environmentHostId: "host_local",
+    environmentBranchName: "main",
+    environmentWorkspaceDisplayKind: "managed-worktree",
+  }),
+  makeThread({
+    id: "thr_full_a_standalone_2",
+    projectId: "proj_full_a",
+    title: "Investigate Laptop Sleep Bug",
+    titleFallback: "Investigate Laptop Sleep Bug",
+    lastReadAt: 50,
+    latestAttentionAt: 200,
+  }),
+];
+
+const fullProjectBThreads: ThreadListEntry[] = [
+  makeThread({
+    id: "thr_full_b_1",
+    projectId: "proj_full_b",
+    title: "Add Support For System Theme",
+    titleFallback: "Add Support For System Theme",
+  }),
+  makeThread({
+    id: "thr_full_b_2",
+    projectId: "proj_full_b",
+    title: "Investigate User Manual Issue",
+    titleFallback: "Investigate User Manual Issue",
+    status: "active",
+    runtime: {
+      displayStatus: "active",
+      hostReconnectGraceExpiresAt: null,
+    },
+  }),
+  makeThread({
+    id: "thr_full_b_3",
+    projectId: "proj_full_b",
+    title: "Optimize Dev Database Size",
+    titleFallback: "Optimize Dev Database Size",
+  }),
+];
+
+const fullManagerC = makeThread({
+  id: "thr_full_c_manager",
+  projectId: "proj_full_c",
+  type: "manager",
+  title: "Frontend Manager",
+  titleFallback: "Frontend Manager",
+});
+
+const fullProjectCThreads: ThreadListEntry[] = [
+  fullManagerC,
+  makeThread({
+    id: "thr_full_c_standalone",
+    projectId: "proj_full_c",
+    title: "Design timeline pagination v2",
+    titleFallback: "Design timeline pagination v2",
+  }),
+];
+
+interface FullProjectEntry extends InteractiveProjectRowArgs {
+  key: string;
+}
+
+const fullProjects: FullProjectEntry[] = [
+  {
+    key: "bb",
+    project: makeProject({ id: "proj_full_a", name: "bb" }),
+    isActive: true,
+    promotedBranchName: "main",
+    threadListState: { status: "ready", threads: fullProjectAThreads },
+  },
+  {
+    key: "pierre",
+    project: makeProject({ id: "proj_full_b", name: "pierre" }),
+    threadListState: { status: "ready", threads: fullProjectBThreads },
+  },
+  {
+    key: "ingest",
+    project: makeProject({ id: "proj_full_c", name: "ingest-pipeline" }),
+    threadListState: { status: "ready", threads: fullProjectCThreads },
+  },
+];
+
+export function Full() {
+  return (
+    <StoryCard>
+      <StoryRow
+        label="full sidebar"
+        hint="three projects: bb (active) with a 4-child manager + 2 standalones; pierre with 3 standalones; ingest-pipeline with a manager + 1 standalone"
+      >
+        <SidebarStage>
+          {fullProjects.map(({ key, ...args }) => (
+            <InteractiveProjectRow key={key} {...args} />
+          ))}
+        </SidebarStage>
+      </StoryRow>
+    </StoryCard>
+  );
+}

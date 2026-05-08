@@ -183,7 +183,7 @@ export function ProjectRow({
               );
 
               return (
-                <div key={managerThread.id} className="space-y-0.5">
+                <div key={managerThread.id} className="space-y-px">
                   <ThreadRow
                     projectId={project.id}
                     thread={managerThread}

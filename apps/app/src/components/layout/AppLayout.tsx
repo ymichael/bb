@@ -7,7 +7,7 @@ import { Archive, ChevronRight, Settings, UserRoundPlus } from "lucide-react";
 import type { Thread } from "@bb/domain";
 import type { ProjectResponse } from "@bb/server-contract";
 import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui";
-import { AppSidebar } from "./AppSidebar";
+import { AppSidebar } from "@/components/sidebar/AppSidebar";
 import { AppPageHeader, HEADER_ICON_BUTTON_CLASS } from "./AppPageHeader";
 import { useHireProjectManager } from "@/hooks/mutations/project-mutations";
 import { useProjects } from "@/hooks/queries/project-queries";

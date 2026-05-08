@@ -22,12 +22,12 @@ import { ProjectPathDialog } from "@/components/project/ProjectPathDialog";
 import {
   ProjectDeleteDialog,
   type ProjectDeleteDialogTarget,
-} from "@/components/layout/project-list/ProjectDeleteDialog";
+} from "@/components/project/ProjectDeleteDialog";
 import {
   ProjectRenameDialog,
   type ProjectRenameDialogTarget,
-} from "@/components/layout/project-list/ProjectRenameDialog";
-import { collapsedProjectIdsAtom } from "@/components/layout/project-list/sidebarCollapsedAtoms";
+} from "@/components/project/ProjectRenameDialog";
+import { collapsedProjectIdsAtom } from "@/components/sidebar/sidebarCollapsedAtoms";
 
 export interface ProjectActionsContextValue {
   requestRename: (project: ProjectResponse) => void;
