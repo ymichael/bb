@@ -22,7 +22,7 @@ import { PermissionModePicker } from "@/components/pickers/PermissionModePicker"
 import { useEffectiveHosts } from "@/hooks/queries/effective-hosts";
 import { useSandboxBackends } from "@/hooks/queries/system-queries";
 import { useHostDaemon } from "@/hooks/useHostDaemon";
-import { sandboxHostSupportedAtom } from "@/lib/atoms";
+import { sandboxHostSupportedAtom } from "@/lib/system-config-atoms";
 
 export interface NewThreadEnvironmentConfig {
   value: string;

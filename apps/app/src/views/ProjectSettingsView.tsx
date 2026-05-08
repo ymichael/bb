@@ -41,7 +41,7 @@ import { useProjects } from "@/hooks/queries/project-queries";
 import { useEffectiveHosts } from "@/hooks/queries/effective-hosts";
 import { useGithubRepos } from "@/hooks/queries/system-queries";
 import { invalidateProjectSourceQueries } from "@/hooks/cache-effects";
-import { githubConnectedAtom } from "@/lib/atoms";
+import { githubConnectedAtom } from "@/lib/system-config-atoms";
 import * as api from "@/lib/api";
 
 interface DeleteSourceTarget {

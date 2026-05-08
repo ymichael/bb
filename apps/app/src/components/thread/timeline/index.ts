@@ -3,13 +3,13 @@ export { ThreadTimelineRows } from "./ThreadTimelineRows.js";
 export type { ThreadTimelineRowsProps } from "./ThreadTimelineRows.js";
 export type { TimelineTitleActionResolver } from "./TimelineTitleView.js";
 export {
-  ConversationStatusIndicator,
-  type ConversationStatusIndicatorProps,
-} from "./ConversationStatusIndicator.js";
+  TimelineStatusIndicator,
+  type TimelineStatusIndicatorProps,
+} from "./TimelineStatusIndicator.js";
 export {
-  ConversationWorkingIndicator,
-  type ConversationWorkingIndicatorProps,
-} from "./ConversationWorkingIndicator.js";
+  TimelineWorkingIndicator,
+  type TimelineWorkingIndicatorProps,
+} from "./TimelineWorkingIndicator.js";
 export {
   ThreadContextWindowIndicator,
   type ThreadContextWindowIndicatorProps,

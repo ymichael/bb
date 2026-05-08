@@ -4,21 +4,21 @@ import {
   getCollapsibleHeaderToneClass,
 } from "../../ui/disclosure.js";
 import { cn } from "@/lib/utils";
-import { ConversationStatusIndicator } from "./ConversationStatusIndicator.js";
+import { TimelineStatusIndicator } from "./TimelineStatusIndicator.js";
 
-export interface ConversationWorkingIndicatorProps {
+export interface TimelineWorkingIndicatorProps {
   label?: string;
   isThinking?: boolean;
   details?: string;
   className?: string;
 }
 
-export function ConversationWorkingIndicator({
+export function TimelineWorkingIndicator({
   label,
   isThinking = false,
   details,
   className,
-}: ConversationWorkingIndicatorProps) {
+}: TimelineWorkingIndicatorProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const resolvedLabel = label ?? (isThinking ? "Thinking..." : "Working...");
   const trimmedDetails = details?.trim() ?? "";
@@ -43,7 +43,7 @@ export function ConversationWorkingIndicator({
   }
 
   return (
-    <ConversationStatusIndicator
+    <TimelineStatusIndicator
       label={<span className="animate-shine">{resolvedLabel}</span>}
       className={cn("mt-4", className)}
     />

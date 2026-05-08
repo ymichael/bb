@@ -46,7 +46,7 @@ import {
   invalidateSandboxEnvVars,
   invalidateHostAvailabilityQueries,
 } from "@/hooks/cache-effects";
-import { sandboxHostSupportedAtom } from "@/lib/atoms";
+import { sandboxHostSupportedAtom } from "@/lib/system-config-atoms";
 import * as api from "@/lib/api";
 import { cn } from "@/lib/utils";
 

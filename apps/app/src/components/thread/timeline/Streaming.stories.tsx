@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { TimelineRow } from "@bb/server-contract";
 import { ThreadTimelineRows } from "@/components/thread/timeline";
-import { StoryCard, StoryRow } from "../../../../../.ladle/story-card";
+import { StoryCard, StoryRow } from "../../../../.ladle/story-card";
 
 export default {
   title: "thread/timeline/streaming",

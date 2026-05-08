@@ -17,7 +17,7 @@ import { Provider as JotaiProvider, createStore } from "jotai";
 import { QueryClientProvider } from "@tanstack/react-query";
 import * as api from "@/lib/api";
 import { createAppQueryClient } from "@/lib/query-client";
-import { collapsedProjectIdsAtom } from "@/components/layout/project-list/collapsedState";
+import { collapsedProjectIdsAtom } from "@/components/layout/project-list/sidebarCollapsedAtoms";
 import {
   ProjectActionsProvider,
   useProjectActions,

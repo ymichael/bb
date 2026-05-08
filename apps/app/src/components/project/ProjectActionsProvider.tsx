@@ -27,7 +27,7 @@ import {
   ProjectRenameDialog,
   type ProjectRenameDialogTarget,
 } from "@/components/layout/project-list/ProjectRenameDialog";
-import { collapsedProjectIdsAtom } from "@/components/layout/project-list/collapsedState";
+import { collapsedProjectIdsAtom } from "@/components/layout/project-list/sidebarCollapsedAtoms";
 
 export interface ProjectActionsContextValue {
   requestRename: (project: ProjectResponse) => void;

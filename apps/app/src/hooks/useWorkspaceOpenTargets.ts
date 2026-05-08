@@ -8,7 +8,7 @@ import {
   hostDaemonPortAtom,
   localHostIdAtom,
   localWorkspaceOpenTargetsAtom,
-} from "@/lib/atoms";
+} from "@/lib/system-config-atoms";
 import { openInTarget as daemonOpenInTarget } from "@/lib/api-host-daemon";
 
 const disabledLocalHostIdAtom = atom<string | null>(null);

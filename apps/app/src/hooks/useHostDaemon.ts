@@ -4,7 +4,7 @@ import {
   hostDaemonPortAtom,
   localHostIdAtom,
   localHostStatusAtom,
-} from "@/lib/atoms";
+} from "@/lib/system-config-atoms";
 import {
   pickFolder as daemonPickFolder,
 } from "@/lib/api-host-daemon";

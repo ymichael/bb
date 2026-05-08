@@ -1,15 +1,15 @@
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
-export interface ConversationStatusIndicatorProps {
+export interface TimelineStatusIndicatorProps {
   label: ReactNode;
   className?: string;
 }
 
-export function ConversationStatusIndicator({
+export function TimelineStatusIndicator({
   label,
   className,
-}: ConversationStatusIndicatorProps) {
+}: TimelineStatusIndicatorProps) {
   return (
     <div className={cn("px-2 text-sm text-muted-foreground", className)}>
       {label}

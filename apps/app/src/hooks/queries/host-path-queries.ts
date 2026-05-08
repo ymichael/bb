@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { useAtomValue } from "jotai";
 import { skipToken, useQuery } from "@tanstack/react-query";
 import { checkPathsExist } from "@/lib/api-host-daemon";
-import { hostDaemonPortAtom, localHostIdAtom } from "@/lib/atoms";
+import { hostDaemonPortAtom, localHostIdAtom } from "@/lib/system-config-atoms";
 import { localPathExistenceQueryKey } from "./query-keys";
 
 export type LocalPathExistence = Record<string, boolean>;

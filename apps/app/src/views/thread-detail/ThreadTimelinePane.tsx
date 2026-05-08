@@ -8,8 +8,8 @@ import {
   type ThreadTimelineLocalFileLinkHandler,
   type TimelineTitleActionResolver,
 } from "@/components/thread/timeline";
-import { ConversationStatusIndicator } from "@/components/thread/timeline";
-import { ConversationWorkingIndicator } from "@/components/thread/timeline";
+import { TimelineStatusIndicator } from "@/components/thread/timeline";
+import { TimelineWorkingIndicator } from "@/components/thread/timeline";
 import { usePreferredTheme } from "@/hooks/useTheme";
 import { toUserAttachmentImageSrc } from "@/lib/user-attachment-images";
 
@@ -113,7 +113,7 @@ export function ThreadTimelinePane({
           {isThreadTimelinePending ? (
             <DelayedThreadLoadingIndicator />
           ) : timelineError ? (
-            <ConversationStatusIndicator
+            <TimelineStatusIndicator
               label="Failed to load timeline"
               className="mt-6 text-destructive"
             />
@@ -134,7 +134,7 @@ export function ThreadTimelinePane({
             />
           ) : null}
           {hostConnectionNotice ? (
-            <ConversationStatusIndicator
+            <TimelineStatusIndicator
               label={hostConnectionNotice.label}
               className={
                 hostConnectionNotice.tone === "error"
@@ -144,7 +144,7 @@ export function ThreadTimelinePane({
             />
           ) : null}
           {showOngoingIndicator ? (
-            <ConversationWorkingIndicator
+            <TimelineWorkingIndicator
               key={ongoingIndicatorKey}
               details={activeThinkingDetails}
               isThinking={showActiveThinking}
@@ -175,6 +175,6 @@ function DelayedThreadLoadingIndicator() {
   }
 
   return (
-    <ConversationStatusIndicator label="Loading thread..." className="mt-6" />
+    <TimelineStatusIndicator label="Loading thread..." className="mt-6" />
   );
 }

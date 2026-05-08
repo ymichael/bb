@@ -50,7 +50,7 @@ import type { ProjectThreadListState } from "./project-list/ProjectRow";
 import {
   collapsedManagerIdsAtom,
   collapsedProjectIdsAtom,
-} from "./project-list/collapsedState";
+} from "./project-list/sidebarCollapsedAtoms";
 
 interface ProjectListProps {
   onNewProject?: () => void;
