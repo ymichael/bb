@@ -48,21 +48,24 @@ Implementation should not start until Michael signs off on these first-pass prod
 
 Current app UI path:
 
-- `apps/app/src/views/ThreadDetailView.tsx`
+- `apps/app/src/views/thread-detail/ThreadDetailView.tsx`
   - Loads `thread`, `parentThread`, `timeline`, `environment`, and `workspaceStatus`.
-  - Computes `workspaceChangedFilesSection`, `promptBannerSummary`, `showPromptGitStatsBanner`, `canExpandPromptChangeList`, and passes banner props into `ThreadDetailPromptArea`.
-- `apps/app/src/views/ThreadDetailPromptArea.tsx`
+  - Computes `workspaceChangedFilesSection` and `contextBannerMergeBase`, and passes them into `ThreadDetailPromptArea`.
+- `apps/app/src/views/thread-detail/ThreadDetailPromptArea.tsx`
   - Owns current prompt-banner expansion state via `isChangeListExpanded`.
-  - Passes a `banner` prop object to `ThreadFollowUpComposer`.
-- `apps/app/src/views/ThreadFollowUpComposer.tsx`
-  - Renders the current rounded muted git banner above queued follow-ups and `PromptBox`.
-  - Uses `WorkspaceChangesList` and `MergeBaseBranchPicker`.
-- `apps/app/src/lib/workspace-change-summary.tsx`
+  - Renders `ContextBanner` directly above `QueuedMessagesList` inside `FollowUpPromptBox`'s stack slot.
+- `apps/app/src/components/promptbox/FollowUpPromptBox.tsx`
+  - Wraps the prompt input. Its stack slot today hosts `ContextBanner` + `QueuedMessagesList`, both inside `PromptStackCard`.
+- `apps/app/src/components/promptbox/banner/ContextBanner.tsx`
+  - Today's git-only banner. Props: `section: WorkspaceChangedFilesSection`, `isChangeListExpanded`, `isDiffPanelActive`, `mergeBase: ContextBannerMergeBaseConfig | null`, click/expand callbacks.
+  - Uses `WorkspaceChangesList` and `BranchPicker` (with `getMergeBaseBranchCandidates`).
+  - The new banner replaces this component's surface, not just its callers.
+- `apps/app/src/components/workspace/workspace-change-summary.tsx`
   - `selectWorkspaceChangedFilesSection` decides whether a changed-files section exists.
   - This is why clean ahead/behind status currently does not show in the prompt banner.
-- `apps/app/src/lib/workspace-status.tsx`
+- `apps/app/src/components/workspace/workspace-status.tsx`
   - `getGitStatusDisplay` already formats `Ahead`, `Behind`, and `Diverged`.
-  - `apps/app/src/lib/workspace-status.test.ts` already covers those display states.
+  - `apps/app/src/components/workspace/workspace-status.test.ts` already covers those display states.
 
 Current git data path:
 
@@ -79,19 +82,19 @@ Current git data path:
 
 Current manager/managed data path:
 
-- `ThreadWithRuntime.type` and `ThreadWithRuntime.parentThreadId` in `packages/domain/src/thread.ts`
-- `ThreadListEntry` includes runtime display status and `hasPendingInteraction`.
+- `ThreadWithRuntime.type`, `ThreadWithRuntime.parentThreadId`, and the nested `ThreadWithRuntime.runtime.displayStatus` in `packages/domain/src/thread.ts`.
+- `ThreadListEntry` extends `ThreadWithRuntime` and adds `hasPendingInteraction`, `environmentHostId`, `environmentBranchName`, `environmentWorkspaceDisplayKind`. `archivedAt` (a `number | null` timestamp on the thread itself) is separate from `runtime.displayStatus` — there is no `archived` runtime status.
+- `threadRuntimeDisplayStatusValues` are: `created`, `provisioning`, `idle`, `active`, `error`, `host-reconnecting`, `waiting-for-host`.
 - The cached project thread list (already loaded for the sidebar) and the cached parent-thread record (already loaded by `ThreadDetailView`) cover everything the banner needs to derive manager ref and active managed children.
 - The new banner reuses these cached queries rather than introducing a parallel route. The only new server endpoint is the bulk-stop action route.
 
 Current TODO data situation:
 
-- `TodoWrite` is known to thread-view formatting in `packages/thread-view/src/tool-call-parsing.ts`.
-- The existing private `asTodoWriteTodos` parser in that file already normalizes loose provider arguments into `{ content, status, activeForm }` values. The implementation should replace it with a canonical zod-backed thread-view helper instead of duplicating ad hoc parsing.
+- `TodoWrite` and `turn/plan/updated` events flow through the timeline projection in `packages/thread-view/src/build-thread-timeline.ts`. There is no canonical TodoWrite argument parser today — the previous private `asTodoWriteTodos` helper was removed during a thread-view cleanup, so the implementation introduces `parseTodoWriteTodos` from scratch as the canonical zod-backed helper rather than replacing an existing one.
 - `TodoRead`, `TodoWrite`, and `ToolSearch` are suppressed from timeline rows by `packages/thread-view/src/tool-call-suppression.ts`. Suppression hides rows from the rendered timeline; the projection itself still observes the underlying events.
-- Provider plan snapshots also exist as `turn/plan/updated` events. The event has a `plan` array; each step has its own optional `status` field whose value can be `pending`, `active`, `completed`, or `failed`.
-- The timeline projection in `@bb/thread-view` already walks events to compute tail-only state such as `activeThinking` and `contextWindowUsage`. Pending TODO snapshot extraction is the same shape of work and should live in the projection rather than a separate server query.
-- There is no first-class API contract for "pending TODOs" today. The banner should not parse raw timeline rows client-side; the typed projection result should expose a `pendingTodos` field alongside `activeThinking`.
+- Provider plan snapshots exist as `turn/plan/updated` events (recognised in `packages/thread-view/src/event-decode.ts`). The event has a `plan` array; each step has its own optional `status` field whose value can be `pending`, `active`, `completed`, or `failed`.
+- The timeline projection's `ThreadTimelineFromEventsResult` already exposes `rows`, `activeThinking`, and `contextWindowUsage`. Pending TODO snapshot extraction is the same shape of work and should live in the projection rather than a separate server query.
+- There is no first-class API contract for "pending TODOs" today. The banner should not parse raw timeline rows client-side; the typed projection result should expose a `pendingTodos` field alongside `activeThinking`. The current `threadTimelineResponseSchema` in `packages/server-contract/src/api-types.ts` exposes `rows`, `activeThinking`, `contextWindowUsage`, and `timelinePage`; `pendingTodos` is the new field added on this work.
 
 ## Recommended Architecture
 
@@ -105,14 +108,14 @@ The split is intentional:
 
 - Workspace status is host-local, already has an environment-scoped refresh cadence, and already powers diff-panel and merge-base picker behavior.
 - Pending TODOs are derived from the same event stream that already drives `activeThinking` and `contextWindowUsage`. Putting them on the projection avoids a duplicate SQL query, avoids a new indexed projection for tool-call names, and reuses existing timeline cache invalidation.
-- Manager/managed-thread context is fully derivable from `ThreadListEntry` records (title, `parentThreadId`, `runtimeDisplayStatus`, `hasPendingInteraction`). The sidebar already loads this list, so adding a parallel server route would re-fetch the same data with a different shape. Use the cached list, do filtering/sorting in the view model.
+- Manager/managed-thread context is fully derivable from `ThreadListEntry` records (title, `parentThreadId`, `runtime.displayStatus`, `archivedAt`, `hasPendingInteraction`). The sidebar already loads this list, so adding a parallel server route would re-fetch the same data with a different shape. Use the cached list, do filtering/sorting in the view model.
 - The app composes all three lanes into one banner view model so users see one surface.
 
 Single predicate for managed work:
 
-- The banner uses `runtimeDisplayStatus` alone to decide which managed children appear and which the `Stop all` button targets. There is no separate "stoppable" predicate; the visible set IS the stop target set.
+- The banner uses `runtime.displayStatus` (combined with an `archivedAt === null` check) alone to decide which managed children appear and which the `Stop all` button targets. There is no separate "stoppable" predicate; the visible set IS the stop target set.
 - Pick a clear "running" set, for example `active`, `host-reconnecting`, `waiting-for-host`. This must be a published view-model constant, not scattered across components.
-- Errored, idle, archived, and pre-start (`created`/`provisioning`) children do not appear in this banner section. The banner answers "what is the manager waiting on?" — finished, idle, or unstarted children are not part of that answer.
+- Errored, idle, archived (`archivedAt !== null`), and pre-start (`created`/`provisioning`) children do not appear in this banner section. The banner answers "what is the manager waiting on?" — finished, idle, or unstarted children are not part of that answer.
 - Server-side, the bulk-stop route still runs the existing lifecycle helper per child as a correctness detail: idempotent on already-stopping children, skips children that became ineligible between target resolution and dispatch, returns typed per-child outcomes. That is invisible to the user.
 
 Add shared contracts only where new typed data crosses package boundaries:
@@ -196,7 +199,7 @@ type ThreadManagerBulkStopResponse = {
 Notes:
 
 - Use zod schemas as the source of truth, exported from shared packages.
-- The banner-visible managed-children set and the bulk-stop targets are the same set, derived from `runtimeDisplayStatus`. There is no `stoppableCount` field; the count is `items.length` on the client.
+- The banner-visible managed-children set and the bulk-stop targets are the same set, derived from `runtime.displayStatus` (combined with `archivedAt === null`). There is no `stoppableCount` field; the count is `items.length` on the client.
 - `pendingTodos: null` mirrors `activeThinking: null` semantics: it is the response shape for older timeline pages or for a thread where no TODO/plan candidate was observed by the projection. The UI hides the TODO section in either case.
 - `pendingTodos.kind === "unparseable"` means one or more TODO/plan candidates were observed by the projection but none could be converted into a valid snapshot. The server should log or meter this.
 - `pendingTodos.kind === "observed"` with `items: []` means the latest valid snapshot exists and has no pending or in-progress items.
@@ -227,8 +230,8 @@ The banner derives the active managed-children list client-side from the cached 
 
 View-model derivation:
 
-- Filter cached `ThreadListEntry` records where `parentThreadId === thread.id`, `projectId === thread.projectId`, `archived === false`.
-- Apply the single managed-work predicate based on `runtimeDisplayStatus`. Recommended "running" set: `active`, `host-reconnecting`, `waiting-for-host`. Excluded: `idle`, `error`, `created`, `provisioning`.
+- Filter cached `ThreadListEntry` records where `parentThreadId === thread.id`, `projectId === thread.projectId`, `archivedAt === null`, `deletedAt === null`.
+- Apply the single managed-work predicate based on `runtime.displayStatus`. Recommended "running" set: `active`, `host-reconnecting`, `waiting-for-host`. Excluded: `idle`, `error`, `created`, `provisioning`.
 - Define this set as a published view-model constant, for example `THREAD_BANNER_ACTIVE_MANAGED_RUNTIME_STATUSES`. Do not duplicate the set across components.
 - Sort by status priority, then `latestAttentionAt` descending:
   - pending interaction (`hasPendingInteraction === true`)
@@ -240,7 +243,7 @@ Single predicate, single set:
 
 - The banner-visible managed-children set and the `Stop all` target set are the same set. There is no separate "stoppable" count.
 - `Stop all` is shown when `items.length > 0` and the thread is a manager.
-- Pre-start children mid-launch (with an active start operation but `runtimeDisplayStatus` still `created`/`provisioning`) are not shown and are not stop targets. This is a small fidelity gap but eliminates the two-predicate confusion. The bulk-stop route still handles them correctly server-side if they happen to be in target resolution at action time.
+- Pre-start children mid-launch (with an active start operation but `runtime.displayStatus` still `created`/`provisioning`) are not shown and are not stop targets. This is a small fidelity gap but eliminates the two-predicate confusion. The bulk-stop route still handles them correctly server-side if they happen to be in target resolution at action time.
 
 Manager stop control:
 
@@ -254,12 +257,12 @@ Bulk-stop semantics:
 
 - Add an action route `POST /api/v1/threads/:id/managed-children/stop` (manager threadId in the URL).
 - Apply lifecycle gating with `requirePublicThread` (thread exists, not deleted), then `requirePublicProject(managerThread.projectId)` (project exists, not pending-delete). Assert the target thread is a manager.
-- Resolve child targets in SQL by `parentThreadId = managerThread.id`, `projectId = managerThread.projectId`, non-archived/live state, and the same `runtimeDisplayStatus`-based predicate the UI uses. Same-project enforcement must happen in the query, not only in UI assumptions.
+- Resolve child targets in SQL by `parentThreadId = managerThread.id`, `projectId = managerThread.projectId`, `archivedAt IS NULL`, `deletedAt IS NULL`, and the same runtime-status predicate the UI uses. Note that `runtime.displayStatus` is computed (not a stored column), so the SQL query selects on persisted `status` plus runtime-state inputs and filters the runtime predicate in service code; same-project and archive/delete enforcement must happen in the query, not only in UI assumptions.
 - Resolve each target child's environment before calling the lifecycle owner. Use the child `environmentId` to load `{ id, hostId }`; if the environment is missing, deleted, or unusable for stop dispatch, emit a typed `skipped` result with `missingEnvironment` or `environmentUnavailable`.
-- Call the existing lifecycle stop owner for each target child (e.g. `requestThreadStopIfNeeded`) instead of directly mutating child status.
+- Call the existing lifecycle stop owner `requestThreadStopIfNeeded` from `apps/server/src/services/threads/thread-lifecycle.ts` for each target child instead of directly mutating child status.
 - Repeated clicks are idempotent: already stopping or already stopped children should not cause the whole operation to fail.
 - Partial failures return `ThreadManagerBulkStopResponse` with per-child outcomes (`requested`, `alreadyStopping`, `skipped`, `failed`) plus aggregate counts. The UI shows a compact failure message and relies on existing invalidation/refetch for final state.
-- If a child is reparented, archived, deleted, or leaves the runtime status set during resolution, skip it unless the lifecycle stop owner says the stop request is still valid.
+- If a child is reparented, archived (`archivedAt` set), deleted, or leaves the runtime status set during resolution, skip it unless the lifecycle stop owner says the stop request is still valid.
 - If the server cannot safely scope the manager and same-project child target set, fail the action before issuing any stop requests.
 - Bulk stop is intentionally non-atomic. Correctness comes from rechecking each child at dispatch and reporting typed per-child outcomes, not from wrapping fan-out in one transaction.
 - This route does not create a new durable bulk lifecycle. The durable lifecycle remains per child thread; lost daemon results, reconnect reconciliation, expired commands, and repeated requests continue to be owned by the existing thread lifecycle module.
@@ -273,8 +276,8 @@ For managed threads, derive the manager ref from cached data:
 
 Ownership invariants:
 
-- Create/update ownership should continue to use `assertValidManagerParentThread` so `parentThreadId` references only a live manager thread in the same project.
-- The view model should silently exclude dirty cross-project refs rather than failing the banner. Include the managed-by notice only when the cached parent exists, is a live manager, and `parent.projectId === thread.projectId`.
+- Create/update ownership should continue to use `assertValidManagerParentThread` (in `apps/server/src/services/threads/thread-parent.ts`) so `parentThreadId` references only a live manager thread in the same project.
+- The view model should silently exclude dirty cross-project refs rather than failing the banner. Include the managed-by notice only when the cached parent exists, is a live manager (`type === "manager"`, `archivedAt === null`, `deletedAt === null`), and `parent.projectId === thread.projectId`.
 - The view-model filter for managed children must be scoped to the target thread's project, so dirty cross-project child refs are not surfaced.
 
 Recommended collapsed text:
@@ -303,13 +306,12 @@ Suppression and projection:
 - `TodoRead`, `TodoWrite`, and `ToolSearch` remain suppressed from rendered timeline rows. Suppression is a row-rendering decision and does not affect the projection's ability to observe the underlying tool-call events.
 - The projection must read TodoWrite event arguments and `turn/plan/updated` events even though their corresponding rows are suppressed.
 
-Parser reuse:
+Parser introduction:
 
-- Replace the existing private `asTodoWriteTodos` parsing path in `packages/thread-view/src/tool-call-parsing.ts` with one canonical exported helper, for example `parseTodoWriteTodos`.
+- The previous private `asTodoWriteTodos` parser was removed during a thread-view cleanup, so `parseTodoWriteTodos` is introduced as a fresh canonical exported helper in `packages/thread-view/src/tool-call-parsing.ts` (or a sibling parsing module if that file no longer fits).
 - Back that helper with zod schemas such as `todoWriteArgsSchema` and `todoWriteTodoSchema`.
-- Remove the current `toRecord`/`asString` TodoWrite shortcuts as part of the parser extraction. The implementation should not merely wrap or rename defensive parsing that the zod schema should own.
+- Do not reintroduce defensive parsing helpers like `toRecord`/`asString` for TodoWrite arguments — the zod schema must own that boundary.
 - Keep the helper tolerant at the provider boundary, but return a strongly typed internal result. Invalid entries and invalid statuses should be dropped from the snapshot rather than passed through.
-- Update the `formatTodoWriteCommand` caller in the same commit as the parser extraction and delete `asTodoWriteTodos` so no dead parser path remains.
 - Keep `ParsedTodoWriteArgs` and `ParsedTodoWriteTodo` internal to `@bb/thread-view`; the app-facing and server-contract shape remains `ThreadTimelinePendingTodos`, which hides completed/failed entries and provider-specific parser details.
 - Define a text cap such as `THREAD_TIMELINE_PENDING_TODO_TEXT_MAX_LENGTH = 240`.
 - At the parser boundary, trim TODO content and plan-step text, drop items whose text is empty after trim, and truncate accepted text to the cap before returning typed projection data.
@@ -364,25 +366,27 @@ Stable IDs:
 
 ## UI Structure
 
-Introduce a dedicated component and view model rather than growing the current `banner` prop object:
+Introduce a dedicated component and view model rather than growing `ContextBanner`'s prop list:
 
-- `apps/app/src/components/thread/ThreadPromptContextBanner.tsx`
-- `apps/app/src/views/threadPromptContextBannerModel.ts`
+- `apps/app/src/components/promptbox/banner/ThreadPromptContextBanner.tsx` (lives next to today's `ContextBanner` in `apps/app/src/components/promptbox/banner/`).
+- `apps/app/src/views/thread-detail/threadPromptContextBannerModel.ts`.
 - Tests alongside the component and helper.
 
 Use existing primitives:
 
-- `StatusPill` from `@bb/ui-core`
-- `CollapsibleHeader` or `ExpandablePanel` from `@bb/ui-core`
-- `Button`, `Link`, `WorkspaceChangesList`, `MergeBaseBranchPicker`
-- Lucide icons for section affordances.
+- `StatusPill` from `@/components/ui/status-pill`.
+- `WorkspaceChangesList` from `@/components/thread/WorkspaceChangesList`.
+- `BranchPicker` from `@/components/pickers/BranchPicker` (with `getMergeBaseBranchCandidates`).
+- `PromptStackCard` from `@/components/promptbox/banner/PromptStackCard` (today's banner card surface).
+- `Button`, `Link`, and Lucide icons for section affordances.
+- Note: `@bb/ui-core` does not currently export a `CollapsibleHeader` or `ExpandablePanel`. Today's `ContextBanner` rolls its own grid-rows expand/collapse animation. Either add a shared disclosure primitive in `@bb/ui-core` (or `@/components/ui/`) as part of this work, or reuse `ContextBanner`'s pattern via a small shared wrapper. Do not duplicate the grid-rows class bundle across new banner sections.
 
 UI consistency constraints:
 
 - Use sanctioned typography utilities already present in nearby components, such as `text-xs`, `text-sm`, and muted foreground tokens.
 - Do not introduce arbitrary `text-[Npx]` classes.
 - Keep one canonical rendering path for prompt context by the end of the migration.
-- Extend `ExpandablePanel` or `CollapsibleHeader` in `@bb/ui-core` if needed to satisfy the accessibility contract below. Do not create a banner-local disclosure primitive or a parallel class bundle for expansion behavior.
+- Whichever disclosure primitive is chosen must satisfy the accessibility contract below (real button, `aria-expanded`, `aria-controls`, named region). Do not ship a banner-local disclosure primitive that diverges from the rest of the app.
 - Do not nest UI cards inside the banner.
 
 Banner layout:
@@ -427,23 +431,23 @@ Managed work expanded behavior:
 
 ## Transition From Current Banner
 
-Replace the current git banner in small implementation steps after sign-off:
+Replace the current `ContextBanner` in small implementation steps after sign-off:
 
-1. Add `ThreadPromptContextBannerModel` and build only the current git section from existing props/data.
-2. Replace `ComposerBannerProps` with a new cohesive `promptContextBanner` prop while keeping visual parity for the existing git banner.
+1. Add `ThreadPromptContextBannerModel` and `ThreadPromptContextBanner`, building only the git section from existing props/data so it is visually equivalent to today's `ContextBanner`.
+2. Update `ThreadDetailPromptArea` to render `ThreadPromptContextBanner` (taking the new view-model prop) instead of `ContextBanner`. The current `workspaceChangedFilesSection` and `contextBannerMergeBase` props on `ThreadDetailPromptArea` collapse into a single `promptContextBanner` view-model prop produced upstream in `ThreadDetailView`.
 3. Replace `isChangeListExpanded` with section expansion state keyed by section:
    - `gitFiles`
    - `managedThreads`
    - `todos`
 4. Map the current changed-file toggle to `gitFiles`.
-5. Add manager and TODO sections to the same component after git parity is covered by tests.
-6. Delete the old git-only banner branch and old `ComposerBannerProps` path once parity and new states pass.
+5. Add manager, managed-by, and TODO sections to the same component after git parity is covered by tests.
+6. Delete `ContextBanner.tsx`, its stories, and the old prop path on `ThreadDetailPromptArea` once the new path covers git parity and the new context sections.
 
 End state:
 
-- `ThreadFollowUpComposer.tsx` has one canonical context-banner render path.
+- `FollowUpPromptBox.tsx`'s stack slot renders `ThreadPromptContextBanner` (above `QueuedMessagesList`) as the single canonical context-banner render path.
 - Git, manager, managed-by, and TODO rows are sections in `ThreadPromptContextBanner`.
-- The old `banner.showPromptGitStatsBanner` branch no longer exists.
+- `ContextBanner` and the old `workspaceChangedFilesSection`/`contextBannerMergeBase` prop pair on `ThreadDetailPromptArea` no longer exist.
 
 ## Loading, Error, And Empty States
 
@@ -503,19 +507,18 @@ Add app API and hooks:
 
 Refactor app composition:
 
-- `ThreadDetailView.tsx` should build a `ThreadPromptContextBannerModel` from:
+- `apps/app/src/views/thread-detail/ThreadDetailView.tsx` should build a `ThreadPromptContextBannerModel` from:
   - `thread`
   - `workspaceStatus`
   - `workspaceStatusError`
   - `workspaceChangedFilesSection`
-  - `showBranchComparisonUi`
-  - `effectiveMergeBaseBranch`
+  - `contextBannerMergeBase` (today's merge-base picker config) — folded into the model rather than passed alongside it.
   - `threadTimeline.pendingTodos` (from existing timeline query)
   - cached project thread list (existing query) for managed children
   - cached parent thread (existing query) for manager ref
   - relevant loading/error flags
-- `ThreadDetailPromptArea.tsx` should own only local section expansion state and pass a cohesive context-banner prop.
-- `ThreadFollowUpComposer.tsx` should render `ThreadPromptContextBanner` above `QueuedFollowUpList`.
+- `apps/app/src/views/thread-detail/ThreadDetailPromptArea.tsx` should own only local section expansion state and accept the cohesive `promptContextBanner` view-model prop in place of the existing `workspaceChangedFilesSection` + `contextBannerMergeBase` pair.
+- `apps/app/src/components/promptbox/FollowUpPromptBox.tsx`'s stack slot should render `ThreadPromptContextBanner` above `QueuedMessagesList`.
 
 ## Realtime Invalidation Plan
 
@@ -567,17 +570,17 @@ CLI:
 
 1. Timeline projection: pending TODOs
    - Add `ThreadTimelinePendingTodos` and `ThreadTimelinePendingTodoItem` domain schemas/types.
-   - Replace the existing `asTodoWriteTodos` TodoWrite parser with a canonical exported zod-backed `parseTodoWriteTodos` and update existing call sites in the same commit.
+   - Add a canonical exported zod-backed `parseTodoWriteTodos` helper in `@bb/thread-view` (no prior parser to replace; introduce fresh).
    - Extend the timeline projection (`@bb/thread-view`) to track the latest valid TODO snapshot and emit `pendingTodos` on `ThreadTimelineFromEventsResult`.
-   - Extend `threadTimelineResponseSchema` and the server timeline service to forward `pendingTodos` on `latest` page requests; older pages return `null`.
+   - Extend `threadTimelineResponseSchema` in `packages/server-contract/src/api-types.ts` and the server timeline service to forward `pendingTodos` on `latest` page requests; older pages return `null`.
    - Add projection tests for: no candidate observed (`null`), only `TodoWrite` snapshots (newest wins), only `turn/plan/updated` snapshots (newest wins), mixed `TodoWrite` and `turn/plan/updated` (newest by sequence wins), unparseable candidates, observed-empty snapshots, interrupted-turn snapshots, orphaned `TodoWrite` snapshots, completed-only items, suppressed tool-call rows still observed by projection.
 
 2. Bulk-stop action route
-   - Add `ThreadManagerBulkStopResponse`, `ThreadManagerBulkStopChildResult`, and their outcome/reason enums to domain/server-contract schemas.
+   - Add `ThreadManagerBulkStopResponse`, `ThreadManagerBulkStopChildResult`, and their outcome/reason enums to domain/server-contract schemas in new files `packages/domain/src/thread-manager-bulk-stop.ts` and the corresponding `packages/server-contract/src/api-types.ts` exports.
    - Add `POST /api/v1/threads/:id/managed-children/stop` route and service.
-   - Resolve target children in SQL by `parentThreadId`, `projectId`, non-archived, and the same `runtimeDisplayStatus` set the UI uses.
-   - Per-child: load environment, call `requestThreadStopIfNeeded`, emit typed outcome.
-   - Tighten existing `GET /api/v1/threads/:id` to require `requirePublicProject` after `requirePublicThread` in the same slice.
+   - Resolve target children in SQL by `parentThreadId`, `projectId`, `archivedAt IS NULL`, `deletedAt IS NULL`, and apply the same `runtime.displayStatus` set the UI uses (computed in service code where needed since `runtime.displayStatus` is derived, not stored).
+   - Per-child: load environment, call `requestThreadStopIfNeeded` from `apps/server/src/services/threads/thread-lifecycle.ts`, emit typed outcome.
+   - Tighten existing `GET /api/v1/threads/:id` (in `apps/server/src/routes/threads/base.ts`) to require `requirePublicProject` after `requirePublicThread` in the same slice. Today the route only calls `requirePublicThread`, so threads whose project is pending-delete are not rejected.
    - Add server action tests: lifecycle gating (deleted thread, pending-delete project), no eligible children, one child, multiple children, per-child missing/unusable environment skips, mixed eligible/idle/archived/cross-project children, partial failure, repeated clicks, children deleted or reparented during resolution, already-stopping children.
    - Tests use in-memory SQLite with `createConnection(":memory:")` plus `migrate(db)`.
 
@@ -587,10 +590,10 @@ CLI:
    - Add tests for: child status change refreshing manager banner, manager title change refreshing managed-child banner, child reparenting refreshing both old and new parent banners, child deletion refreshing manager banner.
 
 4. Banner view model and component
-   - Add `ThreadPromptContextBannerModel` and `ThreadPromptContextBanner`.
+   - Add `ThreadPromptContextBannerModel` and `ThreadPromptContextBanner` (next to today's `ContextBanner` under `apps/app/src/components/promptbox/banner/`).
    - Define published view-model constants: `THREAD_BANNER_ACTIVE_MANAGED_RUNTIME_STATUSES`, `THREAD_BANNER_ACTIVE_MANAGED_LIMIT`.
    - Derive manager ref from cached parent thread and managed children from cached project thread list.
-   - Extend and reuse `ExpandablePanel` or `CollapsibleHeader` so expandable banner sections get `aria-controls`, named regions, and `aria-labelledby` without adding a banner-local disclosure primitive.
+   - Pick or introduce a single shared disclosure primitive that gives banner sections `aria-controls`, named regions, and `aria-labelledby` without duplicating today's `ContextBanner` grid-rows class bundle. Either add one to `@bb/ui-core` / `@/components/ui/` or extract from the existing pattern.
    - Move current git banner behavior into the new component first.
    - Add collapsed TODO and managed-work expansion states.
    - Add the manager `Stop all` affordance near the managed-thread summary, gated by `items.length > 0`.
@@ -600,11 +603,11 @@ CLI:
    - Add view-model and component tests for all numbered scenarios in the exit criteria.
 
 5. Thread detail integration
-   - Replace the current git-only banner prop shape in `ThreadDetailView`, `ThreadDetailPromptArea`, and `ThreadFollowUpComposer`.
+   - Replace the existing prop shape in `apps/app/src/views/thread-detail/ThreadDetailView.tsx`, `apps/app/src/views/thread-detail/ThreadDetailPromptArea.tsx`, and `apps/app/src/components/promptbox/FollowUpPromptBox.tsx`. Today `ThreadDetailPromptArea` takes `workspaceChangedFilesSection` and `contextBannerMergeBase` and renders `ContextBanner`; the new code passes a single `promptContextBanner` view-model prop and renders `ThreadPromptContextBanner`.
    - Wire `pendingTodos` from the existing timeline query, cached parent thread, and cached project thread list into the banner view model.
    - Replace `isChangeListExpanded` with section expansion state.
-   - Keep queued follow-ups and `PromptBox` behavior unchanged.
-   - Remove the old banner render branch once the new path covers git parity and new context sections.
+   - Keep queued follow-ups and `FollowUpPromptBox` behavior unchanged.
+   - Delete `ContextBanner.tsx` and its stories once the new path covers git parity and the new context sections, and update the existing `ThreadDetailPromptArea.test.tsx` to drive the new prop shape.
 
 6. Verification and polish
    - Run Turbo validation.
@@ -629,11 +632,11 @@ Implementation exit criteria after sign-off:
 7. Given a standard unmanaged thread with clean up-to-date workspace status, `pendingTodos === null` from the timeline, and no managed ownership, the banner is hidden.
 8. Given a standard unmanaged thread with clean up-to-date workspace status, `pendingTodos.kind === "unparseable"` from the timeline projection, and no managed ownership, the banner is hidden and the server log/metric records the unparseable candidates.
 9. Given a standard unmanaged thread with clean up-to-date workspace status, observed-empty TODOs from the timeline projection, and no managed ownership, the banner is hidden.
-10. Given a manager thread with child threads whose `runtimeDisplayStatus` is in the active set (`active`, `host-reconnecting`, `waiting-for-host`), the banner shows the managed-thread count and expansion reveals child links, statuses, and pending-approval markers.
-11. Given a manager thread whose only children have `runtimeDisplayStatus` outside the active set (e.g. `idle`, `error`, `created`, `provisioning`, `archived`), the managed-work section is hidden and no `Stop all` button is shown.
+10. Given a manager thread with child threads whose `runtime.displayStatus` is in the active set (`active`, `host-reconnecting`, `waiting-for-host`) and `archivedAt === null`, the banner shows the managed-thread count and expansion reveals child links, statuses, and pending-approval markers.
+11. Given a manager thread whose only children have `runtime.displayStatus` outside the active set (e.g. `idle`, `error`, `created`, `provisioning`) or `archivedAt !== null`, the managed-work section is hidden and no `Stop all` button is shown.
 12. Given a manager thread with exactly one child in the active set, the banner shows `Stop all` near the managed-thread summary and invokes lifecycle stop semantics for that child without client-side status mutation.
 13. Given a manager thread with multiple children in the active set, `Stop all` requires confirmation that states how many managed threads will be stopped.
-14. Given a manager thread with mixed children (some in the active set, some idle, archived, errored, or dirty cross-project), `Stop all` targets only same-project children in the active set, and the visible list shows exactly the targets.
+14. Given a manager thread with mixed children (some in the active set, some idle, archived via `archivedAt`, errored, or dirty cross-project), `Stop all` targets only same-project, non-archived children in the active set, and the visible list shows exactly the targets.
 15. Given the bulk-stop route is called repeatedly while children are already stopping, the route remains idempotent and returns typed per-child outcomes.
 16. Given a bulk-stop request where a child has no usable environment, the route skips that child with `missingEnvironment` or `environmentUnavailable` and continues handling other children.
 17. Given a bulk-stop request where one child fails, is deleted, archived, or reparented during resolution, the route reports partial outcomes and does not mutate any child status directly.
@@ -655,7 +658,7 @@ Implementation exit criteria after sign-off:
 34. Given mobile-width viewport checks, banner text truncates or wraps without overlapping the prompt box, queued follow-ups, manager `Stop all` button, or footer controls.
 35. Given a thread whose project is pending-delete, existing `GET /api/v1/threads/:id` rejects after `requirePublicProject(thread.projectId)` (lifecycle gating tightened in the same slice as the bulk-stop route).
 36. Given a manager thread whose project is pending-delete, the bulk-stop route rejects before resolving or stopping child threads.
-37. Given a managed child changes `runtimeDisplayStatus`, the manager's banner refreshes via existing project thread-list invalidation, without a banner-specific cache key.
+37. Given a managed child changes `runtime.displayStatus`, the manager's banner refreshes via existing project thread-list invalidation, without a banner-specific cache key.
 38. Given a manager title changes, cached managed-child banners refresh via existing parent-thread or project list invalidation.
 39. Given a manager is archived or deleted, cached managed-child banners refresh via existing realtime cache effects so child banners do not retain stale manager links.
 40. Given a managed child is reparented, both the old and new parent banners refresh via existing project thread-list invalidation.
@@ -688,7 +691,7 @@ Manual app scenarios:
 - Manager thread with no children in the active runtime set: managed-work section is hidden and no `Stop all` button is shown.
 - Manager thread with one active child: `Stop all` activates lifecycle stop semantics for that child.
 - Manager thread with multiple active children: `Stop all` shows confirmation before stopping.
-- Manager thread with mixed children (active, idle, errored, archived, cross-project): the visible list and `Stop all` target only same-project active children; the count matches what the user sees.
+- Manager thread with mixed children (active, idle, errored, archived via `archivedAt`, cross-project): the visible list and `Stop all` target only same-project, non-archived active children; the count matches what the user sees.
 - Bulk stop with a child missing a usable environment: response reports a skipped child and still reports other child outcomes.
 - Manager thread with more active children than the cap: summary uses true count, expanded list shows capped rows and a truncation note.
 - Manager thread after children complete or stop: banner refreshes via project thread-list invalidation and hides `Stop all` when no active children remain.
@@ -713,11 +716,11 @@ Manual app scenarios:
 - Provider TODO data must be parsed at the timeline projection boundary and not leak `unknown` into app code.
 - Reuse the existing project thread list and parent-thread queries for manager/managed-child data; do not add a parallel server route for what the sidebar already loads.
 - Pending TODOs are tail-only timeline projection state, computed alongside `activeThinking`. Do not introduce a separate SQL query, indexed event projection, or candidate-row constant for TODO extraction.
-- One predicate, not two: the visible managed-children set and the `Stop all` target set are the same, derived from `runtimeDisplayStatus`. No `stoppableCount` field.
-- The bulk-stop action route applies lifecycle gating (`requirePublicThread` + `requirePublicProject`) and reuses the existing per-child lifecycle stop owner. It does not mutate child status directly.
-- Tighten existing `GET /api/v1/threads/:id` to also call `requirePublicProject` in the same backend slice, so both routes refuse to operate on threads whose project is pending-delete.
-- Replace/reuse the existing `asTodoWriteTodos` parsing path instead of duplicating it, and remove the old helper once the zod-backed parser is canonical.
-- Reuse `StatusPill`, `CollapsibleHeader` or `ExpandablePanel`, `WorkspaceChangesList`, `MergeBaseBranchPicker`, `Button`, and existing layout conventions.
+- One predicate, not two: the visible managed-children set and the `Stop all` target set are the same, derived from `runtime.displayStatus` (plus `archivedAt === null`). No `stoppableCount` field.
+- The bulk-stop action route applies lifecycle gating (`requirePublicThread` + `requirePublicProject`) and reuses the existing `requestThreadStopIfNeeded` lifecycle owner per child. It does not mutate child status directly.
+- Tighten existing `GET /api/v1/threads/:id` (in `apps/server/src/routes/threads/base.ts`) to also call `requirePublicProject` in the same backend slice, so both routes refuse to operate on threads whose project is pending-delete.
+- Introduce `parseTodoWriteTodos` as the canonical zod-backed TodoWrite argument parser in `@bb/thread-view`. There is no prior `asTodoWriteTodos` helper to remove.
+- Reuse `StatusPill` (`@/components/ui/status-pill`), `WorkspaceChangesList`, `BranchPicker` (with `getMergeBaseBranchCandidates`), `PromptStackCard`, `Button`, and existing layout conventions. If a shared disclosure primitive is missing, add one in `@bb/ui-core` or `@/components/ui/` rather than duplicating today's `ContextBanner` grid-rows class bundle.
 - Use sanctioned typography utilities; do not add arbitrary `text-[Npx]` classes.
 - Use Turbo for typecheck and tests.
 - Do not add route/query fields unless implemented end to end.
