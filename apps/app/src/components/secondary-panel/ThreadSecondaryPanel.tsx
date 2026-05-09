@@ -1,33 +1,21 @@
 import { type CSSProperties, type ReactNode, memo, useMemo } from "react";
 import { useAtomValue } from "jotai";
 import {
-  Check,
-  ChevronDown,
   ChevronRight,
-  ChevronsDown,
-  ChevronsUp,
-  Columns2,
   FileDiff as FileDiffIcon,
   FolderOpen,
   GripVertical,
   Info,
-  Loader2,
   MoreHorizontal,
-  Rows2,
   X,
 } from "lucide-react";
 import { FileDiff as DiffView } from "@pierre/diffs/react";
 import { DiffStatsTally, FilePathLink, Skeleton } from "@/components/ui";
 import { copyToClipboardWithToast } from "@/lib/clipboard";
 import { Panel, PanelResizeHandle } from "react-resizable-panels";
-import {
-  formatChangeSummary,
-  renderChangeSummary,
-} from "@/components/workspace/workspace-change-summary";
 import { useIntersectionObserver } from "usehooks-ts";
 import {
   Button,
-  COARSE_POINTER_COMPACT_ICON_SIZE_CLASS,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -53,8 +41,13 @@ import {
   gitDiffLoadingFileKeysAtom,
   threadSecondaryPanelResizingAtom,
 } from "./threadSecondaryPanelAtoms";
+import { GitDiffToolbar } from "./GitDiffToolbar";
+export type {
+  GitDiffDisplayMode,
+  GitDiffSelectionOption,
+} from "./GitDiffToolbar";
 
-const GIT_DIFF_VIEW_BASE_OPTIONS = {
+export const GIT_DIFF_VIEW_BASE_OPTIONS = {
   overflow: "scroll",
   disableFileHeader: false,
 } as const;
@@ -74,13 +67,6 @@ const GIT_DIFF_CARD_BODY_STYLE: CSSProperties = {
 };
 const THREAD_SECONDARY_PANEL_TRANSITION_CLASS =
   "duration-[220ms] ease-[cubic-bezier(0.32,0.72,0,1)]";
-
-export interface GitDiffSelectionOption {
-  value: string;
-  label: string;
-  /** When set, rendered in monospace before the label (e.g. a short commit SHA). */
-  monoPrefix?: string;
-}
 
 function ThreadDiffSkeleton({
   count = GIT_DIFF_SKELETON_FILE_COUNT,
@@ -115,86 +101,6 @@ function ThreadDiffSkeleton({
   );
 }
 
-function GitDiffSelector({
-  value,
-  options,
-  onChange,
-  disabled,
-}: {
-  value: string;
-  options: readonly GitDiffSelectionOption[];
-  onChange: (value: string) => void;
-  disabled?: boolean;
-}) {
-  const selectedOption = options.find((option) => option.value === value);
-  const selectedLabel = selectedOption?.label ?? value;
-  const selectedMonoPrefix = selectedOption?.monoPrefix;
-
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild disabled={disabled}>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          disabled={disabled}
-          className={cn(
-            "h-8 w-full min-w-0 justify-between gap-2 rounded-lg border border-border/70 bg-transparent px-2.5 text-xs font-normal hover:bg-muted/45 hover:text-foreground",
-            disabled && "opacity-60",
-          )}
-        >
-          <span className="flex min-w-0 items-baseline gap-2">
-            {selectedMonoPrefix ? (
-              <span className="shrink-0 font-mono text-muted-foreground">
-                {selectedMonoPrefix}
-              </span>
-            ) : null}
-            <span className="truncate">{selectedLabel}</span>
-          </span>
-          <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent
-        align="start"
-        // Cap at viewport so we don't overflow; otherwise grow to content.
-        // Bigger than the trigger so commit-label rows can breathe and match
-        // the width of the diff cards rendered below the selector.
-        className="min-w-[var(--radix-dropdown-menu-trigger-width)] max-w-[var(--radix-popper-available-width)]"
-      >
-        {options.map((option) => (
-          <DropdownMenuItem
-            key={option.value}
-            onSelect={() => onChange(option.value)}
-            className="flex items-center justify-between gap-2"
-          >
-            <span
-              className="flex min-w-0 items-baseline gap-2"
-              title={
-                option.monoPrefix
-                  ? `${option.monoPrefix} ${option.label}`
-                  : option.label
-              }
-            >
-              {option.monoPrefix ? (
-                <span className="shrink-0 font-mono text-muted-foreground">
-                  {option.monoPrefix}
-                </span>
-              ) : null}
-              <span className="truncate">{option.label}</span>
-            </span>
-            <Check
-              className={cn(
-                COARSE_POINTER_COMPACT_ICON_SIZE_CLASS,
-                option.value === value ? "opacity-100" : "opacity-0",
-              )}
-            />
-          </DropdownMenuItem>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
 interface StuckState {
   isStuck: boolean;
   sentinelRef: (node?: Element | null) => void;
@@ -212,7 +118,7 @@ function useIsStuck(): StuckState {
   };
 }
 
-interface GitDiffFileCardProps {
+export interface GitDiffFileCardProps {
   fileKey: string;
   fileDiff: ParsedGitDiffFile;
   threadId: string;
@@ -224,7 +130,7 @@ interface GitDiffFileCardProps {
   onOpenFileInEditor?: (path: string) => void;
 }
 
-const GitDiffFileCard = memo(function GitDiffFileCard({
+export const GitDiffFileCard = memo(function GitDiffFileCard({
   fileKey,
   fileDiff,
   threadId,
@@ -549,96 +455,19 @@ export function ThreadSecondaryPanel({
           </Button>
         </div>
         {isDiffPanelActive ? (
-          <div className="px-4 pb-3">
-            <div className="flex min-w-0 items-center gap-3">
-              <div className="min-w-0 flex-1">
-                <GitDiffSelector
-                  value={gitDiffSelectValue}
-                  options={gitDiffSelectOptions}
-                  onChange={onGitDiffSelectionChange}
-                  disabled={isGitDiffLoading || threadGitDiff === undefined}
-                />
-              </div>
-              <span
-                className="min-w-0 shrink truncate text-xs text-muted-foreground"
-                title={formatChangeSummary(gitDiffStats)}
-              >
-                {renderChangeSummary(gitDiffStats)}
-              </span>
-              {isParsingGitDiffFiles ? (
-                <span className="inline-flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
-                  <Loader2 className="size-3 animate-spin" />
-                  Parsing
-                </span>
-              ) : null}
-              <div className="ml-auto flex min-w-0 shrink-0 items-center justify-end gap-1">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 w-7 rounded-md p-0 text-muted-foreground hover:bg-accent/70 hover:text-foreground"
-                  onClick={toggleAllGitDiffFilesCollapsed}
-                  disabled={!hasParsedGitDiffFiles || isGitDiffLoading}
-                  aria-label={
-                    areAllGitDiffFilesCollapsed
-                      ? "Expand all files"
-                      : "Collapse all files"
-                  }
-                  title={
-                    areAllGitDiffFilesCollapsed
-                      ? "Expand all files"
-                      : "Collapse all files"
-                  }
-                >
-                  {areAllGitDiffFilesCollapsed ? (
-                    <ChevronsDown className="size-3.5" />
-                  ) : (
-                    <ChevronsUp className="size-3.5" />
-                  )}
-                </Button>
-                <div
-                  className="inline-flex items-center gap-1 rounded-lg border border-border/70 p-0.5"
-                  role="tablist"
-                  aria-label="Diff view mode"
-                >
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className={cn(
-                      "h-7 w-7 rounded-md p-0",
-                      gitDiffDisplayMode === "unified"
-                        ? "bg-accent/35 text-foreground hover:bg-accent/45"
-                        : "text-muted-foreground hover:bg-muted/45 hover:text-foreground",
-                    )}
-                    onClick={() => handleGitDiffDisplayModeChange("unified")}
-                    aria-label="Stacked diff view"
-                    aria-pressed={gitDiffDisplayMode === "unified"}
-                    title="Stacked diff view"
-                  >
-                    <Rows2 className="size-3.5" />
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className={cn(
-                      "h-7 w-7 rounded-md p-0",
-                      gitDiffDisplayMode === "split"
-                        ? "bg-accent/35 text-foreground hover:bg-accent/45"
-                        : "text-muted-foreground hover:bg-muted/45 hover:text-foreground",
-                    )}
-                    onClick={() => handleGitDiffDisplayModeChange("split")}
-                    aria-label="Split diff view"
-                    aria-pressed={gitDiffDisplayMode === "split"}
-                    title="Split diff view"
-                  >
-                    <Columns2 className="size-3.5" />
-                  </Button>
-                </div>
-              </div>
-            </div>
-          </div>
+          <GitDiffToolbar
+            selectionValue={gitDiffSelectValue}
+            selectionOptions={gitDiffSelectOptions}
+            onSelectionChange={onGitDiffSelectionChange}
+            isSelectorDisabled={isGitDiffLoading || threadGitDiff === undefined}
+            stats={gitDiffStats}
+            isParsing={isParsingGitDiffFiles}
+            areAllFilesCollapsed={areAllGitDiffFilesCollapsed}
+            isCollapseAllDisabled={!hasParsedGitDiffFiles || isGitDiffLoading}
+            onToggleAllCollapsed={toggleAllGitDiffFilesCollapsed}
+            displayMode={gitDiffDisplayMode}
+            onDisplayModeChange={handleGitDiffDisplayModeChange}
+          />
         ) : null}
       </div>
       <div

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, type ReactNode } from "react";
+import { useCallback, useMemo } from "react";
 import { useParams } from "react-router-dom";
 import type {
   ThreadTimelineLocalFileLink,
@@ -10,7 +10,6 @@ import { useThreadSecondaryPanelUrlSync } from "@/lib/thread-secondary-panel";
 import { useRequestEnvironmentAction } from "../../hooks/mutations/environment-mutations";
 import {
   useMarkThreadRead,
-  useUnarchiveThread,
   useUpdateThread,
 } from "../../hooks/mutations/thread-state-mutations";
 import { useSendThreadMessage } from "../../hooks/mutations/thread-runtime-mutations";
@@ -42,7 +41,7 @@ import { useStandardManagerTimelinePreference } from "@/lib/manager-timeline-vie
 import { getGitStatusDisplay } from "@/components/workspace/workspace-status";
 import { selectWorkspaceChangedFilesSection } from "@/components/workspace/workspace-change-summary";
 import { getThreadDisplayTitle } from "@/lib/thread-title";
-import { useGitDiffPanel } from "./git-diff/useGitDiffPanel";
+import { useGitDiffPanel } from "@/components/secondary-panel/git-diff/useGitDiffPanel";
 import { useThreadDetailTurnSummaryRows } from "./turn-summary/useThreadDetailTurnSummaryRows";
 import { ThreadDetailHeader } from "./ThreadDetailHeader";
 import { ThreadDetailPromptArea } from "./ThreadDetailPromptArea";
@@ -53,8 +52,8 @@ import {
 } from "@/components/promptbox/banner/ThreadPromptContextBanner";
 import { ThreadDetailSecondaryContent } from "./ThreadDetailSecondaryContent";
 import type { HostConnectionNotice } from "./ThreadTimelinePane";
-import { useThreadStorageViewer } from "./useThreadStorageViewer";
-import { useEnvironmentMergeBase } from "./git-diff/useEnvironmentMergeBase";
+import { useThreadStorageViewer } from "@/components/secondary-panel/useThreadStorageViewer";
+import { useEnvironmentMergeBase } from "@/components/secondary-panel/git-diff/useEnvironmentMergeBase";
 import { useThreadGitActions } from "./useThreadGitActions";
 import { useThreadEnvironmentPromotionActions } from "./useThreadEnvironmentPromotionActions";
 import { useThreadReadTracking } from "./useThreadReadTracking";
@@ -63,7 +62,6 @@ import {
   resolveThreadLocalWorkspaceRootPath,
   resolveThreadWorkspaceOpenPath,
 } from "./threadWorkspaceOpenPath";
-import { copyToClipboardWithToast } from "@/lib/clipboard";
 import { resolveThreadLocalFileLink } from "@/lib/thread-local-file-links";
 import {
   buildManagerSelectorOptions,
@@ -181,7 +179,6 @@ export function ThreadDetailView() {
   });
   const sendMessage = useSendThreadMessage();
   const requestEnvironmentAction = useRequestEnvironmentAction();
-  const unarchiveThread = useUnarchiveThread();
   const markThreadRead = useMarkThreadRead();
   const updateEnvironment = useUpdateEnvironment();
   const updateThread = useUpdateThread();
@@ -315,13 +312,11 @@ export function ThreadDetailView() {
     thread,
   });
   const {
-    canSelectMergeBase,
     effectiveMergeBaseBranch,
     handleMergeBaseBranchChange,
     showBranchComparisonUi,
     showMergeBase,
     mergeBaseBranch,
-    mergeBaseCandidates,
   } = useEnvironmentMergeBase({
     environment,
     mergeBaseBranchOptions,
@@ -367,10 +362,6 @@ export function ThreadDetailView() {
       parentThreadId,
       thread?.id,
     ],
-  );
-  const managerSelectorValue = parentThreadId ?? "none";
-  const selectedManagerOption = managerSelectorOptions.find(
-    (option) => option.value === managerSelectorValue,
   );
   const handleAssignManager = useCallback(
     (nextParentThreadId: string | null) => {
@@ -487,65 +478,15 @@ export function ThreadDetailView() {
       )
     : null;
   const promptBannerMergeBaseBranch = effectiveMergeBaseBranch;
-  const threadEnvironmentType =
-    threadEnvironmentDisplay?.modeLabel ??
-    (environment ? "environment" : undefined);
-  const threadEnvironmentValue: ReactNode | undefined =
-    threadEnvironmentDisplay ? (
-      threadEnvironmentDisplay.hostLabel &&
-      threadEnvironmentDisplay.location === "remote" ? (
-        <>
-          {threadEnvironmentDisplay.modeLabel}
-          <span className="text-muted-foreground/60">
-            {" "}
-            · {threadEnvironmentDisplay.hostLabel}
-          </span>
-        </>
-      ) : (
-        threadEnvironmentDisplay.modeLabel
-      )
-    ) : undefined;
-  const threadEnvironmentModeLabel = threadEnvironmentDisplay?.modeLabel;
   const threadBranchName = workspaceBranch?.currentBranch ?? undefined;
   const isWorkspaceDeleted = environment?.status === "destroyed";
-  const showWorkspaceStatus =
-    canUseGitUi &&
-    (Boolean(workspaceStatus) ||
-      Boolean(workspaceStatusError) ||
-      isWorkspaceDeleted) &&
-    !(thread.archivedAt != null && environment?.managed !== true);
   const threadGitStatusDisplay = getGitStatusDisplay(workspaceStatus, {
     mergeBaseBranch,
     showBranchComparison: showBranchComparisonUi,
     error: workspaceStatusError,
     workspaceDeleted: isWorkspaceDeleted,
   });
-  const threadGitStatusLabelClass =
-    workspaceWorkingTree?.state === "untracked"
-      ? "text-muted-foreground"
-      : "text-foreground";
-  const showThreadChangedFiles =
-    canUseGitUi && workspaceChangedFilesSection !== null;
-  const showThreadMetadata = Boolean(
-    isManagerThread ||
-    parentThreadId ||
-    (!isManagerThread && threadEnvironmentType) ||
-    (!isManagerThread && threadBranchName) ||
-    (!isManagerThread && showMergeBase) ||
-    showWorkspaceStatus ||
-    showThreadChangedFiles ||
-    thread.archivedAt != null,
-  );
   const threadTitle = getThreadDisplayTitle(thread);
-  const handleCopyThreadBranch = async () => {
-    if (!threadBranchName) {
-      return;
-    }
-    await copyToClipboardWithToast(threadBranchName, {
-      successMessage: "Branch name copied",
-      errorMessage: "Failed to copy branch name",
-    });
-  };
   const threadActionsMenu = (
     <ThreadActionsMenu
       thread={thread}
@@ -669,53 +610,29 @@ export function ThreadDetailView() {
         header={timelineHeader}
         threadStorage={threadStorage}
         metadata={{
-          canAssignToManager,
-          canSelectMergeBase,
-          canTakeOverThread,
-          isLoadingMergeBaseBranchOptions,
-          isManagerThread,
-          managerSelectorOptions,
-          managerSelectorValue,
-          onAssignManager: handleAssignManager,
-          onCopyThreadBranch: () => {
-            void handleCopyThreadBranch();
-          },
-          onMergeBaseBranchChange: handleMergeBaseBranchChange,
-          onUnarchive: () => {
-            unarchiveThread.mutate({ id: thread.id });
-          },
-          parentThreadId: parentThreadId ?? undefined,
-          projectId,
-          selectedManagerOptionLabel: selectedManagerOption?.label,
-          showThreadChangedFiles,
-          showMergeBase,
-          showWorkspaceStatus,
           thread,
-          threadBranchName,
-          threadEnvironmentModeLabel,
-          threadEnvironmentType,
-          threadEnvironmentValue,
-          threadHostConnected: environmentHost
-            ? environmentHost.status === "connected"
-            : undefined,
-          threadHostIsLocal: environment ? threadEnvironmentIsLocal : undefined,
-          threadHostName: environmentHost?.name,
-          threadGitStatusDisplay,
-          threadGitStatusLabelClass,
-          mergeBaseBranch,
-          mergeBaseCandidates,
-          unarchivePending:
-            unarchiveThread.isPending &&
-            unarchiveThread.variables?.id === thread.id,
+          projectId,
+          parentThreadDisplayName: parentThreadDisplayName ?? null,
+          managerThreads,
+          canAssignToManager,
+          canTakeOverThread,
+          environmentHost: environmentHost ?? null,
+          environmentIsLocal: threadEnvironmentIsLocal,
+          environment: environment ?? null,
+          workspaceStatus,
+          workspaceStatusError: workspaceStatusError ?? null,
+          selectedMergeBaseBranch,
+          mergeBaseBranchOptions,
+          isLoadingMergeBaseBranchOptions,
           updateThreadPending:
             updateThread.isPending || updateEnvironment.isPending,
+          onAssignManager: handleAssignManager,
+          onMergeBaseBranchChange: handleMergeBaseBranchChange,
           onChangedFileClick: canUseGitUi
             ? (file) => {
                 openDiffFile(file.path);
               }
             : undefined,
-          workspaceStatusFiles: workspaceChangedFilesSection?.files,
-          workspaceStatusFilesLabel: workspaceChangedFilesSection?.label,
         }}
         secondaryPanel={{
           canUseGitUi,
@@ -740,7 +657,6 @@ export function ThreadDetailView() {
           showThreadStorageTab: thread.type === "manager",
           threadId: thread.id,
         }}
-        showThreadMetadata={showThreadMetadata}
         timeline={{
           activeThinking,
           hasOlderTimelineRows,

@@ -2,6 +2,11 @@ import { useCallback, useState, type ReactNode } from "react";
 import type { ThreadListEntry } from "@bb/domain";
 import type { ProjectResponse } from "@bb/server-contract";
 import {
+  PROJECT_IDS,
+  makeProject as makeSharedProject,
+  makeThreadListEntry,
+} from "../../../.ladle/story-fixtures";
+import {
   SidebarMenu,
   SidebarStickyStack,
 } from "@/components/ui";
@@ -30,47 +35,13 @@ function SidebarStage({ children }: { children: ReactNode }) {
   );
 }
 
-function makeProject(overrides: Partial<ProjectResponse> = {}): ProjectResponse {
-  return {
-    id: "proj_demo",
-    name: "bb",
-    sources: [],
-    createdAt: 1,
-    updatedAt: 2,
-    ...overrides,
-  };
-}
+// Wrap the shared builders for slightly different defaults the sidebar wants
+// (a different demo project id; ThreadListEntry instead of Thread).
+const makeProject = (overrides: Partial<ProjectResponse> = {}) =>
+  makeSharedProject({ id: PROJECT_IDS.bb, name: "bb", ...overrides });
 
-function makeThread(overrides: Partial<ThreadListEntry> = {}): ThreadListEntry {
-  return {
-    id: "thr_default",
-    projectId: "proj_demo",
-    environmentId: null,
-    automationId: null,
-    providerId: "codex",
-    type: "standard",
-    title: "Audit recurring permission failures",
-    titleFallback: "Audit recurring permission failures",
-    status: "idle",
-    parentThreadId: null,
-    archivedAt: null,
-    stopRequestedAt: null,
-    deletedAt: null,
-    lastReadAt: 100,
-    latestAttentionAt: 100,
-    createdAt: 0,
-    updatedAt: 100,
-    hasPendingInteraction: false,
-    environmentHostId: null,
-    environmentBranchName: null,
-    environmentWorkspaceDisplayKind: "other",
-    runtime: {
-      displayStatus: "idle",
-      hostReconnectGraceExpiresAt: null,
-    },
-    ...overrides,
-  };
-}
+const makeThread = (overrides: Partial<ThreadListEntry> = {}) =>
+  makeThreadListEntry({ id: "thr_default", ...overrides });
 
 interface InteractiveProjectRowArgs {
   project?: ProjectResponse;

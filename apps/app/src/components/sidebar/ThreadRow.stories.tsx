@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import type { ThreadListEntry } from "@bb/domain";
+import { makeThreadListEntry } from "../../../.ladle/story-fixtures";
 import { SidebarMenu, SidebarMenuItem } from "@/components/ui";
 import { ThreadActionsProvider } from "@/components/thread/ThreadActionsProvider";
 import { ThreadRow, type ThreadRowOptions } from "./ThreadRow";
@@ -25,36 +26,8 @@ function SidebarStage({ children }: { children: ReactNode }) {
   );
 }
 
-function makeThread(overrides: Partial<ThreadListEntry> = {}): ThreadListEntry {
-  return {
-    id: "thr_default",
-    projectId: "proj_demo",
-    environmentId: null,
-    automationId: null,
-    providerId: "codex",
-    type: "standard",
-    title: "Audit recurring permission failures",
-    titleFallback: "Audit recurring permission failures",
-    status: "idle",
-    parentThreadId: null,
-    archivedAt: null,
-    stopRequestedAt: null,
-    deletedAt: null,
-    lastReadAt: 100,
-    latestAttentionAt: 100,
-    createdAt: 0,
-    updatedAt: 100,
-    hasPendingInteraction: false,
-    environmentHostId: null,
-    environmentBranchName: null,
-    environmentWorkspaceDisplayKind: "other",
-    runtime: {
-      displayStatus: "idle",
-      hostReconnectGraceExpiresAt: null,
-    },
-    ...overrides,
-  };
-}
+const makeThread = (overrides: Partial<ThreadListEntry> = {}) =>
+  makeThreadListEntry({ id: "thr_default", ...overrides });
 
 const noop = () => {};
 

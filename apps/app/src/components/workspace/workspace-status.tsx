@@ -11,7 +11,6 @@ import {
 export interface ThreadGitStatusDisplay {
   label:
     | "Unknown"
-    | "Deleted"
     | "Up to date"
     | "Clean"
     | "Ahead"
@@ -88,7 +87,7 @@ export function getGitStatusDisplay(
       options?.error instanceof HttpError &&
       options.error.code === "path_not_found";
     if (options?.workspaceDeleted || isPathNotFound) {
-      return plainDisplay("Deleted", "Workspace deleted.");
+      return plainDisplay("Unknown", "Workspace not found.");
     }
     return plainDisplay("Unknown", "Workspace status unavailable.");
   }
@@ -143,12 +142,9 @@ export function getGitStatusDisplay(
     case "untracked":
       return {
         label: "Untracked",
-        summary: joinStatusSummary([
-          workspaceSummary ?? "Untracked files",
-          comparisonSummary,
-        ]),
+        summary: joinStatusSummary([workspaceSummary, comparisonSummary]),
         summaryContent: joinSummaryNodes([
-          workspaceSummaryContent ?? "Untracked files",
+          workspaceSummaryContent,
           comparisonSummary,
         ]),
       };

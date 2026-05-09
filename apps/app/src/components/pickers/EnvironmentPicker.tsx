@@ -336,7 +336,7 @@ function HostSectionGroup({
 
   return (
     <DropdownMenuGroup>
-      <DropdownMenuLabel className="flex items-center gap-1.5 text-xs text-muted-foreground">
+      <DropdownMenuLabel className="flex items-center gap-1.5">
         <span className="truncate">{section.host.name}</span>
         {section.isLocal ? <LocalhostBadge /> : null}
         {section.isConnected ? <HostStatusDot /> : null}
@@ -392,9 +392,7 @@ function SandboxSection({
 
   return (
     <DropdownMenuGroup>
-      <DropdownMenuLabel className="text-xs text-muted-foreground">
-        Sandbox
-      </DropdownMenuLabel>
+      <DropdownMenuLabel>Sandbox</DropdownMenuLabel>
       {hasGitHubSource ? (
         backends
           .filter((backend) => backend.available)

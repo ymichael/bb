@@ -535,7 +535,11 @@ describe("ThreadDetailView", () => {
       1,
     );
 
-    expect(listThreadsRequestCount).toBe(1);
+    // For manager threads we also fire `useThreads({ parentThreadId })` to feed
+    // the prompt-context's "managed children" section, so two listThreads
+    // requests are expected: the prompt-mentions one (matched by the observer
+    // assertion above) and the managed-children one (different query key).
+    expect(listThreadsRequestCount).toBe(2);
     expect(getThreadListObserverCount(queryClient, projectThreadFilters)).toBe(
       1,
     );

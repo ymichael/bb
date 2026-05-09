@@ -150,9 +150,7 @@ export function OptionPicker<T extends string>({
         className={cn("min-w-52 max-w-96", contentClassName)}
         mobileTitle={label}
       >
-        <DropdownMenuLabel className="text-xs text-muted-foreground">
-          {label}
-        </DropdownMenuLabel>
+        <DropdownMenuLabel>{label}</DropdownMenuLabel>
         {options.map((option) => {
           const OptionIcon = option.icon;
           return (
