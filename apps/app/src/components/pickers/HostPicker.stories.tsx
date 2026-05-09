@@ -1,56 +1,36 @@
 import type { Host } from "@bb/domain";
 import { HostPicker } from "./HostPicker";
 import { StoryCard, StoryRow } from "../../../.ladle/story-card";
+import {
+  HOST_IDS,
+  HOST_NAMES,
+  makeHost,
+} from "../../../.ladle/story-fixtures";
 
 export default {
   title: "pickers/Host Picker",
 };
 
-const localOnly: Host[] = [
-  {
-    id: "local",
-    name: "Michael’s MacBook Pro",
-    type: "persistent",
-    status: "connected",
-    lastSeenAt: 0,
-    createdAt: 0,
-    updatedAt: 0,
-  },
-];
+const localOnly: Host[] = [makeHost()];
 
 const multipleHosts: Host[] = [
-  {
-    id: "local",
-    name: "Michael’s MacBook Pro",
-    type: "persistent",
-    status: "connected",
-    lastSeenAt: 0,
-    createdAt: 0,
-    updatedAt: 0,
-  },
-  {
-    id: "e2b-bb",
+  makeHost(),
+  makeHost({
+    id: "host_e2b_bb",
     name: "bb-sandbox-thr_qfk8ksbxkk",
     type: "ephemeral",
-    status: "connected",
     provider: "e2b",
-    lastSeenAt: 0,
-    createdAt: 0,
-    updatedAt: 0,
-  },
-  {
-    id: "e2b-stale",
+  }),
+  makeHost({
+    id: "host_e2b_stale",
     name: "bb-sandbox-thr_5brannp925",
     type: "ephemeral",
     status: "disconnected",
     provider: "e2b",
-    lastSeenAt: 0,
-    createdAt: 0,
-    updatedAt: 0,
-  },
+  }),
 ];
 
-const isLocalHost = (id: string | null | undefined) => id === "local";
+const isLocalHost = (id: string | null | undefined) => id === HOST_IDS.local;
 const noop = () => {};
 
 export function Overview() {
@@ -60,16 +40,16 @@ export function Overview() {
         <HostPicker
           hosts={localOnly}
           eligibleHosts={localOnly}
-          selectedHostId="local"
+          selectedHostId={HOST_IDS.local}
           onChange={noop}
           isLocalHost={isLocalHost}
         />
       </StoryRow>
-      <StoryRow label="remote host">
+      <StoryRow label={`${HOST_NAMES.local}, remote sandbox selected`}>
         <HostPicker
           hosts={multipleHosts}
           eligibleHosts={multipleHosts}
-          selectedHostId="e2b-bb"
+          selectedHostId="host_e2b_bb"
           onChange={noop}
           isLocalHost={isLocalHost}
         />
@@ -78,7 +58,7 @@ export function Overview() {
         <HostPicker
           hosts={multipleHosts}
           eligibleHosts={multipleHosts}
-          selectedHostId="e2b-stale"
+          selectedHostId="host_e2b_stale"
           onChange={noop}
           isLocalHost={isLocalHost}
         />
@@ -96,7 +76,7 @@ export function Overview() {
         <HostPicker
           hosts={multipleHosts}
           eligibleHosts={multipleHosts}
-          selectedHostId="local"
+          selectedHostId={HOST_IDS.local}
           onChange={noop}
           isLocalHost={isLocalHost}
           defaultOpen

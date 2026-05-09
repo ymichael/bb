@@ -19,6 +19,7 @@ import {
   makeThread,
   makeWorkspaceStatus,
 } from "./ThreadMetadataContent.fixtures";
+import { HOST_IDS, HOST_NAMES } from "../../../.ladle/story-fixtures";
 import { StoryCard, StoryRow } from "../../../.ladle/story-card";
 
 export default {
@@ -125,11 +126,11 @@ export function Host() {
         <RowStage>
           <HostRow
             environmentHost={makeHost({
-              id: "host_remote",
-              name: "michael-build-box",
+              id: HOST_IDS.remote,
+              name: HOST_NAMES.remote,
               status: "connected",
             })}
-            environment={makeEnvironment({ hostId: "host_remote" })}
+            environment={makeEnvironment({ hostId: HOST_IDS.remote })}
             environmentIsLocal={false}
           />
         </RowStage>
@@ -138,11 +139,11 @@ export function Host() {
         <RowStage>
           <HostRow
             environmentHost={makeHost({
-              id: "host_remote",
-              name: "michael-build-box",
+              id: HOST_IDS.remote,
+              name: HOST_NAMES.remote,
               status: "disconnected",
             })}
-            environment={makeEnvironment({ hostId: "host_remote" })}
+            environment={makeEnvironment({ hostId: HOST_IDS.remote })}
             environmentIsLocal={false}
           />
         </RowStage>
@@ -151,12 +152,12 @@ export function Host() {
         <RowStage>
           <HostRow
             environmentHost={makeHost({
-              id: "host_e2b",
-              name: "e2b-sandbox-3a91",
+              id: HOST_IDS.sandbox,
+              name: HOST_NAMES.sandbox,
               type: "ephemeral",
               provider: "e2b",
             })}
-            environment={makeEnvironment({ hostId: "host_e2b" })}
+            environment={makeEnvironment({ hostId: HOST_IDS.sandbox })}
             environmentIsLocal={false}
           />
         </RowStage>
@@ -186,10 +187,10 @@ export function Environment() {
         <RowStage>
           <EnvironmentRow
             thread={makeThread()}
-            environment={makeEnvironment({ hostId: "host_remote" })}
+            environment={makeEnvironment({ hostId: HOST_IDS.remote })}
             environmentHost={makeHost({
-              id: "host_remote",
-              name: "michael-build-box",
+              id: HOST_IDS.remote,
+              name: HOST_NAMES.remote,
             })}
             environmentIsLocal={false}
           />
@@ -213,13 +214,13 @@ export function Environment() {
           <EnvironmentRow
             thread={makeThread()}
             environment={makeEnvironment({
-              hostId: "host_remote",
+              hostId: HOST_IDS.remote,
               isWorktree: false,
               workspaceProvisionType: "unmanaged",
             })}
             environmentHost={makeHost({
-              id: "host_remote",
-              name: "michael-build-box",
+              id: HOST_IDS.remote,
+              name: HOST_NAMES.remote,
             })}
             environmentIsLocal={false}
           />
@@ -230,13 +231,13 @@ export function Environment() {
           <EnvironmentRow
             thread={makeThread()}
             environment={makeEnvironment({
-              hostId: "host_e2b",
+              hostId: HOST_IDS.sandbox,
               isWorktree: false,
               workspaceProvisionType: "unmanaged",
             })}
             environmentHost={makeHost({
-              id: "host_e2b",
-              name: "e2b-sandbox-3a91",
+              id: HOST_IDS.sandbox,
+              name: HOST_NAMES.sandbox,
               type: "ephemeral",
               provider: "e2b",
             })}

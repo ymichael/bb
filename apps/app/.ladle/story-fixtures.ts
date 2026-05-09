@@ -6,6 +6,12 @@ import type {
   WorkspaceStatus,
 } from "@bb/domain";
 import type { ProjectResponse } from "@bb/server-contract";
+import type {
+  AttachmentsConfig,
+  MentionsConfig,
+} from "../src/components/promptbox/PromptBoxInternal";
+
+const noop = () => {};
 
 // ---------------------------------------------------------------------------
 // A small set of realistic, shared constants so the fixture universe feels
@@ -16,7 +22,7 @@ import type { ProjectResponse } from "@bb/server-contract";
 export const HOST_IDS = {
   local: "host_local",
   remote: "host_remote",
-  sandbox: "host_e2b_sandbox",
+  sandbox: "host_e2b",
 } as const;
 
 export const HOST_NAMES = {
@@ -41,6 +47,46 @@ export const BRANCH_NAMES = {
   default: "main",
   feature: "feat/sidebar-rail",
 } as const;
+
+/** Stable set of placeholder image URLs for prompt-attachment + preview stories. */
+export const PLACEHOLDER_IMAGE_URLS = [
+  "https://placecats.com/300/200",
+  "https://placecats.com/320/180",
+  "https://placecats.com/360/220",
+  "https://placecats.com/400/240",
+] as const;
+
+// ---------------------------------------------------------------------------
+// Promptbox config builders. PromptBoxInternal, NewThreadPromptBox, and
+// FollowUpPromptBox stories all reach for the same Mentions / Attachments
+// shapes — share them here so the inert defaults stay consistent.
+// ---------------------------------------------------------------------------
+
+export function makeMentionsConfig(
+  overrides: Partial<MentionsConfig> = {},
+): MentionsConfig {
+  const base: MentionsConfig = {
+    suggestions: [],
+    isLoading: false,
+    isError: false,
+    onQueryChange: noop,
+  };
+  return { ...base, ...overrides };
+}
+
+export function makeAttachmentsConfig(
+  overrides: Partial<AttachmentsConfig> = {},
+): AttachmentsConfig {
+  const base: AttachmentsConfig = {
+    items: [],
+    projectId: PROJECT_IDS.bb,
+    onAttachFiles: noop,
+    onRemove: noop,
+    isAttaching: false,
+    error: null,
+  };
+  return { ...base, ...overrides };
+}
 
 // ---------------------------------------------------------------------------
 // Typed-base builders. Each base is annotated with its strict T so TypeScript

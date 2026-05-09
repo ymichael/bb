@@ -8,13 +8,13 @@ import {
   type NewThreadEnvironmentConfig,
 } from "@/components/promptbox/NewThreadPromptBox";
 import type { ExecutionControlsProps } from "@/components/promptbox/ExecutionControls";
-import type {
-  AttachmentsConfig,
-  HistoryConfig,
-  MentionsConfig,
-} from "@/components/promptbox/PromptBoxInternal";
+import type { HistoryConfig } from "@/components/promptbox/PromptBoxInternal";
 import type { PickerOption } from "@/components/pickers/OptionPicker";
 import { StoryCard, StoryRow } from "../../../.ladle/story-card";
+import {
+  makeAttachmentsConfig as makeAttachments,
+  makeMentionsConfig as makeMentions,
+} from "../../../.ladle/story-fixtures";
 
 export default {
   title: "promptbox/New Thread Prompt Box",
@@ -130,26 +130,6 @@ const baseHistory: HistoryConfig = {
   ],
   onSelectEntry: noop,
 };
-
-function makeMentions(): MentionsConfig {
-  return {
-    suggestions: [],
-    isLoading: false,
-    isError: false,
-    onQueryChange: noop,
-  };
-}
-
-function makeAttachments(): AttachmentsConfig {
-  return {
-    items: [],
-    projectId: "proj_demo",
-    onAttachFiles: noop,
-    onRemove: noop,
-    isAttaching: false,
-    error: null,
-  };
-}
 
 function useControlledValue(initial: string) {
   const [value, setValue] = useState(initial);

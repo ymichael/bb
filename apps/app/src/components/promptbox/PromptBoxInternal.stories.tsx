@@ -8,14 +8,16 @@ import {
 } from "@/components/promptbox/ExecutionControls";
 import {
   PromptBoxInternal,
-  type AttachmentsConfig,
   type HistoryConfig,
-  type MentionsConfig,
   type PromptBoxSubmissionConfig,
   type PromptVoiceConfig,
 } from "@/components/promptbox/PromptBoxInternal";
 import type { PickerOption } from "@/components/pickers/OptionPicker";
 import { StoryCard, StoryRow } from "../../../.ladle/story-card";
+import {
+  makeAttachmentsConfig as makeAttachments,
+  makeMentionsConfig as makeMentions,
+} from "../../../.ladle/story-fixtures";
 
 export default {
   title: "promptbox/Prompt Box Internal",
@@ -141,30 +143,6 @@ const baseHistory: HistoryConfig = {
 function useControlledValue(initial: string) {
   const [value, setValue] = useState(initial);
   return { value, onChange: setValue };
-}
-
-function makeMentions(overrides?: Partial<MentionsConfig>): MentionsConfig {
-  return {
-    suggestions: [],
-    isLoading: false,
-    isError: false,
-    onQueryChange: noop,
-    ...overrides,
-  };
-}
-
-function makeAttachments(
-  overrides?: Partial<AttachmentsConfig>,
-): AttachmentsConfig {
-  return {
-    items: [],
-    projectId: "proj_demo",
-    onAttachFiles: noop,
-    onRemove: noop,
-    isAttaching: false,
-    error: null,
-    ...overrides,
-  };
 }
 
 function makeSubmission(

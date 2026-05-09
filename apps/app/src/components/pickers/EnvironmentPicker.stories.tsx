@@ -5,39 +5,20 @@ import type {
 } from "@bb/domain";
 import { EnvironmentPickerUI } from "./EnvironmentPicker";
 import { StoryCard, StoryRow } from "../../../.ladle/story-card";
+import { HOST_IDS, makeHost } from "../../../.ladle/story-fixtures";
 
 export default {
   title: "pickers/Environment Picker",
 };
 
 const mockHosts: Host[] = [
-  {
-    id: "local",
-    name: "Michael’s MacBook Pro",
-    type: "persistent",
-    status: "connected",
-    lastSeenAt: 0,
-    createdAt: 0,
-    updatedAt: 0,
-  },
-  {
-    id: "mac-mini-studio",
-    name: "Mac Studio (office)",
-    type: "persistent",
-    status: "connected",
-    lastSeenAt: 0,
-    createdAt: 0,
-    updatedAt: 0,
-  },
-  {
-    id: "old-laptop",
+  makeHost(),
+  makeHost({ id: "host_mac_mini", name: "Mac Studio (office)" }),
+  makeHost({
+    id: "host_old_laptop",
     name: "Linux laptop",
-    type: "persistent",
     status: "disconnected",
-    lastSeenAt: 0,
-    createdAt: 0,
-    updatedAt: 0,
-  },
+  }),
 ];
 
 const mockSandboxBackends: SandboxBackendInfo[] = [
@@ -54,14 +35,14 @@ const mockSandboxBackends: SandboxBackendInfo[] = [
 ];
 
 const localProjectSources: readonly ProjectSource[] = [
-  { type: "local_path", hostId: "local", path: "/Users/michael/Projects/bb" },
+  { type: "local_path", hostId: HOST_IDS.local, path: "/Users/michael/Projects/bb" },
 ];
 
 const multiHostSources: readonly ProjectSource[] = [
-  { type: "local_path", hostId: "local", path: "/Users/michael/Projects/bb" },
+  { type: "local_path", hostId: HOST_IDS.local, path: "/Users/michael/Projects/bb" },
   {
     type: "local_path",
-    hostId: "mac-mini-studio",
+    hostId: "host_mac_mini",
     path: "/Users/michael/projects/bb",
   },
 ];
@@ -71,7 +52,7 @@ const githubProjectSources: readonly ProjectSource[] = [
   { type: "github_repo", repoUrl: "https://github.com/example/bb" },
 ];
 
-const isLocalHost = (id: string | null | undefined) => id === "local";
+const isLocalHost = (id: string | null | undefined) => id === HOST_IDS.local;
 const noop = () => {};
 
 export function Overview() {

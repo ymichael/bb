@@ -2,6 +2,8 @@ import { useCallback, useState, type ReactNode } from "react";
 import type { ThreadListEntry } from "@bb/domain";
 import type { ProjectResponse } from "@bb/server-contract";
 import {
+  BRANCH_NAMES,
+  HOST_IDS,
   PROJECT_IDS,
   makeProject as makeSharedProject,
   makeThreadListEntry,
@@ -91,7 +93,7 @@ function InteractiveProjectRow({
       isCollapsed={isCollapsed}
       collapsedManagerIds={collapsedManagerIds}
       isLocalPathInvalid={isLocalPathInvalid}
-      localHostId="host_local"
+      localHostId={HOST_IDS.local}
       onToggleProjectCollapsed={onToggleProjectCollapsed}
       onToggleManagerCollapsed={onToggleManagerCollapsed}
       promotedBranchName={promotedBranchName}
@@ -132,8 +134,8 @@ const promotedThread = makeThread({
   id: "thr_promoted",
   title: "Stabilize Pnpm Dev Environment",
   titleFallback: "Stabilize Pnpm Dev Environment",
-  environmentHostId: "host_local",
-  environmentBranchName: "main",
+  environmentHostId: HOST_IDS.local,
+  environmentBranchName: BRANCH_NAMES.default,
   environmentWorkspaceDisplayKind: "managed-worktree",
 });
 const manager = makeThread({
@@ -169,7 +171,7 @@ const multipleProjects: MultiProjectEntry[] = [
     key: "bb",
     project: makeProject({ id: "proj_bb", name: "bb" }),
     isActive: true,
-    promotedBranchName: "main",
+    promotedBranchName: BRANCH_NAMES.default,
     threadListState: {
       status: "ready",
       threads: [
@@ -422,7 +424,7 @@ const fullProjects: FullProjectEntry[] = [
     key: "bb",
     project: makeProject({ id: "proj_full_a", name: "bb" }),
     isActive: true,
-    promotedBranchName: "main",
+    promotedBranchName: BRANCH_NAMES.default,
     threadListState: { status: "ready", threads: fullProjectAThreads },
   },
   {
