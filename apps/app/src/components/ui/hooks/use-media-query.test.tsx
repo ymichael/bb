@@ -3,7 +3,7 @@
 import { act, cleanup, renderHook } from "@testing-library/react";
 import { renderToString } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { restoreMatchMedia, setupMatchMedia } from "./helpers/match-media.js";
+import { restoreMatchMedia, setupMatchMedia } from "@/test/helpers/match-media.js";
 
 interface MediaQueryProbeProps {
   query: string;

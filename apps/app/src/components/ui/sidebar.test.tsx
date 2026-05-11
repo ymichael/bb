@@ -5,7 +5,7 @@ import { useEffect } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { COMPACT_VIEWPORT_QUERY } from "@/components/ui/hooks/use-compact-viewport";
 import { Sidebar, SidebarProvider } from "@/components/ui/sidebar";
-import { restoreMatchMedia, setupMatchMedia } from "./helpers/match-media.js";
+import { restoreMatchMedia, setupMatchMedia } from "@/test/helpers/match-media.js";
 
 afterEach(() => {
   cleanup();
