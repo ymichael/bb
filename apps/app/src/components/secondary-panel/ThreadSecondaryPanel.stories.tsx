@@ -64,27 +64,14 @@ const placeholderInfoContent = (
   </div>
 );
 
-const placeholderStorageContent = (
-  <div className="space-y-2 pt-1 text-sm text-muted-foreground">
-    <p>
-      Workspace tab content (see "secondary-panel/Workspace" story for
-      variants).
-    </p>
-  </div>
-);
-
 interface ShellArgs {
   initialPanel: ThreadSecondaryPanelTab;
-  isManagerThread?: boolean;
-  showThreadStorageTab?: boolean;
   showGitDiffTab?: boolean;
   canUseGitUi?: boolean;
 }
 
 function ShellRow({
   initialPanel,
-  isManagerThread = false,
-  showThreadStorageTab = false,
   showGitDiffTab = true,
   canUseGitUi = true,
 }: ShellArgs) {
@@ -95,12 +82,7 @@ function ShellRow({
           canUseGitUi={canUseGitUi}
           defaultMergeBaseBranch="main"
           environmentId={undefined}
-          isManagerThread={isManagerThread}
           metadataContent={placeholderInfoContent}
-          threadStorageContent={
-            showThreadStorageTab ? placeholderStorageContent : undefined
-          }
-          showThreadStorageTab={showThreadStorageTab}
           showGitDiffTab={showGitDiffTab}
           onPanelChange={noop}
           onCollapse={noop}
@@ -121,11 +103,13 @@ const placeholderFileContent = (
 interface FileTabsShellRowProps {
   filenames: string[];
   initialActiveFilename: string | null;
+  pinnedFilename?: string;
 }
 
 function FileTabsShellInner({
   filenames,
   initialActiveFilename,
+  pinnedFilename,
 }: FileTabsShellRowProps) {
   const setActiveStaticPanel = useSetAtom(activeSecondaryPanelAtom);
   const [openFiles, setOpenFiles] = useState<string[]>(filenames);
@@ -133,10 +117,14 @@ function FileTabsShellInner({
     initialActiveFilename,
   );
 
-  const handleCloseFile = useCallback((filename: string) => {
-    setOpenFiles((prev) => prev.filter((name) => name !== filename));
-    setActiveFilename((prev) => (prev === filename ? null : prev));
-  }, []);
+  const handleCloseFile = useCallback(
+    (filename: string) => {
+      if (filename === pinnedFilename) return;
+      setOpenFiles((prev) => prev.filter((name) => name !== filename));
+      setActiveFilename((prev) => (prev === filename ? null : prev));
+    },
+    [pinnedFilename],
+  );
 
   const fileTabs = useMemo<SecondaryPanelFileTab[]>(
     () =>
@@ -144,10 +132,11 @@ function FileTabsShellInner({
         id: filename,
         filename,
         isActive: filename === activeFilename,
+        isPinned: filename === pinnedFilename,
         onSelect: () => setActiveFilename(filename),
         onClose: () => handleCloseFile(filename),
       })),
-    [openFiles, activeFilename, handleCloseFile],
+    [openFiles, activeFilename, handleCloseFile, pinnedFilename],
   );
 
   return (
@@ -156,7 +145,6 @@ function FileTabsShellInner({
         canUseGitUi
         defaultMergeBaseBranch="main"
         environmentId={undefined}
-        isManagerThread={false}
         metadataContent={placeholderInfoContent}
         fileTabs={fileTabs}
         fileTabContent={activeFilename ? placeholderFileContent : null}
@@ -192,25 +180,9 @@ export function Overview() {
       </StoryRow>
       <StoryRow
         label="manager thread, info tab"
-        hint="tab strip shows Info + Workspace (no Diff for managers)"
+        hint="no Diff for managers; workspace tree is rendered inside the info tab body"
       >
-        <ShellRow
-          initialPanel="thread-info"
-          isManagerThread
-          showThreadStorageTab
-          showGitDiffTab={false}
-        />
-      </StoryRow>
-      <StoryRow
-        label="manager thread, workspace tab"
-        hint="Workspace tab active (content is exercised in secondary-panel/Workspace)"
-      >
-        <ShellRow
-          initialPanel="thread-storage"
-          isManagerThread
-          showThreadStorageTab
-          showGitDiffTab={false}
-        />
+        <ShellRow initialPanel="thread-info" showGitDiffTab={false} />
       </StoryRow>
       <StoryRow
         label="git UI disabled"
@@ -238,6 +210,16 @@ export function Overview() {
         <FileTabsShellRow
           filenames={["ThreadSecondaryPanel.tsx", "useGitDiffPanelState.ts"]}
           initialActiveFilename={null}
+        />
+      </StoryRow>
+      <StoryRow
+        label="pinned tab"
+        hint="leftmost tab is pinned (no close X); other tabs render the close affordance as usual"
+      >
+        <FileTabsShellRow
+          filenames={["STATUS.md", "useGitDiffPanelState.ts"]}
+          pinnedFilename="STATUS.md"
+          initialActiveFilename="STATUS.md"
         />
       </StoryRow>
       <StoryRow

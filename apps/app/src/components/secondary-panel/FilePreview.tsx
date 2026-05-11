@@ -1,8 +1,8 @@
-import { type CSSProperties, useMemo, useState } from "react";
+import { type CSSProperties, useMemo } from "react";
 import { File as PierreFile } from "@pierre/diffs/react";
 import type { SupportedLanguages } from "@pierre/diffs";
-import { FileX2 } from "lucide-react";
-import { Button, MarkdownPreview, Skeleton } from "@/components/ui";
+import { FileQuestion, FileX2 } from "lucide-react";
+import { MarkdownPreview, Skeleton } from "@/components/ui";
 import { usePreferredTheme } from "@/hooks/useTheme";
 
 export interface FilePreviewFile {
@@ -13,7 +13,10 @@ export interface FilePreviewFile {
 
 export type FilePreviewState =
   | { kind: "loading" }
-  | { kind: "error" }
+  | { kind: "empty" }
+  | { kind: "not-found" }
+  | { kind: "manager-status-pending" }
+  | { kind: "error"; message?: string }
   | { kind: "ready"; file: FilePreviewFile };
 
 export interface FilePreviewProps {
@@ -58,8 +61,27 @@ function FilePreviewBody({ state }: FilePreviewProps) {
   if (state.kind === "loading") {
     return <FilePreviewLoading />;
   }
+  if (state.kind === "empty") {
+    return <FilePreviewMessage icon="empty" message="Empty file." />;
+  }
+  if (state.kind === "not-found") {
+    return <FilePreviewMessage icon="missing" message="File not found." />;
+  }
+  if (state.kind === "manager-status-pending") {
+    return (
+      <FilePreviewMessage
+        icon={null}
+        message="Manager hasn't written a status yet."
+      />
+    );
+  }
   if (state.kind === "error") {
-    return <FilePreviewError />;
+    return (
+      <FilePreviewMessage
+        icon={state.message === undefined ? "missing" : null}
+        message={state.message ?? "Failed to load file"}
+      />
+    );
   }
   if (isMarkdownFile(state.file.name)) {
     return <MarkdownFilePreview file={state.file} />;
@@ -67,78 +89,8 @@ function FilePreviewBody({ state }: FilePreviewProps) {
   return <FilePreviewCode file={state.file} />;
 }
 
-type MarkdownViewMode = "preview" | "raw";
-
 function MarkdownFilePreview({ file }: { file: FilePreviewFile }) {
-  const [mode, setMode] = useState<MarkdownViewMode>("preview");
-  const rawFile = useMemo<FilePreviewFile>(
-    () => ({ name: file.name, contents: file.contents, lang: "markdown" }),
-    [file.name, file.contents],
-  );
-  return (
-    <div className="flex flex-col">
-      <MarkdownViewModeToggle mode={mode} onModeChange={setMode} />
-      {mode === "preview" ? (
-        <MarkdownPreview content={file.contents} />
-      ) : (
-        <FilePreviewCode file={rawFile} />
-      )}
-    </div>
-  );
-}
-
-function MarkdownViewModeToggle({
-  mode,
-  onModeChange,
-}: {
-  mode: MarkdownViewMode;
-  onModeChange: (mode: MarkdownViewMode) => void;
-}) {
-  return (
-    <div className="mb-2 flex items-center justify-end">
-      <div
-        className="inline-flex items-center gap-0.5 rounded-md border border-border/70 p-0.5"
-        role="tablist"
-        aria-label="Markdown view mode"
-      >
-        <MarkdownViewModeButton
-          label="Preview"
-          isActive={mode === "preview"}
-          onClick={() => onModeChange("preview")}
-        />
-        <MarkdownViewModeButton
-          label="Raw"
-          isActive={mode === "raw"}
-          onClick={() => onModeChange("raw")}
-        />
-      </div>
-    </div>
-  );
-}
-
-function MarkdownViewModeButton({
-  label,
-  isActive,
-  onClick,
-}: {
-  label: string;
-  isActive: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <Button
-      type="button"
-      role="tab"
-      variant="ghost"
-      size="sm"
-      className="h-6 rounded-sm px-2 text-xs text-muted-foreground"
-      onClick={onClick}
-      aria-pressed={isActive}
-      aria-selected={isActive}
-    >
-      {label}
-    </Button>
-  );
+  return <MarkdownPreview content={file.contents} />;
 }
 
 function FilePreviewLoading() {
@@ -154,14 +106,21 @@ function FilePreviewLoading() {
   );
 }
 
-function FilePreviewError() {
+function FilePreviewMessage({
+  icon,
+  message,
+}: {
+  icon: "empty" | "missing" | null;
+  message: string;
+}) {
+  const Icon = icon === "missing" ? FileX2 : icon === "empty" ? FileQuestion : null;
   return (
     <div
-      role="alert"
+      role={icon === "missing" ? "alert" : undefined}
       className="flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-border/70 bg-background/45 px-3 py-8 text-sm text-muted-foreground"
     >
-      <FileX2 className="size-3.5" />
-      <span>Failed to load file</span>
+      {Icon ? <Icon className="size-3.5" /> : null}
+      <span>{message}</span>
     </div>
   );
 }

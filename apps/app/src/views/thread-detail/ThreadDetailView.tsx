@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import type {
   ThreadTimelineLocalFileLink,
@@ -53,6 +53,10 @@ import {
 import { ThreadDetailSecondaryContent } from "./ThreadDetailSecondaryContent";
 import type { HostConnectionNotice } from "./ThreadTimelinePane";
 import { useThreadStorageViewer } from "@/components/secondary-panel/useThreadStorageViewer";
+import { ThreadStorageFilePreview } from "@/components/secondary-panel/ThreadStorageFilePreview";
+import { PINNED_STORAGE_FILE_PATH } from "@/components/secondary-panel/managerStorage";
+import { useManagerStorageBrowser } from "@/components/secondary-panel/useManagerStorageBrowser";
+import type { SecondaryPanelFileTab } from "@/components/secondary-panel/ThreadSecondaryPanel";
 import { useEnvironmentMergeBase } from "@/components/secondary-panel/git-diff/useEnvironmentMergeBase";
 import { useThreadGitActions } from "./useThreadGitActions";
 import { useThreadEnvironmentPromotionActions } from "./useThreadEnvironmentPromotionActions";
@@ -69,6 +73,17 @@ import {
 } from "./threadManagerSelectorOptions";
 
 const EMPTY_MANAGER_THREADS: readonly ThreadListEntry[] = [];
+
+function arePathListsEqual(
+  a: readonly string[],
+  b: readonly string[],
+): boolean {
+  if (a.length !== b.length) return false;
+  for (let index = 0; index < a.length; index += 1) {
+    if (a[index] !== b[index]) return false;
+  }
+  return true;
+}
 
 function buildHostConnectionNotice(
   thread: ThreadWithRuntime,
@@ -126,6 +141,9 @@ export function ThreadDetailView() {
   const managerTimelineView = useStandardManagerTimeline
     ? "standard"
     : undefined;
+  const [openFilePaths, setOpenFilePaths] = useState<string[]>([]);
+  const [activeFilePath, setActiveFilePath] = useState<string | null>(null);
+  const hasDefaultedToPinnedFileRef = useRef(false);
   const {
     isThreadStorageFilePreviewLoading,
     isThreadStorageFilesLoading,
@@ -133,12 +151,80 @@ export function ThreadDetailView() {
     threadStorageFilePreviewError,
     threadStorageFiles,
     threadStorageFilesError,
-    selectedThreadStoragePath,
-    setSelectedThreadStoragePath,
   } = useThreadStorageViewer({
+    activePath: activeFilePath,
     threadId,
     threadType: thread?.type,
   });
+
+  // Pin STATUS.md for manager threads as soon as we know the thread type —
+  // don't wait for the file list to load, so the tab strip and preview render
+  // immediately. If the file later turns out to be missing the prune effect
+  // below cleans up.
+  useEffect(() => {
+    if (!isManagerThread) return;
+    setOpenFilePaths((prev) => {
+      if (prev[0] === PINNED_STORAGE_FILE_PATH) return prev;
+      const withoutPinned = prev.filter(
+        (path) => path !== PINNED_STORAGE_FILE_PATH,
+      );
+      return [PINNED_STORAGE_FILE_PATH, ...withoutPinned];
+    });
+    if (hasDefaultedToPinnedFileRef.current) return;
+    hasDefaultedToPinnedFileRef.current = true;
+    setActiveFilePath((prev) => prev ?? PINNED_STORAGE_FILE_PATH);
+  }, [isManagerThread]);
+
+  // Prune any open tab whose file no longer appears in the latest file list.
+  useEffect(() => {
+    const files = threadStorageFiles?.files;
+    if (!files) return;
+    const known = new Set(files.map((file) => file.path));
+    setOpenFilePaths((prev) => {
+      const next = prev.filter((path) => known.has(path));
+      return arePathListsEqual(next, prev) ? prev : next;
+    });
+    setActiveFilePath((prev) =>
+      prev !== null && !known.has(prev) ? null : prev,
+    );
+  }, [threadStorageFiles?.files]);
+
+  const handleOpenStorageFile = useCallback((path: string) => {
+    setOpenFilePaths((prev) => (prev.includes(path) ? prev : [...prev, path]));
+    setActiveFilePath(path);
+  }, []);
+  const handleCloseStorageFileTab = useCallback((path: string) => {
+    if (path === PINNED_STORAGE_FILE_PATH) return;
+    setOpenFilePaths((prev) => prev.filter((openPath) => openPath !== path));
+    setActiveFilePath((prev) => (prev === path ? null : prev));
+  }, []);
+  const handleActivateStorageFileTab = useCallback((path: string) => {
+    setActiveFilePath(path);
+  }, []);
+  const storageBrowserController = useManagerStorageBrowser({
+    files: threadStorageFiles?.files,
+    onSelectPath: handleOpenStorageFile,
+    selectedPath: activeFilePath,
+  });
+  const fileTabs = useMemo<SecondaryPanelFileTab[] | undefined>(() => {
+    if (!isManagerThread || openFilePaths.length === 0) {
+      return undefined;
+    }
+    return openFilePaths.map((path) => ({
+      id: path,
+      filename: path.split("/").at(-1) ?? path,
+      isActive: path === activeFilePath,
+      isPinned: path === PINNED_STORAGE_FILE_PATH,
+      onSelect: () => handleActivateStorageFileTab(path),
+      onClose: () => handleCloseStorageFileTab(path),
+    }));
+  }, [
+    isManagerThread,
+    openFilePaths,
+    activeFilePath,
+    handleActivateStorageFileTab,
+    handleCloseStorageFileTab,
+  ]);
   const handleUseStandardManagerTimelineChange = useCallback(
     (checked: boolean) => {
       if (!isManagerThread) {
@@ -204,6 +290,13 @@ export function ThreadDetailView() {
       environment?.mergeBaseBranch ?? environment?.defaultBranch ?? undefined,
     environmentId: thread?.environmentId ?? undefined,
   });
+  const handleSecondaryPanelChange = useCallback(
+    (panel: Parameters<typeof openThreadSecondaryPanel>[0]) => {
+      setActiveFilePath(null);
+      openThreadSecondaryPanel(panel);
+    },
+    [openThreadSecondaryPanel],
+  );
   const requestedMergeBaseBranch =
     selectedMergeBaseBranch ??
     environment?.mergeBaseBranch ??
@@ -375,12 +468,6 @@ export function ThreadDetailView() {
       });
     },
     [thread, updateThread],
-  );
-  const handleThreadStoragePathSelect = useCallback(
-    (path: string) => {
-      setSelectedThreadStoragePath(path);
-    },
-    [setSelectedThreadStoragePath],
   );
   const handleOpenTimelineLocalFileLink = useCallback(
     (link: ThreadTimelineLocalFileLink) => {
@@ -589,27 +676,28 @@ export function ThreadDetailView() {
       thread={thread}
     />
   );
-  const threadStorage =
+  const metadataStorage =
     thread.type === "manager"
       ? {
-          filePreview: threadStorageFilePreview,
-          fileError: threadStorageFilePreviewError,
+          controller: storageBrowserController,
           filesError: threadStorageFilesError,
-          files: threadStorageFiles?.files,
           isFilesLoading: isThreadStorageFilesLoading,
-          isFileLoading: isThreadStorageFilePreviewLoading,
-          onSelectPath: handleThreadStoragePathSelect,
-          selectedPath: selectedThreadStoragePath,
-          truncated: threadStorageFiles?.truncated ?? false,
         }
       : undefined;
+  const fileTabContent = activeFilePath ? (
+    <ThreadStorageFilePreview
+      activePath={activeFilePath}
+      error={threadStorageFilePreviewError}
+      filePreview={threadStorageFilePreview}
+      isLoading={isThreadStorageFilePreviewLoading}
+    />
+  ) : undefined;
 
   return (
     <>
       <ThreadDetailSecondaryContent
         footer={composerFooter}
         header={timelineHeader}
-        threadStorage={threadStorage}
         metadata={{
           thread,
           projectId,
@@ -627,6 +715,7 @@ export function ThreadDetailView() {
           isLoadingMergeBaseBranchOptions,
           updateThreadPending:
             updateThread.isPending || updateEnvironment.isPending,
+          storage: metadataStorage,
           onAssignManager: handleAssignManager,
           onMergeBaseBranchChange: handleMergeBaseBranchChange,
           onChangedFileClick: canUseGitUi
@@ -639,7 +728,8 @@ export function ThreadDetailView() {
           canUseGitUi,
           defaultMergeBaseBranch: resolvedDefaultMergeBaseBranch,
           environmentId: thread.environmentId ?? undefined,
-          isManagerThread,
+          fileTabs,
+          fileTabContent,
           onClose: closeThreadSecondaryPanel,
           onCollapse: closeThreadSecondaryPanel,
           onOpenFileInEditor:
@@ -653,9 +743,8 @@ export function ThreadDetailView() {
                   });
                 }
               : undefined,
-          onPanelChange: openThreadSecondaryPanel,
+          onPanelChange: handleSecondaryPanelChange,
           showGitDiffTab: canUseGitUi,
-          showThreadStorageTab: thread.type === "manager",
         }}
         timeline={{
           activeThinking,

@@ -1,10 +1,9 @@
 // @vitest-environment jsdom
 
-import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
+import { cleanup, renderHook, waitFor } from "@testing-library/react";
 import type { FilePreview } from "@/lib/api";
 import * as api from "@/lib/api";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { threadStorageFilesQueryKey } from "@/hooks/queries/query-keys";
 import { DEFAULT_THREAD_STORAGE_FILE_LIST_OPTIONS } from "@/lib/thread-storage-files";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
 import { useThreadStorageViewer } from "./useThreadStorageViewer";
@@ -48,18 +47,16 @@ afterEach(() => {
 });
 
 describe("useThreadStorageViewer", () => {
-  it("defaults manager threads to the first storage file and loads its preview", async () => {
+  it("loads the file list and skips the preview query when no path is active", async () => {
     vi.mocked(api.listThreadStorageFiles).mockResolvedValue(
       makeStorageFiles(["docs/alpha.txt", "docs/beta.txt"]),
-    );
-    vi.mocked(api.getThreadStorageFilePreview).mockImplementation(
-      async (_threadId, path) => makeTextPreview(path),
     );
 
     const { wrapper } = createQueryClientTestHarness();
     const { result } = renderHook(
       () =>
         useThreadStorageViewer({
+          activePath: null,
           threadId: "thread-1",
           threadType: "manager",
         }),
@@ -69,124 +66,19 @@ describe("useThreadStorageViewer", () => {
     await waitFor(() => {
       expect(result.current.threadStorageFiles?.files).toHaveLength(2);
     });
-    await waitFor(() => {
-      expect(result.current.threadStorageFilePreview?.path).toBe(
-        "docs/alpha.txt",
-      );
-    });
-    expect(result.current.selectedThreadStoragePath).toBe("docs/alpha.txt");
 
+    expect(result.current.threadStorageFilePreview).toBeUndefined();
+    expect(api.getThreadStorageFilePreview).not.toHaveBeenCalled();
     expect(api.listThreadStorageFiles).toHaveBeenCalledWith({
       id: "thread-1",
       options: DEFAULT_THREAD_STORAGE_FILE_LIST_OPTIONS,
       signal: expect.any(AbortSignal),
     });
-    expect(api.getThreadStorageFilePreview).toHaveBeenCalledWith(
-      "thread-1",
-      "docs/alpha.txt",
-      expect.any(AbortSignal),
-    );
   });
 
-  it("preserves the selected path when it still exists after file-list updates", async () => {
+  it("loads the preview for the active path", async () => {
     vi.mocked(api.listThreadStorageFiles).mockResolvedValue(
       makeStorageFiles(["docs/alpha.txt", "docs/beta.txt"]),
-    );
-    vi.mocked(api.getThreadStorageFilePreview).mockImplementation(
-      async (_threadId, path) => makeTextPreview(path),
-    );
-
-    const { queryClient, wrapper } = createQueryClientTestHarness();
-    const { result } = renderHook(
-      () =>
-        useThreadStorageViewer({
-          threadId: "thread-1",
-          threadType: "manager",
-        }),
-      { wrapper },
-    );
-
-    await waitFor(() => {
-      expect(result.current.threadStorageFilePreview?.path).toBe(
-        "docs/alpha.txt",
-      );
-    });
-
-    act(() => {
-      result.current.setSelectedThreadStoragePath("docs/beta.txt");
-    });
-
-    await waitFor(() => {
-      expect(result.current.threadStorageFilePreview?.path).toBe(
-        "docs/beta.txt",
-      );
-    });
-
-    act(() => {
-      queryClient.setQueryData(
-        threadStorageFilesQueryKey("thread-1"),
-        makeStorageFiles(["docs/beta.txt", "docs/gamma.txt"]),
-      );
-    });
-
-    await waitFor(() => {
-      expect(result.current.selectedThreadStoragePath).toBe("docs/beta.txt");
-    });
-    expect(result.current.threadStorageFilePreview?.path).toBe("docs/beta.txt");
-  });
-
-  it("clears invalid selections when the file list no longer includes them", async () => {
-    vi.mocked(api.listThreadStorageFiles).mockResolvedValue(
-      makeStorageFiles(["docs/alpha.txt", "docs/beta.txt"]),
-    );
-    vi.mocked(api.getThreadStorageFilePreview).mockImplementation(
-      async (_threadId, path) => makeTextPreview(path),
-    );
-
-    const { queryClient, wrapper } = createQueryClientTestHarness();
-    const { result } = renderHook(
-      () =>
-        useThreadStorageViewer({
-          threadId: "thread-1",
-          threadType: "manager",
-        }),
-      { wrapper },
-    );
-
-    await waitFor(() => {
-      expect(result.current.threadStorageFilePreview?.path).toBe(
-        "docs/alpha.txt",
-      );
-    });
-
-    act(() => {
-      result.current.setSelectedThreadStoragePath("docs/beta.txt");
-    });
-
-    await waitFor(() => {
-      expect(result.current.selectedThreadStoragePath).toBe("docs/beta.txt");
-    });
-
-    act(() => {
-      queryClient.setQueryData(
-        threadStorageFilesQueryKey("thread-1"),
-        makeStorageFiles(["docs/gamma.txt"]),
-      );
-    });
-
-    await waitFor(() => {
-      expect(result.current.selectedThreadStoragePath).toBe("docs/gamma.txt");
-    });
-    await waitFor(() => {
-      expect(result.current.threadStorageFilePreview?.path).toBe(
-        "docs/gamma.txt",
-      );
-    });
-  });
-
-  it("disables storage queries for standard threads", async () => {
-    vi.mocked(api.listThreadStorageFiles).mockResolvedValue(
-      makeStorageFiles(["docs/alpha.txt"]),
     );
     vi.mocked(api.getThreadStorageFilePreview).mockImplementation(
       async (_threadId, path) => makeTextPreview(path),
@@ -196,13 +88,42 @@ describe("useThreadStorageViewer", () => {
     const { result } = renderHook(
       () =>
         useThreadStorageViewer({
+          activePath: "docs/beta.txt",
+          threadId: "thread-1",
+          threadType: "manager",
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => {
+      expect(result.current.threadStorageFilePreview?.path).toBe(
+        "docs/beta.txt",
+      );
+    });
+
+    expect(api.getThreadStorageFilePreview).toHaveBeenCalledWith(
+      "thread-1",
+      "docs/beta.txt",
+      expect.any(AbortSignal),
+    );
+  });
+
+  it("disables storage queries for standard threads", async () => {
+    vi.mocked(api.listThreadStorageFiles).mockResolvedValue(
+      makeStorageFiles(["docs/alpha.txt"]),
+    );
+
+    const { wrapper } = createQueryClientTestHarness();
+    const { result } = renderHook(
+      () =>
+        useThreadStorageViewer({
+          activePath: "docs/alpha.txt",
           threadId: "thread-1",
           threadType: "standard",
         }),
       { wrapper },
     );
 
-    expect(result.current.selectedThreadStoragePath).toBeNull();
     expect(result.current.threadStorageFiles).toBeUndefined();
     expect(result.current.threadStorageFilePreview).toBeUndefined();
     expect(api.listThreadStorageFiles).not.toHaveBeenCalled();
@@ -217,14 +138,12 @@ describe("useThreadStorageViewer", () => {
     vi.mocked(api.listThreadStorageFiles).mockResolvedValue(
       makeStorageFiles(["docs/notes.md"]),
     );
-    vi.mocked(api.getThreadStorageFilePreview).mockImplementation(
-      async (_threadId, path) => makeTextPreview(path),
-    );
 
     const { wrapper } = createQueryClientTestHarness();
     const { result } = renderHook(
       () =>
         useThreadStorageViewer({
+          activePath: null,
           fileListOptions,
           threadId: "thread-1",
           threadType: "manager",
@@ -251,6 +170,7 @@ describe("useThreadStorageViewer", () => {
     const { result } = renderHook(
       () =>
         useThreadStorageViewer({
+          activePath: null,
           threadId: "thread-1",
           threadType: "manager",
         }),

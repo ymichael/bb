@@ -187,6 +187,13 @@ interface ResponsiveDrawerShellProps {
   srLabel?: string;
   /** Class name on the DrawerContent wrapper. */
   contentClassName?: string;
+  /**
+   * When true, the drawer can only be dragged via the handle bar. Pointer
+   * events on the content area are not consumed by vaul, which would
+   * otherwise call setPointerCapture on the click target and break clicks
+   * inside web components (e.g. Pierre tree's shadow DOM).
+   */
+  handleOnly?: boolean;
   children: React.ReactNode;
 }
 
@@ -195,10 +202,11 @@ export function ResponsiveDrawerShell({
   onOpenChange,
   srLabel,
   contentClassName,
+  handleOnly,
   children,
 }: ResponsiveDrawerShellProps) {
   return (
-    <Drawer open={open} onOpenChange={onOpenChange}>
+    <Drawer open={open} onOpenChange={onOpenChange} handleOnly={handleOnly}>
       <DrawerContent className={contentClassName}>
         {srLabel !== undefined ? (
           <DrawerTitle className="sr-only">{srLabel}</DrawerTitle>

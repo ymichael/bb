@@ -1,0 +1,1 @@
+export const PINNED_STORAGE_FILE_PATH = "STATUS.md";

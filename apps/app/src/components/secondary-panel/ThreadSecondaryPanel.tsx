@@ -2,7 +2,6 @@ import { type ReactNode, useMemo } from "react";
 import { useAtomValue } from "jotai";
 import {
   FileDiff as FileDiffIcon,
-  FolderOpen,
   GripVertical,
   Info,
   PanelRight,
@@ -78,6 +77,7 @@ export interface SecondaryPanelFileTab {
   id: string;
   filename: string;
   isActive: boolean;
+  isPinned?: boolean;
   onSelect: () => void;
   onClose: () => void;
 }
@@ -86,12 +86,9 @@ export interface ThreadSecondaryPanelProps {
   canUseGitUi: boolean;
   defaultMergeBaseBranch?: string;
   environmentId?: string;
-  isManagerThread: boolean;
   metadataContent: ReactNode;
-  threadStorageContent?: ReactNode;
   fileTabs?: SecondaryPanelFileTab[];
   fileTabContent?: ReactNode;
-  showThreadStorageTab?: boolean;
   showGitDiffTab?: boolean;
   onPanelChange: (panel: ThreadSecondaryPanelTab) => void;
   onCollapse: () => void;
@@ -109,12 +106,9 @@ export function ThreadSecondaryPanel({
   canUseGitUi,
   defaultMergeBaseBranch,
   environmentId,
-  isManagerThread,
   metadataContent,
-  threadStorageContent,
   fileTabs,
   fileTabContent,
-  showThreadStorageTab = false,
   showGitDiffTab = true,
   onPanelChange,
   onCollapse,
@@ -139,11 +133,8 @@ export function ThreadSecondaryPanel({
   const activePanel =
     !canUseGitUi && rawActivePanel === "git-diff"
       ? "thread-info"
-      : !isManagerThread && rawActivePanel === "thread-storage"
-        ? "thread-info"
-        : rawActivePanel;
+      : rawActivePanel;
   const isDiffPanelActive = activePanel === "git-diff";
-  const isThreadStoragePanelActive = activePanel === "thread-storage";
   const {
     currentGitDiff,
     gitDiffError,
@@ -233,32 +224,12 @@ export function ThreadSecondaryPanel({
                 <FileDiffIcon className="size-3.5" />
               </Button>
             ) : null}
-            {showThreadStorageTab ? (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-7 w-7 shrink-0 rounded-md p-0 text-muted-foreground"
-                onClick={() => onPanelChange("thread-storage")}
-                aria-label="Show thread storage panel"
-                aria-pressed={isThreadStoragePanelActive && !hasActiveFileTab}
-                title="Storage"
-              >
-                <FolderOpen className="size-3.5" />
-              </Button>
-            ) : null}
             {fileTabs && fileTabs.length > 0 ? (
-              <>
-                <div
-                  aria-hidden
-                  className="mx-1 h-4 w-px shrink-0 bg-border/70"
-                />
-                <div className="flex min-w-0 items-center gap-1 overflow-x-auto">
-                  {fileTabs.map((tab) => (
-                    <FileTabPill key={tab.id} tab={tab} />
-                  ))}
-                </div>
-              </>
+              <div className="flex min-w-0 items-center gap-1 overflow-x-auto">
+                {fileTabs.map((tab) => (
+                  <FileTabPill key={tab.id} tab={tab} />
+                ))}
+              </div>
             ) : null}
           </div>
           <Button
@@ -291,84 +262,85 @@ export function ThreadSecondaryPanel({
       </div>
       <div
         className={cn(
-          "min-h-0 flex-1 overflow-x-hidden overflow-y-auto bg-background px-4 pb-3",
+          "flex min-h-0 flex-1 flex-col overflow-hidden bg-background px-4 pb-3",
           isDiffPanelActive && !hasActiveFileTab ? "pt-0" : "pt-1",
         )}
       >
         {hasActiveFileTab ? (
-          (fileTabContent ?? (
-            <p className="rounded-lg border border-dashed border-border/70 bg-background/45 px-3 py-6 text-center text-sm text-muted-foreground">
-              No file preview content provided.
-            </p>
-          ))
+          <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
+            {fileTabContent ?? (
+              <p className="rounded-lg border border-dashed border-border/70 bg-background/45 px-3 py-6 text-center text-sm text-muted-foreground">
+                No file preview content provided.
+              </p>
+            )}
+          </div>
         ) : isDiffPanelActive ? (
-          isPreparingGitDiff ? (
-            <ThreadDiffSkeleton />
-          ) : gitDiffError ? (
-            <p className="rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-xs text-destructive">
-              {gitDiffError instanceof Error
-                ? gitDiffError.message
-                : "Failed to load git diff"}
-            </p>
-          ) : threadGitDiff && hasCurrentGitDiff ? (
-            <>
-              {parsedGitDiffFileEntries.length > 0 ? (
-                <div className="space-y-2">
-                  {parsedGitDiffFileEntries.map(({ key, fileDiff }) => {
-                    const isCollapsed = collapsedGitDiffFileKeys.has(key);
-                    const hasQueuedFileRender =
-                      queuedGitDiffFileRenderKeys.has(key);
-                    const isRendering =
-                      !hasQueuedFileRender || loadingGitDiffFileKeys.has(key);
+          <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
+            {isPreparingGitDiff ? (
+              <ThreadDiffSkeleton />
+            ) : gitDiffError ? (
+              <p className="rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+                {gitDiffError instanceof Error
+                  ? gitDiffError.message
+                  : "Failed to load git diff"}
+              </p>
+            ) : threadGitDiff && hasCurrentGitDiff ? (
+              <>
+                {parsedGitDiffFileEntries.length > 0 ? (
+                  <div className="space-y-2">
+                    {parsedGitDiffFileEntries.map(({ key, fileDiff }) => {
+                      const isCollapsed = collapsedGitDiffFileKeys.has(key);
+                      const hasQueuedFileRender =
+                        queuedGitDiffFileRenderKeys.has(key);
+                      const isRendering =
+                        !hasQueuedFileRender ||
+                        loadingGitDiffFileKeys.has(key);
 
-                    return (
-                      <GitDiffCard
-                        key={key}
-                        fileDiff={fileDiff}
-                        diffViewOptions={gitDiffViewOptions}
-                        onOpenFileInEditor={onOpenFileInEditor}
-                        isCollapsed={isCollapsed}
-                        onToggleCollapsed={() =>
-                          toggleGitDiffFileCollapsed(key)
-                        }
-                        stickyHeader
-                        isRendering={isRendering}
-                        cardRef={(element) => setGitDiffFileRef(key, element)}
-                        onRequestFileContents={onRequestFileContents}
-                      />
-                    );
-                  })}
-                  {isParsingGitDiffFiles ? (
-                    <div className="rounded-lg border border-border/70 bg-background/70 px-3 py-3">
-                      <div className="space-y-1.5">
-                        <Skeleton className="h-3 w-52 max-w-full rounded-sm" />
-                        <Skeleton className="h-3 w-5/6 rounded-sm" />
+                      return (
+                        <GitDiffCard
+                          key={key}
+                          fileDiff={fileDiff}
+                          diffViewOptions={gitDiffViewOptions}
+                          onOpenFileInEditor={onOpenFileInEditor}
+                          isCollapsed={isCollapsed}
+                          onToggleCollapsed={() =>
+                            toggleGitDiffFileCollapsed(key)
+                          }
+                          stickyHeader
+                          isRendering={isRendering}
+                          cardRef={(element) =>
+                            setGitDiffFileRef(key, element)
+                          }
+                          onRequestFileContents={onRequestFileContents}
+                        />
+                      );
+                    })}
+                    {isParsingGitDiffFiles ? (
+                      <div className="rounded-lg border border-border/70 bg-background/70 px-3 py-3">
+                        <div className="space-y-1.5">
+                          <Skeleton className="h-3 w-52 max-w-full rounded-sm" />
+                          <Skeleton className="h-3 w-5/6 rounded-sm" />
+                        </div>
                       </div>
-                    </div>
-                  ) : null}
-                </div>
-              ) : (
-                <pre className="overflow-auto whitespace-pre rounded-lg border border-border/70 bg-background/70 p-3 font-mono text-xs text-foreground">
-                  {threadGitDiff.diff}
-                </pre>
-              )}
-              {threadGitDiff.truncated ? (
-                <p className="pt-2 text-xs text-muted-foreground">
-                  Diff output was truncated for display.
-                </p>
-              ) : null}
-            </>
-          ) : (
-            <p className="rounded-lg border border-dashed border-border/70 bg-background/45 px-3 py-6 text-center text-sm text-muted-foreground">
-              No diff to display.
-            </p>
-          )
-        ) : isThreadStoragePanelActive ? (
-          (threadStorageContent ?? (
-            <p className="rounded-lg border border-dashed border-border/70 bg-background/45 px-3 py-6 text-center text-sm text-muted-foreground">
-              No thread storage available.
-            </p>
-          ))
+                    ) : null}
+                  </div>
+                ) : (
+                  <pre className="overflow-auto whitespace-pre rounded-lg border border-border/70 bg-background/70 p-3 font-mono text-xs text-foreground">
+                    {threadGitDiff.diff}
+                  </pre>
+                )}
+                {threadGitDiff.truncated ? (
+                  <p className="pt-2 text-xs text-muted-foreground">
+                    Diff output was truncated for display.
+                  </p>
+                ) : null}
+              </>
+            ) : (
+              <p className="rounded-lg border border-dashed border-border/70 bg-background/45 px-3 py-6 text-center text-sm text-muted-foreground">
+                No diff to display.
+              </p>
+            )}
+          </div>
         ) : (
           metadataContent
         )}
@@ -424,19 +396,24 @@ function FileTabPill({ tab }: { tab: SecondaryPanelFileTab }) {
         onClick={tab.onSelect}
         aria-pressed={tab.isActive}
         title={tab.filename}
-        className="flex h-full min-w-0 items-center rounded-l-md pl-2 pr-1 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+        className={cn(
+          "flex h-full min-w-0 items-center rounded-l-md pl-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+          tab.isPinned ? "pr-2 rounded-r-md" : "pr-1",
+        )}
       >
         <span className="max-w-[160px] truncate">{tab.filename}</span>
       </button>
-      <button
-        type="button"
-        onClick={tab.onClose}
-        aria-label={`Close ${tab.filename}`}
-        title="Close tab"
-        className="mr-1 ml-0.5 inline-flex size-4 shrink-0 items-center justify-center rounded opacity-70 transition-opacity hover:bg-muted-foreground/15 hover:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:opacity-100"
-      >
-        <X className="size-3" />
-      </button>
+      {tab.isPinned ? null : (
+        <button
+          type="button"
+          onClick={tab.onClose}
+          aria-label={`Close ${tab.filename}`}
+          title="Close tab"
+          className="mr-1 ml-0.5 inline-flex size-4 shrink-0 items-center justify-center rounded opacity-70 transition-opacity hover:bg-muted-foreground/15 hover:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:opacity-100"
+        >
+          <X className="size-3" />
+        </button>
+      )}
     </div>
   );
 }

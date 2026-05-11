@@ -1,20 +1,17 @@
 import { type ComponentProps, type ReactNode, useEffect, useRef } from "react";
 import { Panel, PanelGroup } from "react-resizable-panels";
-import type { WorkspaceFile } from "@bb/server-contract";
 import { ResponsiveDrawerShell } from "@/components/ui";
 import { useIsCompactViewport } from "@/components/ui";
 import { useAtomValue } from "jotai";
 import { useIsSecondaryPanelOpen } from "@/lib/thread-secondary-panel";
 import { ThreadSecondaryPanel } from "@/components/secondary-panel/ThreadSecondaryPanel";
 import { secondaryPanelWidthPercentAtom } from "@/components/secondary-panel/threadSecondaryPanelAtoms";
-import { ManagerThreadStorageBrowser } from "@/components/secondary-panel/ManagerThreadStorageBrowser";
 import {
   ThreadMetadataContent,
   hasAnyThreadMetadata,
   type ThreadMetadataContentProps,
 } from "@/components/secondary-panel/ThreadMetadataContent";
 import { ThreadTimelinePane } from "./ThreadTimelinePane";
-import type { FilePreview } from "@/lib/file-preview";
 
 const CLOSED_TIMELINE_PANEL_SIZE_PERCENT = 100;
 
@@ -24,27 +21,12 @@ type ThreadTimelinePaneProps = Omit<
 >;
 type ThreadSecondaryPanelProps = Omit<
   ComponentProps<typeof ThreadSecondaryPanel>,
-  "threadStorageContent" | "metadataContent" | "renderAsDrawer"
+  "metadataContent" | "renderAsDrawer"
 >;
-
-type ThreadStoragePathSelectHandler = (path: string) => void;
-
-interface ThreadDetailThreadStorageProps {
-  fileError?: Error | null;
-  filePreview?: FilePreview;
-  filesError?: Error | null;
-  files?: readonly WorkspaceFile[];
-  isFilesLoading: boolean;
-  isFileLoading: boolean;
-  onSelectPath: ThreadStoragePathSelectHandler;
-  selectedPath: string | null;
-  truncated: boolean;
-}
 
 interface ThreadDetailSecondaryContentProps {
   footer: ReactNode;
   header: ReactNode;
-  threadStorage?: ThreadDetailThreadStorageProps;
   metadata: ThreadMetadataContentProps;
   secondaryPanel: ThreadSecondaryPanelProps;
   timeline: ThreadTimelinePaneProps;
@@ -53,7 +35,6 @@ interface ThreadDetailSecondaryContentProps {
 export function ThreadDetailSecondaryContent({
   footer,
   header,
-  threadStorage,
   metadata,
   secondaryPanel,
   timeline,
@@ -79,21 +60,19 @@ export function ThreadDetailSecondaryContent({
   }, [renderAsDrawer, isSecondaryPanelOpen, onClose]);
 
   const metadataContent = hasAnyThreadMetadata(metadata) ? (
-    <ThreadMetadataContent {...metadata} />
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <ThreadMetadataContent {...metadata} />
+    </div>
   ) : (
     <div className="pt-1 text-sm text-muted-foreground">
       No thread details available.
     </div>
   );
-  const threadStorageContent = threadStorage ? (
-    <ManagerThreadStorageBrowser {...threadStorage} />
-  ) : undefined;
   const inlineSecondaryPanelContent = !renderAsDrawer ? (
     <ThreadSecondaryPanel
       {...secondaryPanel}
       renderAsDrawer={false}
       metadataContent={metadataContent}
-      threadStorageContent={threadStorageContent}
     />
   ) : null;
   const drawerSecondaryPanelContent = renderAsDrawer ? (
@@ -101,7 +80,6 @@ export function ThreadDetailSecondaryContent({
       {...secondaryPanel}
       renderAsDrawer={true}
       metadataContent={metadataContent}
-      threadStorageContent={threadStorageContent}
     />
   ) : null;
 
@@ -134,6 +112,12 @@ export function ThreadDetailSecondaryContent({
           }}
           srLabel="Thread details"
           contentClassName="h-[92dvh] max-h-[92dvh]"
+          // `handleOnly` keeps vaul from binding its pointerdown handler on
+          // the drawer body. Without it, vaul calls setPointerCapture on the
+          // click target, which captures the pointer on Pierre tree's host
+          // element and prevents the click from reaching rows inside the
+          // shadow DOM. The drag handle bar still drags the drawer.
+          handleOnly
         >
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
             {drawerSecondaryPanelContent}

@@ -12,38 +12,13 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { WorkspaceFile } from "@bb/server-contract";
 import { setPreferredTheme } from "@/hooks/useTheme";
-import type { FilePreview } from "@/lib/file-preview";
-import {
-  MARKDOWN_PREVIEW_RENDER_MAX_CHARS,
-  ManagerThreadStorageBrowser,
-} from "./ManagerThreadStorageBrowser";
-
-interface MakeTextPreviewArgs {
-  content: string;
-  mimeType?: string;
-  path: string;
-}
-
-type SelectPathHandler = (path: string) => void;
-
-interface RenderBrowserArgs {
-  fileError?: Error | null;
-  filePreview?: FilePreview;
-  files?: readonly WorkspaceFile[];
-  filesError?: Error | null;
-  isFileLoading?: boolean;
-  isFilesLoading?: boolean;
-  onSelectPath?: SelectPathHandler;
-  selectedPath?: string | null;
-  truncated?: boolean;
-}
+import { ManagerThreadStorageBrowser } from "./ManagerThreadStorageBrowser";
+import { useManagerStorageBrowser } from "./useManagerStorageBrowser";
 
 interface TreeResetCall {
   initialExpandedPaths: readonly string[];
   paths: readonly string[];
 }
-
-type ClipboardWriteText = (text: string) => Promise<void>;
 
 const treeResetCalls: TreeResetCall[] = vi.hoisted(() => []);
 
@@ -208,41 +183,44 @@ function makeFiles(paths: readonly string[]): WorkspaceFile[] {
   }));
 }
 
-function makeTextPreview(args: MakeTextPreviewArgs): FilePreview {
-  return {
-    content: args.content,
-    kind: "text",
-    mimeType: args.mimeType ?? "text/plain",
-    name: args.path.split("/").at(-1) ?? args.path,
-    path: args.path,
-    url: `/preview/${encodeURIComponent(args.path)}`,
-  };
-}
-
-function renderBrowser(args: RenderBrowserArgs) {
-  return render(
-    <ManagerThreadStorageBrowser
-      fileError={args.fileError ?? null}
-      filePreview={args.filePreview}
-      files={args.files}
-      filesError={args.filesError ?? null}
-      isFileLoading={args.isFileLoading ?? false}
-      isFilesLoading={args.isFilesLoading ?? false}
-      onSelectPath={args.onSelectPath ?? (() => {})}
-      selectedPath={args.selectedPath ?? null}
-      truncated={args.truncated ?? false}
-    />,
+function Harness({
+  files,
+  filesError,
+  isFilesLoading,
+  onSelectPath,
+  initialSelectedPath,
+}: {
+  files?: readonly WorkspaceFile[];
+  filesError?: Error | null;
+  isFilesLoading?: boolean;
+  onSelectPath?: (path: string) => void;
+  initialSelectedPath?: string | null;
+}) {
+  const [selectedPath, setSelectedPath] = useState<string | null>(
+    initialSelectedPath ?? null,
   );
-}
-
-function installClipboardWriteTextMock() {
-  const writeText = vi.fn<ClipboardWriteText>();
-  writeText.mockResolvedValue(undefined);
-  Object.defineProperty(navigator, "clipboard", {
-    configurable: true,
-    value: { writeText },
+  const controller = useManagerStorageBrowser({
+    files,
+    onSelectPath: (path) => {
+      setSelectedPath(path);
+      onSelectPath?.(path);
+    },
+    selectedPath,
   });
-  return writeText;
+  return (
+    <>
+      <button
+        type="button"
+        aria-label="Open search"
+        onClick={controller.openSearch}
+      />
+      <ManagerThreadStorageBrowser
+        controller={controller}
+        filesError={filesError ?? null}
+        isFilesLoading={isFilesLoading ?? false}
+      />
+    </>
+  );
 }
 
 afterEach(() => {
@@ -254,49 +232,37 @@ afterEach(() => {
 });
 
 describe("ManagerThreadStorageBrowser", () => {
-  it("renders nested tree paths and selects files", async () => {
+  it("renders tree paths and reports selection through onSelectPath", async () => {
     const onSelectPath = vi.fn();
-    renderBrowser({
-      filePreview: makeTextPreview({
-        content: "Guide",
-        path: "docs/guide.md",
-      }),
-      files: makeFiles(["README.md", "docs/guide.md", "docs/reports/q1.md"]),
-      onSelectPath,
-      selectedPath: "docs/guide.md",
-    });
-
-    expect(await screen.findByRole("treeitem", { name: "docs/" })).toBeTruthy();
-    expect(
-      screen.getByRole("treeitem", { name: "docs/reports/" }),
-    ).toBeTruthy();
-
-    fireEvent.click(
-      screen.getByRole("treeitem", { name: "docs/reports/q1.md" }),
+    render(
+      <Harness
+        files={makeFiles(["README.md", "docs/guide.md", "docs/reports/q1.md"])}
+        onSelectPath={onSelectPath}
+      />,
     );
 
-    expect(onSelectPath).toHaveBeenCalledWith("docs/reports/q1.md");
+    expect(await screen.findByRole("treeitem", { name: "README.md" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("treeitem", { name: "README.md" }));
+    expect(onSelectPath).toHaveBeenCalledWith("README.md");
   });
 
-  it("resets the tree with file paths and derived directory expansion", async () => {
-    renderBrowser({
-      files: makeFiles(["README.md", "docs/guide.md", "docs/reports/q1.md"]),
-      selectedPath: "docs/guide.md",
-    });
+  it("resets the tree with file paths and no auto-expanded directories by default", async () => {
+    render(
+      <Harness
+        files={makeFiles(["README.md", "docs/guide.md", "docs/reports/q1.md"])}
+      />,
+    );
 
-    expect(await screen.findByRole("treeitem", { name: "docs/" })).toBeTruthy();
+    await screen.findByRole("treeitem", { name: "README.md" });
 
     expect(treeResetCalls.at(-1)).toEqual({
-      initialExpandedPaths: ["docs/", "docs/reports/"],
+      initialExpandedPaths: [],
       paths: ["README.md", "docs/guide.md", "docs/reports/q1.md"],
     });
   });
 
   it("syncs the shadow-root tree color-scheme with the selected theme", async () => {
-    renderBrowser({
-      files: makeFiles(["README.md"]),
-      selectedPath: null,
-    });
+    render(<Harness files={makeFiles(["README.md"])} />);
 
     const tree = await screen.findByRole("tree", {
       name: "Thread storage file tree",
@@ -313,79 +279,15 @@ describe("ManagerThreadStorageBrowser", () => {
     });
   });
 
-  it("copies the selected relative path", async () => {
-    const writeText = installClipboardWriteTextMock();
-    renderBrowser({
-      filePreview: makeTextPreview({
-        content: "Guide",
-        path: "docs/guide.md",
-      }),
-      files: makeFiles(["docs/guide.md"]),
-      selectedPath: "docs/guide.md",
-    });
+  it("filters loaded paths and auto-expands matching directories when searching", async () => {
+    render(
+      <Harness
+        files={makeFiles(["docs/guide.md", "reports/q1.md"])}
+      />,
+    );
 
-    fireEvent.click(screen.getByRole("button", { name: "Copy relative path" }));
-
-    await waitFor(() => {
-      expect(writeText).toHaveBeenCalledWith("docs/guide.md");
-    });
-  });
-
-  it("renders Markdown previews without raw HTML DOM", () => {
-    const { container } = renderBrowser({
-      filePreview: makeTextPreview({
-        content: "# Plan\n\n<script>alert('x')</script>",
-        mimeType: "text/markdown",
-        path: "docs/plan.md",
-      }),
-      files: makeFiles(["docs/plan.md"]),
-      selectedPath: "docs/plan.md",
-    });
-
-    expect(screen.getByRole("heading", { name: "Plan" })).toBeTruthy();
-    expect(container.querySelector("script")).toBeNull();
-    expect(container.textContent).toContain("<script>alert('x')</script>");
-  });
-
-  it("falls back for Markdown above the render threshold", () => {
-    renderBrowser({
-      filePreview: makeTextPreview({
-        content: "#".repeat(MARKDOWN_PREVIEW_RENDER_MAX_CHARS + 1),
-        mimeType: "text/markdown",
-        path: "docs/huge.md",
-      }),
-      files: makeFiles(["docs/huge.md"]),
-      selectedPath: "docs/huge.md",
-    });
-
-    expect(screen.getByText(/Markdown rendering is disabled/u)).toBeTruthy();
-    expect(screen.getByLabelText("Markdown source")).toBeTruthy();
-  });
-
-  it("truncates large non-Markdown source previews", () => {
-    renderBrowser({
-      filePreview: makeTextPreview({
-        content: "a".repeat(200_001),
-        mimeType: "text/plain",
-        path: "logs/output.txt",
-      }),
-      files: makeFiles(["logs/output.txt"]),
-      selectedPath: "logs/output.txt",
-    });
-
-    expect(
-      screen.getByText("Showing the first 200,000 characters as source."),
-    ).toBeTruthy();
-    expect(screen.getByLabelText("Source").textContent?.length).toBe(200_000);
-  });
-
-  it("filters loaded paths with local search", async () => {
-    renderBrowser({
-      files: makeFiles(["docs/guide.md", "reports/q1.md"]),
-      selectedPath: "docs/guide.md",
-    });
-
-    fireEvent.change(screen.getByLabelText("Search storage files"), {
+    fireEvent.click(screen.getByLabelText("Open search"));
+    fireEvent.change(screen.getByLabelText("Search files"), {
       target: { value: "reports" },
     });
 
@@ -395,5 +297,33 @@ describe("ManagerThreadStorageBrowser", () => {
     expect(
       screen.queryByRole("treeitem", { name: "docs/guide.md" }),
     ).toBeNull();
+
+    expect(treeResetCalls.at(-1)).toEqual({
+      initialExpandedPaths: ["reports/"],
+      paths: ["reports/q1.md"],
+    });
+  });
+
+  it("shows an error message when filesError is set", () => {
+    render(
+      <Harness
+        files={[]}
+        filesError={new Error("Failed to load file list.")}
+      />,
+    );
+
+    expect(screen.getByText("Failed to load file list.")).toBeTruthy();
+  });
+
+  it("shows a loading state while files are loading with no data", () => {
+    render(<Harness isFilesLoading />);
+
+    expect(screen.getByText("Loading files...")).toBeTruthy();
+  });
+
+  it("shows an empty state when there are no files", () => {
+    render(<Harness files={[]} />);
+
+    expect(screen.getByText("No files yet.")).toBeTruthy();
   });
 });

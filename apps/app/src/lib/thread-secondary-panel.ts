@@ -9,12 +9,8 @@ const THREAD_SECONDARY_PANEL_QUERY_KEY = "secondaryPanel";
 const THREAD_SECONDARY_PANEL_STORAGE_KEY = "bb.thread.secondaryPanel";
 const THREAD_DIFF_PANEL_QUERY_VALUE = "git-diff";
 const THREAD_INFO_PANEL_QUERY_VALUE = "thread-info";
-const THREAD_STORAGE_PANEL_QUERY_VALUE = "thread-storage";
 
-export type ThreadSecondaryPanel =
-  | "git-diff"
-  | "thread-info"
-  | "thread-storage";
+export type ThreadSecondaryPanel = "git-diff" | "thread-info";
 
 function decodeThreadSecondaryPanel(
   value: string | null,
@@ -24,8 +20,6 @@ function decodeThreadSecondaryPanel(
       return "git-diff";
     case THREAD_INFO_PANEL_QUERY_VALUE:
       return "thread-info";
-    case THREAD_STORAGE_PANEL_QUERY_VALUE:
-      return "thread-storage";
     default:
       return null;
   }

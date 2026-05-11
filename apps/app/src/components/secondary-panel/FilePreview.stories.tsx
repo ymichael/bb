@@ -6,9 +6,11 @@ export default {
   title: "secondary-panel/File preview",
 };
 
+// Mirror the secondary panel's surface: bg-background and the same horizontal
+// padding the panel uses for its content area (px-4 pb-3 pt-1).
 function PreviewStage({ children }: { children: ReactNode }) {
   return (
-    <div className="flex h-[360px] w-full max-w-[640px] min-w-0 flex-col overflow-hidden rounded-md border border-border/70 bg-background p-3">
+    <div className="flex h-[360px] w-full max-w-[640px] min-w-0 flex-col overflow-hidden bg-background px-4 pb-3 pt-1">
       <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
     </div>
   );
@@ -114,8 +116,32 @@ export function Overview() {
         </PreviewStage>
       </StoryRow>
       <StoryRow
+        label="empty file"
+        hint="Content is an empty string — show an explicit empty state instead of a blank surface"
+      >
+        <PreviewStage>
+          <FilePreview state={{ kind: "empty" }} />
+        </PreviewStage>
+      </StoryRow>
+      <StoryRow
         label="file not found"
-        hint="One-line inline indicator when the file can't be loaded"
+        hint="Preview fetch returned 404; the file isn't on disk"
+      >
+        <PreviewStage>
+          <FilePreview state={{ kind: "not-found" }} />
+        </PreviewStage>
+      </StoryRow>
+      <StoryRow
+        label="manager status pending"
+        hint="STATUS.md doesn't exist yet for a freshly-created manager — informational copy, no icon"
+      >
+        <PreviewStage>
+          <FilePreview state={{ kind: "manager-status-pending" }} />
+        </PreviewStage>
+      </StoryRow>
+      <StoryRow
+        label="failed to load"
+        hint="Preview fetch failed for some other reason (network, 500, etc.)"
       >
         <PreviewStage>
           <FilePreview state={{ kind: "error" }} />

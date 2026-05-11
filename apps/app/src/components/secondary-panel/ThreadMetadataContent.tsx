@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { Check, ChevronDown, Copy, X } from "lucide-react";
+import { Check, ChevronDown, Copy, Search, X } from "lucide-react";
+import { ManagerThreadStorageBrowser } from "./ManagerThreadStorageBrowser";
+import type { ManagerStorageBrowserController } from "./useManagerStorageBrowser";
 import { Link } from "react-router-dom";
 import { copyToClipboardWithToast } from "@/lib/clipboard";
 import type {
@@ -466,6 +468,51 @@ export function ChangedFilesRow({
   );
 }
 
+export interface ManagerWorkspaceRowProps {
+  controller: ManagerStorageBrowserController;
+  filesError?: Error | null;
+  isFilesLoading: boolean;
+}
+
+export function ManagerWorkspaceRow({
+  controller,
+  filesError,
+  isFilesLoading,
+}: ManagerWorkspaceRowProps) {
+  const { isSearchOpen, openSearch } = controller;
+  return (
+    <DetailRow
+      orientation="vertical"
+      className="min-h-0 flex-1"
+      valueClassName="min-h-0 flex-1 overflow-hidden"
+      labelClassName="flex items-center justify-between gap-2"
+      label={
+        <>
+          <span>Manager workspace</span>
+          {isSearchOpen ? null : (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-5 w-5 shrink-0 rounded-md p-0 text-muted-foreground"
+              aria-label="Search files"
+              onClick={openSearch}
+            >
+              <Search className="size-3.5" />
+            </Button>
+          )}
+        </>
+      }
+    >
+      <ManagerThreadStorageBrowser
+        controller={controller}
+        filesError={filesError}
+        isFilesLoading={isFilesLoading}
+      />
+    </DetailRow>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Composition + helper
 // ---------------------------------------------------------------------------
@@ -486,6 +533,7 @@ export interface ThreadMetadataContentProps {
   mergeBaseBranchOptions: readonly string[] | undefined;
   isLoadingMergeBaseBranchOptions: boolean;
   updateThreadPending: boolean;
+  storage?: ManagerWorkspaceRowProps;
   onAssignManager: (parentThreadId: string | null) => void;
   onMergeBaseBranchChange: (branch: string) => void;
   onChangedFileClick?: (file: WorkspaceChangedFile) => void;
@@ -581,14 +629,16 @@ export function ThreadMetadataContent(props: ThreadMetadataContentProps) {
     mergeBaseBranchOptions,
     isLoadingMergeBaseBranchOptions,
     updateThreadPending,
+    storage,
     onAssignManager,
     onMergeBaseBranchChange,
     onChangedFileClick,
   } = props;
 
   const hasFlexibleHeight =
-    thread.type !== "manager" &&
-    selectWorkspaceChangedFilesSection(workspaceStatus) !== null;
+    storage !== undefined ||
+    (thread.type !== "manager" &&
+      selectWorkspaceChangedFilesSection(workspaceStatus) !== null);
 
   return (
     <ThreadMetadataCard hasFlexibleHeight={hasFlexibleHeight}>
@@ -636,6 +686,7 @@ export function ThreadMetadataContent(props: ThreadMetadataContentProps) {
         workspaceStatus={workspaceStatus}
         onChangedFileClick={onChangedFileClick}
       />
+      {storage ? <ManagerWorkspaceRow {...storage} /> : null}
     </ThreadMetadataCard>
   );
 }
