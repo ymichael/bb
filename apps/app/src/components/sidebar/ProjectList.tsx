@@ -15,6 +15,7 @@ import { useLocation } from "react-router-dom";
 import {
   getConnectionAwareQueryState,
   useConnectionAwareQueryState,
+  useServerConnectionGracePeriodElapsed,
   type ConnectionAwareQueryStatus,
 } from "@/hooks/queries/connection-aware-query-state";
 import { useProjects } from "@/hooks/queries/project-queries";
@@ -90,6 +91,7 @@ interface BuildProjectThreadQueryAggregationArgs {
   projectIds: readonly string[];
   queryResults: readonly ProjectThreadQueryResult[];
   serverConnectionState: WebSocketConnectionState;
+  connectionGracePeriodElapsed: boolean;
 }
 
 interface ProjectThreadListStateArgs {
@@ -101,6 +103,7 @@ function buildProjectThreadQueryAggregation({
   projectIds,
   queryResults,
   serverConnectionState,
+  connectionGracePeriodElapsed,
 }: BuildProjectThreadQueryAggregationArgs): ProjectThreadQueryAggregation {
   const threads: ThreadListEntry[] = [];
   const threadStatesByProjectId = new Map<string, ProjectThreadQueryState>();
@@ -121,6 +124,7 @@ function buildProjectThreadQueryAggregation({
         isFetching: result.isFetching,
         isLoadingError: result.isLoadingError,
         serverConnectionState,
+        connectionGracePeriodElapsed,
       }).status,
     });
   }
@@ -162,6 +166,7 @@ function ProjectListComponent({
     isLoadingError: projectsLoadingError,
   } = projectsQuery;
   const serverConnectionState = useServerConnectionState();
+  const connectionGracePeriodElapsed = useServerConnectionGracePeriodElapsed();
   const projectsState = useConnectionAwareQueryState({
     hasResolvedData: projects !== undefined,
     isFetching: projectsFetching,
@@ -188,8 +193,9 @@ function ProjectListComponent({
         projectIds,
         queryResults: results,
         serverConnectionState,
+        connectionGracePeriodElapsed,
       }),
-    [projectIds, serverConnectionState],
+    [projectIds, serverConnectionState, connectionGracePeriodElapsed],
   );
   const { threads, threadStatesByProjectId } = useQueries({
     queries: threadQueries,

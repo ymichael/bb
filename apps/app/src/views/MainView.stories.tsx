@@ -23,7 +23,7 @@ export const States = () => (
   <StoryCard className="bg-card">
     <StoryRow
       label="Loading"
-      hint="Initial fetch in flight, or errored before the WebSocket has connected. The sidebar already shows skeletons in this case; the main pane mirrors it so the cold-start race doesn't flash misleading content."
+      hint="Initial fetch in flight, or errored before the WebSocket has connected (within the 10s grace period). The sidebar already shows skeletons in this case; the main pane mirrors it so the cold-start race doesn't flash misleading content. After the grace period the state flips to 'Couldn't load projects' below."
     >
       <MainViewStage>
         <MainViewBody
@@ -38,7 +38,7 @@ export const States = () => (
 
     <StoryRow
       label="Couldn't load projects"
-      hint="WebSocket is connected but the projects API errored. Steady-state failure — the user needs an action they can take, not a dead message."
+      hint="Projects API errored and either the WebSocket is connected or the 10s grace period has elapsed — i.e. we've given up assuming the cold-start race will resolve itself. Steady-state failure surfaces a retry action instead of an infinite spinner."
     >
       <MainViewStage>
         <MainViewBody
