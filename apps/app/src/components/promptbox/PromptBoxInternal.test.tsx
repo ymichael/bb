@@ -553,7 +553,7 @@ describe("PromptBoxInternal history navigation", () => {
 
       fireEvent.keyDown(textarea, { key: "Enter" });
       await waitFor(() => {
-        expect(textarea.value).toBe("@README.md");
+        expect(textarea.value).toBe("@README.md ");
         expect(textarea.selectionStart).toBe(textarea.value.length);
         expect(textarea.selectionEnd).toBe(textarea.value.length);
       });
@@ -593,7 +593,7 @@ describe("PromptBoxInternal history navigation", () => {
     fireEvent.keyDown(textarea, { key: "Enter" });
 
     await waitFor(() => {
-      expect(textarea.value).toBe("@src/App.tsx");
+      expect(textarea.value).toBe("@src/App.tsx ");
       expect(textarea.selectionStart).toBe(textarea.value.length);
       expect(textarea.selectionEnd).toBe(textarea.value.length);
     });

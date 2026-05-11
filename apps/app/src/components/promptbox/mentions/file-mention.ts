@@ -27,23 +27,34 @@ export function findActiveFileMention(
   };
 }
 
+export interface InsertFileMentionResult {
+  value: string;
+  caretPosition: number;
+  /** Length of `@path` (plus the trailing space, when one is inserted). */
+  insertedLength: number;
+}
+
 export function insertFileMention(
   value: string,
   mention: ActiveFileMention,
   filePath: string,
-): { value: string; caretPosition: number } {
+): InsertFileMentionResult {
   const safePath = filePath.trim();
   if (!safePath) {
-    return { value, caretPosition: mention.end };
+    return { value, caretPosition: mention.end, insertedLength: 0 };
   }
 
   const suffix = value.slice(mention.end);
-  const mentionText = /^\s|$/.test(suffix) ? `@${safePath}` : `@${safePath} `;
+  // Append a trailing space unless the following text already starts with
+  // whitespace, so the caret lands past a separator. Otherwise further
+  // keystrokes would extend the @-string and re-trigger the suggestion menu.
+  const mentionText = /^\s/.test(suffix) ? `@${safePath}` : `@${safePath} `;
   const nextValue = `${value.slice(0, mention.start)}${mentionText}${suffix}`;
   const caretPosition = mention.start + mentionText.length;
 
   return {
     value: nextValue,
     caretPosition,
+    insertedLength: mentionText.length,
   };
 }

@@ -471,7 +471,6 @@ export function PromptBoxInternal({
       if (!textarea || !activeMention) return;
 
       const mentionStart = activeMention.start;
-      const mentionEnd = mentionStart + item.replacement.length + 1;
       const replacement = insertFileMention(
         value,
         activeMention,
@@ -481,7 +480,7 @@ export function PromptBoxInternal({
       mentionKeyRef.current = "";
       dismissedMentionRef.current = {
         start: mentionStart,
-        end: mentionEnd,
+        end: mentionStart + replacement.insertedLength,
         hasLeftRange: false,
       };
       setActiveMention(null);

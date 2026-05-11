@@ -52,4 +52,28 @@ describe("file mention helpers", () => {
       "Please check @src/components/PromptBoxInternal.tsx".length,
     );
   });
+
+  it("appends a trailing space when the mention is at the end of the text", () => {
+    const value = "Look at @fil";
+    const mention = findActiveFileMention(value, value.length);
+    expect(mention).not.toBeNull();
+
+    const result = insertFileMention(value, mention!, "file.txt");
+
+    expect(result.value).toBe("Look at @file.txt ");
+    expect(result.caretPosition).toBe("Look at @file.txt ".length);
+    expect(result.insertedLength).toBe("@file.txt ".length);
+  });
+
+  it("appends a trailing space when the mention is followed by non-whitespace", () => {
+    const value = "@filworld";
+    const mention = findActiveFileMention(value, "@fil".length);
+    expect(mention).not.toBeNull();
+
+    const result = insertFileMention(value, mention!, "file.txt");
+
+    expect(result.value).toBe("@file.txt world");
+    expect(result.caretPosition).toBe("@file.txt ".length);
+    expect(result.insertedLength).toBe("@file.txt ".length);
+  });
 });
