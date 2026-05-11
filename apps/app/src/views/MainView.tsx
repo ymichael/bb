@@ -1,15 +1,29 @@
 import { Navigate } from "react-router-dom";
 import { useProjects } from "../hooks/queries/project-queries";
+import {
+  useConnectionAwareQueryState,
+  type ConnectionAwareQueryStatus,
+} from "../hooks/queries/connection-aware-query-state";
 import { useQuickCreateProjectController } from "@/hooks/useQuickCreateProject";
 import { Button } from "@/components/ui";
 import { PageShell } from "@/components/ui";
 
-export function MainView() {
-  const { data: projects, isLoading: projectsLoading } = useProjects();
-  const quickCreateProject = useQuickCreateProjectController();
-  const hasProjects = (projects?.length ?? 0) > 0;
+export interface MainViewBodyProps {
+  status: ConnectionAwareQueryStatus;
+  isCreating: boolean;
+  isAvailable: boolean;
+  onCreate: () => void;
+  onRetry: () => void;
+}
 
-  if (projectsLoading) {
+export function MainViewBody({
+  status,
+  isCreating,
+  isAvailable,
+  onCreate,
+  onRetry,
+}: MainViewBodyProps) {
+  if (status === "loading") {
     return (
       <PageShell contentClassName="min-h-full items-center justify-center">
         <p className="text-sm text-muted-foreground">Loading projects...</p>
@@ -17,31 +31,80 @@ export function MainView() {
     );
   }
 
-  if (!hasProjects) {
+  if (status === "unavailable") {
     return (
       <PageShell contentClassName="min-h-full items-center justify-center">
         <div className="flex flex-col items-center gap-4 text-center">
           <p className="text-sm text-muted-foreground">
-            Create a new project to get started
+            Couldn&apos;t load projects
           </p>
-          <Button
-            onClick={() => {
-              quickCreateProject.openCreateDialog();
-            }}
-            disabled={
-              quickCreateProject.isCreating || !quickCreateProject.isAvailable
-            }
-          >
-            {quickCreateProject.isCreating
-              ? "Creating..."
-              : !quickCreateProject.isAvailable
-                ? "No local daemon"
-                : "New project"}
+          <Button variant="outline" onClick={onRetry}>
+            Try again
           </Button>
         </div>
       </PageShell>
     );
   }
 
-  return <Navigate to={`/projects/${projects![0].id}`} replace />;
+  if (!isAvailable) {
+    return (
+      <PageShell contentClassName="min-h-full items-center justify-center">
+        <div className="flex flex-col items-center gap-1 text-center">
+          <p className="text-sm font-medium text-foreground">
+            No local daemon
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Start a local daemon on this device to create a project.
+          </p>
+        </div>
+      </PageShell>
+    );
+  }
+
+  return (
+    <PageShell contentClassName="min-h-full items-center justify-center">
+      <div className="flex flex-col items-center gap-4 text-center">
+        <p className="text-sm text-muted-foreground">
+          Create a new project to get started
+        </p>
+        <Button onClick={onCreate} disabled={isCreating}>
+          {isCreating ? "Creating..." : "New project"}
+        </Button>
+      </div>
+    </PageShell>
+  );
+}
+
+export function MainView() {
+  const {
+    data: projects,
+    isFetching,
+    isLoadingError,
+    refetch,
+  } = useProjects();
+  const projectsState = useConnectionAwareQueryState({
+    hasResolvedData: projects !== undefined,
+    isFetching,
+    isLoadingError,
+  });
+  const quickCreateProject = useQuickCreateProjectController();
+  const hasProjects = (projects?.length ?? 0) > 0;
+
+  if (projectsState.status !== "loading" && hasProjects) {
+    return <Navigate to={`/projects/${projects![0].id}`} replace />;
+  }
+
+  return (
+    <MainViewBody
+      status={projectsState.status}
+      isCreating={quickCreateProject.isCreating}
+      isAvailable={quickCreateProject.isAvailable}
+      onCreate={() => {
+        quickCreateProject.openCreateDialog();
+      }}
+      onRetry={() => {
+        void refetch();
+      }}
+    />
+  );
 }
