@@ -799,6 +799,7 @@ describe("server-contract clients", () => {
       systemKind: "operation",
       operationKind: "manager-assignment",
       status: "completed",
+      completedAt: 1,
       managerAssignment: {
         action: "assign",
         previousManagerThreadId: null,

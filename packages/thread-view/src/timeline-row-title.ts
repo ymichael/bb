@@ -1058,14 +1058,23 @@ function mapSystemTitle(row: TimelineSystemViewRow): TimelineTitle {
   ) {
     return mapManagerAssignmentSystemTitle(row);
   }
+  const isCompaction =
+    row.systemKind === "operation" && row.operationKind === "compaction";
+  const decorations =
+    isCompaction && (row.status === "pending" || row.status === "completed")
+      ? filterNull([durationDecoration(row.startedAt, row.completedAt)])
+      : [];
+  const titleText =
+    isCompaction && row.status === "pending" ? `${row.title}…` : row.title;
   return makeTitle({
     segments: [
-      segment(row.title, {
+      segment(titleText, {
         em: hasErrorTone,
         shimmer: row.status === "pending",
         truncate: true,
       }),
     ],
+    decorations,
     tone: hasErrorTone ? "destructive" : "default",
   });
 }

@@ -273,6 +273,9 @@ function op(
   idKey: string,
   fields: ViewOperationFields,
 ): EventProjectionOperationMessage {
+  const completedAt = isTerminalOperationStatus(fields.status)
+    ? meta.createdAt
+    : null;
   return {
     kind: "operation",
     id: messageId(decoded.threadId, "op", `${idKey}:${meta.seq}`),
@@ -281,9 +284,18 @@ function op(
     sourceSeqEnd: meta.seq,
     createdAt: meta.createdAt,
     startedAt: meta.createdAt,
+    completedAt,
     scope: decoded.scope,
     ...fields,
   };
+}
+
+function isTerminalOperationStatus(
+  status: EventProjectionOperationMessage["status"],
+): boolean {
+  return (
+    status === "completed" || status === "error" || status === "interrupted"
+  );
 }
 
 type ViewOperationFields = Omit<
@@ -295,6 +307,7 @@ type ViewOperationFields = Omit<
   | "sourceSeqEnd"
   | "createdAt"
   | "startedAt"
+  | "completedAt"
   | "scope"
   | "turnId"
 >;
@@ -435,6 +448,7 @@ export function interruptOperationMessage(
 ): void {
   if (message.status !== "pending") return;
   message.status = "interrupted";
+  message.completedAt = message.createdAt;
 
   switch (message.opType) {
     case "operation":
@@ -462,6 +476,7 @@ export function finalizeOperationMessage(
       case "thread-provisioning":
         message.status = "error";
         message.title = "Provisioning thread failed";
+        message.completedAt = message.createdAt;
         return;
       default:
         break;

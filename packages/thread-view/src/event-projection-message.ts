@@ -283,6 +283,7 @@ export interface EventProjectionOperationMessage extends EventProjectionMessageB
     EventProjectionMessageStatus,
     "pending" | "completed" | "error" | "interrupted"
   >;
+  completedAt: number | null;
   provisioning?: EventProjectionProvisioningMetadata;
   threadOperation?: EventProjectionThreadOperationMetadata;
 }

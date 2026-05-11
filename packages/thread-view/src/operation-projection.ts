@@ -164,11 +164,15 @@ function mergeProvisioningOperation(
   existing: EventProjectionOperationMessage,
   incoming: EventProjectionOperationMessage,
 ): void {
+  const wasPending = (existing.status ?? "pending") === "pending";
   existing.status = mergeLifecycleStatus(
     existing.status ?? "pending",
     incoming.status ?? "pending",
   );
   existing.title = provisioningTitleForStatus(existing.status);
+  if (wasPending && existing.status !== "pending") {
+    existing.completedAt = incoming.completedAt ?? incoming.createdAt;
+  }
   existing.provisioning = mergeProvisioningMetadata(
     existing.provisioning,
     incoming.provisioning,
@@ -242,6 +246,9 @@ function mergeThreadOperationMessage(
   if (shouldUseIncomingLifecycle) {
     existing.title = incoming.title;
     existing.threadOperation = incoming.threadOperation;
+    if (mergedStatus !== "pending") {
+      existing.completedAt = incoming.completedAt ?? incoming.createdAt;
+    }
   }
   existing.detail = mergeOperationDetail({
     existing: existing.detail,
@@ -708,6 +715,7 @@ export function onCompactionBegin(
     sourceSeqEnd: meta.seq,
     createdAt: meta.createdAt,
     startedAt: meta.createdAt,
+    completedAt: null,
     ...(turnId
       ? eventProjectionMessageTurnScopeFields(turnId)
       : eventProjectionMessageThreadScopeFields()),
@@ -731,6 +739,7 @@ export function onCompactionEnd(
   if (existing) {
     existing.sourceSeqEnd = Math.max(existing.sourceSeqEnd, meta.seq);
     existing.createdAt = Math.max(existing.createdAt, meta.createdAt);
+    existing.completedAt = meta.createdAt;
     existing.status = "completed";
     existing.title = "Context compacted";
     existing.detail = payload.detail ?? existing.detail;
@@ -751,6 +760,7 @@ export function onCompactionEnd(
     sourceSeqEnd: meta.seq,
     createdAt: meta.createdAt,
     startedAt: meta.createdAt,
+    completedAt: meta.createdAt,
     ...(turnId
       ? eventProjectionMessageTurnScopeFields(turnId)
       : eventProjectionMessageThreadScopeFields()),
@@ -782,6 +792,7 @@ export function finalizeOpenCompactionsForTurn(
 
     message.sourceSeqEnd = Math.max(message.sourceSeqEnd, args.meta.seq);
     message.createdAt = Math.max(message.createdAt, args.meta.createdAt);
+    message.completedAt = args.meta.createdAt;
     message.status = args.status;
     message.title =
       args.status === "error"

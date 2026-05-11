@@ -278,6 +278,7 @@ function buildGenericOperationSystemRow({
     title: message.title,
     detail: buildTimelineOperationDetail(message),
     status: message.status ?? null,
+    completedAt: message.completedAt,
   };
 }
 
@@ -299,6 +300,7 @@ function buildManagerAssignmentSystemRow({
     title: message.title,
     detail: buildTimelineOperationDetail(message),
     status,
+    completedAt: message.completedAt,
   };
 }
 

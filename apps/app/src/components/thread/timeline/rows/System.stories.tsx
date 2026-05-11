@@ -58,6 +58,7 @@ const provisioningPending: TimelineRow = {
     "Lockfile is up to date, resolution step is skipped\n" +
     "Progress: resolved 1094, reused 1093, downloaded 0, added 877",
   "status": "pending",
+  "completedAt": null,
 };
 
 // thr_sjgc9pafri provisioning — completed shape. Title flips to "Provisioned
@@ -81,6 +82,7 @@ const provisioningCompleted: TimelineRow = {
     "Using branch: bb/investigate-thread-timeline-load-thr_sjgc9pafri (37eeec8)\n" +
     "Provisioned thread (8.7s)",
   "status": "completed",
+  "completedAt": 1778027670469,
 };
 
 // thr_iqcz6et4rd — `thread/compacted` event. The projector inserts a
@@ -102,6 +104,7 @@ const compactionCompleted: TimelineRow = {
   "title": "Context compacted",
   "detail": null,
   "status": "completed",
+  "completedAt": 1777890119840,
 };
 
 // "Compacting context" while the lifecycle is mid-flight. Triggered by an
@@ -121,6 +124,7 @@ const compactionPending: TimelineRow = {
   "title": "Compacting context",
   "detail": null,
   "status": "pending",
+  "completedAt": null,
 };
 
 // thr_m8dsv5hjpi — `system/thread/interrupted` event with reason
@@ -141,6 +145,7 @@ const threadInterruptedManualStop: TimelineRow = {
   "title": "Stopped manually",
   "detail": null,
   "status": "interrupted",
+  "completedAt": 1776810312000,
 };
 
 // thr_m22cr9ggq7 — provider/unhandled SDK system event from claude-code.
@@ -182,6 +187,7 @@ const providerUnhandled: TimelineRow = {
       2,
     ),
   "status": "completed",
+  "completedAt": 1776898870858,
 };
 
 // provider/warning, category=general — the projector emits a generic
@@ -202,6 +208,7 @@ const providerWarning: TimelineRow = {
   "detail":
     "You are within 10% of your weekly usage limit. The provider will throttle requests once the limit is reached.",
   "status": "completed",
+  "completedAt": 1777884800000,
 };
 
 // provider/warning with category=deprecation — title becomes
@@ -222,6 +229,7 @@ const deprecationNotice: TimelineRow = {
     "The `text_editor_20241022` tool name is deprecated.\n" +
     "Switch to `text_editor_20250124`. The old name will stop being accepted in a future API version.",
   "status": "completed",
+  "completedAt": 1777885200000,
 };
 
 // system/operation with operation="ownership_change", action="assign". The
@@ -242,6 +250,7 @@ const managerAssignmentAssign: TimelineRow = {
   "title": "Thread assigned to manager",
   "detail": null,
   "status": "completed",
+  "completedAt": 1777680600000,
   "managerAssignment": {
     "action": "assign",
     "previousManagerThreadId": null,
@@ -268,6 +277,7 @@ const managerAssignmentRelease: TimelineRow = {
   "title": "Thread released from manager",
   "detail": null,
   "status": "completed",
+  "completedAt": 1777724900000,
   "managerAssignment": {
     "action": "release",
     "previousManagerThreadId": "thr_bj3p5vk9py",
@@ -292,6 +302,7 @@ const managerAssignmentTransfer: TimelineRow = {
   "title": "Thread transferred to new manager",
   "detail": null,
   "status": "completed",
+  "completedAt": 1777800100000,
   "managerAssignment": {
     "action": "transfer",
     "previousManagerThreadId": "thr_bj3p5vk9py",

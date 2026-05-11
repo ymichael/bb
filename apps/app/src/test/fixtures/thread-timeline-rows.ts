@@ -141,7 +141,9 @@ type PermissionGrantApprovalLifecycle = Extract<
 >["lifecycle"];
 
 export interface SystemRowArgs {
+  completedAt?: number | null;
   detail?: string | null;
+  durationMs?: number | null;
   id?: string;
   managerAssignment?: TimelineManagerAssignment;
   operationKind?: TimelineSystemOperationKind;
@@ -587,7 +589,9 @@ export function approvalRow({
 }
 
 export function systemRow({
+  completedAt,
   detail = "Running setup\nProvisioned thread (2s)",
+  durationMs,
   id = DEFAULT_SYSTEM_ID,
   managerAssignment,
   operationKind,
@@ -614,6 +618,16 @@ export function systemRow({
   }
   const resolvedOperationKind =
     operationKind ?? (managerAssignment ? "manager-assignment" : "generic");
+  const resolvedCompletedAt =
+    completedAt !== undefined
+      ? completedAt
+      : durationMs !== undefined && durationMs !== null
+        ? completedAtFromDuration(base.startedAt, durationMs)
+        : status === "completed" ||
+            status === "error" ||
+            status === "interrupted"
+          ? base.createdAt
+          : null;
   if (resolvedOperationKind === "manager-assignment") {
     if (status === null) {
       throw new Error("Manager assignment system row requires a status");
@@ -623,6 +637,7 @@ export function systemRow({
       systemKind,
       operationKind: resolvedOperationKind,
       status,
+      completedAt: resolvedCompletedAt,
       managerAssignment: managerAssignment ?? {
         action: "assign",
         previousManagerThreadId: null,
@@ -636,6 +651,7 @@ export function systemRow({
     ...base,
     systemKind,
     operationKind: resolvedOperationKind,
+    completedAt: resolvedCompletedAt,
   };
 }
 

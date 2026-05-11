@@ -3096,6 +3096,7 @@ describe("CLI JSON output contracts", () => {
           title: "Provisioned thread",
           detail: null,
           status: "completed",
+          completedAt: 8,
         },
         {
           ...makeTimelineBase({

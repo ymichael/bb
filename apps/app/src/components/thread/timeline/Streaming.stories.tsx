@@ -147,6 +147,7 @@ function ProvisioningStreaming({ restartKey }: { restartKey: number }) {
     title: completed ? "Provisioned thread" : "Provisioning thread",
     detail: detail.length > 0 ? detail : null,
     status: completed ? "completed" : "pending",
+    completedAt: completed ? 0 : null,
   };
   return (
     <TimelineStage>

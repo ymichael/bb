@@ -294,6 +294,7 @@ function systemOperationRow(): TimelineSystemRow {
     title: "Thread release failed",
     detail: null,
     status: "error",
+    completedAt: 1,
   };
 }
 
@@ -310,6 +311,7 @@ function managerAssignmentSystemRow({
     title: "Thread assigned to manager",
     detail: null,
     status,
+    completedAt: 1,
   };
 }
 
@@ -962,6 +964,51 @@ describe("buildTimelineRowTitle", () => {
 
     expect(title.plain).toBe("Thread release failed");
     expect(title.tone).toBe("destructive");
+  });
+
+  it("renders elapsed duration on completed compaction rows", () => {
+    const row: TimelineSystemRow = {
+      ...baseRow("compaction-completed"),
+      startedAt: 1,
+      createdAt: 7_001,
+      kind: "system",
+      systemKind: "operation",
+      operationKind: "compaction",
+      title: "Context compacted",
+      detail: null,
+      status: "completed",
+      completedAt: 7_001,
+    };
+
+    const title = buildTimelineRowTitle(row, DEFAULT_OPTIONS);
+
+    expect(title.plain).toBe("Context compacted (7s)");
+    expect(title.decorations).toEqual([
+      { kind: "duration", startedAt: 1, completedAt: 7_001, em: false },
+    ]);
+  });
+
+  it("emits a live-tick duration decoration and ellipsis on pending compaction rows", () => {
+    const row: TimelineSystemRow = {
+      ...baseRow("compaction-pending"),
+      startedAt: 1,
+      createdAt: 1,
+      kind: "system",
+      systemKind: "operation",
+      operationKind: "compaction",
+      title: "Compacting context",
+      detail: null,
+      status: "pending",
+      completedAt: null,
+    };
+
+    const title = buildTimelineRowTitle(row, DEFAULT_OPTIONS);
+
+    expect(title.segments[0]?.text).toBe("Compacting context…");
+    expect(title.segments[0]?.shimmer).toBe(true);
+    expect(title.decorations).toEqual([
+      { kind: "duration", startedAt: 1, completedAt: null, em: false },
+    ]);
   });
 
   it("formats turn durations over 60 minutes as hours", () => {

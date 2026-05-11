@@ -187,6 +187,7 @@ export const timelineGenericOperationSystemRowSchema =
   timelineSystemRowBaseSchema.extend({
     systemKind: z.literal("operation"),
     operationKind: timelineGenericSystemOperationKindSchema,
+    completedAt: z.number().nullable(),
   });
 export type TimelineGenericOperationSystemRow = z.infer<
   typeof timelineGenericOperationSystemRowSchema
@@ -198,6 +199,7 @@ export const timelineManagerAssignmentSystemRowSchema =
     operationKind: z.literal("manager-assignment"),
     status: timelineRowStatusSchema,
     managerAssignment: timelineManagerAssignmentSchema,
+    completedAt: z.number().nullable(),
   });
 export type TimelineManagerAssignmentSystemRow = z.infer<
   typeof timelineManagerAssignmentSystemRowSchema
