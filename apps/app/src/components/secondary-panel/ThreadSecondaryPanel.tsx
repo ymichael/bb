@@ -139,6 +139,7 @@ export function ThreadSecondaryPanel({
     isParsingGitDiffFiles,
     isPreparingGitDiff,
     onGitDiffSelectionChange,
+    onRequestFileContents,
     parsedGitDiffFileEntries,
     queuedGitDiffFileRenderKeys,
     setGitDiffFileRef,
@@ -194,12 +195,7 @@ export function ThreadSecondaryPanel({
               type="button"
               variant="ghost"
               size="sm"
-              className={cn(
-                "h-7 w-7 rounded-md p-0",
-                activePanel === "thread-info"
-                  ? "bg-accent/35 text-foreground hover:bg-accent/45"
-                  : "text-muted-foreground hover:bg-muted/45 hover:text-foreground",
-              )}
+              className="h-7 w-7 rounded-md p-0 text-muted-foreground"
               onClick={() => onPanelChange("thread-info")}
               aria-label="Show thread info panel"
               aria-pressed={activePanel === "thread-info"}
@@ -212,12 +208,7 @@ export function ThreadSecondaryPanel({
                 type="button"
                 variant="ghost"
                 size="sm"
-                className={cn(
-                  "h-7 w-7 rounded-md p-0",
-                  isDiffPanelActive
-                    ? "bg-accent/35 text-foreground hover:bg-accent/45"
-                    : "text-muted-foreground hover:bg-muted/45 hover:text-foreground",
-                )}
+                className="h-7 w-7 rounded-md p-0 text-muted-foreground"
                 onClick={() => onPanelChange("git-diff")}
                 aria-label="Show diff panel"
                 aria-pressed={isDiffPanelActive}
@@ -231,12 +222,7 @@ export function ThreadSecondaryPanel({
                 type="button"
                 variant="ghost"
                 size="sm"
-                className={cn(
-                  "h-7 w-7 rounded-md p-0",
-                  isThreadStoragePanelActive
-                    ? "bg-accent/35 text-foreground hover:bg-accent/45"
-                    : "text-muted-foreground hover:bg-muted/45 hover:text-foreground",
-                )}
+                className="h-7 w-7 rounded-md p-0 text-muted-foreground"
                 onClick={() => onPanelChange("thread-storage")}
                 aria-label="Show thread storage panel"
                 aria-pressed={isThreadStoragePanelActive}
@@ -250,7 +236,7 @@ export function ThreadSecondaryPanel({
             type="button"
             variant="ghost"
             size="icon"
-            className="h-7 w-7 shrink-0 rounded-md p-0 text-muted-foreground hover:bg-accent/45 hover:text-foreground"
+            className="h-7 w-7 shrink-0 rounded-md p-0 text-muted-foreground"
             onClick={onClose}
             aria-label="Close secondary panel"
             title="Close secondary panel"
@@ -313,6 +299,7 @@ export function ThreadSecondaryPanel({
                         stickyHeader
                         isRendering={isRendering}
                         cardRef={(element) => setGitDiffFileRef(key, element)}
+                        onRequestFileContents={onRequestFileContents}
                       />
                     );
                   })}

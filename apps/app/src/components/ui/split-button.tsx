@@ -74,7 +74,7 @@ function SplitButton({
             className={cn(
               base,
               "rounded-l-none border-l-0 px-1 pl-0 focus-visible:z-10",
-              "data-[state=open]:bg-accent data-[state=open]:text-accent-foreground",
+              "data-[state=open]:bg-state-active data-[state=open]:text-foreground",
             )}
             aria-label={triggerLabel}
             title={triggerLabel}

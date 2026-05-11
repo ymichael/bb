@@ -250,7 +250,7 @@ export function ProviderModelPicker({
                 type="button"
                 onClick={() => handleModelSelect(option.value)}
                 className={cn(
-                  "relative flex w-full cursor-default select-none items-center justify-between gap-3 rounded-sm px-2 text-xs outline-none transition-colors hover:bg-accent hover:text-accent-foreground",
+                  "relative flex w-full cursor-default select-none items-center justify-between gap-3 rounded-sm px-2 text-xs outline-none transition-colors hover:bg-state-hover hover:text-foreground",
                   isMobile ? "py-2" : "py-[0.3125rem]",
                 )}
               >

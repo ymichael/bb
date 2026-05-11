@@ -912,7 +912,7 @@ export function PromptBoxInternal({
         autoFocus={autoFocus}
         enterKeyHint="send"
         className={cn(
-          "w-full resize-none overflow-y-auto bg-transparent px-4 pb-1 pr-14 pt-3 leading-relaxed outline-none placeholder:text-muted-foreground/60",
+          "w-full resize-none overflow-y-auto bg-transparent px-4 pb-1 pr-14 pt-3 leading-relaxed outline-none placeholder:select-none placeholder:text-muted-foreground/60",
           COARSE_POINTER_TEXT_BASE_CLASS,
           isZenMode && "min-h-0 flex-1 px-6 pb-3 pt-8",
         )}

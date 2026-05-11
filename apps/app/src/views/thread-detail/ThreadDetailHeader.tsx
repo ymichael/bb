@@ -161,15 +161,11 @@ export function ThreadDetailHeader({
         type="button"
         variant="ghost"
         size="icon"
-        className={cn(
-          HEADER_ICON_BUTTON_CLASS,
-          isSecondaryPanelOpen
-            ? "bg-accent/35 text-foreground hover:bg-accent/45"
-            : "text-muted-foreground hover:bg-accent/45 hover:text-foreground",
-        )}
+        className={cn(HEADER_ICON_BUTTON_CLASS, "text-muted-foreground")}
         aria-label={
           isSecondaryPanelOpen ? "Hide secondary panel" : "Show secondary panel"
         }
+        aria-pressed={isSecondaryPanelOpen}
         title={
           isSecondaryPanelOpen ? "Hide secondary panel" : "Show secondary panel"
         }

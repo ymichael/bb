@@ -196,7 +196,7 @@ function SectionToggleButton({
       aria-label={ariaLabel}
       onClick={onToggle}
       className={cn(
-        "flex min-w-0 items-center gap-1 rounded px-1 py-0.5 text-xs transition-colors hover:bg-muted/55",
+        "flex min-w-0 items-center gap-1 rounded px-1 py-0.5 text-xs transition-colors hover:bg-state-hover",
         isExpanded ? "text-foreground/90" : "text-muted-foreground",
       )}
     >

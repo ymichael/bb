@@ -56,7 +56,7 @@ export function ThreadActionsMenu({
           variant="ghost"
           size="icon"
           className={cn(
-            "rounded-md p-0 text-muted-foreground hover:bg-accent/45 hover:text-foreground data-[state=open]:bg-accent/35 data-[state=open]:text-foreground",
+            "rounded-md p-0 text-muted-foreground",
             triggerClassName,
           )}
           aria-label={`${capitalizedLabel} actions`}

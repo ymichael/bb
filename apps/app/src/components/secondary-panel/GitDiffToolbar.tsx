@@ -57,7 +57,7 @@ function GitDiffSelector({
           size="sm"
           disabled={disabled}
           className={cn(
-            "h-8 w-full min-w-0 justify-between gap-2 rounded-lg border border-border/70 bg-transparent px-2.5 text-xs font-normal hover:bg-muted/45 hover:text-foreground",
+            "h-8 w-full min-w-0 justify-between gap-2 rounded-lg border border-border/70 bg-transparent px-2.5 text-xs font-normal",
             disabled && "opacity-60",
           )}
         >
@@ -175,7 +175,7 @@ export function GitDiffToolbar({
             type="button"
             variant="ghost"
             size="sm"
-            className="h-7 w-7 rounded-md p-0 text-muted-foreground hover:bg-accent/70 hover:text-foreground"
+            className="h-7 w-7 rounded-md p-0 text-muted-foreground"
             onClick={onToggleAllCollapsed}
             disabled={isCollapseAllDisabled}
             aria-label={
@@ -200,12 +200,7 @@ export function GitDiffToolbar({
               type="button"
               variant="ghost"
               size="sm"
-              className={cn(
-                "h-7 w-7 rounded-md p-0",
-                displayMode === "unified"
-                  ? "bg-accent/35 text-foreground hover:bg-accent/45"
-                  : "text-muted-foreground hover:bg-muted/45 hover:text-foreground",
-              )}
+              className="h-7 w-7 rounded-md p-0 text-muted-foreground"
               onClick={() => onDisplayModeChange("unified")}
               aria-label="Stacked diff view"
               aria-pressed={displayMode === "unified"}
@@ -217,12 +212,7 @@ export function GitDiffToolbar({
               type="button"
               variant="ghost"
               size="sm"
-              className={cn(
-                "h-7 w-7 rounded-md p-0",
-                displayMode === "split"
-                  ? "bg-accent/35 text-foreground hover:bg-accent/45"
-                  : "text-muted-foreground hover:bg-muted/45 hover:text-foreground",
-              )}
+              className="h-7 w-7 rounded-md p-0 text-muted-foreground"
               onClick={() => onDisplayModeChange("split")}
               aria-label="Split diff view"
               aria-pressed={displayMode === "split"}

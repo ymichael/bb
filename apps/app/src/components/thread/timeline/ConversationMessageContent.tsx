@@ -187,7 +187,7 @@ function ConversationAttachments({
               <button
                 key={path}
                 type="button"
-                className={cn(className, "hover:bg-muted/60")}
+                className={cn(className, "hover:bg-state-hover")}
                 onClick={() => {
                   onOpenLocalFileLink({ lineNumber: null, path });
                 }}

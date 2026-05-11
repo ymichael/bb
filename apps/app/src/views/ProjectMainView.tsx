@@ -284,7 +284,7 @@ export function ProjectMainView() {
                 value={projectId}
                 options={projectOptions}
                 onChange={handleProjectChange}
-                className="h-8 px-0 text-sm"
+                className="h-8 text-sm"
               />
             </div>
           ) : null}

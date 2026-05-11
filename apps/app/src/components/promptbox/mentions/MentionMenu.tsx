@@ -109,8 +109,8 @@ export function MentionMenu({
                   className={cn(
                     "w-full rounded px-2 py-1.5 text-left text-xs",
                     isSelected
-                      ? "bg-accent text-accent-foreground"
-                      : "hover:bg-accent/70",
+                      ? "bg-state-active text-foreground"
+                      : "hover:bg-state-hover",
                   )}
                   title={item.path}
                 >

@@ -14,13 +14,14 @@ import { cn } from "@/lib/utils";
 export const OPTION_BASE_CLASS_NAME =
   "h-8 w-fit max-w-full min-w-0 items-center gap-1 px-1 text-xs leading-tight";
 export const OPTION_INTERACTIVE_CLASS_NAME =
-  "border-none bg-transparent shadow-none hover:bg-transparent";
+  "border-none bg-transparent shadow-none hover:bg-transparent data-[state=open]:bg-transparent";
 export const OPTION_CONTENT_CLASS_NAME =
   "flex min-w-0 items-center gap-1.5";
 export const OPTION_MUTED_CLASS_NAME =
   "text-muted-foreground/75 hover:text-foreground";
 const OPTION_WARNING_TEXT_CLASS_NAME = "text-warning";
-const OPTION_WARNING_INTERACTIVE_CLASS_NAME = "hover:text-warning/80";
+const OPTION_WARNING_INTERACTIVE_CLASS_NAME =
+  "hover:text-warning/80 data-[state=open]:text-warning";
 const OPTION_WARNING_ICON_CLASS_NAME = "text-warning/90";
 
 export interface PickerOption<T extends string> {

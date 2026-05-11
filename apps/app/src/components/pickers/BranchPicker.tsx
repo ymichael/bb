@@ -147,7 +147,7 @@ export function BranchPicker({
           }
           className={cn(
             variant === "default" &&
-              "h-8 w-full min-w-0 justify-between rounded-md border-border/60 bg-background px-2.5 text-sm font-normal shadow-none hover:bg-muted/35",
+              "h-8 w-full min-w-0 justify-between rounded-md border-border/60 bg-background px-2.5 text-sm font-normal shadow-none hover:bg-state-hover",
             variant === "minimal" &&
               "h-5 w-auto min-w-0 justify-between gap-1 rounded-sm px-0 text-xs font-normal shadow-none hover:bg-transparent",
             variant === "minimal" &&
@@ -242,7 +242,7 @@ export function BranchPicker({
           {showCreateItem && onCreate ? (
             <button
               type="button"
-              className="flex w-full min-w-0 items-center gap-2 rounded-sm py-1.5 pl-3 pr-2 text-left text-sm outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground"
+              className="flex w-full min-w-0 items-center gap-2 rounded-sm py-1.5 pl-3 pr-2 text-left text-sm outline-none transition-colors hover:bg-state-hover hover:text-foreground focus-visible:bg-state-hover focus-visible:text-foreground"
               onClick={() => {
                 onCreate();
                 setOpen(false);
@@ -271,7 +271,7 @@ export function BranchPicker({
               <button
                 key={branch}
                 type="button"
-                className="flex w-full min-w-0 items-center gap-2 rounded-sm py-1.5 pl-3 pr-2 text-left text-sm outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground"
+                className="flex w-full min-w-0 items-center gap-2 rounded-sm py-1.5 pl-3 pr-2 text-left text-sm outline-none transition-colors hover:bg-state-hover hover:text-foreground focus-visible:bg-state-hover focus-visible:text-foreground"
                 onClick={() => {
                   onChange(branch);
                   setOpen(false);

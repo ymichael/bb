@@ -339,7 +339,7 @@ export function ProjectSettingsView() {
                   <button
                     key={repo.fullName}
                     type="button"
-                    className="flex w-full items-center gap-2 px-2 py-2 text-left text-sm hover:bg-accent disabled:opacity-50"
+                    className="flex w-full items-center gap-2 px-2 py-2 text-left text-sm hover:bg-state-hover disabled:opacity-50"
                     disabled={addGitHubSource.isPending}
                     onClick={() => addGitHubSource.mutate(repo.htmlUrl)}
                   >

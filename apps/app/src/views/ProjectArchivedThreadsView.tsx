@@ -6,7 +6,6 @@ import { ThreadUnarchiveButton } from "@/components/thread/ThreadUnarchiveButton
 import { useUnarchiveThread } from "@/hooks/mutations/thread-state-mutations";
 import { useArchivedThreads } from "@/hooks/queries/thread-queries";
 import type { ArchivedThreadsManagedFilter } from "@/hooks/queries/query-keys";
-import { cn } from "@/lib/utils";
 import { getThreadDisplayTitle } from "@/lib/thread-title";
 
 interface FilterOption {
@@ -75,12 +74,7 @@ export function ProjectArchivedThreadsView() {
                   role="tab"
                   aria-selected={isActive}
                   aria-pressed={isActive}
-                  className={cn(
-                    "h-7 rounded-md px-3 text-xs font-medium",
-                    isActive
-                      ? "bg-accent text-accent-foreground hover:bg-accent"
-                      : "text-muted-foreground hover:bg-muted/45 hover:text-foreground",
-                  )}
+                  className="h-7 rounded-md px-3 text-xs font-medium text-muted-foreground"
                   onClick={() => setManagedFilter(option.value)}
                 >
                   {option.label}
@@ -104,7 +98,7 @@ export function ProjectArchivedThreadsView() {
               {archivedThreads.map((thread) => (
                 <div
                   key={thread.id}
-                  className="group flex h-9 items-center gap-3 rounded-md px-3 text-sm transition-colors hover:bg-accent"
+                  className="group flex h-9 items-center gap-3 rounded-md px-3 text-sm transition-colors hover:bg-state-hover"
                 >
                   <Link
                     to={`/projects/${projectId}/threads/${thread.id}`}

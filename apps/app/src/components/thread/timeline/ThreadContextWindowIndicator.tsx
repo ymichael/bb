@@ -43,7 +43,7 @@ export function ThreadContextWindowIndicator({
           type="button"
           {...triggerHoverProps}
           className={cn(
-            "inline-flex size-6 items-center justify-center rounded-full transition-colors hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            "inline-flex size-6 items-center justify-center rounded-full transition-colors hover:bg-state-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
             className,
           )}
           aria-label={`Context window ${usedPercent}% used`}

@@ -181,7 +181,7 @@ function AppHeader({
           type="button"
           className={cn(
             HEADER_ICON_BUTTON_CLASS,
-            "inline-flex items-center justify-center text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60",
+            "inline-flex items-center justify-center text-muted-foreground transition-colors hover:bg-state-hover hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60",
           )}
           aria-label="Hire manager"
           title="Hire manager"
@@ -194,7 +194,7 @@ function AppHeader({
           to={`/projects/${projectId}/settings`}
           className={cn(
             HEADER_ICON_BUTTON_CLASS,
-            "inline-flex items-center justify-center text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
+            "inline-flex items-center justify-center text-muted-foreground transition-colors hover:bg-state-hover hover:text-foreground",
           )}
           aria-label="Project settings"
           title="Project settings"
@@ -205,7 +205,7 @@ function AppHeader({
           to={`/projects/${projectId}/archived`}
           className={cn(
             HEADER_ICON_BUTTON_CLASS,
-            "inline-flex items-center justify-center text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
+            "inline-flex items-center justify-center text-muted-foreground transition-colors hover:bg-state-hover hover:text-foreground",
           )}
           aria-label="Archived threads"
           title="Archived threads"
