@@ -22,13 +22,7 @@ import "./ladle.css";
 if (typeof window !== "undefined") {
   const params = new URLSearchParams(window.location.search);
   if (!params.has("theme")) {
-    let stored: string | null = null;
-    try {
-      const raw = window.localStorage.getItem("bb.theme");
-      stored = raw ? JSON.parse(raw) : null;
-    } catch {
-      stored = null;
-    }
+    const stored = window.localStorage.getItem("bb.theme");
     if (stored === "light" || stored === "dark") {
       params.set("theme", stored);
       const next = `${window.location.pathname}?${params.toString()}${window.location.hash}`;
