@@ -523,6 +523,9 @@ export function translateCodexEvent(
       }
       return events;
     }
+    case "thread/archived":
+    case "thread/unarchived":
+      return [];
     case "thread/name/updated":
       return handledEvent.params.threadName
         ? [

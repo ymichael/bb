@@ -1960,6 +1960,21 @@ describe("codex provider adapter", () => {
     expect(events).toHaveLength(0);
   });
 
+  it("translateEvent ignores native archive acknowledgements", () => {
+    const adapter = createCodexProviderAdapter();
+
+    expect(
+      adapter.translateEvent(
+        codexEvent("thread/archived", { threadId: "t1" }),
+      ),
+    ).toEqual([]);
+    expect(
+      adapter.translateEvent(
+        codexEvent("thread/unarchived", { threadId: "t1" }),
+      ),
+    ).toEqual([]);
+  });
+
   it("translateEvent thread/compacted emits a compacted event", () => {
     const adapter = createCodexProviderAdapter();
     const events = adapter.translateEvent(
