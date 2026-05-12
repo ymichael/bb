@@ -1,5 +1,4 @@
 import path from "node:path";
-import { z } from "zod";
 import {
   REPLAY_CAPTURE_ID_PATTERN,
   REPLAY_CAPTURE_ID_PATTERN_DESCRIPTION,
@@ -124,73 +123,3 @@ export function getReplayCaptureTerminalTurnId(
   }
   return turn.turnId;
 }
-
-export const replayCaptureSummarySchema = replayCaptureManifestSchema.pick({
-  captureId: true,
-  capturedAt: true,
-  completedAt: true,
-  providerId: true,
-  projectId: true,
-  environmentId: true,
-  threadId: true,
-  title: true,
-  kind: true,
-  userInputPreview: true,
-  execution: true,
-  eventCounts: true,
-  errorMessage: true,
-});
-export type ReplayCaptureSummary = z.infer<typeof replayCaptureSummarySchema>;
-
-export const replayCaptureHostSummarySchema = replayCaptureSummarySchema.extend(
-  {
-    hostId: z.string().min(1),
-    projectName: z.string().nullable(),
-  },
-);
-export type ReplayCaptureHostSummary = z.infer<
-  typeof replayCaptureHostSummarySchema
->;
-
-export const replayCaptureDaemonListResponseSchema = z.object({
-  captures: z.array(replayCaptureSummarySchema),
-});
-export type ReplayCaptureDaemonListResponse = z.infer<
-  typeof replayCaptureDaemonListResponseSchema
->;
-
-export const replayCaptureDetailSchema = replayCaptureManifestSchema.extend({
-  hostId: z.string().min(1),
-  projectName: z.string().nullable(),
-});
-export type ReplayCaptureDetail = z.infer<typeof replayCaptureDetailSchema>;
-
-export const replayCaptureListResponseSchema = z.object({
-  captures: z.array(replayCaptureHostSummarySchema),
-});
-export type ReplayCaptureListResponse = z.infer<
-  typeof replayCaptureListResponseSchema
->;
-
-export const replaySpeedSchema = z.union([
-  z.literal(0.5),
-  z.literal(1),
-  z.literal(2),
-  z.literal(5),
-  z.literal(10),
-]);
-export type ReplayRunSpeed = z.infer<typeof replaySpeedSchema>;
-
-export const replayRunRequestSchema = z
-  .object({
-    speed: replaySpeedSchema,
-  })
-  .strict();
-export type ReplayRunRequest = z.infer<typeof replayRunRequestSchema>;
-
-export const replayRunResponseSchema = z.object({
-  commandId: z.string(),
-  replayThreadId: z.string(),
-  projectId: z.string(),
-});
-export type ReplayRunResponse = z.infer<typeof replayRunResponseSchema>;

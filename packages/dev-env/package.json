@@ -3,8 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
-    "dev": "tsx src/index.ts",
+    "dev": "tsx --conditions=source src/index.ts",
     "clean": "rimraf dist",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --config vitest.config.ts"

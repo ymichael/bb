@@ -4,26 +4,24 @@
   "type": "module",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "source": "./src/index.ts",
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
     },
     "./internal-lifecycle": {
-      "types": "./dist/internal-lifecycle.d.ts",
-      "import": "./dist/internal-lifecycle.js"
+      "source": "./src/internal-lifecycle.ts",
+      "types": "./src/internal-lifecycle.ts",
+      "default": "./src/internal-lifecycle.ts"
     }
   },
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "types": "./src/index.ts",
   "files": [
-    "dist",
     "drizzle"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
     "clean": "rimraf dist tsconfig.tsbuildinfo",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --config vitest.config.ts",
-    "predb:generate": "pnpm exec turbo run build --filter=@bb/db",
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio"

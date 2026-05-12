@@ -1249,7 +1249,7 @@ export {
   replayRunRequestSchema,
   replayRunResponseSchema,
   replaySpeedSchema,
-} from "@bb/replay-capture";
+} from "@bb/replay-capture/schema";
 export type {
   ReplayCaptureDetail,
   ReplayCaptureHostSummary,
@@ -1258,4 +1258,4 @@ export type {
   ReplayRunRequest,
   ReplayRunResponse,
   ReplayRunSpeed,
-} from "@bb/replay-capture";
+} from "@bb/replay-capture/schema";

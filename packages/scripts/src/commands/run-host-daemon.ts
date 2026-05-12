@@ -27,6 +27,11 @@ const commandDir = dirname(fileURLToPath(import.meta.url));
 const packageRoot = resolve(commandDir, "..", "..");
 const repoRoot = resolve(packageRoot, "..", "..");
 
+interface HostDaemonProcessCommand {
+  args: string[];
+  command: string;
+}
+
 function resolveMode(): HostMode {
   return resolveScriptMode();
 }
@@ -51,6 +56,27 @@ function buildEnv(mode: HostMode): HostDaemonRuntimeEnvironment {
     BB_DATA_DIR: resolveDataDir(mode),
     BB_SERVER_URL: hostDaemonConfig.BB_SERVER_URL,
     NODE_ENV: resolveNodeEnvironment(mode),
+  };
+}
+
+export function resolveHostDaemonProcessCommand(
+  mode: HostMode,
+): HostDaemonProcessCommand {
+  if (mode === "dev") {
+    return {
+      args: [
+        "--conditions=source",
+        "--import",
+        "tsx",
+        "apps/host-daemon/src/index.ts",
+      ],
+      command: process.execPath,
+    };
+  }
+
+  return {
+    args: ["apps/host-daemon/dist/index.js"],
+    command: process.execPath,
   };
 }
 
@@ -128,9 +154,10 @@ export async function main(): Promise<void> {
   const mode = resolveMode();
   const autoJoin = shouldAutoJoin();
   const env = await maybeAddAutoJoinEnv(buildEnv(mode), autoJoin);
+  const daemonProcessCommand = resolveHostDaemonProcessCommand(mode);
   process.exitCode = await runScriptProcess({
-    args: ["apps/host-daemon/dist/index.js"],
-    command: process.execPath,
+    args: daemonProcessCommand.args,
+    command: daemonProcessCommand.command,
     cwd: repoRoot,
     env: toHostDaemonProcessEnv(env),
     stdio: "inherit",

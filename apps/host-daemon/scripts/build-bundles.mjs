@@ -2,8 +2,14 @@ import { chmod, mkdir, stat } from "node:fs/promises";
 import { dirname } from "node:path";
 import { build } from "esbuild";
 import { bundleTargets } from "./bundle-manifest.mjs";
+import {
+  createNativeExternalPatterns,
+  generateTemplatesIfRequested,
+} from "../../../scripts/build-utils.mjs";
 
 async function main() {
+  await generateTemplatesIfRequested(true);
+
   for (const target of bundleTargets) {
     await mkdir(dirname(target.outfile), { recursive: true });
     await build({
@@ -11,7 +17,9 @@ async function main() {
         js: target.banner,
       },
       bundle: true,
+      conditions: ["source"],
       entryPoints: [target.entryPoint],
+      external: createNativeExternalPatterns(),
       format: "esm",
       legalComments: "none",
       minify: true,

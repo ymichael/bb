@@ -7,6 +7,7 @@ import { workspaceTestAliases } from "../../vitest.workspace-aliases";
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: {
+    conditions: ["source"],
     alias: {
       ...workspaceTestAliases,
       "@": path.resolve(__dirname, "./src"),

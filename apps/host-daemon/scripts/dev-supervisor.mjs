@@ -10,7 +10,10 @@ const packageRoot = resolve(scriptDir, "..");
 
 void runDevSupervisor({
   childArgs: [
-    "../../packages/scripts/dist/commands/run-host-daemon.js",
+    "--conditions=source",
+    "--import",
+    "tsx",
+    "../../packages/scripts/src/commands/run-host-daemon.ts",
     "--auto-join",
   ],
   childCommand: process.execPath,

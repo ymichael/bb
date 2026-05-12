@@ -7,7 +7,7 @@ This runbook covers the standalone persistent-host CLI/API smoke pass for genera
 Build the server, daemon, and CLI:
 
 ```bash
-pnpm exec turbo run build --filter=@bb/server --filter=@bb/host-daemon --filter=@bb/cli
+pnpm build
 ```
 
 Verify provider CLIs are installed before running real-provider checks:

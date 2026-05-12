@@ -6,7 +6,7 @@
     "bb": "./bin/bb"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "node ../../scripts/build-node-entry.mjs src/index.ts dist/index.js --clean-dist --templates",
     "start": "node dist/index.js",
     "clean": "rimraf dist",
     "typecheck": "tsc --noEmit",

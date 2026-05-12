@@ -4,33 +4,33 @@
   "type": "module",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "source": "./src/index.ts",
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
     },
     "./reader": {
-      "types": "./dist/reader.d.ts",
-      "import": "./dist/reader.js"
+      "source": "./src/reader.ts",
+      "types": "./src/reader.ts",
+      "default": "./src/reader.ts"
     },
     "./playback": {
-      "types": "./dist/playback.d.ts",
-      "import": "./dist/playback.js"
+      "source": "./src/playback.ts",
+      "types": "./src/playback.ts",
+      "default": "./src/playback.ts"
     },
     "./schema": {
-      "types": "./dist/schema.d.ts",
-      "import": "./dist/schema.js"
+      "source": "./src/schema.ts",
+      "types": "./src/schema.ts",
+      "default": "./src/schema.ts"
     },
     "./writer": {
-      "types": "./dist/writer.d.ts",
-      "import": "./dist/writer.js"
+      "source": "./src/writer.ts",
+      "types": "./src/writer.ts",
+      "default": "./src/writer.ts"
     }
   },
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
-  "files": [
-    "dist"
-  ],
+  "types": "./src/index.ts",
   "scripts": {
-    "build": "rimraf dist tsconfig.build.tsbuildinfo && tsc -p tsconfig.build.json",
     "clean": "rimraf dist tsconfig.tsbuildinfo",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --config vitest.config.ts"

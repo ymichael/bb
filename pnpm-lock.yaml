@@ -17,6 +17,9 @@ importers:
       dotenv-cli:
         specifier: ^11.0.0
         version: 11.0.0
+      esbuild:
+        specifier: ^0.25.0
+        version: 0.25.12
       open:
         specifier: ^10.2.0
         version: 10.2.0
@@ -26,6 +29,9 @@ importers:
       rimraf:
         specifier: ^6.1.0
         version: 6.1.3
+      tsx:
+        specifier: ^4.21.0
+        version: 4.21.0
       turbo:
         specifier: ^2.4.0
         version: 2.8.3
@@ -280,6 +286,9 @@ importers:
       '@hono/node-server':
         specifier: ^1.19.11
         version: 1.19.11(hono@4.11.9)
+      '@parcel/watcher':
+        specifier: 2.5.6
+        version: 2.5.6
       better-sqlite3:
         specifier: ^11.7.0
         version: 11.10.0
@@ -298,6 +307,15 @@ importers:
       partysocket:
         specifier: ^1.1.16
         version: 1.1.16(react@19.2.4)
+      pino:
+        specifier: ^9.6.0
+        version: 9.14.0
+      pino-pretty:
+        specifier: ^13.0.0
+        version: 13.1.3
+      pino-roll:
+        specifier: ^4.0.0
+        version: 4.0.0
       proper-lockfile:
         specifier: ^4.1.2
         version: 4.1.2
@@ -422,6 +440,15 @@ importers:
       mime-types:
         specifier: ^3.0.2
         version: 3.0.2
+      pino:
+        specifier: ^9.6.0
+        version: 9.14.0
+      pino-pretty:
+        specifier: ^13.0.0
+        version: 13.1.3
+      pino-roll:
+        specifier: ^4.0.0
+        version: 4.0.0
       zod:
         specifier: 4.3.6
         version: 4.3.6
@@ -450,6 +477,9 @@ importers:
       '@types/ws':
         specifier: ^8.18.1
         version: 8.18.1
+      tsx:
+        specifier: ^4.21.0
+        version: 4.21.0
       typescript:
         specifier: ^5.7.0
         version: 5.9.3
@@ -490,6 +520,9 @@ importers:
       rimraf:
         specifier: ^6.1.0
         version: 6.1.3
+      tsx:
+        specifier: ^4.21.0
+        version: 4.21.0
       typescript:
         specifier: ^5.7.0
         version: 5.9.3
@@ -577,6 +610,9 @@ importers:
       '@types/node':
         specifier: ^22.0.0
         version: 22.19.10
+      tsx:
+        specifier: ^4.21.0
+        version: 4.21.0
       typescript:
         specifier: ^5.7.0
         version: 5.9.3
@@ -759,6 +795,9 @@ importers:
       '@bb/tsconfig':
         specifier: workspace:*
         version: link:../tsconfig
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.19.10
       typescript:
         specifier: ^5.7.0
         version: 5.9.3
@@ -837,6 +876,9 @@ importers:
       pino:
         specifier: ^9.6.0
         version: 9.14.0
+      pino-pretty:
+        specifier: ^13.0.0
+        version: 13.1.3
       pino-roll:
         specifier: ^4.0.0
         version: 4.0.0
@@ -847,9 +889,6 @@ importers:
       '@types/node':
         specifier: ^22.0.0
         version: 22.19.10
-      pino-pretty:
-        specifier: ^13.0.0
-        version: 13.1.3
       typescript:
         specifier: ^5.7.0
         version: 5.9.3
@@ -1034,6 +1073,9 @@ importers:
       '@bb/tsconfig':
         specifier: workspace:*
         version: link:../tsconfig
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.19.10
       typescript:
         specifier: ^5.7.0
         version: 5.9.3
@@ -3800,6 +3842,7 @@ packages:
 
   '@ungap/structured-clone@1.3.0':
     resolution: {integrity: sha512-WmoN8qaIAo7WTYWbAZuG8PYEhn5fkz7dZrqTBZ7dtt//lL2Gwms1IcnQ5yHqjDfX8Ft5j4YzDM23f87zBfDe9g==}
+    deprecated: Potential CWE-502 - Update to 1.3.1 or higher
 
   '@vitejs/plugin-react-swc@3.11.0':
     resolution: {integrity: sha512-YTJCGFdNMHCMfjODYtxRNVAYmTWQ1Lb8PulP/2/f/oEEtglw8oKxKIZmmRkyXrVrHfsKOaVkAc3NT9/dMutO5w==}

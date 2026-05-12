@@ -4,55 +4,62 @@
   "type": "module",
   "exports": {
     "./common": {
-      "types": "./dist/common.d.ts",
-      "import": "./dist/common.js"
+      "source": "./src/common.ts",
+      "types": "./src/common.ts",
+      "default": "./src/common.ts"
     },
     "./server": {
-      "types": "./dist/server.d.ts",
-      "import": "./dist/server.js"
+      "source": "./src/server.ts",
+      "types": "./src/server.ts",
+      "default": "./src/server.ts"
     },
     "./server-port": {
-      "types": "./dist/server-port.d.ts",
-      "import": "./dist/server-port.js"
+      "source": "./src/server-port.ts",
+      "types": "./src/server-port.ts",
+      "default": "./src/server-port.ts"
     },
     "./dev-env": {
-      "types": "./dist/dev-env.d.ts",
-      "import": "./dist/dev-env.js"
+      "source": "./src/dev-env.ts",
+      "types": "./src/dev-env.ts",
+      "default": "./src/dev-env.ts"
     },
     "./host-daemon": {
-      "types": "./dist/host-daemon.d.ts",
-      "import": "./dist/host-daemon.js"
+      "source": "./src/host-daemon.ts",
+      "types": "./src/host-daemon.ts",
+      "default": "./src/host-daemon.ts"
     },
     "./host-daemon-entrypoint": {
-      "types": "./dist/host-daemon-entrypoint.d.ts",
-      "import": "./dist/host-daemon-entrypoint.js"
+      "source": "./src/host-daemon-entrypoint.ts",
+      "types": "./src/host-daemon-entrypoint.ts",
+      "default": "./src/host-daemon-entrypoint.ts"
     },
     "./cli": {
-      "types": "./dist/cli.d.ts",
-      "import": "./dist/cli.js"
+      "source": "./src/cli.ts",
+      "types": "./src/cli.ts",
+      "default": "./src/cli.ts"
     },
     "./defaults": {
-      "types": "./dist/defaults.d.ts",
-      "import": "./dist/defaults.js"
+      "source": "./src/defaults.ts",
+      "types": "./src/defaults.ts",
+      "default": "./src/defaults.ts"
     },
     "./database": {
-      "types": "./dist/database.d.ts",
-      "import": "./dist/database.js"
+      "source": "./src/database.ts",
+      "types": "./src/database.ts",
+      "default": "./src/database.ts"
     },
     "./data-dir": {
-      "types": "./dist/data-dir.d.ts",
-      "import": "./dist/data-dir.js"
+      "source": "./src/data-dir.ts",
+      "types": "./src/data-dir.ts",
+      "default": "./src/data-dir.ts"
     },
     "./strings": {
-      "types": "./dist/strings.d.ts",
-      "import": "./dist/strings.js"
+      "source": "./src/strings.ts",
+      "types": "./src/strings.ts",
+      "default": "./src/strings.ts"
     }
   },
-  "files": [
-    "dist"
-  ],
   "scripts": {
-    "build": "rimraf dist tsconfig.build.tsbuildinfo && tsc -p tsconfig.build.json",
     "clean": "rimraf dist tsconfig.tsbuildinfo",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --config vitest.config.ts"

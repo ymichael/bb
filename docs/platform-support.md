@@ -19,7 +19,7 @@ Windows support means the Linux stack runs entirely inside WSL2:
 ### Supported product flows
 
 - `pnpm install`
-- `pnpm exec turbo run build`
+- `pnpm build`
 - `pnpm exec turbo run typecheck`
 - `pnpm exec turbo run test`
 - app + server + host-daemon startup on supported persistent-host OSes

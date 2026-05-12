@@ -20,11 +20,15 @@ describe("provider registry", () => {
     const provider = createProviderForId("claude-code");
     expect(provider.id).toBe("claude-code");
     expect(provider.process.command).toBe("node");
-    expect(provider.process.args).toHaveLength(1);
-    expect(provider.process.args[0]).toMatch(
-      /agent-runtime\/(src|dist)\/claude-code\/bridge\/bridge\.js$/,
+    expect(provider.process.args.slice(0, 3)).toEqual([
+      "--conditions=source",
+      "--import",
+      import.meta.resolve("tsx"),
+    ]);
+    expect(provider.process.args.at(-1)).toMatch(
+      /agent-runtime\/src\/claude-code\/bridge\/bridge\.ts$/,
     );
-    expect(existsSync(provider.process.args[0])).toBe(true);
+    expect(existsSync(provider.process.args.at(-1) ?? "")).toBe(true);
   });
 
   it("passes the configured bridge bundle directory to bundled providers", () => {
@@ -83,11 +87,15 @@ describe("provider registry", () => {
     const provider = createProviderForId("pi");
     expect(provider.id).toBe("pi");
     expect(provider.process.command).toBe("node");
-    expect(provider.process.args).toHaveLength(1);
-    expect(provider.process.args[0]).toMatch(
-      /agent-runtime\/(src|dist)\/pi\/bridge\/bridge\.js$/,
+    expect(provider.process.args.slice(0, 3)).toEqual([
+      "--conditions=source",
+      "--import",
+      import.meta.resolve("tsx"),
+    ]);
+    expect(provider.process.args.at(-1)).toMatch(
+      /agent-runtime\/src\/pi\/bridge\/bridge\.ts$/,
     );
-    expect(existsSync(provider.process.args[0])).toBe(true);
+    expect(existsSync(provider.process.args.at(-1) ?? "")).toBe(true);
   });
 
   it("rejects unsupported adapters", () => {

@@ -1,54 +1,179 @@
 {
   "$schema": "https://turbo.build/schema.json",
   "tasks": {
-    "build": {
-      "dependsOn": ["^build"],
+    "@bb/app#build": {
+      "dependsOn": [],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/apps/*/package.json",
+        "$TURBO_ROOT$/apps/*/scripts/**",
+        "$TURBO_ROOT$/apps/*/src/**",
+        "$TURBO_ROOT$/apps/*/tsconfig.build.json",
+        "$TURBO_ROOT$/apps/*/tsconfig.json",
+        "$TURBO_ROOT$/apps/*/vite.config.ts",
+        "$TURBO_ROOT$/package.json",
+        "$TURBO_ROOT$/packages/*/package.json",
+        "$TURBO_ROOT$/packages/*/src/**",
+        "$TURBO_ROOT$/packages/*/tsconfig.build.json",
+        "$TURBO_ROOT$/packages/*/tsconfig.json",
+        "$TURBO_ROOT$/packages/db/drizzle/**",
+        "$TURBO_ROOT$/packages/templates/scripts/**",
+        "$TURBO_ROOT$/packages/tsconfig/*.json",
+        "$TURBO_ROOT$/pnpm-lock.yaml",
+        "$TURBO_ROOT$/pnpm-workspace.yaml",
+        "$TURBO_ROOT$/scripts/*.mjs",
+        "$TURBO_ROOT$/turbo.json"
+      ],
       "outputs": ["dist/**"]
     },
-    "bundle": {
-      "dependsOn": ["^build"],
+    "@bb/cli#build": {
+      "dependsOn": [],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/apps/*/package.json",
+        "$TURBO_ROOT$/apps/*/scripts/**",
+        "$TURBO_ROOT$/apps/*/src/**",
+        "$TURBO_ROOT$/apps/*/tsconfig.build.json",
+        "$TURBO_ROOT$/apps/*/tsconfig.json",
+        "$TURBO_ROOT$/apps/*/vite.config.ts",
+        "$TURBO_ROOT$/package.json",
+        "$TURBO_ROOT$/packages/*/package.json",
+        "$TURBO_ROOT$/packages/*/src/**",
+        "$TURBO_ROOT$/packages/*/tsconfig.build.json",
+        "$TURBO_ROOT$/packages/*/tsconfig.json",
+        "$TURBO_ROOT$/packages/db/drizzle/**",
+        "$TURBO_ROOT$/packages/templates/scripts/**",
+        "$TURBO_ROOT$/packages/tsconfig/*.json",
+        "$TURBO_ROOT$/pnpm-lock.yaml",
+        "$TURBO_ROOT$/pnpm-workspace.yaml",
+        "$TURBO_ROOT$/scripts/*.mjs",
+        "$TURBO_ROOT$/turbo.json"
+      ],
       "outputs": ["dist/**"]
     },
     "@bb/host-daemon#build": {
-      "dependsOn": ["bundle", "^build"],
+      "dependsOn": [],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/apps/*/package.json",
+        "$TURBO_ROOT$/apps/*/scripts/**",
+        "$TURBO_ROOT$/apps/*/src/**",
+        "$TURBO_ROOT$/apps/*/tsconfig.build.json",
+        "$TURBO_ROOT$/apps/*/tsconfig.json",
+        "$TURBO_ROOT$/apps/*/vite.config.ts",
+        "$TURBO_ROOT$/package.json",
+        "$TURBO_ROOT$/packages/*/package.json",
+        "$TURBO_ROOT$/packages/*/src/**",
+        "$TURBO_ROOT$/packages/*/tsconfig.build.json",
+        "$TURBO_ROOT$/packages/*/tsconfig.json",
+        "$TURBO_ROOT$/packages/db/drizzle/**",
+        "$TURBO_ROOT$/packages/templates/scripts/**",
+        "$TURBO_ROOT$/packages/tsconfig/*.json",
+        "$TURBO_ROOT$/pnpm-lock.yaml",
+        "$TURBO_ROOT$/pnpm-workspace.yaml",
+        "$TURBO_ROOT$/scripts/*.mjs",
+        "$TURBO_ROOT$/turbo.json"
+      ],
       "outputs": ["dist/**"]
     },
-    "@bb/agent-fixtures#build": {
-      "dependsOn": ["^build"],
+    "@bb/scripts#build": {
+      "dependsOn": [],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/apps/*/package.json",
+        "$TURBO_ROOT$/apps/*/scripts/**",
+        "$TURBO_ROOT$/apps/*/src/**",
+        "$TURBO_ROOT$/apps/*/tsconfig.build.json",
+        "$TURBO_ROOT$/apps/*/tsconfig.json",
+        "$TURBO_ROOT$/apps/*/vite.config.ts",
+        "$TURBO_ROOT$/package.json",
+        "$TURBO_ROOT$/packages/*/package.json",
+        "$TURBO_ROOT$/packages/*/src/**",
+        "$TURBO_ROOT$/packages/*/tsconfig.build.json",
+        "$TURBO_ROOT$/packages/*/tsconfig.json",
+        "$TURBO_ROOT$/packages/db/drizzle/**",
+        "$TURBO_ROOT$/packages/templates/scripts/**",
+        "$TURBO_ROOT$/packages/tsconfig/*.json",
+        "$TURBO_ROOT$/pnpm-lock.yaml",
+        "$TURBO_ROOT$/pnpm-workspace.yaml",
+        "$TURBO_ROOT$/scripts/*.mjs",
+        "$TURBO_ROOT$/turbo.json"
+      ],
+      "outputs": ["dist/**"]
+    },
+    "@bb/server#build": {
+      "dependsOn": [],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/apps/*/package.json",
+        "$TURBO_ROOT$/apps/*/scripts/**",
+        "$TURBO_ROOT$/apps/*/src/**",
+        "$TURBO_ROOT$/apps/*/tsconfig.build.json",
+        "$TURBO_ROOT$/apps/*/tsconfig.json",
+        "$TURBO_ROOT$/apps/*/vite.config.ts",
+        "$TURBO_ROOT$/package.json",
+        "$TURBO_ROOT$/packages/*/package.json",
+        "$TURBO_ROOT$/packages/*/src/**",
+        "$TURBO_ROOT$/packages/*/tsconfig.build.json",
+        "$TURBO_ROOT$/packages/*/tsconfig.json",
+        "$TURBO_ROOT$/packages/db/drizzle/**",
+        "$TURBO_ROOT$/packages/templates/scripts/**",
+        "$TURBO_ROOT$/packages/tsconfig/*.json",
+        "$TURBO_ROOT$/pnpm-lock.yaml",
+        "$TURBO_ROOT$/pnpm-workspace.yaml",
+        "$TURBO_ROOT$/scripts/*.mjs",
+        "$TURBO_ROOT$/turbo.json"
+      ],
+      "outputs": ["dist/**"]
+    },
+    "bundle": {
+      "dependsOn": [],
       "outputs": ["dist/**"]
     },
     "template:build": {
-      "dependsOn": ["build", "^build"],
+      "dependsOn": [],
       "cache": false,
       "outputs": [],
       "passThroughEnv": ["E2B_API_KEY"]
     },
-    "dev": {
-      "dependsOn": ["^build"],
+    "@bb/app#dev": {
+      "dependsOn": [],
       "cache": false,
       "persistent": true,
       "passThroughEnv": ["*"]
     },
     "storybook": {
-      "dependsOn": ["^build"],
+      "dependsOn": [],
       "cache": false,
       "persistent": true,
       "passThroughEnv": ["*"]
     },
-    "@bb/server#dev": {
-      "dependsOn": ["build", "^build"],
+    "@bb/dev-env#dev": {
+      "dependsOn": [],
       "cache": false,
       "persistent": true,
       "passThroughEnv": ["*"]
     },
     "@bb/host-daemon#dev": {
-      "dependsOn": ["build", "^build"],
+      "dependsOn": [],
       "cache": false,
       "persistent": true,
       "passThroughEnv": ["*"]
     },
-    "start:prod": {
-      "dependsOn": ["build", "^build"],
+    "@bb/server#dev": {
+      "dependsOn": [],
+      "cache": false,
+      "persistent": true,
+      "passThroughEnv": ["*"]
+    },
+    "@bb/host-daemon#start:prod": {
+      "dependsOn": ["build"],
+      "cache": false,
+      "persistent": true,
+      "passThroughEnv": ["*"]
+    },
+    "@bb/server#start:prod": {
+      "dependsOn": ["build"],
       "cache": false,
       "persistent": true,
       "passThroughEnv": ["*"]
@@ -58,20 +183,10 @@
     },
     "lint": {},
     "typecheck": {
-      "dependsOn": ["^build"]
-    },
-    "@bb/integration-tests#build": {
-      "dependsOn": ["^build"],
-      "inputs": [
-        "$TURBO_DEFAULT$",
-        "$TURBO_ROOT$/apps/server/package.json",
-        "$TURBO_ROOT$/apps/server/tsconfig.json",
-        "$TURBO_ROOT$/apps/server/src/**"
-      ],
-      "outputs": []
+      "dependsOn": []
     },
     "@bb/integration-tests#typecheck": {
-      "dependsOn": ["^build"],
+      "dependsOn": [],
       "inputs": [
         "$TURBO_DEFAULT$",
         "$TURBO_ROOT$/apps/server/package.json",
@@ -80,10 +195,10 @@
       ]
     },
     "test": {
-      "dependsOn": ["build", "^build"]
+      "dependsOn": []
     },
     "@bb/integration-tests#test": {
-      "dependsOn": ["build", "^build"],
+      "dependsOn": [],
       "inputs": [
         "$TURBO_DEFAULT$",
         "$TURBO_ROOT$/apps/server/package.json",
@@ -92,10 +207,10 @@
       ]
     },
     "test:smoke": {
-      "dependsOn": ["build", "^build"]
+      "dependsOn": []
     },
     "@bb/integration-tests#test:smoke": {
-      "dependsOn": ["build", "^build"],
+      "dependsOn": [],
       "inputs": [
         "$TURBO_DEFAULT$",
         "$TURBO_ROOT$/apps/server/package.json",
@@ -104,7 +219,7 @@
       ]
     },
     "test:e2b-smoke": {
-      "dependsOn": ["typecheck", "^build"],
+      "dependsOn": ["typecheck"],
       "cache": false,
       "passThroughEnv": [
         "BB_CLOUD_AUTH_FIXTURE_PATH",
@@ -114,13 +229,13 @@
       ]
     },
     "bench": {
-      "dependsOn": ["build", "^build"]
+      "dependsOn": []
     },
     "test:integration": {
-      "dependsOn": ["build", "^build"]
+      "dependsOn": []
     },
     "@bb/integration-tests#test:integration": {
-      "dependsOn": ["build", "^build"],
+      "dependsOn": [],
       "inputs": [
         "$TURBO_DEFAULT$",
         "$TURBO_ROOT$/apps/server/package.json",

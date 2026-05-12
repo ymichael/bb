@@ -35,23 +35,33 @@ interface FakeEventMessage {
 const DEFAULT_ADAPTER_ID = "fake";
 const DEFAULT_DISPLAY_NAME = "Fake Provider";
 
-function resolveFakeProviderScriptPath(): string {
-  const siblingCompiledPath = fileURLToPath(
-    new URL("./fake-provider-script.cjs", import.meta.url),
-  );
-  if (existsSync(siblingCompiledPath)) {
-    return siblingCompiledPath;
+function resolveTsxLoaderSpecifier(): string {
+  return import.meta.resolve("tsx");
+}
+
+export function buildNodeScriptArgs(scriptPath: string): string[] {
+  if (scriptPath.endsWith(".ts")) {
+    return [
+      "--conditions=source",
+      "--import",
+      resolveTsxLoaderSpecifier(),
+      scriptPath,
+    ];
   }
 
-  const builtPath = fileURLToPath(
-    new URL("../../dist/test/fake-provider-script.cjs", import.meta.url),
+  return [scriptPath];
+}
+
+function resolveFakeProviderScriptPath(): string {
+  const sourceScriptPath = fileURLToPath(
+    new URL("./fake-provider-script.ts", import.meta.url),
   );
-  if (existsSync(builtPath)) {
-    return builtPath;
+  if (existsSync(sourceScriptPath)) {
+    return sourceScriptPath;
   }
 
   throw new Error(
-    "Missing fake provider script. Build @bb/agent-runtime before using createFakeAdapter().",
+    "Missing fake provider script. Expected packages/agent-runtime/src/test/fake-provider-script.ts.",
   );
 }
 
@@ -296,7 +306,7 @@ export function createFakeAdapter(
     parseModelListResult,
     prepareTurnStart: noPreparedProviderCommandDispatch,
     process: {
-      args: [options.scriptPath ?? fakeProviderScriptPath],
+      args: buildNodeScriptArgs(options.scriptPath ?? fakeProviderScriptPath),
       command: "node",
     },
     translateEvent(event) {

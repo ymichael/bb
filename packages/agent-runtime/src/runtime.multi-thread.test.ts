@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
+import { writeFileSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -582,9 +582,7 @@ rl.on("line", (line) => {
 
   it("handles multiple providers in a single runtime", async () => {
     const events: ThreadEvent[] = [];
-    // Create two different fake provider scripts with distinct responses
-    const script2 = join(tmpDir, "fake-provider-2.cjs");
-    writeFileSync(script2, readFileSync(fakeProviderScriptPath, "utf8"));
+    const script2 = fakeProviderScriptPath;
 
     let adapterCallCount = 0;
     const runtime = createAgentRuntimeWithAdapters({

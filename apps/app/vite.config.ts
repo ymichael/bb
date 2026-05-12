@@ -17,6 +17,7 @@ const serverWsOrigin = `ws://localhost:${serverPort}`;
 export default defineConfig(({ command }) => ({
   plugins: [react(), tailwindcss()],
   resolve: {
+    conditions: ["source"],
     alias: {
       "@": path.resolve(__dirname, "./src"),
     },

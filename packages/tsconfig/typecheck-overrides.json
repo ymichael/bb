@@ -4,6 +4,7 @@
     "declaration": false,
     "declarationMap": false,
     "noEmit": true,
-    "sourceMap": false
+    "sourceMap": false,
+    "customConditions": ["source"]
   }
 }

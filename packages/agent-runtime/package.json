@@ -4,29 +4,28 @@
   "type": "module",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "source": "./src/index.ts",
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
     },
     "./capture": {
-      "types": "./dist/capture.d.ts",
-      "import": "./dist/capture.js"
+      "source": "./src/capture.ts",
+      "types": "./src/capture.ts",
+      "default": "./src/capture.ts"
     },
     "./shared/json-rpc-envelope": {
-      "types": "./dist/shared/json-rpc-envelope.d.ts",
-      "import": "./dist/shared/json-rpc-envelope.js"
+      "source": "./src/shared/json-rpc-envelope.ts",
+      "types": "./src/shared/json-rpc-envelope.ts",
+      "default": "./src/shared/json-rpc-envelope.ts"
     },
     "./test": {
-      "types": "./dist/test/index.d.ts",
-      "import": "./dist/test/index.js"
+      "source": "./src/test/index.ts",
+      "types": "./src/test/index.ts",
+      "default": "./src/test/index.ts"
     }
   },
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
-  "files": [
-    "dist"
-  ],
+  "types": "./src/index.ts",
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
     "clean": "rimraf dist tsconfig.tsbuildinfo",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --config vitest.config.ts",
@@ -46,6 +45,7 @@
     "@bb/test-helpers": "workspace:*",
     "@bb/tsconfig": "workspace:*",
     "@types/node": "^22.0.0",
+    "tsx": "^4.21.0",
     "typescript": "^5.7.0",
     "vitest": "^4.1.1"
   }

@@ -21,7 +21,7 @@ import type {
 } from "@bb/domain";
 import { threadScope, toPositiveNumber, turnScope } from "@bb/domain";
 import { decodeNormalizedProviderToolCallRequest } from "../shared/provider-tool-call-contract.js";
-import { resolveBridgePath } from "../shared/bridge-path.js";
+import { resolveBridgeProcessArgs } from "../shared/bridge-path.js";
 import { bashArgsSchema, textBlockSchema } from "../shared/tool-arg-schemas.js";
 import {
   buildEditDiff,
@@ -1200,14 +1200,14 @@ export function createPiProviderAdapter(
     capabilities,
     process: {
       command: opts?.processCommand ?? "node",
-      args: opts?.processArgs ?? [
-        resolveBridgePath({
+      args:
+        opts?.processArgs ??
+        resolveBridgeProcessArgs({
           bridgeBundleDir: opts?.bridgeBundleDir,
           bundleFileName: "bb-pi-bridge.mjs",
           importMetaUrl: import.meta.url,
           bridgeRelativePath: "bridge/bridge.js",
         }),
-      ],
     },
 
     // -- Unified command builder -------------------------------------------

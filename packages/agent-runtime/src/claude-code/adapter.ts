@@ -20,7 +20,7 @@ import type {
 import { jsonValueSchema, threadScope } from "@bb/domain";
 import { decodeNormalizedProviderToolCallRequest } from "../shared/provider-tool-call-contract.js";
 import { resolveAdapterPermissionPolicy } from "../shared/permission-policy.js";
-import { resolveBridgePath } from "../shared/bridge-path.js";
+import { resolveBridgeProcessArgs } from "../shared/bridge-path.js";
 import { bashArgsSchema } from "../shared/tool-arg-schemas.js";
 import {
   buildEditDiff,
@@ -740,14 +740,14 @@ export function createClaudeCodeProviderAdapter(
     capabilities,
     process: {
       command: opts?.processCommand ?? "node",
-      args: opts?.processArgs ?? [
-        resolveBridgePath({
+      args:
+        opts?.processArgs ??
+        resolveBridgeProcessArgs({
           bridgeBundleDir: opts?.bridgeBundleDir,
           bundleFileName: "bb-claude-code-bridge.mjs",
           importMetaUrl: import.meta.url,
           bridgeRelativePath: "bridge/bridge.js",
         }),
-      ],
     },
 
     // -- Unified command builder -------------------------------------------

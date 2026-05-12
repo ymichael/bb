@@ -127,8 +127,7 @@ function parseTurnPlan(inputText: string): TurnPlan {
   const unresolvedToolMatch =
     /(?:^|\s)call_tool_unresolved:([^\s]+)(?:\s|$)/.exec(inputText);
   const toolMatch =
-    unresolvedToolMatch ??
-    /(?:^|\s)call_tool:([^\s]+)(?:\s|$)/.exec(inputText);
+    unresolvedToolMatch ?? /(?:^|\s)call_tool:([^\s]+)(?:\s|$)/.exec(inputText);
 
   let delayMs = delayMatch ? Number(delayMatch[1]) : 0;
   let toolName = toolMatch ? toolMatch[1] : null;

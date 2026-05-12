@@ -2,12 +2,9 @@ import { spawn } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 
-const DIST_INDEX_PATH = fileURLToPath(
-  new URL("../dist/index.js", import.meta.url),
-);
+const LOGGER_IMPORT_SPECIFIER = "@bb/logger";
 
 const tempDirs: string[] = [];
 
@@ -65,13 +62,18 @@ async function runLoggerInSubprocess(args: {
   message: string;
 }): Promise<SubprocessLoggerResult> {
   const script = `
-    import { createLogger } from ${JSON.stringify(DIST_INDEX_PATH)};
-    const logger = createLogger({ component: ${JSON.stringify(args.component)} });
-    logger.info({ marker: ${JSON.stringify(args.message)} }, ${JSON.stringify(args.message)});
-    // Worker transport is async. Pino's flush callback only waits for the
-    // main-thread buffer, not the worker thread; a short settle window lets
-    // the worker drain to stdout/file before we exit.
-    setTimeout(() => process.exit(0), 250);
+    (async () => {
+      const { createLogger } = await import(${JSON.stringify(LOGGER_IMPORT_SPECIFIER)});
+      const logger = createLogger({ component: ${JSON.stringify(args.component)} });
+      logger.info({ marker: ${JSON.stringify(args.message)} }, ${JSON.stringify(args.message)});
+      // Worker transport is async. Pino's flush callback only waits for the
+      // main-thread buffer, not the worker thread; a short settle window lets
+      // the worker drain to stdout/file before we exit.
+      setTimeout(() => process.exit(0), 250);
+    })().catch((error) => {
+      console.error(error);
+      process.exit(1);
+    });
   `;
 
   const childEnv: NodeJS.ProcessEnv = {
@@ -85,7 +87,7 @@ async function runLoggerInSubprocess(args: {
   return new Promise((resolve, reject) => {
     const child = spawn(
       process.execPath,
-      ["--input-type=module", "-e", script],
+      ["--conditions=source", "--import", "tsx", "-e", script],
       {
         env: childEnv,
         stdio: ["ignore", "pipe", "pipe"],

@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { basename, dirname, resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export interface ResolveBridgePathArgs {
@@ -9,28 +9,47 @@ export interface ResolveBridgePathArgs {
   bundleFileName?: string;
 }
 
-export function resolveBridgePath(args: ResolveBridgePathArgs): string {
+export type BridgeProcessArgs = string[];
+
+function resolveTsxLoaderSpecifier(): string {
+  return import.meta.resolve("tsx");
+}
+
+function sourceTypeScriptCandidate(sourceJavaScriptPath: string): string {
+  return sourceJavaScriptPath.replace(/\.js$/u, ".ts");
+}
+
+function sourceTypeScriptProcessArgs(sourcePath: string): BridgeProcessArgs {
+  return [
+    "--conditions=source",
+    "--import",
+    resolveTsxLoaderSpecifier(),
+    sourcePath,
+  ];
+}
+
+export function resolveBridgeProcessArgs(
+  args: ResolveBridgePathArgs,
+): BridgeProcessArgs {
   if (args.bridgeBundleDir && args.bundleFileName) {
-    return resolve(args.bridgeBundleDir, args.bundleFileName);
+    return [resolve(args.bridgeBundleDir, args.bundleFileName)];
   }
 
   const moduleDir = dirname(fileURLToPath(args.importMetaUrl));
   const sourceCandidate = resolve(moduleDir, args.bridgeRelativePath);
   if (existsSync(sourceCandidate)) {
-    return sourceCandidate;
+    return [sourceCandidate];
   }
 
-  const packageRoot = resolve(moduleDir, "..", "..");
-  const providerDir = basename(moduleDir);
-  const distCandidate = resolve(
-    packageRoot,
-    "dist",
-    providerDir,
-    args.bridgeRelativePath,
+  const sourceTsCandidate = sourceTypeScriptCandidate(sourceCandidate);
+  if (existsSync(sourceTsCandidate)) {
+    return sourceTypeScriptProcessArgs(sourceTsCandidate);
+  }
+
+  throw new Error(
+    `Missing provider bridge. Expected source bridge at ${sourceTsCandidate}` +
+      (args.bridgeBundleDir && args.bundleFileName
+        ? ` or bundled bridge at ${resolve(args.bridgeBundleDir, args.bundleFileName)}`
+        : ""),
   );
-  if (existsSync(distCandidate)) {
-    return distCandidate;
-  }
-
-  return sourceCandidate;
 }

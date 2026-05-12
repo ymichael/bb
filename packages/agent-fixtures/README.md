@@ -32,16 +32,10 @@ stream and is copied verbatim when promoting a live capture.
 
 ## CLI
 
-Build first:
-
-```sh
-pnpm exec turbo run build --filter=@bb/agent-fixtures
-```
-
 Capture a built-in scenario:
 
 ```sh
-node ./packages/agent-fixtures/dist/cli.js capture \
+pnpm --filter @bb/agent-fixtures fixtures -- capture \
   --provider codex \
   --scenario excalidraw-search-feature \
   --workspace /path/to/excalidraw
@@ -50,8 +44,8 @@ node ./packages/agent-fixtures/dist/cli.js capture \
 Replay fixtures:
 
 ```sh
-node ./packages/agent-fixtures/dist/cli.js replay
-node ./packages/agent-fixtures/dist/cli.js replay \
+pnpm --filter @bb/agent-fixtures fixtures -- replay
+pnpm --filter @bb/agent-fixtures fixtures -- replay \
   --corpus-id excalidraw \
   --provider claude-code \
   --task search-feature
@@ -60,7 +54,7 @@ node ./packages/agent-fixtures/dist/cli.js replay \
 Promote a live capture from `~/.bb-dev/replays/<captureId>/`:
 
 ```sh
-node ./packages/agent-fixtures/dist/cli.js promote cap_abc12345_deadbeef \
+pnpm --filter @bb/agent-fixtures fixtures -- promote cap_abc12345_deadbeef \
   --corpus-id dev-replays
 ```
 
@@ -70,7 +64,7 @@ The usual path is to record a live replay capture in the dev app, then promote
 it:
 
 ```sh
-node ./packages/agent-fixtures/dist/cli.js promote <captureId> \
+pnpm --filter @bb/agent-fixtures fixtures -- promote <captureId> \
   --corpus-id dev-replays
 ```
 

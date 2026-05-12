@@ -9,6 +9,7 @@ import {
 import {
   maybeAddAutoJoinEnv,
   resolveDefaultDataDirName,
+  resolveHostDaemonProcessCommand,
 } from "../src/commands/run-host-daemon.js";
 import type { HostDaemonRuntimeEnvironment } from "../src/lib/host-daemon-runtime.js";
 
@@ -40,6 +41,22 @@ describe("run-host-daemon auto join", () => {
   it("resolves the default data dir by mode", () => {
     expect(resolveDefaultDataDirName("dev")).toBe(".bb-dev");
     expect(resolveDefaultDataDirName("prod")).toBe(".bb");
+  });
+
+  it("runs the daemon from source in dev and from dist in prod", () => {
+    expect(resolveHostDaemonProcessCommand("dev")).toEqual({
+      args: [
+        "--conditions=source",
+        "--import",
+        "tsx",
+        "apps/host-daemon/src/index.ts",
+      ],
+      command: process.execPath,
+    });
+    expect(resolveHostDaemonProcessCommand("prod")).toEqual({
+      args: ["apps/host-daemon/dist/index.js"],
+      command: process.execPath,
+    });
   });
 
   it("skips auto join when auth state already exists", async () => {

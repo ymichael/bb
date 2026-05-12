@@ -109,12 +109,6 @@ pnpm --filter @bb/agent-runtime test:integration -- --reporter=verbose > /tmp/in
 grep -E "(✓|×|Test Files|Tests )" /tmp/integ-out.txt
 ```
 
-**Build before running integration tests.** Bridge processes (claude-code, pi) run from `dist/`, not `src/`. If you change bridge or adapter code, rebuild first:
-
-```bash
-pnpm exec turbo run build --filter=@bb/agent-runtime --force
-```
-
 **Tests run concurrently within each scenario file.** All 3 provider variants in a file run in parallel via `describe.concurrent`. Scenario files run serially because Pi and other real providers share local auth state and external provider limits; running every scenario file at once has caused real-provider flakes where a turn completes without the expected tool execution.
 
 **When a test hangs**, the provider is likely not responding to a JSON-RPC request. Common causes:
@@ -134,11 +128,8 @@ pnpm exec turbo run build --filter=@bb/agent-runtime --force
 
 ### Building
 
-```bash
-pnpm exec turbo run build --filter=@bb/agent-runtime
-```
-
-Integration tests require a build first (bridge processes run from `dist/`).
+`@bb/agent-runtime` is source-only inside this workspace. The host daemon build
+creates the bridge bundles it needs for runtime startup.
 
 ## Architecture
 

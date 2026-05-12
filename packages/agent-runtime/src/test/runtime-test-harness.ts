@@ -10,7 +10,10 @@ import { noPreparedProviderCommandDispatch } from "../provider-adapter.js";
 import { ProviderRequestDecodeError } from "../runtime-json-rpc.js";
 import { parseAvailableModelList } from "../shared/available-models.js";
 import type { AgentRuntimeExecutionOptions } from "../types.js";
-import { createFakeAdapter as createSharedFakeAdapter } from "./index.js";
+import {
+  buildNodeScriptArgs,
+  createFakeAdapter as createSharedFakeAdapter,
+} from "./index.js";
 export {
   waitForRuntimeState,
   waitForRuntimeThreadEvent,
@@ -205,7 +208,7 @@ export function createWarningEventAdapter(scriptPath: string): ProviderAdapter {
     },
     process: {
       command: "node",
-      args: [scriptPath],
+      args: buildNodeScriptArgs(scriptPath),
     },
     buildCommandPlan(command) {
       switch (command.type) {
@@ -312,7 +315,7 @@ export function createStartedEventAdapter(scriptPath: string): ProviderAdapter {
     },
     process: {
       command: "node",
-      args: [scriptPath],
+      args: buildNodeScriptArgs(scriptPath),
     },
     buildCommandPlan(command) {
       switch (command.type) {

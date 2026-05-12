@@ -143,8 +143,14 @@ describe("pi provider adapter", () => {
   it("has correct process config", () => {
     const adapter = createPiProviderAdapter();
     expect(adapter.process.command).toBe("node");
-    expect(adapter.process.args).toHaveLength(1);
-    expect(adapter.process.args[0]).toMatch(/bridge\.js$/);
+    expect(adapter.process.args.slice(0, 3)).toEqual([
+      "--conditions=source",
+      "--import",
+      import.meta.resolve("tsx"),
+    ]);
+    expect(adapter.process.args.at(-1)).toMatch(
+      /agent-runtime\/src\/pi\/bridge\/bridge\.ts$/,
+    );
   });
 
   it("uses the configured bridge bundle directory when present", () => {

@@ -3,6 +3,7 @@ import { workspaceTestAliases } from "../../vitest.workspace-aliases";
 
 export default defineConfig({
   resolve: {
+    conditions: ["source"],
     alias: workspaceTestAliases,
   },
   benchmark: {

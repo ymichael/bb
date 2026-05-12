@@ -866,7 +866,7 @@ describe("thread command dispatch", () => {
     const threadStorage = await makeTempDir("bb-manager-runtime-");
     const harness = createHarness({ workspacePath: threadStorage });
     const managerInstructions = [
-      "You are a manager for this project.",
+      "You are a manager in a project inside bb.",
       "Prefer concise user updates.",
       "Delegate implementation quickly.",
       "Manager Project",

@@ -5,35 +5,43 @@
   "private": true,
   "exports": {
     "./lib/run-dev-supervisor": {
-      "types": "./dist/lib/run-dev-supervisor.d.ts",
+      "source": "./src/lib/run-dev-supervisor.ts",
+      "types": "./src/lib/run-dev-supervisor.ts",
       "import": "./dist/lib/run-dev-supervisor.js"
     },
     "./request-dev-restart": {
-      "types": "./dist/commands/request-dev-restart.d.ts",
+      "source": "./src/commands/request-dev-restart.ts",
+      "types": "./src/commands/request-dev-restart.ts",
       "import": "./dist/commands/request-dev-restart.js"
     },
     "./run-cli": {
-      "types": "./dist/commands/run-cli.d.ts",
+      "source": "./src/commands/run-cli.ts",
+      "types": "./src/commands/run-cli.ts",
       "import": "./dist/commands/run-cli.js"
     },
     "./run-host-daemon": {
-      "types": "./dist/commands/run-host-daemon.d.ts",
+      "source": "./src/commands/run-host-daemon.ts",
+      "types": "./src/commands/run-host-daemon.ts",
       "import": "./dist/commands/run-host-daemon.js"
     },
     "./start-bb": {
-      "types": "./dist/commands/start-bb.d.ts",
+      "source": "./src/commands/start-bb.ts",
+      "types": "./src/commands/start-bb.ts",
       "import": "./dist/commands/start-bb.js"
     },
     "./start-host-daemon": {
-      "types": "./dist/commands/start-host-daemon.d.ts",
+      "source": "./src/commands/start-host-daemon.ts",
+      "types": "./src/commands/start-host-daemon.ts",
       "import": "./dist/commands/start-host-daemon.js"
     },
     "./reset-bb-data": {
-      "types": "./dist/commands/reset-bb-data.d.ts",
+      "source": "./src/commands/reset-bb-data.ts",
+      "types": "./src/commands/reset-bb-data.ts",
       "import": "./dist/commands/reset-bb-data.js"
     },
     "./archive-codex-tmp-bb-sessions": {
-      "types": "./dist/commands/archive-codex-tmp-bb-sessions.d.ts",
+      "source": "./src/commands/archive-codex-tmp-bb-sessions.ts",
+      "types": "./src/commands/archive-codex-tmp-bb-sessions.ts",
       "import": "./dist/commands/archive-codex-tmp-bb-sessions.js"
     }
   },
@@ -41,7 +49,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "rimraf dist tsconfig.build.tsbuildinfo && tsc -p tsconfig.build.json",
+    "build": "node ../../scripts/build-package.mjs",
     "clean": "rimraf dist tsconfig.tsbuildinfo",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --config vitest.config.ts",

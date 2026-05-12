@@ -5,17 +5,18 @@
   "private": true,
   "exports": {
     "./test": {
-      "types": "./dist/test/index.d.ts",
-      "import": "./dist/test/index.js"
+      "source": "./src/test/index.ts",
+      "types": "./src/test/index.ts",
+      "default": "./src/test/index.ts"
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "node ../../scripts/build-node-entry.mjs src/index.ts dist/index.js --clean-dist --templates && node ./scripts/build-bundles.mjs",
     "bundle": "node ./scripts/build-bundles.mjs",
     "bundle:check": "node ./scripts/check-bundles.mjs",
     "start": "node dist/index.js",
     "start:prod": "cross-env NODE_ENV=production node dist/index.js",
-    "dev": "node scripts/dev-supervisor.mjs",
+    "dev": "node --conditions=source --import tsx scripts/dev-supervisor.mjs",
     "clean": "rimraf dist",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --config vitest.config.ts"
@@ -35,10 +36,14 @@
     "@bb/replay-capture": "workspace:*",
     "@bb/templates": "workspace:*",
     "@hono/node-server": "^1.19.11",
+    "@parcel/watcher": "2.5.6",
     "better-sqlite3": "^11.7.0",
     "mime-types": "^3.0.2",
     "open": "^10.2.0",
     "p-debounce": "^5.1.0",
+    "pino": "^9.6.0",
+    "pino-pretty": "^13.0.0",
+    "pino-roll": "^4.0.0",
     "p-retry": "^6.2.1",
     "partysocket": "^1.1.16",
     "proper-lockfile": "^4.1.2",

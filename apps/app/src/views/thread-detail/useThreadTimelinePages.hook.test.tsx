@@ -136,29 +136,34 @@ describe("useThreadTimelinePages", () => {
       expect(result.current.timelineRows.map((row) => row.id)).toEqual([
         "latest-row",
       ]);
+      expect(result.current.hasOlderTimelineRows).toBe(true);
     });
 
     await act(async () => {
       await result.current.loadOlderTimelineRows();
     });
-    expect(result.current.timelineRows.map((row) => row.id)).toEqual([
-      "older-row",
-      "latest-row",
-    ]);
-    expect(result.current.hasOlderTimelineRows).toBe(true);
+    await waitFor(() => {
+      expect(result.current.timelineRows.map((row) => row.id)).toEqual([
+        "older-row",
+        "latest-row",
+      ]);
+      expect(result.current.hasOlderTimelineRows).toBe(true);
+    });
 
     await act(async () => {
       await result.current.loadOlderTimelineRows();
     });
 
-    expect(result.current.isLoadingOlderTimelineRows).toBe(false);
-    expect(result.current.timelineRows.map((row) => row.id)).toEqual([
-      "older-row",
-      "latest-row",
-    ]);
-    expect(result.current.timelineRows[1]).toMatchObject({
-      text: "updated latest",
+    await waitFor(() => {
+      expect(result.current.isLoadingOlderTimelineRows).toBe(false);
+      expect(result.current.timelineRows.map((row) => row.id)).toEqual([
+        "older-row",
+        "latest-row",
+      ]);
+      expect(result.current.timelineRows[1]).toMatchObject({
+        text: "updated latest",
+      });
+      expect(result.current.hasOlderTimelineRows).toBe(true);
     });
-    expect(result.current.hasOlderTimelineRows).toBe(true);
   });
 });

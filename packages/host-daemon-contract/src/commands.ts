@@ -18,7 +18,7 @@ import {
   replayCaptureDaemonListResponseSchema,
   replayCaptureManifestSchema,
   replaySpeedSchema,
-} from "@bb/replay-capture";
+} from "@bb/replay-capture/schema";
 import { z } from "zod";
 import { hostRuntimeMaterialSnapshotSchema } from "./local-state.js";
 

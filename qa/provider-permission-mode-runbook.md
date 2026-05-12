@@ -39,10 +39,10 @@ Core behaviors under test:
 
 ## Prerequisites
 
-Build the server, host daemon, CLI, templates, and provider runtime package:
+Build the runtime artifacts:
 
 ```bash
-pnpm exec turbo run build --filter=@bb/server --filter=@bb/host-daemon --filter=@bb/cli --filter=@bb/templates --filter=@bb/agent-runtime
+pnpm build
 ```
 
 Verify provider CLIs and support tools:

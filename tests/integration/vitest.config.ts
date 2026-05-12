@@ -9,6 +9,7 @@ const timeoutScale =
 
 export default defineConfig({
   resolve: {
+    conditions: ["source"],
     alias: workspaceTestAliases,
   },
   test: {

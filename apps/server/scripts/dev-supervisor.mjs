@@ -9,7 +9,7 @@ const scriptDir = dirname(fileURLToPath(import.meta.url));
 const packageRoot = resolve(scriptDir, "..");
 
 void runDevSupervisor({
-  childArgs: ["dist/index.js"],
+  childArgs: ["--conditions=source", "--import", "tsx", "src/index.ts"],
   childCommand: process.execPath,
   childCwd: packageRoot,
   unexpectedRestartBackoff: DEFAULT_UNEXPECTED_RESTART_BACKOFF,
