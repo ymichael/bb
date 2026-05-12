@@ -1,4 +1,4 @@
-import { memo, useState } from "react";
+import { memo, type MouseEvent, useState } from "react";
 import type { ThreadListEntry } from "@bb/domain";
 import {
   Pill,
@@ -231,6 +231,8 @@ interface ThreadTrailingIconProps {
   isManager: boolean;
 }
 
+type ThreadRowContextMenuEvent = MouseEvent<HTMLElement>;
+
 function ThreadTrailingIcon({
   environmentIcon: EnvironmentIcon,
   environmentIconLabel,
@@ -281,8 +283,7 @@ function ThreadRowComponent({
   const managedChildBusyCount = managerOptions?.managedChildBusyCount ?? 0;
   const isManagerBusy =
     isManager &&
-    (threadIsBusy ||
-      (isManagerCollapsed && managedChildBusyCount > 0));
+    (threadIsBusy || (isManagerCollapsed && managedChildBusyCount > 0));
   const EnvironmentIcon = getEnvironmentWorkspaceDisplayIcon(
     thread.environmentWorkspaceDisplayKind,
   );
@@ -300,6 +301,12 @@ function ThreadRowComponent({
       ? "bg-sidebar-border text-sidebar-foreground"
       : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
   );
+  function handleContextMenu(event: ThreadRowContextMenuEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+    setIsActionsOpen(true);
+  }
+
   const rowContent = (
     <>
       <NavLink
@@ -395,6 +402,7 @@ function ThreadRowComponent({
           >
             <ThreadActionsMenu
               thread={thread}
+              open={isActionsOpen}
               triggerClassName={cn(
                 "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground",
                 COARSE_POINTER_ROW_ACTION_SIZE_CLASS,
@@ -409,13 +417,21 @@ function ThreadRowComponent({
 
   if (isManager) {
     return (
-      <SidebarStickyTier tier="manager" className={rowClassName}>
+      <SidebarStickyTier
+        tier="manager"
+        className={rowClassName}
+        onContextMenu={handleContextMenu}
+      >
         {rowContent}
       </SidebarStickyTier>
     );
   }
 
-  return <div className={rowClassName}>{rowContent}</div>;
+  return (
+    <div className={rowClassName} onContextMenu={handleContextMenu}>
+      {rowContent}
+    </div>
+  );
 }
 
 export const ThreadRow = memo(ThreadRowComponent);

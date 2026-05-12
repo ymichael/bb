@@ -26,6 +26,7 @@ interface ThreadActionsMenuProps {
   viewerToggleLabel?: string;
   viewerToggleChecked?: boolean;
   onViewerToggleCheckedChange?: (checked: boolean) => void;
+  open?: boolean;
   onOpenChange?: (open: boolean) => void;
   triggerClassName?: string;
   align?: "start" | "center" | "end";
@@ -37,6 +38,7 @@ export function ThreadActionsMenu({
   viewerToggleLabel,
   viewerToggleChecked,
   onViewerToggleCheckedChange,
+  open,
   onOpenChange,
   triggerClassName,
   align = "end",
@@ -49,7 +51,7 @@ export function ThreadActionsMenu({
   const isArchived = thread.archivedAt != null;
 
   return (
-    <DropdownMenu onOpenChange={onOpenChange}>
+    <DropdownMenu open={open} onOpenChange={onOpenChange}>
       <DropdownMenuTrigger asChild>
         <Button
           type="button"
