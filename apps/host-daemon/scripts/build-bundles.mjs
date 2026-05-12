@@ -1,7 +1,7 @@
-import { chmod, mkdir, stat } from "node:fs/promises";
+import { chmod, copyFile, mkdir, stat } from "node:fs/promises";
 import { dirname } from "node:path";
 import { build } from "esbuild";
-import { bundleTargets } from "./bundle-manifest.mjs";
+import { bundleSupportFileTargets, bundleTargets } from "./bundle-manifest.mjs";
 import {
   createNativeExternalPatterns,
   generateTemplatesIfRequested,
@@ -33,6 +33,13 @@ async function main() {
     }
     const bundleStats = await stat(target.outfile);
     console.log(`${target.label}: ${bundleStats.size} bytes`);
+  }
+
+  for (const target of bundleSupportFileTargets) {
+    await mkdir(dirname(target.outfile), { recursive: true });
+    await copyFile(target.source, target.outfile);
+    const fileStats = await stat(target.outfile);
+    console.log(`${target.label}: ${fileStats.size} bytes`);
   }
 }
 

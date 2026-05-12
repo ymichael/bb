@@ -130,6 +130,10 @@
       "dependsOn": [],
       "outputs": ["dist/**"]
     },
+    "bundle:check": {
+      "dependsOn": ["bundle"],
+      "outputs": []
+    },
     "template:build": {
       "dependsOn": [],
       "cache": false,

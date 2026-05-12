@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { stat } from "node:fs/promises";
 import { promisify } from "node:util";
-import { bundleTargets } from "./bundle-manifest.mjs";
+import { bundleSupportFileTargets, bundleTargets } from "./bundle-manifest.mjs";
 
 const execFileAsync = promisify(execFile);
 
@@ -13,6 +13,15 @@ async function main() {
     const bundleStats = await stat(target.outfile);
     totalBytes += bundleStats.size;
     console.log(`${target.label}: syntax ok (${bundleStats.size} bytes)`);
+  }
+
+  for (const target of bundleSupportFileTargets) {
+    if (target.syntaxCheck) {
+      await execFileAsync("node", ["--check", target.outfile]);
+    }
+    const fileStats = await stat(target.outfile);
+    totalBytes += fileStats.size;
+    console.log(`${target.label}: present (${fileStats.size} bytes)`);
   }
 
   console.log(`total bundle size: ${totalBytes} bytes`);

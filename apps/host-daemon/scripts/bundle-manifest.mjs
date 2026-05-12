@@ -1,9 +1,13 @@
 import { dirname, resolve } from "node:path";
+import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
 const scriptsDir = dirname(fileURLToPath(import.meta.url));
 const packageRoot = resolve(scriptsDir, "..");
 const workspaceRoot = resolve(packageRoot, "..", "..");
+const requireFromAgentRuntime = createRequire(
+  resolve(workspaceRoot, "packages", "agent-runtime", "package.json"),
+);
 
 export const NODE_ESM_REQUIRE_BANNER = [
   'import { createRequire as __createRequire } from "node:module";',
@@ -55,5 +59,21 @@ export const bundleTargets = [
     executable: true,
     label: "bb cli",
     outfile: resolve(packageRoot, "dist", "bb"),
+  },
+];
+
+function resolveClaudeAgentSdkCliPath() {
+  return resolve(
+    dirname(requireFromAgentRuntime.resolve("@anthropic-ai/claude-agent-sdk")),
+    "cli.js",
+  );
+}
+
+export const bundleSupportFileTargets = [
+  {
+    label: "claude-code cli",
+    source: resolveClaudeAgentSdkCliPath(),
+    outfile: resolve(packageRoot, "dist", "cli.js"),
+    syntaxCheck: true,
   },
 ];
