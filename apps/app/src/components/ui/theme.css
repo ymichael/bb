@@ -104,11 +104,14 @@
      * sizing, gaps, and derived offsets for its descendant sticky tiers.
      */
     --bb-sidebar-sticky-stack-padding: 0.5rem;
+    --bb-sidebar-sticky-stack-padding-top: var(
+      --bb-sidebar-sticky-stack-padding
+    );
     --bb-sidebar-sticky-label-height: 2rem;
     --bb-sidebar-sticky-label-gap: 0.25rem;
     --bb-sidebar-sticky-row-height: var(--bb-sidebar-row-height);
     --bb-sidebar-sticky-row-gap: 0.125rem;
-    --bb-sidebar-sticky-label-top: var(--bb-sidebar-sticky-stack-padding);
+    --bb-sidebar-sticky-label-top: var(--bb-sidebar-sticky-stack-padding-top);
     --bb-sidebar-sticky-project-top: calc(
       var(--bb-sidebar-sticky-label-top) +
         var(--bb-sidebar-sticky-label-height) +
@@ -119,7 +122,13 @@
         var(--bb-sidebar-sticky-row-height) + var(--bb-sidebar-sticky-row-gap)
     );
 
-    padding: var(--bb-sidebar-sticky-stack-padding);
+    padding: var(--bb-sidebar-sticky-stack-padding-top)
+      var(--bb-sidebar-sticky-stack-padding)
+      var(--bb-sidebar-sticky-stack-padding);
+  }
+
+  [data-sidebar-sticky-stack][data-sidebar-sticky-density="compact-actions"] {
+    --bb-sidebar-sticky-stack-padding-top: 0.25rem;
   }
 
   [data-sidebar-sticky-stack] [data-sidebar-sticky-tier] {

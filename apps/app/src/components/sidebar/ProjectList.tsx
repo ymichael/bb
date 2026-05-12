@@ -433,7 +433,7 @@ function ProjectListComponent({
 
   return (
     <>
-      <div className="px-2 pt-2 pb-1 group-data-[collapsible=icon]:hidden">
+      <div className="px-2 pt-2 group-data-[collapsible=icon]:hidden">
         <ProjectListActionButtons
           onNewChat={onNewChat}
           onNewManager={onNewManager}
@@ -441,7 +441,7 @@ function ProjectListComponent({
           isManagerActionPending={isManagerActionPending}
         />
       </div>
-      <SidebarStickyStack>
+      <SidebarStickyStack data-sidebar-sticky-density="compact-actions">
         <SidebarStickyTier tier="label" className="justify-between pr-1">
           Projects
           {onNewProject ? (
