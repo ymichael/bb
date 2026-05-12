@@ -42,6 +42,7 @@ vi.mock("partysocket/ws", async () => {
 interface InstallHireManagerRoutesArgs {
   managerThread?: Thread;
   modelResponsesByProvider?: Record<string, AvailableModel[]>;
+  projects?: ProjectResponse[];
   systemProviders?: SystemProvidersFixture;
 }
 
@@ -114,6 +115,27 @@ function makeProjectResponse(): ProjectResponse {
         isDefault: true,
         createdAt: 1,
         updatedAt: 1,
+      },
+    ],
+  };
+}
+
+function makeSecondProjectResponse(): ProjectResponse {
+  return {
+    id: "proj-2",
+    name: "Second Demo",
+    createdAt: 2,
+    updatedAt: 2,
+    sources: [
+      {
+        id: "src-2",
+        projectId: "proj-2",
+        type: "local_path",
+        hostId: "host-local",
+        path: "/tmp/second-demo",
+        isDefault: true,
+        createdAt: 2,
+        updatedAt: 2,
       },
     ],
   };
@@ -221,10 +243,11 @@ function resolveSystemProviders(
 function installHireManagerRoutes(args: InstallHireManagerRoutesArgs = {}) {
   const managerThread = args.managerThread ?? makeThread();
   const managerRequests: CreateManagerThreadRequest[] = [];
+  const managerRequestProjectIds: string[] = [];
   const requestedModelProviders: Array<string | null> = [];
   const systemProviders =
     args.systemProviders ?? createDefaultSystemProviders();
-  const projects = [makeProjectResponse()];
+  const projects = args.projects ?? [makeProjectResponse()];
   const hosts = [makeHost("host-local", "Local Host")];
 
   const routes: FetchRoute[] = [
@@ -263,15 +286,19 @@ function installHireManagerRoutes(args: InstallHireManagerRoutesArgs = {}) {
       handler: async () =>
         jsonResponse(resolveSystemProviders(systemProviders)),
     },
-    {
+  ];
+
+  for (const project of projects) {
+    routes.push({
       method: "POST",
-      pathname: "/api/v1/projects/proj-1/managers",
+      pathname: `/api/v1/projects/${project.id}/managers`,
       handler: async (request: Request) => {
+        managerRequestProjectIds.push(project.id);
         managerRequests.push(await request.json());
         return jsonResponse(managerThread);
       },
-    },
-  ];
+    });
+  }
 
   if (args.modelResponsesByProvider) {
     routes.push({
@@ -291,6 +318,7 @@ function installHireManagerRoutes(args: InstallHireManagerRoutesArgs = {}) {
 
   return {
     managerRequests,
+    managerRequestProjectIds,
     managerThread,
     requestedModelProviders,
   };
@@ -396,6 +424,73 @@ describe("HireManagerDialog", () => {
       managerThread,
     );
     expect(requestedModelProviders).toEqual(["pi"]);
+  });
+
+  it("submits the manager hire for the project selected in the dialog", async () => {
+    const piModels = [
+      makeModel("anthropic/claude-opus-4-7", {
+        displayName: "Claude Opus 4.7",
+        isDefault: true,
+      }),
+    ];
+    const managerThread = { ...makeThread(), projectId: "proj-2" };
+    const { managerRequests, managerRequestProjectIds } =
+      installHireManagerRoutes({
+        managerThread,
+        modelResponsesByProvider: {
+          pi: piModels,
+        },
+        projects: [makeProjectResponse(), makeSecondProjectResponse()],
+      });
+    const { wrapper } = createSuspenseWrapper();
+
+    await renderOpenHireManagerDialog({
+      wrapper,
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Project" }).title).toContain(
+        "Demo",
+      );
+    });
+
+    fireEvent.pointerDown(screen.getByRole("button", { name: "Project" }), {
+      button: 0,
+      ctrlKey: false,
+    });
+    fireEvent.click(
+      await screen.findByRole("menuitem", { name: "Second Demo" }),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Project" }).title).toContain(
+        "Second Demo",
+      );
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Host" }).title).toContain(
+        "Local Host",
+      );
+    });
+    await waitFor(() => {
+      expectProviderModelTitle(["Pi", "Claude Opus 4.7"]);
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Hire Manager" }));
+
+    await waitFor(() => {
+      expect(managerRequestProjectIds).toEqual(["proj-2"]);
+      expect(managerRequests).toEqual([
+        {
+          origin: "app",
+          providerId: "pi",
+          model: "anthropic/claude-opus-4-7",
+          reasoningLevel: "medium",
+          environment: { type: "host", hostId: "host-local" },
+        },
+      ]);
+    });
   });
 
   it("keeps the visible fallback provider selected when a stale provider returns", async () => {
