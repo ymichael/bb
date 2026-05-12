@@ -113,7 +113,7 @@ export type ThreadPromptContextBannerExpandedSection =
  * sides on the same constant means tweaking banner chrome only requires
  * updating this number in one place.
  */
-export const THREAD_PROMPT_CONTEXT_BANNER_ROW_HEIGHT = 31;
+export const THREAD_PROMPT_CONTEXT_BANNER_ROW_HEIGHT = 32;
 
 export interface ThreadPromptContextBannerProps {
   todoSection: ThreadPromptTodoSection | null;
@@ -472,8 +472,7 @@ export function ThreadPromptContextBanner({
   // selectWorkspaceChangedFilesSection only emits a section when files exist,
   // so showGit implies a non-empty file list.
   const isGitExpanded = expandedSection === "git" && showGit;
-  const isManagedByExpanded =
-    expandedSection === "managedBy" && showManagedBy;
+  const isManagedByExpanded = expandedSection === "managedBy" && showManagedBy;
   const isManagerChildrenExpanded =
     expandedSection === "managerChildren" && showManagerChildren;
 
@@ -564,9 +563,7 @@ export function ThreadPromptContextBanner({
           <SectionToggleButton
             id={SECTION_IDS.git.toggle}
             controlsId={SECTION_IDS.git.body}
-            icon={
-              <FileDiff className="size-3.5 shrink-0" aria-hidden="true" />
-            }
+            icon={<FileDiff className="size-3.5 shrink-0" aria-hidden="true" />}
             label={gitSummary}
             isExpanded={isGitExpanded}
             onToggle={() => onToggleSection("git")}
