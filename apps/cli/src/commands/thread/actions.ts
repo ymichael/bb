@@ -15,6 +15,7 @@ import {
   prependErrorContext,
   requireThreadIdOrSelf,
 } from "../helpers.js";
+import { resolveThreadId } from "../../context-env.js";
 import { parsePermissionMode, PERMISSION_MODE_HELP } from "./helpers.js";
 
 interface ThreadUpdateCommandOptions {
@@ -64,6 +65,7 @@ interface PostThreadMessageArgs {
   model?: string;
   permissionMode?: PermissionMode;
   reasoningLevel?: ReasoningLevel;
+  senderThreadId?: string;
 }
 
 interface ThreadUpdateBody {
@@ -259,6 +261,7 @@ export function registerActionsCommands(
             model: opts.model,
             permissionMode: parsePermissionMode(opts.permissionMode),
             reasoningLevel: parseReasoningLevel(opts.reasoningLevel),
+            senderThreadId: resolveSenderThreadId(id),
           });
           if (outputJson(opts, { threadId: id, ...response })) return;
           console.log(
@@ -311,6 +314,7 @@ async function postThreadMessage(
         ...(args.model ? { model: args.model } : {}),
         ...(args.permissionMode ? { permissionMode: args.permissionMode } : {}),
         ...(args.reasoningLevel ? { reasoningLevel: args.reasoningLevel } : {}),
+        ...(args.senderThreadId ? { senderThreadId: args.senderThreadId } : {}),
       },
     }),
   );
@@ -318,6 +322,14 @@ async function postThreadMessage(
     ...response,
     ...(args.mode === "steer" ? { mode: "steer" as const } : {}),
   };
+}
+
+function resolveSenderThreadId(targetThreadId: string): string | undefined {
+  const senderThreadId = resolveThreadId();
+  if (!senderThreadId || senderThreadId === targetThreadId) {
+    return undefined;
+  }
+  return senderThreadId;
 }
 
 function resolveThreadMessageMode(value: string | undefined): "auto" | "steer" {

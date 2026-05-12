@@ -327,6 +327,7 @@ export const sendMessageRequestSchema = z.object({
   reasoningLevel: reasoningLevelSchema.optional(),
   permissionMode: permissionModeSchema.optional(),
   mode: sendMessageModeSchema,
+  senderThreadId: z.string().min(1).optional(),
 });
 export type SendMessageRequest = z.infer<typeof sendMessageRequestSchema>;
 

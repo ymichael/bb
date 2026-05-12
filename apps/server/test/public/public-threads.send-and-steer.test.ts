@@ -8,10 +8,15 @@ import {
   getDraft,
   getThread,
   hostDaemonCommands,
+  listEvents,
+  markThreadDeleted,
 } from "@bb/db";
 import {
   encodeClientTurnRequestIdNumber,
   threadScope,
+  type PromptInput,
+  type TurnRequestEventData,
+  turnRequestEventDataSchema,
   threadSchema,
   turnScope,
 } from "@bb/domain";
@@ -24,10 +29,46 @@ import {
   seedHostSession,
   seedProjectWithSource,
   seedThread,
+  seedThreadRuntimeState,
+  seedTurnStarted,
 } from "../helpers/seed.js";
-import { createTestAppHarness } from "../helpers/test-app.js";
+import {
+  createTestAppHarness,
+  type TestAppHarness,
+} from "../helpers/test-app.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
+
+interface AgentThreadMessageTextArgs {
+  messageText: string;
+  senderThreadId: string;
+}
+
+interface LatestTurnRequestDataArgs {
+  harness: TestAppHarness;
+  threadId: string;
+}
+
+function agentThreadMessageText(args: AgentThreadMessageTextArgs): string {
+  const prefix = `[bb message from thread:${args.senderThreadId}; reply with \`bb thread tell ${args.senderThreadId} "<your response>"\`]`;
+  if (args.messageText.length === 0) {
+    return prefix;
+  }
+  return [prefix, "", args.messageText].join("\n");
+}
+
+function latestTurnRequestData(
+  args: LatestTurnRequestDataArgs,
+): TurnRequestEventData {
+  const requestedRows = listEvents(args.harness.db, {
+    threadId: args.threadId,
+  }).filter((row) => row.type === "client/turn/requested");
+  const requestRow = requestedRows[requestedRows.length - 1];
+  if (!requestRow) {
+    throw new Error("Expected client/turn/requested event");
+  }
+  return turnRequestEventDataSchema.parse(JSON.parse(requestRow.data));
+}
 
 describe("public thread send and steer routes", () => {
   beforeEach(() => {
@@ -304,6 +345,499 @@ describe("public thread send and steer routes", () => {
           providerThreadId: "provider-turn",
         },
       });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("formats sender-thread follow-ups with reply guidance", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/sender-thread-follow-up",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/sender-thread-follow-up",
+      });
+      const senderThread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "idle",
+      });
+      const receiverThread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "active",
+      });
+      seedThreadRuntimeState(harness.deps, {
+        threadId: receiverThread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-receiver-thread",
+        sequenceStart: 10,
+      });
+      seedTurnStarted(harness.deps, {
+        threadId: receiverThread.id,
+        environmentId: environment.id,
+        turnId: "turn-receiver-thread",
+        providerThreadId: "provider-receiver-thread",
+        sequence: 12,
+      });
+
+      const response = await harness.app.request(
+        `/api/v1/threads/${receiverThread.id}/send`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            mode: "auto",
+            senderThreadId: senderThread.id,
+            input: [{ type: "text", text: "Please review this result" }],
+          }),
+        },
+      );
+      expect(response.status).toBe(200);
+
+      const queued = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "turn.submit" &&
+          command.threadId === receiverThread.id,
+      );
+      if (queued.command.type !== "turn.submit") {
+        throw new Error("Expected turn.submit command");
+      }
+      const firstInput = queued.command.input[0];
+      if (firstInput?.type !== "text") {
+        throw new Error("Expected text input");
+      }
+
+      const expectedText = agentThreadMessageText({
+        messageText: "Please review this result",
+        senderThreadId: senderThread.id,
+      });
+      expect(firstInput.text).toBe(expectedText);
+
+      const requestData = latestTurnRequestData({
+        harness,
+        threadId: receiverThread.id,
+      });
+      expect(requestData.initiator).toBe("agent");
+      expect(requestData.input).toEqual(queued.command.input);
+      expect(requestData.target).toEqual({
+        kind: "auto",
+        expectedTurnId: "turn-receiver-thread",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("wraps sender-thread messages on the start path", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/sender-thread-start",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/sender-thread-start",
+      });
+      const senderThread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "idle",
+      });
+      const receiverThread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "idle",
+      });
+
+      const response = await harness.app.request(
+        `/api/v1/threads/${receiverThread.id}/send`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            mode: "start",
+            model: "gpt-5",
+            senderThreadId: senderThread.id,
+            input: [{ type: "text", text: "Start from this context" }],
+          }),
+        },
+      );
+      expect(response.status).toBe(200);
+
+      const queued = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "thread.start" &&
+          command.threadId === receiverThread.id,
+      );
+      if (queued.command.type !== "thread.start") {
+        throw new Error("Expected thread.start command");
+      }
+      const expectedInput: PromptInput[] = [
+        {
+          type: "text",
+          text: agentThreadMessageText({
+            messageText: "Start from this context",
+            senderThreadId: senderThread.id,
+          }),
+        },
+      ];
+
+      expect(queued.command.input).toEqual(expectedInput);
+      const requestData = latestTurnRequestData({
+        harness,
+        threadId: receiverThread.id,
+      });
+      expect(requestData.initiator).toBe("agent");
+      expect(requestData.input).toEqual(expectedInput);
+      expect(requestData.target).toEqual({ kind: "new-turn" });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("wraps sender-thread messages on the steer path", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/sender-thread-steer",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/sender-thread-steer",
+      });
+      const senderThread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "idle",
+      });
+      const receiverThread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "active",
+      });
+      seedThreadRuntimeState(harness.deps, {
+        threadId: receiverThread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-receiver-steer",
+        sequenceStart: 20,
+      });
+      seedTurnStarted(harness.deps, {
+        threadId: receiverThread.id,
+        environmentId: environment.id,
+        turnId: "turn-receiver-steer",
+        providerThreadId: "provider-receiver-steer",
+        sequence: 22,
+      });
+
+      const response = await harness.app.request(
+        `/api/v1/threads/${receiverThread.id}/send`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            mode: "steer",
+            senderThreadId: senderThread.id,
+            input: [{ type: "text", text: "Adjust the active turn" }],
+          }),
+        },
+      );
+      expect(response.status).toBe(200);
+
+      const queued = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "turn.submit" &&
+          command.threadId === receiverThread.id,
+      );
+      if (queued.command.type !== "turn.submit") {
+        throw new Error("Expected turn.submit command");
+      }
+      const expectedInput: PromptInput[] = [
+        {
+          type: "text",
+          text: agentThreadMessageText({
+            messageText: "Adjust the active turn",
+            senderThreadId: senderThread.id,
+          }),
+        },
+      ];
+
+      expect(queued.command.input).toEqual(expectedInput);
+      expect(queued.command.target).toEqual({
+        mode: "steer",
+        expectedTurnId: "turn-receiver-steer",
+      });
+      const requestData = latestTurnRequestData({
+        harness,
+        threadId: receiverThread.id,
+      });
+      expect(requestData.initiator).toBe("agent");
+      expect(requestData.input).toEqual(expectedInput);
+      expect(requestData.target).toEqual({
+        kind: "steer",
+        expectedTurnId: "turn-receiver-steer",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("rejects invalid or deleted sender-thread metadata", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/sender-thread-invalid",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/sender-thread-invalid",
+      });
+      const receiverThread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "idle",
+      });
+
+      const invalidResponse = await harness.app.request(
+        `/api/v1/threads/${receiverThread.id}/send`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            mode: "start",
+            senderThreadId: "thr_missing_sender",
+            input: [{ type: "text", text: "Should fail" }],
+          }),
+        },
+      );
+      expect(invalidResponse.status).toBe(400);
+      await expect(readJson(invalidResponse)).resolves.toMatchObject({
+        code: "invalid_request",
+        message: "senderThreadId must reference a live thread",
+      });
+
+      const deletedSenderThread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "idle",
+      });
+      markThreadDeleted(harness.db, harness.hub, {
+        threadId: deletedSenderThread.id,
+        deletedAt: 123,
+      });
+
+      const deletedResponse = await harness.app.request(
+        `/api/v1/threads/${receiverThread.id}/send`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            mode: "start",
+            senderThreadId: deletedSenderThread.id,
+            input: [{ type: "text", text: "Should also fail" }],
+          }),
+        },
+      );
+      expect(deletedResponse.status).toBe(400);
+      await expect(readJson(deletedResponse)).resolves.toMatchObject({
+        code: "invalid_request",
+        message: "senderThreadId must reference a live thread",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("formats sender-thread non-text input cases explicitly", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/sender-thread-non-text",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/sender-thread-non-text",
+      });
+      const senderThread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "idle",
+      });
+      const imageOnlyThread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "active",
+      });
+      const mixedInputThread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "active",
+      });
+      seedThreadRuntimeState(harness.deps, {
+        threadId: imageOnlyThread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-image-only",
+        sequenceStart: 30,
+      });
+      seedTurnStarted(harness.deps, {
+        threadId: imageOnlyThread.id,
+        environmentId: environment.id,
+        turnId: "turn-image-only",
+        providerThreadId: "provider-image-only",
+        sequence: 32,
+      });
+      seedThreadRuntimeState(harness.deps, {
+        threadId: mixedInputThread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-mixed-input",
+        sequenceStart: 40,
+      });
+      seedTurnStarted(harness.deps, {
+        threadId: mixedInputThread.id,
+        environmentId: environment.id,
+        turnId: "turn-mixed-input",
+        providerThreadId: "provider-mixed-input",
+        sequence: 42,
+      });
+
+      const imageOnlyInput: PromptInput[] = [
+        {
+          type: "image",
+          url: "https://example.com/image-only.png",
+        },
+      ];
+      const imageOnlyResponse = await harness.app.request(
+        `/api/v1/threads/${imageOnlyThread.id}/send`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            mode: "auto",
+            senderThreadId: senderThread.id,
+            input: imageOnlyInput,
+          }),
+        },
+      );
+      expect(imageOnlyResponse.status).toBe(200);
+
+      const imageOnlyCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "turn.submit" &&
+          command.threadId === imageOnlyThread.id,
+      );
+      if (imageOnlyCommand.command.type !== "turn.submit") {
+        throw new Error("Expected turn.submit command");
+      }
+      const expectedImageOnlyInput: PromptInput[] = [
+        {
+          type: "text",
+          text: agentThreadMessageText({
+            messageText: "",
+            senderThreadId: senderThread.id,
+          }),
+        },
+        {
+          type: "image",
+          url: "https://example.com/image-only.png",
+        },
+      ];
+      expect(imageOnlyCommand.command.input).toEqual(expectedImageOnlyInput);
+      const imageOnlyRequestData = latestTurnRequestData({
+        harness,
+        threadId: imageOnlyThread.id,
+      });
+      expect(imageOnlyRequestData.initiator).toBe("agent");
+      expect(imageOnlyRequestData.input).toEqual(expectedImageOnlyInput);
+
+      const mixedInput: PromptInput[] = [
+        {
+          type: "image",
+          url: "https://example.com/context.png",
+        },
+        {
+          type: "text",
+          text: "Use this visual context",
+        },
+      ];
+      const mixedResponse = await harness.app.request(
+        `/api/v1/threads/${mixedInputThread.id}/send`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            mode: "auto",
+            senderThreadId: senderThread.id,
+            input: mixedInput,
+          }),
+        },
+      );
+      expect(mixedResponse.status).toBe(200);
+
+      const mixedCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "turn.submit" &&
+          command.threadId === mixedInputThread.id,
+      );
+      if (mixedCommand.command.type !== "turn.submit") {
+        throw new Error("Expected turn.submit command");
+      }
+      const expectedMixedInput: PromptInput[] = [
+        {
+          type: "image",
+          url: "https://example.com/context.png",
+        },
+        {
+          type: "text",
+          text: agentThreadMessageText({
+            messageText: "Use this visual context",
+            senderThreadId: senderThread.id,
+          }),
+        },
+      ];
+      expect(mixedCommand.command.input).toEqual(expectedMixedInput);
+      const mixedRequestData = latestTurnRequestData({
+        harness,
+        threadId: mixedInputThread.id,
+      });
+      expect(mixedRequestData.initiator).toBe("agent");
+      expect(mixedRequestData.input).toEqual(expectedMixedInput);
     } finally {
       await harness.cleanup();
     }

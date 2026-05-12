@@ -2664,6 +2664,73 @@ describe("CLI JSON output contracts", () => {
     });
   });
 
+  it("bb thread tell includes sender thread metadata when run inside another thread", async () => {
+    vi.stubEnv("BB_THREAD_ID", "thread-sender");
+    const post = vi.fn(async () => ({ ok: true }));
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              ":id": {
+                send: {
+                  $post: post,
+                },
+              },
+            },
+          },
+        },
+      }),
+    );
+
+    await runCommand(
+      ["thread", "tell", "thread-receiver", "hello from sender"],
+      (program) => registerThreadCommands(program, () => "http://server"),
+    );
+
+    expect(post).toHaveBeenCalledWith({
+      param: { id: "thread-receiver" },
+      json: {
+        input: [{ type: "text", text: "hello from sender" }],
+        mode: "auto",
+        senderThreadId: "thread-sender",
+      },
+    });
+  });
+
+  it("bb thread tell omits sender metadata when targeting the current thread", async () => {
+    vi.stubEnv("BB_THREAD_ID", "thread-self");
+    const post = vi.fn(async () => ({ ok: true }));
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              ":id": {
+                send: {
+                  $post: post,
+                },
+              },
+            },
+          },
+        },
+      }),
+    );
+
+    await runCommand(
+      ["thread", "tell", "thread-self", "self note"],
+      (program) => registerThreadCommands(program, () => "http://server"),
+    );
+
+    expect(post).toHaveBeenCalledWith({
+      param: { id: "thread-self" },
+      json: {
+        input: [{ type: "text", text: "self note" }],
+        mode: "auto",
+      },
+    });
+  });
+
   it("bb thread wait --status succeeds when the thread is already at the requested status", async () => {
     const get = vi.fn(async () =>
       makeThread({

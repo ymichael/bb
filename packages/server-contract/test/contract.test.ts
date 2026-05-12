@@ -126,6 +126,8 @@ const INTENTIONAL_OPTIONAL_SERVER_FIELDS: Record<string, string> = {
     "Follow-up sends may inherit the thread's current permission mode.",
   "sendMessageRequestSchema.reasoningLevel":
     "Follow-up sends may inherit the thread's default reasoning level.",
+  "sendMessageRequestSchema.senderThreadId":
+    "Immediate agent-to-agent CLI sends include the current thread; user-originated sends and queued drafts omit live sender context.",
   "sendMessageRequestSchema.serviceTier":
     "Follow-up sends may inherit the thread's default service tier.",
   "systemModelsQuerySchema.environmentId":

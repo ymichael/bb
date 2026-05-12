@@ -3,6 +3,20 @@
 
 export const templateDefinitions = [
   {
+    "id": "agentThreadMessage",
+    "body": "[bb message from thread:{{senderThreadId}}; reply with `bb thread tell {{senderThreadId}} \"<your response>\"`]\n\n{{messageText}}",
+    "fileName": "agent-thread-message.md",
+    "kind": "prompt",
+    "title": "Agent Thread Message",
+    "summary": "Wraps a bb CLI message from one agent thread to another.",
+    "intent": "Tell the receiving agent which thread sent the message and how to reply.",
+    "editingNotes": "Keep the response command in the prefix so standard agent instructions do not need special cross-thread message guidance.",
+    "variables": {
+      "senderThreadId": "The thread ID that sent the message.",
+      "messageText": "The original message text sent by the agent."
+    }
+  },
+  {
     "id": "bbGuideEnvironments",
     "body": "Environment commands\n\nEnvironments determine where threads run. Multiple threads can share an environment\n(e.g., a coding thread and a review thread in the same worktree).\n\n  bb environment show <id>                Show environment details (path, branch, status)\n\n  bb environment update <id>              Update environment metadata\n    --merge-base-branch <branch>          Set merge-base branch override\n    --clear-merge-base-branch             Clear merge-base override\n\n  bb environment commit <id>              Create a commit in the environment\n\n  bb environment squash-merge <id>        Squash-merge into a target branch\n    --merge-base-branch <branch>          Target branch (required)\n\n  bb environment promote <id>             Move environment into the primary checkout\n  bb environment demote <id>              Move environment out of the primary checkout",
     "fileName": "bb-guide-environments.md",
@@ -263,6 +277,10 @@ export const templateDefinitions = [
 ] as const;
 
 export interface TemplateVariables {
+  agentThreadMessage: {
+    senderThreadId: string;
+    messageText: string;
+  };
   bbGuideEnvironments: Record<string, never>;
   bbGuideHosts: Record<string, never>;
   bbGuideManagers: Record<string, never>;

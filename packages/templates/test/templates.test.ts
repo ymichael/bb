@@ -35,6 +35,21 @@ describe("@bb/templates", () => {
     expect(rendered).toContain("hooks/pre-commit exited with status 1");
   });
 
+  it("renders agent thread messages with inline reply guidance", () => {
+    const rendered = renderTemplate("agentThreadMessage", {
+      senderThreadId: "thr_sender",
+      messageText: "Please check the failing test.",
+    });
+
+    expect(rendered).toBe(
+      [
+        '[bb message from thread:thr_sender; reply with `bb thread tell thr_sender "<your response>"`]',
+        "",
+        "Please check the failing test.",
+      ].join("\n"),
+    );
+  });
+
   it("renders squash merge commit failure follow-up from structured variables", () => {
     const rendered = renderTemplate(
       "threadOperationSquashMergeCommitFailureFollowUp",

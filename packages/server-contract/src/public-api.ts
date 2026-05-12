@@ -365,11 +365,15 @@ export type PublicApiSchema = {
     /**
      * Send a message to a thread.
      * Idle thread → starts a new turn. Active thread with mode=steer → steers the current turn.
+     * senderThreadId marks immediate agent-to-agent CLI messages so the server can add reply guidance.
+     * Draft routes intentionally omit it because drafts are stored queued messages,
+     * not immediate sends from a live sender thread.
      */
     $post: Endpoint<PathId & { json: SendMessageRequest }, { ok: true }>;
   };
   "/threads/:id/drafts": {
     $get: Endpoint<PathId, ThreadDraftListResponse>;
+    /** Create a queued draft. Use /threads/:id/send for immediate agent-to-agent messages. */
     $post: Endpoint<
       PathId & { json: CreateDraftRequest },
       ThreadQueuedMessage,
@@ -377,7 +381,7 @@ export type PublicApiSchema = {
     >;
   };
   "/threads/:id/drafts/:draftId/send": {
-    /** Send a previously created draft. Starts or steers a turn, then deletes the draft. */
+    /** Send a previously created queued draft. Starts or steers a turn, then deletes the draft. */
     $post: Endpoint<
       PathThreadAndDraft & { json: SendDraftRequest },
       SendDraftResponse

@@ -1,5 +1,13 @@
-import type { Environment, Thread, ThreadStatus } from "@bb/domain";
+import { getThread } from "@bb/db";
+import type {
+  Environment,
+  PromptInput,
+  Thread,
+  ThreadStatus,
+  ThreadTurnInitiator,
+} from "@bb/domain";
 import type { SendMessageRequest } from "@bb/server-contract";
+import { renderTemplate } from "@bb/templates";
 import type { AppDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
 import { demoteEnvironmentIfPromoted } from "../environments/environment-promotion.js";
@@ -22,6 +30,7 @@ import { resolveThreadRuntimeState } from "./thread-runtime-display.js";
 import { tryTransition } from "./thread-transitions.js";
 
 type SendThreadMessageMode = SendMessageRequest["mode"];
+type TextPromptInput = Extract<PromptInput, { type: "text" }>;
 export type SendThreadMessageTrigger = "auto-dispatch" | "user";
 
 export interface SendThreadMessageArgs {
@@ -29,6 +38,21 @@ export interface SendThreadMessageArgs {
   payload: SendMessageRequest;
   thread: Thread;
   trigger: SendThreadMessageTrigger;
+}
+
+interface ResolveMessageSenderArgs {
+  senderThreadId?: string;
+  targetThread: Thread;
+}
+
+interface FormatAgentThreadInputArgs {
+  input: PromptInput[];
+  senderThreadId: string;
+}
+
+interface BuildAgentThreadMessageTextArgs {
+  messageText: string;
+  senderThreadId: string;
 }
 
 export function ensureThreadIsNotAwaitingUserInteraction(
@@ -96,6 +120,64 @@ function ensureRuntimeCanAcceptActiveSend(
   throw new ApiError(502, "host_disconnected", "Host daemon is not connected");
 }
 
+function resolveMessageSenderThreadId(
+  deps: Pick<AppDeps, "db">,
+  args: ResolveMessageSenderArgs,
+): string | null {
+  if (!args.senderThreadId || args.senderThreadId === args.targetThread.id) {
+    return null;
+  }
+
+  const senderThread = getThread(deps.db, args.senderThreadId);
+  if (!senderThread || senderThread.deletedAt !== null) {
+    throw new ApiError(
+      400,
+      "invalid_request",
+      "senderThreadId must reference a live thread",
+    );
+  }
+
+  return senderThread.id;
+}
+
+function buildAgentThreadMessageText(
+  args: BuildAgentThreadMessageTextArgs,
+): string {
+  return renderTemplate("agentThreadMessage", {
+    messageText: args.messageText,
+    senderThreadId: args.senderThreadId,
+  });
+}
+
+function formatAgentThreadInput(
+  args: FormatAgentThreadInputArgs,
+): PromptInput[] {
+  const firstTextIndex = args.input.findIndex((item) => item.type === "text");
+  if (firstTextIndex === -1) {
+    const textItem: TextPromptInput = {
+      type: "text",
+      text: buildAgentThreadMessageText({
+        messageText: "",
+        senderThreadId: args.senderThreadId,
+      }),
+    };
+    return [textItem, ...args.input];
+  }
+
+  return args.input.map((item, index) => {
+    if (index !== firstTextIndex || item.type !== "text") {
+      return item;
+    }
+    return {
+      ...item,
+      text: buildAgentThreadMessageText({
+        messageText: item.text,
+        senderThreadId: args.senderThreadId,
+      }),
+    };
+  });
+}
+
 export async function sendThreadMessage(
   deps: AppDeps,
   args: SendThreadMessageArgs,
@@ -111,6 +193,19 @@ export async function sendThreadMessage(
   if (mode === "start") {
     ensureThreadCanQueueStartRequest(deps, thread);
   }
+  const senderThreadId = resolveMessageSenderThreadId(deps, {
+    senderThreadId: payload.senderThreadId,
+    targetThread: thread,
+  });
+  const input = senderThreadId
+    ? formatAgentThreadInput({
+        input: payload.input,
+        senderThreadId,
+      })
+    : payload.input;
+  // Agent-originated CLI sends still appear as normal turn requests in
+  // timeline/prompt history, while initiator lets policy distinguish the source.
+  const initiator: ThreadTurnInitiator = senderThreadId ? "agent" : "user";
   const expectedSteerTurnId =
     mode === "auto" || mode === "steer"
       ? getActiveTurnId(deps, thread.id)
@@ -125,7 +220,7 @@ export async function sendThreadMessage(
   );
   const permissionEscalation = resolvePermissionEscalation({
     thread,
-    initiator: "user",
+    initiator,
   });
 
   if (
@@ -133,8 +228,8 @@ export async function sendThreadMessage(
       deps,
       environment,
       execution,
-      initiator: "user",
-      input: payload.input,
+      initiator,
+      input,
       thread,
     })
   ) {
@@ -151,9 +246,9 @@ export async function sendThreadMessage(
     threadId: thread.id,
     environmentId: readyEnvironment.id,
     type: "client/turn/requested",
-    input: payload.input,
+    input,
     execution,
-    initiator: "user",
+    initiator,
     requestMethod: "turn/start",
     source: "tell",
     target:
@@ -168,7 +263,7 @@ export async function sendThreadMessage(
   if (mode === "start") {
     const queuedMode = await queueReadyThreadTurnCommand(deps, {
       thread,
-      input: payload.input,
+      input,
       requestId: request.requestId,
       execution,
       permissionEscalation,
@@ -187,7 +282,7 @@ export async function sendThreadMessage(
 
   await queueTurnSubmitCommand(deps, {
     thread,
-    input: payload.input,
+    input,
     requestId: request.requestId,
     execution,
     permissionEscalation,
