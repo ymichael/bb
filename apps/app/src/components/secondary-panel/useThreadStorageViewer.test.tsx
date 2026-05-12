@@ -130,6 +130,33 @@ describe("useThreadStorageViewer", () => {
     expect(api.getThreadStorageFilePreview).not.toHaveBeenCalled();
   });
 
+  it("honors explicit query gates for manager threads", async () => {
+    vi.mocked(api.listThreadStorageFiles).mockResolvedValue(
+      makeStorageFiles(["docs/alpha.txt"]),
+    );
+    vi.mocked(api.getThreadStorageFilePreview).mockResolvedValue(
+      makeTextPreview("docs/alpha.txt"),
+    );
+
+    const { wrapper } = createQueryClientTestHarness();
+    const { result } = renderHook(
+      () =>
+        useThreadStorageViewer({
+          activePath: "docs/alpha.txt",
+          fileListEnabled: false,
+          filePreviewEnabled: false,
+          threadId: "thread-1",
+          threadType: "manager",
+        }),
+      { wrapper },
+    );
+
+    expect(result.current.threadStorageFiles).toBeUndefined();
+    expect(result.current.threadStorageFilePreview).toBeUndefined();
+    expect(api.listThreadStorageFiles).not.toHaveBeenCalled();
+    expect(api.getThreadStorageFilePreview).not.toHaveBeenCalled();
+  });
+
   it("passes explicit file-list options through the storage query", async () => {
     const fileListOptions = {
       limit: 25,

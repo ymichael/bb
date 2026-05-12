@@ -10,14 +10,18 @@ import {
 
 interface UseThreadStorageViewerParams {
   activePath: string | null;
+  fileListEnabled?: boolean;
   fileListOptions?: ThreadStorageFileListOptions;
+  filePreviewEnabled?: boolean;
   threadId?: string;
   threadType?: ThreadType;
 }
 
 export function useThreadStorageViewer({
   activePath,
+  fileListEnabled = true,
   fileListOptions = DEFAULT_THREAD_STORAGE_FILE_LIST_OPTIONS,
+  filePreviewEnabled = true,
   threadId,
   threadType,
 }: UseThreadStorageViewerParams) {
@@ -27,14 +31,14 @@ export function useThreadStorageViewer({
     isLoading: isThreadStorageFilesLoading,
     error: threadStorageFilesError,
   } = useThreadStorageFiles(threadId ?? "", fileListOptions, {
-    enabled: isManagerThread,
+    enabled: isManagerThread && fileListEnabled,
   });
   const {
     data: threadStorageFilePreview,
     isLoading: isThreadStorageFilePreviewLoading,
     error: threadStorageFilePreviewError,
   } = useThreadStorageFilePreview(threadId ?? "", activePath, {
-    enabled: isManagerThread && activePath !== null,
+    enabled: isManagerThread && filePreviewEnabled && activePath !== null,
   });
 
   return {

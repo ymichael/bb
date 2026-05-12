@@ -20,6 +20,8 @@ interface QueryOptions {
   enabled?: boolean;
 }
 
+const PROJECT_SOURCE_WORKSPACE_STATUS_STALE_MS = 30_000;
+
 interface RequireProjectSourceWorkspaceStatusIdsArgs {
   projectId: string | null | undefined;
   sourceId: string | null | undefined;
@@ -161,7 +163,7 @@ export function useProjectSourceWorkspaceStatus(
       return api.getProjectSourceWorkspaceStatus(ids.projectId, ids.sourceId);
     },
     enabled: (options?.enabled ?? true) && Boolean(projectId && sourceId),
-    refetchOnWindowFocus: true,
-    staleTime: 5_000,
+    refetchOnWindowFocus: false,
+    staleTime: PROJECT_SOURCE_WORKSPACE_STATUS_STALE_MS,
   });
 }

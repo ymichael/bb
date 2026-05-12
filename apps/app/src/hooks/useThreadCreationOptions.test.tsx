@@ -2,6 +2,7 @@
 
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import type { AvailableModel } from "@bb/domain";
+import type { SystemProviderInfo } from "@bb/server-contract";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as api from "@/lib/api";
 import { getProjectScopedStorageKey } from "@/lib/project-scoped-storage";
@@ -23,6 +24,11 @@ vi.mock("@/lib/api", async (importOriginal) => {
 });
 
 interface ModelOverrides extends Partial<AvailableModel> {}
+
+interface DeferredSystemProviders {
+  promise: Promise<SystemProviderInfo[]>;
+  resolve: (providers: SystemProviderInfo[]) => void;
+}
 
 const PERMISSION_MODE_OPTIONS = [
   {
@@ -62,6 +68,19 @@ function makeModel(overrides: ModelOverrides = {}): AvailableModel {
   };
 }
 
+function createDeferredSystemProviders(): DeferredSystemProviders {
+  let resolveProviders: (providers: SystemProviderInfo[]) => void = () => {
+    throw new Error("Deferred system providers promise was not initialized");
+  };
+  const promise = new Promise<SystemProviderInfo[]>((resolve) => {
+    resolveProviders = resolve;
+  });
+  return {
+    promise,
+    resolve: resolveProviders,
+  };
+}
+
 afterEach(() => {
   cleanup();
   localStorage.clear();
@@ -81,6 +100,47 @@ describe("formatModelLabel", () => {
 });
 
 describe("useThreadCreationOptions", () => {
+  it("waits for providers before loading provider models", async () => {
+    const deferredProviders = createDeferredSystemProviders();
+    vi.mocked(api.listSystemProviders).mockReturnValue(
+      deferredProviders.promise,
+    );
+    vi.mocked(api.getAvailableModels).mockResolvedValue([
+      makeModel({
+        id: "gpt-5.4",
+        model: "gpt-5.4",
+      }),
+    ]);
+
+    const { wrapper } = createQueryClientTestHarness();
+    renderHook(
+      () =>
+        useThreadCreationOptions({
+          projectId: "project-provider-gating",
+          scope: "new-thread",
+        }),
+      { wrapper },
+    );
+
+    expect(api.getAvailableModels).not.toHaveBeenCalled();
+
+    await act(async () => {
+      deferredProviders.resolve([
+        createTestSystemProvider({
+          id: "codex",
+        }),
+      ]);
+    });
+
+    await waitFor(() => {
+      expect(api.getAvailableModels).toHaveBeenCalledWith("codex", undefined);
+    });
+    expect(api.getAvailableModels).not.toHaveBeenCalledWith(
+      undefined,
+      undefined,
+    );
+  });
+
   it("falls back to valid provider and model values from query data", async () => {
     const projectId = "project-1";
     localStorage.setItem(

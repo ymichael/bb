@@ -358,14 +358,15 @@ async function readPromotionWorkspaceFacts(
     };
   }
 
-  const primaryStatus = (
-    await readProjectSourceWorkspaceStatus(deps, {
+  const [primaryStatusResponse, environmentStatus] = await Promise.all([
+    readProjectSourceWorkspaceStatus(deps, {
       source: eligibility.source,
-    })
-  ).workspace;
-  const environmentStatus = await readEnvironmentWorkspaceStatus(deps, {
-    environment,
-  });
+    }),
+    readEnvironmentWorkspaceStatus(deps, {
+      environment,
+    }),
+  ]);
+  const primaryStatus = primaryStatusResponse.workspace;
   return {
     eligibilityUnavailableReason: null,
     environmentStatus,

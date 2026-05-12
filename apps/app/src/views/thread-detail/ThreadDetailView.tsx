@@ -6,7 +6,10 @@ import type {
 } from "@/components/thread/timeline";
 import type { ThreadListEntry, ThreadWithRuntime } from "@bb/domain";
 import { toast } from "sonner";
-import { useThreadSecondaryPanelUrlSync } from "@/lib/thread-secondary-panel";
+import {
+  useActiveSecondaryPanel,
+  useThreadSecondaryPanelUrlSync,
+} from "@/lib/thread-secondary-panel";
 import { useRequestEnvironmentAction } from "../../hooks/mutations/environment-mutations";
 import {
   useMarkThreadRead,
@@ -46,6 +49,7 @@ import { useThreadDetailTurnSummaryRows } from "./turn-summary/useThreadDetailTu
 import { ThreadDetailHeader } from "./ThreadDetailHeader";
 import { ThreadDetailPromptArea } from "./ThreadDetailPromptArea";
 import {
+  type ContextBannerMergeBaseConfig,
   isThreadDisplayStatusBannerActive,
   type ThreadPromptManagedBySection,
   type ThreadPromptManagerChildrenSection,
@@ -73,6 +77,10 @@ import {
 } from "./threadManagerSelectorOptions";
 
 const EMPTY_MANAGER_THREADS: readonly ThreadListEntry[] = [];
+
+type MergeBasePickerOpenChangeHandler = NonNullable<
+  ContextBannerMergeBaseConfig["onPickerOpenChange"]
+>;
 
 function arePathListsEqual(
   a: readonly string[],
@@ -132,6 +140,7 @@ export function ThreadDetailView() {
   const hasPendingInteraction =
     getLatestPendingInteraction(pendingInteractions) !== null;
   const isManagerThread = thread?.type === "manager";
+  const canUseGitUi = thread?.type === "standard";
   const [
     storedUseStandardManagerTimeline,
     setStoredUseStandardManagerTimeline,
@@ -143,7 +152,13 @@ export function ThreadDetailView() {
     : undefined;
   const [openFilePaths, setOpenFilePaths] = useState<string[]>([]);
   const [activeFilePath, setActiveFilePath] = useState<string | null>(null);
+  const [hasRequestedMergeBaseOptions, setHasRequestedMergeBaseOptions] =
+    useState(false);
   const hasDefaultedToPinnedFileRef = useRef(false);
+  const activeSecondaryPanel = useActiveSecondaryPanel();
+  const isSecondaryPanelActive = activeSecondaryPanel !== null;
+  const shouldLoadManagerStorageFiles =
+    isSecondaryPanelActive && isManagerThread;
   const {
     isThreadStorageFilePreviewLoading,
     isThreadStorageFilesLoading,
@@ -153,6 +168,8 @@ export function ThreadDetailView() {
     threadStorageFilesError,
   } = useThreadStorageViewer({
     activePath: activeFilePath,
+    fileListEnabled: shouldLoadManagerStorageFiles,
+    filePreviewEnabled: isSecondaryPanelActive,
     threadId,
     threadType: thread?.type,
   });
@@ -274,6 +291,8 @@ export function ThreadDetailView() {
   );
   const environmentQuery = useEnvironment(thread?.environmentId);
   const environment = environmentQuery.data;
+  const environmentMergeBaseBranch =
+    environment?.mergeBaseBranch ?? environment?.defaultBranch ?? undefined;
   const {
     closeThreadSecondaryPanel,
     defaultMergeBaseBranch: resolvedDefaultMergeBaseBranch,
@@ -286,10 +305,21 @@ export function ThreadDetailView() {
     setSelectedMergeBaseBranch,
     toggleThreadSecondaryPanel,
   } = useGitDiffPanel({
-    defaultMergeBaseBranch:
-      environment?.mergeBaseBranch ?? environment?.defaultBranch ?? undefined,
-    environmentId: thread?.environmentId ?? undefined,
+    defaultMergeBaseBranch: environmentMergeBaseBranch,
+    environmentId: canUseGitUi
+      ? (thread?.environmentId ?? undefined)
+      : undefined,
+    mergeBaseBranchOptionsEnabled: hasRequestedMergeBaseOptions,
   });
+  useEffect(() => {
+    setHasRequestedMergeBaseOptions(false);
+  }, [thread?.environmentId]);
+  const handleMergeBasePickerOpenChange =
+    useCallback<MergeBasePickerOpenChangeHandler>((open) => {
+      if (open) {
+        setHasRequestedMergeBaseOptions(true);
+      }
+    }, []);
   const handleSecondaryPanelChange = useCallback(
     (panel: Parameters<typeof openThreadSecondaryPanel>[0]) => {
       setActiveFilePath(null);
@@ -298,13 +328,13 @@ export function ThreadDetailView() {
     [openThreadSecondaryPanel],
   );
   const requestedMergeBaseBranch =
-    selectedMergeBaseBranch ??
-    environment?.mergeBaseBranch ??
-    environment?.defaultBranch ??
-    undefined;
+    selectedMergeBaseBranch ?? environmentMergeBaseBranch;
   const workStatusQuery = useEnvironmentWorkStatus(
     thread?.environmentId,
     requestedMergeBaseBranch,
+    {
+      enabled: canUseGitUi && environment !== undefined,
+    },
   );
   const workStatus = workStatusQuery.data;
   const workspaceStatusError = workStatusQuery.error;
@@ -539,8 +569,6 @@ export function ThreadDetailView() {
       </PageShell>
     );
   }
-
-  const canUseGitUi = !isManagerThread;
   const turnSummaryRowsIdentity = `${thread.id}:${
     managerTimelineView ?? "default"
   }`;
@@ -657,7 +685,9 @@ export function ThreadDetailView() {
       workspaceChangedFilesSection={
         canUseGitUi ? workspaceChangedFilesSection : null
       }
-      workspaceStatusPending={canUseGitUi && workStatusQuery.isLoading}
+      workspaceStatusPending={
+        canUseGitUi && (environmentQuery.isLoading || workStatusQuery.isLoading)
+      }
       contextBannerMergeBase={
         canUseGitUi && showMergeBase && promptBannerMergeBaseBranch
           ? {
@@ -665,6 +695,7 @@ export function ThreadDetailView() {
               options: mergeBaseBranchOptions,
               optionsLoading: isLoadingMergeBaseBranchOptions,
               onChange: handleMergeBaseBranchChange,
+              onPickerOpenChange: handleMergeBasePickerOpenChange,
             }
           : null
       }

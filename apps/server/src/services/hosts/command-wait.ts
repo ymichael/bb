@@ -25,6 +25,106 @@ export interface WaitForQueuedCommandResultArgs<
   type: TType;
 }
 
+type WorkspaceStatusCommand = Extract<
+  HostDaemonCommand,
+  { type: "workspace.status" }
+>;
+
+interface QueueWorkspaceStatusCommandAndWaitArgs {
+  command: WorkspaceStatusCommand;
+  hostId: string;
+  timeoutMs: number;
+}
+
+interface WorkspaceStatusCommandCacheEntry {
+  expiresAt: number;
+  promise: Promise<HostDaemonCommandResult<"workspace.status">>;
+}
+
+const WORKSPACE_STATUS_COMMAND_CACHE_TTL_MS = 1_000;
+/**
+ * Coalesces bursty workspace.status reads during thread-detail initial load.
+ * In-flight commands share one daemon round trip, and successful results stay
+ * reusable for a short freshness window. Failures/timeouts are evicted so the
+ * next caller can queue a real retry.
+ */
+const workspaceStatusCommandCache = new Map<
+  string,
+  WorkspaceStatusCommandCacheEntry
+>();
+
+function assertQueueCommandAndWaitAllowed(
+  args: QueueCommandAndWaitArgs<HostDaemonCommandType>,
+): void {
+  assertDaemonCommandWaitAllowed({
+    commandId: null,
+    commandType: args.command.type,
+    operation: "queue-and-wait",
+  });
+}
+
+function buildWorkspaceStatusCommandCacheKey({
+  command,
+  hostId,
+}: QueueWorkspaceStatusCommandAndWaitArgs): string {
+  return JSON.stringify([
+    hostId,
+    command.environmentId,
+    command.workspaceContext.workspacePath,
+    command.workspaceContext.workspaceProvisionType,
+    command.mergeBaseBranch ?? "",
+  ]);
+}
+
+function scheduleWorkspaceStatusCacheCleanup(
+  key: string,
+  entry: WorkspaceStatusCommandCacheEntry,
+): void {
+  void entry.promise.then(
+    () => {
+      setTimeout(() => {
+        const currentEntry = workspaceStatusCommandCache.get(key);
+        if (currentEntry === entry && currentEntry.expiresAt <= Date.now()) {
+          workspaceStatusCommandCache.delete(key);
+        }
+      }, WORKSPACE_STATUS_COMMAND_CACHE_TTL_MS);
+    },
+    () => undefined,
+  );
+}
+
+function queueWorkspaceStatusCommandAndWait(
+  deps: SandboxWorkSessionDeps,
+  args: QueueWorkspaceStatusCommandAndWaitArgs,
+): Promise<HostDaemonCommandResult<"workspace.status">> {
+  const now = Date.now();
+  const key = buildWorkspaceStatusCommandCacheKey(args);
+  const cached = workspaceStatusCommandCache.get(key);
+  if (cached && cached.expiresAt > now) {
+    return cached.promise;
+  }
+
+  const entry: WorkspaceStatusCommandCacheEntry = {
+    expiresAt: Number.POSITIVE_INFINITY,
+    promise: queueCommandAndWaitUncached(deps, args)
+      .then((result) => {
+        entry.expiresAt = Date.now() + WORKSPACE_STATUS_COMMAND_CACHE_TTL_MS;
+        return result;
+      })
+      .catch((error) => {
+        // Do not cache daemon failures or waiter timeouts; callers need the
+        // next identical status read to enqueue a fresh command.
+        if (workspaceStatusCommandCache.get(key) === entry) {
+          workspaceStatusCommandCache.delete(key);
+        }
+        throw error;
+      }),
+  };
+  workspaceStatusCommandCache.set(key, entry);
+  scheduleWorkspaceStatusCacheCleanup(key, entry);
+  return entry.promise;
+}
+
 export function queueCommandAndWait<TType extends HostDaemonCommandType>(
   deps: SandboxWorkSessionDeps,
   args: QueueCommandAndWaitArgs<TType>,
@@ -33,11 +133,25 @@ export async function queueCommandAndWait(
   deps: SandboxWorkSessionDeps,
   args: QueueCommandAndWaitArgs<HostDaemonCommandType>,
 ): Promise<HostDaemonCommandResult> {
-  assertDaemonCommandWaitAllowed({
-    commandId: null,
-    commandType: args.command.type,
-    operation: "queue-and-wait",
-  });
+  assertQueueCommandAndWaitAllowed(args);
+  if (args.command.type === "workspace.status") {
+    return queueWorkspaceStatusCommandAndWait(deps, {
+      command: args.command,
+      hostId: args.hostId,
+      timeoutMs: args.timeoutMs,
+    });
+  }
+  return queueCommandAndWaitUncached(deps, args);
+}
+
+function queueCommandAndWaitUncached<TType extends HostDaemonCommandType>(
+  deps: SandboxWorkSessionDeps,
+  args: QueueCommandAndWaitArgs<TType>,
+): Promise<HostDaemonCommandResult<TType>>;
+async function queueCommandAndWaitUncached(
+  deps: SandboxWorkSessionDeps,
+  args: QueueCommandAndWaitArgs<HostDaemonCommandType>,
+): Promise<HostDaemonCommandResult> {
   const session = await ensureHostSessionReadyForWork(deps, {
     hostId: args.hostId,
   });

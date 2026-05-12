@@ -391,7 +391,8 @@ export function useThreadCreationOptions(
   );
 
   const availableModelsQuery = useAvailableModels({
-    providerId: hasMultipleProviders ? effectiveProviderId || undefined : undefined,
+    enabled: providersQuery.status === "success" && effectiveProviderId !== "",
+    providerId: effectiveProviderId || undefined,
     selectedModel: rawSelectedModel || undefined,
   });
 

@@ -27,6 +27,10 @@ interface UseEnvironmentGitDiffOptions extends QueryOptions {
   target?: WorkspaceDiffTarget;
 }
 
+const ENVIRONMENT_PROMOTION_STALE_MS = 30_000;
+const ENVIRONMENT_WORK_STATUS_STALE_MS = 10_000;
+const MERGE_BASE_BRANCHES_STALE_MS = 30_000;
+
 function requireEnvironmentId(
   environmentId: string | null | undefined,
   hookName: string,
@@ -80,6 +84,7 @@ export function useEnvironmentWorkStatus(
       ),
     enabled: (options?.enabled ?? true) && Boolean(environmentId),
     refetchOnWindowFocus: false,
+    staleTime: ENVIRONMENT_WORK_STATUS_STALE_MS,
     placeholderData: (previousData, previousQuery) =>
       environmentId
         ? resolveEnvironmentWorkStatusPlaceholder(
@@ -102,8 +107,8 @@ export function useEnvironmentPromotion(
         requireEnvironmentId(environmentId, "useEnvironmentPromotion"),
       ),
     enabled: (options?.enabled ?? true) && Boolean(environmentId),
-    refetchOnWindowFocus: true,
-    staleTime: 5_000,
+    refetchOnWindowFocus: false,
+    staleTime: ENVIRONMENT_PROMOTION_STALE_MS,
   });
 }
 
@@ -116,6 +121,7 @@ export function useEnvironmentMergeBaseBranches(
     queryFn: () => api.getEnvironmentDiffBranches(environmentId),
     enabled: (options?.enabled ?? true) && Boolean(environmentId),
     refetchOnWindowFocus: false,
+    staleTime: MERGE_BASE_BRANCHES_STALE_MS,
   });
 }
 

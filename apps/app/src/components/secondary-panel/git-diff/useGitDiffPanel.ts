@@ -15,13 +15,16 @@ import {
 interface UseGitDiffPanelParams {
   defaultMergeBaseBranch?: string;
   environmentId?: string;
+  mergeBaseBranchOptionsEnabled?: boolean;
 }
 
 export function useGitDiffPanel({
   defaultMergeBaseBranch,
   environmentId,
+  mergeBaseBranchOptionsEnabled = false,
 }: UseGitDiffPanelParams) {
   const applyThreadSecondaryPanel = useSetThreadSecondaryPanel();
+  const activeSecondaryPanel = useAtomValue(activeSecondaryPanelAtom);
   const selectedMergeBaseBranch = useAtomValue(selectedMergeBaseBranchAtom);
   const setSelectedMergeBaseBranch = useSetAtom(selectedMergeBaseBranchAtom);
   const setPendingGitDiffScrollPath = useSetAtom(pendingGitDiffScrollPathAtom);
@@ -30,7 +33,11 @@ export function useGitDiffPanel({
     data: mergeBaseBranchOptions,
     isLoading: isLoadingMergeBaseBranchOptions,
   } = useEnvironmentMergeBaseBranches(environmentId ?? "", {
-    enabled: Boolean(environmentId),
+    // Branch options are only needed once the picker can open or the diff
+    // panel is visible; initial thread load can use the persisted/default base.
+    enabled:
+      Boolean(environmentId) &&
+      (mergeBaseBranchOptionsEnabled || activeSecondaryPanel === "git-diff"),
   });
 
   useEffect(() => {

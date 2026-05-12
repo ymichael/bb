@@ -124,6 +124,8 @@ const PROJECT_LIST_ACTION_TRAILING_SLOT_CLASS = cn(
   COARSE_POINTER_ROW_ACTION_SIZE_CLASS,
 );
 
+const PROMOTED_BRANCH_STATUS_STALE_MS = 30_000;
+
 interface ProjectThreadListStateArgs {
   status: ConnectionAwareQueryStatus | undefined;
   threads: ThreadListEntry[] | undefined;
@@ -336,8 +338,8 @@ function ProjectListComponent({
             target.projectId,
             target.sourceId,
           ),
-        staleTime: 5_000,
-        refetchOnWindowFocus: true,
+        staleTime: PROMOTED_BRANCH_STATUS_STALE_MS,
+        refetchOnWindowFocus: false,
       })),
     [localSourceTargets],
   );

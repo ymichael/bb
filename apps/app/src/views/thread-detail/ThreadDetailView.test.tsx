@@ -218,6 +218,13 @@ function createThreadDetailSuccessRoutes(
         (() => jsonResponse({ files: [], truncated: false })),
     },
     {
+      pathname: "/api/v1/threads/thr-1/thread-storage/content",
+      handler: () =>
+        new Response("# Manager status\n", {
+          headers: { "content-type": "text/markdown" },
+        }),
+    },
+    {
       pathname: "/api/v1/threads",
       handler: (request) => {
         const requestUrl = new URL(request.url);
@@ -580,7 +587,7 @@ describe("ThreadDetailView", () => {
     );
   });
 
-  it("only loads thread storage files for manager threads", async () => {
+  it("defers thread storage files for manager threads", async () => {
     let standardStorageRequestCount = 0;
     installFetchRoutes(
       createThreadDetailSuccessRoutes({
@@ -611,8 +618,40 @@ describe("ThreadDetailView", () => {
     );
 
     await renderThreadDetailView();
+    await screen.findByText("Loaded thread");
+    expect(managerStorageRequestCount).toBe(0);
+  });
+
+  it("loads manager storage files when the secondary panel is restored open", async () => {
+    window.localStorage.setItem("bb.thread.secondaryPanel", "thread-info");
+    let managerStorageRequestCount = 0;
+    installFetchRoutes(
+      createThreadDetailSuccessRoutes({
+        thread: createThreadResponse({ type: "manager" }),
+        threadStorageFilesHandler: () => {
+          managerStorageRequestCount += 1;
+          return jsonResponse({
+            files: [
+              { path: "STATUS.md", name: "STATUS.md" },
+              { path: "notes/plan.md", name: "plan.md" },
+            ],
+            truncated: false,
+          });
+        },
+      }),
+    );
+
+    await renderThreadDetailView();
+    await screen.findByText("Loaded thread");
     await waitFor(() => {
       expect(managerStorageRequestCount).toBe(1);
     });
+
+    await act(async () => {
+      screen.getByLabelText("Show thread info panel").click();
+    });
+
+    expect(managerStorageRequestCount).toBe(1);
+    expect(screen.queryByText("No files yet.")).toBeNull();
   });
 });
