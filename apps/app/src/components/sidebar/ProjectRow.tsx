@@ -4,7 +4,10 @@ import type { ProjectResponse } from "@bb/server-contract";
 import { AlertTriangle, ChevronRight, Folder, FolderOpen } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import { EmptyState, SidebarStickyTier } from "@/components/ui";
-import { ProjectActionsMenu } from "@/components/project/ProjectActionsMenu";
+import {
+  ProjectActionsContextMenu,
+  ProjectActionsMenu,
+} from "@/components/project/ProjectActionsMenu";
 import { SidebarMenuItem, SidebarMenuSkeleton } from "@/components/ui";
 import {
   COARSE_POINTER_ICON_SIZE_CLASS,
@@ -75,96 +78,102 @@ export function ProjectRow({
 
   return (
     <SidebarMenuItem data-sidebar-sticky-project-item="">
-      <SidebarStickyTier
-        tier="project"
-        className={cn(
-          "group/project-row flex w-full items-center rounded-md text-sm transition-colors",
-          isActive
-            ? "bg-sidebar-border text-sidebar-foreground"
-            : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-        )}
-        title={project.name}
-      >
-        <NavLink
-          to={`/projects/${project.id}`}
-          onClick={onProjectSelect}
-          className="absolute inset-0 rounded-md outline-none ring-sidebar-ring focus-visible:ring-2"
-        />
-        <button
-          type="button"
-          aria-expanded={!isCollapsed}
-          aria-label={
-            isCollapsed ? `Expand ${project.name}` : `Collapse ${project.name}`
-          }
-          title={
-            isCollapsed ? "Expand project threads" : "Collapse project threads"
-          }
-          onClick={() => {
-            onToggleProjectCollapsed(project.id);
-          }}
+      <ProjectActionsContextMenu project={project}>
+        <SidebarStickyTier
+          tier="project"
           className={cn(
-            "relative z-10 flex shrink-0 items-center justify-center rounded-md text-sidebar-foreground/70 outline-none ring-sidebar-ring transition-colors hover:text-sidebar-foreground focus-visible:ring-2",
-            COARSE_POINTER_PROJECT_ROW_ACTION_SIZE_CLASS,
+            "group/project-row flex w-full items-center rounded-md text-sm transition-colors",
+            isActive
+              ? "bg-sidebar-border text-sidebar-foreground"
+              : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
           )}
+          title={project.name}
         >
-          <span
+          <NavLink
+            to={`/projects/${project.id}`}
+            onClick={onProjectSelect}
+            className="absolute inset-0 rounded-md outline-none ring-sidebar-ring focus-visible:ring-2"
+          />
+          <button
+            type="button"
+            aria-expanded={!isCollapsed}
+            aria-label={
+              isCollapsed
+                ? `Expand ${project.name}`
+                : `Collapse ${project.name}`
+            }
+            title={
+              isCollapsed
+                ? "Expand project threads"
+                : "Collapse project threads"
+            }
+            onClick={() => {
+              onToggleProjectCollapsed(project.id);
+            }}
             className={cn(
-              "relative inline-flex items-center justify-center",
-              COARSE_POINTER_ICON_SIZE_CLASS,
+              "relative z-10 flex shrink-0 items-center justify-center rounded-md text-sidebar-foreground/70 outline-none ring-sidebar-ring transition-colors hover:text-sidebar-foreground focus-visible:ring-2",
+              COARSE_POINTER_PROJECT_ROW_ACTION_SIZE_CLASS,
             )}
           >
-            <ChevronRight
+            <span
               className={cn(
-                "absolute opacity-0 transition-all duration-150 group-hover/project-row:opacity-100",
+                "relative inline-flex items-center justify-center",
                 COARSE_POINTER_ICON_SIZE_CLASS,
-                !isCollapsed && "rotate-90",
               )}
-            />
-            {isCollapsed ? (
-              <Folder
+            >
+              <ChevronRight
                 className={cn(
-                  "absolute opacity-100 transition-opacity duration-150 group-hover/project-row:opacity-0",
+                  "absolute opacity-0 transition-all duration-150 group-hover/project-row:opacity-100",
                   COARSE_POINTER_ICON_SIZE_CLASS,
+                  !isCollapsed && "rotate-90",
                 )}
               />
-            ) : (
-              <FolderOpen
-                className={cn(
-                  "absolute opacity-100 transition-opacity duration-150 group-hover/project-row:opacity-0",
-                  COARSE_POINTER_ICON_SIZE_CLASS,
-                )}
-              />
-            )}
+              {isCollapsed ? (
+                <Folder
+                  className={cn(
+                    "absolute opacity-100 transition-opacity duration-150 group-hover/project-row:opacity-0",
+                    COARSE_POINTER_ICON_SIZE_CLASS,
+                  )}
+                />
+              ) : (
+                <FolderOpen
+                  className={cn(
+                    "absolute opacity-100 transition-opacity duration-150 group-hover/project-row:opacity-0",
+                    COARSE_POINTER_ICON_SIZE_CLASS,
+                  )}
+                />
+              )}
+            </span>
+          </button>
+          <span className="pointer-events-none relative z-10 min-w-0 flex-1 truncate text-left">
+            {project.name}
           </span>
-        </button>
-        <span className="pointer-events-none relative z-10 min-w-0 flex-1 truncate text-left">
-          {project.name}
-        </span>
-        {isLocalPathInvalid ? (
-          <NavLink
-            to={`/projects/${project.id}/settings`}
-            onClick={(event) => {
-              event.stopPropagation();
-              onProjectSelect?.();
-            }}
-            title="Project folder not found. Open project settings to fix."
-            aria-label="Project folder not found"
-            className={cn(
-              "relative z-10 inline-flex shrink-0 items-center justify-center rounded-md text-destructive outline-none ring-sidebar-ring transition-colors hover:bg-destructive/10 hover:text-destructive focus-visible:ring-2",
+          {isLocalPathInvalid ? (
+            <NavLink
+              to={`/projects/${project.id}/settings`}
+              onClick={(event) => {
+                event.stopPropagation();
+                onProjectSelect?.();
+              }}
+              title="Project folder not found. Open project settings to fix."
+              aria-label="Project folder not found"
+              className={cn(
+                "relative z-10 inline-flex shrink-0 items-center justify-center rounded-md text-destructive outline-none ring-sidebar-ring transition-colors hover:bg-destructive/10 hover:text-destructive focus-visible:ring-2",
+                COARSE_POINTER_ROW_ACTION_SIZE_CLASS,
+              )}
+            >
+              <AlertTriangle className={COARSE_POINTER_ICON_SIZE_CLASS} />
+            </NavLink>
+          ) : null}
+          <ProjectActionsMenu
+            project={project}
+            triggerClassName={cn(
+              "relative z-10 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-foreground",
               COARSE_POINTER_ROW_ACTION_SIZE_CLASS,
             )}
-          >
-            <AlertTriangle className={COARSE_POINTER_ICON_SIZE_CLASS} />
-          </NavLink>
-        ) : null}
-        <ProjectActionsMenu
-          project={project}
-          triggerClassName={cn(
-            "relative z-10 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-foreground",
-            COARSE_POINTER_ROW_ACTION_SIZE_CLASS,
-          )}
-        />
-      </SidebarStickyTier>
+          />
+        </SidebarStickyTier>
+      </ProjectActionsContextMenu>
 
       {!isCollapsed ? (
         threadListState.status === "loading" ? (

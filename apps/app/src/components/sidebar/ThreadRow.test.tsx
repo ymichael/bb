@@ -261,12 +261,18 @@ describe("ThreadRow", () => {
 
     const browserMenuAllowed = fireEvent.contextMenu(
       screen.getByRole("link", { name: "Open Pending interaction thread" }),
+      { clientX: 80, clientY: 64 },
     );
 
     expect(browserMenuAllowed).toBe(false);
     expect(
       await screen.findByRole("menuitem", { name: "Mark as read" }),
     ).not.toBeNull();
+    expect(
+      screen
+        .getByRole("button", { hidden: true, name: "Thread actions" })
+        .getAttribute("aria-expanded"),
+    ).toBe("false");
   });
 
   it("opens the thread actions menu from a manager row context menu gesture", async () => {
@@ -284,6 +290,7 @@ describe("ThreadRow", () => {
 
     const browserMenuAllowed = fireEvent.contextMenu(
       screen.getByRole("link", { name: "Open Manager thread" }),
+      { clientX: 90, clientY: 72 },
     );
 
     expect(browserMenuAllowed).toBe(false);

@@ -1,8 +1,4 @@
-export {
-  Button,
-  buttonVariants,
-  type ButtonProps,
-} from "./button.js";
+export { Button, buttonVariants, type ButtonProps } from "./button.js";
 export { Input } from "./input.js";
 export { Separator } from "./separator.js";
 export { Skeleton } from "./skeleton.js";
@@ -53,6 +49,23 @@ export {
   DropdownMenuSubTrigger,
   DropdownMenuRadioGroup,
 } from "./dropdown-menu.js";
+export {
+  ContextMenu,
+  ContextMenuTrigger,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuCheckboxItem,
+  ContextMenuRadioItem,
+  ContextMenuLabel,
+  ContextMenuSeparator,
+  ContextMenuShortcut,
+  ContextMenuGroup,
+  ContextMenuPortal,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
+  ContextMenuRadioGroup,
+} from "./context-menu.js";
 export {
   Popover,
   PopoverTrigger,
@@ -160,10 +173,7 @@ export {
   type StatusPillProps,
   type StatusPillVariant,
 } from "./status-pill.js";
-export {
-  ExpandableLine,
-  type ExpandableLineProps,
-} from "./expandable-line.js";
+export { ExpandableLine, type ExpandableLineProps } from "./expandable-line.js";
 export {
   CollapsibleHeader,
   ExpandablePanel,

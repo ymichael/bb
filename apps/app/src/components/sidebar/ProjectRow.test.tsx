@@ -1,7 +1,14 @@
 // @vitest-environment jsdom
 
 import { Suspense, type ReactNode } from "react";
-import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Provider as JotaiProvider } from "jotai";
 import type { ThreadListEntry } from "@bb/domain";
@@ -15,8 +22,14 @@ import { installFetchRoutes, jsonResponse } from "@/test/http-test-utils";
 import { createAppQueryClient } from "@/lib/query-client";
 import { ProjectRow, type ProjectThreadListState } from "./ProjectRow";
 
+vi.mock("@/components/sidebar/sidebarCollapsedAtoms", async () => {
+  const { atom } = await import("jotai");
+  return { collapsedProjectIdsAtom: atom<string[]>([]) };
+});
+
 interface RenderProjectRowArgs {
   collapsedManagerIds?: Set<string>;
+  onProjectSelect?: () => void;
   threadListState: ProjectThreadListState;
 }
 
@@ -119,6 +132,7 @@ async function renderProjectRow(args: RenderProjectRowArgs): Promise<void> {
           collapsedManagerIds={args.collapsedManagerIds ?? new Set()}
           isLocalPathInvalid={false}
           localHostId={null}
+          onProjectSelect={args.onProjectSelect}
           onToggleProjectCollapsed={vi.fn()}
           onToggleManagerCollapsed={vi.fn()}
           promotedBranchName={null}
@@ -134,6 +148,16 @@ function getThreadOpenLabels(): string[] {
     const label = link.getAttribute("aria-label")?.replace(/^Open /u, "");
     return label === undefined ? [] : [label];
   });
+}
+
+function getProjectOpenLink(): HTMLAnchorElement {
+  const link = document.querySelector<HTMLAnchorElement>(
+    'a[href="/projects/proj_1"]',
+  );
+  if (link === null) {
+    throw new Error("Expected project open link to be rendered");
+  }
+  return link;
 }
 
 afterEach(() => {
@@ -284,5 +308,93 @@ describe("ProjectRow", () => {
       ]);
     });
     expect(screen.queryByLabelText("Open Managed child")).toBeNull();
+  });
+
+  it("preserves left-click project opening", async () => {
+    const onProjectSelect = vi.fn();
+
+    await renderProjectRow({
+      onProjectSelect,
+      threadListState: {
+        status: "ready",
+        threads: [],
+      },
+    });
+
+    fireEvent.click(getProjectOpenLink());
+
+    expect(onProjectSelect).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("menuitem", { name: "Rename" })).toBeNull();
+  });
+
+  it("opens the project actions menu from the ellipsis trigger", async () => {
+    await renderProjectRow({
+      threadListState: {
+        status: "ready",
+        threads: [],
+      },
+    });
+
+    fireEvent.pointerDown(
+      screen.getByRole("button", { name: "Project Alpha actions" }),
+      {
+        button: 0,
+        ctrlKey: false,
+      },
+    );
+
+    expect(
+      await screen.findByRole("menuitem", { name: "Rename" }),
+    ).not.toBeNull();
+    expect(screen.getByRole("menuitem", { name: "Remove" })).not.toBeNull();
+  });
+
+  it("opens the project actions menu from the row context menu gesture", async () => {
+    await renderProjectRow({
+      threadListState: {
+        status: "ready",
+        threads: [],
+      },
+    });
+
+    const browserMenuAllowed = fireEvent.contextMenu(
+      screen.getByText("Project Alpha"),
+      { clientX: 96, clientY: 48 },
+    );
+
+    expect(browserMenuAllowed).toBe(false);
+    expect(
+      await screen.findByRole("menuitem", { name: "Rename" }),
+    ).not.toBeNull();
+    expect(screen.getByRole("menuitem", { name: "Remove" })).not.toBeNull();
+    expect(
+      screen
+        .getByRole("button", { hidden: true, name: "Project Alpha actions" })
+        .getAttribute("aria-expanded"),
+    ).toBe("false");
+  });
+
+  it("closes a right-click-opened project actions menu with Escape", async () => {
+    await renderProjectRow({
+      threadListState: {
+        status: "ready",
+        threads: [],
+      },
+    });
+
+    fireEvent.contextMenu(screen.getByText("Project Alpha"), {
+      clientX: 96,
+      clientY: 48,
+    });
+
+    const menu = await screen.findByRole("menu", {
+      name: "Project Alpha actions",
+    });
+
+    fireEvent.keyDown(menu, { key: "Escape" });
+
+    await waitFor(() => {
+      expect(screen.queryByRole("menuitem", { name: "Rename" })).toBeNull();
+    });
   });
 });
