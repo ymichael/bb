@@ -23,6 +23,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { CommandRouter } from "../../src/command-router.js";
 import { noopEventSink } from "../../src/command-dispatch-support.js";
 import { RuntimeManager } from "../../src/runtime-manager.js";
+import { unexpectedProjectAttachmentFetch } from "./dispatch-helpers.js";
 
 const tempDirs: string[] = [];
 let nextClientRequestIdValue = 1;
@@ -74,9 +75,7 @@ interface FakeWorkspace {
   managed: HostWorkspace["managed"];
   isGitRepo: HostWorkspace["isGitRepo"];
   isWorktree: HostWorkspace["isWorktree"];
-  getCurrentBranch: ReturnType<
-    typeof vi.fn<HostWorkspace["getCurrentBranch"]>
-  >;
+  getCurrentBranch: ReturnType<typeof vi.fn<HostWorkspace["getCurrentBranch"]>>;
   getHeadSha: ReturnType<typeof vi.fn<HostWorkspace["getHeadSha"]>>;
   getLocalStateFingerprint: ReturnType<
     typeof vi.fn<HostWorkspace["getLocalStateFingerprint"]>
@@ -209,19 +208,17 @@ function createFakeRuntime(): FakeRuntime {
     ensureProvider: vi.fn<(args: EnsureProviderArgs) => Promise<void>>(
       async () => undefined,
     ),
-    startThread: vi.fn<
-      (args: StartThreadArgs) => Promise<StartThreadResult>
-    >(async ({ threadId }) => ({
-      providerThreadId: `provider-${threadId}`,
-    })),
+    startThread: vi.fn<(args: StartThreadArgs) => Promise<StartThreadResult>>(
+      async ({ threadId }) => ({
+        providerThreadId: `provider-${threadId}`,
+      }),
+    ),
     resumeThread: vi.fn<
       (args: ResumeThreadArgs) => Promise<ResumeThreadResult>
     >(async ({ providerThreadId }) => ({
       providerThreadId: providerThreadId ?? "provider-resumed",
     })),
-    runTurn: vi.fn<(args: RunTurnArgs) => Promise<void>>(
-      async () => undefined,
-    ),
+    runTurn: vi.fn<(args: RunTurnArgs) => Promise<void>>(async () => undefined),
     steerTurn: vi.fn<(args: SteerTurnArgs) => Promise<SteerTurnResult>>(
       async () => ({ status: "steered" }),
     ),
@@ -237,9 +234,9 @@ function createFakeRuntime(): FakeRuntime {
     unarchiveThread: vi.fn<(args: UnarchiveThreadArgs) => Promise<void>>(
       async () => undefined,
     ),
-    listModels: vi.fn<
-      (args: ListModelsArgs) => Promise<ListModelsResult>
-    >(async () => []),
+    listModels: vi.fn<(args: ListModelsArgs) => Promise<ListModelsResult>>(
+      async () => [],
+    ),
     listRunningProviders: vi.fn<() => string[]>(() => []),
     shutdown: vi.fn<() => Promise<void>>(async () => undefined),
   };
@@ -321,6 +318,7 @@ describe("CommandRouter", () => {
     const reportResult = vi.fn(async () => undefined);
     const router = new CommandRouter({
       dataDir: "/tmp/bb-test-data",
+      fetchProjectAttachment: unexpectedProjectAttachmentFetch,
       fetchRuntimeMaterial: async () => snapshot,
       readPersistedRuntimeMaterial: async () =>
         readRuntimeMaterialState(dataDir),
@@ -391,6 +389,7 @@ describe("CommandRouter", () => {
     });
     const router = new CommandRouter({
       dataDir: "/tmp/bb-test-data",
+      fetchProjectAttachment: unexpectedProjectAttachmentFetch,
       fetchRuntimeMaterial: vi.fn(),
       readPersistedRuntimeMaterial: async () => null,
       persistRuntimeMaterial: async () => undefined,
@@ -434,6 +433,7 @@ describe("CommandRouter", () => {
     });
     const router = new CommandRouter({
       dataDir: "/tmp/bb-test-data",
+      fetchProjectAttachment: unexpectedProjectAttachmentFetch,
       fetchRuntimeMaterial: vi.fn(),
       readPersistedRuntimeMaterial: async () => null,
       persistRuntimeMaterial: async () => undefined,
@@ -493,6 +493,7 @@ describe("CommandRouter", () => {
       });
     const router = new CommandRouter({
       dataDir: "/tmp/bb-test-data",
+      fetchProjectAttachment: unexpectedProjectAttachmentFetch,
       fetchRuntimeMaterial,
       readPersistedRuntimeMaterial: vi.fn(async () => null),
       persistRuntimeMaterial: vi.fn(async () => undefined),
@@ -558,6 +559,7 @@ describe("CommandRouter", () => {
 
     const router = new CommandRouter({
       dataDir: "/tmp/bb-test-data",
+      fetchProjectAttachment: unexpectedProjectAttachmentFetch,
       fetchRuntimeMaterial: vi.fn(),
       readPersistedRuntimeMaterial: vi.fn(async () => null),
       persistRuntimeMaterial: vi.fn(async () => undefined),
@@ -642,6 +644,7 @@ describe("CommandRouter", () => {
 
     const router = new CommandRouter({
       dataDir: "/tmp/bb-test-data",
+      fetchProjectAttachment: unexpectedProjectAttachmentFetch,
       fetchRuntimeMaterial: vi.fn(),
       readPersistedRuntimeMaterial: vi.fn(async () => null),
       persistRuntimeMaterial: vi.fn(async () => undefined),
@@ -721,6 +724,7 @@ describe("CommandRouter", () => {
 
     const router = new CommandRouter({
       dataDir: "/tmp/bb-test-data",
+      fetchProjectAttachment: unexpectedProjectAttachmentFetch,
       fetchRuntimeMaterial: vi.fn(),
       readPersistedRuntimeMaterial: vi.fn(async () => null),
       persistRuntimeMaterial: vi.fn(async () => undefined),
@@ -820,6 +824,7 @@ describe("CommandRouter", () => {
     const reported: string[] = [];
     const router = new CommandRouter({
       dataDir: "/tmp/bb-test-data",
+      fetchProjectAttachment: unexpectedProjectAttachmentFetch,
       fetchRuntimeMaterial: vi.fn(),
       readPersistedRuntimeMaterial: vi.fn(async () => null),
       persistRuntimeMaterial: vi.fn(async () => undefined),
@@ -915,6 +920,7 @@ describe("CommandRouter", () => {
     }> = [];
     const router = new CommandRouter({
       dataDir: "/tmp/bb-test-data",
+      fetchProjectAttachment: unexpectedProjectAttachmentFetch,
       fetchRuntimeMaterial: vi.fn(),
       readPersistedRuntimeMaterial: vi.fn(async () => null),
       persistRuntimeMaterial: vi.fn(async () => undefined),
@@ -999,6 +1005,7 @@ describe("CommandRouter", () => {
 
     const router = new CommandRouter({
       dataDir: "/tmp/bb-test-data",
+      fetchProjectAttachment: unexpectedProjectAttachmentFetch,
       fetchRuntimeMaterial: vi.fn(),
       readPersistedRuntimeMaterial: vi.fn(async () => null),
       persistRuntimeMaterial: vi.fn(async () => undefined),
@@ -1057,6 +1064,7 @@ describe("CommandRouter", () => {
     const reported: string[] = [];
     const router = new CommandRouter({
       dataDir: "/tmp/bb-test-data",
+      fetchProjectAttachment: unexpectedProjectAttachmentFetch,
       fetchRuntimeMaterial: vi.fn(),
       readPersistedRuntimeMaterial: vi.fn(async () => null),
       persistRuntimeMaterial: vi.fn(async () => undefined),

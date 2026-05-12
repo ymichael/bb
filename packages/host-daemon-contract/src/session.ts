@@ -100,6 +100,16 @@ export type HostDaemonRuntimeMaterialQuery = z.infer<
   typeof hostDaemonRuntimeMaterialQuerySchema
 >;
 
+export const hostDaemonProjectAttachmentContentQuerySchema = z.object({
+  sessionId: z.string().min(1),
+  threadId: z.string().min(1),
+  projectId: z.string().min(1),
+  path: z.string().min(1),
+});
+export type HostDaemonProjectAttachmentContentQuery = z.infer<
+  typeof hostDaemonProjectAttachmentContentQuerySchema
+>;
+
 export const hostDaemonCommandBatchSchema = z.object({
   commands: z.array(hostDaemonCommandEnvelopeSchema),
 });
@@ -340,6 +350,15 @@ export type HostDaemonInternalSchema = {
       { query: HostDaemonRuntimeMaterialQuery },
       z.infer<typeof hostRuntimeMaterialSnapshotSchema>,
       200
+    >;
+  };
+  "/session/project-attachment-content": {
+    /** Used by the daemon to fetch uploaded prompt attachment bytes for a specific thread. */
+    $get: Endpoint<
+      { query: HostDaemonProjectAttachmentContentQuery },
+      Uint8Array,
+      200,
+      "binary"
     >;
   };
   "/session/command-result": {

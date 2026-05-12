@@ -18,6 +18,7 @@ import type {
 import type { HostRuntimeMaterialState } from "@bb/host-runtime-material";
 import type { InteractiveResolveCommandInput } from "./interactive-request-registry.js";
 import { RuntimeManager, type RuntimeEntry } from "./runtime-manager.js";
+import type { FetchProjectAttachment } from "./project-attachments.js";
 
 export type CommandOf<TType extends HostDaemonCommand["type"]> = Extract<
   HostDaemonCommand,
@@ -42,6 +43,7 @@ export const noopEventSink: EventSink = {
 
 export interface CommandDispatchOptions {
   dataDir: string;
+  fetchProjectAttachment: FetchProjectAttachment;
   fetchRuntimeMaterial: (
     version: string,
   ) => Promise<HostRuntimeMaterialSnapshot>;

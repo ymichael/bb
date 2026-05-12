@@ -21,6 +21,7 @@ interface PendingCommandResultReport {
 
 export interface CommandRouterOptions {
   dataDir: CommandDispatchOptions["dataDir"];
+  fetchProjectAttachment: CommandDispatchOptions["fetchProjectAttachment"];
   fetchRuntimeMaterial: CommandDispatchOptions["fetchRuntimeMaterial"];
   readPersistedRuntimeMaterial: CommandDispatchOptions["readPersistedRuntimeMaterial"];
   persistRuntimeMaterial: CommandDispatchOptions["persistRuntimeMaterial"];
@@ -167,6 +168,7 @@ export class CommandRouter {
     try {
       const result = await dispatchCommand(envelope.command, {
         fetchRuntimeMaterial: this.options.fetchRuntimeMaterial,
+        fetchProjectAttachment: this.options.fetchProjectAttachment,
         readPersistedRuntimeMaterial: this.options.readPersistedRuntimeMaterial,
         persistRuntimeMaterial: this.options.persistRuntimeMaterial,
         runtimeManager: this.options.runtimeManager,

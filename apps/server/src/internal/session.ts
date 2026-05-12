@@ -5,6 +5,7 @@ import {
   upsertHost,
 } from "@bb/db";
 import {
+  hostDaemonProjectAttachmentContentQuerySchema,
   hostDaemonRuntimeMaterialQuerySchema,
   hostDaemonSessionOpenRequestSchema,
   hostRuntimeMaterialSnapshotSchema,
@@ -15,7 +16,10 @@ import type { Hono } from "hono";
 import type { AppDeps } from "../types.js";
 import { HEARTBEAT_INTERVAL_MS, LEASE_TIMEOUT_MS } from "../constants.js";
 import { ApiError } from "../errors.js";
-import { listHostThreadIds } from "../services/lib/entity-lookup.js";
+import {
+  listHostThreadIds,
+  requirePublicThreadEnvironment,
+} from "../services/lib/entity-lookup.js";
 import {
   assertAuthenticatedHostMatches,
   getAuthenticatedDaemon,
@@ -30,6 +34,7 @@ import { markHostSessionOpened } from "../services/hosts/host-lifecycle.js";
 import { reconcileSandboxRuntimeMaterialAfterSessionOpen } from "../services/hosts/sandbox-runtime-material-operation.js";
 import { readSandboxRuntimeMaterialSnapshotForVersion } from "../services/hosts/sandbox-runtime-material-snapshot.js";
 import { requireAuthorizedActiveSession } from "./session-state.js";
+import { readAttachment } from "../services/projects/attachments.js";
 
 export function registerInternalSessionRoutes(app: Hono, deps: AppDeps): void {
   const { get, post } = typedRoutes<HostDaemonInternalSchema>(app, {
@@ -155,6 +160,55 @@ export function registerInternalSessionRoutes(app: Hono, deps: AppDeps): void {
               }),
             ),
           );
+        },
+      }),
+  );
+
+  get(
+    "/session/project-attachment-content",
+    hostDaemonProjectAttachmentContentQuerySchema,
+    (context, query) =>
+      runWithDaemonCommandWaitForbidden({
+        reason: "/session/project-attachment-content",
+        work: async () => {
+          const daemon = getAuthenticatedDaemon(context);
+          requireAuthorizedActiveSession(deps.db, {
+            hostId: daemon.hostId,
+            sessionId: query.sessionId,
+          });
+
+          const { environment, thread } = requirePublicThreadEnvironment(
+            deps.db,
+            query.threadId,
+          );
+          // Attachment paths are project-scoped upload tokens, so cross-check
+          // projectId before reading bytes even though threadId identifies a thread.
+          if (thread.projectId !== query.projectId) {
+            throw new ApiError(
+              403,
+              "forbidden",
+              "Thread does not belong to project",
+            );
+          }
+          if (environment.hostId !== daemon.hostId) {
+            throw new ApiError(
+              403,
+              "forbidden",
+              "Host is not assigned to thread environment",
+            );
+          }
+
+          const attachment = await readAttachment(
+            deps.config.dataDir,
+            query.projectId,
+            query.path,
+          );
+          return new Response(new Uint8Array(attachment.content), {
+            status: 200,
+            headers: {
+              "content-type": attachment.mimeType ?? "application/octet-stream",
+            },
+          });
         },
       }),
   );

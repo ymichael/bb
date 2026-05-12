@@ -595,6 +595,7 @@ export async function createHostDaemonApp(
 
   const router = new CommandRouter({
     dataDir: options.dataDir,
+    fetchProjectAttachment: (args) => serverClient.fetchProjectAttachment(args),
     fetchRuntimeMaterial: (version) =>
       serverClient.fetchRuntimeMaterial({ version }),
     readPersistedRuntimeMaterial: () =>

@@ -52,6 +52,48 @@ describe("createServerClient", () => {
     expect(fetchFn).not.toHaveBeenCalled();
   });
 
+  it("refuses to fetch project attachments over insecure non-loopback HTTP", async () => {
+    const fetchFn = vi.fn<typeof fetch>();
+    const client = createServerClient({
+      fetchFn,
+      getSessionId: () => "session-1",
+      hostKey: "host-key",
+      logger: createLogger(),
+      serverUrl: "http://bb.example.test",
+    });
+
+    await expect(
+      client.fetchProjectAttachment({
+        maxBytes: 25,
+        projectId: "project-1",
+        threadId: "thread-1",
+        path: "network-tab.har",
+      }),
+    ).rejects.toBeInstanceOf(AbortError);
+    expect(fetchFn).not.toHaveBeenCalled();
+  });
+
+  it("refuses to fetch project attachments when the server URL is malformed", async () => {
+    const fetchFn = vi.fn<typeof fetch>();
+    const client = createServerClient({
+      fetchFn,
+      getSessionId: () => "session-1",
+      hostKey: "host-key",
+      logger: createLogger(),
+      serverUrl: "not a url",
+    });
+
+    await expect(
+      client.fetchProjectAttachment({
+        maxBytes: 25,
+        projectId: "project-1",
+        threadId: "thread-1",
+        path: "network-tab.har",
+      }),
+    ).rejects.toBeInstanceOf(AbortError);
+    expect(fetchFn).not.toHaveBeenCalled();
+  });
+
   it("fetches runtime material over HTTPS", async () => {
     const fetchFn = vi.fn<typeof fetch>(async (input) => {
       const url = String(input);
@@ -107,6 +149,98 @@ describe("createServerClient", () => {
       ],
       version: "runtime-version-1",
     });
+    expect(fetchFn).toHaveBeenCalledTimes(1);
+  });
+
+  it("fetches project attachment bytes over HTTPS", async () => {
+    const fetchFn = vi.fn<typeof fetch>(async (input) => {
+      const url = new URL(String(input));
+      expect(url.pathname).toBe("/internal/session/project-attachment-content");
+      expect(url.searchParams.get("sessionId")).toBe("session-1");
+      expect(url.searchParams.get("threadId")).toBe("thread-1");
+      expect(url.searchParams.get("projectId")).toBe("project-1");
+      expect(url.searchParams.get("path")).toBe("network-tab.har");
+      return new Response("attachment-body", {
+        headers: {
+          "content-type": "application/octet-stream",
+        },
+        status: 200,
+      });
+    });
+    const client = createServerClient({
+      fetchFn,
+      getSessionId: () => "session-1",
+      hostKey: "host-key",
+      logger: createLogger(),
+      serverUrl: "https://bb.example.test",
+    });
+
+    const attachment = await client.fetchProjectAttachment({
+      expectedSizeBytes: 15,
+      maxBytes: 25,
+      projectId: "project-1",
+      threadId: "thread-1",
+      path: "network-tab.har",
+    });
+
+    expect(Buffer.from(attachment.bytes).toString("utf8")).toBe(
+      "attachment-body",
+    );
+    expect(fetchFn).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects project attachment responses with unexpected byte length", async () => {
+    const fetchFn = vi.fn<typeof fetch>(
+      async () =>
+        new Response("too-large", {
+          status: 200,
+        }),
+    );
+    const client = createServerClient({
+      fetchFn,
+      getSessionId: () => "session-1",
+      hostKey: "host-key",
+      logger: createLogger(),
+      serverUrl: "https://bb.example.test",
+    });
+
+    await expect(
+      client.fetchProjectAttachment({
+        expectedSizeBytes: 4,
+        maxBytes: 25,
+        projectId: "project-1",
+        threadId: "thread-1",
+        path: "network-tab.har",
+      }),
+    ).rejects.toThrow("Project attachment size mismatch");
+  });
+
+  it("fetches project attachment bytes over loopback HTTP", async () => {
+    const fetchFn = vi.fn<typeof fetch>(async (input) => {
+      const url = new URL(String(input));
+      expect(url.pathname).toBe("/internal/session/project-attachment-content");
+      return new Response("loopback-body", {
+        status: 200,
+      });
+    });
+    const client = createServerClient({
+      fetchFn,
+      getSessionId: () => "session-1",
+      hostKey: "host-key",
+      logger: createLogger(),
+      serverUrl: "http://127.0.0.1:3334",
+    });
+
+    const attachment = await client.fetchProjectAttachment({
+      maxBytes: 25,
+      projectId: "project-1",
+      threadId: "thread-1",
+      path: "network-tab.har",
+    });
+
+    expect(Buffer.from(attachment.bytes).toString("utf8")).toBe(
+      "loopback-body",
+    );
     expect(fetchFn).toHaveBeenCalledTimes(1);
   });
 

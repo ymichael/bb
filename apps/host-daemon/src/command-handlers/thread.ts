@@ -8,6 +8,7 @@ import {
   type CommandDispatchOptions,
   type CommandOf,
 } from "../command-dispatch-support.js";
+import { stagePromptAttachments } from "./prompt-attachments.js";
 
 type TurnSubmitCommand = CommandOf<"turn.submit">;
 
@@ -35,6 +36,16 @@ function resolveThreadStorageDir(
   );
 }
 
+async function cleanupAfterPostStagingFailure(
+  cleanup: () => Promise<void>,
+): Promise<void> {
+  try {
+    await cleanup();
+  } catch {
+    // Preserve the runtime/provisioning failure that triggered cleanup.
+  }
+}
+
 export async function startThread(
   command: CommandOf<"thread.start">,
   options: CommandDispatchOptions,
@@ -46,29 +57,42 @@ export async function startThread(
     );
     await fs.mkdir(confined, { recursive: true });
   }
-  const entry = await options.runtimeManager.ensureEnvironment({
-    environmentId: command.environmentId,
-    workspacePath: command.workspaceContext.workspacePath,
-    workspaceProvisionType: command.workspaceContext.workspaceProvisionType,
-  });
-  const result = await entry.runtime.startThread({
-    environmentId: command.environmentId,
-    threadId: command.threadId,
-    projectId: command.projectId,
-    providerId: command.providerId,
-    clientRequestId: command.requestId,
+  const staged = await stagePromptAttachments({
+    fetchProjectAttachment: options.fetchProjectAttachment,
     input: command.input,
-    options: command.options,
-    instructions: command.instructions,
-    dynamicTools: command.dynamicTools,
-    instructionMode: command.instructionMode,
+    projectId: command.projectId,
+    requestId: command.requestId,
+    threadStorageRootPath: options.threadStorageRootPath,
+    threadId: command.threadId,
   });
-  options.runtimeManager.markThreadActive(
-    command.environmentId,
-    command.threadId,
-    result.providerThreadId,
-  );
-  return result;
+  try {
+    const entry = await options.runtimeManager.ensureEnvironment({
+      environmentId: command.environmentId,
+      workspacePath: command.workspaceContext.workspacePath,
+      workspaceProvisionType: command.workspaceContext.workspaceProvisionType,
+    });
+    const result = await entry.runtime.startThread({
+      environmentId: command.environmentId,
+      threadId: command.threadId,
+      projectId: command.projectId,
+      providerId: command.providerId,
+      clientRequestId: command.requestId,
+      input: staged.input,
+      options: command.options,
+      instructions: command.instructions,
+      dynamicTools: command.dynamicTools,
+      instructionMode: command.instructionMode,
+    });
+    options.runtimeManager.markThreadActive(
+      command.environmentId,
+      command.threadId,
+      result.providerThreadId,
+    );
+    return result;
+  } catch (error) {
+    await cleanupAfterPostStagingFailure(staged.cleanup);
+    throw error;
+  }
 }
 
 export async function ensureThreadRuntime(
@@ -163,20 +187,46 @@ async function steerSubmittedTurn(
 export async function submitTurn(
   command: TurnSubmitCommand,
   entry: RuntimeEntry,
+  options: CommandDispatchOptions,
 ): Promise<HostDaemonCommandResult<"turn.submit">> {
-  switch (command.target.mode) {
-    case "start":
-      return runSubmittedTurn(command, entry);
-    case "auto":
-      return command.target.expectedTurnId
-        ? steerSubmittedTurn(command, entry, command.target.expectedTurnId)
-        : runSubmittedTurn(command, entry);
-    case "steer":
-      if (!command.target.expectedTurnId) {
-        // The server saw no active turn, but the user's intent is still "send".
-        return runSubmittedTurn(command, entry);
-      }
-      return steerSubmittedTurn(command, entry, command.target.expectedTurnId);
+  const staged = await stagePromptAttachments({
+    fetchProjectAttachment: options.fetchProjectAttachment,
+    input: command.input,
+    projectId: command.resumeContext.projectId,
+    requestId: command.requestId,
+    threadStorageRootPath: options.threadStorageRootPath,
+    threadId: command.threadId,
+  });
+  const stagedCommand = {
+    ...command,
+    input: staged.input,
+  };
+  try {
+    switch (command.target.mode) {
+      case "start":
+        return await runSubmittedTurn(stagedCommand, entry);
+      case "auto":
+        return command.target.expectedTurnId
+          ? await steerSubmittedTurn(
+              stagedCommand,
+              entry,
+              command.target.expectedTurnId,
+            )
+          : await runSubmittedTurn(stagedCommand, entry);
+      case "steer":
+        if (!command.target.expectedTurnId) {
+          // The server saw no active turn, but the user's intent is still "send".
+          return await runSubmittedTurn(stagedCommand, entry);
+        }
+        return await steerSubmittedTurn(
+          stagedCommand,
+          entry,
+          command.target.expectedTurnId,
+        );
+    }
+  } catch (error) {
+    await cleanupAfterPostStagingFailure(staged.cleanup);
+    throw error;
   }
 }
 

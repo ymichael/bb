@@ -11,6 +11,7 @@ import type {
   ClientTurnRequestId,
   AvailableModel,
   DynamicTool,
+  PromptInput,
 } from "@bb/domain";
 import { makeWorkspaceMergeBase, makeWorkspaceStatus } from "@bb/test-helpers";
 import type { HostWorkspace, ProvisionWorkspaceArgs } from "@bb/host-workspace";
@@ -18,9 +19,14 @@ import { RuntimeManager } from "../../src/runtime-manager.js";
 import { listFilesRecursively } from "../../src/command-handlers/file-list.js";
 import { noopEventSink } from "../../src/command-dispatch-support.js";
 import type { CommandDispatchOptions } from "../../src/command-dispatch-support.js";
+import type { FetchProjectAttachment } from "../../src/project-attachments.js";
 
 const tempDirs: string[] = [];
 const execFileAsync = promisify(execFile);
+export const unexpectedProjectAttachmentFetch: FetchProjectAttachment =
+  async () => {
+    throw new Error("Unexpected project attachment fetch");
+  };
 
 type GitCommandArgs = string[];
 
@@ -52,6 +58,7 @@ interface FakeRuntimeState {
   archivedThreadId: string | undefined;
   listedModelsProviderId: string | undefined;
   ranTurnClientRequestId: ClientTurnRequestId | undefined;
+  ranTurnInput: PromptInput[] | undefined;
   ranTurnInstructions: string | undefined;
   ranTurnOptions: AgentRuntimeExecutionOptions | undefined;
   ranTurnText: string | undefined;
@@ -66,6 +73,7 @@ interface FakeRuntimeState {
   shutdownCount: number;
   startedDynamicTools: DynamicTool[] | undefined;
   startedEnvironmentId: string | undefined;
+  startedInput: PromptInput[] | undefined;
   startedInstructions: string | undefined;
   startedOptions: AgentRuntimeExecutionOptions | undefined;
   startedThreadId: string | undefined;
@@ -211,6 +219,7 @@ export function createFakeRuntime() {
     archivedThreadId: undefined,
     listedModelsProviderId: undefined,
     ranTurnClientRequestId: undefined,
+    ranTurnInput: undefined,
     ranTurnInstructions: undefined,
     ranTurnOptions: undefined,
     ranTurnText: undefined,
@@ -225,6 +234,7 @@ export function createFakeRuntime() {
     shutdownCount: 0,
     startedDynamicTools: undefined,
     startedEnvironmentId: undefined,
+    startedInput: undefined,
     startedInstructions: undefined,
     startedOptions: undefined,
     startedThreadId: undefined,
@@ -243,6 +253,7 @@ export function createFakeRuntime() {
       state.startedEnvironmentId = args.environmentId;
       state.startedThreadId = args.threadId;
       state.startedDynamicTools = args.dynamicTools;
+      state.startedInput = args.input;
       state.startedOptions = args.options;
       state.startedInstructions = args.instructions;
       return { providerThreadId: `provider-${args.threadId}` };
@@ -263,6 +274,7 @@ export function createFakeRuntime() {
       state.ranTurnText =
         firstInput?.type === "text" ? firstInput.text : undefined;
       state.ranTurnClientRequestId = args.clientRequestId;
+      state.ranTurnInput = args.input;
       state.ranTurnOptions = args.options;
       state.ranTurnInstructions = args.instructions;
     },
@@ -346,6 +358,7 @@ export function createHarness(
       return {
         dataDir: overrides.dataDir ?? "/tmp/bb-test-data",
         eventSink: noopEventSink,
+        fetchProjectAttachment: unexpectedProjectAttachmentFetch,
         fetchRuntimeMaterial: async () => ({
           env: {},
           files: [],
@@ -369,6 +382,7 @@ export function makeDispatchOptions(
   return {
     dataDir: "/tmp/bb-test-data",
     eventSink: noopEventSink,
+    fetchProjectAttachment: unexpectedProjectAttachmentFetch,
     fetchRuntimeMaterial: async () => ({
       env: {},
       files: [],

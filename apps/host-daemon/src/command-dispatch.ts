@@ -138,7 +138,7 @@ const commandHandlers: CommandHandlerMap = {
     recordReplayThreadMetadata(command, options);
     recordReplayTurnRequest(command, options);
     const entry = await ensureThreadRuntime(command, options);
-    return submitTurn(command, entry);
+    return submitTurn(command, entry, options);
   },
   "thread.stop": async (
     command: Extract<HostDaemonCommand, { type: "thread.stop" }>,

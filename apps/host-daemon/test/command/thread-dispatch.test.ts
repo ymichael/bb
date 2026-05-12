@@ -6,8 +6,12 @@ import {
   turnScope,
   type ClientTurnRequestId,
 } from "@bb/domain";
-import { afterEach, describe, expect, it } from "vitest";
-import { dispatchCommand } from "../../src/command-dispatch.js";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  CommandDispatchError,
+  dispatchCommand,
+} from "../../src/command-dispatch.js";
+import type { FetchProjectAttachment } from "../../src/project-attachments.js";
 import { RuntimeManager } from "../../src/runtime-manager.js";
 import {
   cleanupTempDirs,
@@ -21,6 +25,8 @@ import {
 afterEach(cleanupTempDirs);
 
 let nextClientRequestIdValue = 1;
+const IMAGE_ATTACHMENT_LIMIT_BYTES = 10 * 1024 * 1024;
+const FILE_ATTACHMENT_LIMIT_BYTES = 25 * 1024 * 1024;
 
 function nextClientRequestId(): ClientTurnRequestId {
   const requestId = encodeClientTurnRequestIdNumber({
@@ -31,6 +37,543 @@ function nextClientRequestId(): ClientTurnRequestId {
 }
 
 describe("thread command dispatch", () => {
+  it("stages uploaded thread.start attachments before runtime input", async () => {
+    const threadStorageRootPath = await makeTempDir(
+      "bb-thread-start-attachments-",
+    );
+    const harness = createHarness();
+    const requestId = nextClientRequestId();
+    const uploadedNotesContent = "content:notes-uploaded.txt";
+    const fetchProjectAttachment = vi.fn<FetchProjectAttachment>(
+      async (args) => ({
+        bytes: Buffer.from(`content:${args.path}`),
+      }),
+    );
+
+    await dispatchCommand(
+      {
+        type: "thread.start",
+        environmentId: "env-attachments",
+        threadId: "thread-attachments",
+        workspaceContext: {
+          workspacePath: "/tmp/env-attachments",
+          workspaceProvisionType: "unmanaged",
+        },
+        projectId: "project-attachments",
+        providerId: "fake",
+        requestId,
+        input: [
+          { type: "text", text: "inspect these" },
+          {
+            type: "localFile",
+            path: "notes-uploaded.txt",
+            name: "notes.txt",
+            sizeBytes: Buffer.byteLength(uploadedNotesContent),
+          },
+          { type: "localImage", path: "screenshot-uploaded.png" },
+          { type: "localFile", path: "/tmp/already-readable.txt" },
+        ],
+        options: {
+          model: "gpt-5",
+          serviceTier: "default",
+          reasoningLevel: "medium",
+          permissionMode: "full",
+          permissionEscalation: null,
+        },
+        instructions: "Be a helpful coding agent.",
+        dynamicTools: [],
+        instructionMode: "append",
+      },
+      {
+        ...harness.dispatchOptions({ threadStorageRootPath }),
+        fetchProjectAttachment,
+      },
+    );
+
+    expect(fetchProjectAttachment).toHaveBeenCalledTimes(2);
+    expect(fetchProjectAttachment).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        expectedSizeBytes: Buffer.byteLength(uploadedNotesContent),
+        maxBytes: FILE_ATTACHMENT_LIMIT_BYTES,
+        projectId: "project-attachments",
+        threadId: "thread-attachments",
+        path: "notes-uploaded.txt",
+      }),
+    );
+    expect(fetchProjectAttachment).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        maxBytes: IMAGE_ATTACHMENT_LIMIT_BYTES,
+        projectId: "project-attachments",
+        threadId: "thread-attachments",
+        path: "screenshot-uploaded.png",
+      }),
+    );
+
+    const runtimeInput = harness.runtimeState.startedInput ?? [];
+    const stagedFile = runtimeInput[1];
+    const stagedImage = runtimeInput[2];
+    const existingFile = runtimeInput[3];
+    if (stagedFile?.type !== "localFile") {
+      throw new Error("Expected staged local file input");
+    }
+    if (stagedImage?.type !== "localImage") {
+      throw new Error("Expected staged local image input");
+    }
+    if (existingFile?.type !== "localFile") {
+      throw new Error("Expected existing local file input");
+    }
+    const stagingDir = path.join(
+      threadStorageRootPath,
+      "thread-attachments",
+      "runtime-attachments",
+      requestId,
+    );
+    expect(stagedFile.path.startsWith(`${stagingDir}${path.sep}`)).toBe(true);
+    expect(stagedImage.path.startsWith(`${stagingDir}${path.sep}`)).toBe(true);
+    expect(existingFile.path).toBe("/tmp/already-readable.txt");
+    await expect(fs.readFile(stagedFile.path, "utf8")).resolves.toBe(
+      uploadedNotesContent,
+    );
+    await expect(fs.readFile(stagedImage.path, "utf8")).resolves.toBe(
+      "content:screenshot-uploaded.png",
+    );
+    expect((await fs.stat(stagedFile.path)).mode & 0o777).toBe(0o600);
+
+    await dispatchCommand(
+      {
+        type: "thread.deleted",
+        environmentId: "env-attachments",
+        threadId: "thread-attachments",
+      },
+      harness.dispatchOptions({ threadStorageRootPath }),
+    );
+    await expect(
+      fs.stat(path.join(threadStorageRootPath, "thread-attachments")),
+    ).rejects.toThrow();
+  });
+
+  it("stages uploaded turn.submit attachments before runtime input", async () => {
+    const threadStorageRootPath = await makeTempDir(
+      "bb-turn-submit-attachments-",
+    );
+    const harness = createHarness();
+    const requestId = nextClientRequestId();
+    const fetchProjectAttachment = vi.fn<FetchProjectAttachment>(
+      async (args) => ({
+        bytes: Buffer.from(`content:${args.path}`),
+      }),
+    );
+
+    await dispatchCommand(
+      {
+        type: "turn.submit",
+        environmentId: "env-submit-attachments",
+        threadId: "thread-submit-attachments",
+        requestId,
+        input: [{ type: "localFile", path: "follow-up-uploaded.har" }],
+        options: {
+          model: "gpt-5",
+          serviceTier: "default",
+          reasoningLevel: "medium",
+          permissionMode: "full",
+          permissionEscalation: null,
+        },
+        resumeContext: {
+          workspaceContext: {
+            workspacePath: "/tmp/env-submit-attachments",
+            workspaceProvisionType: "unmanaged",
+          },
+          projectId: "project-submit-attachments",
+          providerId: "fake",
+          providerThreadId: "provider-submit-attachments",
+          instructions: "Be a helpful coding agent.",
+          dynamicTools: [],
+          instructionMode: "append",
+        },
+        target: { mode: "start" },
+      },
+      {
+        ...harness.dispatchOptions({ threadStorageRootPath }),
+        fetchProjectAttachment,
+      },
+    );
+
+    expect(fetchProjectAttachment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        maxBytes: FILE_ATTACHMENT_LIMIT_BYTES,
+        projectId: "project-submit-attachments",
+        threadId: "thread-submit-attachments",
+        path: "follow-up-uploaded.har",
+      }),
+    );
+    const runtimeInput = harness.runtimeState.ranTurnInput ?? [];
+    const stagedFile = runtimeInput[0];
+    if (stagedFile?.type !== "localFile") {
+      throw new Error("Expected staged local file input");
+    }
+    const stagingDir = path.join(
+      threadStorageRootPath,
+      "thread-submit-attachments",
+      "runtime-attachments",
+      requestId,
+    );
+    expect(stagedFile.path.startsWith(`${stagingDir}${path.sep}`)).toBe(true);
+    await expect(fs.readFile(stagedFile.path, "utf8")).resolves.toBe(
+      "content:follow-up-uploaded.har",
+    );
+  });
+
+  it("leaves runtime-readable attachment paths unstaged", async () => {
+    const threadStorageRootPath = await makeTempDir("bb-no-stage-attachments-");
+    const harness = createHarness();
+    const fetchProjectAttachment = vi.fn<FetchProjectAttachment>();
+
+    await dispatchCommand(
+      {
+        type: "thread.start",
+        environmentId: "env-no-stage-attachments",
+        threadId: "thread-no-stage-attachments",
+        workspaceContext: {
+          workspacePath: "/tmp/env-no-stage-attachments",
+          workspaceProvisionType: "unmanaged",
+        },
+        projectId: "project-no-stage-attachments",
+        providerId: "fake",
+        requestId: nextClientRequestId(),
+        input: [
+          { type: "localFile", path: "https://example.test/log.har" },
+          { type: "localImage", path: "C:\\Users\\michael\\screenshot.png" },
+        ],
+        options: {
+          model: "gpt-5",
+          serviceTier: "default",
+          reasoningLevel: "medium",
+          permissionMode: "full",
+          permissionEscalation: null,
+        },
+        instructions: "Be a helpful coding agent.",
+        dynamicTools: [],
+        instructionMode: "append",
+      },
+      {
+        ...harness.dispatchOptions({ threadStorageRootPath }),
+        fetchProjectAttachment,
+      },
+    );
+
+    expect(fetchProjectAttachment).not.toHaveBeenCalled();
+    expect(harness.runtimeState.startedInput).toEqual([
+      { type: "localFile", path: "https://example.test/log.har" },
+      { type: "localImage", path: "C:\\Users\\michael\\screenshot.png" },
+    ]);
+    await expect(
+      fs.stat(path.join(threadStorageRootPath, "thread-no-stage-attachments")),
+    ).rejects.toThrow();
+  });
+
+  it("removes stale files before restaging attachments for the same request", async () => {
+    const threadStorageRootPath = await makeTempDir("bb-restage-attachments-");
+    const harness = createHarness();
+    const requestId = nextClientRequestId();
+    const stagingDir = path.join(
+      threadStorageRootPath,
+      "thread-restage-attachments",
+      "runtime-attachments",
+      requestId,
+    );
+    const stalePath = path.join(stagingDir, "999-stale.txt");
+    await fs.mkdir(stagingDir, { recursive: true });
+    await fs.writeFile(stalePath, "stale");
+    const fetchProjectAttachment = vi.fn<FetchProjectAttachment>(async () => ({
+      bytes: Buffer.from("fresh"),
+    }));
+
+    await dispatchCommand(
+      {
+        type: "thread.start",
+        environmentId: "env-restage-attachments",
+        threadId: "thread-restage-attachments",
+        workspaceContext: {
+          workspacePath: "/tmp/env-restage-attachments",
+          workspaceProvisionType: "unmanaged",
+        },
+        projectId: "project-restage-attachments",
+        providerId: "fake",
+        requestId,
+        input: [{ type: "localFile", path: "fresh-uploaded.txt" }],
+        options: {
+          model: "gpt-5",
+          serviceTier: "default",
+          reasoningLevel: "medium",
+          permissionMode: "full",
+          permissionEscalation: null,
+        },
+        instructions: "Be a helpful coding agent.",
+        dynamicTools: [],
+        instructionMode: "append",
+      },
+      {
+        ...harness.dispatchOptions({ threadStorageRootPath }),
+        fetchProjectAttachment,
+      },
+    );
+
+    await expect(fs.stat(stalePath)).rejects.toThrow();
+    await expect(fs.readdir(stagingDir)).resolves.toEqual([
+      "000-fresh-uploaded.txt",
+    ]);
+  });
+
+  it("cleans up staged attachments when fetching a later attachment fails", async () => {
+    const threadStorageRootPath = await makeTempDir(
+      "bb-failed-stage-attachments-",
+    );
+    const harness = createHarness();
+    const requestId = nextClientRequestId();
+    const fetchProjectAttachment = vi.fn<FetchProjectAttachment>(
+      async (args) => {
+        if (args.path === "second-uploaded.txt") {
+          throw new Error("server unavailable");
+        }
+        return {
+          bytes: Buffer.from(`content:${args.path}`),
+        };
+      },
+    );
+
+    let thrown: unknown;
+    try {
+      await dispatchCommand(
+        {
+          type: "thread.start",
+          environmentId: "env-failed-stage-attachments",
+          threadId: "thread-failed-stage-attachments",
+          workspaceContext: {
+            workspacePath: "/tmp/env-failed-stage-attachments",
+            workspaceProvisionType: "unmanaged",
+          },
+          projectId: "project-failed-stage-attachments",
+          providerId: "fake",
+          requestId,
+          input: [
+            { type: "localFile", path: "first-uploaded.txt" },
+            { type: "localFile", path: "second-uploaded.txt" },
+          ],
+          options: {
+            model: "gpt-5",
+            serviceTier: "default",
+            reasoningLevel: "medium",
+            permissionMode: "full",
+            permissionEscalation: null,
+          },
+          instructions: "Be a helpful coding agent.",
+          dynamicTools: [],
+          instructionMode: "append",
+        },
+        {
+          ...harness.dispatchOptions({ threadStorageRootPath }),
+          fetchProjectAttachment,
+        },
+      );
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(CommandDispatchError);
+    expect(thrown).toMatchObject({ code: "attachment_unavailable" });
+    expect(fetchProjectAttachment).toHaveBeenCalledTimes(2);
+    expect(harness.provisions).toEqual([]);
+    expect(harness.runtimeState.startedThreadId).toBeUndefined();
+    await expect(
+      fs.stat(
+        path.join(
+          threadStorageRootPath,
+          "thread-failed-stage-attachments",
+          "runtime-attachments",
+          requestId,
+        ),
+      ),
+    ).rejects.toThrow();
+  });
+
+  it("rejects attachment responses that do not match declared size", async () => {
+    const threadStorageRootPath = await makeTempDir(
+      "bb-oversized-stage-attachments-",
+    );
+    const harness = createHarness();
+    const requestId = nextClientRequestId();
+    const fetchProjectAttachment = vi.fn<FetchProjectAttachment>(async () => ({
+      bytes: Buffer.from("too-large"),
+    }));
+
+    await expect(
+      dispatchCommand(
+        {
+          type: "thread.start",
+          environmentId: "env-oversized-stage-attachments",
+          threadId: "thread-oversized-stage-attachments",
+          workspaceContext: {
+            workspacePath: "/tmp/env-oversized-stage-attachments",
+            workspaceProvisionType: "unmanaged",
+          },
+          projectId: "project-oversized-stage-attachments",
+          providerId: "fake",
+          requestId,
+          input: [
+            {
+              type: "localFile",
+              path: "oversized-uploaded.txt",
+              sizeBytes: 4,
+            },
+          ],
+          options: {
+            model: "gpt-5",
+            serviceTier: "default",
+            reasoningLevel: "medium",
+            permissionMode: "full",
+            permissionEscalation: null,
+          },
+          instructions: "Be a helpful coding agent.",
+          dynamicTools: [],
+          instructionMode: "append",
+        },
+        {
+          ...harness.dispatchOptions({ threadStorageRootPath }),
+          fetchProjectAttachment,
+        },
+      ),
+    ).rejects.toMatchObject({ code: "attachment_unavailable" });
+    expect(harness.provisions).toEqual([]);
+    await expect(
+      fs.stat(
+        path.join(
+          threadStorageRootPath,
+          "thread-oversized-stage-attachments",
+          "runtime-attachments",
+          requestId,
+        ),
+      ),
+    ).rejects.toThrow();
+  });
+
+  it("cleans up staged thread.start attachments when runtime start fails", async () => {
+    const threadStorageRootPath = await makeTempDir(
+      "bb-runtime-failed-start-attachments-",
+    );
+    const harness = createHarness();
+    const requestId = nextClientRequestId();
+    harness.runtime.startThread = async () => {
+      throw new Error("runtime start failed");
+    };
+    const fetchProjectAttachment = vi.fn<FetchProjectAttachment>(async () => ({
+      bytes: Buffer.from("content"),
+    }));
+
+    await expect(
+      dispatchCommand(
+        {
+          type: "thread.start",
+          environmentId: "env-runtime-failed-start-attachments",
+          threadId: "thread-runtime-failed-start-attachments",
+          workspaceContext: {
+            workspacePath: "/tmp/env-runtime-failed-start-attachments",
+            workspaceProvisionType: "unmanaged",
+          },
+          projectId: "project-runtime-failed-start-attachments",
+          providerId: "fake",
+          requestId,
+          input: [{ type: "localFile", path: "runtime-failed-uploaded.txt" }],
+          options: {
+            model: "gpt-5",
+            serviceTier: "default",
+            reasoningLevel: "medium",
+            permissionMode: "full",
+            permissionEscalation: null,
+          },
+          instructions: "Be a helpful coding agent.",
+          dynamicTools: [],
+          instructionMode: "append",
+        },
+        {
+          ...harness.dispatchOptions({ threadStorageRootPath }),
+          fetchProjectAttachment,
+        },
+      ),
+    ).rejects.toThrow("runtime start failed");
+    await expect(
+      fs.stat(
+        path.join(
+          threadStorageRootPath,
+          "thread-runtime-failed-start-attachments",
+          "runtime-attachments",
+          requestId,
+        ),
+      ),
+    ).rejects.toThrow();
+  });
+
+  it("cleans up staged turn.submit attachments when runtime turn fails", async () => {
+    const threadStorageRootPath = await makeTempDir(
+      "bb-runtime-failed-turn-attachments-",
+    );
+    const harness = createHarness();
+    const requestId = nextClientRequestId();
+    harness.runtime.runTurn = async () => {
+      throw new Error("runtime turn failed");
+    };
+    const fetchProjectAttachment = vi.fn<FetchProjectAttachment>(async () => ({
+      bytes: Buffer.from("content"),
+    }));
+
+    await expect(
+      dispatchCommand(
+        {
+          type: "turn.submit",
+          environmentId: "env-runtime-failed-turn-attachments",
+          threadId: "thread-runtime-failed-turn-attachments",
+          requestId,
+          input: [{ type: "localFile", path: "runtime-turn-uploaded.txt" }],
+          options: {
+            model: "gpt-5",
+            serviceTier: "default",
+            reasoningLevel: "medium",
+            permissionMode: "full",
+            permissionEscalation: null,
+          },
+          resumeContext: {
+            workspaceContext: {
+              workspacePath: "/tmp/env-runtime-failed-turn-attachments",
+              workspaceProvisionType: "unmanaged",
+            },
+            projectId: "project-runtime-failed-turn-attachments",
+            providerId: "fake",
+            providerThreadId: "provider-runtime-failed-turn-attachments",
+            instructions: "Be a helpful coding agent.",
+            dynamicTools: [],
+            instructionMode: "append",
+          },
+          target: { mode: "start" },
+        },
+        {
+          ...harness.dispatchOptions({ threadStorageRootPath }),
+          fetchProjectAttachment,
+        },
+      ),
+    ).rejects.toThrow("runtime turn failed");
+    await expect(
+      fs.stat(
+        path.join(
+          threadStorageRootPath,
+          "thread-runtime-failed-turn-attachments",
+          "runtime-attachments",
+          requestId,
+        ),
+      ),
+    ).rejects.toThrow();
+  });
+
   it("covers thread lifecycle commands", async () => {
     const harness = createHarness();
 

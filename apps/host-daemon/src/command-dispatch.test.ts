@@ -96,6 +96,9 @@ describe("dispatchCommand", () => {
         emit: vi.fn(),
         flush,
       },
+      fetchProjectAttachment: async () => {
+        throw new Error("Unexpected project attachment fetch");
+      },
       fetchRuntimeMaterial: async () => unexpectedWorkspaceCall(),
       persistRuntimeMaterial: async () => undefined,
       readPersistedRuntimeMaterial: async () => null,
@@ -139,6 +142,9 @@ describe("dispatchCommand", () => {
       eventSink: {
         emit: vi.fn(),
         flush: vi.fn(async () => undefined),
+      },
+      fetchProjectAttachment: async () => {
+        throw new Error("Unexpected project attachment fetch");
       },
       fetchRuntimeMaterial: async () => unexpectedWorkspaceCall(),
       persistRuntimeMaterial: async () => undefined,

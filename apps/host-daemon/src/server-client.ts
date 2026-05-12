@@ -9,6 +9,7 @@ import {
   hostDaemonEnvironmentChangeRequestSchema,
   hostDaemonEventBatchRequestSchema,
   hostDaemonEventBatchResponseSchema,
+  hostDaemonProjectAttachmentContentQuerySchema,
   hostDaemonRuntimeMaterialQuerySchema,
   hostDaemonInteractiveInterruptRequestSchema,
   hostDaemonInteractiveInterruptResponseSchema,
@@ -35,6 +36,10 @@ import {
 import type { PendingInteractionCreate, ToolCallRequest } from "@bb/domain";
 import type { HostDaemonLogger } from "./logger.js";
 import type { EventPostResult } from "./event-buffer.js";
+import type {
+  FetchedProjectAttachment,
+  FetchProjectAttachmentArgs,
+} from "./project-attachments.js";
 
 const knownCommandTypes = new Set<string>(HOST_DAEMON_COMMAND_TYPES);
 const DEFAULT_COMMAND_FETCH_LIMIT = 100;
@@ -215,6 +220,9 @@ export interface ServerClient {
   fetchRuntimeMaterial(args: {
     version: string;
   }): Promise<HostRuntimeMaterialSnapshot>;
+  fetchProjectAttachment(
+    args: FetchProjectAttachmentArgs,
+  ): Promise<FetchedProjectAttachment>;
   reportCommandResult(
     report: HostDaemonCommandResultReportWithoutSession,
   ): Promise<HostDaemonCommandResultResponse>;
@@ -242,8 +250,13 @@ const DEFAULT_COMMAND_RESULT_RETRY_OPTIONS: CommandResultRetryOptions = {
   retries: COMMAND_RESULT_RETRIES,
 };
 
-function usesSecureRuntimeMaterialTransport(serverUrl: string): boolean {
-  const parsed = new URL(serverUrl);
+function usesSecureInternalFetchTransport(serverUrl: string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(serverUrl);
+  } catch {
+    return false;
+  }
   if (parsed.protocol === "https:") {
     return true;
   }
@@ -253,6 +266,83 @@ function usesSecureRuntimeMaterialTransport(serverUrl: string): boolean {
     parsed.hostname === "localhost" ||
     parsed.hostname === "::1"
   );
+}
+
+function parseContentLength(value: string | null): number | null {
+  if (!value) {
+    return null;
+  }
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < 0) {
+    return null;
+  }
+  return parsed;
+}
+
+function validateProjectAttachmentPartialByteLength(
+  args: FetchProjectAttachmentArgs,
+  byteLength: number,
+): void {
+  if (
+    args.expectedSizeBytes !== undefined &&
+    byteLength > args.expectedSizeBytes
+  ) {
+    throw new Error(
+      `Project attachment size mismatch: expected ${args.expectedSizeBytes} bytes, received more than ${args.expectedSizeBytes}`,
+    );
+  }
+  if (byteLength > args.maxBytes) {
+    throw new Error(
+      `Project attachment exceeds ${args.maxBytes} byte limit: received ${byteLength}`,
+    );
+  }
+}
+
+function validateProjectAttachmentFinalByteLength(
+  args: FetchProjectAttachmentArgs,
+  byteLength: number,
+): void {
+  if (
+    args.expectedSizeBytes !== undefined &&
+    byteLength !== args.expectedSizeBytes
+  ) {
+    throw new Error(
+      `Project attachment size mismatch: expected ${args.expectedSizeBytes} bytes, received ${byteLength}`,
+    );
+  }
+  validateProjectAttachmentPartialByteLength(args, byteLength);
+}
+
+async function readProjectAttachmentBytes(
+  response: Response,
+  args: FetchProjectAttachmentArgs,
+): Promise<Uint8Array> {
+  if (!response.body) {
+    validateProjectAttachmentFinalByteLength(args, 0);
+    return new Uint8Array();
+  }
+
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+  while (true) {
+    const result = await reader.read();
+    if (result.done) {
+      break;
+    }
+    totalBytes += result.value.byteLength;
+    validateProjectAttachmentPartialByteLength(args, totalBytes);
+    chunks.push(result.value);
+  }
+
+  validateProjectAttachmentFinalByteLength(args, totalBytes);
+  const bytes = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes;
 }
 
 export function createServerClient(
@@ -460,7 +550,7 @@ export function createServerClient(
     },
 
     async fetchRuntimeMaterial(args): Promise<HostRuntimeMaterialSnapshot> {
-      if (!usesSecureRuntimeMaterialTransport(options.serverUrl)) {
+      if (!usesSecureInternalFetchTransport(options.serverUrl)) {
         throw new AbortError(
           `Refusing to fetch runtime material over insecure server URL: ${options.serverUrl}`,
         );
@@ -483,6 +573,46 @@ export function createServerClient(
       }
 
       return hostRuntimeMaterialSnapshotSchema.parse(await response.json());
+    },
+
+    async fetchProjectAttachment(
+      args: FetchProjectAttachmentArgs,
+    ): Promise<FetchedProjectAttachment> {
+      if (!usesSecureInternalFetchTransport(options.serverUrl)) {
+        throw new AbortError(
+          `Refusing to fetch project attachment over insecure server URL: ${options.serverUrl}`,
+        );
+      }
+
+      const query = hostDaemonProjectAttachmentContentQuerySchema.parse({
+        sessionId: requireSessionId(),
+        threadId: args.threadId,
+        projectId: args.projectId,
+        path: args.path,
+      });
+      const response = await fetchFn(
+        buildInternalUrl("/session/project-attachment-content", query),
+        {
+          method: "GET",
+          headers: headers(),
+        },
+      );
+
+      if (!response.ok) {
+        throw await createResponseError("fetch project attachment", response);
+      }
+
+      const contentLength = parseContentLength(
+        response.headers.get("content-length"),
+      );
+      if (contentLength !== null) {
+        validateProjectAttachmentFinalByteLength(args, contentLength);
+      }
+
+      const bytes = await readProjectAttachmentBytes(response, args);
+      return {
+        bytes,
+      };
     },
 
     async reportCommandResult(
