@@ -374,6 +374,51 @@ describe("ProjectRow", () => {
     ).toBe("false");
   });
 
+  it("dismisses a right-click-opened project actions menu after selecting an action", async () => {
+    await renderProjectRow({
+      threadListState: {
+        status: "ready",
+        threads: [],
+      },
+    });
+
+    fireEvent.contextMenu(screen.getByText("Project Alpha"), {
+      clientX: 96,
+      clientY: 48,
+    });
+
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Rename" }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("menuitem", { name: "Rename" })).toBeNull();
+    });
+  });
+
+  it("dismisses a right-click-opened project actions menu when clicking outside", async () => {
+    await renderProjectRow({
+      threadListState: {
+        status: "ready",
+        threads: [],
+      },
+    });
+
+    fireEvent.contextMenu(screen.getByText("Project Alpha"), {
+      clientX: 96,
+      clientY: 48,
+    });
+
+    expect(
+      await screen.findByRole("menuitem", { name: "Rename" }),
+    ).not.toBeNull();
+
+    fireEvent.pointerDown(document.body, { button: 0 });
+    fireEvent.click(document.body);
+
+    await waitFor(() => {
+      expect(screen.queryByRole("menuitem", { name: "Rename" })).toBeNull();
+    });
+  });
+
   it("closes a right-click-opened project actions menu with Escape", async () => {
     await renderProjectRow({
       threadListState: {

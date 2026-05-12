@@ -83,7 +83,9 @@ function ProjectActionsMenuItems({
       <ProjectActionMenuItem
         surface={surface}
         onSelect={(event) => {
-          event.preventDefault();
+          if (surface === "dropdown") {
+            event.preventDefault();
+          }
           requestRename(project);
         }}
       >
@@ -94,7 +96,9 @@ function ProjectActionsMenuItems({
         <ProjectActionMenuItem
           surface={surface}
           onSelect={(event) => {
-            event.preventDefault();
+            if (surface === "dropdown") {
+              event.preventDefault();
+            }
             requestAddLocalPath(project);
           }}
         >
@@ -106,7 +110,9 @@ function ProjectActionsMenuItems({
         surface={surface}
         className="text-destructive focus:text-destructive"
         onSelect={(event) => {
-          event.preventDefault();
+          if (surface === "dropdown") {
+            event.preventDefault();
+          }
           requestDelete(project);
         }}
       >

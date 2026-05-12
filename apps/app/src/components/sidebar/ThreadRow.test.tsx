@@ -15,6 +15,7 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createAppQueryClient } from "@/lib/query-client";
 import { ThreadActionsProvider } from "@/components/thread/ThreadActionsProvider";
+import { installFetchRoutes, jsonResponse } from "@/test/http-test-utils";
 import { ThreadRow, type ThreadRowOptions } from "./ThreadRow";
 
 vi.mock("sonner", () => ({
@@ -151,6 +152,7 @@ function renderThreadRow(
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  vi.unstubAllGlobals();
 });
 
 describe("ThreadRow", () => {
@@ -273,6 +275,60 @@ describe("ThreadRow", () => {
         .getByRole("button", { hidden: true, name: "Thread actions" })
         .getAttribute("aria-expanded"),
     ).toBe("false");
+  });
+
+  it("dismisses a right-click-opened thread actions menu after selecting an action", async () => {
+    const thread = createThread();
+    installFetchRoutes([
+      {
+        method: "POST",
+        pathname: `/api/v1/threads/${thread.id}/read`,
+        handler: () =>
+          jsonResponse({
+            ...thread,
+            lastReadAt: Date.now(),
+          }),
+      },
+    ]);
+
+    renderThreadRow(thread);
+
+    fireEvent.contextMenu(
+      screen.getByRole("link", { name: "Open Pending interaction thread" }),
+      { clientX: 80, clientY: 64 },
+    );
+
+    fireEvent.click(
+      await screen.findByRole("menuitem", { name: "Mark as read" }),
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("menuitem", { name: "Mark as read" }),
+      ).toBeNull();
+    });
+  });
+
+  it("dismisses a right-click-opened thread actions menu when clicking outside", async () => {
+    renderThreadRow(createThread());
+
+    fireEvent.contextMenu(
+      screen.getByRole("link", { name: "Open Pending interaction thread" }),
+      { clientX: 80, clientY: 64 },
+    );
+
+    expect(
+      await screen.findByRole("menuitem", { name: "Mark as read" }),
+    ).not.toBeNull();
+
+    fireEvent.pointerDown(document.body, { button: 0 });
+    fireEvent.click(document.body);
+
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("menuitem", { name: "Mark as read" }),
+      ).toBeNull();
+    });
   });
 
   it("opens the thread actions menu from a manager row context menu gesture", async () => {

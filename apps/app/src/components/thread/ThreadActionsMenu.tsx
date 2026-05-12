@@ -151,7 +151,9 @@ function ThreadActionsMenuItems({
       <ThreadActionMenuItem
         surface={surface}
         onSelect={(event) => {
-          event.preventDefault();
+          if (surface === "dropdown") {
+            event.preventDefault();
+          }
           toggleRead(thread);
         }}
       >
@@ -170,7 +172,9 @@ function ThreadActionsMenuItems({
       <ThreadActionMenuItem
         surface={surface}
         onSelect={(event) => {
-          event.preventDefault();
+          if (surface === "dropdown") {
+            event.preventDefault();
+          }
           toggleArchive(thread);
         }}
       >
@@ -199,7 +203,9 @@ function ThreadActionsMenuItems({
               onViewerToggleCheckedChange(checked === true);
             }}
             onSelect={(event) => {
-              event.preventDefault();
+              if (surface === "dropdown") {
+                event.preventDefault();
+              }
             }}
           >
             {viewerToggleLabel}
