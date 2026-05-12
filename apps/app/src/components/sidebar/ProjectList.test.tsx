@@ -1,7 +1,14 @@
 // @vitest-environment jsdom
 
 import { Suspense, type ReactNode } from "react";
-import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { BrowserRouter } from "react-router-dom";
 import type { QueryClient } from "@tanstack/react-query";
 import type { ProjectResponse } from "@bb/server-contract";
@@ -71,12 +78,27 @@ function createProjectListWrapper() {
   };
 }
 
-async function renderProjectList(): Promise<ProjectListRenderResult> {
+interface RenderProjectListArgs {
+  onNewChat?: () => void;
+  onNewManager?: (projectId: string) => void;
+  selectedProjectId?: string;
+}
+
+async function renderProjectList(
+  args: RenderProjectListArgs = {},
+): Promise<ProjectListRenderResult> {
   const { queryClient, wrapper } = createProjectListWrapper();
   let container: HTMLElement | null = null;
 
   await act(async () => {
-    const result = render(<ProjectList />, { wrapper });
+    const result = render(
+      <ProjectList
+        onNewChat={args.onNewChat}
+        onNewManager={args.onNewManager}
+        selectedProjectId={args.selectedProjectId}
+      />,
+      { wrapper },
+    );
     container = result.container;
   });
 
@@ -96,6 +118,67 @@ afterEach(() => {
 });
 
 describe("ProjectList", () => {
+  it("renders new chat and manager actions above the projects heading", async () => {
+    installFetchRoutes([
+      {
+        pathname: "/api/v1/projects",
+        handler: () => jsonResponse([makeProjectResponse()]),
+      },
+      {
+        pathname: "/api/v1/threads",
+        handler: () => jsonResponse([]),
+      },
+      {
+        pathname: "/api/v1/system/config",
+        handler: () =>
+          jsonResponse({
+            githubConnected: false,
+            hostDaemonPort: null,
+            sandboxHostSupported: false,
+            voiceTranscriptionEnabled: false,
+          }),
+      },
+      {
+        pathname: "/api/v1/hosts",
+        handler: () => jsonResponse([]),
+      },
+    ]);
+    const onNewChat = vi.fn();
+    const onNewManager = vi.fn<(projectId: string) => void>();
+
+    await renderProjectList({
+      onNewChat,
+      onNewManager,
+      selectedProjectId: "project-1",
+    });
+
+    const newChatButton = screen.getByRole("button", { name: "New Chat" });
+    const newManagerButton = screen.getByRole("button", {
+      name: "New Manager",
+    });
+    const projectHeading = screen.getByText("Projects");
+
+    expect(
+      screen.queryByRole("button", { name: "Manager project" }),
+    ).toBeNull();
+    expect(newManagerButton.hasAttribute("disabled")).toBe(false);
+
+    expect(
+      newChatButton.compareDocumentPosition(newManagerButton) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      newManagerButton.compareDocumentPosition(projectHeading) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+
+    fireEvent.click(newChatButton);
+    fireEvent.click(newManagerButton);
+
+    expect(onNewChat).toHaveBeenCalledTimes(1);
+    expect(onNewManager).toHaveBeenCalledWith("project-1");
+  });
+
   it("renders the sticky project heading without a sidebar overflow fade", async () => {
     installFetchRoutes([
       {

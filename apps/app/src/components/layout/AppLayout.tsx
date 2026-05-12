@@ -1,15 +1,16 @@
 import { Fragment, type CSSProperties, type Ref, type ReactNode } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useIsMutating } from "@tanstack/react-query";
 import { useAtom } from "jotai";
 import { atomWithStorage } from "jotai/utils";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { Archive, ChevronRight, Settings, UserRoundPlus } from "lucide-react";
+import { Archive, ChevronRight, Settings } from "lucide-react";
 import type { Thread } from "@bb/domain";
 import type { ProjectResponse } from "@bb/server-contract";
 import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui";
 import { AppSidebar } from "@/components/sidebar/AppSidebar";
 import { AppPageHeader, HEADER_ICON_BUTTON_CLASS } from "./AppPageHeader";
-import { useHireProjectManager } from "@/hooks/mutations/project-mutations";
+import { HIRE_PROJECT_MANAGER_MUTATION_KEY } from "@/hooks/mutations/project-mutations";
 import { useProjects } from "@/hooks/queries/project-queries";
 import { useThread } from "@/hooks/queries/thread-queries";
 import { useAppRoute } from "@/hooks/useAppRoute";
@@ -106,11 +107,8 @@ const routeTitles: Record<string, { title: string; subtitle?: string }> = {
 
 interface AppHeaderProps {
   isProjectMainView: boolean;
-  projectName?: string;
   projectId?: string;
   project?: ProjectResponse;
-  isManagerActionPending?: boolean;
-  onOpenManager?: () => void;
   meta: {
     title: string;
     subtitle?: string;
@@ -120,11 +118,8 @@ interface AppHeaderProps {
 
 function AppHeader({
   isProjectMainView,
-  projectName,
   projectId,
   project,
-  isManagerActionPending = false,
-  onOpenManager,
   meta,
 }: AppHeaderProps) {
   const showProjectMenuButton = isProjectMainView && !!project;
@@ -191,19 +186,6 @@ function AppHeader({
   const actions =
     isProjectMainView && projectId ? (
       <>
-        <button
-          type="button"
-          className={cn(
-            HEADER_ICON_BUTTON_CLASS,
-            "inline-flex items-center justify-center text-muted-foreground transition-colors hover:bg-state-hover hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60",
-          )}
-          aria-label="Hire manager"
-          title="Hire manager"
-          disabled={!projectId || isManagerActionPending}
-          onClick={() => onOpenManager?.()}
-        >
-          <UserRoundPlus />
-        </button>
         <Link
           to={`/projects/${projectId}/settings`}
           className={cn(
@@ -253,7 +235,9 @@ export function AppLayout({ children }: AppLayoutProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const { data: projects, isLoading: projectsLoading } = useProjects();
-  const hireProjectManager = useHireProjectManager();
+  const activeHireManagerRequests = useIsMutating({
+    mutationKey: HIRE_PROJECT_MANAGER_MUTATION_KEY,
+  });
   const hireManagerDialog = useDialogState<string>();
   const [sidebarWidth, setSidebarWidth] = useAtom(sidebarWidthAtom);
   const [isSidebarResizing, setIsSidebarResizing] = useState(false);
@@ -417,6 +401,8 @@ export function AppLayout({ children }: AppLayoutProps) {
     if (typeof document === "undefined") return;
     document.title = documentTitle;
   }, [documentTitle]);
+  const isManagerActionPending =
+    activeHireManagerRequests > 0 || hireManagerDialog.isOpen;
 
   return (
     <ProjectActionsProvider>
@@ -432,6 +418,12 @@ export function AppLayout({ children }: AppLayoutProps) {
           <AppSidebar
             onResizeMouseDown={handleResizeMouseDown}
             isResizing={isSidebarResizing}
+            selectedProjectId={projectId}
+            isManagerActionPending={isManagerActionPending}
+            onNewManager={(targetProjectId) => {
+              if (isManagerActionPending) return;
+              hireManagerDialog.onOpen(targetProjectId);
+            }}
           />
           <SidebarInset>
             <div className="relative flex h-[100dvh] min-w-0 w-full flex-col">
@@ -443,16 +435,8 @@ export function AppLayout({ children }: AppLayoutProps) {
               {showHeader ? (
                 <AppHeader
                   isProjectMainView={isProjectMainView}
-                  projectName={projectLabel}
                   projectId={projectId}
                   project={project}
-                  isManagerActionPending={
-                    hireProjectManager.isPending || hireManagerDialog.isOpen
-                  }
-                  onOpenManager={() => {
-                    if (!projectId || hireManagerDialog.isOpen) return;
-                    hireManagerDialog.onOpen(projectId);
-                  }}
                   meta={meta}
                 />
               ) : null}

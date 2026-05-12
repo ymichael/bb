@@ -1,6 +1,6 @@
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useRef } from "react";
 import { cn } from "@/lib/utils";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Settings } from "lucide-react";
 import {
   Sidebar,
@@ -18,11 +18,20 @@ import { useQuickCreateProjectController } from "@/hooks/useQuickCreateProject";
 interface AppSidebarProps {
   onResizeMouseDown: (event: React.MouseEvent<HTMLDivElement>) => void;
   isResizing: boolean;
+  selectedProjectId?: string;
+  isManagerActionPending?: boolean;
+  onNewManager?: (projectId: string) => void;
 }
 
-export function AppSidebar({ onResizeMouseDown, isResizing }: AppSidebarProps) {
+export function AppSidebar({
+  onResizeMouseDown,
+  isResizing,
+  selectedProjectId,
+  isManagerActionPending = false,
+  onNewManager,
+}: AppSidebarProps) {
   const quickCreateProject = useQuickCreateProjectController();
-  const location = useLocation();
+  const navigate = useNavigate();
   const { isCompactViewport, setOpenMobile } = useSidebar();
   const isCompactViewportRef = useRef(isCompactViewport);
   // Keep the ProjectList callback stable while reading the latest breakpoint.
@@ -34,16 +43,32 @@ export function AppSidebar({ onResizeMouseDown, isResizing }: AppSidebarProps) {
     }
   }, [setOpenMobile]);
 
-  const selectedProjectId = useMemo(
-    () => location.pathname.match(/^\/projects\/([^/]+)/)?.[1],
-    [location.pathname],
+  const handleNewChat = useCallback(() => {
+    if (!selectedProjectId) return;
+    closeOnMobile();
+    void navigate(`/projects/${selectedProjectId}`);
+  }, [closeOnMobile, navigate, selectedProjectId]);
+
+  const handleNewManager = useCallback(
+    (managerProjectId: string) => {
+      if (!onNewManager) return;
+      closeOnMobile();
+      onNewManager(managerProjectId);
+    },
+    [closeOnMobile, onNewManager],
   );
+
+  const newChatAction = selectedProjectId ? handleNewChat : undefined;
+  const newManagerAction =
+    selectedProjectId && onNewManager ? handleNewManager : undefined;
 
   return (
     <>
       <Sidebar>
         <SidebarContent>
           <ProjectList
+            onNewChat={newChatAction}
+            onNewManager={newManagerAction}
             onNewProject={
               quickCreateProject.isAvailable
                 ? quickCreateProject.openCreateDialog
@@ -52,6 +77,7 @@ export function AppSidebar({ onResizeMouseDown, isResizing }: AppSidebarProps) {
             onProjectSelect={closeOnMobile}
             selectedProjectId={selectedProjectId}
             isCreatingProject={quickCreateProject.isCreating}
+            isManagerActionPending={isManagerActionPending}
           />
         </SidebarContent>
         <SidebarFooter>

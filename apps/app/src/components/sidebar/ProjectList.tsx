@@ -10,7 +10,7 @@ import {
   type ThreadListEntry,
 } from "@bb/domain";
 import type { ProjectSourceWorkspaceStatusResponse } from "@bb/server-contract";
-import { Folder, Plus } from "lucide-react";
+import { Folder, MessageSquarePlus, Plus, UserRoundPlus } from "lucide-react";
 import { useLocation } from "react-router-dom";
 import {
   getConnectionAwareQueryState,
@@ -33,7 +33,7 @@ import { useServerConnectionState } from "@/hooks/useServerConnectionState";
 import type { WebSocketConnectionState } from "@/lib/ws";
 import * as api from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { EmptyState } from "@/components/ui";
+import { Button, EmptyState } from "@/components/ui";
 import {
   SidebarGroupContent,
   SidebarMenu,
@@ -45,6 +45,8 @@ import {
 import {
   COARSE_POINTER_ADD_PROJECT_BUTTON_SIZE_CLASS,
   COARSE_POINTER_ICON_SIZE_CLASS,
+  COARSE_POINTER_ROW_ACTION_SIZE_CLASS,
+  COARSE_POINTER_ROW_HEIGHT_CLASS,
 } from "@/components/ui";
 import { ProjectRow } from "./ProjectRow";
 import type { ProjectThreadListState } from "./ProjectRow";
@@ -52,12 +54,27 @@ import {
   collapsedManagerIdsAtom,
   collapsedProjectIdsAtom,
 } from "./sidebarCollapsedAtoms";
+import {
+  SIDEBAR_ROW_BASE_CLASS,
+  SIDEBAR_ROW_INTERACTIVE_STATE_CLASS,
+  SIDEBAR_STANDARD_ROW_PADDING_CLASS,
+} from "./sidebarRowClasses";
 
 interface ProjectListProps {
+  onNewChat?: () => void;
+  onNewManager?: (projectId: string) => void;
   onNewProject?: () => void;
   onProjectSelect?: () => void;
   selectedProjectId?: string;
   isCreatingProject?: boolean;
+  isManagerActionPending?: boolean;
+}
+
+interface ProjectListActionButtonsProps {
+  onNewChat?: () => void;
+  onNewManager?: (projectId: string) => void;
+  selectedProjectId?: string;
+  isManagerActionPending: boolean;
 }
 
 interface ProjectSourceStatusTarget {
@@ -93,6 +110,19 @@ interface BuildProjectThreadQueryAggregationArgs {
   serverConnectionState: WebSocketConnectionState;
   connectionGracePeriodElapsed: boolean;
 }
+
+const PROJECT_LIST_ACTION_BUTTON_CLASS = cn(
+  SIDEBAR_ROW_BASE_CLASS,
+  SIDEBAR_STANDARD_ROW_PADDING_CLASS,
+  SIDEBAR_ROW_INTERACTIVE_STATE_CLASS,
+  COARSE_POINTER_ROW_HEIGHT_CLASS,
+  "min-w-0 justify-start overflow-hidden font-normal ring-sidebar-ring focus-visible:ring-2 max-md:pointer-coarse:[&_svg]:size-5",
+);
+
+const PROJECT_LIST_ACTION_TRAILING_SLOT_CLASS = cn(
+  "inline-flex shrink-0 items-center justify-center",
+  COARSE_POINTER_ROW_ACTION_SIZE_CLASS,
+);
 
 interface ProjectThreadListStateArgs {
   status: ConnectionAwareQueryStatus | undefined;
@@ -153,11 +183,74 @@ function getProjectThreadListState({
   }
 }
 
+function ProjectListActionButtons({
+  onNewChat,
+  onNewManager,
+  selectedProjectId,
+  isManagerActionPending,
+}: ProjectListActionButtonsProps) {
+  const isNewChatDisabled = !onNewChat;
+  const isNewManagerDisabled =
+    !onNewManager || !selectedProjectId || isManagerActionPending;
+  const newChatTitle = isNewChatDisabled
+    ? "Select a project to start a new chat"
+    : "New Chat";
+  const newManagerTitle =
+    !onNewManager || !selectedProjectId
+      ? "Select a project to hire a new manager"
+      : isManagerActionPending
+        ? "Hiring manager..."
+        : "New Manager";
+
+  return (
+    <div className="space-y-0.5 pb-1 group-data-[collapsible=icon]:hidden">
+      <Button
+        type="button"
+        size="sm"
+        variant="ghost"
+        className={PROJECT_LIST_ACTION_BUTTON_CLASS}
+        onClick={onNewChat}
+        disabled={isNewChatDisabled}
+        title={newChatTitle}
+      >
+        <MessageSquarePlus />
+        <span className="min-w-0 flex-1 truncate text-left">New Chat</span>
+        <span
+          className={PROJECT_LIST_ACTION_TRAILING_SLOT_CLASS}
+          aria-hidden="true"
+        />
+      </Button>
+      <Button
+        type="button"
+        size="sm"
+        variant="ghost"
+        className={PROJECT_LIST_ACTION_BUTTON_CLASS}
+        onClick={() => {
+          if (!selectedProjectId) return;
+          onNewManager?.(selectedProjectId);
+        }}
+        disabled={isNewManagerDisabled}
+        title={newManagerTitle}
+      >
+        <UserRoundPlus />
+        <span className="min-w-0 flex-1 truncate text-left">New Manager</span>
+        <span
+          className={PROJECT_LIST_ACTION_TRAILING_SLOT_CLASS}
+          aria-hidden="true"
+        />
+      </Button>
+    </div>
+  );
+}
+
 function ProjectListComponent({
+  onNewChat,
+  onNewManager,
   onNewProject,
   onProjectSelect,
   selectedProjectId,
   isCreatingProject = false,
+  isManagerActionPending = false,
 }: ProjectListProps) {
   const projectsQuery = useProjects();
   const {
@@ -340,6 +433,12 @@ function ProjectListComponent({
 
   return (
     <SidebarStickyStack>
+      <ProjectListActionButtons
+        onNewChat={onNewChat}
+        onNewManager={onNewManager}
+        selectedProjectId={selectedProjectId}
+        isManagerActionPending={isManagerActionPending}
+      />
       <SidebarStickyTier tier="label" className="justify-between pr-1">
         Projects
         {onNewProject ? (

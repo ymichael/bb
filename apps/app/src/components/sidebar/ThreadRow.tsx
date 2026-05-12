@@ -30,6 +30,11 @@ import {
 import { isBusyThread, isUnreadDoneThread } from "@/lib/thread-activity";
 import { getThreadDisplayTitle } from "@/lib/thread-title";
 import { cn } from "@/lib/utils";
+import {
+  SIDEBAR_ROW_BASE_CLASS,
+  SIDEBAR_ROW_INTERACTIVE_STATE_CLASS,
+  SIDEBAR_STANDARD_ROW_PADDING_CLASS,
+} from "./sidebarRowClasses";
 
 export type ThreadRowOptions =
   | {
@@ -281,8 +286,7 @@ function ThreadRowComponent({
   const managedChildBusyCount = managerOptions?.managedChildBusyCount ?? 0;
   const isManagerBusy =
     isManager &&
-    (threadIsBusy ||
-      (isManagerCollapsed && managedChildBusyCount > 0));
+    (threadIsBusy || (isManagerCollapsed && managedChildBusyCount > 0));
   const EnvironmentIcon = getEnvironmentWorkspaceDisplayIcon(
     thread.environmentWorkspaceDisplayKind,
   );
@@ -290,15 +294,16 @@ function ThreadRowComponent({
     thread.environmentWorkspaceDisplayKind,
   );
   const rowClassName = cn(
-    "group/thread-row flex w-full items-center gap-2 rounded-md pr-0 text-sm transition-colors",
+    "group/thread-row",
+    SIDEBAR_ROW_BASE_CLASS,
     !isManager && "relative",
     isManagedChild
       ? COARSE_POINTER_COMPACT_ROW_HEIGHT_CLASS
       : COARSE_POINTER_ROW_HEIGHT_CLASS,
-    isManagedChild ? "pl-1" : "pl-2",
+    isManagedChild ? "pl-1" : SIDEBAR_STANDARD_ROW_PADDING_CLASS,
     isActive
       ? "bg-sidebar-border text-sidebar-foreground"
-      : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+      : SIDEBAR_ROW_INTERACTIVE_STATE_CLASS,
   );
   const rowContent = (
     <>

@@ -38,6 +38,10 @@ export interface HireProjectManagerRequest {
   environment: ManagerEnvironmentArgs;
 }
 
+export const HIRE_PROJECT_MANAGER_MUTATION_KEY = [
+  "hireProjectManager",
+] as const;
+
 interface UpdateProjectMutationRequest extends UpdateProjectRequest {
   id: string;
 }
@@ -65,6 +69,7 @@ export function useHireProjectManager() {
   const queryClient = useQueryClient();
 
   return useMutation({
+    mutationKey: HIRE_PROJECT_MANAGER_MUTATION_KEY,
     meta: {
       errorMessage: "Failed to hire manager.",
       showErrorToast: false,
