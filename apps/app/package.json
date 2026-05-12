@@ -22,6 +22,7 @@
     "@bb/server-contract": "workspace:*",
     "@bb/templates": "workspace:*",
     "@bb/thread-view": "workspace:*",
+    "@fontsource-variable/inter": "^5.2.8",
     "@pierre/diffs": "^1.0.11",
     "@pierre/trees": "^1.0.0-beta.3",
     "@radix-ui/react-compose-refs": "^1.1.2",

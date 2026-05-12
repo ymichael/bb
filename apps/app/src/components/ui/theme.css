@@ -251,7 +251,7 @@
   --sidebar-accent-foreground: oklch(0.3211 0 0);
   --sidebar-border: oklch(0.8576 0 0);
   --sidebar-ring: oklch(0.4891 0 0);
-  --font-sans: Montserrat, sans-serif;
+  --font-sans: "Inter Variable", Inter, sans-serif;
   --font-serif: Georgia, serif;
   --font-mono: "Fira Code", monospace;
   --radius: 0.35rem;
@@ -359,7 +359,7 @@
   --sidebar-accent-foreground: oklch(0.8853 0 0);
   --sidebar-border: oklch(0.32 0 0);
   --sidebar-ring: oklch(0.7058 0 0);
-  --font-sans: Montserrat, sans-serif;
+  --font-sans: "Inter Variable", Inter, sans-serif;
   --font-serif: Georgia, serif;
   --font-mono: "Fira Code", monospace;
   --radius: 0.35rem;
