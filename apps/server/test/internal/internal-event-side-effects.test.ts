@@ -1,4 +1,5 @@
-import { eq } from "drizzle-orm";
+import { setImmediate as waitForImmediate } from "node:timers/promises";
+import { and, eq, sql } from "drizzle-orm";
 import {
   createAutomation,
   deleteAutomation,
@@ -11,6 +12,7 @@ import {
   listManagerThreadNudgesByThread,
   markThreadDeleted,
   markThreadStopRequested,
+  queueCommand,
   threads,
 } from "@bb/db";
 import { threadScope, turnRequestEventDataSchema, turnScope } from "@bb/domain";
@@ -882,6 +884,212 @@ describe("internal event side effects", () => {
         },
       });
       expect(getThread(harness.db, managerThread.id)?.status).toBe("active");
+      expect(getThread(harness.db, childThread.id)?.status).toBe("error");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("does not duplicate manager failure notification when command-result failure precedes failed turn event", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-event-command-failure-dedupe",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environmentPath = "/tmp/event-command-failure-dedupe";
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: environmentPath,
+      });
+      const managerThread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "idle",
+        type: "manager",
+        title: "Manager thread",
+      });
+      seedThreadRuntimeState(harness.deps, {
+        threadId: managerThread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-manager-command-event-dedupe",
+        inputText: "Initial manager task",
+        model: "gpt-5.4",
+      });
+      const childThread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "active",
+        parentThreadId: managerThread.id,
+        title: "Command event duplicate guard",
+      });
+      const turnId = "turn-command-event-dedupe";
+      seedTurnStarted(harness.deps, {
+        threadId: childThread.id,
+        environmentId: environment.id,
+        turnId,
+        providerThreadId: "provider-child-command-event-dedupe",
+      });
+
+      const command = queueCommand(harness.db, harness.hub, {
+        hostId: host.id,
+        sessionId: session.id,
+        type: "turn.submit",
+        payload: JSON.stringify({
+          type: "turn.submit",
+          environmentId: environment.id,
+          threadId: childThread.id,
+          requestId: "creq_23456789ab",
+          input: [{ type: "text", text: "Continue" }],
+          options: {
+            model: "gpt-5",
+            serviceTier: "default",
+            reasoningLevel: "medium",
+            permissionMode: "full",
+            permissionEscalation: null,
+          },
+          resumeContext: {
+            workspaceContext: {
+              workspacePath: environmentPath,
+              workspaceProvisionType: "unmanaged",
+            },
+            projectId: project.id,
+            providerId: "codex",
+            providerThreadId: "provider-child-command-event-dedupe",
+            instructions: "You are a helpful assistant.",
+            dynamicTools: [],
+            instructionMode: "append",
+          },
+          target: { mode: "steer", expectedTurnId: turnId },
+        }),
+      });
+      const queued = await waitForQueuedCommand(
+        harness,
+        ({ row }) => row.id === command.id,
+      );
+
+      const commandFailureResponse = await reportQueuedCommandError(
+        harness,
+        queued,
+        {
+          errorCode: "provider_error",
+          errorMessage: "Provider process crashed",
+        },
+      );
+      expect(commandFailureResponse.status).toBe(200);
+
+      const managerPreferencesPath = `/tmp/bb-host-data/${host.id}/thread-storage/${managerThread.id}/PREFERENCES.md`;
+      const preferencesReadCommand = await waitForQueuedCommandAfter(
+        harness,
+        queued.row.cursor,
+        ({ command }) =>
+          command.type === "host.read_file" &&
+          command.path === managerPreferencesPath,
+      );
+      const readResponse = await reportQueuedCommandError(
+        harness,
+        preferencesReadCommand,
+        {
+          errorCode: "ENOENT",
+          errorMessage: "File not found",
+        },
+      );
+      expect(readResponse.status).toBe(200);
+
+      const queuedManagerTurn = await waitForQueuedCommandAfter(
+        harness,
+        preferencesReadCommand.row.cursor,
+        ({ command }) =>
+          command.type === "turn.submit" &&
+          command.threadId === managerThread.id,
+      );
+      expect(queuedManagerTurn.command).toMatchObject({
+        environmentId: environment.id,
+        input: [
+          {
+            type: "text",
+            text: renderTemplate("systemMessageManagedThreadFailed", {
+              threadId: childThread.id,
+              titleSuffix: " (Command event duplicate guard)",
+            }),
+          },
+        ],
+      });
+      expect(
+        listQueuedThreadCommands(harness, "turn.submit", managerThread.id),
+      ).toHaveLength(1);
+
+      const commandFailureErrorRows = harness.db
+        .select({ data: events.data })
+        .from(events)
+        .where(
+          and(
+            eq(events.threadId, childThread.id),
+            eq(events.turnId, turnId),
+            eq(events.type, "system/error"),
+            sql`json_extract(${events.data}, '$.code') = 'thread_command_failed'`,
+          ),
+        )
+        .all();
+      expect(commandFailureErrorRows).toHaveLength(1);
+
+      const eventResponse = await harness.app.request(
+        "/internal/session/events",
+        {
+          method: "POST",
+          headers: internalAuthHeaders(harness, { hostId: host.id }),
+          body: JSON.stringify({
+            sessionId: session.id,
+            events: [
+              createTestDaemonEventEnvelope({
+                producerEventIdValue: 1,
+                event: {
+                  type: "turn/completed",
+                  threadId: childThread.id,
+                  providerThreadId: "provider-child-command-event-dedupe",
+                  scope: turnScope(turnId),
+                  status: "failed",
+                },
+              }),
+            ],
+          }),
+        },
+      );
+      expect(eventResponse.status).toBe(200);
+      await waitForImmediate();
+
+      expect(
+        listQueuedThreadCommands(harness, "turn.submit", managerThread.id),
+      ).toHaveLength(1);
+      expect(
+        harness.db
+          .select({ id: hostDaemonCommands.id })
+          .from(hostDaemonCommands)
+          .where(
+            and(
+              eq(hostDaemonCommands.type, "host.read_file"),
+              sql`json_extract(${hostDaemonCommands.payload}, '$.path') = ${managerPreferencesPath}`,
+            ),
+          )
+          .all(),
+      ).toHaveLength(1);
+      expect(
+        harness.db
+          .select({ data: events.data })
+          .from(events)
+          .where(
+            and(
+              eq(events.threadId, childThread.id),
+              eq(events.turnId, turnId),
+              eq(events.type, "system/error"),
+              sql`json_extract(${events.data}, '$.code') = 'thread_command_failed'`,
+            ),
+          )
+          .all(),
+      ).toHaveLength(1);
       expect(getThread(harness.db, childThread.id)?.status).toBe("error");
     } finally {
       await harness.cleanup();

@@ -1,5 +1,6 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import {
+  events,
   getEnvironment,
   getHost,
   listStoredThreadProvisioningRowsByProvisioningId,
@@ -24,9 +25,7 @@ import {
   systemThreadProvisioningEventDataSchema,
 } from "@bb/domain";
 import type { ThreadEventScope } from "@bb/domain";
-import type {
-  InteractiveLifecycleCoordinationDeps,
-} from "../lifecycle-coordination-deps.js";
+import type { InteractiveLifecycleCoordinationDeps } from "../lifecycle-coordination-deps.js";
 import {
   completeEnvironmentDestroyForCommand,
   failEnvironmentDestroyForCommand,
@@ -45,9 +44,7 @@ import {
   failSandboxRuntimeMaterialSyncForCommand,
   hasActiveSandboxRuntimeMaterialSyncOperationForCommand,
 } from "../services/hosts/sandbox-runtime-material-operation.js";
-import {
-  queueThreadRenameCommandInTransaction,
-} from "../services/threads/thread-commands.js";
+import { queueThreadRenameCommandInTransaction } from "../services/threads/thread-commands.js";
 import {
   appendThreadProvisioningEventInTransaction,
   appendSystemErrorEventInTransaction,
@@ -67,6 +64,10 @@ import {
   hasActiveThreadStopOperationForCommand,
   queueSettledArchivedThreadProviderArchiveCommand,
 } from "../services/threads/thread-lifecycle.js";
+import {
+  queueManagedThreadTurnNotificationBestEffort,
+  type QueueManagedThreadTurnNotificationArgs,
+} from "../services/threads/managed-thread-notifications.js";
 import { tryTransitionInTransaction } from "../services/threads/thread-transitions.js";
 
 export type CommandResultSideEffectsDeps = InteractiveLifecycleCoordinationDeps;
@@ -185,6 +186,56 @@ function getThreadFailureCommandErrorScope(
   return command.target.mode !== "start" && command.target.expectedTurnId
     ? turnScope(command.target.expectedTurnId)
     : threadScope();
+}
+
+// Once a terminal turn event exists, event side effects own the actual turn
+// outcome. Command-result failure handling is only the fallback for missing
+// terminal events, regardless of whether the event outcome was failed,
+// completed, or interrupted.
+function hasExpectedTurnCompletedEvent(
+  deps: CommandResultSettlementDeps,
+  command: ThreadFailureCommand,
+): boolean {
+  if (command.type !== "turn.submit" || command.target.mode === "start") {
+    return false;
+  }
+  const turnId = command.target.expectedTurnId;
+  if (!turnId) {
+    return false;
+  }
+
+  return (
+    deps.db
+      .select({ id: events.id })
+      .from(events)
+      .where(
+        and(
+          eq(events.threadId, command.threadId),
+          eq(events.turnId, turnId),
+          eq(events.type, "turn/completed"),
+        ),
+      )
+      .limit(1)
+      .get() !== undefined
+  );
+}
+
+function buildManagedThreadCommandFailureNotification(
+  args: QueueManagedThreadTurnNotificationArgs,
+): CommandResultPostCommitAction {
+  return {
+    name: "Managed thread command failure notification",
+    context: {
+      threadId: args.managedThreadId,
+    },
+    run: (deps) =>
+      queueManagedThreadTurnNotificationBestEffort(deps, {
+        managedThreadId: args.managedThreadId,
+        managerThreadId: args.managerThreadId,
+        title: args.title,
+        turnStatus: args.turnStatus,
+      }),
+  };
 }
 
 type CommandResultOwnerRegistry = {
@@ -379,8 +430,7 @@ function handleProvisionCommandResult(
           environmentId: args.command.environmentId,
           threadId: thread.id,
         },
-        run: (deps) =>
-          advanceThreadProvisioning(deps, { threadId: thread.id }),
+        run: (deps) => advanceThreadProvisioning(deps, { threadId: thread.id }),
       });
     }
 
@@ -493,13 +543,19 @@ function handleEnvironmentDestroyResult(
 }
 
 function handleThreadCommandFailure(
-  deps: Pick<CommandResultSettlementDeps, "db" | "hub">,
+  deps: CommandResultSettlementDeps,
   command: ThreadFailureCommand,
   report: ThreadFailureResultReport,
-): void {
+): CommandResultSideEffectsResult {
+  const postCommitActions: CommandResultPostCommitAction[] = [];
   const thread = getThread(deps.db, command.threadId);
   if (!thread || thread.deletedAt !== null || thread.stopRequestedAt !== null) {
-    return;
+    return emptyCommandResultSideEffects();
+  }
+  // Preserve the event-owned outcome when the daemon reports a late command
+  // failure after the expected turn already reached a terminal event.
+  if (hasExpectedTurnCompletedEvent(deps, command)) {
+    return emptyCommandResultSideEffects();
   }
   appendSystemErrorEventInTransaction(deps, {
     threadId: thread.id,
@@ -510,14 +566,25 @@ function handleThreadCommandFailure(
     scope: getThreadFailureCommandErrorScope(command),
   });
   tryTransitionInTransaction(deps.db, deps.hub, thread.id, "error");
+  if (thread.parentThreadId !== null) {
+    postCommitActions.push(
+      buildManagedThreadCommandFailureNotification({
+        managedThreadId: thread.id,
+        managerThreadId: thread.parentThreadId,
+        title: thread.title,
+        turnStatus: "failed",
+      }),
+    );
+  }
+  return { postCommitActions };
 }
 
 function handleThreadStartResult(
   args: ApplyCommandResultSideEffectsArgs<"thread.start">,
-): void {
+): CommandResultSideEffectsResult {
   const thread = getThread(args.deps.db, args.command.threadId);
   if (!thread) {
-    return;
+    return emptyCommandResultSideEffects();
   }
   if (!args.report.ok) {
     if (
@@ -530,8 +597,7 @@ function handleThreadStartResult(
         failureReason: args.report.errorMessage,
       });
     }
-    handleThreadCommandFailure(args.deps, args.command, args.report);
-    return;
+    return handleThreadCommandFailure(args.deps, args.command, args.report);
   }
 
   if (
@@ -539,7 +605,7 @@ function handleThreadStartResult(
       commandId: args.commandRow.id,
     })
   ) {
-    return;
+    return emptyCommandResultSideEffects();
   }
 
   completeThreadStartForCommand(args.deps, {
@@ -559,6 +625,7 @@ function handleThreadStartResult(
       args.deps.hub.notifyCommand(args.commandRow.hostId);
     }
   }
+  return emptyCommandResultSideEffects();
 }
 
 function handleThreadStopResult(
@@ -717,8 +784,9 @@ const commandResultOwners: CommandResultOwnerRegistry = {
   "turn.submit": defineCommandResultOwner({
     applySideEffects: ({ deps, command, report }) => {
       if (!report.ok) {
-        handleThreadCommandFailure(deps, command, report);
+        return handleThreadCommandFailure(deps, command, report);
       }
+      return emptyCommandResultSideEffects();
     },
   }),
   "workspace.commit": defineCommandResultOwner({

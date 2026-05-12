@@ -1,3 +1,4 @@
+import { and, eq, sql } from "drizzle-orm";
 import {
   appendDaemonEventsInTransaction,
   archiveThread,
@@ -8,6 +9,7 @@ import {
   listThreadEnvironmentAssignmentsOnHost,
   MissingStoredTurnStartedError,
   ProducerEventPayloadMismatchError,
+  events as storedEvents,
   updateThread,
 } from "@bb/db";
 import type {
@@ -27,8 +29,8 @@ import {
 import {
   canonicalizeProducerEventPayload,
   requireThreadEventScopeTurnId,
+  type ThreadEventTurnStatus,
 } from "@bb/domain";
-import { renderTemplate } from "@bb/templates";
 import type { Hono } from "hono";
 import { createHash } from "node:crypto";
 import { ApiError } from "../errors.js";
@@ -46,7 +48,7 @@ import {
   wouldCleanupEnvironment,
 } from "../services/environments/environment-cleanup.js";
 import { syncManagerThreadSchedules } from "../services/scheduling/manager-schedule-sync.js";
-import { queueManagerSystemMessage } from "../services/threads/manager-system-messages.js";
+import { queueManagedThreadTurnNotificationBestEffort } from "../services/threads/managed-thread-notifications.js";
 import { runQueuedDraftAutoSendForThread } from "../services/threads/queued-drafts.js";
 import { queueSettledArchivedThreadProviderArchiveCommand } from "../services/threads/thread-lifecycle.js";
 import {
@@ -119,6 +121,15 @@ interface TurnKeyArgs {
   turnId: string;
 }
 
+interface HasThreadCommandFailureSystemErrorForTurnDeps {
+  db: AppDeps["db"];
+}
+
+interface HasThreadCommandFailureSystemErrorForTurnArgs {
+  threadId: string;
+  turnId: string;
+}
+
 interface ActivePruneCandidate {
   latestPrunableSequence: number;
   threadId: string;
@@ -130,27 +141,9 @@ interface ResolveActivePruneCandidatesArgs {
   insertedEventIndexes: number[];
 }
 
-type CompletedTurnStatus = Extract<
-  HostDaemonEventEnvelope["event"],
-  { type: "turn/completed" }
->["status"];
-
 interface ArchiveCompletedAutomationThreadIfNeededArgs {
   latestThread: NonNullable<ReturnType<typeof getThread>>;
-  turnStatus: CompletedTurnStatus;
-}
-
-interface QueueManagedThreadTurnNotificationArgs {
-  managedThreadId: string;
-  managerThreadId: string;
-  turnStatus: CompletedTurnStatus;
-  title: string | null;
-}
-
-interface RenderManagedThreadTurnStatusMessageArgs {
-  managedThreadId: string;
-  title: string | null;
-  turnStatus: CompletedTurnStatus;
+  turnStatus: ThreadEventTurnStatus;
 }
 
 interface ManagerScheduleSyncFollowUp {
@@ -163,7 +156,7 @@ interface ManagerTurnNotificationFollowUp {
   managedThreadId: string;
   managerThreadId: string;
   title: string | null;
-  turnStatus: CompletedTurnStatus;
+  turnStatus: ThreadEventTurnStatus;
 }
 
 interface QueuedDraftAutoSendFollowUp {
@@ -200,54 +193,6 @@ type EventFollowUpLogContext =
   | ManagerScheduleSyncLogContext
   | ManagerTurnNotificationLogContext
   | QueuedDraftAutoSendLogContext;
-
-function formatManagedThreadTitleSuffix(title: string | null): string {
-  return title ? ` (${title})` : "";
-}
-
-function renderManagedThreadTurnStatusMessage(
-  args: RenderManagedThreadTurnStatusMessageArgs,
-): string {
-  const variables = {
-    threadId: args.managedThreadId,
-    titleSuffix: formatManagedThreadTitleSuffix(args.title),
-  };
-
-  switch (args.turnStatus) {
-    case "completed":
-      return renderTemplate("systemMessageManagedThreadComplete", variables);
-    case "failed":
-      return renderTemplate("systemMessageManagedThreadFailed", variables);
-    case "interrupted":
-      return renderTemplate("systemMessageManagedThreadInterrupted", variables);
-    default: {
-      const exhaustiveCheck: never = args.turnStatus;
-      return exhaustiveCheck;
-    }
-  }
-}
-
-async function queueManagedThreadTurnNotificationBestEffort(
-  deps: LoggedPendingInteractionWorkSessionDeps,
-  args: QueueManagedThreadTurnNotificationArgs,
-): Promise<void> {
-  try {
-    await queueManagerSystemMessage(deps, {
-      managerThreadId: args.managerThreadId,
-      messageText: renderManagedThreadTurnStatusMessage(args),
-    });
-  } catch (error) {
-    deps.logger.error(
-      {
-        err: error,
-        managedThreadId: args.managedThreadId,
-        managerThreadId: args.managerThreadId,
-        turnStatus: args.turnStatus,
-      },
-      "Failed to queue manager turn notification",
-    );
-  }
-}
 
 function resolveProviderIdentifiers(event: HostDaemonEventEnvelope["event"]): {
   providerThreadId: string | null;
@@ -420,13 +365,26 @@ async function applyEventEffects(
           threadId: entry.threadId,
         });
         if (turnCompleted.thread?.parentThreadId) {
-          followUps.push({
-            kind: "manager-turn-notification",
-            managedThreadId: turnCompleted.thread.id,
-            managerThreadId: turnCompleted.thread.parentThreadId,
-            turnStatus: event.status,
-            title: turnCompleted.thread.title,
-          });
+          // Command-result failures already notify managers for failed turns
+          // without terminal events; late terminal events still own status effects.
+          const alreadyHandledByCommandFailure =
+            event.status === "failed" &&
+            hasThreadCommandFailureSystemErrorForTurn(deps, {
+              threadId: turnCompleted.thread.id,
+              turnId: requireThreadEventScopeTurnId({
+                type: event.type,
+                scope: event.scope,
+              }),
+            });
+          if (!alreadyHandledByCommandFailure) {
+            followUps.push({
+              kind: "manager-turn-notification",
+              managedThreadId: turnCompleted.thread.id,
+              managerThreadId: turnCompleted.thread.parentThreadId,
+              turnStatus: event.status,
+              title: turnCompleted.thread.title,
+            });
+          }
         }
         if (event.status === "completed") {
           followUps.push({
@@ -561,6 +519,28 @@ function deferEventFollowUpBatch(
 
 function toTurnKey(args: TurnKeyArgs): string {
   return `${args.threadId}:${args.turnId}`;
+}
+
+function hasThreadCommandFailureSystemErrorForTurn(
+  deps: HasThreadCommandFailureSystemErrorForTurnDeps,
+  args: HasThreadCommandFailureSystemErrorForTurnArgs,
+): boolean {
+  return (
+    deps.db
+      .select({ id: storedEvents.id })
+      .from(storedEvents)
+      .where(
+        and(
+          eq(storedEvents.threadId, args.threadId),
+          eq(storedEvents.turnId, args.turnId),
+          eq(storedEvents.scopeKind, "turn"),
+          eq(storedEvents.type, "system/error"),
+          sql`json_extract(${storedEvents.data}, '$.code') = 'thread_command_failed'`,
+        ),
+      )
+      .limit(1)
+      .get() !== undefined
+  );
 }
 
 function listCompletedTurnKeysForStartedEvents(
