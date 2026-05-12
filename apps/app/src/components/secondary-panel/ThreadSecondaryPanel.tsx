@@ -1,12 +1,6 @@
 import { type ReactNode, useMemo } from "react";
 import { useAtomValue } from "jotai";
-import {
-  FileDiff as FileDiffIcon,
-  GripVertical,
-  Info,
-  PanelRight,
-  X,
-} from "lucide-react";
+import { FileDiff as FileDiffIcon, Info, PanelRight, X } from "lucide-react";
 import { Skeleton } from "@/components/ui";
 import { Panel, PanelResizeHandle } from "react-resizable-panels";
 import { Button } from "@/components/ui";
@@ -447,14 +441,6 @@ function SecondaryPanelResizeHandle({
             : "group-hover:bg-accent-foreground/35",
         )}
       />
-      <span
-        className={cn(
-          "pointer-events-none absolute left-1/2 top-1/2 flex h-8 w-1.5 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-border/70 bg-background/95 opacity-0 shadow-sm transition-opacity",
-          isResizing ? "opacity-100" : "group-hover:opacity-100",
-        )}
-      >
-        <GripVertical className="size-3 text-muted-foreground" />
-      </span>
     </PanelResizeHandle>
   );
 }

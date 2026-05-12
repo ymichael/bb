@@ -1,6 +1,6 @@
 import { Fragment, type CSSProperties, type Ref, type ReactNode } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { atom, useAtom } from "jotai";
+import { useAtom } from "jotai";
 import { atomWithStorage } from "jotai/utils";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Archive, ChevronRight, Settings, UserRoundPlus } from "lucide-react";
@@ -25,6 +25,7 @@ import { createLocalStorageSyncStorage } from "@/lib/browser-storage";
 import { useQuickCreateProjectController } from "@/hooks/useQuickCreateProject";
 
 const SIDEBAR_WIDTH_KEY = "bb.sidebar.width";
+const SIDEBAR_OPEN_KEY = "bb.sidebar.open";
 const SIDEBAR_MIN_WIDTH = 240;
 const SIDEBAR_MAX_WIDTH = 460;
 const SIDEBAR_DEFAULT_WIDTH = 320;
@@ -58,7 +59,20 @@ const sidebarWidthAtom = atomWithStorage<number>(
 // subscribes. AppLayout's `children` reference stays stable across toggles,
 // so React's element-reference bailout skips re-rendering the entire route
 // subtree (ThreadDetailView, the timeline, etc.).
-const sidebarOpenAtom = atom(true);
+const sidebarOpenStorage = createLocalStorageSyncStorage<boolean>({
+  parse: (storedValue, initialValue) => {
+    if (storedValue === "true") return true;
+    if (storedValue === "false") return false;
+    return initialValue;
+  },
+  serialize: (value) => String(value),
+});
+const sidebarOpenAtom = atomWithStorage<boolean>(
+  SIDEBAR_OPEN_KEY,
+  true,
+  sidebarOpenStorage,
+  { getOnInit: true },
+);
 
 interface SidebarStateBridgeProps {
   providerRef: Ref<HTMLDivElement>;
