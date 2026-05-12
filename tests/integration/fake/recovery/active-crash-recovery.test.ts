@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   getThreadEvents,
-  getThreadOutput,
   getThreadResponse,
   sendTextMessage,
 } from "../../helpers/api.js";
 import {
   waitForHostConnected,
   waitForHostDisconnected,
+  waitForThreadOutputContaining,
   waitForThreadStatus,
 } from "../../helpers/assertions.js";
 import { withHarness } from "../../helpers/harness.js";
@@ -65,6 +65,12 @@ describe.sequential("fake provider active crash recovery integration", () => {
       await sendTextMessage(harness.api, thread.id, {
         text: "recovered after crash",
       });
+      await waitForThreadOutputContaining(
+        harness.api,
+        thread.id,
+        "recovered after crash",
+        TURN_TIMEOUT_MS,
+      );
       await waitForThreadStatus(
         harness.api,
         thread.id,
@@ -81,8 +87,5 @@ describe.sequential("fake provider active crash recovery integration", () => {
         ),
       ).toBe(true);
       expect(events.some((event) => event.type === "system/error")).toBe(false);
-      expect(await getThreadOutput(harness.api, thread.id)).toContain(
-        "recovered after crash",
-      );
     }));
 });

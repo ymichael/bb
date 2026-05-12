@@ -6,16 +6,13 @@ import {
   turnRequestEventDataSchema,
 } from "@bb/domain";
 import { hostDaemonCommandSchema } from "@bb/host-daemon-contract";
-import {
-  getThreadEvents,
-  getThreadOutput,
-  sendTextMessage,
-} from "../../helpers/api.js";
+import { getThreadEvents, sendTextMessage } from "../../helpers/api.js";
 import {
   waitForEventType,
   waitForEvents,
   waitForHostConnected,
   waitForHostDisconnected,
+  waitForThreadOutputContaining,
   waitForThreadStatus,
 } from "../../helpers/assertions.js";
 import { withHarness } from "../../helpers/harness.js";
@@ -35,6 +32,12 @@ describe.sequential("fake provider offline queue recovery integration", () => {
       await sendTextMessage(harness.api, thread.id, {
         text: "queued baseline",
       });
+      await waitForThreadOutputContaining(
+        harness.api,
+        thread.id,
+        "queued baseline",
+        TURN_TIMEOUT_MS,
+      );
       await waitForThreadStatus(
         harness.api,
         thread.id,
@@ -136,9 +139,11 @@ describe.sequential("fake provider offline queue recovery integration", () => {
         "turn/completed",
         RECOVERY_TIMEOUT_MS,
       );
-
-      expect(await getThreadOutput(harness.api, thread.id)).toContain(
+      await waitForThreadOutputContaining(
+        harness.api,
+        thread.id,
         "queued while offline",
+        RECOVERY_TIMEOUT_MS,
       );
     }));
 });

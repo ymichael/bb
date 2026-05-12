@@ -1,8 +1,9 @@
-import { describe, expect, it } from "vitest";
-import { getThreadOutput, sendTextMessage } from "../../helpers/api.js";
+import { describe, it } from "vitest";
+import { sendTextMessage } from "../../helpers/api.js";
 import {
   waitForHostConnected,
   waitForHostDisconnected,
+  waitForThreadOutputContaining,
   waitForThreadStatus,
 } from "../../helpers/assertions.js";
 import { withHarness } from "../../helpers/harness.js";
@@ -24,6 +25,12 @@ describe.sequential("fake provider managed crash recovery integration", () => {
       await sendTextMessage(harness.api, thread.id, {
         text: "before managed crash",
       });
+      await waitForThreadOutputContaining(
+        harness.api,
+        thread.id,
+        "before managed crash",
+        TURN_TIMEOUT_MS,
+      );
       await waitForThreadStatus(
         harness.api,
         thread.id,
@@ -44,15 +51,17 @@ describe.sequential("fake provider managed crash recovery integration", () => {
       await sendTextMessage(harness.api, thread.id, {
         text: "after managed crash",
       });
+      await waitForThreadOutputContaining(
+        harness.api,
+        thread.id,
+        "after managed crash",
+        TURN_TIMEOUT_MS,
+      );
       await waitForThreadStatus(
         harness.api,
         thread.id,
         "idle",
         TURN_TIMEOUT_MS,
-      );
-
-      expect(await getThreadOutput(harness.api, thread.id)).toContain(
-        "after managed crash",
       );
     }));
 });

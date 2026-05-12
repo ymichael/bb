@@ -1,8 +1,9 @@
-import { describe, expect, it } from "vitest";
-import { getThreadOutput, sendTextMessage } from "../../helpers/api.js";
+import { describe, it } from "vitest";
+import { sendTextMessage } from "../../helpers/api.js";
 import {
   waitForHostConnected,
   waitForHostDisconnected,
+  waitForThreadOutputContaining,
   waitForThreadStatus,
 } from "../../helpers/assertions.js";
 import { withHarness } from "../../helpers/harness.js";
@@ -26,6 +27,12 @@ describe.sequential(
         await sendTextMessage(harness.api, thread.id, {
           text: "before managed restart",
         });
+        await waitForThreadOutputContaining(
+          harness.api,
+          thread.id,
+          "before managed restart",
+          TURN_TIMEOUT_MS,
+        );
         await waitForThreadStatus(
           harness.api,
           thread.id,
@@ -46,15 +53,17 @@ describe.sequential(
         await sendTextMessage(harness.api, thread.id, {
           text: "after managed restart",
         });
+        await waitForThreadOutputContaining(
+          harness.api,
+          thread.id,
+          "after managed restart",
+          TURN_TIMEOUT_MS,
+        );
         await waitForThreadStatus(
           harness.api,
           thread.id,
           "idle",
           TURN_TIMEOUT_MS,
-        );
-
-        expect(await getThreadOutput(harness.api, thread.id)).toContain(
-          "after managed restart",
         );
       }));
   },

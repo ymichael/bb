@@ -204,6 +204,25 @@ export async function waitForThreadStatus(
   }
 }
 
+export async function waitForThreadOutputContaining(
+  api: PublicApiClient,
+  threadId: string,
+  expectedText: string,
+  timeoutMs = 10_000,
+): Promise<string> {
+  let currentOutput = "";
+  return pollUntil(
+    async () => {
+      const output = await readThreadOutput(api, threadId);
+      currentOutput = previewThreadText(output);
+      return output?.includes(expectedText) ? output : null;
+    },
+    `Timed out waiting for thread ${threadId} output to contain ${JSON.stringify(expectedText)}`,
+    timeoutMs,
+    () => JSON.stringify(currentOutput),
+  );
+}
+
 export async function waitForEvents(
   api: PublicApiClient,
   threadId: string,

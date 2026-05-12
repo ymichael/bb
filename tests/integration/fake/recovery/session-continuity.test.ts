@@ -1,11 +1,8 @@
 import { describe, expect, it } from "vitest";
-import {
-  getThreadEvents,
-  getThreadOutput,
-  sendTextMessage,
-} from "../../helpers/api.js";
+import { getThreadEvents, sendTextMessage } from "../../helpers/api.js";
 import {
   waitForHostConnected,
+  waitForThreadOutputContaining,
   waitForThreadStatus,
 } from "../../helpers/assertions.js";
 import { withHarness } from "../../helpers/harness.js";
@@ -29,6 +26,12 @@ describe.sequential("fake provider session continuity integration", () => {
       await sendTextMessage(harness.api, thread.id, {
         text: "cursor first turn",
       });
+      await waitForThreadOutputContaining(
+        harness.api,
+        thread.id,
+        "cursor first turn",
+        TURN_TIMEOUT_MS,
+      );
       await waitForThreadStatus(
         harness.api,
         thread.id,
@@ -49,6 +52,12 @@ describe.sequential("fake provider session continuity integration", () => {
       await sendTextMessage(harness.api, thread.id, {
         text: "cursor second turn",
       });
+      await waitForThreadOutputContaining(
+        harness.api,
+        thread.id,
+        "cursor second turn",
+        TURN_TIMEOUT_MS,
+      );
       await waitForThreadStatus(
         harness.api,
         thread.id,
@@ -84,6 +93,12 @@ describe.sequential("fake provider session continuity integration", () => {
       await sendTextMessage(harness.api, thread.id, {
         text: "before session rotation",
       });
+      await waitForThreadOutputContaining(
+        harness.api,
+        thread.id,
+        "before session rotation",
+        TURN_TIMEOUT_MS,
+      );
       await waitForThreadStatus(
         harness.api,
         thread.id,
@@ -116,14 +131,17 @@ describe.sequential("fake provider session continuity integration", () => {
       await sendTextMessage(harness.api, thread.id, {
         text: "after stale session rejection",
       });
+      await waitForThreadOutputContaining(
+        harness.api,
+        thread.id,
+        "after stale session rejection",
+        TURN_TIMEOUT_MS,
+      );
       await waitForThreadStatus(
         harness.api,
         thread.id,
         "idle",
         TURN_TIMEOUT_MS,
-      );
-      expect(await getThreadOutput(harness.api, thread.id)).toContain(
-        "after stale session rejection",
       );
     }));
 });

@@ -103,15 +103,14 @@ export function HeightTransition({
     const snapState: SnapState = { savedDuration: null, restoreFrame: null };
     const observer = new ResizeObserver((entries) => {
       const entry = entries[0];
-      const target = wrapperRef.current;
-      if (!entry || !target) return;
+      if (!entry) return;
       const { width, height } = entry.contentRect;
       const widthChanged = lastWidth !== null && width !== lastWidth;
       const snap = widthChanged || pendingVisibilitySnap;
       pendingVisibilitySnap = false;
       lastWidth = width;
       const nextHeight = visible ? `${height}px` : "0px";
-      applyHeight(target, nextHeight, snap, snapState);
+      applyHeight(wrapper, nextHeight, snap, snapState);
     });
     observer.observe(inner);
     // While a tab is hidden, ResizeObserver delivery is throttled and the CSS
@@ -122,18 +121,15 @@ export function HeightTransition({
     // observer fire (in case offsetHeight isn't yet reconciled) to snap too.
     const onVisibility = () => {
       if (document.visibilityState !== "visible") return;
-      const target = wrapperRef.current;
-      const source = innerRef.current;
-      if (!target || !source) return;
       pendingVisibilitySnap = true;
-      const nextHeight = visible ? `${source.offsetHeight}px` : "0px";
-      applyHeight(target, nextHeight, true, snapState);
+      const nextHeight = visible ? `${inner.offsetHeight}px` : "0px";
+      applyHeight(wrapper, nextHeight, true, snapState);
     };
     document.addEventListener("visibilitychange", onVisibility);
     return () => {
       observer.disconnect();
       document.removeEventListener("visibilitychange", onVisibility);
-      cleanupSnapState(wrapperRef.current, snapState);
+      cleanupSnapState(wrapper, snapState);
     };
   }, [visible]);
   return (
@@ -201,14 +197,13 @@ export function AutoHeightContainer({
     const snapState: SnapState = { savedDuration: null, restoreFrame: null };
     const observer = new ResizeObserver((entries) => {
       const entry = entries[0];
-      const target = wrapperRef.current;
-      if (!entry || !target) return;
+      if (!entry) return;
       const { width, height } = entry.contentRect;
       const widthChanged = lastWidth !== null && width !== lastWidth;
       const snap = widthChanged || pendingVisibilitySnap;
       pendingVisibilitySnap = false;
       lastWidth = width;
-      applyHeight(target, `${height}px`, snap, snapState);
+      applyHeight(wrapper, `${height}px`, snap, snapState);
     });
     observer.observe(inner);
     // See HeightTransition's matching block: a hidden tab pauses observer
@@ -218,17 +213,14 @@ export function AutoHeightContainer({
     // full duration. Snap-sync on visibility return short-circuits that.
     const onVisibility = () => {
       if (document.visibilityState !== "visible") return;
-      const target = wrapperRef.current;
-      const source = innerRef.current;
-      if (!target || !source) return;
       pendingVisibilitySnap = true;
-      applyHeight(target, `${source.offsetHeight}px`, true, snapState);
+      applyHeight(wrapper, `${inner.offsetHeight}px`, true, snapState);
     };
     document.addEventListener("visibilitychange", onVisibility);
     return () => {
       observer.disconnect();
       document.removeEventListener("visibilitychange", onVisibility);
-      cleanupSnapState(wrapperRef.current, snapState);
+      cleanupSnapState(wrapper, snapState);
     };
   }, []);
   return (
