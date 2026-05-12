@@ -38,15 +38,21 @@ describe("HeightTransition", () => {
     expect(view.getByTestId("hidden").textContent).toBe("hello");
   });
 
-  it("applies overflow-hidden to the wrapper", () => {
+  it("clips the wrapper vertically without forming a horizontal scroll container", () => {
+    // `overflow: visible clip` lets the height transition clip overflow on
+    // the y-axis (so intermediate heights don't leak content past the
+    // wrapper) without making the wrapper an overflow-x scroll container —
+    // children that intentionally extend horizontally (markdown table
+    // breakout, etc.) need to bleed past the wrapper.
     const { container } = render(
       <HeightTransition visible>
         <span>x</span>
       </HeightTransition>,
     );
-    const wrapper = container.firstElementChild;
+    const wrapper = container.firstElementChild as HTMLElement | null;
     expect(wrapper).not.toBeNull();
-    expect(wrapper?.className ?? "").toContain("overflow-hidden");
+    expect(wrapper?.style.overflowX).toBe("visible");
+    expect(wrapper?.style.overflowY).toBe("clip");
   });
 
   it("declares a CSS transition on height and opacity", () => {
@@ -83,13 +89,17 @@ describe("AutoHeightContainer", () => {
     expect(wrapper?.style.transition).toContain("height");
   });
 
-  it("clips overflow so the transition's intermediate heights stay bounded", () => {
+  it("clips the wrapper vertically without forming a horizontal scroll container", () => {
+    // Same constraint as HeightTransition: clip the y-axis during the
+    // height animation, leave the x-axis visible so horizontally bleeding
+    // children (markdown table breakout) aren't masked.
     const { container } = render(
       <AutoHeightContainer>
         <span>x</span>
       </AutoHeightContainer>,
     );
     const wrapper = container.firstElementChild as HTMLElement | null;
-    expect(wrapper?.style.overflow).toBe("hidden");
+    expect(wrapper?.style.overflowX).toBe("visible");
+    expect(wrapper?.style.overflowY).toBe("clip");
   });
 });

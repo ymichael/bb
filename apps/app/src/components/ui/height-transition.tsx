@@ -1,5 +1,4 @@
 import { useLayoutEffect, useRef, type ReactNode } from "react";
-import { cn } from "@/lib/utils";
 
 // Shared animation tokens for height transitions across the timeline.
 // Exported so adjacent surfaces (future affordances) can match the easing
@@ -140,8 +139,17 @@ export function HeightTransition({
   return (
     <div
       ref={wrapperRef}
-      className={cn("overflow-hidden", className)}
+      className={className}
       style={{
+        // Clip vertically (so intermediate heights during the animation
+        // don't leak content past the wrapper) without turning the wrapper
+        // into a horizontal scroll container — `overflow-y: hidden` would
+        // force `overflow-x` to compute as `auto` and clip negative-margin
+        // breakouts like the markdown table's bleed past the 760px text
+        // column. `clip` doesn't establish a scroll container, so the
+        // mismatched x: visible / y: clip pair stays as specified.
+        overflowX: "visible",
+        overflowY: "clip",
         opacity: visible ? 1 : 0,
         transition: `height ${durationMs}ms ${HEIGHT_TRANSITION_EASE_CSS}, opacity ${durationMs}ms ${HEIGHT_TRANSITION_EASE_CSS}`,
       }}
@@ -228,7 +236,11 @@ export function AutoHeightContainer({
       ref={wrapperRef}
       className={className}
       style={{
-        overflow: "hidden",
+        // See HeightTransition: clip vertically without forcing the wrapper
+        // into a horizontal scroll container, so children with intentional
+        // horizontal bleed (markdown table breakout) aren't clipped.
+        overflowX: "visible",
+        overflowY: "clip",
         transition: `height ${durationMs}ms ${HEIGHT_TRANSITION_EASE_CSS}`,
       }}
     >
