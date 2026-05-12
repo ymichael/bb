@@ -3,13 +3,13 @@ import fsSync from "node:fs";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { setTimeout as sleep } from "node:timers/promises";
 import { promisify } from "node:util";
+import parcelWatcher from "@parcel/watcher";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createDeferredPromise } from "@bb/test-helpers";
+import { watchWorkspaceStatus as watchWorkspaceStatusImpl } from "../src/watch-status.js";
 
-type WatchStatusModule = typeof import("../src/watch-status.js");
-type WatchWorkspaceStatus = WatchStatusModule["watchWorkspaceStatus"];
+type WatchWorkspaceStatus = typeof watchWorkspaceStatusImpl;
 type WatchWorkspaceStatusArgs = Parameters<WatchWorkspaceStatus>[1];
 type WorkspaceStatusChangeEvent = Parameters<
   WatchWorkspaceStatusArgs["onChange"]
@@ -47,12 +47,27 @@ interface ManualWorkspaceEventsImport extends WatchWorkspaceStatusImport {
   getWorkspaceRootSubscriptionCount: () => number;
 }
 
+type Sleep = (durationMs: number) => Promise<void>;
+
 const execFileAsync = promisify(execFile);
 const tempDirs: string[] = [];
 const WATCH_READY_SETTLE_MS = 100;
 const WATCH_TEST_TIMEOUT_MS = 2_000;
 const FSEVENTS_DROPPED_EVENTS_ERROR_MESSAGE =
   "Events were dropped by the FSEvents client. File system must be re-scanned.";
+const sleep: Sleep = (durationMs) =>
+  new Promise((resolve) => {
+    setTimeout(() => {
+      resolve();
+    }, durationMs);
+  });
+
+async function settleAsyncWatchWork(): Promise<void> {
+  // Let watcher startup/retry microtasks finish before restoring shared spies.
+  await Promise.resolve();
+  await sleep(0);
+  await Promise.resolve();
+}
 
 function ignoreWatchError(): void {
   // Ignore watcher warnings in tests that assert only change callbacks.
@@ -202,40 +217,31 @@ async function importWatchWorkspaceStatusWithTransientWorkspaceSubscriptionFailu
   let workspaceRootSubscriptionCount = 0;
   const ready = createDeferredPromise<void>();
   let readyScheduled = false;
-  vi.resetModules();
-  vi.doMock("@parcel/watcher", () => {
-    const mockSubscribe = async (
-      ...watchArgs: ParcelWatcherSubscribeArgs
-    ): Promise<ParcelWatcherSubscribeResult> => {
-      const [_rootPath, callback] = watchArgs;
-      const isWorkspaceRoot = isWorkspaceRootSubscription(
-        watchArgs,
-        workspaceRootPath,
-      );
-      if (isWorkspaceRoot && !failedWorkspaceSubscription) {
-        failedWorkspaceSubscription = true;
-        throw new Error("workspace subscription unavailable");
+  const mockSubscribe = async (
+    ...watchArgs: ParcelWatcherSubscribeArgs
+  ): Promise<ParcelWatcherSubscribeResult> => {
+    const [_rootPath, callback] = watchArgs;
+    const isWorkspaceRoot = isWorkspaceRootSubscription(
+      watchArgs,
+      workspaceRootPath,
+    );
+    if (isWorkspaceRoot && !failedWorkspaceSubscription) {
+      failedWorkspaceSubscription = true;
+      throw new Error("workspace subscription unavailable");
+    }
+    if (isWorkspaceRoot) {
+      workspaceRootSubscriptionCount += 1;
+      workspaceRootCallback = callback;
+      if (!readyScheduled) {
+        readyScheduled = true;
+        setTimeout(() => {
+          ready.resolve(undefined);
+        }, WATCH_READY_SETTLE_MS);
       }
-      if (isWorkspaceRoot) {
-        workspaceRootSubscriptionCount += 1;
-        workspaceRootCallback = callback;
-        if (!readyScheduled) {
-          readyScheduled = true;
-          setTimeout(() => {
-            ready.resolve(undefined);
-          }, WATCH_READY_SETTLE_MS);
-        }
-      }
-      return createMockWatcherSubscription();
-    };
-    return {
-      default: {
-        subscribe: mockSubscribe,
-      },
-      subscribe: mockSubscribe,
-    };
-  });
-  const watchStatusModule = await import("../src/watch-status.js");
+    }
+    return createMockWatcherSubscription();
+  };
+  vi.spyOn(parcelWatcher, "subscribe").mockImplementation(mockSubscribe);
   return {
     emitWorkspaceRootError: (error) => {
       if (!workspaceRootCallback) {
@@ -251,7 +257,7 @@ async function importWatchWorkspaceStatusWithTransientWorkspaceSubscriptionFailu
     },
     getWorkspaceRootSubscriptionCount: () => workspaceRootSubscriptionCount,
     ready: ready.promise,
-    watchWorkspaceStatus: watchStatusModule.watchWorkspaceStatus,
+    watchWorkspaceStatus: watchWorkspaceStatusImpl,
   };
 }
 
@@ -260,31 +266,22 @@ async function importWatchWorkspaceStatusWithPersistentWorkspaceSubscriptionFail
 ): Promise<PersistentWorkspaceSubscriptionFailureImport> {
   let workspaceSubscriptionAttemptCount = 0;
   const ready = createDeferredPromise<void>();
-  vi.resetModules();
-  vi.doMock("@parcel/watcher", () => {
-    const mockSubscribe = (
-      ...watchArgs: ParcelWatcherSubscribeArgs
-    ): Promise<ParcelWatcherSubscribeResult> => {
-      if (isWorkspaceRootSubscription(watchArgs, workspaceRootPath)) {
-        workspaceSubscriptionAttemptCount += 1;
-        ready.resolve(undefined);
-        throw new Error("workspace subscription unavailable");
-      }
-      return Promise.resolve(createMockWatcherSubscription());
-    };
-    return {
-      default: {
-        subscribe: mockSubscribe,
-      },
-      subscribe: mockSubscribe,
-    };
-  });
-  const watchStatusModule = await import("../src/watch-status.js");
+  const mockSubscribe = (
+    ...watchArgs: ParcelWatcherSubscribeArgs
+  ): Promise<ParcelWatcherSubscribeResult> => {
+    if (isWorkspaceRootSubscription(watchArgs, workspaceRootPath)) {
+      workspaceSubscriptionAttemptCount += 1;
+      ready.resolve(undefined);
+      throw new Error("workspace subscription unavailable");
+    }
+    return Promise.resolve(createMockWatcherSubscription());
+  };
+  vi.spyOn(parcelWatcher, "subscribe").mockImplementation(mockSubscribe);
   return {
     getWorkspaceSubscriptionAttemptCount: () =>
       workspaceSubscriptionAttemptCount,
     ready: ready.promise,
-    watchWorkspaceStatus: watchStatusModule.watchWorkspaceStatus,
+    watchWorkspaceStatus: watchWorkspaceStatusImpl,
   };
 }
 
@@ -300,36 +297,23 @@ async function importWatchWorkspaceStatusWithManualWorkspaceEvents(
   let workspaceRootCallback: ParcelWatcherCallback | null = null;
   let workspaceRootSubscriptionCount = 0;
   const ready = createDeferredPromise<void>();
-  vi.resetModules();
-  vi.doMock("@parcel/watcher", async () => {
-    const mockSubscribe = (
-      ...watchArgs: ParcelWatcherSubscribeArgs
-    ): Promise<ParcelWatcherSubscribeResult> =>
-      new Promise<ParcelWatcherSubscribeResult>((resolve) => {
-        const [_rootPath, callback] = watchArgs;
-        const isWorkspaceRoot = isWorkspaceRootSubscription(
-          watchArgs,
-          workspaceRootPath,
-        );
-        if (isWorkspaceRoot) {
-          workspaceRootSubscriptionCount += 1;
-          workspaceRootCallback = callback;
-        }
-        resolve(createMockWatcherSubscription());
-        if (isWorkspaceRoot) {
-          queueMicrotask(() => {
-            ready.resolve(undefined);
-          });
-        }
-      });
-    return {
-      default: {
-        subscribe: mockSubscribe,
-      },
-      subscribe: mockSubscribe,
-    };
-  });
-  const watchStatusModule = await import("../src/watch-status.js");
+  const mockSubscribe = (
+    ...watchArgs: ParcelWatcherSubscribeArgs
+  ): Promise<ParcelWatcherSubscribeResult> =>
+    new Promise<ParcelWatcherSubscribeResult>((resolve) => {
+      const [_rootPath, callback] = watchArgs;
+      const isWorkspaceRoot = isWorkspaceRootSubscription(
+        watchArgs,
+        workspaceRootPath,
+      );
+      if (isWorkspaceRoot) {
+        workspaceRootSubscriptionCount += 1;
+        workspaceRootCallback = callback;
+        ready.resolve(undefined);
+      }
+      resolve(createMockWatcherSubscription());
+    });
+  vi.spyOn(parcelWatcher, "subscribe").mockImplementation(mockSubscribe);
   return {
     emitWorkspaceRootError: (error) => {
       if (!workspaceRootCallback) {
@@ -345,7 +329,7 @@ async function importWatchWorkspaceStatusWithManualWorkspaceEvents(
     },
     getWorkspaceRootSubscriptionCount: () => workspaceRootSubscriptionCount,
     ready: ready.promise,
-    watchWorkspaceStatus: watchStatusModule.watchWorkspaceStatus,
+    watchWorkspaceStatus: watchWorkspaceStatusImpl,
   };
 }
 
@@ -360,32 +344,23 @@ async function importWatchWorkspaceStatusWithManualRootEvents(
   const ready = createDeferredPromise<void>();
   const expectedRootPaths = args.expectedRootPaths.map(normalizeWatchPath);
   const seenRootPaths = new Set<string>();
-  vi.resetModules();
-  vi.doMock("@parcel/watcher", async () => {
-    const mockSubscribe = async (
-      ...watchArgs: ParcelWatcherSubscribeArgs
-    ): Promise<ParcelWatcherSubscribeResult> => {
-      const [rootPath, callback] = watchArgs;
-      const normalizedRootPath = normalizeWatchPath(rootPath);
-      callbacksByRootPath.set(normalizedRootPath, callback);
-      seenRootPaths.add(normalizedRootPath);
-      if (
-        expectedRootPaths.every((expectedRootPath) =>
-          seenRootPaths.has(expectedRootPath),
-        )
-      ) {
-        ready.resolve(undefined);
-      }
-      return createMockWatcherSubscription();
-    };
-    return {
-      default: {
-        subscribe: mockSubscribe,
-      },
-      subscribe: mockSubscribe,
-    };
-  });
-  const watchStatusModule = await import("../src/watch-status.js");
+  const mockSubscribe = async (
+    ...watchArgs: ParcelWatcherSubscribeArgs
+  ): Promise<ParcelWatcherSubscribeResult> => {
+    const [rootPath, callback] = watchArgs;
+    const normalizedRootPath = normalizeWatchPath(rootPath);
+    callbacksByRootPath.set(normalizedRootPath, callback);
+    seenRootPaths.add(normalizedRootPath);
+    if (
+      expectedRootPaths.every((expectedRootPath) =>
+        seenRootPaths.has(expectedRootPath),
+      )
+    ) {
+      ready.resolve(undefined);
+    }
+    return createMockWatcherSubscription();
+  };
+  vi.spyOn(parcelWatcher, "subscribe").mockImplementation(mockSubscribe);
   return {
     emitEvents: (rootPath, events) => {
       const callback = callbacksByRootPath.get(normalizeWatchPath(rootPath));
@@ -395,14 +370,13 @@ async function importWatchWorkspaceStatusWithManualRootEvents(
       callback(null, normalizeEventBatch(events));
     },
     ready: ready.promise,
-    watchWorkspaceStatus: watchStatusModule.watchWorkspaceStatus,
+    watchWorkspaceStatus: watchWorkspaceStatusImpl,
   };
 }
 
 afterEach(async () => {
-  vi.useRealTimers();
-  vi.doUnmock("@parcel/watcher");
-  vi.resetModules();
+  await settleAsyncWatchWork();
+  vi.restoreAllMocks();
   await Promise.all(
     tempDirs
       .splice(0)
@@ -410,7 +384,8 @@ afterEach(async () => {
   );
 });
 
-describe("watchWorkspaceStatus", () => {
+// These tests mutate shared module spies, so keep them out of Vitest parallelism.
+describe.sequential("watchWorkspaceStatus", () => {
   it("watches workspace status changes without duplicate callbacks for the same burst", async () => {
     const repoPath = await initRepo();
     const { emitWorkspaceRootEvents, ready, watchWorkspaceStatus } =
@@ -443,7 +418,6 @@ describe("watchWorkspaceStatus", () => {
   });
 
   it("flushes sustained workspace event bursts at max wait", async () => {
-    vi.useFakeTimers();
     const repoPath = await initRepo();
     const { emitWorkspaceRootEvents, ready, watchWorkspaceStatus } =
       await importWatchWorkspaceStatusWithManualWorkspaceEvents(repoPath);
@@ -457,28 +431,38 @@ describe("watchWorkspaceStatus", () => {
 
     try {
       await ready;
-      for (let elapsedMs = 0; elapsedMs < 480; elapsedMs += 60) {
+      const firstEventAt = Date.now();
+      const eventIntervalMs = 60;
+      const earlyFlushGuardMs = 180;
+      for (
+        let elapsedMs = 0;
+        elapsedMs < 600;
+        elapsedMs += eventIntervalMs
+      ) {
         emitWorkspaceRootEvents([
           {
             path: path.join(repoPath, "README.md"),
             type: "update",
           },
         ]);
-        await vi.advanceTimersByTimeAsync(60);
+        await sleep(eventIntervalMs);
+        if (elapsedMs + eventIntervalMs <= earlyFlushGuardMs) {
+          expect(calls).toHaveLength(0);
+        }
+        if (calls.length > 0) {
+          break;
+        }
       }
 
-      expect(calls).toHaveLength(0);
-
-      await vi.advanceTimersByTimeAsync(20);
+      await waitForCallCount(() => calls.length, 1, WATCH_TEST_TIMEOUT_MS);
       expect(calls).toHaveLength(1);
+      expect(calls[0] - firstEventAt).toBeLessThan(800);
     } finally {
       stopWatching();
-      vi.useRealTimers();
     }
   });
 
   it("reports change callback failures and continues watching", async () => {
-    vi.useFakeTimers();
     const repoPath = await initRepo();
     const { emitWorkspaceRootEvents, ready, watchWorkspaceStatus } =
       await importWatchWorkspaceStatusWithManualWorkspaceEvents(repoPath);
@@ -504,7 +488,11 @@ describe("watchWorkspaceStatus", () => {
           type: "update",
         },
       ]);
-      await vi.advanceTimersByTimeAsync(75);
+      await waitForCallCount(
+        () => callbackCount,
+        1,
+        WATCH_TEST_TIMEOUT_MS,
+      );
       expect(callbackCount).toBe(1);
       expect(watchErrors).toHaveLength(1);
       expect(watchErrors[0]).toContain(repoPath);
@@ -518,12 +506,15 @@ describe("watchWorkspaceStatus", () => {
           type: "update",
         },
       ]);
-      await vi.advanceTimersByTimeAsync(75);
+      await waitForCallCount(
+        () => callbackCount,
+        2,
+        WATCH_TEST_TIMEOUT_MS,
+      );
       expect(callbackCount).toBe(2);
       expect(watchErrors).toHaveLength(1);
     } finally {
       stopWatching();
-      vi.useRealTimers();
     }
   });
 

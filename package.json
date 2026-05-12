@@ -2,6 +2,9 @@
   "name": "bb",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  },
   "scripts": {
     "scripts:prepare": "pnpm exec turbo run build --filter=@bb/scripts --output-logs=none --log-prefix=none --summarize=false",
     "cli:prepare": "pnpm exec turbo run build --filter=@bb/scripts --filter=@bb/cli --output-logs=none --log-prefix=none --summarize=false",
@@ -39,12 +42,12 @@
   "devDependencies": {
     "cross-env": "^10.1.0",
     "dotenv-cli": "^11.0.0",
-    "esbuild": "^0.25.0",
+    "esbuild": "^0.28.0",
     "open": "^10.2.0",
     "prettier": "^3.8.3",
     "rimraf": "^6.1.0",
-    "turbo": "^2.4.0",
     "tsx": "^4.21.0",
+    "turbo": "^2.4.0",
     "typescript": "^5.7.0",
     "vitest": "^4.1.1"
   },

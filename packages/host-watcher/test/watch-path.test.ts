@@ -1,21 +1,14 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { setTimeout as sleep } from "node:timers/promises";
+import parcelWatcher from "@parcel/watcher";
 import { afterEach, describe, expect, it, vi } from "vitest";
+// Import the ESM namespace so Vitest can spy on the exported pathExists binding.
+import * as pathExistsModule from "../src/path-exists.js";
+import { watchPathChanges as watchPathChangesImpl } from "../src/watch-path.js";
 
-type WatchPathModule = typeof import("../src/watch-path.js");
-type WatchPathChanges = WatchPathModule["watchPathChanges"];
-// `@parcel/watcher` ships with `export =`, so the runtime module after Node's
-// ESM interop exposes a `default` field alongside the named callable. The TS
-// type for `typeof import("@parcel/watcher")` doesn't include `default`, so
-// intersect it in here for the mock plumbing.
-type ParcelWatcherActual = typeof import("@parcel/watcher");
-type ParcelWatcherModule = ParcelWatcherActual & {
-  default: ParcelWatcherActual;
-};
-type ParcelWatcherDefault = ParcelWatcherModule["default"];
-type ParcelWatcherSubscribe = ParcelWatcherDefault["subscribe"];
+type WatchPathChanges = typeof watchPathChangesImpl;
+type ParcelWatcherSubscribe = (typeof import("@parcel/watcher"))["subscribe"];
 type ParcelWatcherCallback = Parameters<ParcelWatcherSubscribe>[1];
 type ParcelWatcherSubscribeArgs = Parameters<ParcelWatcherSubscribe>;
 type ParcelWatcherEventBatch = Parameters<ParcelWatcherCallback>[1];
@@ -36,7 +29,22 @@ interface ImportWatchPathOptions {
   ) => Promise<ParcelWatcherSubscribeResult>;
 }
 
+type Sleep = (durationMs: number) => Promise<void>;
+
 const tempDirs: string[] = [];
+const sleep: Sleep = (durationMs) =>
+  new Promise((resolve) => {
+    setTimeout(() => {
+      resolve();
+    }, durationMs);
+  });
+
+async function settleAsyncWatchWork(): Promise<void> {
+  // Let watcher startup/retry microtasks finish before restoring shared spies.
+  await Promise.resolve();
+  await sleep(0);
+  await Promise.resolve();
+}
 
 async function makeTempDir(prefix: string): Promise<string> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), prefix));
@@ -78,43 +86,30 @@ async function importWatchPathWithMockedWatcher(
   let subscribeCallCount = 0;
   const unsubscribe = vi.fn<() => Promise<void>>(async () => undefined);
 
-  vi.resetModules();
   if (options.pathExistsImplementation) {
-    vi.doMock("../src/path-exists.js", () => ({
-      pathExists: options.pathExistsImplementation,
-    }));
+    vi.spyOn(pathExistsModule, "pathExists").mockImplementation(
+      options.pathExistsImplementation,
+    );
   }
-  vi.doMock("@parcel/watcher", async () => {
-    const actualWatcher =
-      await vi.importActual<ParcelWatcherModule>("@parcel/watcher");
-    const subscribe = async (
-      ...args: ParcelWatcherSubscribeArgs
-    ): Promise<ParcelWatcherSubscribeResult> => {
-      subscribeCallCount += 1;
-      rootPaths.push(args[0]);
-      callbacks.push(args[1]);
-      if (options.subscribeImplementation) {
-        return options.subscribeImplementation(args);
-      }
-      return { unsubscribe };
-    };
-    return {
-      ...actualWatcher,
-      default: {
-        ...actualWatcher.default,
-        subscribe,
-      },
-      subscribe,
-    };
-  });
+  const subscribe = async (
+    ...args: ParcelWatcherSubscribeArgs
+  ): Promise<ParcelWatcherSubscribeResult> => {
+    subscribeCallCount += 1;
+    rootPaths.push(args[0]);
+    callbacks.push(args[1]);
+    if (options.subscribeImplementation) {
+      return options.subscribeImplementation(args);
+    }
+    return { unsubscribe };
+  };
+  vi.spyOn(parcelWatcher, "subscribe").mockImplementation(subscribe);
 
-  const watchPathModule = await import("../src/watch-path.js");
   return {
     callbacks,
     rootPaths,
     subscribeCallCount: () => subscribeCallCount,
     unsubscribe,
-    watchPathChanges: watchPathModule.watchPathChanges,
+    watchPathChanges: watchPathChangesImpl,
   };
 }
 
@@ -126,9 +121,8 @@ function createEventBatch(paths: string[]): ParcelWatcherEventBatch {
 }
 
 afterEach(async () => {
-  vi.resetModules();
-  vi.doUnmock("@parcel/watcher");
-  vi.doUnmock("../src/path-exists.js");
+  await settleAsyncWatchWork();
+  vi.restoreAllMocks();
   await Promise.all(
     tempDirs.splice(0).map(async (dir) => {
       await fs.rm(dir, { force: true, recursive: true });
@@ -136,7 +130,8 @@ afterEach(async () => {
   );
 });
 
-describe("watchPathChanges", () => {
+// These tests mutate shared module spies, so keep them out of Vitest parallelism.
+describe.sequential("watchPathChanges", () => {
   it("watches the target path and reports changed paths within that subtree", async () => {
     const dataDir = await makeTempDir("bb-watch-path-");
     const threadStorageRoot = path.join(dataDir, "thread-storage");
@@ -184,7 +179,6 @@ describe("watchPathChanges", () => {
   });
 
   it("reports a missing watched path once and retries until it appears", async () => {
-    vi.useFakeTimers();
     const threadStorageRoot = path.join("/tmp", "bb-watch-path-missing");
     let pathExistsCallCount = 0;
     const onWatchError = vi.fn();
@@ -201,30 +195,30 @@ describe("watchPathChanges", () => {
       onWatchError,
     });
 
-    await vi.advanceTimersByTimeAsync(0);
+    try {
+      await waitFor(
+        () => onWatchError.mock.calls.length,
+        (callCount) => callCount === 1,
+      );
+      expect(rootPaths).toEqual([]);
+      expect(onWatchError).toHaveBeenCalledWith({
+        message: `Watched path does not exist yet: ${threadStorageRoot}`,
+        rootPath: threadStorageRoot,
+      });
 
-    expect(rootPaths).toEqual([]);
-    expect(onWatchError).toHaveBeenCalledTimes(1);
-    expect(onWatchError).toHaveBeenCalledWith({
-      message: `Watched path does not exist yet: ${threadStorageRoot}`,
-      rootPath: threadStorageRoot,
-    });
+      await waitFor(
+        () => rootPaths.length,
+        (count) => count === 1,
+      );
 
-    await vi.advanceTimersByTimeAsync(300);
-    await waitFor(
-      () => rootPaths.length,
-      (count) => count === 1,
-    );
-
-    expect(rootPaths).toEqual([threadStorageRoot]);
-    expect(onWatchError).toHaveBeenCalledTimes(1);
-
-    stopWatching();
-    vi.useRealTimers();
+      expect(rootPaths).toEqual([threadStorageRoot]);
+      expect(onWatchError).toHaveBeenCalledTimes(1);
+    } finally {
+      stopWatching();
+    }
   });
 
   it("retries path subscriptions after a startup failure", async () => {
-    vi.useFakeTimers();
     const threadStorageRoot = path.join("/tmp", "bb-watch-path-retry");
     const onWatchError = vi.fn();
     let shouldFail = true;
@@ -247,21 +241,19 @@ describe("watchPathChanges", () => {
       onWatchError,
     });
 
-    await vi.advanceTimersByTimeAsync(0);
+    try {
+      await waitFor(subscribeCallCount, (count) => count === 1);
+      expect(onWatchError).toHaveBeenCalledWith({
+        message: "path subscription unavailable",
+        rootPath: threadStorageRoot,
+      });
 
-    expect(subscribeCallCount()).toBe(1);
-    expect(onWatchError).toHaveBeenCalledWith({
-      message: "path subscription unavailable",
-      rootPath: threadStorageRoot,
-    });
+      await waitFor(subscribeCallCount, (count) => count === 2);
 
-    await vi.advanceTimersByTimeAsync(300);
-    await waitFor(subscribeCallCount, (count) => count === 2);
-
-    expect(rootPaths).toEqual([threadStorageRoot, threadStorageRoot]);
-
-    stopWatching();
-    vi.useRealTimers();
+      expect(rootPaths).toEqual([threadStorageRoot, threadStorageRoot]);
+    } finally {
+      stopWatching();
+    }
   });
 
   it("unsubscribes a late subscription if disposed during startup", async () => {

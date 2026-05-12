@@ -16,6 +16,10 @@ const serverWsOrigin = `ws://localhost:${serverPort}`;
 
 export default defineConfig(({ command }) => ({
   plugins: [react(), tailwindcss()],
+  build: {
+    // Skip compressed-size calculation to keep production app builds fast.
+    reportCompressedSize: false,
+  },
   resolve: {
     conditions: ["source"],
     alias: {
