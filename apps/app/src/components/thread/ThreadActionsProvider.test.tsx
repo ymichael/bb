@@ -272,12 +272,7 @@ describe("ThreadActionsProvider", () => {
 
     expect(
       await screen.findByText(
-        /this manager has 2 non-deleted assigned child threads/i,
-      ),
-    ).not.toBeNull();
-    expect(
-      screen.getByText(
-        /archived child threads are included; deleted child threads are not/i,
+        /2 child threads are assigned to this manager/i,
       ),
     ).not.toBeNull();
     expect(api.archiveThread).not.toHaveBeenCalled();
@@ -315,14 +310,14 @@ describe("ThreadActionsProvider", () => {
     });
 
     await screen.findByText(
-      /archive manager with non-deleted assigned child threads/i,
+      /child threads? (?:are|is) assigned to this manager/i,
     );
     fireEvent.click(screen.getByRole("button", { name: /cancel/i }));
 
     await waitFor(() => {
       expect(
         screen.queryByText(
-          /archive manager with non-deleted assigned child threads/i,
+          /child threads? (?:are|is) assigned to this manager/i,
         ),
       ).toBeNull();
     });
@@ -383,7 +378,7 @@ describe("ThreadActionsProvider", () => {
     });
     expect(
       screen.queryByText(
-        /archive manager with non-deleted assigned child threads/i,
+        /child threads? (?:are|is) assigned to this manager/i,
       ),
     ).toBeNull();
   });
@@ -425,7 +420,7 @@ describe("ThreadActionsProvider", () => {
 
     expect(
       await screen.findByText(
-        /archive manager with non-deleted assigned child threads/i,
+        /child threads? (?:are|is) assigned to this manager/i,
       ),
     ).not.toBeNull();
     expect(api.archiveThread).toHaveBeenCalledTimes(1);
@@ -481,7 +476,7 @@ describe("ThreadActionsProvider", () => {
 
     expect(
       screen.queryByText(
-        /archive manager with non-deleted assigned child threads/i,
+        /child threads? (?:are|is) assigned to this manager/i,
       ),
     ).toBeNull();
     expect(api.archiveThread).not.toHaveBeenCalled();
@@ -681,7 +676,7 @@ describe("ThreadActionsProvider", () => {
 
     expect(
       await screen.findByText(
-        /this manager has 1 non-deleted assigned child thread/i,
+        /1 child thread is assigned to this manager and will lose its manager/i,
       ),
     ).not.toBeNull();
     expect(api.deleteThread).not.toHaveBeenCalled();
@@ -718,14 +713,14 @@ describe("ThreadActionsProvider", () => {
     });
 
     await screen.findByText(
-      /delete manager with non-deleted assigned child threads/i,
+      /child threads? (?:are|is) assigned to this manager and will lose/i,
     );
     fireEvent.click(screen.getByRole("button", { name: /cancel/i }));
 
     await waitFor(() => {
       expect(
         screen.queryByText(
-          /delete manager with non-deleted assigned child threads/i,
+          /child threads? (?:are|is) assigned to this manager and will lose/i,
         ),
       ).toBeNull();
     });
@@ -784,7 +779,7 @@ describe("ThreadActionsProvider", () => {
 
     expect(
       screen.queryByText(
-        /delete manager with non-deleted assigned child threads/i,
+        /child threads? (?:are|is) assigned to this manager and will lose/i,
       ),
     ).toBeNull();
     fireEvent.click(confirmButton);
