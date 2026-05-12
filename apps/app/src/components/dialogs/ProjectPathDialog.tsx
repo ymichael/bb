@@ -69,7 +69,7 @@ export function ProjectPathDialog({
   );
 }
 
-interface ProjectPathDialogContentProps {
+export interface ProjectPathDialogContentProps {
   target: ProjectPathDialogTarget;
   pending: boolean;
   platform: HostPlatform | null;
@@ -118,7 +118,7 @@ function getPlatformCopy(platform: HostPlatform | null): PlatformCopy {
   };
 }
 
-function ProjectPathDialogContent({
+export function ProjectPathDialogContent({
   target,
   pending,
   platform,

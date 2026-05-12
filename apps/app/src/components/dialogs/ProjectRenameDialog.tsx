@@ -22,7 +22,7 @@ interface ProjectRenameDialogProps {
   onRename: (projectId: string, name: string) => void;
 }
 
-interface ProjectRenameDialogContentProps {
+export interface ProjectRenameDialogContentProps {
   target: ProjectRenameDialogTarget;
   pending: boolean;
   onRename: (projectId: string, name: string) => void;
@@ -50,7 +50,7 @@ export function ProjectRenameDialog({
   );
 }
 
-function ProjectRenameDialogContent({
+export function ProjectRenameDialogContent({
   target,
   pending,
   onRename,

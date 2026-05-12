@@ -6,7 +6,7 @@ import { useHostDaemon } from "@/hooks/useHostDaemon";
 import type {
   ProjectPathDialogSubmitHandler,
   ProjectPathDialogTarget,
-} from "@/components/project/ProjectPathDialog";
+} from "@/components/dialogs/ProjectPathDialog";
 
 export interface LocalPathSubmitParams {
   path: string;

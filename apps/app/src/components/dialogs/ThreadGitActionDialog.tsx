@@ -121,7 +121,14 @@ export function ThreadGitActionDialog({
   );
 }
 
-function ThreadGitActionDialogContent({
+export type ThreadGitActionDialogContentProps = Omit<
+  ThreadGitActionDialogProps,
+  "target"
+> & {
+  target: ThreadGitActionDialogTarget;
+};
+
+export function ThreadGitActionDialogContent({
   target,
   branchName,
   gitStatusDisplay,
@@ -136,9 +143,7 @@ function ThreadGitActionDialogContent({
   onOpenChange,
   onCommit,
   onSquashMerge,
-}: Omit<ThreadGitActionDialogProps, "target"> & {
-  target: ThreadGitActionDialogTarget;
-}) {
+}: ThreadGitActionDialogContentProps) {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const dialogCopy = getDialogCopy(target);
   const mergeBaseCandidates = getMergeBaseBranchCandidates({

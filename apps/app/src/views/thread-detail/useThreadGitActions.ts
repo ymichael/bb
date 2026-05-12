@@ -13,7 +13,7 @@ import type {
 } from "@bb/server-contract";
 import { environmentActionFailureDetailsSchema } from "@bb/server-contract";
 import { useDialogState } from "@/hooks/useDialogState";
-import type { ThreadGitActionDialogTarget } from "@/components/thread/dialogs/ThreadGitActionDialog";
+import type { ThreadGitActionDialogTarget } from "@/components/dialogs/ThreadGitActionDialog";
 import {
   buildCommitFailureFollowUpInstruction,
   buildSquashMergeCommitFailureFollowUpInstruction,

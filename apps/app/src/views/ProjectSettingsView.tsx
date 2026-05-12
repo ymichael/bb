@@ -3,7 +3,6 @@ import { useParams } from "react-router-dom";
 import { useAtomValue } from "jotai";
 import { useDebounceValue } from "usehooks-ts";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
 import {
   findLocalPathProjectSourceForHost,
   isGitHubRepoProjectSource,
@@ -12,17 +11,13 @@ import {
   type ProjectSource,
 } from "@bb/domain";
 import { Button } from "@/components/ui";
-import { Input } from "@/components/ui";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui";
 import { PageShell } from "@/components/ui";
-import { ProjectPathDialog } from "@/components/project/ProjectPathDialog";
+import { ProjectPathDialog } from "@/components/dialogs/ProjectPathDialog";
+import { ProjectConnectGithubDialog } from "@/components/dialogs/ProjectConnectGithubDialog";
+import {
+  ProjectSourceDeleteDialog,
+  type ProjectSourceDeleteDialogTarget,
+} from "@/components/dialogs/ProjectSourceDeleteDialog";
 import { SettingsRowList, SettingsSection } from "@/components/ui";
 import { ProjectSourceRow } from "@/views/project-settings/ProjectSourceRow";
 import {
@@ -43,11 +38,6 @@ import { useGithubRepos } from "@/hooks/queries/system-queries";
 import { invalidateProjectSourceQueries } from "@/hooks/cache-effects";
 import { githubConnectedAtom } from "@/lib/system-config-atoms";
 import * as api from "@/lib/api";
-
-interface DeleteSourceTarget {
-  id: string;
-  label: string;
-}
 
 interface DeleteProjectSourceMutationRequest {
   sourceId: string;
@@ -70,9 +60,8 @@ export function ProjectSettingsView() {
   const queryClient = useQueryClient();
   const githubConnected = useAtomValue(githubConnectedAtom);
 
-  const [deleteTarget, setDeleteTarget] = useState<DeleteSourceTarget | null>(
-    null,
-  );
+  const [deleteTarget, setDeleteTarget] =
+    useState<ProjectSourceDeleteDialogTarget | null>(null);
   const [repoPickerOpen, setRepoPickerOpen] = useState(false);
   const [repoSearch, setRepoSearch] = useState("");
 
@@ -298,97 +287,29 @@ export function ProjectSettingsView() {
         onSubmit={localSourcePicker.submitProjectPath}
       />
 
-      <Dialog
+      <ProjectConnectGithubDialog
         open={repoPickerOpen}
+        search={repoSearch}
+        repos={visibleRepos}
+        isLoading={reposLoading}
+        isFetching={reposFetching}
+        isAddPending={addGitHubSource.isPending}
         onOpenChange={(open) => {
           setRepoPickerOpen(open);
           if (!open) setRepoSearch("");
         }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Connect GitHub repository</DialogTitle>
-            <DialogDescription>
-              Select a repository to connect to this project.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="relative">
-            <Input
-              placeholder="Search repositories…"
-              value={repoSearch}
-              onChange={(e) => setRepoSearch(e.target.value)}
-            />
-            {reposFetching && !reposLoading && (
-              <Loader2 className="absolute right-2.5 top-1/2 size-4 -translate-y-1/2 animate-spin text-muted-foreground" />
-            )}
-          </div>
-          <div className="max-h-64 overflow-y-auto">
-            {reposLoading ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="size-5 animate-spin text-muted-foreground" />
-              </div>
-            ) : visibleRepos.length === 0 ? (
-              <p className="py-4 text-center text-sm text-muted-foreground">
-                {repoSearch
-                  ? "No matching repositories"
-                  : "No repositories found"}
-              </p>
-            ) : (
-              <div className="divide-y divide-border">
-                {visibleRepos.map((repo) => (
-                  <button
-                    key={repo.fullName}
-                    type="button"
-                    className="flex w-full items-center gap-2 px-2 py-2 text-left text-sm hover:bg-state-hover disabled:opacity-50"
-                    disabled={addGitHubSource.isPending}
-                    onClick={() => addGitHubSource.mutate(repo.htmlUrl)}
-                  >
-                    <span className="min-w-0 flex-1 truncate">
-                      {repo.fullName}
-                    </span>
-                    {repo.private && (
-                      <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-                        Private
-                      </span>
-                    )}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
+        onSearchChange={setRepoSearch}
+        onSelectRepo={(repoUrl) => addGitHubSource.mutate(repoUrl)}
+      />
 
-      <Dialog
-        open={deleteTarget !== null}
+      <ProjectSourceDeleteDialog
+        target={deleteTarget}
+        pending={deleteSource.isPending}
         onOpenChange={(open) => {
           if (!open) setDeleteTarget(null);
         }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Remove source?</DialogTitle>
-            <DialogDescription>
-              {deleteTarget
-                ? `Remove "${deleteTarget.label}" from this project? This cannot be undone.`
-                : "Remove this source? This cannot be undone."}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="destructive"
-              disabled={!deleteTarget || deleteSource.isPending}
-              onClick={() => {
-                if (!deleteTarget) return;
-                deleteSource.mutate({ sourceId: deleteTarget.id });
-              }}
-            >
-              Remove source
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        onDelete={(sourceId) => deleteSource.mutate({ sourceId })}
+      />
     </PageShell>
   );
 }

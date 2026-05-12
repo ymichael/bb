@@ -83,15 +83,52 @@ export function ThreadEnvironmentPromotionDialog({
   onOpenChange,
   onSubmit,
 }: ThreadEnvironmentPromotionDialogProps) {
+  return (
+    <Dialog open={target !== null} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-[32rem] gap-0 overflow-hidden border-border/80 bg-background p-0 shadow-xl">
+        {target ? (
+          <ThreadEnvironmentPromotionDialogContent
+            target={target}
+            agentActive={agentActive}
+            blockers={blockers}
+            branchName={branchName}
+            defaultBranch={defaultBranch}
+            primaryCheckoutPath={primaryCheckoutPath}
+            pending={pending}
+            onOpenChange={onOpenChange}
+            onSubmit={onSubmit}
+          />
+        ) : null}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+export type ThreadEnvironmentPromotionDialogContentProps = Omit<
+  ThreadEnvironmentPromotionDialogProps,
+  "target"
+> & {
+  target: ThreadEnvironmentPromotionDialogTarget;
+};
+
+export function ThreadEnvironmentPromotionDialogContent({
+  target,
+  agentActive,
+  blockers,
+  branchName,
+  defaultBranch,
+  primaryCheckoutPath,
+  pending = false,
+  onOpenChange,
+  onSubmit,
+}: ThreadEnvironmentPromotionDialogContentProps) {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const dialogCopy = target
-    ? getDialogCopy(target, branchName, defaultBranch)
-    : null;
+  const dialogCopy = getDialogCopy(target, branchName, defaultBranch);
   const submitDisabled = pending || blockers.length > 0 || agentActive;
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!target || submitDisabled) {
+    if (submitDisabled) {
       return;
     }
     setErrorMessage(null);
@@ -109,67 +146,58 @@ export function ThreadEnvironmentPromotionDialog({
   };
 
   return (
-    <Dialog open={target !== null} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[32rem] gap-0 overflow-hidden border-border/80 bg-background p-0 shadow-xl">
-        {target && dialogCopy ? (
-          <>
-            <DialogHeader className="px-6 pt-5 pb-3">
-              <DialogTitle>{dialogCopy.title}</DialogTitle>
-              <DialogDescription>{dialogCopy.description}</DialogDescription>
-            </DialogHeader>
-            <form className="space-y-4 px-6 pt-3 pb-5" onSubmit={handleSubmit}>
-              <DetailCard className="border-border/70 bg-muted/20">
-                {branchName ? (
-                  <DetailRow label="Branch" valueClassName="min-w-0 truncate">
-                    <span className="block truncate" title={branchName}>
-                      {branchName}
-                    </span>
-                  </DetailRow>
-                ) : null}
-                {primaryCheckoutPath ? (
-                  <DetailRow
-                    label="Primary checkout"
-                    valueClassName="min-w-0 truncate"
-                  >
-                    <span
-                      className="block truncate"
-                      title={primaryCheckoutPath}
-                    >
-                      {primaryCheckoutPath}
-                    </span>
-                  </DetailRow>
-                ) : null}
-                <DetailRow label="Planned change" valueClassName="min-w-0">
-                  <span className="text-muted-foreground">
-                    {dialogCopy.plannedChange}
-                  </span>
-                </DetailRow>
-              </DetailCard>
-              {blockers.length > 0 || agentActive ? (
-                <PromotionDialogIssues
-                  agentActive={agentActive}
-                  blockers={blockers}
-                />
-              ) : null}
-              <FormError message={errorMessage} />
-              <DialogFooter>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => onOpenChange(false)}
-                >
-                  Cancel
-                </Button>
-                <Button type="submit" disabled={submitDisabled}>
-                  {pending ? <Loader2 className="size-4 animate-spin" /> : null}
-                  {dialogCopy.submitLabel}
-                </Button>
-              </DialogFooter>
-            </form>
-          </>
+    <>
+      <DialogHeader className="px-6 pt-5 pb-3">
+        <DialogTitle>{dialogCopy.title}</DialogTitle>
+        <DialogDescription>{dialogCopy.description}</DialogDescription>
+      </DialogHeader>
+      <form className="space-y-4 px-6 pt-3 pb-5" onSubmit={handleSubmit}>
+        <DetailCard className="border-border/70 bg-muted/20">
+          {branchName ? (
+            <DetailRow label="Branch" valueClassName="min-w-0 truncate">
+              <span className="block truncate" title={branchName}>
+                {branchName}
+              </span>
+            </DetailRow>
+          ) : null}
+          {primaryCheckoutPath ? (
+            <DetailRow
+              label="Primary checkout"
+              valueClassName="min-w-0 truncate"
+            >
+              <span className="block truncate" title={primaryCheckoutPath}>
+                {primaryCheckoutPath}
+              </span>
+            </DetailRow>
+          ) : null}
+          <DetailRow label="Planned change" valueClassName="min-w-0">
+            <span className="text-muted-foreground">
+              {dialogCopy.plannedChange}
+            </span>
+          </DetailRow>
+        </DetailCard>
+        {blockers.length > 0 || agentActive ? (
+          <PromotionDialogIssues
+            agentActive={agentActive}
+            blockers={blockers}
+          />
         ) : null}
-      </DialogContent>
-    </Dialog>
+        <FormError message={errorMessage} />
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+          >
+            Cancel
+          </Button>
+          <Button type="submit" disabled={submitDisabled}>
+            {pending ? <Loader2 className="size-4 animate-spin" /> : null}
+            {dialogCopy.submitLabel}
+          </Button>
+        </DialogFooter>
+      </form>
+    </>
   );
 }
 

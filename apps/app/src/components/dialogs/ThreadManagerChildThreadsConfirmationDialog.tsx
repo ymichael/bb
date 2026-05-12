@@ -58,50 +58,68 @@ export function ThreadManagerChildThreadsConfirmationDialog({
   onOpenChange,
   onConfirm,
 }: ThreadManagerChildThreadsConfirmationDialogProps) {
-  const copy = target ? getDialogCopy(target.action) : null;
-  const childCountLabel = target
-    ? formatNonDeletedAssignedChildThreadCount(
-        target.nonDeletedAssignedChildCount,
-      )
-    : "assigned child threads";
-
   return (
     <Dialog open={target !== null} onOpenChange={onOpenChange}>
       <DialogContent>
-        {target && copy ? (
-          <>
-            <DialogHeader>
-              <DialogTitle>{copy.title}</DialogTitle>
-              <DialogDescription>
-                This manager has {childCountLabel}. Archived child threads are
-                included; deleted child threads are not. {copy.impact} Continue
-                only if this managed work should no longer depend on the
-                manager.
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                disabled={pending}
-                onClick={() => onOpenChange(false)}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="button"
-                variant="destructive"
-                disabled={pending}
-                onClick={() => {
-                  onConfirm(target);
-                }}
-              >
-                {copy.confirmLabel}
-              </Button>
-            </DialogFooter>
-          </>
+        {target ? (
+          <ThreadManagerChildThreadsConfirmationDialogContent
+            target={target}
+            pending={pending}
+            onOpenChange={onOpenChange}
+            onConfirm={onConfirm}
+          />
         ) : null}
       </DialogContent>
     </Dialog>
+  );
+}
+
+export interface ThreadManagerChildThreadsConfirmationDialogContentProps {
+  target: ThreadManagerChildThreadsDialogTarget;
+  pending: boolean;
+  onOpenChange: (open: boolean) => void;
+  onConfirm: (target: ThreadManagerChildThreadsDialogTarget) => void;
+}
+
+export function ThreadManagerChildThreadsConfirmationDialogContent({
+  target,
+  pending,
+  onOpenChange,
+  onConfirm,
+}: ThreadManagerChildThreadsConfirmationDialogContentProps) {
+  const copy = getDialogCopy(target.action);
+  const childCountLabel = formatNonDeletedAssignedChildThreadCount(
+    target.nonDeletedAssignedChildCount,
+  );
+
+  return (
+    <>
+      <DialogHeader>
+        <DialogTitle>{copy.title}</DialogTitle>
+        <DialogDescription>
+          This manager has {childCountLabel}. Archived child threads are
+          included; deleted child threads are not. {copy.impact} Continue only
+          if this managed work should no longer depend on the manager.
+        </DialogDescription>
+      </DialogHeader>
+      <DialogFooter>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={pending}
+          onClick={() => onOpenChange(false)}
+        >
+          Cancel
+        </Button>
+        <Button
+          type="button"
+          variant="destructive"
+          disabled={pending}
+          onClick={() => onConfirm(target)}
+        >
+          {copy.confirmLabel}
+        </Button>
+      </DialogFooter>
+    </>
   );
 }

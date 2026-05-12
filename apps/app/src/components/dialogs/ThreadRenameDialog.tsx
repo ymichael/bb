@@ -1,3 +1,4 @@
+import type { ThreadType } from "@bb/domain";
 import { useId, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui";
 import {
@@ -9,30 +10,32 @@ import {
   DialogTitle,
 } from "@/components/ui";
 import { Input } from "@/components/ui";
+import { threadTypeLabel } from "@/lib/thread-title";
 
-export interface HostRenameDialogTarget {
+export interface ThreadRenameDialogTarget {
   id: string;
-  currentName: string;
+  currentTitle: string;
+  threadType?: ThreadType;
 }
 
-interface HostRenameDialogProps {
-  target: HostRenameDialogTarget | null;
-  pending: boolean;
+interface ThreadRenameDialogProps {
+  target: ThreadRenameDialogTarget | null;
+  pending?: boolean;
   onOpenChange: (open: boolean) => void;
-  onRename: (hostId: string, name: string) => void;
+  onRename: (threadId: string, title: string) => void;
 }
 
-export function HostRenameDialog({
+export function ThreadRenameDialog({
   target,
-  pending,
+  pending = false,
   onOpenChange,
   onRename,
-}: HostRenameDialogProps) {
+}: ThreadRenameDialogProps) {
   return (
     <Dialog open={target !== null} onOpenChange={onOpenChange}>
       <DialogContent>
         {target ? (
-          <HostRenameDialogContent
+          <ThreadRenameDialogContent
             key={target.id}
             target={target}
             pending={pending}
@@ -44,17 +47,19 @@ export function HostRenameDialog({
   );
 }
 
-function HostRenameDialogContent({
+export interface ThreadRenameDialogContentProps {
+  target: ThreadRenameDialogTarget;
+  pending: boolean;
+  onRename: (threadId: string, title: string) => void;
+}
+
+export function ThreadRenameDialogContent({
   target,
   pending,
   onRename,
-}: {
-  target: HostRenameDialogTarget;
-  pending: boolean;
-  onRename: (hostId: string, name: string) => void;
-}) {
+}: ThreadRenameDialogContentProps) {
   const inputId = useId();
-  const [nextName, setNextName] = useState(target.currentName);
+  const [nextTitle, setNextTitle] = useState(target.currentTitle);
   const [validationMessage, setValidationMessage] = useState<string | null>(
     null,
   );
@@ -63,31 +68,40 @@ function HostRenameDialogContent({
     event.preventDefault();
     if (pending) return;
 
-    const trimmedName = nextName.trim();
-    if (!trimmedName) {
-      setValidationMessage("Host name cannot be empty.");
+    const trimmedTitle = nextTitle.trim();
+    if (!trimmedTitle) {
+      setValidationMessage(
+        `${label.charAt(0).toUpperCase() + label.slice(1)} name cannot be empty.`,
+      );
       return;
     }
 
-    onRename(target.id, trimmedName);
+    onRename(target.id, trimmedTitle);
   };
+
+  const label = threadTypeLabel(target.threadType ?? "standard");
 
   return (
     <>
       <DialogHeader>
-        <DialogTitle>Rename host</DialogTitle>
-        <DialogDescription>Choose a new name for this host.</DialogDescription>
+        <DialogTitle>Rename {label}</DialogTitle>
+        <DialogDescription>
+          Choose a new name for this {label}.
+        </DialogDescription>
       </DialogHeader>
       <form className="space-y-4" onSubmit={handleSubmit}>
         <div className="space-y-2">
           <Input
             id={inputId}
-            aria-label="Host name"
-            value={nextName}
+            aria-label={`${label.charAt(0).toUpperCase() + label.slice(1)} name`}
+            value={nextTitle}
             autoFocus
+            autoCapitalize="sentences"
+            autoCorrect="off"
+            spellCheck={false}
             disabled={pending}
             onChange={(event) => {
-              setNextName(event.target.value);
+              setNextTitle(event.target.value);
               if (validationMessage) {
                 setValidationMessage(null);
               }
@@ -99,7 +113,7 @@ function HostRenameDialogContent({
         </div>
         <DialogFooter>
           <Button type="submit" disabled={pending}>
-            Rename host
+            Rename {label}
           </Button>
         </DialogFooter>
       </form>

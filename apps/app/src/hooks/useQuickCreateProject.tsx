@@ -15,7 +15,7 @@ import {
 import type {
   ProjectPathDialogSubmitHandler,
   ProjectPathDialogTarget,
-} from "@/components/project/ProjectPathDialog";
+} from "@/components/dialogs/ProjectPathDialog";
 
 export interface QuickCreateProjectDialogState {
   isOpen: boolean;

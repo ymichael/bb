@@ -28,11 +28,11 @@ import {
 import {
   HostDeleteDialog,
   type HostDeleteDialogTarget,
-} from "@/components/settings/HostDeleteDialog";
+} from "@/components/dialogs/HostDeleteDialog";
 import {
   HostRenameDialog,
   type HostRenameDialogTarget,
-} from "@/components/settings/HostRenameDialog";
+} from "@/components/dialogs/HostRenameDialog";
 import {
   setPreferredTheme,
   useThemePreference,

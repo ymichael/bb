@@ -29,7 +29,7 @@ interface UpdateLocalProjectSourceRequest {
   path: string;
 }
 
-interface HireProjectManagerRequest {
+export interface HireProjectManagerRequest {
   projectId: string;
   name?: string;
   providerId?: string;

@@ -24,8 +24,8 @@ import {
   useThreadPendingInteractions,
   useThreads,
 } from "../../hooks/queries/thread-queries";
-import { ThreadGitActionDialog } from "@/components/thread/dialogs/ThreadGitActionDialog";
-import { ThreadEnvironmentPromotionDialog } from "@/components/thread/dialogs/ThreadEnvironmentPromotionDialog";
+import { ThreadGitActionDialog } from "@/components/dialogs/ThreadGitActionDialog";
+import { ThreadEnvironmentPromotionDialog } from "@/components/dialogs/ThreadEnvironmentPromotionDialog";
 import { PageShell } from "@/components/ui";
 import { HEADER_ICON_BUTTON_CLASS } from "@/components/layout/AppPageHeader";
 import { ThreadActionsMenu } from "@/components/thread/ThreadActionsMenu";

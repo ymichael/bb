@@ -16,8 +16,8 @@ import { useAppRoute } from "@/hooks/useAppRoute";
 import { useDialogState } from "@/hooks/useDialogState";
 import { getThreadDisplayTitle } from "@/lib/thread-title";
 import { cn } from "@/lib/utils";
-import { HireManagerModal } from "@/components/HireManagerModal";
-import { ProjectPathDialog } from "@/components/project/ProjectPathDialog";
+import { HireManagerDialog } from "@/components/dialogs/HireManagerDialog";
+import { ProjectPathDialog } from "@/components/dialogs/ProjectPathDialog";
 import { ProjectActionsMenu } from "@/components/project/ProjectActionsMenu";
 import { ProjectActionsProvider } from "@/components/project/ProjectActionsProvider";
 import { ThreadActionsProvider } from "@/components/thread/ThreadActionsProvider";
@@ -240,7 +240,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   const navigate = useNavigate();
   const { data: projects, isLoading: projectsLoading } = useProjects();
   const hireProjectManager = useHireProjectManager();
-  const hireManagerModal = useDialogState<string>();
+  const hireManagerDialog = useDialogState<string>();
   const [sidebarWidth, setSidebarWidth] = useAtom(sidebarWidthAtom);
   const [isSidebarResizing, setIsSidebarResizing] = useState(false);
   const providerRef = useRef<HTMLDivElement>(null);
@@ -433,11 +433,11 @@ export function AppLayout({ children }: AppLayoutProps) {
                   projectId={projectId}
                   project={project}
                   isManagerActionPending={
-                    hireProjectManager.isPending || hireManagerModal.isOpen
+                    hireProjectManager.isPending || hireManagerDialog.isOpen
                   }
                   onOpenManager={() => {
-                    if (!projectId || hireManagerModal.isOpen) return;
-                    hireManagerModal.onOpen(projectId);
+                    if (!projectId || hireManagerDialog.isOpen) return;
+                    hireManagerDialog.onOpen(projectId);
                   }}
                   meta={meta}
                 />
@@ -455,11 +455,11 @@ export function AppLayout({ children }: AppLayoutProps) {
           onOpenChange={quickCreateProject.projectPathDialog.onOpenChange}
           onSubmit={quickCreateProject.submitProjectPath}
         />
-        {hireManagerModal.target ? (
-          <HireManagerModal
-            projectId={hireManagerModal.target}
+        {hireManagerDialog.target ? (
+          <HireManagerDialog
+            projectId={hireManagerDialog.target}
             open
-            onClose={hireManagerModal.onClose}
+            onClose={hireManagerDialog.onClose}
             onHired={(thread: Thread) => {
               navigate(`/projects/${thread.projectId}/threads/${thread.id}`);
             }}

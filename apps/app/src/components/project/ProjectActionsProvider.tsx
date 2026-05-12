@@ -18,15 +18,15 @@ import {
   useLocalPathPicker,
   type LocalPathSubmitParams,
 } from "@/hooks/useLocalPathPicker";
-import { ProjectPathDialog } from "@/components/project/ProjectPathDialog";
+import { ProjectPathDialog } from "@/components/dialogs/ProjectPathDialog";
 import {
   ProjectDeleteDialog,
   type ProjectDeleteDialogTarget,
-} from "@/components/project/ProjectDeleteDialog";
+} from "@/components/dialogs/ProjectDeleteDialog";
 import {
   ProjectRenameDialog,
   type ProjectRenameDialogTarget,
-} from "@/components/project/ProjectRenameDialog";
+} from "@/components/dialogs/ProjectRenameDialog";
 import { collapsedProjectIdsAtom } from "@/components/sidebar/sidebarCollapsedAtoms";
 
 export interface ProjectActionsContextValue {

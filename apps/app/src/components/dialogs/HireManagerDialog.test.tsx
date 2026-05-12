@@ -29,7 +29,7 @@ import {
   type FetchRoute,
 } from "@/test/http-test-utils";
 import { createTestSystemProvider } from "@/test/system-provider-test-utils";
-import { HireManagerModal } from "./HireManagerModal";
+import { HireManagerDialog } from "./HireManagerDialog";
 
 vi.mock("partysocket/ws", async () => {
   const { FakeReconnectingWebSocket } =
@@ -296,14 +296,14 @@ function installHireManagerRoutes(args: InstallHireManagerRoutesArgs = {}) {
   };
 }
 
-async function renderOpenHireManagerModal(args: {
+async function renderOpenHireManagerDialog(args: {
   onClose?: () => void;
   onHired?: (thread: Thread) => void;
   wrapper: ({ children }: { children: ReactNode }) => JSX.Element;
 }) {
   await act(async () => {
     render(
-      <HireManagerModal
+      <HireManagerDialog
         projectId="proj-1"
         open
         onClose={args.onClose ?? (() => {})}
@@ -325,14 +325,14 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("HireManagerModal", () => {
+describe("HireManagerDialog", () => {
   it("shows an empty provider state after providers load with no entries", async () => {
     installHireManagerRoutes({
       systemProviders: [],
     });
     const { wrapper } = createSuspenseWrapper();
 
-    await renderOpenHireManagerModal({
+    await renderOpenHireManagerDialog({
       wrapper,
     });
 
@@ -358,7 +358,7 @@ describe("HireManagerModal", () => {
     const { queryClient, wrapper } = createSuspenseWrapper();
     const onHired = vi.fn();
 
-    await renderOpenHireManagerModal({
+    await renderOpenHireManagerDialog({
       onHired,
       wrapper,
     });
@@ -421,7 +421,7 @@ describe("HireManagerModal", () => {
     });
     const { queryClient, wrapper } = createSuspenseWrapper();
 
-    await renderOpenHireManagerModal({
+    await renderOpenHireManagerDialog({
       wrapper,
     });
 
@@ -489,7 +489,7 @@ describe("HireManagerModal", () => {
       });
     const { queryClient, wrapper } = createSuspenseWrapper();
 
-    await renderOpenHireManagerModal({
+    await renderOpenHireManagerDialog({
       wrapper,
     });
 
@@ -558,7 +558,7 @@ describe("HireManagerModal", () => {
     });
     const { queryClient, wrapper } = createSuspenseWrapper();
 
-    await renderOpenHireManagerModal({
+    await renderOpenHireManagerDialog({
       wrapper,
     });
 

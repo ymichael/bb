@@ -9,7 +9,7 @@ import type {
   EnvironmentPromotionUnavailableReason,
 } from "@bb/server-contract";
 import { PROMOTION_UNAVAILABLE_COPY } from "@/lib/promotion-copy";
-import type { ThreadEnvironmentPromotionDialogTarget } from "@/components/thread/dialogs/ThreadEnvironmentPromotionDialog";
+import type { ThreadEnvironmentPromotionDialogTarget } from "@/components/dialogs/ThreadEnvironmentPromotionDialog";
 
 export type ThreadEnvironmentPromotionHeaderAction =
   | { kind: "hard-disabled"; label: string; tooltip: string }
