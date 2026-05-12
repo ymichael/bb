@@ -645,6 +645,9 @@ export function queueArchivedThreadProviderArchiveCommand(
   if (!environment) {
     return false;
   }
+  if (environment.status !== "ready") {
+    return false;
+  }
 
   return queueThreadArchiveCommand(deps, {
     environment: {

@@ -320,6 +320,53 @@ describe("public thread archive delete cleanup routes", () => {
     }
   });
 
+  it("archives without Codex archive forwarding when the environment is already destroyed", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        managed: true,
+        projectId: project.id,
+        status: "destroyed",
+        workspaceProvisionType: "managed-worktree",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "idle",
+      });
+      seedThreadRuntimeState(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-destroyed-env-archive",
+      });
+
+      const response = await harness.app.request(
+        `/api/v1/threads/${thread.id}/archive`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            force: false,
+            managerChildThreadsConfirmed: false,
+          }),
+        },
+      );
+
+      expect(response.status).toBe(200);
+      expect(getThread(harness.db, thread.id)?.archivedAt).toBeTypeOf("number");
+      expect(
+        listQueuedThreadCommands(harness, "thread.archive", thread.id),
+      ).toEqual([]);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   for (const existingCommandState of [
     "pending",
     "fetched",

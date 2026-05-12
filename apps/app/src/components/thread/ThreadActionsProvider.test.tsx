@@ -275,6 +275,36 @@ describe("ThreadActionsProvider", () => {
     expect(api.archiveThread).not.toHaveBeenCalled();
   });
 
+  it("archives without workspace preflight when a managed environment is already destroyed", async () => {
+    const thread = makeThread();
+    vi.mocked(api.getEnvironment).mockResolvedValue(
+      makeEnvironment({ managed: true, status: "destroyed" }),
+    );
+    vi.mocked(api.archiveThread).mockResolvedValue(undefined);
+
+    let actions: ReturnType<typeof useThreadActions> | null = null;
+    renderWithProvider(
+      <HookProbe
+        onReady={(a) => {
+          actions = a;
+        }}
+      />,
+    );
+
+    act(() => {
+      actions!.toggleArchive(thread);
+    });
+
+    await waitFor(() => {
+      expect(api.archiveThread).toHaveBeenCalledWith(thread.id, {
+        force: false,
+        managerChildThreadsConfirmed: false,
+      });
+    });
+    expect(api.getEnvironmentWorkStatus).not.toHaveBeenCalled();
+    expect(toast.error).not.toHaveBeenCalled();
+  });
+
   it("archives with force when the workspace-warning dialog is confirmed", async () => {
     const thread = makeThread();
     vi.mocked(api.getEnvironment).mockResolvedValue(

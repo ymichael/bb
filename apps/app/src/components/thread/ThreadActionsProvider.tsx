@@ -188,9 +188,15 @@ export function ThreadActionsProvider({
         if (signal.aborted) return null;
 
         let workspaceWarning: ThreadDirtyWorkspaceWarning | null = null;
-        // Workspace cleanup only fires for managed environments; an unmanaged
-        // path will be left intact, so no need to warn (or pay the fetch).
-        if (environment?.managed && thread.environmentId) {
+        // Workspace cleanup only needs a warning when there is a ready managed
+        // workspace to inspect; destroyed/provisioning environments cannot
+        // return workspace status and should not block archive.
+        if (
+          environment?.managed &&
+          environment.status === "ready" &&
+          environment.path !== null &&
+          thread.environmentId
+        ) {
           const workspace = await getEnvironmentWorkStatus(
             thread.environmentId,
             undefined,
