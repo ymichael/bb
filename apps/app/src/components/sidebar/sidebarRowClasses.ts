@@ -3,5 +3,7 @@ export const SIDEBAR_ROW_BASE_CLASS =
 
 export const SIDEBAR_STANDARD_ROW_PADDING_CLASS = "pl-2";
 
+export const SIDEBAR_MANAGER_ROW_PADDING_CLASS = "pl-8";
+
 export const SIDEBAR_ROW_INTERACTIVE_STATE_CLASS =
   "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground";

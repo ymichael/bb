@@ -172,7 +172,6 @@ export function ProjectRow({
               const { managerThread, managedThreads, stats } =
                 managerThreadGroup;
               const managedChildCount = stats.managedChildCount;
-              const managedChildBusyCount = stats.managedChildBusyCount;
               const isManagerCollapsed = collapsedManagerIds.has(
                 managerThread.id,
               );
@@ -188,7 +187,6 @@ export function ProjectRow({
                       kind: "manager",
                       isCollapsed: isManagerCollapsed,
                       managedChildCount,
-                      managedChildBusyCount,
                       onToggleCollapsed: onToggleManagerCollapsed,
                     }}
                   />

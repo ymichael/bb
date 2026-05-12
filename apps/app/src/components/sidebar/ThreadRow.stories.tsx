@@ -40,7 +40,6 @@ function managerOption(
     kind: "manager",
     isCollapsed: false,
     managedChildCount: 0,
-    managedChildBusyCount: 0,
     onToggleCollapsed: noop,
     ...overrides,
   };
@@ -198,7 +197,7 @@ export function Overview() {
       </StoryRow>
       <StoryRow
         label="manager, no children"
-        hint="manager pill, no chevron, no count badge"
+        hint="leading user icon, no chevron"
       >
         <SidebarStage>
           <ThreadRow
@@ -211,7 +210,7 @@ export function Overview() {
       </StoryRow>
       <StoryRow
         label="manager, expanded with child"
-        hint="manager row above its child — chevron rotated, count badge on the trailing edge, child uses the compact row height"
+        hint="manager row above its child — user icon swaps to a rotated chevron on hover, child uses the compact row height"
       >
         <SidebarStage>
           <ThreadRow
@@ -243,22 +242,6 @@ export function Overview() {
             options={managerOption({
               isCollapsed: true,
               managedChildCount: 4,
-            })}
-          />
-        </SidebarStage>
-      </StoryRow>
-      <StoryRow
-        label="manager, busy via children"
-        hint="manager itself is idle but managedChildBusyCount > 0 — chevron shows spinner under hover"
-      >
-        <SidebarStage>
-          <ThreadRow
-            projectId="proj_demo"
-            thread={managerThread}
-            isActive={false}
-            options={managerOption({
-              managedChildCount: 3,
-              managedChildBusyCount: 1,
             })}
           />
         </SidebarStage>

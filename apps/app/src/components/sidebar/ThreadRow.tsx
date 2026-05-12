@@ -1,8 +1,8 @@
 import { memo, useState } from "react";
 import type { ThreadListEntry } from "@bb/domain";
 import { Icon, type IconName } from "@/components/ui/icon.js";
-import { SidebarMenuBadge, SidebarStickyTier } from "@/components/ui/sidebar.js";
-import { StatusPill } from "@/components/ui/status-pill.js";
+import { Pill } from "@/components/ui/pill.js";
+import { SidebarStickyTier } from "@/components/ui/sidebar.js";
 import { NavLink } from "react-router-dom";
 import {
   ThreadActionsContextMenu,
@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
 import {
   SIDEBAR_ROW_BASE_CLASS,
   SIDEBAR_ROW_INTERACTIVE_STATE_CLASS,
+  SIDEBAR_MANAGER_ROW_PADDING_CLASS,
   SIDEBAR_STANDARD_ROW_PADDING_CLASS,
 } from "./sidebarRowClasses";
 
@@ -33,7 +34,6 @@ export type ThreadRowOptions =
       kind: "manager";
       isCollapsed: boolean;
       managedChildCount: number;
-      managedChildBusyCount: number;
       onToggleCollapsed: (threadId: string) => void;
     };
 
@@ -47,7 +47,6 @@ interface ThreadRowProps {
 
 interface ManagerChevronProps {
   isCollapsed: boolean;
-  isBusy: boolean;
   onToggle: () => void;
   threadTitle: string;
 }
@@ -66,7 +65,6 @@ function EmptyLeadingSlot() {
 
 function ManagerChevron({
   isCollapsed,
-  isBusy,
   onToggle,
   threadTitle,
 }: ManagerChevronProps) {
@@ -99,26 +97,53 @@ function ManagerChevron({
           COARSE_POINTER_ICON_SIZE_CLASS,
         )}
       >
-        {isBusy ? (
+        <span
+          data-manager-leading-icon=""
+          className={cn(
+            "absolute inline-flex items-center justify-center opacity-100 transition-opacity duration-150 group-hover/thread-row:opacity-0 group-focus-within/thread-row:opacity-0",
+            COARSE_POINTER_ICON_SIZE_CLASS,
+          )}
+          aria-hidden="true"
+        >
           <Icon
-            name="CircleDashed"
-            className={cn(
-              "absolute animate-spin opacity-100 transition-opacity duration-150 group-hover/thread-row:opacity-0",
-              COARSE_POINTER_ICON_SIZE_CLASS,
-            )}
+            name="UserRound"
+            className={COARSE_POINTER_ICON_SIZE_CLASS}
             aria-hidden="true"
           />
-        ) : null}
-        <Icon
-          name="ChevronRight"
+        </span>
+        <span
+          data-manager-collapse-indicator=""
           className={cn(
-            "absolute opacity-0 transition-all duration-150 group-hover/thread-row:opacity-100",
+            "absolute inline-flex items-center justify-center opacity-0 transition-all duration-150 group-hover/thread-row:opacity-100 group-focus-within/thread-row:opacity-100",
             COARSE_POINTER_ICON_SIZE_CLASS,
             !isCollapsed && "rotate-90",
           )}
-        />
+          aria-hidden="true"
+        >
+          <Icon
+            name="ChevronRight"
+            className={COARSE_POINTER_ICON_SIZE_CLASS}
+            aria-hidden="true"
+          />
+        </span>
       </span>
     </button>
+  );
+}
+
+function ManagerLeadingIcon() {
+  return (
+    <span
+      data-manager-leading-icon=""
+      className={cn(LEADING_SLOT_CLASS, COARSE_POINTER_GLYPH_BOX_CLASS)}
+      aria-hidden="true"
+    >
+      <Icon
+        name="UserRound"
+        className={COARSE_POINTER_ICON_SIZE_CLASS}
+        aria-hidden="true"
+      />
+    </span>
   );
 }
 
@@ -222,16 +247,7 @@ function ThreadTrailingIcon({
   isManager,
 }: ThreadTrailingIconProps) {
   if (isManager) {
-    return (
-      <Icon
-        name="UserRound"
-        className={cn(
-          "text-sidebar-foreground/70",
-          COARSE_POINTER_ICON_SIZE_CLASS,
-        )}
-        aria-label="Manager"
-      />
-    );
+    return null;
   }
 
   return environmentIcon ? (
@@ -271,10 +287,6 @@ function ThreadRowComponent({
   const isManagerCollapsed = managerOptions?.isCollapsed ?? false;
   const managedChildCount = managerOptions?.managedChildCount ?? 0;
   const hasManagedChildren = managedChildCount > 0;
-  const managedChildBusyCount = managerOptions?.managedChildBusyCount ?? 0;
-  const isManagerBusy =
-    isManager &&
-    (threadIsBusy || (isManagerCollapsed && managedChildBusyCount > 0));
   const environmentIcon = getEnvironmentWorkspaceDisplayIconName(
     thread.environmentWorkspaceDisplayKind,
   );
@@ -288,7 +300,11 @@ function ThreadRowComponent({
     isManagedChild
       ? COARSE_POINTER_COMPACT_ROW_HEIGHT_CLASS
       : COARSE_POINTER_ROW_HEIGHT_CLASS,
-    isManagedChild ? "pl-1" : SIDEBAR_STANDARD_ROW_PADDING_CLASS,
+    isManager
+      ? SIDEBAR_MANAGER_ROW_PADDING_CLASS
+      : isManagedChild
+        ? "pl-1"
+        : SIDEBAR_STANDARD_ROW_PADDING_CLASS,
     isActive
       ? "bg-sidebar-border text-sidebar-foreground"
       : SIDEBAR_ROW_INTERACTIVE_STATE_CLASS,
@@ -307,12 +323,13 @@ function ThreadRowComponent({
       {managerOptions && hasManagedChildren ? (
         <ManagerChevron
           isCollapsed={isManagerCollapsed}
-          isBusy={isManagerBusy}
           onToggle={() => {
             managerOptions.onToggleCollapsed(thread.id);
           }}
           threadTitle={threadTitle}
         />
+      ) : isManager ? (
+        <ManagerLeadingIcon />
       ) : isManagedChild ? (
         <EmptyLeadingSlot />
       ) : (
@@ -331,10 +348,10 @@ function ThreadRowComponent({
       ) : null}
       <span className="flex min-w-0 flex-1 items-center gap-1.5">
         <span className="min-w-0 truncate">{threadTitle}</span>
-        {isManager ? (
-          <StatusPill variant="outline" className="shrink-0">
-            manager
-          </StatusPill>
+        {isPromoted ? (
+          <Pill variant="emphasis" className="shrink-0">
+            promoted
+          </Pill>
         ) : null}
       </span>
       <span
@@ -343,20 +360,6 @@ function ThreadRowComponent({
           COARSE_POINTER_COMPACT_ROW_HEIGHT_CLASS,
         )}
       >
-        {isManager && managedChildCount > 0 ? (
-          <span
-            className={cn(
-              "inline-flex shrink-0 items-center justify-center",
-              COARSE_POINTER_ROW_ACTION_SIZE_CLASS,
-            )}
-            aria-label={`${managedChildCount} managed thread${managedChildCount === 1 ? "" : "s"}`}
-            title={`${managedChildCount} managed thread${managedChildCount === 1 ? "" : "s"}`}
-          >
-            <SidebarMenuBadge className="rounded-full bg-sidebar-foreground/10 px-1.5 text-sidebar-foreground/80">
-              {managedChildCount}
-            </SidebarMenuBadge>
-          </span>
-        ) : null}
         <span
           className={cn(
             "relative shrink-0",
