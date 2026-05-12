@@ -158,6 +158,29 @@ describe("SdkSession", () => {
     );
   });
 
+  it("forwards an explicit Claude Code executable path to the SDK", () => {
+    const onMessage = vi.fn();
+    const onDone = vi.fn();
+    const session = new SdkSession(
+      {
+        ...defaultOptions,
+        pathToClaudeCodeExecutable: "/usr/local/bin/claude",
+      },
+      onMessage,
+      onDone,
+    );
+
+    session.start();
+
+    expect(queryMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        options: expect.objectContaining({
+          pathToClaudeCodeExecutable: "/usr/local/bin/claude",
+        }),
+      }),
+    );
+  });
+
   it("passes non-bypass permission modes through without the dangerous skip flag", () => {
     const onMessage = vi.fn();
     const onDone = vi.fn();

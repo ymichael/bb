@@ -12,6 +12,7 @@ import {
   type BashSpawnHook,
   type ContextUsage,
   type CreateAgentSessionOptions,
+  type PromptOptions,
   type SessionStats,
   type ToolDefinition,
 } from "@mariozechner/pi-coding-agent";
@@ -37,8 +38,11 @@ type AppendSystemPromptOverride = (base: string[]) => string[];
 
 interface RunPromptArgs {
   images?: ImageContent[];
+  streamingBehavior: PiStreamingBehavior;
   text: string;
 }
+
+type PiStreamingBehavior = NonNullable<PromptOptions["streamingBehavior"]>;
 
 const PI_TRANSIENT_AUTH_RETRY_DELAY_MS = 250;
 // Pi auth storage can briefly miss credentials during concurrent session startup;
@@ -232,6 +236,7 @@ export class PiSdkSession {
     try {
       await this.runPromptWithTransientAuthRetry({
         images,
+        streamingBehavior: "followUp",
         text,
       });
     } catch (error) {
@@ -245,6 +250,7 @@ export class PiSdkSession {
     try {
       await this.runPromptWithTransientAuthRetry({
         images,
+        streamingBehavior: "steer",
         text,
       });
     } catch (error) {
@@ -357,7 +363,7 @@ export class PiSdkSession {
     this.ensureCustomToolsActive();
     if (this.session.isStreaming) {
       await this.session.prompt(args.text, {
-        streamingBehavior: "steer",
+        streamingBehavior: args.streamingBehavior,
         ...(args.images && args.images.length > 0
           ? { images: args.images }
           : {}),

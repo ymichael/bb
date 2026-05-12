@@ -1,4 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   CanUseTool,
   SDKMessage,
@@ -98,6 +101,13 @@ interface SuccessResultMessageArgs {
   result: string;
   sessionId: string;
 }
+
+interface TempClaudeExecutable {
+  binDir: string;
+  executablePath: string;
+}
+
+const tempDirs: string[] = [];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -331,6 +341,15 @@ function createSuccessResultMessage(args: SuccessResultMessageArgs): SDKMessage 
   };
 }
 
+function createTempClaudeExecutable(): TempClaudeExecutable {
+  const binDir = mkdtempSync(join(tmpdir(), "bb-claude-path-"));
+  tempDirs.push(binDir);
+  const executablePath = join(binDir, "claude");
+  writeFileSync(executablePath, "#!/bin/sh\nexit 0\n");
+  chmodSync(executablePath, 0o755);
+  return { binDir, executablePath };
+}
+
 describe("bridge", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -369,6 +388,12 @@ describe("bridge", () => {
       }),
       close: vi.fn(),
     });
+  });
+
+  afterEach(() => {
+    for (const tempDir of tempDirs.splice(0)) {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
   });
 
   it("keeps manager sessions on a plain string system prompt", () => {
@@ -428,6 +453,82 @@ describe("bridge", () => {
     );
 
     expect(options.permissionMode).toBe("dontAsk");
+  });
+
+  it("uses a Claude executable discovered from PATH for SDK sessions", () => {
+    const { binDir, executablePath } = createTempClaudeExecutable();
+    const options = buildSessionOptions(
+      {
+        baseInstructions: "You are a coder.",
+        cwd: "/tmp/worktree",
+        instructionMode: "append",
+        permissionEscalation: "ask",
+        permissionMode: "default",
+      },
+      { PATH: binDir },
+    );
+
+    expect(options.pathToClaudeCodeExecutable).toBe(executablePath);
+  });
+
+  it("lets an explicit Claude executable override PATH discovery", () => {
+    const { executablePath } = createTempClaudeExecutable();
+    const options = buildSessionOptions(
+      {
+        baseInstructions: "You are a coder.",
+        cwd: "/tmp/worktree",
+        instructionMode: "append",
+        permissionEscalation: "ask",
+        permissionMode: "default",
+      },
+      {
+        BB_CLAUDE_CODE_EXECUTABLE: executablePath,
+        PATH: "/usr/bin",
+      },
+    );
+
+    expect(options.pathToClaudeCodeExecutable).toBe(executablePath);
+  });
+
+  it("trims explicit Claude executable overrides before forwarding", () => {
+    const { executablePath } = createTempClaudeExecutable();
+    const options = buildSessionOptions(
+      {
+        baseInstructions: "You are a coder.",
+        cwd: "/tmp/worktree",
+        instructionMode: "append",
+        permissionEscalation: "ask",
+        permissionMode: "default",
+      },
+      {
+        BB_CLAUDE_CODE_EXECUTABLE: `  ${executablePath}  `,
+        PATH: "/usr/bin",
+      },
+    );
+
+    expect(options.pathToClaudeCodeExecutable).toBe(executablePath);
+  });
+
+  it("rejects explicit Claude executable overrides that are not executable", () => {
+    const binDir = mkdtempSync(join(tmpdir(), "bb-claude-path-"));
+    tempDirs.push(binDir);
+    const executablePath = join(binDir, "claude");
+
+    expect(() =>
+      buildSessionOptions(
+        {
+          baseInstructions: "You are a coder.",
+          cwd: "/tmp/worktree",
+          instructionMode: "append",
+          permissionEscalation: "ask",
+          permissionMode: "default",
+        },
+        {
+          BB_CLAUDE_CODE_EXECUTABLE: executablePath,
+          PATH: "/usr/bin",
+        },
+      ),
+    ).toThrow("BB_CLAUDE_CODE_EXECUTABLE must point to an executable");
   });
 
   it("configures workspace-write sessions with Claude sandbox settings", () => {

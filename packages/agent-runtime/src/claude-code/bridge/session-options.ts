@@ -1,3 +1,5 @@
+import { accessSync, constants } from "node:fs";
+import { delimiter, join } from "node:path";
 import type { Options } from "@anthropic-ai/claude-agent-sdk";
 import type {
   InstructionMode,
@@ -19,6 +21,15 @@ export interface BuildSessionOptionsArgs {
   reasoningLevel?: ReasoningLevel;
 }
 
+interface ResolveExecutableOnPathArgs {
+  executableName: string;
+  pathEnv: string | undefined;
+}
+
+interface ResolveClaudeCodeExecutableArgs {
+  env: NodeJS.ProcessEnv;
+}
+
 const READONLY_ALLOWED_TOOLS = new Set([
   // Agent is a read/delegation tool here; child Bash calls still flow through
   // this same readonly session hook policy before execution.
@@ -34,6 +45,7 @@ const SUMMARIZED_ADAPTIVE_THINKING = {
   type: "adaptive",
   display: "summarized",
 } satisfies Exclude<Options["thinking"], undefined>;
+const CLAUDE_CODE_EXECUTABLE_ENV = "BB_CLAUDE_CODE_EXECUTABLE";
 
 export function buildReadonlyDenialMessage(): string {
   return "bb readonly mode allows reading and analysis only. Continue with a read-only answer; do not modify files, run mutating shell commands, use network, or use mutating tools.";
@@ -120,6 +132,53 @@ function buildWorkspaceWriteSandbox(
   };
 }
 
+function resolveExecutableOnPath(
+  args: ResolveExecutableOnPathArgs,
+): string | null {
+  if (!args.pathEnv) {
+    return null;
+  }
+
+  for (const searchDir of args.pathEnv.split(delimiter)) {
+    if (!searchDir) {
+      continue;
+    }
+    const candidate = join(searchDir, args.executableName);
+    try {
+      accessSync(candidate, constants.X_OK);
+      return candidate;
+    } catch {
+      continue;
+    }
+  }
+
+  return null;
+}
+
+function resolveClaudeCodeExecutable(
+  args: ResolveClaudeCodeExecutableArgs,
+): string | null {
+  const explicitPath = args.env[CLAUDE_CODE_EXECUTABLE_ENV];
+  const trimmedExplicitPath = explicitPath?.trim();
+  if (trimmedExplicitPath && trimmedExplicitPath.length > 0) {
+    try {
+      accessSync(trimmedExplicitPath, constants.X_OK);
+      return trimmedExplicitPath;
+    } catch {
+      throw new Error(
+        `${CLAUDE_CODE_EXECUTABLE_ENV} must point to an executable Claude CLI path: ${trimmedExplicitPath}`,
+      );
+    }
+  }
+
+  // Bundled bridge files cannot rely on the SDK's package-relative CLI
+  // resolution, so pass the host's Claude CLI path explicitly when available.
+  return resolveExecutableOnPath({
+    executableName: "claude",
+    pathEnv: args.env.PATH,
+  });
+}
+
 export function buildSessionOptions(
   params: BuildSessionOptionsArgs,
   env: NodeJS.ProcessEnv,
@@ -141,6 +200,7 @@ export function buildSessionOptions(
     params.permissionMode === "acceptEdits"
       ? (params.additionalWorkspaceWriteRoots ?? [])
       : [];
+  const pathToClaudeCodeExecutable = resolveClaudeCodeExecutable({ env });
 
   return {
     cwd: params.cwd,
@@ -151,6 +211,9 @@ export function buildSessionOptions(
     ...(params.reasoningLevel ? { effort: params.reasoningLevel } : {}),
     ...(params.reasoningLevel
       ? { thinking: SUMMARIZED_ADAPTIVE_THINKING }
+      : {}),
+    ...(pathToClaudeCodeExecutable
+      ? { pathToClaudeCodeExecutable }
       : {}),
     ...(sandbox ? { sandbox } : {}),
     ...(hooks ? { hooks } : {}),

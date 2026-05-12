@@ -46,12 +46,14 @@ const {
   mockInMemory,
   mockSettingsInMemory,
   mockCreateAgentSession,
+  mockSessionState,
   mockAbort,
   mockDispose,
   mockPrompt,
   mockGetModel,
 } = vi.hoisted(() => {
   const mockSubscribe = vi.fn(() => () => {});
+  const mockSessionState = { isStreaming: false };
   const mockPrompt = vi.fn();
   const mockAbort = vi.fn(async () => {});
   const mockDispose = vi.fn();
@@ -87,7 +89,9 @@ const {
       getContextUsage: mockGetContextUsage,
       getActiveToolNames: mockGetActiveToolNames,
       setActiveToolsByName: mockSetActiveToolsByName,
-      isStreaming: false,
+      get isStreaming() {
+        return mockSessionState.isStreaming;
+      },
     },
   }));
   const mockGetModel = vi.fn((provider: string, modelId: string) => ({
@@ -104,6 +108,7 @@ const {
     mockInMemory,
     mockSettingsInMemory,
     mockCreateAgentSession,
+    mockSessionState,
     mockAbort,
     mockDispose,
     mockPrompt,
@@ -139,6 +144,7 @@ function rejectPromptWithTransientAuthError(count: number, error: Error): void {
 describe("PiSdkSession", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockSessionState.isStreaming = false;
     mockGetActiveToolNames.mockReturnValue([]);
     mockAbort.mockResolvedValue(undefined);
   });
@@ -347,6 +353,41 @@ describe("PiSdkSession", () => {
       "bash",
       "message_user",
     ]);
+  });
+
+  it("queues normal prompts as follow-ups while the SDK is still streaming", async () => {
+    mockSessionState.isStreaming = true;
+    const session = new PiSdkSession({ cwd: "/tmp/project" }, vi.fn(), vi.fn());
+
+    await session.start();
+    await session.prompt("queued follow-up");
+
+    expect(mockPrompt).toHaveBeenCalledWith("queued follow-up", {
+      streamingBehavior: "followUp",
+    });
+  });
+
+  it("queues explicit steering as steer while the SDK is still streaming", async () => {
+    mockSessionState.isStreaming = true;
+    const session = new PiSdkSession({ cwd: "/tmp/project" }, vi.fn(), vi.fn());
+
+    await session.start();
+    await session.steer("interrupting steer");
+
+    expect(mockPrompt).toHaveBeenCalledWith("interrupting steer", {
+      streamingBehavior: "steer",
+    });
+  });
+
+  it("omits streaming behavior while the SDK is idle", async () => {
+    const session = new PiSdkSession({ cwd: "/tmp/project" }, vi.fn(), vi.fn());
+
+    await session.start();
+    await session.prompt("idle follow-up");
+    await session.steer("idle steer");
+
+    expect(mockPrompt).toHaveBeenNthCalledWith(1, "idle follow-up", {});
+    expect(mockPrompt).toHaveBeenNthCalledWith(2, "idle steer", {});
   });
 
   it("allows eight transient Pi auth storage misses before succeeding", async () => {

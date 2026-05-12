@@ -111,6 +111,8 @@ grep -E "(✓|×|Test Files|Tests )" /tmp/integ-out.txt
 
 **Tests run concurrently within each scenario file.** All 3 provider variants in a file run in parallel via `describe.concurrent`. Scenario files run serially because Pi and other real providers share local auth state and external provider limits; running every scenario file at once has caused real-provider flakes where a turn completes without the expected tool execution.
 
+The root `test:integration --force` run also schedules `@bb/integration-tests#test:integration` after `@bb/agent-runtime#test:integration`. Those two package-level suites both exercise real providers and can share local subscription auth/session state, so only the cross-package real-provider suites are ordered. Concurrency inside each suite remains covered, including multi-provider runtime tests and `real/provider-concurrency.test.ts`. Run `@bb/qa#test:e2b-smoke` separately when it uses the same local cloud-auth fixture; it is an explicit sandbox smoke command, not part of the root integration task.
+
 **When a test hangs**, the provider is likely not responding to a JSON-RPC request. Common causes:
 
 - Bridge Zod schema rejects the request silently (check that `buildCommand` output matches what the bridge expects)

@@ -78,8 +78,8 @@ function buildCodexSearchPrompt(): string {
 
 function buildCodexOpenPagePrompt(): string {
   return (
-    `Use the native open-page web tool to open exactly ${codexOpenPageUrl}. ` +
-    "Do not answer from memory. Do not use shell commands or web search. " +
+    `Use the native web tool to open exactly ${codexOpenPageUrl}. ` +
+    "Do not answer from memory. Do not use shell commands. " +
     'After the open-page tool completes, reply with exactly "DONE".'
   );
 }
@@ -172,6 +172,7 @@ describe("web normalization integration", () => {
       });
 
       const threadEvents = getEventsForThread(ctx.events, threadId);
+      const webSearchEvents = threadEvents.filter(isWebSearchLifecycleEvent);
       const completedWebFetch = threadEvents.find(
         (event): event is WebFetchLifecycleEvent =>
           isWebFetchLifecycleEvent(event) &&
@@ -189,6 +190,10 @@ describe("web normalization integration", () => {
         completedWebFetch,
         describeRuntimeDiagnostics({ ctx, threadId }),
       ).toBeDefined();
+      expect(
+        webSearchEvents,
+        describeRuntimeDiagnostics({ ctx, threadId }),
+      ).toEqual([]);
       expect(providerUnhandledEvents).toEqual([]);
     } finally {
       await ctx.runtime.shutdown();

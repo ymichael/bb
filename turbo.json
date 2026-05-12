@@ -236,7 +236,7 @@
       "dependsOn": []
     },
     "@bb/integration-tests#test:integration": {
-      "dependsOn": [],
+      "dependsOn": ["@bb/agent-runtime#test:integration"],
       "inputs": [
         "$TURBO_DEFAULT$",
         "$TURBO_ROOT$/apps/server/package.json",
