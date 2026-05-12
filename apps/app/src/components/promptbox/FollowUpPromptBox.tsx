@@ -1,4 +1,10 @@
-import { useRef, type ComponentProps, type ReactNode } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ComponentProps,
+  type ReactNode,
+} from "react";
 import { type ThreadRuntimeDisplayStatus } from "@bb/domain";
 import {
   PromptBoxInternal,
@@ -17,6 +23,7 @@ import {
 import { useBottomAnchoredScroll } from "@/components/ui";
 import { ThreadTimelineScrollToBottomButton } from "@/views/thread-detail/ThreadTimelineScrollToBottomButton";
 import { ThreadContextWindowIndicator } from "@/components/thread/timeline";
+import { THREAD_PROMPT_CONTEXT_BANNER_ROW_HEIGHT } from "@/components/promptbox/banner/ThreadPromptContextBanner";
 
 type PromptBoxWithScrollAnchorProps = ComponentProps<typeof PromptBoxInternal>;
 
@@ -31,6 +38,17 @@ function PromptBoxWithScrollAnchor({
   };
   return <PromptBoxInternal {...promptBoxProps} onSubmit={handleSubmit} />;
 }
+
+// Elastic compensation: when nothing is stacked above the textarea, the
+// textarea defaults to FOLLOW_UP_PROMPT_BOX_ELASTIC_TARGET_HEIGHT so the
+// prompt area is already at "with-banner" height on first paint. As the stack
+// (context banner + queued messages) grows, the textarea min-height shrinks
+// by the same amount — total prompt-area height stays constant and the
+// thread timeline does not shift when the context banner mounts.
+const FOLLOW_UP_PROMPT_BOX_DEFAULT_MIN_HEIGHT = 68;
+const FOLLOW_UP_PROMPT_BOX_ELASTIC_TARGET_HEIGHT =
+  FOLLOW_UP_PROMPT_BOX_DEFAULT_MIN_HEIGHT +
+  THREAD_PROMPT_CONTEXT_BANNER_ROW_HEIGHT;
 
 
 /**
@@ -127,6 +145,23 @@ export function FollowUpPromptBox({
   const canStopRuntime = onStopRuntime !== undefined;
   const promptBoxRef = useRef<PromptBoxHandle>(null);
   const voice = usePromptVoice(promptBoxRef);
+  const stackRef = useRef<HTMLDivElement>(null);
+  const [stackHeight, setStackHeight] = useState(0);
+  useEffect(() => {
+    const element = stackRef.current;
+    if (!element || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+      setStackHeight(entry.contentRect.height);
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+  const elasticTextareaMinHeight = Math.max(
+    FOLLOW_UP_PROMPT_BOX_DEFAULT_MIN_HEIGHT,
+    FOLLOW_UP_PROMPT_BOX_ELASTIC_TARGET_HEIGHT - stackHeight,
+  );
 
   return (
     <>
@@ -134,10 +169,13 @@ export function FollowUpPromptBox({
         active={composer.threadRuntimeDisplayStatus === "active"}
       />
       <div className="space-y-2">
-        {stack}
+        <div ref={stackRef} className="space-y-2">
+          {stack}
+        </div>
         <PromptBoxWithScrollAnchor
           promptBoxRef={promptBoxRef}
           voice={voice}
+          minHeight={elasticTextareaMinHeight}
           value={composer.message}
           onChange={composer.onChangeMessage}
           onSubmit={composer.onSubmit}

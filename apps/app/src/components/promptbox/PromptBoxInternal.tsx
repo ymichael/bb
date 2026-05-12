@@ -145,6 +145,13 @@ export interface PromptBoxInternalProps {
   footerStart?: ReactNode;
   autoFocus?: boolean;
   submission?: PromptBoxSubmissionConfig;
+  /**
+   * Minimum textarea height in pixels. Defaults to PROMPTBOX_MIN_HEIGHT.
+   * Callers may pass a smaller value to make room for siblings that grow
+   * above the textarea (see FollowUpPromptBox's elastic compensation for
+   * the context banner stack) — total prompt-area height stays constant.
+   */
+  minHeight?: number;
   mentions: MentionsConfig;
   /**
    * Where the @-mention menu floats relative to the prompt box.
@@ -196,6 +203,7 @@ export function PromptBoxInternal({
   footerStart,
   autoFocus = false,
   submission = {},
+  minHeight = PROMPTBOX_MIN_HEIGHT,
   mentions,
   mentionMenuPlacement,
   attachments: attachmentConfig = {},
@@ -238,7 +246,7 @@ export function PromptBoxInternal({
   const attachmentInputRef = useRef<HTMLInputElement>(null);
   const valueRef = useRef(value);
   const resizeTextarea = useAutoGrow(textareaRef, {
-    minHeight: PROMPTBOX_MIN_HEIGHT,
+    minHeight,
     maxHeight: PROMPTBOX_MAX_HEIGHT,
   });
   const mentionKeyRef = useRef("");
@@ -916,7 +924,7 @@ export function PromptBoxInternal({
           isZenMode && "min-h-0 flex-1 px-6 pb-3 pt-8",
         )}
         style={{
-          minHeight: isZenMode ? "0px" : `${PROMPTBOX_MIN_HEIGHT}px`,
+          minHeight: isZenMode ? "0px" : `${minHeight}px`,
           height: isZenMode ? "100%" : undefined,
           maxHeight: isZenMode ? "none" : `${PROMPTBOX_MAX_HEIGHT}px`,
         }}

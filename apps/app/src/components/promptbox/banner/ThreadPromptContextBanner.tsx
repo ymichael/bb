@@ -105,6 +105,16 @@ export type ThreadPromptContextBannerExpandedSection =
   | "managedBy"
   | "managerChildren";
 
+/**
+ * Pixel height of the banner's collapsed (single-row) state. Pinned via the
+ * outer PromptStackCard's `min-height` so the height is a contract, not a
+ * computed coincidence of text size + paddings + border. Imported by
+ * FollowUpPromptBox to derive its elastic textarea target — keeping both
+ * sides on the same constant means tweaking banner chrome only requires
+ * updating this number in one place.
+ */
+export const THREAD_PROMPT_CONTEXT_BANNER_ROW_HEIGHT = 31;
+
 export interface ThreadPromptContextBannerProps {
   todoSection: ThreadPromptTodoSection | null;
   gitSection: ThreadPromptGitSection | null;
@@ -411,6 +421,7 @@ export function ThreadPromptContextBanner({
       <PromptStackCard
         ariaLabel="Thread context before sending"
         className="overflow-hidden"
+        style={{ minHeight: THREAD_PROMPT_CONTEXT_BANNER_ROW_HEIGHT }}
       >
         <div className="flex items-center gap-0.5 px-2 py-1 text-xs text-muted-foreground">
           {managedBySection ? (
@@ -492,6 +503,7 @@ export function ThreadPromptContextBanner({
     <PromptStackCard
       ariaLabel="Thread context before sending"
       className="overflow-hidden"
+      style={{ minHeight: THREAD_PROMPT_CONTEXT_BANNER_ROW_HEIGHT }}
     >
       <div className="flex items-center gap-0.5 px-2 py-1 text-xs text-muted-foreground">
         {showManagedBy && managedBySection && isManagedByOnly ? (

@@ -1,4 +1,4 @@
-import { type ReactNode } from "react";
+import { type CSSProperties, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 const BASE_CHROME =
@@ -12,6 +12,7 @@ export interface PromptStackCardProps {
    */
   ariaLabel?: string;
   className?: string;
+  style?: CSSProperties;
 }
 
 /**
@@ -25,13 +26,22 @@ export function PromptStackCard({
   children,
   ariaLabel,
   className,
+  style,
 }: PromptStackCardProps) {
   if (ariaLabel) {
     return (
-      <section aria-label={ariaLabel} className={cn(BASE_CHROME, className)}>
+      <section
+        aria-label={ariaLabel}
+        className={cn(BASE_CHROME, className)}
+        style={style}
+      >
         {children}
       </section>
     );
   }
-  return <div className={cn(BASE_CHROME, className)}>{children}</div>;
+  return (
+    <div className={cn(BASE_CHROME, className)} style={style}>
+      {children}
+    </div>
+  );
 }
