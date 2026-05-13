@@ -461,20 +461,25 @@ export const GitDiffCard = memo(function GitDiffCard({
           style={GIT_DIFF_CARD_BODY_STYLE}
         >
           {shouldGateDeletedDiff ? (
-            <div className="px-3 py-3 text-xs text-muted-foreground">
-              <span>This file was deleted.</span>{" "}
-              <Button
-                type="button"
-                variant="link"
-                size="sm"
-                className="h-auto p-0 text-xs underline underline-offset-4 hover:underline"
-                onClick={() => {
-                  setHasLoadedDeletedDiff(true);
-                  setHasBodyEnteredViewport(true);
-                }}
-              >
-                Load diff
-              </Button>
+            <div className="flex items-center py-3 pl-2 pr-3 text-xs text-muted-foreground">
+              {supportsCollapse ? (
+                <span aria-hidden className="w-8 shrink-0" />
+              ) : null}
+              <span className="pl-[1ch]">
+                <span>This file was deleted.</span>{" "}
+                <Button
+                  type="button"
+                  variant="link"
+                  size="sm"
+                  className="h-auto p-0 text-xs underline underline-offset-4 hover:underline"
+                  onClick={() => {
+                    setHasLoadedDeletedDiff(true);
+                    setHasBodyEnteredViewport(true);
+                  }}
+                >
+                  Load diff
+                </Button>
+              </span>
             </div>
           ) : !shouldRenderDiffView ? (
             <div className="space-y-1.5 px-3 py-3">
