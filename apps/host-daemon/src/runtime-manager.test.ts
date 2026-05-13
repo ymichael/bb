@@ -32,8 +32,6 @@ type GetSharedGitRefsFingerprintResult = Awaited<
 type CommitArgs = Parameters<HostWorkspace["commit"]>;
 type FetchArgs = Parameters<HostWorkspace["fetch"]>;
 type SquashMergeArgs = Parameters<HostWorkspace["squashMerge"]>;
-type PromoteArgs = Parameters<HostWorkspace["promote"]>;
-type DemoteArgs = Parameters<HostWorkspace["demote"]>;
 type ProvisionWorkspaceMockArgs = Parameters<
   (options: ProvisionWorkspaceArgs) => Promise<HostWorkspace>
 >;
@@ -188,8 +186,6 @@ function createFakeWorkspace(path: string) {
     setSharedGitRefsFingerprintError(value: Error | null) {
       sharedGitRefsFingerprintError = value;
     },
-    promote: vi.fn(async (..._args: PromoteArgs) => undefined),
-    demote: vi.fn(async (..._args: DemoteArgs) => undefined),
     destroy: vi.fn(async () => undefined),
   } satisfies HostWorkspace & {
     setLocalStateFingerprint: (value: GetLocalStateFingerprintResult) => void;

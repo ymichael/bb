@@ -48,8 +48,6 @@ export const HOST_DAEMON_COMMAND_TYPES = [
   "workspace.diff",
   "workspace.commit",
   "workspace.squash_merge",
-  "workspace.promote",
-  "workspace.demote",
   "replay.capture_list",
   "replay.capture_get",
   "replay.capture_delete",
@@ -400,22 +398,6 @@ export const workspaceSquashMergeCommandSchema =
     commitMessage: z.string().min(1),
   });
 
-/** Switch the project's primary checkout to the environment's branch so the user can work with the changes directly. */
-export const workspacePromoteCommandSchema =
-  hostDaemonWorkspaceTargetSchema.extend({
-    type: z.literal("workspace.promote"),
-    primaryPath: z.string().min(1),
-  });
-
-/** Reverse a prior promote — restore the primary checkout to the default branch. */
-export const workspaceDemoteCommandSchema =
-  hostDaemonWorkspaceTargetSchema.extend({
-    type: z.literal("workspace.demote"),
-    primaryPath: z.string().min(1),
-    defaultBranch: z.string().min(1),
-    envBranch: z.string().min(1),
-  });
-
 const hostDaemonNonProvisionCommandSchema = z.discriminatedUnion("type", [
   threadStartCommandSchema,
   turnSubmitCommandSchema,
@@ -440,8 +422,6 @@ const hostDaemonNonProvisionCommandSchema = z.discriminatedUnion("type", [
   workspaceDiffCommandSchema,
   workspaceCommitCommandSchema,
   workspaceSquashMergeCommandSchema,
-  workspacePromoteCommandSchema,
-  workspaceDemoteCommandSchema,
 ]);
 export const hostDaemonCommandSchema = z.union([
   hostDaemonNonProvisionCommandSchema,
@@ -476,9 +456,7 @@ export function shouldFlushEventsBeforeReportingCommandResult(
     case "thread.rename":
     case "thread.unarchive":
     case "workspace.commit":
-    case "workspace.demote":
     case "workspace.diff":
-    case "workspace.promote":
     case "workspace.squash_merge":
     case "workspace.status":
       return false;
@@ -548,12 +526,6 @@ export const hostDaemonCommandResultSchemaByType = {
     merged: z.boolean(),
     commitSha: z.string().min(1),
     commitSubject: z.string().min(1),
-  }),
-  "workspace.promote": z.object({
-    ok: z.boolean(),
-  }),
-  "workspace.demote": z.object({
-    ok: z.boolean(),
   }),
 } as const satisfies Record<HostDaemonCommandType, z.ZodTypeAny>;
 

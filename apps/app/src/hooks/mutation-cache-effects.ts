@@ -20,10 +20,7 @@ import type {
   QueryClientArg,
   ThreadArg,
 } from "./cache-effect-types";
-import {
-  invalidatePrimaryCheckoutWorkspaceStateQueries,
-  removeEnvironmentScopedQueries,
-} from "./environment-cache-effects";
+import { removeEnvironmentScopedQueries } from "./environment-cache-effects";
 
 export function invalidateProjectListQueries({
   queryClient,
@@ -145,7 +142,6 @@ export function invalidateThreadDraftSendQueries({
   });
   queryClient.invalidateQueries({ queryKey: threadsQueryKey() });
   queryClient.invalidateQueries({ queryKey: statusQueryKey() });
-  invalidatePrimaryCheckoutWorkspaceStateQueries({ queryClient });
 }
 
 export function invalidateThreadAcceptedMessageQueries({
@@ -158,7 +154,6 @@ export function invalidateThreadAcceptedMessageQueries({
   queryClient.invalidateQueries({
     queryKey: threadPromptHistoryQueryKey(threadId),
   });
-  invalidatePrimaryCheckoutWorkspaceStateQueries({ queryClient });
 }
 
 export function invalidateThreadAcceptedMessageQueriesWithoutRealtime({

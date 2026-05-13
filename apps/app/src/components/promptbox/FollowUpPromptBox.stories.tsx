@@ -156,7 +156,7 @@ const attachmentsBase: AttachmentsConfig = {
 };
 
 const historyEntries = [
-  { text: "promote thread workspace", attachments: [] },
+  { text: "review thread workspace", attachments: [] },
   { text: "investigate timeline pagination", attachments: [] },
 ];
 

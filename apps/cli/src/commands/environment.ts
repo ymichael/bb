@@ -27,14 +27,6 @@ interface EnvironmentSquashMergeCommandOptions {
   json?: boolean;
 }
 
-interface EnvironmentPromoteCommandOptions {
-  json?: boolean;
-}
-
-interface EnvironmentDemoteCommandOptions {
-  json?: boolean;
-}
-
 export function registerEnvironmentCommands(
   program: Command,
   getUrl: () => string,
@@ -177,52 +169,4 @@ export function registerEnvironmentCommands(
       }),
     );
 
-  environment
-    .command("promote <id>")
-    .description("Promote an environment into the primary checkout")
-    .option("--json", "Print machine-readable JSON output")
-    .action(
-      action(async (id: string, opts: EnvironmentPromoteCommandOptions) => {
-        const client = createClient(getUrl());
-        let result: { ok: true; action: "promote"; message: string };
-        try {
-          result = await unwrap<{
-            ok: true;
-            action: "promote";
-            message: string;
-          }>(
-            client.api.v1.environments[":id"].actions.$post({
-              param: { id },
-              json: { action: "promote" },
-            }),
-          );
-        } catch (err: unknown) {
-          throw prependErrorContext(`Failed to promote environment ${id}`, err);
-        }
-        if (outputJson(opts, result)) return;
-        console.log(result.message);
-      }),
-    );
-
-  environment
-    .command("demote <id>")
-    .description("Demote an environment from the primary checkout")
-    .option("--json", "Print machine-readable JSON output")
-    .action(
-      action(async (id: string, opts: EnvironmentDemoteCommandOptions) => {
-        const client = createClient(getUrl());
-        const result = await unwrap<{
-          ok: true;
-          action: "demote";
-          message: string;
-        }>(
-          client.api.v1.environments[":id"].actions.$post({
-            param: { id },
-            json: { action: "demote" },
-          }),
-        );
-        if (outputJson(opts, result)) return;
-        console.log(result.message);
-      }),
-    );
 }

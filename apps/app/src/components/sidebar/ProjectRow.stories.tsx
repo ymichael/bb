@@ -49,7 +49,6 @@ interface InteractiveProjectRowArgs {
   initialCollapsedManagerIds?: ReadonlySet<string>;
   isActive?: boolean;
   isLocalPathInvalid?: boolean;
-  promotedBranchName?: string | null;
 }
 
 // Holds local collapse state so the chevrons in stories actually toggle. The
@@ -62,7 +61,6 @@ function InteractiveProjectRow({
   initialCollapsedManagerIds,
   isActive = false,
   isLocalPathInvalid = false,
-  promotedBranchName = null,
 }: InteractiveProjectRowArgs) {
   const [isCollapsed, setIsCollapsed] = useState(initialCollapsed);
   const [collapsedManagerIds, setCollapsedManagerIds] = useState<Set<string>>(
@@ -90,10 +88,8 @@ function InteractiveProjectRow({
       isCollapsed={isCollapsed}
       collapsedManagerIds={collapsedManagerIds}
       isLocalPathInvalid={isLocalPathInvalid}
-      localHostId={HOST_IDS.local}
       onToggleProjectCollapsed={onToggleProjectCollapsed}
       onToggleManagerCollapsed={onToggleManagerCollapsed}
-      promotedBranchName={promotedBranchName}
     />
   );
 }
@@ -127,8 +123,8 @@ const pendingThread = makeThread({
   titleFallback: "Diagnose Claude provider auth path",
   hasPendingInteraction: true,
 });
-const promotedThread = makeThread({
-  id: "thr_promoted",
+const standardThread = makeThread({
+  id: "thr_standard",
   title: "Stabilize Pnpm Dev Environment",
   titleFallback: "Stabilize Pnpm Dev Environment",
   environmentHostId: HOST_IDS.local,
@@ -168,11 +164,10 @@ const multipleProjects: MultiProjectEntry[] = [
     key: "bb",
     project: makeProject({ id: "proj_bb", name: "bb" }),
     isActive: true,
-    promotedBranchName: BRANCH_NAMES.default,
     threadListState: {
       status: "ready",
       threads: [
-        { ...promotedThread, projectId: "proj_bb" },
+        { ...standardThread, projectId: "proj_bb" },
         { ...manager, projectId: "proj_bb" },
         { ...managerChildA, projectId: "proj_bb" },
         { ...managerChildB, projectId: "proj_bb" },
@@ -289,7 +284,7 @@ export function Overview() {
       </StoryRow>
       <StoryRow
         label="multiple projects"
-        hint="four projects stacked — active project at the top with a promoted thread, manager group, and busy/pending threads; another collapsed with a long truncated name; one with two idle threads; an empty one at the bottom"
+        hint="four projects stacked — active project at the top with a standard thread, manager group, and busy/pending threads; another collapsed with a long truncated name; one with two idle threads; an empty one at the bottom"
       >
         <SidebarStage>
           {multipleProjects.map(({ key, ...args }) => (
@@ -421,7 +416,6 @@ const fullProjects: FullProjectEntry[] = [
     key: "bb",
     project: makeProject({ id: "proj_full_a", name: "bb" }),
     isActive: true,
-    promotedBranchName: BRANCH_NAMES.default,
     threadListState: { status: "ready", threads: fullProjectAThreads },
   },
   {

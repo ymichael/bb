@@ -18,7 +18,7 @@ const VARIANT_CONTENT: Record<PillVariant, string> = {
   secondary: "managed",
   destructive: "Failed",
   outline: "manager",
-  emphasis: "promoted",
+  emphasis: "active",
 };
 
 export function Overview() {
@@ -33,7 +33,7 @@ export function Overview() {
       </StoryCard>
       <StoryCard>
         <StoryRow label="standard">
-          <Pill variant="outline">feat/promotion-flow</Pill>
+          <Pill variant="outline">feat/review-flow</Pill>
         </StoryRow>
         <StoryRow label="truncated" hint="max-w-40">
           <Pill variant="outline" className="max-w-40">

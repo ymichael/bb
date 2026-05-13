@@ -34,23 +34,6 @@ const idOnlyResponseSchema = z.object({
   id: z.string(),
 });
 
-function cleanWorkspaceStatus() {
-  return {
-    workingTree: {
-      hasUncommittedChanges: false,
-      state: "clean" as const,
-      insertions: 0,
-      deletions: 0,
-      files: [],
-    },
-    branch: {
-      currentBranch: "main",
-      defaultBranch: "main",
-    },
-    mergeBase: null,
-  };
-}
-
 const projectResponseSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -1274,59 +1257,6 @@ describe("public project and host routes", () => {
     }
   });
 
-  it("returns workspace status for a local path project source", async () => {
-    const harness = await createTestAppHarness();
-    try {
-      const { host } = seedHostSession(harness.deps, {
-        id: "host-project-source-status",
-      });
-      const { project, source } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
-        path: "/tmp/project-source-status",
-      });
-      const environment = seedEnvironment(harness.deps, {
-        hostId: host.id,
-        projectId: project.id,
-        path: source.path,
-      });
-
-      const responsePromise = harness.app.request(
-        `/api/v1/projects/${project.id}/sources/${source.id}/status`,
-      );
-      const queued = await waitForQueuedCommand(
-        harness,
-        ({ command }) =>
-          command.type === "workspace.status" &&
-          command.environmentId === environment.id,
-      );
-      expect(queued.command).toMatchObject({
-        workspaceContext: {
-          workspacePath: "/tmp/project-source-status",
-          workspaceProvisionType: "unmanaged",
-        },
-      });
-      await reportQueuedCommandSuccess(harness, queued, {
-        workspaceStatus: cleanWorkspaceStatus(),
-      });
-
-      const response = await responsePromise;
-      expect(response.status).toBe(200);
-      await expect(readJson(response)).resolves.toMatchObject({
-        sourceId: source.id,
-        hostId: host.id,
-        path: "/tmp/project-source-status",
-        workspace: {
-          branch: {
-            currentBranch: "main",
-            defaultBranch: "main",
-          },
-        },
-      });
-    } finally {
-      await harness.cleanup();
-    }
-  });
-
   it("stores project attachments and serves their content", async () => {
     const harness = await createTestAppHarness();
     try {
@@ -1664,7 +1594,7 @@ describe("public project and host routes", () => {
           command.environmentId === secondEnvironment.id,
       );
 
-      await reportQueuedCommandSuccess(harness, firstDestroy, { ok: true });
+      await reportQueuedCommandSuccess(harness, firstDestroy, {});
       await reportQueuedCommandError(harness, secondDestroy, {
         errorCode: "provider_error",
         errorMessage: "Destroy failed",
@@ -1681,7 +1611,7 @@ describe("public project and host routes", () => {
           command.type === "environment.destroy" &&
           command.environmentId === secondEnvironment.id,
       );
-      await reportQueuedCommandSuccess(harness, retriedDestroy, { ok: true });
+      await reportQueuedCommandSuccess(harness, retriedDestroy, {});
 
       await runProjectDeletionSweep(harness.deps);
 

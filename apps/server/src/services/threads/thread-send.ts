@@ -10,7 +10,6 @@ import type { SendMessageRequest } from "@bb/server-contract";
 import { renderTemplate } from "@bb/templates";
 import type { AppDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
-import { demoteEnvironmentIfPromoted } from "../environments/environment-promotion.js";
 import {
   buildExecutionOptions,
   ensureThreadNativeArchiveSettled,
@@ -236,11 +235,6 @@ export async function sendThreadMessage(
     return;
   }
   const readyEnvironment = requireReadyThreadEnvironment(environment);
-  if (mode === "start") {
-    await demoteEnvironmentIfPromoted(deps, {
-      environment: readyEnvironment,
-    });
-  }
 
   const request = appendClientTurnEvent(deps, {
     threadId: thread.id,

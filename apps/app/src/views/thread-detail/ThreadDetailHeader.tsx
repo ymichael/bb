@@ -5,7 +5,6 @@ import { COARSE_POINTER_TOOLBAR_ACTION_BUTTON_CLASS } from "@/components/ui/coar
 import { Icon } from "@/components/ui/icon.js";
 import { SplitButton } from "@/components/ui/split-button.js";
 import { StatusPill } from "@/components/ui/status-pill.js";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip.js";
 import { useIsCompactViewport } from "@/components/ui/hooks/use-compact-viewport.js";
 import {
   AppPageHeader,
@@ -13,8 +12,6 @@ import {
 } from "@/components/layout/AppPageHeader";
 import { cn } from "@/lib/utils";
 import type { ThreadGitActionDialogTarget } from "@/components/dialogs/ThreadGitActionDialog";
-import type { ThreadEnvironmentPromotionDialogTarget } from "@/components/dialogs/ThreadEnvironmentPromotionDialog";
-import type { ThreadEnvironmentPromotionHeaderAction } from "@/views/thread-detail/threadEnvironmentPromotionActions";
 
 const THREAD_HEADER_ACTION_BUTTON_CLASS =
   COARSE_POINTER_TOOLBAR_ACTION_BUTTON_CLASS;
@@ -28,75 +25,22 @@ interface ThreadDetailHeaderProps {
   actionsMenu: ReactNode;
   isManagedThread: boolean;
   isManagerThread: boolean;
-  isPromoted: boolean;
   isThreadGitActionPending: boolean;
   onOpenThreadGitAction: (target: ThreadGitActionDialogTarget) => void;
-  onOpenThreadPromotionAction: (
-    target: ThreadEnvironmentPromotionDialogTarget,
-  ) => void;
   onToggleSecondaryPanel: () => void;
   threadHeaderGitActions: ThreadHeaderGitAction[];
-  threadHeaderPromotionAction: ThreadEnvironmentPromotionHeaderAction | null;
   threadTitle: string;
   workspaceOpenButton?: ReactNode;
-}
-
-interface PromotionActionButtonProps {
-  action: ThreadEnvironmentPromotionHeaderAction;
-  onOpen: (target: ThreadEnvironmentPromotionDialogTarget) => void;
-}
-
-function PromotionActionButton({ action, onOpen }: PromotionActionButtonProps) {
-  if (action.kind === "hard-disabled") {
-    return (
-      <TooltipProvider delayDuration={150}>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span tabIndex={0} className="inline-flex">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled
-                aria-label={action.label}
-                className={cn(
-                  THREAD_HEADER_ACTION_BUTTON_CLASS,
-                  "pointer-events-none",
-                )}
-              >
-                {action.label}
-              </Button>
-            </span>
-          </TooltipTrigger>
-          <TooltipContent>{action.tooltip}</TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-    );
-  }
-  return (
-    <Button
-      type="button"
-      variant="outline"
-      size="sm"
-      className={THREAD_HEADER_ACTION_BUTTON_CLASS}
-      onClick={() => onOpen(action.target)}
-    >
-      {action.label}
-    </Button>
-  );
 }
 
 export function ThreadDetailHeader({
   actionsMenu,
   isManagedThread,
   isManagerThread,
-  isPromoted,
   isThreadGitActionPending,
   onOpenThreadGitAction,
-  onOpenThreadPromotionAction,
   onToggleSecondaryPanel,
   threadHeaderGitActions,
-  threadHeaderPromotionAction,
   threadTitle,
   workspaceOpenButton,
 }: ThreadDetailHeaderProps) {
@@ -114,19 +58,12 @@ export function ThreadDetailHeader({
       {!isManagerThread && isManagedThread ? (
         <StatusPill variant="outline">managed</StatusPill>
       ) : null}
-      {isPromoted ? <StatusPill variant="outline">promoted</StatusPill> : null}
     </>
   );
 
   const actions = (
     <>
       {workspaceOpenButton}
-      {threadHeaderPromotionAction ? (
-        <PromotionActionButton
-          action={threadHeaderPromotionAction}
-          onOpen={onOpenThreadPromotionAction}
-        />
-      ) : null}
       {primaryAction && secondaryActions.length > 0 ? (
         <SplitButton
           disabled={isThreadGitActionPending}

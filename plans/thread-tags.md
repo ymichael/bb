@@ -7,7 +7,7 @@ follow, and filter high-volume work. Threads can have multiple tags such as
 `code review` and `react perf`; tags render as pills in the sidebar and thread
 detail header; tags are editable from the app three-dot menu and the CLI.
 
-Do not treat the existing manager/managed/promoted labels as tags. Those remain
+Do not treat the existing manager/managed labels as tags. Those remain
 derived state. Tags are user/manager-maintained categorization metadata.
 
 ## Current Findings
@@ -31,8 +31,8 @@ derived state. Tags are user/manager-maintained categorization metadata.
 - Realtime invalidation is driven by `ThreadChangeKind`; app cache logic treats
   title/read/archive/status as list-affecting thread changes. Tags need their
   own change kind that invalidates both thread detail and thread lists.
-- Sidebar rows already use `Pill` for `promoted`; the thread detail header uses
-  `StatusPill` for `manager`, `managed`, and `promoted`. Add one canonical
+- The thread detail header uses
+  `StatusPill` for `manager` and `managed`. Add one canonical
   thread-tag pill renderer reused in both locations instead of duplicating local
   class bundles.
 - The three-dot menu is centralized in `ThreadActionsMenu` and
@@ -282,7 +282,7 @@ Sidebar:
 Thread detail header:
 
 - Render the full tag pill list next to the thread title and existing
-  `manager`/`managed`/`promoted` status pills.
+  `manager`/`managed` status pills.
 - Allow wrapping within the header center area on narrow widths without
   overlapping actions.
 

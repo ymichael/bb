@@ -86,8 +86,6 @@ export {
   turnSubmitTargetSchema,
   workspaceCommitCommandSchema,
   workspaceDiffCommandSchema,
-  workspaceDemoteCommandSchema,
-  workspacePromoteCommandSchema,
   workspaceSquashMergeCommandSchema,
   workspaceContextSchema,
   workspaceStatusCommandSchema,

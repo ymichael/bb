@@ -105,16 +105,6 @@ Delete and project deletion:
   project.
 - Both paths currently preserve local branches.
 
-Promote and demote:
-
-- Promote switches the project primary checkout to the environment branch and
-  detaches the managed worktree, because one branch cannot be checked out in two
-  linked worktrees.
-- Demote switches the primary checkout back to the default branch and reattaches
-  the environment worktree to its branch.
-- While promoted, the branch is checked out in the primary checkout and must not
-  be deleted.
-
 Squash merge:
 
 - `workspace.squash_merge` creates a temporary detached worktree, squash merges
@@ -448,7 +438,7 @@ Server responsibilities:
 - Decide whether a branch is BB-owned and eligible for automatic cleanup.
 - Decide automatic vs manual behavior.
 - Look up project sources, source git common dirs, environment records, thread
-  liveness, archive state, cleanup mode, and promotion state.
+  liveness, archive state, and cleanup mode.
 - Supply required policy fields to daemon commands.
 - Queue durable `delete_branch` operations.
 - Reconcile lost daemon results, expired commands, reconnects, and repeated
@@ -654,8 +644,7 @@ Branch checked out elsewhere:
 
 - Block deletion with `checked_out_elsewhere` if
   `git worktree list --porcelain` shows the branch checked out in any worktree.
-- This covers promoted environments, primary checkouts, and user-created
-  worktrees.
+- This covers primary checkouts and user-created worktrees.
 
 Protected/default branches:
 
@@ -1195,9 +1184,6 @@ Server integration tests:
 - Squash-merge without archive leaves the environment branch in place and
   reports the follow-up archive/cleanup step without deleting the active
   branch.
-- Promote environment: cleanup blocks branch deletion while promoted.
-- Demote then cleanup: demote releases the checkout blocker and safe cleanup can
-  delete the branch.
 - Multiple environments sharing a branch: first cleanup preserves branch until
   all owners are gone.
 - Manual unmanaged worktree environment: cleanup never deletes the branch.

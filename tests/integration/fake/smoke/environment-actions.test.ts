@@ -11,7 +11,6 @@ import {
   runEnvironmentAction,
   sendTextMessage,
   unarchiveThread,
-  updateEnvironment,
 } from "../../helpers/api.js";
 import {
   waitForCommand,
@@ -112,58 +111,6 @@ describe.sequential("fake provider smoke environment integration", () => {
         cwd: workspacePath,
       });
       expect(subject.trim()).toBe("bb: automated commit");
-    }));
-
-  it("promotes and demotes a managed worktree after committing changes", () =>
-    withHarness(async (harness) => {
-      const project = await createProjectFixture(harness, "Promote Smoke");
-      const { environment } = await createReadyThread(harness, {
-        projectId: project.id,
-        workspace: { type: "managed-worktree" },
-      });
-
-      const workspacePath = environment.path;
-      if (!workspacePath) {
-        throw new Error("Managed worktree path was not assigned");
-      }
-
-      await updateEnvironment(harness.api, environment.id, {
-        mergeBaseBranch: "main",
-      });
-      await createTestFile({
-        content: "feature branch change\n",
-        filePath: path.join(workspacePath, "feature.txt"),
-      });
-
-      await runEnvironmentAction(harness.api, environment.id, {
-        action: "commit",
-      });
-      await runEnvironmentAction(harness.api, environment.id, {
-        action: "promote",
-      });
-
-      const promotedHead = await runGit({
-        args: ["log", "-1", "--format=%s"],
-        cwd: harness.repoDir,
-      });
-      expect(promotedHead.trim()).toBe("bb: automated commit");
-
-      await runEnvironmentAction(harness.api, environment.id, {
-        action: "demote",
-      });
-
-      const sourceBranch = await runGit({
-        args: ["rev-parse", "--abbrev-ref", "HEAD"],
-        cwd: harness.repoDir,
-      });
-      const environmentStatus = await getEnvironmentStatus(
-        harness.api,
-        environment.id,
-      );
-      expect(sourceBranch.trim()).toBe("main");
-      expect(environmentStatus.workspace?.workingTree.state).toBe(
-        "committed_unmerged",
-      );
     }));
 
   it("archives and unarchives a thread, blocking work while archived", () =>

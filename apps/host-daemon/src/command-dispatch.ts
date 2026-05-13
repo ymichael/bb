@@ -32,11 +32,7 @@ import {
   submitTurn,
 } from "./command-handlers/thread.js";
 import { WorkspaceError } from "@bb/host-workspace";
-import {
-  demoteWorkspace,
-  promoteWorkspace,
-  squashMerge,
-} from "./command-handlers/workspace.js";
+import { squashMerge } from "./command-handlers/workspace.js";
 
 export {
   CommandDispatchError,
@@ -336,14 +332,6 @@ const commandHandlers: CommandHandlerMap = {
     command: Extract<HostDaemonCommand, { type: "workspace.squash_merge" }>,
     options: CommandDispatchOptions,
   ) => squashMerge(command, options.runtimeManager),
-  "workspace.promote": async (
-    command: Extract<HostDaemonCommand, { type: "workspace.promote" }>,
-    options: CommandDispatchOptions,
-  ) => promoteWorkspace(command, options.runtimeManager),
-  "workspace.demote": async (
-    command: Extract<HostDaemonCommand, { type: "workspace.demote" }>,
-    options: CommandDispatchOptions,
-  ) => demoteWorkspace(command, options.runtimeManager),
 };
 
 function dispatchCommandByType<TType extends HostDaemonCommandType>(

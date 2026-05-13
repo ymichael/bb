@@ -1,7 +1,6 @@
 import { memo, useState } from "react";
 import type { ThreadListEntry } from "@bb/domain";
 import { Icon, type IconName } from "@/components/ui/icon.js";
-import { Pill } from "@/components/ui/pill.js";
 import { SidebarMenuBadge, SidebarStickyTier } from "@/components/ui/sidebar.js";
 import { StatusPill } from "@/components/ui/status-pill.js";
 import { NavLink } from "react-router-dom";
@@ -42,7 +41,6 @@ interface ThreadRowProps {
   projectId: string;
   thread: ThreadListEntry;
   isActive: boolean;
-  isPromoted?: boolean;
   onProjectSelect?: () => void;
   options: ThreadRowOptions;
 }
@@ -258,7 +256,6 @@ function ThreadRowComponent({
   projectId,
   thread,
   isActive,
-  isPromoted = false,
   onProjectSelect,
   options,
 }: ThreadRowProps) {
@@ -338,11 +335,6 @@ function ThreadRowComponent({
           <StatusPill variant="outline" className="shrink-0">
             manager
           </StatusPill>
-        ) : null}
-        {isPromoted ? (
-          <Pill variant="emphasis" className="shrink-0">
-            promoted
-          </Pill>
         ) : null}
       </span>
       <span

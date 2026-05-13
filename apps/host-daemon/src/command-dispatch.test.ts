@@ -44,8 +44,6 @@ function createWorkspace(): HostWorkspace {
     reset: unexpectedWorkspaceCall,
     fetch: unexpectedWorkspaceCall,
     squashMerge: unexpectedWorkspaceCall,
-    promote: unexpectedWorkspaceCall,
-    demote: unexpectedWorkspaceCall,
     destroy: vi.fn(async () => undefined),
   };
 }

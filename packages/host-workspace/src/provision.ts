@@ -10,7 +10,6 @@ import type {
   SquashMergeResult,
 } from "./workspace.js";
 import { Workspace } from "./workspace.js";
-import { promoteWorkspace, demoteWorkspace } from "./promote.js";
 import {
   withCheckoutMutationAdmission,
   withCheckoutMutationLock,
@@ -126,14 +125,6 @@ export interface HostWorkspace {
   fetch(options?: FetchOptions): Promise<void>;
   squashMerge(options: SquashMergeOptions): Promise<SquashMergeResult>;
 
-  // Promote/demote
-  promote(primary: HostWorkspace): Promise<void>;
-  demote(args: {
-    primary: HostWorkspace;
-    defaultBranch: string;
-    envBranch?: string;
-  }): Promise<void>;
-
   // Lifecycle
   destroy(): Promise<void>;
 }
@@ -156,7 +147,7 @@ async function detectWorktree(cwd: string): Promise<boolean> {
 }
 
 // ---------------------------------------------------------------------------
-// WorkspaceImpl — wraps Workspace + promote/demote + destroy
+// ProvisionedHostWorkspace - wraps Workspace + lifecycle cleanup
 // ---------------------------------------------------------------------------
 
 class ProvisionedHostWorkspace implements HostWorkspace {
@@ -236,32 +227,6 @@ class ProvisionedHostWorkspace implements HostWorkspace {
 
   squashMerge(options: SquashMergeOptions): Promise<SquashMergeResult> {
     return this.ws.squashMergeInto(options);
-  }
-
-  async promote(primary: HostWorkspace): Promise<void> {
-    const primaryWs = new Workspace(primary.path);
-    await promoteWorkspace(this.ws, primaryWs);
-  }
-
-  async demote(args: {
-    primary: HostWorkspace;
-    defaultBranch: string;
-    envBranch?: string;
-  }): Promise<void> {
-    const primaryWs = new Workspace(args.primary.path);
-    const branch = args.envBranch ?? (await this.ws.currentBranch);
-    if (!branch) {
-      throw new WorkspaceError(
-        "detached_head",
-        "Cannot demote: workspace has no branch (detached HEAD)",
-      );
-    }
-    await demoteWorkspace({
-      source: this.ws,
-      primary: primaryWs,
-      defaultBranch: args.defaultBranch,
-      envBranch: branch,
-    });
   }
 
   destroy(): Promise<void> {

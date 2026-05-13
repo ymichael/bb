@@ -5,7 +5,6 @@ import {
   getEnvironmentBranchListInvalidationQueryKeys,
   getEnvironmentRecordInvalidationQueryKeys,
   getEnvironmentWorkspaceStateInvalidationQueryKeys,
-  getPrimaryCheckoutWorkspaceStateInvalidationQueryKeys,
 } from "./queries/query-cache";
 import {
   environmentFilePreviewQueryKeyPrefix,
@@ -19,7 +18,6 @@ import type {
   EnvironmentArg,
   EnvironmentChangedArg,
   OptionalEnvironmentArg,
-  QueryClientArg,
   ThreadArg,
 } from "./cache-effect-types";
 import { invalidateQueryKeys } from "./cache-effect-utils";
@@ -69,15 +67,6 @@ export function removeEnvironmentScopedQueries({
   });
 }
 
-export function invalidatePrimaryCheckoutWorkspaceStateQueries({
-  queryClient,
-}: QueryClientArg): void {
-  invalidateQueryKeys({
-    queryClient,
-    queryKeys: getPrimaryCheckoutWorkspaceStateInvalidationQueryKeys(),
-  });
-}
-
 export function invalidateEnvironmentActionQueries({
   environmentId,
   queryClient,
@@ -86,14 +75,6 @@ export function invalidateEnvironmentActionQueries({
     queryClient,
     queryKeys: getEnvironmentActionInvalidationQueryKeys({ environmentId }),
   });
-}
-
-export function invalidatePromoteOrDemoteEnvironmentActionQueries({
-  environmentId,
-  queryClient,
-}: EnvironmentArg): void {
-  invalidateEnvironmentActionQueries({ environmentId, queryClient });
-  invalidatePrimaryCheckoutWorkspaceStateQueries({ queryClient });
 }
 
 export function invalidateEnvironmentWorkspaceStateQueries({

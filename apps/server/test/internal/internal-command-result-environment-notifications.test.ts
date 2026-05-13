@@ -7,15 +7,12 @@ import {
   seedEnvironment,
   seedHostSession,
   seedProjectWithSource,
-  seedThread,
 } from "../helpers/seed.js";
 import { createTestAppHarness } from "../helpers/test-app.js";
 
 type WorkspaceMutationCommandType =
   | "workspace.commit"
-  | "workspace.squash_merge"
-  | "workspace.promote"
-  | "workspace.demote";
+  | "workspace.squash_merge";
 
 type WorkspaceMutationResult =
   HostDaemonCommandResultByType[WorkspaceMutationCommandType];
@@ -26,7 +23,6 @@ interface WorkspaceMutationCase {
   result: WorkspaceMutationResult;
   toPayload: (args: {
     environmentId: string;
-    threadId: string;
     workspacePath: string;
   }) => string;
 }
@@ -70,44 +66,6 @@ const WORKSPACE_MUTATION_CASES: WorkspaceMutationCase[] = [
         targetBranch: "main",
       }),
   },
-  {
-    commandType: "workspace.promote",
-    name: "workspace.promote",
-    result: {
-      ok: true,
-    },
-    toPayload: ({ environmentId, threadId, workspacePath }) =>
-      JSON.stringify({
-        type: "workspace.promote",
-        environmentId,
-        workspaceContext: {
-          workspacePath,
-          workspaceProvisionType: "unmanaged",
-        },
-        primaryPath: "/tmp/test-project",
-        threadId,
-      }),
-  },
-  {
-    commandType: "workspace.demote",
-    name: "workspace.demote",
-    result: {
-      ok: true,
-    },
-    toPayload: ({ environmentId, threadId, workspacePath }) =>
-      JSON.stringify({
-        type: "workspace.demote",
-        environmentId,
-        workspaceContext: {
-          workspacePath,
-          workspaceProvisionType: "unmanaged",
-        },
-        defaultBranch: "main",
-        envBranch: "bb/test",
-        primaryPath: "/tmp/test-project",
-        threadId,
-      }),
-  },
 ];
 
 describe("internal command result environment notifications", () => {
@@ -128,17 +86,11 @@ describe("internal command result environment notifications", () => {
           path: `/tmp/${commandType}`,
           status: "ready",
         });
-        const thread = seedThread(harness.deps, {
-          environmentId: environment.id,
-          projectId: project.id,
-          status: "idle",
-        });
         const notifyEnvironmentSpy = vi.spyOn(harness.hub, "notifyEnvironment");
         const command = queueCommand(harness.db, harness.hub, {
           hostId: host.id,
           payload: toPayload({
             environmentId: environment.id,
-            threadId: thread.id,
             workspacePath: environment.path ?? "/tmp/test-environment",
           }),
           sessionId: session.id,

@@ -301,58 +301,12 @@ bb thread output "$CLAUDE_THREAD_ID"
 bb thread output "$PI_THREAD_ID"
 ```
 
-Promote and demote a managed worktree.
-
-Promotion requires both the managed worktree and the primary checkout to be clean. The primary checkout is `$PROJECT_ROOT`, the local project source, not the operator's current shell directory. Commit the worktree change before promoting, and verify `$PROJECT_ROOT` is clean:
-
-```bash
-PROMOTE_THREAD_ID=$(bb thread spawn \
-  --project "$BB_PROJECT_ID" \
-  --provider codex \
-  --model "$CODEX_MODEL" \
-  --reasoning-level low \
-  --new-environment worktree \
-  --prompt "Write a file named promote.txt" \
-  --json | jq -r '.id')
-
-bb thread wait "$PROMOTE_THREAD_ID" --status idle --timeout 120
-PROMOTE_ENV_ID=$(curl -fsS "$BB_SERVER_URL/api/v1/threads/$PROMOTE_THREAD_ID" | jq -r '.environmentId')
-PROMOTE_ENV_JSON=$(curl -fsS "$BB_SERVER_URL/api/v1/environments/$PROMOTE_ENV_ID")
-PROMOTE_BRANCH=$(printf '%s\n' "$PROMOTE_ENV_JSON" | jq -er '.branchName')
-PROMOTE_DEFAULT_BRANCH=$(printf '%s\n' "$PROMOTE_ENV_JSON" | jq -er '.defaultBranch')
-PROJECT_SOURCE_ID=$(bb project show "$BB_PROJECT_ID" --json | jq -er '
-  ([.sources[] | select(.type == "local_path" and .isDefault)][0]
-    // [.sources[] | select(.type == "local_path")][0]).id
-')
-
-curl -fsS "$BB_SERVER_URL/api/v1/projects/$BB_PROJECT_ID/sources/$PROJECT_SOURCE_ID/status" \
-  | jq -e '.workspace.workingTree.hasUncommittedChanges == false'
-curl -fsS "$BB_SERVER_URL/api/v1/environments/$PROMOTE_ENV_ID/status" | jq
-bb environment commit "$PROMOTE_ENV_ID"
-curl -fsS "$BB_SERVER_URL/api/v1/environments/$PROMOTE_ENV_ID/promotion" \
-  | jq -e '.state.isPromoted == false and .actions.promote.unavailableReasons == []'
-
-bb environment promote "$PROMOTE_ENV_ID"
-curl -fsS "$BB_SERVER_URL/api/v1/environments/$PROMOTE_ENV_ID/promotion" \
-  | jq -e '.state.isPromoted == true and .actions.demote.unavailableReasons == []'
-curl -fsS "$BB_SERVER_URL/api/v1/projects/$BB_PROJECT_ID/sources/$PROJECT_SOURCE_ID/status" \
-  | jq -e --arg branch "$PROMOTE_BRANCH" '.workspace.branch.currentBranch == $branch'
-
-bb environment demote "$PROMOTE_ENV_ID"
-curl -fsS "$BB_SERVER_URL/api/v1/environments/$PROMOTE_ENV_ID/promotion" \
-  | jq -e '.state.isPromoted == false and (.actions.demote.unavailableReasons | index("not_promoted")) != null'
-curl -fsS "$BB_SERVER_URL/api/v1/projects/$BB_PROJECT_ID/sources/$PROJECT_SOURCE_ID/status" \
-  | jq -e --arg branch "$PROMOTE_DEFAULT_BRANCH" '.workspace.branch.currentBranch == $branch'
-```
-
 Expected result:
 
 - Thread A and B share the same environment ID via implicit same-path reuse.
 - Alternating follow-ups complete and return the requested exact outputs.
 - Archiving one sibling does not break the other.
 - Mixed-provider threads succeed without event cross-contamination.
-- Promotion availability reports no promote blockers before promote, promoted state and no demote blockers after promote, then unpromoted state after demote.
-- The project source status route shows the primary checkout branch change during promote/demote.
 
 ## Recovery
 

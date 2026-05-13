@@ -54,8 +54,6 @@ export default function (bb: ExtensionAPI) {
       capabilities: {
         host_filesystem: false,
         isolated_workspace: true,
-        promote_primary_checkout: false,
-        demote_primary_checkout: false,
         squash_merge: false,
       },
     },
@@ -206,8 +204,6 @@ const e2bDefinition: EnvironmentDefinition<E2BState> = {
     capabilities: {
       host_filesystem: false,
       isolated_workspace: true,
-      promote_primary_checkout: false,
-      demote_primary_checkout: false,
       squash_merge: false,
     },
   },
@@ -421,7 +417,7 @@ In `apps/server/src/index.ts` (`main()`):
 - **Provider interface complexity:** RESOLVED. The `ProviderAdapter` interface was restructured to ~15 methods with shared helpers (`baseNotificationResult`, `withExecutionOptions`, etc.) that handle common patterns. A minimal provider is ~40 lines. See `packages/provider-adapters/README.md`.
 - **`ProviderAdapter.id` type widening:** RESOLVED. `ProviderAdapter.id` is now `string`. The `isThreadProviderId()` guard discriminates built-in vs extension providers. The provider registry is dynamic via `registerProvider()`.
 - **Per-thread provider resolution:** The current `createServer()` creates one `ProviderSessionController` bound to a single `ProviderAdapter` (the default provider). Multi-provider support (extension or otherwise) requires either a controller pool keyed by provider ID, or a factory that creates controllers on demand. This is the largest architectural change for provider extensions.
-- **Environment `IEnvironment` surface:** The `IEnvironment` interface has extensive requirements (git workspace operations, agent connection targets, spawn/run, promote/demote). Extension environments may only need a subset. Consider whether some methods can have no-op defaults or whether a base class / mixin simplifies implementation.
+- **Environment `IEnvironment` surface:** The `IEnvironment` interface has extensive requirements (git workspace operations, agent connection targets, spawn/run). Extension environments may only need a subset. Consider whether some methods can have no-op defaults or whether a base class / mixin simplifies implementation.
 - **TypeScript loading:** jiti is battle-tested (used by Nuxt, etc.) but adds a dependency. Alternative: require extensions to be pre-compiled JS. Recommendation: use jiti — the DX of writing raw TypeScript is worth it.
 - **Dependency resolution:** Extensions with `package.json` need their `node_modules` installed. The user runs `npm install` in their extension directory. bb does not manage this — document it. Future: could auto-install on discovery.
 - **Provisioning system integration:** Extension environments need to work with the `resolveProvisioningSelection()` machinery in `apps/server/src/environment-provisioning-systems.ts`. The current built-in provisioning systems (`reuse-existing`, `direct-path`, `worktree`, `docker`) are a hardcoded array. Extension environments will either need to register a corresponding `EnvironmentProvisioningSystem`, or the resolution fallback at the bottom of `resolveProvisioningSelection()` needs to be made extension-aware.

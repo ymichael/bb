@@ -14,7 +14,6 @@ import {
   ENVIRONMENT_GIT_DIFF_QUERY_KEY,
   ENVIRONMENT_WORK_STATUS_QUERY_KEY,
   environmentFilePreviewQueryKeyPrefix,
-  environmentPromotionQueryKeyPrefix,
   environmentGitDiffQueryKey,
   environmentGitDiffQueryKeyPrefix,
   environmentMergeBaseBranchesQueryKeyPrefix,
@@ -22,7 +21,6 @@ import {
   environmentWorkStatusQueryKey,
   environmentWorkStatusQueryKeyPrefix,
   isStandardManagerThreadTimelineQueryKey,
-  projectSourceWorkspaceStatusQueryKeyPrefix,
   THREADS_QUERY_KEY,
   threadQueryKey,
   threadsQueryKey,
@@ -121,7 +119,6 @@ export function getEnvironmentWorkspaceStateInvalidationQueryKeys({
     environmentWorkStatusQueryKeyPrefix(environmentId),
     environmentGitDiffQueryKeyPrefix(environmentId),
     environmentFilePreviewQueryKeyPrefix(environmentId),
-    environmentPromotionQueryKeyPrefix(environmentId),
   ];
 }
 
@@ -209,10 +206,6 @@ export function getEnvironmentActionInvalidationQueryKeys({
     ...getEnvironmentBranchListInvalidationQueryKeys({ environmentId }),
     threadsQueryKey(),
   ];
-}
-
-export function getPrimaryCheckoutWorkspaceStateInvalidationQueryKeys(): QueryKey[] {
-  return [projectSourceWorkspaceStatusQueryKeyPrefix()];
 }
 
 export function getCachedThreadListPlaceholder(

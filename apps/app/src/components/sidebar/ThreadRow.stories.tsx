@@ -141,20 +141,6 @@ export function Overview() {
         </SidebarStage>
       </StoryRow>
       <StoryRow
-        label="promoted"
-        hint="thread on the promoted branch — pill at trailing edge"
-      >
-        <SidebarStage>
-          <ThreadRow
-            projectId="proj_demo"
-            thread={makeThread()}
-            isActive={false}
-            isPromoted
-            options={defaultOption}
-          />
-        </SidebarStage>
-      </StoryRow>
-      <StoryRow
         label="long title"
         hint="single-line truncate; title attr carries the full string"
       >

@@ -148,7 +148,6 @@ ProjectRow.displayName = "ProjectRow";
 `;
 
 const THREAD_ROW_TSX = `import { memo, useMemo } from "react";
-import { Pill } from "@/components/ui/pill.js";
 import { SidebarMenuButton, SidebarMenuItem } from "@/components/ui/sidebar.js";
 import { StatusPill } from "@/components/ui/status-pill.js";
 import { cn } from "@/lib/utils";
@@ -198,7 +197,6 @@ function ThreadRowComponent({
   const environmentIcon = getEnvironmentWorkspaceDisplayIconName(
     thread.environmentWorkspaceDisplayKind,
   );
-  const isPromoted = thread.archivedAt === null && thread.parentThreadId !== null;
   const titleText = useMemo(
     () => thread.title?.trim() || thread.titleFallback || "Untitled thread",
     [thread.title, thread.titleFallback],
@@ -235,11 +233,6 @@ function ThreadRowComponent({
           </StatusPill>
         ) : null}
       </SidebarMenuButton>
-      {isPromoted ? (
-        <Pill variant="emphasis" className="relative z-10">
-          promoted
-        </Pill>
-      ) : null}
       <span
         className={cn(
           "flex shrink-0 items-center justify-end",

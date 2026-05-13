@@ -69,33 +69,6 @@ describe("workspace command dispatch", () => {
       },
       harness.dispatchOptions(),
     );
-    const promoteResult = await dispatchCommand(
-      {
-        type: "workspace.promote",
-        environmentId: "env-1",
-        workspaceContext: {
-          workspacePath: "/tmp/env-1",
-          workspaceProvisionType: "unmanaged",
-        },
-        primaryPath: "/tmp/primary",
-      },
-      harness.dispatchOptions(),
-    );
-    const demoteResult = await dispatchCommand(
-      {
-        type: "workspace.demote",
-        environmentId: "env-1",
-        workspaceContext: {
-          workspacePath: "/tmp/env-1",
-          workspaceProvisionType: "unmanaged",
-        },
-        primaryPath: "/tmp/primary",
-        defaultBranch: "main",
-        envBranch: "feature",
-      },
-      harness.dispatchOptions(),
-    );
-
     expect(statusResult.workspaceStatus?.workingTree.state).toBe("clean");
     expect(diffResult.diff.diff).toBe("");
     expect(commitResult).toEqual({
@@ -107,12 +80,8 @@ describe("workspace command dispatch", () => {
       commitSha: "merge-main",
       commitSubject: "feat: squash merge",
     });
-    expect(promoteResult).toEqual({ ok: true });
-    expect(demoteResult).toEqual({ ok: true });
     expect(harness.workspaceState.statusReads).toBe(1);
     expect(harness.workspaceState.lastCommitMessage).toBe("Commit message");
-    expect(harness.workspaceState.promotedPrimaryPath).toBe("/tmp/primary");
-    expect(harness.workspaceState.demotedPrimaryPath).toBe("/tmp/primary");
   });
 
   it("rehydrates a missing workspace runtime from workspaceContext", async () => {

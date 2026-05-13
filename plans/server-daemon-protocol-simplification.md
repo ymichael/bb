@@ -63,8 +63,6 @@ Durable job examples:
 - `environment.destroy`
 - `workspace.commit`
 - `workspace.squash_merge`
-- `workspace.promote`
-- `workspace.demote`
 - `host.sync_runtime_material` if it remains a durable mutation
 
 The daemon result must include both `jobId` and `attemptId`. The server accepts a

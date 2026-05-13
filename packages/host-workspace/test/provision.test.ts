@@ -586,48 +586,6 @@ describe("provisionWorkspace", () => {
     });
   });
 
-  describe("HostWorkspace promote/demote", () => {
-    it("promotes and demotes round-trip", async () => {
-      const repoPath = await initRepo();
-      const parentDir = await makeTempDir("bb-provision-promote-rt-");
-      const targetPath = path.join(parentDir, "env");
-
-      const primary = await provisionWorkspace({
-        workspaceProvisionType: "unmanaged",
-        path: repoPath,
-      });
-
-      // Create worktree directly and provision as unmanaged to have full control
-      await runGit(["worktree", "add", "-B", "bb/env-rt", targetPath], {
-        cwd: repoPath,
-      });
-      const env = await provisionWorkspace({
-        workspaceProvisionType: "unmanaged",
-        path: targetPath,
-      });
-
-      // Add commit on env branch
-      await fs.writeFile(
-        path.join(targetPath, "feature.txt"),
-        "work\n",
-        "utf8",
-      );
-      await env.commit({ message: "Feature work", noVerify: false });
-
-      // Promote
-      await env.promote(primary);
-      expect(await primary.getCurrentBranch()).toBe("bb/env-rt");
-      expect(await env.getCurrentBranch()).toBeNull();
-
-      // Demote — need a workspace that's on the env branch still
-      // After promote, env is detached. demote expects envBranch from ws.currentBranch.
-      // This means demote can't work on a detached env. Let's test the error case.
-      await expect(
-        env.demote({ primary, defaultBranch: "main" }),
-      ).rejects.toThrow(/no branch/u);
-    });
-  });
-
   describe("reconnect-managed-worktree", () => {
     it("reconnects to an existing worktree with managed=true", async () => {
       const repoPath = await initRepo();

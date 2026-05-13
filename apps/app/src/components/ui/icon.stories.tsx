@@ -6,7 +6,7 @@ export default {
 };
 
 const USAGE: Partial<Record<IconName, string>> = {
-  AlertCircle: "Promote-environment dialog warning state",
+  AlertCircle: "Dialog warning state",
   AlertTriangle: "“Project folder not found” indicator on sidebar project rows",
   AlignLeft: "Mobile/coarse-pointer sidebar toggle",
   Archive: "“Archived threads” header link, archived-thread banner",

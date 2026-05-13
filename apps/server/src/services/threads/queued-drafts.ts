@@ -15,7 +15,6 @@ import type { Thread, ThreadQueuedMessage } from "@bb/domain";
 import type { SendMessageRequest } from "@bb/server-contract";
 import type { AppDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
-import { demoteEnvironmentIfPromoted } from "../environments/environment-promotion.js";
 import { scheduleAfterDaemonIngressResponse } from "../hosts/command-wait-context.js";
 import { ensureHostSessionReadyForWork } from "../hosts/host-lifecycle.js";
 import { toQueuedMessage } from "./drafts.js";
@@ -145,7 +144,6 @@ async function sendClaimedDraftForIdleProviderThread(
   ensureThreadNativeArchiveSettled(deps, { environment, thread });
   const queuedMessage = toQueuedMessage(args.draft);
   ensureThreadCanQueueStartRequest(deps, thread);
-  await demoteEnvironmentIfPromoted(deps, { environment });
 
   const payload = sendQueuedMessagePayload(queuedMessage);
   const execution = await buildExecutionOptions(

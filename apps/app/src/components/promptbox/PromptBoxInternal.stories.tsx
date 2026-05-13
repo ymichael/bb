@@ -127,7 +127,7 @@ const mockAttachments: UploadedPromptAttachment[] = [
 
 const historyEntries = [
   { text: "fix the timeline pagination bug", attachments: [] },
-  { text: "promote thread workspace", attachments: [] },
+  { text: "review thread workspace", attachments: [] },
 ];
 
 const baseHistory: HistoryConfig = {
@@ -201,7 +201,7 @@ function WithAttachmentsRow() {
 }
 
 function SubmittingRow() {
-  const { value, onChange } = useControlledValue("Promote thread workspace.");
+  const { value, onChange } = useControlledValue("Review thread workspace.");
   return (
     <PromptBoxInternal
       value={value}

@@ -41,13 +41,10 @@ type FakeWorkspaceDiffTarget =
   | { type: "commit"; sha: string };
 
 interface FakeWorkspaceState {
-  demotedDefaultBranch: string | undefined;
-  demotedPrimaryPath: string | undefined;
   destroyed: boolean;
   lastCommitMessage: string | undefined;
   lastDiffTarget: FakeWorkspaceDiffTarget | undefined;
   listedModelsProviderId: string | undefined;
-  promotedPrimaryPath: string | undefined;
   resetCount: number;
   statusReads: number;
 }
@@ -100,9 +97,6 @@ export function createFakeWorkspace(pathname: string) {
     lastDiffTarget: undefined,
     lastCommitMessage: undefined,
     resetCount: 0,
-    promotedPrimaryPath: undefined,
-    demotedPrimaryPath: undefined,
-    demotedDefaultBranch: undefined,
     destroyed: false,
     listedModelsProviderId: undefined,
   };
@@ -193,17 +187,6 @@ export function createFakeWorkspace(pathname: string) {
         commitSubject: options.commitMessage,
         targetBranch: options.targetBranch,
       };
-    },
-    async promote(primary: HostWorkspace) {
-      state.promotedPrimaryPath = primary.path;
-    },
-    async demote(args: {
-      primary: HostWorkspace;
-      defaultBranch: string;
-      envBranch?: string;
-    }) {
-      state.demotedPrimaryPath = args.primary.path;
-      state.demotedDefaultBranch = args.defaultBranch;
     },
     async destroy() {
       state.destroyed = true;

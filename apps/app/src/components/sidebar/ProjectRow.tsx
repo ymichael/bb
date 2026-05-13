@@ -35,11 +35,9 @@ interface ProjectRowProps {
   isCollapsed: boolean;
   collapsedManagerIds: Set<string>;
   isLocalPathInvalid: boolean;
-  localHostId: string | null;
   onProjectSelect?: () => void;
   onToggleProjectCollapsed: (projectId: string) => void;
   onToggleManagerCollapsed: (threadId: string) => void;
-  promotedBranchName: string | null;
 }
 
 const EMPTY_PROJECT_THREADS: ThreadListEntry[] = [];
@@ -52,11 +50,9 @@ export function ProjectRow({
   isCollapsed,
   collapsedManagerIds,
   isLocalPathInvalid,
-  localHostId,
   onProjectSelect,
   onToggleProjectCollapsed,
   onToggleManagerCollapsed,
-  promotedBranchName,
 }: ProjectRowProps) {
   const projectThreads =
     threadListState.status === "ready"
@@ -66,13 +62,6 @@ export function ProjectRow({
     () => buildProjectThreadGroups(projectThreads),
     [projectThreads],
   );
-  const isThreadPromoted = (thread: ThreadListEntry) =>
-    localHostId !== null &&
-    promotedBranchName !== null &&
-    thread.environmentHostId === localHostId &&
-    thread.environmentBranchName === promotedBranchName &&
-    thread.environmentWorkspaceDisplayKind !== "other";
-
   return (
     <SidebarMenuItem data-sidebar-sticky-project-item="">
       <ProjectActionsContextMenu project={project}>
@@ -194,7 +183,6 @@ export function ProjectRow({
                     projectId={project.id}
                     thread={managerThread}
                     isActive={selectedThreadId === managerThread.id}
-                    isPromoted={isThreadPromoted(managerThread)}
                     onProjectSelect={onProjectSelect}
                     options={{
                       kind: "manager",
@@ -211,7 +199,6 @@ export function ProjectRow({
                           projectId={project.id}
                           thread={managedThread}
                           isActive={selectedThreadId === managedThread.id}
-                          isPromoted={isThreadPromoted(managedThread)}
                           onProjectSelect={onProjectSelect}
                           options={{ kind: "managed-child" }}
                         />
@@ -226,7 +213,6 @@ export function ProjectRow({
                 projectId={project.id}
                 thread={thread}
                 isActive={selectedThreadId === thread.id}
-                isPromoted={isThreadPromoted(thread)}
                 onProjectSelect={onProjectSelect}
                 options={{ kind: "default" }}
               />

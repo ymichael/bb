@@ -2,7 +2,6 @@ import { useQuery } from "@tanstack/react-query";
 import type {
   ProjectBranchesResponse,
   ProjectResponse,
-  ProjectSourceWorkspaceStatusResponse,
   PromptHistoryResponse,
   WorkspaceFileListResponse,
 } from "@bb/server-contract";
@@ -13,18 +12,10 @@ import {
   projectPromptHistoryQueryKey,
   projectSourceBranchesQueryKey,
   projectsQueryKey,
-  projectSourceWorkspaceStatusQueryKey,
 } from "./query-keys";
 
 interface QueryOptions {
   enabled?: boolean;
-}
-
-const PROJECT_SOURCE_WORKSPACE_STATUS_STALE_MS = 30_000;
-
-interface RequireProjectSourceWorkspaceStatusIdsArgs {
-  projectId: string | null | undefined;
-  sourceId: string | null | undefined;
 }
 
 function requireProjectId(
@@ -129,41 +120,5 @@ export function useProjectFileSuggestions(args: {
     // Hold the previous query's results while a new query is fetching so the
     // mention menu doesn't flicker through "loading" between every keystroke.
     placeholderData: (previousData) => previousData,
-  });
-}
-
-function requireProjectSourceWorkspaceStatusIds({
-  projectId,
-  sourceId,
-}: RequireProjectSourceWorkspaceStatusIdsArgs) {
-  if (!projectId || !sourceId) {
-    throw new Error(
-      "useProjectSourceWorkspaceStatus: projectId and sourceId are required when query is enabled",
-    );
-  }
-
-  return {
-    projectId,
-    sourceId,
-  };
-}
-
-export function useProjectSourceWorkspaceStatus(
-  projectId: string | null | undefined,
-  sourceId: string | null | undefined,
-  options?: QueryOptions,
-) {
-  return useQuery<ProjectSourceWorkspaceStatusResponse>({
-    queryKey: projectSourceWorkspaceStatusQueryKey(projectId, sourceId),
-    queryFn: () => {
-      const ids = requireProjectSourceWorkspaceStatusIds({
-        projectId,
-        sourceId,
-      });
-      return api.getProjectSourceWorkspaceStatus(ids.projectId, ids.sourceId);
-    },
-    enabled: (options?.enabled ?? true) && Boolean(projectId && sourceId),
-    refetchOnWindowFocus: false,
-    staleTime: PROJECT_SOURCE_WORKSPACE_STATUS_STALE_MS,
   });
 }

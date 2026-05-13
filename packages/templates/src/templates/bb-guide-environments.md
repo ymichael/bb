@@ -1,7 +1,7 @@
 ---
 kind: instruction
 title: bb Guide — Environments
-summary: Command reference for environment inspection, commits, merges, and promote/demote.
+summary: Command reference for environment inspection, commits, and merges.
 intent: Provide complete environment command documentation for agents.
 editingNotes: Keep flags accurate against the CLI implementation.
 ---
@@ -20,6 +20,3 @@ Environments determine where threads run. Multiple threads can share an environm
 
   bb environment squash-merge <id>        Squash-merge into a target branch
     --merge-base-branch <branch>          Target branch (required)
-
-  bb environment promote <id>             Move environment into the primary checkout
-  bb environment demote <id>              Move environment out of the primary checkout

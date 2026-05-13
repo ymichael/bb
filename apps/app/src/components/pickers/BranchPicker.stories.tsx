@@ -9,7 +9,7 @@ const branches = [
   "origin/main",
   "origin/develop",
   "origin/staging",
-  "bb/feat/promotion-flow",
+  "bb/feat/review-flow",
   "bb/fix/timeline-pagination",
   "bb/implement-server-daemon-protocol-simplification-thr_qfk8ksbxkk",
 ] as const;

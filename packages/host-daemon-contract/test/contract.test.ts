@@ -678,45 +678,6 @@ describe("host-daemon command schemas", () => {
     ).toThrow();
   });
 
-  it("parses promote and demote commands", () => {
-    expect(
-      hostDaemonCommandSchema.parse({
-        type: "workspace.promote",
-        environmentId: "env_123",
-        environmentStatus: "ready",
-        workspaceContext: {
-          workspacePath: "/tmp/workspace",
-          workspaceProvisionType: "unmanaged",
-        },
-        threadId: "thr_123",
-        primaryPath: "/tmp/primary",
-      }),
-    ).toMatchObject({
-      type: "workspace.promote",
-      primaryPath: "/tmp/primary",
-    });
-
-    expect(
-      hostDaemonCommandSchema.parse({
-        type: "workspace.demote",
-        environmentId: "env_123",
-        environmentStatus: "ready",
-        workspaceContext: {
-          workspacePath: "/tmp/workspace",
-          workspaceProvisionType: "unmanaged",
-        },
-        threadId: "thr_123",
-        primaryPath: "/tmp/primary",
-        defaultBranch: "main",
-        envBranch: "bb/env-abc",
-      }),
-    ).toMatchObject({
-      type: "workspace.demote",
-      defaultBranch: "main",
-      envBranch: "bb/env-abc",
-    });
-  });
-
   it("requires replay.run request correlation", () => {
     expect(
       hostDaemonCommandSchema.parse({
@@ -782,22 +743,6 @@ describe("host-daemon command schemas", () => {
   });
 
   it("keeps typed per-command result schemas", () => {
-    expect(
-      hostDaemonCommandResultSchemaByType["workspace.promote"].parse({
-        ok: true,
-      }),
-    ).toMatchObject({
-      ok: true,
-    });
-
-    expect(
-      hostDaemonCommandResultSchemaByType["workspace.demote"].parse({
-        ok: true,
-      }),
-    ).toMatchObject({
-      ok: true,
-    });
-
     expect(
       hostDaemonCommandResultSchemaByType["host.list_files"].parse({
         files: [{ path: "notes/today.md", name: "today.md" }],

@@ -12,7 +12,6 @@ import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
 import * as api from "@/lib/api";
 import {
   projectPromptHistoryQueryKey,
-  projectSourceWorkspaceStatusQueryKey,
   threadQueryKey,
   threadPromptHistoryQueryKey,
   threadTimelineQueryKey,
@@ -154,29 +153,6 @@ describe("thread runtime mutations", () => {
     expect(
       queryClient.getQueryState(projectPromptHistoryQueryKey("project-1"))
         ?.isInvalidated,
-    ).toBe(true);
-  });
-
-  it("invalidates primary checkout status after sending a message", async () => {
-    vi.mocked(api.sendThreadMessage).mockResolvedValue(undefined);
-    const { queryClient, wrapper } = createQueryClientTestHarness();
-    const workspaceStatusQueryKey = projectSourceWorkspaceStatusQueryKey(
-      "project-1",
-      "source-1",
-    );
-    queryClient.setQueryData(workspaceStatusQueryKey, {});
-    const { result } = renderHook(() => useSendThreadMessage(), { wrapper });
-
-    await act(async () => {
-      await result.current.mutateAsync({
-        id: "thread-1",
-        input: [{ type: "text", text: "Continue" }],
-        mode: "auto",
-      });
-    });
-
-    expect(
-      queryClient.getQueryState(workspaceStatusQueryKey)?.isInvalidated,
     ).toBe(true);
   });
 
@@ -466,31 +442,6 @@ describe("thread runtime mutations", () => {
       threadTimelineQueryKey("thread-1", undefined),
     );
     expect(finalTimeline?.rows).toHaveLength(0);
-  });
-
-  it("invalidates primary checkout status after sending a queued draft", async () => {
-    vi.mocked(api.sendThreadDraft).mockResolvedValue({
-      ok: true,
-      queuedMessage,
-    });
-    const { queryClient, wrapper } = createQueryClientTestHarness();
-    const workspaceStatusQueryKey = projectSourceWorkspaceStatusQueryKey(
-      "project-1",
-      "source-1",
-    );
-    queryClient.setQueryData(workspaceStatusQueryKey, {});
-    const { result } = renderHook(() => useSendThreadDraft(), { wrapper });
-
-    await act(async () => {
-      await result.current.mutateAsync({
-        id: "thread-1",
-        queuedMessageId: "queued-1",
-      });
-    });
-
-    expect(
-      queryClient.getQueryState(workspaceStatusQueryKey)?.isInvalidated,
-    ).toBe(true);
   });
 
   it("adds thread follow-up history immediately after sending succeeds", async () => {

@@ -142,8 +142,6 @@ type CommandResultReportForType<TType extends ParsedCommandType> =
   | CommandResultSuccessReportForType<TType>;
 type WorkspaceMutationCommandType =
   | "workspace.commit"
-  | "workspace.demote"
-  | "workspace.promote"
   | "workspace.squash_merge";
 type WorkspaceMutationCommand =
   ParsedCommandForType<WorkspaceMutationCommandType>;
@@ -794,17 +792,7 @@ const commandResultOwners: CommandResultOwnerRegistry = {
       handleWorkspaceMutationResult(deps, command, report);
     },
   }),
-  "workspace.demote": defineCommandResultOwner({
-    applySideEffects: ({ deps, command, report }) => {
-      handleWorkspaceMutationResult(deps, command, report);
-    },
-  }),
   "workspace.diff": null,
-  "workspace.promote": defineCommandResultOwner({
-    applySideEffects: ({ deps, command, report }) => {
-      handleWorkspaceMutationResult(deps, command, report);
-    },
-  }),
   "workspace.squash_merge": defineCommandResultOwner({
     applySideEffects: ({ deps, command, report }) => {
       handleWorkspaceMutationResult(deps, command, report);

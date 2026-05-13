@@ -9,7 +9,6 @@ import {
   findLocalPathProjectSourceForHost,
   type ThreadListEntry,
 } from "@bb/domain";
-import type { ProjectSourceWorkspaceStatusResponse } from "@bb/server-contract";
 import { useLocation } from "react-router-dom";
 import {
   getConnectionAwareQueryState,
@@ -23,7 +22,6 @@ import {
   useLocalPathExistence,
 } from "@/hooks/queries/host-path-queries";
 import {
-  projectSourceWorkspaceStatusQueryKey,
   threadListQueryKey,
   type ThreadListQueryKey,
 } from "@/hooks/queries/query-keys";
@@ -66,10 +64,9 @@ interface ProjectListActionButtonsProps {
   isManagerActionPending: boolean;
 }
 
-interface ProjectSourceStatusTarget {
+interface LocalSourcePathTarget {
   path: string;
   projectId: string;
-  sourceId: string;
 }
 
 interface ProjectThreadQueryState {
@@ -79,11 +76,6 @@ interface ProjectThreadQueryState {
 type ProjectThreadQueryResult = Pick<
   UseQueryResult<ThreadListEntry[]>,
   "data" | "isFetching" | "isLoadingError"
->;
-
-type ProjectSourceWorkspaceStatusQueryResult = Pick<
-  UseQueryResult<ProjectSourceWorkspaceStatusResponse>,
-  "data"
 >;
 
 type ThreadQueryFnContext = QueryFunctionContext<ThreadListQueryKey>;
@@ -112,8 +104,6 @@ const PROJECT_LIST_ACTION_TRAILING_SLOT_CLASS = cn(
   "inline-flex shrink-0 items-center justify-center",
   COARSE_POINTER_ROW_ACTION_SIZE_CLASS,
 );
-
-const PROMOTED_BRANCH_STATUS_STALE_MS = 30_000;
 
 interface ProjectThreadListStateArgs {
   status: ConnectionAwareQueryStatus | undefined;
@@ -290,7 +280,7 @@ function ProjectListComponent({
 
   const localSourceTargets = useMemo(() => {
     if (!localHostId || !projects) return [];
-    const targets: ProjectSourceStatusTarget[] = [];
+    const targets: LocalSourcePathTarget[] = [];
     for (const project of projects) {
       const source = findLocalPathProjectSourceForHost(
         project.sources,
@@ -300,7 +290,6 @@ function ProjectListComponent({
         targets.push({
           path: source.path,
           projectId: project.id,
-          sourceId: source.id,
         });
       }
     }
@@ -314,43 +303,6 @@ function ProjectListComponent({
     }
     return pathsByProjectId;
   }, [localSourceTargets]);
-
-  const promotedBranchQueries = useMemo(
-    () =>
-      localSourceTargets.map((target) => ({
-        queryKey: projectSourceWorkspaceStatusQueryKey(
-          target.projectId,
-          target.sourceId,
-        ),
-        queryFn: () =>
-          api.getProjectSourceWorkspaceStatus(
-            target.projectId,
-            target.sourceId,
-          ),
-        staleTime: PROMOTED_BRANCH_STATUS_STALE_MS,
-        refetchOnWindowFocus: false,
-      })),
-    [localSourceTargets],
-  );
-  const combinePromotedBranchQueries = useCallback(
-    (results: readonly ProjectSourceWorkspaceStatusQueryResult[]) => {
-      const branchNamesByProjectId = new Map<string, string | null>();
-      for (let index = 0; index < results.length; index += 1) {
-        const target = localSourceTargets[index];
-        if (!target) continue;
-        branchNamesByProjectId.set(
-          target.projectId,
-          results[index].data?.workspace?.branch.currentBranch ?? null,
-        );
-      }
-      return branchNamesByProjectId;
-    },
-    [localSourceTargets],
-  );
-  const promotedBranchNamesByProjectId = useQueries({
-    queries: promotedBranchQueries,
-    combine: combinePromotedBranchQueries,
-  });
 
   const localPaths = useMemo(() => {
     if (!localHostId) return [];
@@ -484,13 +436,9 @@ function ProjectListComponent({
                     isCollapsed={collapsedProjectIds.has(project.id)}
                     collapsedManagerIds={collapsedManagerIds}
                     isLocalPathInvalid={isLocalPathInvalid}
-                    localHostId={localHostId}
                     onProjectSelect={onProjectSelect}
                     onToggleProjectCollapsed={toggleProjectCollapsed}
                     onToggleManagerCollapsed={toggleManagerCollapsed}
-                    promotedBranchName={
-                      promotedBranchNamesByProjectId.get(project.id) ?? null
-                    }
                   />
                 );
               })

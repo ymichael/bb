@@ -249,7 +249,7 @@ the affected rows/projects.
 **Changes:**
 
 - Memoize `ProjectRow` with a comparator that keys off project identity,
-  selected thread/project state, promoted branch, local path validity, and the
+  selected thread/project state, local path validity, and the
   relevant thread list state.
 - Replace inline `ThreadRowOptions` objects with stable constants for
   `default`/`managed-child` and memoized manager options.

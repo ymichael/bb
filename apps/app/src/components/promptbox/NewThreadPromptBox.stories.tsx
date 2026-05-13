@@ -101,7 +101,7 @@ const baseBranch: NewThreadBranchConfig = {
     "main",
     "develop",
     "feat/timeline-pagination",
-    "fix/promote-thread",
+    "fix/review-thread",
     "chore/upgrade-react",
   ],
   loading: false,
@@ -125,7 +125,7 @@ const basePermission = {
 const baseHistory: HistoryConfig = {
   currentDraft: { text: "", attachments: [] },
   entries: [
-    { text: "promote thread workspace", attachments: [] },
+    { text: "review thread workspace", attachments: [] },
     { text: "investigate timeline pagination", attachments: [] },
   ],
   onSelectEntry: noop,

@@ -98,8 +98,6 @@ interface FakeWorkspace {
   squashMerge: ReturnType<
     typeof vi.fn<(options: SquashMergeOptions) => Promise<SquashMergeResult>>
   >;
-  promote: ReturnType<typeof vi.fn<HostWorkspace["promote"]>>;
-  demote: ReturnType<typeof vi.fn<HostWorkspace["demote"]>>;
   destroy: ReturnType<typeof vi.fn<HostWorkspace["destroy"]>>;
 }
 
@@ -167,8 +165,6 @@ function createFakeWorkspace(path: string): FakeWorkspace {
       commitSubject: "squash subject",
       targetBranch: "main",
     })),
-    promote: vi.fn<HostWorkspace["promote"]>(async () => undefined),
-    demote: vi.fn<HostWorkspace["demote"]>(async () => undefined),
     destroy: vi.fn<HostWorkspace["destroy"]>(async () => undefined),
   };
 }

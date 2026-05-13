@@ -44,7 +44,6 @@ import type {
   EnvironmentActionApiError,
   EnvironmentActionRequest,
   EnvironmentActionResponse,
-  EnvironmentPromotionResponse,
   EnvironmentStatusQuery,
   EnvironmentStatusResponse,
   ThreadStorageContentQuery,
@@ -58,7 +57,6 @@ import type {
   PromptHistoryQuery,
   PromptHistoryResponse,
   ProjectResponse,
-  ProjectSourceWorkspaceStatusResponse,
   SendDraftRequest,
   SendDraftResponse,
   SendMessageRequest,
@@ -162,10 +160,6 @@ export type PublicApiSchema = {
       ProjectSource
     >;
     $delete: Endpoint<PathProjectSourceId, { ok: true }>;
-  };
-  "/projects/:id/sources/:sourceId/status": {
-    /** Return git workspace status for a local path project source primary checkout. */
-    $get: Endpoint<PathProjectSourceId, ProjectSourceWorkspaceStatusResponse>;
   };
   "/projects/:id/automations": {
     $get: Endpoint<PathProjectId, Automation[]>;
@@ -279,10 +273,6 @@ export type PublicApiSchema = {
       EnvironmentStatusResponse
     >;
   };
-  "/environments/:id/promotion": {
-    /** Derive current promotion state and server-side action eligibility for an environment. */
-    $get: Endpoint<PathId, EnvironmentPromotionResponse>;
-  };
   "/environments/:id/diff": {
     /** Get git diff for an environment's workspace. Proxies to `workspace.diff`. */
     $get: Endpoint<
@@ -309,7 +299,7 @@ export type PublicApiSchema = {
   };
   "/environments/:id/actions": {
     /**
-     * Execute an environment action (commit, squash_merge, promote, demote).
+     * Execute an environment action (commit, squash_merge).
      * Returns 409 if blocked by environment state.
      */
     $post:

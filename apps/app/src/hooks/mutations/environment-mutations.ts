@@ -9,7 +9,6 @@ import type { RequestEnvironmentActionMutationRequest } from "./mutation-request
 import {
   invalidateEnvironmentActionQueries,
   invalidateEnvironmentWorkspaceStateQueries,
-  invalidatePromoteOrDemoteEnvironmentActionQueries,
 } from "../cache-effects";
 import { environmentQueryKey } from "../queries/query-keys";
 type UpdateEnvironmentMutationRequest = {
@@ -30,12 +29,7 @@ export function useRequestEnvironmentAction() {
     }: RequestEnvironmentActionMutationRequest): Promise<EnvironmentActionResponse> =>
       api.requestEnvironmentAction(id, request),
     onSuccess: (_response, variables) => {
-      const invalidateActionRequestQueries =
-        variables.action === "promote" || variables.action === "demote"
-          ? invalidatePromoteOrDemoteEnvironmentActionQueries
-          : invalidateEnvironmentActionQueries;
-
-      invalidateActionRequestQueries({
+      invalidateEnvironmentActionQueries({
         environmentId: variables.id,
         queryClient,
       });

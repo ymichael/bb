@@ -30,12 +30,10 @@ import type {
   EnvironmentActionResponse,
   EnvironmentDiffFileQuery,
   EnvironmentDiffFileResponse,
-  EnvironmentPromotionResponse,
   EnvironmentStatusResponse,
   CreateThreadRequest,
   ProjectBranchesResponse,
   ProjectResponse,
-  ProjectSourceWorkspaceStatusResponse,
   PromptHistoryResponse,
   SendDraftResponse,
   SendMessageRequest,
@@ -525,17 +523,6 @@ export async function getProjectGithubBranches(
   );
 }
 
-export async function getProjectSourceWorkspaceStatus(
-  projectId: string,
-  sourceId: string,
-): Promise<ProjectSourceWorkspaceStatusResponse> {
-  return request<ProjectSourceWorkspaceStatusResponse>(
-    apiClient.projects[":id"].sources[":sourceId"].status.$get({
-      param: { id: projectId, sourceId },
-    }),
-  );
-}
-
 export async function uploadPromptAttachment(
   projectId: string,
   file: File,
@@ -867,16 +854,6 @@ export async function getEnvironmentWorkStatus(
     ),
   );
   return res.workspace;
-}
-
-export async function getEnvironmentPromotion(
-  environmentId: string,
-): Promise<EnvironmentPromotionResponse> {
-  return request<EnvironmentPromotionResponse>(
-    apiClient.environments[":id"].promotion.$get({
-      param: { id: environmentId },
-    }),
-  );
 }
 
 export async function getEnvironmentDiffBranches(

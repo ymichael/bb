@@ -5,12 +5,10 @@ import type {
   WorkspaceDiffTarget,
   WorkspaceStatus,
 } from "@bb/domain";
-import type { EnvironmentPromotionResponse } from "@bb/server-contract";
 import type { FilePreview } from "@/lib/api";
 import * as api from "@/lib/api";
 import {
   environmentFilePreviewQueryKey,
-  environmentPromotionQueryKey,
   environmentGitDiffQueryKey,
   environmentMergeBaseBranchesQueryKey,
   environmentQueryKey,
@@ -29,7 +27,6 @@ interface UseEnvironmentGitDiffOptions extends QueryOptions {
   target?: WorkspaceDiffTarget;
 }
 
-const ENVIRONMENT_PROMOTION_STALE_MS = 30_000;
 const ENVIRONMENT_WORK_STATUS_STALE_MS = 10_000;
 const MERGE_BASE_BRANCHES_STALE_MS = 30_000;
 
@@ -95,22 +92,6 @@ export function useEnvironmentWorkStatus(
             environmentId,
           )
         : undefined,
-  });
-}
-
-export function useEnvironmentPromotion(
-  environmentId: string | null | undefined,
-  options?: QueryOptions,
-) {
-  return useQuery<EnvironmentPromotionResponse>({
-    queryKey: environmentPromotionQueryKey(environmentId),
-    queryFn: () =>
-      api.getEnvironmentPromotion(
-        requireEnvironmentId(environmentId, "useEnvironmentPromotion"),
-      ),
-    enabled: (options?.enabled ?? true) && Boolean(environmentId),
-    refetchOnWindowFocus: false,
-    staleTime: ENVIRONMENT_PROMOTION_STALE_MS,
   });
 }
 

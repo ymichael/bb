@@ -20,31 +20,3 @@ export async function squashMerge(
     commitSubject: result.commitSubject,
   };
 }
-
-export async function promoteWorkspace(
-  command: CommandOf<"workspace.promote">,
-  runtimeManager: RuntimeManager,
-): Promise<HostDaemonCommandResult<"workspace.promote">> {
-  const entry = await requireWorkspaceEnvironment(command, runtimeManager);
-  const primaryWorkspace = await runtimeManager.openWorkspace(
-    command.primaryPath,
-  );
-  await entry.workspace.promote(primaryWorkspace);
-  return { ok: true };
-}
-
-export async function demoteWorkspace(
-  command: CommandOf<"workspace.demote">,
-  runtimeManager: RuntimeManager,
-): Promise<HostDaemonCommandResult<"workspace.demote">> {
-  const entry = await requireWorkspaceEnvironment(command, runtimeManager);
-  const primaryWorkspace = await runtimeManager.openWorkspace(
-    command.primaryPath,
-  );
-  await entry.workspace.demote({
-    primary: primaryWorkspace,
-    defaultBranch: command.defaultBranch,
-    envBranch: command.envBranch,
-  });
-  return { ok: true };
-}

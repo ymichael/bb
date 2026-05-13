@@ -15,10 +15,8 @@ import {
   createPublicApiClient,
   createThreadRequestSchema,
   environmentActionRequestSchema,
-  environmentPromotionResponseSchema,
   baseBranchSpecSchema,
   gitBranchNameSchema,
-  projectSourceWorkspaceStatusResponseSchema,
   resolvePendingInteractionRequestSchema,
   sendMessageRequestSchema,
   threadListResponseSchema,
@@ -431,48 +429,6 @@ describe("server-contract canonical schemas", () => {
     });
 
     expect(
-      projectSourceWorkspaceStatusResponseSchema.parse({
-        sourceId: "src_123",
-        hostId: "host_123",
-        path: "/tmp/project",
-        refreshedAt: 1,
-        workspace: null,
-      }),
-    ).toMatchObject({
-      sourceId: "src_123",
-      workspace: null,
-    });
-
-    expect(
-      environmentPromotionResponseSchema.parse({
-        state: {
-          isPromoted: true,
-          branchName: "bb/test",
-        },
-        actions: {
-          promote: {
-            unavailableReasons: ["already_promoted"],
-          },
-          demote: {
-            unavailableReasons: [],
-          },
-        },
-      }),
-    ).toMatchObject({
-      state: {
-        isPromoted: true,
-      },
-      actions: {
-        promote: {
-          unavailableReasons: ["already_promoted"],
-        },
-        demote: {
-          unavailableReasons: [],
-        },
-      },
-    });
-
-    expect(
       threadListResponseSchema.parse([
         {
           id: "thr_123",
@@ -590,22 +546,6 @@ describe("server-contract canonical schemas", () => {
         commitSha: "sha",
         commitSubject: "subject",
         merged: true,
-        message: "",
-        ok: true,
-      }),
-    ).toThrow();
-
-    expect(() =>
-      contract.environmentActionResponseSchema.parse({
-        action: "promote",
-        message: "",
-        ok: true,
-      }),
-    ).toThrow();
-
-    expect(() =>
-      contract.environmentActionResponseSchema.parse({
-        action: "demote",
         message: "",
         ok: true,
       }),

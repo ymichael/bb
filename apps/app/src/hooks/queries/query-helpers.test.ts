@@ -329,7 +329,6 @@ describe("getEnvironmentWorkspaceStateInvalidationQueryKeys", () => {
       ["environmentWorkStatus", "env-1"],
       ["environmentGitDiff", "env-1"],
       ["environmentFilePreview", "env-1"],
-      ["environmentPromotion", "env-1"],
     ]);
   });
 });
@@ -434,7 +433,6 @@ describe("getEnvironmentActionInvalidationQueryKeys", () => {
       ["environmentWorkStatus", "env-1"],
       ["environmentGitDiff", "env-1"],
       ["environmentFilePreview", "env-1"],
-      ["environmentPromotion", "env-1"],
       ["environmentMergeBaseBranches", "env-1"],
       ["threads"],
     ]);

@@ -39,10 +39,6 @@ const changedFiles: WorkspaceFileStatus[] = [
     path: "apps/app/src/components/thread/dialogs/ThreadGitActionDialog.tsx",
     status: "M",
   },
-  {
-    path: "apps/app/src/components/thread/dialogs/ThreadEnvironmentPromotionDialog.tsx",
-    status: "M",
-  },
 ];
 
 const dirtyGitStatus: ThreadGitStatusDisplay = {

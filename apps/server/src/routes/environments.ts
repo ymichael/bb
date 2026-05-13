@@ -24,12 +24,7 @@ import {
   requireReadyEnvironment,
 } from "../services/lib/entity-lookup.js";
 import { queueCommandAndWait } from "../services/hosts/command-wait.js";
-import { requireSourceForHost } from "../services/threads/thread-create-helpers.js";
 import { generateCommitMessage } from "../services/ai/commit-message.js";
-import {
-  queueEnvironmentDemote,
-  readEnvironmentPromotionResponse,
-} from "../services/environments/environment-promotion.js";
 
 const COMMIT_FALLBACK_MESSAGE = "bb: automated commit";
 const SQUASH_MERGE_FALLBACK_MESSAGE = "bb: squash merge";
@@ -159,13 +154,6 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
       return context.json({ workspace: result.workspaceStatus });
     },
   );
-
-  get("/environments/:id/promotion", async (context) => {
-    const environment = requireEnvironment(deps.db, context.req.param("id"));
-    return context.json(
-      await readEnvironmentPromotionResponse(deps, { environment }),
-    );
-  });
 
   get(
     "/environments/:id/diff",
@@ -402,39 +390,6 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
             message: "Squash merge completed",
             commitSha: result.commitSha,
             commitSubject: result.commitSubject,
-          });
-        }
-        case "promote": {
-          const source = requireSourceForHost(
-            deps,
-            environment.projectId,
-            environment.hostId,
-          );
-          await queueCommandAndWait(deps, {
-            hostId: environment.hostId,
-            timeoutMs: COMMAND_TIMEOUT_MS,
-            command: {
-              type: "workspace.promote",
-              environmentId: environment.id,
-              workspaceContext: {
-                workspacePath: environment.path,
-                workspaceProvisionType: environment.workspaceProvisionType,
-              },
-              primaryPath: source.path,
-            },
-          });
-          return context.json({
-            ok: true,
-            action: "promote",
-            message: "Environment promoted to primary checkout",
-          });
-        }
-        case "demote": {
-          await queueEnvironmentDemote(deps, { environment });
-          return context.json({
-            ok: true,
-            action: "demote",
-            message: "Environment restored to default branch",
           });
         }
         default: {

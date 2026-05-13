@@ -35,7 +35,7 @@ All commands support --json for machine-readable output.
 Run `bb guide <chapter>` for command details:
 
   threads        Spawning, inspecting, messaging, and managing threads
-  environments   Environment operations, commits, merges, promote/demote
+  environments   Environment operations, commits, and merges
   managers       Hiring and managing project managers
   providers      Discovering providers and models
   projects       Project CRUD and sources

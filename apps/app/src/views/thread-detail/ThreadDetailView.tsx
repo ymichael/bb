@@ -34,7 +34,6 @@ import {
   useThreads,
 } from "../../hooks/queries/thread-queries";
 import { ThreadGitActionDialog } from "@/components/dialogs/ThreadGitActionDialog";
-import { ThreadEnvironmentPromotionDialog } from "@/components/dialogs/ThreadEnvironmentPromotionDialog";
 import { PageShell } from "@/components/ui/page-shell.js";
 import { HEADER_ICON_BUTTON_CLASS } from "@/components/layout/AppPageHeader";
 import { ThreadActionsMenu } from "@/components/thread/ThreadActionsMenu";
@@ -77,7 +76,6 @@ import {
 import type { SecondaryPanelFileTab } from "@/components/secondary-panel/ThreadSecondaryPanel";
 import { useEnvironmentMergeBase } from "@/components/secondary-panel/git-diff/useEnvironmentMergeBase";
 import { useThreadGitActions } from "./useThreadGitActions";
-import { useThreadEnvironmentPromotionActions } from "./useThreadEnvironmentPromotionActions";
 import { useThreadReadTracking } from "./useThreadReadTracking";
 import { useThreadTimelinePages } from "./useThreadTimelinePages";
 import {
@@ -471,14 +469,6 @@ export function ThreadDetailView() {
     thread,
     workspaceStatus,
   });
-  const isAgentActive = thread?.status === "active";
-  const promotionActions = useThreadEnvironmentPromotionActions({
-    environment,
-    isAgentActive,
-    requestEnvironmentAction,
-    thread,
-  });
-
   const parentThreadId = thread?.parentThreadId;
   const parentThreadDisplayName =
     parentThread?.title && parentThread.title.trim().length > 0
@@ -668,13 +658,10 @@ export function ThreadDetailView() {
       actionsMenu={threadActionsMenu}
       isManagedThread={Boolean(parentThreadId)}
       isManagerThread={isManagerThread}
-      isPromoted={promotionActions.isPromoted}
       isThreadGitActionPending={gitActions.isThreadGitActionPending}
       onOpenThreadGitAction={gitActions.threadGitActionDialog.onOpen}
-      onOpenThreadPromotionAction={promotionActions.promotionDialog.onOpen}
       onToggleSecondaryPanel={toggleThreadSecondaryPanel}
       threadHeaderGitActions={gitActions.threadHeaderGitActions}
-      threadHeaderPromotionAction={promotionActions.headerAction}
       threadTitle={threadTitle}
       workspaceOpenButton={workspaceOpenButton}
     />
@@ -860,17 +847,6 @@ export function ThreadDetailView() {
           onSquashMerge={gitActions.handleSquashMergeThread}
         />
       ) : null}
-      <ThreadEnvironmentPromotionDialog
-        agentActive={isAgentActive}
-        blockers={promotionActions.dialogBlockers}
-        target={promotionActions.promotionDialog.target}
-        pending={promotionActions.isPromotionActionPending}
-        branchName={promotionActions.branchName}
-        defaultBranch={promotionActions.defaultBranch}
-        primaryCheckoutPath={promotionActions.primaryCheckoutPath}
-        onOpenChange={promotionActions.promotionDialog.onOpenChange}
-        onSubmit={promotionActions.handlePromotionAction}
-      />
     </>
   );
 }
