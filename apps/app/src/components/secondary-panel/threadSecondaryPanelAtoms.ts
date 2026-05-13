@@ -1,10 +1,6 @@
 import { atom } from "jotai";
 import { atomWithStorage } from "jotai/utils";
 import { createLocalStorageSyncStorage } from "@/lib/browser-storage";
-import type {
-  EnvironmentFilePreviewSource,
-  WorkspaceFilePreviewStatusLabel,
-} from "@/lib/file-preview";
 
 export const threadSecondaryPanelResizingAtom = atom(false);
 
@@ -45,28 +41,3 @@ export const selectedMergeBaseBranchAtom = atom<string | undefined>(undefined);
 
 /** Set by openDiffFile (prompt banner), consumed by useGitDiffPanelState to scroll to file. */
 export const pendingGitDiffScrollPathAtom = atom<string | null>(null);
-
-export interface WorkspaceFileTab {
-  lineNumber: number | null;
-  path: string;
-  source: EnvironmentFilePreviewSource;
-  statusLabel: WorkspaceFilePreviewStatusLabel | null;
-}
-
-/** Workspace preview tabs open in the secondary panel for the current thread. */
-export const openWorkspaceFileTabsAtom = atom<readonly WorkspaceFileTab[]>([]);
-
-/**
- * Active workspace preview tab path. Mutually exclusive with
- * activeStorageFilePathAtom — at most one is non-null at any time.
- */
-export const activeWorkspaceFilePathAtom = atom<string | null>(null);
-
-/** Manager-storage tabs open in the secondary panel for the current thread. */
-export const openStorageFilePathsAtom = atom<readonly string[]>([]);
-
-/**
- * Active manager-storage tab path. Mutually exclusive with
- * activeWorkspaceFilePathAtom — at most one is non-null at any time.
- */
-export const activeStorageFilePathAtom = atom<string | null>(null);

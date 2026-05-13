@@ -1,191 +1,337 @@
-import { useCallback, useEffect, useRef } from "react";
-import { useAtomValue, useSetAtom } from "jotai";
+import { useCallback, useEffect } from "react";
+import type { ThreadType } from "@bb/domain";
 import {
-  activeStorageFilePathAtom,
-  activeWorkspaceFilePathAtom,
-  openStorageFilePathsAtom,
-  openWorkspaceFileTabsAtom,
-  type WorkspaceFileTab,
-} from "./threadSecondaryPanelAtoms";
-import { PINNED_STORAGE_FILE_PATH } from "./managerStorage";
+  useSetThreadSecondaryPanel,
+  useThreadSecondaryPanelState,
+  useUpdateThreadSecondaryPanelState,
+} from "@/lib/thread-secondary-panel";
 import { areEnvironmentFilePreviewSourcesEqual } from "@/lib/file-preview";
-import { useSetThreadSecondaryPanel } from "@/lib/thread-secondary-panel";
+import {
+  clearActiveFileTab,
+  clearWorkspaceTabsForEnvironment,
+  getActiveStorageFilePath,
+  getActiveWorkspaceFileTab,
+  normalizeThreadSecondaryPanelState,
+  pruneStorageFileTabs,
+  type ThreadSecondaryPanelFileTabRef,
+  type ThreadSecondaryPanelFileTabsState,
+  type ThreadSecondaryPanelState,
+  type WorkspaceFileTabState,
+} from "@/lib/thread-secondary-panel-state";
+import { PINNED_STORAGE_FILE_PATH } from "./managerStorage";
 
 interface UseThreadFileTabsParams {
   threadId: string | null | undefined;
   environmentId: string | null | undefined;
-  isManagerThread: boolean;
+  threadType: ThreadType | undefined;
   storageFiles: readonly { path: string }[] | undefined;
 }
 
-function arePathListsEqual(
-  a: readonly string[],
-  b: readonly string[],
-): boolean {
-  if (a.length !== b.length) return false;
-  for (let i = 0; i < a.length; i += 1) {
-    if (a[i] !== b[i]) return false;
+function upsertWorkspaceFileTab(
+  tabs: readonly WorkspaceFileTabState[],
+  nextTab: WorkspaceFileTabState,
+): readonly WorkspaceFileTabState[] {
+  const existingTab = tabs.find((tab) => tab.path === nextTab.path);
+  if (!existingTab) {
+    return [...tabs, nextTab];
   }
-  return true;
+  if (
+    existingTab.lineNumber === nextTab.lineNumber &&
+    areEnvironmentFilePreviewSourcesEqual(existingTab.source, nextTab.source) &&
+    existingTab.statusLabel === nextTab.statusLabel
+  ) {
+    return tabs;
+  }
+  return tabs.map((tab) => (tab.path === nextTab.path ? nextTab : tab));
+}
+
+function removeWorkspaceFileTab(
+  tabs: readonly WorkspaceFileTabState[],
+  path: string,
+): readonly WorkspaceFileTabState[] {
+  const nextTabs = tabs.filter((tab) => tab.path !== path);
+  return nextTabs.length === tabs.length ? tabs : nextTabs;
+}
+
+function removeStorageFileTab(
+  tabs: readonly string[],
+  path: string,
+): readonly string[] {
+  const nextTabs = tabs.filter((openPath) => openPath !== path);
+  return nextTabs.length === tabs.length ? tabs : nextTabs;
+}
+
+function buildActiveWorkspaceFileTab(
+  path: string,
+): ThreadSecondaryPanelFileTabRef {
+  return {
+    type: "workspace",
+    path,
+  };
+}
+
+function buildActiveStorageFileTab(
+  path: string,
+): ThreadSecondaryPanelFileTabRef {
+  return {
+    type: "storage",
+    path,
+  };
+}
+
+function setFileTabs(
+  state: ThreadSecondaryPanelState,
+  fileTabs: ThreadSecondaryPanelFileTabsState,
+): ThreadSecondaryPanelState {
+  return {
+    ...state,
+    fileTabs,
+  };
 }
 
 export function useThreadFileTabs({
   threadId,
   environmentId,
-  isManagerThread,
+  threadType,
   storageFiles,
 }: UseThreadFileTabsParams) {
-  const openWorkspaceFileTabs = useAtomValue(openWorkspaceFileTabsAtom);
-  const setOpenWorkspaceFileTabs = useSetAtom(openWorkspaceFileTabsAtom);
-  const activeWorkspaceFilePath = useAtomValue(activeWorkspaceFilePathAtom);
-  const setActiveWorkspaceFilePath = useSetAtom(activeWorkspaceFilePathAtom);
-  const openStorageFilePaths = useAtomValue(openStorageFilePathsAtom);
-  const setOpenStorageFilePaths = useSetAtom(openStorageFilePathsAtom);
-  const rawActiveStorageFilePath = useAtomValue(activeStorageFilePathAtom);
-  const setActiveStorageFilePath = useSetAtom(activeStorageFilePathAtom);
-  const setSecondaryPanel = useSetThreadSecondaryPanel();
-  const hasDefaultedToPinnedFileRef = useRef(false);
+  const panelState = useThreadSecondaryPanelState(threadId);
+  const updatePanelState = useUpdateThreadSecondaryPanelState(threadId);
+  const setSecondaryPanel = useSetThreadSecondaryPanel(threadId);
+  const isThreadResolved = threadType !== undefined;
+  const isManagerThread = threadType === "manager";
+  const resolvedEnvironmentId = isThreadResolved
+    ? (environmentId ?? null)
+    : undefined;
 
   useEffect(() => {
-    setOpenWorkspaceFileTabs([]);
-    setActiveWorkspaceFilePath(null);
-    setOpenStorageFilePaths([]);
-    setActiveStorageFilePath(null);
-    hasDefaultedToPinnedFileRef.current = false;
-  }, [
-    environmentId,
-    setActiveStorageFilePath,
-    setActiveWorkspaceFilePath,
-    setOpenStorageFilePaths,
-    setOpenWorkspaceFileTabs,
-    threadId,
-  ]);
+    if (!isThreadResolved) return;
+    updatePanelState((state) =>
+      normalizeThreadSecondaryPanelState({ isManagerThread, state }),
+    );
+  }, [isManagerThread, isThreadResolved, updatePanelState]);
+
+  useEffect(() => {
+    if (!isThreadResolved) return;
+    updatePanelState((state) =>
+      clearWorkspaceTabsForEnvironment({
+        environmentId: resolvedEnvironmentId,
+        state,
+      }),
+    );
+  }, [isThreadResolved, resolvedEnvironmentId, updatePanelState]);
 
   useEffect(() => {
     if (!isManagerThread) return;
-    setOpenStorageFilePaths((prev) => {
-      if (prev[0] === PINNED_STORAGE_FILE_PATH) return prev;
-      const withoutPinned = prev.filter(
+    updatePanelState((state) => {
+      const normalizedState = normalizeThreadSecondaryPanelState({
+        isManagerThread,
+        state,
+      });
+      if (
+        normalizedState.fileTabs.storage[0] === PINNED_STORAGE_FILE_PATH &&
+        normalizedState.fileTabs.active !== null
+      ) {
+        return normalizedState;
+      }
+      const storageWithoutPinned = normalizedState.fileTabs.storage.filter(
         (path) => path !== PINNED_STORAGE_FILE_PATH,
       );
-      return [PINNED_STORAGE_FILE_PATH, ...withoutPinned];
+      const storage = [PINNED_STORAGE_FILE_PATH, ...storageWithoutPinned];
+      return setFileTabs(normalizedState, {
+        ...normalizedState.fileTabs,
+        storage,
+        active:
+          normalizedState.fileTabs.active ??
+          buildActiveStorageFileTab(PINNED_STORAGE_FILE_PATH),
+      });
     });
-    if (hasDefaultedToPinnedFileRef.current) return;
-    hasDefaultedToPinnedFileRef.current = true;
-    setActiveStorageFilePath((prev) => prev ?? PINNED_STORAGE_FILE_PATH);
-  }, [isManagerThread, setActiveStorageFilePath, setOpenStorageFilePaths]);
+  }, [isManagerThread, updatePanelState]);
 
   useEffect(() => {
-    if (!storageFiles) return;
-    const known = new Set(storageFiles.map((file) => file.path));
-    setOpenStorageFilePaths((prev) => {
-      const next = prev.filter((path) => known.has(path));
-      return arePathListsEqual(next, prev) ? prev : next;
-    });
-    setActiveStorageFilePath((prev) =>
-      prev !== null && !known.has(prev) ? null : prev,
+    if (!isThreadResolved || !storageFiles) return;
+    updatePanelState((state) =>
+      pruneStorageFileTabs({
+        isManagerThread,
+        pinnedStorageFilePath: PINNED_STORAGE_FILE_PATH,
+        state,
+        storageFiles,
+      }),
     );
-  }, [setActiveStorageFilePath, setOpenStorageFilePaths, storageFiles]);
+  }, [isManagerThread, isThreadResolved, storageFiles, updatePanelState]);
 
   const openWorkspaceFile = useCallback(
-    ({ lineNumber, path, source, statusLabel }: WorkspaceFileTab) => {
-      setOpenWorkspaceFileTabs((prev) => {
-        const existingTab = prev.find((tab) => tab.path === path);
-        if (!existingTab) {
-          return [...prev, { lineNumber, path, source, statusLabel }];
-        }
+    ({ lineNumber, path, source, statusLabel }: WorkspaceFileTabState) => {
+      if (resolvedEnvironmentId === undefined) return;
+      updatePanelState((state) => {
+        const workspace = upsertWorkspaceFileTab(state.fileTabs.workspace, {
+          lineNumber,
+          path,
+          source,
+          statusLabel,
+        });
+        const isAlreadyActive =
+          state.fileTabs.active?.type === "workspace" &&
+          state.fileTabs.active.path === path;
         if (
-          existingTab.lineNumber === lineNumber &&
-          areEnvironmentFilePreviewSourcesEqual(existingTab.source, source) &&
-          existingTab.statusLabel === statusLabel
+          state.environmentId === resolvedEnvironmentId &&
+          workspace === state.fileTabs.workspace &&
+          isAlreadyActive
         ) {
-          return prev;
+          return state;
         }
-        return prev.map((tab) =>
-          tab.path === path ? { lineNumber, path, source, statusLabel } : tab,
+        return setFileTabs(
+          {
+            ...state,
+            environmentId: resolvedEnvironmentId,
+          },
+          {
+            ...state.fileTabs,
+            workspace,
+            active: buildActiveWorkspaceFileTab(path),
+          },
         );
       });
-      setActiveWorkspaceFilePath(path);
-      setActiveStorageFilePath(null);
       setSecondaryPanel("thread-info");
     },
-    [
-      setActiveStorageFilePath,
-      setActiveWorkspaceFilePath,
-      setOpenWorkspaceFileTabs,
-      setSecondaryPanel,
-    ],
+    [resolvedEnvironmentId, setSecondaryPanel, updatePanelState],
   );
 
   const closeWorkspaceFileTab = useCallback(
     (path: string) => {
-      setOpenWorkspaceFileTabs((prev) =>
-        prev.filter((tab) => tab.path !== path),
-      );
-      setActiveWorkspaceFilePath((prev) => (prev === path ? null : prev));
+      updatePanelState((state) => {
+        const workspace = removeWorkspaceFileTab(
+          state.fileTabs.workspace,
+          path,
+        );
+        if (workspace === state.fileTabs.workspace) {
+          return state;
+        }
+        return setFileTabs(state, {
+          ...state.fileTabs,
+          workspace,
+          active:
+            state.fileTabs.active?.type === "workspace" &&
+            state.fileTabs.active.path === path
+              ? null
+              : state.fileTabs.active,
+        });
+      });
     },
-    [setActiveWorkspaceFilePath, setOpenWorkspaceFileTabs],
+    [updatePanelState],
   );
 
   const activateWorkspaceFileTab = useCallback(
     (path: string) => {
-      setActiveWorkspaceFilePath(path);
-      setActiveStorageFilePath(null);
+      updatePanelState((state) => {
+        if (
+          !state.fileTabs.workspace.some((tab) => tab.path === path) ||
+          (state.fileTabs.active?.type === "workspace" &&
+            state.fileTabs.active.path === path)
+        ) {
+          return state;
+        }
+        return setFileTabs(state, {
+          ...state.fileTabs,
+          active: buildActiveWorkspaceFileTab(path),
+        });
+      });
     },
-    [setActiveStorageFilePath, setActiveWorkspaceFilePath],
+    [updatePanelState],
   );
 
   const openStorageFile = useCallback(
     (path: string) => {
-      setOpenStorageFilePaths((prev) =>
-        prev.includes(path) ? prev : [...prev, path],
-      );
-      setActiveStorageFilePath(path);
-      setActiveWorkspaceFilePath(null);
+      if (!isManagerThread) return;
+      updatePanelState((state) => {
+        const storage = state.fileTabs.storage.includes(path)
+          ? state.fileTabs.storage
+          : [...state.fileTabs.storage, path];
+        if (
+          storage === state.fileTabs.storage &&
+          state.fileTabs.active?.type === "storage" &&
+          state.fileTabs.active.path === path
+        ) {
+          return state;
+        }
+        return setFileTabs(state, {
+          ...state.fileTabs,
+          storage,
+          active: buildActiveStorageFileTab(path),
+        });
+      });
     },
-    [
-      setActiveStorageFilePath,
-      setActiveWorkspaceFilePath,
-      setOpenStorageFilePaths,
-    ],
+    [isManagerThread, updatePanelState],
   );
 
   const closeStorageFileTab = useCallback(
     (path: string) => {
-      if (path === PINNED_STORAGE_FILE_PATH) return;
-      setOpenStorageFilePaths((prev) =>
-        prev.filter((openPath) => openPath !== path),
-      );
-      setActiveStorageFilePath((prev) => (prev === path ? null : prev));
+      if (!isManagerThread || path === PINNED_STORAGE_FILE_PATH) return;
+      updatePanelState((state) => {
+        const storage = removeStorageFileTab(state.fileTabs.storage, path);
+        if (storage === state.fileTabs.storage) {
+          return state;
+        }
+        return setFileTabs(state, {
+          ...state.fileTabs,
+          storage,
+          active:
+            state.fileTabs.active?.type === "storage" &&
+            state.fileTabs.active.path === path
+              ? null
+              : state.fileTabs.active,
+        });
+      });
     },
-    [setActiveStorageFilePath, setOpenStorageFilePaths],
+    [isManagerThread, updatePanelState],
   );
 
   const activateStorageFileTab = useCallback(
     (path: string) => {
-      setActiveStorageFilePath(path);
-      setActiveWorkspaceFilePath(null);
+      if (!isManagerThread) return;
+      updatePanelState((state) => {
+        if (
+          !state.fileTabs.storage.includes(path) ||
+          (state.fileTabs.active?.type === "storage" &&
+            state.fileTabs.active.path === path)
+        ) {
+          return state;
+        }
+        return setFileTabs(state, {
+          ...state.fileTabs,
+          active: buildActiveStorageFileTab(path),
+        });
+      });
     },
-    [setActiveStorageFilePath, setActiveWorkspaceFilePath],
+    [isManagerThread, updatePanelState],
   );
 
   const clearActiveFileTabs = useCallback(() => {
-    setActiveWorkspaceFilePath(null);
-    setActiveStorageFilePath(null);
-  }, [setActiveStorageFilePath, setActiveWorkspaceFilePath]);
+    updatePanelState(clearActiveFileTab);
+  }, [updatePanelState]);
 
-  const activeWorkspaceFileTab =
-    openWorkspaceFileTabs.find((tab) => tab.path === activeWorkspaceFilePath) ??
-    null;
-  const activeStorageFilePath =
-    activeWorkspaceFilePath === null ? rawActiveStorageFilePath : null;
+  const workspaceEnvironmentMatches =
+    resolvedEnvironmentId !== undefined &&
+    panelState.environmentId === resolvedEnvironmentId;
+  const visibleWorkspaceFileTabs = workspaceEnvironmentMatches
+    ? panelState.fileTabs.workspace
+    : [];
+  const activeWorkspaceFileTab = workspaceEnvironmentMatches
+    ? getActiveWorkspaceFileTab(panelState)
+    : null;
+  const activeStorageFilePath = isManagerThread
+    ? getActiveStorageFilePath(panelState)
+    : null;
+  const openStorageFilePaths = isManagerThread
+    ? panelState.fileTabs.storage
+    : [];
 
   return {
     activateStorageFileTab,
     activateWorkspaceFileTab,
     activeStorageFilePath,
     activeWorkspaceFileLineNumber: activeWorkspaceFileTab?.lineNumber ?? null,
-    activeWorkspaceFilePath,
+    activeWorkspaceFilePath: activeWorkspaceFileTab?.path ?? null,
     activeWorkspaceFileSource: activeWorkspaceFileTab?.source ?? null,
     activeWorkspaceFileStatusLabel: activeWorkspaceFileTab?.statusLabel ?? null,
     clearActiveFileTabs,
@@ -194,6 +340,6 @@ export function useThreadFileTabs({
     openStorageFile,
     openStorageFilePaths,
     openWorkspaceFile,
-    openWorkspaceFileTabs,
+    openWorkspaceFileTabs: visibleWorkspaceFileTabs,
   };
 }

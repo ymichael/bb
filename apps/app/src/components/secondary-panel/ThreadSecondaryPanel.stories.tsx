@@ -5,12 +5,10 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { Provider as JotaiProvider, createStore, useSetAtom } from "jotai";
 import {
   ThreadSecondaryPanel,
   type SecondaryPanelFileTab,
 } from "./ThreadSecondaryPanel";
-import { activeSecondaryPanelAtom } from "@/lib/thread-secondary-panel";
 import type { ThreadSecondaryPanel as ThreadSecondaryPanelTab } from "@/lib/thread-secondary-panel";
 import { StoryCard, StoryRow } from "../../../.ladle/story-card";
 
@@ -30,34 +28,17 @@ function PanelStage({ children }: { children: ReactNode }) {
   );
 }
 
-// Each story instance gets its own jotai store so the active-panel atom is
-// isolated from every other instance on the page.
-function PanelHarness({
-  initialPanel,
-  children,
-}: {
+interface PanelHarnessProps {
   initialPanel: ThreadSecondaryPanelTab;
-  children: ReactNode;
-}) {
-  const store = useMemo(() => {
-    const next = createStore();
-    next.set(activeSecondaryPanelAtom, initialPanel);
-    return next;
-  }, [initialPanel]);
-  return (
-    <JotaiProvider store={store}>
-      <ActivePanelSetter panel={initialPanel} />
-      {children}
-    </JotaiProvider>
-  );
+  children: (panel: ThreadSecondaryPanelTab) => ReactNode;
 }
 
-function ActivePanelSetter({ panel }: { panel: ThreadSecondaryPanelTab }) {
-  const setActive = useSetAtom(activeSecondaryPanelAtom);
+function PanelHarness({ initialPanel, children }: PanelHarnessProps) {
+  const [panel, setPanel] = useState(initialPanel);
   useEffect(() => {
-    setActive(panel);
-  }, [panel, setActive]);
-  return null;
+    setPanel(initialPanel);
+  }, [initialPanel]);
+  return children(panel);
 }
 
 const placeholderInfoContent = (
@@ -79,19 +60,24 @@ function ShellRow({
 }: ShellArgs) {
   return (
     <PanelHarness initialPanel={initialPanel}>
-      <PanelStage>
-        <ThreadSecondaryPanel
-          canUseGitUi={canUseGitUi}
-          defaultMergeBaseBranch="main"
-          environmentId={undefined}
-          metadataContent={placeholderInfoContent}
-          showGitDiffTab={showGitDiffTab}
-          onPanelChange={noop}
-          onCollapse={noop}
-          onClose={noop}
-          renderAsDrawer
-        />
-      </PanelStage>
+      {(panel) => (
+        <PanelStage>
+          <ThreadSecondaryPanel
+            activePanel={panel}
+            canUseGitUi={canUseGitUi}
+            defaultMergeBaseBranch="main"
+            environmentId={undefined}
+            isOpen
+            metadataContent={placeholderInfoContent}
+            showGitDiffTab={showGitDiffTab}
+            onPanelFocus={noop}
+            onPanelChange={noop}
+            onCollapse={noop}
+            onClose={noop}
+            renderAsDrawer
+          />
+        </PanelStage>
+      )}
     </PanelHarness>
   );
 }
@@ -113,7 +99,8 @@ function FileTabsShellInner({
   initialActiveFilename,
   pinnedFilename,
 }: FileTabsShellRowProps) {
-  const setActiveStaticPanel = useSetAtom(activeSecondaryPanelAtom);
+  const [activePanel, setActivePanel] =
+    useState<ThreadSecondaryPanelTab>("thread-info");
   const [openFiles, setOpenFiles] = useState<string[]>(filenames);
   const [activeFilename, setActiveFilename] = useState<string | null>(
     initialActiveFilename,
@@ -145,16 +132,19 @@ function FileTabsShellInner({
   return (
     <PanelStage>
       <ThreadSecondaryPanel
+        activePanel={activePanel}
         canUseGitUi
         defaultMergeBaseBranch="main"
         environmentId={undefined}
+        isOpen
         metadataContent={placeholderInfoContent}
         fileTabs={fileTabs}
         fileTabContent={activeFilename ? placeholderFileContent : null}
         showGitDiffTab
+        onPanelFocus={noop}
         onPanelChange={(panel) => {
           setActiveFilename(null);
-          setActiveStaticPanel(panel);
+          setActivePanel(panel);
         }}
         onCollapse={noop}
         onClose={noop}
@@ -165,11 +155,7 @@ function FileTabsShellInner({
 }
 
 function FileTabsShellRow(props: FileTabsShellRowProps) {
-  return (
-    <PanelHarness initialPanel="thread-info">
-      <FileTabsShellInner {...props} />
-    </PanelHarness>
-  );
+  return <FileTabsShellInner {...props} />;
 }
 
 export function Overview() {

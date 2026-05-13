@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useAtomValue } from "jotai";
 import { useParams } from "react-router-dom";
 import type {
   ThreadTimelineLocalFileLink,
@@ -8,9 +7,13 @@ import type {
 import type { ThreadListEntry, ThreadWithRuntime } from "@bb/domain";
 import { toast } from "sonner";
 import {
-  useActiveSecondaryPanel,
+  useIsSecondaryPanelOpen,
+  useThreadSecondaryPanelState,
+  useThreadSecondaryPanelStorageMaintenance,
   useThreadSecondaryPanelUrlSync,
+  useTouchThreadSecondaryPanelState,
 } from "@/lib/thread-secondary-panel";
+import { getActiveStorageFilePath } from "@/lib/thread-secondary-panel-state";
 import { useRequestEnvironmentAction } from "../../hooks/mutations/environment-mutations";
 import {
   useMarkThreadRead,
@@ -68,10 +71,6 @@ import {
 import { PINNED_STORAGE_FILE_PATH } from "@/components/secondary-panel/managerStorage";
 import { useManagerStorageBrowser } from "@/components/secondary-panel/useManagerStorageBrowser";
 import { useThreadFileTabs } from "@/components/secondary-panel/useThreadFileTabs";
-import {
-  activeStorageFilePathAtom,
-  activeWorkspaceFilePathAtom,
-} from "@/components/secondary-panel/threadSecondaryPanelAtoms";
 import type { SecondaryPanelFileTab } from "@/components/secondary-panel/ThreadSecondaryPanel";
 import { useEnvironmentMergeBase } from "@/components/secondary-panel/git-diff/useEnvironmentMergeBase";
 import { useThreadGitActions } from "./useThreadGitActions";
@@ -120,7 +119,12 @@ export function ThreadDetailView() {
     projectId: string;
     threadId: string;
   }>();
-  useThreadSecondaryPanelUrlSync();
+  useThreadSecondaryPanelStorageMaintenance(threadId);
+  useThreadSecondaryPanelUrlSync(threadId);
+  const secondaryPanelState = useThreadSecondaryPanelState(threadId);
+  const activeSecondaryPanel = secondaryPanelState.activePanel;
+  const isSecondaryPanelOpen = useIsSecondaryPanelOpen(threadId);
+  const touchSecondaryPanelState = useTouchThreadSecondaryPanelState(threadId);
   const {
     data: thread,
     isFetching,
@@ -154,21 +158,12 @@ export function ThreadDetailView() {
     : undefined;
   const [hasRequestedMergeBaseOptions, setHasRequestedMergeBaseOptions] =
     useState(false);
-  const activeSecondaryPanel = useActiveSecondaryPanel();
   const isSecondaryPanelActive = activeSecondaryPanel !== null;
   const shouldLoadManagerStorageFiles =
     isSecondaryPanelActive && isManagerThread;
-  // Read the active storage path directly for the storage viewer query; the
-  // file-tabs hook owns mutation but the viewer needs the value before the
-  // hook returns (it sits earlier in the render order).
-  const activeWorkspaceFilePathForViewer = useAtomValue(
-    activeWorkspaceFilePathAtom,
-  );
-  const rawActiveStorageFilePath = useAtomValue(activeStorageFilePathAtom);
-  const activeStorageFilePathForViewer =
-    activeWorkspaceFilePathForViewer === null
-      ? rawActiveStorageFilePath
-      : null;
+  const activeStorageFilePathForViewer = isManagerThread
+    ? getActiveStorageFilePath(secondaryPanelState)
+    : null;
   const {
     isThreadStorageFilePreviewLoading,
     isThreadStorageFilesLoading,
@@ -202,7 +197,7 @@ export function ThreadDetailView() {
   } = useThreadFileTabs({
     threadId,
     environmentId: thread?.environmentId,
-    isManagerThread,
+    threadType: thread?.type,
     storageFiles: threadStorageFiles?.files,
   });
   const storageBrowserController = useManagerStorageBrowser({
@@ -282,11 +277,13 @@ export function ThreadDetailView() {
     setSelectedMergeBaseBranch,
     toggleThreadSecondaryPanel,
   } = useGitDiffPanel({
+    clearActiveFileTabs,
     defaultMergeBaseBranch: environmentMergeBaseBranch,
     environmentId: canUseGitUi
       ? (thread?.environmentId ?? undefined)
       : undefined,
     mergeBaseBranchOptionsEnabled: hasRequestedMergeBaseOptions,
+    threadId,
   });
   useEffect(() => {
     setHasRequestedMergeBaseOptions(false);
@@ -671,6 +668,7 @@ export function ThreadDetailView() {
       actionsMenu={threadActionsMenu}
       isManagedThread={Boolean(parentThreadId)}
       isManagerThread={isManagerThread}
+      isSecondaryPanelOpen={isSecondaryPanelOpen}
       isThreadGitActionPending={gitActions.isThreadGitActionPending}
       onOpenThreadGitAction={gitActions.threadGitActionDialog.onOpen}
       onToggleSecondaryPanel={toggleThreadSecondaryPanel}
@@ -769,6 +767,7 @@ export function ThreadDetailView() {
         footer={composerFooter}
         header={timelineHeader}
         isMetadataLoading={environmentQuery.isLoading}
+        isSecondaryPanelOpen={isSecondaryPanelOpen}
         metadata={{
           thread,
           projectId,
@@ -792,11 +791,13 @@ export function ThreadDetailView() {
           onChangedFileClick: canUseGitUi ? handleChangedFileClick : undefined,
         }}
         secondaryPanel={{
+          activePanel: activeSecondaryPanel,
           canUseGitUi,
           defaultMergeBaseBranch: resolvedDefaultMergeBaseBranch,
           environmentId: thread.environmentId ?? undefined,
           fileTabs,
           fileTabContent,
+          isOpen: isSecondaryPanelOpen,
           onClose: closeThreadSecondaryPanel,
           onCollapse: closeThreadSecondaryPanel,
           onOpenFileInEditor: handleOpenFileInEditor,
@@ -808,6 +809,7 @@ export function ThreadDetailView() {
               statusLabel: null,
             });
           },
+          onPanelFocus: touchSecondaryPanelState,
           onPanelChange: handleSecondaryPanelChange,
           showGitDiffTab: canUseGitUi,
         }}

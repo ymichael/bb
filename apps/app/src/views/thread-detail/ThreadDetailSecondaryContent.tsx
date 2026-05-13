@@ -4,7 +4,6 @@ import { ResponsiveDrawerShell } from "@/components/ui/responsive-overlay.js";
 import { useIsCompactViewport } from "@/components/ui/hooks/use-compact-viewport.js";
 import { Skeleton } from "@/components/ui/skeleton.js";
 import { useAtomValue } from "jotai";
-import { useIsSecondaryPanelOpen } from "@/lib/thread-secondary-panel";
 import { ThreadSecondaryPanel } from "@/components/secondary-panel/ThreadSecondaryPanel";
 import { secondaryPanelWidthPercentAtom } from "@/components/secondary-panel/threadSecondaryPanelAtoms";
 import {
@@ -30,6 +29,7 @@ interface ThreadDetailSecondaryContentProps {
   footer: ReactNode;
   header: ReactNode;
   isMetadataLoading: boolean;
+  isSecondaryPanelOpen: boolean;
   metadata: ThreadMetadataContentProps;
   secondaryPanel: ThreadSecondaryPanelProps;
   timeline: ThreadTimelinePaneProps;
@@ -39,12 +39,12 @@ export function ThreadDetailSecondaryContent({
   footer,
   header,
   isMetadataLoading,
+  isSecondaryPanelOpen,
   metadata,
   secondaryPanel,
   timeline,
 }: ThreadDetailSecondaryContentProps) {
   const renderAsDrawer = useIsCompactViewport();
-  const isSecondaryPanelOpen = useIsSecondaryPanelOpen();
   const persistedSecondaryWidthPercent = useAtomValue(
     secondaryPanelWidthPercentAtom,
   );

@@ -1,4 +1,10 @@
-import { type ReactNode, memo, useCallback, useMemo } from "react";
+import {
+  type FocusEvent,
+  type ReactNode,
+  memo,
+  useCallback,
+  useMemo,
+} from "react";
 import { useAtomValue } from "jotai";
 import { Icon } from "@/components/ui/icon.js";
 import { Skeleton } from "@/components/ui/skeleton.js";
@@ -14,10 +20,6 @@ import {
 } from "../git-diff/GitDiffCard";
 import type { ParsedGitDiffFile } from "../git-diff/git-diff-parsing";
 import { usePreferredTheme } from "@/hooks/useTheme";
-import {
-  useActiveSecondaryPanel,
-  useIsSecondaryPanelOpen,
-} from "@/lib/thread-secondary-panel";
 import { useGitDiffPanelState } from "./git-diff/useGitDiffPanelState";
 import { useResponsiveGitDiffPanelDisplay } from "./git-diff/useResponsiveGitDiffPanelDisplay";
 import {
@@ -134,13 +136,16 @@ export interface SecondaryPanelFileTab {
 }
 
 export interface ThreadSecondaryPanelProps {
+  activePanel: ThreadSecondaryPanelTab | null;
   canUseGitUi: boolean;
   defaultMergeBaseBranch?: string;
   environmentId?: string;
   metadataContent: ReactNode;
   fileTabs?: SecondaryPanelFileTab[];
   fileTabContent?: ReactNode;
+  isOpen: boolean;
   showGitDiffTab?: boolean;
+  onPanelFocus: () => void;
   onPanelChange: (panel: ThreadSecondaryPanelTab) => void;
   onCollapse: () => void;
   onClose: () => void;
@@ -155,13 +160,16 @@ export interface ThreadSecondaryPanelProps {
 }
 
 export function ThreadSecondaryPanel({
+  activePanel: rawActivePanel,
   canUseGitUi,
   defaultMergeBaseBranch,
   environmentId,
   metadataContent,
   fileTabs,
   fileTabContent,
+  isOpen,
   showGitDiffTab = true,
+  onPanelFocus,
   onPanelChange,
   onCollapse,
   onClose,
@@ -172,8 +180,6 @@ export function ThreadSecondaryPanel({
   const activeFileTab = fileTabs?.find((tab) => tab.isActive);
   const hasActiveFileTab = activeFileTab !== undefined;
   const togglePanelIconName = renderAsDrawer ? "X" : "PanelRight";
-  const rawActivePanel = useActiveSecondaryPanel();
-  const isOpen = useIsSecondaryPanelOpen();
   const {
     gitDiffDisplayMode,
     handleGitDiffDisplayModeChange,
@@ -231,11 +237,22 @@ export function ThreadSecondaryPanel({
     }),
     [gitDiffDisplayMode, preferredTheme],
   );
+  const handlePanelFocusCapture = (event: FocusEvent<HTMLElement>) => {
+    const previousTarget = event.relatedTarget;
+    if (
+      previousTarget instanceof Node &&
+      event.currentTarget.contains(previousTarget)
+    ) {
+      return;
+    }
+    onPanelFocus();
+  };
 
   const asideMarkup = (
     <aside
       ref={panelRef}
       aria-hidden={!isOpen}
+      onFocusCapture={handlePanelFocusCapture}
       className={cn(
         "flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background",
         !renderAsDrawer && [

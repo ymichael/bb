@@ -1,5 +1,4 @@
 import type { ReactNode } from "react";
-import { useIsSecondaryPanelOpen } from "@/lib/thread-secondary-panel";
 import { Button } from "@/components/ui/button.js";
 import { COARSE_POINTER_TOOLBAR_ACTION_BUTTON_CLASS } from "@/components/ui/coarse-pointer-sizing.js";
 import { Icon } from "@/components/ui/icon.js";
@@ -25,6 +24,7 @@ interface ThreadDetailHeaderProps {
   actionsMenu: ReactNode;
   isManagedThread: boolean;
   isManagerThread: boolean;
+  isSecondaryPanelOpen: boolean;
   isThreadGitActionPending: boolean;
   onOpenThreadGitAction: (target: ThreadGitActionDialogTarget) => void;
   onToggleSecondaryPanel: () => void;
@@ -37,6 +37,7 @@ export function ThreadDetailHeader({
   actionsMenu,
   isManagedThread,
   isManagerThread,
+  isSecondaryPanelOpen,
   isThreadGitActionPending,
   onOpenThreadGitAction,
   onToggleSecondaryPanel,
@@ -46,7 +47,6 @@ export function ThreadDetailHeader({
 }: ThreadDetailHeaderProps) {
   const [primaryAction, ...secondaryActions] = threadHeaderGitActions;
   const renderAsDrawer = useIsCompactViewport();
-  const isSecondaryPanelOpen = useIsSecondaryPanelOpen();
   const secondaryPanelIconName = renderAsDrawer ? "PanelBottom" : "PanelRight";
 
   const center = (
