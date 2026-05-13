@@ -420,6 +420,101 @@ describe("CommandRouter", () => {
     flushDeferred.resolve(undefined);
   });
 
+  it("reports missing host file reads without warning", async () => {
+    const rootPath = await makeTempDir("bb-command-router-read-file-");
+    const missingPath = path.join(rootPath, "STATUS.md");
+    const reportResult = vi.fn(async () => undefined);
+    const logger = createLogger();
+    const router = new CommandRouter({
+      dataDir: "/tmp/bb-test-data",
+      fetchProjectAttachment: unexpectedProjectAttachmentFetch,
+      fetchRuntimeMaterial: vi.fn(),
+      readPersistedRuntimeMaterial: async () => null,
+      persistRuntimeMaterial: async () => undefined,
+      reportResult,
+      runtimeManager: new RuntimeManager({
+        provisionWorkspace: async () => createFakeWorkspace("/tmp/env-1"),
+      }),
+      eventSink: noopEventSink,
+      threadStorageRootPath: "/tmp/bb-test-thread-storage",
+      logger,
+    });
+
+    await router.handleCommands([
+      {
+        id: "read-missing-status",
+        cursor: 1,
+        command: {
+          type: "host.read_file",
+          path: missingPath,
+          rootPath,
+        },
+      },
+    ]);
+
+    expect(reportResult).toHaveBeenCalledWith(
+      expect.objectContaining({
+        commandId: "read-missing-status",
+        errorCode: "ENOENT",
+        errorMessage: `Path does not exist: ${missingPath}`,
+        ok: false,
+        type: "host.read_file",
+      }),
+    );
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  it("still warns for missing host file read roots", async () => {
+    const parentPath = await makeTempDir("bb-command-router-root-");
+    const rootPath = path.join(parentPath, "missing-root");
+    const missingPath = path.join(rootPath, "STATUS.md");
+    const reportResult = vi.fn(async () => undefined);
+    const logger = createLogger();
+    const router = new CommandRouter({
+      dataDir: "/tmp/bb-test-data",
+      fetchProjectAttachment: unexpectedProjectAttachmentFetch,
+      fetchRuntimeMaterial: vi.fn(),
+      readPersistedRuntimeMaterial: async () => null,
+      persistRuntimeMaterial: async () => undefined,
+      reportResult,
+      runtimeManager: new RuntimeManager({
+        provisionWorkspace: async () => createFakeWorkspace("/tmp/env-1"),
+      }),
+      eventSink: noopEventSink,
+      threadStorageRootPath: "/tmp/bb-test-thread-storage",
+      logger,
+    });
+
+    await router.handleCommands([
+      {
+        id: "read-missing-root",
+        cursor: 1,
+        command: {
+          type: "host.read_file",
+          path: missingPath,
+          rootPath,
+        },
+      },
+    ]);
+
+    expect(reportResult).toHaveBeenCalledWith(
+      expect.objectContaining({
+        commandId: "read-missing-root",
+        errorCode: "ENOENT",
+        errorMessage: `Path does not exist: ${missingPath}`,
+        ok: false,
+        type: "host.read_file",
+      }),
+    );
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        commandId: "read-missing-root",
+        type: "host.read_file",
+      }),
+      "command execution failed",
+    );
+  });
+
   it("flushes buffered provider events before reporting thread command results", async () => {
     const calls: string[] = [];
     const eventSink = {

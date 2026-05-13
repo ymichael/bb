@@ -9,6 +9,7 @@ import {
   getErrorCode,
   type CommandDispatchOptions,
 } from "./command-dispatch.js";
+import { isExpectedCommandDispatchError } from "./command-dispatch-support.js";
 import type { HostDaemonLogger } from "./logger.js";
 import { RuntimeManager } from "./runtime-manager.js";
 
@@ -190,19 +191,22 @@ export class CommandRouter {
         result,
       };
     } catch (error) {
-      this.logger.warn(
-        {
-          err: error,
-          commandId: envelope.id,
-          type: envelope.command.type,
-        },
-        "command execution failed",
-      );
+      const errorCode = getErrorCode(error);
+      if (!isExpectedCommandDispatchError(error)) {
+        this.logger.warn(
+          {
+            err: error,
+            commandId: envelope.id,
+            type: envelope.command.type,
+          },
+          "command execution failed",
+        );
+      }
       return {
         ...baseReport,
         completedAt: this.now(),
         ok: false,
-        errorCode: getErrorCode(error),
+        errorCode,
         errorMessage: error instanceof Error ? error.message : String(error),
       };
     }

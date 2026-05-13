@@ -74,6 +74,19 @@ export class CommandDispatchError extends Error {
   }
 }
 
+export class ExpectedCommandDispatchError extends CommandDispatchError {
+  constructor(code: string, message: string) {
+    super(code, message);
+    this.name = "ExpectedCommandDispatchError";
+  }
+}
+
+export function isExpectedCommandDispatchError(
+  error: unknown,
+): error is ExpectedCommandDispatchError {
+  return error instanceof ExpectedCommandDispatchError;
+}
+
 export interface DefaultListModelsOptions {
   bridgeBundleDir?: AgentRuntimeOptions["bridgeBundleDir"];
 }

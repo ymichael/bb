@@ -4,7 +4,11 @@ import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
-import { CommandDispatchError } from "../command-dispatch-support.js";
+import {
+  CommandDispatchError,
+  type CommandOf,
+  isExpectedCommandDispatchError,
+} from "../command-dispatch-support.js";
 import { readHostFile } from "./host-files.js";
 
 const execFileAsync = promisify(execFile);
@@ -30,6 +34,18 @@ async function initRepo(): Promise<string> {
   await runGit(["config", "user.name", "BB Tests"], { cwd: repoPath });
   await runGit(["config", "user.email", "bb@example.com"], { cwd: repoPath });
   return repoPath;
+}
+
+async function captureReadHostFileError(
+  command: CommandOf<"host.read_file">,
+): Promise<unknown> {
+  try {
+    await readHostFile(command);
+  } catch (error) {
+    return error;
+  }
+
+  throw new Error("Expected readHostFile to fail");
 }
 
 afterEach(async () => {
@@ -66,6 +82,42 @@ describe("readHostFile (no ref — disk read)", () => {
         rootPath: "/tmp",
       }),
     ).rejects.toBeInstanceOf(CommandDispatchError);
+  });
+
+  it("marks missing targets under an existing root as expected", async () => {
+    const repoPath = await initRepo();
+    const missingPath = path.join(repoPath, "STATUS.md");
+    const thrown = await captureReadHostFileError({
+      type: "host.read_file",
+      path: missingPath,
+      rootPath: repoPath,
+    });
+
+    expect(thrown).toBeInstanceOf(CommandDispatchError);
+    expect(thrown).toMatchObject({
+      code: "ENOENT",
+      message: `Path does not exist: ${missingPath}`,
+      name: "ExpectedCommandDispatchError",
+    });
+    expect(isExpectedCommandDispatchError(thrown)).toBe(true);
+  });
+
+  it("does not mark missing roots as expected", async () => {
+    const parentPath = await makeTempDir("bb-host-files-missing-root-");
+    const rootPath = path.join(parentPath, "missing-root");
+    const missingPath = path.join(rootPath, "STATUS.md");
+    const thrown = await captureReadHostFileError({
+      type: "host.read_file",
+      path: missingPath,
+      rootPath,
+    });
+
+    expect(thrown).toMatchObject({
+      code: "ENOENT",
+      message: `Path does not exist: ${missingPath}`,
+      name: "CommandDispatchError",
+    });
+    expect(isExpectedCommandDispatchError(thrown)).toBe(false);
   });
 });
 
