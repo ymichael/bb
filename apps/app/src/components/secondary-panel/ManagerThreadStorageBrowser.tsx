@@ -121,7 +121,7 @@ export function ManagerThreadStorageBrowser({
             <Input
               ref={searchInputRef}
               aria-label="Search files"
-              className="h-7 pl-7 pr-2 text-xs"
+              className="h-7 pl-7 pr-2 text-xs focus-visible:ring-0"
               placeholder="Search files"
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
