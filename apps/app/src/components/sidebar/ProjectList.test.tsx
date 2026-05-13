@@ -11,7 +11,10 @@ import {
 } from "@testing-library/react";
 import { BrowserRouter } from "react-router-dom";
 import type { QueryClient } from "@tanstack/react-query";
-import type { ProjectResponse } from "@bb/server-contract";
+import type {
+  ProjectResponse,
+  ProjectWithThreadsResponse,
+} from "@bb/server-contract";
 import {
   FakeReconnectingWebSocket,
   resetFakeReconnectingWebSockets,
@@ -45,13 +48,71 @@ interface ProjectListRenderResult {
   queryClient: QueryClient;
 }
 
-function makeProjectResponse(): ProjectResponse {
+type ProjectThreadListEntry = ProjectWithThreadsResponse["threads"][number];
+
+function makeProjectResponse(
+  overrides: Partial<ProjectResponse> = {},
+): ProjectResponse {
   return {
     createdAt: 1,
     id: "project-1",
     name: "Project One",
     sources: [],
     updatedAt: 1,
+    ...overrides,
+  };
+}
+
+function makeThreadListEntry(
+  projectId: string,
+  index: number,
+): ProjectThreadListEntry {
+  return {
+    archivedAt: null,
+    automationId: null,
+    createdAt: index,
+    deletedAt: null,
+    environmentBranchName: null,
+    environmentHostId: null,
+    environmentId: null,
+    environmentWorkspaceDisplayKind: "other",
+    hasPendingInteraction: false,
+    id: `thread-${index}`,
+    lastReadAt: null,
+    latestAttentionAt: index,
+    parentThreadId: null,
+    projectId,
+    providerId: "codex",
+    runtime: {
+      displayStatus: "idle",
+      hostReconnectGraceExpiresAt: null,
+    },
+    status: "idle",
+    stopRequestedAt: null,
+    title: `Thread ${index}`,
+    titleFallback: `Thread ${index}`,
+    type: "standard",
+    updatedAt: index,
+  };
+}
+
+interface ProjectListHandlerArgs {
+  projects: ProjectResponse[];
+  threadsByProjectId?: Map<string, ProjectWithThreadsResponse["threads"]>;
+}
+
+function buildProjectListHandler(args: ProjectListHandlerArgs) {
+  return (request: Request) => {
+    const url = new URL(request.url);
+    if (url.searchParams.get("include") === "threads") {
+      return jsonResponse(
+        args.projects.map((project) => ({
+          ...project,
+          threads: args.threadsByProjectId?.get(project.id) ?? [],
+        })),
+      );
+    }
+    return jsonResponse(args.projects);
   };
 }
 
@@ -122,7 +183,7 @@ describe("ProjectList", () => {
     installFetchRoutes([
       {
         pathname: "/api/v1/projects",
-        handler: () => jsonResponse([makeProjectResponse()]),
+        handler: buildProjectListHandler({ projects: [makeProjectResponse()] }),
       },
       {
         pathname: "/api/v1/threads",
@@ -191,7 +252,7 @@ describe("ProjectList", () => {
     installFetchRoutes([
       {
         pathname: "/api/v1/projects",
-        handler: () => jsonResponse([]),
+        handler: buildProjectListHandler({ projects: [] }),
       },
       {
         pathname: "/api/v1/system/config",
@@ -222,6 +283,77 @@ describe("ProjectList", () => {
     ).toBe(true);
 
     expect(projectHeading.querySelector("[data-overflow-fade]")).toBeNull();
+  });
+
+  it("primes project and thread-list caches from the sidebar bootstrap", async () => {
+    let includeProjectRequestCount = 0;
+    let leanProjectRequestCount = 0;
+    let threadRequestCount = 0;
+    const projects = [
+      makeProjectResponse({ id: "project-1", name: "Project One" }),
+      makeProjectResponse({ id: "project-2", name: "Project Two" }),
+      makeProjectResponse({ id: "project-3", name: "Project Three" }),
+    ];
+    const threadsByProjectId = new Map<string, ProjectThreadListEntry[]>(
+      projects.map((project, index) => [
+        project.id,
+        [makeThreadListEntry(project.id, index + 1)],
+      ]),
+    );
+    installFetchRoutes([
+      {
+        pathname: "/api/v1/projects",
+        handler: (request) => {
+          const url = new URL(request.url);
+          if (url.searchParams.get("include") === "threads") {
+            includeProjectRequestCount += 1;
+          } else {
+            leanProjectRequestCount += 1;
+          }
+          return buildProjectListHandler({
+            projects,
+            threadsByProjectId,
+          })(request);
+        },
+      },
+      {
+        pathname: "/api/v1/threads",
+        handler: () => {
+          threadRequestCount += 1;
+          return jsonResponse([]);
+        },
+      },
+      {
+        pathname: "/api/v1/system/config",
+        handler: () =>
+          jsonResponse({
+            githubConnected: false,
+            hostDaemonPort: null,
+            sandboxHostSupported: false,
+            voiceTranscriptionEnabled: false,
+          }),
+      },
+      {
+        pathname: "/api/v1/hosts",
+        handler: () => jsonResponse([]),
+      },
+    ]);
+
+    const { queryClient } = await renderProjectList();
+
+    await waitFor(() => {
+      expect(queryClient.getQueryData(projectsQueryKey())).toEqual(projects);
+      for (const project of projects) {
+        expect(
+          queryClient.getQueryData(
+            threadListQueryKey({ projectId: project.id, archived: false }),
+          ),
+        ).toEqual(threadsByProjectId.get(project.id));
+      }
+    });
+    expect(includeProjectRequestCount).toBe(1);
+    expect(leanProjectRequestCount).toBe(0);
+    expect(threadRequestCount).toBe(0);
   });
 
   it("keeps showing project skeletons when the project request fails before the websocket connects", async () => {
@@ -298,7 +430,13 @@ describe("ProjectList", () => {
     installFetchRoutes([
       {
         pathname: "/api/v1/projects",
-        handler: () => jsonResponse([makeProjectResponse()]),
+        handler: (request) => {
+          const url = new URL(request.url);
+          if (url.searchParams.get("include") === "threads") {
+            return new Response("starting", { status: 503 });
+          }
+          return jsonResponse([makeProjectResponse()]);
+        },
       },
       {
         pathname: "/api/v1/threads",

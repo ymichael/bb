@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import {
+  archiveThread,
   createProject,
   getProjectExecutionDefaults,
   getProject,
@@ -8,11 +9,12 @@ import {
   hostDaemonCommands,
   hostDaemonSessions,
   markHostSuspended,
+  threads,
   upsertProjectExecutionDefaults,
   updateHost,
 } from "@bb/db";
 import { hostDaemonCommandSchema } from "@bb/host-daemon-contract";
-import { threadSchema } from "@bb/domain";
+import { threadListEntrySchema, threadSchema } from "@bb/domain";
 import { describe, expect, it } from "vitest";
 import {
   reportQueuedCommandError,
@@ -26,6 +28,7 @@ import {
   seedHost,
   seedHostSession,
   seedProjectWithSource,
+  seedThread,
 } from "../helpers/seed.js";
 import { createTestAppHarness } from "../helpers/test-app.js";
 import { runProjectDeletionSweep } from "../../src/services/system/periodic-sweeps.js";
@@ -47,6 +50,10 @@ const projectResponseSchema = z.object({
       repoUrl: z.string().nullable().optional(),
     }),
   ),
+});
+
+const projectWithThreadsResponseSchema = projectResponseSchema.extend({
+  threads: z.array(threadListEntrySchema),
 });
 
 const attachmentResponseSchema = z.object({
@@ -134,6 +141,122 @@ describe("public project and host routes", () => {
 
       const finalListResponse = await harness.app.request("/api/v1/projects");
       await expect(readJson(finalListResponse)).resolves.toEqual([]);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("embeds unarchived sidebar threads when requested", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-project-thread-include",
+      });
+      const { project: firstProject } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        name: "First Project",
+      });
+      const { project: secondProject } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        name: "Second Project",
+      });
+      const firstEnvironment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/project-thread-include-first",
+        projectId: firstProject.id,
+      });
+      const secondEnvironment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/project-thread-include-second",
+        projectId: secondProject.id,
+      });
+      const olderThread = seedThread(harness.deps, {
+        environmentId: firstEnvironment.id,
+        projectId: firstProject.id,
+        title: "Older Thread",
+      });
+      const newerThread = seedThread(harness.deps, {
+        environmentId: firstEnvironment.id,
+        projectId: firstProject.id,
+        title: "Newer Thread",
+      });
+      const archivedThread = seedThread(harness.deps, {
+        environmentId: firstEnvironment.id,
+        projectId: firstProject.id,
+        title: "Archived Thread",
+      });
+      const secondProjectThread = seedThread(harness.deps, {
+        environmentId: secondEnvironment.id,
+        projectId: secondProject.id,
+        title: "Second Project Thread",
+      });
+      archiveThread(harness.deps.db, harness.deps.hub, archivedThread.id);
+      harness.deps.db
+        .update(threads)
+        .set({ createdAt: 100, updatedAt: 100 })
+        .where(eq(threads.id, olderThread.id))
+        .run();
+      harness.deps.db
+        .update(threads)
+        .set({ createdAt: 200, updatedAt: 200 })
+        .where(eq(threads.id, newerThread.id))
+        .run();
+      harness.deps.db
+        .update(threads)
+        .set({ createdAt: 150, updatedAt: 150 })
+        .where(eq(threads.id, secondProjectThread.id))
+        .run();
+
+      const leanResponse = await harness.app.request("/api/v1/projects");
+      expect(leanResponse.status).toBe(200);
+      const leanPayload = await leanResponse.text();
+      expect(leanPayload).not.toContain('"threads"');
+      expect(
+        z.array(projectResponseSchema).parse(JSON.parse(leanPayload)),
+      ).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ id: firstProject.id }),
+          expect.objectContaining({ id: secondProject.id }),
+        ]),
+      );
+
+      const response = await harness.app.request(
+        "/api/v1/projects?include=threads",
+      );
+      expect(response.status).toBe(200);
+      const projects = z
+        .array(projectWithThreadsResponseSchema)
+        .parse(await readJson(response));
+      const firstProjectResponse = projects.find(
+        (project) => project.id === firstProject.id,
+      );
+      const secondProjectResponse = projects.find(
+        (project) => project.id === secondProject.id,
+      );
+
+      expect(firstProjectResponse?.threads.map((thread) => thread.id)).toEqual(
+        [newerThread.id, olderThread.id],
+      );
+      expect(
+        firstProjectResponse?.threads.some(
+          (thread) => thread.id === archivedThread.id,
+        ),
+      ).toBe(false);
+      expect(secondProjectResponse?.threads.map((thread) => thread.id)).toEqual(
+        [secondProjectThread.id],
+      );
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("rejects invalid project list include values", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const response = await harness.app.request(
+        "/api/v1/projects?include=threads,invalid",
+      );
+      expect(response.status).toBe(400);
     } finally {
       await harness.cleanup();
     }

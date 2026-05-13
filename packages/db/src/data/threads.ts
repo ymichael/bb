@@ -11,9 +11,11 @@ import {
 } from "drizzle-orm";
 import type {
   EnvironmentWorkspaceDisplayKind,
+  HostType,
   ThreadChangeKind,
   ThreadStatus,
   ThreadType,
+  WorkspaceProvisionType,
 } from "@bb/domain";
 import { resolveEnvironmentWorkspaceDisplayKind } from "@bb/domain";
 import type { DbConnection, DbTransaction } from "../connection.js";
@@ -101,6 +103,11 @@ export interface ListThreadsOptions {
 
 type ThreadRow = typeof threads.$inferSelect;
 
+export interface ListThreadsForProjectsOptions {
+  projectIds: readonly string[];
+  archived?: boolean;
+}
+
 interface InvalidThreadStatusTransitionErrorArgs {
   currentStatus: ThreadStatus;
   newStatus: ThreadStatus;
@@ -130,6 +137,15 @@ export interface ThreadWithPendingInteractionState extends ThreadRow {
   environmentHostId: string | null;
   hasPendingInteraction: boolean;
   environmentWorkspaceDisplayKind: EnvironmentWorkspaceDisplayKind;
+}
+
+interface ThreadWithPendingInteractionStateRow extends ThreadRow {
+  environmentBranchName: string | null;
+  environmentHostId: string | null;
+  environmentIsWorktree: boolean | null;
+  environmentWorkspaceProvisionType: WorkspaceProvisionType | null;
+  hostType: HostType | null;
+  pendingInteractionCount: number;
 }
 
 export interface CountLiveThreadsInEnvironmentArgs {
@@ -229,6 +245,20 @@ function buildListThreadsFilters(options: ListThreadsOptions) {
   ].filter((value) => value !== undefined);
 }
 
+function buildListThreadsForProjectsFilters(
+  options: ListThreadsForProjectsOptions,
+) {
+  return [
+    inArray(threads.projectId, [...options.projectIds]),
+    isNull(threads.deletedAt),
+    options.archived === true
+      ? isNotNull(threads.archivedAt)
+      : options.archived === false
+        ? isNull(threads.archivedAt)
+        : undefined,
+  ].filter((value) => value !== undefined);
+}
+
 // Order archived listings by archive recency so paginated pages show the
 // most recently archived rows first.
 function buildListThreadsOrderBy(options: ListThreadsOptions) {
@@ -236,6 +266,42 @@ function buildListThreadsOrderBy(options: ListThreadsOptions) {
     return [desc(threads.archivedAt), desc(threads.id)];
   }
   return [desc(threads.createdAt)];
+}
+
+function buildListThreadsForProjectsOrderBy(
+  options: ListThreadsForProjectsOptions,
+) {
+  if (options.archived === true) {
+    return [desc(threads.archivedAt), desc(threads.id)];
+  }
+  return [desc(threads.createdAt)];
+}
+
+function toThreadWithPendingInteractionState(
+  row: ThreadWithPendingInteractionStateRow,
+): ThreadWithPendingInteractionState {
+  const {
+    environmentIsWorktree,
+    environmentWorkspaceProvisionType,
+    environmentBranchName,
+    environmentHostId,
+    hostType,
+    pendingInteractionCount,
+    ...thread
+  } = row;
+  return {
+    ...thread,
+    environmentBranchName,
+    environmentHostId,
+    environmentWorkspaceDisplayKind: resolveEnvironmentWorkspaceDisplayKind({
+      environment: {
+        isWorktree: environmentIsWorktree,
+        workspaceProvisionType: environmentWorkspaceProvisionType,
+      },
+      hostType,
+    }),
+    hasPendingInteraction: pendingInteractionCount > 0,
+  };
 }
 
 export function listThreads(db: DbConnection, options: ListThreadsOptions) {
@@ -290,29 +356,43 @@ export function listThreadsWithPendingInteractionState(
   }
   const rows = query.all();
 
-  return rows.map(
-    ({
-      environmentIsWorktree,
-      environmentWorkspaceProvisionType,
-      environmentBranchName,
-      environmentHostId,
-      hostType,
-      pendingInteractionCount,
-      ...thread
-    }) => ({
-      ...thread,
-      environmentBranchName,
-      environmentHostId,
-      environmentWorkspaceDisplayKind: resolveEnvironmentWorkspaceDisplayKind({
-        environment: {
-          isWorktree: environmentIsWorktree,
-          workspaceProvisionType: environmentWorkspaceProvisionType,
-        },
-        hostType,
-      }),
-      hasPendingInteraction: pendingInteractionCount > 0,
-    }),
-  );
+  return rows.map(toThreadWithPendingInteractionState);
+}
+
+export function listThreadsWithPendingInteractionStateForProjects(
+  db: DbConnection,
+  options: ListThreadsForProjectsOptions,
+): ThreadWithPendingInteractionState[] {
+  if (options.projectIds.length === 0) {
+    return [];
+  }
+
+  const rows = db
+    .select({
+      ...getTableColumns(threads),
+      environmentBranchName: environments.branchName,
+      environmentHostId: environments.hostId,
+      environmentIsWorktree: environments.isWorktree,
+      environmentWorkspaceProvisionType: environments.workspaceProvisionType,
+      hostType: hosts.type,
+      pendingInteractionCount: count(pendingInteractions.id),
+    })
+    .from(threads)
+    .leftJoin(environments, eq(threads.environmentId, environments.id))
+    .leftJoin(hosts, eq(environments.hostId, hosts.id))
+    .leftJoin(
+      pendingInteractions,
+      and(
+        eq(pendingInteractions.threadId, threads.id),
+        eq(pendingInteractions.status, "pending"),
+      ),
+    )
+    .where(and(...buildListThreadsForProjectsFilters(options)))
+    .groupBy(threads.id)
+    .orderBy(...buildListThreadsForProjectsOrderBy(options))
+    .all();
+
+  return rows.map(toThreadWithPendingInteractionState);
 }
 
 export function countLiveThreadsInEnvironment(

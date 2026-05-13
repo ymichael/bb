@@ -2,12 +2,16 @@ import { useMemo } from "react";
 import type { Host } from "@bb/domain";
 import type { WebSocketConnectionState } from "@/lib/ws";
 import { useServerConnectionState } from "../useServerConnectionState";
-import { useHost, useHosts } from "./system-queries";
+import { useHosts } from "./system-queries";
 import type { HostQueryId } from "./query-keys";
 
 interface EffectiveHostInput {
   host: Host;
   serverConnectionState: WebSocketConnectionState;
+}
+
+interface UseEffectiveHostOptions {
+  enabled?: boolean;
 }
 
 function isHostStatusUnavailable(
@@ -67,22 +71,30 @@ export function useEffectiveHosts() {
   };
 }
 
-export function useEffectiveHost(hostId: HostQueryId) {
-  const hostQuery = useHost(hostId);
+export function useEffectiveHost(
+  hostId: HostQueryId,
+  options?: UseEffectiveHostOptions,
+) {
+  const hostsQuery = useHosts({
+    enabled: (options?.enabled ?? true) && Boolean(hostId),
+  });
   const serverConnectionState = useServerConnectionState();
   const effectiveHost = useMemo(
-    () =>
-      hostQuery.data
-        ? getEffectiveHost({
-            host: hostQuery.data,
-            serverConnectionState,
-          })
-        : hostQuery.data,
-    [hostQuery.data, serverConnectionState],
+    () => {
+      const host = hostsQuery.data?.find((candidate) => candidate.id === hostId);
+      if (!host) {
+        return undefined;
+      }
+      return getEffectiveHost({
+        host,
+        serverConnectionState,
+      });
+    },
+    [hostId, hostsQuery.data, serverConnectionState],
   );
 
   return {
-    ...hostQuery,
+    ...hostsQuery,
     data: effectiveHost,
   };
 }

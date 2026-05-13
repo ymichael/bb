@@ -29,6 +29,7 @@ import {
 import {
   getLatestPendingInteraction,
   useThread,
+  useThreadDetailBootstrap,
   useThreadPendingInteractions,
   useThreads,
 } from "../../hooks/queries/thread-queries";
@@ -125,6 +126,9 @@ export function ThreadDetailView() {
   const activeSecondaryPanel = secondaryPanelState.activePanel;
   const isSecondaryPanelOpen = useIsSecondaryPanelOpen(threadId);
   const touchSecondaryPanelState = useTouchThreadSecondaryPanelState(threadId);
+  const threadDetailBootstrapQuery = useThreadDetailBootstrap(threadId ?? "");
+  const hasThreadDetailBootstrapSettled =
+    threadDetailBootstrapQuery.isSuccess || threadDetailBootstrapQuery.isError;
   const {
     data: thread,
     isFetching,
@@ -132,11 +136,12 @@ export function ThreadDetailView() {
     isPlaceholderData,
     error,
   } = useThread(threadId ?? "", {
-    refetchOnMount: "always",
+    enabled: hasThreadDetailBootstrapSettled,
+    refetchOnMount: threadDetailBootstrapQuery.isSuccess ? true : "always",
   });
   const threadQueryState = useConnectionAwareQueryState({
     hasResolvedData: thread !== undefined && !isPlaceholderData,
-    isFetching,
+    isFetching: threadDetailBootstrapQuery.isFetching || isFetching,
     isLoadingError,
   });
   const { data: parentThread } = useThread(thread?.parentThreadId ?? "");
@@ -252,7 +257,10 @@ export function ThreadDetailView() {
     () => (thread ? buildHostConnectionNotice(thread) : null),
     [thread],
   );
-  const environmentQuery = useEnvironment(thread?.environmentId);
+  const environmentQuery = useEnvironment(thread?.environmentId, {
+    enabled: hasThreadDetailBootstrapSettled,
+    staleTime: 5_000,
+  });
   const environment = environmentQuery.data;
   const environmentMergeBaseBranch =
     environment?.mergeBaseBranch ?? environment?.defaultBranch ?? undefined;
@@ -387,7 +395,14 @@ export function ThreadDetailView() {
   } = useLocalOpenTargets({
     enabled: localWorkspaceRootPath !== null,
   });
-  const { data: environmentHost } = useEffectiveHost(environment?.hostId);
+  const bootstrapResolvedMissingEnvironmentHost =
+    threadDetailBootstrapQuery.isSuccess &&
+    threadDetailBootstrapQuery.data.environment !== undefined &&
+    threadDetailBootstrapQuery.data.environment !== null &&
+    threadDetailBootstrapQuery.data.host === null;
+  const { data: environmentHost } = useEffectiveHost(environment?.hostId, {
+    enabled: !bootstrapResolvedMissingEnvironmentHost,
+  });
   const managedChildrenQuery = useThreads(
     {
       archived: false,

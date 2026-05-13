@@ -11,8 +11,14 @@ import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/s
 import { AppSidebar } from "@/components/sidebar/AppSidebar";
 import { AppPageHeader, HEADER_ICON_BUTTON_CLASS } from "./AppPageHeader";
 import { HIRE_PROJECT_MANAGER_MUTATION_KEY } from "@/hooks/mutations/project-mutations";
-import { useProjects } from "@/hooks/queries/project-queries";
-import { useThread } from "@/hooks/queries/thread-queries";
+import {
+  useProjects,
+  useSidebarBootstrap,
+} from "@/hooks/queries/project-queries";
+import {
+  useThread,
+  useThreadDetailBootstrap,
+} from "@/hooks/queries/thread-queries";
 import { useActiveProjectId } from "@/hooks/useActiveProjectId";
 import { useAppRoute } from "@/hooks/useAppRoute";
 import { useDialogState } from "@/hooks/useDialogState";
@@ -235,7 +241,27 @@ export function AppLayout({ children }: AppLayoutProps) {
   const quickCreateProject = useQuickCreateProjectController();
   const location = useLocation();
   const navigate = useNavigate();
-  const { data: projects, isLoading: projectsLoading } = useProjects();
+  const {
+    projectId,
+    threadId,
+    isProjectMainView,
+    isThreadView,
+    isArchivedView,
+    isSettingsView,
+    isRootView,
+  } = useAppRoute();
+  const sidebarBootstrapQuery = useSidebarBootstrap();
+  const hasSidebarBootstrapSettled =
+    sidebarBootstrapQuery.isSuccess || sidebarBootstrapQuery.isError;
+  const projectsQuery = useProjects({ enabled: hasSidebarBootstrapSettled });
+  const projects = projectsQuery.data;
+  const projectsLoading =
+    sidebarBootstrapQuery.isFetching || projectsQuery.isLoading;
+  const threadDetailBootstrapQuery = useThreadDetailBootstrap(threadId ?? "", {
+    enabled: isThreadView && Boolean(threadId),
+  });
+  const hasThreadDetailBootstrapSettled =
+    threadDetailBootstrapQuery.isSuccess || threadDetailBootstrapQuery.isError;
   const activeHireManagerRequests = useIsMutating({
     mutationKey: HIRE_PROJECT_MANAGER_MUTATION_KEY,
   });
@@ -247,16 +273,6 @@ export function AppLayout({ children }: AppLayoutProps) {
   const startWidthRef = useRef(0);
   const liveWidthRef = useRef(sidebarWidth);
   const animationFrameRef = useRef<number | null>(null);
-
-  const {
-    projectId,
-    threadId,
-    isProjectMainView,
-    isThreadView,
-    isArchivedView,
-    isSettingsView,
-    isRootView,
-  } = useAppRoute();
   const activeProjectId = useActiveProjectId();
   const showHeader = !isRootView && !isThreadView;
   const showFloatingSidebarTrigger = isRootView;
@@ -272,7 +288,12 @@ export function AppLayout({ children }: AppLayoutProps) {
         ? "Loading project…"
         : projectId
       : undefined);
-  const { data: thread } = useThread(threadId ?? "");
+  const { data: thread } = useThread(threadId ?? "", {
+    enabled:
+      Boolean(threadId) && (!isThreadView || hasThreadDetailBootstrapSettled),
+    refetchOnMount:
+      isThreadView && threadDetailBootstrapQuery.isSuccess ? true : "always",
+  });
   const threadDisplayTitle = thread
     ? getThreadDisplayTitle(thread)
     : threadId

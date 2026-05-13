@@ -1,5 +1,8 @@
 import { Navigate } from "react-router-dom";
-import { useProjects } from "../hooks/queries/project-queries";
+import {
+  useProjects,
+  useSidebarBootstrap,
+} from "../hooks/queries/project-queries";
 import {
   useConnectionAwareQueryState,
   type ConnectionAwareQueryStatus,
@@ -77,15 +80,14 @@ export function MainViewBody({
 }
 
 export function MainView() {
-  const {
-    data: projects,
-    isFetching,
-    isLoadingError,
-    refetch,
-  } = useProjects();
+  const sidebarBootstrapQuery = useSidebarBootstrap();
+  const hasSidebarBootstrapSettled =
+    sidebarBootstrapQuery.isSuccess || sidebarBootstrapQuery.isError;
+  const projectsQuery = useProjects({ enabled: hasSidebarBootstrapSettled });
+  const { data: projects, isLoadingError, refetch } = projectsQuery;
   const projectsState = useConnectionAwareQueryState({
     hasResolvedData: projects !== undefined,
-    isFetching,
+    isFetching: sidebarBootstrapQuery.isFetching || projectsQuery.isFetching,
     isLoadingError,
   });
   const quickCreateProject = useQuickCreateProjectController();

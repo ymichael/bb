@@ -5,6 +5,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import type {
+  Host,
   PendingInteraction,
   ResolvedThreadExecutionOptions,
 } from "@bb/domain";
@@ -15,6 +16,7 @@ import type {
   ManagerTimelineView,
   ThreadPendingInteractionsResponse,
   ThreadResponse,
+  ThreadWithIncludesResponse,
   ThreadStorageFileListResponse,
   ThreadTimelineResponse,
   TimelineTurnSummaryDetailsRequest,
@@ -31,6 +33,10 @@ import {
 import {
   archivedThreadsListQueryKey,
   disabledThreadListQueryKey,
+  environmentQueryKey,
+  hostQueryKey,
+  hostsQueryKey,
+  threadDetailBootstrapQueryKey,
   threadDefaultExecutionOptionsQueryKey,
   threadDraftsQueryKey,
   threadListQueryKey,
@@ -49,6 +55,14 @@ interface QueryOptions {
 
 interface RefetchOnMountOptions extends QueryOptions {
   refetchOnMount?: boolean | "always";
+}
+
+type HostList = Host[];
+type HostListQueryData = HostList | undefined;
+
+interface UpsertHostListArgs {
+  host: Host;
+  hosts: HostListQueryData;
 }
 
 export interface UseThreadsFilters extends Omit<
@@ -163,6 +177,61 @@ export function useThread(id: string, options?: RefetchOnMountOptions) {
     placeholderData: (previousData, previousQuery) =>
       resolveThreadPlaceholder(previousData, previousQuery?.queryKey, id) ??
       getCachedThreadListPlaceholder(queryClient, id),
+  });
+}
+
+function stripThreadIncludes(thread: ThreadWithIncludesResponse): ThreadResponse {
+  const { environment, host, ...threadResponse } = thread;
+  return threadResponse;
+}
+
+function upsertHostList({ host, hosts }: UpsertHostListArgs): HostList {
+  if (!hosts) {
+    return [host];
+  }
+
+  let found = false;
+  const nextHosts = hosts.map((candidate) => {
+    if (candidate.id !== host.id) {
+      return candidate;
+    }
+    found = true;
+    return host;
+  });
+
+  return found ? nextHosts : [...hosts, host];
+}
+
+export function useThreadDetailBootstrap(id: string, options?: QueryOptions) {
+  const queryClient = useQueryClient();
+
+  return useQuery<ThreadWithIncludesResponse>({
+    queryKey: threadDetailBootstrapQueryKey(id),
+    queryFn: async () => {
+      const thread = await api.getThreadWithEnvironmentHost(
+        requireThreadId(id, "useThreadDetailBootstrap"),
+      );
+      queryClient.setQueryData(
+        threadQueryKey(thread.id),
+        stripThreadIncludes(thread),
+      );
+      if (thread.environment) {
+        queryClient.setQueryData(
+          environmentQueryKey(thread.environment.id),
+          thread.environment,
+        );
+      }
+      if (thread.host) {
+        const host = thread.host;
+        queryClient.setQueryData(hostQueryKey(host.id), host);
+        queryClient.setQueryData<HostList>(hostsQueryKey(), (hosts) =>
+          upsertHostList({ host, hosts }),
+        );
+      }
+      return thread;
+    },
+    enabled: (options?.enabled ?? true) && Boolean(id),
+    staleTime: Infinity,
   });
 }
 

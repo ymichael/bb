@@ -14,9 +14,11 @@ export const PROJECT_FILES_QUERY_KEY = "projectFiles";
 export const PROJECT_SOURCE_BRANCHES_QUERY_KEY = "projectSourceBranches";
 export const PROJECT_GITHUB_BRANCHES_QUERY_KEY = "projectGithubBranches";
 export const PROJECT_PROMPT_HISTORY_QUERY_KEY = "projectPromptHistory";
+export const SIDEBAR_BOOTSTRAP_QUERY_KEY = "sidebarBootstrap";
 export const THREADS_QUERY_KEY = "threads";
 export const THREADS_DISABLED_QUERY_KEY = "threadsDisabled";
 export const THREAD_QUERY_KEY = "thread";
+export const THREAD_DETAIL_BOOTSTRAP_QUERY_KEY = "threadDetailBootstrap";
 export const THREAD_DEFAULT_EXECUTION_OPTIONS_QUERY_KEY =
   "threadDefaultExecutionOptions";
 export const THREAD_DRAFTS_QUERY_KEY = "threadDrafts";
@@ -99,6 +101,9 @@ export type ProjectGithubBranchesQueryKey = readonly [
   typeof PROJECT_GITHUB_BRANCHES_QUERY_KEY,
   string,
 ];
+export type SidebarBootstrapQueryKey = readonly [
+  typeof SIDEBAR_BOOTSTRAP_QUERY_KEY,
+];
 export type ThreadsQueryKey = readonly [typeof THREADS_QUERY_KEY];
 export type ThreadListQueryKey = readonly [
   typeof THREADS_QUERY_KEY,
@@ -115,6 +120,10 @@ export type DisabledThreadListQueryKey = readonly [
 ];
 export type ThreadQueryKeyPrefix = readonly [typeof THREAD_QUERY_KEY];
 export type ThreadQueryKey = readonly [typeof THREAD_QUERY_KEY, string];
+export type ThreadDetailBootstrapQueryKey = readonly [
+  typeof THREAD_DETAIL_BOOTSTRAP_QUERY_KEY,
+  string,
+];
 export type ThreadDefaultExecutionOptionsQueryKeyPrefix = readonly [
   typeof THREAD_DEFAULT_EXECUTION_OPTIONS_QUERY_KEY,
 ];
@@ -348,6 +357,10 @@ export function projectGithubBranchesQueryKey(
   return [PROJECT_GITHUB_BRANCHES_QUERY_KEY, projectId];
 }
 
+export function sidebarBootstrapQueryKey(): SidebarBootstrapQueryKey {
+  return [SIDEBAR_BOOTSTRAP_QUERY_KEY];
+}
+
 export function threadsQueryKey(): ThreadsQueryKey {
   return [THREADS_QUERY_KEY];
 }
@@ -383,6 +396,12 @@ export function disabledThreadListQueryKey(
 
 export function threadQueryKey(threadId: string): ThreadQueryKey {
   return [THREAD_QUERY_KEY, threadId];
+}
+
+export function threadDetailBootstrapQueryKey(
+  threadId: string,
+): ThreadDetailBootstrapQueryKey {
+  return [THREAD_DETAIL_BOOTSTRAP_QUERY_KEY, threadId];
 }
 
 export function allThreadQueryKeyPrefix(): ThreadQueryKeyPrefix {

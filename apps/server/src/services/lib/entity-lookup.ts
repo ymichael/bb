@@ -76,6 +76,17 @@ export function requireNonDestroyedHostWithStatus(
   return toHostRecord(host, toHostStatus(db, host.id));
 }
 
+export function getNonDestroyedHostWithStatus(
+  db: DbConnection,
+  hostId: string,
+): Host | null {
+  const host = getNonDestroyedHost(db, hostId);
+  if (!host) {
+    return null;
+  }
+  return toHostRecord(host, toHostStatus(db, host.id));
+}
+
 export function requireConnectedHostSession(
   deps: Pick<{ db: DbConnection }, "db">,
   hostId: string,

@@ -1,7 +1,8 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   ProjectBranchesResponse,
   ProjectResponse,
+  ProjectWithThreadsResponse,
   PromptHistoryResponse,
   WorkspaceFileListResponse,
 } from "@bb/server-contract";
@@ -12,6 +13,8 @@ import {
   projectPromptHistoryQueryKey,
   projectSourceBranchesQueryKey,
   projectsQueryKey,
+  sidebarBootstrapQueryKey,
+  threadListQueryKey,
 } from "./query-keys";
 
 interface QueryOptions {
@@ -29,11 +32,42 @@ function requireProjectId(
   return projectId;
 }
 
-export function useProjects() {
+export function useProjects(options?: QueryOptions) {
   return useQuery<ProjectResponse[]>({
     queryKey: projectsQueryKey(),
     queryFn: () => api.listProjects(),
+    enabled: options?.enabled ?? true,
     staleTime: 30_000,
+  });
+}
+
+function stripProjectThreads(
+  project: ProjectWithThreadsResponse,
+): ProjectResponse {
+  const { threads, ...projectResponse } = project;
+  return projectResponse;
+}
+
+export function useSidebarBootstrap() {
+  const queryClient = useQueryClient();
+
+  return useQuery<ProjectWithThreadsResponse[]>({
+    queryKey: sidebarBootstrapQueryKey(),
+    queryFn: async () => {
+      const projects = await api.listProjectsWithThreads();
+      queryClient.setQueryData(
+        projectsQueryKey(),
+        projects.map(stripProjectThreads),
+      );
+      for (const project of projects) {
+        queryClient.setQueryData(
+          threadListQueryKey({ projectId: project.id, archived: false }),
+          project.threads,
+        );
+      }
+      return projects;
+    },
+    staleTime: Infinity,
   });
 }
 

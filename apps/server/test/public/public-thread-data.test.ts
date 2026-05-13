@@ -1,6 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import {
   createDraftId,
+  deleteHost,
   environments,
   events,
   getDraft,
@@ -17,6 +18,7 @@ import {
   type TimelineRow,
   threadDraftListResponseSchema,
   threadTimelineResponseSchema,
+  threadWithIncludesResponseSchema,
   timelineTurnSummaryDetailsResponseSchema,
 } from "@bb/server-contract";
 import { z } from "zod";
@@ -55,6 +57,115 @@ const threadEventWaitResponseSchema = z.object({
 type TimelineTurnRow = Extract<TimelineRow, { kind: "turn" }>;
 
 describe("public thread data routes", () => {
+  it("embeds thread environment and host snapshots when requested", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-thread-include",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        environmentId: environment.id,
+        projectId: project.id,
+      });
+
+      const leanResponse = await harness.app.request(
+        `/api/v1/threads/${thread.id}`,
+      );
+      expect(leanResponse.status).toBe(200);
+      const leanThread = await readJson(leanResponse);
+      expect(leanThread).not.toHaveProperty("environment");
+      expect(leanThread).not.toHaveProperty("host");
+
+      const includeResponse = await harness.app.request(
+        `/api/v1/threads/${thread.id}?include=environment,host`,
+      );
+      expect(includeResponse.status).toBe(200);
+      const includedThread = threadWithIncludesResponseSchema.parse(
+        await readJson(includeResponse),
+      );
+
+      expect(includedThread.environment?.id).toBe(environment.id);
+      expect(includedThread.host?.id).toBe(host.id);
+      expect(includedThread.host?.status).toBe("connected");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("returns null thread includes when relations are absent or unresolved", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-thread-null-include",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const threadWithoutEnvironment = seedThread(harness.deps, {
+        environmentId: null,
+        projectId: project.id,
+      });
+      const threadWithMissingHost = seedThread(harness.deps, {
+        environmentId: environment.id,
+        projectId: project.id,
+      });
+      deleteHost(harness.deps.db, harness.deps.hub, host.id);
+
+      const noEnvironmentResponse = await harness.app.request(
+        `/api/v1/threads/${threadWithoutEnvironment.id}?include=environment,host`,
+      );
+      expect(noEnvironmentResponse.status).toBe(200);
+      const noEnvironmentThread = threadWithIncludesResponseSchema.parse(
+        await readJson(noEnvironmentResponse),
+      );
+      expect(noEnvironmentThread.environment).toBeNull();
+      expect(noEnvironmentThread.host).toBeNull();
+
+      const missingHostResponse = await harness.app.request(
+        `/api/v1/threads/${threadWithMissingHost.id}?include=host`,
+      );
+      expect(missingHostResponse.status).toBe(200);
+      const missingHostThread = threadWithIncludesResponseSchema.parse(
+        await readJson(missingHostResponse),
+      );
+      expect(missingHostThread).not.toHaveProperty("environment");
+      expect(missingHostThread.host).toBeNull();
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("rejects invalid thread include values", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+      });
+
+      const response = await harness.app.request(
+        `/api/v1/threads/${thread.id}?include=environment,timeline`,
+      );
+      expect(response.status).toBe(400);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("returns timeline rows from thread events", async () => {
     const harness = await createTestAppHarness();
     try {

@@ -54,9 +54,11 @@ import type {
   ProjectDefaultExecutionOptionsQuery,
   ProjectAttachmentUploadForm,
   ProjectFilesQuery,
+  ProjectListQuery,
   PromptHistoryQuery,
   PromptHistoryResponse,
   ProjectResponse,
+  ProjectWithThreadsResponse,
   SendDraftRequest,
   SendDraftResponse,
   SendMessageRequest,
@@ -77,10 +79,12 @@ import type {
   SystemVoiceTranscriptionResponse,
   ThreadEventWaitQuery,
   ThreadEventsQuery,
+  ThreadGetQuery,
   ThreadListQuery,
   ThreadListResponse,
   ThreadPendingInteractionsResponse,
   ThreadResponse,
+  ThreadWithIncludesResponse,
   ThreadTimelineQuery,
   ThreadTimelineResponse,
   TimelineTurnSummaryDetailsQuery,
@@ -123,7 +127,10 @@ export type PublicApiSchema = {
   // ─── Projects ────────────────────────────────────────────────────────
 
   "/projects": {
-    $get: Endpoint<EmptyInput, ProjectResponse[]>;
+    $get: Endpoint<
+      { query?: ProjectListQuery },
+      ProjectResponse[] | ProjectWithThreadsResponse[]
+    >;
     $post: Endpoint<{ json: CreateProjectRequest }, ProjectResponse, 201>;
   };
   "/projects/:id": {
@@ -339,7 +346,10 @@ export type PublicApiSchema = {
     $post: Endpoint<{ json: CreateThreadRequest }, ThreadResponse, 201>;
   };
   "/threads/:id": {
-    $get: Endpoint<PathId, ThreadResponse>;
+    $get: Endpoint<
+      PathId & { query?: ThreadGetQuery },
+      ThreadResponse | ThreadWithIncludesResponse
+    >;
     /** Update thread metadata. If the title changes, also notifies providers that support `thread.rename`. */
     $patch: Endpoint<PathId & { json: UpdateThreadRequest }, ThreadResponse>;
     /**

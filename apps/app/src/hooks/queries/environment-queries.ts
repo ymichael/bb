@@ -24,6 +24,10 @@ interface QueryOptions {
   enabled?: boolean;
 }
 
+interface EnvironmentQueryOptions extends QueryOptions {
+  staleTime?: number;
+}
+
 interface UseEnvironmentGitDiffOptions extends QueryOptions {
   target?: WorkspaceDiffTarget;
 }
@@ -76,12 +80,16 @@ function requireGitDiffTarget(
   return target;
 }
 
-export function useEnvironment(environmentId: string | null | undefined) {
+export function useEnvironment(
+  environmentId: string | null | undefined,
+  options?: EnvironmentQueryOptions,
+) {
   return useQuery<Environment>({
     queryKey: environmentQueryKey(environmentId),
     queryFn: () =>
       api.getEnvironment(requireEnvironmentId(environmentId, "useEnvironment")),
-    enabled: Boolean(environmentId),
+    enabled: (options?.enabled ?? true) && Boolean(environmentId),
+    staleTime: options?.staleTime,
   });
 }
 

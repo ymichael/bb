@@ -11,6 +11,7 @@ import {
   listPublicProjects,
   listProjectSourcesByProjectIds,
   listThreads,
+  listThreadsWithPendingInteractionStateForProjects,
   updateProject,
   updateProjectSource,
 } from "@bb/db";
@@ -23,11 +24,16 @@ import {
   projectBranchesQuerySchema,
   projectDefaultExecutionOptionsQuerySchema,
   projectFilesQuerySchema,
+  projectListIncludeOptionSchema,
+  projectListQuerySchema,
   promptHistoryQuerySchema,
   typedRoutes,
   updateProjectRequestSchema,
   updateProjectSourceRequestSchema,
+  type ProjectListIncludeOption,
+  type ProjectListQuery,
   type ProjectResponse,
+  type ProjectWithThreadsResponse,
   type PublicApiSchema,
 } from "@bb/server-contract";
 import type { Hono } from "hono";
@@ -47,7 +53,10 @@ import {
 } from "../services/lib/entity-lookup.js";
 import { PROMPT_HISTORY_ENTRY_LIMIT } from "@bb/domain";
 import { createThreadFromRequest } from "../services/threads/thread-create.js";
-import { toThreadResponseFromThread } from "../services/threads/thread-runtime-display.js";
+import {
+  toThreadListEntryResponses,
+  toThreadResponseFromThread,
+} from "../services/threads/thread-runtime-display.js";
 import { queueCommandAndWait } from "../services/hosts/command-wait.js";
 import { parseOptionalInteger } from "../services/lib/validation.js";
 import {
@@ -83,6 +92,53 @@ function buildProjectResponses(
   return projects.map((project) => ({
     ...project,
     sources: sourcesByProjectId.get(project.id) ?? [],
+  }));
+}
+
+function parseProjectListIncludes(
+  query: ProjectListQuery,
+): Set<ProjectListIncludeOption> {
+  const includes = new Set<ProjectListIncludeOption>();
+  if (!query.include) {
+    return includes;
+  }
+  for (const value of query.include.split(",")) {
+    includes.add(projectListIncludeOptionSchema.parse(value));
+  }
+  return includes;
+}
+
+function buildProjectsWithThreadsResponse(
+  deps: AppDeps,
+): ProjectWithThreadsResponse[] {
+  const projects = buildProjectResponses(deps);
+  const projectIds = projects.map((project) => project.id);
+  const threadRows = listThreadsWithPendingInteractionStateForProjects(
+    deps.db,
+    {
+      archived: false,
+      projectIds,
+    },
+  );
+  const threadResponses = toThreadListEntryResponses(deps, {
+    threads: threadRows,
+  });
+  const threadsByProjectId = new Map<
+    string,
+    ProjectWithThreadsResponse["threads"]
+  >();
+  for (const thread of threadResponses) {
+    const projectThreads = threadsByProjectId.get(thread.projectId);
+    if (projectThreads) {
+      projectThreads.push(thread);
+      continue;
+    }
+    threadsByProjectId.set(thread.projectId, [thread]);
+  }
+
+  return projects.map((project) => ({
+    ...project,
+    threads: threadsByProjectId.get(project.id) ?? [],
   }));
 }
 
@@ -160,7 +216,13 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
     onValidationError: (msg) => new ApiError(400, "invalid_request", msg),
   });
 
-  get("/projects", (context) => context.json(buildProjectResponses(deps)));
+  get("/projects", projectListQuerySchema, (context, query) => {
+    const includes = parseProjectListIncludes(query);
+    if (includes.has("threads")) {
+      return context.json(buildProjectsWithThreadsResponse(deps));
+    }
+    return context.json(buildProjectResponses(deps));
+  });
 
   post("/projects", createProjectRequestSchema, async (context, payload) => {
     const { source } = payload;

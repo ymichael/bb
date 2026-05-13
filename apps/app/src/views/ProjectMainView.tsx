@@ -12,6 +12,7 @@ import {
   useProjectPromptHistory,
   useProjectSourceBranches,
   useProjects,
+  useSidebarBootstrap,
 } from "@/hooks/queries/project-queries";
 import { useHostDaemon } from "@/hooks/useHostDaemon";
 import { usePromptDraftStorage } from "@/hooks/usePromptDraftStorage";
@@ -30,7 +31,13 @@ export function ProjectMainView() {
   const { projectId } = useParams<{ projectId: string }>();
   const location = useLocation();
   const navigate = useNavigate();
-  const { data: projects, isLoading: projectsLoading } = useProjects();
+  const sidebarBootstrapQuery = useSidebarBootstrap();
+  const hasSidebarBootstrapSettled =
+    sidebarBootstrapQuery.isSuccess || sidebarBootstrapQuery.isError;
+  const projectsQuery = useProjects({ enabled: hasSidebarBootstrapSettled });
+  const projects = projectsQuery.data;
+  const projectsLoading =
+    sidebarBootstrapQuery.isFetching || projectsQuery.isLoading;
   const createThread = useCreateThread();
   const { localHostId } = useHostDaemon();
   const uploadPromptAttachment = useUploadPromptAttachment();

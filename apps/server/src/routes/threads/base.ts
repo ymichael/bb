@@ -1,17 +1,23 @@
 import {
   countNonDeletedAssignedChildThreads,
+  getEnvironment,
   listThreadsWithPendingInteractionState,
   markThreadDeleted,
   updateThread,
 } from "@bb/db";
-import type { ThreadListEntry, ThreadWithRuntime } from "@bb/domain";
+import type { Environment, Thread, ThreadListEntry } from "@bb/domain";
 import {
   createThreadRequestSchema,
   deleteThreadRequestSchema,
+  threadGetQuerySchema,
+  threadIncludeOptionSchema,
   threadListQuerySchema,
   updateThreadRequestSchema,
   typedRoutes,
+  type ThreadGetQuery,
+  type ThreadIncludeOption,
   type ThreadAssignedChildSummaryResponse,
+  type ThreadWithIncludesResponse,
   type PublicApiSchema,
 } from "@bb/server-contract";
 import { renderTemplate } from "@bb/templates";
@@ -27,6 +33,7 @@ import {
   requestEnvironmentCleanup,
 } from "../../services/environments/environment-cleanup.js";
 import {
+  getNonDestroyedHostWithStatus,
   requireEnvironment,
   requirePublicProject,
   requirePublicThread,
@@ -46,6 +53,59 @@ import {
   toThreadResponseFromThread,
 } from "../../services/threads/thread-runtime-display.js";
 import { assertValidManagerParentThread } from "../../services/threads/thread-parent.js";
+
+function parseThreadIncludes(query: ThreadGetQuery): Set<ThreadIncludeOption> {
+  const includes = new Set<ThreadIncludeOption>();
+  if (!query.include) {
+    return includes;
+  }
+  for (const value of query.include.split(",")) {
+    includes.add(threadIncludeOptionSchema.parse(value));
+  }
+  return includes;
+}
+
+interface BuildThreadResponseArgs {
+  includes: Set<ThreadIncludeOption>;
+  thread: Thread;
+}
+
+function resolveIncludedThreadEnvironment(
+  deps: Pick<AppDeps, "db">,
+  thread: Thread,
+): Environment | null {
+  if (thread.environmentId === null) {
+    return null;
+  }
+  return getEnvironment(deps.db, thread.environmentId);
+}
+
+function buildThreadResponse(
+  deps: AppDeps,
+  args: BuildThreadResponseArgs,
+): ThreadWithIncludesResponse {
+  const response: ThreadWithIncludesResponse = toThreadResponseFromThread(
+    deps,
+    {
+      thread: args.thread,
+    },
+  );
+  const shouldResolveEnvironment =
+    args.includes.has("environment") || args.includes.has("host");
+  const environment = shouldResolveEnvironment
+    ? resolveIncludedThreadEnvironment(deps, args.thread)
+    : null;
+
+  if (args.includes.has("environment")) {
+    response.environment = environment;
+  }
+  if (args.includes.has("host")) {
+    response.host = environment
+      ? getNonDestroyedHostWithStatus(deps.db, environment.hostId)
+      : null;
+  }
+  return response;
+}
 
 function formatThreadLabelForManager(thread: {
   id: string;
@@ -126,13 +186,15 @@ export function registerThreadBaseRoutes(app: Hono, deps: AppDeps): void {
     return context.json(toThreadResponseFromThread(deps, { thread }), 201);
   });
 
-  get("/threads/:id", (context) =>
-    context.json(
-      toThreadResponseFromThread(deps, {
-        thread: requirePublicThread(deps.db, context.req.param("id")),
-      }) satisfies ThreadWithRuntime,
-    ),
-  );
+  get("/threads/:id", threadGetQuerySchema, (context, query) => {
+    const thread = requirePublicThread(deps.db, context.req.param("id"));
+    return context.json(
+      buildThreadResponse(deps, {
+        includes: parseThreadIncludes(query),
+        thread,
+      }),
+    );
+  });
 
   get("/threads/:id/assigned-child-summary", (context) => {
     const thread = requirePublicThread(deps.db, context.req.param("id"));

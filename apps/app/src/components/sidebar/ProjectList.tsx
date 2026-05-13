@@ -16,7 +16,10 @@ import {
   useServerConnectionGracePeriodElapsed,
   type ConnectionAwareQueryStatus,
 } from "@/hooks/queries/connection-aware-query-state";
-import { useProjects } from "@/hooks/queries/project-queries";
+import {
+  useProjects,
+  useSidebarBootstrap,
+} from "@/hooks/queries/project-queries";
 import {
   isLocalPathMissing,
   useLocalPathExistence,
@@ -233,7 +236,10 @@ function ProjectListComponent({
   isCreatingProject = false,
   isManagerActionPending = false,
 }: ProjectListProps) {
-  const projectsQuery = useProjects();
+  const sidebarBootstrapQuery = useSidebarBootstrap();
+  const hasSidebarBootstrapSettled =
+    sidebarBootstrapQuery.isSuccess || sidebarBootstrapQuery.isError;
+  const projectsQuery = useProjects({ enabled: hasSidebarBootstrapSettled });
   const {
     data: projects,
     isFetching: projectsFetching,
@@ -243,7 +249,7 @@ function ProjectListComponent({
   const connectionGracePeriodElapsed = useServerConnectionGracePeriodElapsed();
   const projectsState = useConnectionAwareQueryState({
     hasResolvedData: projects !== undefined,
-    isFetching: projectsFetching,
+    isFetching: sidebarBootstrapQuery.isFetching || projectsFetching,
     isLoadingError: projectsLoadingError,
   });
   const projectIds = useMemo(
@@ -253,12 +259,13 @@ function ProjectListComponent({
   const threadQueries = useMemo(
     () =>
       projectIds.map((projectId) => ({
+        enabled: hasSidebarBootstrapSettled,
         queryKey: threadListQueryKey({ projectId, archived: false }),
         queryFn: ({ signal }: ThreadQueryFnContext) =>
           api.listThreads({ projectId, archived: false }, signal),
         staleTime: 10_000,
       })),
-    [projectIds],
+    [hasSidebarBootstrapSettled, projectIds],
   );
   // Keep combine stable so useQueries skips aggregation on unrelated renders.
   const combineProjectThreadQueries = useCallback(

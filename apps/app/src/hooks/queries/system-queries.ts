@@ -27,6 +27,10 @@ export interface UseAvailableModelsArgs {
   selectedModel?: string;
 }
 
+interface QueryOptions {
+  enabled?: boolean;
+}
+
 function requireQueryId(id: HostQueryId, hookName: string): string {
   if (!id) {
     throw new Error(`${hookName}: hostId is required when query is enabled`);
@@ -35,19 +39,20 @@ function requireQueryId(id: HostQueryId, hookName: string): string {
   return id;
 }
 
-export function useHosts() {
+export function useHosts(options?: QueryOptions) {
   return useQuery<Host[]>({
     queryKey: hostsQueryKey(),
     queryFn: () => api.listHosts(),
+    enabled: options?.enabled ?? true,
     staleTime: 30_000,
   });
 }
 
-export function useHost(hostId: HostQueryId) {
+export function useHost(hostId: HostQueryId, options?: QueryOptions) {
   return useQuery<Host>({
     queryKey: hostQueryKey(hostId),
     queryFn: () => api.getHost(requireQueryId(hostId, "useHost")),
-    enabled: Boolean(hostId),
+    enabled: (options?.enabled ?? true) && Boolean(hostId),
     staleTime: 30_000,
   });
 }

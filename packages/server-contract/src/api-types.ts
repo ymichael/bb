@@ -5,6 +5,8 @@ import {
   normalizeProjectPathInput,
   activeThinkingSchema,
   featureFlagsSchema,
+  environmentSchema,
+  hostSchema,
   pendingInteractionResolutionSchema,
   pendingInteractionSchema,
   promptHistoryEntrySchema,
@@ -33,6 +35,20 @@ export const FILE_LIST_QUERY_MAX_LENGTH = 256;
 export const SCHEDULE_CRON_MAX_LENGTH = 100;
 export const SCHEDULE_NAME_MAX_LENGTH = 200;
 export const SCHEDULE_TIMEZONE_MAX_LENGTH = 100;
+
+interface IncludeQueryValidationArgs {
+  allowedValues: readonly string[];
+  value: string;
+}
+
+function isCommaSeparatedIncludeQueryValue(
+  args: IncludeQueryValidationArgs,
+): boolean {
+  const requestedValues = args.value.split(",");
+  return requestedValues.every(
+    (value) => value.length > 0 && args.allowedValues.includes(value),
+  );
+}
 
 export const threadContextWindowUsageSchema = z.object({
   usedTokens: z.number(),
@@ -356,6 +372,33 @@ export type ThreadListResponse = z.infer<typeof threadListResponseSchema>;
 export const threadResponseSchema = threadWithRuntimeSchema;
 export type ThreadResponse = z.infer<typeof threadResponseSchema>;
 
+export const threadIncludeOptionSchema = z.enum(["environment", "host"]);
+export type ThreadIncludeOption = z.infer<typeof threadIncludeOptionSchema>;
+
+export const threadGetQuerySchema = z.object({
+  include: z
+    .string()
+    .min(1)
+    .refine(
+      (value) =>
+        isCommaSeparatedIncludeQueryValue({
+          allowedValues: threadIncludeOptionSchema.options,
+          value,
+        }),
+      { message: "Invalid include" },
+    )
+    .optional(),
+});
+export type ThreadGetQuery = z.infer<typeof threadGetQuerySchema>;
+
+export const threadWithIncludesResponseSchema = threadResponseSchema.extend({
+  environment: environmentSchema.nullable().optional(),
+  host: hostSchema.nullable().optional(),
+});
+export type ThreadWithIncludesResponse = z.infer<
+  typeof threadWithIncludesResponseSchema
+>;
+
 export const threadPendingInteractionsResponseSchema = z.array(
   pendingInteractionSchema,
 );
@@ -525,6 +568,27 @@ export const createManagerThreadRequestSchema = z.object({
 export type CreateManagerThreadRequest = z.infer<
   typeof createManagerThreadRequestSchema
 >;
+
+export const projectListIncludeOptionSchema = z.enum(["threads"]);
+export type ProjectListIncludeOption = z.infer<
+  typeof projectListIncludeOptionSchema
+>;
+
+export const projectListQuerySchema = z.object({
+  include: z
+    .string()
+    .min(1)
+    .refine(
+      (value) =>
+        isCommaSeparatedIncludeQueryValue({
+          allowedValues: projectListIncludeOptionSchema.options,
+          value,
+        }),
+      { message: "Invalid include" },
+    )
+    .optional(),
+});
+export type ProjectListQuery = z.infer<typeof projectListQuerySchema>;
 
 export const projectFilesQuerySchema = z.object({
   query: z.string().min(1).max(FILE_LIST_QUERY_MAX_LENGTH).optional(),
@@ -1119,6 +1183,13 @@ export const projectResponseSchema = projectSchema.extend({
   sources: z.array(projectSourceSchema),
 });
 export type ProjectResponse = z.infer<typeof projectResponseSchema>;
+
+export const projectWithThreadsResponseSchema = projectResponseSchema.extend({
+  threads: z.array(threadListEntrySchema),
+});
+export type ProjectWithThreadsResponse = z.infer<
+  typeof projectWithThreadsResponseSchema
+>;
 
 export const systemConfigResponseSchema = z.object({
   featureFlags: featureFlagsSchema,

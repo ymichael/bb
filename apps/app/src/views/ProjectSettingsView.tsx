@@ -32,7 +32,10 @@ import {
   useLocalPathPicker,
   type LocalPathSubmitParams,
 } from "@/hooks/useLocalPathPicker";
-import { useProjects } from "@/hooks/queries/project-queries";
+import {
+  useProjects,
+  useSidebarBootstrap,
+} from "@/hooks/queries/project-queries";
 import { useEffectiveHosts } from "@/hooks/queries/effective-hosts";
 import { useGithubRepos } from "@/hooks/queries/system-queries";
 import { invalidateProjectSourceQueries } from "@/hooks/cache-effects";
@@ -55,7 +58,12 @@ function sourceLabel(
 
 export function ProjectSettingsView() {
   const { projectId } = useParams<{ projectId: string }>();
-  const { data: projects, isLoading } = useProjects();
+  const sidebarBootstrapQuery = useSidebarBootstrap();
+  const hasSidebarBootstrapSettled =
+    sidebarBootstrapQuery.isSuccess || sidebarBootstrapQuery.isError;
+  const projectsQuery = useProjects({ enabled: hasSidebarBootstrapSettled });
+  const projects = projectsQuery.data;
+  const isLoading = sidebarBootstrapQuery.isFetching || projectsQuery.isLoading;
   const { data: hosts = [] } = useEffectiveHosts();
   const queryClient = useQueryClient();
   const githubConnected = useAtomValue(githubConnectedAtom);

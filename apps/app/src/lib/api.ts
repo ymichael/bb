@@ -34,6 +34,7 @@ import type {
   CreateThreadRequest,
   ProjectBranchesResponse,
   ProjectResponse,
+  ProjectWithThreadsResponse,
   PromptHistoryResponse,
   SendDraftResponse,
   SendMessageRequest,
@@ -48,6 +49,7 @@ import type {
   ThreadDraftListResponse,
   ThreadListResponse,
   ThreadResponse,
+  ThreadWithIncludesResponse,
   ThreadStorageFilesQuery,
   ThreadTimelineResponse,
   TimelineTurnSummaryDetailsRequest,
@@ -462,6 +464,19 @@ export async function listProjects(): Promise<ProjectResponse[]> {
   return request<ProjectResponse[]>(apiClient.projects.$get());
 }
 
+export async function listProjectsWithThreads(
+  signal?: AbortSignal,
+): Promise<ProjectWithThreadsResponse[]> {
+  return request<ProjectWithThreadsResponse[]>(
+    apiClient.projects.$get(
+      {
+        query: { include: "threads" },
+      },
+      requestOptions(signal),
+    ),
+  );
+}
+
 export async function listProjectPromptHistory(
   projectId: string,
   signal?: AbortSignal,
@@ -640,6 +655,21 @@ export async function listThreads(
 export async function getThread(id: string): Promise<ThreadResponse> {
   return request<ThreadResponse>(
     apiClient.threads[":id"].$get({ param: { id } }),
+  );
+}
+
+export async function getThreadWithEnvironmentHost(
+  id: string,
+  signal?: AbortSignal,
+): Promise<ThreadWithIncludesResponse> {
+  return request<ThreadWithIncludesResponse>(
+    apiClient.threads[":id"].$get(
+      {
+        param: { id },
+        query: { include: "environment,host" },
+      },
+      requestOptions(signal),
+    ),
   );
 }
 
