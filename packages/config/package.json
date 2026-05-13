@@ -43,6 +43,11 @@
       "types": "./src/defaults.ts",
       "default": "./src/defaults.ts"
     },
+    "./local-app-origins": {
+      "source": "./src/local-app-origins.ts",
+      "types": "./src/local-app-origins.ts",
+      "default": "./src/local-app-origins.ts"
+    },
     "./database": {
       "source": "./src/database.ts",
       "types": "./src/database.ts",

@@ -48,5 +48,6 @@ export function useThreadStorageViewer({
     threadStorageFilePreviewError,
     threadStorageFilesError,
     threadStorageFiles,
+    threadStorageRootPath: threadStorageFiles?.storageRootPath ?? null,
   };
 }

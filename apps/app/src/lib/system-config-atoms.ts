@@ -1,9 +1,13 @@
-import { atom } from "jotai";
+import { atom, useAtomValue } from "jotai";
 import type { WorkspaceOpenTarget } from "@bb/host-daemon-contract";
 import type { HostDaemonStatusSnapshot } from "./api-host-daemon";
 import type { SystemConfigResponse } from "@bb/server-contract";
 import { apiClient } from "./api-server";
 import { fetchHostStatus, fetchWorkspaceOpenTargets } from "./api-host-daemon";
+import {
+  resolvePreferredWorkspaceOpenTarget,
+  workspaceOpenTargetPreferenceAtom,
+} from "./workspace-open-target-preference";
 import { wsManager } from "./ws";
 
 async function loadSystemConfig(): Promise<SystemConfigResponse> {
@@ -107,6 +111,26 @@ export const localWorkspaceOpenTargetsAtom = atom<
 
   return fetchWorkspaceOpenTargets(config.hostDaemonPort);
 });
+
+/**
+ * The active preferred open target: the user's stored preference if it's
+ * currently installed, otherwise the first editor-kind target, otherwise the
+ * first available target. Single source of truth for "which app does the BB
+ * UI default to opening files in." Use `useLocalOpenTargets` instead when you
+ * need the gated, hook-scoped variant.
+ */
+export const preferredWorkspaceOpenTargetAtom = atom<
+  Promise<WorkspaceOpenTarget | null>
+>(async (get) =>
+  resolvePreferredWorkspaceOpenTarget({
+    preferredTargetId: get(workspaceOpenTargetPreferenceAtom),
+    targets: await get(localWorkspaceOpenTargetsAtom),
+  }),
+);
+
+export function usePreferredWorkspaceOpenTarget() {
+  return useAtomValue(preferredWorkspaceOpenTargetAtom);
+}
 
 // ---------------------------------------------------------------------------
 // Derived: host daemon port (sync access after config resolves)

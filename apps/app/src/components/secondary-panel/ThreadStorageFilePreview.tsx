@@ -9,6 +9,7 @@ interface ThreadStorageFilePreviewProps {
   filePreview: FilePreview | undefined;
   isLoading: boolean;
   lineNumber?: number | null;
+  onOpenInEditor?: (path: string) => void;
 }
 
 interface SecondaryPanelFilePreviewProps extends ThreadStorageFilePreviewProps {
@@ -108,6 +109,7 @@ export function ThreadStorageFilePreview({
   filePreview,
   isLoading,
   lineNumber,
+  onOpenInEditor,
 }: ThreadStorageFilePreviewProps) {
   return (
     <SecondaryPanelFilePreview
@@ -116,6 +118,7 @@ export function ThreadStorageFilePreview({
       filePreview={filePreview}
       isLoading={isLoading}
       lineNumber={lineNumber}
+      onOpenInEditor={onOpenInEditor}
       pendingNotFoundPath={PINNED_STORAGE_FILE_PATH}
     />
   );

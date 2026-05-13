@@ -126,7 +126,6 @@ function createLocalOpenTargetsProbe(
             void value.openPathInPreferredTarget({
               lineNumber: 27,
               path: "/tmp/workspace/file.ts",
-              workspaceRootPath: "/tmp/workspace",
             });
           }}
         >
@@ -139,7 +138,6 @@ function createLocalOpenTargetsProbe(
               path: "/tmp/workspace/file.ts",
               rememberTarget: true,
               targetId: "finder",
-              workspaceRootPath: "/tmp/workspace",
             });
           }}
         >
@@ -281,7 +279,6 @@ describe("useLocalOpenTargets", () => {
           lineNumber: 27,
           path: "/tmp/workspace/file.ts",
           targetId: "finder",
-          workspaceRootPath: "/tmp/workspace",
         },
       ]);
     });
@@ -331,7 +328,6 @@ describe("useLocalOpenTargets", () => {
           lineNumber: null,
           path: "/tmp/workspace/file.ts",
           targetId: "finder",
-          workspaceRootPath: "/tmp/workspace",
         },
       ]);
     });

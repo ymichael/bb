@@ -59,6 +59,7 @@ import type {
   UpdateProjectSourceRequest,
   UploadedPromptAttachment,
   UpsertSandboxEnvVarRequest,
+  ThreadStorageFileListResponse,
   WorkspaceFileListResponse,
   ReplayCaptureListResponse,
   ReplayRunRequest,
@@ -644,8 +645,8 @@ export async function listThreadStorageFiles({
   id,
   options,
   signal,
-}: ListThreadStorageFilesArgs): Promise<WorkspaceFileListResponse> {
-  return request<WorkspaceFileListResponse>(
+}: ListThreadStorageFilesArgs): Promise<ThreadStorageFileListResponse> {
+  return request<ThreadStorageFileListResponse>(
     apiClient.threads[":id"]["thread-storage"].files.$get(
       {
         param: { id },

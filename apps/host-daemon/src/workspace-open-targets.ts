@@ -14,7 +14,6 @@ const execFileAsync = promisify(execFile);
 export type WorkspaceOpenTargetErrorCode =
   | "path_not_found"
   | "path_not_openable"
-  | "path_outside_workspace"
   | "target_unavailable"
   | "unsupported_platform";
 
@@ -37,7 +36,6 @@ export interface OpenPathInTargetArgs {
   lineNumber: number | null;
   path: string;
   targetId: WorkspaceOpenTargetId;
-  workspaceRootPath: string;
 }
 
 interface ExecFileResult {
@@ -388,11 +386,6 @@ interface ExistingPath {
   type: "directory" | "file";
 }
 
-interface OpenPathWithinWorkspaceArgs {
-  path: string;
-  workspaceRootPath: string;
-}
-
 async function requireOpenablePath(targetPath: string): Promise<ExistingPath> {
   const stat = await fs.stat(targetPath).catch(() => null);
   if (!stat) {
@@ -420,58 +413,6 @@ async function requireOpenablePath(targetPath: string): Promise<ExistingPath> {
     code: "path_not_openable",
     message: `Open target path must be a file or directory: ${targetPath}`,
   });
-}
-
-async function requireDirectoryPath(
-  targetPath: string,
-  description: string,
-): Promise<string> {
-  const stat = await fs.stat(targetPath).catch(() => null);
-  if (!stat) {
-    throw new WorkspaceOpenTargetError({
-      code: "path_not_found",
-      message: `${description} does not exist: ${targetPath}`,
-    });
-  }
-
-  if (!stat.isDirectory()) {
-    throw new WorkspaceOpenTargetError({
-      code: "path_not_openable",
-      message: `${description} must be a directory: ${targetPath}`,
-    });
-  }
-
-  return fs.realpath(targetPath);
-}
-
-function isPathWithinRoot(candidatePath: string, rootPath: string): boolean {
-  const relativePath = path.relative(rootPath, candidatePath);
-  return (
-    relativePath === "" ||
-    (!relativePath.startsWith("..") && !path.isAbsolute(relativePath))
-  );
-}
-
-async function resolveWorkspaceExistingPath(
-  args: OpenPathWithinWorkspaceArgs,
-): Promise<ExistingPath> {
-  const existingPath = await requireOpenablePath(args.path);
-  const [workspaceRootPath, resolvedPath] = await Promise.all([
-    requireDirectoryPath(args.workspaceRootPath, "Workspace root path"),
-    fs.realpath(existingPath.path),
-  ]);
-
-  if (!isPathWithinRoot(resolvedPath, workspaceRootPath)) {
-    throw new WorkspaceOpenTargetError({
-      code: "path_outside_workspace",
-      message: `Open target path must stay inside the workspace root: ${args.path}`,
-    });
-  }
-
-  return {
-    path: resolvedPath,
-    type: existingPath.type,
-  };
 }
 
 function resolveTargetOpenPath(args: ResolveTargetOpenPathArgs): string {
@@ -568,10 +509,7 @@ export async function openPathInTargetWithRuntime(
     });
   }
 
-  const existingPath = await resolveWorkspaceExistingPath({
-    path: args.path,
-    workspaceRootPath: args.workspaceRootPath,
-  });
+  const existingPath = await requireOpenablePath(args.path);
   const invocation = await resolveMacOpenInvocation(
     {
       definition,

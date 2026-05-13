@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import fs from "node:fs/promises";
 import { promisify } from "node:util";
 import { serve } from "@hono/node-server";
+import { buildLocalAppOrigins } from "@bb/config/local-app-origins";
 import {
   healthResponseSchema,
   HOST_DAEMON_PROTOCOL_VERSION,
@@ -35,6 +36,15 @@ export interface StartLocalApiServerOptions {
   hostId: string;
   localApiConfig: HostDaemonLocalApiConfig;
   serverUrl: string;
+  /** Port the BB server binds on (parsed from `serverUrl` upstream so the
+   * daemon doesn't need to depend on server config). Used to build the CORS
+   * allowlist. */
+  serverPort: number;
+  /** Vite dev port for the BB app frontend; allowed origin for CORS. */
+  devAppPort: number;
+  /** Optional public app origin (e.g. `https://app.example.com`); allowed
+   * origin for CORS when the frontend is served from a non-localhost domain. */
+  appUrl?: string;
   getConnected: () => boolean;
   listWorkspaceOpenTargets?: WorkspaceOpenTargetListHandler;
   openInTarget?: OpenInTargetHandler;
@@ -82,7 +92,25 @@ export async function startLocalApiServer(
   options: StartLocalApiServerOptions,
 ): Promise<LocalApiServer> {
   const app = new Hono();
-  app.use("*", cors());
+  const allowedCorsOrigins = new Set<string>(
+    buildLocalAppOrigins({
+      serverPort: options.serverPort,
+      devAppPort: options.devAppPort,
+      appUrl: options.appUrl,
+    }),
+  );
+  app.use(
+    "*",
+    cors({
+      origin: (origin, context) => {
+        const requestOrigin = new URL(context.req.url).origin;
+        if (origin === requestOrigin || allowedCorsOrigins.has(origin)) {
+          return origin;
+        }
+        return null;
+      },
+    }),
+  );
 
   app.get(options.localApiConfig.healthPath, (c) =>
     c.text(healthResponseSchema.parse(options.localApiConfig.healthValue)),

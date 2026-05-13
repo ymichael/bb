@@ -93,7 +93,6 @@ function createWorkspaceOpenTargetsProbe(
               lineNumber: null,
               path: "/tmp/workspace",
               targetId: "vscode",
-              workspaceRootPath: "/tmp/workspace",
             });
           }}
         >
@@ -261,7 +260,6 @@ describe("useWorkspaceOpenTargets", () => {
           lineNumber: null,
           path: "/tmp/workspace",
           targetId: "vscode",
-          workspaceRootPath: "/tmp/workspace",
         },
       ]);
     });

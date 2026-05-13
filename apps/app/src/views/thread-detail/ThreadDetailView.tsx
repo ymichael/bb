@@ -79,6 +79,7 @@ import { useThreadGitActions } from "./useThreadGitActions";
 import { useThreadReadTracking } from "./useThreadReadTracking";
 import { useThreadTimelinePages } from "./useThreadTimelinePages";
 import {
+  buildOpenInEditorHandler,
   resolveThreadLocalWorkspaceRootPath,
   resolveThreadWorkspaceOpenPath,
 } from "./threadWorkspaceOpenPath";
@@ -175,6 +176,7 @@ export function ThreadDetailView() {
     threadStorageFilePreviewError,
     threadStorageFiles,
     threadStorageFilesError,
+    threadStorageRootPath,
   } = useThreadStorageViewer({
     activePath: activeStorageFilePathForViewer,
     fileListEnabled: shouldLoadManagerStorageFiles,
@@ -639,7 +641,6 @@ export function ThreadDetailView() {
           await openPathInPreferredTarget({
             lineNumber: null,
             path: workspaceOpenPath,
-            workspaceRootPath: workspaceOpenPath,
           });
         }}
         onOpenTarget={async (targetId) => {
@@ -648,7 +649,6 @@ export function ThreadDetailView() {
             path: workspaceOpenPath,
             rememberTarget: true,
             targetId,
-            workspaceRootPath: workspaceOpenPath,
           });
         }}
       />
@@ -720,17 +720,16 @@ export function ThreadDetailView() {
           isFilesLoading: isThreadStorageFilesLoading,
         }
       : undefined;
-  const handleOpenFileInEditor =
-    localWorkspaceRootPath && canOpenPreferredTarget
-      ? (relativePath: string) => {
-          const fullPath = `${localWorkspaceRootPath}/${relativePath}`;
-          void openPathInPreferredTarget({
-            lineNumber: null,
-            path: fullPath,
-            workspaceRootPath: localWorkspaceRootPath,
-          });
-        }
-      : undefined;
+  const handleOpenFileInEditor = buildOpenInEditorHandler({
+    rootPath: localWorkspaceRootPath,
+    canOpenPreferredTarget,
+    openInPreferredTarget: openPathInPreferredTarget,
+  });
+  const handleOpenStorageFileInEditor = buildOpenInEditorHandler({
+    rootPath: threadEnvironmentIsLocal ? threadStorageRootPath : null,
+    canOpenPreferredTarget,
+    openInPreferredTarget: openPathInPreferredTarget,
+  });
   const fileTabContent = activeWorkspaceFilePath ? (
     <SecondaryPanelFilePreview
       activePath={activeWorkspaceFilePath}
@@ -746,6 +745,7 @@ export function ThreadDetailView() {
       error={threadStorageFilePreviewError}
       filePreview={threadStorageFilePreview}
       isLoading={isThreadStorageFilePreviewLoading}
+      onOpenInEditor={handleOpenStorageFileInEditor}
     />
   ) : undefined;
 

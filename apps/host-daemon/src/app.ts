@@ -672,6 +672,9 @@ export async function createHostDaemonApp(
         hostId: options.hostId,
         localApiConfig: options.localApiConfig,
         serverUrl: options.serverUrl,
+        serverPort: Number(new URL(options.serverUrl).port) || 0,
+        devAppPort: hostDaemonConfig.BB_DEV_APP_PORT,
+        appUrl: hostDaemonConfig.BB_APP_URL || undefined,
         getConnected: () => connection.sessionId != null,
         pickFolder: options.pickFolder,
       })

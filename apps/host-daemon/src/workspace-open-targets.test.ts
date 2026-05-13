@@ -1,11 +1,4 @@
-import {
-  mkdir,
-  mkdtemp,
-  realpath,
-  rm,
-  symlink,
-  writeFile,
-} from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
@@ -163,21 +156,18 @@ describe("workspace open targets", () => {
     });
 
     try {
-      const resolvedWorkspacePath = await realpath(workspacePath);
-
       await openPathInTargetWithRuntime(
         {
           lineNumber: null,
           path: workspacePath,
           targetId: "zed",
-          workspaceRootPath: workspacePath,
         },
         createRuntime({ execFile }),
       );
 
       expect(calls.find((call) => call.file === "open")).toEqual({
         file: "open",
-        args: ["-a", "Zed", "--", resolvedWorkspacePath],
+        args: ["-a", "Zed", "--", workspacePath],
       });
     } finally {
       await rm(workspacePath, { force: true, recursive: true });
@@ -191,7 +181,6 @@ describe("workspace open targets", () => {
           lineNumber: null,
           path: path.join(tmpdir(), "bb-missing-workspace"),
           targetId: "zed",
-          workspaceRootPath: tmpdir(),
         },
         createRuntime({
           execFile: createAvailableExecFile({
@@ -213,88 +202,22 @@ describe("workspace open targets", () => {
     try {
       await mkdir(path.dirname(filePath), { recursive: true });
       await writeFile(filePath, "export const value = 1;\n");
-      const resolvedFilePath = await realpath(filePath);
 
       await openPathInTargetWithRuntime(
         {
           lineNumber: 22,
           path: filePath,
           targetId: "terminal",
-          workspaceRootPath: workspacePath,
         },
         createRuntime({ execFile }),
       );
 
       expect(calls.find((call) => call.file === "open")).toEqual({
         file: "open",
-        args: ["-a", "Terminal", "--", path.dirname(resolvedFilePath)],
+        args: ["-a", "Terminal", "--", path.dirname(filePath)],
       });
     } finally {
       await rm(workspacePath, { force: true, recursive: true });
-    }
-  });
-
-  it("rejects paths outside the workspace root", async () => {
-    const root = await mkdtemp(path.join(tmpdir(), "bb-workspace-root-"));
-    const workspacePath = path.join(root, "workspace");
-    const externalPath = path.join(root, "outside.ts");
-
-    try {
-      await mkdir(workspacePath);
-      await writeFile(externalPath, "export const outside = true;\n");
-
-      await expect(
-        openPathInTargetWithRuntime(
-          {
-            lineNumber: null,
-            path: externalPath,
-            targetId: "zed",
-            workspaceRootPath: workspacePath,
-          },
-          createRuntime({
-            execFile: createAvailableExecFile({
-              availableBundleIdSubstrings: ["dev.zed.Zed"],
-            }),
-          }),
-        ),
-      ).rejects.toMatchObject({
-        code: "path_outside_workspace",
-      });
-    } finally {
-      await rm(root, { force: true, recursive: true });
-    }
-  });
-
-  it("rejects symlink escapes outside the workspace root", async () => {
-    const root = await mkdtemp(path.join(tmpdir(), "bb-workspace-root-"));
-    const workspacePath = path.join(root, "workspace");
-    const externalPath = path.join(root, "outside.ts");
-    const linkedPath = path.join(workspacePath, "linked.ts");
-
-    try {
-      await mkdir(workspacePath);
-      await writeFile(externalPath, "export const outside = true;\n");
-      await symlink(externalPath, linkedPath);
-
-      await expect(
-        openPathInTargetWithRuntime(
-          {
-            lineNumber: null,
-            path: linkedPath,
-            targetId: "zed",
-            workspaceRootPath: workspacePath,
-          },
-          createRuntime({
-            execFile: createAvailableExecFile({
-              availableBundleIdSubstrings: ["dev.zed.Zed"],
-            }),
-          }),
-        ),
-      ).rejects.toMatchObject({
-        code: "path_outside_workspace",
-      });
-    } finally {
-      await rm(root, { force: true, recursive: true });
     }
   });
 
@@ -311,21 +234,19 @@ describe("workspace open targets", () => {
     try {
       await mkdir(path.dirname(filePath), { recursive: true });
       await writeFile(filePath, "export const value = 1;\n");
-      const resolvedFilePath = await realpath(filePath);
 
       await openPathInTargetWithRuntime(
         {
           lineNumber: 15,
           path: filePath,
           targetId: "cursor",
-          workspaceRootPath: workspacePath,
         },
         createRuntime({ execFile }),
       );
 
       expect(calls.find((call) => call.file === "cursor")).toEqual({
         file: "cursor",
-        args: ["-g", `${resolvedFilePath}:15`],
+        args: ["-g", `${filePath}:15`],
       });
       expect(calls.some((call) => call.file === "open")).toBe(false);
     } finally {
@@ -345,21 +266,19 @@ describe("workspace open targets", () => {
     try {
       await mkdir(path.dirname(filePath), { recursive: true });
       await writeFile(filePath, "export const value = 1;\n");
-      const resolvedFilePath = await realpath(filePath);
 
       await openPathInTargetWithRuntime(
         {
           lineNumber: 15,
           path: filePath,
           targetId: "cursor",
-          workspaceRootPath: workspacePath,
         },
         createRuntime({ execFile }),
       );
 
       expect(calls.find((call) => call.file === "open")).toEqual({
         file: "open",
-        args: ["-a", "Cursor", "--", resolvedFilePath],
+        args: ["-a", "Cursor", "--", filePath],
       });
     } finally {
       await rm(workspacePath, { force: true, recursive: true });
@@ -376,7 +295,6 @@ describe("workspace open targets", () => {
             lineNumber: null,
             path: workspacePath,
             targetId: "vscode",
-            workspaceRootPath: workspacePath,
           },
           createRuntime(),
         ),
@@ -398,7 +316,6 @@ describe("workspace open targets", () => {
             lineNumber: null,
             path: workspacePath,
             targetId: "vscode",
-            workspaceRootPath: workspacePath,
           },
           createRuntime({ platform: "linux" }),
         ),

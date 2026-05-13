@@ -33,7 +33,7 @@ const workspaceOpenTargetPreferenceStorage =
     isStoredWorkspaceOpenTargetPreference,
   );
 
-const workspaceOpenTargetPreferenceAtom =
+export const workspaceOpenTargetPreferenceAtom =
   atomWithStorage<StoredWorkspaceOpenTargetPreference>(
     WORKSPACE_OPEN_TARGET_STORAGE_KEY,
     null,

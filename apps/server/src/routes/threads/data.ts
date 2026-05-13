@@ -332,10 +332,15 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
         return context.json({
           files: result.files,
           truncated: result.truncated,
+          storageRootPath: target.storagePath,
         });
       } catch (error) {
         if (error instanceof ApiError && error.body.code === "ENOENT") {
-          return context.json({ files: [], truncated: false });
+          return context.json({
+            files: [],
+            truncated: false,
+            storageRootPath: target.storagePath,
+          });
         }
         throw error;
       }

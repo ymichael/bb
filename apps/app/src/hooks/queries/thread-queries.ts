@@ -15,10 +15,10 @@ import type {
   ManagerTimelineView,
   ThreadPendingInteractionsResponse,
   ThreadResponse,
+  ThreadStorageFileListResponse,
   ThreadTimelineResponse,
   TimelineTurnSummaryDetailsRequest,
   TimelineTurnSummaryDetailsResponse,
-  WorkspaceFileListResponse,
 } from "@bb/server-contract";
 import type { ThreadListFilters, FilePreview } from "@/lib/api";
 import type { ThreadStorageFileListOptions } from "@/lib/thread-storage-files";
@@ -224,7 +224,7 @@ export function useThreadStorageFiles(
   listOptions: ThreadStorageFileListOptions,
   options?: QueryOptions,
 ) {
-  return useQuery<WorkspaceFileListResponse>({
+  return useQuery<ThreadStorageFileListResponse>({
     queryKey: threadStorageFilesQueryKey(id, listOptions),
     queryFn: ({ signal }) =>
       api.listThreadStorageFiles({

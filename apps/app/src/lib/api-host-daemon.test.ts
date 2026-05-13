@@ -239,7 +239,6 @@ describe("api-host-daemon", () => {
       lineNumber: null,
       path: "/tmp/workspace",
       targetId: "vscode",
-      workspaceRootPath: "/tmp/workspace",
     });
 
     expect(requests).toEqual([
@@ -247,8 +246,7 @@ describe("api-host-daemon", () => {
         lineNumber: null,
         path: "/tmp/workspace",
         targetId: "vscode",
-        workspaceRootPath: "/tmp/workspace",
-      },
+        },
     ]);
   });
 
@@ -273,8 +271,7 @@ describe("api-host-daemon", () => {
         lineNumber: null,
         path: "/tmp/workspace",
         targetId: "vscode",
-        workspaceRootPath: "/tmp/workspace",
-      }),
+        }),
     ).rejects.toThrow("Workspace open target is unavailable: VS Code");
   });
 });

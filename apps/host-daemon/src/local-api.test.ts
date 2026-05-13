@@ -63,6 +63,8 @@ describe("local API server", () => {
       hostId: "host-1",
       localApiConfig: createLocalApiConfig(),
       serverUrl: "http://server.test",
+      serverPort: 3334,
+      devAppPort: 5173,
       getConnected: () => true,
     });
     const client = createHostDaemonLocalClient(
@@ -92,6 +94,8 @@ describe("local API server", () => {
       hostId: "host-1",
       localApiConfig: createLocalApiConfig(),
       serverUrl: "http://server.test",
+      serverPort: 3334,
+      devAppPort: 5173,
       getConnected: () => false,
       pickFolder,
     });
@@ -122,6 +126,8 @@ describe("local API server", () => {
         hostId: "host-1",
         localApiConfig: createLocalApiConfig(),
         serverUrl: "http://server.test",
+      serverPort: 3334,
+      devAppPort: 5173,
         getConnected: () => true,
       });
       const client = createHostDaemonLocalClient(
@@ -161,6 +167,8 @@ describe("local API server", () => {
         hostId: "host-1",
         localApiConfig: createLocalApiConfig(),
         serverUrl: "http://server.test",
+      serverPort: 3334,
+      devAppPort: 5173,
         getConnected: () => true,
       });
       const client = createHostDaemonLocalClient(
@@ -189,6 +197,8 @@ describe("local API server", () => {
       hostId: "host-1",
       localApiConfig: createLocalApiConfig(),
       serverUrl: "http://server.test",
+      serverPort: 3334,
+      devAppPort: 5173,
       getConnected: () => true,
     });
     const client = createHostDaemonLocalClient(
@@ -238,6 +248,8 @@ describe("local API server", () => {
       hostId: "host-1",
       localApiConfig: createLocalApiConfig(),
       serverUrl: "http://server.test",
+      serverPort: 3334,
+      devAppPort: 5173,
       getConnected: () => true,
       listWorkspaceOpenTargets,
       openInTarget,
@@ -252,7 +264,6 @@ describe("local API server", () => {
         lineNumber: null,
         path: workspacePath,
         targetId: "vscode",
-        workspaceRootPath: workspacePath,
       },
     });
 
@@ -261,7 +272,6 @@ describe("local API server", () => {
       lineNumber: null,
       path: workspacePath,
       targetId: "vscode",
-      workspaceRootPath: workspacePath,
     });
 
     await rm(workspacePath, { recursive: true, force: true });
@@ -278,6 +288,8 @@ describe("local API server", () => {
       hostId: "host-1",
       localApiConfig: createLocalApiConfig(),
       serverUrl: "http://server.test",
+      serverPort: 3334,
+      devAppPort: 5173,
       getConnected: () => true,
       openInTarget,
     });
@@ -290,7 +302,6 @@ describe("local API server", () => {
         lineNumber: null,
         path: "/tmp/workspace",
         targetId: "vscode",
-        workspaceRootPath: "/tmp/workspace",
       },
     });
 
@@ -299,7 +310,6 @@ describe("local API server", () => {
       lineNumber: null,
       path: "/tmp/workspace",
       targetId: "vscode",
-      workspaceRootPath: "/tmp/workspace",
     });
   });
 
@@ -312,6 +322,8 @@ describe("local API server", () => {
       hostId: "host-1",
       localApiConfig: createLocalApiConfig(),
       serverUrl: "http://server.test",
+      serverPort: 3334,
+      devAppPort: 5173,
       getConnected: () => true,
     });
     const client = createHostDaemonLocalClient(
@@ -336,6 +348,8 @@ describe("local API server", () => {
         mode: "health-only",
       }),
       serverUrl: "http://server.test",
+      serverPort: 3334,
+      devAppPort: 5173,
       getConnected: () => true,
     });
 

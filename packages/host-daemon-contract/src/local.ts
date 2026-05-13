@@ -63,7 +63,6 @@ export const openInTargetRequestSchema = z.object({
   lineNumber: openTargetLineNumberSchema,
   path: openTargetPathSchema,
   targetId: workspaceOpenTargetIdSchema,
-  workspaceRootPath: openTargetPathSchema,
 });
 export type OpenInTargetRequest = z.infer<typeof openInTargetRequestSchema>;
 

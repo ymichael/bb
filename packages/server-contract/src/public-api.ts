@@ -93,6 +93,7 @@ import type {
   UpdateThreadRequest,
   UpsertSandboxEnvVarRequest,
   UploadedPromptAttachment,
+  ThreadStorageFileListResponse,
   WorkspaceFileListResponse,
   ReplayCaptureListResponse,
   ReplayRunRequest,
@@ -473,7 +474,7 @@ export type PublicApiSchema = {
      */
     $get: Endpoint<
       PathId & { query?: ThreadStorageFilesQuery },
-      WorkspaceFileListResponse
+      ThreadStorageFileListResponse
     >;
   };
   "/threads/:id/thread-storage/content": {

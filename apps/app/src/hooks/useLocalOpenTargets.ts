@@ -22,7 +22,6 @@ export interface UseLocalOpenTargetsArgs {
 export interface OpenLocalPathRequest {
   lineNumber: number | null;
   path: string;
-  workspaceRootPath: string;
 }
 
 export interface OpenPathInTargetArgs extends OpenLocalPathRequest {
@@ -63,6 +62,10 @@ export function useLocalOpenTargets(
   const { openWorkspace, workspaceOpenTargets } = useWorkspaceOpenTargets(args);
   const [preferredTargetId, setPreferredTargetId] =
     useWorkspaceOpenTargetPreference();
+  // Resolve locally from the already-gated `workspaceOpenTargets` so that
+  // callers passing `enabled: false` don't trigger a daemon fetch via the
+  // global atom. The atom (and `usePreferredWorkspaceOpenTarget`) remain
+  // available for callers that don't need the gating.
   const preferredTarget = useMemo(
     () =>
       resolvePreferredWorkspaceOpenTarget({
@@ -95,7 +98,6 @@ export function useLocalOpenTargets(
           lineNumber: request.lineNumber,
           path: request.path,
           targetId: request.targetId,
-          workspaceRootPath: request.workspaceRootPath,
         });
         return true;
       } catch (error) {
@@ -129,7 +131,6 @@ export function useLocalOpenTargets(
         path: request.path,
         rememberTarget: false,
         targetId: preferredTarget.id,
-        workspaceRootPath: request.workspaceRootPath,
       });
     },
     [

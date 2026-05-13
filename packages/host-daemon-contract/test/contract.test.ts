@@ -92,13 +92,11 @@ describe("host-daemon local schemas", () => {
         lineNumber: 12,
         path: "/tmp/workspace",
         targetId: "zed",
-        workspaceRootPath: "/tmp/workspace",
       }),
     ).toEqual({
       lineNumber: 12,
       path: "/tmp/workspace",
       targetId: "zed",
-      workspaceRootPath: "/tmp/workspace",
     });
   });
 
@@ -133,7 +131,6 @@ describe("host-daemon local schemas", () => {
         lineNumber: 0,
         path: "/tmp/workspace",
         targetId: "zed",
-        workspaceRootPath: "/tmp/workspace",
       }),
     ).toThrow();
   });

@@ -1099,6 +1099,21 @@ export type WorkspaceFileListResponse = z.infer<
   typeof workspaceFileListResponseSchema
 >;
 
+export const threadStorageFileListResponseSchema =
+  workspaceFileListResponseSchema.extend({
+    /**
+     * Absolute on-host path to the thread's storage directory. Useful for
+     * clients that need to construct a full path for filesystem operations
+     * (e.g. opening a storage file in the user's editor). The path is on
+     * the thread's host machine, so it is only usable when that host is the
+     * user's local machine.
+     */
+    storageRootPath: z.string(),
+  });
+export type ThreadStorageFileListResponse = z.infer<
+  typeof threadStorageFileListResponseSchema
+>;
+
 export const projectResponseSchema = projectSchema.extend({
   sources: z.array(projectSourceSchema),
 });

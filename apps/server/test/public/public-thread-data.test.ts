@@ -1264,6 +1264,7 @@ describe("public thread data routes", () => {
           { path: "notes/todo.md", name: "todo.md" },
         ],
         truncated: false,
+        storageRootPath: threadStoragePath,
       });
     } finally {
       await harness.cleanup();
@@ -1309,6 +1310,7 @@ describe("public thread data routes", () => {
       await expect(readJson(filesResponse)).resolves.toEqual({
         files: [{ path: "notes/plan.md", name: "plan.md" }],
         truncated: false,
+        storageRootPath: threadStoragePath,
       });
     } finally {
       await harness.cleanup();
@@ -1365,6 +1367,7 @@ describe("public thread data routes", () => {
       await expect(readJson(filesResponse)).resolves.toEqual({
         files: [{ path: "notes/plan.md", name: "plan.md" }],
         truncated: false,
+        storageRootPath: threadStoragePath,
       });
     } finally {
       await harness.cleanup();
@@ -1495,6 +1498,7 @@ describe("public thread data routes", () => {
         environmentId: environment.id,
         type: "manager",
       });
+      const threadStoragePath = `/tmp/bb-host-data/${host.id}/thread-storage/${thread.id}`;
 
       const filesPromise = harness.app.request(
         `/api/v1/threads/${thread.id}/thread-storage/files`,
@@ -1518,6 +1522,7 @@ describe("public thread data routes", () => {
       await expect(readJson(filesResponse)).resolves.toEqual({
         files: [],
         truncated: false,
+        storageRootPath: threadStoragePath,
       });
     } finally {
       await harness.cleanup();

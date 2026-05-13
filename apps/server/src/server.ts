@@ -3,6 +3,9 @@ import { readFile, stat } from "node:fs/promises";
 import { extname, join, resolve } from "node:path";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { buildLocalAppOrigins } from "@bb/config/local-app-origins";
+import { devEnvConfig } from "@bb/config/dev-env";
+import { serverConfig } from "@bb/config/server";
 import type { AppDeps } from "./types.js";
 import { ApiError, errorToResponse } from "./errors.js";
 import { registerAutomationRoutes } from "./routes/automations.js";
@@ -73,25 +76,18 @@ interface CreateAppOptions {
   staticDir?: string;
 }
 
-const LOCAL_APP_ORIGINS = [
-  "http://127.0.0.1:38886",
-  "http://127.0.0.1:3334",
-  "http://127.0.0.1:5173",
-  "http://localhost:38886",
-  "http://localhost:3334",
-  "http://localhost:5173",
-] as const;
-
 const WEB_SOCKET_SHUTDOWN_CODE = 1001;
 const WEB_SOCKET_SHUTDOWN_FORCE_CLOSE_MS = 1_000;
 const WEB_SOCKET_SHUTDOWN_REASON = "server-shutdown";
 
 function buildAllowedCorsOrigins(deps: AppDeps): Set<string> {
-  const allowedOrigins = new Set<string>(LOCAL_APP_ORIGINS);
-  if (deps.config.appUrl) {
-    allowedOrigins.add(new URL(deps.config.appUrl).origin);
-  }
-  return allowedOrigins;
+  return new Set<string>(
+    buildLocalAppOrigins({
+      serverPort: serverConfig.BB_SERVER_PORT,
+      devAppPort: devEnvConfig.BB_DEV_APP_PORT,
+      appUrl: deps.config.appUrl,
+    }),
+  );
 }
 
 function closeWebSocketServer(args: CloseWebSocketServerArgs): Promise<void> {
