@@ -145,6 +145,18 @@ export function BottomAnchoredScrollBody({
       return;
     }
 
+    // CSS scroll anchoring (the trailing sentinel) keeps scrollTop pinned at
+    // sub-pixel precision during content growth/shrink. `scrollElementToBottom`
+    // sets `scrollTop = scrollHeight - clientHeight` — both integer-rounded
+    // Web API values — so calling it while we're already within sub-pixel
+    // range yanks scrollTop by ±1px against the browser's fractional value,
+    // producing visible jitter on every frame of a row expand/collapse.
+    // Restore only when anchoring has actually let us drift away from bottom.
+    if (isScrolledNearBottom(scrollArea)) {
+      restoreFramesRemainingRef.current = 0;
+      return;
+    }
+
     scrollElementToBottom(scrollArea);
     restoreFramesRemainingRef.current -= 1;
     if (restoreFramesRemainingRef.current > 0) {

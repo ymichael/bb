@@ -1,3 +1,4 @@
+import { useSetAtom } from "jotai";
 import {
   useEffect,
   useLayoutEffect,
@@ -7,6 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { cn } from "@/lib/utils";
+import { layoutAnimationInFlightCountAtom } from "./layoutAnimationAtoms.js";
 
 const EXPANDABLE_PANEL_TRANSITION_MS = 200;
 const useBrowserLayoutEffect =
@@ -142,6 +144,35 @@ export function ExpandablePanel({
     }
     return renderBody ? renderBody() : children;
   }, [children, isExpanded, renderBody]);
+
+  // Signal to AutoHeightContainer / HeightTransition wrappers that a
+  // CSS-driven layout animation is in flight, so they snap their wrapper to
+  // inner.height each frame instead of running their own lagging 180ms
+  // transition. Without this, three layers compound (this grid animation +
+  // wrapper transition + bottom-anchor) and the timeline slides for ~280ms
+  // instead of the row's intended 200ms.
+  const setLayoutAnimationInFlightCount = useSetAtom(
+    layoutAnimationInFlightCountAtom,
+  );
+  const isFirstAnimationEffectRef = useRef(true);
+  useBrowserLayoutEffect(() => {
+    if (isFirstAnimationEffectRef.current) {
+      isFirstAnimationEffectRef.current = false;
+      return;
+    }
+    setLayoutAnimationInFlightCount((c) => c + 1);
+    let released = false;
+    const release = () => {
+      if (released) return;
+      released = true;
+      setLayoutAnimationInFlightCount((c) => Math.max(0, c - 1));
+    };
+    const timer = window.setTimeout(release, EXPANDABLE_PANEL_TRANSITION_MS);
+    return () => {
+      window.clearTimeout(timer);
+      release();
+    };
+  }, [isExpanded, setLayoutAnimationInFlightCount]);
 
   useBrowserLayoutEffect(() => {
     if (!isExpanded) {

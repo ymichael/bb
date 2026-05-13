@@ -1,4 +1,6 @@
+import { useStore } from "jotai";
 import { useLayoutEffect, useRef, type ReactNode } from "react";
+import { layoutAnimationInFlightCountAtom } from "./layoutAnimationAtoms.js";
 
 // Shared animation tokens for height transitions across the timeline.
 // Exported so adjacent surfaces (future affordances) can match the easing
@@ -92,6 +94,7 @@ export function HeightTransition({
 }: HeightTransitionProps) {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const innerRef = useRef<HTMLDivElement>(null);
+  const store = useStore();
   useLayoutEffect(() => {
     const wrapper = wrapperRef.current;
     const inner = innerRef.current;
@@ -106,7 +109,13 @@ export function HeightTransition({
       if (!entry) return;
       const { width, height } = entry.contentRect;
       const widthChanged = lastWidth !== null && width !== lastWidth;
-      const snap = widthChanged || pendingVisibilitySnap;
+      // While a CSS layout animation (e.g. ExpandablePanel's grid expansion)
+      // is in flight, the inner is itself animating its size every frame.
+      // Running our own 180ms transition on top compounds the lag and drags
+      // scrollHeight, which the bottom-anchor sentinel then chases.
+      const layoutAnimationActive =
+        store.get(layoutAnimationInFlightCountAtom) > 0;
+      const snap = widthChanged || pendingVisibilitySnap || layoutAnimationActive;
       pendingVisibilitySnap = false;
       lastWidth = width;
       const nextHeight = visible ? `${height}px` : "0px";
@@ -131,7 +140,7 @@ export function HeightTransition({
       document.removeEventListener("visibilitychange", onVisibility);
       cleanupSnapState(wrapper, snapState);
     };
-  }, [visible]);
+  }, [visible, store]);
   return (
     <div
       ref={wrapperRef}
@@ -197,6 +206,7 @@ export function AutoHeightContainer({
 }: AutoHeightContainerProps) {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const innerRef = useRef<HTMLDivElement>(null);
+  const store = useStore();
   useLayoutEffect(() => {
     const wrapper = wrapperRef.current;
     const inner = innerRef.current;
@@ -214,8 +224,17 @@ export function AutoHeightContainer({
       if (!entry) return;
       const { width, height } = entry.contentRect;
       const widthChanged = lastWidth !== null && width !== lastWidth;
+      // While a CSS layout animation (e.g. ExpandablePanel's grid expansion)
+      // is in flight, the inner is itself animating its size every frame.
+      // Running our own 180ms transition on top compounds the lag and drags
+      // scrollHeight, which the bottom-anchor sentinel then chases.
+      const layoutAnimationActive =
+        store.get(layoutAnimationInFlightCountAtom) > 0;
       const snap =
-        widthChanged || pendingVisibilitySnap || !initialSettleComplete;
+        widthChanged ||
+        pendingVisibilitySnap ||
+        !initialSettleComplete ||
+        layoutAnimationActive;
       pendingVisibilitySnap = false;
       lastWidth = width;
       applyHeight(wrapper, `${height}px`, snap, snapState);
@@ -244,7 +263,7 @@ export function AutoHeightContainer({
       window.clearTimeout(initialSettleTimerId);
       cleanupSnapState(wrapper, snapState);
     };
-  }, []);
+  }, [store]);
   return (
     <div
       ref={wrapperRef}
