@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo } from "react";
+import { memo, useCallback, useMemo, type ReactNode } from "react";
 import { useAtom } from "jotai";
 import {
   useQueries,
@@ -65,6 +65,21 @@ interface ProjectListActionButtonsProps {
   onNewManager?: (projectId: string) => void;
   selectedProjectId?: string;
   isManagerActionPending: boolean;
+}
+
+interface ProjectListSectionLabelProps {
+  onNewProject?: () => void;
+  isCreatingProject?: boolean;
+}
+
+interface ProjectListShellProps {
+  onNewChat?: () => void;
+  onNewManager?: (projectId: string) => void;
+  selectedProjectId?: string;
+  isManagerActionPending?: boolean;
+  onNewProject?: () => void;
+  isCreatingProject?: boolean;
+  children: ReactNode;
 }
 
 interface LocalSourcePathTarget {
@@ -167,6 +182,32 @@ function getProjectThreadListState({
   }
 }
 
+function ProjectListSectionLabel({
+  onNewProject,
+  isCreatingProject = false,
+}: ProjectListSectionLabelProps) {
+  return (
+    <SidebarStickyTier tier="label" className="justify-between pr-1">
+      Projects
+      {onNewProject ? (
+        <button
+          type="button"
+          onClick={onNewProject}
+          disabled={isCreatingProject}
+          title={isCreatingProject ? "Creating project..." : "Add project"}
+          aria-label="Add project"
+          className={cn(
+            "inline-flex items-center justify-center rounded text-sidebar-foreground/50 transition-colors hover:text-sidebar-foreground disabled:opacity-50",
+            COARSE_POINTER_ADD_PROJECT_BUTTON_SIZE_CLASS,
+          )}
+        >
+          <Icon name="Plus" className={COARSE_POINTER_ICON_SIZE_CLASS} />
+        </button>
+      ) : null}
+    </SidebarStickyTier>
+  );
+}
+
 function ProjectListActionButtons({
   onNewChat,
   onNewManager,
@@ -187,7 +228,7 @@ function ProjectListActionButtons({
         : "New Manager";
 
   return (
-    <div className="space-y-0.5">
+    <div className="space-y-1">
       <Button
         type="button"
         size="sm"
@@ -224,6 +265,38 @@ function ProjectListActionButtons({
         />
       </Button>
     </div>
+  );
+}
+
+export function ProjectListShell({
+  onNewChat,
+  onNewManager,
+  selectedProjectId,
+  isManagerActionPending = false,
+  onNewProject,
+  isCreatingProject = false,
+  children,
+}: ProjectListShellProps) {
+  return (
+    <>
+      <div className="px-2 pt-2 group-data-[collapsible=icon]:hidden">
+        <ProjectListActionButtons
+          onNewChat={onNewChat}
+          onNewManager={onNewManager}
+          selectedProjectId={selectedProjectId}
+          isManagerActionPending={isManagerActionPending}
+        />
+      </div>
+      <SidebarStickyStack data-sidebar-sticky-density="compact-actions">
+        <ProjectListSectionLabel
+          onNewProject={onNewProject}
+          isCreatingProject={isCreatingProject}
+        />
+        <SidebarGroupContent>
+          <SidebarMenu className="gap-1">{children}</SidebarMenu>
+        </SidebarGroupContent>
+      </SidebarStickyStack>
+    </>
   );
 }
 
@@ -382,92 +455,63 @@ function ProjectListComponent({
   );
 
   return (
-    <>
-      <div className="px-2 pt-2 group-data-[collapsible=icon]:hidden">
-        <ProjectListActionButtons
-          onNewChat={onNewChat}
-          onNewManager={onNewManager}
-          selectedProjectId={selectedProjectId}
-          isManagerActionPending={isManagerActionPending}
-        />
-      </div>
-      <SidebarStickyStack data-sidebar-sticky-density="compact-actions">
-        <SidebarStickyTier tier="label" className="justify-between pr-1">
-          Projects
-          {onNewProject ? (
-            <button
-              type="button"
-              onClick={onNewProject}
-              disabled={isCreatingProject}
-              title={isCreatingProject ? "Creating project..." : "Add project"}
-              aria-label="Add project"
-              className={cn(
-                "inline-flex items-center justify-center rounded text-sidebar-foreground/50 transition-colors hover:text-sidebar-foreground disabled:opacity-50",
-                COARSE_POINTER_ADD_PROJECT_BUTTON_SIZE_CLASS,
-              )}
-            >
-              <Icon name="Plus" className={COARSE_POINTER_ICON_SIZE_CLASS} />
-            </button>
-          ) : null}
-        </SidebarStickyTier>
-        <SidebarGroupContent>
-          <SidebarMenu className="gap-1">
-            {projectsState.status === "loading" ? (
-              <>
-                <SidebarMenuSkeleton />
-                <SidebarMenuSkeleton />
-              </>
-            ) : projects && projects.length > 0 ? (
-              projects.map((project) => {
-                const threadState = threadStatesByProjectId.get(project.id);
-                const threadListState = getProjectThreadListState({
-                  status: threadState?.status,
-                  threads: threadsByProject.get(project.id),
-                });
-                const localSourcePath = localSourcePathsByProjectId.get(
-                  project.id,
-                );
-                const isLocalPathInvalid = isLocalPathMissing(
-                  pathExistence,
-                  localSourcePath,
-                );
-                return (
-                  <ProjectRow
-                    key={project.id}
-                    project={project}
-                    threadListState={threadListState}
-                    selectedThreadId={selectedThreadId}
-                    isActive={
-                      selectedProjectId === project.id && !selectedThreadId
-                    }
-                    isCollapsed={collapsedProjectIds.has(project.id)}
-                    collapsedManagerIds={collapsedManagerIds}
-                    isLocalPathInvalid={isLocalPathInvalid}
-                    onProjectSelect={onProjectSelect}
-                    onToggleProjectCollapsed={toggleProjectCollapsed}
-                    onToggleManagerCollapsed={toggleManagerCollapsed}
-                  />
-                );
-              })
-            ) : (
-              <SidebarMenuItem>
-                <EmptyState
-                  message={
-                    projectsState.status === "unavailable"
-                      ? "Projects unavailable"
-                      : "No projects"
-                  }
-                  icon="Folder"
-                  className="px-2 py-1.5"
-                  iconClassName="size-3.5"
-                  messageClassName="text-xs"
-                />
-              </SidebarMenuItem>
-            )}
-          </SidebarMenu>
-        </SidebarGroupContent>
-      </SidebarStickyStack>
-    </>
+    <ProjectListShell
+      onNewChat={onNewChat}
+      onNewManager={onNewManager}
+      selectedProjectId={selectedProjectId}
+      isManagerActionPending={isManagerActionPending}
+      onNewProject={onNewProject}
+      isCreatingProject={isCreatingProject}
+    >
+      {projectsState.status === "loading" ? (
+        <>
+          <SidebarMenuSkeleton />
+          <SidebarMenuSkeleton />
+        </>
+      ) : projects && projects.length > 0 ? (
+        projects.map((project) => {
+          const threadState = threadStatesByProjectId.get(project.id);
+          const threadListState = getProjectThreadListState({
+            status: threadState?.status,
+            threads: threadsByProject.get(project.id),
+          });
+          const localSourcePath = localSourcePathsByProjectId.get(project.id);
+          const isLocalPathInvalid = isLocalPathMissing(
+            pathExistence,
+            localSourcePath,
+          );
+          return (
+            <ProjectRow
+              key={project.id}
+              project={project}
+              threadListState={threadListState}
+              selectedThreadId={selectedThreadId}
+              isActive={selectedProjectId === project.id && !selectedThreadId}
+              isCollapsed={collapsedProjectIds.has(project.id)}
+              collapsedManagerIds={collapsedManagerIds}
+              isLocalPathInvalid={isLocalPathInvalid}
+              onProjectSelect={onProjectSelect}
+              onToggleProjectCollapsed={toggleProjectCollapsed}
+              onToggleManagerCollapsed={toggleManagerCollapsed}
+            />
+          );
+        })
+      ) : (
+        <SidebarMenuItem>
+          <EmptyState
+            message={
+              projectsState.status === "unavailable"
+                ? "Projects unavailable"
+                : "No projects"
+            }
+            icon="Folder"
+            className="px-2 py-1.5"
+            iconClassName="size-3.5"
+            messageClassName="text-xs"
+          />
+        </SidebarMenuItem>
+      )}
+    </ProjectListShell>
   );
 }
 

@@ -167,7 +167,7 @@ export function ProjectRow({
             <SidebarMenuSkeleton />
           </div>
         ) : projectThreads.length > 0 ? (
-          <div className="space-y-0.5 group-data-[collapsible=icon]:hidden">
+          <div className="space-y-1 group-data-[collapsible=icon]:hidden">
             {managerThreadGroups.map((managerThreadGroup) => {
               const { managerThread, managedThreads, stats } =
                 managerThreadGroup;
@@ -178,7 +178,7 @@ export function ProjectRow({
               );
 
               return (
-                <div key={managerThread.id} className="space-y-px">
+                <div key={managerThread.id} className="space-y-0.5">
                   <ThreadRow
                     projectId={project.id}
                     thread={managerThread}

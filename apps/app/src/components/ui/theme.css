@@ -110,7 +110,7 @@
     --bb-sidebar-sticky-label-height: 2rem;
     --bb-sidebar-sticky-label-gap: 0.25rem;
     --bb-sidebar-sticky-row-height: var(--bb-sidebar-row-height);
-    --bb-sidebar-sticky-row-gap: 0.125rem;
+    --bb-sidebar-sticky-row-gap: 0.25rem;
     --bb-sidebar-sticky-label-top: var(--bb-sidebar-sticky-stack-padding-top);
     --bb-sidebar-sticky-project-top: calc(
       var(--bb-sidebar-sticky-label-top) +
@@ -128,7 +128,7 @@
   }
 
   [data-sidebar-sticky-stack][data-sidebar-sticky-density="compact-actions"] {
-    --bb-sidebar-sticky-stack-padding-top: 0.25rem;
+    --bb-sidebar-sticky-stack-padding-top: 0.75rem;
   }
 
   [data-sidebar-sticky-stack] [data-sidebar-sticky-tier] {
@@ -255,7 +255,7 @@
   --font-serif: Georgia, serif;
   --font-mono: "Fira Code", monospace;
   --radius: 0.35rem;
-  --bb-sidebar-row-height: 2rem;
+  --bb-sidebar-row-height: 1.75rem;
   --bb-sidebar-row-height-coarse: 2.5rem;
   --shadow-x: 0px;
   --shadow-y: 2px;

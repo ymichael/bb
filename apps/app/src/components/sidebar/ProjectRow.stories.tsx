@@ -11,6 +11,7 @@ import {
 import { SidebarMenu, SidebarStickyStack } from "@/components/ui/sidebar.js";
 import { ProjectActionsProvider } from "@/components/project/ProjectActionsProvider";
 import { ThreadActionsProvider } from "@/components/thread/ThreadActionsProvider";
+import { ProjectListShell } from "./ProjectList";
 import { ProjectRow, type ProjectThreadListState } from "./ProjectRow";
 import { StoryCard, StoryRow } from "../../../.ladle/story-card";
 
@@ -19,15 +20,16 @@ export default {
 };
 
 // Caps at the production sidebar max (460px) but shrinks with the parent so
-// truncation behavior is visible at any container width.
+// truncation behavior is visible at any container width. Provides the outer
+// sidebar frame only; each story decides whether to use ProjectListShell (for
+// full-sidebar shots) or a bare SidebarStickyStack (for isolated ProjectRow
+// demos).
 function SidebarStage({ children }: { children: ReactNode }) {
   return (
     <ProjectActionsProvider>
       <ThreadActionsProvider>
         <div className="w-full max-w-[460px] min-w-0 rounded-md bg-sidebar p-2 text-sidebar-foreground">
-          <SidebarStickyStack>
-            <SidebarMenu className="gap-1">{children}</SidebarMenu>
-          </SidebarStickyStack>
+          {children}
         </div>
       </ThreadActionsProvider>
     </ProjectActionsProvider>
@@ -94,10 +96,16 @@ function InteractiveProjectRow({
   );
 }
 
+// Isolated ProjectRow demos: no action buttons, no "Projects" label — just the
+// minimum sticky-stack context the row depends on.
 function singleProject(args: InteractiveProjectRowArgs) {
   return (
     <SidebarStage>
-      <InteractiveProjectRow {...args} />
+      <SidebarStickyStack>
+        <SidebarMenu className="gap-1">
+          <InteractiveProjectRow {...args} />
+        </SidebarMenu>
+      </SidebarStickyStack>
     </SidebarStage>
   );
 }
@@ -287,9 +295,13 @@ export function Overview() {
         hint="four projects stacked — active project at the top with a standard thread, manager group, and busy/pending threads; another collapsed with a long truncated name; one with two idle threads; an empty one at the bottom"
       >
         <SidebarStage>
-          {multipleProjects.map(({ key, ...args }) => (
-            <InteractiveProjectRow key={key} {...args} />
-          ))}
+          <SidebarStickyStack>
+            <SidebarMenu className="gap-1">
+              {multipleProjects.map(({ key, ...args }) => (
+                <InteractiveProjectRow key={key} {...args} />
+              ))}
+            </SidebarMenu>
+          </SidebarStickyStack>
         </SidebarStage>
       </StoryRow>
     </StoryCard>
@@ -430,17 +442,26 @@ const fullProjects: FullProjectEntry[] = [
   },
 ];
 
+const noop = () => {};
+
 export function Full() {
   return (
     <StoryCard>
       <StoryRow
         label="full sidebar"
-        hint="three projects: bb (active) with a 4-child manager + 2 standalones; pierre with 3 standalones; ingest-pipeline with a manager + 1 standalone"
+        hint="action buttons + three projects: bb (active) with a 4-child manager + 2 standalones; pierre with 3 standalones; ingest-pipeline with a manager + 1 standalone"
       >
         <SidebarStage>
-          {fullProjects.map(({ key, ...args }) => (
-            <InteractiveProjectRow key={key} {...args} />
-          ))}
+          <ProjectListShell
+            onNewChat={noop}
+            onNewManager={noop}
+            selectedProjectId="proj_full_a"
+            onNewProject={noop}
+          >
+            {fullProjects.map(({ key, ...args }) => (
+              <InteractiveProjectRow key={key} {...args} />
+            ))}
+          </ProjectListShell>
         </SidebarStage>
       </StoryRow>
     </StoryCard>
