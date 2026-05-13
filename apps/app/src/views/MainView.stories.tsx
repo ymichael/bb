@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { MainViewBody } from "./MainView";
+import { MainViewWelcome } from "./MainViewWelcome";
 import { StoryCard, StoryRow } from "../../.ladle/story-card";
 
 export default {
@@ -11,9 +12,17 @@ const noop = () => {};
 // MainView's body renders inside `<main>` which is a flex column with padding
 // (see AppLayout). PageShell uses negative margins to bleed past that padding,
 // so reproduce the same wrapper shape here.
-function MainViewStage({ children }: { children: ReactNode }) {
+function MainViewStage({
+  children,
+  height = "h-[260px]",
+}: {
+  children: ReactNode;
+  height?: string;
+}) {
   return (
-    <div className="flex h-[260px] w-full min-w-0 flex-col rounded-md border border-border/70 bg-background p-4 md:p-5">
+    <div
+      className={`flex ${height} w-full min-w-0 flex-col rounded-md border border-border/70 bg-background p-4 md:p-5`}
+    >
       {children}
     </div>
   );
@@ -93,6 +102,19 @@ export const States = () => (
           onCreate={noop}
           onRetry={noop}
         />
+      </MainViewStage>
+    </StoryRow>
+  </StoryCard>
+);
+
+export const Welcome = () => (
+  <StoryCard className="bg-card">
+    <StoryRow
+      label="Welcome (first run)"
+      hint="Empty-state shown when a user has no projects yet. Single concise pane with the pitch and the primary CTA. Not yet wired into the live MainView."
+    >
+      <MainViewStage height="h-[480px]">
+        <MainViewWelcome isCreating={false} onCreate={noop} />
       </MainViewStage>
     </StoryRow>
   </StoryCard>
