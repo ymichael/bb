@@ -12,7 +12,7 @@ import { upsertProjectOperationRecord } from "@bb/db/internal-lifecycle";
 import type { Environment } from "@bb/domain";
 import type {
   AppDeps,
-  PendingInteractionWorkSessionDeps,
+  LoggedPendingInteractionWorkSessionDeps,
 } from "../../types.js";
 import { deleteProjectAttachments } from "./attachments.js";
 import {
@@ -41,7 +41,7 @@ function isProjectDeletionActive(
 }
 
 async function advanceProjectThreadsForDeletion(
-  deps: PendingInteractionWorkSessionDeps,
+  deps: LoggedPendingInteractionWorkSessionDeps,
   args: {
     environmentsById: Map<string, Environment>;
     projectId: string;
@@ -113,7 +113,7 @@ export function requestProjectDeletion(
 }
 
 export async function advanceProjectDeletion(
-  deps: PendingInteractionWorkSessionDeps,
+  deps: LoggedPendingInteractionWorkSessionDeps,
   args: ProjectDeletionArgs,
 ): Promise<boolean> {
   if (!isProjectDeletionActive(deps, args.projectId)) {

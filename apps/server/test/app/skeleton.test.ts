@@ -1,8 +1,14 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { hosts } from "@bb/db";
 import { HOST_DAEMON_PROTOCOL_VERSION } from "@bb/host-daemon-contract";
 import { initDb } from "../../src/db.js";
+import { createApp } from "../../src/server.js";
 import { readJson } from "../helpers/json.js";
+import {
+  seedHostSession,
+  seedProjectWithSource,
+  seedThread,
+} from "../helpers/seed.js";
 import { createTestAppHarness } from "../helpers/test-app.js";
 
 describe("server skeleton", () => {
@@ -61,6 +67,77 @@ describe("server skeleton", () => {
         code: "invalid_request",
       });
     } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("logs public API requests that exceed the slow request threshold", async () => {
+    const harness = await createTestAppHarness();
+    const logger = {
+      error: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+    };
+    const serverApp = createApp(
+      {
+        ...harness.deps,
+        logger,
+      },
+      {
+        slowApiRequestLogThresholdMs: 0,
+      },
+    );
+    try {
+      const response = await serverApp.app.request("/api/v1/hosts");
+      expect(response.status).toBe(200);
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          durationMs: expect.any(Number),
+          method: "GET",
+          path: "/api/v1/hosts",
+          status: 200,
+        }),
+        "Slow API request",
+      );
+    } finally {
+      await serverApp.closeWebSockets();
+      await harness.cleanup();
+    }
+  });
+
+  it("does not log slow API requests for thread event long-poll waits", async () => {
+    const harness = await createTestAppHarness();
+    const logger = {
+      error: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+    };
+    const serverApp = createApp(
+      {
+        ...harness.deps,
+        logger,
+      },
+      {
+        slowApiRequestLogThresholdMs: 0,
+      },
+    );
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-slow-api-events-wait",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const thread = seedThread(harness.deps, { projectId: project.id });
+
+      const response = await serverApp.app.request(
+        `/api/v1/threads/${thread.id}/events/wait?type=turn%2Fstarted&waitMs=0`,
+      );
+
+      expect(response.status).toBe(204);
+      expect(logger.warn).not.toHaveBeenCalled();
+    } finally {
+      await serverApp.closeWebSockets();
       await harness.cleanup();
     }
   });

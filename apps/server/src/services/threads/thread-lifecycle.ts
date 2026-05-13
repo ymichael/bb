@@ -41,6 +41,8 @@ import {
 } from "@bb/host-daemon-contract";
 import type {
   AppDeps,
+  LoggedPendingInteractionWorkSessionDeps,
+  LoggedSandboxWorkSessionDeps,
   PendingInteractionWorkSessionDeps,
   SandboxWorkSessionDeps,
 } from "../../types.js";
@@ -539,7 +541,7 @@ function requestThreadStartHandoff(
 }
 
 export async function requestThreadStart(
-  deps: SandboxWorkSessionDeps,
+  deps: LoggedSandboxWorkSessionDeps,
   args: QueueThreadStartCommandArgs,
 ): Promise<void> {
   await threadStartRequestDeduper.run(args.thread.id, () =>
@@ -548,7 +550,7 @@ export async function requestThreadStart(
 }
 
 async function requestThreadStartOnce(
-  deps: SandboxWorkSessionDeps,
+  deps: LoggedSandboxWorkSessionDeps,
   args: QueueThreadStartCommandArgs,
 ): Promise<void> {
   if (await advanceActiveThreadStartIfPresent(deps, args)) {
@@ -617,7 +619,7 @@ export async function advanceThreadStart(
 }
 
 export async function queueReadyThreadTurnCommand(
-  deps: SandboxWorkSessionDeps,
+  deps: LoggedSandboxWorkSessionDeps,
   args: QueueReadyThreadTurnCommandArgs,
 ): Promise<QueueReadyThreadTurnCommandResult> {
   const providerThreadId = getLastProviderThreadId(deps, args.thread.id);
@@ -1055,7 +1057,7 @@ export function finalizeStoppedThreadInTransaction(
 }
 
 export async function finalizeStoppedThreadAndAdvanceCleanup(
-  deps: PendingInteractionWorkSessionDeps,
+  deps: LoggedPendingInteractionWorkSessionDeps,
   args: FinalizeStoppedThreadArgs,
 ): Promise<boolean> {
   const threadBeforeFinalize = getThread(deps.db, args.threadId);

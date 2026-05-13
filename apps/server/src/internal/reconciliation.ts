@@ -13,7 +13,7 @@ import {
   threads,
 } from "@bb/db";
 import type { HostDaemonActiveThread } from "@bb/host-daemon-contract";
-import type { PendingInteractionWorkSessionDeps } from "../types.js";
+import type { LoggedPendingInteractionWorkSessionDeps } from "../types.js";
 import {
   completeThreadStart,
   finalizeStoppedThreadAndAdvanceCleanup,
@@ -23,7 +23,7 @@ import {
 import { tryTransition } from "../services/threads/thread-transitions.js";
 
 export async function reconcileSessionThreads(
-  deps: PendingInteractionWorkSessionDeps,
+  deps: LoggedPendingInteractionWorkSessionDeps,
   hostId: string,
   activeThreads: HostDaemonActiveThread[],
 ): Promise<void> {

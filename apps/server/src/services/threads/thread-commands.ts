@@ -32,7 +32,10 @@ import type {
   TurnSubmitTarget,
   WorkspaceContext,
 } from "@bb/host-daemon-contract";
-import type { AppDeps, SandboxWorkSessionDeps } from "../../types.js";
+import type {
+  AppDeps,
+  LoggedSandboxWorkSessionDeps,
+} from "../../types.js";
 import { ApiError } from "../../errors.js";
 import { ensureHostSessionReadyForWork } from "../hosts/host-lifecycle.js";
 import { getLastProviderThreadId } from "./thread-events.js";
@@ -271,7 +274,7 @@ export async function buildExecutionOptions(
 }
 
 export async function buildThreadStartCommand(
-  deps: SandboxWorkSessionDeps,
+  deps: LoggedSandboxWorkSessionDeps,
   args: QueueThreadStartCommandArgs,
 ): Promise<Extract<HostDaemonCommand, { type: "thread.start" }>> {
   const runtimeContext = await resolveThreadRuntimeCommandConfig(deps, {
@@ -334,7 +337,7 @@ export function addRequestIdToTurnSubmitCommandPayload(
 }
 
 export async function prepareTurnSubmitCommandPayload(
-  deps: SandboxWorkSessionDeps,
+  deps: LoggedSandboxWorkSessionDeps,
   args: PrepareTurnSubmitCommandPayloadArgs,
 ): Promise<PreparedTurnSubmitCommandPayload> {
   const providerThreadId = requireProviderThreadId(
@@ -358,7 +361,7 @@ export async function prepareTurnSubmitCommandPayload(
 }
 
 async function createTurnSubmitCommandPayload(
-  deps: SandboxWorkSessionDeps,
+  deps: LoggedSandboxWorkSessionDeps,
   args: CreateTurnSubmitCommandPayloadArgs,
 ): Promise<Extract<HostDaemonCommand, { type: "turn.submit" }>> {
   const preparedCommand = await prepareTurnSubmitCommandPayload(deps, args);
@@ -381,7 +384,7 @@ export function queueTurnSubmitCommandInTransaction(
 }
 
 export async function queueTurnSubmitCommand(
-  deps: SandboxWorkSessionDeps,
+  deps: LoggedSandboxWorkSessionDeps,
   args: QueueTurnSubmitCommandArgs,
 ): Promise<void> {
   ensureThreadNativeArchiveSettled(deps, {

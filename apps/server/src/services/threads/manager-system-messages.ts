@@ -4,7 +4,7 @@ import type {
   ResolvedThreadExecutionOptions,
   Thread,
 } from "@bb/domain";
-import type { PendingInteractionWorkSessionDeps } from "../../types.js";
+import type { LoggedPendingInteractionWorkSessionDeps } from "../../types.js";
 import { requireThreadEnvironment } from "../lib/entity-lookup.js";
 import {
   buildExecutionOptions,
@@ -43,7 +43,7 @@ function buildSystemInput(messageText: string): PromptInput[] {
 }
 
 async function queueReadyManagerSystemMessage(
-  deps: PendingInteractionWorkSessionDeps,
+  deps: LoggedPendingInteractionWorkSessionDeps,
   args: QueueReadyManagerSystemMessageArgs,
 ): Promise<void> {
   const expectedSteerTurnId =
@@ -114,7 +114,7 @@ async function queueReadyManagerSystemMessage(
 }
 
 export async function queueManagerSystemMessage(
-  deps: PendingInteractionWorkSessionDeps,
+  deps: LoggedPendingInteractionWorkSessionDeps,
   args: QueueManagerSystemMessageArgs,
 ): Promise<boolean> {
   const managerThread = getThread(deps.db, args.managerThreadId);

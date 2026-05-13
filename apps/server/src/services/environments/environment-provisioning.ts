@@ -35,7 +35,11 @@ import {
 } from "@bb/domain";
 import { type HostDaemonCommand } from "@bb/host-daemon-contract";
 import type { SandboxHostProgressEvent } from "@bb/sandbox-host";
-import type { AppDeps, SandboxWorkSessionDeps } from "../../types.js";
+import type {
+  AppDeps,
+  LoggedSandboxWorkSessionDeps,
+  SandboxWorkSessionDeps,
+} from "../../types.js";
 import { ApiError } from "../../errors.js";
 import {
   appendThreadProvisioningEvent,
@@ -588,18 +592,7 @@ export function recordEnvironmentProvisioningFailureInTransaction(
 }
 
 export async function failEnvironmentProvisioningDurably(
-  deps: Pick<
-    AppDeps,
-    | "cloudAuth"
-    | "config"
-    | "db"
-    | "hostLifecycle"
-    | "hub"
-    | "lifecycleDedupers"
-    | "machineAuth"
-    | "sandboxEnv"
-    | "sandboxRegistry"
-  >,
+  deps: LoggedSandboxWorkSessionDeps,
   args: FailEnvironmentProvisioningDurablyArgs,
 ): Promise<void> {
   const recorded = recordEnvironmentProvisioningFailure(deps, args);
@@ -631,18 +624,7 @@ export function requestEnvironmentProvision(
 }
 
 async function bootstrapSandboxProvisioning(
-  deps: Pick<
-    AppDeps,
-    | "cloudAuth"
-    | "config"
-    | "db"
-    | "hostLifecycle"
-    | "hub"
-    | "lifecycleDedupers"
-    | "machineAuth"
-    | "sandboxEnv"
-    | "sandboxRegistry"
-  >,
+  deps: LoggedSandboxWorkSessionDeps,
   args: {
     environment: Environment;
     operationKind: EnvironmentProvisionOperationKind;
@@ -728,18 +710,7 @@ async function bootstrapSandboxProvisioning(
 }
 
 export async function advanceEnvironmentProvisioning(
-  deps: Pick<
-    AppDeps,
-    | "cloudAuth"
-    | "config"
-    | "db"
-    | "hostLifecycle"
-    | "hub"
-    | "lifecycleDedupers"
-    | "machineAuth"
-    | "sandboxEnv"
-    | "sandboxRegistry"
-  >,
+  deps: LoggedSandboxWorkSessionDeps,
   args: AdvanceEnvironmentProvisioningArgs,
 ): Promise<string | null> {
   if (!args.environmentId) {

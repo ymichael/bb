@@ -1,5 +1,6 @@
 import { createNodeWebSocket } from "@hono/node-ws";
 import { readFile, stat } from "node:fs/promises";
+import { performance } from "node:perf_hooks";
 import { extname, join, resolve } from "node:path";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
@@ -38,6 +39,7 @@ import {
   onDaemonSocketOpen,
   validateDaemonWebSocket,
 } from "./ws/daemon-protocol.js";
+import { roundDurationMs } from "./services/lib/duration.js";
 
 export type CloseWebSockets = () => Promise<void>;
 type NodeWebSocketServer = ReturnType<typeof createNodeWebSocket>["wss"];
@@ -73,12 +75,29 @@ function normalizeInternalAuthPath(path: string): string {
 }
 
 interface CreateAppOptions {
+  slowApiRequestLogThresholdMs?: number;
   staticDir?: string;
 }
 
 const WEB_SOCKET_SHUTDOWN_CODE = 1001;
 const WEB_SOCKET_SHUTDOWN_FORCE_CLOSE_MS = 1_000;
 const WEB_SOCKET_SHUTDOWN_REASON = "server-shutdown";
+const SLOW_API_REQUEST_LOG_THRESHOLD_MS = 1_000;
+const THREAD_EVENT_WAIT_PATH_PATTERN =
+  /^\/api\/v1\/threads\/[^/]+\/events\/wait$/u;
+
+interface ShouldLogSlowApiRequestArgs {
+  durationMs: number;
+  path: string;
+  thresholdMs: number;
+}
+
+function shouldLogSlowApiRequest(args: ShouldLogSlowApiRequestArgs): boolean {
+  if (args.durationMs < args.thresholdMs) {
+    return false;
+  }
+  return !THREAD_EVENT_WAIT_PATH_PATTERN.test(args.path);
+}
 
 function buildAllowedCorsOrigins(deps: AppDeps): Set<string> {
   return new Set<string>(
@@ -123,6 +142,8 @@ export function createApp(
     app,
   });
   const allowedCorsOrigins = buildAllowedCorsOrigins(deps);
+  const slowApiRequestLogThresholdMs =
+    options?.slowApiRequestLogThresholdMs ?? SLOW_API_REQUEST_LOG_THRESHOLD_MS;
 
   app.use(
     "*",
@@ -138,6 +159,29 @@ export function createApp(
   );
   app.onError((error) => errorToResponse(error, deps.logger));
   app.get("/health", (context) => context.json({ ok: true }));
+  app.use("/api/v1/*", async (context, next) => {
+    const startedAt = performance.now();
+    await next();
+    const durationMs = performance.now() - startedAt;
+    const path = context.req.path;
+    if (
+      shouldLogSlowApiRequest({
+        durationMs,
+        path,
+        thresholdMs: slowApiRequestLogThresholdMs,
+      })
+    ) {
+      deps.logger.warn(
+        {
+          durationMs: roundDurationMs(durationMs),
+          method: context.req.method,
+          path,
+          status: context.res.status,
+        },
+        "Slow API request",
+      );
+    }
+  });
   app.use("/api/v1/development-only/*", async (_context, next) => {
     if (!deps.config.isDevelopment) {
       throw new ApiError(404, "not_found", "Not found");

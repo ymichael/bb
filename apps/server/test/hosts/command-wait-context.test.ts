@@ -1,4 +1,5 @@
 import { asc, eq } from "drizzle-orm";
+import { performance } from "node:perf_hooks";
 import { hostDaemonCommands } from "@bb/db";
 import type { HostDaemonCommand } from "@bb/host-daemon-contract";
 import { makeWorkspaceStatus } from "@bb/test-helpers";
@@ -64,6 +65,18 @@ interface RecordWorkspaceStatusFailureArgs {
 }
 
 interface RecordWorkspaceCommitSuccessArgs {
+  commandId: string;
+  harness: TestAppHarness;
+}
+
+interface RecordThreadStopFailureArgs {
+  commandId: string;
+  errorCode: string;
+  errorMessage: string;
+  harness: TestAppHarness;
+}
+
+interface RecordThreadStopSuccessArgs {
   commandId: string;
   harness: TestAppHarness;
 }
@@ -195,6 +208,33 @@ function recordWorkspaceCommitSuccess({
   });
 }
 
+function recordThreadStopFailure({
+  commandId,
+  errorCode,
+  errorMessage,
+  harness,
+}: RecordThreadStopFailureArgs): void {
+  harness.hub.recordCommandResult(commandId, {
+    commandId,
+    errorCode,
+    errorMessage,
+    ok: false,
+    type: "thread.stop",
+  });
+}
+
+function recordThreadStopSuccess({
+  commandId,
+  harness,
+}: RecordThreadStopSuccessArgs): void {
+  harness.hub.recordCommandResult(commandId, {
+    commandId,
+    ok: true,
+    result: {},
+    type: "thread.stop",
+  });
+}
+
 async function waitForQueuedHostCommandCount({
   count,
   harness,
@@ -319,6 +359,127 @@ describe("daemon command wait context", () => {
 
       await expect(waitForResults).resolves.toEqual([{}, {}, {}]);
     } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("logs slow command waits that complete successfully", async () => {
+    const harness = await createTestAppHarness();
+    const logger = {
+      error: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+    };
+    const deps = {
+      ...harness.deps,
+      logger,
+    };
+    const now = { value: 0 };
+    const performanceNow = vi
+      .spyOn(performance, "now")
+      .mockImplementation(() => now.value);
+    try {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-command-wait-slow-success",
+      });
+      const waitForResult = queueCommandAndWait(deps, {
+        command: buildThreadStopCommand({ threadId: "thread-slow-success" }),
+        hostId: host.id,
+        timeoutMs: 5_000,
+      });
+
+      await waitForQueuedHostCommandCount({
+        count: 1,
+        harness,
+        hostId: host.id,
+      });
+      const commandId = getCommandIdAtIndex({
+        commandIds: listQueuedHostCommandIds({ harness, hostId: host.id }),
+        index: 0,
+      });
+      now.value = 1_001;
+      recordThreadStopSuccess({ commandId, harness });
+
+      await expect(waitForResult).resolves.toEqual({});
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          commandId,
+          commandType: "thread.stop",
+          completed: true,
+          durationMs: 1_001,
+          hostId: host.id,
+          outcome: "success",
+          sessionId: session.id,
+        }),
+        "Slow host command wait",
+      );
+    } finally {
+      performanceNow.mockRestore();
+      await harness.cleanup();
+    }
+  });
+
+  it("logs slow command waits with provider failure details", async () => {
+    const harness = await createTestAppHarness();
+    const logger = {
+      error: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+    };
+    const deps = {
+      ...harness.deps,
+      logger,
+    };
+    const now = { value: 0 };
+    const performanceNow = vi
+      .spyOn(performance, "now")
+      .mockImplementation(() => now.value);
+    try {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-command-wait-slow-provider-failure",
+      });
+      const waitForResult = queueCommandAndWait(deps, {
+        command: buildThreadStopCommand({
+          threadId: "thread-slow-provider-failure",
+        }),
+        hostId: host.id,
+        timeoutMs: 5_000,
+      });
+
+      await waitForQueuedHostCommandCount({
+        count: 1,
+        harness,
+        hostId: host.id,
+      });
+      const commandId = getCommandIdAtIndex({
+        commandIds: listQueuedHostCommandIds({ harness, hostId: host.id }),
+        index: 0,
+      });
+      now.value = 1_001;
+      recordThreadStopFailure({
+        commandId,
+        errorCode: "provider_unavailable",
+        errorMessage: "Provider unavailable",
+        harness,
+      });
+
+      await expect(waitForResult).rejects.toThrow("Provider unavailable");
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          commandId,
+          commandType: "thread.stop",
+          completed: false,
+          durationMs: 1_001,
+          errorCode: "provider_unavailable",
+          hostId: host.id,
+          outcome: "provider_error",
+          sessionId: session.id,
+          status: 502,
+        }),
+        "Slow host command wait",
+      );
+    } finally {
+      performanceNow.mockRestore();
       await harness.cleanup();
     }
   });
