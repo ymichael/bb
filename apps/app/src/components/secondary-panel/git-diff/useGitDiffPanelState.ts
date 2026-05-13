@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAtomValue, useSetAtom } from "jotai";
-import { useAtomCallback } from "jotai/utils";
 import { useQueryClient } from "@tanstack/react-query";
 import type { FileContents } from "@pierre/diffs";
 import type { WorkspaceDiffTarget } from "@bb/domain";
@@ -12,13 +11,12 @@ import { environmentDiffFileQueryKey } from "../../../hooks/queries/query-keys";
 import { getEnvironmentDiffFile, type DiffFileTarget } from "../../../lib/api";
 import type { RequestDiffFileContents } from "../../git-diff/GitDiffCard";
 import {
-  gitDiffCollapsedFileKeysAtom,
   pendingGitDiffScrollPathAtom,
   selectedMergeBaseBranchAtom,
 } from "../threadSecondaryPanelAtoms";
 import {
+  buildParsedGitDiffFileEntries,
   doesGitDiffFileMatchPath,
-  getParsedGitDiffFileKey,
   parseGitDiffFiles,
   parseGitDiffPatchChunks,
   summarizeGitDiff,
@@ -43,14 +41,17 @@ interface UseGitDiffPanelStateParams {
   defaultMergeBaseBranch?: string;
 }
 
+interface GitDiffIdentityParams {
+  environmentId?: string;
+  mergeBaseRef: string | null;
+  target: WorkspaceDiffTarget | undefined;
+}
+
 export function useGitDiffPanelState({
   environmentId,
   isDiffPanelActive,
   defaultMergeBaseBranch,
 }: UseGitDiffPanelStateParams) {
-  const getCollapsedFileKeys = useAtomCallback(
-    useCallback((get) => get(gitDiffCollapsedFileKeysAtom), []),
-  );
   const selectedMergeBaseBranch = useAtomValue(selectedMergeBaseBranchAtom);
   const pendingGitDiffScrollPath = useAtomValue(pendingGitDiffScrollPathAtom);
   const setPendingGitDiffScrollPath = useSetAtom(pendingGitDiffScrollPathAtom);
@@ -60,6 +61,7 @@ export function useGitDiffPanelState({
   const [parsedGitDiffFiles, setParsedGitDiffFiles] = useState<
     ParsedGitDiffFile[]
   >([]);
+  const [expectedGitDiffFileCount, setExpectedGitDiffFileCount] = useState(0);
   const [isParsingGitDiffFiles, setIsParsingGitDiffFiles] = useState(false);
   const [lastParsedGitDiffKey, setLastParsedGitDiffKey] = useState("");
 
@@ -91,16 +93,23 @@ export function useGitDiffPanelState({
       gitDiffTarget !== undefined,
     target: gitDiffTarget,
   });
-  const parsedGitDiffFileEntries = useMemo(
+  const diffMergeBaseRef = threadGitDiff?.mergeBaseRef ?? null;
+  const gitDiffIdentity = useMemo(
     () =>
-      parsedGitDiffFiles.map((fileDiff, index) => ({
-        key: getParsedGitDiffFileKey(fileDiff, index),
-        fileDiff,
-      })),
+      buildGitDiffIdentity({
+        environmentId,
+        mergeBaseRef: diffMergeBaseRef,
+        target: gitDiffTarget,
+      }),
+    [diffMergeBaseRef, environmentId, gitDiffTarget],
+  );
+  const currentGitDiff = threadGitDiff?.diff ?? "";
+  const parsedGitDiffFileEntries = useMemo(
+    () => buildParsedGitDiffFileEntries(parsedGitDiffFiles),
     [parsedGitDiffFiles],
   );
   const {
-    expandGitDiffFile,
+    focusGitDiffFile,
     gitDiffFileRefs,
     queuedGitDiffFileRenderKeys,
     setGitDiffFileRef,
@@ -108,26 +117,41 @@ export function useGitDiffPanelState({
     toggleGitDiffFileCollapsed,
   } = useGitDiffFileRenderQueue({
     environmentId,
-    gitDiff: threadGitDiff?.diff,
+    gitDiffIdentity,
+    expectedGitDiffFileCount,
     parsedGitDiffFileEntries,
     isDiffPanelActive,
     isParsingGitDiffFiles,
+  });
+  const isAwaitingPrerequisites =
+    isDiffPanelActive && Boolean(environmentId) && gitDiffTarget === undefined;
+  const gitDiffPreparationState = resolveGitDiffPreparationState({
+    currentGitDiff,
+    isAwaitingPrerequisites,
+    isGitDiffLoading,
+    isParsingGitDiffFiles,
+    lastParsedGitDiffKey,
+    parsedGitDiffFileCount: parsedGitDiffFileEntries.length,
   });
 
   // --- Parsing pipeline ---
 
   useEffect(() => {
-    const gitDiff = threadGitDiff?.diff ?? "";
-    const parsePlan = buildGitDiffParsePlan({ gitDiff, isDiffPanelActive });
+    const parsePlan = buildGitDiffParsePlan({
+      gitDiff: currentGitDiff,
+      isDiffPanelActive,
+    });
 
     if (parsePlan.kind === "reset") {
       setParsedGitDiffFiles([]);
+      setExpectedGitDiffFileCount(0);
       setIsParsingGitDiffFiles(false);
       setLastParsedGitDiffKey("");
       return;
     }
 
     setParsedGitDiffFiles([]);
+    setExpectedGitDiffFileCount(parsePlan.patchChunks.length);
     if (parsePlan.kind === "empty") {
       setIsParsingGitDiffFiles(false);
       setLastParsedGitDiffKey(parsePlan.gitDiffKey);
@@ -135,7 +159,7 @@ export function useGitDiffPanelState({
     }
 
     if (parsePlan.kind === "immediate") {
-      setParsedGitDiffFiles(parseGitDiffFiles(gitDiff));
+      setParsedGitDiffFiles(parseGitDiffFiles(currentGitDiff));
       setIsParsingGitDiffFiles(false);
       setLastParsedGitDiffKey(parsePlan.gitDiffKey);
       return;
@@ -196,7 +220,7 @@ export function useGitDiffPanelState({
         window.clearTimeout(timerId);
       }
     };
-  }, [isDiffPanelActive, threadGitDiff?.diff]);
+  }, [currentGitDiff, isDiffPanelActive]);
 
   // --- Reset on environment change ---
 
@@ -246,15 +270,17 @@ export function useGitDiffPanelState({
       doesGitDiffFileMatchPath(fileDiff, pendingGitDiffScrollPath),
     );
     if (!targetEntry) {
-      if (!isGitDiffLoading && !isParsingGitDiffFiles) {
+      if (
+        !isGitDiffLoading &&
+        !isParsingGitDiffFiles &&
+        !gitDiffPreparationState.isAwaitingCurrentGitDiffParse
+      ) {
         setPendingGitDiffScrollPath(null);
       }
       return;
     }
 
-    if (getCollapsedFileKeys().has(targetEntry.key)) {
-      expandGitDiffFile(targetEntry.key);
-    }
+    focusGitDiffFile(targetEntry.key);
 
     const scrollTarget = gitDiffFileRefs.current.get(targetEntry.key);
     if (scrollTarget) {
@@ -274,79 +300,70 @@ export function useGitDiffPanelState({
       window.cancelAnimationFrame(frameId);
     };
   }, [
-    expandGitDiffFile,
+    focusGitDiffFile,
     gitDiffFileRefs,
+    gitDiffPreparationState.isAwaitingCurrentGitDiffParse,
     isGitDiffLoading,
     isParsingGitDiffFiles,
     isDiffPanelActive,
     parsedGitDiffFileEntries,
     pendingGitDiffScrollPath,
     setPendingGitDiffScrollPath,
-    getCollapsedFileKeys,
   ]);
 
   // --- Derived values ---
 
-  const diffCommits = gitDiffWorkspaceStatus?.mergeBase?.commits ?? [];
-  const gitDiffSelectValue = selectedGitDiffCommitSha ?? "all";
-  const gitDiffSelectOptions: GitDiffSelectionOption[] =
-    buildGitDiffSelectionOptions(diffCommits, { hasUncommittedChanges });
-  const currentGitDiff = threadGitDiff?.diff ?? "";
-  const gitDiffStats = summarizeGitDiff(
-    isParsingGitDiffFiles ? [] : parsedGitDiffFiles,
-    currentGitDiff,
+  const diffCommits = useMemo(
+    () => gitDiffWorkspaceStatus?.mergeBase?.commits ?? [],
+    [gitDiffWorkspaceStatus?.mergeBase?.commits],
   );
-  const isAwaitingPrerequisites =
-    isDiffPanelActive &&
-    Boolean(environmentId) &&
-    gitDiffTarget === undefined;
+  const gitDiffSelectValue = selectedGitDiffCommitSha ?? "all";
+  const gitDiffSelectOptions: GitDiffSelectionOption[] = useMemo(
+    () => buildGitDiffSelectionOptions(diffCommits, { hasUncommittedChanges }),
+    [diffCommits, hasUncommittedChanges],
+  );
+  const gitDiffStats = useMemo(
+    () =>
+      summarizeGitDiff(
+        isParsingGitDiffFiles ? [] : parsedGitDiffFiles,
+        currentGitDiff,
+      ),
+    [currentGitDiff, isParsingGitDiffFiles, parsedGitDiffFiles],
+  );
   const { hasParsedGitDiffFiles, isPreparingGitDiff } =
-    resolveGitDiffPreparationState({
-      currentGitDiff,
-      isAwaitingPrerequisites,
-      isGitDiffLoading,
-      isParsingGitDiffFiles,
-      lastParsedGitDiffKey,
-      parsedGitDiffFileCount: parsedGitDiffFileEntries.length,
-    });
+    gitDiffPreparationState;
 
   const onGitDiffSelectionChange = useCallback((value: string) => {
     setSelectedGitDiffCommitSha(value === "all" ? null : value);
   }, []);
 
   const queryClient = useQueryClient();
-  const diffMergeBaseRef = threadGitDiff?.mergeBaseRef ?? null;
   const fileTarget = useMemo<DiffFileTarget | undefined>(
     () => buildDiffFileTarget(gitDiffTarget, diffMergeBaseRef),
     [gitDiffTarget, diffMergeBaseRef],
   );
-  const onRequestFileContents = useMemo<RequestDiffFileContents | undefined>(
-    () => {
-      if (!environmentId || fileTarget === undefined) return undefined;
-      const envId = environmentId;
-      const target = fileTarget;
-      const targetKey = fileTargetKey(target);
-      return async (path, side) => {
-        const result = await queryClient.fetchQuery({
-          queryKey: environmentDiffFileQueryKey(
-            envId,
-            target.type,
-            targetKey,
-            path,
-            side,
-          ),
-          queryFn: () => getEnvironmentDiffFile(envId, target, path, side),
-          staleTime: 5_000,
-        });
-        return toFileContents(
+  const onRequestFileContents = useMemo<
+    RequestDiffFileContents | undefined
+  >(() => {
+    if (!environmentId || fileTarget === undefined) return undefined;
+    const envId = environmentId;
+    const target = fileTarget;
+    const targetKey = fileTargetKey(target);
+    return async (path, side) => {
+      const result = await queryClient.fetchQuery({
+        queryKey: environmentDiffFileQueryKey(
+          envId,
+          target.type,
+          targetKey,
           path,
-          result.content,
-          result.contentEncoding,
-        );
-      };
-    },
-    [environmentId, fileTarget, queryClient],
-  );
+          side,
+        ),
+        queryFn: () => getEnvironmentDiffFile(envId, target, path, side),
+        staleTime: 5_000,
+      });
+      return toFileContents(path, result.content, result.contentEncoding);
+    };
+  }, [environmentId, fileTarget, queryClient]);
 
   return {
     currentGitDiff,
@@ -367,6 +384,40 @@ export function useGitDiffPanelState({
     toggleAllGitDiffFilesCollapsed,
     toggleGitDiffFileCollapsed,
   };
+}
+
+function buildGitDiffIdentity({
+  environmentId,
+  mergeBaseRef,
+  target,
+}: GitDiffIdentityParams): string {
+  const environmentKey = environmentId ?? "none";
+  if (!target) return `${environmentKey}:none`;
+
+  switch (target.type) {
+    case "uncommitted":
+      return `${environmentKey}:uncommitted`;
+    case "branch_committed":
+      return [
+        environmentKey,
+        "branch_committed",
+        target.mergeBaseBranch,
+        mergeBaseRef ?? "pending",
+      ].join(":");
+    case "all":
+      return [
+        environmentKey,
+        "all",
+        target.mergeBaseBranch,
+        mergeBaseRef ?? "pending",
+      ].join(":");
+    case "commit":
+      return `${environmentKey}:commit:${target.sha}`;
+    default: {
+      const _exhaustive: never = target;
+      return _exhaustive;
+    }
+  }
 }
 
 function fileTargetKey(target: DiffFileTarget): string | null {

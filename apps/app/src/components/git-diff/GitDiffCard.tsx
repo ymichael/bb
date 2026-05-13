@@ -9,6 +9,7 @@ import {
 import type { FileContents } from "@pierre/diffs";
 import { FileDiff as DiffView } from "@pierre/diffs/react";
 import { useIntersectionObserver } from "usehooks-ts";
+import { Button } from "@/components/ui/button.js";
 import { CopyButton } from "@/components/ui/copy-button.js";
 import { DiffStatsTally } from "@/components/ui/diff-stats-tally.js";
 import { FilePathLink } from "@/components/ui/file-path-link.js";
@@ -18,8 +19,11 @@ import { TruncateStart } from "@/components/ui/truncate-start.js";
 import { cn } from "@/lib/utils";
 import {
   formatGitDiffFileLabel,
+  getGitDiffFileChangeKind,
   getOpenableGitDiffPath,
+  normalizeGitDiffPath,
   summarizeGitDiffFile,
+  type GitDiffFileChangeKind,
   type ParsedGitDiffFile,
 } from "./git-diff-parsing";
 
@@ -96,6 +100,82 @@ interface EnrichedFileDiff extends ParsedGitDiffFile {
   newLines: string[];
 }
 
+type DiffFileContentSource =
+  | { kind: "empty"; path: string }
+  | { kind: "request"; path: string; side: "old" | "new" };
+
+interface DiffFileContentPlan {
+  identity: string;
+  old: DiffFileContentSource;
+  new: DiffFileContentSource;
+}
+
+type DiffFileEnrichmentState =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "ready"; oldLines: string[]; newLines: string[] }
+  | { status: "unavailable" }
+  | { status: "error" };
+
+function buildDiffFileContentPlan(
+  fileDiff: ParsedGitDiffFile,
+  changeKind: GitDiffFileChangeKind,
+): DiffFileContentPlan {
+  const currentPath = normalizeGitDiffPath(fileDiff.name) ?? fileDiff.name;
+  const previousPath = normalizeGitDiffPath(fileDiff.prevName) ?? currentPath;
+
+  const oldSource: DiffFileContentSource =
+    changeKind === "added"
+      ? { kind: "empty", path: currentPath }
+      : {
+          kind: "request",
+          path: changeKind === "renamed" ? previousPath : currentPath,
+          side: "old",
+        };
+  const newSource: DiffFileContentSource =
+    changeKind === "deleted"
+      ? { kind: "empty", path: currentPath }
+      : { kind: "request", path: currentPath, side: "new" };
+  const hunkIdentity = fileDiff.hunks
+    .map(
+      (hunk) =>
+        `${hunk.hunkSpecs ?? ""}:${hunk.additionStart}:${hunk.additionCount}:${hunk.deletionStart}:${hunk.deletionCount}`,
+    )
+    .join("|");
+
+  return {
+    identity: [
+      changeKind,
+      describeDiffFileContentSource(oldSource),
+      describeDiffFileContentSource(newSource),
+      hunkIdentity,
+    ].join(":"),
+    old: oldSource,
+    new: newSource,
+  };
+}
+
+function describeDiffFileContentSource(source: DiffFileContentSource): string {
+  return source.kind === "empty"
+    ? `empty:${source.path}`
+    : `request:${source.side}:${source.path}`;
+}
+
+function resolveDiffFileContentSource(
+  source: DiffFileContentSource,
+  fetcher: RequestDiffFileContents,
+): Promise<FileContents | null> {
+  if (source.kind === "empty") {
+    return Promise.resolve({ name: source.path, contents: "" });
+  }
+  return fetcher(source.path, source.side);
+}
+
+function splitFileContentsForDiffContext(file: FileContents): string[] {
+  if (file.contents.length === 0) return [];
+  return file.contents.split(SPLIT_WITH_NEWLINES);
+}
+
 export const GitDiffCard = memo(function GitDiffCard({
   fileDiff,
   diffViewOptions,
@@ -116,9 +196,20 @@ export const GitDiffCard = memo(function GitDiffCard({
     () => formatGitDiffFileLabel(fileDiff),
     [fileDiff],
   );
+  const fileDiffChangeKind = useMemo(
+    () => getGitDiffFileChangeKind(fileDiff),
+    [fileDiff],
+  );
+  const isAddedFile = fileDiffChangeKind === "added";
+  const isDeletedFile = fileDiffChangeKind === "deleted";
+  const headerInsertions = isDeletedFile ? 0 : fileDiffStats.insertions;
+  const headerDeletions = isAddedFile ? 0 : fileDiffStats.deletions;
+  const hideEmptyHeaderStats = isAddedFile || isDeletedFile;
   const renameInfo = useMemo(() => {
-    if (fileDiff.prevName && fileDiff.prevName !== fileDiff.name) {
-      return { from: fileDiff.prevName, to: fileDiff.name };
+    const name = normalizeGitDiffPath(fileDiff.name) ?? fileDiff.name;
+    const prevName = normalizeGitDiffPath(fileDiff.prevName);
+    if (prevName && prevName !== name) {
+      return { from: prevName, to: name };
     }
     return null;
   }, [fileDiff]);
@@ -148,8 +239,10 @@ export const GitDiffCard = memo(function GitDiffCard({
   // checks `ast.newLines.length > 0 && ast.oldLines.length > 0` to decide
   // whether to draw expand-context buttons in the gaps between hunks; once
   // we tag those arrays the library renders the buttons on its next pass.
-  const oldSidePath = fileDiff.prevName ?? fileDiff.name;
-  const newSidePath = fileDiff.name;
+  const fileContentPlan = useMemo(
+    () => buildDiffFileContentPlan(fileDiff, fileDiffChangeKind),
+    [fileDiff, fileDiffChangeKind],
+  );
   const { ref: bodySentinelRef, isIntersecting: isBodyVisible } =
     useIntersectionObserver({
       initialIsIntersecting: false,
@@ -163,47 +256,82 @@ export const GitDiffCard = memo(function GitDiffCard({
   useEffect(() => {
     fetcherRef.current = onRequestFileContents;
   });
-  const [enrichment, setEnrichment] = useState<{
-    oldLines: string[];
-    newLines: string[];
-  } | null>(null);
+  const [enrichment, setEnrichment] = useState<DiffFileEnrichmentState>({
+    status: "idle",
+  });
+  const enrichmentStatusRef = useRef<DiffFileEnrichmentState["status"]>(
+    "idle",
+  );
+  const [hasBodyEnteredViewport, setHasBodyEnteredViewport] = useState(false);
+  const [hasLoadedDeletedDiff, setHasLoadedDeletedDiff] = useState(false);
   // Reset cached enrichment when the card swaps to a different file.
   useEffect(() => {
-    setEnrichment(null);
-  }, [oldSidePath, newSidePath]);
-  // Fire the fetch once the body is visible. Effect deps deliberately exclude
-  // `onRequestFileContents` (we read the latest via the ref) so stable
-  // visibility doesn't re-trigger when the panel re-renders.
+    enrichmentStatusRef.current = "idle";
+    setEnrichment({ status: "idle" });
+    setHasBodyEnteredViewport(false);
+    setHasLoadedDeletedDiff(false);
+  }, [fileContentPlan.identity]);
   useEffect(() => {
-    if (isBodyHidden || !isBodyVisible || enrichment !== null) return;
+    if (!isBodyHidden && isBodyVisible) {
+      setHasBodyEnteredViewport(true);
+    }
+  }, [isBodyHidden, isBodyVisible]);
+  const shouldGateDeletedDiff = isDeletedFile && !hasLoadedDeletedDiff;
+  const shouldRenderDiffView =
+    hasBodyEnteredViewport && !isRendering && !shouldGateDeletedDiff;
+  // Fire the fetch once the diff view is actually renderable. Effect deps
+  // deliberately exclude `onRequestFileContents` (we read the latest via the
+  // ref) so stable visibility doesn't re-trigger when the panel re-renders.
+  useEffect(() => {
+    if (!shouldRenderDiffView || enrichmentStatusRef.current !== "idle") {
+      return;
+    }
     const fetcher = fetcherRef.current;
     if (!fetcher) return;
+
     let cancelled = false;
+    enrichmentStatusRef.current = "loading";
+    setEnrichment({ status: "loading" });
+
     void Promise.all([
-      fetcher(oldSidePath, "old"),
-      fetcher(newSidePath, "new"),
-    ]).then(([oldFile, newFile]) => {
-      if (cancelled) return;
-      if (!oldFile || !newFile) return;
-      setEnrichment({
-        oldLines: oldFile.contents.split(SPLIT_WITH_NEWLINES),
-        newLines: newFile.contents.split(SPLIT_WITH_NEWLINES),
+      resolveDiffFileContentSource(fileContentPlan.old, fetcher),
+      resolveDiffFileContentSource(fileContentPlan.new, fetcher),
+    ])
+      .then(([oldFile, newFile]) => {
+        if (cancelled) return;
+        if (!oldFile || !newFile) {
+          enrichmentStatusRef.current = "unavailable";
+          setEnrichment({ status: "unavailable" });
+          return;
+        }
+        enrichmentStatusRef.current = "ready";
+        setEnrichment({
+          status: "ready",
+          oldLines: splitFileContentsForDiffContext(oldFile),
+          newLines: splitFileContentsForDiffContext(newFile),
+        });
+      })
+      .catch(() => {
+        if (cancelled) return;
+        enrichmentStatusRef.current = "error";
+        setEnrichment({ status: "error" });
       });
-    });
+
     return () => {
       cancelled = true;
+      if (enrichmentStatusRef.current === "loading") {
+        enrichmentStatusRef.current = "idle";
+      }
     };
-  }, [
-    isBodyHidden,
-    isBodyVisible,
-    oldSidePath,
-    newSidePath,
-    enrichment,
-  ]);
+  }, [fileContentPlan, shouldRenderDiffView]);
 
   const enrichedFileDiff = useMemo<EnrichedFileDiff | ParsedGitDiffFile>(() => {
-    if (!enrichment) return fileDiff;
-    return { ...fileDiff, ...enrichment };
+    if (enrichment.status !== "ready") return fileDiff;
+    return {
+      ...fileDiff,
+      oldLines: enrichment.oldLines,
+      newLines: enrichment.newLines,
+    };
   }, [fileDiff, enrichment]);
 
   return (
@@ -211,9 +339,7 @@ export const GitDiffCard = memo(function GitDiffCard({
       ref={cardRef}
       className="rounded-lg border border-border/70 bg-background"
     >
-      {stickyHeader ? (
-        <div ref={stickySentinelRef} className="h-0" />
-      ) : null}
+      {stickyHeader ? <div ref={stickySentinelRef} className="h-0" /> : null}
       <div
         className={cn(
           // Left padding matches the in-diff expand-button's margin-left
@@ -254,7 +380,8 @@ export const GitDiffCard = memo(function GitDiffCard({
                 }
                 aria-expanded={hasChanges ? !isCollapsed : undefined}
               >
-                <Icon name="ChevronRight"
+                <Icon
+                  name="ChevronRight"
                   className={cn(
                     "size-3.5 shrink-0 transition-transform duration-150",
                     hasChanges && !isCollapsed && "rotate-90",
@@ -281,7 +408,8 @@ export const GitDiffCard = memo(function GitDiffCard({
                 </TruncateStart>
               ) : null}
               {renameInfo ? (
-                <Icon name="ArrowRight"
+                <Icon
+                  name="ArrowRight"
                   aria-hidden="true"
                   className="size-3 shrink-0 text-muted-foreground/60"
                 />
@@ -318,8 +446,9 @@ export const GitDiffCard = memo(function GitDiffCard({
           </span>
           <span className="flex shrink-0 items-center gap-1">
             <DiffStatsTally
-              insertions={fileDiffStats.insertions}
-              deletions={fileDiffStats.deletions}
+              insertions={headerInsertions}
+              deletions={headerDeletions}
+              hideZero={hideEmptyHeaderStats}
               className="text-xs"
             />
           </span>
@@ -331,7 +460,23 @@ export const GitDiffCard = memo(function GitDiffCard({
           className="overflow-hidden rounded-b-lg bg-background"
           style={GIT_DIFF_CARD_BODY_STYLE}
         >
-          {isRendering ? (
+          {shouldGateDeletedDiff ? (
+            <div className="px-3 py-3 text-xs text-muted-foreground">
+              <span>This file was deleted.</span>{" "}
+              <Button
+                type="button"
+                variant="link"
+                size="sm"
+                className="h-auto p-0 text-xs underline underline-offset-4 hover:underline"
+                onClick={() => {
+                  setHasLoadedDeletedDiff(true);
+                  setHasBodyEnteredViewport(true);
+                }}
+              >
+                Load diff
+              </Button>
+            </div>
+          ) : !shouldRenderDiffView ? (
             <div className="space-y-1.5 px-3 py-3">
               <Skeleton className="h-3 w-full rounded-sm" />
               <Skeleton className="h-3 w-[96%] rounded-sm" />
@@ -342,7 +487,10 @@ export const GitDiffCard = memo(function GitDiffCard({
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <div className="w-full max-w-full" style={GIT_DIFF_CARD_VIEW_STYLE}>
+              <div
+                className="w-full max-w-full"
+                style={GIT_DIFF_CARD_VIEW_STYLE}
+              >
                 <DiffView
                   fileDiff={enrichedFileDiff}
                   options={fileDiffOptions}

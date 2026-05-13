@@ -1,9 +1,4 @@
-import {
-  useCallback,
-  useMemo,
-  useState,
-  type ReactNode,
-} from "react";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
 import type { FileContents } from "@pierre/diffs";
 import { toast } from "sonner";
 import {
@@ -322,6 +317,11 @@ interface AlignedDiffResult {
   unifiedDiff: string;
 }
 
+interface FileContentDiffSpec {
+  filename: string;
+  content: string;
+}
+
 const ALIGNED_DIFF_CONTEXT = 3;
 
 function buildAlignedDiff(spec: AlignedDiffSpec): AlignedDiffResult {
@@ -350,7 +350,10 @@ function buildAlignedDiff(spec: AlignedDiffSpec): AlignedDiffResult {
   const hunkRanges: Array<{ start: number; end: number; lines: number[] }> = [];
   for (const edit of sortedEdits) {
     const rangeStart = Math.max(1, edit.line - ALIGNED_DIFF_CONTEXT);
-    const rangeEnd = Math.min(oldLines.length, edit.line + ALIGNED_DIFF_CONTEXT);
+    const rangeEnd = Math.min(
+      oldLines.length,
+      edit.line + ALIGNED_DIFF_CONTEXT,
+    );
     const last = hunkRanges[hunkRanges.length - 1];
     if (last && last.end >= rangeStart - 1) {
       last.end = Math.max(last.end, rangeEnd);
@@ -389,7 +392,10 @@ ${hunkBlocks.join("\n")}
   };
 }
 
-function buildNewFileDiff(filename: string, content: string): AlignedDiffResult {
+function buildNewFileDiff(
+  filename: string,
+  content: string,
+): AlignedDiffResult {
   const lines = content.split("\n");
   const trailingEmpty = lines[lines.length - 1] === "" ? 1 : 0;
   const lineCount = lines.length - trailingEmpty;
@@ -406,6 +412,31 @@ index 0000000..3333333
 --- /dev/null
 +++ b/${filename}
 @@ -0,0 +1,${lineCount} @@
+${body}
+`,
+  };
+}
+
+function buildDeletedFileDiff({
+  filename,
+  content,
+}: FileContentDiffSpec): AlignedDiffResult {
+  const lines = content.split("\n");
+  const trailingEmpty = lines[lines.length - 1] === "" ? 1 : 0;
+  const lineCount = lines.length - trailingEmpty;
+  const body = lines
+    .slice(0, lineCount)
+    .map((line) => `-${line}`)
+    .join("\n");
+  return {
+    oldFile: { name: filename, contents: content },
+    newFile: { name: filename, contents: "" },
+    unifiedDiff: `diff --git a/${filename} b/${filename}
+deleted file mode 100644
+index 3333333..0000000
+--- a/${filename}
++++ /dev/null
+@@ -1,${lineCount} +0,0 @@
 ${body}
 `,
   };
@@ -468,13 +499,18 @@ const NEW_FILE = buildNewFileDiff(
   PROJECT_ROW_STORIES_TSX,
 );
 
+const DELETED_FILE = buildDeletedFileDiff({
+  filename: "apps/app/src/components/sidebar/legacy-thread-groups.ts",
+  content: THREAD_ROW_TSX,
+});
+
 const RENAMED = buildRenameDiff(
   "apps/app/src/components/layout/AppSidebar.tsx",
   "apps/app/src/components/sidebar/AppSidebar.tsx",
   PROJECT_ROW_TSX,
 );
 
-const ALL_FIXTURES = [SMALL, LARGER, NEW_FILE, RENAMED] as const;
+const ALL_FIXTURES = [SMALL, LARGER, NEW_FILE, DELETED_FILE, RENAMED] as const;
 
 const SELECTION_OPTIONS: readonly GitDiffSelectionOption[] = [
   { value: "working", label: "Working changes" },
@@ -648,9 +684,7 @@ export function Overview() {
         label="modified file"
         hint="single hunk in a real-looking ProjectRow.tsx; click ↑/↓/⇅ in the gaps to expand 30 lines at a time"
       >
-        <InteractiveDiffPanel
-          diffs={[{ fileKey: "small", fixture: SMALL }]}
-        />
+        <InteractiveDiffPanel diffs={[{ fileKey: "small", fixture: SMALL }]} />
       </StoryRow>
       <StoryRow
         label="multi-hunk"
@@ -664,8 +698,14 @@ export function Overview() {
         label="new file"
         hint="entire file is added; no expand UI (nothing to expand into on the old side)"
       >
+        <InteractiveDiffPanel diffs={[{ fileKey: "new", fixture: NEW_FILE }]} />
+      </StoryRow>
+      <StoryRow
+        label="deleted file"
+        hint="expanded deletion shows a cheap placeholder first; Load diff mounts the expensive renderer"
+      >
         <InteractiveDiffPanel
-          diffs={[{ fileKey: "new", fixture: NEW_FILE }]}
+          diffs={[{ fileKey: "deleted", fixture: DELETED_FILE }]}
         />
       </StoryRow>
       <StoryRow
@@ -678,7 +718,7 @@ export function Overview() {
       </StoryRow>
       <StoryRow
         label="multi-file working changes"
-        hint="all four file shapes in one panel — collapse-all, view-mode toggle, per-file collapse"
+        hint="all five file shapes in one panel — collapse-all, view-mode toggle, per-file collapse"
       >
         <InteractiveDiffPanel
           diffs={ALL_FIXTURES.map((fixture, i) => ({

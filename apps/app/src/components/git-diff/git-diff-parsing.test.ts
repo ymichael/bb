@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildParsedGitDiffFileEntries,
   doesGitDiffFileMatchPath,
   formatGitDiffFileLabel,
+  getGitDiffFileChangeKind,
   getGitDiffParseKey,
   getOpenableGitDiffPath,
+  getParsedGitDiffFileKey,
   parseGitDiffFiles,
   splitGitDiffIntoPatchChunks,
   summarizeGitDiff,
@@ -28,6 +31,25 @@ const NEW_FILE_DIFF = [
   "+++ b/src/new-file.ts",
   "@@ -0,0 +1 @@",
   "+export const value = 1;",
+  "",
+].join("\n");
+
+const DELETED_FILE_DIFF = [
+  "diff --git a/src/deleted-file.ts b/src/deleted-file.ts",
+  "deleted file mode 100644",
+  "index 1111111..0000000",
+  "--- a/src/deleted-file.ts",
+  "+++ /dev/null",
+  "@@ -1 +0,0 @@",
+  "-export const value = 1;",
+  "",
+].join("\n");
+
+const RENAME_ONLY_DIFF = [
+  "diff --git a/src/old-name.ts b/src/new-name.ts",
+  "similarity index 100%",
+  "rename from src/old-name.ts",
+  "rename to src/new-name.ts",
   "",
 ].join("\n");
 
@@ -73,9 +95,46 @@ describe("threadDetailGitDiff", () => {
 
     expect(formatGitDiffFileLabel(file)).toBe("src/new-file.ts");
     expect(getOpenableGitDiffPath(file)).toBe("src/new-file.ts");
+    expect(getGitDiffFileChangeKind(file)).toBe("added");
   });
 
-  it("builds a stable parse key from diff edges", () => {
-    expect(getGitDiffParseKey("abc")).toBe("3:abc:abc");
+  it("derives deleted and renamed file kinds from parsed git metadata", () => {
+    const [deletedFile] = parseGitDiffFiles(DELETED_FILE_DIFF);
+    const [renamedFile] = parseGitDiffFiles(RENAME_ONLY_DIFF);
+
+    expect(deletedFile).toBeDefined();
+    expect(renamedFile).toBeDefined();
+    if (!deletedFile || !renamedFile) return;
+
+    expect(getGitDiffFileChangeKind(deletedFile)).toBe("deleted");
+    expect(getGitDiffFileChangeKind(renamedFile)).toBe("renamed");
+    expect(formatGitDiffFileLabel(renamedFile)).toBe(
+      "src/old-name.ts -> src/new-name.ts",
+    );
+  });
+
+  it("builds stable file entry keys without depending on file order", () => {
+    const files = parseGitDiffFiles(
+      [SAMPLE_DIFF.trimEnd(), NEW_FILE_DIFF.trimEnd()].join("\n"),
+    );
+    const entries = buildParsedGitDiffFileEntries(files);
+
+    expect(entries.map((entry) => entry.key)).toEqual(
+      files.map((file) => getParsedGitDiffFileKey(file)),
+    );
+  });
+
+  it("changes the parse key when diff edges change", () => {
+    const middle = "middle\n".repeat(40);
+    const base = `first\n${middle}last`;
+    const changedPrefix = `changed\n${middle}last`;
+    const changedSuffix = `first\n${middle}changed`;
+
+    expect(getGitDiffParseKey(base)).not.toBe(
+      getGitDiffParseKey(changedPrefix),
+    );
+    expect(getGitDiffParseKey(base)).not.toBe(
+      getGitDiffParseKey(changedSuffix),
+    );
   });
 });

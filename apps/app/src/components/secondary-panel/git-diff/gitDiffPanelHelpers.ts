@@ -1,11 +1,14 @@
 import type { WorkspaceCommitSummary } from "@bb/domain";
 import {
+  getGitDiffFileChangeKind,
   getGitDiffParseKey,
   splitGitDiffIntoPatchChunks,
+  type ParsedGitDiffFileEntry,
 } from "../../git-diff/git-diff-parsing";
 import type { GitDiffSelectionOption } from "../ThreadSecondaryPanel";
 
 export const GIT_DIFF_PARSE_BATCH_THRESHOLD = 24;
+export const GIT_DIFF_AUTO_COLLAPSE_FILE_THRESHOLD = 10;
 export const GIT_DIFF_PARSE_INITIAL_BATCH_SIZE = 6;
 export const GIT_DIFF_PARSE_BATCH_SIZE = 18;
 export const GIT_DIFF_PARSE_BATCH_DELAY_MS = 24;
@@ -32,6 +35,11 @@ export type GitDiffParsePlan =
   | { kind: "immediate"; gitDiffKey: string; patchChunks: string[] }
   | { kind: "batched"; gitDiffKey: string; patchChunks: string[] };
 
+export type GitDiffBulkCollapsePreference =
+  | "default"
+  | "collapsed-all"
+  | "expanded-all";
+
 interface GitDiffPreparationStateParams {
   currentGitDiff: string;
   isAwaitingPrerequisites: boolean;
@@ -39,6 +47,20 @@ interface GitDiffPreparationStateParams {
   isParsingGitDiffFiles: boolean;
   lastParsedGitDiffKey: string;
   parsedGitDiffFileCount: number;
+}
+
+export interface ShouldCollapseGitDiffFileByDefaultParams {
+  entry: ParsedGitDiffFileEntry;
+  expectedFileCount: number;
+}
+
+export interface ReconcileGitDiffCollapsedFileKeysParams {
+  bulkCollapsePreference: GitDiffBulkCollapsePreference;
+  currentCollapsedFileKeys: ReadonlySet<string>;
+  expectedFileCount: number;
+  focusedFileKey: string | null;
+  parsedGitDiffFileEntries: readonly ParsedGitDiffFileEntry[];
+  previousFileKeys: ReadonlySet<string>;
 }
 
 export function buildGitDiffTarget(
@@ -131,6 +153,57 @@ export function resolveGitDiffPreparationState(
     isAwaitingCurrentGitDiffParse,
     isPreparingGitDiff,
   };
+}
+
+export function shouldCollapseGitDiffFileByDefault({
+  entry,
+  expectedFileCount,
+}: ShouldCollapseGitDiffFileByDefaultParams): boolean {
+  if (expectedFileCount > GIT_DIFF_AUTO_COLLAPSE_FILE_THRESHOLD) {
+    return true;
+  }
+  return getGitDiffFileChangeKind(entry.fileDiff) === "deleted";
+}
+
+export function reconcileGitDiffCollapsedFileKeys({
+  bulkCollapsePreference,
+  currentCollapsedFileKeys,
+  expectedFileCount,
+  focusedFileKey,
+  parsedGitDiffFileEntries,
+  previousFileKeys,
+}: ReconcileGitDiffCollapsedFileKeysParams): Set<string> {
+  if (bulkCollapsePreference === "expanded-all") {
+    return new Set();
+  }
+
+  const nextCollapsedFileKeys = new Set<string>();
+  for (const entry of parsedGitDiffFileEntries) {
+    if (focusedFileKey !== null) {
+      if (entry.key !== focusedFileKey) {
+        nextCollapsedFileKeys.add(entry.key);
+      }
+      continue;
+    }
+
+    if (bulkCollapsePreference === "collapsed-all") {
+      nextCollapsedFileKeys.add(entry.key);
+      continue;
+    }
+
+    if (previousFileKeys.has(entry.key)) {
+      if (currentCollapsedFileKeys.has(entry.key)) {
+        nextCollapsedFileKeys.add(entry.key);
+      }
+      continue;
+    }
+
+    if (shouldCollapseGitDiffFileByDefault({ entry, expectedFileCount })) {
+      nextCollapsedFileKeys.add(entry.key);
+    }
+  }
+
+  return nextCollapsedFileKeys;
 }
 
 export function buildGitDiffParsePlan(args: {

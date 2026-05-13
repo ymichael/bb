@@ -4,10 +4,18 @@ import {
   buildGitDiffParsePlan,
   buildGitDiffSelectionOptions,
   buildGitDiffTarget,
+  GIT_DIFF_AUTO_COLLAPSE_FILE_THRESHOLD,
   GIT_DIFF_PARSE_BATCH_THRESHOLD,
+  reconcileGitDiffCollapsedFileKeys,
   resolveGitDiffPreparationState,
+  shouldCollapseGitDiffFileByDefault,
   shouldResetSelectedGitDiffCommit,
 } from "./gitDiffPanelHelpers";
+import {
+  buildParsedGitDiffFileEntries,
+  parseGitDiffFiles,
+  type ParsedGitDiffFileEntry,
+} from "../../git-diff/git-diff-parsing";
 
 function makeCommit(
   overrides: Partial<WorkspaceCommitSummary> = {},
@@ -37,7 +45,37 @@ function buildPatchDiff(count: number): string {
   }).join("\n");
 }
 
+const DELETED_FILE_DIFF = [
+  "diff --git a/src/deleted-file.ts b/src/deleted-file.ts",
+  "deleted file mode 100644",
+  "index 1111111..0000000",
+  "--- a/src/deleted-file.ts",
+  "+++ /dev/null",
+  "@@ -1 +0,0 @@",
+  "-export const value = 1;",
+  "",
+].join("\n");
+
+const NEW_FILE_DIFF = [
+  "diff --git a/src/new-file.ts b/src/new-file.ts",
+  "new file mode 100644",
+  "index 0000000..1111111",
+  "--- /dev/null",
+  "+++ b/src/new-file.ts",
+  "@@ -0,0 +1 @@",
+  "+export const value = 1;",
+  "",
+].join("\n");
+
+function buildEntries(diff: string): ParsedGitDiffFileEntry[] {
+  return buildParsedGitDiffFileEntries(parseGitDiffFiles(diff));
+}
+
 describe("gitDiffPanelHelpers", () => {
+  it("uses a conservative threshold before auto-collapsing many files", () => {
+    expect(GIT_DIFF_AUTO_COLLAPSE_FILE_THRESHOLD).toBe(10);
+  });
+
   it("builds git diff targets from commit, uncommitted, and merge-base selections", () => {
     expect(buildGitDiffTarget("commit-sha", "main")).toEqual({
       sha: "commit-sha",
@@ -114,7 +152,7 @@ describe("gitDiffPanelHelpers", () => {
     ).toBe(true);
   });
 
-it("tracks when a diff is still preparing for the current parse key", () => {
+  it("tracks when a diff is still preparing for the current parse key", () => {
     const currentGitDiff = buildPatchDiff(2);
     const state = resolveGitDiffPreparationState({
       currentGitDiff,
@@ -176,5 +214,124 @@ it("tracks when a diff is still preparing for the current parse key", () => {
         isDiffPanelActive: true,
       }).kind,
     ).toBe("batched");
+  });
+
+  it("collapses deleted files and large diffs by default", () => {
+    const [modifiedEntry] = buildEntries(buildPatchDiff(1));
+    const [deletedEntry] = buildEntries(DELETED_FILE_DIFF);
+    expect(modifiedEntry).toBeDefined();
+    expect(deletedEntry).toBeDefined();
+    if (!modifiedEntry || !deletedEntry) return;
+
+    expect(
+      shouldCollapseGitDiffFileByDefault({
+        entry: modifiedEntry,
+        expectedFileCount: 1,
+      }),
+    ).toBe(false);
+    expect(
+      shouldCollapseGitDiffFileByDefault({
+        entry: deletedEntry,
+        expectedFileCount: 1,
+      }),
+    ).toBe(true);
+    expect(
+      shouldCollapseGitDiffFileByDefault({
+        entry: modifiedEntry,
+        expectedFileCount: GIT_DIFF_AUTO_COLLAPSE_FILE_THRESHOLD + 1,
+      }),
+    ).toBe(true);
+  });
+
+  it("reconciles collapsed state without losing existing file choices", () => {
+    const [modifiedEntry] = buildEntries(buildPatchDiff(1));
+    const [deletedEntry] = buildEntries(DELETED_FILE_DIFF);
+    const [addedEntry] = buildEntries(NEW_FILE_DIFF);
+    expect(modifiedEntry).toBeDefined();
+    expect(deletedEntry).toBeDefined();
+    expect(addedEntry).toBeDefined();
+    if (!modifiedEntry || !deletedEntry || !addedEntry) return;
+
+    const initialEntries = [modifiedEntry, deletedEntry];
+    const initialCollapsed = reconcileGitDiffCollapsedFileKeys({
+      bulkCollapsePreference: "default",
+      currentCollapsedFileKeys: new Set<string>(),
+      expectedFileCount: initialEntries.length,
+      focusedFileKey: null,
+      parsedGitDiffFileEntries: initialEntries,
+      previousFileKeys: new Set<string>(),
+    });
+    expect(initialCollapsed.has(modifiedEntry.key)).toBe(false);
+    expect(initialCollapsed.has(deletedEntry.key)).toBe(true);
+
+    const userCollapsedModified = new Set([
+      modifiedEntry.key,
+      deletedEntry.key,
+    ]);
+    const nextCollapsed = reconcileGitDiffCollapsedFileKeys({
+      bulkCollapsePreference: "default",
+      currentCollapsedFileKeys: userCollapsedModified,
+      expectedFileCount: 3,
+      focusedFileKey: null,
+      parsedGitDiffFileEntries: [modifiedEntry, deletedEntry, addedEntry],
+      previousFileKeys: new Set(initialEntries.map((entry) => entry.key)),
+    });
+    expect(nextCollapsed.has(modifiedEntry.key)).toBe(true);
+    expect(nextCollapsed.has(deletedEntry.key)).toBe(true);
+    expect(nextCollapsed.has(addedEntry.key)).toBe(false);
+  });
+
+  it("honors explicit collapse-all and expand-all preferences for new entries", () => {
+    const entries = buildEntries(
+      [buildPatchDiff(1), DELETED_FILE_DIFF.trimEnd()].join("\n"),
+    );
+
+    expect(
+      reconcileGitDiffCollapsedFileKeys({
+        bulkCollapsePreference: "collapsed-all",
+        currentCollapsedFileKeys: new Set<string>(),
+        expectedFileCount: entries.length,
+        focusedFileKey: null,
+        parsedGitDiffFileEntries: entries,
+        previousFileKeys: new Set<string>(),
+      }),
+    ).toEqual(new Set(entries.map((entry) => entry.key)));
+
+    expect(
+      reconcileGitDiffCollapsedFileKeys({
+        bulkCollapsePreference: "expanded-all",
+        currentCollapsedFileKeys: new Set(entries.map((entry) => entry.key)),
+        expectedFileCount: entries.length,
+        focusedFileKey: null,
+        parsedGitDiffFileEntries: entries,
+        previousFileKeys: new Set<string>(),
+      }),
+    ).toEqual(new Set());
+  });
+
+  it("focuses one diff file by collapsing every other parsed entry", () => {
+    const entries = buildEntries(
+      [buildPatchDiff(2), DELETED_FILE_DIFF.trimEnd()].join("\n"),
+    );
+    const focusedEntry = entries[1];
+    expect(focusedEntry).toBeDefined();
+    if (!focusedEntry) return;
+
+    expect(
+      reconcileGitDiffCollapsedFileKeys({
+        bulkCollapsePreference: "default",
+        currentCollapsedFileKeys: new Set<string>(),
+        expectedFileCount: entries.length,
+        focusedFileKey: focusedEntry.key,
+        parsedGitDiffFileEntries: entries,
+        previousFileKeys: new Set<string>(),
+      }),
+    ).toEqual(
+      new Set(
+        entries
+          .filter((entry) => entry.key !== focusedEntry.key)
+          .map((entry) => entry.key),
+      ),
+    );
   });
 });

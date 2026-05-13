@@ -4,10 +4,21 @@ export type ParsedGitDiffFile = ReturnType<
   typeof parsePatchFiles
 >[number]["files"][number];
 
+export type GitDiffFileChangeKind =
+  | "added"
+  | "modified"
+  | "deleted"
+  | "renamed";
+
 export interface GitDiffStats {
   filesCount: number;
   insertions: number;
   deletions: number;
+}
+
+export interface ParsedGitDiffFileEntry {
+  key: string;
+  fileDiff: ParsedGitDiffFile;
 }
 
 export function parseGitDiffFiles(
@@ -122,23 +133,67 @@ export function summarizeGitDiffFile(
   return { insertions, deletions };
 }
 
-export function formatGitDiffFileLabel(file: ParsedGitDiffFile): string {
-  if (file.prevName && file.prevName !== file.name) {
-    return `${file.prevName} -> ${file.name}`;
+export function getGitDiffFileChangeKind(
+  file: ParsedGitDiffFile,
+): GitDiffFileChangeKind {
+  switch (file.type) {
+    case "new":
+      return "added";
+    case "deleted":
+      return "deleted";
+    case "rename-pure":
+    case "rename-changed":
+      return "renamed";
+    case "change":
+      return "modified";
+    default: {
+      const _exhaustive: never = file.type;
+      return _exhaustive;
+    }
   }
-  return file.name;
 }
 
-export function getParsedGitDiffFileKey(
-  file: ParsedGitDiffFile,
-  index: number,
-): string {
-  return `${file.name}:${file.prevName ?? ""}:${index}`;
+export function formatGitDiffFileLabel(file: ParsedGitDiffFile): string {
+  const name = normalizeGitDiffPath(file.name) ?? file.name;
+  const prevName = normalizeGitDiffPath(file.prevName);
+  if (prevName && prevName !== name) {
+    return `${prevName} -> ${name}`;
+  }
+  return name;
+}
+
+export function getParsedGitDiffFileKey(file: ParsedGitDiffFile): string {
+  return `${getGitDiffFileChangeKind(file)}:${normalizeGitDiffPath(file.name) ?? ""}:${normalizeGitDiffPath(file.prevName) ?? ""}`;
+}
+
+export function buildParsedGitDiffFileEntries(
+  files: readonly ParsedGitDiffFile[],
+): ParsedGitDiffFileEntry[] {
+  const seenBaseKeyCounts = new Map<string, number>();
+  return files.map((fileDiff) => {
+    const baseKey = getParsedGitDiffFileKey(fileDiff);
+    const seenCount = seenBaseKeyCounts.get(baseKey) ?? 0;
+    seenBaseKeyCounts.set(baseKey, seenCount + 1);
+    return {
+      key: seenCount === 0 ? baseKey : `${baseKey}:${seenCount + 1}`,
+      fileDiff,
+    };
+  });
+}
+
+export function normalizeGitDiffPath(
+  path: string | undefined,
+): string | undefined {
+  const trimmedPath = path?.trim();
+  return trimmedPath && trimmedPath.length > 0 ? trimmedPath : undefined;
 }
 
 function getGitDiffPathAliases(path: string | undefined): string[] {
-  if (!path || path === "/dev/null") return [];
-  const normalizedPath = path.startsWith("./") ? path.slice(2) : path;
+  const cleanPath = normalizeGitDiffPath(path);
+  if (!cleanPath || cleanPath === "/dev/null") return [];
+  const normalizedPath = cleanPath.startsWith("./")
+    ? cleanPath.slice(2)
+    : cleanPath;
   if (normalizedPath.length === 0) return [];
   const aliases = [normalizedPath];
   if (normalizedPath.startsWith("a/") || normalizedPath.startsWith("b/")) {

@@ -1,4 +1,4 @@
-import { type ReactNode, useMemo } from "react";
+import { type ReactNode, memo, useCallback, useMemo } from "react";
 import { useAtomValue } from "jotai";
 import { Icon } from "@/components/ui/icon.js";
 import { Skeleton } from "@/components/ui/skeleton.js";
@@ -10,7 +10,9 @@ import { type ThreadSecondaryPanel as ThreadSecondaryPanelTab } from "@/lib/thre
 import {
   GIT_DIFF_VIEW_BASE_OPTIONS,
   GitDiffCard,
+  type RequestDiffFileContents,
 } from "../git-diff/GitDiffCard";
+import type { ParsedGitDiffFile } from "../git-diff/git-diff-parsing";
 import { usePreferredTheme } from "@/hooks/useTheme";
 import {
   useActiveSecondaryPanel,
@@ -69,6 +71,57 @@ function ThreadDiffSkeleton({
     </div>
   );
 }
+
+interface GitDiffFileCardContainerProps {
+  fileKey: string;
+  fileDiff: ParsedGitDiffFile;
+  diffViewOptions: Record<string, string | boolean | number>;
+  onOpenFileInEditor?: (path: string) => void;
+  onOpenFilePreview?: (path: string) => void;
+  isCollapsed: boolean;
+  isRendering: boolean;
+  setGitDiffFileRef: (fileKey: string, element: HTMLDivElement | null) => void;
+  toggleGitDiffFileCollapsed: (fileKey: string) => void;
+  onRequestFileContents?: RequestDiffFileContents;
+}
+
+const GitDiffFileCardContainer = memo(function GitDiffFileCardContainer({
+  fileKey,
+  fileDiff,
+  diffViewOptions,
+  onOpenFileInEditor,
+  onOpenFilePreview,
+  isCollapsed,
+  isRendering,
+  setGitDiffFileRef,
+  toggleGitDiffFileCollapsed,
+  onRequestFileContents,
+}: GitDiffFileCardContainerProps) {
+  const handleToggleCollapsed = useCallback(() => {
+    toggleGitDiffFileCollapsed(fileKey);
+  }, [fileKey, toggleGitDiffFileCollapsed]);
+  const handleCardRef = useCallback(
+    (element: HTMLDivElement | null) => {
+      setGitDiffFileRef(fileKey, element);
+    },
+    [fileKey, setGitDiffFileRef],
+  );
+
+  return (
+    <GitDiffCard
+      fileDiff={fileDiff}
+      diffViewOptions={diffViewOptions}
+      onOpenFileInEditor={onOpenFileInEditor}
+      onOpenFilePreview={onOpenFilePreview}
+      isCollapsed={isCollapsed}
+      onToggleCollapsed={handleToggleCollapsed}
+      stickyHeader
+      isRendering={isRendering}
+      cardRef={handleCardRef}
+      onRequestFileContents={onRequestFileContents}
+    />
+  );
+});
 
 export interface SecondaryPanelFileTab {
   id: string;
@@ -161,11 +214,14 @@ export function ThreadSecondaryPanel({
   const hasCurrentGitDiff = currentGitDiff.trim().length > 0;
   const collapsedGitDiffFileKeys = useAtomValue(gitDiffCollapsedFileKeysAtom);
   const loadingGitDiffFileKeys = useAtomValue(gitDiffLoadingFileKeysAtom);
-  const areAllGitDiffFilesCollapsed =
-    hasParsedGitDiffFiles &&
-    parsedGitDiffFileEntries.every(({ key }) =>
-      collapsedGitDiffFileKeys.has(key),
-    );
+  const areAllGitDiffFilesCollapsed = useMemo(
+    () =>
+      hasParsedGitDiffFiles &&
+      parsedGitDiffFileEntries.every(({ key }) =>
+        collapsedGitDiffFileKeys.has(key),
+      ),
+    [collapsedGitDiffFileKeys, hasParsedGitDiffFiles, parsedGitDiffFileEntries],
+  );
   const preferredTheme = usePreferredTheme();
   const gitDiffViewOptions = useMemo(
     () => ({
@@ -238,8 +294,12 @@ export function ThreadSecondaryPanel({
             size="icon"
             className="h-7 w-7 shrink-0 rounded-md p-0 text-muted-foreground"
             onClick={onClose}
-            aria-label={renderAsDrawer ? "Close secondary panel" : "Hide secondary panel"}
-            title={renderAsDrawer ? "Close secondary panel" : "Hide secondary panel"}
+            aria-label={
+              renderAsDrawer ? "Close secondary panel" : "Hide secondary panel"
+            }
+            title={
+              renderAsDrawer ? "Close secondary panel" : "Hide secondary panel"
+            }
           >
             <Icon name={togglePanelIconName} className="size-3.5" />
           </Button>
@@ -288,24 +348,21 @@ export function ThreadSecondaryPanel({
                       const hasQueuedFileRender =
                         queuedGitDiffFileRenderKeys.has(key);
                       const isRendering =
-                        !hasQueuedFileRender ||
-                        loadingGitDiffFileKeys.has(key);
+                        !hasQueuedFileRender || loadingGitDiffFileKeys.has(key);
 
                       return (
-                        <GitDiffCard
+                        <GitDiffFileCardContainer
                           key={key}
+                          fileKey={key}
                           fileDiff={fileDiff}
                           diffViewOptions={gitDiffViewOptions}
                           onOpenFileInEditor={onOpenFileInEditor}
                           onOpenFilePreview={onOpenFilePreview}
                           isCollapsed={isCollapsed}
-                          onToggleCollapsed={() =>
-                            toggleGitDiffFileCollapsed(key)
-                          }
-                          stickyHeader
                           isRendering={isRendering}
-                          cardRef={(element) =>
-                            setGitDiffFileRef(key, element)
+                          setGitDiffFileRef={setGitDiffFileRef}
+                          toggleGitDiffFileCollapsed={
+                            toggleGitDiffFileCollapsed
                           }
                           onRequestFileContents={onRequestFileContents}
                         />
