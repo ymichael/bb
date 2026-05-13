@@ -1,4 +1,11 @@
-import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type RefObject,
+} from "react";
 import type {
   TimelineConversationAttachments,
   TimelineConversationRow,
@@ -298,7 +305,12 @@ function useIsOverflowing(
 ): boolean {
   const [isOverflowing, setIsOverflowing] = useState(false);
 
-  useEffect(() => {
+  // useLayoutEffect (not useEffect) so the first measurement runs before
+  // paint. Otherwise the first paint renders without the "Show more" toggle
+  // (isOverflowing starts at false), and the button appears on the next
+  // frame after the effect runs — visible as a flicker on page load for any
+  // user message long enough to overflow.
+  useLayoutEffect(() => {
     if (!enabled) {
       setIsOverflowing(false);
       return;
