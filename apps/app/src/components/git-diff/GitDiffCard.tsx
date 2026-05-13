@@ -46,6 +46,7 @@ export interface GitDiffCardProps {
   fileDiff: ParsedGitDiffFile;
   diffViewOptions: Record<string, string | boolean | number>;
   onOpenFileInEditor?: (path: string) => void;
+  onOpenFilePreview?: (path: string) => void;
   /**
    * When both isCollapsed and onToggleCollapsed are provided, the card renders
    * a chevron in the header and hides its body when collapsed. Omit both to
@@ -94,6 +95,7 @@ export const GitDiffCard = memo(function GitDiffCard({
   fileDiff,
   diffViewOptions,
   onOpenFileInEditor,
+  onOpenFilePreview,
   isCollapsed,
   onToggleCollapsed,
   stickyHeader = false,
@@ -283,8 +285,8 @@ export const GitDiffCard = memo(function GitDiffCard({
                 path={openablePath ?? fileDiff.name}
                 displayName={renameInfo ? renameInfo.to : fileDiffLabel}
                 onClick={
-                  canOpenFile && openablePath && onOpenFileInEditor
-                    ? () => onOpenFileInEditor(openablePath)
+                  canOpenFile && openablePath && onOpenFilePreview
+                    ? () => onOpenFilePreview(openablePath)
                     : undefined
                 }
                 className="font-mono font-medium text-foreground"
@@ -295,6 +297,17 @@ export const GitDiffCard = memo(function GitDiffCard({
                   label={`Copy path for ${fileDiffLabel}`}
                   className="rounded-md hover:bg-state-hover"
                 />
+              ) : null}
+              {canOpenFile && openablePath && onOpenFileInEditor ? (
+                <button
+                  type="button"
+                  onClick={() => onOpenFileInEditor(openablePath)}
+                  aria-label={`Open ${fileDiffLabel} in editor`}
+                  title="Open in editor"
+                  className="inline-flex size-5 shrink-0 items-center justify-center rounded-md text-muted-foreground/80 hover:bg-state-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                >
+                  <Icon name="ExternalLink" aria-hidden className="size-3" />
+                </button>
               ) : null}
             </span>
           </span>

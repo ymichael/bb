@@ -32,6 +32,8 @@ const THREAD_SECONDARY_PANEL_MAX_SIZE_PERCENT = 70;
 const GIT_DIFF_SKELETON_FILE_COUNT = 3;
 const THREAD_SECONDARY_PANEL_TRANSITION_CLASS =
   "duration-[220ms] ease-[cubic-bezier(0.32,0.72,0,1)]";
+const PANEL_SCROLL_SLOT_CLASS =
+  "min-h-0 flex-1 overflow-x-hidden overflow-y-auto";
 
 function ThreadDiffSkeleton({
   count = GIT_DIFF_SKELETON_FILE_COUNT,
@@ -87,6 +89,7 @@ export interface ThreadSecondaryPanelProps {
   onCollapse: () => void;
   onClose: () => void;
   onOpenFileInEditor?: (path: string) => void;
+  onOpenFilePreview?: (path: string) => void;
   /**
    * When true, render only the aside content — skip the PanelResizeHandle +
    * Panel wrappers that are only meaningful inside a desktop PanelGroup.
@@ -107,6 +110,7 @@ export function ThreadSecondaryPanel({
   onCollapse,
   onClose,
   onOpenFileInEditor,
+  onOpenFilePreview,
   renderAsDrawer,
 }: ThreadSecondaryPanelProps) {
   const activeFileTab = fileTabs?.find((tab) => tab.isActive);
@@ -253,22 +257,17 @@ export function ThreadSecondaryPanel({
           />
         ) : null}
       </div>
-      <div
-        className={cn(
-          "flex min-h-0 flex-1 flex-col overflow-hidden bg-background px-4 pb-3",
-          isDiffPanelActive && !hasActiveFileTab ? "pt-0" : "pt-1",
-        )}
-      >
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
         {hasActiveFileTab ? (
-          <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
+          <div className={cn(PANEL_SCROLL_SLOT_CLASS, "pb-3")}>
             {fileTabContent ?? (
-              <p className="rounded-lg border border-dashed border-border/70 bg-background/45 px-3 py-6 text-center text-sm text-muted-foreground">
+              <p className="mx-4 rounded-lg border border-dashed border-border/70 bg-background/45 px-3 py-6 text-center text-sm text-muted-foreground">
                 No file preview content provided.
               </p>
             )}
           </div>
         ) : isDiffPanelActive ? (
-          <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
+          <div className={cn(PANEL_SCROLL_SLOT_CLASS, "px-4 pb-3")}>
             {isPreparingGitDiff ? (
               <ThreadDiffSkeleton />
             ) : gitDiffError ? (
@@ -295,6 +294,7 @@ export function ThreadSecondaryPanel({
                           fileDiff={fileDiff}
                           diffViewOptions={gitDiffViewOptions}
                           onOpenFileInEditor={onOpenFileInEditor}
+                          onOpenFilePreview={onOpenFilePreview}
                           isCollapsed={isCollapsed}
                           onToggleCollapsed={() =>
                             toggleGitDiffFileCollapsed(key)
@@ -335,7 +335,9 @@ export function ThreadSecondaryPanel({
             )}
           </div>
         ) : (
-          metadataContent
+          <div className="flex min-h-0 flex-1 flex-col px-4 pb-3">
+            {metadataContent}
+          </div>
         )}
       </div>
     </aside>

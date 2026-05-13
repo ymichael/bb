@@ -13,6 +13,7 @@ import type { Components, ExtraProps, UrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ImageLightbox, getWrappedImageIndex } from "./image-lightbox.js";
 import { CopyButton } from "./copy-button.js";
+import { Icon } from "./icon.js";
 import { cn } from "@/lib/utils";
 
 export interface MarkdownPreviewLocalFileLink {
@@ -270,12 +271,22 @@ function MarkdownAnchor({
     <a
       {...anchorProps}
       href={anchorHref}
-      className="break-words underline underline-offset-2"
+      className={cn(
+        "break-words underline underline-offset-2",
+        localFileLink && "inline-flex items-baseline gap-1",
+      )}
       target="_blank"
       rel="noopener noreferrer"
       onClick={handleLocalFileLinkClick}
     >
       {children}
+      {localFileLink ? (
+        <Icon
+          name="ExternalLink"
+          aria-hidden
+          className="size-3 shrink-0 self-center text-muted-foreground/80"
+        />
+      ) : null}
     </a>
   );
 }

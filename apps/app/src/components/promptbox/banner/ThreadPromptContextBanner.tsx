@@ -5,6 +5,7 @@ import type {
   ThreadTimelinePendingTodoItem,
   ThreadTimelinePendingTodoItemStatus,
   ThreadTimelinePendingTodos,
+  WorkspaceFileStatus,
 } from "@bb/domain";
 import {
   BranchPicker,
@@ -35,7 +36,7 @@ export interface ThreadPromptTodoSection {
 export interface ThreadPromptGitSection {
   changedFiles: WorkspaceChangedFilesSection;
   mergeBase: ContextBannerMergeBaseConfig | null;
-  onPromptBannerFileClick: (file: { path: string }) => void;
+  onPromptBannerFileClick: (file: WorkspaceFileStatus) => void;
 }
 
 /**

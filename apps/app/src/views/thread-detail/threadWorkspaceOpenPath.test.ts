@@ -66,15 +66,21 @@ describe("resolveThreadWorkspaceOpenPath", () => {
     ).toBeNull();
   });
 
-  it("hides when the environment is not ready", () => {
+  it("still resolves when the environment is not ready, as long as it has a path", () => {
+    expect(
+      resolveThreadLocalWorkspaceRootPath({
+        environment: makeEnvironment({ status: "destroyed" }),
+        threadEnvironmentIsLocal: true,
+      }),
+    ).toBe("/tmp/workspace");
     expect(
       resolveThreadWorkspaceOpenPath({
         canOpenWorkspace: true,
-        environment: makeEnvironment({ status: "provisioning" }),
+        environment: makeEnvironment({ status: "destroyed" }),
         hasWorkspaceOpenTargets: true,
         threadEnvironmentIsLocal: true,
       }),
-    ).toBeNull();
+    ).toBe("/tmp/workspace");
   });
 
   it("hides when the environment has no path", () => {

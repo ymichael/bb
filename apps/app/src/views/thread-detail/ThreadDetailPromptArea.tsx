@@ -50,9 +50,7 @@ import {
 import { queuedInputToDraft } from "./threadQueuedMessages";
 import type { SendMessageMutationLike } from "./threadDetailMutationTypes";
 
-interface PromptBannerFile {
-  path: string;
-}
+import type { WorkspaceFileStatus } from "@bb/domain";
 
 interface SendFollowUpInputParams {
   input: PromptInput[];
@@ -73,7 +71,7 @@ interface ThreadDetailPromptAreaProps {
   environmentLabel?: string;
   isEnvironmentActionPending: boolean;
   pendingInteractions: readonly PendingInteraction[];
-  openDiffFile: (path: string) => void;
+  onChangedFileClick: (file: WorkspaceFileStatus) => void;
   openThreadDiffPanel: () => void;
   projectId: string;
   /**
@@ -150,7 +148,7 @@ export function ThreadDetailPromptArea({
   environmentLabel,
   isEnvironmentActionPending,
   pendingInteractions,
-  openDiffFile,
+  onChangedFileClick,
   openThreadDiffPanel,
   projectId,
   workspaceChangedFilesSection,
@@ -476,10 +474,10 @@ export function ThreadDetailPromptArea({
   );
 
   const handlePromptBannerFileClick = useCallback(
-    (file: PromptBannerFile) => {
-      openDiffFile(file.path);
+    (file: WorkspaceFileStatus) => {
+      onChangedFileClick(file);
     },
-    [openDiffFile],
+    [onChangedFileClick],
   );
 
   if (activePendingInteraction) {

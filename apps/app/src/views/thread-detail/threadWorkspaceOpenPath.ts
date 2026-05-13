@@ -19,11 +19,7 @@ export function resolveThreadLocalWorkspaceRootPath(
     return null;
   }
 
-  if (args.environment?.status !== "ready") {
-    return null;
-  }
-
-  return args.environment.path;
+  return args.environment?.path ?? null;
 }
 
 export function resolveThreadWorkspaceOpenPath(

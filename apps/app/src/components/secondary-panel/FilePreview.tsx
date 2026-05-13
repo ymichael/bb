@@ -82,15 +82,18 @@ function FilePreviewBody({ state }: FilePreviewProps) {
       />
     );
   }
-  const lineNumber = state.lineNumber ?? null;
-  if (isMarkdownFile(state.file.name) && lineNumber === null) {
+  if (isMarkdownFile(state.file.name)) {
     return <MarkdownFilePreview file={state.file} />;
   }
-  return <FilePreviewCode file={state.file} lineNumber={lineNumber} />;
+  return <FilePreviewCode file={state.file} lineNumber={state.lineNumber ?? null} />;
 }
 
 function MarkdownFilePreview({ file }: { file: FilePreviewFile }) {
-  return <MarkdownPreview content={file.contents} />;
+  return (
+    <div className="px-4">
+      <MarkdownPreview content={file.contents} />
+    </div>
+  );
 }
 
 function clearPreviewTargetLine(container: HTMLElement) {
@@ -123,7 +126,7 @@ function findPreviewTargetLine(
 
 function FilePreviewLoading() {
   return (
-    <div className="space-y-2 py-2" aria-busy>
+    <div className="space-y-2 px-4 py-2" aria-busy>
       <Skeleton className="h-3 w-3/4 rounded-sm" />
       <Skeleton className="h-3 w-full rounded-sm" />
       <Skeleton className="h-3 w-5/6 rounded-sm" />
@@ -146,7 +149,7 @@ function FilePreviewMessage({
   return (
     <div
       role={icon === "missing" ? "alert" : undefined}
-      className="flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-border/70 bg-background/45 px-3 py-8 text-sm text-muted-foreground"
+      className="flex items-center gap-1.5 px-4 py-2 text-sm text-muted-foreground"
     >
       {iconName ? <Icon name={iconName} className="size-3.5" /> : null}
       <span>{message}</span>
@@ -237,7 +240,6 @@ function FilePreviewCode({
       ref={containerRef}
       style={FILE_PREVIEW_VIEW_STYLE}
       data-file-preview-line-number={lineNumber ?? undefined}
-      className="overflow-hidden rounded-md border border-border/70"
     >
       <PierreFile file={file} options={options} selectedLines={selectedLines} />
     </div>

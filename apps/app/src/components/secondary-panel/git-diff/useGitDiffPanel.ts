@@ -8,6 +8,8 @@ import {
   type ThreadSecondaryPanel as ThreadSecondaryPanelTab,
 } from "@/lib/thread-secondary-panel";
 import {
+  activeStorageFilePathAtom,
+  activeWorkspaceFilePathAtom,
   pendingGitDiffScrollPathAtom,
   selectedMergeBaseBranchAtom,
 } from "../threadSecondaryPanelAtoms";
@@ -28,6 +30,8 @@ export function useGitDiffPanel({
   const selectedMergeBaseBranch = useAtomValue(selectedMergeBaseBranchAtom);
   const setSelectedMergeBaseBranch = useSetAtom(selectedMergeBaseBranchAtom);
   const setPendingGitDiffScrollPath = useSetAtom(pendingGitDiffScrollPathAtom);
+  const setActiveWorkspaceFilePath = useSetAtom(activeWorkspaceFilePathAtom);
+  const setActiveStorageFilePath = useSetAtom(activeStorageFilePathAtom);
 
   const {
     data: mergeBaseBranchOptions,
@@ -94,10 +98,17 @@ export function useGitDiffPanel({
 
   const openDiffFile = useCallback(
     (path: string) => {
+      setActiveWorkspaceFilePath(null);
+      setActiveStorageFilePath(null);
       setPendingGitDiffScrollPath(path);
       openThreadDiffPanel();
     },
-    [openThreadDiffPanel, setPendingGitDiffScrollPath],
+    [
+      openThreadDiffPanel,
+      setActiveStorageFilePath,
+      setActiveWorkspaceFilePath,
+      setPendingGitDiffScrollPath,
+    ],
   );
 
   return {

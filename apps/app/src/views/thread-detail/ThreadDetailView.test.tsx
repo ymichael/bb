@@ -26,6 +26,7 @@ import type {
 import type { ThreadTimelineResponse } from "@bb/server-contract";
 import { HOST_DAEMON_PROTOCOL_VERSION } from "@bb/host-daemon-contract";
 import { SidebarProvider } from "@/components/ui";
+import { Provider as JotaiProvider, createStore } from "jotai";
 import { conversationRow } from "@/test/fixtures/thread-timeline-rows";
 import { resetFakeReconnectingWebSockets } from "@/test/fake-reconnecting-websocket";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
@@ -233,24 +234,28 @@ function createThreadDetailWrapper() {
     return null;
   }
 
+  const jotaiStore = createStore();
+
   function ThreadDetailWrapper({ children }: ThreadDetailWrapperProps) {
     return harness.wrapper({
       children: (
-        <Suspense fallback={null}>
-          <MemoryRouter initialEntries={["/projects/project-1/threads/thr-1"]}>
-            <NavigationCapture />
-            <SidebarProvider>
-              <ThreadActionsProvider>
-                <Routes>
-                  <Route
-                    path="/projects/:projectId/threads/:threadId"
-                    element={children}
-                  />
-                </Routes>
-              </ThreadActionsProvider>
-            </SidebarProvider>
-          </MemoryRouter>
-        </Suspense>
+        <JotaiProvider store={jotaiStore}>
+          <Suspense fallback={null}>
+            <MemoryRouter initialEntries={["/projects/project-1/threads/thr-1"]}>
+              <NavigationCapture />
+              <SidebarProvider>
+                <ThreadActionsProvider>
+                  <Routes>
+                    <Route
+                      path="/projects/:projectId/threads/:threadId"
+                      element={children}
+                    />
+                  </Routes>
+                </ThreadActionsProvider>
+              </SidebarProvider>
+            </MemoryRouter>
+          </Suspense>
+        </JotaiProvider>
       ),
     });
   }
@@ -737,7 +742,7 @@ describe("ThreadDetailView", () => {
   it("opens timeline file links in secondary panel tabs", async () => {
     const environment = createEnvironmentResponse();
     const host = createHostResponse({ id: environment.hostId });
-    const relativeFilePath = "docs/README.md";
+    const relativeFilePath = "docs/notes.txt";
     const absoluteFilePath = `${environment.path ?? ""}/${relativeFilePath}`;
     const fileContents = Array.from({ length: 45 }, (_, index) =>
       index === 41 ? "target line 42" : `line ${index + 1}`,
@@ -751,7 +756,7 @@ describe("ThreadDetailView", () => {
         thread: createThreadResponse({ environmentId: environment.id }),
         timelineResponse: createThreadTimelineResponse([
           conversationRow({
-            text: `[README.md](${absoluteFilePath}:42)`,
+            text: `[notes.txt](${absoluteFilePath}:42)`,
           }),
         ]),
       }),
@@ -762,7 +767,7 @@ describe("ThreadDetailView", () => {
           return jsonResponse({
             content: fileContents,
             contentEncoding: "utf8",
-            mimeType: "text/markdown",
+            mimeType: "text/plain",
             path: absoluteFilePath,
             sizeBytes: fileContents.length,
           });
@@ -779,7 +784,7 @@ describe("ThreadDetailView", () => {
         queryClient.getQueryState(environmentQueryKey(environment.id))?.status,
       ).toBe("success");
     });
-    const fileLink = await screen.findByRole("link", { name: "README.md" });
+    const fileLink = await screen.findByRole("link", { name: /notes\.txt/ });
     expect(fileLink.getAttribute("href")).toBe(
       `file://${absoluteFilePath}#L42`,
     );
@@ -836,7 +841,7 @@ describe("ThreadDetailView", () => {
         thread: threadA,
         timelineResponse: createThreadTimelineResponse([
           conversationRow({
-            text: `[README.md](${environmentA.path ?? ""}/README.md:42)`,
+            text: `[notes.txt](${environmentA.path ?? ""}/notes.txt:42)`,
           }),
         ]),
       }),
@@ -854,8 +859,8 @@ describe("ThreadDetailView", () => {
           return jsonResponse({
             content: fileContents,
             contentEncoding: "utf8",
-            mimeType: "text/markdown",
-            path: `${environmentA.path ?? ""}/README.md`,
+            mimeType: "text/plain",
+            path: `${environmentA.path ?? ""}/notes.txt`,
             sizeBytes: fileContents.length,
           });
         },
@@ -868,7 +873,7 @@ describe("ThreadDetailView", () => {
             content: "stale preview should not load",
             contentEncoding: "utf8",
             mimeType: "text/plain",
-            path: `${environmentB.path ?? ""}/README.md`,
+            path: `${environmentB.path ?? ""}/notes.txt`,
             sizeBytes: 29,
           });
         },
@@ -884,7 +889,7 @@ describe("ThreadDetailView", () => {
         queryClient.getQueryState(environmentQueryKey(environmentA.id))?.status,
       ).toBe("success");
     });
-    const fileLink = await screen.findByRole("link", { name: "README.md" });
+    const fileLink = await screen.findByRole("link", { name: /notes\.txt/ });
     fireEvent.click(fileLink);
 
     await waitFor(() => {
@@ -900,7 +905,7 @@ describe("ThreadDetailView", () => {
 
     await screen.findByText("Thread B");
     await waitFor(() => {
-      expect(screen.queryByRole("button", { name: "README.md" })).toBeNull();
+      expect(screen.queryByRole("button", { name: /notes\.txt/ })).toBeNull();
       expect(
         document.querySelector('[data-file-preview-line-number="42"]'),
       ).toBeNull();
