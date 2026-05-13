@@ -5,11 +5,7 @@ import type {
   ThreadTimelineLocalFileLink,
   TimelineTitleActionResolver,
 } from "@/components/thread/timeline";
-import type {
-  ThreadListEntry,
-  ThreadWithRuntime,
-  WorkspaceFileStatus,
-} from "@bb/domain";
+import type { ThreadListEntry, ThreadWithRuntime } from "@bb/domain";
 import { toast } from "sonner";
 import {
   useActiveSecondaryPanel,
@@ -47,7 +43,10 @@ import { useEffectiveHost } from "@/hooks/queries/effective-hosts";
 import { getEnvironmentWorkspaceLabelIconName } from "@/lib/environment-workspace-display";
 import { useStandardManagerTimelinePreference } from "@/lib/manager-timeline-view-preference";
 import { getGitStatusDisplay } from "@/components/workspace/workspace-status";
-import { selectWorkspaceChangedFilesSection } from "@/components/workspace/workspace-change-summary";
+import {
+  selectWorkspaceChangedFilesSection,
+  type WorkspaceChangedFileSelection,
+} from "@/components/workspace/workspace-change-summary";
 import { getThreadDisplayTitle } from "@/lib/thread-title";
 import { useGitDiffPanel } from "@/components/secondary-panel/git-diff/useGitDiffPanel";
 import { useThreadDetailTurnSummaryRows } from "./turn-summary/useThreadDetailTurnSummaryRows";
@@ -80,6 +79,7 @@ import { useThreadReadTracking } from "./useThreadReadTracking";
 import { useThreadTimelinePages } from "./useThreadTimelinePages";
 import {
   buildOpenInEditorHandler,
+  resolveWorkspaceChangedFileOpenTarget,
   resolveThreadLocalWorkspaceRootPath,
   resolveThreadWorkspaceOpenPath,
 } from "./threadWorkspaceOpenPath";
@@ -190,6 +190,8 @@ export function ThreadDetailView() {
     activeStorageFilePath,
     activeWorkspaceFileLineNumber,
     activeWorkspaceFilePath,
+    activeWorkspaceFileSource,
+    activeWorkspaceFileStatusLabel,
     clearActiveFileTabs,
     closeStorageFileTab,
     closeWorkspaceFileTab,
@@ -263,7 +265,11 @@ export function ThreadDetailView() {
     data: workspaceFilePreview,
     error: workspaceFilePreviewError,
     isLoading: isWorkspaceFilePreviewLoading,
-  } = useEnvironmentFilePreview(thread?.environmentId, activeWorkspaceFilePath);
+  } = useEnvironmentFilePreview(
+    thread?.environmentId,
+    activeWorkspaceFilePath,
+    activeWorkspaceFileSource,
+  );
   const {
     closeThreadSecondaryPanel,
     defaultMergeBaseBranch: resolvedDefaultMergeBaseBranch,
@@ -299,15 +305,18 @@ export function ThreadDetailView() {
     [clearActiveFileTabs, openThreadSecondaryPanel],
   );
   const handleChangedFileClick = useCallback(
-    (file: WorkspaceFileStatus) => {
-      // Added or deleted files have nothing meaningful to diff against — the
-      // diff card would just render the full file with +/- gutter. Show the
-      // file preview instead so the content is readable.
-      if (file.status === "A" || file.status === "??" || file.status === "D") {
-        openWorkspaceFile({ lineNumber: null, path: file.path });
+    (selection: WorkspaceChangedFileSelection) => {
+      const openTarget = resolveWorkspaceChangedFileOpenTarget(selection);
+      if (openTarget.kind === "preview") {
+        openWorkspaceFile({
+          lineNumber: null,
+          path: selection.file.path,
+          source: openTarget.source,
+          statusLabel: openTarget.statusLabel,
+        });
         return;
       }
-      openDiffFile(file.path);
+      openDiffFile(selection.file.path);
     },
     [openDiffFile, openWorkspaceFile],
   );
@@ -316,6 +325,7 @@ export function ThreadDetailView() {
       id: `workspace:${tab.path}`,
       filename: tab.path.split("/").at(-1) ?? tab.path,
       isActive: tab.path === activeWorkspaceFilePath,
+      statusLabel: tab.statusLabel,
       onSelect: () => activateWorkspaceFileTab(tab.path),
       onClose: () => closeWorkspaceFileTab(tab.path),
     }));
@@ -325,6 +335,7 @@ export function ThreadDetailView() {
           filename: path.split("/").at(-1) ?? path,
           isActive: path === activeStorageFilePath,
           isPinned: path === PINNED_STORAGE_FILE_PATH,
+          statusLabel: null,
           onSelect: () => activateStorageFileTab(path),
           onClose: () => closeStorageFileTab(path),
         }))
@@ -525,6 +536,8 @@ export function ThreadDetailView() {
       openWorkspaceFile({
         lineNumber: resolution.request.lineNumber,
         path: resolution.request.relativePath,
+        source: { kind: "working-tree" },
+        statusLabel: null,
       });
       return true;
     },
@@ -738,6 +751,7 @@ export function ThreadDetailView() {
       isLoading={isWorkspaceFilePreviewLoading}
       lineNumber={activeWorkspaceFileLineNumber}
       onOpenInEditor={handleOpenFileInEditor}
+      statusLabel={activeWorkspaceFileStatusLabel}
     />
   ) : activeStorageFilePath ? (
     <ThreadStorageFilePreview
@@ -787,7 +801,12 @@ export function ThreadDetailView() {
           onCollapse: closeThreadSecondaryPanel,
           onOpenFileInEditor: handleOpenFileInEditor,
           onOpenFilePreview: (relativePath: string) => {
-            openWorkspaceFile({ lineNumber: null, path: relativePath });
+            openWorkspaceFile({
+              lineNumber: null,
+              path: relativePath,
+              source: { kind: "working-tree" },
+              statusLabel: null,
+            });
           },
           onPanelChange: handleSecondaryPanelChange,
           showGitDiffTab: canUseGitUi,

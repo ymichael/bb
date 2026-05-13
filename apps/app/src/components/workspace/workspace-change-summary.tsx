@@ -67,12 +67,23 @@ export function renderChangeSummary(tally: ChangeTally): ReactNode {
   );
 }
 
+export type WorkspaceChangedFilesSectionKind =
+  | "uncommitted"
+  | "untracked"
+  | "committed";
+
 export interface WorkspaceChangedFilesSection {
-  kind: "uncommitted" | "untracked" | "committed";
+  kind: WorkspaceChangedFilesSectionKind;
   label: string;
   files: WorkspaceFileStatus[];
+  mergeBaseRef: string | null;
   /** Line-level stats for the files in this section. */
   stats: WorkspaceChangeStats;
+}
+
+export interface WorkspaceChangedFileSelection {
+  file: WorkspaceFileStatus;
+  section: WorkspaceChangedFilesSection;
 }
 
 /**
@@ -97,6 +108,7 @@ export function selectWorkspaceChangedFilesSection(
       kind: isUntrackedOnly ? "untracked" : "uncommitted",
       label: isUntrackedOnly ? "Untracked files" : "Uncommitted files",
       files: workingTree.files,
+      mergeBaseRef: null,
       stats: workingTree,
     };
   }
@@ -106,6 +118,7 @@ export function selectWorkspaceChangedFilesSection(
       kind: "committed",
       label: "Committed files",
       files: mergeBase.files,
+      mergeBaseRef: mergeBase.baseRef,
       stats: mergeBase,
     };
   }

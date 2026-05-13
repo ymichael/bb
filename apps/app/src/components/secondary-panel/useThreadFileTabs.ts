@@ -8,6 +8,7 @@ import {
   type WorkspaceFileTab,
 } from "./threadSecondaryPanelAtoms";
 import { PINNED_STORAGE_FILE_PATH } from "./managerStorage";
+import { areEnvironmentFilePreviewSourcesEqual } from "@/lib/file-preview";
 import { useSetThreadSecondaryPanel } from "@/lib/thread-secondary-panel";
 
 interface UseThreadFileTabsParams {
@@ -87,17 +88,21 @@ export function useThreadFileTabs({
   }, [setActiveStorageFilePath, setOpenStorageFilePaths, storageFiles]);
 
   const openWorkspaceFile = useCallback(
-    ({ lineNumber, path }: WorkspaceFileTab) => {
+    ({ lineNumber, path, source, statusLabel }: WorkspaceFileTab) => {
       setOpenWorkspaceFileTabs((prev) => {
         const existingTab = prev.find((tab) => tab.path === path);
         if (!existingTab) {
-          return [...prev, { lineNumber, path }];
+          return [...prev, { lineNumber, path, source, statusLabel }];
         }
-        if (existingTab.lineNumber === lineNumber) {
+        if (
+          existingTab.lineNumber === lineNumber &&
+          areEnvironmentFilePreviewSourcesEqual(existingTab.source, source) &&
+          existingTab.statusLabel === statusLabel
+        ) {
           return prev;
         }
         return prev.map((tab) =>
-          tab.path === path ? { lineNumber, path } : tab,
+          tab.path === path ? { lineNumber, path, source, statusLabel } : tab,
         );
       });
       setActiveWorkspaceFilePath(path);
@@ -181,6 +186,8 @@ export function useThreadFileTabs({
     activeStorageFilePath,
     activeWorkspaceFileLineNumber: activeWorkspaceFileTab?.lineNumber ?? null,
     activeWorkspaceFilePath,
+    activeWorkspaceFileSource: activeWorkspaceFileTab?.source ?? null,
+    activeWorkspaceFileStatusLabel: activeWorkspaceFileTab?.statusLabel ?? null,
     clearActiveFileTabs,
     closeStorageFileTab,
     closeWorkspaceFileTab,

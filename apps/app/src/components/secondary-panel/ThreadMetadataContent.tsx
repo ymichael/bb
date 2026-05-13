@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import { ManagerThreadStorageBrowser } from "./ManagerThreadStorageBrowser";
 import type { ManagerStorageBrowserController } from "./useManagerStorageBrowser";
 import { Link } from "react-router-dom";
@@ -16,7 +22,13 @@ import { HostStatusBadge } from "@/components/HostStatusIndicator";
 import { Button } from "@/components/ui/button.js";
 import { COARSE_POINTER_ICON_SIZE_CLASS } from "@/components/ui/coarse-pointer-sizing.js";
 import { DetailCard, DetailRow } from "@/components/ui/detail-card.js";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu.js";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu.js";
 import { Icon } from "@/components/ui/icon.js";
 import { LocalhostBadge } from "@/components/ui/localhost-badge.js";
 import {
@@ -24,11 +36,11 @@ import {
   getMergeBaseBranchCandidates,
 } from "@/components/pickers/BranchPicker";
 import { ThreadUnarchiveButton } from "@/components/thread/ThreadUnarchiveButton";
+import { WorkspaceChangesList } from "@/components/thread/WorkspaceChangesList";
 import {
-  WorkspaceChangesList,
-  type WorkspaceChangedFile,
-} from "@/components/thread/WorkspaceChangesList";
-import { selectWorkspaceChangedFilesSection } from "@/components/workspace/workspace-change-summary";
+  selectWorkspaceChangedFilesSection,
+  type WorkspaceChangedFileSelection,
+} from "@/components/workspace/workspace-change-summary";
 import { getGitStatusDisplay } from "@/components/workspace/workspace-status";
 import { useUnarchiveThread } from "../../hooks/mutations/thread-state-mutations";
 import { buildManagerSelectorOptions } from "@/views/thread-detail/threadManagerSelectorOptions";
@@ -134,7 +146,10 @@ export function ManagerSelectorRow({
               <span className="min-w-0 truncate text-xs text-foreground">
                 {selectedManagerOptionLabel ?? "None"}
               </span>
-              <Icon name="ChevronDown" className="size-3.5 shrink-0 text-muted-foreground" />
+              <Icon
+                name="ChevronDown"
+                className="size-3.5 shrink-0 text-muted-foreground"
+              />
             </div>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="min-w-40 max-w-72">
@@ -152,7 +167,8 @@ export function ManagerSelectorRow({
                 <span className="truncate" title={option.label}>
                   {option.label}
                 </span>
-                <Icon name="Check"
+                <Icon
+                  name="Check"
                   className={
                     managerSelectorValue === option.value
                       ? cn("opacity-100", COARSE_POINTER_ICON_SIZE_CLASS)
@@ -270,9 +286,15 @@ export function BranchRow({ thread, workspaceStatus }: BranchRowProps) {
       >
         <span className="truncate">{branchName}</span>
         {copied ? (
-          <Icon name="Check" className="size-3.5 shrink-0 text-muted-foreground" />
+          <Icon
+            name="Check"
+            className="size-3.5 shrink-0 text-muted-foreground"
+          />
         ) : (
-          <Icon name="Copy" className="size-3.5 shrink-0 text-muted-foreground" />
+          <Icon
+            name="Copy"
+            className="size-3.5 shrink-0 text-muted-foreground"
+          />
         )}
       </button>
     </DetailRow>
@@ -433,7 +455,7 @@ export function ArchivedRow({ thread }: ArchivedRowProps) {
 export interface ChangedFilesRowProps {
   thread: Thread;
   workspaceStatus: WorkspaceStatus | undefined;
-  onChangedFileClick?: (file: WorkspaceChangedFile) => void;
+  onChangedFileClick?: (selection: WorkspaceChangedFileSelection) => void;
 }
 
 export function ChangedFilesRow({
@@ -454,7 +476,11 @@ export function ChangedFilesRow({
       <WorkspaceChangesList
         files={section.files}
         maxHeightClassName="h-full"
-        onFileClick={onChangedFileClick}
+        onFileClick={
+          onChangedFileClick
+            ? (file) => onChangedFileClick({ file, section })
+            : undefined
+        }
       />
     </DetailRow>
   );
@@ -528,7 +554,7 @@ export interface ThreadMetadataContentProps {
   storage?: ManagerWorkspaceRowProps;
   onAssignManager: (parentThreadId: string | null) => void;
   onMergeBaseBranchChange: (branch: string) => void;
-  onChangedFileClick?: (file: WorkspaceChangedFile) => void;
+  onChangedFileClick?: (selection: WorkspaceChangedFileSelection) => void;
 }
 
 /**
@@ -568,13 +594,13 @@ export function hasAnyThreadMetadata({
 
   return Boolean(
     isManagerThread ||
-      parentThreadId ||
-      (!isManagerThread && environment) ||
-      (!isManagerThread && branchName) ||
-      showWorkspaceStatus ||
-      showThreadChangedFiles ||
-      thread.archivedAt != null ||
-      (parentThreadDisplayName && parentThreadId),
+    parentThreadId ||
+    (!isManagerThread && environment) ||
+    (!isManagerThread && branchName) ||
+    showWorkspaceStatus ||
+    showThreadChangedFiles ||
+    thread.archivedAt != null ||
+    (parentThreadDisplayName && parentThreadId),
   );
 }
 

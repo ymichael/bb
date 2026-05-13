@@ -5,6 +5,7 @@ import { Skeleton } from "@/components/ui/skeleton.js";
 import { Panel, PanelResizeHandle } from "react-resizable-panels";
 import { Button } from "@/components/ui/button.js";
 import { cn } from "@/lib/utils";
+import type { WorkspaceFilePreviewStatusLabel } from "@/lib/file-preview";
 import { type ThreadSecondaryPanel as ThreadSecondaryPanelTab } from "@/lib/thread-secondary-panel";
 import {
   GIT_DIFF_VIEW_BASE_OPTIONS,
@@ -74,6 +75,7 @@ export interface SecondaryPanelFileTab {
   filename: string;
   isActive: boolean;
   isPinned?: boolean;
+  statusLabel: WorkspaceFilePreviewStatusLabel | null;
   onSelect: () => void;
   onClose: () => void;
 }
@@ -378,6 +380,10 @@ export function ThreadSecondaryPanel({
 }
 
 function FileTabPill({ tab }: { tab: SecondaryPanelFileTab }) {
+  const title =
+    tab.statusLabel === null
+      ? tab.filename
+      : `${tab.filename} (${tab.statusLabel})`;
   return (
     <div
       className={cn(
@@ -391,13 +397,18 @@ function FileTabPill({ tab }: { tab: SecondaryPanelFileTab }) {
         type="button"
         onClick={tab.onSelect}
         aria-pressed={tab.isActive}
-        title={tab.filename}
+        title={title}
         className={cn(
           "flex h-full min-w-0 items-center rounded-l-md pl-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
           tab.isPinned ? "pr-2 rounded-r-md" : "pr-1",
         )}
       >
         <span className="max-w-[160px] truncate">{tab.filename}</span>
+        {tab.statusLabel === null ? null : (
+          <span className="ml-1 shrink-0 text-muted-foreground/80">
+            ({tab.statusLabel})
+          </span>
+        )}
       </button>
       {tab.isPinned ? null : (
         <button

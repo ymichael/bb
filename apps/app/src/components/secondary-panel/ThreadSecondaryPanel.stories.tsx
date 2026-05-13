@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
-  Provider as JotaiProvider,
-  createStore,
-  useSetAtom,
-} from "jotai";
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
+import { Provider as JotaiProvider, createStore, useSetAtom } from "jotai";
 import {
   ThreadSecondaryPanel,
   type SecondaryPanelFileTab,
@@ -133,6 +135,7 @@ function FileTabsShellInner({
         filename,
         isActive: filename === activeFilename,
         isPinned: filename === pinnedFilename,
+        statusLabel: null,
         onSelect: () => setActiveFilename(filename),
         onClose: () => handleCloseFile(filename),
       })),

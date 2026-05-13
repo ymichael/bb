@@ -6,6 +6,7 @@ import type {
   WorkspaceStatus,
 } from "@bb/domain";
 import type { FilePreview } from "@/lib/api";
+import type { EnvironmentFilePreviewSource } from "@/lib/file-preview";
 import * as api from "@/lib/api";
 import {
   environmentFilePreviewQueryKey,
@@ -41,6 +42,26 @@ function requireEnvironmentId(
   }
 
   return environmentId;
+}
+
+function requireEnvironmentFilePreviewPath(path: string | null): string {
+  if (!path) {
+    throw new Error(
+      "useEnvironmentFilePreview: path is required when query is enabled",
+    );
+  }
+  return path;
+}
+
+function requireEnvironmentFilePreviewSource(
+  source: EnvironmentFilePreviewSource | null,
+): EnvironmentFilePreviewSource {
+  if (!source) {
+    throw new Error(
+      "useEnvironmentFilePreview: source is required when query is enabled",
+    );
+  }
+  return source;
 }
 
 function requireGitDiffTarget(
@@ -111,18 +132,23 @@ export function useEnvironmentMergeBaseBranches(
 export function useEnvironmentFilePreview(
   environmentId: string | null | undefined,
   path: string | null,
+  source: EnvironmentFilePreviewSource | null,
   options?: QueryOptions,
 ) {
   return useQuery<FilePreview>({
-    queryKey: environmentFilePreviewQueryKey(environmentId, path),
+    queryKey: environmentFilePreviewQueryKey(environmentId, path, source),
     queryFn: ({ signal }) =>
       api.getEnvironmentFilePreview({
         id: requireEnvironmentId(environmentId, "useEnvironmentFilePreview"),
-        path: path ?? "",
+        path: requireEnvironmentFilePreviewPath(path),
+        source: requireEnvironmentFilePreviewSource(source),
         signal,
       }),
     enabled:
-      (options?.enabled ?? true) && Boolean(environmentId) && Boolean(path),
+      (options?.enabled ?? true) &&
+      Boolean(environmentId) &&
+      Boolean(path) &&
+      source !== null,
     refetchOnWindowFocus: false,
   });
 }

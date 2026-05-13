@@ -69,6 +69,7 @@ import { apiClient, toRelativeUrl } from "./api-server";
 import {
   buildFilePreview,
   normalizeFilePreviewMimeType,
+  type EnvironmentFilePreviewSource,
   type FilePreview,
   type FilePreviewTarget,
 } from "./file-preview";
@@ -91,6 +92,7 @@ interface GetThreadTimelineTurnSummaryDetailsArgs extends TimelineTurnSummaryDet
 interface GetEnvironmentFilePreviewArgs {
   id: string;
   path: string;
+  source: EnvironmentFilePreviewSource;
   signal?: AbortSignal;
 }
 
@@ -310,22 +312,50 @@ function buildEnvironmentDiffFilePreviewUrl(
   return `data:${mimeType};base64,${base64Content}`;
 }
 
+interface BuildEnvironmentFilePreviewQueryArgs {
+  path: string;
+  source: EnvironmentFilePreviewSource;
+}
+
+function buildEnvironmentFilePreviewQuery({
+  path,
+  source,
+}: BuildEnvironmentFilePreviewQueryArgs): EnvironmentDiffFileQuery {
+  switch (source.kind) {
+    case "working-tree":
+      return {
+        target: "uncommitted",
+        path,
+        side: "new",
+      };
+    case "head":
+      return {
+        target: "uncommitted",
+        path,
+        side: "old",
+      };
+    case "merge-base":
+      return {
+        target: "branch_committed",
+        mergeBaseRef: source.ref,
+        path,
+        side: "old",
+      };
+  }
+}
+
 /**
- * The app previews the current workspace file by using the diff-file route
- * with `target=uncommitted` and `side=new`. For this target the server has no
- * git ref to read, so the daemon returns the working-tree file contents.
- * Keep this wrapper as the app boundary if we add a dedicated preview route.
+ * The app previews workspace files by using the diff-file route. Current files
+ * read the uncommitted new side from disk; deleted-file previews read the old
+ * side from HEAD or the merge base because the working-tree path is gone.
  */
 export async function getEnvironmentFilePreview({
   id,
   path,
+  source,
   signal,
 }: GetEnvironmentFilePreviewArgs): Promise<FilePreview> {
-  const query = {
-    target: "uncommitted",
-    path,
-    side: "new",
-  } satisfies EnvironmentDiffFileQuery;
+  const query = buildEnvironmentFilePreviewQuery({ path, source });
   const response = await request<EnvironmentDiffFileResponse>(
     apiClient.environments[":id"].diff.file.$get(
       {

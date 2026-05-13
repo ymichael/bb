@@ -20,7 +20,10 @@ import {
   type ThreadPromptManagedBySection,
   type ThreadPromptManagerChildrenSection,
 } from "@/components/promptbox/banner/ThreadPromptContextBanner";
-import type { WorkspaceChangedFilesSection } from "@/components/workspace/workspace-change-summary";
+import type {
+  WorkspaceChangedFileSelection,
+  WorkspaceChangedFilesSection,
+} from "@/components/workspace/workspace-change-summary";
 import { QueuedMessagesList } from "@/components/promptbox/banner/QueuedMessagesList";
 import { ThreadEnvironmentSummary } from "@/components/promptbox/ThreadEnvironmentSummary";
 import { usePromptDraftStorage } from "@/hooks/usePromptDraftStorage";
@@ -50,8 +53,6 @@ import {
 import { queuedInputToDraft } from "./threadQueuedMessages";
 import type { SendMessageMutationLike } from "./threadDetailMutationTypes";
 
-import type { WorkspaceFileStatus } from "@bb/domain";
-
 interface SendFollowUpInputParams {
   input: PromptInput[];
   mode?: "auto" | "steer";
@@ -71,7 +72,7 @@ interface ThreadDetailPromptAreaProps {
   environmentLabel?: string;
   isEnvironmentActionPending: boolean;
   pendingInteractions: readonly PendingInteraction[];
-  onChangedFileClick: (file: WorkspaceFileStatus) => void;
+  onChangedFileClick: (selection: WorkspaceChangedFileSelection) => void;
   openThreadDiffPanel: () => void;
   projectId: string;
   /**
@@ -180,10 +181,8 @@ export function ThreadDetailPromptArea({
     environmentId: thread.environmentId ?? null,
   });
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
-  const [
-    expandedBannerSection,
-    setExpandedBannerSection,
-  ] = useState<ThreadPromptContextBannerExpandedSection | null>(null);
+  const [expandedBannerSection, setExpandedBannerSection] =
+    useState<ThreadPromptContextBannerExpandedSection | null>(null);
   const [processingQueuedMessageId, setProcessingQueuedMessageId] = useState<
     string | null
   >(null);
@@ -474,8 +473,8 @@ export function ThreadDetailPromptArea({
   );
 
   const handlePromptBannerFileClick = useCallback(
-    (file: WorkspaceFileStatus) => {
-      onChangedFileClick(file);
+    (selection: WorkspaceChangedFileSelection) => {
+      onChangedFileClick(selection);
     },
     [onChangedFileClick],
   );

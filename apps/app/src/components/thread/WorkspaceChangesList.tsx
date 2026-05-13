@@ -7,17 +7,19 @@ import { formatWorkspaceFileStatus } from "@/components/workspace/workspace-chan
 export type WorkspaceChangedFile =
   WorkspaceStatus["workingTree"]["files"][number];
 
+export interface WorkspaceChangesListProps {
+  files: readonly WorkspaceChangedFile[];
+  maxHeightClassName?: string;
+  emptyMessage?: string;
+  onFileClick?: (file: WorkspaceChangedFile) => void;
+}
+
 export function WorkspaceChangesList({
   files,
   maxHeightClassName = "max-h-32",
   emptyMessage = "No changed files detected.",
   onFileClick,
-}: {
-  files: readonly WorkspaceChangedFile[];
-  maxHeightClassName?: string;
-  emptyMessage?: string;
-  onFileClick?: (file: WorkspaceChangedFile) => void;
-}) {
+}: WorkspaceChangesListProps) {
   if (!files || files.length === 0) {
     return <EmptyState message={emptyMessage} />;
   }

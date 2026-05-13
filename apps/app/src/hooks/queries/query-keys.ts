@@ -1,5 +1,6 @@
 import type { QueryKey } from "@tanstack/react-query";
 import type { ThreadListFilters } from "@/lib/api";
+import type { EnvironmentFilePreviewSource } from "@/lib/file-preview";
 import {
   DEFAULT_THREAD_STORAGE_FILE_LIST_OPTIONS,
   type ThreadStorageFileListOptions,
@@ -238,6 +239,7 @@ export type EnvironmentFilePreviewQueryKey = readonly [
   typeof ENVIRONMENT_FILE_PREVIEW_QUERY_KEY,
   string | null | undefined,
   string | null,
+  EnvironmentFilePreviewSource | null,
 ];
 export type EnvironmentFilePreviewQueryKeyRootPrefix = readonly [
   typeof ENVIRONMENT_FILE_PREVIEW_QUERY_KEY,
@@ -596,8 +598,9 @@ export function environmentDiffFileQueryKeyPrefix(
 export function environmentFilePreviewQueryKey(
   environmentId: string | null | undefined,
   path: string | null,
+  source: EnvironmentFilePreviewSource | null,
 ): EnvironmentFilePreviewQueryKey {
-  return [ENVIRONMENT_FILE_PREVIEW_QUERY_KEY, environmentId, path];
+  return [ENVIRONMENT_FILE_PREVIEW_QUERY_KEY, environmentId, path, source];
 }
 
 export function allEnvironmentFilePreviewQueryKeyPrefix(): EnvironmentFilePreviewQueryKeyRootPrefix {

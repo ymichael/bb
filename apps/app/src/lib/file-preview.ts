@@ -51,6 +51,34 @@ export type FilePreview =
   | TextFilePreview
   | UnsupportedFilePreview;
 
+export type EnvironmentFilePreviewSource =
+  | { kind: "working-tree" }
+  | { kind: "head" }
+  | { kind: "merge-base"; ref: string };
+
+export type WorkspaceFilePreviewStatusLabel = "deleted";
+
+export function areEnvironmentFilePreviewSourcesEqual(
+  a: EnvironmentFilePreviewSource,
+  b: EnvironmentFilePreviewSource,
+): boolean {
+  if (a.kind !== b.kind) {
+    return false;
+  }
+
+  switch (a.kind) {
+    case "working-tree":
+    case "head":
+      return true;
+    case "merge-base":
+      return b.kind === "merge-base" && a.ref === b.ref;
+    default: {
+      const exhaustive: never = a;
+      return exhaustive;
+    }
+  }
+}
+
 export interface BuildFilePreviewArgs extends FilePreviewTarget {
   contentBytes: Uint8Array;
   mimeType: string;
@@ -93,9 +121,7 @@ export function normalizeFilePreviewMimeType(value: string | null): string {
     : DEFAULT_FILE_PREVIEW_MIME_TYPE;
 }
 
-export function isMarkdownFilePreview(
-  preview: FilePreview,
-): boolean {
+export function isMarkdownFilePreview(preview: FilePreview): boolean {
   return (
     preview.kind === "text" &&
     (MARKDOWN_MIME_TYPES.has(preview.mimeType) ||

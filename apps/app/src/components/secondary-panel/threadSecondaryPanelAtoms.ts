@@ -1,6 +1,10 @@
 import { atom } from "jotai";
 import { atomWithStorage } from "jotai/utils";
 import { createLocalStorageSyncStorage } from "@/lib/browser-storage";
+import type {
+  EnvironmentFilePreviewSource,
+  WorkspaceFilePreviewStatusLabel,
+} from "@/lib/file-preview";
 
 export const threadSecondaryPanelResizingAtom = atom(false);
 
@@ -45,6 +49,8 @@ export const pendingGitDiffScrollPathAtom = atom<string | null>(null);
 export interface WorkspaceFileTab {
   lineNumber: number | null;
   path: string;
+  source: EnvironmentFilePreviewSource;
+  statusLabel: WorkspaceFilePreviewStatusLabel | null;
 }
 
 /** Workspace preview tabs open in the secondary panel for the current thread. */

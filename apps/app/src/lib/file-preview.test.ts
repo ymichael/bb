@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  areEnvironmentFilePreviewSourcesEqual,
   buildFilePreview,
   isMarkdownFilePreview,
   normalizeFilePreviewMimeType,
@@ -97,6 +98,36 @@ describe("file-preview", () => {
       "text/plain",
     );
     expect(normalizeFilePreviewMimeType(null)).toBe("application/octet-stream");
+  });
+
+  it("compares environment file preview sources structurally", () => {
+    expect(
+      areEnvironmentFilePreviewSourcesEqual(
+        { kind: "working-tree" },
+        { kind: "working-tree" },
+      ),
+    ).toBe(true);
+    expect(
+      areEnvironmentFilePreviewSourcesEqual({ kind: "head" }, { kind: "head" }),
+    ).toBe(true);
+    expect(
+      areEnvironmentFilePreviewSourcesEqual(
+        { kind: "merge-base", ref: "abc1234" },
+        { kind: "merge-base", ref: "abc1234" },
+      ),
+    ).toBe(true);
+    expect(
+      areEnvironmentFilePreviewSourcesEqual(
+        { kind: "merge-base", ref: "abc1234" },
+        { kind: "merge-base", ref: "def5678" },
+      ),
+    ).toBe(false);
+    expect(
+      areEnvironmentFilePreviewSourcesEqual(
+        { kind: "working-tree" },
+        { kind: "head" },
+      ),
+    ).toBe(false);
   });
 
   it("detects Markdown text previews by extension and mime type", () => {

@@ -1,6 +1,12 @@
-import type { Environment } from "@bb/domain";
+import type {
+  Environment,
+  WorkspaceFileStatus,
+  WorkspaceFileStatusKind,
+} from "@bb/domain";
+import type { WorkspaceChangedFilesSection } from "@/components/workspace/workspace-change-summary";
 import { describe, expect, it } from "vitest";
 import {
+  resolveWorkspaceChangedFileOpenTarget,
   resolveThreadLocalWorkspaceRootPath,
   resolveThreadWorkspaceOpenPath,
 } from "./threadWorkspaceOpenPath";
@@ -24,6 +30,33 @@ function makeEnvironment(overrides: Partial<Environment> = {}): Environment {
     status: "ready",
     updatedAt: 1,
     workspaceProvisionType: "managed-worktree",
+    ...overrides,
+  };
+}
+
+function makeWorkspaceFileStatus(
+  status: WorkspaceFileStatusKind,
+): WorkspaceFileStatus {
+  return {
+    path: "src/file.ts",
+    status,
+  };
+}
+
+function makeWorkspaceChangedFilesSection(
+  overrides: Partial<WorkspaceChangedFilesSection> = {},
+): WorkspaceChangedFilesSection {
+  const file = makeWorkspaceFileStatus("M");
+  return {
+    kind: "uncommitted",
+    label: "Uncommitted files",
+    files: [file],
+    mergeBaseRef: null,
+    stats: {
+      files: [file],
+      insertions: 1,
+      deletions: 1,
+    },
     ...overrides,
   };
 }
@@ -114,5 +147,104 @@ describe("resolveThreadWorkspaceOpenPath", () => {
         threadEnvironmentIsLocal: true,
       }),
     ).toBeNull();
+  });
+});
+
+describe("resolveWorkspaceChangedFileOpenTarget", () => {
+  it("opens added and untracked files as previews", () => {
+    expect(
+      resolveWorkspaceChangedFileOpenTarget({
+        file: makeWorkspaceFileStatus("A"),
+        section: makeWorkspaceChangedFilesSection(),
+      }),
+    ).toEqual({
+      kind: "preview",
+      source: { kind: "working-tree" },
+      statusLabel: null,
+    });
+    expect(
+      resolveWorkspaceChangedFileOpenTarget({
+        file: makeWorkspaceFileStatus("??"),
+        section: makeWorkspaceChangedFilesSection({ kind: "untracked" }),
+      }),
+    ).toEqual({
+      kind: "preview",
+      source: { kind: "working-tree" },
+      statusLabel: null,
+    });
+  });
+
+  it("opens working-tree deleted files as HEAD previews because the current file no longer exists", () => {
+    expect(
+      resolveWorkspaceChangedFileOpenTarget({
+        file: makeWorkspaceFileStatus("D"),
+        section: makeWorkspaceChangedFilesSection(),
+      }),
+    ).toEqual({
+      kind: "preview",
+      source: { kind: "head" },
+      statusLabel: "deleted",
+    });
+  });
+
+  it("opens committed deleted files as merge-base previews when the merge-base ref is known", () => {
+    expect(
+      resolveWorkspaceChangedFileOpenTarget({
+        file: makeWorkspaceFileStatus("D"),
+        section: makeWorkspaceChangedFilesSection({
+          kind: "committed",
+          mergeBaseRef: "abc1234",
+        }),
+      }),
+    ).toEqual({
+      kind: "preview",
+      source: { kind: "merge-base", ref: "abc1234" },
+      statusLabel: "deleted",
+    });
+  });
+
+  it("opens committed deleted files as diffs when the merge-base ref is unknown", () => {
+    expect(
+      resolveWorkspaceChangedFileOpenTarget({
+        file: makeWorkspaceFileStatus("D"),
+        section: makeWorkspaceChangedFilesSection({
+          kind: "committed",
+          mergeBaseRef: null,
+        }),
+      }),
+    ).toEqual({ kind: "diff" });
+  });
+
+  it("opens modified, copied, renamed, conflicted, and unknown statuses as diffs", () => {
+    expect(
+      resolveWorkspaceChangedFileOpenTarget({
+        file: makeWorkspaceFileStatus("M"),
+        section: makeWorkspaceChangedFilesSection(),
+      }),
+    ).toEqual({ kind: "diff" });
+    expect(
+      resolveWorkspaceChangedFileOpenTarget({
+        file: makeWorkspaceFileStatus("C"),
+        section: makeWorkspaceChangedFilesSection(),
+      }),
+    ).toEqual({ kind: "diff" });
+    expect(
+      resolveWorkspaceChangedFileOpenTarget({
+        file: makeWorkspaceFileStatus("R"),
+        section: makeWorkspaceChangedFilesSection(),
+      }),
+    ).toEqual({ kind: "diff" });
+    expect(
+      resolveWorkspaceChangedFileOpenTarget({
+        file: makeWorkspaceFileStatus("U"),
+        section: makeWorkspaceChangedFilesSection(),
+      }),
+    ).toEqual({ kind: "diff" });
+    expect(
+      resolveWorkspaceChangedFileOpenTarget({
+        file: makeWorkspaceFileStatus("?"),
+        section: makeWorkspaceChangedFilesSection(),
+      }),
+    ).toEqual({ kind: "diff" });
   });
 });
