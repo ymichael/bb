@@ -9,6 +9,7 @@ import {
 import { readJson } from "../helpers/json.js";
 import { seedHostSession, seedProjectWithSource } from "../helpers/seed.js";
 import { createTestAppHarness } from "../helpers/test-app.js";
+import { InferenceTimeoutError } from "../../src/services/ai/inference.js";
 import { generateThreadMetadataWithOutcome } from "../../src/services/threads/title-generation.js";
 
 const piAiMocks = vi.hoisted(() => ({
@@ -19,6 +20,19 @@ const piAiMocks = vi.hoisted(() => ({
 interface MockThreadMetadata {
   branchSlug?: string;
   title?: string;
+}
+
+function mockThreadMetadataCompletion(metadata: MockThreadMetadata) {
+  return {
+    content: [
+      {
+        arguments: metadata,
+        id: "tool_result",
+        name: "result",
+        type: "toolCall",
+      },
+    ],
+  };
 }
 
 vi.mock("@mariozechner/pi-ai", async (importOriginal) => {
@@ -32,16 +46,7 @@ vi.mock("@mariozechner/pi-ai", async (importOriginal) => {
 
 function mockThreadMetadata(metadata: MockThreadMetadata): void {
   piAiMocks.getModel.mockReturnValue({ provider: "test" });
-  piAiMocks.complete.mockResolvedValue({
-    content: [
-      {
-        arguments: metadata,
-        id: "tool_result",
-        name: "result",
-        type: "toolCall",
-      },
-    ],
-  });
+  piAiMocks.complete.mockResolvedValue(mockThreadMetadataCompletion(metadata));
 }
 
 describe("generated managed branch names", () => {
@@ -111,6 +116,71 @@ describe("generated managed branch names", () => {
         `bb/improve-branch-names-${thread.id}`,
       );
       expect(piAiMocks.complete).toHaveBeenCalledTimes(1);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("uses two timeout attempts for managed worktree metadata inference", async () => {
+    piAiMocks.getModel.mockReturnValue({ provider: "test" });
+    piAiMocks.complete
+      .mockRejectedValueOnce(new InferenceTimeoutError({ timeoutMs: 2_500 }))
+      .mockResolvedValueOnce(
+        mockThreadMetadataCompletion({
+          title: "Recovered Managed Metadata",
+        }),
+      );
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-managed-metadata-retry",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/managed-metadata-retry-project",
+      });
+
+      const response = await harness.app.request("/api/v1/threads", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          origin: "app",
+          projectId: project.id,
+          providerId: "codex",
+          model: "gpt-5",
+          input: [
+            {
+              type: "text",
+              text: "Recover managed metadata after transient timeout",
+            },
+          ],
+          environment: {
+            type: "host",
+            hostId: host.id,
+            workspace: {
+              type: "managed-worktree",
+              baseBranch: { kind: "default" },
+            },
+          },
+        }),
+      });
+
+      expect(response.status).toBe(201);
+      const thread = threadSchema.parse(await readJson(response));
+      const queued = await waitForQueuedCommand(
+        harness,
+        ({ command }) => command.type === "environment.provision",
+      );
+      if (
+        queued.command.type !== "environment.provision" ||
+        queued.command.workspaceProvisionType === "unmanaged"
+      ) {
+        throw new Error("Expected environment.provision command");
+      }
+      expect(queued.command.branchName).toBe(
+        `bb/recovered-managed-metadata-${thread.id}`,
+      );
+      expect(piAiMocks.complete).toHaveBeenCalledTimes(2);
     } finally {
       await harness.cleanup();
     }
@@ -490,6 +560,7 @@ describe("generated managed branch names", () => {
     piAiMocks.getModel.mockReturnValue({ provider: "test" });
     piAiMocks.complete.mockReturnValue(new Promise(() => undefined));
     const harness = await createTestAppHarness();
+    const infoSpy = vi.spyOn(harness.deps.logger, "info");
     try {
       await expect(
         generateThreadMetadataWithOutcome(harness.deps, {
@@ -505,6 +576,95 @@ describe("generated managed branch names", () => {
       ).resolves.toMatchObject({
         metadata: null,
         reason: "timeout",
+      });
+      expect(piAiMocks.complete).toHaveBeenCalledTimes(1);
+      expect(infoSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          attempts: 1,
+          threadId: "thr_timeout",
+          timeoutMs: 1,
+        }),
+        "Thread metadata inference timed out",
+      );
+    } finally {
+      infoSpy.mockRestore();
+      await harness.cleanup();
+    }
+  });
+
+  it("retries once when metadata inference times out", async () => {
+    piAiMocks.getModel.mockReturnValue({ provider: "test" });
+    piAiMocks.complete
+      .mockReturnValueOnce(new Promise(() => undefined))
+      .mockResolvedValueOnce(
+        mockThreadMetadataCompletion({
+          title: "Recovered Metadata",
+        }),
+      );
+    const harness = await createTestAppHarness();
+    const infoSpy = vi.spyOn(harness.deps.logger, "info");
+    try {
+      await expect(
+        generateThreadMetadataWithOutcome(harness.deps, {
+          input: [
+            {
+              type: "text",
+              text: "Improve timed out metadata generation behavior",
+            },
+          ],
+          threadId: "thr_retry_timeout",
+          timeoutMaxAttempts: 2,
+          timeoutMs: 1,
+        }),
+      ).resolves.toMatchObject({
+        metadata: {
+          branchSlug: "recovered-metadata",
+          title: "Recovered Metadata",
+        },
+      });
+      expect(piAiMocks.complete).toHaveBeenCalledTimes(2);
+      expect(infoSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          attempt: 1,
+          maxAttempts: 2,
+          threadId: "thr_retry_timeout",
+          timeoutMs: 1,
+        }),
+        "Thread metadata inference timed out; retrying",
+      );
+      expect(infoSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          attempts: 2,
+          threadId: "thr_retry_timeout",
+        }),
+        "Thread metadata inference completed after timeout retry",
+      );
+    } finally {
+      infoSpy.mockRestore();
+      await harness.cleanup();
+    }
+  });
+
+  it("does not retry non-timeout metadata inference failures", async () => {
+    piAiMocks.getModel.mockReturnValue({ provider: "test" });
+    piAiMocks.complete.mockRejectedValue(new Error("metadata failed"));
+    const harness = await createTestAppHarness();
+    try {
+      await expect(
+        generateThreadMetadataWithOutcome(harness.deps, {
+          input: [
+            {
+              type: "text",
+              text: "Improve failed metadata generation behavior",
+            },
+          ],
+          threadId: "thr_failed_metadata",
+          timeoutMaxAttempts: 2,
+          timeoutMs: 1,
+        }),
+      ).resolves.toMatchObject({
+        metadata: null,
+        reason: "failed",
       });
       expect(piAiMocks.complete).toHaveBeenCalledTimes(1);
     } finally {

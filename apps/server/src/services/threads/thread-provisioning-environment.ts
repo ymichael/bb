@@ -52,6 +52,7 @@ import {
 import { queueThreadRenameCommand } from "./thread-commands.js";
 import {
   inferThreadMetadata,
+  MANAGED_THREAD_METADATA_TIMEOUT_MAX_ATTEMPTS,
   MANAGED_THREAD_METADATA_TIMEOUT_MS,
 } from "./thread-metadata-inference.js";
 import { deriveBranchSlugFromTitle } from "./title-generation.js";
@@ -478,7 +479,8 @@ async function resolveMetadataIfNeeded(
     input: args.context.request.input,
     provisioningId: args.context.state.provisioningId,
     threadId: args.thread.id,
-    timeoutMs: needsBranch ? MANAGED_THREAD_METADATA_TIMEOUT_MS : undefined,
+    timeoutMaxAttempts: MANAGED_THREAD_METADATA_TIMEOUT_MAX_ATTEMPTS,
+    timeoutMs: MANAGED_THREAD_METADATA_TIMEOUT_MS,
     writeTranscript: false,
   });
 

@@ -12,7 +12,10 @@ type ThreadMetadataInferenceDeps = Pick<
   "config" | "db" | "hub" | "logger"
 >;
 
-export const MANAGED_THREAD_METADATA_TIMEOUT_MS = 5_000;
+// Two 2.5s attempts preserve roughly the old 5s managed provisioning
+// blocking budget while recovering transient metadata inference timeouts.
+export const MANAGED_THREAD_METADATA_TIMEOUT_MS = 2_500;
+export const MANAGED_THREAD_METADATA_TIMEOUT_MAX_ATTEMPTS = 2;
 
 export interface ThreadMetadataInferenceArgs {
   environmentId: string | null;
@@ -20,6 +23,7 @@ export interface ThreadMetadataInferenceArgs {
   generateTitle: boolean;
   input: PromptInput[];
   provisioningId: string | null;
+  timeoutMaxAttempts?: number;
   timeoutMs?: number;
   threadId: string;
   writeTranscript: boolean;
@@ -137,6 +141,9 @@ export async function inferThreadMetadata(
   const outcome = await generateThreadMetadataWithOutcome(deps, {
     input: args.input,
     threadId: args.threadId,
+    ...(args.timeoutMaxAttempts !== undefined
+      ? { timeoutMaxAttempts: args.timeoutMaxAttempts }
+      : {}),
     ...(args.timeoutMs ? { timeoutMs: args.timeoutMs } : {}),
   });
 
