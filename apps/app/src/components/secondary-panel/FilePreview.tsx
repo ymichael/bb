@@ -1,7 +1,6 @@
 import { type CSSProperties, useEffect, useMemo, useRef } from "react";
 import { File as PierreFile } from "@pierre/diffs/react";
 import type { SelectedLineRange, SupportedLanguages } from "@pierre/diffs";
-import { Icon } from "@/components/ui/icon.js";
 import { MarkdownPreview } from "@/components/ui/markdown-preview.js";
 import { Skeleton } from "@/components/ui/skeleton.js";
 import { usePreferredTheme } from "@/hooks/useTheme";
@@ -63,24 +62,19 @@ function FilePreviewBody({ state }: FilePreviewProps) {
     return <FilePreviewLoading />;
   }
   if (state.kind === "empty") {
-    return <FilePreviewMessage icon="empty" message="Empty file." />;
+    return <FilePreviewMessage message="Empty file." />;
   }
   if (state.kind === "not-found") {
-    return <FilePreviewMessage icon="missing" message="File not found." />;
+    return <FilePreviewMessage message="File not found." role="alert" />;
   }
   if (state.kind === "manager-status-pending") {
-    return (
-      <FilePreviewMessage
-        icon={null}
-        message="Manager hasn't written a status yet."
-      />
-    );
+    return <FilePreviewMessage message="Manager hasn't written a status yet." />;
   }
   if (state.kind === "error") {
     return (
       <FilePreviewMessage
-        icon={state.message === undefined ? "missing" : null}
         message={state.message ?? "Failed to load file"}
+        role={state.message === undefined ? "alert" : undefined}
       />
     );
   }
@@ -140,22 +134,19 @@ function FilePreviewLoading() {
 }
 
 function FilePreviewMessage({
-  icon,
   message,
+  role,
 }: {
-  icon: "empty" | "missing" | null;
   message: string;
+  role?: "alert";
 }) {
-  const iconName =
-    icon === "missing" ? "FileX2" : icon === "empty" ? "FileQuestion" : null;
   return (
-    <div
-      role={icon === "missing" ? "alert" : undefined}
-      className="flex items-center gap-1.5 px-4 py-2 text-sm text-muted-foreground"
+    <p
+      role={role}
+      className="mx-4 rounded-lg border border-dashed border-border/70 bg-background/45 px-3 py-6 text-center text-sm text-muted-foreground"
     >
-      {iconName ? <Icon name={iconName} className="size-3.5" /> : null}
-      <span>{message}</span>
-    </div>
+      {message}
+    </p>
   );
 }
 
