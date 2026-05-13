@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type ComponentProps,
@@ -147,6 +148,23 @@ export function FollowUpPromptBox({
   const voice = usePromptVoice(promptBoxRef);
   const stackRef = useRef<HTMLDivElement>(null);
   const [stackHeight, setStackHeight] = useState(0);
+  // Measure the stack synchronously after every render. useLayoutEffect runs
+  // post-DOM-commit and pre-paint, so when a React commit adds the banner
+  // (e.g. workspace status arrives and the git section becomes non-empty),
+  // we read the new stack height and the resulting `setStackHeight` triggers
+  // a synchronous re-render that updates the textarea's minHeight before the
+  // browser paints. Without this, the banner appears at 32px while the
+  // textarea is still 100px for one frame — the timeline visibly shifts up
+  // then back down as the elastic compensation catches up.
+  useLayoutEffect(() => {
+    const element = stackRef.current;
+    if (!element) return;
+    const measured = element.offsetHeight;
+    setStackHeight((prev) => (prev === measured ? prev : measured));
+  });
+  // ResizeObserver catches changes that happen outside a React render —
+  // banner sections expanding via CSS animation, window resize affecting
+  // markdown line-wrapping inside the stack, etc.
   useEffect(() => {
     const element = stackRef.current;
     if (!element || typeof ResizeObserver === "undefined") return;

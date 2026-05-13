@@ -180,6 +180,16 @@ export interface AutoHeightContainerProps {
  * for surfaces where content size grows over time (a row list receiving new
  * rows) and you want the boundary to glide instead of snap.
  */
+// Window after mount during which size changes snap rather than animate. The
+// initial layout pass for heavy lists (large threads, font swap, secondary
+// React commits) fires several ResizeObserver events at frame boundaries; if
+// each is animated, the wrapper height eases through every intermediate value
+// and the parent scroll container chases the growth, looking like multiple
+// scroll-to-bottom jumps. Snapping during this window means initial settling
+// is invisible; once the inner has been quiet for the window, subsequent
+// changes (streaming) animate as designed.
+const AUTO_HEIGHT_INITIAL_SETTLE_MS = 250;
+
 export function AutoHeightContainer({
   children,
   className,
@@ -194,16 +204,27 @@ export function AutoHeightContainer({
     wrapper.style.height = `${inner.offsetHeight}px`;
     let lastWidth: number | null = null;
     let pendingVisibilitySnap = false;
+    let initialSettleComplete = false;
+    let initialSettleTimerId = window.setTimeout(() => {
+      initialSettleComplete = true;
+    }, AUTO_HEIGHT_INITIAL_SETTLE_MS);
     const snapState: SnapState = { savedDuration: null, restoreFrame: null };
     const observer = new ResizeObserver((entries) => {
       const entry = entries[0];
       if (!entry) return;
       const { width, height } = entry.contentRect;
       const widthChanged = lastWidth !== null && width !== lastWidth;
-      const snap = widthChanged || pendingVisibilitySnap;
+      const snap =
+        widthChanged || pendingVisibilitySnap || !initialSettleComplete;
       pendingVisibilitySnap = false;
       lastWidth = width;
       applyHeight(wrapper, `${height}px`, snap, snapState);
+      if (!initialSettleComplete) {
+        window.clearTimeout(initialSettleTimerId);
+        initialSettleTimerId = window.setTimeout(() => {
+          initialSettleComplete = true;
+        }, AUTO_HEIGHT_INITIAL_SETTLE_MS);
+      }
     });
     observer.observe(inner);
     // See HeightTransition's matching block: a hidden tab pauses observer
@@ -220,6 +241,7 @@ export function AutoHeightContainer({
     return () => {
       observer.disconnect();
       document.removeEventListener("visibilitychange", onVisibility);
+      window.clearTimeout(initialSettleTimerId);
       cleanupSnapState(wrapper, snapState);
     };
   }, []);
