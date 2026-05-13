@@ -27,6 +27,58 @@ afterEach(() => {
 });
 
 describe("MarkdownPreview", () => {
+  it("does not render raw HTML by default", () => {
+    const { container } = render(
+      <MarkdownPreview content="<span>Inline HTML</span>" />,
+    );
+
+    expect(container.querySelector("span")).toBeNull();
+  });
+
+  it("renders sanitized raw HTML when explicitly allowed", () => {
+    const { container } = render(
+      <MarkdownPreview
+        allowHtml
+        content={[
+          "Line one<br />line two",
+          '<details open><summary>More</summary><div onmouseover="alert(1)">Body</div></details>',
+          "<script>alert(1)</script>",
+        ].join("\n")}
+      />,
+    );
+
+    expect(container.querySelector("br")).not.toBeNull();
+    expect(screen.getByText("More").tagName).toBe("SUMMARY");
+    expect(screen.getByText("Body").tagName).toBe("DIV");
+    expect(screen.getByText("Body").getAttribute("onmouseover")).toBeNull();
+    expect(container.querySelector("script")).toBeNull();
+    expect(screen.queryByText("alert(1)")).toBeNull();
+  });
+
+  it("strips unsafe links, image handlers, and embedded HTML", () => {
+    const { container } = render(
+      <MarkdownPreview
+        allowHtml
+        content={[
+          '<a href="javascript:alert(1)">Unsafe link</a>',
+          '<img alt="Unsafe image" src="https://example.test/image.png" onerror="alert(1)" />',
+          '<iframe src="https://example.test/embed"></iframe>',
+          "<style>body { display: none; }</style>",
+        ].join("\n")}
+      />,
+    );
+
+    const link = screen.getByText("Unsafe link").closest("a");
+    const image = screen.getByRole("img", { name: "Unsafe image" });
+
+    expect(link).not.toBeNull();
+    expect(link?.getAttribute("href")).toBeNull();
+    expect(image.getAttribute("src")).toBe("https://example.test/image.png");
+    expect(image.getAttribute("onerror")).toBeNull();
+    expect(container.querySelector("iframe")).toBeNull();
+    expect(container.querySelector("style")).toBeNull();
+  });
+
   it("routes local file link clicks through the handler and prevents default navigation", () => {
     const onOpenLocalFileLink = vi.fn(() => true);
     render(

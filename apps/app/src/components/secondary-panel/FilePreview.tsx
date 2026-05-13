@@ -211,7 +211,7 @@ function FilePreviewHeader({
 function MarkdownFilePreview({ file }: { file: FilePreviewFile }) {
   return (
     <div className="px-4 pt-4">
-      <MarkdownPreview content={file.contents} />
+      <MarkdownPreview allowHtml content={file.contents} />
     </div>
   );
 }

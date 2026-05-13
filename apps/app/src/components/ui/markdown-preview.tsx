@@ -9,7 +9,14 @@ import {
   type SetStateAction,
 } from "react";
 import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
-import type { Components, ExtraProps, UrlTransform } from "react-markdown";
+import type {
+  Components,
+  ExtraProps,
+  Options as ReactMarkdownOptions,
+  UrlTransform,
+} from "react-markdown";
+import rehypeRaw from "rehype-raw";
+import rehypeSanitize from "rehype-sanitize";
 import remarkGfm from "remark-gfm";
 import { ImageLightbox, getWrappedImageIndex } from "./image-lightbox.js";
 import { CopyButton } from "./copy-button.js";
@@ -22,6 +29,7 @@ import {
 import { cn } from "@/lib/utils";
 
 export interface MarkdownPreviewProps {
+  allowHtml?: boolean;
   className?: string;
   content: string;
   expandedImageAlt?: string;
@@ -64,8 +72,17 @@ type MarkdownTableCellProps = ComponentPropsWithoutRef<"td"> & ExtraProps;
 type MarkdownTableHeadProps = ComponentPropsWithoutRef<"thead"> & ExtraProps;
 type MarkdownTableHeaderProps = ComponentPropsWithoutRef<"th"> & ExtraProps;
 type MarkdownUnorderedListProps = ComponentPropsWithoutRef<"ul"> & ExtraProps;
+type MarkdownRehypePlugins = NonNullable<
+  ReactMarkdownOptions["rehypePlugins"]
+>;
 
 const MARKDOWN_TABLE_BREAKOUT_WIDTH = "max(100%, min(1100px, 100cqw - 2rem))";
+// Security-critical order: raw HTML must become nodes before sanitization can
+// strip unsafe elements, attributes, and URLs.
+const MARKDOWN_HTML_REHYPE_PLUGINS: MarkdownRehypePlugins = [
+  rehypeRaw,
+  rehypeSanitize,
+];
 
 const localFileAwareUrlTransform: UrlTransform = (value, key) => {
   if (key === "href" && parseLocalFileHref(value)) {
@@ -364,6 +381,7 @@ function buildMarkdownComponents({
 }
 
 function MarkdownPreviewComponent({
+  allowHtml = false,
   className,
   content,
   expandedImageAlt = "Expanded image",
@@ -419,6 +437,7 @@ function MarkdownPreviewComponent({
         )}
       >
         <ReactMarkdown
+          rehypePlugins={allowHtml ? MARKDOWN_HTML_REHYPE_PLUGINS : undefined}
           remarkPlugins={[remarkGfm]}
           components={markdownComponents}
           urlTransform={
