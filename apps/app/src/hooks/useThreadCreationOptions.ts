@@ -251,7 +251,7 @@ function updateThreadPromptSelections({
   };
 }
 
-function resolvePermissionModeSelection({
+export function resolvePermissionModeSelection({
   rawPermissionMode,
   supportedPermissionModes,
 }: ResolvePermissionModeSelectionArgs): PermissionMode {

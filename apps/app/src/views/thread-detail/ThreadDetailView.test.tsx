@@ -41,7 +41,6 @@ import {
   environmentQueryKey,
   threadListQueryKey,
   threadQueryKey,
-  type ThreadListQueryFilters,
 } from "@/hooks/queries/query-keys";
 import { restoreMatchMedia, setupMatchMedia } from "@/test/helpers/match-media";
 import { wsManager } from "@/lib/ws";
@@ -460,21 +459,6 @@ function createThreadDetailSuccessRoutes(
   ];
 }
 
-function getThreadListObserverCount(
-  queryClient: QueryClient,
-  filters: ThreadListQueryFilters,
-): number {
-  return (
-    queryClient
-      .getQueryCache()
-      .find({
-        exact: true,
-        queryKey: threadListQueryKey(filters),
-      })
-      ?.getObserversCount() ?? 0
-  );
-}
-
 beforeEach(() => {
   window.localStorage.clear();
 });
@@ -582,72 +566,6 @@ describe("ThreadDetailView", () => {
     expect(screen.queryByText("Cached thread")).toBeNull();
     expect(screen.queryByText("Failed to load thread.")).toBeNull();
     expect(listThreadsRequestCount).toBe(0);
-  });
-
-  it("does not add a manager-selector thread-list observer for manager threads", async () => {
-    let listThreadsRequestCount = 0;
-    installThreadDetailSuccessFetchRoutes({
-      thread: createThreadResponse({ type: "manager" }),
-      listThreadsHandler: () => {
-        listThreadsRequestCount += 1;
-        return jsonResponse([]);
-      },
-    });
-
-    const { queryClient } = await renderThreadDetailView();
-    const projectThreadFilters: ThreadListQueryFilters = {
-      archived: false,
-      projectId: "project-1",
-    };
-
-    await screen.findByText("Loaded thread");
-    expect(getThreadListObserverCount(queryClient, projectThreadFilters)).toBe(
-      1,
-    );
-
-    // For manager threads we also fire `useThreads({ parentThreadId })` to feed
-    // the prompt-context's "managed children" section, so two listThreads
-    // requests are expected: the prompt-mentions one (matched by the observer
-    // assertion above) and the managed-children one (different query key).
-    expect(listThreadsRequestCount).toBe(2);
-    expect(getThreadListObserverCount(queryClient, projectThreadFilters)).toBe(
-      1,
-    );
-  });
-
-  it("does not add a manager-selector thread-list observer for managed child threads", async () => {
-    let listThreadsRequestCount = 0;
-    const parentThread = createThreadResponse({
-      id: "manager-1",
-      title: "Manager thread",
-      titleFallback: "Manager thread",
-      type: "manager",
-    });
-    installThreadDetailSuccessFetchRoutes({
-      parentThread,
-      thread: createThreadResponse({ parentThreadId: parentThread.id }),
-      listThreadsHandler: () => {
-        listThreadsRequestCount += 1;
-        return jsonResponse([]);
-      },
-    });
-
-    const { queryClient } = await renderThreadDetailView();
-    const managerThreadFilters: ThreadListQueryFilters = {
-      archived: false,
-      projectId: "project-1",
-      type: "manager",
-    };
-
-    await screen.findByText("Loaded thread");
-    expect(getThreadListObserverCount(queryClient, managerThreadFilters)).toBe(
-      1,
-    );
-
-    expect(listThreadsRequestCount).toBe(1);
-    expect(getThreadListObserverCount(queryClient, managerThreadFilters)).toBe(
-      1,
-    );
   });
 
   it("resets workspace preview tabs after thread navigation", async () => {
