@@ -1,9 +1,5 @@
-import {
-  useCallback,
-  useMemo,
-  useState,
-  type ComponentType,
-} from "react";
+import { useCallback, useMemo, useState } from "react";
+import type { IconName } from "@/components/ui";
 import { assertNever } from "@bb/core-ui";
 import type {
   PendingInteraction,
@@ -73,7 +69,7 @@ interface ThreadDetailPromptAreaProps {
   environmentBranchName?: string;
   environmentHostConnected?: boolean;
   environmentHostLabel?: string;
-  environmentIcon?: ComponentType<{ className?: string }>;
+  environmentIcon?: IconName;
   environmentLabel?: string;
   isEnvironmentActionPending: boolean;
   pendingInteractions: readonly PendingInteraction[];

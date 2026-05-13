@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, type CSSProperties, type ReactNode } from "react";
 import { FileTree } from "@pierre/trees/react";
-import { Loader2, Search, X } from "lucide-react";
-import { Button, EmptyState, Input } from "@/components/ui";
+import { Button, EmptyState, Icon, Input } from "@/components/ui";
 import { usePreferredTheme } from "@/hooks/useTheme";
 import type { ManagerStorageBrowserController } from "./useManagerStorageBrowser";
 
@@ -93,7 +92,7 @@ export function ManagerThreadStorageBrowser({
   } else if (isFilesLoading && loadedFiles.length === 0) {
     body = (
       <EmptyState
-        icon={Loader2}
+        icon="Spinner"
         message="Loading files..."
         iconClassName="animate-spin"
       />
@@ -118,7 +117,7 @@ export function ManagerThreadStorageBrowser({
       {isSearchOpen ? (
         <div className="flex h-7 shrink-0 items-center gap-2">
           <div className="relative min-w-0 flex-1">
-            <Search className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Icon name="Search" className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
             <Input
               ref={searchInputRef}
               aria-label="Search files"
@@ -142,7 +141,7 @@ export function ManagerThreadStorageBrowser({
             aria-label="Close search"
             onClick={closeSearch}
           >
-            <X className="size-3.5" />
+            <Icon name="X" className="size-3.5" />
           </Button>
         </div>
       ) : null}

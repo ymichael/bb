@@ -1,6 +1,5 @@
-import { CornerDownRight, Pencil, Trash2 } from "lucide-react";
 import type { ThreadQueuedMessage } from "@bb/domain";
-import { Button } from "@/components/ui";
+import { Button, Icon } from "@/components/ui";
 import { PromptStackCard } from "@/components/promptbox/banner/PromptStackCard";
 import {
   countQueuedMessageAttachments,
@@ -49,7 +48,7 @@ export function QueuedMessagesList({
             <li key={queuedMessage.id} className="px-2.5 py-0.5">
               <div className="flex items-center gap-1.5">
                 <div className="p-0.5 text-muted-foreground">
-                  <CornerDownRight className="size-3.5" />
+                  <Icon name="CornerDownRight" className="size-3.5" />
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex min-w-0 items-center gap-1 text-xs leading-4">
@@ -104,7 +103,7 @@ export function QueuedMessagesList({
                     aria-label={`Edit queued message ${index + 1}`}
                     title="Edit queued message"
                   >
-                    <Pencil className="size-3.5" />
+                    <Icon name="Edit" className="size-3.5" />
                   </Button>
                   <Button
                     type="button"
@@ -116,7 +115,7 @@ export function QueuedMessagesList({
                     aria-label={`Delete queued message ${index + 1}`}
                     title="Delete queued message"
                   >
-                    <Trash2 className="size-3.5" />
+                    <Icon name="Trash2" className="size-3.5" />
                   </Button>
                 </div>
               </div>

@@ -39,7 +39,7 @@ import { useHostDaemon } from "@/hooks/useHostDaemon";
 import { useLocalOpenTargets } from "@/hooks/useLocalOpenTargets";
 import { useConnectionAwareQueryState } from "@/hooks/queries/connection-aware-query-state";
 import { useEffectiveHost } from "@/hooks/queries/effective-hosts";
-import { getEnvironmentWorkspaceLabelIcon } from "@/lib/environment-workspace-display";
+import { getEnvironmentWorkspaceLabelIconName } from "@/lib/environment-workspace-display";
 import { useStandardManagerTimelinePreference } from "@/lib/manager-timeline-view-preference";
 import { getGitStatusDisplay } from "@/components/workspace/workspace-status";
 import { selectWorkspaceChangedFilesSection } from "@/components/workspace/workspace-change-summary";
@@ -588,7 +588,7 @@ export function ThreadDetailView() {
       })
     : undefined;
   const threadEnvironmentIcon = threadEnvironmentDisplay
-    ? getEnvironmentWorkspaceLabelIcon(
+    ? getEnvironmentWorkspaceLabelIconName(
         threadEnvironmentDisplay.workspaceDisplayKind,
       )
     : null;

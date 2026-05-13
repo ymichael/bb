@@ -1,13 +1,3 @@
-import {
-  Archive,
-  Check,
-  ChevronDown,
-  CircleDashed,
-  FileDiff,
-  ListTodo,
-  Square,
-  UserRound,
-} from "lucide-react";
 import { type ReactNode } from "react";
 import { NavLink } from "react-router-dom";
 import type {
@@ -28,6 +18,7 @@ import {
   type WorkspaceChangedFilesSection,
 } from "@/components/workspace/workspace-change-summary";
 import { cn } from "@/lib/utils";
+import { Icon } from "@/components/ui";
 
 export interface ContextBannerMergeBaseConfig {
   branch: string;
@@ -198,7 +189,7 @@ function renderTodoCounts(
  */
 function ManagedChildIcon({ className }: { className?: string }) {
   return (
-    <ChevronDown
+    <Icon name="ChevronDown"
       className={cn("size-3.5 shrink-0 rotate-45", className)}
       aria-hidden="true"
     />
@@ -244,7 +235,7 @@ function SectionToggleButton({
       {label !== null && label !== undefined ? (
         <span className="min-w-0 truncate">{label}</span>
       ) : null}
-      <ChevronDown
+      <Icon name="ChevronDown"
         className={cn(
           "size-3.5 shrink-0 text-muted-foreground/70 transition-transform duration-200",
           isExpanded && "rotate-180",
@@ -264,22 +255,22 @@ function TodoStatusIcon({
   switch (status) {
     case "in_progress":
       return (
-        <Square
-          className={cn(className, "text-muted-foreground/30")}
-          fill="currentColor"
+        <Icon
+          name="Square"
+          className={cn(className, "fill-current text-muted-foreground/30")}
           aria-hidden="true"
         />
       );
     case "completed":
       return (
-        <Check
+        <Icon name="Check"
           className={cn(className, "text-muted-foreground/60")}
           aria-hidden="true"
         />
       );
     case "pending":
       return (
-        <Square
+        <Icon name="Square"
           className={cn(className, "text-muted-foreground/45")}
           aria-hidden="true"
         />
@@ -430,7 +421,7 @@ export function ThreadPromptContextBanner({
               controlsId={SECTION_IDS.managedBy.body}
               ariaLabel={`Managed by ${managedBySection.managerName}`}
               icon={
-                <UserRound className="size-3.5 shrink-0" aria-hidden="true" />
+                <Icon name="UserRound" className="size-3.5 shrink-0" aria-hidden="true" />
               }
               label={null}
               isExpanded={isManagedByExpandedInArchived}
@@ -438,7 +429,7 @@ export function ThreadPromptContextBanner({
             />
           ) : null}
           <div className="flex min-w-0 items-center gap-1.5 px-1 py-0.5">
-            <Archive className="size-3.5 shrink-0" aria-hidden="true" />
+            <Icon name="Archive" className="size-3.5 shrink-0" aria-hidden="true" />
             <span className="min-w-0 truncate">Thread is archived</span>
           </div>
         </div>
@@ -507,7 +498,7 @@ export function ThreadPromptContextBanner({
       <div className="flex items-center gap-0.5 px-2 py-1 text-xs text-muted-foreground">
         {showManagedBy && managedBySection && isManagedByOnly ? (
           <div className="flex min-w-0 items-center gap-1.5 px-1 py-0.5">
-            <UserRound className="size-3.5 shrink-0" aria-hidden="true" />
+            <Icon name="UserRound" className="size-3.5 shrink-0" aria-hidden="true" />
             <span className="min-w-0 truncate">
               Managed by{" "}
               <NavLink
@@ -525,7 +516,7 @@ export function ThreadPromptContextBanner({
             controlsId={SECTION_IDS.managedBy.body}
             ariaLabel={`Managed by ${managedBySection.managerName}`}
             icon={
-              <UserRound className="size-3.5 shrink-0" aria-hidden="true" />
+              <Icon name="UserRound" className="size-3.5 shrink-0" aria-hidden="true" />
             }
             label={null}
             isExpanded={isManagedByExpanded}
@@ -537,7 +528,7 @@ export function ThreadPromptContextBanner({
             id={SECTION_IDS.managerChildren.toggle}
             controlsId={SECTION_IDS.managerChildren.body}
             icon={
-              <CircleDashed
+              <Icon name="CircleDashed"
                 className="size-3.5 shrink-0 animate-spin"
                 aria-hidden="true"
               />
@@ -553,7 +544,7 @@ export function ThreadPromptContextBanner({
           <SectionToggleButton
             id={SECTION_IDS.todos.toggle}
             controlsId={SECTION_IDS.todos.body}
-            icon={<ListTodo className="size-3.5 shrink-0" aria-hidden="true" />}
+            icon={<Icon name="ListTodo" className="size-3.5 shrink-0" aria-hidden="true" />}
             label={renderTodoCounts(todoItems)}
             isExpanded={isTodoExpanded}
             onToggle={() => onToggleSection("todos")}
@@ -563,7 +554,7 @@ export function ThreadPromptContextBanner({
           <SectionToggleButton
             id={SECTION_IDS.git.toggle}
             controlsId={SECTION_IDS.git.body}
-            icon={<FileDiff className="size-3.5 shrink-0" aria-hidden="true" />}
+            icon={<Icon name="FileDiff" className="size-3.5 shrink-0" aria-hidden="true" />}
             label={gitSummary}
             isExpanded={isGitExpanded}
             onToggle={() => onToggleSection("git")}

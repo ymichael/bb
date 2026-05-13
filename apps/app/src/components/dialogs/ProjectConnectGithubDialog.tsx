@@ -1,12 +1,5 @@
-import { Loader2 } from "lucide-react";
 import type { GithubRepoInfo } from "@bb/server-contract";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Icon } from "@/components/ui";
 import { Input } from "@/components/ui";
 
 interface ProjectConnectGithubDialogProps {
@@ -69,13 +62,13 @@ export function ProjectConnectGithubDialogContent({
           onChange={(event) => onSearchChange(event.target.value)}
         />
         {isFetching && !isLoading ? (
-          <Loader2 className="absolute right-2.5 top-1/2 size-4 -translate-y-1/2 animate-spin text-muted-foreground" />
+          <Icon name="Spinner" className="absolute right-2.5 top-1/2 size-4 -translate-y-1/2 animate-spin text-muted-foreground" />
         ) : null}
       </div>
       <div className="max-h-64 overflow-y-auto">
         {isLoading ? (
           <div className="flex items-center justify-center py-8">
-            <Loader2 className="size-5 animate-spin text-muted-foreground" />
+            <Icon name="Spinner" className="size-5 animate-spin text-muted-foreground" />
           </div>
         ) : repos.length === 0 ? (
           <p className="py-4 text-center text-sm text-muted-foreground">

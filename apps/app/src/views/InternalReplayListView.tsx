@@ -1,8 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronRight, Info, LoaderCircle, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { DetailCard, DetailRow, Pill } from "@/components/ui";
+import { DetailCard, DetailRow, Icon, Pill } from "@/components/ui";
 import type { ReplayRunSpeed } from "@bb/server-contract";
 import { PageShell } from "@/components/ui";
 import { Button } from "@/components/ui";
@@ -83,7 +82,7 @@ export function InternalReplayListView() {
     <PageShell contentClassName="pt-4 md:pt-5">
       <div className="mx-auto w-full max-w-3xl space-y-4">
         <div className="flex items-start gap-2 rounded-md border border-border/70 bg-muted/20 px-3 py-2 text-sm text-muted-foreground">
-          <Info className="mt-0.5 size-4 shrink-0" />
+          <Icon name="Info" className="mt-0.5 size-4 shrink-0" />
           <p className="m-0">
             Replay previously captured conversations in a fresh thread. To
             record new captures, create threads with{" "}
@@ -133,7 +132,7 @@ export function InternalReplayListView() {
                 content: (
                   <>
                     {isStarting ? (
-                      <LoaderCircle className="size-3 animate-spin" />
+                      <Icon name="Spinner" className="size-3 animate-spin" />
                     ) : null}
                     Replay
                   </>
@@ -159,7 +158,7 @@ export function InternalReplayListView() {
                       aria-expanded={isExpanded}
                       className="flex min-w-0 flex-1 items-center gap-2 text-left"
                     >
-                      <ChevronRight
+                      <Icon name="ChevronRight"
                         className={cn(
                           "size-3 shrink-0 text-muted-foreground transition-transform",
                           isExpanded && "rotate-90",
@@ -210,9 +209,9 @@ export function InternalReplayListView() {
                       className="size-6"
                     >
                       {isDeleting ? (
-                        <LoaderCircle className="size-3 animate-spin" />
+                        <Icon name="Spinner" className="size-3 animate-spin" />
                       ) : (
-                        <Trash2 className="size-3" />
+                        <Icon name="Trash2" className="size-3" />
                       )}
                     </Button>
                   </div>

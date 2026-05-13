@@ -1,6 +1,5 @@
 import type { ComponentType, ReactNode } from "react";
-import { Check, ChevronDown } from "lucide-react";
-import { Button } from "@/components/ui";
+import { Button, Icon } from "@/components/ui";
 import { COARSE_POINTER_ICON_SIZE_CLASS } from "@/components/ui";
 import {
   DropdownMenu,
@@ -37,6 +36,8 @@ interface OptionDisplayProps {
   value: ReactNode;
   tone?: "default" | "warning";
   icon?: ComponentType<{ className?: string }>;
+  /** Pre-rendered leading element (e.g. an Icon). Takes precedence over `icon`. */
+  leading?: ReactNode;
   className?: string;
   title?: string;
   /** Render with the dim, hover-to-foreground treatment used inside the prompt box. */
@@ -64,7 +65,8 @@ export function OptionDisplay({
   label,
   value,
   tone = "default",
-  icon: Icon,
+  icon: BrandIcon,
+  leading,
   className,
   title,
   muted,
@@ -84,7 +86,7 @@ export function OptionDisplay({
       )}
     >
       <span className={OPTION_CONTENT_CLASS_NAME}>
-        {Icon ? <Icon className="size-4 shrink-0" /> : null}
+        {leading ?? (BrandIcon ? <BrandIcon className="size-4 shrink-0" /> : null)}
         <span className="sr-only">{label}: </span>
         <span className="truncate">{value}</span>
       </span>
@@ -136,7 +138,7 @@ export function OptionPicker<T extends string>({
             ) : null}
             <span className="truncate">{selectedLabel}</span>
           </span>
-          <ChevronDown
+          <Icon name="ChevronDown"
             className={cn(
               "size-3.5",
               selectedIsWarning
@@ -180,7 +182,7 @@ export function OptionPicker<T extends string>({
                   ) : null}
                 </span>
               </span>
-              <Check
+              <Icon name="Check"
                 className={cn(
                   COARSE_POINTER_ICON_SIZE_CLASS,
                   option.value === value ? "opacity-100" : "opacity-0",

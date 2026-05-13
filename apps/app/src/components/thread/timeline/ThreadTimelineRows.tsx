@@ -8,7 +8,6 @@ import {
   useRef,
 } from "react";
 import type { ReactNode } from "react";
-import { RotateCcw } from "lucide-react";
 import type { ThreadRuntimeDisplayStatus } from "@bb/domain";
 import type { TimelineRow, TimelineTurnRow } from "@bb/server-contract";
 import {
@@ -50,6 +49,7 @@ import { WorkRowBody } from "./TimelineRowDetails.js";
 import { TimelineDetailScroll } from "./TimelineDetailScroll.js";
 import { Button } from "../../ui/button.js";
 import { AutoHeightContainer } from "../../ui/height-transition.js";
+import { Icon } from "@/components/ui";
 import {
   joinSignatureParts,
   timelineRowRenderSignature,
@@ -785,7 +785,7 @@ function TurnRowBody({ compactActivityIntents, row }: TurnRowBodyProps) {
           onClick={handleRetry}
           className="h-7 border-destructive/30 px-2 text-destructive hover:text-destructive"
         >
-          <RotateCcw />
+          <Icon name="RotateCcw" />
           Retry
         </Button>
       </div>

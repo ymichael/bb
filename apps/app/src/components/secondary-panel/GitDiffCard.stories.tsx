@@ -51,13 +51,7 @@ const PROJECT_ROW_TSX = `import {
   memo,
   useMemo,
 } from "react";
-import { ChevronRight } from "lucide-react";
-import {
-  Sidebar,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  SidebarMenuSkeleton,
-} from "@/components/ui";
+import { Icon, Sidebar, SidebarMenuButton, SidebarMenuItem, SidebarMenuSkeleton } from "@/components/ui";
 import { useThreadList } from "@/hooks/queries/thread-queries";
 import type { Project } from "@bb/domain";
 import { ThreadRow } from "./ThreadRow";
@@ -118,7 +112,7 @@ function ProjectRowComponent({
         aria-expanded={!isCollapsed}
         aria-label={\`\${isCollapsed ? "Expand" : "Collapse"} \${project.name}\`}
       >
-        <ChevronRight
+        <Icon name="ChevronRight"
           className={
             isCollapsed
               ? "size-3.5 shrink-0 transition-transform"
@@ -153,7 +147,6 @@ ProjectRow.displayName = "ProjectRow";
 `;
 
 const THREAD_ROW_TSX = `import { memo, useMemo } from "react";
-import { Loader2 } from "lucide-react";
 import {
   Pill,
   SidebarMenuButton,
@@ -161,7 +154,7 @@ import {
   StatusPill,
 } from "@/components/ui";
 import { cn } from "@/lib/utils";
-import { getEnvironmentWorkspaceDisplayIcon } from "@/lib/environment-workspace-display";
+import { getEnvironmentWorkspaceDisplayIconName } from "@/lib/environment-workspace-display";
 import type { ThreadListEntry } from "@bb/server-contract";
 
 export interface ThreadRowProps {
@@ -204,7 +197,7 @@ function ThreadRowComponent({
   const managedChildBusyCount = managerOptions?.managedChildBusyCount ?? 0;
   const isManagerBusy =
     isManager && (threadIsBusy || managedChildBusyCount > 0);
-  const EnvironmentIcon = getEnvironmentWorkspaceDisplayIcon(
+  const environmentIcon = getEnvironmentWorkspaceDisplayIconName(
     thread.environmentWorkspaceDisplayKind,
   );
   const isPromoted = thread.archivedAt === null && thread.parentThreadId !== null;
@@ -221,9 +214,14 @@ function ThreadRowComponent({
         className="text-sm text-sidebar-foreground"
       >
         {isManagerBusy ? (
-          <Loader2 className="size-3 shrink-0 animate-spin text-muted-foreground" />
+          <Icon name="Spinner" className="size-3 shrink-0 animate-spin text-muted-foreground" />
         ) : (
-          <EnvironmentIcon className="size-3 shrink-0 text-muted-foreground" />
+          environmentIcon ? (
+            <Icon
+              name={environmentIcon}
+              className="size-3 shrink-0 text-muted-foreground"
+            />
+          ) : null
         )}
         <span className="flex min-w-0 flex-1 items-center gap-1.5">
           <span className="truncate">{titleText}</span>

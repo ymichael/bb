@@ -14,23 +14,11 @@ import {
   type ReactNode,
   type Ref,
 } from "react";
-import {
-  ArrowUp,
-  AudioLines,
-  CornerDownLeft,
-  Loader2,
-  Maximize2,
-  Mic,
-  Minimize2,
-  Paperclip,
-  Square,
-  X,
-} from "lucide-react";
 import type {
   MentionMenuState,
   PromptMentionSuggestion,
 } from "@/components/promptbox/mentions/types";
-import { Button } from "@/components/ui";
+import { Button, Icon } from "@/components/ui";
 import {
   COARSE_POINTER_PROMPT_ACTION_BUTTON_CLASS,
   COARSE_POINTER_PROMPT_COMBO_BUTTON_CLASS,
@@ -859,9 +847,9 @@ export function PromptBoxInternal({
         className="absolute right-2 top-2 z-20 size-auto h-6 px-1.5 text-muted-foreground/40 hover:text-muted-foreground"
       >
         {isZenMode ? (
-          <Minimize2 className="size-3" />
+          <Icon name="Minimize2" className="size-3" />
         ) : (
-          <Maximize2 className="size-3" />
+          <Icon name="Maximize2" className="size-3" />
         )}
       </Button>
       <input
@@ -997,9 +985,9 @@ export function PromptBoxInternal({
             className={COARSE_POINTER_PROMPT_ICON_ACTION_BUTTON_CLASS}
           >
             {isAttaching ? (
-              <Loader2 className="size-4 animate-spin" />
+              <Icon name="Spinner" className="size-4 animate-spin" />
             ) : (
-              <Paperclip className="size-4" />
+              <Icon name="Paperclip" className="size-4" />
             )}
           </Button>
           {voice && !showVoiceActionGroup ? (
@@ -1016,7 +1004,7 @@ export function PromptBoxInternal({
               onClick={voice.start}
               className={COARSE_POINTER_PROMPT_ICON_ACTION_BUTTON_CLASS}
             >
-              <Mic className="size-4" />
+              <Icon name="Mic" className="size-4" />
             </Button>
           ) : null}
           {showStop ? (
@@ -1028,10 +1016,9 @@ export function PromptBoxInternal({
               onClick={onStop}
               className={COARSE_POINTER_PROMPT_ICON_ACTION_BUTTON_CLASS}
             >
-              <Square
-                className="size-3.5"
-                fill="currentColor"
-                strokeWidth={0}
+              <Icon
+                name="Square"
+                className="size-3.5 fill-current [&_*]:stroke-0"
               />
             </Button>
           ) : voice && isVoiceRecording ? (
@@ -1047,7 +1034,7 @@ export function PromptBoxInternal({
                   COARSE_POINTER_PROMPT_ACTION_BUTTON_CLASS,
                 )}
               >
-                <AudioLines className="size-4 animate-pulse" />
+                <Icon name="AudioLines" className="size-4 animate-pulse" />
               </Button>
               <Button
                 type="button"
@@ -1057,7 +1044,7 @@ export function PromptBoxInternal({
                 onClick={voice.cancel}
                 className={COARSE_POINTER_PROMPT_COMBO_BUTTON_CLASS}
               >
-                <X className="size-3.5" />
+                <Icon name="X" className="size-3.5" />
               </Button>
             </div>
           ) : voice && isVoiceProcessing ? (
@@ -1073,8 +1060,8 @@ export function PromptBoxInternal({
                   COARSE_POINTER_PROMPT_ACTION_BUTTON_CLASS,
                 )}
               >
-                <AudioLines className="size-4" />
-                <Loader2 className="size-4 animate-spin" />
+                <Icon name="AudioLines" className="size-4" />
+                <Icon name="Spinner" className="size-4 animate-spin" />
               </Button>
               <Button
                 type="button"
@@ -1084,7 +1071,7 @@ export function PromptBoxInternal({
                 onClick={voice.cancel}
                 className={COARSE_POINTER_PROMPT_COMBO_BUTTON_CLASS}
               >
-                <X className="size-3.5" />
+                <Icon name="X" className="size-3.5" />
               </Button>
             </div>
           ) : (
@@ -1097,11 +1084,11 @@ export function PromptBoxInternal({
               className={COARSE_POINTER_PROMPT_ACTION_BUTTON_CLASS}
             >
               {isSubmitting ? (
-                <Loader2 className="size-4 animate-spin" />
+                <Icon name="Spinner" className="size-4 animate-spin" />
               ) : isZenMode ? (
-                <ArrowUp className="size-4" />
+                <Icon name="ArrowUp" className="size-4" />
               ) : (
-                <CornerDownLeft className="size-4" />
+                <Icon name="CornerDownLeft" className="size-4" />
               )}
             </Button>
           )}

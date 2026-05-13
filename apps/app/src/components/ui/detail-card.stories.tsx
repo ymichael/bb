@@ -1,4 +1,3 @@
-import { Copy, X } from "lucide-react";
 import type { Host } from "@bb/domain";
 import { Button } from "./button";
 import { DetailCard, DetailRow } from "./detail-card";
@@ -13,6 +12,7 @@ import {
   type WorkspaceChangedFile,
 } from "../thread/WorkspaceChangesList";
 import { StoryCard, StoryRow } from "../../../.ladle/story-card";
+import { Icon } from "@/components/ui";
 
 export default {
   title: "ui/Detail Card",
@@ -78,7 +78,7 @@ export function Overview() {
                 aria-label="Unassign manager"
                 onClick={noop}
               >
-                <X />
+                <Icon name="X" />
               </Button>
             </div>
           </DetailRow>
@@ -103,7 +103,7 @@ export function Overview() {
               <span className="truncate">
                 bb/implement-server-daemon-protocol-simplification-thr_qfk8ksbxkk
               </span>
-              <Copy className="size-3.5 shrink-0 text-muted-foreground" />
+              <Icon name="Copy" className="size-3.5 shrink-0 text-muted-foreground" />
             </button>
           </DetailRow>
           <DetailRow label="Merge base" valueClassName="min-w-0 truncate">

@@ -1,6 +1,5 @@
-import { Check, ChevronDown } from "lucide-react";
 import type { Host } from "@bb/domain";
-import { LocalhostBadge } from "@/components/ui";
+import { Icon, LocalhostBadge } from "@/components/ui";
 import { Button } from "@/components/ui";
 import { COARSE_POINTER_ICON_SIZE_SHRINK_CLASS } from "@/components/ui";
 import {
@@ -10,7 +9,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui";
 import { HostStatusBadge } from "@/components/HostStatusIndicator";
-import { getHostIcon } from "@/lib/host-display";
+import { getHostIconName } from "@/lib/host-display";
 import { cn } from "@/lib/utils";
 import {
   OPTION_BASE_CLASS_NAME,
@@ -43,7 +42,7 @@ export function HostPicker({
   const isLocal = selectedHost ? isLocalHost(selectedHost.id) : false;
   const label = selectedHost?.name ?? "Select host";
   const isConnected = selectedHost?.status === "connected";
-  const SelectedHostIcon = getHostIcon(selectedHost);
+  const selectedHostIcon = getHostIconName(selectedHost);
 
   return (
     <DropdownMenu defaultOpen={defaultOpen} modal={modal}>
@@ -57,18 +56,18 @@ export function HostPicker({
           className={cn(OPTION_BASE_CLASS_NAME, OPTION_INTERACTIVE_CLASS_NAME)}
         >
           <span className={OPTION_CONTENT_CLASS_NAME}>
-            <SelectedHostIcon className="size-3.5 shrink-0" />
+            <Icon name={selectedHostIcon} className="size-3.5 shrink-0" />
             <span className="truncate">{label}</span>
             {isLocal ? <LocalhostBadge /> : null}
             {selectedHost ? <HostStatusBadge connected={isConnected} /> : null}
           </span>
-          <ChevronDown className="size-3.5 text-muted-foreground" />
+          <Icon name="ChevronDown" className="size-3.5 text-muted-foreground" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="min-w-44 max-w-80">
         {eligibleHosts.length > 0 ? (
           eligibleHosts.map((host) => {
-            const HostIcon = getHostIcon(host);
+            const hostIcon = getHostIconName(host);
             return (
             <DropdownMenuItem
               key={host.id}
@@ -76,12 +75,12 @@ export function HostPicker({
               className="flex items-center justify-between gap-3"
             >
               <span className="flex min-w-0 items-center gap-2 text-xs">
-                <HostIcon className="size-3.5 shrink-0" />
+                <Icon name={hostIcon} className="size-3.5 shrink-0" />
                 <span className="truncate">{host.name}</span>
                 {isLocalHost(host.id) ? <LocalhostBadge /> : null}
                 <HostStatusBadge connected={host.status === "connected"} />
               </span>
-              <Check
+              <Icon name="Check"
                 className={cn(
                   COARSE_POINTER_ICON_SIZE_SHRINK_CLASS,
                   host.id === selectedHostId ? "opacity-100" : "opacity-0",

@@ -1,10 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { useAtomValue } from "jotai";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Check, ChevronDown, MoreHorizontal } from "lucide-react";
 import { timeAgo } from "@bb/core-ui";
 import type { CloudAuthProviderId } from "@bb/agent-providers";
-import { Button } from "@/components/ui";
+import { Button, Icon } from "@/components/ui";
 import { COARSE_POINTER_ICON_SIZE_CLASS } from "@/components/ui";
 import {
   DropdownMenu,
@@ -250,7 +249,7 @@ export function AppSettingsView() {
                   aria-label="Theme"
                 >
                   {THEME_PREFERENCE_LABELS[themePreference]}
-                  <ChevronDown className="size-3.5 text-muted-foreground" />
+                  <Icon name="ChevronDown" className="size-3.5 text-muted-foreground" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-48">
@@ -260,7 +259,7 @@ export function AppSettingsView() {
                     onSelect={() => setPreferredTheme(option.value)}
                   >
                     {option.label}
-                    <Check
+                    <Icon name="Check"
                       className={cn(
                         "ml-auto",
                         themePreference !== option.value && "opacity-0",
@@ -308,7 +307,7 @@ export function AppSettingsView() {
                           className="h-7 w-7 shrink-0"
                           aria-label="Host actions"
                         >
-                          <MoreHorizontal className="size-4" />
+                          <Icon name="MoreHorizontal" className="size-4" />
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="w-40">

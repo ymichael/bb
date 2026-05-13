@@ -1,14 +1,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { ChevronUp } from "lucide-react";
 import type { ActiveThinking, ThreadRuntimeDisplayStatus } from "@bb/domain";
 import type { TimelineRow, TimelineTurnRow } from "@bb/server-contract";
-import {
-  Button,
-  ConversationTimeline,
-  HeightTransition,
-  PageShell,
-  useBottomAnchoredScroll,
-} from "@/components/ui";
+import { Button, ConversationTimeline, HeightTransition, Icon, PageShell, useBottomAnchoredScroll } from "@/components/ui";
 import {
   ThreadTimelineRows,
   type ThreadTimelineLocalFileLinkHandler,
@@ -178,7 +171,7 @@ function LoadOlderMessagesButton({
         onClick={handleClick}
         disabled={isLoadingOlderTimelineRows}
       >
-        <ChevronUp aria-hidden="true" />
+        <Icon name="ChevronUp" aria-hidden="true" />
         {isLoadingOlderTimelineRows
           ? "Loading older messages..."
           : "Load older messages"}

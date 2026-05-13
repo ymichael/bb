@@ -1,7 +1,7 @@
 import { useEffect } from "react";
-import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import { Button } from "./button.js";
 import { Dialog, DialogClose, DialogContent, DialogTitle } from "./dialog.js";
+import { Icon } from "@/components/ui";
 
 export const imageLightboxKeyActionValues = [
   "close",
@@ -164,7 +164,7 @@ export function ImageLightbox({
               onClick={onPrevious}
               aria-label="Previous image"
             >
-              <ChevronLeft className="size-5" />
+              <Icon name="ChevronLeft" className="size-5" />
             </Button>
             <Button
               type="button"
@@ -174,7 +174,7 @@ export function ImageLightbox({
               onClick={onNext}
               aria-label="Next image"
             >
-              <ChevronRight className="size-5" />
+              <Icon name="ChevronRight" className="size-5" />
             </Button>
           </>
         ) : null}
@@ -187,7 +187,7 @@ export function ImageLightbox({
             className="absolute right-2 top-2 size-9 rounded-full bg-black/45 text-white hover:bg-black/60 hover:text-white"
             aria-label="Close image preview"
           >
-            <X className="size-5" />
+            <Icon name="X" className="size-5" />
           </Button>
         </DialogClose>
       </DialogContent>

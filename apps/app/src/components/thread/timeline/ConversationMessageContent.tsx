@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
-import { CornerDownRight } from "lucide-react";
 import type {
   TimelineConversationAttachments,
   TimelineConversationRow,
@@ -11,6 +10,7 @@ import { CopyButton } from "../../ui/copy-button.js";
 import { cn } from "@/lib/utils";
 import { buildProjectAttachmentContentUrl } from "@/lib/file-content-urls";
 import { MarkdownPreview } from "../../ui/markdown-preview.js";
+import { Icon } from "@/components/ui";
 import type {
   ThreadTimelineLocalFileLinkHandler,
   UserAttachmentImageSrcResolver,
@@ -415,7 +415,7 @@ function UserConversationMessage({
                   isPendingSteer && "animate-shine",
                 )}
               >
-                <CornerDownRight className="mr-1 inline-block size-3 align-middle" />
+                <Icon name="CornerDownRight" className="mr-1 inline-block size-3 align-middle" />
                 {requestLabel}
               </span>
             ) : null}

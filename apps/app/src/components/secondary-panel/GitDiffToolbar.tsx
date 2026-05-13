@@ -1,20 +1,4 @@
-import {
-  Check,
-  ChevronDown,
-  ChevronsDown,
-  ChevronsUp,
-  Columns2,
-  Loader2,
-  Rows2,
-} from "lucide-react";
-import {
-  Button,
-  COARSE_POINTER_COMPACT_ICON_SIZE_CLASS,
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui";
+import { Button, COARSE_POINTER_COMPACT_ICON_SIZE_CLASS, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, Icon } from "@/components/ui";
 import {
   formatChangeSummary,
   renderChangeSummary,
@@ -69,7 +53,7 @@ function GitDiffSelector({
             ) : null}
             <span className="truncate">{selectedLabel}</span>
           </span>
-          <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
+          <Icon name="ChevronDown" className="size-3.5 shrink-0 text-muted-foreground" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent
@@ -100,7 +84,7 @@ function GitDiffSelector({
               ) : null}
               <span className="truncate">{option.label}</span>
             </span>
-            <Check
+            <Icon name="Check"
               className={cn(
                 COARSE_POINTER_COMPACT_ICON_SIZE_CLASS,
                 option.value === value ? "opacity-100" : "opacity-0",
@@ -166,7 +150,7 @@ export function GitDiffToolbar({
         </span>
         {isParsing ? (
           <span className="inline-flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
-            <Loader2 className="size-3 animate-spin" />
+            <Icon name="Spinner" className="size-3 animate-spin" />
             Parsing
           </span>
         ) : null}
@@ -186,9 +170,9 @@ export function GitDiffToolbar({
             }
           >
             {areAllFilesCollapsed ? (
-              <ChevronsDown className="size-3.5" />
+              <Icon name="ChevronsDown" className="size-3.5" />
             ) : (
-              <ChevronsUp className="size-3.5" />
+              <Icon name="ChevronsUp" className="size-3.5" />
             )}
           </Button>
           <div
@@ -206,7 +190,7 @@ export function GitDiffToolbar({
               aria-pressed={displayMode === "unified"}
               title="Stacked diff view"
             >
-              <Rows2 className="size-3.5" />
+              <Icon name="Rows2" className="size-3.5" />
             </Button>
             <Button
               type="button"
@@ -218,7 +202,7 @@ export function GitDiffToolbar({
               aria-pressed={displayMode === "split"}
               title="Split diff view"
             >
-              <Columns2 className="size-3.5" />
+              <Icon name="Columns2" className="size-3.5" />
             </Button>
           </div>
         </div>

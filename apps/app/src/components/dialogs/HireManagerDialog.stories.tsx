@@ -1,11 +1,12 @@
 import { useState } from "react";
 import type { AvailableModel, Host, ProjectSource } from "@bb/domain";
-import type { SystemProviderInfo } from "@bb/server-contract";
+import type { ProjectResponse, SystemProviderInfo } from "@bb/server-contract";
 import { HireManagerDialogContent } from "./HireManagerDialog";
 import {
   HOST_IDS,
   HOST_NAMES,
   PROJECT_IDS,
+  makeProject,
 } from "../../../.ladle/story-fixtures";
 import { StoryCard, StoryRow } from "../../../.ladle/story-card";
 import { DialogStage } from "../../../.ladle/story-dialog-stage";
@@ -120,10 +121,14 @@ function ControlledHireManagerDialogContent(props: {
   projectSources: readonly ProjectSource[];
 }) {
   const [selectedProviderId, setSelectedProviderId] = useState("");
+  const projects: readonly ProjectResponse[] = [
+    makeProject({ sources: props.projectSources }),
+  ];
   return (
     <HireManagerDialogContent
-      projectId={PROJECT_IDS.bb}
-      projectSources={props.projectSources}
+      initialProjectId={PROJECT_IDS.bb}
+      projects={projects}
+      projectsAreLoaded
       providers={props.providers}
       providersAreLoaded={props.providersAreLoaded}
       hosts={props.hosts}

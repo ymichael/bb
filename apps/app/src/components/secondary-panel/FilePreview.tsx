@@ -1,8 +1,7 @@
 import { type CSSProperties, useMemo } from "react";
 import { File as PierreFile } from "@pierre/diffs/react";
 import type { SupportedLanguages } from "@pierre/diffs";
-import { FileQuestion, FileX2 } from "lucide-react";
-import { MarkdownPreview, Skeleton } from "@/components/ui";
+import { Icon, MarkdownPreview, Skeleton } from "@/components/ui";
 import { usePreferredTheme } from "@/hooks/useTheme";
 
 export interface FilePreviewFile {
@@ -113,13 +112,14 @@ function FilePreviewMessage({
   icon: "empty" | "missing" | null;
   message: string;
 }) {
-  const Icon = icon === "missing" ? FileX2 : icon === "empty" ? FileQuestion : null;
+  const iconName =
+    icon === "missing" ? "FileX2" : icon === "empty" ? "FileQuestion" : null;
   return (
     <div
       role={icon === "missing" ? "alert" : undefined}
       className="flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-border/70 bg-background/45 px-3 py-8 text-sm text-muted-foreground"
     >
-      {Icon ? <Icon className="size-3.5" /> : null}
+      {iconName ? <Icon name={iconName} className="size-3.5" /> : null}
       <span>{message}</span>
     </div>
   );

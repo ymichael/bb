@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { Check, Copy } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Icon } from "@/components/ui";
 
 interface CopyButtonProps {
   text: string;
@@ -53,9 +53,9 @@ export function CopyButton({
       title={label}
     >
       {copied ? (
-        <Check className={cn("size-3", iconClassName)} />
+        <Icon name="Check" className={cn("size-3", iconClassName)} />
       ) : (
-        <Copy className={cn("size-3", iconClassName)} />
+        <Icon name="Copy" className={cn("size-3", iconClassName)} />
       )}
     </button>
   );

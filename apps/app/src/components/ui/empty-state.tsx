@@ -1,9 +1,9 @@
-import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Icon, type IconName } from "./icon";
 
 export interface EmptyStateProps {
   message: string;
-  icon?: LucideIcon;
+  icon?: IconName;
   className?: string;
   iconClassName?: string;
   messageClassName?: string;
@@ -11,15 +11,16 @@ export interface EmptyStateProps {
 
 export function EmptyState({
   message,
-  icon: Icon,
+  icon,
   className,
   iconClassName,
   messageClassName,
 }: EmptyStateProps) {
   return (
     <div className={cn("flex items-center gap-2", className)}>
-      {Icon ? (
+      {icon ? (
         <Icon
+          name={icon}
           aria-hidden="true"
           className={cn(
             "size-4 shrink-0 text-muted-foreground/70",

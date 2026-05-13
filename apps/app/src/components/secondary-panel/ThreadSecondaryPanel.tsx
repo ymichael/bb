@@ -1,7 +1,6 @@
 import { type ReactNode, useMemo } from "react";
 import { useAtomValue } from "jotai";
-import { FileDiff as FileDiffIcon, Info, PanelRight, X } from "lucide-react";
-import { Skeleton } from "@/components/ui";
+import { Icon, Skeleton } from "@/components/ui";
 import { Panel, PanelResizeHandle } from "react-resizable-panels";
 import { Button } from "@/components/ui";
 import { cn } from "@/lib/utils";
@@ -112,7 +111,7 @@ export function ThreadSecondaryPanel({
 }: ThreadSecondaryPanelProps) {
   const activeFileTab = fileTabs?.find((tab) => tab.isActive);
   const hasActiveFileTab = activeFileTab !== undefined;
-  const TogglePanelIcon = renderAsDrawer ? X : PanelRight;
+  const togglePanelIconName = renderAsDrawer ? "X" : "PanelRight";
   const rawActivePanel = useActiveSecondaryPanel();
   const isOpen = useIsSecondaryPanelOpen();
   const {
@@ -202,7 +201,7 @@ export function ThreadSecondaryPanel({
               aria-pressed={activePanel === "thread-info" && !hasActiveFileTab}
               title="Info"
             >
-              <Info className="size-3.5" />
+              <Icon name="Info" className="size-3.5" />
             </Button>
             {showGitDiffTab !== false ? (
               <Button
@@ -215,7 +214,7 @@ export function ThreadSecondaryPanel({
                 aria-pressed={isDiffPanelActive && !hasActiveFileTab}
                 title="Diff"
               >
-                <FileDiffIcon className="size-3.5" />
+                <Icon name="FileDiff" className="size-3.5" />
               </Button>
             ) : null}
             {fileTabs && fileTabs.length > 0 ? (
@@ -235,7 +234,7 @@ export function ThreadSecondaryPanel({
             aria-label={renderAsDrawer ? "Close secondary panel" : "Hide secondary panel"}
             title={renderAsDrawer ? "Close secondary panel" : "Hide secondary panel"}
           >
-            <TogglePanelIcon className="size-3.5" />
+            <Icon name={togglePanelIconName} className="size-3.5" />
           </Button>
         </div>
         {isDiffPanelActive && !hasActiveFileTab ? (
@@ -405,7 +404,7 @@ function FileTabPill({ tab }: { tab: SecondaryPanelFileTab }) {
           title="Close tab"
           className="mr-1 ml-0.5 inline-flex size-4 shrink-0 items-center justify-center rounded opacity-70 transition-opacity hover:bg-muted-foreground/15 hover:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:opacity-100"
         >
-          <X className="size-3" />
+          <Icon name="X" className="size-3" />
         </button>
       )}
     </div>

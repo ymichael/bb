@@ -1,9 +1,8 @@
 import { useMemo } from "react";
 import type { ThreadListEntry } from "@bb/domain";
 import type { ProjectResponse } from "@bb/server-contract";
-import { AlertTriangle, ChevronRight, Folder, FolderOpen } from "lucide-react";
 import { NavLink } from "react-router-dom";
-import { EmptyState, SidebarStickyTier } from "@/components/ui";
+import { EmptyState, Icon, SidebarStickyTier } from "@/components/ui";
 import {
   ProjectActionsContextMenu,
   ProjectActionsMenu,
@@ -121,7 +120,7 @@ export function ProjectRow({
                 COARSE_POINTER_ICON_SIZE_CLASS,
               )}
             >
-              <ChevronRight
+              <Icon name="ChevronRight"
                 className={cn(
                   "absolute opacity-0 transition-all duration-150 group-hover/project-row:opacity-100",
                   COARSE_POINTER_ICON_SIZE_CLASS,
@@ -129,14 +128,14 @@ export function ProjectRow({
                 )}
               />
               {isCollapsed ? (
-                <Folder
+                <Icon name="Folder"
                   className={cn(
                     "absolute opacity-100 transition-opacity duration-150 group-hover/project-row:opacity-0",
                     COARSE_POINTER_ICON_SIZE_CLASS,
                   )}
                 />
               ) : (
-                <FolderOpen
+                <Icon name="FolderOpen"
                   className={cn(
                     "absolute opacity-100 transition-opacity duration-150 group-hover/project-row:opacity-0",
                     COARSE_POINTER_ICON_SIZE_CLASS,
@@ -162,7 +161,7 @@ export function ProjectRow({
                 COARSE_POINTER_ROW_ACTION_SIZE_CLASS,
               )}
             >
-              <AlertTriangle className={COARSE_POINTER_ICON_SIZE_CLASS} />
+              <Icon name="AlertTriangle" className={COARSE_POINTER_ICON_SIZE_CLASS} />
             </NavLink>
           ) : null}
           <ProjectActionsMenu

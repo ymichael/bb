@@ -1,6 +1,6 @@
-import { ArrowRight, Check, Plus } from "lucide-react";
 import { Button, type ButtonProps } from "./button";
 import { StoryCard, StoryRow } from "../../../.ladle/story-card";
+import { Icon } from "@/components/ui";
 
 export default {
   title: "ui/Button",
@@ -42,7 +42,7 @@ export function Overview() {
                 size={size}
                 aria-label={size === "icon" ? VARIANT_LABEL[variant] : undefined}
               >
-                {size === "icon" ? <Plus /> : VARIANT_LABEL[variant]}
+                {size === "icon" ? <Icon name="Plus" /> : VARIANT_LABEL[variant]}
               </Button>
             ))}
           </StoryRow>
@@ -51,12 +51,12 @@ export function Overview() {
       <StoryCard>
         <StoryRow label="with icons">
           <Button>
-            <Check />
+            <Icon name="Check" />
             Save changes
           </Button>
           <Button variant="outline" size="sm">
             Connect GitHub repo
-            <ArrowRight />
+            <Icon name="ArrowRight" />
           </Button>
         </StoryRow>
         <StoryRow label="disabled">

@@ -1,18 +1,6 @@
 import { useState, type FormEvent } from "react";
-import { AlertCircle, Loader2 } from "lucide-react";
 import { assertNever } from "@bb/core-ui";
-import {
-  Button,
-  DetailCard,
-  DetailRow,
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  FormError,
-} from "@/components/ui";
+import { Button, DetailCard, DetailRow, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, FormError, Icon } from "@/components/ui";
 import type { EnvironmentPromotionUnavailableReason } from "@bb/server-contract";
 import { getMutationErrorMessage } from "@/lib/mutation-errors";
 import { PROMOTION_UNAVAILABLE_COPY } from "@/lib/promotion-copy";
@@ -192,7 +180,7 @@ export function ThreadEnvironmentPromotionDialogContent({
             Cancel
           </Button>
           <Button type="submit" disabled={submitDisabled}>
-            {pending ? <Loader2 className="size-4 animate-spin" /> : null}
+            {pending ? <Icon name="Spinner" className="size-4 animate-spin" /> : null}
             {dialogCopy.submitLabel}
           </Button>
         </DialogFooter>
@@ -208,7 +196,7 @@ function PromotionDialogIssues({
   return (
     <div className="rounded-md border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-foreground">
       <div className="flex items-center gap-2 font-medium">
-        <AlertCircle className="size-4 text-warning" />
+        <Icon name="AlertCircle" className="size-4 text-warning" />
         Resolve before continuing
       </div>
       <ul className="mt-2 ml-6 list-disc space-y-1 text-muted-foreground">

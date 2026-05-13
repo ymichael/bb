@@ -1,18 +1,13 @@
 import { memo, useState } from "react";
 import type { ThreadListEntry } from "@bb/domain";
 import {
+  Icon,
+  type IconName,
   Pill,
   SidebarMenuBadge,
   SidebarStickyTier,
   StatusPill,
 } from "@/components/ui";
-import {
-  ChevronDown,
-  ChevronRight,
-  CircleDashed,
-  type LucideIcon,
-  UserRound,
-} from "lucide-react";
 import { NavLink } from "react-router-dom";
 import {
   ThreadActionsContextMenu,
@@ -27,8 +22,8 @@ import {
   COARSE_POINTER_ROW_HEIGHT_CLASS,
 } from "@/components/ui";
 import {
-  getEnvironmentWorkspaceDisplayIcon,
   getEnvironmentWorkspaceDisplayIconLabel,
+  getEnvironmentWorkspaceDisplayIconName,
 } from "@/lib/environment-workspace-display";
 import { isBusyThread, isUnreadDoneThread } from "@/lib/thread-activity";
 import { getThreadDisplayTitle } from "@/lib/thread-title";
@@ -118,7 +113,8 @@ function ManagerChevron({
         )}
       >
         {isBusy ? (
-          <CircleDashed
+          <Icon
+            name="CircleDashed"
             className={cn(
               "absolute animate-spin opacity-100 transition-opacity duration-150 group-hover/thread-row:opacity-0",
               COARSE_POINTER_ICON_SIZE_CLASS,
@@ -126,7 +122,8 @@ function ManagerChevron({
             aria-hidden="true"
           />
         ) : null}
-        <ChevronRight
+        <Icon
+          name="ChevronRight"
           className={cn(
             "absolute transition-all duration-150",
             COARSE_POINTER_ICON_SIZE_CLASS,
@@ -159,7 +156,8 @@ function ManagedChildChevron({
           showUnreadBadge={showUnreadBadge}
         />
       ) : (
-        <ChevronDown
+        <Icon
+          name="ChevronDown"
           aria-hidden="true"
           className={cn("rotate-45", COARSE_POINTER_ICON_SIZE_CLASS)}
         />
@@ -194,7 +192,8 @@ function ThreadStatusGlyph({
 
   if (isBusy) {
     return (
-      <CircleDashed
+      <Icon
+        name="CircleDashed"
         className={cn(
           "animate-spin text-sidebar-foreground/70",
           COARSE_POINTER_ICON_SIZE_CLASS,
@@ -234,13 +233,14 @@ function ThreadLeadingStatusSlot({
 }
 
 function ThreadTrailingIcon({
-  environmentIcon: EnvironmentIcon,
+  environmentIcon,
   environmentIconLabel,
   isManager,
 }: ThreadTrailingIconProps) {
   if (isManager) {
     return (
-      <UserRound
+      <Icon
+        name="UserRound"
         className={cn(
           "text-sidebar-foreground/70",
           COARSE_POINTER_ICON_SIZE_CLASS,
@@ -250,8 +250,9 @@ function ThreadTrailingIcon({
     );
   }
 
-  return EnvironmentIcon ? (
-    <EnvironmentIcon
+  return environmentIcon ? (
+    <Icon
+      name={environmentIcon}
       className={cn(
         "text-sidebar-foreground/70",
         COARSE_POINTER_ICON_SIZE_CLASS,
@@ -262,7 +263,7 @@ function ThreadTrailingIcon({
 }
 
 interface ThreadTrailingIconProps {
-  environmentIcon: LucideIcon | null;
+  environmentIcon: IconName | null;
   environmentIconLabel: string | null;
   isManager: boolean;
 }
@@ -291,7 +292,7 @@ function ThreadRowComponent({
   const isManagerBusy =
     isManager &&
     (threadIsBusy || (isManagerCollapsed && managedChildBusyCount > 0));
-  const EnvironmentIcon = getEnvironmentWorkspaceDisplayIcon(
+  const environmentIcon = getEnvironmentWorkspaceDisplayIconName(
     thread.environmentWorkspaceDisplayKind,
   );
   const environmentIconLabel = getEnvironmentWorkspaceDisplayIconLabel(
@@ -391,7 +392,7 @@ function ThreadRowComponent({
             )}
           >
             <ThreadTrailingIcon
-              environmentIcon={EnvironmentIcon}
+              environmentIcon={environmentIcon}
               environmentIconLabel={environmentIconLabel}
               isManager={isManager}
             />

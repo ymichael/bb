@@ -1,6 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import { Check, ChevronDown, Zap } from "lucide-react";
-import { Button } from "@/components/ui";
+import { Button, Icon } from "@/components/ui";
 import {
   COARSE_POINTER_ICON_SIZE_CLASS,
   COARSE_POINTER_ICON_SIZE_SHRINK_CLASS,
@@ -164,11 +163,11 @@ export function ProviderModelPicker({
           <span className={OPTION_CONTENT_CLASS_NAME}>
             {TriggerIcon ? <TriggerIcon className="size-3.5 shrink-0" /> : null}
             {fastModeEnabled ? (
-              <Zap className="size-3.5 shrink-0 fill-current text-muted-foreground/75" />
+              <Icon name="Zap" className="size-3.5 shrink-0 fill-current text-muted-foreground/75" />
             ) : null}
             <span className="truncate">{selectedModelLabel}</span>
           </span>
-          <ChevronDown className="size-3.5 text-muted-foreground" />
+          <Icon name="ChevronDown" className="size-3.5 text-muted-foreground" />
         </Button>
       </PopoverTrigger>
       <PopoverContent
@@ -257,7 +256,7 @@ export function ProviderModelPicker({
                 <span className="truncate" title={option.label}>
                   {option.label}
                 </span>
-                <Check
+                <Icon name="Check"
                   className={cn(
                     COARSE_POINTER_ICON_SIZE_SHRINK_CLASS,
                     !isPreviewing && option.value === modelValue
@@ -286,7 +285,7 @@ export function ProviderModelPicker({
             <div className="p-1">
               <div className="flex items-center justify-between gap-3 rounded-sm px-2 py-[0.3125rem] text-xs">
                 <span className="flex min-w-0 items-center gap-2">
-                  <Zap className="size-4 fill-current text-muted-foreground" />
+                  <Icon name="Zap" className="size-4 fill-current text-muted-foreground" />
                   <span>Fast mode</span>
                 </span>
                 <Switch

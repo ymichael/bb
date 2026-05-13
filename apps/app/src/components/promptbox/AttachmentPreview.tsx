@@ -1,6 +1,5 @@
 import { useEffect } from "react";
-import { X } from "lucide-react";
-import { ImageLightbox, getWrappedImageIndex } from "@/components/ui";
+import { getWrappedImageIndex, Icon, ImageLightbox } from "@/components/ui";
 import type { PromptDraftAttachment } from "@/lib/prompt-draft";
 import { toUserAttachmentImageSrc } from "@/lib/user-attachment-images";
 
@@ -81,7 +80,7 @@ export function AttachmentPreview({
                     title={`Remove ${attachment.name}`}
                     aria-label={`Remove ${attachment.name}`}
                   >
-                    <X className="size-3" />
+                    <Icon name="X" className="size-3" />
                   </button>
                 ) : null}
               </div>
@@ -104,7 +103,7 @@ export function AttachmentPreview({
                     className="rounded p-0.5 hover:bg-background/70"
                     title={`Remove ${attachment.name}`}
                   >
-                    <X className="size-3" />
+                    <Icon name="X" className="size-3" />
                   </button>
                 ) : null}
               </span>

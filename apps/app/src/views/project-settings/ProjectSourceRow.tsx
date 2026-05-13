@@ -1,12 +1,11 @@
-import { MoreHorizontal, PencilLine, Trash2 } from "lucide-react";
 import {
   isLocalPathProjectSource,
   type LocalPathProjectSource,
   type ProjectSource,
 } from "@bb/domain";
-import { LocalhostBadge, SettingsRow, StatusPill } from "@/components/ui";
+import { Icon, LocalhostBadge, SettingsRow, StatusPill } from "@/components/ui";
 import { GitHubIcon } from "@/components/icons/GitHubIcon";
-import { PersistentHostIcon } from "@/lib/host-display";
+import { PersistentHostIconName } from "@/lib/host-display";
 import { Button } from "@/components/ui";
 import {
   DropdownMenu,
@@ -41,7 +40,10 @@ export function ProjectSourceRow({
   return (
     <SettingsRow>
       {isLocalSource ? (
-        <PersistentHostIcon className="size-4 shrink-0 text-muted-foreground" />
+        <Icon
+          name={PersistentHostIconName}
+          className="size-4 shrink-0 text-muted-foreground"
+        />
       ) : (
         <GitHubIcon className="size-4 shrink-0" />
       )}
@@ -71,7 +73,7 @@ export function ProjectSourceRow({
             className="h-7 w-7 shrink-0"
             aria-label="Source actions"
           >
-            <MoreHorizontal className="size-4" />
+            <Icon name="MoreHorizontal" className="size-4" />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-40">
@@ -83,7 +85,7 @@ export function ProjectSourceRow({
                 onEditLocalPath(source);
               }}
             >
-              <PencilLine className="size-4" />
+              <Icon name="Edit" className="size-4" />
               Edit local path
             </DropdownMenuItem>
           ) : null}
@@ -92,7 +94,7 @@ export function ProjectSourceRow({
             disabled={isOnlySource}
             onSelect={() => onRemove(source)}
           >
-            <Trash2 className="size-4" />
+            <Icon name="Trash2" className="size-4" />
             Remove
           </DropdownMenuItem>
         </DropdownMenuContent>

@@ -1,8 +1,8 @@
 import { useCallback, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { Link, useNavigate } from "react-router-dom";
-import { Settings } from "lucide-react";
 import {
+  Icon,
   Sidebar,
   SidebarContent,
   SidebarFooter,
@@ -90,7 +90,7 @@ export function AppSidebar({
                 aria-label="App settings"
               >
                 <Link to="/settings">
-                  <Settings />
+                  <Icon name="Settings" />
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>

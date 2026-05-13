@@ -1,17 +1,6 @@
 import type { ReactNode } from "react";
-import { PanelBottom, PanelRight } from "lucide-react";
 import { useIsSecondaryPanelOpen } from "@/lib/thread-secondary-panel";
-import {
-  Button,
-  COARSE_POINTER_TOOLBAR_ACTION_BUTTON_CLASS,
-  SplitButton,
-  StatusPill,
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-  useIsCompactViewport,
-} from "@/components/ui";
+import { Button, COARSE_POINTER_TOOLBAR_ACTION_BUTTON_CLASS, Icon, SplitButton, StatusPill, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger, useIsCompactViewport } from "@/components/ui";
 import {
   AppPageHeader,
   HEADER_ICON_BUTTON_CLASS,
@@ -108,7 +97,7 @@ export function ThreadDetailHeader({
   const [primaryAction, ...secondaryActions] = threadHeaderGitActions;
   const renderAsDrawer = useIsCompactViewport();
   const isSecondaryPanelOpen = useIsSecondaryPanelOpen();
-  const SecondaryPanelIcon = renderAsDrawer ? PanelBottom : PanelRight;
+  const secondaryPanelIconName = renderAsDrawer ? "PanelBottom" : "PanelRight";
 
   const center = (
     <>
@@ -172,7 +161,7 @@ export function ThreadDetailHeader({
           }
           onClick={onToggleSecondaryPanel}
         >
-          <SecondaryPanelIcon />
+          <Icon name={secondaryPanelIconName} />
         </Button>
       )}
     </>

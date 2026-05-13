@@ -23,7 +23,7 @@ describe("FilePathLink", () => {
       <FilePathLink path="src/foo.ts" onClick={() => {}} variant="external" />,
     );
 
-    expect(container.querySelector(".lucide-external-link")).not.toBeNull();
+    expect(container.querySelector('[data-icon="ExternalLink"]')).not.toBeNull();
   });
 
   it("does not render the external-link icon when no variant is set", () => {
@@ -31,7 +31,7 @@ describe("FilePathLink", () => {
       <FilePathLink path="src/foo.ts" onClick={() => {}} />,
     );
 
-    expect(container.querySelector(".lucide-external-link")).toBeNull();
+    expect(container.querySelector('[data-icon="ExternalLink"]')).toBeNull();
   });
 
   it("does not render the external-link icon when variant=external but no onClick (no action available)", () => {
@@ -40,6 +40,6 @@ describe("FilePathLink", () => {
     );
 
     expect(screen.queryByRole("button")).toBeNull();
-    expect(container.querySelector(".lucide-external-link")).toBeNull();
+    expect(container.querySelector('[data-icon="ExternalLink"]')).toBeNull();
   });
 });

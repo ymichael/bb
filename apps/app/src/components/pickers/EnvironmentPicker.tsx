@@ -1,10 +1,8 @@
 import { useAtomValue } from "jotai";
 import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Check, ChevronDown, Laptop } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
 import type { Host, ProjectSource, SandboxBackendInfo } from "@bb/domain";
-import { LocalhostBadge } from "@/components/ui";
+import { Icon, type IconName, LocalhostBadge } from "@/components/ui";
 import {
   findLocalPathProjectSourceForHost,
   isGitHubRepoProjectSource,
@@ -27,7 +25,7 @@ import { useHostDaemon } from "@/hooks/useHostDaemon";
 import { useSandboxBackends } from "@/hooks/queries/system-queries";
 import { useEffectiveHosts } from "@/hooks/queries/effective-hosts";
 import { sandboxHostSupportedAtom } from "@/lib/system-config-atoms";
-import { getEnvironmentWorkspaceLabelIcon } from "@/lib/environment-workspace-display";
+import { getEnvironmentWorkspaceLabelIconName } from "@/lib/environment-workspace-display";
 import {
   HostStatusBadge,
   HostStatusDot,
@@ -91,7 +89,7 @@ function buildHostSections(
 interface SelectedEnvironment {
   modeLabel: string;
   hostLabel?: string;
-  icon: LucideIcon;
+  icon: IconName;
   hostConnected?: boolean;
 }
 
@@ -132,7 +130,7 @@ export function EnvironmentPickerUI({
 
   const selected = useMemo((): SelectedEnvironment => {
     const parsed = parseEnvironmentValue(value);
-    if (!parsed) return { modeLabel: "Environment", icon: Laptop };
+    if (!parsed) return { modeLabel: "Environment", icon: "Laptop" as const };
     if (parsed.type === "host") {
       const host = hosts.find((h) => h.id === parsed.hostId);
       const isLocal = isLocalHost(parsed.hostId);
@@ -142,7 +140,7 @@ export function EnvironmentPickerUI({
           : isLocal
             ? "Work locally"
             : "Work remotely";
-      const icon = getEnvironmentWorkspaceLabelIcon(
+      const icon = getEnvironmentWorkspaceLabelIconName(
         parsed.mode === "worktree" ? "managed-worktree" : "other",
       );
       if (isLocal) {
@@ -158,7 +156,7 @@ export function EnvironmentPickerUI({
     const backend = sandboxBackends.find((b) => b.id === parsed.backendId);
     return {
       modeLabel: backend?.displayName ?? "Sandbox",
-      icon: getEnvironmentWorkspaceLabelIcon("sandbox"),
+      icon: getEnvironmentWorkspaceLabelIconName("sandbox"),
     };
   }, [value, hosts, sandboxBackends, isLocalHost]);
 
@@ -178,7 +176,8 @@ export function EnvironmentPickerUI({
           )}
         >
           <span className={OPTION_CONTENT_CLASS_NAME}>
-            <selected.icon
+            <Icon
+              name={selected.icon}
               className={COARSE_POINTER_COMPACT_ICON_SIZE_SHRINK_CLASS}
             />
             <span className="truncate">
@@ -194,7 +193,8 @@ export function EnvironmentPickerUI({
               <HostStatusBadge connected={selected.hostConnected} />
             ) : null}
           </span>
-          <ChevronDown
+          <Icon
+            name="ChevronDown"
             className={cn(
               "text-muted-foreground",
               COARSE_POINTER_COMPACT_ICON_SIZE_CLASS,
@@ -307,14 +307,14 @@ function HostSectionGroup({
         <>
           <EnvironmentMenuItem
             label={section.isLocal ? "Work locally" : "Work remotely"}
-            icon={getEnvironmentWorkspaceLabelIcon("other")}
+            icon={getEnvironmentWorkspaceLabelIconName("other")}
             itemValue={localValue}
             selectedValue={value}
             onSelect={onChange}
           />
           <EnvironmentMenuItem
             label="New worktree"
-            icon={getEnvironmentWorkspaceLabelIcon("managed-worktree")}
+            icon={getEnvironmentWorkspaceLabelIconName("managed-worktree")}
             itemValue={worktreeValue}
             selectedValue={value}
             onSelect={onChange}
@@ -362,7 +362,7 @@ function SandboxSection({
             <EnvironmentMenuItem
               key={backend.id}
               label={backend.displayName}
-              icon={getEnvironmentWorkspaceLabelIcon("sandbox")}
+              icon={getEnvironmentWorkspaceLabelIconName("sandbox")}
               itemValue={encodeSandboxValue(backend.id)}
               selectedValue={value}
               onSelect={onChange}
@@ -393,7 +393,7 @@ function SandboxSection({
 
 interface EnvironmentMenuItemProps {
   label: string;
-  icon: LucideIcon;
+  icon: IconName;
   itemValue: string;
   selectedValue: string;
   onSelect: (value: string) => void;
@@ -402,7 +402,7 @@ interface EnvironmentMenuItemProps {
 
 function EnvironmentMenuItem({
   label,
-  icon: Icon,
+  icon,
   itemValue,
   selectedValue,
   onSelect,
@@ -416,6 +416,7 @@ function EnvironmentMenuItem({
     >
       <span className="flex min-w-0 items-center gap-2">
         <Icon
+          name={icon}
           className={cn(
             "text-muted-foreground",
             COARSE_POINTER_COMPACT_ICON_SIZE_SHRINK_CLASS,
@@ -423,7 +424,8 @@ function EnvironmentMenuItem({
         />
         <span className="truncate text-xs">{label}</span>
       </span>
-      <Check
+      <Icon
+        name="Check"
         className={cn(
           COARSE_POINTER_ICON_SIZE_CLASS,
           itemValue === selectedValue ? "opacity-100" : "opacity-0",

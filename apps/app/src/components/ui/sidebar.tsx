@@ -2,10 +2,6 @@
 import * as React from "react";
 import { Slot } from "@radix-ui/react-slot";
 import { cva, type VariantProps } from "class-variance-authority";
-import {
-  AlignLeft as MobileSidebarIcon,
-  PanelLeft as DesktopSidebarIcon,
-} from "lucide-react";
 
 import { useIsCompactViewport } from "./hooks/use-compact-viewport.js";
 import { cn } from "@/lib/utils";
@@ -14,6 +10,7 @@ import { COARSE_POINTER_HEADER_ICON_BUTTON_CLASS } from "./coarse-pointer-sizing
 import { Input } from "./input.js";
 import { Separator } from "./separator.js";
 import { Skeleton } from "./skeleton.js";
+import { Icon } from "@/components/ui";
 import {
   Tooltip,
   TooltipContent,
@@ -289,8 +286,8 @@ const SidebarTrigger = React.forwardRef<
       }}
       {...props}
     >
-      <DesktopSidebarIcon className="max-md:pointer-coarse:hidden" />
-      <MobileSidebarIcon className="hidden max-md:pointer-coarse:block" />
+      <Icon name="PanelLeft" className="max-md:pointer-coarse:hidden" />
+      <Icon name="AlignLeft" className="hidden max-md:pointer-coarse:block" />
       <span className="sr-only">Toggle Sidebar</span>
     </Button>
   );

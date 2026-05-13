@@ -1,5 +1,5 @@
-import { ArrowDown } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Icon } from "@/components/ui";
 
 export interface ScrollToBottomButtonProps {
   visible: boolean;
@@ -29,7 +29,7 @@ export function ScrollToBottomButton({
         aria-label={ariaLabel}
         type="button"
       >
-        {active ? <TypingDots /> : <ArrowDown className="size-4" />}
+        {active ? <TypingDots /> : <Icon name="ArrowDown" className="size-4" />}
       </button>
     </div>
   );

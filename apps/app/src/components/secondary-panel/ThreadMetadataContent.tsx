@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { Check, ChevronDown, Copy, Search, X } from "lucide-react";
 import { ManagerThreadStorageBrowser } from "./ManagerThreadStorageBrowser";
 import type { ManagerStorageBrowserController } from "./useManagerStorageBrowser";
 import { Link } from "react-router-dom";
@@ -14,18 +13,7 @@ import type {
 import { formatEnvironmentDisplay } from "@bb/core-ui";
 import { cn } from "@/lib/utils";
 import { HostStatusBadge } from "@/components/HostStatusIndicator";
-import {
-  Button,
-  COARSE_POINTER_ICON_SIZE_CLASS,
-  DetailCard,
-  DetailRow,
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuTrigger,
-  LocalhostBadge,
-} from "@/components/ui";
+import { Button, COARSE_POINTER_ICON_SIZE_CLASS, DetailCard, DetailRow, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger, Icon, LocalhostBadge } from "@/components/ui";
 import {
   BranchPicker,
   getMergeBaseBranchCandidates,
@@ -121,7 +109,7 @@ export function ManagerSelectorRow({
             }}
             aria-label="Unassign manager"
           >
-            <X />
+            <Icon name="X" />
           </Button>
         </div>
       ) : (
@@ -141,7 +129,7 @@ export function ManagerSelectorRow({
               <span className="min-w-0 truncate text-xs text-foreground">
                 {selectedManagerOptionLabel ?? "None"}
               </span>
-              <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
+              <Icon name="ChevronDown" className="size-3.5 shrink-0 text-muted-foreground" />
             </div>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="min-w-40 max-w-72">
@@ -159,7 +147,7 @@ export function ManagerSelectorRow({
                 <span className="truncate" title={option.label}>
                   {option.label}
                 </span>
-                <Check
+                <Icon name="Check"
                   className={
                     managerSelectorValue === option.value
                       ? cn("opacity-100", COARSE_POINTER_ICON_SIZE_CLASS)
@@ -277,9 +265,9 @@ export function BranchRow({ thread, workspaceStatus }: BranchRowProps) {
       >
         <span className="truncate">{branchName}</span>
         {copied ? (
-          <Check className="size-3.5 shrink-0 text-muted-foreground" />
+          <Icon name="Check" className="size-3.5 shrink-0 text-muted-foreground" />
         ) : (
-          <Copy className="size-3.5 shrink-0 text-muted-foreground" />
+          <Icon name="Copy" className="size-3.5 shrink-0 text-muted-foreground" />
         )}
       </button>
     </DetailRow>
@@ -497,7 +485,7 @@ export function ManagerWorkspaceRow({
               aria-label="Search files"
               onClick={openSearch}
             >
-              <Search className="size-3.5" />
+              <Icon name="Search" className="size-3.5" />
             </Button>
           )}
         </>

@@ -1,8 +1,7 @@
-import { FolderPlus, MoreHorizontal, PencilLine, Trash2 } from "lucide-react";
 import { findLocalPathProjectSourceForHost } from "@bb/domain";
 import type { ProjectResponse } from "@bb/server-contract";
 import type { ReactNode } from "react";
-import { Button } from "@/components/ui";
+import { Button, Icon } from "@/components/ui";
 import { COARSE_POINTER_ICON_SIZE_CLASS } from "@/components/ui";
 import {
   ContextMenu,
@@ -89,7 +88,6 @@ function ProjectActionsMenuItems({
           requestRename(project);
         }}
       >
-        <PencilLine className="size-4" />
         Rename
       </ProjectActionMenuItem>
       {showAddLocalPath ? (
@@ -102,7 +100,6 @@ function ProjectActionsMenuItems({
             requestAddLocalPath(project);
           }}
         >
-          <FolderPlus className="size-4" />
           Add local path
         </ProjectActionMenuItem>
       ) : null}
@@ -116,7 +113,6 @@ function ProjectActionsMenuItems({
           requestDelete(project);
         }}
       >
-        <Trash2 className="size-4" />
         Remove
       </ProjectActionMenuItem>
     </>
@@ -146,7 +142,7 @@ export function ProjectActionsMenu({
             event.stopPropagation();
           }}
         >
-          <MoreHorizontal className={COARSE_POINTER_ICON_SIZE_CLASS} />
+          <Icon name="MoreHorizontal" className={COARSE_POINTER_ICON_SIZE_CLASS} />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align={align} className="w-44">

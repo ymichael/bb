@@ -1,7 +1,6 @@
 /* shadcn/ui-derived */
 import * as React from "react";
 import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu";
-import { Check, ChevronRight, Circle } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { COARSE_POINTER_CHECK_SLOT_CLASS } from "./coarse-pointer-sizing.js";
@@ -13,6 +12,7 @@ import {
   stripRadixContentProps,
 } from "./responsive-overlay.js";
 import { getOverlayTriggerClassName } from "./overlay-trigger.js";
+import { Icon } from "@/components/ui";
 
 // ---------------------------------------------------------------------------
 // Context — separate instance from Popover to avoid cross-contamination
@@ -299,7 +299,7 @@ const DropdownMenuCheckboxItem = React.forwardRef<
             )}
           >
             {(checked === true || checked === "indeterminate") && (
-              <Check className={COARSE_POINTER_CHECK_SLOT_CLASS} />
+              <Icon name="Check" className={COARSE_POINTER_CHECK_SLOT_CLASS} />
             )}
           </span>
           {children}
@@ -328,7 +328,7 @@ const DropdownMenuCheckboxItem = React.forwardRef<
           )}
         >
           <DropdownMenuPrimitive.ItemIndicator>
-            <Check className={COARSE_POINTER_CHECK_SLOT_CLASS} />
+            <Icon name="Check" className={COARSE_POINTER_CHECK_SLOT_CLASS} />
           </DropdownMenuPrimitive.ItemIndicator>
         </span>
         {children}
@@ -383,7 +383,7 @@ const DropdownMenuRadioItem = React.forwardRef<
     >
       <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
         <DropdownMenuPrimitive.ItemIndicator>
-          <Circle className="h-2 w-2 fill-current" />
+          <Icon name="Circle" className="h-2 w-2 fill-current" />
         </DropdownMenuPrimitive.ItemIndicator>
       </span>
       {children}
@@ -514,7 +514,7 @@ const DropdownMenuSubTrigger = React.forwardRef<
     {...props}
   >
     {children}
-    <ChevronRight className="ml-auto" />
+    <Icon name="ChevronRight" className="ml-auto" />
   </DropdownMenuPrimitive.SubTrigger>
 ));
 DropdownMenuSubTrigger.displayName =

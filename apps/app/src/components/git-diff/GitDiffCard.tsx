@@ -8,15 +8,8 @@ import {
 } from "react";
 import type { FileContents } from "@pierre/diffs";
 import { FileDiff as DiffView } from "@pierre/diffs/react";
-import { ArrowRight, ChevronRight } from "lucide-react";
 import { useIntersectionObserver } from "usehooks-ts";
-import {
-  CopyButton,
-  DiffStatsTally,
-  FilePathLink,
-  Skeleton,
-  TruncateStart,
-} from "@/components/ui";
+import { CopyButton, DiffStatsTally, FilePathLink, Icon, Skeleton, TruncateStart } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import {
   formatGitDiffFileLabel,
@@ -254,7 +247,7 @@ export const GitDiffCard = memo(function GitDiffCard({
                 }
                 aria-expanded={hasChanges ? !isCollapsed : undefined}
               >
-                <ChevronRight
+                <Icon name="ChevronRight"
                   className={cn(
                     "size-3.5 shrink-0 transition-transform duration-150",
                     hasChanges && !isCollapsed && "rotate-90",
@@ -281,7 +274,7 @@ export const GitDiffCard = memo(function GitDiffCard({
                 </TruncateStart>
               ) : null}
               {renameInfo ? (
-                <ArrowRight
+                <Icon name="ArrowRight"
                   aria-hidden="true"
                   className="size-3 shrink-0 text-muted-foreground/60"
                 />

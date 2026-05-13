@@ -1,27 +1,26 @@
 import type { EnvironmentWorkspaceDisplayKind } from "@bb/domain";
-import { Container, FolderGit2 } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
-import { PersistentHostIcon } from "@/lib/host-display";
+import type { IconName } from "@/components/ui";
+import { PersistentHostIconName } from "@/lib/host-display";
 
-export function getEnvironmentWorkspaceDisplayIcon(
+export function getEnvironmentWorkspaceDisplayIconName(
   kind: EnvironmentWorkspaceDisplayKind,
-): LucideIcon | null {
+): IconName | null {
   switch (kind) {
     case "sandbox":
-      return Container;
+      return "Container";
     case "managed-worktree":
-      return FolderGit2;
+      return "FolderGit2";
     case "unmanaged-worktree":
-      return FolderGit2;
+      return "FolderGit2";
     case "other":
       return null;
   }
 }
 
-export function getEnvironmentWorkspaceLabelIcon(
+export function getEnvironmentWorkspaceLabelIconName(
   kind: EnvironmentWorkspaceDisplayKind,
-): LucideIcon {
-  return getEnvironmentWorkspaceDisplayIcon(kind) ?? PersistentHostIcon;
+): IconName {
+  return getEnvironmentWorkspaceDisplayIconName(kind) ?? PersistentHostIconName;
 }
 
 export function getEnvironmentWorkspaceDisplayIconLabel(

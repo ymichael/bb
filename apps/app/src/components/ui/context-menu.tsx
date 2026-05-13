@@ -1,10 +1,10 @@
 /* shadcn/ui-derived */
 import * as React from "react";
 import * as ContextMenuPrimitive from "@radix-ui/react-context-menu";
-import { Check, ChevronRight, Circle } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { COARSE_POINTER_CHECK_SLOT_CLASS } from "./coarse-pointer-sizing.js";
+import { Icon } from "@/components/ui";
 
 type ContextMenuSubTriggerElement = React.ComponentRef<
   typeof ContextMenuPrimitive.SubTrigger
@@ -91,7 +91,7 @@ const ContextMenuSubTrigger = React.forwardRef<
     {...props}
   >
     {children}
-    <ChevronRight className="ml-auto" />
+    <Icon name="ChevronRight" className="ml-auto" />
   </ContextMenuPrimitive.SubTrigger>
 ));
 ContextMenuSubTrigger.displayName = ContextMenuPrimitive.SubTrigger.displayName;
@@ -164,7 +164,7 @@ const ContextMenuCheckboxItem = React.forwardRef<
       )}
     >
       <ContextMenuPrimitive.ItemIndicator>
-        <Check className={COARSE_POINTER_CHECK_SLOT_CLASS} />
+        <Icon name="Check" className={COARSE_POINTER_CHECK_SLOT_CLASS} />
       </ContextMenuPrimitive.ItemIndicator>
     </span>
     {children}
@@ -187,7 +187,7 @@ const ContextMenuRadioItem = React.forwardRef<
   >
     <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
       <ContextMenuPrimitive.ItemIndicator>
-        <Circle className="h-2 w-2 fill-current" />
+        <Icon name="Circle" className="h-2 w-2 fill-current" />
       </ContextMenuPrimitive.ItemIndicator>
     </span>
     {children}

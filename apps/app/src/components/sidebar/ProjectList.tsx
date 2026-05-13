@@ -10,7 +10,6 @@ import {
   type ThreadListEntry,
 } from "@bb/domain";
 import type { ProjectSourceWorkspaceStatusResponse } from "@bb/server-contract";
-import { Folder, MessageSquarePlus, Plus, UserRoundPlus } from "lucide-react";
 import { useLocation } from "react-router-dom";
 import {
   getConnectionAwareQueryState,
@@ -33,7 +32,7 @@ import { useServerConnectionState } from "@/hooks/useServerConnectionState";
 import type { WebSocketConnectionState } from "@/lib/ws";
 import * as api from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { Button, EmptyState } from "@/components/ui";
+import { Button, EmptyState, Icon } from "@/components/ui";
 import {
   SidebarGroupContent,
   SidebarMenu,
@@ -215,7 +214,7 @@ function ProjectListActionButtons({
         disabled={isNewChatDisabled}
         title={newChatTitle}
       >
-        <MessageSquarePlus />
+        <Icon name="MessageSquarePlus" />
         <span className="min-w-0 flex-1 truncate text-left">New Chat</span>
         <span
           className={PROJECT_LIST_ACTION_TRAILING_SLOT_CLASS}
@@ -234,7 +233,7 @@ function ProjectListActionButtons({
         disabled={isNewManagerDisabled}
         title={newManagerTitle}
       >
-        <UserRoundPlus />
+        <Icon name="UserRoundPlus" />
         <span className="min-w-0 flex-1 truncate text-left">New Manager</span>
         <span
           className={PROJECT_LIST_ACTION_TRAILING_SLOT_CLASS}
@@ -458,7 +457,7 @@ function ProjectListComponent({
                 COARSE_POINTER_ADD_PROJECT_BUTTON_SIZE_CLASS,
               )}
             >
-              <Plus className={COARSE_POINTER_ICON_SIZE_CLASS} />
+              <Icon name="Plus" className={COARSE_POINTER_ICON_SIZE_CLASS} />
             </button>
           ) : null}
         </SidebarStickyTier>
@@ -513,7 +512,7 @@ function ProjectListComponent({
                       ? "Projects unavailable"
                       : "No projects"
                   }
-                  icon={Folder}
+                  icon="Folder"
                   className="px-2 py-1.5"
                   iconClassName="size-3.5"
                   messageClassName="text-xs"

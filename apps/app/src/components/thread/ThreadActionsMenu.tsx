@@ -1,20 +1,6 @@
 import type { Thread } from "@bb/domain";
 import type { ReactNode } from "react";
-import { MoreHorizontal } from "lucide-react";
-import {
-  ContextMenu,
-  ContextMenuCheckboxItem,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSeparator,
-  ContextMenuTrigger,
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui";
+import { ContextMenu, ContextMenuCheckboxItem, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger, DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, Icon } from "@/components/ui";
 import { Button } from "@/components/ui";
 import { COARSE_POINTER_ICON_SIZE_CLASS } from "@/components/ui";
 import { cn } from "@/lib/utils";
@@ -246,7 +232,7 @@ export function ThreadActionsMenu({
             event.stopPropagation();
           }}
         >
-          <MoreHorizontal className={COARSE_POINTER_ICON_SIZE_CLASS} />
+          <Icon name="MoreHorizontal" className={COARSE_POINTER_ICON_SIZE_CLASS} />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align={align} className="w-44">

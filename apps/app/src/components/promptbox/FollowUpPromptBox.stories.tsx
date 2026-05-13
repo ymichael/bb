@@ -9,8 +9,8 @@ import {
   FollowUpPromptBox,
   type FollowUpSubmitMode,
 } from "@/components/promptbox/FollowUpPromptBox";
-import { PersistentHostIcon } from "@/lib/host-display";
-import { getEnvironmentWorkspaceLabelIcon } from "@/lib/environment-workspace-display";
+import { PersistentHostIconName } from "@/lib/host-display";
+import { getEnvironmentWorkspaceLabelIconName } from "@/lib/environment-workspace-display";
 import type {
   AttachmentsConfig,
   MentionsConfig,
@@ -98,7 +98,7 @@ const basePermission = {
 const localEnvironmentSummary: ReactNode = (
   <ThreadEnvironmentSummary
     environmentLabel="Working locally"
-    environmentIcon={PersistentHostIcon}
+    environmentIcon={PersistentHostIconName}
     environmentBranchName="bb/promptbox-stories"
   />
 );
@@ -108,7 +108,7 @@ const remoteEnvironmentSummary: ReactNode = (
     environmentLabel="Working remotely"
     environmentHostLabel="ec2-builder"
     environmentHostConnected
-    environmentIcon={PersistentHostIcon}
+    environmentIcon={PersistentHostIconName}
     environmentBranchName="bb/promptbox-stories"
   />
 );
@@ -116,7 +116,7 @@ const remoteEnvironmentSummary: ReactNode = (
 const worktreeEnvironmentSummary: ReactNode = (
   <ThreadEnvironmentSummary
     environmentLabel="Worktree"
-    environmentIcon={getEnvironmentWorkspaceLabelIcon("managed-worktree")}
+    environmentIcon={getEnvironmentWorkspaceLabelIconName("managed-worktree")}
     environmentBranchName="bb/promptbox-stories"
   />
 );
@@ -124,7 +124,7 @@ const worktreeEnvironmentSummary: ReactNode = (
 const sandboxEnvironmentSummary: ReactNode = (
   <ThreadEnvironmentSummary
     environmentLabel="E2B Sandbox"
-    environmentIcon={getEnvironmentWorkspaceLabelIcon("sandbox")}
+    environmentIcon={getEnvironmentWorkspaceLabelIconName("sandbox")}
     environmentBranchName="bb/promptbox-stories"
   />
 );

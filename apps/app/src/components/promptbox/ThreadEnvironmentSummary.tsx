@@ -1,8 +1,7 @@
-import { type ComponentType } from "react";
-import { GitMerge } from "lucide-react";
 import { HostStatusBadge } from "@/components/HostStatusIndicator";
 import { OptionDisplay } from "@/components/pickers/OptionPicker";
 import { copyToClipboardWithToast } from "@/lib/clipboard";
+import { Icon, type IconName } from "@/components/ui";
 
 export interface ThreadEnvironmentSummaryProps {
   /** Mode label (e.g. "Working locally" / "Worktree" / "E2B Sandbox"). Never truncates. */
@@ -12,7 +11,7 @@ export interface ThreadEnvironmentSummaryProps {
   /** Whether the host backing the environment is connected. */
   environmentHostConnected?: boolean;
   /** Icon for the environment (e.g. monitor / container). */
-  environmentIcon?: ComponentType<{ className?: string }>;
+  environmentIcon?: IconName;
   /** Branch name if the environment runs on a worktree. Renders a copy-to-clipboard button. */
   environmentBranchName?: string;
 }
@@ -60,7 +59,11 @@ export function ThreadEnvironmentSummary({
               ) : null}
             </span>
           }
-          icon={environmentIcon}
+          leading={
+            environmentIcon ? (
+              <Icon name={environmentIcon} className="size-4 shrink-0" />
+            ) : null
+          }
           className="h-6 shrink-0"
           muted
         />
@@ -79,7 +82,7 @@ export function ThreadEnvironmentSummary({
             });
           }}
         >
-          <GitMerge className="size-3.5 shrink-0" />
+          <Icon name="GitMerge" className="size-3.5 shrink-0" />
           <span className="truncate">{environmentBranchName}</span>
         </button>
       ) : null}

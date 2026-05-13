@@ -1,5 +1,5 @@
 import { useSearchParams } from "react-router-dom";
-import { CircleCheck, CircleX } from "lucide-react";
+import { Icon } from "@/components/ui";
 
 const STATUS_CONTENT = {
   success: {
@@ -22,9 +22,9 @@ export function AuthCallbackView() {
       <div className="w-full max-w-sm rounded-lg border border-border bg-card px-4 py-3">
         <div className="flex items-center gap-2">
           {status === "error" ? (
-            <CircleX className="size-4 shrink-0 text-destructive" />
+            <Icon name="CircleX" className="size-4 shrink-0 text-destructive" />
           ) : (
-            <CircleCheck className="size-4 shrink-0" />
+            <Icon name="CircleCheck" className="size-4 shrink-0" />
           )}
           <h1 className="text-sm font-semibold">{content.title}</h1>
         </div>

@@ -4,10 +4,9 @@ import { useIsMutating } from "@tanstack/react-query";
 import { useAtom } from "jotai";
 import { atomWithStorage } from "jotai/utils";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { Archive, ChevronRight, Settings } from "lucide-react";
 import type { Thread } from "@bb/domain";
 import type { ProjectResponse } from "@bb/server-contract";
-import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui";
+import { Icon, SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui";
 import { AppSidebar } from "@/components/sidebar/AppSidebar";
 import { AppPageHeader, HEADER_ICON_BUTTON_CLASS } from "./AppPageHeader";
 import { HIRE_PROJECT_MANAGER_MUTATION_KEY } from "@/hooks/mutations/project-mutations";
@@ -147,7 +146,7 @@ function AppHeader({
             return (
               <Fragment key={`${segment.label}-${index}`}>
                 {index > 0 ? (
-                  <ChevronRight className="size-3.5 shrink-0 text-muted-foreground/70" />
+                  <Icon name="ChevronRight" className="size-3.5 shrink-0 text-muted-foreground/70" />
                 ) : null}
                 {!isLast && segment.to ? (
                   <Link
@@ -195,7 +194,7 @@ function AppHeader({
           aria-label="Project settings"
           title="Project settings"
         >
-          <Settings />
+          <Icon name="Settings" />
         </Link>
         <Link
           to={`/projects/${projectId}/archived`}
@@ -206,7 +205,7 @@ function AppHeader({
           aria-label="Archived threads"
           title="Archived threads"
         >
-          <Archive />
+          <Icon name="Archive" />
         </Link>
         {showProjectMenuButton && project ? (
           <ProjectActionsMenu
