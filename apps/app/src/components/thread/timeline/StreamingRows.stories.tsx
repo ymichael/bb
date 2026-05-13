@@ -26,12 +26,8 @@ import {
   TimelineWorkingIndicator,
 } from "@/components/thread/timeline";
 import { ConversationTimeline } from "@/components/ui/conversation.js";
-import {
-  HEIGHT_TRANSITION_DURATION_MS,
-  HeightTransition,
-} from "@/components/ui/height-transition.js";
+import { HeightTransition } from "@/components/ui/height-transition.js";
 import { PageShell } from "@/components/ui/page-shell.js";
-import { useTrailingVisible } from "@/hooks/useTrailingVisible";
 import { StoryCard, StoryRow } from "../../../../.ladle/story-card";
 
 export default {
@@ -58,29 +54,15 @@ function PinnedTimelineStage({
   rows,
   indicator,
   showIndicator,
-  // Mirrors the production ThreadTimelinePane: hold the indicator visible for
-  // one height-transition window after `showIndicator` flips false, so the
-  // rows wrapper can finish growing into the final chunk before this wrapper
-  // collapses. Pass `false` to opt out and reproduce the parallel-collapse
-  // jump that the production hold prevents.
-  holdIndicatorOnHide = true,
   cycle = 0,
 }: {
   rows: readonly TimelineRow[];
   indicator: ReactNode;
   showIndicator: boolean;
-  holdIndicatorOnHide?: boolean;
   // Threaded into `turnSummaryRowsIdentity` so consumers can observe the
   // story re-mounting the row list each loop cycle if needed.
   cycle?: number;
 }) {
-  const heldShowIndicator = useTrailingVisible(
-    showIndicator,
-    HEIGHT_TRANSITION_DURATION_MS,
-  );
-  const indicatorVisible = holdIndicatorOnHide
-    ? heldShowIndicator
-    : showIndicator;
   return (
     // `overflow-anchor: none` on the stage container so the browser's
     // page-level scroll anchoring doesn't pick an element inside a tick-
@@ -105,9 +87,7 @@ function PinnedTimelineStage({
             turnSummaryRowsIdentity={`story-cycle-${cycle}`}
             timelineRows={rows.slice()}
           />
-          <HeightTransition visible={indicatorVisible}>
-            {indicator}
-          </HeightTransition>
+          <HeightTransition visible={showIndicator}>{indicator}</HeightTransition>
         </ConversationTimeline>
       </PageShell>
     </div>
@@ -328,12 +308,6 @@ function conversationRowFromStep(
   };
 }
 
-// Renders two stages stacked under a single tick loop so the viewer can
-// directly compare the timeline jump (top: parallel collapse) against the
-// production hold (bottom: indicator stays one extra transition window so
-// the final row lands before the indicator collapses). The shared tick +
-// isPaused + restartKey keep both stages frame-aligned for honest
-// comparison.
 function ConversationRowsArriving({
   restartKey,
   isPaused,
@@ -351,40 +325,12 @@ function ConversationRowsArriving({
   const rows = CONVERSATION_STEPS.slice(0, step).map(conversationRowFromStep);
   const isStreaming = step < CONVERSATION_STEPS.length;
   return (
-    <div className="flex flex-col gap-4">
-      <StageWithCaption caption="without hold — indicator collapses in the same render as the final row arrives, so the timeline jumps">
-        <PinnedTimelineStage
-          rows={rows}
-          indicator={<TimelineWorkingIndicator />}
-          showIndicator={isStreaming}
-          holdIndicatorOnHide={false}
-          cycle={cycle}
-        />
-      </StageWithCaption>
-      <StageWithCaption caption="with hold (production) — indicator stays one transition window so the final row lands first, then the indicator collapses">
-        <PinnedTimelineStage
-          rows={rows}
-          indicator={<TimelineWorkingIndicator />}
-          showIndicator={isStreaming}
-          cycle={cycle}
-        />
-      </StageWithCaption>
-    </div>
-  );
-}
-
-function StageWithCaption({
-  caption,
-  children,
-}: {
-  caption: string;
-  children: ReactNode;
-}) {
-  return (
-    <div className="flex flex-col gap-1">
-      <span className="text-xs text-muted-foreground">{caption}</span>
-      {children}
-    </div>
+    <PinnedTimelineStage
+      rows={rows}
+      indicator={<TimelineWorkingIndicator />}
+      showIndicator={isStreaming}
+      cycle={cycle}
+    />
   );
 }
 
@@ -940,7 +886,7 @@ export function Rows() {
         label={
           <StreamingLabel
             title="assistant messages"
-            hint="user / assistant rows mount one at a time at the bottom; the final tick hides the indicator and lands the last row in the same render — the two stacked stages compare the parallel-collapse jump against the production hold"
+            hint="user / assistant rows mount one at a time at the bottom"
             onRestart={() => setConversationKey((k) => k + 1)}
             isPaused={conversationPaused}
             onTogglePause={() => setConversationPaused((p) => !p)}
