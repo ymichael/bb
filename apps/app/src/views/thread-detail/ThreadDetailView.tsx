@@ -733,6 +733,17 @@ export function ThreadDetailView() {
           isFilesLoading: isThreadStorageFilesLoading,
         }
       : undefined;
+  const handleOpenFileInEditor =
+    localWorkspaceRootPath && canOpenPreferredTarget
+      ? (relativePath: string) => {
+          const fullPath = `${localWorkspaceRootPath}/${relativePath}`;
+          void openPathInPreferredTarget({
+            lineNumber: null,
+            path: fullPath,
+            workspaceRootPath: localWorkspaceRootPath,
+          });
+        }
+      : undefined;
   const fileTabContent = activeWorkspaceFilePath ? (
     <SecondaryPanelFilePreview
       activePath={activeWorkspaceFilePath}
@@ -740,6 +751,7 @@ export function ThreadDetailView() {
       filePreview={workspaceFilePreview}
       isLoading={isWorkspaceFilePreviewLoading}
       lineNumber={activeWorkspaceFileLineNumber}
+      onOpenInEditor={handleOpenFileInEditor}
     />
   ) : activeStorageFilePath ? (
     <ThreadStorageFilePreview
@@ -786,17 +798,7 @@ export function ThreadDetailView() {
           fileTabContent,
           onClose: closeThreadSecondaryPanel,
           onCollapse: closeThreadSecondaryPanel,
-          onOpenFileInEditor:
-            localWorkspaceRootPath && canOpenPreferredTarget
-              ? (relativePath: string) => {
-                  const fullPath = `${localWorkspaceRootPath}/${relativePath}`;
-                  void openPathInPreferredTarget({
-                    lineNumber: null,
-                    path: fullPath,
-                    workspaceRootPath: localWorkspaceRootPath,
-                  });
-                }
-              : undefined,
+          onOpenFileInEditor: handleOpenFileInEditor,
           onOpenFilePreview: (relativePath: string) => {
             openWorkspaceFile({ lineNumber: null, path: relativePath });
           },

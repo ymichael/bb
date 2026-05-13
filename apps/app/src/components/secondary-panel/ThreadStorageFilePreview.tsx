@@ -13,6 +13,7 @@ interface ThreadStorageFilePreviewProps {
 
 interface SecondaryPanelFilePreviewProps extends ThreadStorageFilePreviewProps {
   pendingNotFoundPath?: string;
+  onOpenInEditor?: (path: string) => void;
 }
 
 export function SecondaryPanelFilePreview({
@@ -22,29 +23,51 @@ export function SecondaryPanelFilePreview({
   isLoading,
   lineNumber = null,
   pendingNotFoundPath,
+  onOpenInEditor,
 }: SecondaryPanelFilePreviewProps) {
   if (error) {
     const isNotFound = error instanceof HttpError && error.status === 404;
     if (isNotFound && activePath === pendingNotFoundPath) {
-      return <FilePreviewSurface state={{ kind: "manager-status-pending" }} />;
+      return (
+        <FilePreviewSurface
+          path={activePath}
+          state={{ kind: "manager-status-pending" }}
+        />
+      );
     }
     return (
       <FilePreviewSurface
+        path={activePath}
+        onOpenInEditor={onOpenInEditor}
         state={{ kind: isNotFound ? "not-found" : "error" }}
       />
     );
   }
 
   if (isLoading || !filePreview || filePreview.path !== activePath) {
-    return <FilePreviewSurface state={{ kind: "loading" }} />;
+    return (
+      <FilePreviewSurface
+        path={activePath}
+        onOpenInEditor={onOpenInEditor}
+        state={{ kind: "loading" }}
+      />
+    );
   }
 
   if (filePreview.kind === "text") {
     if (filePreview.content.length === 0) {
-      return <FilePreviewSurface state={{ kind: "empty" }} />;
+      return (
+        <FilePreviewSurface
+          path={activePath}
+          onOpenInEditor={onOpenInEditor}
+          state={{ kind: "empty" }}
+        />
+      );
     }
     return (
       <FilePreviewSurface
+        path={activePath}
+        onOpenInEditor={onOpenInEditor}
         state={{
           kind: "ready",
           lineNumber,
@@ -59,18 +82,18 @@ export function SecondaryPanelFilePreview({
 
   if (filePreview.kind === "image") {
     return (
-      <div className="flex items-center justify-center rounded-md border border-border/70 bg-background/45 p-3">
-        <img
-          src={filePreview.url}
-          alt={filePreview.path}
-          className="max-h-[34rem] w-auto max-w-full rounded-md border border-border/70 bg-background object-contain"
-        />
-      </div>
+      <FilePreviewSurface
+        path={activePath}
+        onOpenInEditor={onOpenInEditor}
+        state={{ kind: "image", url: filePreview.url }}
+      />
     );
   }
 
   return (
     <FilePreviewSurface
+      path={activePath}
+      onOpenInEditor={onOpenInEditor}
       state={{
         kind: "error",
         message: `Preview not available for ${filePreview.mimeType}.`,

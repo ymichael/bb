@@ -82,15 +82,45 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
 Button.displayName = "Button";
 `;
 
+const README_PATH = "docs/secondary-panel/README.md";
+const BUTTON_PATH = "apps/app/src/components/ui/button.tsx";
+const STATUS_PATH = "agents/manager-42/STATUS.md";
+const SCREENSHOT_PATH = "docs/screenshots/secondary-panel.svg";
+
+const SAMPLE_IMAGE_URL =
+  "data:image/svg+xml;utf8," +
+  encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="480" height="280" viewBox="0 0 480 280">
+      <defs>
+        <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#7c3aed"/>
+          <stop offset="100%" stop-color="#2563eb"/>
+        </linearGradient>
+      </defs>
+      <rect width="480" height="280" fill="url(#g)"/>
+      <circle cx="240" cy="120" r="56" fill="#fef3c7" opacity="0.92"/>
+      <rect x="80" y="200" width="320" height="14" rx="7" fill="#ffffff" opacity="0.85"/>
+      <rect x="120" y="226" width="240" height="10" rx="5" fill="#ffffff" opacity="0.6"/>
+    </svg>`,
+  );
+
+function noopOpenInEditor(path: string) {
+  // Stories don't actually open anything; the prop is wired so the
+  // open-in-editor affordance renders in the header.
+  console.log("open in editor:", path);
+}
+
 export function Overview() {
   return (
     <StoryCard>
       <StoryRow
         label="markdown file"
-        hint="README.md is rendered with react-markdown + GFM (tables, code blocks, quotes)"
+        hint="Header shows path + Preview/Raw toggle; body renders with react-markdown + GFM"
       >
         <PreviewStage>
           <FilePreview
+            path={README_PATH}
+            onOpenInEditor={noopOpenInEditor}
             state={{
               kind: "ready",
               lineNumber: null,
@@ -101,10 +131,12 @@ export function Overview() {
       </StoryRow>
       <StoryRow
         label="typescript / react file"
-        hint="Pierre File component highlights via Shiki (lang inferred from extension)"
+        hint="No markdown toggle for code files; Pierre File highlights via Shiki"
       >
         <PreviewStage>
           <FilePreview
+            path={BUTTON_PATH}
+            onOpenInEditor={noopOpenInEditor}
             state={{
               kind: "ready",
               lineNumber: null,
@@ -118,11 +150,27 @@ export function Overview() {
         </PreviewStage>
       </StoryRow>
       <StoryRow
-        label="empty file"
-        hint="Content is an empty string — show an explicit empty state instead of a blank surface"
+        label="image file"
+        hint="Image previews render inside the same header chrome (path, copy, open-in-editor)"
       >
         <PreviewStage>
-          <FilePreview state={{ kind: "empty" }} />
+          <FilePreview
+            path={SCREENSHOT_PATH}
+            onOpenInEditor={noopOpenInEditor}
+            state={{ kind: "image", url: SAMPLE_IMAGE_URL }}
+          />
+        </PreviewStage>
+      </StoryRow>
+      <StoryRow
+        label="empty file"
+        hint="Header still visible; body shows the dashed empty-state card"
+      >
+        <PreviewStage>
+          <FilePreview
+            path={README_PATH}
+            onOpenInEditor={noopOpenInEditor}
+            state={{ kind: "empty" }}
+          />
         </PreviewStage>
       </StoryRow>
       <StoryRow
@@ -130,15 +178,22 @@ export function Overview() {
         hint="Preview fetch returned 404; the file isn't on disk"
       >
         <PreviewStage>
-          <FilePreview state={{ kind: "not-found" }} />
+          <FilePreview
+            path={README_PATH}
+            onOpenInEditor={noopOpenInEditor}
+            state={{ kind: "not-found" }}
+          />
         </PreviewStage>
       </StoryRow>
       <StoryRow
         label="manager status pending"
-        hint="STATUS.md doesn't exist yet for a freshly-created manager — informational copy, no icon"
+        hint="STATUS.md doesn't exist yet for a freshly-created manager"
       >
         <PreviewStage>
-          <FilePreview state={{ kind: "manager-status-pending" }} />
+          <FilePreview
+            path={STATUS_PATH}
+            state={{ kind: "manager-status-pending" }}
+          />
         </PreviewStage>
       </StoryRow>
       <StoryRow
@@ -146,7 +201,11 @@ export function Overview() {
         hint="Preview fetch failed for some other reason (network, 500, etc.)"
       >
         <PreviewStage>
-          <FilePreview state={{ kind: "error" }} />
+          <FilePreview
+            path={README_PATH}
+            onOpenInEditor={noopOpenInEditor}
+            state={{ kind: "error" }}
+          />
         </PreviewStage>
       </StoryRow>
       <StoryRow
@@ -154,7 +213,11 @@ export function Overview() {
         hint="Skeleton lines while file contents are being fetched"
       >
         <PreviewStage>
-          <FilePreview state={{ kind: "loading" }} />
+          <FilePreview
+            path={README_PATH}
+            onOpenInEditor={noopOpenInEditor}
+            state={{ kind: "loading" }}
+          />
         </PreviewStage>
       </StoryRow>
     </StoryCard>

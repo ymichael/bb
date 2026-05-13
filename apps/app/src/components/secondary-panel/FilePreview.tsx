@@ -1,8 +1,12 @@
-import { type CSSProperties, useEffect, useMemo, useRef } from "react";
+import { type CSSProperties, useEffect, useMemo, useRef, useState } from "react";
 import { File as PierreFile } from "@pierre/diffs/react";
 import type { SelectedLineRange, SupportedLanguages } from "@pierre/diffs";
+import { Button } from "@/components/ui/button.js";
+import { CopyButton } from "@/components/ui/copy-button.js";
+import { Icon } from "@/components/ui/icon.js";
 import { MarkdownPreview } from "@/components/ui/markdown-preview.js";
 import { Skeleton } from "@/components/ui/skeleton.js";
+import { TruncateStart } from "@/components/ui/truncate-start.js";
 import { usePreferredTheme } from "@/hooks/useTheme";
 
 export interface FilePreviewFile {
@@ -17,11 +21,16 @@ export type FilePreviewState =
   | { kind: "not-found" }
   | { kind: "manager-status-pending" }
   | { kind: "error"; message?: string }
+  | { kind: "image"; url: string }
   | { kind: "ready"; file: FilePreviewFile; lineNumber: number | null };
 
 export interface FilePreviewProps {
   state: FilePreviewState;
+  path: string;
+  onOpenInEditor?: (path: string) => void;
 }
+
+type MarkdownViewMode = "preview" | "source";
 
 const MARKDOWN_EXTENSIONS: ReadonlySet<string> = new Set([
   "md",
@@ -32,6 +41,10 @@ const MARKDOWN_EXTENSIONS: ReadonlySet<string> = new Set([
 const FILE_PREVIEW_VIEW_STYLE = {
   "--diffs-font-size": "12px",
   "--diffs-line-height": "18px",
+  // Pierre paints its theme bg inside this gap, so the top breathing room of
+  // the code body lives on Pierre's bg — not on the panel's bg-background.
+  // Without this, the gap above Pierre would show a visible bg-color seam.
+  "--diffs-gap-block": "16px",
 } as CSSProperties;
 
 // `--md-content-w` tells MarkdownPreview the surrounding text-column width so
@@ -47,17 +60,44 @@ function isMarkdownFile(name: string): boolean {
   return extension !== undefined && MARKDOWN_EXTENSIONS.has(extension);
 }
 
-export function FilePreview({ state }: FilePreviewProps) {
+export function FilePreview({ state, path, onOpenInEditor }: FilePreviewProps) {
+  const isReadyMarkdown =
+    state.kind === "ready" && isMarkdownFile(state.file.name);
+  const [markdownMode, setMarkdownMode] = useState<MarkdownViewMode>("preview");
+  // Each new file opens in rendered preview by default; the user re-toggles per
+  // file rather than carrying their last choice across unrelated files.
+  useEffect(() => {
+    setMarkdownMode("preview");
+  }, [path]);
+
   // Establish a `@container/page` scope so MarkdownPreview's `100cqw`-based
   // table breakout sizes against this panel, not the viewport.
   return (
     <div className="@container/page" style={FILE_PREVIEW_WRAPPER_STYLE}>
-      <FilePreviewBody state={state} />
+      <FilePreviewHeader
+        path={path}
+        onOpenInEditor={onOpenInEditor}
+        markdownMode={isReadyMarkdown ? markdownMode : null}
+        onMarkdownModeChange={setMarkdownMode}
+      />
+      <FilePreviewBody
+        state={state}
+        path={path}
+        markdownMode={isReadyMarkdown ? markdownMode : "preview"}
+      />
     </div>
   );
 }
 
-function FilePreviewBody({ state }: FilePreviewProps) {
+function FilePreviewBody({
+  state,
+  path,
+  markdownMode,
+}: {
+  state: FilePreviewState;
+  path: string;
+  markdownMode: MarkdownViewMode;
+}) {
   if (state.kind === "loading") {
     return <FilePreviewLoading />;
   }
@@ -78,16 +118,112 @@ function FilePreviewBody({ state }: FilePreviewProps) {
       />
     );
   }
-  if (isMarkdownFile(state.file.name)) {
+  if (state.kind === "image") {
+    return <FilePreviewImage url={state.url} alt={path} />;
+  }
+  if (isMarkdownFile(state.file.name) && markdownMode === "preview") {
     return <MarkdownFilePreview file={state.file} />;
   }
   return <FilePreviewCode file={state.file} lineNumber={state.lineNumber ?? null} />;
 }
 
+function FilePreviewHeader({
+  path,
+  onOpenInEditor,
+  markdownMode,
+  onMarkdownModeChange,
+}: {
+  path: string;
+  onOpenInEditor?: (path: string) => void;
+  markdownMode: MarkdownViewMode | null;
+  onMarkdownModeChange: (mode: MarkdownViewMode) => void;
+}) {
+  // The fade is `absolute top-full` so the bar's bottom border is the actual
+  // overflow edge — content scrolls under right at the border. The fade lives
+  // in the sticky element so it pins with the header, but `absolute` keeps it
+  // out of flow so the body's `pt-4` controls the initial gap, not this strip.
+  return (
+    <div className="sticky top-0 z-10">
+      <div className="flex h-9 items-center gap-2 border-b border-border/70 bg-background px-4">
+        <div className="flex min-w-0 items-center gap-1">
+          <TruncateStart
+            className="min-w-0 font-mono text-xs font-medium leading-5 text-foreground"
+            title={path}
+          >
+            {path}
+          </TruncateStart>
+          <CopyButton
+            text={path}
+            label="Copy file path"
+            className="shrink-0 rounded-md hover:bg-state-hover hover:text-foreground"
+          />
+          {onOpenInEditor ? (
+            <button
+              type="button"
+              onClick={() => onOpenInEditor(path)}
+              aria-label="Open in editor"
+              title="Open in editor"
+              className="inline-flex size-5 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-state-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            >
+              <Icon name="ExternalLink" aria-hidden className="size-3" />
+            </button>
+          ) : null}
+        </div>
+        {markdownMode !== null ? (
+          <div
+            className="ml-auto inline-flex shrink-0 items-center gap-0.5 rounded-md border border-border/70 p-0.5"
+            role="tablist"
+            aria-label="Markdown view mode"
+          >
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-5 rounded-sm px-2 text-xs text-muted-foreground"
+              onClick={() => onMarkdownModeChange("preview")}
+              aria-pressed={markdownMode === "preview"}
+              title="Rendered preview"
+            >
+              Preview
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-5 rounded-sm px-2 text-xs text-muted-foreground"
+              onClick={() => onMarkdownModeChange("source")}
+              aria-pressed={markdownMode === "source"}
+              title="Markdown source"
+            >
+              Raw
+            </Button>
+          </div>
+        ) : null}
+      </div>
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-full h-4 bg-gradient-to-b from-background to-transparent"
+      />
+    </div>
+  );
+}
+
 function MarkdownFilePreview({ file }: { file: FilePreviewFile }) {
   return (
-    <div className="px-4">
+    <div className="px-4 pt-4">
       <MarkdownPreview content={file.contents} />
+    </div>
+  );
+}
+
+function FilePreviewImage({ url, alt }: { url: string; alt: string }) {
+  return (
+    <div className="pt-4">
+      <img
+        src={url}
+        alt={alt}
+        className="block max-h-[34rem] w-full object-contain"
+      />
     </div>
   );
 }
@@ -122,7 +258,7 @@ function findPreviewTargetLine(
 
 function FilePreviewLoading() {
   return (
-    <div className="space-y-2 px-4 py-2" aria-busy>
+    <div className="space-y-2 px-4 pt-4" aria-busy>
       <Skeleton className="h-3 w-3/4 rounded-sm" />
       <Skeleton className="h-3 w-full rounded-sm" />
       <Skeleton className="h-3 w-5/6 rounded-sm" />
@@ -143,7 +279,7 @@ function FilePreviewMessage({
   return (
     <p
       role={role}
-      className="mx-4 rounded-lg border border-dashed border-border/70 bg-background/45 px-3 py-6 text-center text-sm text-muted-foreground"
+      className="mx-4 mt-4 rounded-lg border border-dashed border-border/70 bg-background/45 px-3 py-6 text-center text-sm text-muted-foreground"
     >
       {message}
     </p>
