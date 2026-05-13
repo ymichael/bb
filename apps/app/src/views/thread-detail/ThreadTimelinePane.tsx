@@ -3,10 +3,14 @@ import type { ActiveThinking, ThreadRuntimeDisplayStatus } from "@bb/domain";
 import type { TimelineRow, TimelineTurnRow } from "@bb/server-contract";
 import { Button } from "@/components/ui/button.js";
 import { ConversationTimeline } from "@/components/ui/conversation.js";
-import { HeightTransition } from "@/components/ui/height-transition.js";
+import {
+  HEIGHT_TRANSITION_DURATION_MS,
+  HeightTransition,
+} from "@/components/ui/height-transition.js";
 import { Icon } from "@/components/ui/icon.js";
 import { PageShell } from "@/components/ui/page-shell.js";
 import { useBottomAnchoredScroll } from "@/components/ui/bottom-anchored-scroll-body.js";
+import { useTrailingVisible } from "@/hooks/useTrailingVisible";
 import {
   ThreadTimelineRows,
   type ThreadTimelineLocalFileLinkHandler,
@@ -85,6 +89,15 @@ export function ThreadTimelinePane({
     showActiveThinking && activeThinking
       ? activeThinking.id
       : (ongoingIndicatorLabel ?? "working");
+  // The final assistant chunk and the displayStatus flip-off land in the same
+  // React commit when a stream completes. Holding the indicator visible for
+  // one transition window lets the rows wrapper finish growing into the final
+  // content before this wrapper starts collapsing, so the two height changes
+  // run in sequence instead of fighting each other under the bottom anchor.
+  const heldShowOngoingIndicator = useTrailingVisible(
+    showOngoingIndicator,
+    HEIGHT_TRANSITION_DURATION_MS,
+  );
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
@@ -140,7 +153,7 @@ export function ThreadTimelinePane({
               }
             />
           ) : null}
-          <HeightTransition visible={showOngoingIndicator}>
+          <HeightTransition visible={heldShowOngoingIndicator}>
             <TimelineWorkingIndicator
               key={ongoingIndicatorKey}
               details={activeThinkingDetails}
