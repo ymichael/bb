@@ -147,6 +147,7 @@ function createFakeWorkspace(path: string): FakeWorkspace {
       truncated: false,
       shortstat: "",
       files: "",
+      mergeBaseRef: null,
     })),
     listBranches: vi.fn<HostWorkspace["listBranches"]>(async () => ["main"]),
     listFiles: vi.fn<HostWorkspace["listFiles"]>(async () => []),

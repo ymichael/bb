@@ -610,15 +610,19 @@ export type EnvironmentDiffQuery = z.infer<typeof environmentDiffQuerySchema>;
 
 const diffFileSideSchema = z.enum(["old", "new"]);
 
+const mergeBaseRefQuerySchema = z.string().regex(/^[0-9a-f]{4,40}$/iu);
+
 /**
  * Query for fetching a single file's contents at one side of a diff target.
  * Used by the diff card to populate `<FileDiff>`'s `oldFile`/`newFile` props
  * so `@pierre/diffs` can render expand-context buttons between hunks.
  *
- * The target shape mirrors `environmentDiffQuerySchema` — the server
- * resolves it to a (oldRef, newRef) pair, then reads the requested side via
- * `host.read_file` (with `ref` for committed sides, omitted for the working
- * tree).
+ * For `branch_committed` / `all`, callers pass the resolved merge-base SHA
+ * (`mergeBaseRef`, surfaced by `workspace.diff`) rather than the branch name
+ * — the diff itself was computed against that SHA, so reading the old side
+ * from the same SHA keeps the file content aligned with the hunk line
+ * numbers. Reading from the branch tip is wrong whenever the branch has
+ * moved past the merge-base since the file existed there.
  */
 export const environmentDiffFileQuerySchema = z.discriminatedUnion("target", [
   z.object({
@@ -628,13 +632,13 @@ export const environmentDiffFileQuerySchema = z.discriminatedUnion("target", [
   }),
   z.object({
     target: z.literal("branch_committed"),
-    mergeBaseBranch: mergeBaseBranchQuerySchema,
+    mergeBaseRef: mergeBaseRefQuerySchema,
     path: z.string().min(1),
     side: diffFileSideSchema,
   }),
   z.object({
     target: z.literal("all"),
-    mergeBaseBranch: mergeBaseBranchQuerySchema,
+    mergeBaseRef: mergeBaseRefQuerySchema,
     path: z.string().min(1),
     side: diffFileSideSchema,
   }),

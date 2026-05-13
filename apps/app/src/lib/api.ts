@@ -945,9 +945,24 @@ export async function getThreadTimelineTurnSummaryDetails({
 
 export type DiffFileSide = "old" | "new";
 
+/**
+ * File-fetch target for {@link getEnvironmentDiffFile}. Differs from
+ * `WorkspaceDiffTarget` for `branch_committed` / `all`: instead of the merge
+ * base *branch name*, the caller must pass the resolved merge-base SHA that
+ * `workspace.diff` returned (via `ThreadGitDiffResponse.mergeBaseRef`). That
+ * keeps the per-file read aligned with the exact ref the diff was computed
+ * against — the branch tip can drift past the merge base between the diff
+ * load and the file read, breaking `@pierre/diffs`' context expansion.
+ */
+export type DiffFileTarget =
+  | { type: "uncommitted" }
+  | { type: "branch_committed"; mergeBaseRef: string }
+  | { type: "all"; mergeBaseRef: string }
+  | { type: "commit"; sha: string };
+
 export async function getEnvironmentDiffFile(
   id: string,
-  target: WorkspaceDiffTarget,
+  target: DiffFileTarget,
   path: string,
   side: DiffFileSide,
 ): Promise<EnvironmentDiffFileResponse> {
@@ -958,12 +973,12 @@ export async function getEnvironmentDiffFile(
       case "branch_committed":
         return {
           target: "branch_committed" as const,
-          mergeBaseBranch: target.mergeBaseBranch,
+          mergeBaseRef: target.mergeBaseRef,
         };
       case "all":
         return {
           target: "all" as const,
-          mergeBaseBranch: target.mergeBaseBranch,
+          mergeBaseRef: target.mergeBaseRef,
         };
       case "commit":
         return {

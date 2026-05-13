@@ -9,7 +9,7 @@ import {
   useEnvironmentWorkStatus,
 } from "../../../hooks/queries/environment-queries";
 import { environmentDiffFileQueryKey } from "../../../hooks/queries/query-keys";
-import { getEnvironmentDiffFile } from "../../../lib/api";
+import { getEnvironmentDiffFile, type DiffFileTarget } from "../../../lib/api";
 import type { RequestDiffFileContents } from "../../git-diff/GitDiffCard";
 import {
   gitDiffCollapsedFileKeysAtom,
@@ -310,12 +310,17 @@ export function useGitDiffPanelState({
   }, []);
 
   const queryClient = useQueryClient();
+  const diffMergeBaseRef = threadGitDiff?.mergeBaseRef ?? null;
+  const fileTarget = useMemo<DiffFileTarget | undefined>(
+    () => buildDiffFileTarget(gitDiffTarget, diffMergeBaseRef),
+    [gitDiffTarget, diffMergeBaseRef],
+  );
   const onRequestFileContents = useMemo<RequestDiffFileContents | undefined>(
     () => {
-      if (!environmentId || gitDiffTarget === undefined) return undefined;
+      if (!environmentId || fileTarget === undefined) return undefined;
       const envId = environmentId;
-      const target = gitDiffTarget;
-      const targetKey = diffTargetKey(target);
+      const target = fileTarget;
+      const targetKey = fileTargetKey(target);
       return async (path, side) => {
         const result = await queryClient.fetchQuery({
           queryKey: environmentDiffFileQueryKey(
@@ -335,7 +340,7 @@ export function useGitDiffPanelState({
         );
       };
     },
-    [environmentId, gitDiffTarget, queryClient],
+    [environmentId, fileTarget, queryClient],
   );
 
   return {
@@ -359,15 +364,46 @@ export function useGitDiffPanelState({
   };
 }
 
-function diffTargetKey(target: WorkspaceDiffTarget): string | null {
+function fileTargetKey(target: DiffFileTarget): string | null {
   switch (target.type) {
     case "uncommitted":
       return null;
     case "branch_committed":
     case "all":
-      return target.mergeBaseBranch;
+      return target.mergeBaseRef;
     case "commit":
       return target.sha;
+    default: {
+      const _exhaustive: never = target;
+      return _exhaustive;
+    }
+  }
+}
+
+/**
+ * Lift a `WorkspaceDiffTarget` (branch-name-shaped) into a `DiffFileTarget`
+ * (SHA-shaped) once the diff response has surfaced the resolved merge base.
+ * Returns `undefined` when we don't yet have a SHA for the merge-base side —
+ * either the diff hasn't loaded yet, or the branch has no merge base with
+ * HEAD (in which case the diff itself was empty and there's nothing for
+ * context expansion to reach).
+ */
+function buildDiffFileTarget(
+  target: WorkspaceDiffTarget | undefined,
+  mergeBaseRef: string | null,
+): DiffFileTarget | undefined {
+  if (!target) return undefined;
+  switch (target.type) {
+    case "uncommitted":
+      return { type: "uncommitted" };
+    case "branch_committed":
+      return mergeBaseRef
+        ? { type: "branch_committed", mergeBaseRef }
+        : undefined;
+    case "all":
+      return mergeBaseRef ? { type: "all", mergeBaseRef } : undefined;
+    case "commit":
+      return { type: "commit", sha: target.sha };
     default: {
       const _exhaustive: never = target;
       return _exhaustive;

@@ -163,6 +163,7 @@ export function createFakeWorkspace(pathname: string) {
         truncated: false,
         shortstat: "",
         files: "",
+        mergeBaseRef: null,
       };
     },
     async listBranches() {

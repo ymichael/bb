@@ -520,12 +520,14 @@ describe("useWebSocket", () => {
       truncated: false,
       shortstat: "",
       files: "",
+      mergeBaseRef: null,
     });
     queryClient.setQueryData(commitGitDiffQueryKey, {
       diff: "",
       truncated: false,
       shortstat: "",
       files: "",
+      mergeBaseRef: null,
     });
 
     renderHook(() => useWebSocket(), { wrapper });

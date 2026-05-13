@@ -134,6 +134,7 @@ function createFakeWorkspace(path: string) {
     truncated: false,
     shortstat: "",
     files: "",
+    mergeBaseRef: null,
   };
   let localStateFingerprint: GetLocalStateFingerprintResult = `local:${path}:initial`;
   let localStateFingerprintError: Error | null = null;

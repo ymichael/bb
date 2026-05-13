@@ -72,10 +72,13 @@ function toWorkspaceDiffTarget(query: EnvironmentDiffQuery) {
  *
  * Only `uncommitted` and `all` have a working-tree side; the others read
  * from refs on both sides. `branch_committed` and `all` use the merge-base
- * branch as their old side. `commit` uses the parent commit (`<sha>^`); on
- * a root commit that ref is missing, but the daemon's `git cat-file`
- * fallback already returns empty content for missing objects, so we don't
- * special-case the root-commit edge here.
+ * SHA the diff was computed against as their old side (passed in by the
+ * client from `workspace.diff`'s response — reading from the branch tip
+ * instead would diverge from the diff's hunk coordinates whenever the
+ * branch has moved past the merge-base). `commit` uses the parent commit
+ * (`<sha>^`); on a root commit that ref is missing, but the daemon's
+ * `git cat-file` fallback already returns empty content for missing
+ * objects, so we don't special-case the root-commit edge here.
  */
 function resolveDiffFileRef(
   query: EnvironmentDiffFileQuery,
@@ -84,9 +87,9 @@ function resolveDiffFileRef(
     case "uncommitted":
       return query.side === "old" ? "HEAD" : undefined;
     case "branch_committed":
-      return query.side === "old" ? query.mergeBaseBranch : "HEAD";
+      return query.side === "old" ? query.mergeBaseRef : "HEAD";
     case "all":
-      return query.side === "old" ? query.mergeBaseBranch : undefined;
+      return query.side === "old" ? query.mergeBaseRef : undefined;
     case "commit":
       return query.side === "old" ? `${query.sha}^` : query.sha;
     default: {

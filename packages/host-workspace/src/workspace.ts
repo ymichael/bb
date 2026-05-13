@@ -78,6 +78,12 @@ type DiffSummary = {
   files: string;
   shortstat: string;
   truncated: boolean;
+  mergeBaseRef: string | null;
+};
+
+type DiffArtifactsResult = {
+  artifacts: [string, string, string];
+  mergeBaseRef: string | null;
 };
 
 type DiffArtifacts = {
@@ -794,9 +800,10 @@ export class Workspace {
     maxDiffBytes?: number;
     maxFileListBytes?: number;
   }): Promise<DiffSummary> {
-    const [rawDiff, shortstat, rawFiles] = await this.readDiffArtifacts(
-      args.target,
-    );
+    const {
+      artifacts: [rawDiff, shortstat, rawFiles],
+      mergeBaseRef,
+    } = await this.readDiffArtifacts(args.target);
 
     const diffTruncated =
       typeof args.maxDiffBytes === "number" &&
@@ -813,6 +820,7 @@ export class Workspace {
         : rawFiles,
       shortstat,
       truncated,
+      mergeBaseRef,
     };
   }
 
@@ -1000,23 +1008,29 @@ export class Workspace {
 
   private async readDiffArtifacts(
     target: WorkspaceDiffTarget,
-  ): Promise<[string, string, string]> {
+  ): Promise<DiffArtifactsResult> {
     switch (target.type) {
       case "uncommitted":
-        return this.readUncommittedDiffArtifacts();
+        return {
+          artifacts: await this.readUncommittedDiffArtifacts(),
+          mergeBaseRef: null,
+        };
       case "branch_committed": {
         const mergeBaseRef = await readMergeBaseRef(
           this.path,
           target.mergeBaseBranch,
         );
         if (!mergeBaseRef) {
-          return ["", "", ""];
+          return { artifacts: ["", "", ""], mergeBaseRef: null };
         }
-        return this.runDiffCommands(
-          [`${mergeBaseRef}..HEAD`],
-          [`${mergeBaseRef}..HEAD`],
-          [`${mergeBaseRef}..HEAD`],
-        );
+        return {
+          artifacts: await this.runDiffCommands(
+            [`${mergeBaseRef}..HEAD`],
+            [`${mergeBaseRef}..HEAD`],
+            [`${mergeBaseRef}..HEAD`],
+          ),
+          mergeBaseRef,
+        };
       }
       case "all": {
         const mergeBaseRef = await readMergeBaseRef(
@@ -1024,13 +1038,16 @@ export class Workspace {
           target.mergeBaseBranch,
         );
         if (!mergeBaseRef) {
-          return ["", "", ""];
+          return { artifacts: ["", "", ""], mergeBaseRef: null };
         }
-        return this.readDiffArtifactsIncludingUntracked({
-          diffArgs: [mergeBaseRef],
-          filesArgs: [mergeBaseRef],
-          numstatArgs: [mergeBaseRef],
-        });
+        return {
+          artifacts: await this.readDiffArtifactsIncludingUntracked({
+            diffArgs: [mergeBaseRef],
+            filesArgs: [mergeBaseRef],
+            numstatArgs: [mergeBaseRef],
+          }),
+          mergeBaseRef,
+        };
       }
       case "commit": {
         const [diff, shortstat, files] = await Promise.all([
@@ -1047,7 +1064,10 @@ export class Workspace {
             cwd: this.path,
           }),
         ]);
-        return [diff.stdout, shortstat.stdout, files.stdout];
+        return {
+          artifacts: [diff.stdout, shortstat.stdout, files.stdout],
+          mergeBaseRef: null,
+        };
       }
       default: {
         const _exhaustive: never = target;

@@ -49,6 +49,7 @@ function makeGitDiffResponse(): ThreadGitDiffResponse {
     truncated: false,
     shortstat: " 1 file changed, 1 insertion(+)\n",
     files: "M\tfile\n",
+    mergeBaseRef: null,
   };
 }
 
