@@ -3,16 +3,14 @@ import {
   type LocalPathProjectSource,
   type ProjectSource,
 } from "@bb/domain";
-import { Icon, LocalhostBadge, SettingsRow, StatusPill } from "@/components/ui";
+import { Icon } from "@/components/ui/icon.js";
+import { LocalhostBadge } from "@/components/ui/localhost-badge.js";
+import { SettingsRow } from "@/components/ui/settings-section.js";
+import { StatusPill } from "@/components/ui/status-pill.js";
 import { GitHubIcon } from "@/components/icons/GitHubIcon";
 import { PersistentHostIconName } from "@/lib/host-display";
-import { Button } from "@/components/ui";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui";
+import { Button } from "@/components/ui/button.js";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu.js";
 
 interface ProjectSourceRowProps {
   source: ProjectSource;

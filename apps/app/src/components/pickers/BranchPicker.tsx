@@ -1,12 +1,9 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
-import { Button, Icon } from "@/components/ui";
-import {
-  COARSE_POINTER_COMPACT_ICON_SIZE_CLASS,
-  COARSE_POINTER_COMPACT_ICON_SIZE_SHRINK_CLASS,
-  COARSE_POINTER_ICON_SIZE_SHRINK_CLASS,
-} from "@/components/ui";
-import { Input } from "@/components/ui";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui";
+import { Button } from "@/components/ui/button.js";
+import { Icon } from "@/components/ui/icon.js";
+import { COARSE_POINTER_COMPACT_ICON_SIZE_CLASS, COARSE_POINTER_COMPACT_ICON_SIZE_SHRINK_CLASS, COARSE_POINTER_ICON_SIZE_SHRINK_CLASS } from "@/components/ui/coarse-pointer-sizing.js";
+import { Input } from "@/components/ui/input.js";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover.js";
 import {
   OPTION_BASE_CLASS_NAME,
   OPTION_CONTENT_CLASS_NAME,

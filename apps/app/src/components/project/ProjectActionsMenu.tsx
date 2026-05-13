@@ -1,18 +1,11 @@
 import { findLocalPathProjectSourceForHost } from "@bb/domain";
 import type { ProjectResponse } from "@bb/server-contract";
 import type { ReactNode } from "react";
-import { Button, Icon } from "@/components/ui";
-import { COARSE_POINTER_ICON_SIZE_CLASS } from "@/components/ui";
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuTrigger,
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui";
+import { Button } from "@/components/ui/button.js";
+import { Icon } from "@/components/ui/icon.js";
+import { COARSE_POINTER_ICON_SIZE_CLASS } from "@/components/ui/coarse-pointer-sizing.js";
+import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from "@/components/ui/context-menu.js";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu.js";
 import { useHostDaemon } from "@/hooks/useHostDaemon";
 import { cn } from "@/lib/utils";
 import { useProjectActions } from "./ProjectActionsProvider";

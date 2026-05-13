@@ -10,18 +10,11 @@ import type { AvailableModel, Host, ReasoningLevel, Thread } from "@bb/domain";
 import type { ProjectResponse, SystemProviderInfo } from "@bb/server-contract";
 import { findLocalPathProjectSourceForHost } from "@bb/domain";
 import type { HireProjectManagerRequest } from "@/hooks/mutations/project-mutations";
-import { DetailCard, DetailRow } from "@/components/ui";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui";
-import { Button } from "@/components/ui";
-import { FormError } from "@/components/ui";
-import { Input } from "@/components/ui";
+import { DetailCard, DetailRow } from "@/components/ui/detail-card.js";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog.js";
+import { Button } from "@/components/ui/button.js";
+import { FormError } from "@/components/ui/form-error.js";
+import { Input } from "@/components/ui/input.js";
 import { useHireProjectManager } from "@/hooks/mutations/project-mutations";
 import {
   useAvailableModels,

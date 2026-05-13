@@ -1,19 +1,12 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { assertNever } from "@bb/core-ui";
 import type { ThreadType, WorkspaceStatus } from "@bb/domain";
-import { DetailCard, DetailRow } from "@/components/ui";
+import { DetailCard, DetailRow } from "@/components/ui/detail-card.js";
 import type { ThreadGitStatusDisplay } from "@/components/workspace/workspace-status";
 import { WorkspaceChangesList } from "@/components/thread/WorkspaceChangesList";
-import { FormError } from "@/components/ui";
-import { Button } from "@/components/ui";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui";
+import { FormError } from "@/components/ui/form-error.js";
+import { Button } from "@/components/ui/button.js";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog.js";
 import {
   getMergeBaseBranchCandidates,
   BranchPicker,

@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useRef, type CSSProperties, type ReactNode } from "react";
 import { FileTree } from "@pierre/trees/react";
-import { Button, EmptyState, Icon, Input } from "@/components/ui";
+import { Button } from "@/components/ui/button.js";
+import { EmptyState } from "@/components/ui/empty-state.js";
+import { Icon } from "@/components/ui/icon.js";
+import { Input } from "@/components/ui/input.js";
 import { usePreferredTheme } from "@/hooks/useTheme";
 import type { ManagerStorageBrowserController } from "./useManagerStorageBrowser";
 

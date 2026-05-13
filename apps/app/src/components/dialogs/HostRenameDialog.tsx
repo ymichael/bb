@@ -1,14 +1,7 @@
 import { useId, useState, type FormEvent } from "react";
-import { Button } from "@/components/ui";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui";
-import { Input } from "@/components/ui";
+import { Button } from "@/components/ui/button.js";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog.js";
+import { Input } from "@/components/ui/input.js";
 
 export interface HostRenameDialogTarget {
   id: string;

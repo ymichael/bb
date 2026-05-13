@@ -20,7 +20,7 @@ import {
   type ExecutionControlsProps,
   type ExecutionPermissionConfig,
 } from "@/components/promptbox/ExecutionControls";
-import { useBottomAnchoredScroll } from "@/components/ui";
+import { useBottomAnchoredScroll } from "@/components/ui/bottom-anchored-scroll-body.js";
 import { ThreadTimelineScrollToBottomButton } from "@/views/thread-detail/ThreadTimelineScrollToBottomButton";
 import { ThreadContextWindowIndicator } from "@/components/thread/timeline";
 import { THREAD_PROMPT_CONTEXT_BANNER_ROW_HEIGHT } from "@/components/promptbox/banner/ThreadPromptContextBanner";

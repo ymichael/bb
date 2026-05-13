@@ -35,7 +35,7 @@ import {
 } from "../../hooks/queries/thread-queries";
 import { ThreadGitActionDialog } from "@/components/dialogs/ThreadGitActionDialog";
 import { ThreadEnvironmentPromotionDialog } from "@/components/dialogs/ThreadEnvironmentPromotionDialog";
-import { PageShell } from "@/components/ui";
+import { PageShell } from "@/components/ui/page-shell.js";
 import { HEADER_ICON_BUTTON_CLASS } from "@/components/layout/AppPageHeader";
 import { ThreadActionsMenu } from "@/components/thread/ThreadActionsMenu";
 import { ThreadWorkspaceOpenButton } from "@/components/thread/ThreadWorkspaceOpenButton";

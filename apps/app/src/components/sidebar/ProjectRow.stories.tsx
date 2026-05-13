@@ -8,10 +8,7 @@ import {
   makeProject as makeSharedProject,
   makeThreadListEntry,
 } from "../../../.ladle/story-fixtures";
-import {
-  SidebarMenu,
-  SidebarStickyStack,
-} from "@/components/ui";
+import { SidebarMenu, SidebarStickyStack } from "@/components/ui/sidebar.js";
 import { ProjectActionsProvider } from "@/components/project/ProjectActionsProvider";
 import { ThreadActionsProvider } from "@/components/thread/ThreadActionsProvider";
 import { ProjectRow, type ProjectThreadListState } from "./ProjectRow";

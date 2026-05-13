@@ -19,7 +19,7 @@ import {
   type WorkspaceChangedFilesSection,
 } from "@/components/workspace/workspace-change-summary";
 import { cn } from "@/lib/utils";
-import { Icon } from "@/components/ui";
+import { Icon } from "@/components/ui/icon.js";
 
 export interface ContextBannerMergeBaseConfig {
   branch: string;

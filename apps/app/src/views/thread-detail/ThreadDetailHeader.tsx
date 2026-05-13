@@ -1,6 +1,12 @@
 import type { ReactNode } from "react";
 import { useIsSecondaryPanelOpen } from "@/lib/thread-secondary-panel";
-import { Button, COARSE_POINTER_TOOLBAR_ACTION_BUTTON_CLASS, Icon, SplitButton, StatusPill, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger, useIsCompactViewport } from "@/components/ui";
+import { Button } from "@/components/ui/button.js";
+import { COARSE_POINTER_TOOLBAR_ACTION_BUTTON_CLASS } from "@/components/ui/coarse-pointer-sizing.js";
+import { Icon } from "@/components/ui/icon.js";
+import { SplitButton } from "@/components/ui/split-button.js";
+import { StatusPill } from "@/components/ui/status-pill.js";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip.js";
+import { useIsCompactViewport } from "@/components/ui/hooks/use-compact-viewport.js";
 import {
   AppPageHeader,
   HEADER_ICON_BUTTON_CLASS,

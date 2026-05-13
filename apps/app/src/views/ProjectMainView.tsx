@@ -4,7 +4,7 @@ import { isGitHubRepoProjectSource } from "@bb/domain";
 import { NewThreadPromptBox } from "@/components/promptbox/NewThreadPromptBox";
 import { parseEnvironmentValue } from "@/components/pickers/environment-picker-value";
 import { OptionPicker } from "@/components/pickers/OptionPicker";
-import { PageShell } from "@/components/ui";
+import { PageShell } from "@/components/ui/page-shell.js";
 import { useUploadPromptAttachment } from "@/hooks/mutations/project-mutations";
 import { useCreateThread } from "@/hooks/mutations/thread-runtime-mutations";
 import {

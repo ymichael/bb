@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import type { ThreadListEntry } from "@bb/domain";
 import { makeThreadListEntry } from "../../../.ladle/story-fixtures";
-import { SidebarMenu, SidebarMenuItem } from "@/components/ui";
+import { SidebarMenu, SidebarMenuItem } from "@/components/ui/sidebar.js";
 import { ThreadActionsProvider } from "@/components/thread/ThreadActionsProvider";
 import { ThreadRow, type ThreadRowOptions } from "./ThreadRow";
 import { StoryCard, StoryRow } from "../../../.ladle/story-card";

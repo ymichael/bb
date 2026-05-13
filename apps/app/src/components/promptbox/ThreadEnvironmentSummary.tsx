@@ -1,7 +1,7 @@
 import { HostStatusBadge } from "@/components/HostStatusIndicator";
 import { OptionDisplay } from "@/components/pickers/OptionPicker";
 import { copyToClipboardWithToast } from "@/lib/clipboard";
-import { Icon, type IconName } from "@/components/ui";
+import { Icon, type IconName } from "@/components/ui/icon.js";
 
 export interface ThreadEnvironmentSummaryProps {
   /** Mode label (e.g. "Working locally" / "Worktree" / "E2B Sandbox"). Never truncates. */

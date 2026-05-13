@@ -1,7 +1,7 @@
 import type {
   MarkdownPreviewLocalFileLink,
   MarkdownPreviewLocalFileLinkHandler,
-} from "../../ui/markdown-preview.js";
+} from "../../ui/markdown-local-file-link.js";
 
 export type ThreadTimelineTheme = "light" | "dark";
 

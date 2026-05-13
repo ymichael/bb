@@ -10,12 +10,10 @@ import {
   type PendingInteractionApprovalDecision,
   type PendingInteractionResolution,
 } from "@bb/domain";
-import {
-  Button,
-  ExpandableLine,
-  StatusPill,
-  getDetailScrollMaxHeightClass,
-} from "@/components/ui";
+import { Button } from "@/components/ui/button.js";
+import { ExpandableLine } from "@/components/ui/expandable-line.js";
+import { StatusPill } from "@/components/ui/status-pill.js";
+import { getDetailScrollMaxHeightClass } from "@/components/ui/detail-scroll-size.js";
 import { useResolveThreadPendingInteraction } from "@/hooks/mutations/thread-interaction-mutations";
 import { getMutationErrorMessage } from "@/lib/mutation-errors";
 import { cn } from "@/lib/utils";

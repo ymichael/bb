@@ -1,5 +1,5 @@
 import { useSearchParams } from "react-router-dom";
-import { Icon } from "@/components/ui";
+import { Icon } from "@/components/ui/icon.js";
 
 const STATUS_CONTENT = {
   success: {

@@ -1,5 +1,5 @@
 import type { EnvironmentWorkspaceDisplayKind } from "@bb/domain";
-import type { IconName } from "@/components/ui";
+import type { IconName } from "@/components/ui/icon.js";
 import { PersistentHostIconName } from "@/lib/host-display";
 
 export function getEnvironmentWorkspaceDisplayIconName(

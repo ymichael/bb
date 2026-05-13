@@ -1,8 +1,8 @@
 import type { CloudAuthProviderId } from "@bb/agent-providers";
 import type { CloudAuthConnection } from "@bb/server-contract";
-import { StatusPill, type StatusPillVariant } from "@/components/ui";
-import { Button } from "@/components/ui";
-import { SettingsCard, SettingsRowList } from "@/components/ui";
+import { StatusPill, type StatusPillVariant } from "@/components/ui/status-pill.js";
+import { Button } from "@/components/ui/button.js";
+import { SettingsCard, SettingsRowList } from "@/components/ui/settings-section.js";
 import { CONNECTED_DOT_CLASS } from "@/components/settings/constants";
 
 const CLOUD_AUTH_STATUS_DISPLAY: Record<

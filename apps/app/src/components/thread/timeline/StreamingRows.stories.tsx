@@ -25,11 +25,9 @@ import {
   ThreadTimelineRows,
   TimelineWorkingIndicator,
 } from "@/components/thread/timeline";
-import {
-  ConversationTimeline,
-  HeightTransition,
-  PageShell,
-} from "@/components/ui";
+import { ConversationTimeline } from "@/components/ui/conversation.js";
+import { HeightTransition } from "@/components/ui/height-transition.js";
+import { PageShell } from "@/components/ui/page-shell.js";
 import { StoryCard, StoryRow } from "../../../../.ladle/story-card";
 
 export default {

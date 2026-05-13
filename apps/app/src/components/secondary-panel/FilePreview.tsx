@@ -1,7 +1,9 @@
 import { type CSSProperties, useEffect, useMemo, useRef } from "react";
 import { File as PierreFile } from "@pierre/diffs/react";
 import type { SelectedLineRange, SupportedLanguages } from "@pierre/diffs";
-import { Icon, MarkdownPreview, Skeleton } from "@/components/ui";
+import { Icon } from "@/components/ui/icon.js";
+import { MarkdownPreview } from "@/components/ui/markdown-preview.js";
+import { Skeleton } from "@/components/ui/skeleton.js";
 import { usePreferredTheme } from "@/hooks/useTheme";
 
 export interface FilePreviewFile {

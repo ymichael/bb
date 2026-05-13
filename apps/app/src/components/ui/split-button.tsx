@@ -2,7 +2,7 @@ import { Fragment, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { buttonVariants } from "./button.js";
 import { COARSE_POINTER_TOOLBAR_ACTION_BUTTON_CLASS } from "./coarse-pointer-sizing.js";
-import { Icon } from "@/components/ui";
+import { Icon } from "@/components/ui/icon.js";
 import {
   DropdownMenu,
   DropdownMenuContent,

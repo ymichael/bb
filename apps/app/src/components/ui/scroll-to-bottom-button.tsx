@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import { Icon } from "@/components/ui";
+import { Icon } from "@/components/ui/icon.js";
 
 export interface ScrollToBottomButtonProps {
   visible: boolean;

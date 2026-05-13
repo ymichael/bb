@@ -1,13 +1,9 @@
 import type { Host } from "@bb/domain";
-import { Icon, LocalhostBadge } from "@/components/ui";
-import { Button } from "@/components/ui";
-import { COARSE_POINTER_ICON_SIZE_SHRINK_CLASS } from "@/components/ui";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui";
+import { Icon } from "@/components/ui/icon.js";
+import { LocalhostBadge } from "@/components/ui/localhost-badge.js";
+import { Button } from "@/components/ui/button.js";
+import { COARSE_POINTER_ICON_SIZE_SHRINK_CLASS } from "@/components/ui/coarse-pointer-sizing.js";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu.js";
 import { HostStatusBadge } from "@/components/HostStatusIndicator";
 import { getHostIconName } from "@/lib/host-display";
 import { cn } from "@/lib/utils";

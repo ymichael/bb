@@ -1,8 +1,10 @@
 import type { Thread } from "@bb/domain";
 import type { ReactNode } from "react";
-import { ContextMenu, ContextMenuCheckboxItem, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger, DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, Icon } from "@/components/ui";
-import { Button } from "@/components/ui";
-import { COARSE_POINTER_ICON_SIZE_CLASS } from "@/components/ui";
+import { ContextMenu, ContextMenuCheckboxItem, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger } from "@/components/ui/context-menu.js";
+import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu.js";
+import { Icon } from "@/components/ui/icon.js";
+import { Button } from "@/components/ui/button.js";
+import { COARSE_POINTER_ICON_SIZE_CLASS } from "@/components/ui/coarse-pointer-sizing.js";
 import { cn } from "@/lib/utils";
 import { threadTypeLabel } from "@/lib/thread-title";
 import { isThreadRead } from "@/lib/thread-read-state";

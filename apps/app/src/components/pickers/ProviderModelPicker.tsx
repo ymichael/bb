@@ -1,16 +1,12 @@
 import { useCallback, useMemo, useState } from "react";
-import { Button, Icon } from "@/components/ui";
-import {
-  COARSE_POINTER_ICON_SIZE_CLASS,
-  COARSE_POINTER_ICON_SIZE_SHRINK_CLASS,
-  COARSE_POINTER_PROVIDER_TAB_SIZE_CLASS,
-  COARSE_POINTER_TEXT_SM_CLASS,
-} from "@/components/ui";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui";
-import { Switch } from "@/components/ui";
+import { Button } from "@/components/ui/button.js";
+import { Icon } from "@/components/ui/icon.js";
+import { COARSE_POINTER_ICON_SIZE_CLASS, COARSE_POINTER_ICON_SIZE_SHRINK_CLASS, COARSE_POINTER_PROVIDER_TAB_SIZE_CLASS, COARSE_POINTER_TEXT_SM_CLASS } from "@/components/ui/coarse-pointer-sizing.js";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover.js";
+import { Switch } from "@/components/ui/switch.js";
 import { cn } from "@/lib/utils";
 import { useAvailableModels } from "@/hooks/queries/system-queries";
-import { useIsCompactViewport } from "@/components/ui";
+import { useIsCompactViewport } from "@/components/ui/hooks/use-compact-viewport.js";
 import {
   OPTION_BASE_CLASS_NAME,
   OPTION_INTERACTIVE_CLASS_NAME,

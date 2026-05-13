@@ -1,6 +1,7 @@
 import type { GithubRepoInfo } from "@bb/server-contract";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Icon } from "@/components/ui";
-import { Input } from "@/components/ui";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog.js";
+import { Icon } from "@/components/ui/icon.js";
+import { Input } from "@/components/ui/input.js";
 
 interface ProjectConnectGithubDialogProps {
   open: boolean;

@@ -10,15 +10,15 @@ import {
   type LocalPathProjectSource,
   type ProjectSource,
 } from "@bb/domain";
-import { Button } from "@/components/ui";
-import { PageShell } from "@/components/ui";
+import { Button } from "@/components/ui/button.js";
+import { PageShell } from "@/components/ui/page-shell.js";
 import { ProjectPathDialog } from "@/components/dialogs/ProjectPathDialog";
 import { ProjectConnectGithubDialog } from "@/components/dialogs/ProjectConnectGithubDialog";
 import {
   ProjectSourceDeleteDialog,
   type ProjectSourceDeleteDialogTarget,
 } from "@/components/dialogs/ProjectSourceDeleteDialog";
-import { SettingsRowList, SettingsSection } from "@/components/ui";
+import { SettingsRowList, SettingsSection } from "@/components/ui/settings-section.js";
 import { ProjectSourceRow } from "@/views/project-settings/ProjectSourceRow";
 import {
   useAddLocalProjectSource,

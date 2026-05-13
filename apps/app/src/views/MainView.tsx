@@ -5,8 +5,8 @@ import {
   type ConnectionAwareQueryStatus,
 } from "../hooks/queries/connection-aware-query-state";
 import { useQuickCreateProjectController } from "@/hooks/useQuickCreateProject";
-import { Button } from "@/components/ui";
-import { PageShell } from "@/components/ui";
+import { Button } from "@/components/ui/button.js";
+import { PageShell } from "@/components/ui/page-shell.js";
 
 export interface MainViewBodyProps {
   status: ConnectionAwareQueryStatus;

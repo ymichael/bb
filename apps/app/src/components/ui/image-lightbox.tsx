@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { Button } from "./button.js";
 import { Dialog, DialogClose, DialogContent, DialogTitle } from "./dialog.js";
-import { Icon } from "@/components/ui";
+import { Icon } from "@/components/ui/icon.js";
 
 export const imageLightboxKeyActionValues = [
   "close",

@@ -1,5 +1,5 @@
 import type { Host } from "@bb/domain";
-import type { IconName } from "@/components/ui";
+import type { IconName } from "@/components/ui/icon.js";
 
 /**
  * Canonical icon for a known persistent host (the user's machine,

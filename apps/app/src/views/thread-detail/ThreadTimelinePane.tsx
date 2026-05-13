@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import type { ActiveThinking, ThreadRuntimeDisplayStatus } from "@bb/domain";
 import type { TimelineRow, TimelineTurnRow } from "@bb/server-contract";
-import { Button, ConversationTimeline, HeightTransition, Icon, PageShell, useBottomAnchoredScroll } from "@/components/ui";
+import { Button } from "@/components/ui/button.js";
+import { ConversationTimeline } from "@/components/ui/conversation.js";
+import { HeightTransition } from "@/components/ui/height-transition.js";
+import { Icon } from "@/components/ui/icon.js";
+import { PageShell } from "@/components/ui/page-shell.js";
+import { useBottomAnchoredScroll } from "@/components/ui/bottom-anchored-scroll-body.js";
 import {
   ThreadTimelineRows,
   type ThreadTimelineLocalFileLinkHandler,

@@ -2,17 +2,15 @@ import { useMemo } from "react";
 import type { ThreadListEntry } from "@bb/domain";
 import type { ProjectResponse } from "@bb/server-contract";
 import { NavLink } from "react-router-dom";
-import { EmptyState, Icon, SidebarStickyTier } from "@/components/ui";
+import { EmptyState } from "@/components/ui/empty-state.js";
+import { Icon } from "@/components/ui/icon.js";
+import { SidebarStickyTier } from "@/components/ui/sidebar.js";
 import {
   ProjectActionsContextMenu,
   ProjectActionsMenu,
 } from "@/components/project/ProjectActionsMenu";
-import { SidebarMenuItem, SidebarMenuSkeleton } from "@/components/ui";
-import {
-  COARSE_POINTER_ICON_SIZE_CLASS,
-  COARSE_POINTER_PROJECT_ROW_ACTION_SIZE_CLASS,
-  COARSE_POINTER_ROW_ACTION_SIZE_CLASS,
-} from "@/components/ui";
+import { SidebarMenuItem, SidebarMenuSkeleton } from "@/components/ui/sidebar.js";
+import { COARSE_POINTER_ICON_SIZE_CLASS, COARSE_POINTER_PROJECT_ROW_ACTION_SIZE_CLASS, COARSE_POINTER_ROW_ACTION_SIZE_CLASS } from "@/components/ui/coarse-pointer-sizing.js";
 import { cn } from "@/lib/utils";
 import { ThreadRow } from "./ThreadRow";
 import { buildProjectThreadGroups } from "./projectThreadGroups";

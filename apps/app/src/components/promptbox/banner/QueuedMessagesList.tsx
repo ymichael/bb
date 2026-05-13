@@ -1,5 +1,6 @@
 import type { ThreadQueuedMessage } from "@bb/domain";
-import { Button, Icon } from "@/components/ui";
+import { Button } from "@/components/ui/button.js";
+import { Icon } from "@/components/ui/icon.js";
 import { PromptStackCard } from "@/components/promptbox/banner/PromptStackCard";
 import {
   countQueuedMessageAttachments,

@@ -13,7 +13,7 @@ import {
   type TimelineTitleTone,
 } from "@bb/thread-view";
 import { cn } from "@/lib/utils";
-import { DiffStatsTally } from "@/components/ui";
+import { DiffStatsTally } from "@/components/ui/diff-stats-tally.js";
 
 /**
  * Resolves a title's declared action to a click callback. Return `null` to

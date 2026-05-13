@@ -18,13 +18,9 @@ import type {
   MentionMenuState,
   PromptMentionSuggestion,
 } from "@/components/promptbox/mentions/types";
-import { Button, Icon } from "@/components/ui";
-import {
-  COARSE_POINTER_PROMPT_ACTION_BUTTON_CLASS,
-  COARSE_POINTER_PROMPT_COMBO_BUTTON_CLASS,
-  COARSE_POINTER_PROMPT_ICON_ACTION_BUTTON_CLASS,
-  COARSE_POINTER_TEXT_BASE_CLASS,
-} from "@/components/ui";
+import { Button } from "@/components/ui/button.js";
+import { Icon } from "@/components/ui/icon.js";
+import { COARSE_POINTER_PROMPT_ACTION_BUTTON_CLASS, COARSE_POINTER_PROMPT_COMBO_BUTTON_CLASS, COARSE_POINTER_PROMPT_ICON_ACTION_BUTTON_CLASS, COARSE_POINTER_TEXT_BASE_CLASS } from "@/components/ui/coarse-pointer-sizing.js";
 import { useAutoGrow } from "@/hooks/useAutoGrow";
 import { createJsonLocalStorage } from "@/lib/browser-storage";
 import {

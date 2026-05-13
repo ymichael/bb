@@ -1,6 +1,6 @@
 import { Button, type ButtonProps } from "./button";
 import { StoryCard, StoryRow } from "../../../.ladle/story-card";
-import { Icon } from "@/components/ui";
+import { Icon } from "@/components/ui/icon.js";
 
 export default {
   title: "ui/Button",

@@ -1,13 +1,6 @@
 import type { Thread } from "@bb/domain";
-import { Button } from "@/components/ui";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui";
+import { Button } from "@/components/ui/button.js";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog.js";
 import { threadTypeLabel } from "@/lib/thread-title";
 
 export interface ThreadDirtyWorkspaceWarning {

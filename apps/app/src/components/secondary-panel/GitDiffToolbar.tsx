@@ -1,4 +1,7 @@
-import { Button, COARSE_POINTER_COMPACT_ICON_SIZE_CLASS, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, Icon } from "@/components/ui";
+import { Button } from "@/components/ui/button.js";
+import { COARSE_POINTER_COMPACT_ICON_SIZE_CLASS } from "@/components/ui/coarse-pointer-sizing.js";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu.js";
+import { Icon } from "@/components/ui/icon.js";
 import {
   formatChangeSummary,
   renderChangeSummary,

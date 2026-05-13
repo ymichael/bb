@@ -1,26 +1,15 @@
 import { memo, useState } from "react";
 import type { ThreadListEntry } from "@bb/domain";
-import {
-  Icon,
-  type IconName,
-  Pill,
-  SidebarMenuBadge,
-  SidebarStickyTier,
-  StatusPill,
-} from "@/components/ui";
+import { Icon, type IconName } from "@/components/ui/icon.js";
+import { Pill } from "@/components/ui/pill.js";
+import { SidebarMenuBadge, SidebarStickyTier } from "@/components/ui/sidebar.js";
+import { StatusPill } from "@/components/ui/status-pill.js";
 import { NavLink } from "react-router-dom";
 import {
   ThreadActionsContextMenu,
   ThreadActionsMenu,
 } from "@/components/thread/ThreadActionsMenu";
-import {
-  COARSE_POINTER_DOT_SIZE_CLASS,
-  COARSE_POINTER_COMPACT_ROW_HEIGHT_CLASS,
-  COARSE_POINTER_GLYPH_BOX_CLASS,
-  COARSE_POINTER_ICON_SIZE_CLASS,
-  COARSE_POINTER_ROW_ACTION_SIZE_CLASS,
-  COARSE_POINTER_ROW_HEIGHT_CLASS,
-} from "@/components/ui";
+import { COARSE_POINTER_DOT_SIZE_CLASS, COARSE_POINTER_COMPACT_ROW_HEIGHT_CLASS, COARSE_POINTER_GLYPH_BOX_CLASS, COARSE_POINTER_ICON_SIZE_CLASS, COARSE_POINTER_ROW_ACTION_SIZE_CLASS, COARSE_POINTER_ROW_HEIGHT_CLASS } from "@/components/ui/coarse-pointer-sizing.js";
 import {
   getEnvironmentWorkspaceDisplayIconLabel,
   getEnvironmentWorkspaceDisplayIconName,

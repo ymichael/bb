@@ -2,25 +2,15 @@ import { useAtomValue } from "jotai";
 import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import type { Host, ProjectSource, SandboxBackendInfo } from "@bb/domain";
-import { Icon, type IconName, LocalhostBadge } from "@/components/ui";
+import { Icon, type IconName } from "@/components/ui/icon.js";
+import { LocalhostBadge } from "@/components/ui/localhost-badge.js";
 import {
   findLocalPathProjectSourceForHost,
   isGitHubRepoProjectSource,
 } from "@bb/domain";
-import { Button } from "@/components/ui";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuTrigger,
-} from "@/components/ui";
-import {
-  COARSE_POINTER_COMPACT_ICON_SIZE_CLASS,
-  COARSE_POINTER_COMPACT_ICON_SIZE_SHRINK_CLASS,
-  COARSE_POINTER_ICON_SIZE_CLASS,
-} from "@/components/ui";
+import { Button } from "@/components/ui/button.js";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu.js";
+import { COARSE_POINTER_COMPACT_ICON_SIZE_CLASS, COARSE_POINTER_COMPACT_ICON_SIZE_SHRINK_CLASS, COARSE_POINTER_ICON_SIZE_CLASS } from "@/components/ui/coarse-pointer-sizing.js";
 import { useHostDaemon } from "@/hooks/useHostDaemon";
 import { useSandboxBackends } from "@/hooks/queries/system-queries";
 import { useEffectiveHosts } from "@/hooks/queries/effective-hosts";

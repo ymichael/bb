@@ -10,7 +10,7 @@ import { COARSE_POINTER_HEADER_ICON_BUTTON_CLASS } from "./coarse-pointer-sizing
 import { Input } from "./input.js";
 import { Separator } from "./separator.js";
 import { Skeleton } from "./skeleton.js";
-import { Icon } from "@/components/ui";
+import { Icon } from "@/components/ui/icon.js";
 import {
   Tooltip,
   TooltipContent,

@@ -1,7 +1,7 @@
 import { type ComponentProps, type ReactNode, useEffect, useRef } from "react";
 import { Panel, PanelGroup } from "react-resizable-panels";
-import { ResponsiveDrawerShell } from "@/components/ui";
-import { useIsCompactViewport } from "@/components/ui";
+import { ResponsiveDrawerShell } from "@/components/ui/responsive-overlay.js";
+import { useIsCompactViewport } from "@/components/ui/hooks/use-compact-viewport.js";
 import { useAtomValue } from "jotai";
 import { useIsSecondaryPanelOpen } from "@/lib/thread-secondary-panel";
 import { ThreadSecondaryPanel } from "@/components/secondary-panel/ThreadSecondaryPanel";

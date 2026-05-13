@@ -1,6 +1,10 @@
 import { useState, type FormEvent } from "react";
 import { assertNever } from "@bb/core-ui";
-import { Button, DetailCard, DetailRow, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, FormError, Icon } from "@/components/ui";
+import { Button } from "@/components/ui/button.js";
+import { DetailCard, DetailRow } from "@/components/ui/detail-card.js";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog.js";
+import { FormError } from "@/components/ui/form-error.js";
+import { Icon } from "@/components/ui/icon.js";
 import type { EnvironmentPromotionUnavailableReason } from "@bb/server-contract";
 import { getMutationErrorMessage } from "@/lib/mutation-errors";
 import { PROMOTION_UNAVAILABLE_COPY } from "@/lib/promotion-copy";

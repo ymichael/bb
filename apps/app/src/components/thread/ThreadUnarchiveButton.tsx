@@ -1,5 +1,6 @@
 import type { ThreadType } from "@bb/domain";
-import { Button, Icon } from "@/components/ui";
+import { Button } from "@/components/ui/button.js";
+import { Icon } from "@/components/ui/icon.js";
 import { threadTypeLabel } from "@/lib/thread-title";
 import { cn } from "@/lib/utils";
 

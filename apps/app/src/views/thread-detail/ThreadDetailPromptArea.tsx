@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import type { IconName } from "@/components/ui";
+import type { IconName } from "@/components/ui/icon.js";
 import { assertNever } from "@bb/core-ui";
 import type {
   PendingInteraction,

@@ -1,15 +1,8 @@
 import type { ThreadType } from "@bb/domain";
 import { useId, useState, type FormEvent } from "react";
-import { Button } from "@/components/ui";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui";
-import { Input } from "@/components/ui";
+import { Button } from "@/components/ui/button.js";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog.js";
+import { Input } from "@/components/ui/input.js";
 import { threadTypeLabel } from "@/lib/thread-title";
 
 export interface ThreadRenameDialogTarget {

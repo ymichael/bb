@@ -1,8 +1,9 @@
 import { type ReactNode, useMemo } from "react";
 import { useAtomValue } from "jotai";
-import { Icon, Skeleton } from "@/components/ui";
+import { Icon } from "@/components/ui/icon.js";
+import { Skeleton } from "@/components/ui/skeleton.js";
 import { Panel, PanelResizeHandle } from "react-resizable-panels";
-import { Button } from "@/components/ui";
+import { Button } from "@/components/ui/button.js";
 import { cn } from "@/lib/utils";
 import { type ThreadSecondaryPanel as ThreadSecondaryPanelTab } from "@/lib/thread-secondary-panel";
 import {

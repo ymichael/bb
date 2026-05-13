@@ -10,7 +10,7 @@ import { CopyButton } from "../../ui/copy-button.js";
 import { cn } from "@/lib/utils";
 import { buildProjectAttachmentContentUrl } from "@/lib/file-content-urls";
 import { MarkdownPreview } from "../../ui/markdown-preview.js";
-import { Icon } from "@/components/ui";
+import { Icon } from "@/components/ui/icon.js";
 import type {
   ThreadTimelineLocalFileLinkHandler,
   UserAttachmentImageSrcResolver,

@@ -12,7 +12,7 @@ import {
   stripRadixContentProps,
 } from "./responsive-overlay.js";
 import { getOverlayTriggerClassName } from "./overlay-trigger.js";
-import { Icon } from "@/components/ui";
+import { Icon } from "@/components/ui/icon.js";
 
 // ---------------------------------------------------------------------------
 // Context — separate instance from Popover to avoid cross-contamination

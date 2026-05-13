@@ -1,13 +1,8 @@
 import type { ComponentType, ReactNode } from "react";
-import { Button, Icon } from "@/components/ui";
-import { COARSE_POINTER_ICON_SIZE_CLASS } from "@/components/ui";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuTrigger,
-} from "@/components/ui";
+import { Button } from "@/components/ui/button.js";
+import { Icon } from "@/components/ui/icon.js";
+import { COARSE_POINTER_ICON_SIZE_CLASS } from "@/components/ui/coarse-pointer-sizing.js";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu.js";
 import { cn } from "@/lib/utils";
 
 export const OPTION_BASE_CLASS_NAME =

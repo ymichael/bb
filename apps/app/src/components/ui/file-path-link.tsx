@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 import { TruncateStart } from "./truncate-start.js";
-import { Icon } from "@/components/ui";
+import { Icon } from "@/components/ui/icon.js";
 
 interface FilePathLinkProps {
   path: string;

@@ -13,7 +13,12 @@ import type {
 import { formatEnvironmentDisplay } from "@bb/core-ui";
 import { cn } from "@/lib/utils";
 import { HostStatusBadge } from "@/components/HostStatusIndicator";
-import { Button, COARSE_POINTER_ICON_SIZE_CLASS, DetailCard, DetailRow, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger, Icon, LocalhostBadge } from "@/components/ui";
+import { Button } from "@/components/ui/button.js";
+import { COARSE_POINTER_ICON_SIZE_CLASS } from "@/components/ui/coarse-pointer-sizing.js";
+import { DetailCard, DetailRow } from "@/components/ui/detail-card.js";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu.js";
+import { Icon } from "@/components/ui/icon.js";
+import { LocalhostBadge } from "@/components/ui/localhost-badge.js";
 import {
   BranchPicker,
   getMergeBaseBranchCandidates,

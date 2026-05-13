@@ -1,11 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { DetailCard, DetailRow, Icon, Pill } from "@/components/ui";
+import { DetailCard, DetailRow } from "@/components/ui/detail-card.js";
+import { Icon } from "@/components/ui/icon.js";
+import { Pill } from "@/components/ui/pill.js";
 import type { ReplayRunSpeed } from "@bb/server-contract";
-import { PageShell } from "@/components/ui";
-import { Button } from "@/components/ui";
-import { SplitButton, type SplitButtonAction } from "@/components/ui";
+import { PageShell } from "@/components/ui/page-shell.js";
+import { Button } from "@/components/ui/button.js";
+import { SplitButton, type SplitButtonAction } from "@/components/ui/split-button.js";
 import { invalidateReplayCaptures } from "@/hooks/cache-effects";
 import { useEffectiveHosts } from "@/hooks/queries/effective-hosts";
 import { replayCapturesQueryKey } from "@/hooks/queries/query-keys";

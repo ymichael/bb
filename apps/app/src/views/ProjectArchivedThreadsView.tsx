@@ -1,7 +1,10 @@
 import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import type { ThreadListEntry } from "@bb/domain";
-import { Button, OverflowFade, PageShell, Pill } from "@/components/ui";
+import { Button } from "@/components/ui/button.js";
+import { OverflowFade } from "@/components/ui/overflow-fade.js";
+import { PageShell } from "@/components/ui/page-shell.js";
+import { Pill } from "@/components/ui/pill.js";
 import { ThreadUnarchiveButton } from "@/components/thread/ThreadUnarchiveButton";
 import { useUnarchiveThread } from "@/hooks/mutations/thread-state-mutations";
 import { useArchivedThreads } from "@/hooks/queries/thread-queries";

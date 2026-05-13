@@ -32,21 +32,11 @@ import { useServerConnectionState } from "@/hooks/useServerConnectionState";
 import type { WebSocketConnectionState } from "@/lib/ws";
 import * as api from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { Button, EmptyState, Icon } from "@/components/ui";
-import {
-  SidebarGroupContent,
-  SidebarMenu,
-  SidebarMenuItem,
-  SidebarMenuSkeleton,
-  SidebarStickyStack,
-  SidebarStickyTier,
-} from "@/components/ui";
-import {
-  COARSE_POINTER_ADD_PROJECT_BUTTON_SIZE_CLASS,
-  COARSE_POINTER_ICON_SIZE_CLASS,
-  COARSE_POINTER_ROW_ACTION_SIZE_CLASS,
-  COARSE_POINTER_ROW_HEIGHT_CLASS,
-} from "@/components/ui";
+import { Button } from "@/components/ui/button.js";
+import { EmptyState } from "@/components/ui/empty-state.js";
+import { Icon } from "@/components/ui/icon.js";
+import { SidebarGroupContent, SidebarMenu, SidebarMenuItem, SidebarMenuSkeleton, SidebarStickyStack, SidebarStickyTier } from "@/components/ui/sidebar.js";
+import { COARSE_POINTER_ADD_PROJECT_BUTTON_SIZE_CLASS, COARSE_POINTER_ICON_SIZE_CLASS, COARSE_POINTER_ROW_ACTION_SIZE_CLASS, COARSE_POINTER_ROW_HEIGHT_CLASS } from "@/components/ui/coarse-pointer-sizing.js";
 import { ProjectRow } from "./ProjectRow";
 import type { ProjectThreadListState } from "./ProjectRow";
 import {

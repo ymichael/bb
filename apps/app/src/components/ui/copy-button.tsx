@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
-import { Icon } from "@/components/ui";
+import { Icon } from "@/components/ui/icon.js";
 
 interface CopyButtonProps {
   text: string;

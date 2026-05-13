@@ -3,23 +3,14 @@ import { useAtomValue } from "jotai";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { timeAgo } from "@bb/core-ui";
 import type { CloudAuthProviderId } from "@bb/agent-providers";
-import { Button, Icon } from "@/components/ui";
-import { COARSE_POINTER_ICON_SIZE_CLASS } from "@/components/ui";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui";
-import { PageShell } from "@/components/ui";
+import { Button } from "@/components/ui/button.js";
+import { Icon } from "@/components/ui/icon.js";
+import { COARSE_POINTER_ICON_SIZE_CLASS } from "@/components/ui/coarse-pointer-sizing.js";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu.js";
+import { PageShell } from "@/components/ui/page-shell.js";
 import { CloudAuthSettingsSection } from "@/components/settings/CloudAuthSettingsSection";
 import { CONNECTED_DOT_CLASS } from "@/components/settings/constants";
-import {
-  SettingsRow,
-  SettingsRowList,
-  SettingsSection,
-  SettingsWithControl,
-} from "@/components/ui";
+import { SettingsRow, SettingsRowList, SettingsSection, SettingsWithControl } from "@/components/ui/settings-section.js";
 import {
   SandboxEnvVarsSection,
   type EnvVarEntry,

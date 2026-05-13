@@ -5,7 +5,7 @@ import type {
   WorkspaceStatus,
 } from "@bb/domain";
 import { formatDiffStatsText } from "@bb/thread-view";
-import { DiffStatsTally } from "@/components/ui";
+import { DiffStatsTally } from "@/components/ui/diff-stats-tally.js";
 
 export interface ChangeTally {
   filesCount: number;

@@ -25,7 +25,7 @@ import type {
 } from "@bb/domain";
 import type { ThreadTimelineResponse } from "@bb/server-contract";
 import { HOST_DAEMON_PROTOCOL_VERSION } from "@bb/host-daemon-contract";
-import { SidebarProvider } from "@/components/ui";
+import { SidebarProvider } from "@/components/ui/sidebar.js";
 import { Provider as JotaiProvider, createStore } from "jotai";
 import { conversationRow } from "@/test/fixtures/thread-timeline-rows";
 import { resetFakeReconnectingWebSockets } from "@/test/fake-reconnecting-websocket";

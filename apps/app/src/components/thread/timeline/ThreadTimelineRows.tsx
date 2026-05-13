@@ -49,7 +49,7 @@ import { WorkRowBody } from "./TimelineRowDetails.js";
 import { TimelineDetailScroll } from "./TimelineDetailScroll.js";
 import { Button } from "../../ui/button.js";
 import { AutoHeightContainer } from "../../ui/height-transition.js";
-import { Icon } from "@/components/ui";
+import { Icon } from "@/components/ui/icon.js";
 import {
   joinSignatureParts,
   timelineRowRenderSignature,

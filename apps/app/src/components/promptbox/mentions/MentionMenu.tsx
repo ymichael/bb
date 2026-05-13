@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef } from "react";
-import { Icon, Pill, TruncateStart } from "@/components/ui";
+import { Icon } from "@/components/ui/icon.js";
+import { Pill } from "@/components/ui/pill.js";
+import { TruncateStart } from "@/components/ui/truncate-start.js";
 import { cn } from "@/lib/utils";
 import type {
   MentionMenuState,

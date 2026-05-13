@@ -1,5 +1,6 @@
 import type { WorkspaceStatus } from "@bb/domain";
-import { EmptyState, FilePathLink } from "@/components/ui";
+import { EmptyState } from "@/components/ui/empty-state.js";
+import { FilePathLink } from "@/components/ui/file-path-link.js";
 import { cn } from "@/lib/utils";
 import { formatWorkspaceFileStatus } from "@/components/workspace/workspace-change-summary";
 

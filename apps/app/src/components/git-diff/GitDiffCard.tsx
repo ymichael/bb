@@ -9,7 +9,12 @@ import {
 import type { FileContents } from "@pierre/diffs";
 import { FileDiff as DiffView } from "@pierre/diffs/react";
 import { useIntersectionObserver } from "usehooks-ts";
-import { CopyButton, DiffStatsTally, FilePathLink, Icon, Skeleton, TruncateStart } from "@/components/ui";
+import { CopyButton } from "@/components/ui/copy-button.js";
+import { DiffStatsTally } from "@/components/ui/diff-stats-tally.js";
+import { FilePathLink } from "@/components/ui/file-path-link.js";
+import { Icon } from "@/components/ui/icon.js";
+import { Skeleton } from "@/components/ui/skeleton.js";
+import { TruncateStart } from "@/components/ui/truncate-start.js";
 import { cn } from "@/lib/utils";
 import {
   formatGitDiffFileLabel,
