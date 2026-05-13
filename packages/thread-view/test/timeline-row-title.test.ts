@@ -356,6 +356,25 @@ describe("buildTimelineRowTitle", () => {
     ]);
   });
 
+  it("collapses newlines in multi-line command content to single-line title segments", () => {
+    // Command content can include literal newlines (heredocs, scripts pasted
+    // as a single argument, etc.). The App renders segments with
+    // `whitespace-pre`, which would honor `\n` as a line break, and the
+    // plain text feeds CLI rendering and HTML title attributes. Both must
+    // be single-line, so segment construction normalizes newlines.
+    const row = {
+      ...commandRow(),
+      command: "node <<'EOF'\nconst x = 1;\nconsole.log(x);\nEOF",
+    } satisfies TimelineCommandWorkRow;
+
+    const title = buildTimelineRowTitle(row, DEFAULT_OPTIONS);
+
+    expect(title.plain).not.toContain("\n");
+    for (const segment of title.segments) {
+      expect(segment.text).not.toContain("\n");
+    }
+  });
+
   it("emits a live-tick duration decoration on pending command rows", () => {
     // Pending rows carry `completedAt: null`. The renderer emits a decoration
     // sourced from `startedAt`; the App ticks `now - startedAt` locally and

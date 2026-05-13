@@ -10,6 +10,7 @@ import {
   buildTimelineViewRows,
   buildTimelineWorkSummaryLabel,
   findActiveLatestBundleId,
+  findTimelineFrontierRow,
   type ThreadTimelineViewRow,
   type TimelineBundleSummaryRow,
   type TimelineStepSummaryRow,
@@ -292,5 +293,60 @@ describe("timeline progression frames", () => {
     expect(buildTimelineWorkSummaryLabel(step)).toBe(
       "Explored 2 files, edited 1 file",
     );
+  });
+});
+
+describe("findTimelineFrontierRow", () => {
+  it("returns null for an empty timeline", () => {
+    expect(findTimelineFrontierRow([])).toBeNull();
+  });
+
+  it("returns null when every row is a user-role conversation row", () => {
+    // User-role conversation rows are skipped because they're inputs to
+    // the agent rather than events the agent produced.
+    nextSeq = 1;
+    const rows = buildTimelineViewRows([userRow("Initial request.")]);
+    expect(findTimelineFrontierRow(rows)).toBeNull();
+  });
+
+  it("looks past a trailing user-role conversation row to the prior agent row", () => {
+    // A pending steer at the tail does not displace the previous frontier
+    // of agent-produced activity.
+    nextSeq = 1;
+    const rows = buildTimelineViewRows([
+      userRow("Initial request."),
+      assistantRow("Working on it."),
+      readRow("AGENTS.md"),
+      readRow("docs/CODE_REVIEW.md"),
+      {
+        ...baseRow("steer-1"),
+        kind: "conversation",
+        role: "user",
+        text: "Keep this in mind",
+        attachments: null,
+        userRequest: { kind: "steer", status: "pending" },
+      },
+    ]);
+
+    const frontier = findTimelineFrontierRow(rows);
+    expect(frontier?.kind).toBe("bundle-summary");
+  });
+
+  it("treats a trailing assistant-role conversation row as the frontier", () => {
+    // Assistant-role conversation rows count as agent-produced events,
+    // so they become the frontier when they trail the timeline.
+    nextSeq = 1;
+    const rows = buildTimelineViewRows([
+      userRow("Initial request."),
+      readRow("AGENTS.md"),
+      readRow("docs/CODE_REVIEW.md"),
+      assistantRow("All done."),
+    ]);
+
+    const frontier = findTimelineFrontierRow(rows);
+    expect(frontier?.kind).toBe("conversation");
+    if (frontier?.kind === "conversation") {
+      expect(frontier.role).toBe("assistant");
+    }
   });
 });

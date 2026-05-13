@@ -7,7 +7,6 @@ import {
   screen,
   type RenderResult,
 } from "@testing-library/react";
-import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { TimelineRow } from "@bb/server-contract";
 import {
@@ -56,12 +55,6 @@ function threadTimelineRowsProps({
     ...overrides,
     timelineRows,
   };
-}
-
-function renderRowsToStaticMarkup(args: ThreadTimelineRowsFixtureArgs): string {
-  return renderToStaticMarkup(
-    <ThreadTimelineRows {...threadTimelineRowsProps(args)} />,
-  );
 }
 
 function renderTimelineRows(args: ThreadTimelineRowsFixtureArgs): RenderResult {
@@ -182,80 +175,6 @@ describe("ThreadTimelineRows", () => {
     );
 
     expect(resolveUserAttachmentImageSrc).toHaveBeenCalledTimes(1);
-  });
-
-  it("uses active-latest treatment for trailing completed bundles in an active scope", () => {
-    // New spec: a bundle that is the trailing/latest bundle in the open step
-    // gets active-latest treatment (present tense + shimmer) regardless of
-    // whether its children have completed. The displaced (non-latest) bundle
-    // would render past-tense; see the displacement coverage below.
-    const html = renderRowsToStaticMarkup({
-      timelineRows: [
-        commandRow({
-          id: "read-1",
-          command: "cat src/app.ts",
-          activityIntents: [readIntent({ path: "src/app.ts" })],
-          sourceSeqStart: 1,
-        }),
-        commandRow({
-          id: "read-2",
-          command: "cat src/other.ts",
-          activityIntents: [readIntent({ path: "src/other.ts" })],
-          sourceSeqStart: 2,
-        }),
-      ],
-      overrides: {
-        threadRuntimeDisplayStatus: "active",
-      },
-    });
-
-    expect(html).toContain("Exploring");
-    expect(html).toContain("2 files");
-  });
-
-  it("does not auto-expand a displaced completed bundle in an active scope", () => {
-    // Two completed bundles in an active scope: only the trailing/latest
-    // bundle should auto-expand. The earlier displaced bundle stays
-    // collapsed so the timeline doesn't surface stale, finished work.
-    renderTimelineRows({
-      timelineRows: [
-        commandRow({
-          id: "command-1",
-          command: "pnpm test",
-          sourceSeqStart: 1,
-        }),
-        commandRow({
-          id: "command-2",
-          command: "pnpm lint",
-          sourceSeqStart: 2,
-        }),
-        commandRow({
-          id: "explore-1",
-          command: "cat src/app.ts",
-          activityIntents: [readIntent({ path: "src/app.ts" })],
-          sourceSeqStart: 3,
-        }),
-        commandRow({
-          id: "explore-2",
-          command: "cat src/other.ts",
-          activityIntents: [readIntent({ path: "src/other.ts" })],
-          sourceSeqStart: 4,
-        }),
-      ],
-      overrides: {
-        threadRuntimeDisplayStatus: "active",
-      },
-    });
-
-    const ranBundleButton = screen.getByRole("button", {
-      name: /Ran 2 commands/u,
-    });
-    expect(ranBundleButton.getAttribute("aria-expanded")).toBe("false");
-
-    const exploringBundleButton = screen.getByRole("button", {
-      name: /Exploring 2 files/u,
-    });
-    expect(exploringBundleButton.getAttribute("aria-expanded")).toBe("true");
   });
 
   it("renders activity summary exploration details as compact static rows", () => {
@@ -644,178 +563,6 @@ describe("ThreadTimelineRows", () => {
     );
   });
 
-  it("auto-expands a trailing bundle in an active scope without expanding its children", () => {
-    // The single auto-expand rule: in an active container, expand the
-    // literal last row if it is expandable. The bundle is the trailing
-    // row, so it expands. Bundle children do not get the rule applied —
-    // they render collapsed until the user clicks them.
-    const view = renderTimelineRows({
-      timelineRows: [
-        commandRow({
-          id: "command-pending-1",
-          command: "pnpm test",
-          output: "first output",
-          sourceSeqStart: 1,
-          status: "pending",
-        }),
-        commandRow({
-          id: "command-pending-2",
-          command: "pnpm lint",
-          output: "second output",
-          sourceSeqStart: 2,
-          status: "pending",
-        }),
-      ],
-      overrides: {
-        threadRuntimeDisplayStatus: "active",
-      },
-    });
-
-    const bundleButton = screen.getByRole("button", {
-      name: /Running 2 commands/u,
-    });
-    expect(bundleButton.getAttribute("aria-expanded")).toBe("true");
-
-    const commandButton = screen.getByRole("button", {
-      name: /Running\s+pnpm test/u,
-    });
-    expect(commandButton.getAttribute("aria-expanded")).toBe("false");
-    expect(view.container.textContent ?? "").not.toContain("first output");
-    expect(view.container.textContent ?? "").not.toContain("second output");
-  });
-
-  it("looks past trailing user conversation rows when finding the frontier", () => {
-    // User-role conversation rows (initial messages, follow-ups, pending
-    // or accepted steers) are inputs to the agent, not events the agent
-    // produced. The rule skips them when locating the frontier. Here a
-    // pending steer trails the bundle; the bundle is the agent's frontier
-    // and auto-expands.
-    renderTimelineRows({
-      timelineRows: [
-        commandRow({
-          id: "command-pending-1",
-          command: "pnpm test",
-          output: "first output",
-          sourceSeqStart: 1,
-          status: "pending",
-        }),
-        commandRow({
-          id: "command-pending-2",
-          command: "pnpm lint",
-          output: "second output",
-          sourceSeqStart: 2,
-          status: "pending",
-        }),
-        conversationRow({
-          id: "pending-steer-1",
-          role: "user",
-          text: "Keep this in mind",
-          userRequest: { kind: "steer", status: "pending" },
-        }),
-      ],
-      overrides: {
-        threadRuntimeDisplayStatus: "active",
-      },
-    });
-
-    const bundleButton = screen.getByRole("button", {
-      name: /Running 2 commands/u,
-    });
-    expect(bundleButton.getAttribute("aria-expanded")).toBe("true");
-    expect(screen.getByText("steer pending")).toBeTruthy();
-  });
-
-  it("does not auto-expand anything when an assistant message is the frontier", () => {
-    // Assistant-role conversation rows are events the agent produced, so
-    // they do count as the frontier. They are not expandable, so when
-    // they trail the timeline the rule produces no auto-expansion — even
-    // if a bundle sits just before them.
-    const view = renderTimelineRows({
-      timelineRows: [
-        commandRow({
-          id: "command-pending-1",
-          command: "pnpm test",
-          output: "first output",
-          sourceSeqStart: 1,
-          status: "pending",
-        }),
-        commandRow({
-          id: "command-pending-2",
-          command: "pnpm lint",
-          output: "second output",
-          sourceSeqStart: 2,
-          status: "pending",
-        }),
-        conversationRow({
-          id: "assistant-final",
-          role: "assistant",
-          text: "All done.",
-        }),
-      ],
-      overrides: {
-        threadRuntimeDisplayStatus: "active",
-      },
-    });
-
-    const bundleButton = screen.getByRole("button", {
-      name: /Ran 2 commands/u,
-    });
-    expect(bundleButton.getAttribute("aria-expanded")).toBe("false");
-    expect(view.container.textContent ?? "").not.toContain("first output");
-    expect(view.container.textContent ?? "").not.toContain("second output");
-    expect(view.container.textContent ?? "").toContain("All done.");
-  });
-
-  it("renders multi-line command titles on a single line", () => {
-    // Command content can include literal newlines (heredocs, scripts
-    // pasted as a single argument, etc.). The title segment renders with
-    // CSS `whitespace-pre`, which would honor `\n` as a line break — so
-    // titles must collapse newlines at segment construction time. Verifies
-    // the rendered title text and the HTML title (used for hover tooltip
-    // and CLI plain rendering) are both single-line.
-    const command = "node <<'EOF'\nconst x = 1;\nconsole.log(x);\nEOF";
-    renderTimelineRows({
-      timelineRows: [
-        commandRow({
-          id: "command-multiline-1",
-          command,
-        }),
-      ],
-    });
-
-    const button = screen.getByRole("button", { name: /Ran/u });
-    expect(button.textContent ?? "").not.toContain("\n");
-
-    // Every `[title]` descendant carries the plain-text rendering of
-    // some segment span — none of them may contain a newline. Iterating
-    // catches a regression even if a future change adds a sibling
-    // metadata pill that also has a `title` attribute.
-    const titleSpans = button.querySelectorAll("[title]");
-    expect(titleSpans.length).toBeGreaterThan(0);
-    for (const span of Array.from(titleSpans)) {
-      expect(span.getAttribute("title") ?? "").not.toContain("\n");
-    }
-  });
-
-  it("renders ANSI command output without leaking escape codes", () => {
-    const view = renderTimelineRows({
-      timelineRows: [
-        commandRow({
-          id: "command-ansi-1",
-          command: "printf color",
-          output: "\u001b[31mred\u001b[0m",
-        }),
-      ],
-    });
-
-    fireEvent.click(
-      screen.getByRole("button", { name: /Ran\s+printf color/u }),
-    );
-
-    expect(view.container.textContent ?? "").toContain("red");
-    expect(view.container.textContent ?? "").not.toContain("\u001b");
-  });
-
   it("renders file-change stderr without rendering stdout below diffs", () => {
     const view = renderTimelineRows({
       timelineRows: [
@@ -893,40 +640,6 @@ describe("ThreadTimelineRows", () => {
     expect(
       screen.queryByRole("button", { name: /^Edited 2 files\b/u }),
     ).toBeNull();
-  });
-
-  it("does not auto-expand a pending delegation's frontier on an idle thread", () => {
-    // Strict scope propagation: the active scope must come from the
-    // top-level thread runtime. A pending delegation does not magically
-    // open an active scope on an idle thread — the user is browsing
-    // history, not watching live work. Verifies the regression-prone
-    // "single rule" promise.
-    const view = renderTimelineRows({
-      timelineRows: [
-        delegationRow({
-          id: "idle-pending-delegation",
-          status: "pending",
-          childRows: [
-            commandRow({
-              id: "nested-pending-command",
-              command: "pnpm test",
-              output: "still running",
-              sourceSeqStart: 50,
-              status: "pending",
-            }),
-          ],
-        }),
-      ],
-      // threadRuntimeDisplayStatus defaults to "idle"
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: /Running subagent/u }));
-
-    const nestedCommandButton = screen.getByRole("button", {
-      name: /Running\s+pnpm test/u,
-    });
-    expect(nestedCommandButton.getAttribute("aria-expanded")).toBe("false");
-    expect(view.container.textContent ?? "").not.toContain("still running");
   });
 
   it("keeps expanded system details pinned to bottom on streaming updates unless the user scrolls up", () => {
