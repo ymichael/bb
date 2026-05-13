@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { tmpdir } from "node:os";
 import { deleteSandboxProviderCredentialByProviderId } from "@bb/db";
+import { defaultFeatureFlags } from "@bb/domain";
 import type { ServerRuntimeConfig } from "../../../apps/server/src/types.js";
 import { buildSandboxRuntimeMaterialSnapshot } from "../../../apps/server/src/services/hosts/sandbox-runtime-material-snapshot.js";
 import {
@@ -92,6 +93,7 @@ async function main(): Promise<void> {
     dataDir: serverDataDir,
     e2bApiKey: process.env.E2B_API_KEY,
     e2bTemplate: process.env.BB_E2B_TEMPLATE ?? "sandbox",
+    featureFlags: defaultFeatureFlags,
     githubPat: smokeGithubPat,
     hostDaemonPort: 3_001,
     inferenceModel: "gpt-5",

@@ -18,6 +18,7 @@ import {
   type HostDaemonApp,
 } from "@bb/host-daemon/test";
 import { createHostDaemonClient } from "@bb/host-daemon-contract";
+import { defaultFeatureFlags } from "@bb/domain";
 import { initDb } from "../../../apps/server/src/db.js";
 import { createLifecycleDedupers } from "../../../apps/server/src/lifecycle-dedupers.js";
 import { createApp } from "../../../apps/server/src/server.js";
@@ -212,6 +213,7 @@ async function startIntegrationServer(
     dataDir: serverDataDir,
     e2bApiKey: process.env.E2B_API_KEY ?? "test-e2b-api-key",
     e2bTemplate: process.env.E2B_TEMPLATE ?? "",
+    featureFlags: defaultFeatureFlags,
     githubPat: "",
     hostDaemonPort: 3001,
     inferenceModel: "test/mock-model",
