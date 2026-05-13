@@ -475,7 +475,7 @@ export function ChangedFilesRow({
     >
       <WorkspaceChangesList
         files={section.files}
-        maxHeightClassName="h-full"
+        className="h-full"
         onFileClick={
           onChangedFileClick
             ? (file) => onChangedFileClick({ file, section })

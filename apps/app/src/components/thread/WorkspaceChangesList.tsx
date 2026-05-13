@@ -9,14 +9,14 @@ export type WorkspaceChangedFile =
 
 export interface WorkspaceChangesListProps {
   files: readonly WorkspaceChangedFile[];
-  maxHeightClassName?: string;
+  className?: string;
   emptyMessage?: string;
   onFileClick?: (file: WorkspaceChangedFile) => void;
 }
 
 export function WorkspaceChangesList({
   files,
-  maxHeightClassName = "max-h-32",
+  className = "max-h-32",
   emptyMessage = "No changed files detected.",
   onFileClick,
 }: WorkspaceChangesListProps) {
@@ -25,7 +25,7 @@ export function WorkspaceChangesList({
   }
 
   return (
-    <ul className={cn("space-y-1 overflow-auto", maxHeightClassName)}>
+    <ul className={cn("space-y-1 overflow-auto", className)}>
       {files.map((file) => (
         <li
           key={`${file.status}:${file.path}`}

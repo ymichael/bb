@@ -253,7 +253,7 @@ export function ThreadGitActionDialogContent({
               >
                 <WorkspaceChangesList
                   files={changedFiles ?? []}
-                  maxHeightClassName="max-h-40"
+                  className="max-h-40"
                 />
               </DetailRow>
             ) : null}

@@ -69,6 +69,43 @@ const dirtyUncommittedStatus: WorkspaceStatus = {
   mergeBase: null,
 };
 
+const dirtyUncommittedManyFiles: WorkspaceFileStatus[] = [
+  { path: "apps/app/src/components/promptbox/FollowUpPromptBox.tsx", status: "M" },
+  { path: "apps/app/src/components/promptbox/banner/PromptStackCard.tsx", status: "A" },
+  { path: "apps/app/src/components/promptbox/banner/QueuedMessagesList.tsx", status: "A" },
+  { path: "apps/app/src/components/promptbox/banner/ThreadPromptContextBanner.tsx", status: "A" },
+  { path: "apps/app/src/components/promptbox/banner/ThreadPromptContextBanner.stories.tsx", status: "M" },
+  { path: "apps/app/src/components/thread/WorkspaceChangesList.tsx", status: "M" },
+  { path: "apps/app/src/components/workspace/workspace-change-summary.ts", status: "M" },
+  { path: "apps/app/src/views/ThreadDetailPromptArea.tsx", status: "M" },
+  { path: "apps/app/src/views/ThreadDetailSecondaryPanel.tsx", status: "M" },
+  { path: "apps/app/src/hooks/useThreadPromptContext.ts", status: "M" },
+  { path: "apps/app/src/lib/format-workspace-status.ts", status: "A" },
+  { path: "apps/app/src/styles/promptbox.css", status: "M" },
+  { path: "apps/app/.ladle/story-card.tsx", status: "M" },
+  { path: "packages/domain/src/workspace.ts", status: "M" },
+  { path: "packages/domain/src/thread.ts", status: "M" },
+  { path: "apps/server/src/routes/threads.ts", status: "M" },
+  { path: "apps/server/src/lifecycle/thread-prompt.ts", status: "M" },
+  { path: "apps/host/src/workspace/status.ts", status: "M" },
+  { path: "apps/app/src/components/promptbox/banner/__snapshots__/ThreadPromptContextBanner.test.tsx.snap", status: "D" },
+];
+
+const dirtyUncommittedManyStatus: WorkspaceStatus = {
+  workingTree: {
+    state: "dirty_uncommitted",
+    hasUncommittedChanges: true,
+    files: dirtyUncommittedManyFiles,
+    insertions: 1284,
+    deletions: 312,
+  },
+  branch: {
+    currentBranch: "bb/promptbox-stories",
+    defaultBranch: "main",
+  },
+  mergeBase: null,
+};
+
 const untrackedOnlyStatus: WorkspaceStatus = {
   workingTree: {
     state: "untracked",
@@ -119,6 +156,7 @@ function sectionFor(status: WorkspaceStatus): WorkspaceChangedFilesSection {
 }
 
 const uncommittedSection = sectionFor(dirtyUncommittedStatus);
+const uncommittedManySection = sectionFor(dirtyUncommittedManyStatus);
 const untrackedSection = sectionFor(untrackedOnlyStatus);
 const committedSection = sectionFor(committedUnmergedStatus);
 
@@ -369,9 +407,9 @@ export function Overview() {
       </StoryRow>
       <StoryRow
         label="uncommitted (expanded)"
-        hint="expanded change list visible inside the same card"
+        hint="expanded change list visible inside the same card; long lists scroll within max-h-32"
       >
-        <Row section={uncommittedSection} initiallyExpandedSection="git" />
+        <Row section={uncommittedManySection} initiallyExpandedSection="git" />
       </StoryRow>
       <StoryRow
         label="untracked only"

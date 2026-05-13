@@ -647,17 +647,16 @@ export function ThreadPromptContextBanner({
           labelledBy={SECTION_IDS.git.toggle}
           isExpanded={isGitExpanded}
         >
-          <div className="px-3 pb-2 pt-1">
-            <WorkspaceChangesList
-              files={gitSection.changedFiles.files}
-              onFileClick={(file) =>
-                gitSection.onPromptBannerFileClick({
-                  file,
-                  section: gitSection.changedFiles,
-                })
-              }
-            />
-          </div>
+          <WorkspaceChangesList
+            files={gitSection.changedFiles.files}
+            className="max-h-32 px-3 pb-2 pt-1"
+            onFileClick={(file) =>
+              gitSection.onPromptBannerFileClick({
+                file,
+                section: gitSection.changedFiles,
+              })
+            }
+          />
         </AnimatedBody>
       ) : null}
     </PromptStackCard>
