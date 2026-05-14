@@ -3,6 +3,7 @@ import {
   ManagerSelectorRow,
   HostRow,
   EnvironmentRow,
+  WorktreePathRow,
   BranchRow,
   MergeBaseRow,
   GitStatusRow,
@@ -242,6 +243,49 @@ export function Environment() {
               provider: "e2b",
             })}
             environmentIsLocal={false}
+          />
+        </RowStage>
+      </StoryRow>
+    </StoryCard>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Worktree path — the "Worktree path" row.
+// ---------------------------------------------------------------------------
+
+export function WorktreePath() {
+  return (
+    <StoryCard>
+      <StoryRow label="managed worktree">
+        <RowStage>
+          <WorktreePathRow
+            thread={makeThread()}
+            environment={makeEnvironment({
+              path: "/Users/michael/.bb-dev/worktrees/env_demo/bb",
+            })}
+          />
+        </RowStage>
+      </StoryRow>
+      <StoryRow label="long path">
+        <RowStage>
+          <WorktreePathRow
+            thread={makeThread()}
+            environment={makeEnvironment({
+              path: "/Users/michael/.bb-dev/worktrees/env_7m3cieyz6q/bb/apps/app/src/components/secondary-panel",
+            })}
+          />
+        </RowStage>
+      </StoryRow>
+      <StoryRow label="unmanaged worktree">
+        <RowStage>
+          <WorktreePathRow
+            thread={makeThread()}
+            environment={makeEnvironment({
+              path: "/srv/repos/bb-linked-worktree",
+              managed: false,
+              workspaceProvisionType: "unmanaged",
+            })}
           />
         </RowStage>
       </StoryRow>
