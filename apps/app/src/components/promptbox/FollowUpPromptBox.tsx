@@ -170,6 +170,9 @@ export function FollowUpPromptBox({
   const canStopRuntime = onStopRuntime !== undefined;
   const promptBoxRef = useRef<PromptBoxHandle>(null);
   const voice = usePromptVoice(promptBoxRef);
+  const onSteerSubmit = composer.canSteerSubmit
+    ? composer.onSteerSubmit
+    : undefined;
   const stackRef = useRef<HTMLDivElement>(null);
   const [stackHeight, setStackHeight] = useState(0);
   // Measure the stack synchronously after every render. useLayoutEffect runs
@@ -229,8 +232,7 @@ export function FollowUpPromptBox({
             onStop: onStopRuntime,
             isSubmitting: composer.isFollowUpSubmitting || isStopping,
             disabled: !canSubmit || composer.isFollowUpSubmitting,
-            onModifierSubmit: composer.onSteerSubmit,
-            modifierSubmitDisabled: !composer.canSteerSubmit,
+            onModifierSubmit: onSteerSubmit,
             title: canQueueFollowUp
               ? "Queue follow-up (Enter)"
               : isStopping

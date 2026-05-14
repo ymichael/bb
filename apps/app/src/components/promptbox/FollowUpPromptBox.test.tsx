@@ -102,6 +102,32 @@ describe("FollowUpPromptBox", () => {
     expect(onSubmit).not.toHaveBeenCalled();
   });
 
+  it("uses the normal submit path for Cmd+Enter when steer is unavailable", () => {
+    const props = makeFollowUpPromptBoxProps();
+    const onSteerSubmit = vi.fn();
+    const onSubmit = vi.fn();
+    props.composer = {
+      ...props.composer,
+      canSteerSubmit: false,
+      onSteerSubmit,
+      onSubmit,
+      promptPlaceholder: "Ask for follow-up changes",
+      submitMode: { kind: "ready" },
+    };
+
+    render(<FollowUpPromptBox {...props} />);
+
+    const textarea = screen.getByRole<HTMLTextAreaElement>("textbox");
+    const wasNotCanceled = fireEvent.keyDown(textarea, {
+      key: "Enter",
+      metaKey: true,
+    });
+
+    expect(wasNotCanceled).toBe(false);
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    expect(onSteerSubmit).not.toHaveBeenCalled();
+  });
+
   it("preserves ordinary Enter submit behavior", () => {
     const props = makeFollowUpPromptBoxProps();
     const onSteerSubmit = vi.fn();

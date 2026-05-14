@@ -62,7 +62,6 @@ export interface PromptBoxSubmissionConfig {
   isRunning?: boolean;
   onStop?: () => void;
   onModifierSubmit?: () => void;
-  modifierSubmitDisabled?: boolean;
 }
 
 export interface MentionsConfig {
@@ -206,7 +205,6 @@ export function PromptBoxInternal({
     isRunning = false,
     onStop,
     onModifierSubmit,
-    modifierSubmitDisabled = false,
   } = submission;
   const {
     suggestions: mentionSuggestions,
@@ -584,7 +582,6 @@ export function PromptBoxInternal({
     onModifierSubmit !== undefined &&
     !isSubmitting &&
     !submitDisabled &&
-    !modifierSubmitDisabled &&
     !isVoiceBusy;
   const showStop = Boolean(isRunning && onStop && !canSubmit && !isVoiceBusy);
   const canStartVoiceInput =

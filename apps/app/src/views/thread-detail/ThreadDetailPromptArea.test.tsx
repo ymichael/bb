@@ -50,6 +50,7 @@ interface MakeQueuedMessageArgs {
 
 interface RenderPromptAreaArgs {
   sendMessageMutateAsync: SendMessageMutationLike["mutateAsync"];
+  thread?: ThreadWithRuntime;
 }
 
 type ThreadOverrides = Partial<ThreadWithRuntime>;
@@ -271,7 +272,10 @@ function makeQueuedMessage(args: MakeQueuedMessageArgs): ThreadQueuedMessage {
   };
 }
 
-function renderPromptArea({ sendMessageMutateAsync }: RenderPromptAreaArgs) {
+function renderPromptArea({
+  sendMessageMutateAsync,
+  thread,
+}: RenderPromptAreaArgs) {
   return render(
     <ThreadDetailPromptArea
       canUseGitUi={true}
@@ -292,7 +296,7 @@ function renderPromptArea({ sendMessageMutateAsync }: RenderPromptAreaArgs) {
         isPending: false,
         mutateAsync: sendMessageMutateAsync,
       }}
-      thread={makeThread()}
+      thread={thread ?? makeThread()}
     />,
   );
 }
@@ -433,6 +437,59 @@ describe("ThreadDetailPromptArea steer submit", () => {
     expect(mocks.promptDraft.clearIfCurrentMatches).toHaveBeenCalledWith({
       attachments: [],
       text: "Current steer",
+    });
+  });
+
+  it("uses normal submit mode for Cmd+Enter on idle threads", async () => {
+    resetMocks();
+    const sendMessageMutateAsync = vi.fn<SendMessageMutationLike["mutateAsync"]>();
+    sendMessageMutateAsync.mockResolvedValue();
+    mocks.queuedMessages = [
+      makeQueuedMessage({
+        id: "queued-1",
+        input: [{ type: "text", text: "Queued follow-up" }],
+      }),
+    ];
+    mocks.promptDraft = createPromptDraftStorageMock({
+      attachments: [],
+      text: "Start a normal turn",
+    });
+
+    renderPromptArea({
+      sendMessageMutateAsync,
+      thread: makeThread({
+        status: "idle",
+        runtime: {
+          displayStatus: "idle",
+          hostReconnectGraceExpiresAt: null,
+        },
+      }),
+    });
+
+    const textarea = screen.getByRole<HTMLTextAreaElement>("textbox");
+    const wasNotCanceled = fireEvent.keyDown(textarea, {
+      key: "Enter",
+      metaKey: true,
+    });
+
+    expect(wasNotCanceled).toBe(false);
+    await waitFor(() => {
+      expect(sendMessageMutateAsync).toHaveBeenCalledTimes(1);
+    });
+    expect(sendMessageMutateAsync).toHaveBeenCalledWith({
+      id: "thread-1",
+      input: [{ type: "text", text: "Start a normal turn" }],
+      mode: "auto",
+      model: "gpt-5",
+      permissionMode: "full",
+      reasoningLevel: "medium",
+      serviceTier: "default",
+    });
+    expect(mocks.createDraftMutateAsync).not.toHaveBeenCalled();
+    expect(mocks.sendDraftMutateAsync).not.toHaveBeenCalled();
+    expect(mocks.promptDraft.clearIfCurrentMatches).toHaveBeenCalledWith({
+      attachments: [],
+      text: "Start a normal turn",
     });
   });
 
