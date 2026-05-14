@@ -446,6 +446,61 @@ export function summarizeNumstat(output: string): {
   );
 }
 
+export interface NumstatEntry {
+  path: string;
+  /** Null for binary files — `git diff --numstat` reports `-` for those. */
+  insertions: number | null;
+  deletions: number | null;
+}
+
+/**
+ * Parses the NUL-delimited output of `git diff --numstat -z`. Each record is
+ * one of two shapes; renames are detected by the extra NUL after the second
+ * tab:
+ *
+ *   ADD \t DEL \t PATH \0                       — normal entry
+ *   ADD \t DEL \t \0 OLD_PATH \0 NEW_PATH \0    — rename / copy
+ *
+ * The new path is kept for renames so entries can be joined by path to the
+ * porcelain/name-status outputs (which also report the new path).
+ */
+export function parseNumstatEntriesZ(output: string): NumstatEntry[] {
+  const entries: NumstatEntry[] = [];
+  let cursor = 0;
+  while (cursor < output.length) {
+    const firstTab = output.indexOf("\t", cursor);
+    if (firstTab < 0) break;
+    const secondTab = output.indexOf("\t", firstTab + 1);
+    if (secondTab < 0) break;
+    const insertions = parseNumstatCount(output.slice(cursor, firstTab));
+    const deletions = parseNumstatCount(
+      output.slice(firstTab + 1, secondTab),
+    );
+
+    let path: string;
+    if (output[secondTab + 1] === "\0") {
+      const oldEnd = output.indexOf("\0", secondTab + 2);
+      if (oldEnd < 0) break;
+      const newEnd = output.indexOf("\0", oldEnd + 1);
+      if (newEnd < 0) break;
+      path = output.slice(oldEnd + 1, newEnd);
+      cursor = newEnd + 1;
+    } else {
+      const end = output.indexOf("\0", secondTab + 1);
+      if (end < 0) break;
+      path = output.slice(secondTab + 1, end);
+      cursor = end + 1;
+    }
+    entries.push({ path, insertions, deletions });
+  }
+  return entries;
+}
+
+function parseNumstatCount(text: string): number | null {
+  const value = Number.parseInt(text, 10);
+  return Number.isFinite(value) ? value : null;
+}
+
 export async function readDefaultBranch(
   cwd: string,
 ): Promise<string | undefined> {

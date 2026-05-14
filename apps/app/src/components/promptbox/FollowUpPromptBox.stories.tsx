@@ -173,14 +173,20 @@ const dirtyWorkspaceStatus: WorkspaceStatus = {
       {
         path: "apps/app/src/components/promptbox/FollowUpPromptBox.tsx",
         status: "M",
+        insertions: 42,
+        deletions: 18,
       },
       {
         path: "apps/app/src/views/ThreadDetailPromptArea.tsx",
         status: "M",
+        insertions: 12,
+        deletions: 6,
       },
       {
         path: "apps/app/src/components/promptbox/banner/QueuedMessagesList.tsx",
         status: "A",
+        insertions: 74,
+        deletions: 0,
       },
     ],
     insertions: 128,

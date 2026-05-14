@@ -35,22 +35,32 @@ const promptboxBannerFiles: WorkspaceFileStatus[] = [
   {
     path: "apps/app/src/components/promptbox/FollowUpPromptBox.tsx",
     status: "M",
+    insertions: 42,
+    deletions: 18,
   },
   {
     path: "apps/app/src/components/promptbox/banner/PromptStackCard.tsx",
     status: "A",
+    insertions: 96,
+    deletions: 0,
   },
   {
     path: "apps/app/src/components/promptbox/banner/QueuedMessagesList.tsx",
     status: "A",
+    insertions: 74,
+    deletions: 0,
   },
   {
     path: "apps/app/src/components/promptbox/banner/ThreadPromptContextBanner.tsx",
     status: "A",
+    insertions: 88,
+    deletions: 0,
   },
   {
     path: "apps/app/src/views/ThreadDetailPromptArea.tsx",
     status: "M",
+    insertions: 12,
+    deletions: 29,
   },
 ];
 
@@ -70,25 +80,25 @@ const dirtyUncommittedStatus: WorkspaceStatus = {
 };
 
 const dirtyUncommittedManyFiles: WorkspaceFileStatus[] = [
-  { path: "apps/app/src/components/promptbox/FollowUpPromptBox.tsx", status: "M" },
-  { path: "apps/app/src/components/promptbox/banner/PromptStackCard.tsx", status: "A" },
-  { path: "apps/app/src/components/promptbox/banner/QueuedMessagesList.tsx", status: "A" },
-  { path: "apps/app/src/components/promptbox/banner/ThreadPromptContextBanner.tsx", status: "A" },
-  { path: "apps/app/src/components/promptbox/banner/ThreadPromptContextBanner.stories.tsx", status: "M" },
-  { path: "apps/app/src/components/thread/WorkspaceChangesList.tsx", status: "M" },
-  { path: "apps/app/src/components/workspace/workspace-change-summary.ts", status: "M" },
-  { path: "apps/app/src/views/ThreadDetailPromptArea.tsx", status: "M" },
-  { path: "apps/app/src/views/ThreadDetailSecondaryPanel.tsx", status: "M" },
-  { path: "apps/app/src/hooks/useThreadPromptContext.ts", status: "M" },
-  { path: "apps/app/src/lib/format-workspace-status.ts", status: "A" },
-  { path: "apps/app/src/styles/promptbox.css", status: "M" },
-  { path: "apps/app/.ladle/story-card.tsx", status: "M" },
-  { path: "packages/domain/src/workspace.ts", status: "M" },
-  { path: "packages/domain/src/thread.ts", status: "M" },
-  { path: "apps/server/src/routes/threads.ts", status: "M" },
-  { path: "apps/server/src/lifecycle/thread-prompt.ts", status: "M" },
-  { path: "apps/host/src/workspace/status.ts", status: "M" },
-  { path: "apps/app/src/components/promptbox/banner/__snapshots__/ThreadPromptContextBanner.test.tsx.snap", status: "D" },
+  { path: "apps/app/src/components/promptbox/FollowUpPromptBox.tsx", status: "M", insertions: 42, deletions: 18 },
+  { path: "apps/app/src/components/promptbox/banner/PromptStackCard.tsx", status: "A", insertions: 96, deletions: 0 },
+  { path: "apps/app/src/components/promptbox/banner/QueuedMessagesList.tsx", status: "A", insertions: 74, deletions: 0 },
+  { path: "apps/app/src/components/promptbox/banner/ThreadPromptContextBanner.tsx", status: "A", insertions: 88, deletions: 0 },
+  { path: "apps/app/src/components/promptbox/banner/ThreadPromptContextBanner.stories.tsx", status: "M", insertions: 21, deletions: 7 },
+  { path: "apps/app/src/components/thread/WorkspaceChangesList.tsx", status: "M", insertions: 16, deletions: 4 },
+  { path: "apps/app/src/components/workspace/workspace-change-summary.ts", status: "M", insertions: 8, deletions: 3 },
+  { path: "apps/app/src/views/ThreadDetailPromptArea.tsx", status: "M", insertions: 12, deletions: 29 },
+  { path: "apps/app/src/views/ThreadDetailSecondaryPanel.tsx", status: "M", insertions: 5, deletions: 5 },
+  { path: "apps/app/src/hooks/useThreadPromptContext.ts", status: "M", insertions: 32, deletions: 14 },
+  { path: "apps/app/src/lib/format-workspace-status.ts", status: "A", insertions: 24, deletions: 0 },
+  { path: "apps/app/src/styles/promptbox.css", status: "M", insertions: 3, deletions: 1 },
+  { path: "apps/app/.ladle/story-card.tsx", status: "M", insertions: 1, deletions: 1 },
+  { path: "packages/domain/src/workspace.ts", status: "M", insertions: 10, deletions: 2 },
+  { path: "packages/domain/src/thread.ts", status: "M", insertions: 6, deletions: 0 },
+  { path: "apps/server/src/routes/threads.ts", status: "M", insertions: 18, deletions: 11 },
+  { path: "apps/server/src/lifecycle/thread-prompt.ts", status: "M", insertions: 9, deletions: 4 },
+  { path: "apps/host/src/workspace/status.ts", status: "M", insertions: 22, deletions: 8 },
+  { path: "apps/app/src/components/promptbox/banner/__snapshots__/ThreadPromptContextBanner.test.tsx.snap", status: "D", insertions: 0, deletions: 187 },
 ];
 
 const dirtyUncommittedManyStatus: WorkspaceStatus = {
@@ -111,8 +121,18 @@ const untrackedOnlyStatus: WorkspaceStatus = {
     state: "untracked",
     hasUncommittedChanges: false,
     files: [
-      { path: "apps/app/notes/triage.md", status: "??" },
-      { path: "apps/app/scripts/dev-bb-sandbox.sh", status: "??" },
+      {
+        path: "apps/app/notes/triage.md",
+        status: "??",
+        insertions: null,
+        deletions: null,
+      },
+      {
+        path: "apps/app/scripts/dev-bb-sandbox.sh",
+        status: "??",
+        insertions: null,
+        deletions: null,
+      },
     ],
     insertions: 0,
     deletions: 0,

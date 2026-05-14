@@ -356,9 +356,9 @@ export function GitStatus() {
                 insertions: 47,
                 deletions: 21,
                 files: [
-                  { path: "apps/app/src/components/sidebar/ProjectRow.tsx", status: "M" },
-                  { path: "apps/app/src/components/sidebar/ThreadRow.tsx", status: "M" },
-                  { path: "apps/app/src/components/sidebar/ProjectRow.stories.tsx", status: "A" },
+                  { path: "apps/app/src/components/sidebar/ProjectRow.tsx", status: "M", insertions: 18, deletions: 9 },
+                  { path: "apps/app/src/components/sidebar/ThreadRow.tsx", status: "M", insertions: 5, deletions: 12 },
+                  { path: "apps/app/src/components/sidebar/ProjectRow.stories.tsx", status: "A", insertions: 24, deletions: 0 },
                 ],
               },
             })}
@@ -448,9 +448,9 @@ export function GitStatus() {
                 insertions: 0,
                 deletions: 0,
                 files: [
-                  { path: "scratch.md", status: "??" },
-                  { path: "notes/scratch.md", status: "??" },
-                  { path: "tmp/output.json", status: "??" },
+                  { path: "scratch.md", status: "??", insertions: null, deletions: null },
+                  { path: "notes/scratch.md", status: "??", insertions: null, deletions: null },
+                  { path: "tmp/output.json", status: "??", insertions: null, deletions: null },
                 ],
               },
             })}
@@ -517,9 +517,9 @@ export function ChangedFiles() {
                 insertions: 47,
                 deletions: 21,
                 files: [
-                  { path: "apps/app/src/components/sidebar/ProjectRow.tsx", status: "M" },
-                  { path: "apps/app/src/components/sidebar/ThreadRow.tsx", status: "M" },
-                  { path: "apps/app/src/components/sidebar/ProjectRow.stories.tsx", status: "A" },
+                  { path: "apps/app/src/components/sidebar/ProjectRow.tsx", status: "M", insertions: 18, deletions: 9 },
+                  { path: "apps/app/src/components/sidebar/ThreadRow.tsx", status: "M", insertions: 5, deletions: 12 },
+                  { path: "apps/app/src/components/sidebar/ProjectRow.stories.tsx", status: "A", insertions: 24, deletions: 0 },
                 ],
               },
             })}
@@ -542,8 +542,8 @@ export function ChangedFiles() {
                 insertions: 110,
                 deletions: 24,
                 files: [
-                  { path: "apps/app/src/components/secondary-panel/ThreadMetadataContent.tsx", status: "M" },
-                  { path: "apps/app/src/components/secondary-panel/ThreadMetadataContent.fixtures.tsx", status: "A" },
+                  { path: "apps/app/src/components/secondary-panel/ThreadMetadataContent.tsx", status: "M", insertions: 38, deletions: 12 },
+                  { path: "apps/app/src/components/secondary-panel/ThreadMetadataContent.fixtures.tsx", status: "A", insertions: 72, deletions: 0 },
                 ],
               },
             })}
