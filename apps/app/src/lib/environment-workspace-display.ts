@@ -9,9 +9,9 @@ export function getEnvironmentWorkspaceDisplayIconName(
     case "sandbox":
       return "Container";
     case "managed-worktree":
-      return "FolderGit2";
+      return "GitBranch";
     case "unmanaged-worktree":
-      return "FolderGit2";
+      return "GitBranch";
     case "other":
       return null;
   }

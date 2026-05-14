@@ -280,7 +280,7 @@ export function Overview() {
       </StoryRow>
       <StoryRow
         label="manager starts collapsed"
-        hint="children hidden by default; count badge stays visible"
+        hint="children hidden by default"
       >
         {singleProject({
           initialCollapsedManagerIds: new Set([manager.id]),

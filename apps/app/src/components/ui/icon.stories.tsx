@@ -45,10 +45,10 @@ const USAGE: Partial<Record<IconName, string>> = {
   FileX2:
     "FilePreview missing-file state (passed via local iconName variable)",
   Folder: "EmptyState “no projects”, sidebar project row when collapsed",
-  FolderGit2:
-    "Worktree environment icon (resolved via environment-workspace helpers)",
   FolderOpen: "Sidebar project row when expanded",
   FolderPlus: "(currently unused — was Add local path in project actions menu)",
+  GitBranch:
+    "Worktree environment icon (resolved via environment-workspace helpers)",
   GitMerge: "Branch name display, branch picker selected/option glyph",
   Info: "Secondary panel “thread info” tab, replay list info banner",
   Laptop: "Persistent host icon (resolved via getHostIconName)",
