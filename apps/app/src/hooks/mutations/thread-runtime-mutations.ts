@@ -1,4 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import type { QueryClient, QueryKey } from "@tanstack/react-query";
 import {
   type PromptHistoryEntry,
   type ThreadWithRuntime,
@@ -23,6 +24,11 @@ import {
   removeOptimisticTimelineRow,
   updateCachedThread,
 } from "../queries/query-cache";
+import {
+  applyToCachedThreadLists,
+  getCachedThreadLists,
+  type ThreadListCacheData,
+} from "../queries/thread-list-cache-data";
 import {
   projectPromptHistoryQueryKey,
   threadQueryKey,
@@ -52,6 +58,24 @@ interface SendThreadDraftMutationRequest {
 interface DeleteThreadDraftMutationRequest {
   id: string;
   queuedMessageId: string;
+}
+
+interface ThreadListSnapshotEntry {
+  queryKey: QueryKey;
+  data: ThreadListCacheData;
+}
+
+type ThreadListSnapshot = ThreadListSnapshotEntry[];
+
+interface StopThreadMutationContext {
+  previousThread: ThreadWithRuntime | undefined;
+  previousThreadLists: ThreadListSnapshot;
+}
+
+interface ApplyOptimisticStopRequestArgs {
+  queryClient: QueryClient;
+  requestedAt: number;
+  threadId: string;
 }
 
 function buildAcceptedPromptHistoryEntry(args: {
@@ -95,6 +119,45 @@ function prependThreadPromptHistory(
     threadPromptHistoryQueryKey(threadId),
     (currentEntries) => prependPromptHistoryEntry(currentEntries, entry),
   );
+}
+
+function snapshotThreadLists(queryClient: QueryClient): ThreadListSnapshot {
+  return getCachedThreadLists(queryClient, { queryKey: threadsQueryKey() });
+}
+
+function restoreThreadLists(
+  queryClient: QueryClient,
+  threadLists: ThreadListSnapshot,
+): void {
+  for (const { queryKey, data } of threadLists) {
+    queryClient.setQueryData(queryKey, data);
+  }
+}
+
+function applyOptimisticStopRequest({
+  queryClient,
+  requestedAt,
+  threadId,
+}: ApplyOptimisticStopRequestArgs): void {
+  updateCachedThread(queryClient, threadId, (thread) => ({
+    ...thread,
+    stopRequestedAt: thread.stopRequestedAt ?? requestedAt,
+    updatedAt: Math.max(thread.updatedAt, requestedAt),
+  }));
+
+  applyToCachedThreadLists(queryClient, {
+    queryKey: threadsQueryKey(),
+    mapper: (list) =>
+      list.map((thread) =>
+        thread.id === threadId
+          ? {
+              ...thread,
+              stopRequestedAt: thread.stopRequestedAt ?? requestedAt,
+              updatedAt: Math.max(thread.updatedAt, requestedAt),
+            }
+          : thread,
+      ),
+  });
 }
 
 export function useCreateThread() {
@@ -379,7 +442,40 @@ export function useStopThread() {
       errorMessage: "Failed to stop thread.",
     },
     mutationFn: (threadId: string) => api.stopThread(threadId),
-    onSuccess: (_data, threadId) => {
+    onMutate: async (threadId) => {
+      await Promise.all([
+        queryClient.cancelQueries({ queryKey: threadQueryKey(threadId) }),
+        queryClient.cancelQueries({ queryKey: threadsQueryKey() }),
+      ]);
+
+      const previousThread = queryClient.getQueryData<ThreadWithRuntime>(
+        threadQueryKey(threadId),
+      );
+      const previousThreadLists = snapshotThreadLists(queryClient);
+
+      applyOptimisticStopRequest({
+        queryClient,
+        requestedAt: Date.now(),
+        threadId,
+      });
+
+      return {
+        previousThread,
+        previousThreadLists,
+      };
+    },
+    onError: (_error, threadId, context?: StopThreadMutationContext) => {
+      if (!context) {
+        return;
+      }
+
+      queryClient.setQueryData(
+        threadQueryKey(threadId),
+        context.previousThread,
+      );
+      restoreThreadLists(queryClient, context.previousThreadLists);
+    },
+    onSettled: (_data, _error, threadId) => {
       invalidateThreadStopQueries({ queryClient, threadId });
     },
   });

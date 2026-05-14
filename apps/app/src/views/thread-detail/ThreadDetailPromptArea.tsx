@@ -245,6 +245,9 @@ export function ThreadDetailPromptArea({
   const isCreated = runtimeDisplayStatus === "created";
   const isProvisioning = runtimeDisplayStatus === "provisioning";
   const isWaitingForHost = runtimeDisplayStatus === "waiting-for-host";
+  const isStopRequested =
+    thread.stopRequestedAt !== null ||
+    (stopThread.isPending && stopThread.variables === thread.id);
   const activePendingInteraction =
     getLatestPendingInteraction(pendingInteractions);
   const hasPendingInteraction = activePendingInteraction !== null;
@@ -255,6 +258,9 @@ export function ThreadDetailPromptArea({
     isEnvironmentActionPending ||
     createDraft.isPending;
   const submitMode: FollowUpSubmitMode = (() => {
+    if (isStopRequested) {
+      return { kind: "blocked", reason: "stopping" };
+    }
     if (hasPendingInteraction) {
       return { kind: "blocked", reason: "pending-interaction" };
     }
@@ -272,10 +278,9 @@ export function ThreadDetailPromptArea({
     }
     return { kind: "ready" };
   })();
-  const promptPlaceholder = getPromptPlaceholder(
-    runtimeDisplayStatus,
-    thread.type === "manager",
-  );
+  const promptPlaceholder = isStopRequested
+    ? "Stopping thread..."
+    : getPromptPlaceholder(runtimeDisplayStatus, thread.type === "manager");
   const sendFollowUpInput = useCallback(
     async ({
       input,

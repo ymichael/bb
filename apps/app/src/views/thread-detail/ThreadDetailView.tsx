@@ -166,9 +166,7 @@ export function ThreadDetailView() {
     thread?.id ?? "",
     {
       enabled: hasThreadComposerBootstrapSettled,
-      refetchOnMount: threadComposerBootstrapQuery.isSuccess
-        ? false
-        : "always",
+      refetchOnMount: threadComposerBootstrapQuery.isSuccess ? false : "always",
       staleTime: composerSeededStaleTime,
     },
   );
@@ -889,6 +887,7 @@ export function ThreadDetailView() {
           onTitleAction: handleTimelineTitleAction,
           projectId,
           showOngoingIndicator:
+            thread.stopRequestedAt === null &&
             (thread.runtime.displayStatus === "active" ||
               thread.runtime.displayStatus === "host-reconnecting") &&
             !isThreadTimelinePending,
@@ -898,6 +897,7 @@ export function ThreadDetailView() {
               ? "Waiting for reconnection"
               : undefined,
           timelineRows,
+          stopRequestedAt: thread.stopRequestedAt,
           threadId: thread.id,
           threadRuntimeDisplayStatus: thread.runtime.displayStatus,
           turnSummaryRowsIdentity,

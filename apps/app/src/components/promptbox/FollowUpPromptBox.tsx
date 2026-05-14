@@ -51,7 +51,6 @@ const FOLLOW_UP_PROMPT_BOX_ELASTIC_TARGET_HEIGHT =
   FOLLOW_UP_PROMPT_BOX_DEFAULT_MIN_HEIGHT +
   THREAD_PROMPT_CONTEXT_BANNER_ROW_HEIGHT;
 
-
 /**
  * Discriminated state for the composer's submit affordances. Replaces the
  * previous canSendFollowUp / canQueueFollowUp / canStopRuntime / onStop
@@ -90,7 +89,6 @@ export interface FollowUpComposerProps {
 type ContextWindowUsage = ComponentProps<
   typeof ThreadContextWindowIndicator
 >["usage"];
-
 
 export interface FollowUpPromptBoxProps {
   attachments: AttachmentsConfig;
@@ -137,8 +135,9 @@ export function FollowUpPromptBox({
 }: FollowUpPromptBoxProps) {
   const submitMode = composer.submitMode;
   const canQueueFollowUp = submitMode.kind === "queue";
-  const canSubmit =
-    submitMode.kind === "ready" || submitMode.kind === "queue";
+  const canSubmit = submitMode.kind === "ready" || submitMode.kind === "queue";
+  const isStopping =
+    submitMode.kind === "blocked" && submitMode.reason === "stopping";
   const onStopRuntime =
     submitMode.kind === "queue" || submitMode.kind === "stop-only"
       ? submitMode.onStop
@@ -203,11 +202,13 @@ export function FollowUpPromptBox({
           autoFocus
           submission={{
             onStop: onStopRuntime,
-            isSubmitting: composer.isFollowUpSubmitting,
+            isSubmitting: composer.isFollowUpSubmitting || isStopping,
             disabled: !canSubmit || composer.isFollowUpSubmitting,
             title: canQueueFollowUp
               ? "Queue follow-up (Enter)"
-              : "Submit (Enter)",
+              : isStopping
+                ? "Stopping run..."
+                : "Submit (Enter)",
             isRunning: canStopRuntime,
             mode: "enter",
           }}
