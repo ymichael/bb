@@ -382,8 +382,9 @@ export function HireManagerDialogContent({
     <>
       <DialogHeader className="px-6 pt-5 pb-3">
         <DialogTitle>Hire Manager</DialogTitle>
-        <DialogDescription className="sr-only">
-          Configure and hire a manager agent.
+        <DialogDescription>
+          Managers are special threads that have persistent memory and can help
+          you coordinate work by delegating tasks to managed child threads.
         </DialogDescription>
       </DialogHeader>
       <form className="space-y-5 px-6 pb-5" onSubmit={handleHire}>
