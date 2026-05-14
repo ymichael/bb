@@ -460,7 +460,7 @@ export function NewManagerForm({
           >
             New Manager
           </h1>
-          <p className="text-sm leading-relaxed text-muted-foreground">
+          <p className="text-left text-sm leading-relaxed text-muted-foreground">
             A manager coordinates sustained work on a project. They delegate to
             worker threads, track progress, and surface updates. Hiring starts
             a new thread
