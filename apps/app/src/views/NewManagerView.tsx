@@ -461,9 +461,9 @@ export function NewManagerForm({
             New Manager
           </h1>
           <p className="text-left text-sm leading-relaxed text-muted-foreground">
-            A manager coordinates sustained work on a project. They delegate to
-            worker threads, track progress, and surface updates. Hiring starts
-            a new thread
+            Managers are special threads that have persistent memory and can
+            help you coordinate work by delegating tasks to managed child
+            threads. Hiring starts a new thread
             {projectName ? (
               <>
                 {" "}
