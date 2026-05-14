@@ -673,7 +673,7 @@ describe("public thread interaction routes", () => {
           headers: {
             "content-type": "application/json",
           },
-          body: JSON.stringify({}),
+          body: JSON.stringify({ mode: "auto" }),
         },
       );
       expect(draftSendResponse.status).toBe(409);

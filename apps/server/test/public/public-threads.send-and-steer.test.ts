@@ -1014,7 +1014,7 @@ describe("public thread send and steer routes", () => {
     }
   });
 
-  it("steers queued drafts for active threads without a mode field", async () => {
+  it("steers queued drafts for active threads with auto mode", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps);
@@ -1063,7 +1063,7 @@ describe("public thread send and steer routes", () => {
           headers: {
             "content-type": "application/json",
           },
-          body: JSON.stringify({}),
+          body: JSON.stringify({ mode: "auto" }),
         },
       );
 
@@ -1084,6 +1084,84 @@ describe("public thread send and steer routes", () => {
         },
         resumeContext: {
           providerThreadId: "provider-draft-steer",
+        },
+      });
+      expect(getDraft(harness.db, draft.id)).toBeNull();
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("sends queued drafts with explicit steer mode", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/thread-draft-explicit-steer-project",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/thread-draft-explicit-steer-project",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "active",
+      });
+      seedEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-draft-explicit-steer",
+        sequence: 1,
+        type: "thread/identity",
+        scope: threadScope(),
+        data: {},
+      });
+      seedEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-draft-explicit-steer",
+        sequence: 2,
+        type: "turn/started",
+        data: {},
+        scope: turnScope("turn-draft-explicit-steer"),
+      });
+      const draft = seedDraft(harness.deps, {
+        threadId: thread.id,
+        content: [{ type: "text", text: "Steer this queued correction" }],
+        model: "gpt-5",
+      });
+
+      const response = await harness.app.request(
+        `/api/v1/threads/${thread.id}/drafts/${draft.id}/send`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ mode: "steer" }),
+        },
+      );
+
+      expect(response.status).toBe(200);
+      const steerCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "turn.submit" && command.threadId === thread.id,
+      );
+      expect(steerCommand.command).toMatchObject({
+        input: [{ type: "text", text: "Steer this queued correction" }],
+        target: {
+          mode: "steer",
+          expectedTurnId: "turn-draft-explicit-steer",
+        },
+        options: {
+          model: "gpt-5",
+        },
+        resumeContext: {
+          providerThreadId: "provider-draft-explicit-steer",
         },
       });
       expect(getDraft(harness.db, draft.id)).toBeNull();

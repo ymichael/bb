@@ -61,6 +61,8 @@ export interface PromptBoxSubmissionConfig {
   mode?: SubmitMode;
   isRunning?: boolean;
   onStop?: () => void;
+  onModifierSubmit?: () => void;
+  modifierSubmitDisabled?: boolean;
 }
 
 export interface MentionsConfig {
@@ -203,6 +205,8 @@ export function PromptBoxInternal({
     mode: submitMode = "enter",
     isRunning = false,
     onStop,
+    onModifierSubmit,
+    modifierSubmitDisabled = false,
   } = submission;
   const {
     suggestions: mentionSuggestions,
@@ -576,6 +580,12 @@ export function PromptBoxInternal({
   const showVoiceActionGroup = isVoiceRecording || isVoiceProcessing;
   const canSubmit =
     hasSubmittableInput && !isSubmitting && !submitDisabled && !isVoiceBusy;
+  const canModifierSubmit =
+    onModifierSubmit !== undefined &&
+    !isSubmitting &&
+    !submitDisabled &&
+    !modifierSubmitDisabled &&
+    !isVoiceBusy;
   const showStop = Boolean(isRunning && onStop && !canSubmit && !isVoiceBusy);
   const canStartVoiceInput =
     voice !== undefined && voice.isSupported && !isSubmitting;
@@ -592,9 +602,7 @@ export function PromptBoxInternal({
     [onAttachFiles],
   );
 
-  const submitPrompt = useCallback(() => {
-    if (!canSubmit) return;
-    onSubmit();
+  const resetZenModeAfterSubmit = useCallback(() => {
     if (!resetZenModeOnSubmit || !isZenMode) return;
     if (resolvedZenModeStorageKey) {
       setIsZenMode(RESET);
@@ -602,13 +610,23 @@ export function PromptBoxInternal({
     }
     setIsZenMode(false);
   }, [
-    canSubmit,
     isZenMode,
-    onSubmit,
     resetZenModeOnSubmit,
     resolvedZenModeStorageKey,
     setIsZenMode,
   ]);
+
+  const submitPrompt = useCallback(() => {
+    if (!canSubmit) return;
+    onSubmit();
+    resetZenModeAfterSubmit();
+  }, [canSubmit, onSubmit, resetZenModeAfterSubmit]);
+
+  const submitModifierPrompt = useCallback(() => {
+    if (!canModifierSubmit || !onModifierSubmit) return;
+    onModifierSubmit();
+    resetZenModeAfterSubmit();
+  }, [canModifierSubmit, onModifierSubmit, resetZenModeAfterSubmit]);
 
   const applyHistoryDraft = useCallback(
     (draft: PromptDraftState) => {
@@ -795,6 +813,18 @@ export function PromptBoxInternal({
       }
     }
 
+    const isModifierSubmitKey =
+      event.key === "Enter" &&
+      event.metaKey &&
+      !event.shiftKey &&
+      !event.altKey &&
+      !event.ctrlKey;
+    if (isModifierSubmitKey && onModifierSubmit) {
+      event.preventDefault();
+      submitModifierPrompt();
+      return;
+    }
+
     const withModifier = event.metaKey || event.ctrlKey;
     if (isZenMode) return;
     const isSubmitKey =
@@ -901,6 +931,7 @@ export function PromptBoxInternal({
         placeholder={placeholder}
         rows={1}
         autoFocus={autoFocus}
+        aria-keyshortcuts={onModifierSubmit ? "Meta+Enter" : undefined}
         enterKeyHint="send"
         className={cn(
           "w-full resize-none overflow-y-auto bg-transparent px-4 pb-1 pr-14 pt-3 leading-relaxed outline-none placeholder:select-none placeholder:text-muted-foreground/60",

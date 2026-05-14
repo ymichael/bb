@@ -391,7 +391,7 @@ export type PublicApiSchema = {
     >;
   };
   "/threads/:id/drafts/:draftId/send": {
-    /** Send a previously created queued draft. Starts or steers a turn, then deletes the draft. */
+    /** Send a previously created queued draft in the requested mode, then delete the draft. */
     $post: Endpoint<
       PathThreadAndDraft & { json: SendDraftRequest },
       SendDraftResponse

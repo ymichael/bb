@@ -20,6 +20,7 @@ import {
   baseBranchSpecSchema,
   gitBranchNameSchema,
   resolvePendingInteractionRequestSchema,
+  sendDraftRequestSchema,
   sendMessageRequestSchema,
   threadListResponseSchema,
   threadPendingInteractionsResponseSchema,
@@ -466,6 +467,11 @@ describe("server-contract canonical schemas", () => {
     ).toMatchObject({
       mode: "auto",
     });
+
+    expect(sendDraftRequestSchema.parse({ mode: "auto" })).toEqual({
+      mode: "auto",
+    });
+    expect(() => sendDraftRequestSchema.parse({})).toThrow();
 
     expect(
       threadListResponseSchema.parse([
@@ -930,6 +936,7 @@ describe("server-contract clients", () => {
       environmentStatusResponseSchema: contract.environmentStatusResponseSchema,
       threadStorageFilesQuerySchema: contract.threadStorageFilesQuerySchema,
       projectFilesQuerySchema: contract.projectFilesQuerySchema,
+      sendDraftRequestSchema: contract.sendDraftRequestSchema,
       sendDraftResponseSchema: contract.sendDraftResponseSchema,
       sendMessageRequestSchema: contract.sendMessageRequestSchema,
       squashMergeActionResponseSchema: contract.squashMergeActionResponseSchema,

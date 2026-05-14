@@ -36,6 +36,7 @@ import type {
   ProjectResponse,
   ProjectWithThreadsResponse,
   PromptHistoryResponse,
+  SendDraftRequest,
   SendDraftResponse,
   SendMessageRequest,
   SystemExecutionOptionsResponse,
@@ -801,11 +802,12 @@ export async function listThreadPromptHistory(
 export async function sendThreadDraft(
   id: string,
   queuedMessageId: string,
+  req: SendDraftRequest,
 ): Promise<SendDraftResponse> {
   return request<SendDraftResponse>(
     apiClient.threads[":id"].drafts[":draftId"].send.$post({
       param: { id, draftId: queuedMessageId },
-      json: {},
+      json: req,
     }),
   );
 }

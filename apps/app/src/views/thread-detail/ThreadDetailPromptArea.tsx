@@ -55,7 +55,7 @@ import type { SendMessageMutationLike } from "./threadDetailMutationTypes";
 
 interface SendFollowUpInputParams {
   input: PromptInput[];
-  mode?: "auto" | "steer";
+  mode: "auto" | "steer";
   model?: string;
   permissionMode?: PermissionMode;
   reasoningLevel?: ReasoningLevel;
@@ -205,6 +205,7 @@ export function ThreadDetailPromptArea({
   const [processingQueuedMessageId, setProcessingQueuedMessageId] = useState<
     string | null
   >(null);
+  const [isSteerBatchSending, setIsSteerBatchSending] = useState(false);
   const promptHistoryDrafts = useMemo(
     () => promptHistoryEntriesToDrafts(promptHistoryEntries),
     [promptHistoryEntries],
@@ -252,11 +253,15 @@ export function ThreadDetailPromptArea({
     getLatestPendingInteraction(pendingInteractions);
   const hasPendingInteraction = activePendingInteraction !== null;
   const isQueueMutationPending =
-    createDraft.isPending || sendDraft.isPending || deleteDraft.isPending;
+    createDraft.isPending ||
+    sendDraft.isPending ||
+    deleteDraft.isPending ||
+    isSteerBatchSending;
   const isFollowUpSubmitting =
     sendMessage.isPending ||
     isEnvironmentActionPending ||
-    createDraft.isPending;
+    createDraft.isPending ||
+    isSteerBatchSending;
   const submitMode: FollowUpSubmitMode = (() => {
     if (isStopRequested) {
       return { kind: "blocked", reason: "stopping" };
@@ -281,10 +286,28 @@ export function ThreadDetailPromptArea({
   const promptPlaceholder = isStopRequested
     ? "Stopping thread..."
     : getPromptPlaceholder(runtimeDisplayStatus, thread.type === "manager");
+  const currentPromptDraft = useMemo(
+    () => ({
+      text: promptDraft.text,
+      attachments: promptDraft.attachments,
+    }),
+    [promptDraft.attachments, promptDraft.text],
+  );
+  const currentPromptDraftInput = useMemo(
+    () => promptDraftToInput(currentPromptDraft),
+    [currentPromptDraft],
+  );
+  const hasPromptDraftInput = currentPromptDraftInput.length > 0;
+  const canSteerSubmit =
+    runtimeDisplayStatus === "active" &&
+    submitMode.kind === "queue" &&
+    !isFollowUpSubmitting &&
+    !isQueueMutationPending &&
+    (queuedMessages.length > 0 || hasPromptDraftInput);
   const sendFollowUpInput = useCallback(
     async ({
       input,
-      mode = "auto",
+      mode,
       model,
       serviceTier: executionServiceTier,
       reasoningLevel: executionReasoningLevel,
@@ -294,11 +317,8 @@ export function ThreadDetailPromptArea({
         return;
       }
 
-      await sendMessage.mutateAsync({
-        id: thread.id,
-        input,
-        mode,
-        ...(mode === "steer"
+      const executionOptions =
+        mode === "steer"
           ? {}
           : {
               ...(model ? { model } : {}),
@@ -311,7 +331,13 @@ export function ThreadDetailPromptArea({
               ...(executionPermissionMode
                 ? { permissionMode: executionPermissionMode }
                 : {}),
-            }),
+            };
+
+      await sendMessage.mutateAsync({
+        id: thread.id,
+        input,
+        mode,
+        ...executionOptions,
       });
     },
     [sendMessage, thread.id],
@@ -344,11 +370,8 @@ export function ThreadDetailPromptArea({
   );
 
   const handleSend = useCallback(async () => {
-    const submittedDraft = {
-      text: promptDraft.text,
-      attachments: promptDraft.attachments,
-    };
-    const submittedInput = promptDraftToInput(submittedDraft);
+    const submittedDraft = currentPromptDraft;
+    const submittedInput = currentPromptDraftInput;
     if (submittedInput.length === 0) {
       return;
     }
@@ -370,6 +393,7 @@ export function ThreadDetailPromptArea({
       } else {
         await sendFollowUpInput({
           input: submittedInput,
+          mode: "auto",
           model: activeModel?.model ?? selectedModel,
           ...(supportsServiceTier && serviceTier ? { serviceTier } : {}),
           reasoningLevel,
@@ -390,6 +414,8 @@ export function ThreadDetailPromptArea({
   }, [
     activeModel?.model,
     createDraft,
+    currentPromptDraft,
+    currentPromptDraftInput,
     promptDraft,
     reasoningLevel,
     permissionMode,
@@ -399,6 +425,58 @@ export function ThreadDetailPromptArea({
     supportsServiceTier,
     thread.id,
     runtimeDisplayStatus,
+  ]);
+
+  const handleSteerSend = useCallback(async () => {
+    if (!canSteerSubmit) {
+      return;
+    }
+
+    const submittedDraft = currentPromptDraft;
+    const submittedInput = currentPromptDraftInput;
+    if (queuedMessages.length === 0 && submittedInput.length === 0) {
+      return;
+    }
+
+    setIsSteerBatchSending(true);
+    if (submittedInput.length > 0) {
+      promptDraft.clearIfCurrentMatches(submittedDraft);
+    }
+    setAttachmentError(null);
+
+    try {
+      for (const queuedMessage of queuedMessages) {
+        await sendDraft.mutateAsync({
+          id: thread.id,
+          mode: "steer",
+          queuedMessageId: queuedMessage.id,
+        });
+      }
+
+      await sendFollowUpInput({
+        input: submittedInput,
+        mode: "steer",
+      });
+    } catch (nextError) {
+      promptDraft.restoreIfEmpty(submittedDraft);
+      toast.error(
+        getMutationErrorMessage({
+          error: nextError,
+          fallbackMessage: "Failed to send steer.",
+        }),
+      );
+    } finally {
+      setIsSteerBatchSending(false);
+    }
+  }, [
+    canSteerSubmit,
+    currentPromptDraft,
+    currentPromptDraftInput,
+    promptDraft,
+    queuedMessages,
+    sendDraft,
+    sendFollowUpInput,
+    thread.id,
   ]);
 
   const handleSendQueuedImmediately = useCallback(
@@ -414,6 +492,7 @@ export function ThreadDetailPromptArea({
       void sendDraft
         .mutateAsync({
           id: thread.id,
+          mode: "auto",
           queuedMessageId: messageId,
         })
         .then(() => {
@@ -586,8 +665,10 @@ export function ThreadDetailPromptArea({
         isFollowUpSubmitting,
         message: promptDraft.text,
         onChangeMessage: promptDraft.setText,
+        onSteerSubmit: handleSteerSend,
         onSubmit: handleSend,
         promptPlaceholder,
+        canSteerSubmit,
         submitMode,
         threadRuntimeDisplayStatus: runtimeDisplayStatus,
       }}

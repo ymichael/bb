@@ -8,6 +8,7 @@ import {
 import type {
   PromptHistoryResponse,
   CreateDraftRequest,
+  SendDraftMode,
   SendDraftResponse,
   TimelineConversationAttachments,
   TimelineRow,
@@ -52,6 +53,7 @@ interface CreateThreadDraftMutationRequest extends CreateDraftRequest {
 
 interface SendThreadDraftMutationRequest {
   id: string;
+  mode: SendDraftMode;
   queuedMessageId: string;
 }
 
@@ -409,9 +411,10 @@ export function useSendThreadDraft() {
     },
     mutationFn: ({
       id,
+      mode,
       queuedMessageId,
     }: SendThreadDraftMutationRequest): Promise<SendDraftResponse> =>
-      api.sendThreadDraft(id, queuedMessageId),
+      api.sendThreadDraft(id, queuedMessageId, { mode }),
     onSuccess: (_data, variables) => {
       invalidateThreadDraftSendQueries({ queryClient, threadId: variables.id });
     },

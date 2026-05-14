@@ -1366,7 +1366,7 @@ describe("public thread data routes", () => {
           headers: {
             "content-type": "application/json",
           },
-          body: JSON.stringify({}),
+          body: JSON.stringify({ mode: "auto" }),
         },
       );
 
@@ -1484,7 +1484,7 @@ describe("public thread data routes", () => {
           headers: {
             "content-type": "application/json",
           },
-          body: JSON.stringify({}),
+          body: JSON.stringify({ mode: "auto" }),
         },
       );
 
@@ -1916,7 +1916,7 @@ describe("public thread data routes", () => {
           headers: {
             "content-type": "application/json",
           },
-          body: JSON.stringify({}),
+          body: JSON.stringify({ mode: "auto" }),
         },
       );
 
