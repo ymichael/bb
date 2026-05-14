@@ -386,11 +386,12 @@ describe("createAgentRuntime process lifecycle", () => {
 
   it("concurrent ensureProvider calls do not spawn duplicate processes", async () => {
     let spawnCount = 0;
+    const baseAdapter = createFakeAdapter(scriptPath);
     const countingAdapter: ProviderAdapter = {
-      ...createFakeAdapter(scriptPath),
+      ...baseAdapter,
       get process() {
         spawnCount++;
-        return { command: "node", args: [scriptPath] };
+        return baseAdapter.process;
       },
     };
 
@@ -411,10 +412,8 @@ describe("createAgentRuntime process lifecycle", () => {
       runtime.ensureProvider({ providerId: "fake" }),
     ]);
 
-    // Only one process should have been spawned
-    // (spawnCount counts adapter.process access which happens once per spawnProvider call)
-    // Actually the getter fires on every access, so let's just verify it works
-    // The real test is that it doesn't throw or hang
+    // Duplicate starts would read the process config more than once.
+    expect(spawnCount).toBe(1);
     await runtime.shutdown();
   });
 

@@ -214,10 +214,11 @@ export class RuntimeProviderProcessManager {
       ...process.env,
       ...this.args.env,
     };
+    const processConfig = adapter.process;
 
     const child = spawnPortablePipedProcess({
-      command: adapter.process.command,
-      args: adapter.process.args,
+      command: processConfig.command,
+      args: processConfig.args,
       cwd: this.args.workspacePath,
       env,
     });

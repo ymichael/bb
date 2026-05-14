@@ -16,7 +16,6 @@ import {
   createRecoveryThread,
   RECOVERY_TIMEOUT_MS,
   STOP_DELAY_TEXT,
-  TURN_TIMEOUT_MS,
 } from "./shared.js";
 
 describe.sequential("fake provider active crash recovery integration", () => {
@@ -69,13 +68,13 @@ describe.sequential("fake provider active crash recovery integration", () => {
         harness.api,
         thread.id,
         "recovered after crash",
-        TURN_TIMEOUT_MS,
+        RECOVERY_TIMEOUT_MS,
       );
       await waitForThreadStatus(
         harness.api,
         thread.id,
         "idle",
-        TURN_TIMEOUT_MS,
+        RECOVERY_TIMEOUT_MS,
       );
 
       const events = await getThreadEvents(harness.api, thread.id);
