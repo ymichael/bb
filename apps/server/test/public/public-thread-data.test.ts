@@ -1151,8 +1151,7 @@ describe("public thread data routes", () => {
         providersCommand.row.cursor,
         ({ command }) =>
           command.type === "provider.list_models" &&
-          command.providerId === "codex" &&
-          command.selectedModel === "gpt-5.5",
+          command.providerId === "codex",
       );
       expect(modelsCommand.row.hostId).toBe(host.id);
       await reportQueuedCommandSuccess(
@@ -1175,6 +1174,7 @@ describe("public thread data routes", () => {
               isDefault: true,
             },
           ],
+          selectedOnlyModels: [],
         },
         { hostId: host.id },
       );
@@ -1237,6 +1237,7 @@ describe("public thread data routes", () => {
       expect(bootstrap.executionOptions).toEqual({
         providers: [],
         models: [],
+        selectedOnlyModels: [],
       });
     } finally {
       await harness.cleanup();

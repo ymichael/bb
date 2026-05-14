@@ -997,7 +997,8 @@ describe("bridge", () => {
   });
 
   it("returns the bridge-owned Claude model list from the SDK probe", async () => {
-    await expect(listClaudeCodeBridgeModels()).resolves.toEqual([
+    const { models, selectedOnlyModels } = await listClaudeCodeBridgeModels();
+    expect(models).toEqual([
       expect.objectContaining({
         id: "claude-opus-4-7[1m]",
         model: "claude-opus-4-7[1m]",
@@ -1040,6 +1041,13 @@ describe("bridge", () => {
         displayName: "Haiku 4.5",
         isDefault: false,
       }),
+    ]);
+    expect(selectedOnlyModels.map((model) => model.model)).toEqual([
+      "opus[1m]",
+      "opus",
+      "sonnet[1m]",
+      "sonnet",
+      "haiku",
     ]);
     expect(queryMock).not.toHaveBeenCalled();
   });

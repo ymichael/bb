@@ -82,12 +82,11 @@ async function buildThreadComposerBootstrapResponse(
     ? await resolveSystemExecutionOptions(deps, {
         environmentId: composerEnvironmentId,
         providerId: thread.providerId,
-        providerScope: "selected",
-        selectedModel: defaultExecutionOptions?.model,
       })
     : {
         providers: [],
         models: [],
+        selectedOnlyModels: [],
       };
   return {
     defaultExecutionOptions,

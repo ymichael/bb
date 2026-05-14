@@ -232,7 +232,6 @@ export function ThreadDetailPromptArea({
   } = useThreadCreationOptions({
     enabled: composerQueriesEnabled,
     environmentId: thread.environmentId ?? undefined,
-    providerScope: "selected",
     scope: "thread",
     resetKey: thread.id,
     initialProviderId: thread.providerId,

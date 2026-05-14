@@ -290,7 +290,10 @@ export function createFakeRuntime() {
     },
     async listModels(args) {
       state.listedModelsProviderId = args.providerId;
-      return [] satisfies AvailableModel[];
+      return {
+        models: [] satisfies AvailableModel[],
+        selectedOnlyModels: [] satisfies AvailableModel[],
+      };
     },
     async shutdown() {
       state.shutdownCount += 1;

@@ -764,9 +764,7 @@ export function createClaudeCodeProviderAdapter(
           return {
             kind: "request",
             method: "model/list",
-            params: command.selectedModel
-              ? { selectedModel: command.selectedModel }
-              : {},
+            params: {},
           };
         case "thread/start": {
           finishOpenProviderTurn({

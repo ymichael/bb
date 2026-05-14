@@ -2,19 +2,17 @@ import {
   keepPreviousData,
   useQuery,
 } from "@tanstack/react-query";
-import type { AvailableModel, Host, SandboxBackendInfo } from "@bb/domain";
+import type { Host, SandboxBackendInfo } from "@bb/domain";
 import type {
   CloudAuthAttemptResponse,
   CloudAuthSettingsResponse,
   GithubRepoInfo,
   SandboxEnvVarsResponse,
-  SystemExecutionOptionsProviderScope,
   SystemExecutionOptionsResponse,
   SystemProviderInfo,
 } from "@bb/server-contract";
 import * as api from "@/lib/api";
 import {
-  availableModelsQueryKey,
   cloudAuthAttemptQueryKey,
   cloudAuthSettingsQueryKey,
   type HostQueryId,
@@ -27,18 +25,10 @@ import {
   systemProvidersQueryKey,
 } from "./query-keys";
 
-export interface UseAvailableModelsArgs {
-  enabled?: boolean;
-  providerId?: string;
-  selectedModel?: string;
-}
-
 export interface UseSystemExecutionOptionsArgs {
   enabled?: boolean;
   environmentId?: string;
   providerId?: string;
-  providerScope?: SystemExecutionOptionsProviderScope;
-  selectedModel?: string;
 }
 
 interface QueryOptions {
@@ -71,39 +61,18 @@ export function useHost(hostId: HostQueryId, options?: QueryOptions) {
   });
 }
 
-export function useAvailableModels(args: UseAvailableModelsArgs = {}) {
-  return useQuery<AvailableModel[]>({
-    queryKey: availableModelsQueryKey(
-      args.providerId ?? null,
-      args.selectedModel ?? null,
-    ),
-    queryFn: () => api.getAvailableModels(args.providerId, args.selectedModel),
-    enabled: args.enabled ?? true,
-    staleTime: 60_000,
-  });
-}
-
 export function useSystemExecutionOptions(
   args: UseSystemExecutionOptionsArgs = {},
 ) {
   const environmentId = args.environmentId ?? null;
   const providerId = args.providerId ?? null;
-  const selectedModel = args.selectedModel ?? null;
-  const providerScope = args.providerScope ?? "all";
 
   return useQuery<SystemExecutionOptionsResponse>({
-    queryKey: systemExecutionOptionsQueryKey({
-      environmentId,
-      providerId,
-      providerScope,
-      selectedModel,
-    }),
+    queryKey: systemExecutionOptionsQueryKey({ environmentId, providerId }),
     queryFn: () =>
       api.getSystemExecutionOptions({
         environmentId: args.environmentId,
         providerId: args.providerId,
-        providerScope,
-        selectedModel: args.selectedModel,
       }),
     enabled: args.enabled ?? true,
     staleTime: 60_000,

@@ -1510,7 +1510,12 @@ export function createCodexProviderAdapter(
     },
 
     parseModelListResult(result: unknown) {
-      return parseModelsResponse(result);
+      // Codex's upstream API only exposes an active model list; legacy/retired
+      // models aren't surfaced separately, so selectedOnlyModels is always empty.
+      return {
+        models: parseModelsResponse(result),
+        selectedOnlyModels: [],
+      };
     },
   };
 }

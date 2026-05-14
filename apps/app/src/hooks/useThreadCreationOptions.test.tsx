@@ -14,7 +14,6 @@ vi.mock("@/lib/api", async (importOriginal) => {
 
   return {
     ...actual,
-    getAvailableModels: vi.fn(),
     getSystemExecutionOptions: vi.fn(),
     listSystemProviders: vi.fn(),
   };
@@ -63,13 +62,16 @@ function makeModel(overrides: ModelOverrides = {}): AvailableModel {
 function mockExecutionOptions({
   models,
   providers,
+  selectedOnlyModels = [],
 }: {
   models: AvailableModel[];
   providers: ReturnType<typeof createTestSystemProvider>[];
+  selectedOnlyModels?: AvailableModel[];
 }): void {
   vi.mocked(api.getSystemExecutionOptions).mockResolvedValue({
     models,
     providers,
+    selectedOnlyModels,
   });
 }
 
@@ -94,7 +96,6 @@ describe("useThreadCreationOptions", () => {
     );
 
     expect(api.listSystemProviders).not.toHaveBeenCalled();
-    expect(api.getAvailableModels).not.toHaveBeenCalled();
     expect(api.getSystemExecutionOptions).not.toHaveBeenCalled();
   });
 
@@ -146,11 +147,8 @@ describe("useThreadCreationOptions", () => {
     expect(api.getSystemExecutionOptions).toHaveBeenCalledWith({
       environmentId: undefined,
       providerId: undefined,
-      providerScope: "all",
-      selectedModel: undefined,
     });
     expect(api.listSystemProviders).not.toHaveBeenCalled();
-    expect(api.getAvailableModels).not.toHaveBeenCalled();
   });
 
   it("falls back to valid provider and model values from query data", async () => {
@@ -474,56 +472,33 @@ describe("useThreadCreationOptions", () => {
     ]);
   });
 
-  it("passes the current model to provider lookup for selected-only runtime models", async () => {
-    const providers = [
-      createTestSystemProvider({
-        displayName: "Codex",
-        id: "codex",
-      }),
-      createTestSystemProvider({
-        capabilities: {
-          supportsArchive: false,
-        },
-        displayName: "Claude Code",
-        id: "claude-code",
-      }),
-    ];
-    vi.mocked(api.getSystemExecutionOptions).mockImplementation(
-      async ({ providerId, selectedModel }) => ({
-        providers,
-        models:
-          providerId === "claude-code" && selectedModel === "opus[1m]"
-            ? [
-                makeModel({
-                  displayName: "Opus Alias (1M, Legacy)",
-                  id: "opus[1m]",
-                  isDefault: false,
-                  model: "opus[1m]",
-                }),
-                makeModel({
-                  defaultReasoningEffort: "xhigh",
-                  displayName: "Claude Opus 4.7 (1M)",
-                  id: "claude-opus-4-7[1m]",
-                  isDefault: true,
-                  model: "claude-opus-4-7[1m]",
-                }),
-              ]
-            : [
-                makeModel({
-                  displayName: "gpt-5.4",
-                  id: "gpt-5.4",
-                  model: "gpt-5.4",
-                }),
-              ],
-      }),
-    );
+  it("prepends a retired model from the selected-only pool when it is the user's stored selection", async () => {
+    mockExecutionOptions({
+      providers: [createTestSystemProvider({ id: "claude-code" })],
+      models: [
+        makeModel({
+          displayName: "Opus 4.7",
+          id: "claude-opus-4-7",
+          isDefault: true,
+          model: "claude-opus-4-7",
+        }),
+      ],
+      selectedOnlyModels: [
+        makeModel({
+          displayName: "Opus Alias (Legacy)",
+          id: "opus",
+          isDefault: false,
+          model: "opus",
+        }),
+      ],
+    });
 
     const { wrapper } = createQueryClientTestHarness();
     const { result } = renderHook(
       () =>
         useThreadCreationOptions({
           environmentId: "environment-selected-only",
-          initialModel: "opus[1m]",
+          initialModel: "opus",
           initialProviderId: "claude-code",
           projectId: "project-selected-only",
           scope: "thread",
@@ -532,19 +507,61 @@ describe("useThreadCreationOptions", () => {
     );
 
     await waitFor(() => {
-      expect(api.getSystemExecutionOptions).toHaveBeenCalledWith({
-        environmentId: "environment-selected-only",
-        providerId: "claude-code",
-        providerScope: "all",
-        selectedModel: "opus[1m]",
-      });
+      expect(result.current.modelOptions.length).toBeGreaterThan(0);
     });
+
+    expect(result.current.selectedModel).toBe("opus");
+    expect(result.current.modelOptions[0]).toEqual({
+      label: "Opus Alias (Legacy)",
+      value: "opus",
+    });
+    expect(result.current.modelOptions.map((option) => option.value)).toEqual([
+      "opus",
+      "claude-opus-4-7",
+    ]);
+  });
+
+  it("ignores selectedOnlyModels when the stored selection is already active", async () => {
+    mockExecutionOptions({
+      providers: [createTestSystemProvider({ id: "claude-code" })],
+      models: [
+        makeModel({
+          displayName: "Opus 4.7",
+          id: "claude-opus-4-7",
+          isDefault: true,
+          model: "claude-opus-4-7",
+        }),
+      ],
+      selectedOnlyModels: [
+        makeModel({
+          displayName: "Opus Alias (Legacy)",
+          id: "opus",
+          isDefault: false,
+          model: "opus",
+        }),
+      ],
+    });
+
+    const { wrapper } = createQueryClientTestHarness();
+    const { result } = renderHook(
+      () =>
+        useThreadCreationOptions({
+          environmentId: "environment-active",
+          initialModel: "claude-opus-4-7",
+          initialProviderId: "claude-code",
+          projectId: "project-active",
+          scope: "thread",
+        }),
+      { wrapper },
+    );
+
     await waitFor(() => {
-      expect(result.current.modelOptions[0]).toEqual({
-        label: "Opus Alias (1M, Legacy)",
-        value: "opus[1m]",
-      });
+      expect(result.current.modelOptions.length).toBeGreaterThan(0);
     });
-    expect(result.current.selectedModel).toBe("opus[1m]");
+
+    expect(result.current.selectedModel).toBe("claude-opus-4-7");
+    expect(result.current.modelOptions.map((option) => option.value)).toEqual([
+      "claude-opus-4-7",
+    ]);
   });
 });

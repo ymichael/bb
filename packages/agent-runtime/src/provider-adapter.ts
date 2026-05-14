@@ -109,7 +109,7 @@ export type ProviderExecutionContext = {
 
 export type AdapterCommand =
   | { type: "initialize" }
-  | { type: "model/list"; selectedModel?: string }
+  | { type: "model/list" }
   | {
       type: "thread/start";
       threadId: string;
@@ -207,7 +207,10 @@ export interface ProviderAdapter {
   prepareTurnStart(
     command: TurnStartAdapterCommand,
   ): PreparedProviderCommandDispatch | null;
-  parseModelListResult(result: unknown): AvailableModel[];
+  parseModelListResult(result: unknown): {
+    models: AvailableModel[];
+    selectedOnlyModels: AvailableModel[];
+  };
   translateEvent(
     event: ProviderRuntimeEvent,
     context?: ProviderTranslationContext,

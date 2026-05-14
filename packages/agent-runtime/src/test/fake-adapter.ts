@@ -275,7 +275,10 @@ function decodeToolCallRequest(
   );
 }
 
-function parseModelListResult(result: unknown): AvailableModel[] {
+function parseModelListResult(result: unknown): {
+  models: AvailableModel[];
+  selectedOnlyModels: AvailableModel[];
+} {
   return parseAvailableModelList(result);
 }
 

@@ -5,7 +5,6 @@ import {
   sandboxEnvVarNameSchema,
   upsertSandboxEnvVarRequestSchema,
   systemExecutionOptionsQuerySchema,
-  systemModelsQuerySchema,
   systemProvidersQuerySchema,
   typedRoutes,
   type PublicApiSchema,
@@ -150,54 +149,8 @@ export function registerSystemRoutes(app: Hono, deps: AppDeps): void {
     "/system/execution-options",
     systemExecutionOptionsQuerySchema,
     async (context, query) =>
-      context.json(
-        await resolveSystemExecutionOptions(deps, {
-          ...query,
-          providerScope: query.providerScope ?? "all",
-        }),
-      ),
+      context.json(await resolveSystemExecutionOptions(deps, query)),
   );
-
-  get("/system/models", systemModelsQuerySchema, async (context, query) => {
-    const hostId = resolveSystemLookupHostId(deps, query);
-    if (query.providerId) {
-      const result = await queueCommandAndWait(deps, {
-        hostId,
-        timeoutMs: COMMAND_TIMEOUT_MS,
-        command: {
-          type: "provider.list_models",
-          providerId: query.providerId,
-          selectedModel: query.selectedModel,
-        },
-      });
-      return context.json(result.models);
-    }
-
-    const providers = (
-      await queueCommandAndWait(deps, {
-        hostId,
-        timeoutMs: COMMAND_TIMEOUT_MS,
-        command: { type: "provider.list" },
-      })
-    ).providers;
-    const models = await Promise.all(
-      providers.map(
-        async (provider) =>
-          (
-            await queueCommandAndWait(deps, {
-              hostId,
-              timeoutMs: COMMAND_TIMEOUT_MS,
-              command: {
-                type: "provider.list_models",
-                providerId: provider.id,
-                selectedModel: query.selectedModel,
-              },
-            })
-          ).models,
-      ),
-    );
-    return context.json(models.flat());
-  });
 
   post("/system/voice-transcription", async (context) => {
     if (!deps.config.openAiApiKey) {

@@ -1,7 +1,6 @@
 import type { Hono } from "hono";
 import { hc } from "hono/client";
 import type {
-  AvailableModel,
   Environment,
   Host,
   PendingInteraction,
@@ -75,7 +74,6 @@ import type {
   SystemExecutionOptionsQuery,
   SystemExecutionOptionsResponse,
   SystemSandboxBackendInfo,
-  SystemModelsQuery,
   SystemProviderInfo,
   SystemProvidersQuery,
   SystemVoiceTranscriptionForm,
@@ -564,10 +562,6 @@ export type PublicApiSchema = {
       { query?: SystemExecutionOptionsQuery },
       SystemExecutionOptionsResponse
     >;
-  };
-  "/system/models": {
-    /** List available models. Proxies to `provider.list_models`; default lookup uses persistent hosts only. */
-    $get: Endpoint<{ query?: SystemModelsQuery }, AvailableModel[]>;
   };
   "/system/providers": {
     /** List available providers. Proxies to `provider.list`; default lookup uses persistent hosts only. */

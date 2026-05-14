@@ -385,7 +385,6 @@ describe("thread query bootstraps", () => {
           environmentId: "environment-1",
           initialModel: "gpt-5.5",
           initialProviderId: "codex",
-          providerScope: "selected",
           resetKey: "thread-1",
           scope: "thread",
         });
@@ -434,8 +433,6 @@ describe("thread query bootstraps", () => {
         systemExecutionOptionsQueryKey({
           environmentId: "environment-1",
           providerId: "codex",
-          providerScope: "selected",
-          selectedModel: "gpt-5.5",
         }),
       ),
     ).toEqual(executionOptions);
@@ -449,8 +446,6 @@ describe("thread query bootstraps", () => {
         queryKey: systemExecutionOptionsQueryKey({
           environmentId: "environment-1",
           providerId: "codex",
-          providerScope: "selected",
-          selectedModel: "gpt-5.5",
         }),
       });
     });

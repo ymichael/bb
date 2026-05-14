@@ -657,7 +657,15 @@ export type PromptHistoryResponse = z.infer<typeof promptHistoryResponseSchema>;
 
 export const systemExecutionOptionsResponseSchema = z.object({
   providers: z.array(providerInfoSchema),
+  /** Active models offered as fresh picker choices. */
   models: z.array(availableModelSchema),
+  /**
+   * Retired/legacy models the picker no longer offers but that may still be
+   * the user's stored selection. Clients prepend the matching entry when a
+   * stored model isn't in `models`, so deprecation doesn't silently rewrite
+   * the user's choice.
+   */
+  selectedOnlyModels: z.array(availableModelSchema),
 });
 export type SystemExecutionOptionsResponse = z.infer<
   typeof systemExecutionOptionsResponseSchema
@@ -871,29 +879,13 @@ export type ThreadStorageContentQuery = z.infer<
   typeof threadStorageContentQuerySchema
 >;
 
-export const systemModelsQuerySchema = z
+export const systemExecutionOptionsQuerySchema = z
   .object({
     providerId: z.string().min(1),
     hostId: z.string().min(1),
     environmentId: z.string().min(1),
-    selectedModel: z.string().min(1),
   })
   .partial();
-export type SystemModelsQuery = z.infer<typeof systemModelsQuerySchema>;
-
-export const systemExecutionOptionsProviderScopeSchema = z.enum([
-  "all",
-  "selected",
-]);
-export type SystemExecutionOptionsProviderScope = z.infer<
-  typeof systemExecutionOptionsProviderScopeSchema
->;
-
-export const systemExecutionOptionsQuerySchema = systemModelsQuerySchema.extend(
-  {
-    providerScope: systemExecutionOptionsProviderScopeSchema.optional(),
-  },
-);
 export type SystemExecutionOptionsQuery = z.infer<
   typeof systemExecutionOptionsQuerySchema
 >;

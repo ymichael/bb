@@ -124,16 +124,6 @@ describe("claude-code provider adapter", () => {
       method: "model/list",
       params: {},
     });
-    expect(
-      adapter.buildCommandPlan({
-        type: "model/list",
-        selectedModel: "claude-opus-4-6",
-      }),
-    ).toEqual({
-      kind: "request",
-      method: "model/list",
-      params: { selectedModel: "claude-opus-4-6" },
-    });
   });
 
   it("buildCommand thread/start routes threadId from command", () => {
@@ -360,8 +350,8 @@ describe("claude-code provider adapter", () => {
 
   it("parseModelListResult validates bridge model payloads", () => {
     const adapter = createClaudeCodeProviderAdapter();
-    expect(
-      adapter.parseModelListResult([
+    const result = adapter.parseModelListResult({
+      models: [
         {
           id: "claude-sonnet-4-6",
           model: "claude-sonnet-4-6",
@@ -376,8 +366,11 @@ describe("claude-code provider adapter", () => {
           defaultReasoningEffort: "medium",
           isDefault: true,
         },
-      ]),
-    ).toHaveLength(1);
+      ],
+      selectedOnlyModels: [],
+    });
+    expect(result.models).toHaveLength(1);
+    expect(result.selectedOnlyModels).toHaveLength(0);
   });
 
   it("buildCommand thread/resume maps updated permission policy", () => {

@@ -37,8 +37,6 @@ const INTENTIONAL_OPTIONAL_HOST_DAEMON_FIELDS: Record<string, string> = {
     "host.list_files may omit a search string to list files without filtering.",
   "hostDaemonCommandSchema.ref":
     "host.read_file may omit ref to read from disk; setting ref switches to git history at that ref.",
-  "hostDaemonCommandSchema.selectedModel":
-    "provider.list_models may omit selectedModel to list only active provider models.",
   "hostDaemonCommandSchema.threadStoragePath":
     "thread.start may include a storage path for manager threads so the daemon creates the directory before the agent starts.",
 };

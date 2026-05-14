@@ -36,7 +36,6 @@ export const ENVIRONMENT_GIT_DIFF_QUERY_KEY = "environmentGitDiff";
 export const ENVIRONMENT_DIFF_FILE_QUERY_KEY = "environmentDiffFile";
 export const ENVIRONMENT_FILE_PREVIEW_QUERY_KEY = "environmentFilePreview";
 export const THREAD_TIMELINE_QUERY_KEY = "threadTimeline";
-export const AVAILABLE_MODELS_QUERY_KEY = "availableModels";
 export const SYSTEM_PROVIDERS_QUERY_KEY = "systemProviders";
 export const SYSTEM_EXECUTION_OPTIONS_QUERY_KEY = "systemExecutionOptions";
 export const SANDBOX_BACKENDS_QUERY_KEY = "sandboxBackends";
@@ -271,14 +270,6 @@ export type EnvironmentFilePreviewQueryKeyPrefix = readonly [
   typeof ENVIRONMENT_FILE_PREVIEW_QUERY_KEY,
   string,
 ];
-export type AvailableModelsQueryKey = readonly [
-  typeof AVAILABLE_MODELS_QUERY_KEY,
-  string | null,
-  string | null,
-];
-export type AllAvailableModelsQueryKeyPrefix = readonly [
-  typeof AVAILABLE_MODELS_QUERY_KEY,
-];
 export type SystemProvidersQueryKey = readonly [
   typeof SYSTEM_PROVIDERS_QUERY_KEY,
 ];
@@ -286,8 +277,6 @@ export type SystemExecutionOptionsQueryKey = readonly [
   typeof SYSTEM_EXECUTION_OPTIONS_QUERY_KEY,
   string | null,
   string | null,
-  string | null,
-  "all" | "selected",
 ];
 export type AllSystemExecutionOptionsQueryKeyPrefix = readonly [
   typeof SYSTEM_EXECUTION_OPTIONS_QUERY_KEY,
@@ -677,17 +666,6 @@ export function environmentFilePreviewQueryKeyPrefix(
   return [ENVIRONMENT_FILE_PREVIEW_QUERY_KEY, environmentId];
 }
 
-export function availableModelsQueryKey(
-  providerId: string | null,
-  selectedModel: string | null,
-): AvailableModelsQueryKey {
-  return [AVAILABLE_MODELS_QUERY_KEY, providerId, selectedModel];
-}
-
-export function allAvailableModelsQueryKeyPrefix(): AllAvailableModelsQueryKeyPrefix {
-  return [AVAILABLE_MODELS_QUERY_KEY];
-}
-
 export function systemProvidersQueryKey(): SystemProvidersQueryKey {
   return [SYSTEM_PROVIDERS_QUERY_KEY];
 }
@@ -695,23 +673,13 @@ export function systemProvidersQueryKey(): SystemProvidersQueryKey {
 export interface SystemExecutionOptionsQueryKeyArgs {
   environmentId: string | null;
   providerId: string | null;
-  providerScope: "all" | "selected";
-  selectedModel: string | null;
 }
 
 export function systemExecutionOptionsQueryKey({
   environmentId,
   providerId,
-  providerScope,
-  selectedModel,
 }: SystemExecutionOptionsQueryKeyArgs): SystemExecutionOptionsQueryKey {
-  return [
-    SYSTEM_EXECUTION_OPTIONS_QUERY_KEY,
-    environmentId,
-    providerId,
-    selectedModel,
-    providerScope,
-  ];
+  return [SYSTEM_EXECUTION_OPTIONS_QUERY_KEY, environmentId, providerId];
 }
 
 export function allSystemExecutionOptionsQueryKeyPrefix(): AllSystemExecutionOptionsQueryKeyPrefix {

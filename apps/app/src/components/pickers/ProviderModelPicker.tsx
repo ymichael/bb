@@ -5,7 +5,7 @@ import { COARSE_POINTER_ICON_SIZE_CLASS, COARSE_POINTER_ICON_SIZE_SHRINK_CLASS, 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover.js";
 import { Switch } from "@/components/ui/switch.js";
 import { cn } from "@/lib/utils";
-import { useAvailableModels } from "@/hooks/queries/system-queries";
+import { useSystemExecutionOptions } from "@/hooks/queries/system-queries";
 import { useIsCompactViewport } from "@/components/ui/hooks/use-compact-viewport.js";
 import {
   OPTION_BASE_CLASS_NAME,
@@ -89,17 +89,20 @@ export function ProviderModelPicker({
     providerOptions.length > 1;
 
   // When previewing a different provider, fetch its models independently
-  // so we don't disturb the committed state in the hook.
+  // so we don't disturb the committed state in the hook. The query shares its
+  // cache key with the committed `useSystemExecutionOptions({ providerId })`
+  // call in `useThreadCreationOptions`, so committing the selection is a cache
+  // hit instead of a refetch.
   const isPreviewing =
     previewProviderId !== null && previewProviderId !== selectedProviderId;
-  const previewModelsQuery = useAvailableModels({
+  const previewQuery = useSystemExecutionOptions({
     enabled: isPreviewing,
     providerId: isPreviewing ? previewProviderId : undefined,
   });
 
   const previewModelOptions = useMemo((): readonly PickerOption<string>[] => {
     if (!isPreviewing) return modelOptions;
-    const models = previewModelsQuery.data;
+    const models = previewQuery.data?.models;
     if (!models || models.length === 0) return [];
     return models.map((model) => ({
       value: model.model,
@@ -110,7 +113,7 @@ export function ProviderModelPicker({
   }, [
     isPreviewing,
     modelOptions,
-    previewModelsQuery.data,
+    previewQuery.data?.models,
     formatModelLabel,
     previewProviderId,
   ]);
@@ -229,7 +232,7 @@ export function ProviderModelPicker({
               "max-h-[min(300px,var(--radix-popover-content-available-height,300px)-80px)]",
           )}
         >
-          {isPreviewing && previewModelsQuery.isLoading ? (
+          {isPreviewing && previewQuery.isLoading ? (
             <div
               className={cn(
                 "px-2 text-xs text-muted-foreground",

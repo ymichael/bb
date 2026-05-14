@@ -132,9 +132,7 @@ const piCommandSchema = z.discriminatedUnion("method", [
   }),
   z.object({
     method: z.literal("model/list"),
-    params: z.object({
-      selectedModel: z.string().min(1).optional(),
-    }),
+    params: z.object({}),
   }),
   z.object({
     method: z.literal("thread/start"),
@@ -519,7 +517,7 @@ async function handleRequest(
       sendResult(request.id, { ok: true });
       break;
     case "model/list":
-      await handleModelList(request.id, request.params);
+      await handleModelList(request.id);
       break;
     case "thread/start":
       await handleThreadStart(request.id, request.params);
@@ -550,7 +548,6 @@ type ThreadResumeParams = Extract<
 type TurnStartParams = Extract<PiCommand, { method: "turn/start" }>["params"];
 type TurnSteerParams = Extract<PiCommand, { method: "turn/steer" }>["params"];
 type ThreadStopParams = Extract<PiCommand, { method: "thread/stop" }>["params"];
-type ModelListParams = Extract<PiCommand, { method: "model/list" }>["params"];
 type PiSessionParams = ThreadStartParams | ThreadResumeParams;
 
 function buildPiSessionParams(
@@ -572,17 +569,9 @@ function buildPiSessionParams(
   };
 }
 
-async function handleModelList(
-  id: string | number,
-  params: ModelListParams,
-): Promise<void> {
+async function handleModelList(id: string | number): Promise<void> {
   try {
-    sendResult(
-      id,
-      await listPiBridgeModels({
-        selectedModel: params.selectedModel,
-      }),
-    );
+    sendResult(id, await listPiBridgeModels());
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     sendError(id, -32000, message);

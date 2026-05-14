@@ -270,7 +270,6 @@ export const providerListCommandSchema = z.object({
 export const providerListModelsCommandSchema = z.object({
   type: z.literal("provider.list_models"),
   providerId: z.string().min(1),
-  selectedModel: z.string().min(1).optional(),
 });
 
 const provisionInitiatorSchema = z
@@ -507,6 +506,7 @@ export const hostDaemonCommandResultSchemaByType = {
   }),
   "provider.list_models": z.object({
     models: z.array(availableModelSchema),
+    selectedOnlyModels: z.array(availableModelSchema),
   }),
   "environment.provision": discoveredWorkspacePropertiesSchema.extend({
     transcript: z.array(provisioningTranscriptEntrySchema),

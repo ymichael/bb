@@ -8,7 +8,6 @@ import type {
   ThreadGitDiffResponse,
 } from "@bb/domain";
 import {
-  availableModelSchema,
   environmentSchema,
   hostSchema,
   threadEventRowSchema,
@@ -36,6 +35,7 @@ import {
   environmentActionResponseSchema,
   environmentStatusResponseSchema,
   projectResponseSchema,
+  systemExecutionOptionsResponseSchema,
   threadResponseSchema,
   threadTimelineResponseSchema,
 } from "@bb/server-contract";
@@ -83,7 +83,6 @@ export interface SendTextMessageOptions {
 export interface GetAvailableModelsOptions {
   hostId?: string;
   providerId?: string;
-  selectedModel?: string;
 }
 
 type PublicApiClient = ReturnType<typeof createPublicApiClient>;
@@ -300,17 +299,15 @@ export async function getAvailableModels(
   api: PublicApiClient,
   options: GetAvailableModelsOptions,
 ): Promise<AvailableModel[]> {
-  const response = await api.system.models.$get({
+  const response = await api.system["execution-options"].$get({
     query: {
       ...(options.hostId ? { hostId: options.hostId } : {}),
       ...(options.providerId ? { providerId: options.providerId } : {}),
-      ...(options.selectedModel
-        ? { selectedModel: options.selectedModel }
-        : {}),
     },
   });
   await expectStatus(response, 200, "get available models");
-  return availableModelSchema.array().parse(await response.json());
+  return systemExecutionOptionsResponseSchema.parse(await response.json())
+    .models;
 }
 
 export async function getHosts(api: PublicApiClient): Promise<Host[]> {

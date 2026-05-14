@@ -19,7 +19,6 @@ import {
   rawStringLocalStorage,
 } from "@/lib/browser-storage";
 import { getProviderIconInfo } from "@/lib/provider-icon";
-import type { SystemExecutionOptionsProviderScope } from "@bb/server-contract";
 import { useSystemExecutionOptions } from "./queries/system-queries";
 
 const MODEL_STORAGE_KEY = "bb.promptbox.model";
@@ -65,7 +64,6 @@ interface PickerOption<T extends string> {
 interface UsePromptModelReasoningOptions {
   enabled?: boolean;
   environmentId?: string;
-  providerScope?: SystemExecutionOptionsProviderScope;
   scope?: "new-thread" | "thread";
   projectId?: string | null;
   resetKey?: string | number | null;
@@ -300,7 +298,6 @@ export function useThreadCreationOptions(
     initialReasoningLevel,
     initialServiceTier,
     projectId,
-    providerScope = "all",
     resetKey,
     scope = "new-thread",
   } = options ?? {};
@@ -371,8 +368,6 @@ export function useThreadCreationOptions(
       (scope !== "thread" || executionOptionsEnvironmentId !== undefined),
     environmentId: executionOptionsEnvironmentId,
     providerId: rawSelectedProviderId || undefined,
-    providerScope,
-    selectedModel: rawSelectedModel || undefined,
   });
   const providers = executionOptionsQuery.data?.providers ?? EMPTY_PROVIDERS;
   const hasMultipleProviders = providers.length >= 2;
@@ -421,14 +416,26 @@ export function useThreadCreationOptions(
     return supportByProvider;
   }, [providers]);
 
-  const availableModels = useMemo(
-    () =>
-      executionOptionsQuery.data?.models &&
-      executionOptionsQuery.data.models.length > 0
-        ? executionOptionsQuery.data.models
-        : [],
-    [executionOptionsQuery.data?.models],
-  );
+  // Merge the user's currently-stored selection from the selected-only pool
+  // when it isn't in the active list. This preserves a previously-selected
+  // model after it has been retired so the picker can render its label and
+  // the user isn't silently moved to a different model.
+  const availableModels = useMemo(() => {
+    const activeModels = executionOptionsQuery.data?.models ?? [];
+    if (!rawSelectedModel) return activeModels;
+    if (activeModels.some((model) => model.model === rawSelectedModel)) {
+      return activeModels;
+    }
+    const selectedOnly = executionOptionsQuery.data?.selectedOnlyModels ?? [];
+    const match = selectedOnly.find(
+      (model) => model.model === rawSelectedModel,
+    );
+    return match ? [match, ...activeModels] : activeModels;
+  }, [
+    executionOptionsQuery.data?.models,
+    executionOptionsQuery.data?.selectedOnlyModels,
+    rawSelectedModel,
+  ]);
   const selectedModel = useMemo(() => {
     if (availableModels.length === 0) {
       return rawSelectedModel;

@@ -1102,15 +1102,12 @@ function createAgentRuntimeInternal(
       });
     },
 
-    async listModels({ providerId, selectedModel }) {
+    async listModels({ providerId }) {
       await runtime.ensureProvider({ providerId });
       const proc = requireProviderProcess(providerId);
       const command = requireProviderRequestPlan({
         commandType: "model/list",
-        plan: proc.adapter.buildCommandPlan({
-          type: "model/list",
-          selectedModel,
-        }),
+        plan: proc.adapter.buildCommandPlan({ type: "model/list" }),
         providerId,
       });
       const result = await sendJsonRpcRequest({

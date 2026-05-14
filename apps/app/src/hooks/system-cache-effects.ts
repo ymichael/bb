@@ -1,6 +1,5 @@
 import type { QueryKey } from "@tanstack/react-query";
 import {
-  allAvailableModelsQueryKeyPrefix,
   allEnvironmentGitDiffQueryKeyPrefix,
   allEnvironmentFilePreviewQueryKeyPrefix,
   allEnvironmentMergeBaseBranchesQueryKeyPrefix,
@@ -65,9 +64,6 @@ export function invalidateHostChangeDependentQueries({
   queryClient.invalidateQueries({ queryKey: projectsQueryKey() });
   queryClient.invalidateQueries({ queryKey: systemProvidersQueryKey() });
   queryClient.invalidateQueries({
-    queryKey: allAvailableModelsQueryKeyPrefix(),
-  });
-  queryClient.invalidateQueries({
     queryKey: allSystemExecutionOptionsQueryKeyPrefix(),
   });
   queryClient.invalidateQueries({
@@ -122,7 +118,6 @@ function getServerReconnectInvalidationQueryKeys(): QueryKey[] {
     allEnvironmentFilePreviewQueryKeyPrefix(),
     localPathExistenceQueryKeyPrefix(),
     systemProvidersQueryKey(),
-    allAvailableModelsQueryKeyPrefix(),
     allSystemExecutionOptionsQueryKeyPrefix(),
     statusQueryKey(),
   ];

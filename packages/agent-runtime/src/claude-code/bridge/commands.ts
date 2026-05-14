@@ -33,9 +33,7 @@ const claudeCodeCommandSchema = z.discriminatedUnion("method", [
   }),
   z.object({
     method: z.literal("model/list"),
-    params: z.object({
-      selectedModel: z.string().min(1).optional(),
-    }),
+    params: z.object({}),
   }),
   z.object({
     method: z.literal("thread/start"),

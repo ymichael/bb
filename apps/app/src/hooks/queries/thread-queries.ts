@@ -11,7 +11,6 @@ import type {
 } from "@bb/domain";
 import type {
   PromptHistoryResponse,
-  SystemExecutionOptionsProviderScope,
   ThreadComposerBootstrapResponse,
   ThreadDraftListResponse,
   ThreadListResponse,
@@ -62,9 +61,6 @@ interface QueryOptions {
 interface ThreadComposerBootstrapQueryOptions extends QueryOptions {
   environmentId?: string;
 }
-
-export const THREAD_COMPOSER_BOOTSTRAP_PROVIDER_SCOPE =
-  "selected" satisfies SystemExecutionOptionsProviderScope;
 
 type HostList = Host[];
 type HostListQueryData = HostList | undefined;
@@ -275,12 +271,7 @@ export function useThreadComposerBootstrap(
       const providerId = bootstrap.executionOptions.providers[0]?.id;
       if (providerId) {
         queryClient.setQueryData(
-          systemExecutionOptionsQueryKey({
-            environmentId,
-            providerId,
-            providerScope: THREAD_COMPOSER_BOOTSTRAP_PROVIDER_SCOPE,
-            selectedModel: bootstrap.defaultExecutionOptions?.model ?? null,
-          }),
+          systemExecutionOptionsQueryKey({ environmentId, providerId }),
           bootstrap.executionOptions,
         );
       }

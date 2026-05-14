@@ -51,7 +51,10 @@ export interface CommandDispatchOptions {
   persistRuntimeMaterial: (state: HostRuntimeMaterialState) => Promise<void>;
   runtimeManager: RuntimeManager;
   eventSink: EventSink;
-  listModels?: (args: ListModelsDispatchArgs) => Promise<AvailableModel[]>;
+  listModels?: (args: ListModelsDispatchArgs) => Promise<{
+    models: AvailableModel[];
+    selectedOnlyModels: AvailableModel[];
+  }>;
   listProviders?: () => ProviderInfo[];
   resolveInteractiveRequest?: (
     request: InteractiveResolveCommandInput,
@@ -123,13 +126,15 @@ export async function shutdownDefaultListModelsRuntimes(): Promise<void> {
 
 export interface ListModelsDispatchArgs {
   providerId: string;
-  selectedModel?: string;
 }
 
 export async function defaultListModels(
   args: ListModelsDispatchArgs,
   options: DefaultListModelsOptions = {},
-): Promise<AvailableModel[]> {
+): Promise<{
+  models: AvailableModel[];
+  selectedOnlyModels: AvailableModel[];
+}> {
   const runtime = getDefaultModelListRuntime(options);
   try {
     return await runtime.listModels(args);

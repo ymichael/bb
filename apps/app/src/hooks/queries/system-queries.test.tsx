@@ -5,7 +5,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
 import { installFetchRoutes, jsonResponse } from "@/test/http-test-utils";
 import {
-  availableModelsQueryKey,
   cloudAuthSettingsQueryKey,
   sandboxEnvVarsQueryKey,
   systemProvidersQueryKey,
@@ -79,7 +78,7 @@ describe("cloud auth system queries", () => {
 });
 
 describe("system execution options query", () => {
-  it("does not mirror execution-options responses into provider or model caches", async () => {
+  it("does not mirror execution-options responses into the providers cache", async () => {
     installFetchRoutes([
       {
         pathname: "/api/v1/system/execution-options",
@@ -124,12 +123,7 @@ describe("system execution options query", () => {
 
     const { queryClient, wrapper } = createQueryClientTestHarness();
     const executionOptions = renderHook(
-      () =>
-        useSystemExecutionOptions({
-          providerId: "codex",
-          providerScope: "all",
-          selectedModel: "gpt-5.5",
-        }),
+      () => useSystemExecutionOptions({ providerId: "codex" }),
       { wrapper },
     );
 
@@ -140,8 +134,5 @@ describe("system execution options query", () => {
     });
 
     expect(queryClient.getQueryData(systemProvidersQueryKey())).toBeUndefined();
-    expect(
-      queryClient.getQueryData(availableModelsQueryKey("codex", "gpt-5.5")),
-    ).toBeUndefined();
   });
 });

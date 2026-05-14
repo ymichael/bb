@@ -1,7 +1,6 @@
 import { extractErrorMessage, toRecord } from "@bb/core-ui";
 import type { CloudAuthProviderId } from "@bb/agent-providers";
 import type {
-  AvailableModel,
   Environment,
   Host,
   PendingInteraction,
@@ -39,7 +38,6 @@ import type {
   PromptHistoryResponse,
   SendDraftResponse,
   SendMessageRequest,
-  SystemExecutionOptionsProviderScope,
   SystemExecutionOptionsResponse,
   SystemProviderInfo,
   ManagerTimelineView,
@@ -1088,33 +1086,15 @@ export async function getEnvironmentDiff(
   );
 }
 
-export async function getAvailableModels(
-  providerId?: string,
-  selectedModel?: string,
-): Promise<AvailableModel[]> {
-  return request<AvailableModel[]>(
-    apiClient.system.models.$get({
-      query: {
-        ...(providerId ? { providerId } : {}),
-        ...(selectedModel ? { selectedModel } : {}),
-      },
-    }),
-  );
-}
-
 export async function getSystemExecutionOptions(args: {
   environmentId?: string;
   providerId?: string;
-  providerScope?: SystemExecutionOptionsProviderScope;
-  selectedModel?: string;
 }): Promise<SystemExecutionOptionsResponse> {
   return request<SystemExecutionOptionsResponse>(
     apiClient.system["execution-options"].$get({
       query: {
         ...(args.environmentId ? { environmentId: args.environmentId } : {}),
         ...(args.providerId ? { providerId: args.providerId } : {}),
-        ...(args.providerScope ? { providerScope: args.providerScope } : {}),
-        ...(args.selectedModel ? { selectedModel: args.selectedModel } : {}),
       },
     }),
   );

@@ -5,7 +5,6 @@ import {
   MEDIUM_REASONING_EFFORT,
   XHIGH_REASONING_EFFORT,
 } from "../shared/adapter-utils.js";
-import { includeSelectedOnlyModels } from "../shared/model-list-visibility.js";
 
 type ClaudeCodeCatalogEntry = {
   id: string;
@@ -15,10 +14,6 @@ type ClaudeCodeCatalogEntry = {
   supportedReasoningEfforts: readonly ModelReasoningEffort[];
   defaultReasoningEffort: AvailableModel["defaultReasoningEffort"];
 };
-
-export interface ListClaudeCodeModelsArgs {
-  selectedModel?: string;
-}
 
 const OPUS_REASONING_EFFORTS: readonly ModelReasoningEffort[] = [
   LOW_REASONING_EFFORT,
@@ -52,9 +47,9 @@ function withOneMillionContext(model: string): string {
   return `${model}[1m]`;
 }
 
-// Keep the active catalog version-pinned. Moving aliases and future retired
-// model strings live in the selected-only catalog so existing stored selections
-// can render without offering them as fresh choices.
+// Keep the active catalog version-pinned. Moving aliases and retired model
+// strings live in the selected-only catalog so existing stored selections can
+// render with their proper label without being offered as fresh choices.
 const CLAUDE_CODE_CATALOG: readonly ClaudeCodeCatalogEntry[] = [
   {
     id: withOneMillionContext(CLAUDE_OPUS_4_7_MODEL),
@@ -184,13 +179,15 @@ function markDefaultModel(models: AvailableModel[]): AvailableModel[] {
   );
 }
 
-export function listClaudeCodeModels(
-  args: ListClaudeCodeModelsArgs = {},
-): AvailableModel[] {
-  return includeSelectedOnlyModels({
-    activeModels: markDefaultModel(CLAUDE_CODE_CATALOG.map(buildCatalogModel)),
-    selectedModel: args.selectedModel,
+export interface ListClaudeCodeModelsResult {
+  models: AvailableModel[];
+  selectedOnlyModels: AvailableModel[];
+}
+
+export function listClaudeCodeModels(): ListClaudeCodeModelsResult {
+  return {
+    models: markDefaultModel(CLAUDE_CODE_CATALOG.map(buildCatalogModel)),
     selectedOnlyModels:
       CLAUDE_CODE_SELECTED_ONLY_CATALOG.map(buildCatalogModel),
-  });
+  };
 }

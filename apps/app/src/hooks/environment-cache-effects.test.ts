@@ -29,8 +29,6 @@ function scopedSystemExecutionOptionsKey({
   return systemExecutionOptionsQueryKey({
     environmentId,
     providerId: "codex",
-    providerScope: "selected",
-    selectedModel: "gpt-5.5",
   });
 }
 

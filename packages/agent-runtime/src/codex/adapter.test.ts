@@ -4442,20 +4442,20 @@ describe("codex provider adapter", () => {
 
   it("parseModelListResult validates model/list payloads", () => {
     const adapter = createCodexProviderAdapter();
-    expect(
-      adapter.parseModelListResult({
-        data: [
-          {
-            id: "codex-mini",
-            model: "codex-mini",
-            displayName: "Codex Mini",
-            description: "Fast coding model",
-            supportedReasoningEfforts: [],
-            defaultReasoningEffort: "medium",
-            isDefault: true,
-          },
-        ],
-      }),
-    ).toHaveLength(1);
+    const result = adapter.parseModelListResult({
+      data: [
+        {
+          id: "codex-mini",
+          model: "codex-mini",
+          displayName: "Codex Mini",
+          description: "Fast coding model",
+          supportedReasoningEfforts: [],
+          defaultReasoningEffort: "medium",
+          isDefault: true,
+        },
+      ],
+    });
+    expect(result.models).toHaveLength(1);
+    expect(result.selectedOnlyModels).toHaveLength(0);
   });
 });
