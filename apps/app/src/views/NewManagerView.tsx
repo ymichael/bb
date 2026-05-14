@@ -5,16 +5,27 @@ import {
   useMemo,
   useState,
   type FormEvent,
+  type ReactNode,
 } from "react";
-import type { AvailableModel, Host, ProviderInfo, ReasoningLevel, Thread } from "@bb/domain";
+import { useNavigate, useParams } from "react-router-dom";
+import type {
+  AvailableModel,
+  Host,
+  ProviderInfo,
+  ReasoningLevel,
+} from "@bb/domain";
 import type { ProjectResponse } from "@bb/server-contract";
 import { findLocalPathProjectSourceForHost } from "@bb/domain";
 import type { HireProjectManagerRequest } from "@/hooks/mutations/project-mutations";
-import { DetailCard, DetailRow } from "@/components/ui/detail-card.js";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog.js";
 import { Button } from "@/components/ui/button.js";
 import { FormError } from "@/components/ui/form-error.js";
+import { Icon } from "@/components/ui/icon.js";
 import { Input } from "@/components/ui/input.js";
+import { PageShell } from "@/components/ui/page-shell.js";
+import {
+  SettingsRow,
+  SettingsRowList,
+} from "@/components/ui/settings-section.js";
 import { useHireProjectManager } from "@/hooks/mutations/project-mutations";
 import { useSystemExecutionOptions } from "@/hooks/queries/system-queries";
 import { useEffectiveHosts } from "@/hooks/queries/effective-hosts";
@@ -44,19 +55,13 @@ type ReasoningSelectionSource = "default" | "user";
 
 type IsLocalHostFn = (id: string | null | undefined) => boolean;
 
-interface HireManagerDialogProps {
-  projectId: string;
-  open: boolean;
-  onClose: () => void;
-  onHired: (thread: Thread) => void;
+function newManagerRoutePath(projectId: string) {
+  return `/projects/${projectId}/managers/new`;
 }
 
-export function HireManagerDialog({
-  projectId,
-  open,
-  onClose,
-  onHired,
-}: HireManagerDialogProps) {
+export function NewManagerView() {
+  const { projectId } = useParams<"projectId">();
+  const navigate = useNavigate();
   const [selectedProviderId, setSelectedProviderId] = useState("");
 
   const projectsQuery = useProjects();
@@ -76,23 +81,47 @@ export function HireManagerDialog({
   const handleHire = useCallback(
     async (params: HireProjectManagerRequest) => {
       const thread = await hireManager.mutateAsync(params);
-      onHired(thread);
-      onClose();
+      navigate(`/projects/${thread.projectId}/threads/${thread.id}`);
     },
-    [hireManager, onClose, onHired],
+    [hireManager, navigate],
   );
+  const handleProjectChange = useCallback(
+    (nextProjectId: string) => {
+      if (nextProjectId === projectId) return;
+      navigate(newManagerRoutePath(nextProjectId));
+    },
+    [navigate, projectId],
+  );
+  const handleCancel = useCallback(() => {
+    if (projectId) {
+      navigate(`/projects/${projectId}`);
+    } else {
+      navigate("/");
+    }
+  }, [navigate, projectId]);
+
+  if (!projectId) {
+    return (
+      <PageShell contentClassName="min-h-full items-center justify-center">
+        <div className="flex flex-col items-center gap-3 py-12 text-center">
+          <Icon
+            name="FolderOpen"
+            className="size-5 text-muted-foreground"
+            aria-hidden
+          />
+          <p className="text-sm text-muted-foreground">
+            Pick a project from the sidebar to hire a manager.
+          </p>
+        </div>
+      </PageShell>
+    );
+  }
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(isOpen) => {
-        if (!isOpen) onClose();
-      }}
-    >
-      <DialogContent className="max-w-[34rem] gap-0 overflow-hidden border-border/80 bg-background p-0 shadow-xl">
-        <HireManagerDialogContent
-          key={projectId}
-          initialProjectId={projectId}
+    <PageShell contentClassName="pt-8 md:pt-12">
+      <div className="mx-auto w-full max-w-md">
+        <NewManagerForm
+          projectId={projectId}
           projects={projects}
           projectsAreLoaded={projectsAreLoaded}
           providers={providers}
@@ -102,15 +131,18 @@ export function HireManagerDialog({
           models={models}
           selectedProviderId={selectedProviderId}
           onSelectedProviderIdChange={setSelectedProviderId}
+          onProjectChange={handleProjectChange}
+          onCancel={handleCancel}
           onHire={handleHire}
+          isHirePending={hireManager.isPending}
         />
-      </DialogContent>
-    </Dialog>
+      </div>
+    </PageShell>
   );
 }
 
-export interface HireManagerDialogContentProps {
-  initialProjectId: string;
+export interface NewManagerFormProps {
+  projectId: string;
   projects: readonly ProjectResponse[];
   projectsAreLoaded: boolean;
   providers: readonly ProviderInfo[];
@@ -120,11 +152,14 @@ export interface HireManagerDialogContentProps {
   models: readonly AvailableModel[];
   selectedProviderId: string;
   onSelectedProviderIdChange: (providerId: string) => void;
+  onProjectChange: (projectId: string) => void;
+  onCancel: () => void;
   onHire: (params: HireProjectManagerRequest) => Promise<void>;
+  isHirePending: boolean;
 }
 
-export function HireManagerDialogContent({
-  initialProjectId,
+export function NewManagerForm({
+  projectId,
   projects,
   projectsAreLoaded,
   providers,
@@ -134,11 +169,14 @@ export function HireManagerDialogContent({
   models,
   selectedProviderId,
   onSelectedProviderIdChange,
+  onProjectChange,
+  onCancel,
   onHire,
-}: HireManagerDialogContentProps) {
+  isHirePending,
+}: NewManagerFormProps) {
   const nameInputId = useId();
+  const formTitleId = useId();
 
-  const [selectedProjectId, setSelectedProjectId] = useState(initialProjectId);
   const [managerName, setManagerName] = useState("");
   const [selectedModel, setSelectedModel] = useState<string>("");
   const [selectedReasoningLevel, setSelectedReasoningLevel] = useState<
@@ -169,14 +207,11 @@ export function HireManagerDialogContent({
     : "Loading projects…";
 
   const effectiveProjectId = useMemo(() => {
-    if (projects.some((project) => project.id === selectedProjectId)) {
-      return selectedProjectId;
+    if (projects.some((candidate) => candidate.id === projectId)) {
+      return projectId;
     }
-    if (projects.some((project) => project.id === initialProjectId)) {
-      return initialProjectId;
-    }
-    return projects[0]?.id ?? initialProjectId;
-  }, [initialProjectId, projects, selectedProjectId]);
+    return projects[0]?.id ?? projectId;
+  }, [projectId, projects]);
 
   const selectedProject = useMemo(
     () => projects.find((project) => project.id === effectiveProjectId) ?? null,
@@ -305,10 +340,13 @@ export function HireManagerDialogContent({
     [onSelectedProviderIdChange],
   );
 
-  const handleProjectChange = useCallback((value: string) => {
-    setSelectedProjectId(value);
-    setError(null);
-  }, []);
+  const handleProjectChange = useCallback(
+    (value: string) => {
+      onProjectChange(value);
+      setError(null);
+    },
+    [onProjectChange],
+  );
 
   const handleModelChange = useCallback((model: string) => {
     setSelectedModel(model);
@@ -328,7 +366,7 @@ export function HireManagerDialogContent({
   const handleHire = useCallback(
     async (event: FormEvent<HTMLFormElement>) => {
       event.preventDefault();
-      if (!effectiveProjectId || isPending) return;
+      if (!effectiveProjectId || isPending || isHirePending) return;
       if (!selectedProvider) {
         setError("A provider is required");
         return;
@@ -369,6 +407,7 @@ export function HireManagerDialogContent({
     [
       effectiveReasoningLevel,
       effectiveProjectId,
+      isHirePending,
       isPending,
       managerName,
       onHire,
@@ -378,47 +417,79 @@ export function HireManagerDialogContent({
     ],
   );
 
+  const isSubmitInProgress = isPending || isHirePending;
+
+  const projectName = selectedProject?.name;
+
   return (
-    <>
-      <DialogHeader className="px-6 pt-5 pb-3">
-        <DialogTitle>Hire Manager</DialogTitle>
-        <DialogDescription>
-          Managers are special threads that have persistent memory and can help
-          you coordinate work by delegating tasks to managed child threads.
-        </DialogDescription>
-      </DialogHeader>
-      <form className="space-y-5 px-6 pb-5" onSubmit={handleHire}>
-        <DetailCard className="border-border/70 bg-muted/20" labelWidth="60px">
-          <DetailRow label="Project" valueClassName="min-w-0">
+    <form
+      aria-labelledby={formTitleId}
+      className="space-y-6"
+      onSubmit={handleHire}
+    >
+      <header className="flex flex-col items-center gap-4 text-center">
+        <div className="flex size-14 items-center justify-center rounded-full bg-muted text-muted-foreground">
+          <Icon name="UserRoundPlus" className="size-6" aria-hidden />
+        </div>
+        <div className="space-y-2">
+          <h1
+            id={formTitleId}
+            className="text-xl font-semibold leading-tight tracking-tight text-foreground"
+          >
+            New Manager
+          </h1>
+          <p className="text-left text-sm leading-relaxed text-muted-foreground">
+            Managers are special threads that have persistent memory and can
+            help you coordinate work by delegating tasks to managed child
+            threads. Hiring starts a new thread
+            {projectName ? (
+              <>
+                {" "}
+                on{" "}
+                <span className="font-medium text-foreground">
+                  {projectName}
+                </span>
+              </>
+            ) : null}
+            .
+          </p>
+        </div>
+      </header>
+
+      <Input
+        id={nameInputId}
+        value={managerName}
+        placeholder="Give them a name (optional)"
+        autoFocus
+        disabled={isPending}
+        aria-label="Manager name"
+        className="h-10 border-border bg-card px-3 text-sm"
+        onChange={(event) => {
+          setManagerName(event.target.value);
+          setError(null);
+        }}
+      />
+
+      <div className="rounded-lg border border-border bg-card px-3 py-1">
+        <SettingsRowList>
+          <ConfigRow label="Project">
             {projectOptions.length > 0 ? (
               <OptionPicker
                 label="Project"
                 value={effectiveProjectId}
                 options={projectOptions}
                 onChange={handleProjectChange}
+                align="end"
               />
             ) : (
-              <span className="text-sm text-muted-foreground">
-                {unavailableProjectMessage}
-              </span>
+              <LoadingOrEmptyText
+                isLoading={!projectsAreLoaded}
+                message={unavailableProjectMessage}
+              />
             )}
-          </DetailRow>
-          <DetailRow label="Name" valueClassName="min-w-0">
-            <Input
-              id={nameInputId}
-              value={managerName}
-              placeholder="Eg. Manager (optional)"
-              autoFocus
-              disabled={isPending}
-              className="text-sm border-border"
-              onChange={(event) => {
-                setManagerName(event.target.value);
-                setError(null);
-              }}
-            />
-          </DetailRow>
-          <DetailRow label="Model" valueClassName="min-w-0">
-            <div className="flex min-w-0 flex-wrap items-center gap-2">
+          </ConfigRow>
+          <ConfigRow label="Model">
+            <div className="flex min-w-0 flex-wrap items-center justify-end gap-1.5">
               {hasSelectedProvider ? (
                 modelOptions.length > 0 ? (
                   <>
@@ -443,22 +514,22 @@ export function HireManagerDialogContent({
                         }
                         options={reasoningOptions}
                         onChange={handleReasoningLevelChange}
+                        align="end"
                       />
                     ) : null}
                   </>
                 ) : (
-                  <span className="text-sm text-muted-foreground">
-                    Loading models…
-                  </span>
+                  <LoadingOrEmptyText isLoading message="Loading models…" />
                 )
               ) : (
-                <span className="text-sm text-muted-foreground">
-                  {unavailableProviderMessage}
-                </span>
+                <LoadingOrEmptyText
+                  isLoading={!providersAreLoaded}
+                  message={unavailableProviderMessage}
+                />
               )}
             </div>
-          </DetailRow>
-          <DetailRow label="Host" valueClassName="min-w-0">
+          </ConfigRow>
+          <ConfigRow label="Host">
             <HostPicker
               hosts={hosts}
               eligibleHosts={eligibleHosts}
@@ -466,15 +537,74 @@ export function HireManagerDialogContent({
               onChange={setSelectedHostId}
               isLocalHost={isLocalHost}
             />
-          </DetailRow>
-        </DetailCard>
-        <FormError message={error} />
-        <DialogFooter>
-          <Button type="submit" disabled={isPending}>
-            {isPending ? "Hiring..." : "Hire Manager"}
-          </Button>
-        </DialogFooter>
-      </form>
-    </>
+          </ConfigRow>
+        </SettingsRowList>
+      </div>
+
+      <FormError message={error} />
+
+      <div className="flex flex-col gap-2">
+        <Button
+          type="submit"
+          disabled={isSubmitInProgress}
+          className="h-10 w-full"
+        >
+          {isSubmitInProgress ? (
+            <>
+              <Icon name="Spinner" className="animate-spin" aria-hidden />
+              Hiring…
+            </>
+          ) : (
+            <>
+              <Icon name="UserRoundPlus" aria-hidden />
+              Hire Manager
+            </>
+          )}
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          onClick={onCancel}
+          disabled={isSubmitInProgress}
+          className="w-full"
+        >
+          Cancel
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+function ConfigRow({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <SettingsRow>
+      <span className="text-xs font-medium text-muted-foreground">{label}</span>
+      <div className="ml-auto flex min-w-0 items-center justify-end">
+        {children}
+      </div>
+    </SettingsRow>
+  );
+}
+
+function LoadingOrEmptyText({
+  isLoading,
+  message,
+}: {
+  isLoading: boolean;
+  message: string;
+}) {
+  return (
+    <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
+      {isLoading ? (
+        <Icon name="Spinner" className="size-3 animate-spin" aria-hidden />
+      ) : null}
+      {message}
+    </span>
   );
 }

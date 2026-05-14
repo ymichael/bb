@@ -2,7 +2,16 @@ import { useCallback, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { Link, useNavigate } from "react-router-dom";
 import { Icon } from "@/components/ui/icon.js";
-import { Sidebar, SidebarContent, SidebarFooter, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarTrigger, useSidebar } from "@/components/ui/sidebar.js";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarTrigger,
+  useSidebar,
+} from "@/components/ui/sidebar.js";
 import { COARSE_POINTER_CHILD_ICON_BUTTON_CLASS } from "@/components/ui/coarse-pointer-sizing.js";
 import { ProjectList } from "./ProjectList";
 import { useQuickCreateProjectController } from "@/hooks/useQuickCreateProject";
@@ -12,7 +21,6 @@ interface AppSidebarProps {
   isResizing: boolean;
   selectedProjectId?: string;
   isManagerActionPending?: boolean;
-  onNewManager?: (projectId: string) => void;
 }
 
 export function AppSidebar({
@@ -20,7 +28,6 @@ export function AppSidebar({
   isResizing,
   selectedProjectId,
   isManagerActionPending = false,
-  onNewManager,
 }: AppSidebarProps) {
   const quickCreateProject = useQuickCreateProjectController();
   const navigate = useNavigate();
@@ -43,16 +50,14 @@ export function AppSidebar({
 
   const handleNewManager = useCallback(
     (managerProjectId: string) => {
-      if (!onNewManager) return;
       closeOnMobile();
-      onNewManager(managerProjectId);
+      void navigate(`/projects/${managerProjectId}/managers/new`);
     },
-    [closeOnMobile, onNewManager],
+    [closeOnMobile, navigate],
   );
 
   const newChatAction = selectedProjectId ? handleNewChat : undefined;
-  const newManagerAction =
-    selectedProjectId && onNewManager ? handleNewManager : undefined;
+  const newManagerAction = selectedProjectId ? handleNewManager : undefined;
 
   return (
     <>
