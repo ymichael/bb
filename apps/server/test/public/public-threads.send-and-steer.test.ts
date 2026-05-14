@@ -1014,7 +1014,7 @@ describe("public thread send and steer routes", () => {
     }
   });
 
-  it("steers queued drafts for active threads without a mode field", async () => {
+  it("steers queued drafts for active threads with auto mode", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps);
@@ -1063,7 +1063,7 @@ describe("public thread send and steer routes", () => {
           headers: {
             "content-type": "application/json",
           },
-          body: JSON.stringify({}),
+          body: JSON.stringify({ mode: "auto" }),
         },
       );
 

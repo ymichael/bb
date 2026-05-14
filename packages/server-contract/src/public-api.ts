@@ -391,7 +391,7 @@ export type PublicApiSchema = {
     >;
   };
   "/threads/:id/drafts/:draftId/send": {
-    /** Send a previously created queued draft. Defaults to auto mode; mode=steer forces steer semantics, then deletes the draft. */
+    /** Send a previously created queued draft in the requested mode, then delete the draft. */
     $post: Endpoint<
       PathThreadAndDraft & { json: SendDraftRequest },
       SendDraftResponse

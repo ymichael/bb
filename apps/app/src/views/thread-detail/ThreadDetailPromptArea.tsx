@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import type { IconName } from "@/components/ui/icon.js";
 import { assertNever } from "@bb/core-ui";
 import type {
@@ -55,7 +55,7 @@ import type { SendMessageMutationLike } from "./threadDetailMutationTypes";
 
 interface SendFollowUpInputParams {
   input: PromptInput[];
-  mode?: "auto" | "steer";
+  mode: "auto" | "steer";
   model?: string;
   permissionMode?: PermissionMode;
   reasoningLevel?: ReasoningLevel;
@@ -206,7 +206,6 @@ export function ThreadDetailPromptArea({
     string | null
   >(null);
   const [isSteerBatchSending, setIsSteerBatchSending] = useState(false);
-  const isSteerBatchSendingRef = useRef(false);
   const promptHistoryDrafts = useMemo(
     () => promptHistoryEntriesToDrafts(promptHistoryEntries),
     [promptHistoryEntries],
@@ -287,8 +286,18 @@ export function ThreadDetailPromptArea({
   const promptPlaceholder = isStopRequested
     ? "Stopping thread..."
     : getPromptPlaceholder(runtimeDisplayStatus, thread.type === "manager");
-  const hasPromptDraftInput =
-    promptDraft.text.trim().length > 0 || promptDraft.attachments.length > 0;
+  const currentPromptDraft = useMemo(
+    () => ({
+      text: promptDraft.text,
+      attachments: promptDraft.attachments,
+    }),
+    [promptDraft.attachments, promptDraft.text],
+  );
+  const currentPromptDraftInput = useMemo(
+    () => promptDraftToInput(currentPromptDraft),
+    [currentPromptDraft],
+  );
+  const hasPromptDraftInput = currentPromptDraftInput.length > 0;
   const canSteerSubmit =
     runtimeDisplayStatus === "active" &&
     submitMode.kind === "queue" &&
@@ -298,7 +307,7 @@ export function ThreadDetailPromptArea({
   const sendFollowUpInput = useCallback(
     async ({
       input,
-      mode = "auto",
+      mode,
       model,
       serviceTier: executionServiceTier,
       reasoningLevel: executionReasoningLevel,
@@ -308,11 +317,8 @@ export function ThreadDetailPromptArea({
         return;
       }
 
-      await sendMessage.mutateAsync({
-        id: thread.id,
-        input,
-        mode,
-        ...(mode === "steer"
+      const executionOptions =
+        mode === "steer"
           ? {}
           : {
               ...(model ? { model } : {}),
@@ -325,7 +331,13 @@ export function ThreadDetailPromptArea({
               ...(executionPermissionMode
                 ? { permissionMode: executionPermissionMode }
                 : {}),
-            }),
+            };
+
+      await sendMessage.mutateAsync({
+        id: thread.id,
+        input,
+        mode,
+        ...executionOptions,
       });
     },
     [sendMessage, thread.id],
@@ -358,11 +370,8 @@ export function ThreadDetailPromptArea({
   );
 
   const handleSend = useCallback(async () => {
-    const submittedDraft = {
-      text: promptDraft.text,
-      attachments: promptDraft.attachments,
-    };
-    const submittedInput = promptDraftToInput(submittedDraft);
+    const submittedDraft = currentPromptDraft;
+    const submittedInput = currentPromptDraftInput;
     if (submittedInput.length === 0) {
       return;
     }
@@ -384,6 +393,7 @@ export function ThreadDetailPromptArea({
       } else {
         await sendFollowUpInput({
           input: submittedInput,
+          mode: "auto",
           model: activeModel?.model ?? selectedModel,
           ...(supportsServiceTier && serviceTier ? { serviceTier } : {}),
           reasoningLevel,
@@ -404,6 +414,8 @@ export function ThreadDetailPromptArea({
   }, [
     activeModel?.model,
     createDraft,
+    currentPromptDraft,
+    currentPromptDraftInput,
     promptDraft,
     reasoningLevel,
     permissionMode,
@@ -416,20 +428,16 @@ export function ThreadDetailPromptArea({
   ]);
 
   const handleSteerSend = useCallback(async () => {
-    if (!canSteerSubmit || isSteerBatchSendingRef.current) {
+    if (!canSteerSubmit) {
       return;
     }
 
-    const submittedDraft = {
-      text: promptDraft.text,
-      attachments: promptDraft.attachments,
-    };
-    const submittedInput = promptDraftToInput(submittedDraft);
+    const submittedDraft = currentPromptDraft;
+    const submittedInput = currentPromptDraftInput;
     if (queuedMessages.length === 0 && submittedInput.length === 0) {
       return;
     }
 
-    isSteerBatchSendingRef.current = true;
     setIsSteerBatchSending(true);
     if (submittedInput.length > 0) {
       promptDraft.clearIfCurrentMatches(submittedDraft);
@@ -458,11 +466,12 @@ export function ThreadDetailPromptArea({
         }),
       );
     } finally {
-      isSteerBatchSendingRef.current = false;
       setIsSteerBatchSending(false);
     }
   }, [
     canSteerSubmit,
+    currentPromptDraft,
+    currentPromptDraftInput,
     promptDraft,
     queuedMessages,
     sendDraft,

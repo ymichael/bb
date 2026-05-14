@@ -364,7 +364,7 @@ export const createDraftRequestSchema = z.object({
 export type CreateDraftRequest = z.infer<typeof createDraftRequestSchema>;
 
 export const sendDraftRequestSchema = z.object({
-  mode: sendDraftModeSchema.optional(),
+  mode: sendDraftModeSchema,
 });
 export type SendDraftRequest = z.infer<typeof sendDraftRequestSchema>;
 

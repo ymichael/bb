@@ -435,4 +435,36 @@ describe("ThreadDetailPromptArea steer submit", () => {
       text: "Current steer",
     });
   });
+
+  it("ignores repeated Cmd+Enter while a steer batch is pending", async () => {
+    resetMocks();
+    const sendMessageMutateAsync = vi.fn<SendMessageMutationLike["mutateAsync"]>();
+    mocks.queuedMessages = [
+      makeQueuedMessage({
+        id: "queued-1",
+        input: [{ type: "text", text: "Queued first" }],
+      }),
+    ];
+    mocks.sendDraftMutateAsync.mockReturnValue(new Promise(() => {}));
+
+    renderPromptArea({ sendMessageMutateAsync });
+
+    const textarea = screen.getByRole<HTMLTextAreaElement>("textbox");
+    fireEvent.keyDown(textarea, {
+      key: "Enter",
+      metaKey: true,
+    });
+
+    await waitFor(() => {
+      expect(mocks.sendDraftMutateAsync).toHaveBeenCalledTimes(1);
+    });
+
+    fireEvent.keyDown(textarea, {
+      key: "Enter",
+      metaKey: true,
+    });
+
+    expect(mocks.sendDraftMutateAsync).toHaveBeenCalledTimes(1);
+    expect(sendMessageMutateAsync).not.toHaveBeenCalled();
+  });
 });

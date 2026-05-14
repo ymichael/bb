@@ -149,7 +149,7 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
       ensureThreadIsNotAwaitingUserInteraction(deps, thread.id);
       const queuedMessage = await sendQueuedDraft(deps, {
         draftId: context.req.param("draftId"),
-        mode: payload.mode ?? "auto",
+        mode: payload.mode,
         threadId: context.req.param("id"),
       });
       return context.json({ ok: true, queuedMessage });
