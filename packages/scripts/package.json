@@ -24,6 +24,11 @@
       "types": "./src/commands/run-host-daemon.ts",
       "import": "./dist/commands/run-host-daemon.js"
     },
+    "./run-dev-auto": {
+      "source": "./src/commands/run-dev-auto.ts",
+      "types": "./src/commands/run-dev-auto.ts",
+      "import": "./dist/commands/run-dev-auto.js"
+    },
     "./start-bb": {
       "source": "./src/commands/start-bb.ts",
       "types": "./src/commands/start-bb.ts",
@@ -55,6 +60,7 @@
     "test": "vitest run --config vitest.config.ts",
     "cli": "node dist/commands/run-cli.js",
     "dev:host-daemon": "node dist/commands/run-host-daemon.js --auto-join",
+    "dev:auto": "node dist/commands/run-dev-auto.js",
     "dev:restart": "node dist/commands/request-dev-restart.js both",
     "dev:restart-host-daemon": "node dist/commands/request-dev-restart.js host-daemon",
     "dev:restart-server": "node dist/commands/request-dev-restart.js server",
