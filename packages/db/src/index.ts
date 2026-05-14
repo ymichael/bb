@@ -1,8 +1,12 @@
 export { createConnection } from "./connection.js";
 export type {
+  CreateConnectionOptions,
   DbConnection,
   DbQueryConnection,
   DbTransaction,
+  SlowDbQueryLogger,
+  SlowDbQueryLogFields,
+  SlowDbQueryOperation,
 } from "./connection.js";
 
 export * from "./schema.js";

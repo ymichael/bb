@@ -410,6 +410,20 @@ export const events = sqliteTable(
       table.itemId,
       table.sequence,
     ),
+    index("events_thread_turn_type_item_sequence_idx").on(
+      table.threadId,
+      table.turnId,
+      table.type,
+      table.itemId,
+      table.sequence,
+    ),
+    index("events_thread_turn_type_item_kind_item_idx").on(
+      table.threadId,
+      table.turnId,
+      table.type,
+      table.itemKind,
+      table.itemId,
+    ),
     index("events_environment_idx").on(table.environmentId),
     check(
       "events_scope_shape_check",

@@ -16,6 +16,7 @@ import {
 } from "./services/interactions/pending-interactions.js";
 import { createMachineAuthService } from "./services/machine-auth.js";
 import { createSandboxEnvService } from "./services/sandbox-env/service.js";
+import { startEventLoopStallMonitor } from "./services/system/event-loop-stall-monitor.js";
 import { runPeriodicSweeps } from "./services/system/periodic-sweeps.js";
 import { createLifecycleDedupers } from "./lifecycle-dedupers.js";
 import type { ServerRuntimeConfig } from "./types.js";
@@ -23,7 +24,7 @@ import { NotificationHub } from "./ws/hub.js";
 
 async function main(): Promise<void> {
   const logger = createLogger({ component: "server" });
-  const db = initDb(serverConfig.BB_DATABASE_URL);
+  const db = initDb(serverConfig.BB_DATABASE_URL, { logger });
   const hub = new NotificationHub();
   const hostLifecycle = createHostLifecycleService();
   const pendingInteractions = new PendingInteractionLifecycle({
@@ -100,6 +101,7 @@ async function main(): Promise<void> {
     },
     { staticDir },
   );
+  const eventLoopStallMonitor = startEventLoopStallMonitor({ logger });
 
   const server = serve({
     port: serverConfig.BB_SERVER_PORT,
@@ -138,6 +140,7 @@ async function main(): Promise<void> {
       return shutdownPromise;
     }
     shutdownPromise = (async () => {
+      eventLoopStallMonitor.stop();
       clearInterval(sweepInterval);
       await cloudAuth.dispose();
       hostLifecycle.dispose();
