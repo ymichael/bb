@@ -54,6 +54,8 @@ less reliable for file watching.
 
 ```bash
 pnpm install
+cp .env.example .env
+# Edit .env before first start. OPENAI_API_KEY is recommended for full local functionality.
 pnpm start
 ```
 
@@ -80,7 +82,7 @@ bb uses whichever providers you have configured. If you need to set one up:
 | `claude-code` | Install [Claude Code](https://docs.anthropic.com/en/docs/claude-code) and authenticate per its docs.                                                   |
 | `pi`          | See the [Pi coding agent docs](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent). Run `pi` and then `/login` for interactive setup. |
 
-Server configuration (ports, data directory, inference model, etc.) is defined in [`packages/config/src/`](./packages/config/src/) with validated defaults for dev and production.
+Server configuration (ports, data directory, inference model, etc.) is defined in [`packages/config/src/`](./packages/config/src/) with validated defaults for dev and production. Agent provider CLI credentials are still managed by each provider, but bb also uses API keys for server-side helpers.
 
 <details>
 <summary>Development setup</summary>
@@ -172,7 +174,22 @@ Implementation packages never import across these boundaries. The server doesn't
 
 ## Configuration
 
-All configuration is via environment variables, validated at startup with sensible defaults. Override them in `.env` files at the repo root (gitignored) and they will be loaded automatically by `pnpm dev` and `pnpm start`. Start from [`.env.example`](./.env.example) if you want a local template. The standard [dotenv-cli](https://github.com/entropitor/dotenv-cli) cascade applies: `.env`, `.env.local`, `.env.<environment>`, `.env.<environment>.local` — where environment is `development` for `pnpm dev` and `production` for `pnpm start`. See [`packages/config/src/`](./packages/config/src/) for the full set of variables.
+All configuration is via environment variables, validated at startup with sensible defaults. Override them in `.env` files at the repo root (gitignored) and they will be loaded automatically by `pnpm dev` and `pnpm start`. Start from [`.env.example`](./.env.example) for a local template:
+
+```bash
+cp .env.example .env
+```
+
+The standard [dotenv-cli](https://github.com/entropitor/dotenv-cli) cascade applies: `.env`, `.env.local`, `.env.<environment>`, `.env.<environment>.local` — where environment is `development` for `pnpm dev` and `production` for `pnpm start`. See [`packages/config/src/`](./packages/config/src/) for the full set of variables.
+
+### First-run credentials
+
+`OPENAI_API_KEY` is the main key most users should set for the best default experience. bb's server-side helper model defaults to `BB_INFERENCE_MODEL=openai/gpt-4o-mini`; without an OpenAI key, those helper calls return no result. Core threads can still run when the selected provider CLI is authenticated, such as `codex login` or a logged-in Claude Code install.
+
+| Variable         | When to set             | Used for                                                                                                   |
+| ---------------- | ----------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `OPENAI_API_KEY` | Recommended             | Generated thread titles, branch names, commit messages, and voice transcription.                           |
+| `BB_APP_URL`     | Optional for remote use | Human-facing app URL used for generated links and allowed browser origins. Leave empty for local-only use. |
 
 `BB_DATA_DIR` is the most important one — it's the root directory for all bb-managed state: the SQLite database, logs, host identity, and thread storage. Defaults to `~/.bb/` (or `~/.bb-dev/` when using `pnpm dev`). Pointing two instances at different data directories gives you fully isolated environments — this is how dev and production run side by side, and how tests get clean state.
 
