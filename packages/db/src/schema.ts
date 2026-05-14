@@ -405,6 +405,11 @@ export const events = sqliteTable(
       table.itemKind,
       table.sequence,
     ),
+    index("events_thread_type_sequence_idx").on(
+      table.threadId,
+      table.type,
+      table.sequence,
+    ),
     index("events_thread_item_id_sequence_idx").on(
       table.threadId,
       table.itemId,
@@ -523,7 +528,21 @@ export const hostDaemonCommands = sqliteTable(
       table.hostId,
       table.cursor,
     ),
-    index("host_daemon_commands_host_state_idx").on(table.hostId, table.state),
+    index("host_daemon_commands_host_state_cursor_idx").on(
+      table.hostId,
+      table.state,
+      table.cursor,
+    ),
+    index("host_daemon_commands_state_fetched_at_idx").on(
+      table.state,
+      table.fetchedAt,
+    ),
+    index("host_daemon_commands_payload_prune_idx")
+      .on(table.state, table.completedAt)
+      .where(
+        sql`${table.completedAt} IS NOT NULL
+          AND (${table.payload} <> '{}' OR ${table.resultPayload} IS NOT NULL)`,
+      ),
   ],
 );
 
