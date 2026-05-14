@@ -9,6 +9,7 @@ import {
   listHosts,
   listNonDestroyedHostsByIds,
   listPublicHosts,
+  markHostSeen,
   updateHost,
   upsertHost,
 } from "../../src/data/hosts.js";
@@ -34,18 +35,17 @@ describe("hosts", () => {
     expect(host.id).toMatch(/^host_/);
     expect(host.name).toBe("My Machine");
     expect(host.type).toBe("persistent");
-    expect(host.lastSeenAt).toBeTypeOf("number");
+    expect(host.lastSeenAt).toBeNull();
   });
 
-  it("upsert with same ID updates lastSeenAt", () => {
+  it("upsert with same ID preserves lastSeenAt", () => {
     const { db } = setup();
     const host1 = upsertHost(db, noopNotifier, {
       name: "My Machine",
       type: "persistent",
     });
 
-    // Wait a tiny bit to ensure different timestamp
-    const firstSeen = host1.lastSeenAt;
+    markHostSeen(db, host1.id, 1_000);
 
     const host2 = upsertHost(db, noopNotifier, {
       id: host1.id,
@@ -55,7 +55,7 @@ describe("hosts", () => {
 
     expect(host2.id).toBe(host1.id);
     expect(host2.name).toBe("Updated Name");
-    expect(host2.lastSeenAt).toBeGreaterThanOrEqual(firstSeen);
+    expect(host2.lastSeenAt).toBe(1_000);
   });
 
   it("preserves provider, externalId, and destroyedAt when omitted on update", () => {

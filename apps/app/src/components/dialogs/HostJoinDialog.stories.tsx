@@ -1,4 +1,5 @@
 import type { CreateHostJoinResponse } from "@bb/server-contract";
+import { HostJoinAppUrlRequiredDialogContent } from "./HostJoinAppUrlRequiredDialog";
 import { HostJoinDialogContent } from "./HostJoinDialog";
 import { HOST_IDS, HOST_NAMES, makeHost } from "../../../.ladle/story-fixtures";
 import { StoryCard, StoryRow } from "../../../.ladle/story-card";
@@ -8,10 +9,8 @@ export default {
   title: "dialogs/Host Join",
 };
 
-const noop = () => {};
-
 const pendingTarget: CreateHostJoinResponse = {
-  expiresAt: Date.now() + 5 * 60 * 1_000,
+  expiresAt: Date.now() + 15 * 60 * 1_000,
   hostId: HOST_IDS.remote,
   joinCode: "bbde_story_join_code",
   joinCommand:
@@ -45,51 +44,26 @@ export function Overview() {
   return (
     <StoryCard>
       <StoryRow label="waiting" hint="join command ready for remote host">
-        <DialogStage>
-          <HostJoinDialogContent
-            cancelPending={false}
-            host={waitingHost}
-            target={pendingTarget}
-            onCancel={noop}
-            onClose={noop}
-            onDone={noop}
-          />
-        </DialogStage>
-      </StoryRow>
-      <StoryRow label="canceling" hint="cleanup request in flight">
-        <DialogStage>
-          <HostJoinDialogContent
-            cancelPending
-            host={waitingHost}
-            target={pendingTarget}
-            onCancel={noop}
-            onClose={noop}
-            onDone={noop}
-          />
+        <DialogStage className="sm:max-w-2xl">
+          <HostJoinDialogContent host={waitingHost} target={pendingTarget} />
         </DialogStage>
       </StoryRow>
       <StoryRow label="expired" hint="join command is no longer valid">
-        <DialogStage>
-          <HostJoinDialogContent
-            cancelPending={false}
-            host={waitingHost}
-            target={expiredTarget}
-            onCancel={noop}
-            onClose={noop}
-            onDone={noop}
-          />
+        <DialogStage className="sm:max-w-2xl">
+          <HostJoinDialogContent host={waitingHost} target={expiredTarget} />
         </DialogStage>
       </StoryRow>
       <StoryRow label="connected" hint="daemon has opened a host session">
-        <DialogStage>
-          <HostJoinDialogContent
-            cancelPending={false}
-            host={connectedHost}
-            target={connectedTarget}
-            onCancel={noop}
-            onClose={noop}
-            onDone={noop}
-          />
+        <DialogStage className="sm:max-w-2xl">
+          <HostJoinDialogContent host={connectedHost} target={connectedTarget} />
+        </DialogStage>
+      </StoryRow>
+      <StoryRow
+        label="app-url-required"
+        hint="separate dialog shown when BB_APP_URL is unset"
+      >
+        <DialogStage className="sm:max-w-2xl">
+          <HostJoinAppUrlRequiredDialogContent />
         </DialogStage>
       </StoryRow>
     </StoryCard>

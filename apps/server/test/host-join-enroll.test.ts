@@ -7,6 +7,10 @@ import { readJson } from "./helpers/json.js";
 import { seedSession } from "./helpers/seed.js";
 import { createTestAppHarness } from "./helpers/test-app.js";
 
+async function parseHostJoinResponse(response: Response) {
+  return createHostJoinResponseSchema.parse(await readJson(response));
+}
+
 describe("host join and enroll routes", () => {
   it("creates join material for an additional host", async () => {
     const harness = await createTestAppHarness();
@@ -23,7 +27,7 @@ describe("host join and enroll routes", () => {
       });
 
       expect(response.status).toBe(201);
-      const body = createHostJoinResponseSchema.parse(await readJson(response));
+      const body = await parseHostJoinResponse(response);
       expect(body.hostId).toMatch(/^host_/u);
       expect(body.joinCode).toMatch(/^bbde_/u);
       expect(body.joinCommand).toContain("pnpm start:host-daemon");
@@ -34,6 +38,31 @@ describe("host join and enroll routes", () => {
         id: body.hostId,
         type: "persistent",
       });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("rejects join with app_url_required and no side effects when BB_APP_URL is unset", async () => {
+    const harness = await createTestAppHarness({ appUrl: undefined });
+
+    try {
+      const response = await harness.app.request("/api/v1/hosts/join", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          hostId: "host_app_url_required",
+          hostType: "persistent",
+        }),
+      });
+
+      expect(response.status).toBe(422);
+      expect(await readJson(response)).toMatchObject({
+        code: "app_url_required",
+      });
+      expect(getHost(harness.db, "host_app_url_required")).toBeNull();
     } finally {
       await harness.cleanup();
     }
@@ -57,7 +86,7 @@ describe("host join and enroll routes", () => {
       });
 
       expect(response.status).toBe(201);
-      const body = createHostJoinResponseSchema.parse(await readJson(response));
+      const body = await parseHostJoinResponse(response);
       expect(body.hostId).toBe("host_ephemeral_external");
       expect(getHost(harness.db, body.hostId)).toMatchObject({
         externalId: "sandbox-external-123",
@@ -83,9 +112,7 @@ describe("host join and enroll routes", () => {
           hostType: "persistent",
         }),
       });
-      const joinBody = createHostJoinResponseSchema.parse(
-        await readJson(joinResponse),
-      );
+      const joinBody = await parseHostJoinResponse(joinResponse);
 
       const cancelResponse = await harness.app.request(
         `/api/v1/hosts/${joinBody.hostId}/join`,
@@ -134,9 +161,7 @@ describe("host join and enroll routes", () => {
           hostType: "persistent",
         }),
       });
-      const joinBody = createHostJoinResponseSchema.parse(
-        await readJson(joinResponse),
-      );
+      const joinBody = await parseHostJoinResponse(joinResponse);
       const session = seedSession(harness.deps, joinBody.hostId);
       closeSession(harness.db, harness.hub, session.id, "test-disconnect");
 
@@ -189,9 +214,7 @@ describe("host join and enroll routes", () => {
           hostType: "persistent",
         }),
       });
-      const joinBody = createHostJoinResponseSchema.parse(
-        await readJson(joinResponse),
-      );
+      const joinBody = await parseHostJoinResponse(joinResponse);
       seedSession(harness.deps, joinBody.hostId);
 
       const cancelResponse = await harness.app.request(
@@ -243,9 +266,7 @@ describe("host join and enroll routes", () => {
           hostType: "persistent",
         }),
       });
-      const joinBody = createHostJoinResponseSchema.parse(
-        await readJson(joinResponse),
-      );
+      const joinBody = await parseHostJoinResponse(joinResponse);
 
       const enrollResponse = await harness.app.request(
         "/internal/hosts/enroll",
@@ -312,9 +333,7 @@ describe("host join and enroll routes", () => {
           hostType: "persistent",
         }),
       });
-      const joinBody = createHostJoinResponseSchema.parse(
-        await readJson(joinResponse),
-      );
+      const joinBody = await parseHostJoinResponse(joinResponse);
 
       const response = await harness.app.request("/internal/hosts/enroll", {
         method: "POST",
@@ -352,9 +371,7 @@ describe("host join and enroll routes", () => {
           }),
         },
       );
-      const firstJoinBody = createHostJoinResponseSchema.parse(
-        await readJson(firstJoinResponse),
-      );
+      const firstJoinBody = await parseHostJoinResponse(firstJoinResponse);
 
       const secondJoinResponse = await harness.app.request(
         "/api/v1/hosts/join",
@@ -369,9 +386,7 @@ describe("host join and enroll routes", () => {
           }),
         },
       );
-      const secondJoinBody = createHostJoinResponseSchema.parse(
-        await readJson(secondJoinResponse),
-      );
+      const secondJoinBody = await parseHostJoinResponse(secondJoinResponse);
 
       expect(secondJoinBody.joinCode).not.toBe(firstJoinBody.joinCode);
 
@@ -429,9 +444,7 @@ describe("host join and enroll routes", () => {
           hostType: "persistent",
         }),
       });
-      const joinBody = createHostJoinResponseSchema.parse(
-        await readJson(joinResponse),
-      );
+      const joinBody = await parseHostJoinResponse(joinResponse);
 
       const issuedKey = harness.db
         .select({

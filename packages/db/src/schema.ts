@@ -128,7 +128,7 @@ export const hosts = sqliteTable(
     lastActivityAt: integer("last_activity_at"),
     suspendedAt: integer("suspended_at"),
     destroyedAt: integer("destroyed_at"),
-    lastSeenAt: integer("last_seen_at").notNull(),
+    lastSeenAt: integer("last_seen_at"),
     createdAt: integer("created_at").notNull(),
     updatedAt: integer("updated_at").notNull(),
   },

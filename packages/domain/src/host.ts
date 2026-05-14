@@ -19,7 +19,7 @@ export const hostSchema = z.object({
   status: hostStatusSchema,
   provider: z.string().optional(),
   externalId: z.string().optional(),
-  lastSeenAt: z.number(),
+  lastSeenAt: z.number().nullable(),
   createdAt: z.number(),
   updatedAt: z.number(),
 });

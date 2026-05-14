@@ -21,13 +21,6 @@ import {
   requireNonDestroyedHostWithStatus,
 } from "../services/lib/entity-lookup.js";
 
-function resolveJoinServerUrl(
-  deps: Pick<AppDeps, "config">,
-  requestUrl: string,
-): string {
-  return deps.config.appUrl ?? new URL(requestUrl).origin;
-}
-
 function resolvePendingHostName(hostId: string): string {
   return `pending-${hostId.slice(-8)}`;
 }
@@ -67,6 +60,14 @@ export function registerHostRoutes(app: Hono, deps: AppDeps): void {
   get("/hosts", (context) => context.json(listPublicHostsWithStatus(deps.db)));
 
   post("/hosts/join", createHostJoinRequestSchema, async (context, payload) => {
+    if (deps.config.appUrl === undefined) {
+      throw new ApiError(
+        422,
+        "app_url_required",
+        "BB_APP_URL is not configured",
+      );
+    }
+
     const hostId = payload.hostId ?? createHostId();
     const hostType = payload.hostType ?? "persistent";
     const existing = getHost(deps.db, hostId);
@@ -96,7 +97,7 @@ export function registerHostRoutes(app: Hono, deps: AppDeps): void {
       hostId,
       hostType,
       joinCode: joinMaterial.key,
-      serverUrl: resolveJoinServerUrl(deps, context.req.url),
+      serverUrl: deps.config.appUrl,
     });
 
     return context.json(

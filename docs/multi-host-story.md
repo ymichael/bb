@@ -42,7 +42,7 @@ pnpm start:host-daemon
 ```
 
 The modal updates when the host connects. The join code is single-use and
-expires after 5 minutes.
+expires after 15 minutes.
 
 The API fallback is:
 
@@ -114,11 +114,9 @@ multi-host path without touching production-mode `~/.bb/` state.
 
 ## Current gaps
 
-- The generated `joinCommand` uses `BB_APP_URL` when it is set; otherwise it
-  uses the request origin. If you request join material through
-  `http://localhost:38886`, the command will point the remote host at its own
-  localhost and fail. Use the reachable Tailscale/server URL or set
-  `BB_APP_URL` before starting the server.
+- The generated `joinCommand` requires `BB_APP_URL` to be set. If it is unset,
+  the join endpoint returns `{ status: "app-url-required" }` and the app
+  surfaces a configuration prompt instead of issuing a join command.
 - `pnpm start:host-daemon` does not auto-request join material. It requires
   persisted auth or an explicit `BB_HOST_ENROLL_KEY`.
 - The app can add a local-path source for the browser-local host, but it does

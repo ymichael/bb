@@ -13,7 +13,7 @@ import type { ServerLogger } from "../types.js";
 const AUTH_SECRET_FILE_NAME = "auth-secret";
 const DAEMON_ENROLL_CONFIG_ID = "daemon-enroll";
 const DAEMON_HOST_CONFIG_ID = "daemon-host";
-const ENROLL_KEY_TTL_SECONDS = 60 * 5;
+const ENROLL_KEY_TTL_SECONDS = 60 * 15;
 const LOCAL_JOIN_COMMAND = "pnpm start:host-daemon";
 const MACHINE_AUTH_SYSTEM_USER_ID = "bb-machine-auth-system-user";
 const MACHINE_AUTH_SYSTEM_USER_EMAIL = "machine-auth@bb.internal";

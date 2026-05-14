@@ -33,6 +33,7 @@ import {
   HostRenameDialog,
   type HostRenameDialogTarget,
 } from "@/components/dialogs/HostRenameDialog";
+import { HostJoinAppUrlRequiredDialog } from "@/components/dialogs/HostJoinAppUrlRequiredDialog";
 import { HostJoinDialog } from "@/components/dialogs/HostJoinDialog";
 import {
   setPreferredTheme,
@@ -53,6 +54,8 @@ import {
 } from "@/hooks/cache-effects";
 import { sandboxHostSupportedAtom } from "@/lib/system-config-atoms";
 import * as api from "@/lib/api";
+import { HttpError } from "@/lib/api";
+import { showMutationErrorToast } from "@/lib/mutation-errors";
 import type { CreateHostJoinResponse } from "@bb/server-contract";
 import { cn } from "@/lib/utils";
 
@@ -116,6 +119,7 @@ export function AppSettingsView() {
     null,
   );
   const [joinDialogOpen, setJoinDialogOpen] = useState(false);
+  const [appUrlRequiredOpen, setAppUrlRequiredOpen] = useState(false);
   const [activeCloudAuthAttempt, setActiveCloudAuthAttempt] =
     useState<CloudAuthAttemptState | null>(null);
   const [cloudAuthNotices, setCloudAuthNotices] = useState<CloudAuthNoticeMap>(
@@ -153,12 +157,23 @@ export function AppSettingsView() {
   const createHostJoin = useMutation({
     meta: {
       errorMessage: "Failed to create host join command.",
+      showErrorToast: false,
     },
     mutationFn: () => api.createHostJoin(),
     onSuccess: (result) => {
       invalidateHostAvailabilityQueries({ queryClient });
       setJoinTarget(result);
       setJoinDialogOpen(true);
+    },
+    onError: (error) => {
+      if (error instanceof HttpError && error.code === "app_url_required") {
+        setAppUrlRequiredOpen(true);
+        return;
+      }
+      showMutationErrorToast({
+        error,
+        fallbackMessage: "Failed to create host join command.",
+      });
     },
   });
 
@@ -280,23 +295,27 @@ export function AppSettingsView() {
     createHostJoin.mutate();
   }
 
-  function handleCancelHostJoin() {
-    if (joinTarget === null) {
+  useEffect(() => {
+    if (!joinDialogOpen || joinHost?.status !== "connected") {
       return;
     }
-    cancelHostJoin.mutate({ id: joinTarget.hostId });
-  }
-
-  function handleJoinDone() {
-    setJoinTarget(null);
-    setJoinDialogOpen(false);
-  }
+    const timeoutId = window.setTimeout(() => {
+      setJoinTarget(null);
+      setJoinDialogOpen(false);
+    }, 1_500);
+    return () => window.clearTimeout(timeoutId);
+  }, [joinDialogOpen, joinHost?.status]);
 
   function handleJoinOpenChange(open: boolean) {
-    if (cancelHostJoin.isPending) {
+    if (open) {
+      setJoinDialogOpen(true);
       return;
     }
-    setJoinDialogOpen(open);
+    if (joinTarget !== null && joinHost?.status !== "connected") {
+      cancelHostJoin.mutate({ id: joinTarget.hostId });
+    }
+    setJoinTarget(null);
+    setJoinDialogOpen(false);
   }
 
   useEffect(() => {
@@ -369,6 +388,7 @@ export function AppSettingsView() {
             <Button
               type="button"
               size="sm"
+              variant="ghost"
               disabled={hostJoinActionPending}
               onClick={() => {
                 void handleCreateHostJoin();
@@ -399,9 +419,13 @@ export function AppSettingsView() {
                     </span>
                     {isConnected ? (
                       <span className={CONNECTED_DOT_CLASS} title="Connected" />
-                    ) : (
+                    ) : host.lastSeenAt !== null ? (
                       <span className="shrink-0 text-xs text-muted-foreground">
                         Offline · {timeAgo(host.lastSeenAt)}
+                      </span>
+                    ) : (
+                      <span className="shrink-0 text-xs text-muted-foreground">
+                        Never connected
                       </span>
                     )}
                     <DropdownMenu>
@@ -497,13 +521,14 @@ export function AppSettingsView() {
         onDelete={(id) => deleteHost.mutate({ id })}
       />
       <HostJoinDialog
-        cancelPending={cancelHostJoin.isPending}
         open={joinDialogOpen}
         target={joinTarget}
         host={joinHost}
-        onCancel={handleCancelHostJoin}
-        onDone={handleJoinDone}
         onOpenChange={handleJoinOpenChange}
+      />
+      <HostJoinAppUrlRequiredDialog
+        open={appUrlRequiredOpen}
+        onOpenChange={setAppUrlRequiredOpen}
       />
     </PageShell>
   );

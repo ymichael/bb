@@ -43,6 +43,13 @@
       "when": 1778269063000,
       "tag": "0005_environment_base_branch",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1778732973503,
+      "tag": "0006_hosts_last_seen_nullable",
+      "breakpoints": true
     }
   ]
 }
