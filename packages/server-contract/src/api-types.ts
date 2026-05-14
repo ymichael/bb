@@ -510,6 +510,14 @@ const persistentHostJoinRequestSchema = z
   })
   .strict();
 
+const localHostJoinRequestSchema = z
+  .object({
+    hostId: z.string().min(1).optional(),
+    hostType: z.literal("persistent"),
+    joinMode: z.literal("local"),
+  })
+  .strict();
+
 const ephemeralHostJoinRequestSchema = z
   .object({
     externalId: z.string().min(1),
@@ -520,6 +528,7 @@ const ephemeralHostJoinRequestSchema = z
   .strict();
 
 export const createHostJoinRequestSchema = z.union([
+  localHostJoinRequestSchema,
   persistentHostJoinRequestSchema,
   ephemeralHostJoinRequestSchema,
 ]);

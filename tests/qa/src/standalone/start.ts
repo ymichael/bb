@@ -6,8 +6,8 @@ import {
   buildStandaloneShellExports,
   buildDaemonRestartCommand,
   cleanupStandaloneOrphans,
-  createHostJoin,
   createProject,
+  createStandaloneHostJoin,
   createTestGitRepo,
   killProcess,
   loadDotEnv,
@@ -94,9 +94,7 @@ async function main() {
       );
     }
 
-    const join = await createHostJoin(serverUrl, {
-      hostType: "persistent",
-    });
+    const join = await createStandaloneHostJoin(serverUrl);
 
     daemonProcess = spawnLoggedProcess({
       command: "node",

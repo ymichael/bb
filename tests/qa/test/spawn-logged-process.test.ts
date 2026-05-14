@@ -116,6 +116,7 @@ vi.mock("node:child_process", async (importOriginal) => {
 
 import {
   cleanupStandaloneOrphans,
+  createStandaloneHostJoin,
   spawnLoggedProcess,
   startQaServer,
 } from "../src/shared.js";
@@ -165,6 +166,7 @@ describe("spawnLoggedProcess", () => {
   });
 
   it("keeps standalone server runtime env isolated from inherited bb env", async () => {
+    vi.stubEnv("BB_APP_URL", "https://inherited-app.example.test");
     vi.stubEnv("BB_DATA_DIR", "/Users/example/.bb-dev");
     vi.stubEnv("BB_SERVER_PORT", "3334");
     vi.stubGlobal(
@@ -188,6 +190,68 @@ describe("spawnLoggedProcess", () => {
       BB_SERVER_PORT: "4567",
       OPENAI_API_KEY: "test-openai-key",
     });
+    expect(
+      spawnMockState.invocations[0]?.options.env?.BB_APP_URL,
+    ).toBeUndefined();
+    expect(
+      spawnMockState.invocations[0]?.options.env?.BB_EXTERNAL_URL,
+    ).toBeUndefined();
+  });
+
+  it("uses the public tunnel URL as app and external URL when provided", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(null, { status: 200 })),
+    );
+
+    await startQaServer({
+      dataDir: "/tmp/standalone-server-data",
+      logPath: "/tmp/standalone-server.log",
+      port: 4567,
+      publicUrl: "https://standalone-public.example.test",
+    });
+
+    expect(spawnMockState.invocations[0]?.options.env).toMatchObject({
+      BB_APP_URL: "https://standalone-public.example.test",
+      BB_EXTERNAL_URL: "https://standalone-public.example.test",
+    });
+  });
+
+  it("requests a local host join for standalone host bootstrap", async () => {
+    let capturedBody: string | null = null;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+        capturedBody = typeof init?.body === "string" ? init.body : null;
+        return new Response(
+          JSON.stringify({
+            expiresAt: Date.now() + 60_000,
+            hostId: "host_standalone",
+            joinCode: "bbde_standalone",
+            joinCommand: "pnpm start:host-daemon",
+          }),
+          {
+            headers: {
+              "content-type": "application/json",
+            },
+            status: 201,
+          },
+        );
+      }),
+    );
+
+    await expect(
+      createStandaloneHostJoin("http://127.0.0.1:4567"),
+    ).resolves.toMatchObject({
+      hostId: "host_standalone",
+      joinCode: "bbde_standalone",
+    });
+    expect(capturedBody).toBe(
+      JSON.stringify({
+        hostType: "persistent",
+        joinMode: "local",
+      }),
+    );
   });
 });
 
@@ -195,7 +259,9 @@ describe("cleanupStandaloneOrphans", () => {
   it.each(["EPERM", "EACCES", 1] as const)(
     "warns and continues when process enumeration is blocked with %s",
     async (errorCode) => {
-      const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+      const warn = vi
+        .spyOn(console, "warn")
+        .mockImplementation(() => undefined);
       spawnMockState.processScanErrorCode = errorCode;
 
       await expect(cleanupStandaloneOrphans()).resolves.toMatchObject({

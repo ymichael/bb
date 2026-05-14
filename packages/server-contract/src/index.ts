@@ -357,6 +357,12 @@ export {
   SYSTEM_CHANGE_KINDS,
   THREAD_CHANGE_KINDS,
 } from "@bb/domain";
+
+export {
+  createLocalPersistentHostJoinRequest,
+  createPersistentHostJoinRequest,
+} from "./host-join-request.js";
+export type { CreatePersistentHostJoinRequestArgs } from "./host-join-request.js";
 export type {
   ChangedMessage,
   ClientMessage,

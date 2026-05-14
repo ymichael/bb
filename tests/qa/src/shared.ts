@@ -11,6 +11,7 @@ import { hostSchema } from "@bb/domain";
 import type { Host } from "@bb/domain";
 import {
   createHostJoinResponseSchema,
+  createLocalPersistentHostJoinRequest,
   projectResponseSchema,
   type CreateHostJoinRequest,
   type CreateHostJoinResponse,
@@ -18,6 +19,8 @@ import {
   type ProjectResponse,
 } from "@bb/server-contract";
 import { z } from "zod";
+
+export { createLocalPersistentHostJoinRequest };
 
 const execFile = promisify(execFileCallback);
 
@@ -285,6 +288,15 @@ export async function createHostJoin(
     );
   }
   return createHostJoinResponseSchema.parse(await response.json());
+}
+
+export async function createStandaloneHostJoin(
+  serverUrl: string,
+): Promise<CreateHostJoinResponse> {
+  return createHostJoin(
+    serverUrl,
+    createLocalPersistentHostJoinRequest({ hostId: null }),
+  );
 }
 
 export async function killProcess(
@@ -566,17 +578,25 @@ export async function startQaServer(
     };
   }
 
+  const serverEnv: NodeJS.ProcessEnv = {
+    ...process.env,
+    ...(args.env ?? {}),
+    BB_DATA_DIR: args.dataDir,
+    BB_SERVER_PORT: String(args.port),
+  };
+  if (args.publicUrl) {
+    serverEnv.BB_APP_URL = args.publicUrl;
+    serverEnv.BB_EXTERNAL_URL = args.publicUrl;
+  } else {
+    delete serverEnv.BB_APP_URL;
+    delete serverEnv.BB_EXTERNAL_URL;
+  }
+
   const serverProcess = spawnLoggedProcess({
     command: process.execPath,
     args: ["apps/server/dist/index.js"],
     cwd: repoRoot,
-    env: {
-      ...process.env,
-      ...(args.env ?? {}),
-      BB_DATA_DIR: args.dataDir,
-      BB_SERVER_PORT: String(args.port),
-      ...(args.publicUrl ? { BB_EXTERNAL_URL: args.publicUrl } : {}),
-    },
+    env: serverEnv,
     logPath: args.logPath,
   });
 

@@ -22,6 +22,28 @@ interface RecordedFetchRequest {
   url: string;
 }
 
+interface TestRuntimeEnvArgs {
+  dataDir: string;
+  serverUrl?: string;
+}
+
+function createTestRuntimeEnv({
+  dataDir,
+  serverUrl = "http://127.0.0.1:3334",
+}: TestRuntimeEnvArgs): HostDaemonRuntimeEnvironment {
+  return {
+    BB_BRIDGE_DIR: undefined,
+    BB_CLI_DIR: undefined,
+    BB_DATA_DIR: dataDir,
+    BB_HOST_ENROLL_KEY: undefined,
+    BB_HOST_ID: undefined,
+    BB_HOST_NAME: undefined,
+    BB_HOST_TYPE: undefined,
+    BB_SERVER_URL: serverUrl,
+    NODE_ENV: "development",
+  };
+}
+
 async function makeTempDir(prefix: string): Promise<string> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), prefix));
   tempDirs.push(dir);
@@ -74,11 +96,7 @@ describe("run-host-daemon auto join", () => {
     vi.stubGlobal("fetch", fetchSpy);
 
     const env = await maybeAddAutoJoinEnv(
-      {
-        BB_DATA_DIR: dataDir,
-        BB_SERVER_URL: "http://127.0.0.1:3334",
-        NODE_ENV: "development",
-      } as HostDaemonRuntimeEnvironment,
+      createTestRuntimeEnv({ dataDir }),
       true,
     );
 
@@ -131,11 +149,7 @@ describe("run-host-daemon auto join", () => {
     );
 
     const env = await maybeAddAutoJoinEnv(
-      {
-        BB_DATA_DIR: dataDir,
-        BB_SERVER_URL: "http://127.0.0.1:3334",
-        NODE_ENV: "development",
-      } as HostDaemonRuntimeEnvironment,
+      createTestRuntimeEnv({ dataDir }),
       true,
     );
 
@@ -147,6 +161,8 @@ describe("run-host-daemon auto join", () => {
     expect(requests[1]?.body).toBe(
       JSON.stringify({
         hostId: persistedHostId,
+        hostType: "persistent",
+        joinMode: "local",
       }),
     );
   });
@@ -191,18 +207,76 @@ describe("run-host-daemon auto join", () => {
     );
 
     const env = await maybeAddAutoJoinEnv(
-      {
-        BB_DATA_DIR: dataDir,
-        BB_SERVER_URL: "http://127.0.0.1:3334",
-        NODE_ENV: "development",
-      } as HostDaemonRuntimeEnvironment,
+      createTestRuntimeEnv({ dataDir }),
       true,
     );
 
     expect(env.BB_HOST_ID).toBe("host_generated");
     expect(env.BB_HOST_ENROLL_KEY).toBe("bbde_generated_join");
     expect(env.BB_HOST_TYPE).toBeUndefined();
-    expect(requests[1]?.body).toBe(JSON.stringify({}));
+    expect(requests[1]?.body).toBe(
+      JSON.stringify({
+        hostType: "persistent",
+        joinMode: "local",
+      }),
+    );
+  });
+
+  it("requests normal persistent join material for non-loopback server URLs", async () => {
+    const dataDir = await makeTempDir("bb-run-host-daemon-");
+
+    const requests: RecordedFetchRequest[] = [];
+    vi.stubGlobal(
+      "fetch",
+      async (input: TestFetchInput, init?: RequestInit): Promise<Response> => {
+        const url =
+          input instanceof Request
+            ? input.url
+            : input instanceof URL
+              ? input.toString()
+              : input;
+        requests.push({
+          body: typeof init?.body === "string" ? init.body : null,
+          url,
+        });
+
+        if (url.endsWith("/health")) {
+          return new Response("", { status: 200 });
+        }
+
+        return new Response(
+          JSON.stringify({
+            expiresAt: Date.now() + 60_000,
+            hostId: "host_remote_generated",
+            joinCode: "bbde_remote_join",
+            joinCommand: "pnpm start:host-daemon",
+          }),
+          {
+            headers: {
+              "content-type": "application/json",
+            },
+            status: 201,
+          },
+        );
+      },
+    );
+
+    const env = await maybeAddAutoJoinEnv(
+      createTestRuntimeEnv({
+        dataDir,
+        serverUrl: "https://bb.example.test",
+      }),
+      true,
+    );
+
+    expect(env.BB_HOST_ID).toBe("host_remote_generated");
+    expect(env.BB_HOST_ENROLL_KEY).toBe("bbde_remote_join");
+    expect(requests[1]?.url).toBe("https://bb.example.test/api/v1/hosts/join");
+    expect(requests[1]?.body).toBe(
+      JSON.stringify({
+        hostType: "persistent",
+      }),
+    );
   });
 
   it("surfaces join request failures", async () => {
@@ -226,14 +300,7 @@ describe("run-host-daemon auto join", () => {
     });
 
     await expect(
-      maybeAddAutoJoinEnv(
-        {
-          BB_DATA_DIR: dataDir,
-          BB_SERVER_URL: "http://127.0.0.1:3334",
-        NODE_ENV: "development",
-        } as HostDaemonRuntimeEnvironment,
-        true,
-      ),
+      maybeAddAutoJoinEnv(createTestRuntimeEnv({ dataDir }), true),
     ).rejects.toThrow(
       "Failed to request host join material: 500 Internal Server Error - nope",
     );

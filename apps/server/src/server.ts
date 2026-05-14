@@ -28,6 +28,7 @@ import {
   setAuthenticatedDaemon,
   verifyAuthenticatedDaemon,
 } from "./internal/auth.js";
+import { captureTrustedRemoteAddress } from "./request-context.js";
 import {
   onClientSocketClose,
   onClientSocketMessage,
@@ -145,6 +146,10 @@ export function createApp(
   const slowApiRequestLogThresholdMs =
     options?.slowApiRequestLogThresholdMs ?? SLOW_API_REQUEST_LOG_THRESHOLD_MS;
 
+  app.use("*", async (context, next) => {
+    captureTrustedRemoteAddress(context);
+    await next();
+  });
   app.use(
     "*",
     cors({

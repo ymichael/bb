@@ -2,13 +2,34 @@ import { authApiKeys, closeSession, getHost } from "@bb/db";
 import { eq } from "drizzle-orm";
 import { hostDaemonEnrollResponseSchema } from "@bb/host-daemon-contract";
 import { createHostJoinResponseSchema } from "@bb/server-contract";
+import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
+import { errorToResponse } from "../src/errors.js";
+import { TRUSTED_REMOTE_ADDRESS_CONTEXT_KEY } from "../src/request-context.js";
+import { registerHostRoutes } from "../src/routes/hosts.js";
+import type { AppDeps } from "../src/types.js";
 import { readJson } from "./helpers/json.js";
 import { seedSession } from "./helpers/seed.js";
-import { createTestAppHarness } from "./helpers/test-app.js";
+import { createTestAppHarness, testLogger } from "./helpers/test-app.js";
+
+interface CreateHostRouteAppArgs {
+  deps: AppDeps;
+  trustedRemoteAddress: string | undefined;
+}
 
 async function parseHostJoinResponse(response: Response) {
   return createHostJoinResponseSchema.parse(await readJson(response));
+}
+
+function createHostRouteApp(args: CreateHostRouteAppArgs): Hono {
+  const app = new Hono();
+  app.onError((error) => errorToResponse(error, testLogger));
+  app.use("*", async (context, next) => {
+    context.set(TRUSTED_REMOTE_ADDRESS_CONTEXT_KEY, args.trustedRemoteAddress);
+    await next();
+  });
+  registerHostRoutes(app, args.deps);
+  return app;
 }
 
 describe("host join and enroll routes", () => {
@@ -31,11 +52,53 @@ describe("host join and enroll routes", () => {
       expect(body.hostId).toMatch(/^host_/u);
       expect(body.joinCode).toMatch(/^bbde_/u);
       expect(body.joinCommand).toContain("pnpm start:host-daemon");
+      expect(body.joinCommand).toContain(
+        "BB_SERVER_URL='https://bb.example.test'",
+      );
       expect(body.joinCommand).toContain(body.hostId);
       expect(body.joinCommand).toContain(body.joinCode);
       expect(body.expiresAt).toBeGreaterThan(Date.now());
       expect(getHost(harness.db, body.hostId)).toMatchObject({
         id: body.hostId,
+        type: "persistent",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("creates local auto-join material without BB_APP_URL", async () => {
+    const harness = await createTestAppHarness({ appUrl: undefined });
+    const app = createHostRouteApp({
+      deps: harness.deps,
+      trustedRemoteAddress: "127.0.0.1",
+    });
+
+    try {
+      const response = await app.request(
+        "http://spoofed.example.test/hosts/join",
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            hostId: "host_local_auto_join",
+            hostType: "persistent",
+            joinMode: "local",
+          }),
+        },
+      );
+
+      expect(response.status).toBe(201);
+      const body = await parseHostJoinResponse(response);
+      expect(body.hostId).toBe("host_local_auto_join");
+      expect(body.joinCode).toMatch(/^bbde_/u);
+      expect(body.joinCommand).toContain(
+        "BB_SERVER_URL='http://127.0.0.1:3334'",
+      );
+      expect(getHost(harness.db, "host_local_auto_join")).toMatchObject({
+        id: "host_local_auto_join",
         type: "persistent",
       });
     } finally {
@@ -63,6 +126,72 @@ describe("host join and enroll routes", () => {
         code: "app_url_required",
       });
       expect(getHost(harness.db, "host_app_url_required")).toBeNull();
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("rejects spoofed Host loopback for local join without BB_APP_URL", async () => {
+    const harness = await createTestAppHarness({ appUrl: undefined });
+    const app = createHostRouteApp({
+      deps: harness.deps,
+      trustedRemoteAddress: "192.168.1.50",
+    });
+
+    try {
+      const response = await app.request("http://127.0.0.1:3334/hosts/join", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          host: "127.0.0.1:3334",
+        },
+        body: JSON.stringify({
+          hostId: "host_spoofed_local_join",
+          hostType: "persistent",
+          joinMode: "local",
+        }),
+      });
+
+      expect(response.status).toBe(422);
+      expect(await readJson(response)).toMatchObject({
+        code: "app_url_required",
+      });
+      expect(getHost(harness.db, "host_spoofed_local_join")).toBeNull();
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("uses BB_APP_URL for non-loopback local join requests when configured", async () => {
+    const harness = await createTestAppHarness();
+    const app = createHostRouteApp({
+      deps: harness.deps,
+      trustedRemoteAddress: "192.168.1.50",
+    });
+
+    try {
+      const response = await app.request("http://127.0.0.1:3334/hosts/join", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          host: "127.0.0.1:3334",
+        },
+        body: JSON.stringify({
+          hostId: "host_remote_local_join",
+          hostType: "persistent",
+          joinMode: "local",
+        }),
+      });
+
+      expect(response.status).toBe(201);
+      const body = await parseHostJoinResponse(response);
+      expect(body.joinCommand).toContain(
+        "BB_SERVER_URL='https://bb.example.test'",
+      );
+      expect(getHost(harness.db, "host_remote_local_join")).toMatchObject({
+        id: "host_remote_local_join",
+        type: "persistent",
+      });
     } finally {
       await harness.cleanup();
     }

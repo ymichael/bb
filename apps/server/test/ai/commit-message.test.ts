@@ -62,6 +62,7 @@ function createCommitMessageDeps(): TestCommitMessageDeps {
     inferenceModel: "test/mock-model",
     isDevelopment: true,
     openAiApiKey: "test-openai-key",
+    serverPort: 3334,
     sandboxActivityExtensionDebounceMs: 30_000,
     sandboxIdleThresholdMs: 300_000,
   };

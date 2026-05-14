@@ -9,6 +9,8 @@ import {
   createAutomationRequestSchema,
   createHostJoinRequestSchema,
   createHostJoinResponseSchema,
+  createLocalPersistentHostJoinRequest,
+  createPersistentHostJoinRequest,
   createDraftRequestSchema,
   createManagerThreadRequestSchema,
   createProjectSourceRequestSchema,
@@ -358,6 +360,45 @@ describe("server-contract canonical schemas", () => {
     });
 
     expect(createHostJoinRequestSchema.parse({})).toEqual({});
+
+    expect(
+      createHostJoinRequestSchema.parse({
+        hostId: "host_local",
+        hostType: "persistent",
+        joinMode: "local",
+      }),
+    ).toMatchObject({
+      hostId: "host_local",
+      hostType: "persistent",
+      joinMode: "local",
+    });
+
+    expect(() =>
+      createHostJoinRequestSchema.parse({
+        joinMode: "local",
+      }),
+    ).toThrow();
+
+    expect(
+      createPersistentHostJoinRequest({ hostId: "host_persistent" }),
+    ).toEqual({
+      hostId: "host_persistent",
+      hostType: "persistent",
+    });
+    expect(createPersistentHostJoinRequest({ hostId: null })).toEqual({
+      hostType: "persistent",
+    });
+    expect(
+      createLocalPersistentHostJoinRequest({ hostId: "host_local" }),
+    ).toEqual({
+      hostId: "host_local",
+      hostType: "persistent",
+      joinMode: "local",
+    });
+    expect(createLocalPersistentHostJoinRequest({ hostId: null })).toEqual({
+      hostType: "persistent",
+      joinMode: "local",
+    });
 
     expect(
       createHostJoinRequestSchema.parse({

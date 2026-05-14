@@ -99,6 +99,7 @@ async function main(): Promise<void> {
     inferenceModel: "gpt-5",
     isDevelopment: false,
     openAiApiKey: "",
+    serverPort,
     appUrl: "https://placeholder.example.test",
     externalUrl: "https://placeholder.example.test",
     sandboxActivityExtensionDebounceMs: 30_000,

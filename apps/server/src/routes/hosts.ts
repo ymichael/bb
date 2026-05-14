@@ -10,16 +10,19 @@ import {
   createHostJoinRequestSchema,
   updateHostRequestSchema,
   typedRoutes,
+  type CreateHostJoinRequest,
   type PublicApiSchema,
 } from "@bb/server-contract";
 import type { Hono } from "hono";
 import type { AppDeps } from "../types.js";
 import { ApiError } from "../errors.js";
 import { assertMatchingExistingHostType } from "../services/hosts/host-type-guard.js";
+import { resolveHostJoinServerUrl } from "../services/hosts/host-join-server-url.js";
 import {
   listPublicHostsWithStatus,
   requireNonDestroyedHostWithStatus,
 } from "../services/lib/entity-lookup.js";
+import { getTrustedRemoteAddress } from "../request-context.js";
 
 function resolvePendingHostName(hostId: string): string {
   return `pending-${hostId.slice(-8)}`;
@@ -28,6 +31,10 @@ function resolvePendingHostName(hostId: string): string {
 interface CancelPendingHostJoinArgs {
   deps: AppDeps;
   hostId: string;
+}
+
+function isLocalHostJoinRequest(payload: CreateHostJoinRequest): boolean {
+  return "joinMode" in payload && payload.joinMode === "local";
 }
 
 async function cancelPendingHostJoin({
@@ -60,14 +67,13 @@ export function registerHostRoutes(app: Hono, deps: AppDeps): void {
   get("/hosts", (context) => context.json(listPublicHostsWithStatus(deps.db)));
 
   post("/hosts/join", createHostJoinRequestSchema, async (context, payload) => {
-    if (deps.config.appUrl === undefined) {
-      throw new ApiError(
-        422,
-        "app_url_required",
-        "BB_APP_URL is not configured",
-      );
-    }
-
+    const isLocalJoin = isLocalHostJoinRequest(payload);
+    const serverUrl = resolveHostJoinServerUrl({
+      appUrl: deps.config.appUrl,
+      isLocalJoin,
+      remoteAddress: getTrustedRemoteAddress(context),
+      serverPort: deps.config.serverPort,
+    });
     const hostId = payload.hostId ?? createHostId();
     const hostType = payload.hostType ?? "persistent";
     const existing = getHost(deps.db, hostId);
@@ -97,7 +103,7 @@ export function registerHostRoutes(app: Hono, deps: AppDeps): void {
       hostId,
       hostType,
       joinCode: joinMaterial.key,
-      serverUrl: deps.config.appUrl,
+      serverUrl,
     });
 
     return context.json(

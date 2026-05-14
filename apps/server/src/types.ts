@@ -23,6 +23,7 @@ export interface ServerRuntimeConfig {
   inferenceModel: string;
   isDevelopment: boolean;
   openAiApiKey: string;
+  serverPort: number;
   appUrl?: string;
   externalUrl?: string;
   sandboxActivityExtensionDebounceMs: number;

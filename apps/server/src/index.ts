@@ -54,6 +54,7 @@ async function main(): Promise<void> {
     inferenceModel: serverConfig.BB_INFERENCE_MODEL,
     isDevelopment: !isProduction,
     openAiApiKey: serverConfig.OPENAI_API_KEY,
+    serverPort: serverConfig.BB_SERVER_PORT,
     sandboxActivityExtensionDebounceMs:
       serverConfig.BB_SANDBOX_ACTIVITY_EXTENSION_DEBOUNCE_MS,
     sandboxIdleThresholdMs: serverConfig.BB_SANDBOX_IDLE_THRESHOLD_MS,
