@@ -1,27 +1,21 @@
 import { useState } from "react";
 import type { AvailableModel, Host, ProjectSource } from "@bb/domain";
 import type { ProjectResponse, SystemProviderInfo } from "@bb/server-contract";
-import { HireManagerDialogContent } from "./HireManagerDialog";
+import { NewManagerForm } from "./NewManagerView";
 import {
   HOST_IDS,
   HOST_NAMES,
   PROJECT_IDS,
   makeProject,
-} from "../../../.ladle/story-fixtures";
-import { StoryCard, StoryRow } from "../../../.ladle/story-card";
-import { DialogStage } from "../../../.ladle/story-dialog-stage";
+} from "../../.ladle/story-fixtures";
+import { StoryCard, StoryRow } from "../../.ladle/story-card";
 
 export default {
-  title: "dialogs/Hire Manager",
+  title: "views/New Manager",
 };
 
 const noop = () => {};
 const asyncNoop = async () => {};
-
-// Matches the dialog's custom DialogContent className: tight border, no padding,
-// 34rem width. The form owns its own inset.
-const stageClassName =
-  "max-w-[34rem] gap-0 overflow-hidden border-border/80 p-0 shadow-xl";
 
 const codexProvider: SystemProviderInfo = {
   id: "codex",
@@ -113,7 +107,7 @@ const projectSources: readonly ProjectSource[] = [
 
 const isLocalHost = (id: string | null | undefined) => id === HOST_IDS.local;
 
-function ControlledHireManagerDialogContent(props: {
+function ControlledNewManagerForm(props: {
   providers: SystemProviderInfo[];
   providersAreLoaded: boolean;
   models: readonly AvailableModel[];
@@ -125,8 +119,8 @@ function ControlledHireManagerDialogContent(props: {
     makeProject({ sources: props.projectSources }),
   ];
   return (
-    <HireManagerDialogContent
-      initialProjectId={PROJECT_IDS.bb}
+    <NewManagerForm
+      projectId={PROJECT_IDS.bb}
       projects={projects}
       projectsAreLoaded
       providers={props.providers}
@@ -136,7 +130,9 @@ function ControlledHireManagerDialogContent(props: {
       models={props.models}
       selectedProviderId={selectedProviderId}
       onSelectedProviderIdChange={setSelectedProviderId}
+      onProjectChange={noop}
       onHire={asyncNoop}
+      isHirePending={false}
     />
   );
 }
@@ -148,85 +144,85 @@ export function Overview() {
         label="default"
         hint="Codex provider preselected, models + reasoning available, local host pre-eligible"
       >
-        <DialogStage className={stageClassName}>
-          <ControlledHireManagerDialogContent
+        <div className="max-w-2xl">
+          <ControlledNewManagerForm
             providers={[codexProvider]}
             providersAreLoaded
             models={codexModels}
             hosts={[localHost]}
             projectSources={projectSources}
           />
-        </DialogStage>
+        </div>
       </StoryRow>
       <StoryRow
         label="multiple providers"
         hint="Provider picker has a chooser; Codex selected by default"
       >
-        <DialogStage className={stageClassName}>
-          <ControlledHireManagerDialogContent
+        <div className="max-w-2xl">
+          <ControlledNewManagerForm
             providers={[codexProvider, claudeProvider]}
             providersAreLoaded
             models={codexModels}
             hosts={[localHost, remoteHost]}
             projectSources={projectSources}
           />
-        </DialogStage>
+        </div>
       </StoryRow>
       <StoryRow
         label="providers loading"
         hint='providersAreLoaded=false — model slot shows "Loading providers…"'
       >
-        <DialogStage className={stageClassName}>
-          <ControlledHireManagerDialogContent
+        <div className="max-w-2xl">
+          <ControlledNewManagerForm
             providers={[]}
             providersAreLoaded={false}
             models={[]}
             hosts={[localHost]}
             projectSources={projectSources}
           />
-        </DialogStage>
+        </div>
       </StoryRow>
       <StoryRow
         label="no providers"
         hint='providers resolved empty — model slot shows "No providers available"'
       >
-        <DialogStage className={stageClassName}>
-          <ControlledHireManagerDialogContent
+        <div className="max-w-2xl">
+          <ControlledNewManagerForm
             providers={[]}
             providersAreLoaded
             models={[]}
             hosts={[localHost]}
             projectSources={projectSources}
           />
-        </DialogStage>
+        </div>
       </StoryRow>
       <StoryRow
         label="models loading"
         hint='provider selected but no models yet — slot shows "Loading models…"'
       >
-        <DialogStage className={stageClassName}>
-          <ControlledHireManagerDialogContent
+        <div className="max-w-2xl">
+          <ControlledNewManagerForm
             providers={[codexProvider]}
             providersAreLoaded
             models={[]}
             hosts={[localHost]}
             projectSources={projectSources}
           />
-        </DialogStage>
+        </div>
       </StoryRow>
       <StoryRow
         label="no eligible host"
         hint="project has no local_path source for any connected host — host picker shows empty state"
       >
-        <DialogStage className={stageClassName}>
-          <ControlledHireManagerDialogContent
+        <div className="max-w-2xl">
+          <ControlledNewManagerForm
             providers={[codexProvider]}
             providersAreLoaded
             models={codexModels}
             hosts={[localHost]}
             projectSources={[]}
           />
-        </DialogStage>
+        </div>
       </StoryRow>
     </StoryCard>
   );

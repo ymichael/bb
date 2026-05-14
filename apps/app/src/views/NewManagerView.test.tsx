@@ -9,6 +9,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import type { AvailableModel, Host, Thread } from "@bb/domain";
 import type {
   CreateManagerThreadRequest,
@@ -29,7 +30,7 @@ import {
   type FetchRoute,
 } from "@/test/http-test-utils";
 import { createTestSystemProvider } from "@/test/system-provider-test-utils";
-import { HireManagerDialog } from "./HireManagerDialog";
+import { NewManagerView } from "./NewManagerView";
 
 vi.mock("partysocket/ws", async () => {
   const { FakeReconnectingWebSocket } =
@@ -240,7 +241,7 @@ function resolveSystemProviders(
     : systemProviders;
 }
 
-function installHireManagerRoutes(args: InstallHireManagerRoutesArgs = {}) {
+function installNewManagerRoutes(args: InstallHireManagerRoutesArgs = {}) {
   const managerThread = args.managerThread ?? makeThread();
   const managerRequests: CreateManagerThreadRequest[] = [];
   const managerRequestProjectIds: string[] = [];
@@ -324,19 +325,33 @@ function installHireManagerRoutes(args: InstallHireManagerRoutesArgs = {}) {
   };
 }
 
-async function renderOpenHireManagerDialog(args: {
-  onClose?: () => void;
-  onHired?: (thread: Thread) => void;
+interface RenderNewManagerRouteArgs {
+  initialEntry?: string;
   wrapper: ({ children }: { children: ReactNode }) => JSX.Element;
-}) {
+}
+
+function ThreadRouteProbe() {
+  const location = useLocation();
+  return <p>Thread route: {location.pathname}</p>;
+}
+
+async function renderNewManagerRoute(args: RenderNewManagerRouteArgs) {
   await act(async () => {
     render(
-      <HireManagerDialog
-        projectId="proj-1"
-        open
-        onClose={args.onClose ?? (() => {})}
-        onHired={args.onHired ?? (() => {})}
-      />,
+      <MemoryRouter
+        initialEntries={[args.initialEntry ?? "/projects/proj-1/managers/new"]}
+      >
+        <Routes>
+          <Route
+            path="/projects/:projectId/managers/new"
+            element={<NewManagerView />}
+          />
+          <Route
+            path="/projects/:projectId/threads/:threadId"
+            element={<ThreadRouteProbe />}
+          />
+        </Routes>
+      </MemoryRouter>,
       { wrapper: args.wrapper },
     );
   });
@@ -353,7 +368,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("HireManagerDialog", () => {
+describe("NewManagerView", () => {
   it("omits the server default option and submits the selected provider and model", async () => {
     const piModels = [
       makeModel("anthropic/claude-opus-4-7", {
@@ -362,18 +377,14 @@ describe("HireManagerDialog", () => {
       }),
     ];
     const { managerRequests, managerThread, requestedModelProviders } =
-      installHireManagerRoutes({
+      installNewManagerRoutes({
         modelResponsesByProvider: {
           pi: piModels,
         },
       });
     const { queryClient, wrapper } = createSuspenseWrapper();
-    const onHired = vi.fn();
 
-    await renderOpenHireManagerDialog({
-      onHired,
-      wrapper,
-    });
+    await renderNewManagerRoute({ wrapper });
 
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "Host" }).title).toContain(
@@ -401,16 +412,18 @@ describe("HireManagerDialog", () => {
         },
       ]);
     });
-    await waitFor(() => {
-      expect(onHired).toHaveBeenCalledWith(managerThread);
-    });
+    expect(
+      await screen.findByText(
+        `Thread route: /projects/${managerThread.projectId}/threads/${managerThread.id}`,
+      ),
+    ).toBeTruthy();
     expect(queryClient.getQueryData(threadQueryKey(managerThread.id))).toEqual(
       managerThread,
     );
     expect(requestedModelProviders).toEqual(["pi"]);
   });
 
-  it("submits the manager hire for the project selected in the dialog", async () => {
+  it("submits the manager hire for the project selected on the page", async () => {
     const piModels = [
       makeModel("anthropic/claude-opus-4-7", {
         displayName: "Claude Opus 4.7",
@@ -419,7 +432,7 @@ describe("HireManagerDialog", () => {
     ];
     const managerThread = { ...makeThread(), projectId: "proj-2" };
     const { managerRequests, managerRequestProjectIds } =
-      installHireManagerRoutes({
+      installNewManagerRoutes({
         managerThread,
         modelResponsesByProvider: {
           pi: piModels,
@@ -428,9 +441,7 @@ describe("HireManagerDialog", () => {
       });
     const { wrapper } = createSuspenseWrapper();
 
-    await renderOpenHireManagerDialog({
-      wrapper,
-    });
+    await renderNewManagerRoute({ wrapper });
 
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "Project" }).title).toContain(
@@ -475,6 +486,11 @@ describe("HireManagerDialog", () => {
         },
       ]);
     });
+    expect(
+      await screen.findByText(
+        `Thread route: /projects/${managerThread.projectId}/threads/${managerThread.id}`,
+      ),
+    ).toBeTruthy();
   });
 
   it("keeps the visible fallback provider selected when a stale provider returns", async () => {
@@ -491,7 +507,7 @@ describe("HireManagerDialog", () => {
         isDefault: true,
       }),
     ];
-    installHireManagerRoutes({
+    installNewManagerRoutes({
       modelResponsesByProvider: {
         pi: piModels,
         codex: codexModels,
@@ -500,9 +516,7 @@ describe("HireManagerDialog", () => {
     });
     const { queryClient, wrapper } = createSuspenseWrapper();
 
-    await renderOpenHireManagerDialog({
-      wrapper,
-    });
+    await renderNewManagerRoute({ wrapper });
 
     await waitFor(() => {
       expectProviderModelTitle(["Pi"]);
@@ -560,7 +574,7 @@ describe("HireManagerDialog", () => {
       }),
     ];
     const { managerRequests, requestedModelProviders } =
-      installHireManagerRoutes({
+      installNewManagerRoutes({
         modelResponsesByProvider: {
           pi: piModels,
           codex: codexModels,
@@ -568,9 +582,7 @@ describe("HireManagerDialog", () => {
       });
     const { queryClient, wrapper } = createSuspenseWrapper();
 
-    await renderOpenHireManagerDialog({
-      wrapper,
-    });
+    await renderNewManagerRoute({ wrapper });
 
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "Host" }).title).toContain(
@@ -632,14 +644,12 @@ describe("HireManagerDialog", () => {
         }),
       ],
     };
-    installHireManagerRoutes({
+    installNewManagerRoutes({
       modelResponsesByProvider,
     });
     const { queryClient, wrapper } = createSuspenseWrapper();
 
-    await renderOpenHireManagerDialog({
-      wrapper,
-    });
+    await renderNewManagerRoute({ wrapper });
 
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "Host" }).title).toContain(

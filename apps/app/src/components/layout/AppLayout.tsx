@@ -3,11 +3,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useIsMutating } from "@tanstack/react-query";
 import { useAtom } from "jotai";
 import { atomWithStorage } from "jotai/utils";
-import { Link, useLocation, useNavigate } from "react-router-dom";
-import type { Thread } from "@bb/domain";
+import { Link, useLocation } from "react-router-dom";
 import type { ProjectResponse } from "@bb/server-contract";
 import { Icon } from "@/components/ui/icon.js";
-import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar.js";
+import {
+  SidebarInset,
+  SidebarProvider,
+  SidebarTrigger,
+} from "@/components/ui/sidebar.js";
 import { AppSidebar } from "@/components/sidebar/AppSidebar";
 import { AppPageHeader, HEADER_ICON_BUTTON_CLASS } from "./AppPageHeader";
 import { HIRE_PROJECT_MANAGER_MUTATION_KEY } from "@/hooks/mutations/project-mutations";
@@ -21,10 +24,8 @@ import {
 } from "@/hooks/queries/thread-queries";
 import { useActiveProjectId } from "@/hooks/useActiveProjectId";
 import { useAppRoute } from "@/hooks/useAppRoute";
-import { useDialogState } from "@/hooks/useDialogState";
 import { getThreadDisplayTitle } from "@/lib/thread-title";
 import { cn } from "@/lib/utils";
-import { HireManagerDialog } from "@/components/dialogs/HireManagerDialog";
 import { ProjectPathDialog } from "@/components/dialogs/ProjectPathDialog";
 import { ProjectActionsMenu } from "@/components/project/ProjectActionsMenu";
 import { ProjectActionsProvider } from "@/components/project/ProjectActionsProvider";
@@ -154,7 +155,10 @@ function AppHeader({
             return (
               <Fragment key={`${segment.label}-${index}`}>
                 {index > 0 ? (
-                  <Icon name="ChevronRight" className="size-3.5 shrink-0 text-muted-foreground/70" />
+                  <Icon
+                    name="ChevronRight"
+                    className="size-3.5 shrink-0 text-muted-foreground/70"
+                  />
                 ) : null}
                 {!isLast && segment.to ? (
                   <Link
@@ -240,13 +244,13 @@ interface AppLayoutProps {
 export function AppLayout({ children }: AppLayoutProps) {
   const quickCreateProject = useQuickCreateProjectController();
   const location = useLocation();
-  const navigate = useNavigate();
   const {
     projectId,
     threadId,
     isProjectMainView,
     isThreadView,
     isArchivedView,
+    isNewManagerView,
     isSettingsView,
     isRootView,
   } = useAppRoute();
@@ -265,7 +269,6 @@ export function AppLayout({ children }: AppLayoutProps) {
   const activeHireManagerRequests = useIsMutating({
     mutationKey: HIRE_PROJECT_MANAGER_MUTATION_KEY,
   });
-  const hireManagerDialog = useDialogState<string>();
   const [sidebarWidth, setSidebarWidth] = useAtom(sidebarWidthAtom);
   const [isSidebarResizing, setIsSidebarResizing] = useState(false);
   const providerRef = useRef<HTMLDivElement>(null);
@@ -316,7 +319,7 @@ export function AppLayout({ children }: AppLayoutProps) {
             { label: "Archived" },
           ],
         }
-      : isSettingsView && projectId
+      : isNewManagerView && projectId
         ? {
             title: "",
             subtitle: undefined,
@@ -325,15 +328,27 @@ export function AppLayout({ children }: AppLayoutProps) {
                 label: projectLabel ?? projectId,
                 to: `/projects/${projectId}`,
               },
-              { label: "Settings" },
+              { label: "New Manager" },
             ],
           }
-        : projectId
+        : isSettingsView && projectId
           ? {
-              title: projectLabel ?? projectId,
+              title: "",
               subtitle: undefined,
+              breadcrumbs: [
+                {
+                  label: projectLabel ?? projectId,
+                  to: `/projects/${projectId}`,
+                },
+                { label: "Settings" },
+              ],
             }
-          : (routeTitles[location.pathname] ?? { title: "" });
+          : projectId
+            ? {
+                title: projectLabel ?? projectId,
+                subtitle: undefined,
+              }
+            : (routeTitles[location.pathname] ?? { title: "" });
 
   const documentTitle = (() => {
     if (isThreadView) {
@@ -341,6 +356,9 @@ export function AppLayout({ children }: AppLayoutProps) {
     }
     if (isArchivedView && projectId) {
       return `${projectLabel ?? projectId} · Archived`;
+    }
+    if (isNewManagerView && projectId) {
+      return `${projectLabel ?? projectId} · New Manager`;
     }
     if (isSettingsView && projectId) {
       return `${projectLabel ?? projectId} · Settings`;
@@ -424,8 +442,7 @@ export function AppLayout({ children }: AppLayoutProps) {
     if (typeof document === "undefined") return;
     document.title = documentTitle;
   }, [documentTitle]);
-  const isManagerActionPending =
-    activeHireManagerRequests > 0 || hireManagerDialog.isOpen;
+  const isManagerActionPending = activeHireManagerRequests > 0;
 
   return (
     <ProjectActionsProvider>
@@ -443,10 +460,6 @@ export function AppLayout({ children }: AppLayoutProps) {
             isResizing={isSidebarResizing}
             selectedProjectId={activeProjectId}
             isManagerActionPending={isManagerActionPending}
-            onNewManager={(targetProjectId) => {
-              if (isManagerActionPending) return;
-              hireManagerDialog.onOpen(targetProjectId);
-            }}
           />
           <SidebarInset>
             <div className="relative flex h-[100dvh] min-w-0 w-full flex-col">
@@ -476,16 +489,6 @@ export function AppLayout({ children }: AppLayoutProps) {
           onOpenChange={quickCreateProject.projectPathDialog.onOpenChange}
           onSubmit={quickCreateProject.submitProjectPath}
         />
-        {hireManagerDialog.target ? (
-          <HireManagerDialog
-            projectId={hireManagerDialog.target}
-            open
-            onClose={hireManagerDialog.onClose}
-            onHired={(thread: Thread) => {
-              navigate(`/projects/${thread.projectId}/threads/${thread.id}`);
-            }}
-          />
-        ) : null}
       </ThreadActionsProvider>
     </ProjectActionsProvider>
   );

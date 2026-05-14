@@ -11,6 +11,8 @@ export interface AppRouteState {
   isThreadView: boolean;
   /** On the project's archived threads list. */
   isArchivedView: boolean;
+  /** On the project's new manager form. */
+  isNewManagerView: boolean;
   /** On the project settings page. */
   isSettingsView: boolean;
   /** On the app root ("/"). */
@@ -29,13 +31,19 @@ export function useAppRoute(): AppRouteState {
     "/projects/:projectId/threads/:threadId/*",
   );
   const projectArchivedMatch = useMatch("/projects/:projectId/archived");
+  const projectNewManagerMatch = useMatch("/projects/:projectId/managers/new");
   const projectSettingsMatch = useMatch("/projects/:projectId/settings");
 
   const isThreadView = Boolean(projectThreadMatch);
   const isArchivedView = Boolean(projectArchivedMatch);
+  const isNewManagerView = Boolean(projectNewManagerMatch);
   const isSettingsView = Boolean(projectSettingsMatch);
   const isProjectMainView = Boolean(
-    projectMatch && !isThreadView && !isArchivedView && !isSettingsView,
+    projectMatch &&
+    !isThreadView &&
+    !isArchivedView &&
+    !isNewManagerView &&
+    !isSettingsView,
   );
 
   return {
@@ -44,6 +52,7 @@ export function useAppRoute(): AppRouteState {
     isProjectMainView,
     isThreadView,
     isArchivedView,
+    isNewManagerView,
     isSettingsView,
     isRootView: location.pathname === "/",
   };
