@@ -1,7 +1,6 @@
 import type { Hono } from "hono";
 import { hc } from "hono/client";
 import type {
-  AvailableModel,
   Environment,
   Host,
   PendingInteraction,
@@ -64,6 +63,7 @@ import type {
   SendMessageRequest,
   ResolvePendingInteractionRequest,
   ThreadAssignedChildSummaryResponse,
+  ThreadComposerBootstrapResponse,
   ThreadDraftListResponse,
   GithubRepoInfo,
   GithubReposQuery,
@@ -71,8 +71,9 @@ import type {
   SandboxEnvVarName,
   SandboxEnvVarsResponse,
   SystemConfigResponse,
+  SystemExecutionOptionsQuery,
+  SystemExecutionOptionsResponse,
   SystemSandboxBackendInfo,
-  SystemModelsQuery,
   SystemProviderInfo,
   SystemProvidersQuery,
   SystemVoiceTranscriptionForm,
@@ -262,6 +263,10 @@ export type PublicApiSchema = {
       201
     >;
   };
+  "/hosts/:id/join": {
+    /** Cancels pending join material and deletes the host row only when the host has never opened a session. */
+    $delete: Endpoint<PathId, { ok: true }>;
+  };
   "/hosts/:id": {
     $get: Endpoint<PathId, Host>;
     $patch: Endpoint<PathId & { json: UpdateHostRequest }, Host>;
@@ -371,6 +376,10 @@ export type PublicApiSchema = {
      * not immediate sends from a live sender thread.
      */
     $post: Endpoint<PathId & { json: SendMessageRequest }, { ok: true }>;
+  };
+  "/threads/:id/composer-bootstrap": {
+    /** Load initial composer state and prime the canonical composer query caches. */
+    $get: Endpoint<PathId, ThreadComposerBootstrapResponse>;
   };
   "/threads/:id/drafts": {
     $get: Endpoint<PathId, ThreadDraftListResponse>;
@@ -547,9 +556,12 @@ export type PublicApiSchema = {
     /** List GitHub repositories accessible via the configured PAT. */
     $get: Endpoint<{ query?: GithubReposQuery }, GithubRepoInfo[]>;
   };
-  "/system/models": {
-    /** List available models. Proxies to `provider.list_models`; default lookup uses persistent hosts only. */
-    $get: Endpoint<{ query?: SystemModelsQuery }, AvailableModel[]>;
+  "/system/execution-options": {
+    /** List provider metadata and models for execution controls in one host lookup flow. */
+    $get: Endpoint<
+      { query?: SystemExecutionOptionsQuery },
+      SystemExecutionOptionsResponse
+    >;
   };
   "/system/providers": {
     /** List available providers. Proxies to `provider.list`; default lookup uses persistent hosts only. */

@@ -22,7 +22,7 @@ export const SIDEBAR_ROW_INTERACTIVE_STATE_CLASS =
  * wide it never overlaps row text, which starts at pl-8 / pl-14.
  */
 export const SIDEBAR_PROJECT_GROUP_LINE_CLASS =
-  "before:pointer-events-none before:absolute before:bottom-1 before:left-4 before:top-0 before:z-50 before:w-px before:bg-sidebar-foreground/25 before:content-[''] max-md:pointer-coarse:before:left-5";
+  "before:pointer-events-none before:absolute before:bottom-0 before:left-4 before:top-0 before:z-50 before:w-px before:bg-sidebar-foreground/15 before:content-[''] max-md:pointer-coarse:before:left-5";
 
 /**
  * Hairline that runs through a manager's managed-child list, sitting under
@@ -30,4 +30,4 @@ export const SIDEBAR_PROJECT_GROUP_LINE_CLASS =
  * line so it stays visible behind active/hover row backgrounds.
  */
 export const SIDEBAR_MANAGER_GROUP_LINE_CLASS =
-  "before:pointer-events-none before:absolute before:bottom-1 before:left-10 before:top-0 before:z-50 before:w-px before:bg-sidebar-foreground/25 before:content-['']";
+  "before:pointer-events-none before:absolute before:bottom-0 before:left-10 before:top-0 before:z-50 before:w-px before:bg-sidebar-foreground/15 before:content-['']";

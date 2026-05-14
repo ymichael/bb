@@ -21,6 +21,7 @@ import { cn } from "@/lib/utils";
 import { HostStatusBadge } from "@/components/HostStatusIndicator";
 import { Button } from "@/components/ui/button.js";
 import { COARSE_POINTER_ICON_SIZE_CLASS } from "@/components/ui/coarse-pointer-sizing.js";
+import { CopyButton } from "@/components/ui/copy-button.js";
 import { DetailCard, DetailRow } from "@/components/ui/detail-card.js";
 import {
   DropdownMenu,
@@ -244,6 +245,40 @@ export function EnvironmentRow({
   return (
     <DetailRow label="Environment" valueClassName="min-w-0 truncate">
       {display.modeLabel}
+    </DetailRow>
+  );
+}
+
+export interface WorktreePathRowProps {
+  thread: Thread;
+  environment: Environment | null;
+}
+
+function isWorktreeEnvironment(environment: Environment): boolean {
+  return (
+    environment.isWorktree ||
+    environment.workspaceProvisionType === "managed-worktree"
+  );
+}
+
+export function WorktreePathRow({ thread, environment }: WorktreePathRowProps) {
+  if (thread.type === "manager") return null;
+  if (!environment?.path) return null;
+  if (!isWorktreeEnvironment(environment)) return null;
+
+  return (
+    <DetailRow label="Worktree path" valueClassName="min-w-0">
+      <div className="flex min-w-0 items-center gap-1.5">
+        <span className="min-w-0 truncate" title={environment.path}>
+          {environment.path}
+        </span>
+        <CopyButton
+          text={environment.path}
+          label="Copy worktree path"
+          className="size-5 shrink-0"
+          iconClassName="size-3.5"
+        />
+      </div>
     </DetailRow>
   );
 }
@@ -682,6 +717,7 @@ export function ThreadMetadataContent(props: ThreadMetadataContentProps) {
         environmentHost={environmentHost}
         environmentIsLocal={environmentIsLocal}
       />
+      <WorktreePathRow thread={thread} environment={environment} />
       <BranchRow thread={thread} workspaceStatus={workspaceStatus} />
       <MergeBaseRow
         thread={thread}

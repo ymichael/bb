@@ -1,4 +1,4 @@
-import { type ComponentProps, type ReactNode, useEffect, useRef } from "react";
+import { type ComponentProps, type ReactNode } from "react";
 import { Panel, PanelGroup } from "react-resizable-panels";
 import { ResponsiveDrawerShell } from "@/components/ui/responsive-overlay.js";
 import { useIsCompactViewport } from "@/components/ui/hooks/use-compact-viewport.js";
@@ -48,20 +48,6 @@ export function ThreadDetailSecondaryContent({
   const persistedSecondaryWidthPercent = useAtomValue(
     secondaryPanelWidthPercentAtom,
   );
-  const didResetOnDrawerRef = useRef(false);
-  const { onClose } = secondaryPanel;
-
-  useEffect(() => {
-    if (!renderAsDrawer) {
-      didResetOnDrawerRef.current = false;
-      return;
-    }
-    if (didResetOnDrawerRef.current) return;
-    didResetOnDrawerRef.current = true;
-    if (isSecondaryPanelOpen) {
-      onClose();
-    }
-  }, [renderAsDrawer, isSecondaryPanelOpen, onClose]);
 
   const metadataContent = hasAnyThreadMetadata(metadata) ? (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">

@@ -87,7 +87,7 @@ export function upsertHost(
             ? input.externalId
             : existing.externalId,
         lastActivityAt: existing.lastActivityAt,
-        lastSeenAt: now,
+        lastSeenAt: existing.lastSeenAt,
         suspendedAt: existing.suspendedAt,
         updatedAt: now,
       })
@@ -107,7 +107,7 @@ export function upsertHost(
         destroyedAt: input.destroyedAt ?? null,
         externalId: input.externalId ?? null,
         lastActivityAt: null,
-        lastSeenAt: now,
+        lastSeenAt: null,
         suspendedAt: null,
         createdAt: now,
         updatedAt: now,
@@ -117,6 +117,17 @@ export function upsertHost(
     notifier.notifyHost(id, ["host-connected"]);
     return row;
   }
+}
+
+export function markHostSeen(
+  db: HostWriteConnection,
+  hostId: string,
+  at: number = Date.now(),
+): void {
+  db.update(hosts)
+    .set({ lastSeenAt: at, updatedAt: at })
+    .where(eq(hosts.id, hostId))
+    .run();
 }
 
 export function getHost(db: HostWriteConnection, id: string) {
@@ -228,7 +239,6 @@ export function updateHost(
       ...(input.externalId !== undefined
         ? { externalId: input.externalId }
         : {}),
-      lastSeenAt: now,
       updatedAt: now,
     })
     .where(eq(hosts.id, hostId))

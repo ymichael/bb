@@ -18,7 +18,10 @@ import {
   ProjectSourceDeleteDialog,
   type ProjectSourceDeleteDialogTarget,
 } from "@/components/dialogs/ProjectSourceDeleteDialog";
-import { SettingsRowList, SettingsSection } from "@/components/ui/settings-section.js";
+import {
+  SettingsRowList,
+  SettingsSection,
+} from "@/components/ui/settings-section.js";
 import { ProjectSourceRow } from "@/views/project-settings/ProjectSourceRow";
 import {
   useAddLocalProjectSource,
@@ -82,7 +85,7 @@ export function ProjectSettingsView() {
       return api.removeProjectSource(projectId, sourceId);
     },
     onSuccess: () => {
-      invalidateProjectSourceQueries({ queryClient });
+      invalidateProjectSourceQueries({ projectId, queryClient });
       setDeleteTarget(null);
     },
   });
@@ -99,7 +102,7 @@ export function ProjectSettingsView() {
       });
     },
     onSuccess: () => {
-      invalidateProjectSourceQueries({ queryClient });
+      invalidateProjectSourceQueries({ projectId, queryClient });
       setRepoPickerOpen(false);
       setRepoSearch("");
     },

@@ -1,6 +1,9 @@
 import { Command } from "commander";
 import type { AvailableModel } from "@bb/domain";
-import type { SystemProviderInfo } from "@bb/server-contract";
+import type {
+  SystemExecutionOptionsResponse,
+  SystemProviderInfo,
+} from "@bb/server-contract";
 import { action } from "../action.js";
 import { createClient, unwrap } from "../client.js";
 import { renderBorderlessTable } from "../table.js";
@@ -12,6 +15,12 @@ interface ProviderListCommandOptions {
 
 interface ProviderModelsCommandOptions {
   json?: boolean;
+  selectedModel?: string;
+}
+
+interface IncludeSelectedOnlyModelArgs {
+  models: AvailableModel[];
+  selectedOnlyModels: AvailableModel[];
   selectedModel?: string;
 }
 
@@ -57,16 +66,18 @@ export function registerProviderCommands(
           opts: ProviderModelsCommandOptions,
         ) => {
           const client = createClient(getUrl());
-          const models = await unwrap<AvailableModel[]>(
-            client.api.v1.system.models.$get({
+          const executionOptions = await unwrap<SystemExecutionOptionsResponse>(
+            client.api.v1.system["execution-options"].$get({
               query: {
                 ...(providerId ? { providerId } : {}),
-                ...(opts.selectedModel
-                  ? { selectedModel: opts.selectedModel }
-                  : {}),
               },
             }),
           );
+          const models = includeSelectedOnlyModel({
+            models: executionOptions.models,
+            selectedOnlyModels: executionOptions.selectedOnlyModels,
+            selectedModel: opts.selectedModel,
+          });
           if (outputJson(opts, models)) return;
           if (models.length === 0) {
             console.log("No models available");
@@ -76,6 +87,21 @@ export function registerProviderCommands(
         },
       ),
     );
+}
+
+function includeSelectedOnlyModel(
+  args: IncludeSelectedOnlyModelArgs,
+): AvailableModel[] {
+  if (!args.selectedModel) {
+    return args.models;
+  }
+  if (args.models.some((model) => model.model === args.selectedModel)) {
+    return args.models;
+  }
+  const selectedOnlyModel = args.selectedOnlyModels.find(
+    (model) => model.model === args.selectedModel,
+  );
+  return selectedOnlyModel ? [selectedOnlyModel, ...args.models] : args.models;
 }
 
 function printProviderTable(providers: SystemProviderInfo[]): void {

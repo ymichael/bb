@@ -19,6 +19,7 @@ export const THREADS_QUERY_KEY = "threads";
 export const THREADS_DISABLED_QUERY_KEY = "threadsDisabled";
 export const THREAD_QUERY_KEY = "thread";
 export const THREAD_DETAIL_BOOTSTRAP_QUERY_KEY = "threadDetailBootstrap";
+export const THREAD_COMPOSER_BOOTSTRAP_QUERY_KEY = "threadComposerBootstrap";
 export const THREAD_DEFAULT_EXECUTION_OPTIONS_QUERY_KEY =
   "threadDefaultExecutionOptions";
 export const THREAD_DRAFTS_QUERY_KEY = "threadDrafts";
@@ -35,14 +36,13 @@ export const ENVIRONMENT_GIT_DIFF_QUERY_KEY = "environmentGitDiff";
 export const ENVIRONMENT_DIFF_FILE_QUERY_KEY = "environmentDiffFile";
 export const ENVIRONMENT_FILE_PREVIEW_QUERY_KEY = "environmentFilePreview";
 export const THREAD_TIMELINE_QUERY_KEY = "threadTimeline";
-export const AVAILABLE_MODELS_QUERY_KEY = "availableModels";
 export const SYSTEM_PROVIDERS_QUERY_KEY = "systemProviders";
+export const SYSTEM_EXECUTION_OPTIONS_QUERY_KEY = "systemExecutionOptions";
 export const SANDBOX_BACKENDS_QUERY_KEY = "sandboxBackends";
 export const CLOUD_AUTH_SETTINGS_QUERY_KEY = "cloudAuthSettings";
 export const CLOUD_AUTH_ATTEMPT_QUERY_KEY = "cloudAuthAttempt";
 export const SANDBOX_ENV_VARS_QUERY_KEY = "sandboxEnvVars";
 export const GITHUB_REPOS_QUERY_KEY = "githubRepos";
-export const STATUS_QUERY_KEY = "status";
 export const LOCAL_PATH_EXISTENCE_QUERY_KEY = "localPathExistence";
 export const REPLAY_CAPTURES_QUERY_KEY = "internalReplayCaptures";
 export const CONVERSATION_MANAGER_TIMELINE_VIEW =
@@ -73,6 +73,16 @@ export type AllHostQueryKeyPrefix = readonly [typeof HOST_QUERY_KEY];
 export type ProjectsQueryKey = readonly [typeof PROJECTS_QUERY_KEY];
 export type AllProjectFilesQueryKeyPrefix = readonly [
   typeof PROJECT_FILES_QUERY_KEY,
+];
+export type AllProjectSourceBranchesQueryKeyPrefix = readonly [
+  typeof PROJECT_SOURCE_BRANCHES_QUERY_KEY,
+];
+export type ProjectSourceBranchesQueryKeyPrefix = readonly [
+  typeof PROJECT_SOURCE_BRANCHES_QUERY_KEY,
+  string,
+];
+export type AllProjectGithubBranchesQueryKeyPrefix = readonly [
+  typeof PROJECT_GITHUB_BRANCHES_QUERY_KEY,
 ];
 export type ProjectPromptHistoryQueryKeyPrefix = readonly [
   typeof PROJECT_PROMPT_HISTORY_QUERY_KEY,
@@ -123,6 +133,18 @@ export type ThreadQueryKey = readonly [typeof THREAD_QUERY_KEY, string];
 export type ThreadDetailBootstrapQueryKey = readonly [
   typeof THREAD_DETAIL_BOOTSTRAP_QUERY_KEY,
   string,
+];
+export type ThreadComposerBootstrapQueryKey = readonly [
+  typeof THREAD_COMPOSER_BOOTSTRAP_QUERY_KEY,
+  string | null,
+  string,
+];
+export type ThreadComposerBootstrapQueryKeyPrefix = readonly [
+  typeof THREAD_COMPOSER_BOOTSTRAP_QUERY_KEY,
+];
+export type ThreadComposerBootstrapEnvironmentQueryKeyPrefix = readonly [
+  typeof THREAD_COMPOSER_BOOTSTRAP_QUERY_KEY,
+  string | null,
 ];
 export type ThreadDefaultExecutionOptionsQueryKeyPrefix = readonly [
   typeof THREAD_DEFAULT_EXECUTION_OPTIONS_QUERY_KEY,
@@ -257,16 +279,20 @@ export type EnvironmentFilePreviewQueryKeyPrefix = readonly [
   typeof ENVIRONMENT_FILE_PREVIEW_QUERY_KEY,
   string,
 ];
-export type AvailableModelsQueryKey = readonly [
-  typeof AVAILABLE_MODELS_QUERY_KEY,
-  string | null,
-  string | null,
-];
-export type AllAvailableModelsQueryKeyPrefix = readonly [
-  typeof AVAILABLE_MODELS_QUERY_KEY,
-];
 export type SystemProvidersQueryKey = readonly [
   typeof SYSTEM_PROVIDERS_QUERY_KEY,
+];
+export type SystemExecutionOptionsQueryKey = readonly [
+  typeof SYSTEM_EXECUTION_OPTIONS_QUERY_KEY,
+  string | null,
+  string | null,
+];
+export type AllSystemExecutionOptionsQueryKeyPrefix = readonly [
+  typeof SYSTEM_EXECUTION_OPTIONS_QUERY_KEY,
+];
+export type SystemExecutionOptionsEnvironmentQueryKeyPrefix = readonly [
+  typeof SYSTEM_EXECUTION_OPTIONS_QUERY_KEY,
+  string | null,
 ];
 export type SandboxBackendsQueryKey = readonly [
   typeof SANDBOX_BACKENDS_QUERY_KEY,
@@ -286,7 +312,6 @@ export type GithubReposQueryKey = readonly [
   typeof GITHUB_REPOS_QUERY_KEY,
   string,
 ];
-export type StatusQueryKey = readonly [typeof STATUS_QUERY_KEY];
 export type LocalPathExistenceQueryKey = readonly [
   typeof LOCAL_PATH_EXISTENCE_QUERY_KEY,
   string,
@@ -351,10 +376,24 @@ export function projectSourceBranchesQueryKey(
   return [PROJECT_SOURCE_BRANCHES_QUERY_KEY, projectId, hostId];
 }
 
+export function allProjectSourceBranchesQueryKeyPrefix(): AllProjectSourceBranchesQueryKeyPrefix {
+  return [PROJECT_SOURCE_BRANCHES_QUERY_KEY];
+}
+
+export function projectSourceBranchesQueryKeyPrefix(
+  projectId: string,
+): ProjectSourceBranchesQueryKeyPrefix {
+  return [PROJECT_SOURCE_BRANCHES_QUERY_KEY, projectId];
+}
+
 export function projectGithubBranchesQueryKey(
   projectId: string,
 ): ProjectGithubBranchesQueryKey {
   return [PROJECT_GITHUB_BRANCHES_QUERY_KEY, projectId];
+}
+
+export function allProjectGithubBranchesQueryKeyPrefix(): AllProjectGithubBranchesQueryKeyPrefix {
+  return [PROJECT_GITHUB_BRANCHES_QUERY_KEY];
 }
 
 export function sidebarBootstrapQueryKey(): SidebarBootstrapQueryKey {
@@ -402,6 +441,23 @@ export function threadDetailBootstrapQueryKey(
   threadId: string,
 ): ThreadDetailBootstrapQueryKey {
   return [THREAD_DETAIL_BOOTSTRAP_QUERY_KEY, threadId];
+}
+
+export function threadComposerBootstrapQueryKey(
+  threadId: string,
+  environmentId: string | null,
+): ThreadComposerBootstrapQueryKey {
+  return [THREAD_COMPOSER_BOOTSTRAP_QUERY_KEY, environmentId, threadId];
+}
+
+export function allThreadComposerBootstrapQueryKeyPrefix(): ThreadComposerBootstrapQueryKeyPrefix {
+  return [THREAD_COMPOSER_BOOTSTRAP_QUERY_KEY];
+}
+
+export function threadComposerBootstrapEnvironmentQueryKeyPrefix(
+  environmentId: string | null,
+): ThreadComposerBootstrapEnvironmentQueryKeyPrefix {
+  return [THREAD_COMPOSER_BOOTSTRAP_QUERY_KEY, environmentId];
 }
 
 export function allThreadQueryKeyPrefix(): ThreadQueryKeyPrefix {
@@ -632,19 +688,30 @@ export function environmentFilePreviewQueryKeyPrefix(
   return [ENVIRONMENT_FILE_PREVIEW_QUERY_KEY, environmentId];
 }
 
-export function availableModelsQueryKey(
-  providerId: string | null,
-  selectedModel: string | null,
-): AvailableModelsQueryKey {
-  return [AVAILABLE_MODELS_QUERY_KEY, providerId, selectedModel];
-}
-
-export function allAvailableModelsQueryKeyPrefix(): AllAvailableModelsQueryKeyPrefix {
-  return [AVAILABLE_MODELS_QUERY_KEY];
-}
-
 export function systemProvidersQueryKey(): SystemProvidersQueryKey {
   return [SYSTEM_PROVIDERS_QUERY_KEY];
+}
+
+export interface SystemExecutionOptionsQueryKeyArgs {
+  environmentId: string | null;
+  providerId: string | null;
+}
+
+export function systemExecutionOptionsQueryKey({
+  environmentId,
+  providerId,
+}: SystemExecutionOptionsQueryKeyArgs): SystemExecutionOptionsQueryKey {
+  return [SYSTEM_EXECUTION_OPTIONS_QUERY_KEY, environmentId, providerId];
+}
+
+export function allSystemExecutionOptionsQueryKeyPrefix(): AllSystemExecutionOptionsQueryKeyPrefix {
+  return [SYSTEM_EXECUTION_OPTIONS_QUERY_KEY];
+}
+
+export function systemExecutionOptionsEnvironmentQueryKeyPrefix(
+  environmentId: string | null,
+): SystemExecutionOptionsEnvironmentQueryKeyPrefix {
+  return [SYSTEM_EXECUTION_OPTIONS_QUERY_KEY, environmentId];
 }
 
 export function sandboxBackendsQueryKey(): SandboxBackendsQueryKey {
@@ -667,10 +734,6 @@ export function sandboxEnvVarsQueryKey(): SandboxEnvVarsQueryKey {
 
 export function githubReposQueryKey(q: string): GithubReposQueryKey {
   return [GITHUB_REPOS_QUERY_KEY, q];
-}
-
-export function statusQueryKey(): StatusQueryKey {
-  return [STATUS_QUERY_KEY];
 }
 
 export function localPathExistenceQueryKey(

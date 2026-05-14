@@ -37,6 +37,7 @@ describe("host.list_branches dispatch", () => {
     );
 
     expect(result.current).toBe("develop");
+    expect(result.defaultBranch).toBe("main");
     expect(result.branches[0]).toBe("main");
     expect(result.branches).toHaveLength(3);
     expect(result.branches).toEqual(
@@ -53,7 +54,7 @@ describe("host.list_branches dispatch", () => {
       harness.dispatchOptions(),
     );
 
-    expect(result).toEqual({ branches: [], current: null });
+    expect(result).toEqual({ branches: [], current: null, defaultBranch: null });
   });
 
   it("returns an empty list for missing paths", async () => {
@@ -65,6 +66,6 @@ describe("host.list_branches dispatch", () => {
       harness.dispatchOptions(),
     );
 
-    expect(result).toEqual({ branches: [], current: null });
+    expect(result).toEqual({ branches: [], current: null, defaultBranch: null });
   });
 });

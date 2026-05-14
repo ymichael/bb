@@ -167,6 +167,7 @@ export {
   systemSandboxBackendInfoSchema,
   systemProviderInfoSchema,
   threadAssignedChildSummaryResponseSchema,
+  threadComposerBootstrapResponseSchema,
   threadContextWindowUsageSchema,
   threadDraftListResponseSchema,
   threadEventWaitQuerySchema,
@@ -181,8 +182,9 @@ export {
   timelinePaginationCursorSchema,
   threadTimelineQuerySchema,
   timelineTurnSummaryDetailsQuerySchema,
+  systemExecutionOptionsQuerySchema,
+  systemExecutionOptionsResponseSchema,
   systemVoiceTranscriptionResponseSchema,
-  systemModelsQuerySchema,
   systemProvidersQuerySchema,
   threadPendingInteractionsResponseSchema,
   threadTimelineResponseSchema,
@@ -289,13 +291,15 @@ export type {
   GithubReposQuery,
   ManagerTimelineView,
   SystemConfigResponse,
+  SystemExecutionOptionsQuery,
+  SystemExecutionOptionsResponse,
   SystemSandboxBackendsResponse,
   SystemSandboxBackendInfo,
-  SystemModelsQuery,
   SystemProviderInfo,
   SystemProvidersQuery,
   SystemVoiceTranscriptionForm,
   ThreadAssignedChildSummaryResponse,
+  ThreadComposerBootstrapResponse,
   ThreadContextWindowUsage,
   ThreadDraftListResponse,
   ThreadEventWaitQuery,
@@ -349,6 +353,12 @@ export {
   SYSTEM_CHANGE_KINDS,
   THREAD_CHANGE_KINDS,
 } from "@bb/domain";
+
+export {
+  createLocalPersistentHostJoinRequest,
+  createPersistentHostJoinRequest,
+} from "./host-join-request.js";
+export type { CreatePersistentHostJoinRequestArgs } from "./host-join-request.js";
 export type {
   ChangedMessage,
   ClientMessage,
@@ -361,6 +371,7 @@ export type {
   ServerMessage,
   SubscribeMessage,
   SystemChangeKind,
+  ThreadChangeMetadata,
   ThreadChangeKind,
   UnsubscribeMessage,
 } from "@bb/domain";

@@ -17,7 +17,11 @@ interface ScopedSelectedBranch {
 }
 
 export interface UseScopedBranchSelectionArgs extends BranchSelectionScopeArgs {
-  defaultBranch: string | null;
+  /**
+   * The branch the env will use if the user doesn't pick one. Used as the
+   * seed when starting the "create new branch" flow.
+   */
+  currentBranch: string | null;
 }
 
 export interface UseScopedBranchSelectionResult {
@@ -93,7 +97,7 @@ export function useScopedBranchSelection(
       const scopedPrevious = matchesBranchSelectionScope(previous?.scope, scope)
         ? previous?.branch
         : null;
-      const branchName = scopedPrevious?.name ?? args.defaultBranch;
+      const branchName = scopedPrevious?.name ?? args.currentBranch;
       if (!branchName) {
         return matchesBranchSelectionScope(previous?.scope, scope)
           ? null
@@ -108,7 +112,7 @@ export function useScopedBranchSelection(
         },
       };
     });
-  }, [args.defaultBranch, scope]);
+  }, [args.currentBranch, scope]);
 
   return {
     onBranchChange,

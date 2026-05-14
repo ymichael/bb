@@ -17,7 +17,7 @@ export async function listHostBranches(
   }
 
   if (!(await detectGitRepo(command.path))) {
-    return { branches: [], current: null };
+    return { branches: [], current: null, defaultBranch: null };
   }
 
   const [branches, current, defaultBranch] = await Promise.all([
@@ -31,5 +31,9 @@ export async function listHostBranches(
     defaultBranch && branches.includes(defaultBranch)
       ? [defaultBranch, ...branches.filter((b) => b !== defaultBranch)]
       : branches;
-  return { branches: sorted, current: current ?? null };
+  return {
+    branches: sorted,
+    current: current ?? null,
+    defaultBranch: defaultBranch ?? null,
+  };
 }

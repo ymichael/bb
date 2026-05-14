@@ -178,10 +178,10 @@ export function createSmokeHostIdentity(): SmokeHostIdentity {
 }
 
 function parseAvailableModels(value: unknown): AvailableModel[] {
-  if (!Array.isArray(value)) {
-    throw new Error("Expected system models response to be an array");
+  if (!isRecord(value) || !Array.isArray(value.models)) {
+    throw new Error("Expected execution-options response with a models array");
   }
-  return value.map((item) => availableModelSchema.parse(item));
+  return value.models.map((item) => availableModelSchema.parse(item));
 }
 
 function parseThreadOutputResponse(value: unknown): { output: string | null } {
@@ -427,7 +427,7 @@ export async function fetchProviderModels(
     providerId: string;
   },
 ): Promise<AvailableModel[]> {
-  const modelsUrl = new URL("/api/v1/system/models", localServerUrl);
+  const modelsUrl = new URL("/api/v1/system/execution-options", localServerUrl);
   modelsUrl.searchParams.set("hostId", args.hostId);
   modelsUrl.searchParams.set("providerId", args.providerId);
 

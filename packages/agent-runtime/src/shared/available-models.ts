@@ -1,13 +1,18 @@
 import { availableModelSchema, type AvailableModel } from "@bb/domain";
+import { z } from "zod";
 
-export function parseAvailableModelList(result: unknown): AvailableModel[] {
-  if (!Array.isArray(result)) {
-    throw new Error("Expected provider model/list response to be an array.");
-  }
+const modelListResultSchema = z.object({
+  models: z.array(availableModelSchema),
+  selectedOnlyModels: z.array(availableModelSchema),
+});
 
-  const models: AvailableModel[] = [];
-  for (const entry of result) {
-    models.push(availableModelSchema.parse(entry));
-  }
-  return models;
+export interface ParsedModelListResult {
+  models: AvailableModel[];
+  selectedOnlyModels: AvailableModel[];
+}
+
+export function parseAvailableModelList(
+  result: unknown,
+): ParsedModelListResult {
+  return modelListResultSchema.parse(result);
 }

@@ -4,42 +4,31 @@ import {
   createDebouncedCallbackScheduler,
   type ChangedMessage,
   type EnvironmentChangeKind,
+  type ThreadEventType,
+  type ThreadChangeMetadata,
   type ThreadChangeKind,
   type ThreadWithRuntime,
 } from "@bb/domain";
-import { updateCachedThreadListPendingInteractionState } from "./queries/query-cache";
 import {
   getCachedThreadLists,
   iterateThreadListCacheEntries,
 } from "./queries/thread-list-cache-data";
+import { allThreadQueryKeyPrefix, threadsQueryKey } from "./queries/query-keys";
 import {
-  allThreadDraftsQueryKeyPrefix,
-  allThreadPendingInteractionsQueryKeyPrefix,
-  allThreadQueryKeyPrefix,
-  allThreadTimelineQueryKeyPrefix,
-  statusQueryKey,
-  threadDraftsQueryKey,
-  threadPendingInteractionsQueryKey,
-  threadQueryKey,
-  threadsQueryKey,
-  threadTimelineQueryKeyPrefix,
-} from "./queries/query-keys";
-import {
-  invalidateRealtimeEnvironmentChangeQueries,
-  invalidateThreadStorageQueries,
-} from "./environment-cache-effects";
-import {
-  invalidateHostChangeDependentQueries,
-  invalidateHostsAfterServerInitialConnection,
   invalidateRealtimeQueriesAfterServerReconnect,
   refetchErroredRealtimeQueriesOnInitialConnect,
 } from "./system-cache-effects";
-import {
-  invalidateAllProjectsPromptHistoryQueries,
-  invalidateProjectListQueries,
-} from "./mutation-cache-effects";
 import { createBufferedEnvironmentInvalidator } from "./buffered-environment-invalidator";
-import * as api from "../lib/api";
+import {
+  executeRealtimeDirtyHandlers,
+  REALTIME_ENVIRONMENT_CHANGE_REGISTRY,
+  REALTIME_HOST_CHANGE_REGISTRY,
+  REALTIME_PROJECT_CHANGE_REGISTRY,
+  REALTIME_THREAD_CHANGE_REGISTRY,
+  shouldFlushThreadChangesImmediately,
+} from "./realtime-cache-registry";
+
+export { shouldFlushThreadChangesImmediately } from "./realtime-cache-registry";
 
 const INVALIDATION_DEBOUNCE_MS = 50;
 const INVALIDATION_MAX_WAIT_MS = 200;
@@ -60,26 +49,10 @@ export interface RealtimeCacheEffectsOptions {
   queryClient: QueryClient;
 }
 
-interface ThreadChangeFlags {
-  interactionsChanged: boolean;
-  listChanged: boolean;
-  projectPromptHistoryChanged: boolean;
-  queueChanged: boolean;
-  threadChanged: boolean;
-  timelineChanged: boolean;
-  statusChanged: boolean;
-}
-
 interface ThreadChangeState {
   changedThreadKinds: Map<string, Set<ThreadChangeKind>>;
   globalChangeKinds: Set<ThreadChangeKind>;
-  shouldInvalidateAllThreadDrafts: boolean;
-  shouldInvalidateAllThreadPendingInteractions: boolean;
-  shouldInvalidateAllProjectPromptHistory: boolean;
-  shouldInvalidateAllThreadTimeline: boolean;
-  shouldInvalidateAllThreadsById: boolean;
-  shouldInvalidateStatus: boolean;
-  shouldInvalidateThreads: boolean;
+  metadataByThreadId: Map<string, ThreadChangeMetadata>;
 }
 
 interface MergeThreadChangesArg {
@@ -97,97 +70,52 @@ interface RealtimeEnvironmentChangedArg extends EnvironmentArg {
   changeKinds: readonly EnvironmentChangeKind[];
 }
 
+function mergeEventTypes(
+  current: readonly ThreadEventType[] | undefined,
+  next: readonly ThreadEventType[] | undefined,
+): readonly ThreadEventType[] | undefined {
+  if (!current) {
+    return next;
+  }
+  if (!next) {
+    return current;
+  }
+  return Array.from(new Set([...current, ...next]));
+}
+
+function mergeThreadChangeMetadata(
+  current: ThreadChangeMetadata | undefined,
+  next: ThreadChangeMetadata,
+): ThreadChangeMetadata {
+  const eventTypes = mergeEventTypes(current?.eventTypes, next.eventTypes);
+  const hasPendingInteraction =
+    next.hasPendingInteraction ?? current?.hasPendingInteraction;
+  const projectId = next.projectId ?? current?.projectId;
+  const metadata: ThreadChangeMetadata = {};
+  if (eventTypes) {
+    metadata.eventTypes = eventTypes;
+  }
+  if (hasPendingInteraction !== undefined) {
+    metadata.hasPendingInteraction = hasPendingInteraction;
+  }
+  if (projectId !== undefined) {
+    metadata.projectId = projectId;
+  }
+  return metadata;
+}
+
 function createThreadChangeState(): ThreadChangeState {
   return {
     changedThreadKinds: new Map<string, Set<ThreadChangeKind>>(),
     globalChangeKinds: new Set<ThreadChangeKind>(),
-    shouldInvalidateAllThreadDrafts: false,
-    shouldInvalidateAllThreadPendingInteractions: false,
-    shouldInvalidateAllProjectPromptHistory: false,
-    shouldInvalidateAllThreadTimeline: false,
-    shouldInvalidateAllThreadsById: false,
-    shouldInvalidateStatus: false,
-    shouldInvalidateThreads: false,
+    metadataByThreadId: new Map<string, ThreadChangeMetadata>(),
   };
 }
 
 function resetThreadChangeState(state: ThreadChangeState): void {
   state.changedThreadKinds.clear();
   state.globalChangeKinds.clear();
-  state.shouldInvalidateAllThreadDrafts = false;
-  state.shouldInvalidateAllThreadPendingInteractions = false;
-  state.shouldInvalidateAllProjectPromptHistory = false;
-  state.shouldInvalidateAllThreadTimeline = false;
-  state.shouldInvalidateAllThreadsById = false;
-  state.shouldInvalidateStatus = false;
-  state.shouldInvalidateThreads = false;
-}
-
-function getThreadChangeFlags(
-  changes: readonly ThreadChangeKind[],
-): ThreadChangeFlags {
-  const flags: ThreadChangeFlags = {
-    interactionsChanged: false,
-    listChanged: false,
-    projectPromptHistoryChanged: false,
-    queueChanged: false,
-    threadChanged: false,
-    timelineChanged: false,
-    statusChanged: false,
-  };
-
-  for (const change of changes) {
-    if (
-      change === "thread-created" ||
-      change === "thread-deleted" ||
-      change === "archived-changed"
-    ) {
-      flags.projectPromptHistoryChanged = true;
-    }
-
-    switch (change) {
-      case "thread-created":
-      case "thread-deleted":
-      case "archived-changed":
-      case "read-state-changed":
-      case "title-changed":
-        flags.listChanged = true;
-        flags.threadChanged = true;
-        if (change === "thread-created" || change === "thread-deleted") {
-          flags.timelineChanged = true;
-        }
-        break;
-      case "queue-changed":
-        flags.queueChanged = true;
-        flags.threadChanged = true;
-        break;
-      case "interactions-changed":
-        flags.interactionsChanged = true;
-        flags.threadChanged = true;
-        flags.timelineChanged = true;
-        break;
-      case "status-changed":
-        flags.listChanged = true;
-        flags.threadChanged = true;
-        flags.timelineChanged = true;
-        flags.statusChanged = true;
-        break;
-      case "events-appended":
-        flags.threadChanged = true;
-        flags.timelineChanged = true;
-        break;
-      default:
-        assertNever(change);
-    }
-  }
-
-  return flags;
-}
-
-export function shouldFlushThreadChangesImmediately(
-  changes: readonly ThreadChangeKind[],
-): boolean {
-  return getThreadChangeFlags(changes).statusChanged;
+  state.metadataByThreadId.clear();
 }
 
 function collectCachedThreadIdsForEnvironment({
@@ -233,73 +161,33 @@ function flushThreadInvalidations(
   queryClient: QueryClient,
   state: ThreadChangeState,
 ): void {
-  if (state.shouldInvalidateThreads) {
-    queryClient.invalidateQueries({ queryKey: threadsQueryKey() });
-  }
-
-  if (state.shouldInvalidateAllThreadsById) {
-    queryClient.invalidateQueries({ queryKey: allThreadQueryKeyPrefix() });
-  }
-  if (state.shouldInvalidateAllProjectPromptHistory) {
-    invalidateAllProjectsPromptHistoryQueries({ queryClient });
-  }
-  if (state.shouldInvalidateAllThreadDrafts) {
-    queryClient.invalidateQueries({
-      queryKey: allThreadDraftsQueryKeyPrefix(),
-    });
-  }
-  if (state.shouldInvalidateAllThreadPendingInteractions) {
-    queryClient.invalidateQueries({
-      queryKey: allThreadPendingInteractionsQueryKeyPrefix(),
-    });
-  }
-  if (state.shouldInvalidateAllThreadTimeline) {
-    queryClient.invalidateQueries({
-      queryKey: allThreadTimelineQueryKeyPrefix(),
+  for (const changeKind of state.globalChangeKinds) {
+    executeRealtimeDirtyHandlers({
+      context: {
+        eventTypes: undefined,
+        hasPendingInteraction: undefined,
+        projectId: undefined,
+        queryClient,
+        threadId: undefined,
+      },
+      handlers: REALTIME_THREAD_CHANGE_REGISTRY[changeKind].dirty,
     });
   }
 
   for (const [threadId, changeKinds] of state.changedThreadKinds) {
-    const flags = getThreadChangeFlags(Array.from(changeKinds));
-
-    if (flags.threadChanged) {
-      queryClient.invalidateQueries({ queryKey: threadQueryKey(threadId) });
-    }
-    if (flags.queueChanged) {
-      queryClient.invalidateQueries({
-        queryKey: threadDraftsQueryKey(threadId),
+    const metadata = state.metadataByThreadId.get(threadId);
+    for (const changeKind of changeKinds) {
+      executeRealtimeDirtyHandlers({
+        context: {
+          hasPendingInteraction: metadata?.hasPendingInteraction,
+          eventTypes: metadata?.eventTypes,
+          projectId: metadata?.projectId,
+          queryClient,
+          threadId,
+        },
+        handlers: REALTIME_THREAD_CHANGE_REGISTRY[changeKind].dirty,
       });
     }
-    if (flags.interactionsChanged) {
-      queryClient.invalidateQueries({
-        queryKey: threadPendingInteractionsQueryKey(threadId),
-      });
-      void queryClient
-        .fetchQuery({
-          queryKey: threadPendingInteractionsQueryKey(threadId),
-          queryFn: ({ signal }) =>
-            api.listThreadPendingInteractions(threadId, signal),
-        })
-        .then((interactions) => {
-          updateCachedThreadListPendingInteractionState(
-            queryClient,
-            threadId,
-            interactions.length > 0,
-          );
-        })
-        .catch(() => {
-          queryClient.invalidateQueries({ queryKey: threadsQueryKey() });
-        });
-    }
-    if (flags.timelineChanged) {
-      queryClient.invalidateQueries({
-        queryKey: threadTimelineQueryKeyPrefix(threadId),
-      });
-    }
-  }
-
-  if (state.shouldInvalidateStatus) {
-    queryClient.invalidateQueries({ queryKey: statusQueryKey() });
   }
 
   resetThreadChangeState(state);
@@ -319,13 +207,14 @@ function recordThreadChange(
       state,
       threadId: message.id,
     });
-    const flags = getThreadChangeFlags(message.changes);
-    if (flags.listChanged) {
-      state.shouldInvalidateThreads = true;
-      state.shouldInvalidateStatus = true;
-    }
-    if (flags.projectPromptHistoryChanged) {
-      state.shouldInvalidateAllProjectPromptHistory = true;
+    if (message.metadata) {
+      state.metadataByThreadId.set(
+        message.id,
+        mergeThreadChangeMetadata(
+          state.metadataByThreadId.get(message.id),
+          message.metadata,
+        ),
+      );
     }
     return;
   }
@@ -333,18 +222,6 @@ function recordThreadChange(
   for (const change of message.changes) {
     state.globalChangeKinds.add(change);
   }
-  const globalFlags = getThreadChangeFlags(Array.from(state.globalChangeKinds));
-  if (globalFlags.listChanged) {
-    state.shouldInvalidateThreads = true;
-    state.shouldInvalidateStatus = true;
-  }
-  state.shouldInvalidateAllProjectPromptHistory =
-    globalFlags.projectPromptHistoryChanged;
-  state.shouldInvalidateAllThreadsById = globalFlags.threadChanged;
-  state.shouldInvalidateAllThreadDrafts = globalFlags.queueChanged;
-  state.shouldInvalidateAllThreadPendingInteractions =
-    globalFlags.interactionsChanged;
-  state.shouldInvalidateAllThreadTimeline = globalFlags.timelineChanged;
 }
 
 function invalidateRealtimeEnvironmentChange({
@@ -352,19 +229,16 @@ function invalidateRealtimeEnvironmentChange({
   environmentId,
   queryClient,
 }: RealtimeEnvironmentChangedArg): void {
-  invalidateRealtimeEnvironmentChangeQueries({
-    changeKinds,
-    environmentId,
-    queryClient,
-  });
-  if (!changeKinds.includes("thread-storage-changed")) {
-    return;
-  }
-  for (const threadId of collectCachedThreadIdsForEnvironment({
-    environmentId,
-    queryClient,
-  })) {
-    invalidateThreadStorageQueries({ queryClient, threadId });
+  for (const changeKind of changeKinds) {
+    executeRealtimeDirtyHandlers({
+      context: {
+        environmentId,
+        getCachedThreadIdsForEnvironment: () =>
+          collectCachedThreadIdsForEnvironment({ environmentId, queryClient }),
+        queryClient,
+      },
+      handlers: REALTIME_ENVIRONMENT_CHANGE_REGISTRY[changeKind].dirty,
+    });
   }
 }
 
@@ -413,12 +287,22 @@ export function createRealtimeCacheEffects({
           }
           break;
         case "host":
-          invalidateHostChangeDependentQueries({ queryClient });
+          for (const changeKind of message.changes) {
+            executeRealtimeDirtyHandlers({
+              context: { queryClient },
+              handlers: REALTIME_HOST_CHANGE_REGISTRY[changeKind].dirty,
+            });
+          }
           break;
         case "project":
-          invalidateProjectListQueries({ queryClient });
-          if (message.changes.includes("threads-changed")) {
-            invalidateAllProjectsPromptHistoryQueries({ queryClient });
+          for (const changeKind of message.changes) {
+            executeRealtimeDirtyHandlers({
+              context: {
+                projectId: message.id,
+                queryClient,
+              },
+              handlers: REALTIME_PROJECT_CHANGE_REGISTRY[changeKind].dirty,
+            });
           }
           break;
         case "system":
@@ -433,7 +317,6 @@ export function createRealtimeCacheEffects({
         return;
       }
       refetchErroredRealtimeQueriesOnInitialConnect({ queryClient });
-      invalidateHostsAfterServerInitialConnection({ queryClient });
     },
   };
 }

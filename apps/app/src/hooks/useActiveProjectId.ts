@@ -35,7 +35,7 @@ const lastActiveProjectIdAtom = atomWithStorage<string | null>(
  */
 export function useActiveProjectId(): string | undefined {
   const { projectId: urlProjectId } = useAppRoute();
-  const { data: projects } = useProjects();
+  const { data: projects } = useProjects({ enabled: !urlProjectId });
   const setLastActive = useSetAtom(lastActiveProjectIdAtom);
   const lastActive = useAtomValue(lastActiveProjectIdAtom);
 

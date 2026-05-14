@@ -1,11 +1,15 @@
 import { access, readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { isLoopbackHostname } from "@bb/config/loopback";
 import {
   HOST_AUTH_FILE_NAME,
   HOST_ID_FILE_NAME,
 } from "@bb/host-daemon-contract";
 import {
+  type CreateHostJoinRequest,
+  createLocalPersistentHostJoinRequest,
+  createPersistentHostJoinRequest,
   createHostJoinResponseSchema,
   createPublicApiClient,
 } from "@bb/server-contract";
@@ -30,6 +34,11 @@ const repoRoot = resolve(packageRoot, "..", "..");
 interface HostDaemonProcessCommand {
   args: string[];
   command: string;
+}
+
+interface CreateAutoJoinRequestArgs {
+  requestedHostId: string | null;
+  serverUrl: string;
 }
 
 function resolveMode(): HostMode {
@@ -57,6 +66,10 @@ function buildEnv(mode: HostMode): HostDaemonRuntimeEnvironment {
     BB_SERVER_URL: hostDaemonConfig.BB_SERVER_URL,
     NODE_ENV: resolveNodeEnvironment(mode),
   };
+}
+
+function isLoopbackServerUrl(serverUrl: string): boolean {
+  return isLoopbackHostname(new URL(serverUrl).hostname);
 }
 
 export function resolveHostDaemonProcessCommand(
@@ -106,6 +119,19 @@ async function readPersistedHostId(dataDir: string): Promise<string | null> {
   }
 }
 
+function createAutoJoinRequest(
+  args: CreateAutoJoinRequestArgs,
+): CreateHostJoinRequest {
+  const requestArgs = {
+    hostId: args.requestedHostId,
+  };
+  if (isLoopbackServerUrl(args.serverUrl)) {
+    return createLocalPersistentHostJoinRequest(requestArgs);
+  }
+
+  return createPersistentHostJoinRequest(requestArgs);
+}
+
 export async function maybeAddAutoJoinEnv(
   env: HostDaemonRuntimeEnvironment,
   autoJoin: boolean,
@@ -124,7 +150,10 @@ export async function maybeAddAutoJoinEnv(
 
   const client = createPublicApiClient(env.BB_SERVER_URL);
   const response = await client.hosts.join.$post({
-    json: requestedHostId ? { hostId: requestedHostId } : {},
+    json: createAutoJoinRequest({
+      requestedHostId,
+      serverUrl: env.BB_SERVER_URL,
+    }),
   });
 
   if (response.status !== 201) {

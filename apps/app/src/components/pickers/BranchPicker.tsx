@@ -1,9 +1,17 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button.js";
 import { Icon } from "@/components/ui/icon.js";
-import { COARSE_POINTER_COMPACT_ICON_SIZE_CLASS, COARSE_POINTER_COMPACT_ICON_SIZE_SHRINK_CLASS, COARSE_POINTER_ICON_SIZE_SHRINK_CLASS } from "@/components/ui/coarse-pointer-sizing.js";
+import {
+  COARSE_POINTER_COMPACT_ICON_SIZE_CLASS,
+  COARSE_POINTER_COMPACT_ICON_SIZE_SHRINK_CLASS,
+  COARSE_POINTER_ICON_SIZE_SHRINK_CLASS,
+} from "@/components/ui/coarse-pointer-sizing.js";
 import { Input } from "@/components/ui/input.js";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover.js";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover.js";
 import {
   OPTION_BASE_CLASS_NAME,
   OPTION_CONTENT_CLASS_NAME,
@@ -33,6 +41,7 @@ export function BranchPicker({
   options,
   loading = false,
   disabled,
+  placeholder,
   onChange,
   onCreate,
   isCreatingNew = false,
@@ -48,6 +57,7 @@ export function BranchPicker({
   options: readonly string[];
   loading?: boolean;
   disabled?: boolean;
+  placeholder?: string;
   onChange: (branch: string) => void;
   /**
    * When provided, the popover surfaces a "Create new branch" action item.
@@ -98,12 +108,11 @@ export function BranchPicker({
     ];
   }, [normalizedQuery, options, value, isCreatingNew]);
   const enterSelection = value
-    ? (filteredOptions.find((branch) => branch === value) ??
-      filteredOptions[0])
+    ? (filteredOptions.find((branch) => branch === value) ?? filteredOptions[0])
     : filteredOptions[0];
   const unresolvedTriggerLabel = loading
     ? "Loading branches..."
-    : "Select branch";
+    : (placeholder ?? "Select branch");
   const triggerLabel = isCreatingNew
     ? CREATE_NEW_BRANCH_LABEL
     : (value ?? unresolvedTriggerLabel);
@@ -168,9 +177,13 @@ export function BranchPicker({
           {variant === "option" ? (
             <span className={OPTION_CONTENT_CLASS_NAME}>
               {isCreatingNew ? (
-                <Icon name="Plus" className={COARSE_POINTER_COMPACT_ICON_SIZE_SHRINK_CLASS} />
+                <Icon
+                  name="Plus"
+                  className={COARSE_POINTER_COMPACT_ICON_SIZE_SHRINK_CLASS}
+                />
               ) : (
-                <Icon name="GitMerge"
+                <Icon
+                  name="GitMerge"
                   className={COARSE_POINTER_COMPACT_ICON_SIZE_SHRINK_CLASS}
                 />
               )}
@@ -193,7 +206,8 @@ export function BranchPicker({
               {triggerLabel}
             </span>
           )}
-          <Icon name="ChevronDown"
+          <Icon
+            name="ChevronDown"
             className={cn(
               "shrink-0 text-muted-foreground",
               variant === "default" && "size-4",
@@ -212,7 +226,10 @@ export function BranchPicker({
       >
         <div className="shrink-0 border-b border-border/70 p-1.5">
           <div className="relative">
-            <Icon name="Search" className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Icon
+              name="Search"
+              className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"
+            />
             <Input
               ref={inputRef}
               value={query}
@@ -252,7 +269,8 @@ export function BranchPicker({
                 setOpen(false);
               }}
             >
-              <Icon name="Plus"
+              <Icon
+                name="Plus"
                 className={cn(
                   "text-muted-foreground",
                   COARSE_POINTER_COMPACT_ICON_SIZE_SHRINK_CLASS,
@@ -261,7 +279,8 @@ export function BranchPicker({
               <span className="min-w-0 flex-1 truncate">
                 {CREATE_NEW_BRANCH_LABEL}
               </span>
-              <Icon name="Check"
+              <Icon
+                name="Check"
                 className={
                   isCreatingNew
                     ? cn("opacity-100", COARSE_POINTER_ICON_SIZE_SHRINK_CLASS)
@@ -281,7 +300,8 @@ export function BranchPicker({
                   setOpen(false);
                 }}
               >
-                <Icon name="GitMerge"
+                <Icon
+                  name="GitMerge"
                   className={cn(
                     "text-muted-foreground",
                     COARSE_POINTER_COMPACT_ICON_SIZE_SHRINK_CLASS,
@@ -290,7 +310,8 @@ export function BranchPicker({
                 <span className="min-w-0 flex-1 truncate" title={branch}>
                   {branch}
                 </span>
-                <Icon name="Check"
+                <Icon
+                  name="Check"
                   className={
                     !isCreatingNew && branch === value
                       ? cn("opacity-100", COARSE_POINTER_ICON_SIZE_SHRINK_CLASS)

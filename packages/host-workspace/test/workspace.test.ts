@@ -132,8 +132,69 @@ describe("Workspace", () => {
       {
         path: "README.md",
         status: "D",
+        insertions: 0,
+        deletions: 1,
       },
     ]);
+  });
+
+  it("joins per-file numstat to a rename+modify under the new path", async () => {
+    const repoPath = await initRepo();
+    const workspace = new Workspace(repoPath);
+
+    await runGit(["mv", "README.md", "NOTES.md"], { cwd: repoPath });
+    await fs.writeFile(
+      path.join(repoPath, "NOTES.md"),
+      "hello\nworld\n",
+      "utf8",
+    );
+
+    const status = await workspace.getStatus();
+    expect(status.workingTree.files).toEqual([
+      {
+        path: "NOTES.md",
+        status: "R",
+        insertions: 1,
+        deletions: 0,
+      },
+    ]);
+    expect(status.workingTree.insertions).toBe(1);
+    expect(status.workingTree.deletions).toBe(0);
+  });
+
+  it("reports null per-file stats for binary changes and excludes them from totals", async () => {
+    const repoPath = await initRepo();
+    const binaryPath = path.join(repoPath, "data.bin");
+    await fs.writeFile(binaryPath, Buffer.from([0, 1, 2, 3, 0xff, 0xfe]));
+    await runGit(["add", "data.bin"], { cwd: repoPath });
+    await runGit(["commit", "-m", "Add binary"], { cwd: repoPath });
+
+    await fs.writeFile(binaryPath, Buffer.from([10, 20, 30, 40, 50, 60]));
+    await fs.writeFile(
+      path.join(repoPath, "README.md"),
+      "hello\nworld\n",
+      "utf8",
+    );
+
+    const workspace = new Workspace(repoPath);
+    const status = await workspace.getStatus();
+
+    expect(status.workingTree.files).toEqual([
+      {
+        path: "README.md",
+        status: "M",
+        insertions: 1,
+        deletions: 0,
+      },
+      {
+        path: "data.bin",
+        status: "M",
+        insertions: null,
+        deletions: null,
+      },
+    ]);
+    expect(status.workingTree.insertions).toBe(1);
+    expect(status.workingTree.deletions).toBe(0);
   });
 
   it("changes the local state fingerprint when local checkout state changes", async () => {
@@ -190,7 +251,7 @@ describe("Workspace", () => {
     });
     expect(status.mergeBase?.commits[0]?.subject).toBe("Feature commit");
     expect(status.mergeBase?.files).toEqual([
-      { path: "README.md", status: "M" },
+      { path: "README.md", status: "M", insertions: 1, deletions: 1 },
     ]);
   });
 
@@ -214,6 +275,8 @@ describe("Workspace", () => {
       {
         path: "notes.txt",
         status: "??",
+        insertions: null,
+        deletions: null,
       },
     ]);
     expect(status.mergeBase).toMatchObject({
@@ -223,7 +286,7 @@ describe("Workspace", () => {
       behindCount: 0,
     });
     expect(status.mergeBase?.files).toEqual([
-      { path: "README.md", status: "M" },
+      { path: "README.md", status: "M", insertions: 1, deletions: 1 },
     ]);
   });
 
@@ -415,6 +478,8 @@ describe("Workspace", () => {
       {
         path: "notes.txt",
         status: "??",
+        insertions: null,
+        deletions: null,
       },
     ]);
   });

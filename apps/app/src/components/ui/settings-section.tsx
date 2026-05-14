@@ -2,14 +2,29 @@ import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 export interface SettingsSectionProps {
-  title: string;
+  action?: ReactNode;
   children: ReactNode;
+  description?: string;
+  title: string;
 }
 
-export function SettingsSection({ title, children }: SettingsSectionProps) {
+export function SettingsSection({
+  action,
+  children,
+  description,
+  title,
+}: SettingsSectionProps) {
   return (
     <section className="space-y-2">
-      <h2 className="text-sm font-semibold">{title}</h2>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-semibold">{title}</h2>
+          {description ? (
+            <p className="text-xs text-muted-foreground">{description}</p>
+          ) : null}
+        </div>
+        {action ? <div className="shrink-0">{action}</div> : null}
+      </div>
       <div className="rounded-lg border border-border bg-card px-3 py-2.5">
         {children}
       </div>

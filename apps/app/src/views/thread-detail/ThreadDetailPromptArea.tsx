@@ -62,8 +62,13 @@ interface SendFollowUpInputParams {
   serviceTier?: ServiceTier;
 }
 
+type ComposerQueryRefetchOnMount = boolean | "always";
+
 interface ThreadDetailPromptAreaProps {
   canUseGitUi: boolean;
+  composerQueriesEnabled: boolean;
+  composerQueriesRefetchOnMount: ComposerQueryRefetchOnMount;
+  composerQueriesStaleTime?: number;
   contextWindowUsage?: ThreadTimelineResponse["contextWindowUsage"];
   environmentBranchName?: string;
   environmentHostConnected?: boolean;
@@ -136,6 +141,9 @@ function shouldQueueFollowUpDraft(
 
 export function ThreadDetailPromptArea({
   canUseGitUi,
+  composerQueriesEnabled,
+  composerQueriesRefetchOnMount,
+  composerQueriesStaleTime,
   contextWindowUsage,
   environmentBranchName,
   environmentHostConnected,
@@ -158,9 +166,25 @@ export function ThreadDetailPromptArea({
 }: ThreadDetailPromptAreaProps) {
   const { data: defaultExecutionOptions } = useThreadDefaultExecutionOptions(
     thread.id,
+    {
+      enabled: composerQueriesEnabled,
+      refetchOnMount: composerQueriesRefetchOnMount,
+      staleTime: composerQueriesStaleTime,
+    },
   );
-  const { data: queuedMessages = [] } = useThreadDrafts(thread.id);
-  const { data: promptHistoryEntries = [] } = useThreadPromptHistory(thread.id);
+  const { data: queuedMessages = [] } = useThreadDrafts(thread.id, {
+    enabled: composerQueriesEnabled,
+    refetchOnMount: composerQueriesRefetchOnMount,
+    staleTime: composerQueriesStaleTime,
+  });
+  const { data: promptHistoryEntries = [] } = useThreadPromptHistory(
+    thread.id,
+    {
+      enabled: composerQueriesEnabled,
+      refetchOnMount: composerQueriesRefetchOnMount,
+      staleTime: composerQueriesStaleTime,
+    },
+  );
   const createDraft = useCreateThreadDraft();
   const sendDraft = useSendThreadDraft();
   const deleteDraft = useDeleteThreadDraft();
@@ -206,6 +230,8 @@ export function ThreadDetailPromptArea({
     supportsServiceTier,
     serviceTierSupportByProvider,
   } = useThreadCreationOptions({
+    enabled: composerQueriesEnabled,
+    environmentId: thread.environmentId ?? undefined,
     scope: "thread",
     resetKey: thread.id,
     initialProviderId: thread.providerId,
@@ -219,6 +245,9 @@ export function ThreadDetailPromptArea({
   const isCreated = runtimeDisplayStatus === "created";
   const isProvisioning = runtimeDisplayStatus === "provisioning";
   const isWaitingForHost = runtimeDisplayStatus === "waiting-for-host";
+  const isStopRequested =
+    thread.stopRequestedAt !== null ||
+    (stopThread.isPending && stopThread.variables === thread.id);
   const activePendingInteraction =
     getLatestPendingInteraction(pendingInteractions);
   const hasPendingInteraction = activePendingInteraction !== null;
@@ -229,6 +258,9 @@ export function ThreadDetailPromptArea({
     isEnvironmentActionPending ||
     createDraft.isPending;
   const submitMode: FollowUpSubmitMode = (() => {
+    if (isStopRequested) {
+      return { kind: "blocked", reason: "stopping" };
+    }
     if (hasPendingInteraction) {
       return { kind: "blocked", reason: "pending-interaction" };
     }
@@ -246,10 +278,9 @@ export function ThreadDetailPromptArea({
     }
     return { kind: "ready" };
   })();
-  const promptPlaceholder = getPromptPlaceholder(
-    runtimeDisplayStatus,
-    thread.type === "manager",
-  );
+  const promptPlaceholder = isStopRequested
+    ? "Stopping thread..."
+    : getPromptPlaceholder(runtimeDisplayStatus, thread.type === "manager");
   const sendFollowUpInput = useCallback(
     async ({
       input,

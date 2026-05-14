@@ -279,6 +279,8 @@ export function sweepIdleEphemeralHostsEligibleForSuspend(
         isNull(hosts.destroyedAt),
         isNull(hosts.suspendedAt),
         sql`${hosts.externalId} IS NOT NULL`,
+        // Both fields can be null; the EXISTS clause below restricts to hosts
+        // with an active session, which guarantees lastSeenAt is set on open.
         sql`COALESCE(${hosts.lastActivityAt}, ${hosts.lastSeenAt}) <= ${args.inactiveBefore}`,
         args.hostId ? eq(hosts.id, args.hostId) : undefined,
         sql`EXISTS (

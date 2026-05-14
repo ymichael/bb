@@ -302,7 +302,9 @@ export function ensureWorkspaceReadyEvent(
   );
 
   if (result !== null) {
-    deps.hub.notifyThread(args.threadId, ["events-appended"]);
+    deps.hub.notifyThread(args.threadId, ["events-appended"], {
+      eventTypes: ["system/thread-provisioning"],
+    });
   }
   return result;
 }
@@ -357,7 +359,9 @@ export function ensureWorkspaceReadyEventInTransaction(
 ): number | null {
   const result = ensureWorkspaceReadyEventRecord(deps.db, args);
   if (result !== null) {
-    deps.hub.notifyThread(args.threadId, ["events-appended"]);
+    deps.hub.notifyThread(args.threadId, ["events-appended"], {
+      eventTypes: ["system/thread-provisioning"],
+    });
   }
   return result;
 }
@@ -629,7 +633,9 @@ function createProvisioningEnvironmentWithOperation(
     },
     { behavior: "immediate" },
   );
-  deps.hub.notifyThread(args.thread.id, ["events-appended"]);
+  deps.hub.notifyThread(args.thread.id, ["events-appended"], {
+    eventTypes: ["system/thread-provisioning"],
+  });
   return result;
 }
 

@@ -128,7 +128,7 @@ export const hosts = sqliteTable(
     lastActivityAt: integer("last_activity_at"),
     suspendedAt: integer("suspended_at"),
     destroyedAt: integer("destroyed_at"),
-    lastSeenAt: integer("last_seen_at").notNull(),
+    lastSeenAt: integer("last_seen_at"),
     createdAt: integer("created_at").notNull(),
     updatedAt: integer("updated_at").notNull(),
   },
@@ -405,10 +405,29 @@ export const events = sqliteTable(
       table.itemKind,
       table.sequence,
     ),
+    index("events_thread_type_sequence_idx").on(
+      table.threadId,
+      table.type,
+      table.sequence,
+    ),
     index("events_thread_item_id_sequence_idx").on(
       table.threadId,
       table.itemId,
       table.sequence,
+    ),
+    index("events_thread_turn_type_item_sequence_idx").on(
+      table.threadId,
+      table.turnId,
+      table.type,
+      table.itemId,
+      table.sequence,
+    ),
+    index("events_thread_turn_type_item_kind_item_idx").on(
+      table.threadId,
+      table.turnId,
+      table.type,
+      table.itemKind,
+      table.itemId,
     ),
     index("events_environment_idx").on(table.environmentId),
     check(
@@ -509,7 +528,21 @@ export const hostDaemonCommands = sqliteTable(
       table.hostId,
       table.cursor,
     ),
-    index("host_daemon_commands_host_state_idx").on(table.hostId, table.state),
+    index("host_daemon_commands_host_state_cursor_idx").on(
+      table.hostId,
+      table.state,
+      table.cursor,
+    ),
+    index("host_daemon_commands_state_fetched_at_idx").on(
+      table.state,
+      table.fetchedAt,
+    ),
+    index("host_daemon_commands_payload_prune_idx")
+      .on(table.state, table.completedAt)
+      .where(
+        sql`${table.completedAt} IS NOT NULL
+          AND (${table.payload} <> '{}' OR ${table.resultPayload} IS NOT NULL)`,
+      ),
   ],
 );
 

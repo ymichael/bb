@@ -1,5 +1,6 @@
 import type {
   ThreadChangeKind,
+  ThreadChangeMetadata,
   ProjectChangeKind,
   EnvironmentChangeKind,
   HostChangeKind,
@@ -7,7 +8,11 @@ import type {
 } from "@bb/domain";
 
 export interface DbNotifier {
-  notifyThread(threadId: string, changes: ThreadChangeKind[]): void;
+  notifyThread(
+    threadId: string,
+    changes: ThreadChangeKind[],
+    metadata?: ThreadChangeMetadata,
+  ): void;
   notifyProject(projectId: string, changes: ProjectChangeKind[]): void;
   notifyEnvironment(
     environmentId: string,

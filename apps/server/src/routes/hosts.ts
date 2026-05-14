@@ -1,6 +1,7 @@
 import {
   createHostId,
   deleteHost,
+  getLatestSessionForHost,
   getHost,
   updateHost,
   upsertHost,
@@ -9,26 +10,52 @@ import {
   createHostJoinRequestSchema,
   updateHostRequestSchema,
   typedRoutes,
+  type CreateHostJoinRequest,
   type PublicApiSchema,
 } from "@bb/server-contract";
 import type { Hono } from "hono";
 import type { AppDeps } from "../types.js";
 import { ApiError } from "../errors.js";
 import { assertMatchingExistingHostType } from "../services/hosts/host-type-guard.js";
+import { resolveHostJoinServerUrl } from "../services/hosts/host-join-server-url.js";
 import {
   listPublicHostsWithStatus,
   requireNonDestroyedHostWithStatus,
 } from "../services/lib/entity-lookup.js";
-
-function resolveJoinServerUrl(
-  deps: Pick<AppDeps, "config">,
-  requestUrl: string,
-): string {
-  return deps.config.appUrl ?? new URL(requestUrl).origin;
-}
+import { getTrustedRemoteAddress } from "../request-context.js";
 
 function resolvePendingHostName(hostId: string): string {
   return `pending-${hostId.slice(-8)}`;
+}
+
+interface CancelPendingHostJoinArgs {
+  deps: AppDeps;
+  hostId: string;
+}
+
+function isLocalHostJoinRequest(payload: CreateHostJoinRequest): boolean {
+  return "joinMode" in payload && payload.joinMode === "local";
+}
+
+async function cancelPendingHostJoin({
+  deps,
+  hostId,
+}: CancelPendingHostJoinArgs): Promise<void> {
+  const host = requireNonDestroyedHostWithStatus(deps.db, hostId);
+  await deps.machineAuth.revokeHostEnrollKeys({
+    hostId: host.id,
+    hostType: host.type,
+  });
+
+  const latestSession = getLatestSessionForHost(deps.db, { hostId: host.id });
+  if (latestSession) {
+    return;
+  }
+
+  const deleted = deleteHost(deps.db, deps.hub, host.id);
+  if (!deleted) {
+    throw new ApiError(404, "host_not_found", "Host not found");
+  }
 }
 
 export function registerHostRoutes(app: Hono, deps: AppDeps): void {
@@ -40,6 +67,13 @@ export function registerHostRoutes(app: Hono, deps: AppDeps): void {
   get("/hosts", (context) => context.json(listPublicHostsWithStatus(deps.db)));
 
   post("/hosts/join", createHostJoinRequestSchema, async (context, payload) => {
+    const isLocalJoin = isLocalHostJoinRequest(payload);
+    const serverUrl = resolveHostJoinServerUrl({
+      appUrl: deps.config.appUrl,
+      isLocalJoin,
+      remoteAddress: getTrustedRemoteAddress(context),
+      serverPort: deps.config.serverPort,
+    });
     const hostId = payload.hostId ?? createHostId();
     const hostType = payload.hostType ?? "persistent";
     const existing = getHost(deps.db, hostId);
@@ -69,7 +103,7 @@ export function registerHostRoutes(app: Hono, deps: AppDeps): void {
       hostId,
       hostType,
       joinCode: joinMaterial.key,
-      serverUrl: resolveJoinServerUrl(deps, context.req.url),
+      serverUrl,
     });
 
     return context.json(
@@ -81,6 +115,14 @@ export function registerHostRoutes(app: Hono, deps: AppDeps): void {
       },
       201,
     );
+  });
+
+  del("/hosts/:id/join", async (context) => {
+    await cancelPendingHostJoin({
+      deps,
+      hostId: context.req.param("id"),
+    });
+    return context.json({ ok: true });
   });
 
   get("/hosts/:id", (context) =>

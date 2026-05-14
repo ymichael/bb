@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { cloudAuthProviderIdSchema } from "@bb/agent-providers";
 import {
+  availableModelSchema,
   getProjectPathValidationMessage,
   normalizeProjectPathInput,
   activeThinkingSchema,
@@ -14,7 +15,9 @@ import {
   projectSourceSchema,
   promptInputSchema,
   permissionModeSchema,
+  providerInfoSchema,
   reasoningLevelSchema,
+  resolvedThreadExecutionOptionsSchema,
   sandboxBackendInfoSchema,
   serviceTierSchema,
   threadListEntrySchema,
@@ -507,6 +510,14 @@ const persistentHostJoinRequestSchema = z
   })
   .strict();
 
+const localHostJoinRequestSchema = z
+  .object({
+    hostId: z.string().min(1).optional(),
+    hostType: z.literal("persistent"),
+    joinMode: z.literal("local"),
+  })
+  .strict();
+
 const ephemeralHostJoinRequestSchema = z
   .object({
     externalId: z.string().min(1),
@@ -517,6 +528,7 @@ const ephemeralHostJoinRequestSchema = z
   .strict();
 
 export const createHostJoinRequestSchema = z.union([
+  localHostJoinRequestSchema,
   persistentHostJoinRequestSchema,
   ephemeralHostJoinRequestSchema,
 ]);
@@ -613,7 +625,17 @@ export type ProjectBranchesQuery = z.infer<typeof projectBranchesQuerySchema>;
 
 export const projectBranchesResponseSchema = z.object({
   branches: z.array(z.string()),
+  /**
+   * For host sources, the HEAD of the primary checkout. For GitHub sources,
+   * null (no working tree). Use this when the env will operate on the
+   * checkout in place (i.e., `host:local` threads).
+   */
   current: z.string().nullable(),
+  /**
+   * The repo's tracked default branch. Use this when the env will create a
+   * fresh workspace from the repo's default (host worktree or sandbox).
+   */
+  defaultBranch: z.string().nullable(),
 });
 export type ProjectBranchesResponse = z.infer<
   typeof projectBranchesResponseSchema
@@ -642,6 +664,33 @@ export type PromptHistoryQuery = z.infer<typeof promptHistoryQuerySchema>;
 
 export const promptHistoryResponseSchema = z.array(promptHistoryEntrySchema);
 export type PromptHistoryResponse = z.infer<typeof promptHistoryResponseSchema>;
+
+export const systemExecutionOptionsResponseSchema = z.object({
+  providers: z.array(providerInfoSchema),
+  /** Active models offered as fresh picker choices. */
+  models: z.array(availableModelSchema),
+  /**
+   * Retired/legacy models the picker no longer offers but that may still be
+   * the user's stored selection. Clients prepend the matching entry when a
+   * stored model isn't in `models`, so deprecation doesn't silently rewrite
+   * the user's choice.
+   */
+  selectedOnlyModels: z.array(availableModelSchema),
+});
+export type SystemExecutionOptionsResponse = z.infer<
+  typeof systemExecutionOptionsResponseSchema
+>;
+
+export const threadComposerBootstrapResponseSchema = z.object({
+  defaultExecutionOptions: resolvedThreadExecutionOptionsSchema.nullable(),
+  drafts: threadDraftListResponseSchema,
+  executionOptions: systemExecutionOptionsResponseSchema,
+  pendingInteractions: threadPendingInteractionsResponseSchema,
+  promptHistory: promptHistoryResponseSchema,
+});
+export type ThreadComposerBootstrapResponse = z.infer<
+  typeof threadComposerBootstrapResponseSchema
+>;
 
 const mergeBaseBranchQuerySchema = z
   .string("A merge base branch is required")
@@ -840,15 +889,16 @@ export type ThreadStorageContentQuery = z.infer<
   typeof threadStorageContentQuerySchema
 >;
 
-export const systemModelsQuerySchema = z
+export const systemExecutionOptionsQuerySchema = z
   .object({
     providerId: z.string().min(1),
     hostId: z.string().min(1),
     environmentId: z.string().min(1),
-    selectedModel: z.string().min(1),
   })
   .partial();
-export type SystemModelsQuery = z.infer<typeof systemModelsQuerySchema>;
+export type SystemExecutionOptionsQuery = z.infer<
+  typeof systemExecutionOptionsQuerySchema
+>;
 
 export const systemProvidersQuerySchema = z
   .object({
@@ -1017,10 +1067,7 @@ export type UpdateProjectSourceRequest = z.infer<
   typeof updateProjectSourceRequestSchema
 >;
 
-export const environmentActionTypeSchema = z.enum([
-  "commit",
-  "squash_merge",
-]);
+export const environmentActionTypeSchema = z.enum(["commit", "squash_merge"]);
 export type EnvironmentActionType = z.infer<typeof environmentActionTypeSchema>;
 
 export const squashMergeOptionsSchema = z

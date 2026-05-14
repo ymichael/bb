@@ -1550,8 +1550,12 @@ describe("CLI command output contracts", () => {
         api: {
           v1: {
             system: {
-              models: {
-                $get: get,
+              "execution-options": {
+                $get: vi.fn(async () => ({
+                  providers: [],
+                  models: await get(),
+                  selectedOnlyModels: [],
+                })),
               },
             },
           },
@@ -1571,14 +1575,30 @@ describe("CLI command output contracts", () => {
     ]);
   });
 
-  it("bb provider models forwards the selected model context", async () => {
-    const get = vi.fn(async () => []);
+  it("bb provider models includes a matching selected-only model", async () => {
+    const get = vi.fn(async () => ({
+      providers: [],
+      models: [
+        {
+          model: "claude-haiku-4-5",
+          displayName: "Claude Haiku 4.5",
+          isDefault: true,
+        },
+      ],
+      selectedOnlyModels: [
+        {
+          model: "claude-opus-4-6",
+          displayName: "Claude Opus 4.6",
+          isDefault: false,
+        },
+      ],
+    }));
     createClientMock.mockReturnValue(
       asServerClient({
         api: {
           v1: {
             system: {
-              models: {
+              "execution-options": {
                 $get: get,
               },
             },
@@ -1601,9 +1621,14 @@ describe("CLI command output contracts", () => {
     expect(get).toHaveBeenCalledWith({
       query: {
         providerId: "claude-code",
-        selectedModel: "claude-opus-4-6",
       },
     });
+    expect(collectLogPayloads(vi.mocked(console.log))).toEqual([
+      "Models for claude-code:",
+      "",
+      "Model             Name              Default\n----------------  ----------------  -------\nclaude-opus-4-6   Claude Opus 4.6\n----------------  ----------------  -------\nclaude-haiku-4-5  Claude Haiku 4.5  *",
+      "",
+    ]);
   });
 
   it("bb thread spawn --json prints the raw thread", async () => {

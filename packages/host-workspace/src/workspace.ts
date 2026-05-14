@@ -16,6 +16,7 @@ import {
   hasUncommittedChanges,
   listBranches,
   parseNameStatusEntries,
+  parseNumstatEntriesZ,
   parsePorcelainEntries,
   pathExists,
   readDefaultBranch,
@@ -331,7 +332,7 @@ function formatShortstat(args: {
 }
 
 async function readHeadNumstat(workspacePath: string): Promise<string> {
-  const result = await runGit(["diff", "--numstat", "HEAD", "--"], {
+  const result = await runGit(["diff", "--numstat", "-z", "HEAD", "--"], {
     cwd: workspacePath,
     allowFailure: true,
   });
@@ -344,7 +345,7 @@ async function readHeadNumstat(workspacePath: string): Promise<string> {
   const detail = result.stderr.trim();
   throw new WorkspaceError(
     "git_command_failed",
-    `git diff --numstat HEAD -- failed${detail ? `: ${detail}` : ""}`,
+    `git diff --numstat -z HEAD -- failed${detail ? `: ${detail}` : ""}`,
   );
 }
 
@@ -403,7 +404,29 @@ export class Workspace {
     ]);
 
     const entries = parsePorcelainEntries(statusOutput.stdout);
-    const workingTreeSummary = summarizeNumstat(diffOutput);
+    const numstatEntries = parseNumstatEntriesZ(diffOutput);
+    const numstatByPath = new Map(
+      numstatEntries.map((entry) => [entry.path, entry] as const),
+    );
+    let workingTreeInsertions = 0;
+    let workingTreeDeletions = 0;
+    for (const entry of numstatEntries) {
+      if (entry.insertions !== null) workingTreeInsertions += entry.insertions;
+      if (entry.deletions !== null) workingTreeDeletions += entry.deletions;
+    }
+    const files: WorkspaceFileStatus[] = entries.map((entry) => {
+      const numstat = numstatByPath.get(entry.path);
+      return {
+        path: entry.path,
+        status: resolveWorkspaceFileStatusKind({
+          indexStatus: entry.indexStatus,
+          status: entry.status,
+          worktreeStatus: entry.worktreeStatus,
+        }),
+        insertions: numstat?.insertions ?? null,
+        deletions: numstat?.deletions ?? null,
+      };
+    });
     const hasUntracked = entries.some((entry) => entry.status === "??");
     const hasTrackedChanges = entries.some((entry) => entry.status !== "??");
     const hasDirtyEntries = entries.length > 0;
@@ -419,16 +442,9 @@ export class Workspace {
       workingTree: {
         hasUncommittedChanges: hasDirtyEntries,
         state,
-        insertions: workingTreeSummary.insertions,
-        deletions: workingTreeSummary.deletions,
-        files: entries.map((entry) => ({
-          path: entry.path,
-          status: resolveWorkspaceFileStatusKind({
-            indexStatus: entry.indexStatus,
-            status: entry.status,
-            worktreeStatus: entry.worktreeStatus,
-          }),
-        })),
+        insertions: workingTreeInsertions,
+        deletions: workingTreeDeletions,
+        files,
       },
       branch: {
         currentBranch: currentBranch ?? null,
@@ -887,7 +903,13 @@ export class Workspace {
           { cwd: this.path, allowFailure: true },
         ),
         runGit(
-          ["diff", "--no-ext-diff", "--numstat", `${mergeBaseBranch}...HEAD`],
+          [
+            "diff",
+            "--no-ext-diff",
+            "--numstat",
+            "-z",
+            `${mergeBaseBranch}...HEAD`,
+          ],
           { cwd: this.path, allowFailure: true },
         ),
       ]);
@@ -900,19 +922,29 @@ export class Workspace {
       ? behindCount
       : 0;
     let effectiveCommits = commits;
+    const numstatEntries =
+      numstat.exitCode === 0 ? parseNumstatEntriesZ(numstat.stdout) : [];
+    const numstatByPath = new Map(
+      numstatEntries.map((entry) => [entry.path, entry] as const),
+    );
     let effectiveFiles: WorkspaceFileStatus[] =
       nameStatus.exitCode === 0
-        ? parseNameStatusEntries(nameStatus.stdout).map((entry) => ({
-            path: entry.path,
-            status: mapNameStatusLetter(entry.status),
-          }))
+        ? parseNameStatusEntries(nameStatus.stdout).map((entry) => {
+            const numstat = numstatByPath.get(entry.path);
+            return {
+              path: entry.path,
+              status: mapNameStatusLetter(entry.status),
+              insertions: numstat?.insertions ?? null,
+              deletions: numstat?.deletions ?? null,
+            };
+          })
         : [];
-    const mergeBaseSummary =
-      numstat.exitCode === 0
-        ? summarizeNumstat(numstat.stdout)
-        : { changedFiles: 0, insertions: 0, deletions: 0 };
-    let effectiveInsertions = mergeBaseSummary.insertions;
-    let effectiveDeletions = mergeBaseSummary.deletions;
+    let effectiveInsertions = 0;
+    let effectiveDeletions = 0;
+    for (const entry of numstatEntries) {
+      if (entry.insertions !== null) effectiveInsertions += entry.insertions;
+      if (entry.deletions !== null) effectiveDeletions += entry.deletions;
+    }
 
     // `--cherry-pick` handles regular merges, rebase-merges, and cherry-picks,
     // but not squash merges. Only look for a squash when the branch still

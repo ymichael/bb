@@ -138,8 +138,11 @@ export function useAddLocalProjectSource() {
     },
     mutationFn: ({ projectId, hostId, path }: AddLocalProjectSourceRequest) =>
       api.addProjectSource(projectId, { type: "local_path", hostId, path }),
-    onSuccess: () => {
-      invalidateProjectSourceQueries({ queryClient });
+    onSuccess: (_data, variables) => {
+      invalidateProjectSourceQueries({
+        projectId: variables.projectId,
+        queryClient,
+      });
     },
   });
 }
@@ -160,8 +163,11 @@ export function useUpdateLocalProjectSource() {
         type: "local_path",
         path,
       }),
-    onSuccess: () => {
-      invalidateProjectSourceQueries({ queryClient });
+    onSuccess: (_data, variables) => {
+      invalidateProjectSourceQueries({
+        projectId: variables.projectId,
+        queryClient,
+      });
     },
   });
 }

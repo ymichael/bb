@@ -37,6 +37,7 @@ export function useProjects(options?: QueryOptions) {
     queryKey: projectsQueryKey(),
     queryFn: () => api.listProjects(),
     enabled: options?.enabled ?? true,
+    refetchOnMount: false,
     staleTime: 30_000,
   });
 }

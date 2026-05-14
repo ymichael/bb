@@ -232,7 +232,7 @@ function createFakeRuntime(): FakeRuntime {
       async () => undefined,
     ),
     listModels: vi.fn<(args: ListModelsArgs) => Promise<ListModelsResult>>(
-      async () => [],
+      async () => ({ models: [], selectedOnlyModels: [] }),
     ),
     listRunningProviders: vi.fn<() => string[]>(() => []),
     shutdown: vi.fn<() => Promise<void>>(async () => undefined),

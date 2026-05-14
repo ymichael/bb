@@ -1029,7 +1029,7 @@ rl.on("line", (line) => {
         adapterFactory: () => createFakeAdapter(scriptPath),
       });
 
-      const models = await runtime.listModels({ providerId: "fake" });
+      const { models } = await runtime.listModels({ providerId: "fake" });
       expect(models).toHaveLength(1);
       expect(models[0].id).toBe("fake-model");
       expect(models[0].isDefault).toBe(true);

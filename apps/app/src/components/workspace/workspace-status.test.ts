@@ -31,6 +31,8 @@ function makeStatus(options: MakeStatusOptions): WorkspaceStatus {
   const files = Array.from({ length: fileCount }, (_, index) => ({
     path: `file-${index}.ts`,
     status: "M" as const,
+    insertions: null,
+    deletions: null,
   }));
   return makeWorkspaceStatus({
     workingTree: makeWorkspaceWorkingTree({

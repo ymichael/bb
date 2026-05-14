@@ -71,6 +71,13 @@ export type WorkspaceFileStatusKind = z.infer<
 export const workspaceFileStatusSchema = z.object({
   path: z.string(),
   status: workspaceFileStatusKindSchema,
+  /**
+   * Per-file line counts from `git diff --numstat`. Null when the count is
+   * unknown — binary files (numstat reports `-`) and untracked files (numstat
+   * does not include them).
+   */
+  insertions: z.number().nullable(),
+  deletions: z.number().nullable(),
 });
 export type WorkspaceFileStatus = z.infer<typeof workspaceFileStatusSchema>;
 

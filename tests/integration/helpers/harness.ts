@@ -220,6 +220,7 @@ async function startIntegrationServer(
     openAiApiKey: process.env.OPENAI_API_KEY ?? "test-openai-key",
     appUrl: "https://bb.example.test",
     externalUrl: "https://bb.example.test",
+    serverPort: 0,
     sandboxActivityExtensionDebounceMs: 30_000,
     sandboxIdleThresholdMs: 300_000,
     isDevelopment: false,
@@ -276,7 +277,9 @@ async function startIntegrationServer(
     await new Promise((resolve) => setTimeout(resolve, 5));
   }
 
-  const baseUrl = `http://${TEST_SERVER_HOST}:${requireListeningAddress(addressInfo).port}`;
+  const { port } = requireListeningAddress(addressInfo);
+  config.serverPort = port;
+  const baseUrl = `http://${TEST_SERVER_HOST}:${port}`;
 
   return {
     baseUrl,

@@ -19,7 +19,10 @@ type GithubBranchResponses = [Response, Response];
 
 export interface GithubBranchesResult {
   branches: string[];
+  /** Always null for GitHub sources — there is no working-tree HEAD. */
   current: string | null;
+  /** The repo's `default_branch` as reported by the GitHub repo API. */
+  defaultBranch: string | null;
 }
 
 /**
@@ -85,7 +88,7 @@ export async function fetchGithubBranches(
           ...branchNames.filter((b) => b !== repo.default_branch),
         ]
       : branchNames;
-    return { branches, current: repo.default_branch };
+    return { branches, current: null, defaultBranch: repo.default_branch };
   } catch {
     throw new ApiError(
       502,

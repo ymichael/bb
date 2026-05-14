@@ -1,6 +1,5 @@
 import type { QueryKey } from "@tanstack/react-query";
 import {
-  allAvailableModelsQueryKeyPrefix,
   allEnvironmentGitDiffQueryKeyPrefix,
   allEnvironmentFilePreviewQueryKeyPrefix,
   allEnvironmentMergeBaseBranchesQueryKeyPrefix,
@@ -8,6 +7,8 @@ import {
   allEnvironmentWorkStatusQueryKeyPrefix,
   allHostQueryKeyPrefix,
   allProjectFilesQueryKeyPrefix,
+  allSystemExecutionOptionsQueryKeyPrefix,
+  allThreadComposerBootstrapQueryKeyPrefix,
   allThreadDefaultExecutionOptionsQueryKeyPrefix,
   allThreadDraftsQueryKeyPrefix,
   allThreadPendingInteractionsQueryKeyPrefix,
@@ -21,7 +22,6 @@ import {
   projectsQueryKey,
   replayCapturesQueryKey,
   sandboxEnvVarsQueryKey,
-  statusQueryKey,
   systemProvidersQueryKey,
   threadsQueryKey,
 } from "./queries/query-keys";
@@ -30,12 +30,6 @@ import {
   invalidateQueryKeys,
   refetchFailedActiveQueryKeys,
 } from "./cache-effect-utils";
-
-export function invalidateHostsAfterServerInitialConnection({
-  queryClient,
-}: QueryClientArg): void {
-  invalidateHostAvailabilityQueries({ queryClient });
-}
 
 export function invalidateRealtimeQueriesAfterServerReconnect({
   queryClient,
@@ -69,7 +63,10 @@ export function invalidateHostChangeDependentQueries({
   queryClient.invalidateQueries({ queryKey: projectsQueryKey() });
   queryClient.invalidateQueries({ queryKey: systemProvidersQueryKey() });
   queryClient.invalidateQueries({
-    queryKey: allAvailableModelsQueryKeyPrefix(),
+    queryKey: allSystemExecutionOptionsQueryKeyPrefix(),
+  });
+  queryClient.invalidateQueries({
+    queryKey: allThreadComposerBootstrapQueryKeyPrefix(),
   });
 }
 
@@ -106,6 +103,7 @@ function getServerReconnectInvalidationQueryKeys(): QueryKey[] {
     allProjectFilesQueryKeyPrefix(),
     threadsQueryKey(),
     allThreadQueryKeyPrefix(),
+    allThreadComposerBootstrapQueryKeyPrefix(),
     allThreadTimelineQueryKeyPrefix(),
     allThreadDraftsQueryKeyPrefix(),
     allThreadPendingInteractionsQueryKeyPrefix(),
@@ -119,7 +117,6 @@ function getServerReconnectInvalidationQueryKeys(): QueryKey[] {
     allEnvironmentFilePreviewQueryKeyPrefix(),
     localPathExistenceQueryKeyPrefix(),
     systemProvidersQueryKey(),
-    allAvailableModelsQueryKeyPrefix(),
-    statusQueryKey(),
+    allSystemExecutionOptionsQueryKeyPrefix(),
   ];
 }

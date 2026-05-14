@@ -259,12 +259,10 @@ const commandHandlers: CommandHandlerMap = {
   "provider.list_models": async (
     command: Extract<HostDaemonCommand, { type: "provider.list_models" }>,
     options: CommandDispatchOptions,
-  ) => ({
-    models: await (options.listModels ?? defaultListModels)({
+  ) =>
+    (options.listModels ?? defaultListModels)({
       providerId: command.providerId,
-      selectedModel: command.selectedModel,
     }),
-  }),
   "environment.provision": async (
     command: Extract<HostDaemonCommand, { type: "environment.provision" }>,
     options: CommandDispatchOptions,

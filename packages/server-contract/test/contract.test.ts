@@ -9,6 +9,8 @@ import {
   createAutomationRequestSchema,
   createHostJoinRequestSchema,
   createHostJoinResponseSchema,
+  createLocalPersistentHostJoinRequest,
+  createPersistentHostJoinRequest,
   createDraftRequestSchema,
   createManagerThreadRequestSchema,
   createProjectSourceRequestSchema,
@@ -128,14 +130,12 @@ const INTENTIONAL_OPTIONAL_SERVER_FIELDS: Record<string, string> = {
     "Immediate agent-to-agent CLI sends include the current thread; user-originated sends and queued drafts omit live sender context.",
   "sendMessageRequestSchema.serviceTier":
     "Follow-up sends may inherit the thread's default service tier.",
-  "systemModelsQuerySchema.environmentId":
-    "System model lookup may target a host indirectly through an environment id.",
-  "systemModelsQuerySchema.hostId":
-    "System model lookup may target a specific host directly.",
-  "systemModelsQuerySchema.providerId":
-    "System model lookup may omit provider id to list models for every provider on the chosen host.",
-  "systemModelsQuerySchema.selectedModel":
-    "System model lookup may omit selectedModel to list only active provider models.",
+  "systemExecutionOptionsQuerySchema.environmentId":
+    "System execution option lookup may target a host indirectly through an environment id.",
+  "systemExecutionOptionsQuerySchema.hostId":
+    "System execution option lookup may target a specific host directly.",
+  "systemExecutionOptionsQuerySchema.providerId":
+    "System execution option lookup may omit provider id to use the chosen host's default provider.",
   "systemProvidersQuerySchema.environmentId":
     "System provider lookup may target a host indirectly through an environment id.",
   "systemProvidersQuerySchema.hostId":
@@ -348,6 +348,45 @@ describe("server-contract canonical schemas", () => {
     });
 
     expect(createHostJoinRequestSchema.parse({})).toEqual({});
+
+    expect(
+      createHostJoinRequestSchema.parse({
+        hostId: "host_local",
+        hostType: "persistent",
+        joinMode: "local",
+      }),
+    ).toMatchObject({
+      hostId: "host_local",
+      hostType: "persistent",
+      joinMode: "local",
+    });
+
+    expect(() =>
+      createHostJoinRequestSchema.parse({
+        joinMode: "local",
+      }),
+    ).toThrow();
+
+    expect(
+      createPersistentHostJoinRequest({ hostId: "host_persistent" }),
+    ).toEqual({
+      hostId: "host_persistent",
+      hostType: "persistent",
+    });
+    expect(createPersistentHostJoinRequest({ hostId: null })).toEqual({
+      hostType: "persistent",
+    });
+    expect(
+      createLocalPersistentHostJoinRequest({ hostId: "host_local" }),
+    ).toEqual({
+      hostId: "host_local",
+      hostType: "persistent",
+      joinMode: "local",
+    });
+    expect(createLocalPersistentHostJoinRequest({ hostId: null })).toEqual({
+      hostType: "persistent",
+      joinMode: "local",
+    });
 
     expect(
       createHostJoinRequestSchema.parse({
@@ -725,6 +764,14 @@ describe("server-contract clients", () => {
         .pathname,
     ).toBe("/api/v1/threads/thr_123/drafts");
     expect(
+      publicClient.threads[":id"]["composer-bootstrap"].$url({
+        param: { id: "thr_123" },
+      }).pathname,
+    ).toBe("/api/v1/threads/thr_123/composer-bootstrap");
+    expect(publicClient.system["execution-options"].$url().pathname).toBe(
+      "/api/v1/system/execution-options",
+    );
+    expect(
       publicClient.projects[":id"].managers.$url({
         param: { id: "proj_123" },
       }).pathname,
@@ -886,7 +933,8 @@ describe("server-contract clients", () => {
       sendDraftResponseSchema: contract.sendDraftResponseSchema,
       sendMessageRequestSchema: contract.sendMessageRequestSchema,
       squashMergeActionResponseSchema: contract.squashMergeActionResponseSchema,
-      systemModelsQuerySchema: contract.systemModelsQuerySchema,
+      systemExecutionOptionsQuerySchema:
+        contract.systemExecutionOptionsQuerySchema,
       systemProvidersQuerySchema: contract.systemProvidersQuerySchema,
       threadEventsQuerySchema: contract.threadEventsQuerySchema,
       threadListQuerySchema: contract.threadListQuerySchema,

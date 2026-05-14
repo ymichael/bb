@@ -5,6 +5,7 @@ import type {
   ProjectChangeKind,
   SystemChangeKind,
   ThreadChangeKind,
+  ThreadChangeMetadata,
 } from "@bb/domain";
 import type { DbNotifier } from "@bb/db";
 import type { HostDaemonSessionCloseReason } from "@bb/host-daemon-contract";
@@ -293,11 +294,16 @@ export class NotificationHub implements DbNotifier {
     this.commandResultWaiters.delete(commandId);
   }
 
-  notifyThread(threadId: string, changes: ThreadChangeKind[]): void {
+  notifyThread(
+    threadId: string,
+    changes: ThreadChangeKind[],
+    metadata?: ThreadChangeMetadata,
+  ): void {
     this.notifyClients({
       type: "changed",
       entity: "thread",
       id: threadId,
+      ...(metadata ? { metadata } : {}),
       changes,
     });
 

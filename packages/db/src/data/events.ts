@@ -184,8 +184,7 @@ export function insertEvents(
   let insertedCount = 0;
   const insertedInputIndexes: number[] = [];
 
-  // Track which threads get new events for notification
-  const threadIds = new Set<string>();
+  const eventTypesByThreadId = new Map<string, Set<ThreadEventType>>();
 
   for (const [index, input] of eventInputs.entries()) {
     const id = createEventId();
@@ -198,12 +197,19 @@ export function insertEvents(
     if (result.changes > 0) {
       insertedCount++;
       insertedInputIndexes.push(index);
-      threadIds.add(input.threadId);
+      const eventTypes = eventTypesByThreadId.get(input.threadId);
+      if (eventTypes) {
+        eventTypes.add(input.type);
+      } else {
+        eventTypesByThreadId.set(input.threadId, new Set([input.type]));
+      }
     }
   }
 
-  for (const threadId of threadIds) {
-    notifier.notifyThread(threadId, ["events-appended"]);
+  for (const [threadId, eventTypes] of eventTypesByThreadId) {
+    notifier.notifyThread(threadId, ["events-appended"], {
+      eventTypes: Array.from(eventTypes),
+    });
   }
 
   return {
@@ -549,7 +555,9 @@ export function appendStoredThreadEvent(
     (tx) => appendStoredThreadEventInTransaction(tx, args),
     { behavior: "immediate" },
   );
-  notifier.notifyThread(args.threadId, ["events-appended"]);
+  notifier.notifyThread(args.threadId, ["events-appended"], {
+    eventTypes: [args.type],
+  });
   return sequence;
 }
 

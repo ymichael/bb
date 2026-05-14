@@ -1,18 +1,33 @@
 // @vitest-environment jsdom
 
-import { cleanup, renderHook, waitFor } from "@testing-library/react";
+import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import type { Environment, Host, ThreadWithRuntime } from "@bb/domain";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { useThreadCreationOptions } from "@/hooks/useThreadCreationOptions";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
+import { installAbortableJsonRoute } from "@/test/abort-signal-test-utils";
 import { installFetchRoutes, jsonResponse } from "@/test/http-test-utils";
 import { useEffectiveHost } from "./effective-hosts";
 import { useEnvironment } from "./environment-queries";
 import {
   useThread,
+  useThreadComposerBootstrap,
   useThreadDetailBootstrap,
+  useThreadDefaultExecutionOptions,
+  useThreadDrafts,
+  useThreadPendingInteractions,
+  useThreadPromptHistory,
 } from "./thread-queries";
-import { hostsQueryKey, threadQueryKey } from "./query-keys";
+import {
+  hostsQueryKey,
+  systemExecutionOptionsQueryKey,
+  threadDefaultExecutionOptionsQueryKey,
+  threadDraftsQueryKey,
+  threadPendingInteractionsQueryKey,
+  threadPromptHistoryQueryKey,
+  threadQueryKey,
+} from "./query-keys";
 
 interface TestWrapperProps {
   children: ReactNode;
@@ -168,7 +183,9 @@ describe("thread query bootstraps", () => {
     expect(leanThreadRequestCount).toBe(0);
     expect(hostListRequestCount).toBe(0);
 
-    await queryClient.invalidateQueries({ queryKey: threadQueryKey(thread.id) });
+    await queryClient.invalidateQueries({
+      queryKey: threadQueryKey(thread.id),
+    });
     await waitFor(() => {
       expect(leanThreadRequestCount).toBe(1);
     });
@@ -213,5 +230,252 @@ describe("thread query bootstraps", () => {
     });
     expect(includeThreadRequestCount).toBe(1);
     expect(leanThreadRequestCount).toBe(1);
+  });
+
+  it("primes composer caches from the thread composer bootstrap", async () => {
+    const defaultExecutionOptions = {
+      model: "gpt-5.5",
+      permissionMode: "workspace-write",
+      reasoningLevel: "medium",
+      serviceTier: "default",
+      source: "client/turn/requested",
+    };
+    const drafts = [
+      {
+        id: "draft-1",
+        content: [{ type: "text", text: "queued follow-up" }],
+        createdAt: 1,
+        model: "gpt-5.5",
+        permissionMode: "workspace-write",
+        reasoningLevel: "medium",
+        serviceTier: "default",
+        updatedAt: 1,
+      },
+    ];
+    const promptHistory = [
+      {
+        id: "event-1",
+        createdAt: 2,
+        input: [{ type: "text", text: "accepted prompt" }],
+      },
+    ];
+    const executionOptions = {
+      providers: [
+        {
+          id: "codex",
+          displayName: "Codex",
+          available: true,
+          capabilities: {
+            supportsArchive: true,
+            supportsRename: true,
+            supportsServiceTier: true,
+            supportedPermissionModes: ["full", "workspace-write", "readonly"],
+          },
+        },
+      ],
+      models: [
+        {
+          id: "gpt-5.5",
+          model: "gpt-5.5",
+          displayName: "GPT-5.5",
+          description: "Frontier model",
+          supportedReasoningEfforts: [
+            {
+              reasoningEffort: "medium",
+              description: "Balanced",
+            },
+          ],
+          defaultReasoningEffort: "medium",
+          isDefault: true,
+        },
+      ],
+    };
+    let bootstrapRequestCount = 0;
+    let fallbackRequestCount = 0;
+    let executionOptionsHostlessRequestCount = 0;
+    let executionOptionsScopedRequestCount = 0;
+    installFetchRoutes([
+      {
+        pathname: "/api/v1/threads/thread-1/composer-bootstrap",
+        handler: () => {
+          bootstrapRequestCount += 1;
+          return jsonResponse({
+            defaultExecutionOptions,
+            drafts,
+            executionOptions,
+            pendingInteractions: [],
+            promptHistory,
+          });
+        },
+      },
+      {
+        pathname: "/api/v1/threads/thread-1/default-execution-options",
+        handler: () => {
+          fallbackRequestCount += 1;
+          return jsonResponse(defaultExecutionOptions);
+        },
+      },
+      {
+        pathname: "/api/v1/threads/thread-1/drafts",
+        handler: () => {
+          fallbackRequestCount += 1;
+          return jsonResponse(drafts);
+        },
+      },
+      {
+        pathname: "/api/v1/threads/thread-1/prompt-history",
+        handler: () => {
+          fallbackRequestCount += 1;
+          return jsonResponse(promptHistory);
+        },
+      },
+      {
+        pathname: "/api/v1/threads/thread-1/interactions",
+        handler: () => {
+          fallbackRequestCount += 1;
+          return jsonResponse([]);
+        },
+      },
+      {
+        pathname: "/api/v1/system/execution-options",
+        handler: (request) => {
+          const environmentId = new URL(request.url).searchParams.get(
+            "environmentId",
+          );
+          if (environmentId === "environment-1") {
+            executionOptionsScopedRequestCount += 1;
+          } else {
+            executionOptionsHostlessRequestCount += 1;
+          }
+          return jsonResponse(executionOptions);
+        },
+      },
+    ]);
+    const { queryClient, wrapper } = createWrapper();
+
+    const { result } = renderHook(
+      () => {
+        const bootstrap = useThreadComposerBootstrap("thread-1", {
+          environmentId: "environment-1",
+        });
+        const canonicalEnabled = bootstrap.isSuccess || bootstrap.isError;
+        const seededStaleTime = bootstrap.isSuccess ? 10_000 : undefined;
+        const defaultExecution = useThreadDefaultExecutionOptions("thread-1", {
+          enabled: canonicalEnabled,
+          refetchOnMount: bootstrap.isSuccess ? false : "always",
+          staleTime: seededStaleTime,
+        });
+        const draftList = useThreadDrafts("thread-1", {
+          enabled: canonicalEnabled,
+          refetchOnMount: bootstrap.isSuccess ? false : "always",
+          staleTime: seededStaleTime,
+        });
+        const history = useThreadPromptHistory("thread-1", {
+          enabled: canonicalEnabled,
+          refetchOnMount: bootstrap.isSuccess ? false : "always",
+          staleTime: seededStaleTime,
+        });
+        const interactions = useThreadPendingInteractions("thread-1", {
+          enabled: canonicalEnabled,
+          refetchOnMount: bootstrap.isSuccess ? false : "always",
+          staleTime: seededStaleTime,
+        });
+        const creationOptions = useThreadCreationOptions({
+          enabled: canonicalEnabled,
+          environmentId: "environment-1",
+          initialModel: "gpt-5.5",
+          initialProviderId: "codex",
+          resetKey: "thread-1",
+          scope: "thread",
+        });
+        return {
+          bootstrap,
+          creationOptions,
+          defaultExecution,
+          draftList,
+          history,
+          interactions,
+        };
+      },
+      { wrapper },
+    );
+
+    await waitFor(() => {
+      expect(result.current.bootstrap.status).toBe("success");
+      expect(result.current.defaultExecution.data?.model).toBe("gpt-5.5");
+      expect(result.current.draftList.data).toEqual(drafts);
+      expect(result.current.creationOptions.selectedProviderId).toBe("codex");
+      expect(result.current.creationOptions.modelOptions).toEqual([
+        {
+          label: "GPT-5.5",
+          value: "gpt-5.5",
+        },
+      ]);
+      expect(result.current.history.data).toEqual(promptHistory);
+      expect(result.current.interactions.data).toEqual([]);
+    });
+    expect(
+      queryClient.getQueryData(
+        threadDefaultExecutionOptionsQueryKey("thread-1"),
+      ),
+    ).toEqual(defaultExecutionOptions);
+    expect(queryClient.getQueryData(threadDraftsQueryKey("thread-1"))).toEqual(
+      drafts,
+    );
+    expect(
+      queryClient.getQueryData(threadPromptHistoryQueryKey("thread-1")),
+    ).toEqual(promptHistory);
+    expect(
+      queryClient.getQueryData(threadPendingInteractionsQueryKey("thread-1")),
+    ).toEqual([]);
+    expect(
+      queryClient.getQueryData(
+        systemExecutionOptionsQueryKey({
+          environmentId: "environment-1",
+          providerId: "codex",
+        }),
+      ),
+    ).toEqual(executionOptions);
+    expect(bootstrapRequestCount).toBe(1);
+    expect(fallbackRequestCount).toBe(0);
+    expect(executionOptionsHostlessRequestCount).toBe(0);
+    expect(executionOptionsScopedRequestCount).toBe(0);
+
+    await act(async () => {
+      await queryClient.invalidateQueries({
+        queryKey: systemExecutionOptionsQueryKey({
+          environmentId: "environment-1",
+          providerId: "codex",
+        }),
+      });
+    });
+
+    await waitFor(() => {
+      expect(executionOptionsScopedRequestCount).toBe(1);
+    });
+    expect(executionOptionsHostlessRequestCount).toBe(0);
+  });
+});
+
+describe("thread prompt history query", () => {
+  it("passes AbortSignal through thread prompt history requests", async () => {
+    const route = installAbortableJsonRoute({
+      pathname: "/api/v1/threads/thread-1/prompt-history",
+      body: [],
+    });
+    const { wrapper } = createWrapper();
+    const { unmount } = renderHook(() => useThreadPromptHistory("thread-1"), {
+      wrapper,
+    });
+
+    await waitFor(() => {
+      expect(route.getSignal()).toBeInstanceOf(AbortSignal);
+    });
+
+    unmount();
+
+    await waitFor(() => {
+      expect(route.getSignal()?.aborted).toBe(true);
+    });
   });
 });

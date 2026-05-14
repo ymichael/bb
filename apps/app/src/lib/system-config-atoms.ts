@@ -24,27 +24,49 @@ const unavailableSystemConfig: SystemConfigResponse = {
   voiceTranscriptionEnabled: false,
 };
 
+type SystemConfigLoadStatus = "failed" | "succeeded" | null;
+
+let lastSystemConfigLoadStatus: SystemConfigLoadStatus = null;
+
+function markSystemConfigLoadFailed(): void {
+  lastSystemConfigLoadStatus = "failed";
+}
+
+function markSystemConfigLoadSucceeded(): void {
+  lastSystemConfigLoadStatus = "succeeded";
+}
+
+function didLastSystemConfigLoadFail(): boolean {
+  return lastSystemConfigLoadStatus === "failed";
+}
+
 async function loadSystemConfig(): Promise<SystemConfigResponse> {
   try {
     const res = await apiClient.system.config.$get();
     if (!res.ok) {
+      markSystemConfigLoadFailed();
       return unavailableSystemConfig;
     }
+    markSystemConfigLoadSucceeded();
     return (await res.json()) as SystemConfigResponse;
   } catch {
+    markSystemConfigLoadFailed();
     return unavailableSystemConfig;
   }
 }
 
 // ---------------------------------------------------------------------------
 // System config — fetched from the server on startup and re-fetched on
-// first websocket connection and reconnects (the initial load may fail if the
-// server isn't ready).
+// reconnects. The first websocket connection only refreshes when the initial
+// load failed, so a healthy startup doesn't immediately duplicate the request.
 // ---------------------------------------------------------------------------
 
 const systemConfigRefreshTickAtom = atom(0);
 systemConfigRefreshTickAtom.onMount = (setRefreshTick) => {
-  const unsubscribe = wsManager.onConnected(() => {
+  const unsubscribe = wsManager.onConnected(({ reconnected }) => {
+    if (!reconnected && !didLastSystemConfigLoadFail()) {
+      return;
+    }
     setRefreshTick((count) => count + 1);
   });
   return unsubscribe;
@@ -57,8 +79,9 @@ export const systemConfigAtom = atom(async (get) => {
 
 // ---------------------------------------------------------------------------
 // Local host ID — probed from the host daemon on startup. Re-probes on host
-// status changes, first websocket connection, and reconnects while some UI is
-// subscribed to it. No-daemon is a normal state (e.g., mobile browser).
+// status changes while some UI is subscribed to it. Server connection events
+// refresh systemConfigAtom, which in turn refreshes this atom. No-daemon is a
+// normal state (e.g., mobile browser).
 // ---------------------------------------------------------------------------
 
 const localHostIdRefreshTickAtom = atom(0);
@@ -72,12 +95,8 @@ localHostIdRefreshTickAtom.onMount = (setRefreshTick) => {
       refresh();
     }
   });
-  const unsubscribeConnected = wsManager.onConnected(refresh);
 
-  return () => {
-    unsubscribeChanged();
-    unsubscribeConnected();
-  };
+  return unsubscribeChanged;
 };
 
 /** The local machine's host ID, or null if no daemon is reachable. */

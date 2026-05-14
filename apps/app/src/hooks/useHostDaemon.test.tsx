@@ -9,7 +9,6 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
-import type { Host } from "@bb/domain";
 import { HOST_DAEMON_PROTOCOL_VERSION } from "@bb/host-daemon-contract";
 import type { HostDaemonStatusSnapshot } from "@/lib/api-host-daemon";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
@@ -25,20 +24,15 @@ vi.mock("partysocket/ws", async () => {
   };
 });
 
-interface HostOverrides extends Partial<Host> {}
-
 interface HostDaemonFetchState {
   daemonStatus: HostDaemonStatusSnapshot | null;
   hostDaemonPort: number | null;
-  hosts: Host[];
   pickedFolderPath: string | null;
 }
 
 interface HostDaemonSnapshot {
-  hasConnectedPersistentHost: boolean;
   hasDaemon: boolean;
   isLocalHost: (hostId: string | null | undefined) => boolean;
-  localHost: Host | null;
   localHostId: string | null;
   pickFolder: (() => Promise<string | null>) | null;
   supportsNativeFolderPicker: boolean;
@@ -60,19 +54,6 @@ interface SuspenseWrapperProps {
 
 interface HostDaemonProbeProps {
   onSnapshot: (snapshot: HostDaemonSnapshot) => void;
-}
-
-function makeHost(overrides: HostOverrides = {}): Host {
-  return {
-    createdAt: 1,
-    id: "host-1",
-    lastSeenAt: 1,
-    name: "Local Host",
-    status: "connected",
-    type: "persistent",
-    updatedAt: 1,
-    ...overrides,
-  };
 }
 
 function createSuspenseWrapper() {
@@ -97,11 +78,7 @@ function createHostDaemonProbe(
     return (
       <div>
         <div data-testid="local-host-id">{value.localHostId ?? "null"}</div>
-        <div data-testid="host-name">{value.localHost?.name ?? "none"}</div>
         <div data-testid="has-daemon">{String(value.hasDaemon)}</div>
-        <div data-testid="is-connected">
-          {String(value.hasConnectedPersistentHost)}
-        </div>
         <div data-testid="supports-folder-picker">
           {String(value.supportsNativeFolderPicker)}
         </div>
@@ -138,10 +115,6 @@ function installHostDaemonFetchRoutes(
           sandboxHostSupported: false,
           voiceTranscriptionEnabled: false,
         }),
-    },
-    {
-      pathname: "/api/v1/hosts",
-      handler: async () => jsonResponse(state.hosts),
     },
     {
       pathname: "/status",
@@ -191,7 +164,7 @@ afterEach(() => {
 });
 
 describe("useHostDaemon", () => {
-  it("exposes the local host and bound daemon actions when the daemon is available", async () => {
+  it("exposes local daemon state and bound daemon actions when available", async () => {
     const state: HostDaemonFetchState = {
       daemonStatus: {
         connected: true,
@@ -202,7 +175,6 @@ describe("useHostDaemon", () => {
         platform: "darwin",
       },
       hostDaemonPort: 4123,
-      hosts: [makeHost()],
       pickedFolderPath: "/picked/path",
     };
     const pickFolderRequests: number[] = [];
@@ -231,15 +203,12 @@ describe("useHostDaemon", () => {
       expect(screen.getByTestId("local-host-id").textContent).toBe("host-1");
     });
 
-    expect(screen.getByTestId("host-name").textContent).toBe("Local Host");
     expect(screen.getByTestId("has-daemon").textContent).toBe("true");
-    expect(screen.getByTestId("is-connected").textContent).toBe("true");
     expect(screen.getByTestId("supports-folder-picker").textContent).toBe(
       "true",
     );
     expect(screen.getByTestId("is-local-host-1").textContent).toBe("true");
     expect(screen.getByTestId("is-local-host-2").textContent).toBe("false");
-    expect(latestSnapshot.current?.localHost).toEqual(makeHost());
 
     fireEvent.click(screen.getByRole("button", { name: "pick folder" }));
 
@@ -252,7 +221,6 @@ describe("useHostDaemon", () => {
     const state: HostDaemonFetchState = {
       daemonStatus: null,
       hostDaemonPort: null,
-      hosts: [],
       pickedFolderPath: null,
     };
     installHostDaemonFetchRoutes(state, []);
@@ -279,9 +247,7 @@ describe("useHostDaemon", () => {
     expect((await screen.findByTestId("local-host-id")).textContent).toBe(
       "null",
     );
-    expect(screen.getByTestId("host-name").textContent).toBe("none");
     expect(screen.getByTestId("has-daemon").textContent).toBe("false");
-    expect(screen.getByTestId("is-connected").textContent).toBe("false");
     expect(screen.getByTestId("supports-folder-picker").textContent).toBe(
       "false",
     );
@@ -291,7 +257,6 @@ describe("useHostDaemon", () => {
         .getByRole("button", { name: "pick folder" })
         .hasAttribute("disabled"),
     ).toBe(true);
-    expect(latestSnapshot.current?.localHost).toBeNull();
     expect(latestSnapshot.current?.pickFolder).toBeNull();
   });
 
@@ -306,7 +271,6 @@ describe("useHostDaemon", () => {
         platform: "linux",
       },
       hostDaemonPort: 4123,
-      hosts: [makeHost()],
       pickedFolderPath: null,
     };
     installHostDaemonFetchRoutes(state, []);
@@ -343,48 +307,6 @@ describe("useHostDaemon", () => {
       expect(screen.getByTestId("supports-folder-picker").textContent).toBe(
         "true",
       );
-    });
-
-    wsManager.disconnect();
-  });
-
-  it("does not report cached connected hosts as connected while the server websocket reconnects", async () => {
-    const state: HostDaemonFetchState = {
-      daemonStatus: {
-        connected: true,
-        hostId: "host-1",
-        protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
-        serverUrl: "http://localhost:3334",
-        supportsNativeFolderPicker: false,
-        platform: "linux",
-      },
-      hostDaemonPort: 4123,
-      hosts: [makeHost()],
-      pickedFolderPath: null,
-    };
-    installHostDaemonFetchRoutes(state, []);
-
-    const { FakeReconnectingWebSocket, useHostDaemon, wsManager } =
-      await importFreshHostDaemonModules();
-    const HostDaemonProbe = createHostDaemonProbe(useHostDaemon);
-
-    await act(async () => {
-      render(<HostDaemonProbe onSnapshot={() => {}} />, {
-        wrapper: createSuspenseWrapper(),
-      });
-    });
-
-    await waitFor(() => {
-      expect(screen.getByTestId("is-connected").textContent).toBe("true");
-    });
-
-    wsManager.connect();
-    const socket = FakeReconnectingWebSocket.latest();
-    socket.open();
-    socket.close();
-
-    await waitFor(() => {
-      expect(screen.getByTestId("is-connected").textContent).toBe("false");
     });
 
     wsManager.disconnect();

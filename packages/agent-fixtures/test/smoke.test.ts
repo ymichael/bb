@@ -22,6 +22,10 @@ import {
 import { promoteCaptureToFixture } from "../src/promote.js";
 import { replayFixtures } from "../src/replay.js";
 
+// The checked-in corpus is large enough to exceed Vitest's 5s default on
+// Ubuntu CI when the full Turbo graph is running in parallel.
+const CORPUS_SMOKE_TEST_TIMEOUT_MS = 30_000;
+
 function tempDir(prefix: string): string {
   return mkdtempSync(join(tmpdir(), prefix));
 }
@@ -85,7 +89,7 @@ describe("@bb/agent-fixtures corpus smoke test", () => {
     for (const bundle of bundles) {
       expect(bundle.manifest.schemaVersion).toBe(3);
     }
-  });
+  }, CORPUS_SMOKE_TEST_TIMEOUT_MS);
 
   it("returns no fixtures for a missing custom root", () => {
     const missingRoot = join(
@@ -105,7 +109,7 @@ describe("@bb/agent-fixtures corpus smoke test", () => {
     });
     expect(result.fixtures).toHaveLength(1);
     expect(result.fixtures[0]?.bundle.timelineRows.length).toBeGreaterThan(0);
-  });
+  }, CORPUS_SMOKE_TEST_TIMEOUT_MS);
 
   it("promotes a synthetic capture to a fixture", async () => {
     const dataDir = tempDir("agent-fixtures-replays-");

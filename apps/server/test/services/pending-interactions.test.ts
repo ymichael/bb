@@ -39,6 +39,70 @@ function registerPendingInteraction(
 }
 
 describe("pending interaction lifecycle", () => {
+  it("includes project and pending state metadata in interaction change notifications", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-pending-interaction-notification-metadata",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+      });
+      const notifyThread = vi.spyOn(harness.hub, "notifyThread");
+
+      const created = registerPendingInteraction(
+        harness.deps,
+        harness.deps.pendingInteractions,
+        {
+          threadId: thread.id,
+          turnId: "turn-notification-metadata-1",
+          providerId: "codex",
+          providerThreadId: "provider-thread-notification-metadata",
+          providerRequestId: "request-notification-metadata",
+          payload: createCommandApprovalPayload({
+            itemId: "item-notification-metadata-1",
+            reason: "Needs approval",
+            command: "git status",
+            cwd: "/tmp/project",
+          }),
+        },
+        session.id,
+      );
+      if (created.outcome === "rejected") {
+        throw new Error(
+          `Expected interaction registration to succeed: ${created.reason}`,
+        );
+      }
+
+      expect(notifyThread).toHaveBeenCalledWith(
+        thread.id,
+        ["interactions-changed"],
+        { hasPendingInteraction: true, projectId: project.id },
+      );
+
+      harness.deps.pendingInteractions.completeResolvingInteraction({
+        interactionId: created.interaction.id,
+        resolution: createAllowOnceResolution(),
+      });
+
+      expect(notifyThread).toHaveBeenCalledWith(
+        thread.id,
+        ["interactions-changed"],
+        { hasPendingInteraction: false, projectId: project.id },
+      );
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("skips corrupt rows when listing pending interactions", async () => {
     const harness = await createTestAppHarness();
     try {

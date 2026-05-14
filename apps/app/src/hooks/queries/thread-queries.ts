@@ -11,6 +11,7 @@ import type {
 } from "@bb/domain";
 import type {
   PromptHistoryResponse,
+  ThreadComposerBootstrapResponse,
   ThreadDraftListResponse,
   ThreadListResponse,
   ManagerTimelineView,
@@ -36,6 +37,8 @@ import {
   environmentQueryKey,
   hostQueryKey,
   hostsQueryKey,
+  systemExecutionOptionsQueryKey,
+  threadComposerBootstrapQueryKey,
   threadDetailBootstrapQueryKey,
   threadDefaultExecutionOptionsQueryKey,
   threadDraftsQueryKey,
@@ -51,10 +54,12 @@ import {
 
 interface QueryOptions {
   enabled?: boolean;
+  refetchOnMount?: boolean | "always";
+  staleTime?: number;
 }
 
-interface RefetchOnMountOptions extends QueryOptions {
-  refetchOnMount?: boolean | "always";
+interface ThreadComposerBootstrapQueryOptions extends QueryOptions {
+  environmentId?: string;
 }
 
 type HostList = Host[];
@@ -165,7 +170,7 @@ export function useThreads(filters: UseThreadsFilters, options?: QueryOptions) {
   });
 }
 
-export function useThread(id: string, options?: RefetchOnMountOptions) {
+export function useThread(id: string, options?: QueryOptions) {
   const queryClient = useQueryClient();
 
   return useQuery<ThreadResponse>({
@@ -180,7 +185,9 @@ export function useThread(id: string, options?: RefetchOnMountOptions) {
   });
 }
 
-function stripThreadIncludes(thread: ThreadWithIncludesResponse): ThreadResponse {
+function stripThreadIncludes(
+  thread: ThreadWithIncludesResponse,
+): ThreadResponse {
   const { environment, host, ...threadResponse } = thread;
   return threadResponse;
 }
@@ -235,6 +242,48 @@ export function useThreadDetailBootstrap(id: string, options?: QueryOptions) {
   });
 }
 
+export function useThreadComposerBootstrap(
+  id: string,
+  options?: ThreadComposerBootstrapQueryOptions,
+) {
+  const queryClient = useQueryClient();
+  const environmentId = options?.environmentId ?? null;
+
+  return useQuery<ThreadComposerBootstrapResponse>({
+    queryKey: threadComposerBootstrapQueryKey(id, environmentId),
+    queryFn: async () => {
+      const bootstrap = await api.getThreadComposerBootstrap(
+        requireThreadId(id, "useThreadComposerBootstrap"),
+      );
+      queryClient.setQueryData(
+        threadDefaultExecutionOptionsQueryKey(id),
+        bootstrap.defaultExecutionOptions,
+      );
+      queryClient.setQueryData(threadDraftsQueryKey(id), bootstrap.drafts);
+      queryClient.setQueryData(
+        threadPromptHistoryQueryKey(id),
+        bootstrap.promptHistory,
+      );
+      queryClient.setQueryData(
+        threadPendingInteractionsQueryKey(id),
+        bootstrap.pendingInteractions,
+      );
+      const providerId = bootstrap.executionOptions.providers[0]?.id;
+      if (providerId) {
+        queryClient.setQueryData(
+          systemExecutionOptionsQueryKey({ environmentId, providerId }),
+          bootstrap.executionOptions,
+        );
+      }
+      return bootstrap;
+    },
+    enabled: (options?.enabled ?? true) && Boolean(id),
+    refetchOnMount: options?.refetchOnMount ?? true,
+    refetchOnWindowFocus: false,
+    staleTime: options?.staleTime,
+  });
+}
+
 export function useThreadDefaultExecutionOptions(
   id: string,
   options?: QueryOptions,
@@ -246,7 +295,9 @@ export function useThreadDefaultExecutionOptions(
         requireThreadId(id, "useThreadDefaultExecutionOptions"),
       ),
     enabled: (options?.enabled ?? true) && Boolean(id),
+    refetchOnMount: options?.refetchOnMount ?? true,
     refetchOnWindowFocus: false,
+    staleTime: options?.staleTime,
   });
 }
 
@@ -255,7 +306,9 @@ export function useThreadDrafts(id: string, options?: QueryOptions) {
     queryKey: threadDraftsQueryKey(id),
     queryFn: () => api.listThreadDrafts(requireThreadId(id, "useThreadDrafts")),
     enabled: (options?.enabled ?? true) && Boolean(id),
+    refetchOnMount: options?.refetchOnMount ?? true,
     refetchOnWindowFocus: false,
+    staleTime: options?.staleTime,
   });
 }
 
@@ -268,7 +321,8 @@ export function useThreadPromptHistory(id: string, options?: QueryOptions) {
         signal,
       ),
     enabled: (options?.enabled ?? true) && Boolean(id),
-    staleTime: 10_000,
+    refetchOnMount: options?.refetchOnMount ?? true,
+    staleTime: options?.staleTime ?? 10_000,
   });
 }
 
@@ -284,7 +338,9 @@ export function useThreadPendingInteractions(
         signal,
       ),
     enabled: (options?.enabled ?? true) && Boolean(id),
+    refetchOnMount: options?.refetchOnMount ?? true,
     refetchOnWindowFocus: false,
+    staleTime: options?.staleTime,
   });
 }
 

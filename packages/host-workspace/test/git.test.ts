@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   parseBranchStatus,
   parseNameStatusEntries,
+  parseNumstatEntriesZ,
   parsePorcelainEntries,
   summarizeNumstat,
 } from "../src/git.js";
@@ -175,5 +176,29 @@ describe("summarizeNumstat", () => {
       insertions: 12,
       deletions: 4,
     });
+  });
+});
+
+describe("parseNumstatEntriesZ", () => {
+  it("parses normal and binary entries from NUL-delimited output", () => {
+    const output =
+      "10\t4\tREADME.md\0" + "-\t-\tbinary.dat\0" + "2\t0\tsrc/app.ts\0";
+    expect(parseNumstatEntriesZ(output)).toEqual([
+      { path: "README.md", insertions: 10, deletions: 4 },
+      { path: "binary.dat", insertions: null, deletions: null },
+      { path: "src/app.ts", insertions: 2, deletions: 0 },
+    ]);
+  });
+
+  it("takes the new path for rename entries", () => {
+    const output = "3\t1\t\0src/old.ts\0src/new.ts\0" + "5\t2\tsrc/app.ts\0";
+    expect(parseNumstatEntriesZ(output)).toEqual([
+      { path: "src/new.ts", insertions: 3, deletions: 1 },
+      { path: "src/app.ts", insertions: 5, deletions: 2 },
+    ]);
+  });
+
+  it("returns an empty array for empty input", () => {
+    expect(parseNumstatEntriesZ("")).toEqual([]);
   });
 });

@@ -211,11 +211,13 @@ async function sendClaimedDraftForIdleProviderThread(
     throw createDraftClaimLostError();
   }
 
-  deps.hub.notifyThread(thread.id, [
-    "events-appended",
-    "queue-changed",
-    "status-changed",
-  ]);
+  deps.hub.notifyThread(
+    thread.id,
+    ["events-appended", "queue-changed", "status-changed"],
+    {
+      eventTypes: ["client/turn/requested"],
+    },
+  );
   deps.hub.notifyCommand(environment.hostId);
   return queuedMessage;
 }

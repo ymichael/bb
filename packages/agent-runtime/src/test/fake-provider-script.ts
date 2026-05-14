@@ -37,22 +37,25 @@ const pendingToolCalls = new Map<JsonRpcId, PendingToolCall>();
 
 let nextProviderThreadId = 1;
 let nextToolCallId = 1;
-const defaultModelList = [
-  {
-    id: "fake-model",
-    model: "fake-model",
-    displayName: "Fake Model",
-    description: "Fake model for integration and runtime tests",
-    supportedReasoningEfforts: [
-      {
-        reasoningEffort: "medium",
-        description: "Medium",
-      },
-    ],
-    defaultReasoningEffort: "medium",
-    isDefault: true,
-  },
-];
+const defaultModelList = {
+  models: [
+    {
+      id: "fake-model",
+      model: "fake-model",
+      displayName: "Fake Model",
+      description: "Fake model for integration and runtime tests",
+      supportedReasoningEfforts: [
+        {
+          reasoningEffort: "medium",
+          description: "Medium",
+        },
+      ],
+      defaultReasoningEffort: "medium",
+      isDefault: true,
+    },
+  ],
+  selectedOnlyModels: [],
+};
 
 function isJsonRecord(value: unknown): value is JsonRecord {
   return typeof value === "object" && value !== null;

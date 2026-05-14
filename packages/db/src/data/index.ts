@@ -236,6 +236,7 @@ export {
   listHostsByIds,
   listNonDestroyedHostsByIds,
   listPublicHosts,
+  markHostSeen,
   updateHost,
   deleteHost,
 } from "./hosts.js";

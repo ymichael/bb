@@ -161,7 +161,6 @@ export interface UnarchiveThreadArgs {
 
 export interface ListModelsArgs {
   providerId: string;
-  selectedModel?: string;
 }
 
 export interface AgentRuntime {
@@ -183,7 +182,10 @@ export interface AgentRuntime {
 
   unarchiveThread(args: UnarchiveThreadArgs): Promise<void>;
 
-  listModels(args: ListModelsArgs): Promise<AvailableModel[]>;
+  listModels(args: ListModelsArgs): Promise<{
+    models: AvailableModel[];
+    selectedOnlyModels: AvailableModel[];
+  }>;
 
   listRunningProviders(): string[];
 

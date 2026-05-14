@@ -6,11 +6,21 @@ import type { CloudAuthProviderId } from "@bb/agent-providers";
 import { Button } from "@/components/ui/button.js";
 import { Icon } from "@/components/ui/icon.js";
 import { COARSE_POINTER_ICON_SIZE_CLASS } from "@/components/ui/coarse-pointer-sizing.js";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu.js";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu.js";
 import { PageShell } from "@/components/ui/page-shell.js";
 import { CloudAuthSettingsSection } from "@/components/settings/CloudAuthSettingsSection";
 import { CONNECTED_DOT_CLASS } from "@/components/settings/constants";
-import { SettingsRow, SettingsRowList, SettingsSection, SettingsWithControl } from "@/components/ui/settings-section.js";
+import {
+  SettingsRow,
+  SettingsRowList,
+  SettingsSection,
+  SettingsWithControl,
+} from "@/components/ui/settings-section.js";
 import {
   SandboxEnvVarsSection,
   type EnvVarEntry,
@@ -23,6 +33,8 @@ import {
   HostRenameDialog,
   type HostRenameDialogTarget,
 } from "@/components/dialogs/HostRenameDialog";
+import { HostJoinAppUrlRequiredDialog } from "@/components/dialogs/HostJoinAppUrlRequiredDialog";
+import { HostJoinDialog } from "@/components/dialogs/HostJoinDialog";
 import {
   setPreferredTheme,
   useThemePreference,
@@ -42,6 +54,9 @@ import {
 } from "@/hooks/cache-effects";
 import { sandboxHostSupportedAtom } from "@/lib/system-config-atoms";
 import * as api from "@/lib/api";
+import { HttpError } from "@/lib/api";
+import { showMutationErrorToast } from "@/lib/mutation-errors";
+import type { CreateHostJoinResponse } from "@bb/server-contract";
 import { cn } from "@/lib/utils";
 
 interface CloudAuthAttemptState {
@@ -55,6 +70,10 @@ interface RenameHostMutationRequest {
 }
 
 interface DeleteHostMutationRequest {
+  id: string;
+}
+
+interface CancelHostJoinMutationRequest {
   id: string;
 }
 
@@ -96,6 +115,11 @@ export function AppSettingsView() {
     useState<HostRenameDialogTarget | null>(null);
   const [deleteTarget, setDeleteTarget] =
     useState<HostDeleteDialogTarget | null>(null);
+  const [joinTarget, setJoinTarget] = useState<CreateHostJoinResponse | null>(
+    null,
+  );
+  const [joinDialogOpen, setJoinDialogOpen] = useState(false);
+  const [appUrlRequiredOpen, setAppUrlRequiredOpen] = useState(false);
   const [activeCloudAuthAttempt, setActiveCloudAuthAttempt] =
     useState<CloudAuthAttemptState | null>(null);
   const [cloudAuthNotices, setCloudAuthNotices] = useState<CloudAuthNoticeMap>(
@@ -127,6 +151,44 @@ export function AppSettingsView() {
     onSuccess: () => {
       invalidateHostDeleteDependentQueries({ queryClient });
       setDeleteTarget(null);
+    },
+  });
+
+  const createHostJoin = useMutation({
+    meta: {
+      errorMessage: "Failed to create host join command.",
+      showErrorToast: false,
+    },
+    mutationFn: () => api.createHostJoin(),
+    onSuccess: (result) => {
+      invalidateHostAvailabilityQueries({ queryClient });
+      setJoinTarget(result);
+      setJoinDialogOpen(true);
+    },
+    onError: (error) => {
+      if (error instanceof HttpError && error.code === "app_url_required") {
+        setAppUrlRequiredOpen(true);
+        return;
+      }
+      showMutationErrorToast({
+        error,
+        fallbackMessage: "Failed to create host join command.",
+      });
+    },
+  });
+
+  const cancelHostJoin = useMutation({
+    meta: {
+      errorMessage: "Failed to cancel host join.",
+    },
+    mutationFn: ({ id }: CancelHostJoinMutationRequest) =>
+      api.cancelHostJoin(id),
+    onSuccess: (_, request) => {
+      invalidateHostAvailabilityQueries({ queryClient });
+      setJoinTarget((current) =>
+        current?.hostId === request.id ? null : current,
+      );
+      setJoinDialogOpen(false);
     },
   });
 
@@ -205,6 +267,57 @@ export function AppSettingsView() {
     },
   });
 
+  const joinHost =
+    joinTarget !== null
+      ? (hosts.find((host) => host.id === joinTarget.hostId) ?? null)
+      : null;
+  const hostJoinActionPending =
+    createHostJoin.isPending || cancelHostJoin.isPending;
+
+  async function handleCreateHostJoin() {
+    if (
+      joinTarget !== null &&
+      joinTarget.expiresAt > Date.now() &&
+      joinHost?.status !== "connected"
+    ) {
+      setJoinDialogOpen(true);
+      return;
+    }
+
+    if (joinTarget !== null && joinHost?.status !== "connected") {
+      try {
+        await cancelHostJoin.mutateAsync({ id: joinTarget.hostId });
+      } catch {
+        return;
+      }
+    }
+
+    createHostJoin.mutate();
+  }
+
+  useEffect(() => {
+    if (!joinDialogOpen || joinHost?.status !== "connected") {
+      return;
+    }
+    const timeoutId = window.setTimeout(() => {
+      setJoinTarget(null);
+      setJoinDialogOpen(false);
+    }, 1_500);
+    return () => window.clearTimeout(timeoutId);
+  }, [joinDialogOpen, joinHost?.status]);
+
+  function handleJoinOpenChange(open: boolean) {
+    if (open) {
+      setJoinDialogOpen(true);
+      return;
+    }
+    if (joinTarget !== null && joinHost?.status !== "connected") {
+      cancelHostJoin.mutate({ id: joinTarget.hostId });
+    }
+    setJoinTarget(null);
+    setJoinDialogOpen(false);
+  }
+
   useEffect(() => {
     if (!activeCloudAuthAttempt || !activeCloudAuthStatus.data) {
       return;
@@ -240,7 +353,10 @@ export function AppSettingsView() {
                   aria-label="Theme"
                 >
                   {THEME_PREFERENCE_LABELS[themePreference]}
-                  <Icon name="ChevronDown" className="size-3.5 text-muted-foreground" />
+                  <Icon
+                    name="ChevronDown"
+                    className="size-3.5 text-muted-foreground"
+                  />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-48">
@@ -250,7 +366,8 @@ export function AppSettingsView() {
                     onSelect={() => setPreferredTheme(option.value)}
                   >
                     {option.label}
-                    <Icon name="Check"
+                    <Icon
+                      name="Check"
                       className={cn(
                         "ml-auto",
                         themePreference !== option.value && "opacity-0",
@@ -264,7 +381,24 @@ export function AppSettingsView() {
           </SettingsWithControl>
         </SettingsSection>
 
-        <SettingsSection title="Hosts">
+        <SettingsSection
+          title="Hosts"
+          description="Persistent hosts"
+          action={
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              disabled={hostJoinActionPending}
+              onClick={() => {
+                void handleCreateHostJoin();
+              }}
+            >
+              <Icon name="Plus" className="size-3.5" />
+              New host
+            </Button>
+          }
+        >
           {hostsLoading ? (
             <p className="text-sm text-muted-foreground">Loading…</p>
           ) : hosts.length === 0 ? (
@@ -285,9 +419,13 @@ export function AppSettingsView() {
                     </span>
                     {isConnected ? (
                       <span className={CONNECTED_DOT_CLASS} title="Connected" />
-                    ) : (
+                    ) : host.lastSeenAt !== null ? (
                       <span className="shrink-0 text-xs text-muted-foreground">
                         Offline · {timeAgo(host.lastSeenAt)}
+                      </span>
+                    ) : (
+                      <span className="shrink-0 text-xs text-muted-foreground">
+                        Never connected
                       </span>
                     )}
                     <DropdownMenu>
@@ -381,6 +519,16 @@ export function AppSettingsView() {
           if (!open) setDeleteTarget(null);
         }}
         onDelete={(id) => deleteHost.mutate({ id })}
+      />
+      <HostJoinDialog
+        open={joinDialogOpen}
+        target={joinTarget}
+        host={joinHost}
+        onOpenChange={handleJoinOpenChange}
+      />
+      <HostJoinAppUrlRequiredDialog
+        open={appUrlRequiredOpen}
+        onOpenChange={setAppUrlRequiredOpen}
       />
     </PageShell>
   );

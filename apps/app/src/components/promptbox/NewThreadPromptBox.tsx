@@ -47,7 +47,9 @@ export interface NewThreadBranchConfig {
   isNew: boolean;
   options: readonly string[];
   loading?: boolean;
+  placeholder?: string;
   onChange: (value: string) => void;
+  onOpenChange?: (open: boolean) => void;
   /**
    * When provided, the picker exposes a "Create new branch" item. Only set
    * for `host:local` (work locally / remotely) — managed-worktree and sandbox
@@ -152,7 +154,9 @@ export function NewThreadPromptBoxUI({
               isCreatingNew={branch.isNew}
               options={branch.options}
               loading={branch.loading}
+              placeholder={branch.placeholder}
               onChange={branch.onChange}
+              onOpenChange={branch.onOpenChange}
               onCreate={branch.onCreate}
             />
           ) : null}
@@ -181,7 +185,9 @@ export interface NewThreadConnectedBranchConfig {
   isNew: boolean;
   options: readonly string[];
   loading?: boolean;
+  placeholder?: string;
   onChange: (value: string) => void;
+  onOpenChange?: (open: boolean) => void;
   onCreate: () => void;
 }
 
@@ -237,7 +243,9 @@ export function NewThreadPromptBox({
         isNew: allowCreate && branch.isNew,
         options: branch.options,
         loading: branch.loading,
+        placeholder: branch.placeholder,
         onChange: branch.onChange,
+        onOpenChange: branch.onOpenChange,
         ...(canCreate ? { onCreate: branch.onCreate } : {}),
       }}
     />

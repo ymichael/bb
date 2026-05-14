@@ -73,6 +73,7 @@ const hostStatusListResponseSchema = z.array(
 const branchListResponseSchema = z.object({
   branches: z.array(z.string()),
   current: z.string().nullable(),
+  defaultBranch: z.string().nullable(),
 });
 
 describe("public project and host routes", () => {
@@ -1171,14 +1172,16 @@ describe("public project and host routes", () => {
       });
       await reportQueuedCommandSuccess(harness, queued, {
         branches: ["main", "feature/test"],
-        current: "main",
+        current: "feature/test",
+        defaultBranch: "main",
       });
 
       const response = await responsePromise;
       expect(response.status).toBe(200);
       expect(branchListResponseSchema.parse(await readJson(response))).toEqual({
         branches: ["main", "feature/test"],
-        current: "main",
+        current: "feature/test",
+        defaultBranch: "main",
       });
     } finally {
       await harness.cleanup();

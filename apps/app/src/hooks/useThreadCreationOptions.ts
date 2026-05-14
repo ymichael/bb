@@ -19,10 +19,7 @@ import {
   rawStringLocalStorage,
 } from "@/lib/browser-storage";
 import { getProviderIconInfo } from "@/lib/provider-icon";
-import {
-  useAvailableModels,
-  useSystemProviders,
-} from "./queries/system-queries";
+import { useSystemExecutionOptions } from "./queries/system-queries";
 
 const MODEL_STORAGE_KEY = "bb.promptbox.model";
 const SERVICE_TIER_STORAGE_KEY = "bb.promptbox.service-tier";
@@ -65,6 +62,8 @@ interface PickerOption<T extends string> {
 }
 
 interface UsePromptModelReasoningOptions {
+  enabled?: boolean;
+  environmentId?: string;
   scope?: "new-thread" | "thread";
   projectId?: string | null;
   resetKey?: string | number | null;
@@ -290,6 +289,8 @@ export function useThreadCreationOptions(
   options?: UsePromptModelReasoningOptions,
 ) {
   const {
+    enabled = true,
+    environmentId,
     initialEnvironmentSelectionValue,
     initialModel,
     initialProviderId,
@@ -333,11 +334,6 @@ export function useThreadCreationOptions(
     resetKey,
   );
 
-  // --- Provider selection ---
-  const providersQuery = useSystemProviders();
-  const providers = providersQuery.data ?? EMPTY_PROVIDERS;
-  const hasMultipleProviders = providers.length >= 2;
-
   const rawSelectedProviderId =
     scope === "new-thread"
       ? storedProviderId
@@ -362,6 +358,19 @@ export function useThreadCreationOptions(
     scope === "new-thread"
       ? storedEnvironmentSelectionValue
       : threadSelections.environmentSelectionValue;
+
+  // --- Provider selection ---
+  const executionOptionsEnvironmentId =
+    scope === "thread" ? environmentId : undefined;
+  const executionOptionsQuery = useSystemExecutionOptions({
+    enabled:
+      enabled &&
+      (scope !== "thread" || executionOptionsEnvironmentId !== undefined),
+    environmentId: executionOptionsEnvironmentId,
+    providerId: rawSelectedProviderId || undefined,
+  });
+  const providers = executionOptionsQuery.data?.providers ?? EMPTY_PROVIDERS;
+  const hasMultipleProviders = providers.length >= 2;
 
   // Resolve the effective provider: use selectedProviderId if it matches a known
   // provider, otherwise fall back to the first provider in the list.
@@ -390,12 +399,6 @@ export function useThreadCreationOptions(
     [providers],
   );
 
-  const availableModelsQuery = useAvailableModels({
-    enabled: providersQuery.status === "success" && effectiveProviderId !== "",
-    providerId: effectiveProviderId || undefined,
-    selectedModel: rawSelectedModel || undefined,
-  });
-
   const activeProviderCapabilities = selectedProviderInfo?.capabilities;
 
   const supportsServiceTier =
@@ -413,13 +416,26 @@ export function useThreadCreationOptions(
     return supportByProvider;
   }, [providers]);
 
-  const availableModels = useMemo(
-    () =>
-      availableModelsQuery.data && availableModelsQuery.data.length > 0
-        ? availableModelsQuery.data
-        : [],
-    [availableModelsQuery.data],
-  );
+  // Merge the user's currently-stored selection from the selected-only pool
+  // when it isn't in the active list. This preserves a previously-selected
+  // model after it has been retired so the picker can render its label and
+  // the user isn't silently moved to a different model.
+  const availableModels = useMemo(() => {
+    const activeModels = executionOptionsQuery.data?.models ?? [];
+    if (!rawSelectedModel) return activeModels;
+    if (activeModels.some((model) => model.model === rawSelectedModel)) {
+      return activeModels;
+    }
+    const selectedOnly = executionOptionsQuery.data?.selectedOnlyModels ?? [];
+    const match = selectedOnly.find(
+      (model) => model.model === rawSelectedModel,
+    );
+    return match ? [match, ...activeModels] : activeModels;
+  }, [
+    executionOptionsQuery.data?.models,
+    executionOptionsQuery.data?.selectedOnlyModels,
+    rawSelectedModel,
+  ]);
   const selectedModel = useMemo(() => {
     if (availableModels.length === 0) {
       return rawSelectedModel;

@@ -40,6 +40,8 @@ function makeWorkspaceFileStatus(
   return {
     path: "src/file.ts",
     status,
+    insertions: null,
+    deletions: null,
   };
 }
 

@@ -13,7 +13,7 @@ import type { ServerLogger } from "../types.js";
 const AUTH_SECRET_FILE_NAME = "auth-secret";
 const DAEMON_ENROLL_CONFIG_ID = "daemon-enroll";
 const DAEMON_HOST_CONFIG_ID = "daemon-host";
-const ENROLL_KEY_TTL_SECONDS = 60 * 5;
+const ENROLL_KEY_TTL_SECONDS = 60 * 15;
 const LOCAL_JOIN_COMMAND = "pnpm start:host-daemon";
 const MACHINE_AUTH_SYSTEM_USER_ID = "bb-machine-auth-system-user";
 const MACHINE_AUTH_SYSTEM_USER_EMAIL = "machine-auth@bb.internal";
@@ -43,6 +43,11 @@ export interface BuildJoinCommandArgs {
 }
 
 export interface IssueHostEnrollKeyArgs {
+  hostId: string;
+  hostType: HostType;
+}
+
+export interface RevokeHostEnrollKeysArgs {
   hostId: string;
   hostType: HostType;
 }
@@ -104,6 +109,7 @@ export interface MachineAuthService {
     args: IssueHostEnrollKeyArgs,
   ): Promise<IssueHostEnrollKeyResult>;
   pruneExpiredKeys(): Promise<void>;
+  revokeHostEnrollKeys(args: RevokeHostEnrollKeysArgs): Promise<void>;
   rotateDaemonHostKey(args: RotateDaemonHostKeyArgs): Promise<string>;
   verifyDaemonHostKey(token: string): Promise<VerifyMachineKeyResult | null>;
 }
@@ -422,6 +428,15 @@ export async function createMachineAuthService(
     },
     async pruneExpiredKeys(): Promise<void> {
       await pruneExpiredKeys();
+    },
+    async revokeHostEnrollKeys({
+      hostId,
+      hostType,
+    }: RevokeHostEnrollKeysArgs): Promise<void> {
+      await disableActiveEnrollKeysForHost({
+        hostId,
+        hostType,
+      });
     },
     async rotateDaemonHostKey({
       keyId,

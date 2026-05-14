@@ -29,6 +29,7 @@ import {
 import {
   canonicalizeProducerEventPayload,
   requireThreadEventScopeTurnId,
+  type ThreadEventType,
   type ThreadEventTurnStatus,
 } from "@bb/domain";
 import type { Hono } from "hono";
@@ -284,15 +285,21 @@ function notifyInsertedEventThreads(
   deps: NotifyInsertedEventThreadsDeps,
   args: NotifyInsertedEventThreadsArgs,
 ): void {
-  const threadIds = new Set<string>();
+  const eventTypesByThreadId = new Map<string, Set<ThreadEventType>>();
   for (const index of args.insertedInputIndexes) {
     const eventInput = args.eventInputs[index];
     if (eventInput) {
-      threadIds.add(eventInput.threadId);
+      const eventTypes =
+        eventTypesByThreadId.get(eventInput.threadId) ??
+        new Set<ThreadEventType>();
+      eventTypes.add(eventInput.type);
+      eventTypesByThreadId.set(eventInput.threadId, eventTypes);
     }
   }
-  for (const threadId of threadIds) {
-    deps.hub.notifyThread(threadId, ["events-appended"]);
+  for (const [threadId, eventTypes] of eventTypesByThreadId) {
+    deps.hub.notifyThread(threadId, ["events-appended"], {
+      eventTypes: Array.from(eventTypes),
+    });
   }
 }
 

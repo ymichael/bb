@@ -431,6 +431,12 @@ describe("thread event pruning", () => {
         }),
       ).toBeNull();
       expect(loggerWarn).toHaveBeenCalledTimes(1);
+      expect(loggerWarn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          step: "get_latest_thread_sequence",
+        }),
+        "Failed to prune thread event history",
+      );
     } finally {
       await harness.cleanup();
     }

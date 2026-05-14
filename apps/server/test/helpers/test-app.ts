@@ -139,6 +139,7 @@ export async function createTestAppHarness(
     inferenceModel: "test/mock-model",
     isDevelopment: true,
     openAiApiKey: "test-openai-key",
+    serverPort: 3334,
     appUrl: "https://bb.example.test",
     externalUrl: "https://bb.example.test",
     sandboxActivityExtensionDebounceMs: 30_000,
@@ -200,6 +201,7 @@ export async function startTestServer(
     await new Promise((resolve) => setTimeout(resolve, 5));
   }
   const resolvedAddress: AddressInfo = addressInfo;
+  harness.config.serverPort = resolvedAddress.port;
 
   return {
     ...harness,

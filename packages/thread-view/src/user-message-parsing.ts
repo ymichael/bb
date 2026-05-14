@@ -2,6 +2,7 @@ import {
   requireThreadEventScopeTurnId,
   type PromptInput,
   type ThreadEvent,
+  type ThreadType,
 } from "@bb/domain";
 import type { EventMeta } from "./event-decode.js";
 import type {
@@ -116,10 +117,35 @@ function shouldRenderClientRequestInitiator(
   decoded: ClientTurnRequestedEvent,
   options: BuildEventProjectionMessagesOptions | undefined,
 ): boolean {
-  return (
-    decoded.initiator !== "system" ||
-    options?.systemClientRequestVisibility === "visible"
-  );
+  if (options?.systemClientRequestVisibility === "visible") {
+    return true;
+  }
+
+  const initiator = decoded.initiator ?? "user";
+  switch (initiator) {
+    case "user":
+      return true;
+    case "agent":
+      return shouldRenderAgentClientRequest(options?.threadType);
+    case "system":
+      return false;
+    default:
+      return assertNever(initiator);
+  }
+}
+
+function shouldRenderAgentClientRequest(
+  threadType: ThreadType | undefined,
+): boolean {
+  const resolvedThreadType = threadType ?? "standard";
+  switch (resolvedThreadType) {
+    case "standard":
+      return true;
+    case "manager":
+      return false;
+    default:
+      return assertNever(resolvedThreadType);
+  }
 }
 
 function buildAttachments(

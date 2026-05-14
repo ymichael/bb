@@ -356,7 +356,9 @@ export function appendThreadEvent(
     },
     { behavior: "immediate" },
   );
-  deps.hub.notifyThread(args.threadId, ["events-appended"]);
+  deps.hub.notifyThread(args.threadId, ["events-appended"], {
+    eventTypes: [args.type],
+  });
   return sequence;
 }
 
@@ -570,7 +572,9 @@ export function appendSystemErrorEventInTransaction(
     scope: args.scope,
     data: buildSystemErrorEventData(args),
   });
-  deps.hub.notifyThread(args.threadId, ["events-appended"]);
+  deps.hub.notifyThread(args.threadId, ["events-appended"], {
+    eventTypes: ["system/error"],
+  });
   return sequence;
 }
 

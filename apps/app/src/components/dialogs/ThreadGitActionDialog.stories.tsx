@@ -30,14 +30,20 @@ const changedFiles: WorkspaceFileStatus[] = [
   {
     path: "apps/app/src/components/thread/dialogs/ThreadRenameDialog.tsx",
     status: "M",
+    insertions: 28,
+    deletions: 11,
   },
   {
     path: "apps/app/src/components/thread/dialogs/ThreadRenameDialog.stories.tsx",
     status: "A",
+    insertions: 64,
+    deletions: 0,
   },
   {
     path: "apps/app/src/components/thread/dialogs/ThreadGitActionDialog.tsx",
     status: "M",
+    insertions: 14,
+    deletions: 6,
   },
 ];
 

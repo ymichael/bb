@@ -1376,17 +1376,30 @@ describe("thread command dispatch", () => {
       },
       {
         ...harness.dispatchOptions(),
-        listModels: async () => [
-          {
-            id: "model-1",
-            model: "model-1",
-            displayName: "Model 1",
-            description: "Test model",
-            supportedReasoningEfforts: [],
-            defaultReasoningEffort: "medium",
-            isDefault: true,
-          },
-        ],
+        listModels: async () => ({
+          models: [
+            {
+              id: "model-1",
+              model: "model-1",
+              displayName: "Model 1",
+              description: "Test model",
+              supportedReasoningEfforts: [],
+              defaultReasoningEffort: "medium",
+              isDefault: true,
+            },
+          ],
+          selectedOnlyModels: [
+            {
+              id: "model-1-legacy",
+              model: "model-1-legacy",
+              displayName: "Model 1 (Legacy)",
+              description: "Retired model retained for existing selections",
+              supportedReasoningEfforts: [],
+              defaultReasoningEffort: "medium",
+              isDefault: false,
+            },
+          ],
+        }),
       },
     );
 
@@ -1400,6 +1413,17 @@ describe("thread command dispatch", () => {
           supportedReasoningEfforts: [],
           defaultReasoningEffort: "medium",
           isDefault: true,
+        },
+      ],
+      selectedOnlyModels: [
+        {
+          id: "model-1-legacy",
+          model: "model-1-legacy",
+          displayName: "Model 1 (Legacy)",
+          description: "Retired model retained for existing selections",
+          supportedReasoningEfforts: [],
+          defaultReasoningEffort: "medium",
+          isDefault: false,
         },
       ],
     });

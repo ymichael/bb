@@ -240,7 +240,10 @@ function createFakeRuntime() {
     renameThread: vi.fn(async (_args: RenameThreadArgs) => undefined),
     archiveThread: vi.fn(async () => undefined),
     unarchiveThread: vi.fn(async () => undefined),
-    listModels: vi.fn(async (_args: ListModelsArgs) => []),
+    listModels: vi.fn(async (_args: ListModelsArgs) => ({
+      models: [],
+      selectedOnlyModels: [],
+    })),
     listRunningProviders: vi.fn((): string[] => []),
     shutdown: vi.fn(async () => undefined),
   } satisfies AgentRuntime;

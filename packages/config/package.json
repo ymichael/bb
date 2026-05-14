@@ -48,6 +48,11 @@
       "types": "./src/local-app-origins.ts",
       "default": "./src/local-app-origins.ts"
     },
+    "./loopback": {
+      "source": "./src/loopback.ts",
+      "types": "./src/loopback.ts",
+      "default": "./src/loopback.ts"
+    },
     "./database": {
       "source": "./src/database.ts",
       "types": "./src/database.ts",

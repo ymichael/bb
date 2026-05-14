@@ -89,12 +89,13 @@ describe("fetchGithubBranches", () => {
       fetchGithubBranches("ghp_test", "https://github.com/acme/widget"),
     ).resolves.toEqual({
       branches: ["main", "develop", "release/1.2"],
-      current: "main",
+      current: null,
+      defaultBranch: "main",
     });
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  it("returns a current default branch even when GitHub omits it from the listed page", async () => {
+  it("returns the default branch even when GitHub omits it from the listed page", async () => {
     stubGithubFetch({
       branches: [{ name: "develop" }, { name: "release/1.2" }],
       repo: { default_branch: "main" },
@@ -104,7 +105,8 @@ describe("fetchGithubBranches", () => {
       fetchGithubBranches("ghp_test", "https://github.com/acme/widget"),
     ).resolves.toEqual({
       branches: ["develop", "release/1.2"],
-      current: "main",
+      current: null,
+      defaultBranch: "main",
     });
   });
 

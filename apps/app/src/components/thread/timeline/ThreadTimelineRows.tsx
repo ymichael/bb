@@ -200,6 +200,9 @@ interface TurnRowBodyProps {
   row: TimelineViewTurnRow;
 }
 
+const NESTED_ROWS_GROUP_LINE_CLASS =
+  "relative my-1 pl-3 pr-2 before:pointer-events-none before:absolute before:bottom-1 before:left-1.5 before:top-0 before:w-px before:bg-foreground/15 before:content-['']";
+
 const TimelineRendererContext =
   createContext<TimelineRendererContextValue | null>(null);
 
@@ -571,7 +574,7 @@ function TimelineExpandableBody({
             size="delegation"
             streaming={delegationActive}
             contentKey={`${timelineRowsSignature(row.childRows)}|${row.output.length}`}
-            className="border-l-1 border-border/60 my-1 px-2"
+            className={NESTED_ROWS_GROUP_LINE_CLASS}
           >
             <div className="flex flex-col gap-3">
               {row.childRows.length > 0 ? (
@@ -692,7 +695,7 @@ function TurnRowBody({ compactActivityIntents, row }: TurnRowBodyProps) {
         scopeActive={false}
         compactActivityIntents={compactActivityIntents}
         spacing="nested"
-        className="border-l-1 border-border/60 my-1 px-2"
+        className={NESTED_ROWS_GROUP_LINE_CLASS}
       />
     );
   }

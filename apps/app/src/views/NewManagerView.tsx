@@ -8,8 +8,13 @@ import {
   type ReactNode,
 } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import type { AvailableModel, Host, ReasoningLevel } from "@bb/domain";
-import type { ProjectResponse, SystemProviderInfo } from "@bb/server-contract";
+import type {
+  AvailableModel,
+  Host,
+  ProviderInfo,
+  ReasoningLevel,
+} from "@bb/domain";
+import type { ProjectResponse } from "@bb/server-contract";
 import { findLocalPathProjectSourceForHost } from "@bb/domain";
 import type { HireProjectManagerRequest } from "@/hooks/mutations/project-mutations";
 import { Button } from "@/components/ui/button.js";
@@ -22,10 +27,7 @@ import {
   SettingsRowList,
 } from "@/components/ui/settings-section.js";
 import { useHireProjectManager } from "@/hooks/mutations/project-mutations";
-import {
-  useAvailableModels,
-  useSystemProviders,
-} from "@/hooks/queries/system-queries";
+import { useSystemExecutionOptions } from "@/hooks/queries/system-queries";
 import { useEffectiveHosts } from "@/hooks/queries/effective-hosts";
 import { useProjects } from "@/hooks/queries/project-queries";
 import { useHostDaemon } from "@/hooks/useHostDaemon";
@@ -45,7 +47,8 @@ const REASONING_LABELS: Record<ReasoningLevel, string> = {
   high: "High",
   xhigh: "Extra High",
 };
-const EMPTY_SYSTEM_PROVIDERS: SystemProviderInfo[] = [];
+const EMPTY_PROVIDERS: ProviderInfo[] = [];
+const EMPTY_MODELS: AvailableModel[] = [];
 const EMPTY_PROJECTS: ProjectResponse[] = [];
 const EMPTY_PROJECT_SOURCES: ProjectResponse["sources"] = [];
 type ReasoningSelectionSource = "default" | "user";
@@ -61,31 +64,18 @@ export function NewManagerView() {
   const navigate = useNavigate();
   const [selectedProviderId, setSelectedProviderId] = useState("");
 
-  const providersQuery = useSystemProviders();
-  const providers = providersQuery.data ?? EMPTY_SYSTEM_PROVIDERS;
-  const providersAreLoaded = providersQuery.data !== undefined;
-
   const projectsQuery = useProjects();
   const projects = projectsQuery.data ?? EMPTY_PROJECTS;
   const projectsAreLoaded = projectsQuery.data !== undefined;
   const { data: hosts = [] } = useEffectiveHosts();
   const { isLocalHost } = useHostDaemon();
 
-  const resolvedProvider = useMemo(() => {
-    if (selectedProviderId) {
-      const matchingProvider = providers.find(
-        (provider) => provider.id === selectedProviderId,
-      );
-      if (matchingProvider) return matchingProvider;
-    }
-    return providers[0] ?? null;
-  }, [providers, selectedProviderId]);
-
-  const modelsQuery = useAvailableModels({
-    providerId: resolvedProvider?.id,
-    enabled: resolvedProvider !== null,
+  const executionOptionsQuery = useSystemExecutionOptions({
+    providerId: selectedProviderId || undefined,
   });
-  const models = useMemo(() => modelsQuery.data ?? [], [modelsQuery.data]);
+  const providers = executionOptionsQuery.data?.providers ?? EMPTY_PROVIDERS;
+  const providersAreLoaded = executionOptionsQuery.data !== undefined;
+  const models = executionOptionsQuery.data?.models ?? EMPTY_MODELS;
 
   const hireManager = useHireProjectManager();
   const handleHire = useCallback(
@@ -155,7 +145,7 @@ export interface NewManagerFormProps {
   projectId: string;
   projects: readonly ProjectResponse[];
   projectsAreLoaded: boolean;
-  providers: readonly SystemProviderInfo[];
+  providers: readonly ProviderInfo[];
   providersAreLoaded: boolean;
   hosts: Host[];
   isLocalHost: IsLocalHostFn;
@@ -275,18 +265,6 @@ export function NewManagerForm({
       })),
     [models, selectedProvider],
   );
-
-  useEffect(() => {
-    if (!providersAreLoaded || selectedProviderId === selectedProviderValue) {
-      return;
-    }
-    onSelectedProviderIdChange(selectedProviderValue);
-  }, [
-    providersAreLoaded,
-    selectedProviderId,
-    selectedProviderValue,
-    onSelectedProviderIdChange,
-  ]);
 
   useEffect(() => {
     if (

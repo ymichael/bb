@@ -13,7 +13,7 @@ import {
   listConnectedHostIds,
   openSession,
 } from "../../src/data/sessions.js";
-import { upsertHost } from "../../src/data/hosts.js";
+import { getHost, upsertHost } from "../../src/data/hosts.js";
 import { hostDaemonSessions } from "../../src/schema.js";
 import { eq } from "drizzle-orm";
 
@@ -51,6 +51,34 @@ describe("sessions", () => {
     expect(getActiveSessionById(db, { sessionId: session.id })?.id).toBe(
       session.id,
     );
+  });
+
+  it("marks the host as seen on open, heartbeat, and close", () => {
+    const { db, host } = setup();
+    expect(getHost(db, host.id)?.lastSeenAt).toBeNull();
+
+    const session = openSession(db, noopNotifier, {
+      hostId: host.id,
+      instanceId: "inst-1",
+      hostName: "test-host",
+      hostType: "persistent",
+      dataDir: "/tmp/test-host-data",
+      protocolVersion: 1,
+      heartbeatIntervalMs: 10_000,
+      leaseTimeoutMs: 30_000,
+    });
+    const seenAtOpen = getHost(db, host.id)?.lastSeenAt ?? null;
+    expect(seenAtOpen).not.toBeNull();
+
+    heartbeatSession(db, session.id, Date.now() + 30_000);
+    const seenAtHeartbeat = getHost(db, host.id)?.lastSeenAt ?? null;
+    expect(seenAtHeartbeat).not.toBeNull();
+    expect(seenAtHeartbeat!).toBeGreaterThanOrEqual(seenAtOpen!);
+
+    closeSession(db, noopNotifier, session.id, "test");
+    const seenAtClose = getHost(db, host.id)?.lastSeenAt ?? null;
+    expect(seenAtClose).not.toBeNull();
+    expect(seenAtClose!).toBeGreaterThanOrEqual(seenAtHeartbeat!);
   });
 
   it("closes a session", () => {

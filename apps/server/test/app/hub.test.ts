@@ -41,6 +41,25 @@ describe("NotificationHub", () => {
     });
   });
 
+  it("includes thread notification metadata when provided", () => {
+    const hub = new NotificationHub();
+    const socket = createMockSocket();
+
+    hub.subscribe(socket, "thread", "thread-1");
+    hub.notifyThread("thread-1", ["archived-changed"], {
+      projectId: "project-1",
+    });
+
+    expect(socket.messages).toHaveLength(1);
+    expect(JSON.parse(socket.messages[0])).toMatchObject({
+      type: "changed",
+      entity: "thread",
+      id: "thread-1",
+      metadata: { projectId: "project-1" },
+      changes: ["archived-changed"],
+    });
+  });
+
   it("subscribes clients and delivers environment notifications", () => {
     const hub = new NotificationHub();
     const socket = createMockSocket();

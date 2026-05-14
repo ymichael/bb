@@ -3208,6 +3208,36 @@ describe("buildThreadTimeline", () => {
       },
     });
 
+    const agentThreadMessageText = [
+      "[bb message from thread:thr_sender123; reply with " +
+        '`bb thread tell thr_sender123 "<your response>"`]',
+      "",
+      "Child thread update",
+    ].join("\n");
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      sequence: 10,
+      type: "client/turn/requested",
+      scope: threadScope(),
+      data: {
+        direction: "outbound",
+        requestId: "creq_23456789ae",
+        source: "tell",
+        initiator: "agent",
+        input: [{ type: "text", text: agentThreadMessageText }],
+        target: { kind: "new-turn" },
+        request: { method: "turn/start", params: {} },
+        execution: {
+          model: "gpt-5",
+          serviceTier: "default",
+          reasoningLevel: "medium",
+          permissionMode: "full",
+          source: "client/turn/requested",
+        },
+      },
+    });
+
     // Default view — should show only operation, message_user, and user message
     const defaultTimeline = buildManagerConversationTimeline(
       harness.db,
@@ -3229,12 +3259,26 @@ describe("buildThreadTimeline", () => {
     if (assistantRow?.kind === "conversation") {
       expect(assistantRow.text).toBe("Hello from manager");
     }
-    expect(JSON.stringify(defaultTimeline.rows)).not.toContain(
-      "buffered manager delta",
-    );
-    expect(JSON.stringify(defaultTimeline.rows)).not.toContain(
-      "[bb system] Welcome!",
-    );
+    const defaultSourceRows = flattenTimelineSourceRows(defaultTimeline.rows);
+    expect(
+      defaultSourceRows.some(
+        (row) =>
+          row.kind === "conversation" && row.text === "buffered manager delta",
+      ),
+    ).toBe(false);
+    expect(
+      defaultSourceRows.some(
+        (row) =>
+          row.kind === "conversation" && row.text === "[bb system] Welcome!",
+      ),
+    ).toBe(false);
+    expect(
+      defaultSourceRows.some(
+        (row) =>
+          row.kind === "conversation" &&
+          row.text.startsWith("[bb message from thread:"),
+      ),
+    ).toBe(false);
 
     // Standard manager timeline uses the same row builder as ordinary threads,
     // while low-value tool discovery rows are still globally suppressed.
@@ -3244,13 +3288,23 @@ describe("buildThreadTimeline", () => {
     expect(standardTimeline.rows.length).toBeGreaterThan(
       defaultTimeline.rows.length,
     );
-    const standardRowsText = JSON.stringify(standardTimeline.rows);
-    expect(standardRowsText).toContain("buffered manager delta");
-    expect(standardRowsText).not.toContain("ToolSearch");
-    expect(standardRowsText).not.toContain("found something");
-    expect(standardRowsText).toContain("[bb system] Welcome!");
-
     const standardSourceRows = flattenTimelineSourceRows(standardTimeline.rows);
+    expect(
+      standardSourceRows.some(
+        (row) =>
+          row.kind === "work" &&
+          row.workKind === "tool" &&
+          row.toolName === "ToolSearch",
+      ),
+    ).toBe(false);
+    expect(
+      standardSourceRows.some(
+        (row) =>
+          row.kind === "work" &&
+          row.workKind === "tool" &&
+          row.output.includes("found something"),
+      ),
+    ).toBe(false);
     expect(standardSourceRows).toContainEqual(
       expect.objectContaining({
         kind: "conversation",
@@ -3263,6 +3317,13 @@ describe("buildThreadTimeline", () => {
         kind: "conversation",
         role: "user",
         text: "[bb system] Welcome!",
+      }),
+    );
+    expect(standardSourceRows).toContainEqual(
+      expect.objectContaining({
+        kind: "conversation",
+        role: "user",
+        text: agentThreadMessageText,
       }),
     );
   });

@@ -55,25 +55,31 @@ describe("pi bridge model list", () => {
       (model: { provider: string }) => model.provider === "anthropic",
     );
 
-    await expect(listPiBridgeModels()).resolves.toEqual([
-      {
-        id: "anthropic/claude-sonnet-4",
-        model: "anthropic/claude-sonnet-4",
-        displayName: "Claude Sonnet 4",
-        description: "Anthropic reasoning, multimodal model via Pi",
-        supportedReasoningEfforts: [
-          { reasoningEffort: "low", description: "Low reasoning effort" },
-          { reasoningEffort: "medium", description: "Medium reasoning effort" },
-          { reasoningEffort: "high", description: "High reasoning effort" },
-          {
-            reasoningEffort: "xhigh",
-            description: "Extra high reasoning effort",
-          },
-        ],
-        defaultReasoningEffort: "medium",
-        isDefault: true,
-      },
-    ]);
+    await expect(listPiBridgeModels()).resolves.toEqual({
+      models: [
+        {
+          id: "anthropic/claude-sonnet-4",
+          model: "anthropic/claude-sonnet-4",
+          displayName: "Claude Sonnet 4",
+          description: "Anthropic reasoning, multimodal model via Pi",
+          supportedReasoningEfforts: [
+            { reasoningEffort: "low", description: "Low reasoning effort" },
+            {
+              reasoningEffort: "medium",
+              description: "Medium reasoning effort",
+            },
+            { reasoningEffort: "high", description: "High reasoning effort" },
+            {
+              reasoningEffort: "xhigh",
+              description: "Extra high reasoning effort",
+            },
+          ],
+          defaultReasoningEffort: "medium",
+          isDefault: true,
+        },
+      ],
+      selectedOnlyModels: [],
+    });
   });
 
   it("marks the pi-mono default openai-codex model as default when available", async () => {
@@ -97,33 +103,42 @@ describe("pi bridge model list", () => {
     ]);
     supportsXhigh.mockReturnValue(false);
 
-    await expect(listPiBridgeModels()).resolves.toEqual([
-      {
-        id: "openai-codex/gpt-5.5",
-        model: "openai-codex/gpt-5.5",
-        displayName: "GPT-5.5",
-        description: "Openai-codex reasoning, multimodal model via Pi",
-        supportedReasoningEfforts: [
-          { reasoningEffort: "low", description: "Low reasoning effort" },
-          { reasoningEffort: "medium", description: "Medium reasoning effort" },
-          { reasoningEffort: "high", description: "High reasoning effort" },
-        ],
-        defaultReasoningEffort: "medium",
-        isDefault: true,
-      },
-      {
-        id: "openai-codex/gpt-5.1",
-        model: "openai-codex/gpt-5.1",
-        displayName: "GPT-5.1",
-        description: "Openai-codex reasoning model via Pi",
-        supportedReasoningEfforts: [
-          { reasoningEffort: "low", description: "Low reasoning effort" },
-          { reasoningEffort: "medium", description: "Medium reasoning effort" },
-          { reasoningEffort: "high", description: "High reasoning effort" },
-        ],
-        defaultReasoningEffort: "medium",
-        isDefault: false,
-      },
-    ]);
+    await expect(listPiBridgeModels()).resolves.toEqual({
+      models: [
+        {
+          id: "openai-codex/gpt-5.5",
+          model: "openai-codex/gpt-5.5",
+          displayName: "GPT-5.5",
+          description: "Openai-codex reasoning, multimodal model via Pi",
+          supportedReasoningEfforts: [
+            { reasoningEffort: "low", description: "Low reasoning effort" },
+            {
+              reasoningEffort: "medium",
+              description: "Medium reasoning effort",
+            },
+            { reasoningEffort: "high", description: "High reasoning effort" },
+          ],
+          defaultReasoningEffort: "medium",
+          isDefault: true,
+        },
+        {
+          id: "openai-codex/gpt-5.1",
+          model: "openai-codex/gpt-5.1",
+          displayName: "GPT-5.1",
+          description: "Openai-codex reasoning model via Pi",
+          supportedReasoningEfforts: [
+            { reasoningEffort: "low", description: "Low reasoning effort" },
+            {
+              reasoningEffort: "medium",
+              description: "Medium reasoning effort",
+            },
+            { reasoningEffort: "high", description: "High reasoning effort" },
+          ],
+          defaultReasoningEffort: "medium",
+          isDefault: false,
+        },
+      ],
+      selectedOnlyModels: [],
+    });
   });
 });

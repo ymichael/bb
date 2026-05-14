@@ -2,7 +2,7 @@
 
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ThreadWithRuntime } from "@bb/domain";
+import type { ThreadListEntry, ThreadWithRuntime } from "@bb/domain";
 import type {
   PromptHistoryResponse,
   SendDraftResponse,
@@ -12,6 +12,7 @@ import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
 import * as api from "@/lib/api";
 import {
   projectPromptHistoryQueryKey,
+  threadListQueryKey,
   threadQueryKey,
   threadPromptHistoryQueryKey,
   threadTimelineQueryKey,
@@ -21,13 +22,16 @@ import {
   useCreateThreadDraft,
   useSendThreadDraft,
   useSendThreadMessage,
+  useStopThread,
 } from "./thread-runtime-mutations";
 
 vi.mock("@/lib/api", () => ({
+  HttpError: class HttpError extends Error {},
   createThread: vi.fn(),
   createThreadDraft: vi.fn(),
   sendThreadDraft: vi.fn(),
   sendThreadMessage: vi.fn(),
+  stopThread: vi.fn(),
 }));
 
 vi.mock("@/lib/ws", () => ({
@@ -97,6 +101,18 @@ function makeThreadWithRuntime(
       hostReconnectGraceExpiresAt: null,
     },
     ...thread,
+  };
+}
+
+function makeThreadListEntry(
+  thread: ThreadWithRuntime = makeThreadWithRuntime(),
+): ThreadListEntry {
+  return {
+    ...thread,
+    hasPendingInteraction: false,
+    environmentHostId: "host-1",
+    environmentBranchName: null,
+    environmentWorkspaceDisplayKind: "managed-worktree",
   };
 }
 
@@ -490,6 +506,93 @@ describe("thread runtime mutations", () => {
         threadPromptHistoryQueryKey("thread-1"),
       ),
     ).toBeUndefined();
+  });
+
+  it("optimistically marks stop requested while the stop request is in flight", async () => {
+    let resolveStop: (() => void) | null = null;
+    vi.mocked(api.stopThread).mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveStop = () => resolve();
+        }),
+    );
+    const { queryClient, wrapper } = createQueryClientTestHarness();
+    const thread = makeThreadWithRuntime({
+      runtime: { displayStatus: "active", hostReconnectGraceExpiresAt: null },
+    });
+    const threadListKey = threadListQueryKey({
+      archived: false,
+      projectId: "project-1",
+    });
+    queryClient.setQueryData<ThreadWithRuntime>(
+      threadQueryKey("thread-1"),
+      thread,
+    );
+    queryClient.setQueryData<ThreadListEntry[]>(threadListKey, [
+      makeThreadListEntry(thread),
+    ]);
+    const { result } = renderHook(() => useStopThread(), { wrapper });
+
+    let mutationPromise: Promise<void> | undefined;
+    act(() => {
+      mutationPromise = result.current.mutateAsync("thread-1");
+    });
+
+    await waitFor(() => {
+      const stoppedThread = queryClient.getQueryData<ThreadWithRuntime>(
+        threadQueryKey("thread-1"),
+      );
+      expect(stoppedThread?.stopRequestedAt).toEqual(expect.any(Number));
+    });
+
+    const stoppedThread = queryClient.getQueryData<ThreadWithRuntime>(
+      threadQueryKey("thread-1"),
+    );
+    const stoppedList =
+      queryClient.getQueryData<ThreadListEntry[]>(threadListKey);
+    expect(stoppedList?.[0]?.stopRequestedAt).toBe(
+      stoppedThread?.stopRequestedAt,
+    );
+
+    await act(async () => {
+      resolveStop?.();
+      await mutationPromise;
+    });
+  });
+
+  it("rolls back optimistic stop requested state when stopping fails", async () => {
+    vi.mocked(api.stopThread).mockRejectedValue(new Error("boom"));
+    const { queryClient, wrapper } = createQueryClientTestHarness();
+    const thread = makeThreadWithRuntime({
+      runtime: { displayStatus: "active", hostReconnectGraceExpiresAt: null },
+    });
+    const threadListKey = threadListQueryKey({
+      archived: false,
+      projectId: "project-1",
+    });
+    queryClient.setQueryData<ThreadWithRuntime>(
+      threadQueryKey("thread-1"),
+      thread,
+    );
+    queryClient.setQueryData<ThreadListEntry[]>(threadListKey, [
+      makeThreadListEntry(thread),
+    ]);
+    const { result } = renderHook(() => useStopThread(), { wrapper });
+
+    await act(async () => {
+      await expect(result.current.mutateAsync("thread-1")).rejects.toThrow(
+        "boom",
+      );
+    });
+
+    expect(
+      queryClient.getQueryData<ThreadWithRuntime>(threadQueryKey("thread-1"))
+        ?.stopRequestedAt,
+    ).toBeNull();
+    expect(
+      queryClient.getQueryData<ThreadListEntry[]>(threadListKey)?.[0]
+        ?.stopRequestedAt,
+    ).toBeNull();
   });
 
   it("adds queued follow-up history immediately after draft creation succeeds", async () => {

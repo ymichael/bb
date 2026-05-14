@@ -20,10 +20,12 @@ import {
   reportNextRuntimeMaterialSyncSuccess,
   reportQueuedCommandSuccess,
   waitForQueuedCommand,
+  waitForQueuedCommandAfter,
 } from "../helpers/commands.js";
 import { readJson } from "../helpers/json.js";
 import {
   seedEnvironment,
+  seedHost,
   seedHostSession,
   seedProjectWithSource,
 } from "../helpers/seed.js";
@@ -265,6 +267,7 @@ describe("public environment and system routes", () => {
       await reportQueuedCommandSuccess(harness, branchesCommand, {
         branches: ["main", "bb/details"],
         current: "bb/details",
+        defaultBranch: "main",
       });
       const branchesResponse = await branchesPromise;
       expect(branchesResponse.status).toBe(200);
@@ -887,43 +890,6 @@ describe("public environment and system routes", () => {
         id: "host-system-routes",
       });
 
-      const modelsPromise = harness.app.request(
-        `/api/v1/system/models?hostId=${host.id}&providerId=codex&selectedModel=legacy-model`,
-      );
-      const modelsCommand = await waitForQueuedCommand(
-        harness,
-        ({ command }) =>
-          command.type === "provider.list_models" &&
-          command.providerId === "codex" &&
-          command.selectedModel === "legacy-model",
-      );
-      await reportQueuedCommandSuccess(harness, modelsCommand, {
-        models: [
-          {
-            id: "codex-mini",
-            model: "gpt-4o-mini",
-            displayName: "Codex Mini",
-            description: "Fast codex model",
-            supportedReasoningEfforts: [
-              {
-                reasoningEffort: "medium",
-                description: "Balanced",
-              },
-            ],
-            defaultReasoningEffort: "medium",
-            isDefault: true,
-          },
-        ],
-      });
-      const modelsResponse = await modelsPromise;
-      expect(modelsResponse.status).toBe(200);
-      await expect(readJson(modelsResponse)).resolves.toEqual([
-        expect.objectContaining({
-          id: "codex-mini",
-          model: "gpt-4o-mini",
-        }),
-      ]);
-
       const providersPromise = harness.app.request(
         `/api/v1/system/providers?hostId=${host.id}`,
       );
@@ -961,6 +927,154 @@ describe("public environment and system routes", () => {
           available: true,
         },
       ]);
+
+      const executionOptionsPromise = harness.app.request(
+        `/api/v1/system/execution-options?hostId=${host.id}&providerId=codex`,
+      );
+      const executionProvidersCommand = await waitForQueuedCommandAfter(
+        harness,
+        providersCommand.row.cursor,
+        ({ command }) => command.type === "provider.list",
+      );
+      await reportQueuedCommandSuccess(harness, executionProvidersCommand, {
+        providers: [
+          {
+            id: "codex",
+            displayName: "Codex",
+            capabilities: {
+              supportsArchive: true,
+              supportsRename: true,
+              supportsServiceTier: true,
+              supportedPermissionModes: ["full", "workspace-write", "readonly"],
+            },
+            available: true,
+          },
+          {
+            id: "claude-code",
+            displayName: "Claude Code",
+            capabilities: {
+              supportsArchive: true,
+              supportsRename: true,
+              supportsServiceTier: false,
+              supportedPermissionModes: ["full"],
+            },
+            available: true,
+          },
+        ],
+      });
+      const executionModelsCommand = await waitForQueuedCommandAfter(
+        harness,
+        executionProvidersCommand.row.cursor,
+        ({ command }) =>
+          command.type === "provider.list_models" &&
+          command.providerId === "codex",
+      );
+      await reportQueuedCommandSuccess(harness, executionModelsCommand, {
+        models: [
+          {
+            id: "codex-mini",
+            model: "gpt-4o-mini",
+            displayName: "Codex Mini",
+            description: "Fast codex model",
+            supportedReasoningEfforts: [
+              {
+                reasoningEffort: "medium",
+                description: "Balanced",
+              },
+            ],
+            defaultReasoningEffort: "medium",
+            isDefault: true,
+          },
+        ],
+        selectedOnlyModels: [
+          {
+            id: "gpt-4o-mini-legacy",
+            model: "gpt-4o-mini-legacy",
+            displayName: "Legacy Mini",
+            description: "Retired mini model retained for existing selections",
+            supportedReasoningEfforts: [
+              {
+                reasoningEffort: "medium",
+                description: "Balanced",
+              },
+            ],
+            defaultReasoningEffort: "medium",
+            isDefault: false,
+          },
+        ],
+      });
+      const executionOptionsResponse = await executionOptionsPromise;
+      expect(executionOptionsResponse.status).toBe(200);
+      await expect(readJson(executionOptionsResponse)).resolves.toEqual({
+        providers: [
+          expect.objectContaining({
+            id: "codex",
+          }),
+          expect.objectContaining({
+            id: "claude-code",
+          }),
+        ],
+        models: [
+          expect.objectContaining({
+            id: "codex-mini",
+          }),
+        ],
+        selectedOnlyModels: [
+          expect.objectContaining({
+            id: "gpt-4o-mini-legacy",
+          }),
+        ],
+      });
+
+      // A stale providerId falls back to the first provider in the list and
+      // fetches that provider's models — the response still contains the full
+      // providers list so the client can recover.
+      const missingProviderOptionsPromise = harness.app.request(
+        `/api/v1/system/execution-options?hostId=${host.id}&providerId=missing-provider`,
+      );
+      const missingProviderCommand = await waitForQueuedCommandAfter(
+        harness,
+        executionModelsCommand.row.cursor,
+        ({ command }) => command.type === "provider.list",
+      );
+      await reportQueuedCommandSuccess(harness, missingProviderCommand, {
+        providers: [
+          {
+            id: "claude-code",
+            displayName: "Claude Code",
+            capabilities: {
+              supportsArchive: true,
+              supportsRename: true,
+              supportsServiceTier: false,
+              supportedPermissionModes: ["full"],
+            },
+            available: true,
+          },
+        ],
+      });
+      const missingProviderModelsCommand = await waitForQueuedCommandAfter(
+        harness,
+        missingProviderCommand.row.cursor,
+        ({ command }) =>
+          command.type === "provider.list_models" &&
+          command.providerId === "claude-code",
+      );
+      await reportQueuedCommandSuccess(harness, missingProviderModelsCommand, {
+        models: [],
+        selectedOnlyModels: [],
+      });
+      const missingProviderOptionsResponse =
+        await missingProviderOptionsPromise;
+      expect(missingProviderOptionsResponse.status).toBe(200);
+      await expect(readJson(missingProviderOptionsResponse)).resolves.toEqual({
+        providers: [
+          expect.objectContaining({
+            id: "claude-code",
+          }),
+        ],
+        models: [],
+        selectedOnlyModels: [],
+      });
     } finally {
       await harness.cleanup();
     }
@@ -1157,11 +1271,41 @@ describe("public environment and system routes", () => {
     }
   });
 
+  it("rejects destroyed environment hosts for system execution-option lookups", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const host = seedHost(harness.deps, {
+        id: "host-system-env-destroyed",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      updateHost(harness.db, harness.hub, host.id, {
+        destroyedAt: Date.now(),
+      });
+
+      const response = await harness.app.request(
+        `/api/v1/system/execution-options?environmentId=${environment.id}&providerId=codex`,
+      );
+
+      expect(response.status).toBe(404);
+      await expect(readJson(response)).resolves.toMatchObject({
+        code: "host_not_found",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("rejects invalid system query params with a 400", async () => {
     const harness = await createTestAppHarness();
     try {
       const response = await harness.app.request(
-        "/api/v1/system/models?providerId=",
+        "/api/v1/system/execution-options?providerId=",
       );
       expect(response.status).toBe(400);
       await expect(readJson(response)).resolves.toMatchObject({

@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import type { Host } from "@bb/domain";
 import type { WebSocketConnectionState } from "@/lib/ws";
 import { useServerConnectionState } from "../useServerConnectionState";
-import { useHosts } from "./system-queries";
+import { useHost, useHosts } from "./system-queries";
 import type { HostQueryId } from "./query-keys";
 
 interface EffectiveHostInput {
@@ -75,13 +75,13 @@ export function useEffectiveHost(
   hostId: HostQueryId,
   options?: UseEffectiveHostOptions,
 ) {
-  const hostsQuery = useHosts({
+  const hostQuery = useHost(hostId, {
     enabled: (options?.enabled ?? true) && Boolean(hostId),
   });
   const serverConnectionState = useServerConnectionState();
   const effectiveHost = useMemo(
     () => {
-      const host = hostsQuery.data?.find((candidate) => candidate.id === hostId);
+      const host = hostQuery.data;
       if (!host) {
         return undefined;
       }
@@ -90,11 +90,11 @@ export function useEffectiveHost(
         serverConnectionState,
       });
     },
-    [hostId, hostsQuery.data, serverConnectionState],
+    [hostQuery.data, serverConnectionState],
   );
 
   return {
-    ...hostsQuery,
+    ...hostQuery,
     data: effectiveHost,
   };
 }

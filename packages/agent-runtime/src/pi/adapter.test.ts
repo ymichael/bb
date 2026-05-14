@@ -1834,7 +1834,7 @@ describe("pi provider adapter", () => {
   // -- Model catalog -------------------------------------------------------
 
   it("builds a dynamic model list from the Pi catalog", () => {
-    const models = buildPiAvailableModels({
+    const { models } = buildPiAvailableModels({
       providers: ["anthropic", "openai", "google"],
       getModels: (provider) => {
         switch (provider) {
@@ -1885,8 +1885,8 @@ describe("pi provider adapter", () => {
     );
   });
 
-  it("uses active Pi catalog entries for Opus 4.6 when still available", () => {
-    const models = buildPiAvailableModels({
+  it("routes dated Pi versions to the selected-only bucket", () => {
+    const { models, selectedOnlyModels } = buildPiAvailableModels({
       providers: ["anthropic"],
       getModels: () => [
         {
@@ -1898,8 +1898,8 @@ describe("pi provider adapter", () => {
           supportsXhigh: true,
         },
         {
-          id: "claude-opus-4-6",
-          name: "Claude Opus 4.6",
+          id: "claude-opus-4-6-20240620",
+          name: "Claude Opus 4.6 (2024-06-20)",
           provider: "anthropic",
           reasoning: true,
           input: ["text"],
@@ -1907,40 +1907,19 @@ describe("pi provider adapter", () => {
         },
       ],
       hasAuth: () => true,
-      selectedModel: "anthropic/claude-opus-4-6",
-    });
-
-    expect(models.map((model) => model.id)).toMatchObject([
-      "anthropic/claude-opus-4-7",
-      "anthropic/claude-opus-4-6",
-    ]);
-    expect(models[1]).toEqual(
-      expect.objectContaining({
-        displayName: "Claude Opus 4.6",
-        isDefault: false,
-      }),
-    );
-  });
-
-  it("does not inject removed Pi fallback models", () => {
-    const models = buildPiAvailableModels({
-      providers: ["anthropic"],
-      getModels: () => [
-        {
-          id: "claude-opus-4-7",
-          name: "Claude Opus 4.7",
-          provider: "anthropic",
-          reasoning: true,
-          input: ["text"],
-          supportsXhigh: true,
-        },
-      ],
-      hasAuth: () => true,
-      selectedModel: "anthropic/claude-opus-4-6",
     });
 
     expect(models.map((model) => model.id)).toEqual([
       "anthropic/claude-opus-4-7",
     ]);
+    expect(selectedOnlyModels.map((model) => model.id)).toEqual([
+      "anthropic/claude-opus-4-6-20240620",
+    ]);
+    expect(selectedOnlyModels[0]).toEqual(
+      expect.objectContaining({
+        displayName: "Claude Opus 4.6 (2024-06-20)",
+        isDefault: false,
+      }),
+    );
   });
 });

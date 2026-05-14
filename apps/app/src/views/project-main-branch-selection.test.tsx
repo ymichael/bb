@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { useScopedBranchSelection } from "./project-main-branch-selection";
 
 interface HookProps {
-  defaultBranch: string | null;
+  currentBranch: string | null;
   environmentValue: string;
   projectId: string | undefined;
 }
@@ -19,9 +19,9 @@ function renderBranchSelection(initialProps: HookProps) {
 afterEach(cleanup);
 
 describe("useScopedBranchSelection", () => {
-  it("does not create a branch before a base branch is resolved", () => {
+  it("does not create a branch before a current branch is resolved", () => {
     const { result } = renderBranchSelection({
-      defaultBranch: null,
+      currentBranch: null,
       environmentValue: "host:hst_test:local",
       projectId: "proj_test",
     });
@@ -33,9 +33,9 @@ describe("useScopedBranchSelection", () => {
     expect(result.current.selectedBranch).toBeNull();
   });
 
-  it("creates a branch from the resolved default branch", () => {
+  it("creates a branch seeded from the env's current branch", () => {
     const { result } = renderBranchSelection({
-      defaultBranch: "main",
+      currentBranch: "main",
       environmentValue: "host:hst_test:local",
       projectId: "proj_test",
     });
@@ -52,7 +52,7 @@ describe("useScopedBranchSelection", () => {
 
   it("creates a branch from the current selected branch when present", () => {
     const { result } = renderBranchSelection({
-      defaultBranch: "main",
+      currentBranch: "main",
       environmentValue: "host:hst_test:local",
       projectId: "proj_test",
     });
@@ -72,7 +72,7 @@ describe("useScopedBranchSelection", () => {
 
   it("scopes branch selection to the current project and environment", () => {
     const firstScopeProps = {
-      defaultBranch: "main",
+      currentBranch: "main",
       environmentValue: "host:hst_test:local",
       projectId: "proj_test",
     };
@@ -88,7 +88,7 @@ describe("useScopedBranchSelection", () => {
     });
 
     rerender({
-      defaultBranch: "develop",
+      currentBranch: "develop",
       environmentValue: "host:hst_test:worktree",
       projectId: "proj_test",
     });

@@ -43,6 +43,27 @@
       "when": 1778269063000,
       "tag": "0005_environment_base_branch",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1778732973503,
+      "tag": "0006_hosts_last_seen_nullable",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1778737000000,
+      "tag": "0007_event_pruning_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1778795271034,
+      "tag": "0008_slow_query_indexes",
+      "breakpoints": true
     }
   ]
 }

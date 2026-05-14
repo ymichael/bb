@@ -2,10 +2,7 @@ import path from "node:path";
 import { listDrafts } from "@bb/db";
 import { FILE_LIST_LIMIT_MAX } from "@bb/host-daemon-contract";
 import type { Hono } from "hono";
-import {
-  PROMPT_HISTORY_ENTRY_LIMIT,
-  threadEventTypeSchema,
-} from "@bb/domain";
+import { PROMPT_HISTORY_ENTRY_LIMIT, threadEventTypeSchema } from "@bb/domain";
 import {
   promptHistoryQuerySchema,
   threadStorageContentQuerySchema,
@@ -16,6 +13,7 @@ import {
   timelineTurnSummaryDetailsQuerySchema,
   typedRoutes,
   type PublicApiSchema,
+  type ThreadComposerBootstrapResponse,
   type ThreadTimelineQuery,
 } from "@bb/server-contract";
 import type { AppDeps, SandboxWorkSessionDeps } from "../../types.js";
@@ -47,11 +45,63 @@ import {
   listThreadEventRows,
 } from "../../services/threads/thread-data.js";
 import { getLastExecutionOptions } from "../../services/threads/thread-events.js";
+import { resolveSystemExecutionOptions } from "../../services/system/execution-options.js";
 import { listThreadPromptHistory } from "../../services/prompt-history.js";
 import {
   parseInteger,
   parseOptionalInteger,
 } from "../../services/lib/validation.js";
+
+interface ThreadComposerExecutionOptionsSource {
+  archivedAt: number | null;
+  environmentId: string | null;
+}
+
+interface ShouldResolveThreadComposerExecutionOptionsArgs {
+  thread: ThreadComposerExecutionOptionsSource;
+}
+
+function shouldResolveThreadComposerExecutionOptions({
+  thread,
+}: ShouldResolveThreadComposerExecutionOptionsArgs): boolean {
+  return thread.archivedAt === null && thread.environmentId !== null;
+}
+
+async function buildThreadComposerBootstrapResponse(
+  deps: AppDeps,
+  threadId: string,
+): Promise<ThreadComposerBootstrapResponse> {
+  const thread = requirePublicThread(deps.db, threadId);
+  const defaultExecutionOptions = getLastExecutionOptions(deps, threadId);
+  const composerEnvironmentId = shouldResolveThreadComposerExecutionOptions({
+    thread,
+  })
+    ? thread.environmentId
+    : null;
+  const executionOptions = composerEnvironmentId
+    ? await resolveSystemExecutionOptions(deps, {
+        environmentId: composerEnvironmentId,
+        providerId: thread.providerId,
+      })
+    : {
+        providers: [],
+        models: [],
+        selectedOnlyModels: [],
+      };
+  return {
+    defaultExecutionOptions,
+    drafts: listDrafts(deps.db, threadId).map((draft) =>
+      toQueuedMessage(draft),
+    ),
+    executionOptions,
+    pendingInteractions:
+      deps.pendingInteractions.listPendingThreadInteractions(threadId),
+    promptHistory: listThreadPromptHistory(deps, {
+      threadId,
+      limit: PROMPT_HISTORY_ENTRY_LIMIT,
+    }),
+  };
+}
 
 function validateFilePath(filePath: string): void {
   if (
@@ -212,6 +262,12 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
       output: getLastThreadOutput(deps.db, context.req.param("id")),
     });
   });
+
+  get("/threads/:id/composer-bootstrap", async (context) =>
+    context.json(
+      await buildThreadComposerBootstrapResponse(deps, context.req.param("id")),
+    ),
+  );
 
   get("/threads/:id/drafts", (context) => {
     const threadId = context.req.param("id");

@@ -123,6 +123,7 @@ export function ProjectMainView() {
   const hostBranchesQuery = useProjectSourceBranches(
     projectId,
     isHostMode ? parsedEnvironment.hostId : null,
+    { enabled: isHostMode },
   );
   const githubBranchesQuery = useProjectGithubBranches(projectId, {
     enabled: isSandboxMode && hasGithubSource,
@@ -131,13 +132,24 @@ export function ProjectMainView() {
     ? githubBranchesQuery
     : hostBranchesQuery;
   const branchOptions = activeBranchesQuery.data?.branches ?? [];
-  const resolvedDefaultBranch = activeBranchesQuery.data?.current ?? null;
+  // The branch this env will use if the user doesn't override:
+  //   - host:local      → the primary checkout's HEAD (`current`)
+  //   - host:worktree   → the repo's default branch (the server's `default`
+  //                       base-branch resolves to this)
+  //   - sandbox         → the repo's default branch (same reason)
+  // For non-local environments, `current` is meaningless (or null, for
+  // GitHub sources), so we prefer `defaultBranch`.
+  const isHostLocalMode =
+    isHostMode && parsedEnvironment.mode === "local";
+  const effectiveCurrentBranch = isHostLocalMode
+    ? (activeBranchesQuery.data?.current ?? null)
+    : (activeBranchesQuery.data?.defaultBranch ?? null);
   const {
     selectedBranch,
     onBranchChange: handleBranchChange,
     onCreateBranch: handleCreateBranch,
   } = useScopedBranchSelection({
-    defaultBranch: resolvedDefaultBranch,
+    currentBranch: effectiveCurrentBranch,
     environmentValue: effectiveEnvironmentValue,
     projectId,
   });
@@ -147,13 +159,13 @@ export function ProjectMainView() {
       resolveProjectMainThreadEnvironment({
         environmentValue: effectiveEnvironmentValue,
         projectId,
-        resolvedDefaultBranch,
+        currentBranch: effectiveCurrentBranch,
         selectedBranch,
       }),
     [
       effectiveEnvironmentValue,
       projectId,
-      resolvedDefaultBranch,
+      effectiveCurrentBranch,
       selectedBranch,
     ],
   );
@@ -363,10 +375,11 @@ export function ProjectMainView() {
           }}
           branch={{
             value: selectedBranch?.name ?? null,
-            current: resolvedDefaultBranch,
+            current: effectiveCurrentBranch,
             isNew: selectedBranch?.isNew ?? false,
             options: branchOptions,
             loading: activeBranchesQuery.isLoading,
+            placeholder: "Default branch",
             onChange: handleBranchChange,
             onCreate: handleCreateBranch,
           }}

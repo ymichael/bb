@@ -138,9 +138,13 @@ describe("sweepExpiredCommands", () => {
       .get();
     expect(updatedThread?.status).toBe("error");
 
-    expect(spy.notifyThread).toHaveBeenCalledWith(thread.id, [
-      "status-changed",
-    ]);
+    expect(spy.notifyThread).toHaveBeenCalledWith(
+      thread.id,
+      ["status-changed"],
+      {
+        projectId: project.id,
+      },
+    );
   });
 
   it("uses 20-minute TTL for environment.provision commands", () => {

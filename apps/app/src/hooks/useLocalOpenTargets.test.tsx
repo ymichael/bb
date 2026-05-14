@@ -9,7 +9,6 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
-import type { Host } from "@bb/domain";
 import {
   HOST_DAEMON_PROTOCOL_VERSION,
   openInTargetRequestSchema,
@@ -40,12 +39,9 @@ vi.mock("sonner", () => ({
   },
 }));
 
-interface HostOverrides extends Partial<Host> {}
-
 interface LocalOpenTargetsFetchState {
   daemonStatus: HostDaemonStatusSnapshot | null;
   hostDaemonPort: number | null;
-  hosts: Host[];
   workspaceOpenTargets: WorkspaceOpenTarget[];
   workspaceOpenTargetsStatus: number;
 }
@@ -68,19 +64,6 @@ interface LocalOpenTargetsProbeProps {
 
 interface SuspenseWrapperProps {
   children: ReactNode;
-}
-
-function makeHost(overrides: HostOverrides = {}): Host {
-  return {
-    createdAt: 1,
-    id: "host-1",
-    lastSeenAt: 1,
-    name: "Local Host",
-    status: "connected",
-    type: "persistent",
-    updatedAt: 1,
-    ...overrides,
-  };
 }
 
 function createSuspenseWrapper() {
@@ -164,10 +147,6 @@ function installLocalOpenTargetsFetchRoutes(
         }),
     },
     {
-      pathname: "/api/v1/hosts",
-      handler: async () => jsonResponse(state.hosts),
-    },
-    {
       pathname: "/status",
       port: 4123,
       handler: async () =>
@@ -234,7 +213,6 @@ describe("useLocalOpenTargets", () => {
         platform: "darwin",
       },
       hostDaemonPort: 4123,
-      hosts: [makeHost()],
       workspaceOpenTargets: [
         { id: "vscode", kind: "editor", label: "VS Code" },
         { id: "finder", kind: "file-browser", label: "Finder" },
@@ -296,7 +274,6 @@ describe("useLocalOpenTargets", () => {
         platform: "darwin",
       },
       hostDaemonPort: 4123,
-      hosts: [makeHost()],
       workspaceOpenTargets: [
         { id: "vscode", kind: "editor", label: "VS Code" },
         { id: "finder", kind: "file-browser", label: "Finder" },
@@ -347,7 +324,6 @@ describe("useLocalOpenTargets", () => {
         platform: "darwin",
       },
       hostDaemonPort: 4123,
-      hosts: [makeHost({ status: "disconnected" })],
       workspaceOpenTargets: [],
       workspaceOpenTargetsStatus: 200,
     };
@@ -398,7 +374,6 @@ describe("useLocalOpenTargets", () => {
         platform: "darwin",
       },
       hostDaemonPort: 4123,
-      hosts: [makeHost()],
       workspaceOpenTargets: [],
       workspaceOpenTargetsStatus: 200,
     };

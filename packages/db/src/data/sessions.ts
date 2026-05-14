@@ -4,6 +4,7 @@ import type { DbConnection, DbTransaction } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
 import { hostDaemonSessions } from "../schema.js";
 import { createHostDaemonSessionId } from "../ids.js";
+import { markHostSeen } from "./hosts.js";
 
 type SessionReadConnection = DbConnection | DbTransaction;
 export type HostDaemonSessionRow = typeof hostDaemonSessions.$inferSelect;
@@ -88,6 +89,8 @@ export function openSession(
     .returning()
     .get();
 
+  markHostSeen(db, input.hostId, now);
+
   notifier.notifyHost(input.hostId, ["host-connected"]);
 
   return row;
@@ -123,6 +126,8 @@ export function closeSession(
     .where(eq(hostDaemonSessions.id, sessionId))
     .returning()
     .get();
+
+  markHostSeen(db, existing.hostId, now);
 
   notifier.notifyHost(existing.hostId, ["host-disconnected"]);
 
@@ -303,7 +308,7 @@ export function heartbeatSession(
   leaseExpiresAt: number,
 ) {
   const now = Date.now();
-  return (
+  const updated =
     db
       .update(hostDaemonSessions)
       .set({
@@ -313,6 +318,9 @@ export function heartbeatSession(
       })
       .where(eq(hostDaemonSessions.id, sessionId))
       .returning()
-      .get() ?? null
-  );
+      .get() ?? null;
+  if (updated) {
+    markHostSeen(db, updated.hostId, now);
+  }
+  return updated;
 }

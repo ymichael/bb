@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import type { ActiveThinking, ThreadRuntimeDisplayStatus } from "@bb/domain";
 import type { TimelineRow, TimelineTurnRow } from "@bb/server-contract";
 import { Button } from "@/components/ui/button.js";
@@ -35,6 +41,7 @@ interface ThreadTimelinePaneProps {
   projectId?: string;
   showOngoingIndicator: boolean;
   ongoingIndicatorLabel?: string;
+  stopRequestedAt: number | null;
   timelineRows: TimelineRow[];
   threadId: string;
   threadRuntimeDisplayStatus: ThreadRuntimeDisplayStatus;
@@ -46,6 +53,72 @@ interface ThreadTimelinePaneProps {
 export interface HostConnectionNotice {
   label: string;
   tone: "pending" | "error";
+}
+
+interface BuildStopRequestedTimelineRowArgs {
+  stopRequestedAt: number;
+  threadId: string;
+}
+
+interface UseTimelineRowsWithPendingStopArgs {
+  rows: TimelineRow[];
+  stopRequestedAt: number | null;
+  threadId: string;
+}
+
+function buildStopRequestedTimelineRow({
+  stopRequestedAt,
+  threadId,
+}: BuildStopRequestedTimelineRowArgs): TimelineRow {
+  return {
+    id: `${threadId}:pending-stop:${stopRequestedAt}`,
+    threadId,
+    turnId: null,
+    sourceSeqStart: 0,
+    sourceSeqEnd: 0,
+    startedAt: stopRequestedAt,
+    createdAt: stopRequestedAt,
+    kind: "system",
+    systemKind: "operation",
+    operationKind: "thread-interrupted",
+    title: "Stop requested",
+    detail: null,
+    status: "pending",
+    completedAt: null,
+  };
+}
+
+function hasConfirmedStopRow(
+  rows: readonly TimelineRow[],
+  stopRequestedAt: number,
+): boolean {
+  return rows.some(
+    (row) =>
+      row.kind === "system" &&
+      row.systemKind === "operation" &&
+      row.operationKind === "thread-interrupted" &&
+      row.createdAt >= stopRequestedAt,
+  );
+}
+
+function useTimelineRowsWithPendingStop({
+  rows,
+  stopRequestedAt,
+  threadId,
+}: UseTimelineRowsWithPendingStopArgs): TimelineRow[] {
+  return useMemo(() => {
+    if (
+      stopRequestedAt === null ||
+      hasConfirmedStopRow(rows, stopRequestedAt)
+    ) {
+      return rows;
+    }
+
+    return [
+      ...rows,
+      buildStopRequestedTimelineRow({ stopRequestedAt, threadId }),
+    ];
+  }, [rows, stopRequestedAt, threadId]);
 }
 
 export function ThreadTimelinePane({
@@ -66,6 +139,7 @@ export function ThreadTimelinePane({
   projectId,
   showOngoingIndicator,
   ongoingIndicatorLabel,
+  stopRequestedAt,
   timelineRows,
   threadId,
   threadRuntimeDisplayStatus,
@@ -85,6 +159,11 @@ export function ThreadTimelinePane({
     showActiveThinking && activeThinking
       ? activeThinking.id
       : (ongoingIndicatorLabel ?? "working");
+  const timelineRowsWithPendingStop = useTimelineRowsWithPendingStop({
+    rows: timelineRows,
+    stopRequestedAt,
+    threadId,
+  });
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
@@ -113,7 +192,7 @@ export function ThreadTimelinePane({
               label="Failed to load timeline"
               className="mt-6 text-destructive"
             />
-          ) : timelineRows.length > 0 ? (
+          ) : timelineRowsWithPendingStop.length > 0 ? (
             <ThreadTimelineRows
               loadingTurnSummaryIds={loadingTurnSummaryIds}
               erroredTurnSummaryIds={erroredTurnSummaryIds}
@@ -123,7 +202,7 @@ export function ThreadTimelinePane({
               projectId={projectId}
               resolveUserAttachmentImageSrc={toUserAttachmentImageSrc}
               themeType={preferredTheme}
-              timelineRows={timelineRows}
+              timelineRows={timelineRowsWithPendingStop}
               threadRuntimeDisplayStatus={threadRuntimeDisplayStatus}
               turnSummaryRowsIdentity={turnSummaryRowsIdentity}
               turnSummaryRowsById={turnSummaryRowsById}
@@ -202,7 +281,5 @@ function DelayedThreadLoadingIndicator() {
     return null;
   }
 
-  return (
-    <TimelineStatusIndicator label="Loading thread..." className="mt-6" />
-  );
+  return <TimelineStatusIndicator label="Loading thread..." className="mt-6" />;
 }

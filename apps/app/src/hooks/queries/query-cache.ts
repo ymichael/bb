@@ -11,6 +11,7 @@ import type {
   TimelineUserConversationRow,
 } from "@bb/server-contract";
 import {
+  ARCHIVED_THREADS_LIST_KIND,
   ENVIRONMENT_GIT_DIFF_QUERY_KEY,
   ENVIRONMENT_WORK_STATUS_QUERY_KEY,
   environmentFilePreviewQueryKeyPrefix,
@@ -27,6 +28,7 @@ import {
   threadTimelineQueryKeyPrefix,
   type EnvironmentGitDiffQueryKey,
   type EnvironmentWorkStatusQueryKey,
+  type ArchivedThreadsListFilters,
   type ThreadListQueryFilters,
 } from "./query-keys";
 
@@ -45,6 +47,11 @@ interface UpdateCachedTimelineRowsArgs {
 
 export interface EnvironmentInvalidationParams {
   environmentId: string;
+}
+
+export interface ProjectThreadListInvalidationParams {
+  projectId: string;
+  queryClient: QueryClient;
 }
 
 function getThreadListFiltersFromQueryKey(
@@ -104,6 +111,64 @@ function isThreadListQueryFilters(
   }
 
   return true;
+}
+
+function isArchivedThreadsListFilters(
+  candidate: unknown,
+): candidate is ArchivedThreadsListFilters {
+  if (
+    typeof candidate !== "object" ||
+    candidate === null ||
+    Array.isArray(candidate)
+  ) {
+    return false;
+  }
+
+  if (!("projectId" in candidate) || typeof candidate.projectId !== "string") {
+    return false;
+  }
+  if (
+    !("managed" in candidate) ||
+    (candidate.managed !== "all" &&
+      candidate.managed !== "managed" &&
+      candidate.managed !== "unmanaged")
+  ) {
+    return false;
+  }
+
+  return true;
+}
+
+function getThreadListProjectIdFromQueryKey(
+  queryKey: QueryKey,
+): string | undefined {
+  if (queryKey[0] !== THREADS_QUERY_KEY) {
+    return undefined;
+  }
+
+  if (queryKey[1] === ARCHIVED_THREADS_LIST_KIND) {
+    const filters = queryKey[2];
+    return isArchivedThreadsListFilters(filters)
+      ? filters.projectId
+      : undefined;
+  }
+
+  return getThreadListFiltersFromQueryKey(queryKey)?.projectId;
+}
+
+export function getCachedProjectThreadListInvalidationQueryKeys({
+  projectId,
+  queryClient,
+}: ProjectThreadListInvalidationParams): QueryKey[] {
+  const queryKeys: QueryKey[] = [];
+  for (const [queryKey] of queryClient.getQueriesData({
+    queryKey: threadsQueryKey(),
+  })) {
+    if (getThreadListProjectIdFromQueryKey(queryKey) === projectId) {
+      queryKeys.push(queryKey);
+    }
+  }
+  return queryKeys;
 }
 
 export function getEnvironmentRecordInvalidationQueryKeys({

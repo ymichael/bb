@@ -10,16 +10,14 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
-import type { AvailableModel, Host, Thread } from "@bb/domain";
+import type { AvailableModel, Host, ProviderInfo, Thread } from "@bb/domain";
 import type {
   CreateManagerThreadRequest,
   ProjectResponse,
-  SystemProviderInfo,
 } from "@bb/server-contract";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  availableModelsQueryKey,
-  systemProvidersQueryKey,
+  systemExecutionOptionsQueryKey,
   threadQueryKey,
 } from "@/hooks/queries/query-keys";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
@@ -47,9 +45,7 @@ interface InstallHireManagerRoutesArgs {
   systemProviders?: SystemProvidersFixture;
 }
 
-type SystemProvidersFixture =
-  | SystemProviderInfo[]
-  | (() => SystemProviderInfo[]);
+type SystemProvidersFixture = ProviderInfo[] | (() => ProviderInfo[]);
 
 function installMatchMedia() {
   Object.defineProperty(window, "matchMedia", {
@@ -212,7 +208,7 @@ async function selectProviderModel(args: {
   fireEvent.click(await waitFor(() => findOptionLabel(args.model)));
 }
 
-function createDefaultSystemProviders(): SystemProviderInfo[] {
+function createDefaultSystemProviders(): ProviderInfo[] {
   return [
     createTestSystemProvider({
       capabilities: {
@@ -235,7 +231,7 @@ function createDefaultSystemProviders(): SystemProviderInfo[] {
 
 function resolveSystemProviders(
   systemProviders: SystemProvidersFixture,
-): SystemProviderInfo[] {
+): ProviderInfo[] {
   return typeof systemProviders === "function"
     ? systemProviders()
     : systemProviders;
@@ -282,11 +278,6 @@ function installNewManagerRoutes(args: InstallHireManagerRoutesArgs = {}) {
       pathname: "/api/v1/hosts",
       handler: async () => jsonResponse(hosts),
     },
-    {
-      pathname: "/api/v1/system/providers",
-      handler: async () =>
-        jsonResponse(resolveSystemProviders(systemProviders)),
-    },
   ];
 
   for (const project of projects) {
@@ -301,19 +292,24 @@ function installNewManagerRoutes(args: InstallHireManagerRoutesArgs = {}) {
     });
   }
 
-  if (args.modelResponsesByProvider) {
-    routes.push({
-      pathname: "/api/v1/system/models",
-      handler: async (request: Request) => {
-        const url = new URL(request.url);
-        const providerId = url.searchParams.get("providerId");
-        requestedModelProviders.push(providerId);
-        return jsonResponse(
-          providerId ? (args.modelResponsesByProvider?.[providerId] ?? []) : [],
-        );
-      },
-    });
-  }
+  routes.push({
+    pathname: "/api/v1/system/execution-options",
+    handler: async (request: Request) => {
+      const url = new URL(request.url);
+      const requestedProviderId = url.searchParams.get("providerId");
+      const providers = resolveSystemProviders(systemProviders);
+      const resolvedProviderId =
+        (requestedProviderId &&
+          providers.find((p) => p.id === requestedProviderId)?.id) ||
+        providers[0]?.id ||
+        null;
+      requestedModelProviders.push(resolvedProviderId);
+      const models = resolvedProviderId
+        ? (args.modelResponsesByProvider?.[resolvedProviderId] ?? [])
+        : [];
+      return jsonResponse({ providers, models });
+    },
+  });
 
   installFetchRoutes(routes);
 
@@ -534,14 +530,24 @@ describe("NewManagerView", () => {
     systemProviders = systemProviders.filter(
       (provider) => provider.id === "pi",
     );
-    await queryClient.refetchQueries({ queryKey: systemProvidersQueryKey() });
+    await queryClient.refetchQueries({
+      queryKey: systemExecutionOptionsQueryKey({
+        environmentId: null,
+        providerId: "codex",
+      }),
+    });
 
     await waitFor(() => {
       expectProviderModelTitle(["Pi"]);
     });
 
     systemProviders = createDefaultSystemProviders();
-    await queryClient.refetchQueries({ queryKey: systemProvidersQueryKey() });
+    await queryClient.refetchQueries({
+      queryKey: systemExecutionOptionsQueryKey({
+        environmentId: null,
+        providerId: "pi",
+      }),
+    });
 
     await waitFor(() => {
       expectProviderModelTitle(["Pi"]);
@@ -619,8 +625,16 @@ describe("NewManagerView", () => {
     });
     expect(requestedModelProviders).toEqual(["pi", "codex"]);
     expect(
-      queryClient.getQueryData(availableModelsQueryKey("codex", null)),
-    ).toEqual(codexModels);
+      queryClient.getQueryData(
+        systemExecutionOptionsQueryKey({
+          environmentId: null,
+          providerId: "codex",
+        }),
+      ),
+    ).toEqual({
+      providers: createDefaultSystemProviders(),
+      models: codexModels,
+    });
   });
 
   it("preserves a user-selected reasoning level across real model refetches", async () => {
@@ -695,7 +709,10 @@ describe("NewManagerView", () => {
     ];
 
     await queryClient.refetchQueries({
-      queryKey: availableModelsQueryKey("pi", null),
+      queryKey: systemExecutionOptionsQueryKey({
+        environmentId: null,
+        providerId: "pi",
+      }),
     });
 
     await waitFor(() => {
