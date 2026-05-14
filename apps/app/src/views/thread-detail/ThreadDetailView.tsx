@@ -7,11 +7,11 @@ import type {
 import type { ThreadListEntry, ThreadWithRuntime } from "@bb/domain";
 import { toast } from "sonner";
 import {
-  useIsSecondaryPanelOpen,
   useThreadSecondaryPanelState,
   useThreadSecondaryPanelStorageMaintenance,
   useThreadSecondaryPanelUrlSync,
   useTouchThreadSecondaryPanelState,
+  type ThreadSecondaryPanel as ThreadSecondaryPanelTab,
 } from "@/lib/thread-secondary-panel";
 import { getActiveStorageFilePath } from "@/lib/thread-secondary-panel-state";
 import { useRequestEnvironmentAction } from "../../hooks/mutations/environment-mutations";
@@ -64,6 +64,7 @@ import {
   type ThreadPromptManagerChildrenSection,
 } from "@/components/promptbox/banner/ThreadPromptContextBanner";
 import { ThreadDetailSecondaryContent } from "./ThreadDetailSecondaryContent";
+import { useThreadSecondaryPanelVisibility } from "./useThreadSecondaryPanelVisibility";
 import type { HostConnectionNotice } from "./ThreadTimelinePane";
 import { useThreadStorageViewer } from "@/components/secondary-panel/useThreadStorageViewer";
 import {
@@ -89,12 +90,14 @@ import {
   buildManagerSelectorOptions,
   isUnassignedStandardThread,
 } from "./threadManagerSelectorOptions";
+import { useIsCompactViewport } from "@/components/ui/hooks/use-compact-viewport";
 
 const EMPTY_MANAGER_THREADS: readonly ThreadListEntry[] = [];
 
 type MergeBasePickerOpenChangeHandler = NonNullable<
   ContextBannerMergeBaseConfig["onPickerOpenChange"]
 >;
+type SecondaryPanelChangeHandler = (panel: ThreadSecondaryPanelTab) => void;
 
 function buildHostConnectionNotice(
   thread: ThreadWithRuntime,
@@ -125,7 +128,7 @@ export function ThreadDetailView() {
   useThreadSecondaryPanelUrlSync(threadId);
   const secondaryPanelState = useThreadSecondaryPanelState(threadId);
   const activeSecondaryPanel = secondaryPanelState.activePanel;
-  const isSecondaryPanelOpen = useIsSecondaryPanelOpen(threadId);
+  const renderSecondaryPanelAsDrawer = useIsCompactViewport();
   const touchSecondaryPanelState = useTouchThreadSecondaryPanelState(threadId);
   const threadDetailBootstrapQuery = useThreadDetailBootstrap(threadId ?? "");
   const hasThreadDetailBootstrapSettled =
@@ -299,12 +302,12 @@ export function ThreadDetailView() {
     defaultMergeBaseBranch: resolvedDefaultMergeBaseBranch,
     isLoadingMergeBaseBranchOptions,
     mergeBaseBranchOptions,
-    openDiffFile,
-    openThreadDiffPanel,
-    openThreadSecondaryPanel,
+    openDiffFile: openPersistedDiffFile,
+    openThreadDiffPanel: openPersistedDiffPanel,
+    openThreadSecondaryPanel: openPersistedSecondaryPanel,
     selectedMergeBaseBranch,
     setSelectedMergeBaseBranch,
-    toggleThreadSecondaryPanel,
+    toggleThreadSecondaryPanel: togglePersistedSecondaryPanel,
   } = useGitDiffPanel({
     clearActiveFileTabs,
     defaultMergeBaseBranch: environmentMergeBaseBranch,
@@ -313,6 +316,23 @@ export function ThreadDetailView() {
       : undefined,
     mergeBaseBranchOptionsEnabled: hasRequestedMergeBaseOptions,
     threadId,
+  });
+  const {
+    closePanel: closeSecondaryPanel,
+    isOpen: isSecondaryPanelOpen,
+    openDiffFile: openSecondaryPanelDiffFile,
+    openDiffPanel: openSecondaryPanelDiffPanel,
+    openPanel: openSecondaryPanel,
+    togglePanel: toggleSecondaryPanel,
+  } = useThreadSecondaryPanelVisibility({
+    activePanel: activeSecondaryPanel,
+    closePersistedPanel: closeThreadSecondaryPanel,
+    isCompactViewport: renderSecondaryPanelAsDrawer,
+    openPersistedDiffFile,
+    openPersistedDiffPanel,
+    openPersistedPanel: openPersistedSecondaryPanel,
+    threadId,
+    togglePersistedPanel: togglePersistedSecondaryPanel,
   });
   useEffect(() => {
     setHasRequestedMergeBaseOptions(false);
@@ -323,12 +343,12 @@ export function ThreadDetailView() {
         setHasRequestedMergeBaseOptions(true);
       }
     }, []);
-  const handleSecondaryPanelChange = useCallback(
-    (panel: Parameters<typeof openThreadSecondaryPanel>[0]) => {
+  const handleSecondaryPanelChange = useCallback<SecondaryPanelChangeHandler>(
+    (panel) => {
       clearActiveFileTabs();
-      openThreadSecondaryPanel(panel);
+      openSecondaryPanel(panel);
     },
-    [clearActiveFileTabs, openThreadSecondaryPanel],
+    [clearActiveFileTabs, openSecondaryPanel],
   );
   const handleChangedFileClick = useCallback(
     (selection: WorkspaceChangedFileSelection) => {
@@ -342,9 +362,9 @@ export function ThreadDetailView() {
         });
         return;
       }
-      openDiffFile(selection.file.path);
+      openSecondaryPanelDiffFile(selection.file.path);
     },
-    [openDiffFile, openWorkspaceFile],
+    [openSecondaryPanelDiffFile, openWorkspaceFile],
   );
   const fileTabs = useMemo<SecondaryPanelFileTab[] | undefined>(() => {
     const workspaceTabs = openWorkspaceFileTabs.map((tab) => ({
@@ -588,7 +608,7 @@ export function ThreadDetailView() {
             return null;
           }
           return () => {
-            openDiffFile(action.path);
+            openSecondaryPanelDiffFile(action.path);
           };
         default:
           // Surfaces a compile-time error if a future TimelineTitleAction
@@ -597,7 +617,7 @@ export function ThreadDetailView() {
           return assertNever(action.kind);
       }
     },
-    [isManagerThread, openDiffFile],
+    [isManagerThread, openSecondaryPanelDiffFile],
   );
 
   if (!projectId || !threadId) {
@@ -707,7 +727,7 @@ export function ThreadDetailView() {
       isSecondaryPanelOpen={isSecondaryPanelOpen}
       isThreadGitActionPending={gitActions.isThreadGitActionPending}
       onOpenThreadGitAction={gitActions.threadGitActionDialog.onOpen}
-      onToggleSecondaryPanel={toggleThreadSecondaryPanel}
+      onToggleSecondaryPanel={toggleSecondaryPanel}
       threadHeaderGitActions={gitActions.threadHeaderGitActions}
       threadTitle={threadTitle}
       workspaceOpenButton={workspaceOpenButton}
@@ -737,7 +757,7 @@ export function ThreadDetailView() {
       }
       composerQueriesStaleTime={composerSeededStaleTime}
       onChangedFileClick={handleChangedFileClick}
-      openThreadDiffPanel={openThreadDiffPanel}
+      openThreadDiffPanel={openSecondaryPanelDiffPanel}
       projectId={projectId}
       workspaceChangedFilesSection={
         canUseGitUi ? workspaceChangedFilesSection : null
@@ -839,8 +859,8 @@ export function ThreadDetailView() {
           fileTabs,
           fileTabContent,
           isOpen: isSecondaryPanelOpen,
-          onClose: closeThreadSecondaryPanel,
-          onCollapse: closeThreadSecondaryPanel,
+          onClose: closeSecondaryPanel,
+          onCollapse: closeSecondaryPanel,
           onOpenFileInEditor: handleOpenFileInEditor,
           onOpenFilePreview: (relativePath: string) => {
             openWorkspaceFile({
