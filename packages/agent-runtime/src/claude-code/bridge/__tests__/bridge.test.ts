@@ -1052,6 +1052,56 @@ describe("bridge", () => {
     expect(queryMock).not.toHaveBeenCalled();
   });
 
+  it("exposes the host HOME and CLAUDE settings cascade to the Claude SDK on thread/start", async () => {
+    const bridge = createBridgeJsonRpcTestHarness(handleLine);
+    const queries: ControlledClaudeQuery[] = [];
+    queryMock.mockImplementation(() => {
+      const query = createControlledClaudeQuery();
+      queries.push(query);
+      return query;
+    });
+
+    const originalHome = process.env.HOME;
+    process.env.HOME = "/Users/test-bb";
+    try {
+      bridge.sendRequest(1, "thread/start", {
+        baseInstructions: "test",
+        cwd: "/tmp/worktree",
+        instructionMode: "append",
+        permissionEscalation: "ask",
+        permissionMode: "default",
+        threadId: "thread-home-config",
+      });
+      await bridge.waitForResponse(1);
+
+      const queryOptions = getLatestQueryOptions() as ClaudeQueryCallOptions & {
+        env?: Record<string, string | undefined>;
+        settingSources?: string[];
+      };
+      expect(queryOptions.env?.HOME).toBe("/Users/test-bb");
+      expect(queryOptions.env?.CLAUDE_AGENT_SDK_CLIENT_APP).toBe("bb/1.0.0");
+      expect(queryOptions.settingSources).toEqual([
+        "user",
+        "project",
+        "local",
+      ]);
+
+      bridge.sendRequest(2, "thread/stop", {
+        threadId: "thread-home-config",
+      });
+      await bridge.flushWork();
+      queries[0]?.finish();
+      await bridge.waitForResponse(2);
+    } finally {
+      if (originalHome === undefined) {
+        delete process.env.HOME;
+      } else {
+        process.env.HOME = originalHome;
+      }
+      bridge.restore();
+    }
+  });
+
   it("passes thread/start reasoningLevel through to Claude SDK effort and thinking display", async () => {
     const bridge = createBridgeJsonRpcTestHarness(handleLine);
     const queries: ControlledClaudeQuery[] = [];

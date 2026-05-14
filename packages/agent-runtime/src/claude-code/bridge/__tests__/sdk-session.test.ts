@@ -111,7 +111,7 @@ describe("SdkSession", () => {
     );
   });
 
-  it("loads project settings so Claude Code discovers repo CLAUDE.md files", () => {
+  it("mirrors the Claude CLI settings cascade so user, project, and local settings all load", () => {
     const onMessage = vi.fn();
     const onDone = vi.fn();
     const session = new SdkSession(defaultOptions, onMessage, onDone);
@@ -121,7 +121,7 @@ describe("SdkSession", () => {
     expect(queryMock).toHaveBeenCalledWith(
       expect.objectContaining({
         options: expect.objectContaining({
-          settingSources: ["project"],
+          settingSources: ["user", "project", "local"],
         }),
       }),
     );

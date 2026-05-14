@@ -76,7 +76,11 @@ export class SdkSession {
       systemPrompt: this.options.systemPrompt,
       permissionMode: this.options.permissionMode ?? "default",
       includePartialMessages: true,
-      settingSources: ["project"],
+      // Mirror the Claude CLI cascade so the SDK loads both the user's global
+      // configuration (~/.claude/settings.json, ~/.claude/CLAUDE.md) and the
+      // workspace's project and local settings. Restricting this to "project"
+      // hid global home configuration from bb-managed sessions.
+      settingSources: ["user", "project", "local"],
       persistSession: true,
       env: this.options.env ?? process.env,
       ...(this.options.mcpServers
