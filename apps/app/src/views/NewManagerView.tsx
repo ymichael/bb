@@ -461,9 +461,9 @@ export function NewManagerForm({
             New Manager
           </h1>
           <p className="text-sm leading-relaxed text-muted-foreground">
-            A manager coordinates sustained work on a project — delegating to
-            worker threads, tracking progress, and surfacing updates. Hiring
-            starts a new thread
+            A manager coordinates sustained work on a project. They delegate to
+            worker threads, track progress, and surface updates. Hiring starts
+            a new thread
             {projectName ? (
               <>
                 {" "}
