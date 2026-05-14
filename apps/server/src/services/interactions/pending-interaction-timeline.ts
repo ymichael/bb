@@ -72,7 +72,9 @@ function appendPermissionGrantTimelineEventInTransaction(
       subject,
     },
   });
-  deps.hub.notifyThread(interaction.threadId, ["events-appended"]);
+  deps.hub.notifyThread(interaction.threadId, ["events-appended"], {
+    eventTypes: ["system/permissionGrant/lifecycle"],
+  });
 }
 
 function appendApprovalItemEvent(
@@ -111,7 +113,9 @@ function appendApprovalItemEventInTransaction(
       item,
     },
   });
-  deps.hub.notifyThread(interaction.threadId, ["events-appended"]);
+  deps.hub.notifyThread(interaction.threadId, ["events-appended"], {
+    eventTypes: [item.status === "pending" ? "item/started" : "item/completed"],
+  });
 }
 
 function appendApprovalSubjectItemEvent(

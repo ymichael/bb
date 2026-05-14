@@ -25,6 +25,7 @@ import {
   type PendingInteraction,
   type PendingInteractionCreate,
   type PendingInteractionResolution,
+  type ThreadChangeMetadata,
 } from "@bb/domain";
 import type { HostDaemonCommand } from "@bb/host-daemon-contract";
 import { ApiError } from "../../errors.js";
@@ -93,6 +94,23 @@ interface InterruptPendingInteractionArgs {
 interface PendingInteractionTransactionDeps {
   db: DbTransaction;
   hub: DbNotifier;
+}
+
+interface BuildInteractionChangeMetadataArgs {
+  db: AppDeps["db"] | DbTransaction;
+  hasPendingInteraction: boolean;
+  threadId: string;
+}
+
+interface InteractionChangeNotificationDeps {
+  db: AppDeps["db"] | DbTransaction;
+  hub: DbNotifier;
+}
+
+interface NotifyInteractionChangedArgs {
+  deps: InteractionChangeNotificationDeps;
+  hasPendingInteraction: boolean;
+  threadId: string;
 }
 
 interface InterruptPendingInteractionsForThreadsLifecycleArgs {
@@ -169,11 +187,35 @@ interface ExpirePendingInteractionArgs {
   reason: string;
 }
 
-function notifyInteractionChanged(
-  deps: CreateLifecycleDeps,
-  threadId: string,
-): void {
-  deps.hub.notifyThread(threadId, ["interactions-changed"]);
+function buildInteractionChangeMetadata({
+  db,
+  hasPendingInteraction,
+  threadId,
+}: BuildInteractionChangeMetadataArgs): ThreadChangeMetadata | undefined {
+  const thread = getThread(db, threadId);
+  if (!thread) {
+    return undefined;
+  }
+  return {
+    hasPendingInteraction,
+    projectId: thread.projectId,
+  };
+}
+
+function notifyInteractionChanged({
+  deps,
+  hasPendingInteraction,
+  threadId,
+}: NotifyInteractionChangedArgs): void {
+  deps.hub.notifyThread(
+    threadId,
+    ["interactions-changed"],
+    buildInteractionChangeMetadata({
+      db: deps.db,
+      hasPendingInteraction,
+      threadId,
+    }),
+  );
 }
 
 /**
@@ -327,7 +369,11 @@ export class PendingInteractionLifecycle {
 
     if (registered.outcome === "created") {
       appendPendingInteractionTimelineEvent(this.deps, pendingInteraction);
-      notifyInteractionChanged(this.deps, pendingInteraction.threadId);
+      notifyInteractionChanged({
+        deps: this.deps,
+        hasPendingInteraction: true,
+        threadId: pendingInteraction.threadId,
+      });
     }
 
     return {
@@ -725,7 +771,11 @@ export class PendingInteractionLifecycle {
   ): void {
     this.clearExpiryTimer(interaction.id);
     appendPendingInteractionTimelineEvent(this.deps, interaction);
-    notifyInteractionChanged(this.deps, interaction.threadId);
+    notifyInteractionChanged({
+      deps: this.deps,
+      hasPendingInteraction: false,
+      threadId: interaction.threadId,
+    });
   }
 
   private settleInteractionTerminalStateInTransaction(
@@ -734,6 +784,10 @@ export class PendingInteractionLifecycle {
   ): void {
     this.clearExpiryTimer(interaction.id);
     appendPendingInteractionTimelineEventInTransaction(deps, interaction);
-    deps.hub.notifyThread(interaction.threadId, ["interactions-changed"]);
+    notifyInteractionChanged({
+      deps,
+      hasPendingInteraction: false,
+      threadId: interaction.threadId,
+    });
   }
 }

@@ -94,7 +94,6 @@ export function listStoredProjectPromptHistoryEventRows(
     .where(
       and(
         eq(threads.projectId, args.projectId),
-        isNull(threads.archivedAt),
         isNull(threads.deletedAt),
         projectCreatePromptHistoryEventPredicate(),
       ),

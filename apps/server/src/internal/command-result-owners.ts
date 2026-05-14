@@ -413,7 +413,9 @@ function handleProvisionCommandResult(
           status: thread.status === "provisioning" ? "active" : "completed",
           entries,
         });
-        args.deps.hub.notifyThread(thread.id, ["events-appended"]);
+        args.deps.hub.notifyThread(thread.id, ["events-appended"], {
+          eventTypes: ["system/thread-provisioning"],
+        });
         continue;
       }
 

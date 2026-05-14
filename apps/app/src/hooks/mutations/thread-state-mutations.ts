@@ -4,10 +4,9 @@ import type { ThreadWithRuntime } from "@bb/domain";
 import type { ProjectResponse, UpdateThreadRequest } from "@bb/server-contract";
 import * as api from "@/lib/api";
 import {
-  invalidateProjectPromptHistoryQueries,
   invalidateThreadDeleteQueries,
   invalidateThreadListMembershipQueries,
-  invalidateThreadListAndStatusQueries,
+  invalidateThreadListQueries,
   removeEnvironmentScopedQueries,
   removeThreadScopedQueries,
 } from "../cache-effects";
@@ -19,7 +18,6 @@ import {
 import {
   applyToCachedThreadLists,
   getCachedThreadLists,
-  iterateThreadListCacheEntries,
   type ThreadListCacheData,
 } from "../queries/thread-list-cache-data";
 
@@ -53,7 +51,6 @@ interface DeleteThreadMutationContext {
 }
 
 interface ThreadListMutationContext {
-  projectId: string | null;
   previousThread: ThreadWithRuntime | undefined;
   previousThreadLists: ThreadListSnapshot;
 }
@@ -61,26 +58,6 @@ interface ThreadListMutationContext {
 interface UpdateThreadInListsArgs {
   queryClient: QueryClient;
   thread: ThreadWithRuntime;
-}
-
-function resolveProjectIdForThread(args: {
-  previousThread: ThreadWithRuntime | undefined;
-  previousThreadLists: ThreadListSnapshot;
-  threadId: string;
-}): string | null {
-  if (args.previousThread) {
-    return args.previousThread.projectId;
-  }
-
-  for (const { data } of args.previousThreadLists) {
-    for (const entry of iterateThreadListCacheEntries(data)) {
-      if (entry.id === args.threadId) {
-        return entry.projectId;
-      }
-    }
-  }
-
-  return null;
 }
 
 function snapshotThreadLists(queryClient: QueryClient): ThreadListSnapshot {
@@ -130,7 +107,7 @@ export function useUpdateThread() {
         threadQueryKey(thread.id),
         thread,
       );
-      invalidateThreadListAndStatusQueries({ queryClient });
+      invalidateThreadListQueries({ queryClient });
     },
   });
 }
@@ -179,11 +156,6 @@ export function useArchiveThread() {
       return {
         previousThread,
         previousThreadLists,
-        projectId: resolveProjectIdForThread({
-          previousThread,
-          previousThreadLists,
-          threadId: id,
-        }),
       };
     },
     onError: (_error, variables, context?: ThreadListMutationContext) => {
@@ -197,17 +169,10 @@ export function useArchiveThread() {
       );
       restoreThreadLists(queryClient, context.previousThreadLists);
     },
-    onSettled: (_data, _error, variables, context) => {
+    onSettled: (_data, _error, variables) => {
       invalidateThreadListMembershipQueries({
         queryClient,
         threadId: variables.id,
-      });
-      if (!context?.projectId) {
-        return;
-      }
-      invalidateProjectPromptHistoryQueries({
-        queryClient,
-        projectId: context.projectId,
       });
     },
   });
@@ -249,11 +214,6 @@ export function useUnarchiveThread() {
       return {
         previousThread,
         previousThreadLists,
-        projectId: resolveProjectIdForThread({
-          previousThread,
-          previousThreadLists,
-          threadId: id,
-        }),
       };
     },
     onError: (_error, variables, context?: ThreadListMutationContext) => {
@@ -267,17 +227,10 @@ export function useUnarchiveThread() {
       );
       restoreThreadLists(queryClient, context.previousThreadLists);
     },
-    onSettled: (_data, _error, variables, context) => {
+    onSettled: (_data, _error, variables) => {
       invalidateThreadListMembershipQueries({
         queryClient,
         threadId: variables.id,
-      });
-      if (!context?.projectId) {
-        return;
-      }
-      invalidateProjectPromptHistoryQueries({
-        queryClient,
-        projectId: context.projectId,
       });
     },
   });

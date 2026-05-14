@@ -2785,6 +2785,13 @@ describe("events", () => {
         data: "{}",
       },
       {
+        threadId: thread.id,
+        sequence: 2,
+        type: "client/turn/requested",
+        ...threadEventFields,
+        data: "{}",
+      },
+      {
         threadId: thread2.id,
         sequence: 1,
         type: "system/error",
@@ -2793,12 +2800,20 @@ describe("events", () => {
       },
     ]);
 
-    expect(spy.notifyThread).toHaveBeenCalledWith(thread.id, [
-      "events-appended",
-    ]);
-    expect(spy.notifyThread).toHaveBeenCalledWith(thread2.id, [
-      "events-appended",
-    ]);
+    expect(spy.notifyThread).toHaveBeenCalledWith(
+      thread.id,
+      ["events-appended"],
+      {
+        eventTypes: ["system/error", "client/turn/requested"],
+      },
+    );
+    expect(spy.notifyThread).toHaveBeenCalledWith(
+      thread2.id,
+      ["events-appended"],
+      {
+        eventTypes: ["system/error"],
+      },
+    );
     expect(spy.notifyThread).toHaveBeenCalledTimes(2);
   });
 });

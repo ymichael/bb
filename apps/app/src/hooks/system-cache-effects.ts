@@ -22,7 +22,6 @@ import {
   projectsQueryKey,
   replayCapturesQueryKey,
   sandboxEnvVarsQueryKey,
-  statusQueryKey,
   systemProvidersQueryKey,
   threadsQueryKey,
 } from "./queries/query-keys";
@@ -119,6 +118,5 @@ function getServerReconnectInvalidationQueryKeys(): QueryKey[] {
     localPathExistenceQueryKeyPrefix(),
     systemProvidersQueryKey(),
     allSystemExecutionOptionsQueryKeyPrefix(),
-    statusQueryKey(),
   ];
 }

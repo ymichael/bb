@@ -1,9 +1,5 @@
-import type { EnvironmentChangeKind } from "@bb/domain";
 import {
-  getCachedEnvironmentRefWorkspaceStateInvalidationQueryKeys,
   getEnvironmentActionInvalidationQueryKeys,
-  getEnvironmentBranchListInvalidationQueryKeys,
-  getEnvironmentRecordInvalidationQueryKeys,
   getEnvironmentWorkspaceStateInvalidationQueryKeys,
 } from "./queries/query-cache";
 import {
@@ -23,29 +19,10 @@ import type {
   ThreadArg,
 } from "./cache-effect-types";
 import { invalidateQueryKeys } from "./cache-effect-utils";
-
-const PERSISTED_ENVIRONMENT_CHANGE_KINDS: readonly EnvironmentChangeKind[] = [
-  "environment-created",
-  "environment-deleted",
-  "metadata-changed",
-  "status-changed",
-];
-const WORKSPACE_STATE_CHANGE_KINDS: readonly EnvironmentChangeKind[] = [
-  "environment-created",
-  "environment-deleted",
-  "metadata-changed",
-  "status-changed",
-  "work-status-changed",
-];
-const REF_DERIVED_WORKSPACE_STATE_CHANGE_KINDS: readonly EnvironmentChangeKind[] =
-  ["git-refs-changed"];
-const BRANCH_LIST_CHANGE_KINDS: readonly EnvironmentChangeKind[] = [
-  "environment-created",
-  "environment-deleted",
-  "metadata-changed",
-  "status-changed",
-  "git-refs-changed",
-];
+import {
+  executeRealtimeDirtyHandlers,
+  REALTIME_ENVIRONMENT_CHANGE_REGISTRY,
+} from "./realtime-cache-registry";
 
 export function removeEnvironmentScopedQueries({
   environmentId,
@@ -102,35 +79,14 @@ export function invalidateRealtimeEnvironmentChangeQueries({
   environmentId,
   queryClient,
 }: EnvironmentChangedArg): void {
-  const includeWorkspaceState =
-    environmentChangeKindsIncludeWorkspaceState(changeKinds);
-
-  if (environmentChangeKindsIncludePersistedEnvironment(changeKinds)) {
-    invalidateQueryKeys({
-      queryClient,
-      queryKeys: getEnvironmentRecordInvalidationQueryKeys({ environmentId }),
-    });
-  }
-  if (includeWorkspaceState) {
-    invalidateEnvironmentWorkspaceStateQueries({ environmentId, queryClient });
-  }
-  if (
-    !includeWorkspaceState &&
-    environmentChangeKindsIncludeRefDerivedWorkspaceState(changeKinds)
-  ) {
-    for (const queryKey of getCachedEnvironmentRefWorkspaceStateInvalidationQueryKeys(
-      queryClient,
-      { environmentId },
-    )) {
-      queryClient.invalidateQueries({ exact: true, queryKey });
-    }
-  }
-  if (environmentChangeKindsIncludeBranchList(changeKinds)) {
-    invalidateQueryKeys({
-      queryClient,
-      queryKeys: getEnvironmentBranchListInvalidationQueryKeys({
+  for (const changeKind of changeKinds) {
+    executeRealtimeDirtyHandlers({
+      context: {
         environmentId,
-      }),
+        getCachedThreadIdsForEnvironment: () => [],
+        queryClient,
+      },
+      handlers: REALTIME_ENVIRONMENT_CHANGE_REGISTRY[changeKind].dirty,
     });
   }
 }
@@ -145,36 +101,4 @@ export function invalidateThreadStorageQueries({
   queryClient.invalidateQueries({
     queryKey: threadStorageFilePreviewQueryKeyPrefix(threadId),
   });
-}
-
-function environmentChangeKindsIncludePersistedEnvironment(
-  changeKinds: readonly EnvironmentChangeKind[],
-): boolean {
-  return changeKinds.some((changeKind) =>
-    PERSISTED_ENVIRONMENT_CHANGE_KINDS.includes(changeKind),
-  );
-}
-
-function environmentChangeKindsIncludeWorkspaceState(
-  changeKinds: readonly EnvironmentChangeKind[],
-): boolean {
-  return changeKinds.some((changeKind) =>
-    WORKSPACE_STATE_CHANGE_KINDS.includes(changeKind),
-  );
-}
-
-function environmentChangeKindsIncludeRefDerivedWorkspaceState(
-  changeKinds: readonly EnvironmentChangeKind[],
-): boolean {
-  return changeKinds.some((changeKind) =>
-    REF_DERIVED_WORKSPACE_STATE_CHANGE_KINDS.includes(changeKind),
-  );
-}
-
-function environmentChangeKindsIncludeBranchList(
-  changeKinds: readonly EnvironmentChangeKind[],
-): boolean {
-  return changeKinds.some((changeKind) =>
-    BRANCH_LIST_CHANGE_KINDS.includes(changeKind),
-  );
 }

@@ -30,6 +30,7 @@ import {
   type ResolvedThreadExecutionOptions,
   type SystemThreadInterruptedReason,
   type Thread,
+  type ThreadEventType,
   type ThreadStatus,
   type WorkspaceProvisionType,
   threadScope,
@@ -193,8 +194,7 @@ interface ThreadLifecycleTransactionDeps extends ThreadLifecycleWriteDeps {
   db: DbTransaction;
 }
 
-interface FinalizeStoppedThreadTransactionDeps
-  extends ThreadLifecycleTransactionDeps {
+interface FinalizeStoppedThreadTransactionDeps extends ThreadLifecycleTransactionDeps {
   pendingInteractions: AppDeps["pendingInteractions"];
 }
 
@@ -535,7 +535,9 @@ function requestThreadStartHandoff(
   );
 
   if (result.completedProvisionSequence !== null) {
-    deps.hub.notifyThread(args.threadId, ["events-appended"]);
+    deps.hub.notifyThread(args.threadId, ["events-appended"], {
+      eventTypes: ["system/thread-provisioning"],
+    });
   }
   return result;
 }
@@ -742,7 +744,9 @@ export function interruptActiveTurnForThread(
     },
     { behavior: "immediate" },
   );
-  deps.hub.notifyThread(args.threadId, ["events-appended", "status-changed"]);
+  deps.hub.notifyThread(args.threadId, ["events-appended", "status-changed"], {
+    eventTypes: ["turn/completed", "system/thread/interrupted"],
+  });
 
   return true;
 }
@@ -778,7 +782,9 @@ function interruptActiveTurnForThreadInTransaction(
     id: args.threadId,
     newStatus: nextStatus,
   });
-  deps.hub.notifyThread(args.threadId, ["events-appended", "status-changed"]);
+  deps.hub.notifyThread(args.threadId, ["events-appended", "status-changed"], {
+    eventTypes: ["turn/completed", "system/thread/interrupted"],
+  });
 
   return true;
 }
@@ -854,11 +860,18 @@ export function interruptActiveThreads(
     { behavior: "immediate" },
   );
 
-  for (const thread of args.threads) {
-    deps.hub.notifyThread(thread.threadId, [
-      "events-appended",
-      "status-changed",
-    ]);
+  for (const result of results) {
+    const eventTypes: ThreadEventType[] = ["system/thread/interrupted"];
+    if (result.interruptedTurnId !== null) {
+      eventTypes.unshift("turn/completed");
+    }
+    deps.hub.notifyThread(
+      result.threadId,
+      ["events-appended", "status-changed"],
+      {
+        eventTypes,
+      },
+    );
   }
 
   return { threads: results };
@@ -1018,7 +1031,9 @@ export function finalizeStoppedThreadInTransaction(
         threadId: finalizedThread.id,
         reason: "manual-stop",
       });
-      deps.hub.notifyThread(finalizedThread.id, ["events-appended"]);
+      deps.hub.notifyThread(finalizedThread.id, ["events-appended"], {
+        eventTypes: ["system/thread/interrupted"],
+      });
     }
   }
 

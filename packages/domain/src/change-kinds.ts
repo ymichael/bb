@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { ThreadEventType } from "./provider-event.js";
 
 export const REALTIME_ENTITIES = [
   "thread",
@@ -20,6 +21,7 @@ export const THREAD_CHANGE_KINDS = [
   "queue-changed",
   "archived-changed",
   "read-state-changed",
+  "manager-assignment-changed",
 ] as const;
 export type ThreadChangeKind = (typeof THREAD_CHANGE_KINDS)[number];
 
@@ -78,7 +80,14 @@ export interface ThreadChangedMessage {
   type: "changed";
   entity: "thread";
   id?: string;
+  metadata?: ThreadChangeMetadata;
   changes: ThreadChangeKind[];
+}
+
+export interface ThreadChangeMetadata {
+  eventTypes?: readonly ThreadEventType[];
+  hasPendingInteraction?: boolean;
+  projectId?: string;
 }
 
 export interface ProjectChangedMessage {

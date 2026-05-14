@@ -81,7 +81,9 @@ export function createThread(
     })
     .returning()
     .get();
-  notifier.notifyThread(id, ["thread-created"]);
+  notifier.notifyThread(id, ["thread-created"], {
+    projectId: input.projectId,
+  });
   notifier.notifyProject(input.projectId, ["threads-changed"]);
   return thread;
 }
@@ -528,6 +530,12 @@ export function updateThread(
   const changes: ThreadChangeKind[] = [];
   if ("title" in input) changes.push("title-changed");
   if ("lastReadAt" in input) changes.push("read-state-changed");
+  if (
+    "parentThreadId" in input &&
+    input.parentThreadId !== existing.parentThreadId
+  ) {
+    changes.push("manager-assignment-changed");
+  }
 
   const set: Partial<typeof threads.$inferInsert> = { updatedAt: now };
   if ("title" in input) set.title = input.title;
@@ -545,7 +553,9 @@ export function updateThread(
     .returning()
     .get();
   if (updated && changes.length > 0) {
-    notifier.notifyThread(id, changes);
+    notifier.notifyThread(id, changes, {
+      projectId: existing.projectId,
+    });
   }
   return updated ?? null;
 }
@@ -558,7 +568,9 @@ export function deleteThread(
   const existing = db.select().from(threads).where(eq(threads.id, id)).get();
   if (!existing) return false;
   db.delete(threads).where(eq(threads.id, id)).run();
-  notifier.notifyThread(id, ["thread-deleted"]);
+  notifier.notifyThread(id, ["thread-deleted"], {
+    projectId: existing.projectId,
+  });
   notifier.notifyProject(existing.projectId, ["threads-changed"]);
   return true;
 }
@@ -579,7 +591,9 @@ export function markThreadStopRequested(
     .get();
 
   if (updated) {
-    notifier.notifyThread(args.threadId, ["status-changed"]);
+    notifier.notifyThread(args.threadId, ["status-changed"], {
+      projectId: updated.projectId,
+    });
   }
 
   return updated ?? null;
@@ -601,7 +615,9 @@ export function clearThreadStopRequested(
     .get();
 
   if (updated) {
-    notifier.notifyThread(threadId, ["status-changed"]);
+    notifier.notifyThread(threadId, ["status-changed"], {
+      projectId: updated.projectId,
+    });
   }
 
   return updated ?? null;
@@ -623,7 +639,9 @@ export function markThreadDeleted(
     .get();
 
   if (updated) {
-    notifier.notifyThread(args.threadId, ["thread-deleted"]);
+    notifier.notifyThread(args.threadId, ["thread-deleted"], {
+      projectId: updated.projectId,
+    });
     notifier.notifyProject(updated.projectId, ["threads-changed"]);
   }
 
@@ -643,7 +661,9 @@ export function archiveThread(
     .returning()
     .get();
   if (updated) {
-    notifier.notifyThread(id, ["archived-changed"]);
+    notifier.notifyThread(id, ["archived-changed"], {
+      projectId: updated.projectId,
+    });
   }
   return updated ?? null;
 }
@@ -661,7 +681,9 @@ export function unarchiveThread(
     .returning()
     .get();
   if (updated) {
-    notifier.notifyThread(id, ["archived-changed"]);
+    notifier.notifyThread(id, ["archived-changed"], {
+      projectId: updated.projectId,
+    });
   }
   return updated ?? null;
 }
@@ -718,7 +740,9 @@ export function transitionThreadStatus(
   newStatus: ThreadStatus,
 ) {
   const updated = transitionThreadStatusRecord(db, id, newStatus);
-  notifier.notifyThread(id, ["status-changed"]);
+  notifier.notifyThread(id, ["status-changed"], {
+    projectId: updated.projectId,
+  });
   return updated;
 }
 
@@ -735,6 +759,7 @@ export function transitionThreadsToError(
   const eligibleThreads = db
     .select({
       id: threads.id,
+      projectId: threads.projectId,
       status: threads.status,
     })
     .from(threads)
@@ -771,7 +796,9 @@ export function transitionThreadsToError(
     }
 
     db.update(threads).set(set).where(eq(threads.id, thread.id)).run();
-    notifier.notifyThread(thread.id, ["status-changed"]);
+    notifier.notifyThread(thread.id, ["status-changed"], {
+      projectId: thread.projectId,
+    });
   }
 
   return eligibleThreads.map((thread) => thread.id);

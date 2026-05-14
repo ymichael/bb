@@ -92,8 +92,7 @@ interface EnvironmentProvisionWriteDeps extends EnvironmentProvisionReadDeps {
   hub: DbNotifier;
 }
 
-interface EnvironmentProvisionTransactionDeps
-  extends EnvironmentProvisionWriteDeps {
+interface EnvironmentProvisionTransactionDeps extends EnvironmentProvisionWriteDeps {
   db: DbTransaction;
 }
 
@@ -242,7 +241,9 @@ function appendThreadProvisioningEventToEnvironmentThreadsInTransaction(
       status: args.status,
       threadId: thread.id,
     });
-    deps.hub.notifyThread(thread.id, ["events-appended"]);
+    deps.hub.notifyThread(thread.id, ["events-appended"], {
+      eventTypes: ["system/thread-provisioning"],
+    });
   }
 }
 

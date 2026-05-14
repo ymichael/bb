@@ -371,6 +371,7 @@ export type {
   ServerMessage,
   SubscribeMessage,
   SystemChangeKind,
+  ThreadChangeMetadata,
   ThreadChangeKind,
   UnsubscribeMessage,
 } from "@bb/domain";

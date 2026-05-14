@@ -31,10 +31,7 @@ export type {
   ThreadExecutionSource,
 } from "./shared-types.js";
 
-export {
-  defaultFeatureFlags,
-  featureFlagsSchema,
-} from "./feature-flags.js";
+export { defaultFeatureFlags, featureFlagsSchema } from "./feature-flags.js";
 export type { FeatureFlags } from "./feature-flags.js";
 
 export {
@@ -490,6 +487,7 @@ export type {
   SubscribeMessage,
   UnsubscribeMessage,
   ClientMessage,
+  ThreadChangeMetadata,
   ThreadChangedMessage,
   ProjectChangedMessage,
   EnvironmentChangedMessage,

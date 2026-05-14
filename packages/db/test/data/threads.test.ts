@@ -382,6 +382,36 @@ describe("threads", () => {
     expect(updated?.title).toBe("New title");
   });
 
+  it("notifies when a thread manager assignment changes", () => {
+    const { db, project } = setup();
+    const spy: DbNotifier = {
+      notifyThread: vi.fn(),
+      notifyEnvironment: vi.fn(),
+      notifyHost: vi.fn(),
+      notifyCommand: vi.fn(),
+      notifyProject: vi.fn(),
+      notifySystem: vi.fn(),
+    };
+    const managerThread = createThread(db, noopNotifier, {
+      projectId: project.id,
+      providerId: "codex",
+    });
+    const childThread = createThread(db, noopNotifier, {
+      projectId: project.id,
+      providerId: "codex",
+    });
+
+    updateThread(db, spy, childThread.id, {
+      parentThreadId: managerThread.id,
+    });
+
+    expect(spy.notifyThread).toHaveBeenCalledWith(
+      childThread.id,
+      ["manager-assignment-changed"],
+      { projectId: project.id },
+    );
+  });
+
   it("preserves read state when renaming a read thread", () => {
     vi.useFakeTimers();
     try {
@@ -876,9 +906,11 @@ describe("transitionThreadStatus", () => {
     });
 
     transitionThreadStatus(db, spy, thread.id, "idle");
-    expect(spy.notifyThread).toHaveBeenCalledWith(thread.id, [
-      "status-changed",
-    ]);
+    expect(spy.notifyThread).toHaveBeenCalledWith(
+      thread.id,
+      ["status-changed"],
+      { projectId: project.id },
+    );
   });
 });
 
@@ -944,11 +976,15 @@ describe("transitionThreadsToError", () => {
     expect(getThread(db, deletedThread.id)?.status).toBe("idle");
     expect(getThread(db, stopPendingThread.id)?.status).toBe("active");
     expect(spy.notifyThread).toHaveBeenCalledTimes(2);
-    expect(spy.notifyThread).toHaveBeenCalledWith(createdThread.id, [
-      "status-changed",
-    ]);
-    expect(spy.notifyThread).toHaveBeenCalledWith(activeThread.id, [
-      "status-changed",
-    ]);
+    expect(spy.notifyThread).toHaveBeenCalledWith(
+      createdThread.id,
+      ["status-changed"],
+      { projectId: project.id },
+    );
+    expect(spy.notifyThread).toHaveBeenCalledWith(
+      activeThread.id,
+      ["status-changed"],
+      { projectId: project.id },
+    );
   });
 });

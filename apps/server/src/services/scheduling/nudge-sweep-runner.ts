@@ -629,7 +629,9 @@ export async function runDueNudge(
 
   cache.pendingTurnSubmitByThreadId.set(preparation.thread.id, true);
   deps.hub.notifyProject(nudge.projectId, ["nudges-changed"]);
-  deps.hub.notifyThread(preparation.thread.id, ["events-appended"]);
+  deps.hub.notifyThread(preparation.thread.id, ["events-appended"], {
+    eventTypes: ["client/turn/requested"],
+  });
   deps.hub.notifyCommand(preparation.environment.hostId);
   tryTransition(deps.db, deps.hub, preparation.thread.id, "active");
 }

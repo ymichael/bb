@@ -4,6 +4,7 @@ import type {
   ProjectChangeKind,
   SystemChangeKind,
   ThreadChangeKind,
+  ThreadChangeMetadata,
 } from "@bb/domain";
 import type { DbNotifier } from "@bb/db";
 
@@ -14,9 +15,14 @@ interface BufferedNotification {
 export class NotificationBuffer implements DbNotifier {
   private readonly notifications: BufferedNotification[] = [];
 
-  notifyThread(threadId: string, changes: ThreadChangeKind[]): void {
+  notifyThread(
+    threadId: string,
+    changes: ThreadChangeKind[],
+    metadata?: ThreadChangeMetadata,
+  ): void {
     this.notifications.push({
-      flush: (notifier) => notifier.notifyThread(threadId, [...changes]),
+      flush: (notifier) =>
+        notifier.notifyThread(threadId, [...changes], metadata),
     });
   }
 

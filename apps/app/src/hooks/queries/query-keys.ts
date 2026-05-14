@@ -43,7 +43,6 @@ export const CLOUD_AUTH_SETTINGS_QUERY_KEY = "cloudAuthSettings";
 export const CLOUD_AUTH_ATTEMPT_QUERY_KEY = "cloudAuthAttempt";
 export const SANDBOX_ENV_VARS_QUERY_KEY = "sandboxEnvVars";
 export const GITHUB_REPOS_QUERY_KEY = "githubRepos";
-export const STATUS_QUERY_KEY = "status";
 export const LOCAL_PATH_EXISTENCE_QUERY_KEY = "localPathExistence";
 export const REPLAY_CAPTURES_QUERY_KEY = "internalReplayCaptures";
 export const CONVERSATION_MANAGER_TIMELINE_VIEW =
@@ -74,6 +73,16 @@ export type AllHostQueryKeyPrefix = readonly [typeof HOST_QUERY_KEY];
 export type ProjectsQueryKey = readonly [typeof PROJECTS_QUERY_KEY];
 export type AllProjectFilesQueryKeyPrefix = readonly [
   typeof PROJECT_FILES_QUERY_KEY,
+];
+export type AllProjectSourceBranchesQueryKeyPrefix = readonly [
+  typeof PROJECT_SOURCE_BRANCHES_QUERY_KEY,
+];
+export type ProjectSourceBranchesQueryKeyPrefix = readonly [
+  typeof PROJECT_SOURCE_BRANCHES_QUERY_KEY,
+  string,
+];
+export type AllProjectGithubBranchesQueryKeyPrefix = readonly [
+  typeof PROJECT_GITHUB_BRANCHES_QUERY_KEY,
 ];
 export type ProjectPromptHistoryQueryKeyPrefix = readonly [
   typeof PROJECT_PROMPT_HISTORY_QUERY_KEY,
@@ -303,7 +312,6 @@ export type GithubReposQueryKey = readonly [
   typeof GITHUB_REPOS_QUERY_KEY,
   string,
 ];
-export type StatusQueryKey = readonly [typeof STATUS_QUERY_KEY];
 export type LocalPathExistenceQueryKey = readonly [
   typeof LOCAL_PATH_EXISTENCE_QUERY_KEY,
   string,
@@ -368,10 +376,24 @@ export function projectSourceBranchesQueryKey(
   return [PROJECT_SOURCE_BRANCHES_QUERY_KEY, projectId, hostId];
 }
 
+export function allProjectSourceBranchesQueryKeyPrefix(): AllProjectSourceBranchesQueryKeyPrefix {
+  return [PROJECT_SOURCE_BRANCHES_QUERY_KEY];
+}
+
+export function projectSourceBranchesQueryKeyPrefix(
+  projectId: string,
+): ProjectSourceBranchesQueryKeyPrefix {
+  return [PROJECT_SOURCE_BRANCHES_QUERY_KEY, projectId];
+}
+
 export function projectGithubBranchesQueryKey(
   projectId: string,
 ): ProjectGithubBranchesQueryKey {
   return [PROJECT_GITHUB_BRANCHES_QUERY_KEY, projectId];
+}
+
+export function allProjectGithubBranchesQueryKeyPrefix(): AllProjectGithubBranchesQueryKeyPrefix {
+  return [PROJECT_GITHUB_BRANCHES_QUERY_KEY];
 }
 
 export function sidebarBootstrapQueryKey(): SidebarBootstrapQueryKey {
@@ -712,10 +734,6 @@ export function sandboxEnvVarsQueryKey(): SandboxEnvVarsQueryKey {
 
 export function githubReposQueryKey(q: string): GithubReposQueryKey {
   return [GITHUB_REPOS_QUERY_KEY, q];
-}
-
-export function statusQueryKey(): StatusQueryKey {
-  return [STATUS_QUERY_KEY];
 }
 
 export function localPathExistenceQueryKey(

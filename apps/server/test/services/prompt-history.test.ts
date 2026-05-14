@@ -222,7 +222,7 @@ describe("prompt history service", () => {
     ]);
   });
 
-  it("excludes archived thread starter prompts from project history", () => {
+  it("includes archived thread starter prompts in project history", () => {
     const { db, firstProject, logger } = setup();
     const liveThread = createThread(db, noopNotifier, {
       projectId: firstProject.id,
@@ -264,6 +264,11 @@ describe("prompt history service", () => {
         },
       ),
     ).toEqual([
+      {
+        id: expect.stringMatching(/^event:/u),
+        createdAt: 20,
+        input: [{ type: "text", text: "Archived starter prompt" }],
+      },
       {
         id: expect.stringMatching(/^event:/u),
         createdAt: 10,

@@ -1,10 +1,14 @@
 import {
+  allProjectFilesQueryKeyPrefix,
+  allProjectGithubBranchesQueryKeyPrefix,
+  allProjectSourceBranchesQueryKeyPrefix,
   localPathExistenceQueryKeyPrefix,
   projectFilesQueryKeyPrefix,
+  projectGithubBranchesQueryKey,
   projectPromptHistoryQueryKey,
   projectPromptHistoryQueryKeyPrefix,
+  projectSourceBranchesQueryKeyPrefix,
   projectsQueryKey,
-  statusQueryKey,
   threadDefaultExecutionOptionsQueryKey,
   threadDraftsQueryKey,
   threadPendingInteractionsQueryKey,
@@ -21,6 +25,10 @@ import type {
   ThreadArg,
 } from "./cache-effect-types";
 import { removeEnvironmentScopedQueries } from "./environment-cache-effects";
+
+interface ProjectSourceInvalidationArg extends QueryClientArg {
+  projectId?: string;
+}
 
 export function invalidateProjectListQueries({
   queryClient,
@@ -44,15 +52,36 @@ export function invalidateProjectDeleteQueries({
 }: QueryClientArg): void {
   queryClient.invalidateQueries({ queryKey: projectsQueryKey() });
   queryClient.invalidateQueries({ queryKey: threadsQueryKey() });
-  queryClient.invalidateQueries({ queryKey: statusQueryKey() });
 }
 
 export function invalidateProjectSourceQueries({
+  projectId,
   queryClient,
-}: QueryClientArg): void {
+}: ProjectSourceInvalidationArg): void {
   queryClient.invalidateQueries({ queryKey: projectsQueryKey() });
   queryClient.invalidateQueries({
     queryKey: localPathExistenceQueryKeyPrefix(),
+  });
+  if (!projectId) {
+    queryClient.invalidateQueries({
+      queryKey: allProjectFilesQueryKeyPrefix(),
+    });
+    queryClient.invalidateQueries({
+      queryKey: allProjectSourceBranchesQueryKeyPrefix(),
+    });
+    queryClient.invalidateQueries({
+      queryKey: allProjectGithubBranchesQueryKeyPrefix(),
+    });
+    return;
+  }
+  queryClient.invalidateQueries({
+    queryKey: projectFilesQueryKeyPrefix(projectId),
+  });
+  queryClient.invalidateQueries({
+    queryKey: projectSourceBranchesQueryKeyPrefix(projectId),
+  });
+  queryClient.invalidateQueries({
+    queryKey: projectGithubBranchesQueryKey(projectId),
   });
 }
 
@@ -63,7 +92,6 @@ export function refetchThreadListsAfterComposerThreadCreate({
     queryKey: threadsQueryKey(),
     type: "active",
   });
-  queryClient.invalidateQueries({ queryKey: statusQueryKey() });
 }
 
 export function invalidateProjectManagerHireQueries({
@@ -73,11 +101,10 @@ export function invalidateProjectManagerHireQueries({
   invalidateBackgroundThreadCreateQueries({ queryClient });
 }
 
-export function invalidateThreadListAndStatusQueries({
+export function invalidateThreadListQueries({
   queryClient,
 }: QueryClientArg): void {
   queryClient.invalidateQueries({ queryKey: threadsQueryKey() });
-  queryClient.invalidateQueries({ queryKey: statusQueryKey() });
 }
 
 export function invalidateThreadListMembershipQueries({
@@ -86,7 +113,6 @@ export function invalidateThreadListMembershipQueries({
 }: ThreadArg): void {
   queryClient.invalidateQueries({ queryKey: threadQueryKey(threadId) });
   queryClient.invalidateQueries({ queryKey: threadsQueryKey() });
-  queryClient.invalidateQueries({ queryKey: statusQueryKey() });
 }
 
 export function invalidateProjectPromptHistoryQueries({
@@ -112,7 +138,6 @@ export function invalidateThreadDeleteQueries({
   queryClient.invalidateQueries({ queryKey: projectsQueryKey() });
   invalidateAllProjectsPromptHistoryQueries({ queryClient });
   queryClient.invalidateQueries({ queryKey: threadsQueryKey() });
-  queryClient.invalidateQueries({ queryKey: statusQueryKey() });
 }
 
 export function invalidateThreadQueueQueries({
@@ -135,7 +160,6 @@ export function invalidateThreadDraftSendQueries({
     queryKey: threadTimelineQueryKeyPrefix(threadId),
   });
   queryClient.invalidateQueries({ queryKey: threadsQueryKey() });
-  queryClient.invalidateQueries({ queryKey: statusQueryKey() });
 }
 
 export function invalidateThreadAcceptedMessageQueries({
@@ -160,7 +184,6 @@ export function invalidateThreadAcceptedMessageQueriesWithoutRealtime({
     queryKey: threadTimelineQueryKeyPrefix(threadId),
   });
   queryClient.invalidateQueries({ queryKey: threadsQueryKey() });
-  queryClient.invalidateQueries({ queryKey: statusQueryKey() });
 }
 
 export function invalidateThreadStopQueries({
@@ -169,7 +192,6 @@ export function invalidateThreadStopQueries({
 }: ThreadArg): void {
   queryClient.invalidateQueries({ queryKey: threadQueryKey(threadId) });
   queryClient.invalidateQueries({ queryKey: threadsQueryKey() });
-  queryClient.invalidateQueries({ queryKey: statusQueryKey() });
 }
 
 export function invalidateThreadPendingInteractionResolutionQueries({
@@ -184,7 +206,6 @@ export function invalidateThreadPendingInteractionResolutionQueries({
   });
   queryClient.invalidateQueries({ queryKey: threadQueryKey(threadId) });
   queryClient.invalidateQueries({ queryKey: threadsQueryKey() });
-  queryClient.invalidateQueries({ queryKey: statusQueryKey() });
 }
 
 export function removeThreadScopedQueries({
@@ -216,5 +237,4 @@ function invalidateBackgroundThreadCreateQueries({
   queryClient,
 }: QueryClientArg): void {
   queryClient.invalidateQueries({ queryKey: threadsQueryKey() });
-  queryClient.invalidateQueries({ queryKey: statusQueryKey() });
 }
