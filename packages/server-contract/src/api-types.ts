@@ -351,6 +351,9 @@ export const sendMessageRequestSchema = z.object({
 });
 export type SendMessageRequest = z.infer<typeof sendMessageRequestSchema>;
 
+export const sendDraftModeSchema = z.enum(["auto", "steer"]);
+export type SendDraftMode = z.infer<typeof sendDraftModeSchema>;
+
 export const createDraftRequestSchema = z.object({
   input: z.array(promptInputSchema).min(1),
   model: z.string().optional(),
@@ -360,7 +363,9 @@ export const createDraftRequestSchema = z.object({
 });
 export type CreateDraftRequest = z.infer<typeof createDraftRequestSchema>;
 
-export const sendDraftRequestSchema = z.object({});
+export const sendDraftRequestSchema = z.object({
+  mode: sendDraftModeSchema.optional(),
+});
 export type SendDraftRequest = z.infer<typeof sendDraftRequestSchema>;
 
 export const sendDraftResponseSchema = z.object({

@@ -30,6 +30,7 @@ type PromptBoxWithScrollAnchorProps = ComponentProps<typeof PromptBoxInternal>;
 
 function PromptBoxWithScrollAnchor({
   onSubmit,
+  submission,
   ...promptBoxProps
 }: PromptBoxWithScrollAnchorProps) {
   const bottomAnchor = useBottomAnchoredScroll();
@@ -37,7 +38,29 @@ function PromptBoxWithScrollAnchor({
     onSubmit();
     bottomAnchor?.scrollToBottom();
   };
-  return <PromptBoxInternal {...promptBoxProps} onSubmit={handleSubmit} />;
+  const handleModifierSubmit =
+    submission?.onModifierSubmit === undefined
+      ? undefined
+      : () => {
+          submission.onModifierSubmit?.();
+          bottomAnchor?.scrollToBottom();
+        };
+  const anchoredSubmission =
+    submission === undefined
+      ? undefined
+      : {
+          ...submission,
+          ...(handleModifierSubmit
+            ? { onModifierSubmit: handleModifierSubmit }
+            : {}),
+        };
+  return (
+    <PromptBoxInternal
+      {...promptBoxProps}
+      onSubmit={handleSubmit}
+      submission={anchoredSubmission}
+    />
+  );
 }
 
 // Elastic compensation: when nothing is stacked above the textarea, the
@@ -79,8 +102,10 @@ export interface FollowUpComposerProps {
   isFollowUpSubmitting: boolean;
   message: string;
   onChangeMessage: (value: string) => void;
+  onSteerSubmit: () => void;
   onSubmit: () => void;
   promptPlaceholder: string;
+  canSteerSubmit: boolean;
   submitMode: FollowUpSubmitMode;
   /** Used by the scroll-to-bottom button to know whether the runtime is actively streaming. */
   threadRuntimeDisplayStatus: ThreadRuntimeDisplayStatus;
@@ -204,6 +229,8 @@ export function FollowUpPromptBox({
             onStop: onStopRuntime,
             isSubmitting: composer.isFollowUpSubmitting || isStopping,
             disabled: !canSubmit || composer.isFollowUpSubmitting,
+            onModifierSubmit: composer.onSteerSubmit,
+            modifierSubmitDisabled: !composer.canSteerSubmit,
             title: canQueueFollowUp
               ? "Queue follow-up (Enter)"
               : isStopping

@@ -12,7 +12,7 @@ import {
   transitionThreadStatusInTransaction,
 } from "@bb/db";
 import type { Thread, ThreadQueuedMessage } from "@bb/domain";
-import type { SendMessageRequest } from "@bb/server-contract";
+import type { SendDraftMode, SendMessageRequest } from "@bb/server-contract";
 import type { AppDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
 import { scheduleAfterDaemonIngressResponse } from "../hosts/command-wait-context.js";
@@ -37,6 +37,7 @@ import { sendThreadMessage } from "./thread-send.js";
 
 interface SendQueuedDraftArgs {
   draftId: string;
+  mode: SendDraftMode;
   threadId: string;
 }
 
@@ -44,11 +45,13 @@ type ClaimedDraft = Exclude<ReturnType<typeof claimDraft>, null>;
 
 interface SendClaimedDraftArgs {
   draft: ClaimedDraft;
+  mode: SendDraftMode;
   threadId: string;
 }
 
 interface SendClaimedDraftForThreadArgs {
   draft: ClaimedDraft;
+  mode: SendDraftMode;
   thread: Thread;
 }
 
@@ -66,10 +69,11 @@ const DRAFT_CLAIM_LOST_CODE = "draft_claim_lost";
 
 function sendQueuedMessagePayload(
   queuedMessage: ThreadQueuedMessage,
+  mode: SendDraftMode,
 ): SendMessageRequest {
   return {
     input: queuedMessage.content,
-    mode: "auto",
+    mode,
     model: queuedMessage.model,
     permissionMode: queuedMessage.permissionMode,
     reasoningLevel: queuedMessage.reasoningLevel,
@@ -117,6 +121,7 @@ async function sendClaimedDraft(
   const { thread } = requireThreadEnvironment(deps.db, args.threadId);
   return sendClaimedDraftForThread(deps, {
     draft: args.draft,
+    mode: args.mode,
     thread,
   });
 }
@@ -125,6 +130,10 @@ async function sendClaimedDraftForIdleProviderThread(
   deps: AppDeps,
   args: SendClaimedDraftForThreadArgs,
 ): Promise<ThreadQueuedMessage | null> {
+  if (args.mode !== "auto") {
+    return null;
+  }
+
   const thread = args.thread;
   if (thread.status !== "idle") {
     return null;
@@ -145,7 +154,7 @@ async function sendClaimedDraftForIdleProviderThread(
   const queuedMessage = toQueuedMessage(args.draft);
   ensureThreadCanQueueStartRequest(deps, thread);
 
-  const payload = sendQueuedMessagePayload(queuedMessage);
+  const payload = sendQueuedMessagePayload(queuedMessage, args.mode);
   const execution = await buildExecutionOptions(
     deps,
     payload,
@@ -239,7 +248,7 @@ async function sendClaimedDraftForThread(
   const environment = requireEnvironment(deps.db, args.thread.environmentId);
   await sendThreadMessage(deps, {
     environment,
-    payload: sendQueuedMessagePayload(queuedMessage),
+    payload: sendQueuedMessagePayload(queuedMessage, args.mode),
     thread: args.thread,
     trigger: "auto-dispatch",
   });
@@ -261,6 +270,7 @@ export async function sendQueuedDraft(
   try {
     return await sendClaimedDraft(deps, {
       draft,
+      mode: args.mode,
       threadId: args.threadId,
     });
   } catch (error) {
@@ -294,6 +304,7 @@ export async function sendNextQueuedDraftIfPresent(
   try {
     await sendClaimedDraftForThread(deps, {
       draft: nextDraft,
+      mode: "auto",
       thread,
     });
   } catch (error) {

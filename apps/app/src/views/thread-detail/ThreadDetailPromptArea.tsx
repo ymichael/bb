@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import type { IconName } from "@/components/ui/icon.js";
 import { assertNever } from "@bb/core-ui";
 import type {
@@ -205,6 +205,8 @@ export function ThreadDetailPromptArea({
   const [processingQueuedMessageId, setProcessingQueuedMessageId] = useState<
     string | null
   >(null);
+  const [isSteerBatchSending, setIsSteerBatchSending] = useState(false);
+  const isSteerBatchSendingRef = useRef(false);
   const promptHistoryDrafts = useMemo(
     () => promptHistoryEntriesToDrafts(promptHistoryEntries),
     [promptHistoryEntries],
@@ -252,11 +254,15 @@ export function ThreadDetailPromptArea({
     getLatestPendingInteraction(pendingInteractions);
   const hasPendingInteraction = activePendingInteraction !== null;
   const isQueueMutationPending =
-    createDraft.isPending || sendDraft.isPending || deleteDraft.isPending;
+    createDraft.isPending ||
+    sendDraft.isPending ||
+    deleteDraft.isPending ||
+    isSteerBatchSending;
   const isFollowUpSubmitting =
     sendMessage.isPending ||
     isEnvironmentActionPending ||
-    createDraft.isPending;
+    createDraft.isPending ||
+    isSteerBatchSending;
   const submitMode: FollowUpSubmitMode = (() => {
     if (isStopRequested) {
       return { kind: "blocked", reason: "stopping" };
@@ -281,6 +287,14 @@ export function ThreadDetailPromptArea({
   const promptPlaceholder = isStopRequested
     ? "Stopping thread..."
     : getPromptPlaceholder(runtimeDisplayStatus, thread.type === "manager");
+  const hasPromptDraftInput =
+    promptDraft.text.trim().length > 0 || promptDraft.attachments.length > 0;
+  const canSteerSubmit =
+    runtimeDisplayStatus === "active" &&
+    submitMode.kind === "queue" &&
+    !isFollowUpSubmitting &&
+    !isQueueMutationPending &&
+    (queuedMessages.length > 0 || hasPromptDraftInput);
   const sendFollowUpInput = useCallback(
     async ({
       input,
@@ -401,6 +415,61 @@ export function ThreadDetailPromptArea({
     runtimeDisplayStatus,
   ]);
 
+  const handleSteerSend = useCallback(async () => {
+    if (!canSteerSubmit || isSteerBatchSendingRef.current) {
+      return;
+    }
+
+    const submittedDraft = {
+      text: promptDraft.text,
+      attachments: promptDraft.attachments,
+    };
+    const submittedInput = promptDraftToInput(submittedDraft);
+    if (queuedMessages.length === 0 && submittedInput.length === 0) {
+      return;
+    }
+
+    isSteerBatchSendingRef.current = true;
+    setIsSteerBatchSending(true);
+    if (submittedInput.length > 0) {
+      promptDraft.clearIfCurrentMatches(submittedDraft);
+    }
+    setAttachmentError(null);
+
+    try {
+      for (const queuedMessage of queuedMessages) {
+        await sendDraft.mutateAsync({
+          id: thread.id,
+          mode: "steer",
+          queuedMessageId: queuedMessage.id,
+        });
+      }
+
+      await sendFollowUpInput({
+        input: submittedInput,
+        mode: "steer",
+      });
+    } catch (nextError) {
+      promptDraft.restoreIfEmpty(submittedDraft);
+      toast.error(
+        getMutationErrorMessage({
+          error: nextError,
+          fallbackMessage: "Failed to send steer.",
+        }),
+      );
+    } finally {
+      isSteerBatchSendingRef.current = false;
+      setIsSteerBatchSending(false);
+    }
+  }, [
+    canSteerSubmit,
+    promptDraft,
+    queuedMessages,
+    sendDraft,
+    sendFollowUpInput,
+    thread.id,
+  ]);
+
   const handleSendQueuedImmediately = useCallback(
     (messageId: string) => {
       const queuedMessage = queuedMessages.find(
@@ -414,6 +483,7 @@ export function ThreadDetailPromptArea({
       void sendDraft
         .mutateAsync({
           id: thread.id,
+          mode: "auto",
           queuedMessageId: messageId,
         })
         .then(() => {
@@ -586,8 +656,10 @@ export function ThreadDetailPromptArea({
         isFollowUpSubmitting,
         message: promptDraft.text,
         onChangeMessage: promptDraft.setText,
+        onSteerSubmit: handleSteerSend,
         onSubmit: handleSend,
         promptPlaceholder,
+        canSteerSubmit,
         submitMode,
         threadRuntimeDisplayStatus: runtimeDisplayStatus,
       }}

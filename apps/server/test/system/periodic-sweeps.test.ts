@@ -835,6 +835,7 @@ describe("periodic sweeps", () => {
 
       const firstSend = sendQueuedDraft(harness.deps, {
         draftId: draft.id,
+        mode: "auto",
         threadId: thread.id,
       });
       const firstPreferencesRead = await waitForQueuedCommand(
