@@ -14,6 +14,7 @@ import type { HireProjectManagerRequest } from "@/hooks/mutations/project-mutati
 import { DetailCard, DetailRow } from "@/components/ui/detail-card.js";
 import { Button } from "@/components/ui/button.js";
 import { FormError } from "@/components/ui/form-error.js";
+import { Icon } from "@/components/ui/icon.js";
 import { Input } from "@/components/ui/input.js";
 import { PageShell } from "@/components/ui/page-shell.js";
 import { useHireProjectManager } from "@/hooks/mutations/project-mutations";
@@ -97,6 +98,13 @@ export function NewManagerView() {
     },
     [navigate, projectId],
   );
+  const handleCancel = useCallback(() => {
+    if (projectId) {
+      navigate(`/projects/${projectId}`);
+    } else {
+      navigate("/");
+    }
+  }, [navigate, projectId]);
 
   if (!projectId) {
     return (
@@ -123,6 +131,7 @@ export function NewManagerView() {
           selectedProviderId={selectedProviderId}
           onSelectedProviderIdChange={setSelectedProviderId}
           onProjectChange={handleProjectChange}
+          onCancel={handleCancel}
           onHire={handleHire}
           isHirePending={hireManager.isPending}
         />
@@ -143,6 +152,7 @@ export interface NewManagerFormProps {
   selectedProviderId: string;
   onSelectedProviderIdChange: (providerId: string) => void;
   onProjectChange: (projectId: string) => void;
+  onCancel: () => void;
   onHire: (params: HireProjectManagerRequest) => Promise<void>;
   isHirePending: boolean;
 }
@@ -159,6 +169,7 @@ export function NewManagerForm({
   selectedProviderId,
   onSelectedProviderIdChange,
   onProjectChange,
+  onCancel,
   onHire,
   isHirePending,
 }: NewManagerFormProps) {
@@ -417,15 +428,20 @@ export function NewManagerForm({
     ],
   );
 
+  const isSubmitInProgress = isPending || isHirePending;
+
   return (
     <form
       aria-labelledby={formTitleId}
-      className="space-y-5"
+      className="space-y-4"
       onSubmit={handleHire}
     >
       <h1 id={formTitleId} className="sr-only">
         New Manager
       </h1>
+      <p className="text-sm text-muted-foreground">
+        Hire a new manager to start a thread on this project.
+      </p>
       <DetailCard className="border-border/70 bg-muted/20" labelWidth="60px">
         <DetailRow label="Project" valueClassName="min-w-0">
           {projectOptions.length > 0 ? (
@@ -507,9 +523,27 @@ export function NewManagerForm({
         </DetailRow>
       </DetailCard>
       <FormError message={error} />
-      <div className="flex justify-end">
-        <Button type="submit" disabled={isPending || isHirePending}>
-          {isPending || isHirePending ? "Hiring..." : "Hire Manager"}
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <Button
+          type="button"
+          variant="ghost"
+          onClick={onCancel}
+          disabled={isSubmitInProgress}
+        >
+          Cancel
+        </Button>
+        <Button type="submit" disabled={isSubmitInProgress}>
+          {isSubmitInProgress ? (
+            <>
+              <Icon name="Spinner" className="animate-spin" aria-hidden />
+              Hiring…
+            </>
+          ) : (
+            <>
+              <Icon name="UserRoundPlus" aria-hidden />
+              Hire Manager
+            </>
+          )}
         </Button>
       </div>
     </form>

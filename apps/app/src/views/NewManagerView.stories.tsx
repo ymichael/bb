@@ -131,6 +131,7 @@ function ControlledNewManagerForm(props: {
       selectedProviderId={selectedProviderId}
       onSelectedProviderIdChange={setSelectedProviderId}
       onProjectChange={noop}
+      onCancel={noop}
       onHire={asyncNoop}
       isHirePending={false}
     />
