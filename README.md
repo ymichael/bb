@@ -201,6 +201,7 @@ addressing values instead.
 - [Platform support](docs/platform-support.md)
 - [Using bb on multiple devices](docs/multiple-devices.md)
 - [Adding another host](docs/additional-hosts.md)
+- [Worktrees and setup scripts](docs/worktrees.md)
 
 ## Contributing
 
