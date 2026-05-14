@@ -1,7 +1,9 @@
 import {
   memo,
   useCallback,
+  useLayoutEffect,
   useMemo,
+  useRef,
   useState,
   type ComponentPropsWithoutRef,
   type Dispatch,
@@ -62,6 +64,11 @@ interface ResolveMarkdownSourceMediaArgs {
   preferredTheme: Theme;
 }
 
+interface SetMarkdownContentWidthVariableArgs {
+  element: HTMLElement;
+  width: number;
+}
+
 type ExpandedImageIndexSetter = Dispatch<SetStateAction<number | null>>;
 type MarkdownAnchorEvent = ReactMouseEvent<HTMLAnchorElement>;
 type MarkdownBlockquoteProps = ComponentPropsWithoutRef<"blockquote"> &
@@ -84,6 +91,7 @@ type MarkdownUnorderedListProps = ComponentPropsWithoutRef<"ul"> & ExtraProps;
 type MarkdownRehypePlugins = NonNullable<ReactMarkdownOptions["rehypePlugins"]>;
 
 const MARKDOWN_TABLE_BREAKOUT_WIDTH = "max(100%, min(1100px, 100cqw - 2rem))";
+const MARKDOWN_CONTENT_WIDTH_VARIABLE = "--md-content-w";
 const MARKDOWN_SOURCE_COLOR_SCHEME_MEDIA_PATTERN =
   /^\(\s*prefers-color-scheme\s*:\s*(dark|light)\s*\)$/iu;
 // Security-critical order: raw HTML must become nodes before sanitization can
@@ -297,7 +305,9 @@ function MarkdownTable({ children }: MarkdownTableProps) {
       */}
       <div
         className="w-max max-w-full overflow-x-auto"
-        style={{ minWidth: "min(var(--md-content-w), 100%)" }}
+        style={{
+          minWidth: `min(var(${MARKDOWN_CONTENT_WIDTH_VARIABLE}), 100%)`,
+        }}
       >
         <table className="border border-border/80">{children}</table>
       </div>
@@ -425,6 +435,51 @@ function buildMarkdownComponents({
   };
 }
 
+function setMarkdownContentWidthVariable({
+  element,
+  width,
+}: SetMarkdownContentWidthVariableArgs): void {
+  if (width <= 0) {
+    return;
+  }
+  element.style.setProperty(MARKDOWN_CONTENT_WIDTH_VARIABLE, `${width}px`);
+}
+
+function useMarkdownContentWidthVariable() {
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    const element = contentRef.current;
+    if (!element) {
+      return;
+    }
+
+    setMarkdownContentWidthVariable({
+      element,
+      width: element.getBoundingClientRect().width,
+    });
+
+    if (typeof ResizeObserver === "undefined") {
+      return;
+    }
+
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) {
+        return;
+      }
+      setMarkdownContentWidthVariable({
+        element,
+        width: entry.contentRect.width,
+      });
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
+  return contentRef;
+}
+
 function MarkdownPreviewComponent({
   allowHtml = false,
   className,
@@ -435,6 +490,7 @@ function MarkdownPreviewComponent({
 }: MarkdownPreviewProps) {
   const imageUrls = useMemo(() => extractMarkdownImageUrls(content), [content]);
   const preferredTheme = usePreferredTheme();
+  const contentRef = useMarkdownContentWidthVariable();
   const [expandedImageIndex, setExpandedImageIndex] = useState<number | null>(
     null,
   );
@@ -478,6 +534,7 @@ function MarkdownPreviewComponent({
   return (
     <>
       <div
+        ref={contentRef}
         className={cn(
           "max-w-none break-words text-sm leading-relaxed text-foreground",
           className,
