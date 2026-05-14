@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import type { ThreadListEntry } from "@bb/domain";
 import type { ProjectResponse } from "@bb/server-contract";
 import { NavLink } from "react-router-dom";
@@ -14,6 +14,10 @@ import { COARSE_POINTER_ICON_SIZE_CLASS, COARSE_POINTER_PROJECT_ROW_ACTION_SIZE_
 import { cn } from "@/lib/utils";
 import { ThreadRow } from "./ThreadRow";
 import { buildProjectThreadGroups } from "./projectThreadGroups";
+import {
+  SIDEBAR_MANAGER_GROUP_LINE_CLASS,
+  SIDEBAR_PROJECT_GROUP_LINE_CLASS,
+} from "./sidebarRowClasses";
 
 export type ProjectThreadListState =
   | {
@@ -54,6 +58,9 @@ export function ProjectRow({
   onToggleProjectCollapsed,
   onToggleManagerCollapsed,
 }: ProjectRowProps) {
+  const [isDropdownActionsOpen, setIsDropdownActionsOpen] = useState(false);
+  const [isContextActionsOpen, setIsContextActionsOpen] = useState(false);
+  const isActionsOpen = isDropdownActionsOpen || isContextActionsOpen;
   const projectThreads =
     threadListState.status === "ready"
       ? threadListState.threads
@@ -64,7 +71,10 @@ export function ProjectRow({
   );
   return (
     <SidebarMenuItem data-sidebar-sticky-project-item="">
-      <ProjectActionsContextMenu project={project}>
+      <ProjectActionsContextMenu
+        project={project}
+        onOpenChange={setIsContextActionsOpen}
+      >
         <SidebarStickyTier
           tier="project"
           className={cn(
@@ -153,9 +163,13 @@ export function ProjectRow({
           ) : null}
           <ProjectActionsMenu
             project={project}
+            onOpenChange={setIsDropdownActionsOpen}
             triggerClassName={cn(
-              "relative z-10 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-foreground",
+              "relative z-10 text-sidebar-foreground/70 transition-opacity hover:bg-sidebar-accent hover:text-sidebar-foreground data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-foreground",
               COARSE_POINTER_ROW_ACTION_SIZE_CLASS,
+              isActionsOpen
+                ? "opacity-100"
+                : "opacity-0 group-hover/project-row:opacity-100 group-focus-within/project-row:opacity-100",
             )}
           />
         </SidebarStickyTier>
@@ -167,7 +181,12 @@ export function ProjectRow({
             <SidebarMenuSkeleton />
           </div>
         ) : projectThreads.length > 0 ? (
-          <div className="space-y-1 group-data-[collapsible=icon]:hidden">
+          <div
+            className={cn(
+              "relative space-y-0.5 group-data-[collapsible=icon]:hidden",
+              SIDEBAR_PROJECT_GROUP_LINE_CLASS,
+            )}
+          >
             {managerThreadGroups.map((managerThreadGroup) => {
               const { managerThread, managedThreads, stats } =
                 managerThreadGroup;
@@ -175,6 +194,8 @@ export function ProjectRow({
               const isManagerCollapsed = collapsedManagerIds.has(
                 managerThread.id,
               );
+              const showManagedChildren =
+                !isManagerCollapsed && managedThreads.length > 0;
 
               return (
                 <div key={managerThread.id} className="space-y-0.5">
@@ -190,8 +211,14 @@ export function ProjectRow({
                       onToggleCollapsed: onToggleManagerCollapsed,
                     }}
                   />
-                  {!isManagerCollapsed
-                    ? managedThreads.map((managedThread) => (
+                  {showManagedChildren ? (
+                    <div
+                      className={cn(
+                        "relative space-y-px",
+                        SIDEBAR_MANAGER_GROUP_LINE_CLASS,
+                      )}
+                    >
+                      {managedThreads.map((managedThread) => (
                         <ThreadRow
                           key={managedThread.id}
                           projectId={project.id}
@@ -200,8 +227,9 @@ export function ProjectRow({
                           onProjectSelect={onProjectSelect}
                           options={{ kind: "managed-child" }}
                         />
-                      ))
-                    : null}
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
               );
             })}

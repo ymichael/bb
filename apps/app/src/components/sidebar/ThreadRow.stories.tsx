@@ -61,7 +61,7 @@ const childThread = makeThread({
 export function Overview() {
   return (
     <StoryCard>
-      <StoryRow label="idle" hint="quiet thread, no badges">
+      <StoryRow label="idle" hint="quiet thread, no leading icon">
         <SidebarStage>
           <ThreadRow
             projectId="proj_demo"
@@ -86,7 +86,7 @@ export function Overview() {
       </StoryRow>
       <StoryRow
         label="busy"
-        hint="runtime is active — leading slot shows the spinning CircleDashed"
+        hint="runtime is active — far-right reserved slot shows the busy spinner"
       >
         <SidebarStage>
           <ThreadRow
@@ -105,7 +105,7 @@ export function Overview() {
       </StoryRow>
       <StoryRow
         label="pending interaction"
-        hint="needs attention — leading slot shows the attention dot (overrides busy)"
+        hint="needs attention — far-right reserved slot shows the attention dot"
       >
         <SidebarStage>
           <ThreadRow
@@ -125,7 +125,7 @@ export function Overview() {
       </StoryRow>
       <StoryRow
         label="unread done"
-        hint="latestAttentionAt > lastReadAt and not busy — small primary dot"
+        hint="latestAttentionAt > lastReadAt and not busy — far-right reserved slot shows the unread dot"
       >
         <SidebarStage>
           <ThreadRow
@@ -210,7 +210,7 @@ export function Overview() {
       </StoryRow>
       <StoryRow
         label="manager, expanded with child"
-        hint="manager row above its child — user icon swaps to a rotated chevron on hover, child uses the compact row height"
+        hint="manager row above its child — user icon swaps to a rotated chevron on hover, child text aligns with the manager title"
       >
         <SidebarStage>
           <ThreadRow
@@ -248,7 +248,7 @@ export function Overview() {
       </StoryRow>
       <StoryRow
         label="managed child, busy"
-        hint="leading slot shows the spinner"
+        hint="far-right reserved slot shows the busy spinner"
       >
         <SidebarStage>
           <ThreadRow
@@ -268,7 +268,7 @@ export function Overview() {
       </StoryRow>
       <StoryRow
         label="managed child, pending"
-        hint="attention dot replaces the chevron-down marker"
+        hint="far-right reserved slot shows the attention dot"
       >
         <SidebarStage>
           <ThreadRow

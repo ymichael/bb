@@ -8,7 +8,14 @@ import {
   ThreadActionsContextMenu,
   ThreadActionsMenu,
 } from "@/components/thread/ThreadActionsMenu";
-import { COARSE_POINTER_DOT_SIZE_CLASS, COARSE_POINTER_COMPACT_ROW_HEIGHT_CLASS, COARSE_POINTER_GLYPH_BOX_CLASS, COARSE_POINTER_ICON_SIZE_CLASS, COARSE_POINTER_ROW_ACTION_SIZE_CLASS, COARSE_POINTER_ROW_HEIGHT_CLASS } from "@/components/ui/coarse-pointer-sizing.js";
+import {
+  COARSE_POINTER_COMPACT_ROW_HEIGHT_CLASS,
+  COARSE_POINTER_DOT_SIZE_CLASS,
+  COARSE_POINTER_GLYPH_BOX_CLASS,
+  COARSE_POINTER_ICON_SIZE_CLASS,
+  COARSE_POINTER_ROW_ACTION_SIZE_CLASS,
+  COARSE_POINTER_ROW_HEIGHT_CLASS,
+} from "@/components/ui/coarse-pointer-sizing.js";
 import {
   getEnvironmentWorkspaceDisplayIconLabel,
   getEnvironmentWorkspaceDisplayIconName,
@@ -17,10 +24,11 @@ import { isBusyThread, isUnreadDoneThread } from "@/lib/thread-activity";
 import { getThreadDisplayTitle } from "@/lib/thread-title";
 import { cn } from "@/lib/utils";
 import {
+  SIDEBAR_MANAGER_CHILD_ROW_PADDING_CLASS,
+  SIDEBAR_MANAGER_ROW_PADDING_CLASS,
+  SIDEBAR_PROJECT_THREAD_ROW_PADDING_CLASS,
   SIDEBAR_ROW_BASE_CLASS,
   SIDEBAR_ROW_INTERACTIVE_STATE_CLASS,
-  SIDEBAR_MANAGER_ROW_PADDING_CLASS,
-  SIDEBAR_STANDARD_ROW_PADDING_CLASS,
 } from "./sidebarRowClasses";
 
 export type ThreadRowOptions =
@@ -41,6 +49,7 @@ interface ThreadRowProps {
   projectId: string;
   thread: ThreadListEntry;
   isActive: boolean;
+  isPromoted?: boolean;
   onProjectSelect?: () => void;
   options: ThreadRowOptions;
 }
@@ -51,17 +60,8 @@ interface ManagerChevronProps {
   threadTitle: string;
 }
 
-const LEADING_SLOT_CLASS =
+const ROW_GLYPH_SLOT_CLASS =
   "inline-flex shrink-0 items-center justify-center text-sidebar-foreground/60";
-
-function EmptyLeadingSlot() {
-  return (
-    <span
-      aria-hidden="true"
-      className={cn(LEADING_SLOT_CLASS, COARSE_POINTER_GLYPH_BOX_CLASS)}
-    />
-  );
-}
 
 function ManagerChevron({
   isCollapsed,
@@ -87,7 +87,7 @@ function ManagerChevron({
       }}
       className={cn(
         "relative z-10 rounded-md outline-none ring-sidebar-ring transition-colors hover:text-sidebar-foreground focus-visible:ring-2",
-        LEADING_SLOT_CLASS,
+        ROW_GLYPH_SLOT_CLASS,
         COARSE_POINTER_GLYPH_BOX_CLASS,
       )}
     >
@@ -135,7 +135,7 @@ function ManagerLeadingIcon() {
   return (
     <span
       data-manager-leading-icon=""
-      className={cn(LEADING_SLOT_CLASS, COARSE_POINTER_GLYPH_BOX_CLASS)}
+      className={cn(ROW_GLYPH_SLOT_CLASS, COARSE_POINTER_GLYPH_BOX_CLASS)}
       aria-hidden="true"
     >
       <Icon
@@ -143,34 +143,6 @@ function ManagerLeadingIcon() {
         className={COARSE_POINTER_ICON_SIZE_CLASS}
         aria-hidden="true"
       />
-    </span>
-  );
-}
-
-function ManagedChildChevron({
-  hasPendingInteraction,
-  isBusy,
-  showUnreadBadge,
-}: ThreadStatusGlyphProps) {
-  const showStatusGlyph = hasPendingInteraction || isBusy || showUnreadBadge;
-  return (
-    <span
-      data-managed-child-marker=""
-      className={cn(LEADING_SLOT_CLASS, COARSE_POINTER_GLYPH_BOX_CLASS)}
-    >
-      {showStatusGlyph ? (
-        <ThreadStatusGlyph
-          hasPendingInteraction={hasPendingInteraction}
-          isBusy={isBusy}
-          showUnreadBadge={showUnreadBadge}
-        />
-      ) : (
-        <Icon
-          name="ChevronDown"
-          aria-hidden="true"
-          className={cn("rotate-45", COARSE_POINTER_ICON_SIZE_CLASS)}
-        />
-      )}
     </span>
   );
 }
@@ -225,31 +197,46 @@ function ThreadStatusGlyph({
   return null;
 }
 
-function ThreadLeadingStatusSlot({
+interface ThreadTrailingIndicatorProps extends ThreadStatusGlyphProps {
+  environmentIcon: IconName | null;
+  environmentIconLabel: string | null;
+}
+
+function ThreadTrailingIndicator({
+  environmentIcon,
+  environmentIconLabel,
   hasPendingInteraction,
   isBusy,
   showUnreadBadge,
-}: ThreadStatusGlyphProps) {
+}: ThreadTrailingIndicatorProps) {
+  const showStatusGlyph = hasPendingInteraction || isBusy || showUnreadBadge;
+
+  if (showStatusGlyph) {
+    return (
+      <span
+        className={cn(ROW_GLYPH_SLOT_CLASS, COARSE_POINTER_GLYPH_BOX_CLASS)}
+      >
+        <ThreadStatusGlyph
+          hasPendingInteraction={hasPendingInteraction}
+          isBusy={isBusy}
+          showUnreadBadge={showUnreadBadge}
+        />
+      </span>
+    );
+  }
+
   return (
-    <span className={cn(LEADING_SLOT_CLASS, COARSE_POINTER_GLYPH_BOX_CLASS)}>
-      <ThreadStatusGlyph
-        hasPendingInteraction={hasPendingInteraction}
-        isBusy={isBusy}
-        showUnreadBadge={showUnreadBadge}
-      />
-    </span>
+    <ThreadTrailingIcon
+      environmentIcon={environmentIcon}
+      environmentIconLabel={environmentIconLabel}
+    />
   );
 }
 
 function ThreadTrailingIcon({
   environmentIcon,
   environmentIconLabel,
-  isManager,
 }: ThreadTrailingIconProps) {
-  if (isManager) {
-    return null;
-  }
-
   return environmentIcon ? (
     <Icon
       name={environmentIcon}
@@ -265,13 +252,13 @@ function ThreadTrailingIcon({
 interface ThreadTrailingIconProps {
   environmentIcon: IconName | null;
   environmentIconLabel: string | null;
-  isManager: boolean;
 }
 
 function ThreadRowComponent({
   projectId,
   thread,
   isActive,
+  isPromoted = false,
   onProjectSelect,
   options,
 }: ThreadRowProps) {
@@ -303,8 +290,8 @@ function ThreadRowComponent({
     isManager
       ? SIDEBAR_MANAGER_ROW_PADDING_CLASS
       : isManagedChild
-        ? "pl-1"
-        : SIDEBAR_STANDARD_ROW_PADDING_CLASS,
+        ? SIDEBAR_MANAGER_CHILD_ROW_PADDING_CLASS
+        : SIDEBAR_PROJECT_THREAD_ROW_PADDING_CLASS,
     isActive
       ? "bg-sidebar-border text-sidebar-foreground"
       : SIDEBAR_ROW_INTERACTIVE_STATE_CLASS,
@@ -330,21 +317,6 @@ function ThreadRowComponent({
         />
       ) : isManager ? (
         <ManagerLeadingIcon />
-      ) : isManagedChild ? (
-        <EmptyLeadingSlot />
-      ) : (
-        <ThreadLeadingStatusSlot
-          hasPendingInteraction={hasPendingInteraction}
-          isBusy={threadIsBusy}
-          showUnreadBadge={showUnreadBadge}
-        />
-      )}
-      {isManagedChild ? (
-        <ManagedChildChevron
-          hasPendingInteraction={hasPendingInteraction}
-          isBusy={threadIsBusy}
-          showUnreadBadge={showUnreadBadge}
-        />
       ) : null}
       <span className="flex min-w-0 flex-1 items-center gap-1.5">
         <span className="min-w-0 truncate">{threadTitle}</span>
@@ -372,10 +344,12 @@ function ThreadRowComponent({
               isActionsOpen ? "opacity-0" : "group-hover/thread-row:opacity-0",
             )}
           >
-            <ThreadTrailingIcon
+            <ThreadTrailingIndicator
               environmentIcon={environmentIcon}
               environmentIconLabel={environmentIconLabel}
-              isManager={isManager}
+              hasPendingInteraction={hasPendingInteraction}
+              isBusy={threadIsBusy}
+              showUnreadBadge={showUnreadBadge}
             />
           </span>
           <div

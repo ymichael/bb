@@ -14,4 +14,16 @@ export default defineConfig({
       "@": path.resolve(__dirname, "../src"),
     },
   },
+  // React 19's prebundled jsx-dev-runtime collapses to the production module
+  // (which sets `jsxDEV = void 0`) when esbuild optimizes it as
+  // NODE_ENV=production. Force a development define during dep optimization
+  // so the dev runtime keeps the real `jsxDEV` export that Ladle's SWC
+  // transform emits calls to.
+  optimizeDeps: {
+    esbuildOptions: {
+      define: {
+        "process.env.NODE_ENV": '"development"',
+      },
+    },
+  },
 });
