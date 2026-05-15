@@ -1,7 +1,23 @@
 {
-  "extends": ["./tsconfig.build.json", "@bb/tsconfig/typecheck-overrides.json"],
+  "extends": [
+    "@bb/tsconfig/base.json",
+    "@bb/tsconfig/typecheck-overrides.json"
+  ],
   "compilerOptions": {
+    "baseUrl": ".",
+    "jsx": "react-jsx",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "paths": {
+      "@/*": ["./src/*"]
+    },
     "rootDir": "."
   },
-  "include": ["src", "test", "tests", "fixtures", "stories"]
+  "include": ["src", "test", "tests", "fixtures", "stories"],
+  "exclude": [
+    "src/**/*.stories.tsx",
+    "src/**/*.fixtures.tsx",
+    "src/**/*.test.ts",
+    "src/**/*.test.tsx"
+  ]
 }

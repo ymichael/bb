@@ -113,7 +113,6 @@ if (entries.length === 0) {
 }
 
 await rm(path.join(packageRoot, "dist"), { force: true, recursive: true });
-await rm(path.join(packageRoot, "tsconfig.build.tsbuildinfo"), { force: true });
 
 for (const entry of entries) {
   await buildNodeEsmEntry({ ...entry, cleanDist: false, packageRoot });

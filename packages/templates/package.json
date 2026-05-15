@@ -11,7 +11,7 @@
   },
   "types": "./src/index.ts",
   "scripts": {
-    "clean": "rimraf dist tsconfig.build.tsbuildinfo",
+    "clean": "rimraf dist tsconfig.tsbuildinfo",
     "typecheck": "node ./scripts/generate-templates.mjs && tsc --noEmit",
     "test": "node ./scripts/generate-templates.mjs && vitest run --config vitest.config.ts"
   },
