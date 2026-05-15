@@ -4,10 +4,10 @@
   "description": "bb app launcher for npx",
   "type": "module",
   "bin": {
-    "bb-app": "./dist/bb-app.js",
-    "bb": "./dist/bb.js",
-    "bb-server": "./dist/bb-server.js",
-    "bb-host-daemon": "./dist/bb-host-daemon.js"
+    "bb-app": "dist/bb-app.js",
+    "bb": "dist/bb.js",
+    "bb-server": "dist/bb-server.js",
+    "bb-host-daemon": "dist/bb-host-daemon.js"
   },
   "files": [
     "app/dist",
