@@ -23,70 +23,55 @@ export interface HostIdentity {
   hostName: string;
 }
 
-export async function readOrCreateHostId(options: {
+interface ResolveHostIdOptions {
   dataDir: string;
   createId?: () => string;
-}): Promise<string> {
-  await fs.mkdir(options.dataDir, { recursive: true });
-
-  const hostIdPath = path.join(options.dataDir, HOST_ID_FILE_NAME);
-  const existing = await readHostIdFile(hostIdPath);
-  if (existing) {
-    return existing;
-  }
-
-  const hostId = options.createId?.() ?? randomUUID();
-  try {
-    await fs.writeFile(hostIdPath, `${hostId}\n`, {
-      encoding: "utf8",
-      flag: "wx",
-      mode: 0o600,
-    });
-    return hostId;
-  } catch {
-    const racedValue = await readHostIdFile(hostIdPath);
-    if (racedValue) {
-      return racedValue;
-    }
-    throw new Error(`Failed to initialize host ID at ${hostIdPath}`);
-  }
+  providedHostId?: string;
 }
 
-async function persistProvidedHostId(options: {
-  dataDir: string;
-  hostId: string;
-}): Promise<string> {
-  await fs.mkdir(options.dataDir, { recursive: true });
-
+async function resolveHostId(options: ResolveHostIdOptions): Promise<string> {
   const hostIdPath = path.join(options.dataDir, HOST_ID_FILE_NAME);
   const existing = await readHostIdFile(hostIdPath);
   if (existing) {
-    if (existing !== options.hostId) {
+    if (options.providedHostId && existing !== options.providedHostId) {
       throw new Error(
-        `Configured BB_HOST_ID ${options.hostId} does not match persisted host ID ${existing}`,
+        `Configured BB_HOST_ID ${options.providedHostId} does not match persisted host ID ${existing}`,
       );
     }
     return existing;
   }
+  return options.providedHostId ?? options.createId?.() ?? randomUUID();
+}
 
+// Writes the host ID file. Idempotent: if a value is already persisted and
+// matches, this is a no-op. Callers must only invoke this once the host has
+// been successfully enrolled — persisting earlier strands the daemon if
+// enrollment fails, because the file then conflicts with any subsequent
+// BB_HOST_ID provided on retry.
+export async function persistHostId(options: {
+  dataDir: string;
+  hostId: string;
+}): Promise<void> {
+  await fs.mkdir(options.dataDir, { recursive: true });
+  const hostIdPath = path.join(options.dataDir, HOST_ID_FILE_NAME);
   try {
     await fs.writeFile(hostIdPath, `${options.hostId}\n`, {
       encoding: "utf8",
       flag: "wx",
       mode: 0o600,
     });
-    return options.hostId;
+    return;
   } catch {
-    const racedValue = await readHostIdFile(hostIdPath);
-    if (!racedValue) {
-      throw new Error(`Failed to initialize host ID at ${hostIdPath}`);
-    }
-    if (racedValue !== options.hostId) {
-      throw new Error(
-        `Configured BB_HOST_ID ${options.hostId} does not match persisted host ID ${racedValue}`,
-      );
-    }
-    return racedValue;
+    // Fall through to validate any racing write below.
+  }
+  const racedValue = await readHostIdFile(hostIdPath);
+  if (!racedValue) {
+    throw new Error(`Failed to initialize host ID at ${hostIdPath}`);
+  }
+  if (racedValue !== options.hostId) {
+    throw new Error(
+      `Persisted host ID ${racedValue} does not match resolved host ID ${options.hostId}`,
+    );
   }
 }
 
@@ -129,16 +114,13 @@ export async function loadHostIdentity(options: {
   providedHostId?: string;
   providedHostName?: string;
 }): Promise<HostIdentity> {
+  await fs.mkdir(options.dataDir, { recursive: true });
   const [hostId, hostName] = await Promise.all([
-    options.providedHostId
-      ? persistProvidedHostId({
-          dataDir: options.dataDir,
-          hostId: options.providedHostId,
-        })
-      : readOrCreateHostId({
-          dataDir: options.dataDir,
-          createId: options.createId,
-        }),
+    resolveHostId({
+      dataDir: options.dataDir,
+      createId: options.createId,
+      providedHostId: options.providedHostId,
+    }),
     options.providedHostName
       ? Promise.resolve(options.providedHostName)
       : detectHostName({

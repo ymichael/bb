@@ -11,7 +11,7 @@ import {
 } from "./auth-state.js";
 import type { HostDaemon } from "./daemon.js";
 import { enrollDaemonHost } from "./enroll.js";
-import { loadHostIdentity } from "./identity.js";
+import { loadHostIdentity, persistHostId } from "./identity.js";
 import { acquireDaemonLock } from "./lock.js";
 import {
   resolveHostDaemonLocalApiConfig,
@@ -109,6 +109,7 @@ export async function startHostDaemon(
       ).hostKey;
 
     if (!persistedAuth) {
+      await persistHostId({ dataDir, hostId: identity.hostId });
       await writeHostAuthState(dataDir, {
         hostId: identity.hostId,
         hostKey,
