@@ -14,6 +14,7 @@ import {
   acquireDaemonLock,
   createHostDaemonApp,
   loadHostIdentity,
+  persistHostId,
   type HostDaemon,
   type HostDaemonApp,
 } from "@bb/host-daemon/test";
@@ -316,6 +317,10 @@ async function startHarnessDaemon(
       hostId: identity.hostId,
       hostType: "persistent",
     });
+    // The harness issues an in-memory host key instead of running persistent
+    // enrollment. Once that succeeds, persist the generated host ID so daemon
+    // restarts stay attached to the same host.
+    await persistHostId({ dataDir, hostId: identity.hostId });
     const adapterFactory = resolveAdapterFactory(options);
     const daemonApp = await createHostDaemonApp({
       createRuntime: adapterFactory
@@ -402,6 +407,16 @@ export async function createIntegrationHarness(
     }
 
     daemonResources = await startHarnessDaemon(daemonDataDir, server, options);
+    if (daemonResources.hostId !== harness.hostId) {
+      const mismatchedResources = daemonResources;
+      daemonResources = null;
+      await mismatchedResources.daemon
+        .shutdown("integration-host-id-mismatch")
+        .catch(() => undefined);
+      throw new Error(
+        `Restarted daemon host ID ${mismatchedResources.hostId} did not match existing harness host ID ${harness.hostId}`,
+      );
+    }
     harness.daemon = daemonResources.daemon;
     harness.daemonApp = daemonResources.daemonApp;
     harness.hostId = daemonResources.hostId;

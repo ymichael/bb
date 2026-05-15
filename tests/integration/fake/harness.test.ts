@@ -15,4 +15,16 @@ describe("integration harness", () => {
     });
     await expect(fs.access(repoDir)).rejects.toThrow();
   });
+
+  it("keeps the same host identity across daemon restarts", async () => {
+    await withHarness(async (harness) => {
+      const initialHostId = harness.hostId;
+
+      await harness.restartDaemon();
+      const host = await waitForHostConnected(harness.api);
+
+      expect(harness.hostId).toBe(initialHostId);
+      expect(host.id).toBe(initialHostId);
+    });
+  });
 });
