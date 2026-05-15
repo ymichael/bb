@@ -1,0 +1,7 @@
+{
+  "extends": ["./tsconfig.build.json", "@bb/tsconfig/typecheck-overrides.json"],
+  "compilerOptions": {
+    "rootDir": "."
+  },
+  "include": ["src", "test"]
+}

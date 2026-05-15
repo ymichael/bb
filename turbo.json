@@ -126,6 +126,28 @@
       ],
       "outputs": ["dist/**"]
     },
+    "bb-app#build": {
+      "dependsOn": [
+        "@bb/app#build",
+        "@bb/server#build",
+        "@bb/host-daemon#build",
+        "@bb/cli#build"
+      ],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/apps/app/dist/**",
+        "$TURBO_ROOT$/apps/server/dist/**",
+        "$TURBO_ROOT$/apps/host-daemon/dist/**",
+        "$TURBO_ROOT$/packages/bb-app/package.json",
+        "$TURBO_ROOT$/packages/bb-app/scripts/**",
+        "$TURBO_ROOT$/packages/bb-app/src/**",
+        "$TURBO_ROOT$/packages/bb-app/tsconfig.json",
+        "$TURBO_ROOT$/packages/bb-app/tsconfig.build.json",
+        "$TURBO_ROOT$/packages/tsconfig/*.json",
+        "$TURBO_ROOT$/scripts/*.mjs"
+      ],
+      "outputs": ["app/**", "dist/**", "host-daemon/**", "server/**"]
+    },
     "bundle": {
       "dependsOn": [],
       "cache": false,

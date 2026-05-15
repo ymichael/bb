@@ -1,0 +1,52 @@
+{
+  "name": "bb-app",
+  "version": "0.0.1",
+  "description": "bb app launcher for npx",
+  "type": "module",
+  "bin": {
+    "bb-app": "./dist/bb-app.js",
+    "bb": "./dist/bb.js",
+    "bb-server": "./dist/bb-server.js",
+    "bb-host-daemon": "./dist/bb-host-daemon.js"
+  },
+  "files": [
+    "app/dist",
+    "dist",
+    "!dist/*.map",
+    "host-daemon/dist/bb",
+    "host-daemon/dist/bb-claude-code-bridge.mjs",
+    "host-daemon/dist/bb-pi-bridge.mjs",
+    "host-daemon/dist/daemon-bundle.mjs",
+    "server/dist",
+    "!server/dist/index.js.map",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "clean": "rimraf dist app host-daemon server tsconfig.tsbuildinfo",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --config vitest.config.ts"
+  },
+  "dependencies": {
+    "@parcel/watcher": "2.5.6",
+    "better-sqlite3": "^11.7.0",
+    "pino": "^9.6.0",
+    "pino-pretty": "^13.0.0",
+    "pino-roll": "^4.0.0"
+  },
+  "devDependencies": {
+    "@bb/tsconfig": "workspace:*",
+    "@types/node": "^22.0.0",
+    "esbuild": "^0.28.0",
+    "rimraf": "^6.1.0",
+    "typescript": "^5.7.0",
+    "vitest": "^4.1.1",
+    "zod": "4.3.6"
+  },
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  }
+}
