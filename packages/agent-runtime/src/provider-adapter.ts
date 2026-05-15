@@ -117,6 +117,7 @@ export type AdapterCommand =
       input?: PromptInput[];
       options: ProviderExecutionContext;
       dynamicTools?: DynamicTool[];
+      disallowedTools?: readonly string[];
       instructionMode: InstructionMode;
     }
   | {
@@ -126,6 +127,7 @@ export type AdapterCommand =
       providerThreadId: string;
       options: ProviderExecutionContext;
       dynamicTools?: DynamicTool[];
+      disallowedTools?: readonly string[];
       instructionMode: InstructionMode;
     }
   | {

@@ -69,6 +69,7 @@ type ProviderProcess = RuntimeProviderProcess;
 
 interface ThreadRuntimeConfig {
   dynamicTools?: DynamicTool[];
+  disallowedTools?: readonly string[];
   environmentId: string;
   instructionMode: InstructionMode;
   instructions?: string;
@@ -342,6 +343,7 @@ function createAgentRuntimeInternal(
         instructions: nextInstructions,
       }),
       dynamicTools: currentConfig.dynamicTools,
+      disallowedTools: currentConfig.disallowedTools,
       instructionMode: currentConfig.instructionMode,
     };
     const plan = proc.adapter.buildCommandPlan(adapterCommand);
@@ -597,6 +599,7 @@ function createAgentRuntimeInternal(
       options: execOpts,
       instructions,
       dynamicTools,
+      disallowedTools,
       instructionMode = "append",
     }) {
       await runtime.ensureProvider({ providerId });
@@ -615,6 +618,7 @@ function createAgentRuntimeInternal(
       });
       setThreadRuntimeConfig(threadId, {
         dynamicTools,
+        disallowedTools,
         environmentId,
         instructionMode,
         instructions,
@@ -641,6 +645,7 @@ function createAgentRuntimeInternal(
           instructions,
         }),
         dynamicTools,
+        disallowedTools,
         instructionMode,
       };
       const cmd = requireProviderRequestPlan({
@@ -710,6 +715,7 @@ function createAgentRuntimeInternal(
       options: execOpts,
       instructions,
       dynamicTools,
+      disallowedTools,
       instructionMode = "append",
     }) {
       await runtime.ensureProvider({ providerId });
@@ -728,6 +734,7 @@ function createAgentRuntimeInternal(
       });
       setThreadRuntimeConfig(threadId, {
         dynamicTools,
+        disallowedTools,
         environmentId,
         instructionMode,
         instructions,
@@ -759,6 +766,7 @@ function createAgentRuntimeInternal(
           instructions,
         }),
         dynamicTools,
+        disallowedTools,
         instructionMode,
       };
       const plan = proc.adapter.buildCommandPlan(adapterCommand);

@@ -39,6 +39,10 @@ const INTENTIONAL_OPTIONAL_HOST_DAEMON_FIELDS: Record<string, string> = {
     "host.read_file may omit ref to read from disk; setting ref switches to git history at that ref.",
   "hostDaemonCommandSchema.threadStoragePath":
     "thread.start may include a storage path for manager threads so the daemon creates the directory before the agent starts.",
+  "hostDaemonCommandSchema.disallowedTools":
+    "manager thread runtime context may omit provider-specific built-in tool removals for providers that do not need them.",
+  "hostDaemonCommandSchema.resumeContext.disallowedTools":
+    "turn.submit resume context may omit provider-specific built-in tool removals for providers that do not need them.",
 };
 
 describe("host-daemon local schemas", () => {

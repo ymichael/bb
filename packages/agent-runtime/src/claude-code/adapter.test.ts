@@ -249,6 +249,7 @@ describe("claude-code provider adapter", () => {
           },
         },
       ],
+      disallowedTools: ["ExitPlanMode", "NotebookEdit", "Task"],
     });
 
     expect(cmd).toMatchObject({
@@ -275,6 +276,7 @@ describe("claude-code provider adapter", () => {
             },
           },
         ],
+        disallowedTools: ["ExitPlanMode", "NotebookEdit", "Task"],
       },
     });
     expect(cmd?.params).toMatchObject({

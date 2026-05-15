@@ -81,6 +81,7 @@ export async function startThread(
       options: command.options,
       instructions: command.instructions,
       dynamicTools: command.dynamicTools,
+      disallowedTools: command.disallowedTools,
       instructionMode: command.instructionMode,
     });
     options.runtimeManager.markThreadActive(
@@ -129,6 +130,7 @@ export async function ensureThreadRuntime(
       options: command.options,
       instructions: resumeContext.instructions,
       dynamicTools: resumeContext.dynamicTools,
+      disallowedTools: resumeContext.disallowedTools,
       instructionMode: resumeContext.instructionMode,
     });
     providerThreadId = result.providerThreadId;

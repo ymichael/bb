@@ -657,6 +657,11 @@ function buildCodexConfig(
     config["model_reasoning_effort"] = args.options.reasoningLevel;
   }
   config["features.default_mode_request_user_input"] = false;
+  config["tools.web_search"] = {
+    allowed_domains: null,
+    context_size: null,
+    location: null,
+  };
   if (args.options?.permissionMode === "workspace-write") {
     const writableRoots = combineWorkspaceWriteRoots(
       args.gitWritableRoots,

@@ -57,6 +57,11 @@ const MANAGER_DYNAMIC_TOOLS: DynamicTool[] = [
     inputSchema: MESSAGE_USER_TOOL_SCHEMA,
   },
 ];
+const MANAGER_DISALLOWED_TOOLS = [
+  "ExitPlanMode",
+  "NotebookEdit",
+  "Task",
+] as const;
 
 function resolveLocalTimezone(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
@@ -97,6 +102,7 @@ export interface ResolvePermissionEscalationArgs {
 
 export interface ResolvedThreadRuntimeCommandConfig {
   dynamicTools: DynamicTool[];
+  disallowedTools?: readonly string[];
   instructionMode: InstructionMode;
   instructions: string;
   projectId: string;
@@ -278,6 +284,7 @@ export async function resolveThreadRuntimeCommandConfig(
 
   return {
     dynamicTools: MANAGER_DYNAMIC_TOOLS,
+    disallowedTools: MANAGER_DISALLOWED_TOOLS,
     instructionMode: "replace",
     instructions: renderTemplate("managerAgentInstructions", {
       hostId: args.environment.hostId,

@@ -325,6 +325,11 @@ describe("public thread manager and ownership routes", () => {
       expect(managerStartCommand.command.dynamicTools).toEqual([
         expect.objectContaining({ name: "message_user" }),
       ]);
+      expect(managerStartCommand.command.disallowedTools).toEqual([
+        "ExitPlanMode",
+        "NotebookEdit",
+        "Task",
+      ]);
       expect(managerStartCommand.command.instructions).toContain(
         "You are a manager in a project inside bb",
       );

@@ -92,6 +92,7 @@ const hostDaemonThreadRuntimeContextSchema = z.object({
   options: hostDaemonExecutionOptionsSchema,
   instructions: z.string().min(1),
   dynamicTools: z.array(dynamicToolSchema),
+  disallowedTools: z.array(z.string()).optional(),
   instructionMode: instructionModeSchema,
 });
 

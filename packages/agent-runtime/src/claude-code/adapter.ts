@@ -816,6 +816,9 @@ export function createClaudeCodeProviderAdapter(
               ...(dynamicTools && dynamicTools.length > 0
                 ? { dynamicTools }
                 : {}),
+              ...(command.disallowedTools && command.disallowedTools.length > 0
+                ? { disallowedTools: [...command.disallowedTools] }
+                : {}),
             },
           };
         }
@@ -869,6 +872,9 @@ export function createClaudeCodeProviderAdapter(
                 : {}),
               ...(dynamicTools && dynamicTools.length > 0
                 ? { dynamicTools }
+                : {}),
+              ...(command.disallowedTools && command.disallowedTools.length > 0
+                ? { disallowedTools: [...command.disallowedTools] }
                 : {}),
             },
           };

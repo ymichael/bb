@@ -401,6 +401,7 @@ describe("bridge", () => {
       {
         baseInstructions: "You are a manager.",
         cwd: "/tmp/worktree",
+        disallowedTools: ["ExitPlanMode", "NotebookEdit", "Task"],
         instructionMode: "replace",
         permissionEscalation: "ask",
         permissionMode: "default",
@@ -410,6 +411,11 @@ describe("bridge", () => {
 
     expect(options.tools).toBeUndefined();
     expect(options.cwd).toBe("/tmp/worktree");
+    expect(options.disallowedTools).toEqual([
+      "ExitPlanMode",
+      "NotebookEdit",
+      "Task",
+    ]);
     expect(options.systemPrompt).toBe("You are a manager.");
   });
 

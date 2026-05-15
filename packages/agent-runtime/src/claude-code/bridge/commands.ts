@@ -49,6 +49,7 @@ const claudeCodeCommandSchema = z.discriminatedUnion("method", [
       reasoningLevel: bridgeReasoningLevelSchema.optional(),
       instructionMode: bridgeInstructionModeSchema,
       dynamicTools: z.array(dynamicToolSchema).optional(),
+      disallowedTools: z.array(z.string()).optional(),
     }),
   }),
   z.object({
@@ -66,6 +67,7 @@ const claudeCodeCommandSchema = z.discriminatedUnion("method", [
       reasoningLevel: bridgeReasoningLevelSchema.optional(),
       instructionMode: bridgeInstructionModeSchema,
       dynamicTools: z.array(dynamicToolSchema).optional(),
+      disallowedTools: z.array(z.string()).optional(),
     }),
   }),
   z.object({

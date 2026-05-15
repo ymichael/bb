@@ -1369,6 +1369,11 @@ describe("codex provider adapter", () => {
       params: {
         config: {
           "features.default_mode_request_user_input": false,
+          "tools.web_search": {
+            allowed_domains: null,
+            context_size: null,
+            location: null,
+          },
         },
       },
     });
