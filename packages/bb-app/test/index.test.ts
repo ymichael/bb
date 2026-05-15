@@ -1,9 +1,10 @@
 import { spawn } from "node:child_process";
-import { mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { pathToFileURL } from "node:url";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 import {
   createHostJoinRequestBody,
   isMainModule,
@@ -22,12 +23,28 @@ interface DelayArgs {
 
 type DelayResult = "timeout";
 
+const packageMetadataSchema = z.object({
+  engines: z.object({
+    node: z.string(),
+  }),
+  os: z.array(z.string()),
+});
+
+type PackageMetadata = z.infer<typeof packageMetadataSchema>;
+
 function delay(args: DelayArgs): Promise<DelayResult> {
   return new Promise((resolvePromise) => {
     setTimeout(() => {
       resolvePromise("timeout");
     }, args.ms);
   });
+}
+
+function readPackageMetadata(): PackageMetadata {
+  const testDir = dirname(fileURLToPath(import.meta.url));
+  return packageMetadataSchema.parse(
+    JSON.parse(readFileSync(resolve(testDir, "..", "package.json"), "utf8")),
+  );
 }
 
 describe("bb-app launcher", () => {
@@ -227,5 +244,14 @@ describe("bb-app launcher", () => {
     await expect(
       Promise.race([waitForProcessExit(childProcess), delay({ ms: 100 })]),
     ).resolves.toEqual({ code: 7, signal: null });
+  });
+
+  it("limits npm package metadata to documented runtimes", () => {
+    const metadata = readPackageMetadata();
+
+    expect(metadata.engines.node).toBe(
+      "^20.19.0 || ^22.12.0 || ^24.0.0 || ^26.0.0",
+    );
+    expect(metadata.os).toEqual(["darwin", "linux"]);
   });
 });
