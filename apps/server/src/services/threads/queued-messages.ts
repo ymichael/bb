@@ -1,23 +1,26 @@
 import {
-  claimDraft,
-  claimNextDraft,
-  deleteClaimedDraft,
-  deleteClaimedDraftInTransaction,
-  getDraft,
+  claimQueuedThreadMessage,
+  claimNextQueuedThreadMessage,
+  deleteClaimedQueuedThreadMessage,
+  deleteClaimedQueuedThreadMessageInTransaction,
+  getQueuedThreadMessage,
   getThread,
-  listIdleThreadsWithQueuedDrafts,
+  listIdleThreadsWithQueuedMessages,
   queueCommandInTransaction,
-  releaseDraftClaim,
-  releaseStaleDraftClaims,
+  releaseQueuedMessageClaim,
+  releaseStaleQueuedMessageClaims,
   transitionThreadStatusInTransaction,
 } from "@bb/db";
 import type { Thread, ThreadQueuedMessage } from "@bb/domain";
-import type { SendDraftMode, SendMessageRequest } from "@bb/server-contract";
+import type {
+  SendMessageRequest,
+  SendQueuedMessageMode,
+} from "@bb/server-contract";
 import type { AppDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
 import { scheduleAfterDaemonIngressResponse } from "../hosts/command-wait-context.js";
 import { ensureHostSessionReadyForWork } from "../hosts/host-lifecycle.js";
-import { toQueuedMessage } from "./drafts.js";
+import { toThreadQueuedMessage } from "./thread-queued-messages.js";
 import {
   requireEnvironment,
   requireThreadEnvironment,
@@ -36,41 +39,44 @@ import { resolvePermissionEscalation } from "./thread-runtime-config.js";
 import { sendThreadMessage } from "./thread-send.js";
 import { recordAcceptedPromptHistoryEntry } from "../prompt-history.js";
 
-interface SendQueuedDraftArgs {
-  draftId: string;
-  mode: SendDraftMode;
+interface SendQueuedMessageArgs {
+  mode: SendQueuedMessageMode;
+  queuedMessageId: string;
   threadId: string;
 }
 
-type ClaimedDraft = Exclude<ReturnType<typeof claimDraft>, null>;
+type ClaimedQueuedMessage = Exclude<
+  ReturnType<typeof claimQueuedThreadMessage>,
+  null
+>;
 
-interface SendClaimedDraftArgs {
-  draft: ClaimedDraft;
-  mode: SendDraftMode;
+interface SendClaimedQueuedMessageArgs {
+  mode: SendQueuedMessageMode;
+  queuedMessage: ClaimedQueuedMessage;
   threadId: string;
 }
 
-interface SendClaimedDraftForThreadArgs {
-  draft: ClaimedDraft;
-  mode: SendDraftMode;
+interface SendClaimedQueuedMessageForThreadArgs {
+  mode: SendQueuedMessageMode;
+  queuedMessage: ClaimedQueuedMessage;
   thread: Thread;
 }
 
-export interface QueuedDraftAutoSendArgs {
+export interface QueuedMessageAutoSendArgs {
   threadId: string;
 }
 
-export interface QueuedDraftAutoSendRequestArgs {
-  draftId: string;
+export interface QueuedMessageAutoSendRequestArgs {
+  queuedMessageId: string;
   threadId: string;
 }
 
-const STALE_DRAFT_CLAIM_MS = 5 * 60 * 1000;
-const DRAFT_CLAIM_LOST_CODE = "draft_claim_lost";
+const STALE_QUEUED_MESSAGE_CLAIM_MS = 5 * 60 * 1000;
+const QUEUED_MESSAGE_CLAIM_LOST_CODE = "queued_message_claim_lost";
 
 function sendQueuedMessagePayload(
   queuedMessage: ThreadQueuedMessage,
-  mode: SendDraftMode,
+  mode: SendQueuedMessageMode,
 ): SendMessageRequest {
   return {
     input: queuedMessage.content,
@@ -82,54 +88,74 @@ function sendQueuedMessagePayload(
   };
 }
 
-function claimDraftForSend(
+function claimQueuedThreadMessageForSend(
   deps: Pick<AppDeps, "db" | "hub">,
-  args: SendQueuedDraftArgs,
-): ClaimedDraft {
-  const existingDraft = getDraft(deps.db, args.draftId);
-  if (!existingDraft || existingDraft.threadId !== args.threadId) {
-    throw new ApiError(404, "invalid_request", "Draft not found");
+  args: SendQueuedMessageArgs,
+): ClaimedQueuedMessage {
+  const existingQueuedMessage = getQueuedThreadMessage(
+    deps.db,
+    args.queuedMessageId,
+  );
+  if (
+    !existingQueuedMessage ||
+    existingQueuedMessage.threadId !== args.threadId
+  ) {
+    throw new ApiError(404, "invalid_request", "Queued message not found");
   }
 
-  const claimedDraft = claimDraft(deps.db, deps.hub, args.draftId);
-  if (claimedDraft) {
-    return claimedDraft;
+  const claimedQueuedMessage = claimQueuedThreadMessage(
+    deps.db,
+    deps.hub,
+    args.queuedMessageId,
+  );
+  if (claimedQueuedMessage) {
+    return claimedQueuedMessage;
   }
 
-  const latestDraft = getDraft(deps.db, args.draftId);
-  if (!latestDraft || latestDraft.threadId !== args.threadId) {
-    throw new ApiError(404, "invalid_request", "Draft not found");
+  const latestQueuedMessage = getQueuedThreadMessage(
+    deps.db,
+    args.queuedMessageId,
+  );
+  if (!latestQueuedMessage || latestQueuedMessage.threadId !== args.threadId) {
+    throw new ApiError(404, "invalid_request", "Queued message not found");
   }
-  throw new ApiError(409, "invalid_request", "Draft is already being sent");
-}
-
-function createDraftClaimLostError(): ApiError {
-  return new ApiError(
+  throw new ApiError(
     409,
-    DRAFT_CLAIM_LOST_CODE,
-    "Draft claim expired before it could be sent",
+    "invalid_request",
+    "Queued message is already being sent",
   );
 }
 
-function isDraftClaimLostError(error: unknown): boolean {
-  return error instanceof ApiError && error.body.code === DRAFT_CLAIM_LOST_CODE;
+function createQueuedMessageClaimLostError(): ApiError {
+  return new ApiError(
+    409,
+    QUEUED_MESSAGE_CLAIM_LOST_CODE,
+    "Queued message claim expired before it could be sent",
+  );
 }
 
-async function sendClaimedDraft(
+function isQueuedMessageClaimLostError(error: unknown): boolean {
+  return (
+    error instanceof ApiError &&
+    error.body.code === QUEUED_MESSAGE_CLAIM_LOST_CODE
+  );
+}
+
+async function sendClaimedQueuedMessage(
   deps: AppDeps,
-  args: SendClaimedDraftArgs,
+  args: SendClaimedQueuedMessageArgs,
 ): Promise<ThreadQueuedMessage> {
   const { thread } = requireThreadEnvironment(deps.db, args.threadId);
-  return sendClaimedDraftForThread(deps, {
-    draft: args.draft,
+  return sendClaimedQueuedMessageForThread(deps, {
     mode: args.mode,
+    queuedMessage: args.queuedMessage,
     thread,
   });
 }
 
-async function sendClaimedDraftForIdleProviderThread(
+async function sendClaimedQueuedMessageForIdleProviderThread(
   deps: AppDeps,
-  args: SendClaimedDraftForThreadArgs,
+  args: SendClaimedQueuedMessageForThreadArgs,
 ): Promise<ThreadQueuedMessage | null> {
   if (args.mode !== "auto") {
     return null;
@@ -152,7 +178,7 @@ async function sendClaimedDraftForIdleProviderThread(
     requireEnvironment(deps.db, thread.environmentId),
   );
   ensureThreadNativeArchiveSettled(deps, { environment, thread });
-  const queuedMessage = toQueuedMessage(args.draft);
+  const queuedMessage = toThreadQueuedMessage(args.queuedMessage);
   ensureThreadCanQueueStartRequest(deps, thread);
 
   const payload = sendQueuedMessagePayload(queuedMessage, args.mode);
@@ -181,9 +207,9 @@ async function sendClaimedDraftForIdleProviderThread(
 
   const sent = deps.db.transaction(
     (tx) => {
-      const consumed = deleteClaimedDraftInTransaction(tx, {
-        id: args.draft.id,
-        claimToken: args.draft.claimToken,
+      const consumed = deleteClaimedQueuedThreadMessageInTransaction(tx, {
+        id: args.queuedMessage.id,
+        claimToken: args.queuedMessage.claimToken,
       });
       if (!consumed) {
         return false;
@@ -228,7 +254,7 @@ async function sendClaimedDraftForIdleProviderThread(
     { behavior: "immediate" },
   );
   if (!sent) {
-    throw createDraftClaimLostError();
+    throw createQueuedMessageClaimLostError();
   }
 
   deps.hub.notifyThread(
@@ -242,17 +268,16 @@ async function sendClaimedDraftForIdleProviderThread(
   return queuedMessage;
 }
 
-async function sendClaimedDraftForThread(
+async function sendClaimedQueuedMessageForThread(
   deps: AppDeps,
-  args: SendClaimedDraftForThreadArgs,
+  args: SendClaimedQueuedMessageForThreadArgs,
 ): Promise<ThreadQueuedMessage> {
-  const sent = await sendClaimedDraftForIdleProviderThread(deps, args);
+  const sent = await sendClaimedQueuedMessageForIdleProviderThread(deps, args);
   if (sent) {
     return sent;
   }
 
-  const draft = args.draft;
-  const queuedMessage = toQueuedMessage(draft);
+  const queuedMessage = toThreadQueuedMessage(args.queuedMessage);
   if (!args.thread.environmentId) {
     throw new ApiError(409, "invalid_request", "Thread has no environment");
   }
@@ -263,37 +288,37 @@ async function sendClaimedDraftForThread(
     thread: args.thread,
     trigger: "auto-dispatch",
   });
-  const deleted = deleteClaimedDraft(deps.db, deps.hub, {
-    id: draft.id,
-    claimToken: draft.claimToken,
+  const deleted = deleteClaimedQueuedThreadMessage(deps.db, deps.hub, {
+    id: args.queuedMessage.id,
+    claimToken: args.queuedMessage.claimToken,
   });
   if (!deleted) {
-    throw createDraftClaimLostError();
+    throw createQueuedMessageClaimLostError();
   }
   return queuedMessage;
 }
 
-export async function sendQueuedDraft(
+export async function sendQueuedMessage(
   deps: AppDeps,
-  args: SendQueuedDraftArgs,
+  args: SendQueuedMessageArgs,
 ): Promise<ThreadQueuedMessage> {
-  const draft = claimDraftForSend(deps, args);
+  const queuedMessage = claimQueuedThreadMessageForSend(deps, args);
   try {
-    return await sendClaimedDraft(deps, {
-      draft,
+    return await sendClaimedQueuedMessage(deps, {
       mode: args.mode,
+      queuedMessage,
       threadId: args.threadId,
     });
   } catch (error) {
-    releaseDraftClaim(deps.db, deps.hub, {
-      id: draft.id,
-      claimToken: draft.claimToken,
+    releaseQueuedMessageClaim(deps.db, deps.hub, {
+      id: queuedMessage.id,
+      claimToken: queuedMessage.claimToken,
     });
     throw error;
   }
 }
 
-export async function sendNextQueuedDraftIfPresent(
+export async function sendNextQueuedMessageIfPresent(
   deps: AppDeps,
   args: { threadId: string },
 ): Promise<boolean> {
@@ -307,80 +332,84 @@ export async function sendNextQueuedDraftIfPresent(
     return false;
   }
 
-  const nextDraft = claimNextDraft(deps.db, deps.hub, args.threadId);
-  if (!nextDraft) {
+  const nextQueuedMessage = claimNextQueuedThreadMessage(
+    deps.db,
+    deps.hub,
+    args.threadId,
+  );
+  if (!nextQueuedMessage) {
     return false;
   }
 
   try {
-    await sendClaimedDraftForThread(deps, {
-      draft: nextDraft,
+    await sendClaimedQueuedMessageForThread(deps, {
       mode: "auto",
+      queuedMessage: nextQueuedMessage,
       thread,
     });
   } catch (error) {
-    releaseDraftClaim(deps.db, deps.hub, {
-      id: nextDraft.id,
-      claimToken: nextDraft.claimToken,
+    releaseQueuedMessageClaim(deps.db, deps.hub, {
+      id: nextQueuedMessage.id,
+      claimToken: nextQueuedMessage.claimToken,
     });
-    if (isDraftClaimLostError(error)) {
+    if (isQueuedMessageClaimLostError(error)) {
       return false;
     }
     deps.logger.warn(
       {
-        draftId: nextDraft.id,
+        queuedMessageId: nextQueuedMessage.id,
         err: error,
         threadId: args.threadId,
       },
-      "Queued draft auto-send failed",
+      "Queued message auto-send failed",
     );
     throw error;
   }
   return true;
 }
 
-export async function runQueuedDraftAutoSendForThread(
+export async function runQueuedMessageAutoSendForThread(
   deps: AppDeps,
-  args: QueuedDraftAutoSendArgs,
+  args: QueuedMessageAutoSendArgs,
 ): Promise<void> {
-  await deps.lifecycleDedupers.queuedDraftAutoSend.run(
+  await deps.lifecycleDedupers.queuedMessageAutoSend.run(
     args.threadId,
     async () => {
-      await sendNextQueuedDraftIfPresent(deps, {
+      await sendNextQueuedMessageIfPresent(deps, {
         threadId: args.threadId,
       });
     },
   );
 }
 
-export function requestQueuedDraftAutoSendForThread(
+export function requestQueuedMessageAutoSendForThread(
   deps: AppDeps,
-  args: QueuedDraftAutoSendRequestArgs,
+  args: QueuedMessageAutoSendRequestArgs,
 ): void {
   scheduleAfterDaemonIngressResponse({
     context: {
-      draftId: args.draftId,
+      queuedMessageId: args.queuedMessageId,
       threadId: args.threadId,
     },
     logger: deps.logger,
-    name: "Queued draft auto-send request",
+    name: "Queued message auto-send request",
     work: () =>
-      runQueuedDraftAutoSendForThread(deps, {
+      runQueuedMessageAutoSendForThread(deps, {
         threadId: args.threadId,
       }),
   });
 }
 
-export async function runQueuedDraftAutoSendSweep(
+export async function runQueuedMessageAutoSendSweep(
   deps: AppDeps,
 ): Promise<void> {
-  releaseStaleDraftClaims(deps.db, deps.hub, {
-    claimedBefore: Date.now() - STALE_DRAFT_CLAIM_MS,
+  releaseStaleQueuedMessageClaims(deps.db, deps.hub, {
+    claimedBefore: Date.now() - STALE_QUEUED_MESSAGE_CLAIM_MS,
   });
 
-  for (const candidate of listIdleThreadsWithQueuedDrafts(deps.db)) {
+  for (const candidate of listIdleThreadsWithQueuedMessages(deps.db)) {
     try {
-      await runQueuedDraftAutoSendForThread(deps, {
+      await runQueuedMessageAutoSendForThread(deps, {
         threadId: candidate.threadId,
       });
     } catch (error) {
@@ -389,7 +418,7 @@ export async function runQueuedDraftAutoSendSweep(
           err: error,
           threadId: candidate.threadId,
         },
-        "Queued draft auto-send sweep failed",
+        "Queued message auto-send sweep failed",
       );
     }
   }

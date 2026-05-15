@@ -13,8 +13,8 @@ export * from "./schema.js";
 export {
   createAutomationId,
   createCloudAuthAttemptId,
-  createDraftClaimToken,
-  createDraftId,
+  createQueuedThreadMessageClaimToken,
+  createQueuedThreadMessageId,
   createEnvironmentId,
   createEventId,
   createEnvironmentProvisioningId,

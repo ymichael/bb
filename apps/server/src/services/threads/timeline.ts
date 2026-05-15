@@ -174,7 +174,7 @@ interface BuildThreadTimelineInternalResult {
   response: ThreadTimelineResponse;
 }
 
-interface ThreadTimelineBuildProfileDraft {
+interface ThreadTimelineBuildProfileAccumulator {
   compactedEventCount: number;
   contextWindowEventDataBytes: number;
   contextWindowEventRowCount: number;
@@ -621,7 +621,7 @@ function byteLengthOfStoredEventRows(rows: readonly StoredEventRow[]): number {
   return byteLength;
 }
 
-function createThreadTimelineBuildProfileDraft(): ThreadTimelineBuildProfileDraft {
+function createThreadTimelineBuildProfileAccumulator(): ThreadTimelineBuildProfileAccumulator {
   return {
     compactedEventCount: 0,
     contextWindowEventDataBytes: 0,
@@ -639,7 +639,7 @@ function createThreadTimelineBuildProfileDraft(): ThreadTimelineBuildProfileDraf
 }
 
 function measureThreadTimelineStage<TResult>(
-  profile: ThreadTimelineBuildProfileDraft | null,
+  profile: ThreadTimelineBuildProfileAccumulator | null,
   stage: ThreadTimelineBuildProfileStage,
   fn: () => TResult,
 ): TResult {
@@ -657,30 +657,30 @@ function measureThreadTimelineStage<TResult>(
 }
 
 function completeThreadTimelineBuildProfile(
-  draft: ThreadTimelineBuildProfileDraft,
+  accumulator: ThreadTimelineBuildProfileAccumulator,
   options: BuildThreadTimelineOptions,
   response: ThreadTimelineResponse,
 ): ThreadTimelineBuildProfile {
-  draft.responseJsonBytes = measureThreadTimelineStage(
-    draft,
+  accumulator.responseJsonBytes = measureThreadTimelineStage(
+    accumulator,
     "response-serialization",
     () => Buffer.byteLength(JSON.stringify(response), "utf8"),
   );
   return {
-    compactedEventCount: draft.compactedEventCount,
-    contextWindowEventDataBytes: draft.contextWindowEventDataBytes,
-    contextWindowEventRowCount: draft.contextWindowEventRowCount,
-    decodedEventCount: draft.decodedEventCount,
-    eventDataBytes: draft.eventDataBytes,
-    eventRowCount: draft.eventRowCount,
+    compactedEventCount: accumulator.compactedEventCount,
+    contextWindowEventDataBytes: accumulator.contextWindowEventDataBytes,
+    contextWindowEventRowCount: accumulator.contextWindowEventRowCount,
+    decodedEventCount: accumulator.decodedEventCount,
+    eventDataBytes: accumulator.eventDataBytes,
+    eventRowCount: accumulator.eventRowCount,
     pageKind: options.page.kind,
-    projectedRowCount: draft.projectedRowCount,
-    responseJsonBytes: draft.responseJsonBytes,
-    responseRowCount: draft.responseRowCount,
-    returnedSegmentCount: draft.returnedSegmentCount,
+    projectedRowCount: accumulator.projectedRowCount,
+    responseJsonBytes: accumulator.responseJsonBytes,
+    responseRowCount: accumulator.responseRowCount,
+    returnedSegmentCount: accumulator.returnedSegmentCount,
     segmentLimit: options.page.segmentLimit,
-    selectionStrategy: draft.selectionStrategy,
-    stageTimings: draft.stageTimings,
+    selectionStrategy: accumulator.selectionStrategy,
+    stageTimings: accumulator.stageTimings,
     timelineViewMode: options.timelineViewMode,
   };
 }
@@ -691,7 +691,7 @@ function buildThreadTimelineInternal(
   options: BuildThreadTimelineInternalOptions,
 ): BuildThreadTimelineInternalResult {
   const profile = options.includeProfile
-    ? createThreadTimelineBuildProfileDraft()
+    ? createThreadTimelineBuildProfileAccumulator()
     : null;
   const includeNestedRows = options.includeNestedRows ?? false;
   const includeProviderUnhandledOperations = options.isDevelopment;

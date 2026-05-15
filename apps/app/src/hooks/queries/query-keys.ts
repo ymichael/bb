@@ -22,7 +22,7 @@ export const THREAD_DETAIL_BOOTSTRAP_QUERY_KEY = "threadDetailBootstrap";
 export const THREAD_COMPOSER_BOOTSTRAP_QUERY_KEY = "threadComposerBootstrap";
 export const THREAD_DEFAULT_EXECUTION_OPTIONS_QUERY_KEY =
   "threadDefaultExecutionOptions";
-export const THREAD_DRAFTS_QUERY_KEY = "threadDrafts";
+export const THREAD_QUEUED_MESSAGES_QUERY_KEY = "threadQueuedMessages";
 export const THREAD_PROMPT_HISTORY_QUERY_KEY = "threadPromptHistory";
 export const THREAD_PENDING_INTERACTIONS_QUERY_KEY =
   "threadPendingInteractions";
@@ -158,11 +158,11 @@ export type ThreadDefaultExecutionOptionsQueryKey = readonly [
   typeof THREAD_DEFAULT_EXECUTION_OPTIONS_QUERY_KEY,
   string,
 ];
-export type ThreadDraftsQueryKeyPrefix = readonly [
-  typeof THREAD_DRAFTS_QUERY_KEY,
+export type ThreadQueuedMessagesQueryKeyPrefix = readonly [
+  typeof THREAD_QUEUED_MESSAGES_QUERY_KEY,
 ];
-export type ThreadDraftsQueryKey = readonly [
-  typeof THREAD_DRAFTS_QUERY_KEY,
+export type ThreadQueuedMessagesQueryKey = readonly [
+  typeof THREAD_QUEUED_MESSAGES_QUERY_KEY,
   string,
 ];
 export type ThreadPromptHistoryQueryKeyPrefix = readonly [
@@ -492,12 +492,14 @@ export function allThreadDefaultExecutionOptionsQueryKeyPrefix(): ThreadDefaultE
   return [THREAD_DEFAULT_EXECUTION_OPTIONS_QUERY_KEY];
 }
 
-export function threadDraftsQueryKey(threadId: string): ThreadDraftsQueryKey {
-  return [THREAD_DRAFTS_QUERY_KEY, threadId];
+export function threadQueuedMessagesQueryKey(
+  threadId: string,
+): ThreadQueuedMessagesQueryKey {
+  return [THREAD_QUEUED_MESSAGES_QUERY_KEY, threadId];
 }
 
-export function allThreadDraftsQueryKeyPrefix(): ThreadDraftsQueryKeyPrefix {
-  return [THREAD_DRAFTS_QUERY_KEY];
+export function allThreadQueuedMessagesQueryKeyPrefix(): ThreadQueuedMessagesQueryKeyPrefix {
+  return [THREAD_QUEUED_MESSAGES_QUERY_KEY];
 }
 
 export function threadPromptHistoryQueryKey(

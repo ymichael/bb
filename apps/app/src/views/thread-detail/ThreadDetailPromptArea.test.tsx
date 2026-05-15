@@ -34,11 +34,11 @@ interface PromptDraftStorageMock extends PromptDraftState {
 }
 
 interface ThreadDetailPromptAreaMocks {
-  createDraftMutateAsync: ReturnType<typeof vi.fn>;
-  deleteDraftMutateAsync: ReturnType<typeof vi.fn>;
+  createQueuedMessageMutateAsync: ReturnType<typeof vi.fn>;
+  deleteQueuedMessageMutateAsync: ReturnType<typeof vi.fn>;
   promptDraft: PromptDraftStorageMock;
   queuedMessages: ThreadQueuedMessage[];
-  sendDraftMutateAsync: ReturnType<typeof vi.fn>;
+  sendQueuedMessageMutateAsync: ReturnType<typeof vi.fn>;
   stopThreadMutate: ReturnType<typeof vi.fn>;
   uploadAttachmentMutateAsync: ReturnType<typeof vi.fn>;
 }
@@ -57,14 +57,14 @@ type ThreadOverrides = Partial<ThreadWithRuntime>;
 
 const mocks = vi.hoisted(
   (): ThreadDetailPromptAreaMocks => ({
-    createDraftMutateAsync: vi.fn(),
-    deleteDraftMutateAsync: vi.fn(),
+    createQueuedMessageMutateAsync: vi.fn(),
+    deleteQueuedMessageMutateAsync: vi.fn(),
     promptDraft: createPromptDraftStorageMock({
       attachments: [],
       text: "",
     }),
     queuedMessages: [],
-    sendDraftMutateAsync: vi.fn(),
+    sendQueuedMessageMutateAsync: vi.fn(),
     stopThreadMutate: vi.fn(),
     uploadAttachmentMutateAsync: vi.fn(),
   }),
@@ -195,17 +195,17 @@ vi.mock("@/hooks/mutations/project-mutations", () => ({
 }));
 
 vi.mock("@/hooks/mutations/thread-runtime-mutations", () => ({
-  useCreateThreadDraft: () => ({
+  useCreateThreadQueuedMessage: () => ({
     isPending: false,
-    mutateAsync: mocks.createDraftMutateAsync,
+    mutateAsync: mocks.createQueuedMessageMutateAsync,
   }),
-  useDeleteThreadDraft: () => ({
+  useDeleteThreadQueuedMessage: () => ({
     isPending: false,
-    mutateAsync: mocks.deleteDraftMutateAsync,
+    mutateAsync: mocks.deleteQueuedMessageMutateAsync,
   }),
-  useSendThreadDraft: () => ({
+  useSendThreadQueuedMessage: () => ({
     isPending: false,
-    mutateAsync: mocks.sendDraftMutateAsync,
+    mutateAsync: mocks.sendQueuedMessageMutateAsync,
   }),
   useStopThread: () => ({
     isPending: false,
@@ -224,7 +224,7 @@ vi.mock("@/hooks/queries/thread-queries", () => ({
       serviceTier: "default",
     },
   }),
-  useThreadDrafts: () => ({
+  useThreadQueuedMessages: () => ({
     data: mocks.queuedMessages,
   }),
   useThreadPromptHistory: () => ({
@@ -302,12 +302,12 @@ function renderPromptArea({
 }
 
 function resetMocks(): void {
-  mocks.createDraftMutateAsync.mockReset();
-  mocks.deleteDraftMutateAsync.mockReset();
-  mocks.sendDraftMutateAsync.mockReset();
+  mocks.createQueuedMessageMutateAsync.mockReset();
+  mocks.deleteQueuedMessageMutateAsync.mockReset();
+  mocks.sendQueuedMessageMutateAsync.mockReset();
   mocks.stopThreadMutate.mockReset();
   mocks.uploadAttachmentMutateAsync.mockReset();
-  mocks.sendDraftMutateAsync.mockResolvedValue({
+  mocks.sendQueuedMessageMutateAsync.mockResolvedValue({
     ok: true,
     queuedMessage: makeQueuedMessage({
       id: "queued-result",
@@ -329,7 +329,8 @@ afterEach(() => {
 describe("ThreadDetailPromptArea steer submit", () => {
   it("sends the current draft as a steer with Cmd+Enter", async () => {
     resetMocks();
-    const sendMessageMutateAsync = vi.fn<SendMessageMutationLike["mutateAsync"]>();
+    const sendMessageMutateAsync =
+      vi.fn<SendMessageMutationLike["mutateAsync"]>();
     sendMessageMutateAsync.mockResolvedValue();
     mocks.promptDraft = createPromptDraftStorageMock({
       attachments: [],
@@ -353,13 +354,14 @@ describe("ThreadDetailPromptArea steer submit", () => {
       input: [{ type: "text", text: "Steer this turn" }],
       mode: "steer",
     });
-    expect(mocks.createDraftMutateAsync).not.toHaveBeenCalled();
-    expect(mocks.sendDraftMutateAsync).not.toHaveBeenCalled();
+    expect(mocks.createQueuedMessageMutateAsync).not.toHaveBeenCalled();
+    expect(mocks.sendQueuedMessageMutateAsync).not.toHaveBeenCalled();
   });
 
   it("sends queued messages as steers with Cmd+Enter", async () => {
     resetMocks();
-    const sendMessageMutateAsync = vi.fn<SendMessageMutationLike["mutateAsync"]>();
+    const sendMessageMutateAsync =
+      vi.fn<SendMessageMutationLike["mutateAsync"]>();
     mocks.queuedMessages = [
       makeQueuedMessage({
         id: "queued-1",
@@ -381,14 +383,14 @@ describe("ThreadDetailPromptArea steer submit", () => {
 
     expect(wasNotCanceled).toBe(false);
     await waitFor(() => {
-      expect(mocks.sendDraftMutateAsync).toHaveBeenCalledTimes(2);
+      expect(mocks.sendQueuedMessageMutateAsync).toHaveBeenCalledTimes(2);
     });
-    expect(mocks.sendDraftMutateAsync).toHaveBeenNthCalledWith(1, {
+    expect(mocks.sendQueuedMessageMutateAsync).toHaveBeenNthCalledWith(1, {
       id: "thread-1",
       mode: "steer",
       queuedMessageId: "queued-1",
     });
-    expect(mocks.sendDraftMutateAsync).toHaveBeenNthCalledWith(2, {
+    expect(mocks.sendQueuedMessageMutateAsync).toHaveBeenNthCalledWith(2, {
       id: "thread-1",
       mode: "steer",
       queuedMessageId: "queued-2",
@@ -398,7 +400,8 @@ describe("ThreadDetailPromptArea steer submit", () => {
 
   it("sends queued messages before the current draft, all as steers", async () => {
     resetMocks();
-    const sendMessageMutateAsync = vi.fn<SendMessageMutationLike["mutateAsync"]>();
+    const sendMessageMutateAsync =
+      vi.fn<SendMessageMutationLike["mutateAsync"]>();
     sendMessageMutateAsync.mockResolvedValue();
     mocks.queuedMessages = [
       makeQueuedMessage({
@@ -423,7 +426,7 @@ describe("ThreadDetailPromptArea steer submit", () => {
     await waitFor(() => {
       expect(sendMessageMutateAsync).toHaveBeenCalledTimes(1);
     });
-    expect(mocks.sendDraftMutateAsync).toHaveBeenCalledWith({
+    expect(mocks.sendQueuedMessageMutateAsync).toHaveBeenCalledWith({
       id: "thread-1",
       mode: "steer",
       queuedMessageId: "queued-1",
@@ -433,7 +436,7 @@ describe("ThreadDetailPromptArea steer submit", () => {
       input: [{ type: "text", text: "Current steer" }],
       mode: "steer",
     });
-    expect(mocks.createDraftMutateAsync).not.toHaveBeenCalled();
+    expect(mocks.createQueuedMessageMutateAsync).not.toHaveBeenCalled();
     expect(mocks.promptDraft.clearIfCurrentMatches).toHaveBeenCalledWith({
       attachments: [],
       text: "Current steer",
@@ -442,12 +445,13 @@ describe("ThreadDetailPromptArea steer submit", () => {
 
   it("uses normal submit mode for Cmd+Enter on idle threads", async () => {
     resetMocks();
-    const sendMessageMutateAsync = vi.fn<SendMessageMutationLike["mutateAsync"]>();
+    const sendMessageMutateAsync =
+      vi.fn<SendMessageMutationLike["mutateAsync"]>();
     sendMessageMutateAsync.mockResolvedValue();
     mocks.queuedMessages = [
       makeQueuedMessage({
         id: "queued-1",
-        input: [{ type: "text", text: "Queued follow-up" }],
+        input: [{ type: "text", text: "Queued message" }],
       }),
     ];
     mocks.promptDraft = createPromptDraftStorageMock({
@@ -485,8 +489,8 @@ describe("ThreadDetailPromptArea steer submit", () => {
       reasoningLevel: "medium",
       serviceTier: "default",
     });
-    expect(mocks.createDraftMutateAsync).not.toHaveBeenCalled();
-    expect(mocks.sendDraftMutateAsync).not.toHaveBeenCalled();
+    expect(mocks.createQueuedMessageMutateAsync).not.toHaveBeenCalled();
+    expect(mocks.sendQueuedMessageMutateAsync).not.toHaveBeenCalled();
     expect(mocks.promptDraft.clearIfCurrentMatches).toHaveBeenCalledWith({
       attachments: [],
       text: "Start a normal turn",
@@ -495,14 +499,15 @@ describe("ThreadDetailPromptArea steer submit", () => {
 
   it("ignores repeated Cmd+Enter while a steer batch is pending", async () => {
     resetMocks();
-    const sendMessageMutateAsync = vi.fn<SendMessageMutationLike["mutateAsync"]>();
+    const sendMessageMutateAsync =
+      vi.fn<SendMessageMutationLike["mutateAsync"]>();
     mocks.queuedMessages = [
       makeQueuedMessage({
         id: "queued-1",
         input: [{ type: "text", text: "Queued first" }],
       }),
     ];
-    mocks.sendDraftMutateAsync.mockReturnValue(new Promise(() => {}));
+    mocks.sendQueuedMessageMutateAsync.mockReturnValue(new Promise(() => {}));
 
     renderPromptArea({ sendMessageMutateAsync });
 
@@ -513,7 +518,7 @@ describe("ThreadDetailPromptArea steer submit", () => {
     });
 
     await waitFor(() => {
-      expect(mocks.sendDraftMutateAsync).toHaveBeenCalledTimes(1);
+      expect(mocks.sendQueuedMessageMutateAsync).toHaveBeenCalledTimes(1);
     });
 
     fireEvent.keyDown(textarea, {
@@ -521,7 +526,7 @@ describe("ThreadDetailPromptArea steer submit", () => {
       metaKey: true,
     });
 
-    expect(mocks.sendDraftMutateAsync).toHaveBeenCalledTimes(1);
+    expect(mocks.sendQueuedMessageMutateAsync).toHaveBeenCalledTimes(1);
     expect(sendMessageMutateAsync).not.toHaveBeenCalled();
   });
 });

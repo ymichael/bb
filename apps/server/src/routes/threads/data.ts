@@ -1,5 +1,5 @@
 import path from "node:path";
-import { listDrafts } from "@bb/db";
+import { listQueuedThreadMessages } from "@bb/db";
 import { FILE_LIST_LIMIT_MAX } from "@bb/host-daemon-contract";
 import type { Hono } from "hono";
 import { PROMPT_HISTORY_ENTRY_LIMIT, threadEventTypeSchema } from "@bb/domain";
@@ -30,7 +30,7 @@ import {
   remapDaemonFileRouteError,
 } from "../../services/hosts/daemon-file-response.js";
 import { requireThreadStoragePath } from "../../services/threads/thread-storage.js";
-import { toQueuedMessage } from "../../services/threads/drafts.js";
+import { toThreadQueuedMessage } from "../../services/threads/thread-queued-messages.js";
 import {
   buildThreadTimeline,
   buildTimelineTurnSummaryDetails,
@@ -91,8 +91,8 @@ async function buildThreadComposerBootstrapResponse(
       };
   return {
     defaultExecutionOptions,
-    drafts: listDrafts(deps.db, threadId).map((draft) =>
-      toQueuedMessage(draft),
+    queuedMessages: listQueuedThreadMessages(deps.db, threadId).map(
+      toThreadQueuedMessage,
     ),
     executionOptions,
     pendingInteractions:
@@ -270,11 +270,11 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
     ),
   );
 
-  get("/threads/:id/drafts", (context) => {
+  get("/threads/:id/queued-messages", (context) => {
     const threadId = context.req.param("id");
     requirePublicThread(deps.db, threadId);
     return context.json(
-      listDrafts(deps.db, threadId).map((draft) => toQueuedMessage(draft)),
+      listQueuedThreadMessages(deps.db, threadId).map(toThreadQueuedMessage),
     );
   });
 

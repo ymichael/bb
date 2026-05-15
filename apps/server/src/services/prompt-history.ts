@@ -1,10 +1,10 @@
 import {
   createPromptHistoryEntry,
-  listDrafts,
+  listQueuedThreadMessages,
   listStoredProjectPromptHistoryRows,
   listStoredThreadPromptHistoryRows,
   type DbQueryConnection,
-  type DraftRow,
+  type QueuedThreadMessageRow,
   type StoredPromptHistoryEntryRow,
 } from "@bb/db";
 import {
@@ -17,7 +17,7 @@ import {
   type TurnRequestTarget,
 } from "@bb/domain";
 import { z } from "zod";
-import { toQueuedMessage } from "./threads/drafts.js";
+import { toThreadQueuedMessage } from "./threads/thread-queued-messages.js";
 import type { AppDeps, ServerLogger } from "../types.js";
 
 const storedPromptHistoryInputSchema = z.array(promptInputSchema).min(1);
@@ -97,11 +97,11 @@ function buildAcceptedPromptHistoryEntry(
 }
 
 function buildQueuedPromptHistoryEntry(
-  row: DraftRow,
+  row: QueuedThreadMessageRow,
 ): InternalPromptHistoryEntry {
-  const queuedMessage = toQueuedMessage(row);
+  const queuedMessage = toThreadQueuedMessage(row);
   return {
-    id: `draft:${queuedMessage.id}`,
+    id: `queued-message:${queuedMessage.id}`,
     createdAt: queuedMessage.createdAt,
     input: queuedMessage.content,
     state: "queued",
@@ -116,7 +116,7 @@ function comparePromptHistoryEntries(
     return right.createdAt - left.createdAt;
   }
   if (left.state !== right.state) {
-    // Keep queued drafts ahead of accepted rows on timestamp ties so recall
+    // Keep queued messages ahead of accepted rows on timestamp ties so recall
     // prefers the still-editable queued version.
     return left.state === "queued" ? -1 : 1;
   }
@@ -223,11 +223,11 @@ export function listThreadPromptHistory(
   args: ThreadPromptHistoryArgs,
 ): PromptHistoryEntry[] {
   const queuedEntries = buildPromptHistoryEntries({
-    rows: listDrafts(deps.db, args.threadId),
+    rows: listQueuedThreadMessages(deps.db, args.threadId),
     logger: deps.logger,
     buildEntry: buildQueuedPromptHistoryEntry,
     describeRow: (row) => ({
-      draftId: row.id,
+      queuedMessageId: row.id,
       threadId: row.threadId,
     }),
   });

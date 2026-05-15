@@ -91,7 +91,7 @@ const longMessage: readonly ThreadQueuedMessage[] = [
 export function Overview() {
   return (
     <StoryCard>
-      <StoryRow label="single message" hint="one queued follow-up">
+      <StoryRow label="single message" hint="one queued message">
         <PromptStage>
           <QueuedMessagesList
             queuedMessages={oneMessage}
@@ -106,7 +106,7 @@ export function Overview() {
       </StoryRow>
       <StoryRow
         label="multiple messages"
-        hint="three queued follow-ups behind the active turn"
+        hint="three queued messages behind the active turn"
       >
         <PromptStage>
           <QueuedMessagesList

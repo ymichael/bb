@@ -52,7 +52,7 @@ describe("system cache effects", () => {
     });
     queryClient.setQueryData(composerBootstrapKey, {
       defaultExecutionOptions: null,
-      drafts: [],
+      queuedMessages: [],
       executionOptions: { providers: [], models: [] },
       pendingInteractions: [],
       promptHistory: [],
@@ -60,12 +60,12 @@ describe("system cache effects", () => {
 
     invalidateRealtimeQueriesAfterServerReconnect({ queryClient });
 
-    expect(
-      queryClient.getQueryState(executionOptionsKey)?.isInvalidated,
-    ).toBe(true);
-    expect(
-      queryClient.getQueryState(composerBootstrapKey)?.isInvalidated,
-    ).toBe(true);
+    expect(queryClient.getQueryState(executionOptionsKey)?.isInvalidated).toBe(
+      true,
+    );
+    expect(queryClient.getQueryState(composerBootstrapKey)?.isInvalidated).toBe(
+      true,
+    );
   });
 
   it("invalidates all execution options and composer bootstrap caches after host changes", () => {
@@ -83,7 +83,7 @@ describe("system cache effects", () => {
     });
     queryClient.setQueryData(composerBootstrapKey, {
       defaultExecutionOptions: null,
-      drafts: [],
+      queuedMessages: [],
       executionOptions: { providers: [], models: [] },
       pendingInteractions: [],
       promptHistory: [],
@@ -95,15 +95,15 @@ describe("system cache effects", () => {
       queryClient.getQueryState(allSystemExecutionOptionsQueryKeyPrefix())
         ?.isInvalidated,
     ).toBeUndefined();
-    expect(
-      queryClient.getQueryState(executionOptionsKey)?.isInvalidated,
-    ).toBe(true);
+    expect(queryClient.getQueryState(executionOptionsKey)?.isInvalidated).toBe(
+      true,
+    );
     expect(
       queryClient.getQueryState(allThreadComposerBootstrapQueryKeyPrefix())
         ?.isInvalidated,
     ).toBeUndefined();
-    expect(
-      queryClient.getQueryState(composerBootstrapKey)?.isInvalidated,
-    ).toBe(true);
+    expect(queryClient.getQueryState(composerBootstrapKey)?.isInvalidated).toBe(
+      true,
+    );
   });
 });

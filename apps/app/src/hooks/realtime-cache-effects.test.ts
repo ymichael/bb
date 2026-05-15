@@ -15,7 +15,7 @@ import {
   projectPromptHistoryQueryKey,
   projectSourceBranchesQueryKey,
   projectsQueryKey,
-  threadDraftsQueryKey,
+  threadQueuedMessagesQueryKey,
   threadListQueryKey,
   threadPromptHistoryQueryKey,
   threadQueryKey,
@@ -421,14 +421,14 @@ describe("createRealtimeCacheEffects", () => {
     effects.dispose();
   });
 
-  it("invalidates drafts and prompt history but not thread detail for queue changes", () => {
+  it("invalidates queued messages and prompt history but not thread detail for queue changes", () => {
     vi.useFakeTimers();
     const { effects, queryClient } = createRealtimeEffectsTestContext();
     const threadKey = threadQueryKey("thr_1");
-    const draftsKey = threadDraftsQueryKey("thr_1");
+    const queuedMessagesKey = threadQueuedMessagesQueryKey("thr_1");
     const promptHistoryKey = threadPromptHistoryQueryKey("thr_1");
     queryClient.setQueryData(threadKey, { id: "thr_1" });
-    queryClient.setQueryData(draftsKey, []);
+    queryClient.setQueryData(queuedMessagesKey, []);
     queryClient.setQueryData(promptHistoryKey, []);
 
     effects.handleChanged({
@@ -440,7 +440,9 @@ describe("createRealtimeCacheEffects", () => {
     });
     vi.advanceTimersByTime(50);
 
-    expect(queryClient.getQueryState(draftsKey)?.isInvalidated).toBe(true);
+    expect(queryClient.getQueryState(queuedMessagesKey)?.isInvalidated).toBe(
+      true,
+    );
     expect(queryClient.getQueryState(promptHistoryKey)?.isInvalidated).toBe(
       true,
     );

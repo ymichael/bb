@@ -1,17 +1,18 @@
 import { and, eq } from "drizzle-orm";
 import {
   archiveThread,
-  createDraftId,
   createPromptHistoryEntry,
+  createQueuedThreadMessageId,
   deleteHost,
   environments,
   events,
-  getDraft,
+  getQueuedThreadMessage,
   getThread,
   queuedThreadMessages,
 } from "@bb/db";
 import {
   encodeClientTurnRequestIdNumber,
+  threadQueuedMessageSchema,
   threadScope,
   threadSchema,
   turnScope,
@@ -19,7 +20,7 @@ import {
 import {
   type TimelineRow,
   threadComposerBootstrapResponseSchema,
-  threadDraftListResponseSchema,
+  threadQueuedMessageListResponseSchema,
   threadTimelineResponseSchema,
   threadWithIncludesResponseSchema,
   timelineTurnSummaryDetailsResponseSchema,
@@ -34,7 +35,7 @@ import {
 } from "../helpers/commands.js";
 import { readJson } from "../helpers/json.js";
 import {
-  seedDraft,
+  seedQueuedMessage,
   seedEnvironment,
   seedEvent,
   seedHost,
@@ -46,7 +47,7 @@ import {
 } from "../helpers/seed.js";
 import { createTestAppHarness } from "../helpers/test-app.js";
 
-const draftIdResponseSchema = z.object({
+const queuedMessageIdResponseSchema = z.object({
   id: z.string(),
 });
 
@@ -858,7 +859,7 @@ describe("public thread data routes", () => {
     }
   });
 
-  it("creates and deletes thread drafts", async () => {
+  it("creates and deletes thread queued messages", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps);
@@ -901,53 +902,57 @@ describe("public thread data routes", () => {
       });
 
       const createResponse = await harness.app.request(
-        `/api/v1/threads/${thread.id}/drafts`,
+        `/api/v1/threads/${thread.id}/queued-messages`,
         {
           method: "POST",
           headers: {
             "content-type": "application/json",
           },
           body: JSON.stringify({
-            input: [{ type: "text", text: "Draft from test" }],
+            input: [{ type: "text", text: "Queued message from test" }],
             reasoningLevel: "high",
             permissionMode: "full",
           }),
         },
       );
       expect(createResponse.status).toBe(201);
-      const draft = draftIdResponseSchema.parse(await readJson(createResponse));
-      expect(getDraft(harness.db, draft.id)).toMatchObject({
-        id: draft.id,
+      const queuedMessage = queuedMessageIdResponseSchema.parse(
+        await readJson(createResponse),
+      );
+      expect(
+        getQueuedThreadMessage(harness.db, queuedMessage.id),
+      ).toMatchObject({
+        id: queuedMessage.id,
       });
 
       const deleteResponse = await harness.app.request(
-        `/api/v1/threads/${thread.id}/drafts/${draft.id}`,
+        `/api/v1/threads/${thread.id}/queued-messages/${queuedMessage.id}`,
         {
           method: "DELETE",
         },
       );
       expect(deleteResponse.status).toBe(200);
       await expect(readJson(deleteResponse)).resolves.toEqual({ ok: true });
-      expect(getDraft(harness.db, draft.id)).toBeNull();
+      expect(getQueuedThreadMessage(harness.db, queuedMessage.id)).toBeNull();
     } finally {
       await harness.cleanup();
     }
   });
 
-  it("auto-sends drafts created on idle provider threads", async () => {
+  it("auto-sends queued messages created on idle provider threads", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps, {
-        id: "host-draft-create-idle-auto-send",
+        id: "host-queued-message-create-idle-auto-send",
       });
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
-        path: "/tmp/draft-create-idle-auto-send-source",
+        path: "/tmp/queued-message-create-idle-auto-send-source",
       });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
-        path: "/tmp/draft-create-idle-auto-send-environment",
+        path: "/tmp/queued-message-create-idle-auto-send-environment",
         workspaceProvisionType: "unmanaged",
       });
       const thread = seedThread(harness.deps, {
@@ -958,24 +963,26 @@ describe("public thread data routes", () => {
       seedThreadRuntimeState(harness.deps, {
         threadId: thread.id,
         environmentId: environment.id,
-        providerThreadId: "provider-draft-create-idle-auto-send",
+        providerThreadId: "provider-queued-message-create-idle-auto-send",
       });
 
       const createResponse = await harness.app.request(
-        `/api/v1/threads/${thread.id}/drafts`,
+        `/api/v1/threads/${thread.id}/queued-messages`,
         {
           method: "POST",
           headers: {
             "content-type": "application/json",
           },
           body: JSON.stringify({
-            input: [{ type: "text", text: "Draft ready to send" }],
+            input: [{ type: "text", text: "Queued message ready to send" }],
             permissionMode: "full",
           }),
         },
       );
       expect(createResponse.status).toBe(201);
-      const draft = draftIdResponseSchema.parse(await readJson(createResponse));
+      const queuedMessage = queuedMessageIdResponseSchema.parse(
+        await readJson(createResponse),
+      );
 
       const queued = await waitForQueuedCommand(
         harness,
@@ -984,19 +991,19 @@ describe("public thread data routes", () => {
       );
       expect(queued.command).toMatchObject({
         environmentId: environment.id,
-        input: [{ type: "text", text: "Draft ready to send" }],
+        input: [{ type: "text", text: "Queued message ready to send" }],
         resumeContext: {
-          providerThreadId: "provider-draft-create-idle-auto-send",
+          providerThreadId: "provider-queued-message-create-idle-auto-send",
         },
       });
-      expect(getDraft(harness.db, draft.id)).toBeNull();
+      expect(getQueuedThreadMessage(harness.db, queuedMessage.id)).toBeNull();
       expect(getThread(harness.db, thread.id)?.status).toBe("active");
     } finally {
       await harness.cleanup();
     }
   });
 
-  it("lists queued thread drafts", async () => {
+  it("lists queued thread messages", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps);
@@ -1011,17 +1018,17 @@ describe("public thread data routes", () => {
         projectId: project.id,
         environmentId: environment.id,
       });
-      seedDraft(harness.deps, {
+      seedQueuedMessage(harness.deps, {
         threadId: thread.id,
-        content: [{ type: "text", text: "First queued draft" }],
+        content: [{ type: "text", text: "First queued message" }],
         model: "gpt-5",
         reasoningLevel: "medium",
         permissionMode: "full",
         serviceTier: "default",
       });
-      seedDraft(harness.deps, {
+      seedQueuedMessage(harness.deps, {
         threadId: thread.id,
-        content: [{ type: "text", text: "Second queued draft" }],
+        content: [{ type: "text", text: "Second queued message" }],
         model: "gpt-5",
         reasoningLevel: "high",
         permissionMode: "full",
@@ -1029,25 +1036,25 @@ describe("public thread data routes", () => {
       });
 
       const response = await harness.app.request(
-        `/api/v1/threads/${thread.id}/drafts`,
+        `/api/v1/threads/${thread.id}/queued-messages`,
       );
 
       expect(response.status).toBe(200);
-      const drafts = threadDraftListResponseSchema.parse(
+      const queuedMessages = threadQueuedMessageListResponseSchema.parse(
         await readJson(response),
       );
-      expect(drafts).toHaveLength(2);
-      expect(drafts).toEqual(
+      expect(queuedMessages).toHaveLength(2);
+      expect(queuedMessages).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
-            content: [{ type: "text", text: "First queued draft" }],
+            content: [{ type: "text", text: "First queued message" }],
             model: "gpt-5",
             reasoningLevel: "medium",
             permissionMode: "full",
             serviceTier: "default",
           }),
           expect.objectContaining({
-            content: [{ type: "text", text: "Second queued draft" }],
+            content: [{ type: "text", text: "Second queued message" }],
             model: "gpt-5",
             reasoningLevel: "high",
             permissionMode: "full",
@@ -1113,9 +1120,9 @@ describe("public thread data routes", () => {
         requestSequence: 1,
         input: [{ type: "text", text: "Accepted prompt" }],
       });
-      seedDraft(harness.deps, {
+      seedQueuedMessage(harness.deps, {
         threadId: thread.id,
-        content: [{ type: "text", text: "Queued draft" }],
+        content: [{ type: "text", text: "Queued message" }],
         model: "gpt-5.5",
         reasoningLevel: "xhigh",
         permissionMode: "workspace-write",
@@ -1197,17 +1204,17 @@ describe("public thread data routes", () => {
         reasoningLevel: "xhigh",
         permissionMode: "workspace-write",
       });
-      expect(bootstrap.drafts).toHaveLength(1);
+      expect(bootstrap.queuedMessages).toHaveLength(1);
       expect(bootstrap.executionOptions.providers).toHaveLength(1);
       expect(bootstrap.executionOptions.models[0]?.model).toBe("gpt-5.5");
-      expect(bootstrap.drafts[0]?.content).toEqual([
-        { type: "text", text: "Queued draft" },
+      expect(bootstrap.queuedMessages[0]?.content).toEqual([
+        { type: "text", text: "Queued message" },
       ]);
       expect(bootstrap.pendingInteractions).toEqual([]);
       expect(bootstrap.promptHistory.map((entry) => entry.input)).toEqual(
         expect.arrayContaining([
           [{ type: "text", text: "Accepted prompt" }],
-          [{ type: "text", text: "Queued draft" }],
+          [{ type: "text", text: "Queued message" }],
         ]),
       );
     } finally {
@@ -1252,7 +1259,7 @@ describe("public thread data routes", () => {
     }
   });
 
-  it("inherits thread default execution options when draft overrides are omitted", async () => {
+  it("inherits thread default execution options when queued message overrides are omitted", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps);
@@ -1295,21 +1302,25 @@ describe("public thread data routes", () => {
       });
 
       const createResponse = await harness.app.request(
-        `/api/v1/threads/${thread.id}/drafts`,
+        `/api/v1/threads/${thread.id}/queued-messages`,
         {
           method: "POST",
           headers: {
             "content-type": "application/json",
           },
           body: JSON.stringify({
-            input: [{ type: "text", text: "Draft from test" }],
+            input: [{ type: "text", text: "Queued message from test" }],
           }),
         },
       );
       expect(createResponse.status).toBe(201);
-      const draft = draftIdResponseSchema.parse(await readJson(createResponse));
-      expect(getDraft(harness.db, draft.id)).toMatchObject({
-        id: draft.id,
+      const queuedMessage = queuedMessageIdResponseSchema.parse(
+        await readJson(createResponse),
+      );
+      expect(
+        getQueuedThreadMessage(harness.db, queuedMessage.id),
+      ).toMatchObject({
+        id: queuedMessage.id,
         model: "gpt-5",
         serviceTier: "default",
         reasoningLevel: "medium",
@@ -1320,7 +1331,7 @@ describe("public thread data routes", () => {
     }
   });
 
-  it("persists draft model and service tier and clears the draft after reprovision send", async () => {
+  it("persists queued message model and service tier and clears the queued message after reprovision send", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps);
@@ -1330,7 +1341,7 @@ describe("public thread data routes", () => {
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
-        path: "/tmp/draft-reprovision",
+        path: "/tmp/queued-message-reprovision",
         status: "error",
         managed: true,
         workspaceProvisionType: "managed-worktree",
@@ -1341,14 +1352,14 @@ describe("public thread data routes", () => {
       });
 
       const createResponse = await harness.app.request(
-        `/api/v1/threads/${thread.id}/drafts`,
+        `/api/v1/threads/${thread.id}/queued-messages`,
         {
           method: "POST",
           headers: {
             "content-type": "application/json",
           },
           body: JSON.stringify({
-            input: [{ type: "text", text: "Draft from test" }],
+            input: [{ type: "text", text: "Queued message from test" }],
             model: "gpt-5",
             serviceTier: "default",
             reasoningLevel: "high",
@@ -1357,18 +1368,16 @@ describe("public thread data routes", () => {
         },
       );
       expect(createResponse.status).toBe(201);
-      const createdDraft = (await readJson(createResponse)) as {
-        id: string;
-        model?: string;
-        serviceTier?: string;
-      };
-      expect(createdDraft).toMatchObject({
+      const createdQueuedMessage = threadQueuedMessageSchema.parse(
+        await readJson(createResponse),
+      );
+      expect(createdQueuedMessage).toMatchObject({
         model: "gpt-5",
         serviceTier: "default",
       });
 
       const sendResponse = await harness.app.request(
-        `/api/v1/threads/${thread.id}/drafts/${createdDraft.id}/send`,
+        `/api/v1/threads/${thread.id}/queued-messages/${createdQueuedMessage.id}/send`,
         {
           method: "POST",
           headers: {
@@ -1379,7 +1388,9 @@ describe("public thread data routes", () => {
       );
 
       expect(sendResponse.status).toBe(200);
-      expect(getDraft(harness.db, createdDraft.id)).toBeNull();
+      expect(
+        getQueuedThreadMessage(harness.db, createdQueuedMessage.id),
+      ).toBeNull();
       const provisionCommand = await waitForQueuedCommand(
         harness,
         ({ command }) =>
@@ -1425,20 +1436,20 @@ describe("public thread data routes", () => {
     }
   });
 
-  it("keeps drafts when send is attempted while a created thread is still starting", async () => {
+  it("keeps queued messages when send is attempted while a created thread is still starting", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps, {
-        id: "host-draft-created-thread-send",
+        id: "host-queued-message-created-thread-send",
       });
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
-        path: "/tmp/draft-created-thread-send",
+        path: "/tmp/queued-message-created-thread-send",
       });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
-        path: "/tmp/draft-created-thread-send",
+        path: "/tmp/queued-message-created-thread-send",
       });
 
       const createThreadResponse = await harness.app.request(
@@ -1468,25 +1479,30 @@ describe("public thread data routes", () => {
       );
       expect(createdThread.status).toBe("provisioning");
 
-      const createDraftResponse = await harness.app.request(
-        `/api/v1/threads/${createdThread.id}/drafts`,
+      const createQueuedThreadMessageResponse = await harness.app.request(
+        `/api/v1/threads/${createdThread.id}/queued-messages`,
         {
           method: "POST",
           headers: {
             "content-type": "application/json",
           },
           body: JSON.stringify({
-            input: [{ type: "text", text: "Draft follow-up while starting" }],
+            input: [
+              {
+                type: "text",
+                text: "Queued message follow-up while starting",
+              },
+            ],
           }),
         },
       );
-      expect(createDraftResponse.status).toBe(201);
-      const createdDraft = draftIdResponseSchema.parse(
-        await readJson(createDraftResponse),
+      expect(createQueuedThreadMessageResponse.status).toBe(201);
+      const createdQueuedMessage = queuedMessageIdResponseSchema.parse(
+        await readJson(createQueuedThreadMessageResponse),
       );
 
       const sendResponse = await harness.app.request(
-        `/api/v1/threads/${createdThread.id}/drafts/${createdDraft.id}/send`,
+        `/api/v1/threads/${createdThread.id}/queued-messages/${createdQueuedMessage.id}/send`,
         {
           method: "POST",
           headers: {
@@ -1501,8 +1517,10 @@ describe("public thread data routes", () => {
         code: "invalid_request",
         message: "Thread is still starting",
       });
-      expect(getDraft(harness.db, createdDraft.id)).toMatchObject({
-        id: createdDraft.id,
+      expect(
+        getQueuedThreadMessage(harness.db, createdQueuedMessage.id),
+      ).toMatchObject({
+        id: createdQueuedMessage.id,
       });
       const requestedEvents = harness.db
         .select({ type: events.type })
@@ -2045,7 +2063,7 @@ describe("public thread data routes", () => {
     }
   });
 
-  it("fails loudly when stored draft content is malformed", async () => {
+  it("fails loudly when stored queued message content is malformed", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps);
@@ -2061,11 +2079,11 @@ describe("public thread data routes", () => {
         environmentId: environment.id,
       });
       const now = Date.now();
-      const draftId = createDraftId();
-      const draft = harness.db
+      const queuedMessageId = createQueuedThreadMessageId();
+      const queuedMessage = harness.db
         .insert(queuedThreadMessages)
         .values({
-          id: draftId,
+          id: queuedMessageId,
           threadId: thread.id,
           content: "not-json",
           model: "gpt-5",
@@ -2080,7 +2098,7 @@ describe("public thread data routes", () => {
         .get();
 
       const response = await harness.app.request(
-        `/api/v1/threads/${thread.id}/drafts/${draft.id}/send`,
+        `/api/v1/threads/${thread.id}/queued-messages/${queuedMessage.id}/send`,
         {
           method: "POST",
           headers: {
@@ -2093,7 +2111,7 @@ describe("public thread data routes", () => {
       expect(response.status).toBe(500);
       await expect(readJson(response)).resolves.toMatchObject({
         code: "internal_error",
-        message: expect.stringContaining(`draft ${draft.id}`),
+        message: expect.stringContaining(`queued message ${queuedMessage.id}`),
       });
     } finally {
       await harness.cleanup();

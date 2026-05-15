@@ -12,7 +12,7 @@ import type {
 import type {
   PromptHistoryResponse,
   ThreadComposerBootstrapResponse,
-  ThreadDraftListResponse,
+  ThreadQueuedMessageListResponse,
   ThreadListResponse,
   ManagerTimelineView,
   ThreadPendingInteractionsResponse,
@@ -41,7 +41,7 @@ import {
   threadComposerBootstrapQueryKey,
   threadDetailBootstrapQueryKey,
   threadDefaultExecutionOptionsQueryKey,
-  threadDraftsQueryKey,
+  threadQueuedMessagesQueryKey,
   threadListQueryKey,
   threadPendingInteractionsQueryKey,
   threadPromptHistoryQueryKey,
@@ -265,7 +265,10 @@ export function useThreadComposerBootstrap(
         threadDefaultExecutionOptionsQueryKey(id),
         bootstrap.defaultExecutionOptions,
       );
-      queryClient.setQueryData(threadDraftsQueryKey(id), bootstrap.drafts);
+      queryClient.setQueryData(
+        threadQueuedMessagesQueryKey(id),
+        bootstrap.queuedMessages,
+      );
       queryClient.setQueryData(
         threadPromptHistoryQueryKey(id),
         bootstrap.promptHistory,
@@ -307,10 +310,13 @@ export function useThreadDefaultExecutionOptions(
   });
 }
 
-export function useThreadDrafts(id: string, options?: QueryOptions) {
-  return useQuery<ThreadDraftListResponse>({
-    queryKey: threadDraftsQueryKey(id),
-    queryFn: () => api.listThreadDrafts(requireThreadId(id, "useThreadDrafts")),
+export function useThreadQueuedMessages(id: string, options?: QueryOptions) {
+  return useQuery<ThreadQueuedMessageListResponse>({
+    queryKey: threadQueuedMessagesQueryKey(id),
+    queryFn: () =>
+      api.listThreadQueuedMessages(
+        requireThreadId(id, "useThreadQueuedMessages"),
+      ),
     enabled: (options?.enabled ?? true) && Boolean(id),
     refetchOnMount: options?.refetchOnMount ?? true,
     refetchOnWindowFocus: false,

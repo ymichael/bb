@@ -24,7 +24,7 @@ import type {
   GithubRepoInfo,
   CreateProjectSourceRequest,
   CreateProjectRequest,
-  CreateDraftRequest,
+  CreateQueuedMessageRequest,
   DeleteThreadRequest,
   EnvironmentActionRequest,
   EnvironmentActionResponse,
@@ -36,8 +36,8 @@ import type {
   ProjectResponse,
   ProjectWithThreadsResponse,
   PromptHistoryResponse,
-  SendDraftRequest,
-  SendDraftResponse,
+  SendQueuedMessageRequest,
+  SendQueuedMessageResponse,
   SendMessageRequest,
   SystemExecutionOptionsResponse,
   SystemProviderInfo,
@@ -49,7 +49,7 @@ import type {
   ThreadAssignedChildSummaryResponse,
   ThreadComposerBootstrapResponse,
   ThreadPendingInteractionsResponse,
-  ThreadDraftListResponse,
+  ThreadQueuedMessageListResponse,
   ThreadListResponse,
   ThreadResponse,
   ThreadWithIncludesResponse,
@@ -780,12 +780,15 @@ export async function sendThreadMessage(
   );
 }
 
-export async function createThreadDraft(
+export async function createThreadQueuedMessage(
   id: string,
-  req: CreateDraftRequest,
+  req: CreateQueuedMessageRequest,
 ): Promise<ThreadQueuedMessage> {
   return request<ThreadQueuedMessage>(
-    apiClient.threads[":id"].drafts.$post({ param: { id }, json: req }),
+    apiClient.threads[":id"]["queued-messages"].$post({
+      param: { id },
+      json: req,
+    }),
   );
 }
 
@@ -797,11 +800,11 @@ export async function getThreadComposerBootstrap(
   );
 }
 
-export async function listThreadDrafts(
+export async function listThreadQueuedMessages(
   id: string,
-): Promise<ThreadDraftListResponse> {
-  return request<ThreadDraftListResponse>(
-    apiClient.threads[":id"].drafts.$get({ param: { id } }),
+): Promise<ThreadQueuedMessageListResponse> {
+  return request<ThreadQueuedMessageListResponse>(
+    apiClient.threads[":id"]["queued-messages"].$get({ param: { id } }),
   );
 }
 
@@ -817,26 +820,26 @@ export async function listThreadPromptHistory(
   );
 }
 
-export async function sendThreadDraft(
+export async function sendThreadQueuedMessage(
   id: string,
   queuedMessageId: string,
-  req: SendDraftRequest,
-): Promise<SendDraftResponse> {
-  return request<SendDraftResponse>(
-    apiClient.threads[":id"].drafts[":draftId"].send.$post({
-      param: { id, draftId: queuedMessageId },
+  req: SendQueuedMessageRequest,
+): Promise<SendQueuedMessageResponse> {
+  return request<SendQueuedMessageResponse>(
+    apiClient.threads[":id"]["queued-messages"][":queuedMessageId"].send.$post({
+      param: { id, queuedMessageId },
       json: req,
     }),
   );
 }
 
-export async function deleteThreadDraft(
+export async function deleteThreadQueuedMessage(
   id: string,
   queuedMessageId: string,
 ): Promise<void> {
   await requestVoid(
-    apiClient.threads[":id"].drafts[":draftId"].$delete({
-      param: { id, draftId: queuedMessageId },
+    apiClient.threads[":id"]["queued-messages"][":queuedMessageId"].$delete({
+      param: { id, queuedMessageId },
     }),
   );
 }

@@ -2,7 +2,7 @@ import { type PromptInput } from "@bb/domain";
 import { fileNameFromPath } from "@bb/thread-view";
 import { promptInputToDraft, type PromptDraftState } from "@/lib/prompt-draft";
 
-const QUEUED_FOLLOW_UP_PREVIEW_MAX_CHARS = 220;
+const QUEUED_MESSAGE_PREVIEW_MAX_CHARS = 220;
 
 function getAttachmentNameFromPath(path: string): string {
   const trimmedPath = path.trim();
@@ -20,7 +20,7 @@ export function countQueuedMessageAttachments(input: PromptInput[]): number {
   return count;
 }
 
-export function formatQueuedFollowUpPreview(input: PromptInput[]): string {
+export function formatQueuedMessagePreview(input: PromptInput[]): string {
   const text = input
     .filter(
       (chunk): chunk is Extract<PromptInput, { type: "text" }> =>
@@ -31,10 +31,10 @@ export function formatQueuedFollowUpPreview(input: PromptInput[]): string {
     .join("\n\n");
   const trimmedText = text.trim();
   if (trimmedText.length > 0) {
-    if (trimmedText.length <= QUEUED_FOLLOW_UP_PREVIEW_MAX_CHARS) {
+    if (trimmedText.length <= QUEUED_MESSAGE_PREVIEW_MAX_CHARS) {
       return trimmedText;
     }
-    return `${trimmedText.slice(0, QUEUED_FOLLOW_UP_PREVIEW_MAX_CHARS - 1)}...`;
+    return `${trimmedText.slice(0, QUEUED_MESSAGE_PREVIEW_MAX_CHARS - 1)}...`;
   }
 
   const attachmentCount = countQueuedMessageAttachments(input);

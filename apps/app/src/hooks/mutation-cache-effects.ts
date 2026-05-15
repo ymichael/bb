@@ -10,7 +10,7 @@ import {
   projectSourceBranchesQueryKeyPrefix,
   projectsQueryKey,
   threadDefaultExecutionOptionsQueryKey,
-  threadDraftsQueryKey,
+  threadQueuedMessagesQueryKey,
   threadPendingInteractionsQueryKey,
   threadPromptHistoryQueryKey,
   threadQueryKey,
@@ -145,13 +145,15 @@ export function invalidateThreadQueueQueries({
   threadId,
 }: ThreadArg): void {
   queryClient.invalidateQueries({ queryKey: threadQueryKey(threadId) });
-  queryClient.invalidateQueries({ queryKey: threadDraftsQueryKey(threadId) });
+  queryClient.invalidateQueries({
+    queryKey: threadQueuedMessagesQueryKey(threadId),
+  });
   queryClient.invalidateQueries({
     queryKey: threadPromptHistoryQueryKey(threadId),
   });
 }
 
-export function invalidateThreadDraftSendQueries({
+export function invalidateThreadQueuedMessageSendQueries({
   queryClient,
   threadId,
 }: ThreadArg): void {
@@ -219,7 +221,9 @@ export function removeThreadScopedQueries({
   queryClient.removeQueries({
     queryKey: threadDefaultExecutionOptionsQueryKey(threadId),
   });
-  queryClient.removeQueries({ queryKey: threadDraftsQueryKey(threadId) });
+  queryClient.removeQueries({
+    queryKey: threadQueuedMessagesQueryKey(threadId),
+  });
   queryClient.removeQueries({
     queryKey: threadPromptHistoryQueryKey(threadId),
   });

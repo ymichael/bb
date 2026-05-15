@@ -50,7 +50,7 @@ import {
 } from "../services/environments/environment-cleanup.js";
 import { syncManagerThreadSchedules } from "../services/scheduling/manager-schedule-sync.js";
 import { queueManagedThreadTurnNotificationBestEffort } from "../services/threads/managed-thread-notifications.js";
-import { runQueuedDraftAutoSendForThread } from "../services/threads/queued-drafts.js";
+import { runQueuedMessageAutoSendForThread } from "../services/threads/queued-messages.js";
 import { queueSettledArchivedThreadProviderArchiveCommand } from "../services/threads/thread-lifecycle.js";
 import {
   runWithDaemonCommandWaitForbidden,
@@ -160,15 +160,15 @@ interface ManagerTurnNotificationFollowUp {
   turnStatus: ThreadEventTurnStatus;
 }
 
-interface QueuedDraftAutoSendFollowUp {
-  kind: "queued-draft-auto-send";
+interface QueuedMessageAutoSendFollowUp {
+  kind: "queued-message-auto-send";
   threadId: string;
 }
 
 type EventEffectFollowUp =
   | ManagerScheduleSyncFollowUp
   | ManagerTurnNotificationFollowUp
-  | QueuedDraftAutoSendFollowUp;
+  | QueuedMessageAutoSendFollowUp;
 
 interface EventEffectResult {
   followUps: EventEffectFollowUp[];
@@ -185,15 +185,15 @@ interface ManagerTurnNotificationLogContext {
   managerThreadId: string;
 }
 
-interface QueuedDraftAutoSendLogContext {
-  followUpKind: "queued-draft-auto-send";
+interface QueuedMessageAutoSendLogContext {
+  followUpKind: "queued-message-auto-send";
   threadId: string;
 }
 
 type EventFollowUpLogContext =
   | ManagerScheduleSyncLogContext
   | ManagerTurnNotificationLogContext
-  | QueuedDraftAutoSendLogContext;
+  | QueuedMessageAutoSendLogContext;
 
 function resolveProviderIdentifiers(event: HostDaemonEventEnvelope["event"]): {
   providerThreadId: string | null;
@@ -395,7 +395,7 @@ async function applyEventEffects(
         }
         if (event.status === "completed") {
           followUps.push({
-            kind: "queued-draft-auto-send",
+            kind: "queued-message-auto-send",
             threadId: entry.threadId,
           });
         }
@@ -455,8 +455,8 @@ async function executeEventFollowUp(
         title: followUp.title,
       });
       return;
-    case "queued-draft-auto-send":
-      await runQueuedDraftAutoSendForThread(deps, {
+    case "queued-message-auto-send":
+      await runQueuedMessageAutoSendForThread(deps, {
         threadId: followUp.threadId,
       });
       return;
@@ -468,7 +468,7 @@ function eventFollowUpLogContext(
 ): EventFollowUpLogContext {
   switch (followUp.kind) {
     case "manager-schedule-sync":
-    case "queued-draft-auto-send":
+    case "queued-message-auto-send":
       return {
         followUpKind: followUp.kind,
         threadId: followUp.threadId,

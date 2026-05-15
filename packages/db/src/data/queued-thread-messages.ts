@@ -3,9 +3,9 @@ import type { PermissionMode, PromptInput } from "@bb/domain";
 import type { DbConnection, DbTransaction } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
 import { queuedThreadMessages, threads } from "../schema.js";
-import { createDraftClaimToken, createDraftId } from "../ids.js";
+import { createQueuedThreadMessageClaimToken, createQueuedThreadMessageId } from "../ids.js";
 
-export interface CreateDraftInput {
+export interface CreateQueuedThreadMessageInput {
   threadId: string;
   content: PromptInput[];
   model: string;
@@ -14,38 +14,38 @@ export interface CreateDraftInput {
   serviceTier: string;
 }
 
-export type DraftRow = typeof queuedThreadMessages.$inferSelect;
+export type QueuedThreadMessageRow = typeof queuedThreadMessages.$inferSelect;
 
-export interface ClaimedDraftRow extends DraftRow {
+export interface ClaimedQueuedThreadMessageRow extends QueuedThreadMessageRow {
   claimedAt: number;
   claimToken: string;
 }
 
-export interface QueuedDraftThreadRow {
-  oldestDraftCreatedAt: number | null;
+export interface QueuedMessageThreadRow {
+  oldestQueuedMessageCreatedAt: number | null;
   threadId: string;
 }
 
-export interface DeleteDraftInTransactionArgs {
+export interface DeleteQueuedThreadMessageInTransactionArgs {
   id: string;
 }
 
-export interface ClaimedDraftMutationArgs {
+export interface ClaimedQueuedThreadMessageMutationArgs {
   claimToken: string;
   id: string;
 }
 
-export type DeleteClaimedDraftInTransactionArgs = ClaimedDraftMutationArgs;
+export type DeleteClaimedQueuedThreadMessageInTransactionArgs = ClaimedQueuedThreadMessageMutationArgs;
 
-export type DeleteClaimedDraftArgs = ClaimedDraftMutationArgs;
+export type DeleteClaimedQueuedThreadMessageArgs = ClaimedQueuedThreadMessageMutationArgs;
 
-export interface ReleaseStaleDraftClaimsArgs {
+export interface ReleaseStaleQueuedMessageClaimsArgs {
   claimedBefore: number;
 }
 
-export type ReleaseDraftClaimArgs = ClaimedDraftMutationArgs;
+export type ReleaseQueuedMessageClaimArgs = ClaimedQueuedThreadMessageMutationArgs;
 
-function requireClaimedDraft(row: DraftRow | null): ClaimedDraftRow | null {
+function requireClaimedQueuedThreadMessage(row: QueuedThreadMessageRow | null): ClaimedQueuedThreadMessageRow | null {
   if (!row || row.claimedAt === null || row.claimToken === null) {
     return null;
   }
@@ -56,13 +56,13 @@ function requireClaimedDraft(row: DraftRow | null): ClaimedDraftRow | null {
   };
 }
 
-export function createDraft(
+export function createQueuedThreadMessage(
   db: DbConnection,
   notifier: DbNotifier,
-  input: CreateDraftInput,
+  input: CreateQueuedThreadMessageInput,
 ) {
   const now = Date.now();
-  const id = createDraftId();
+  const id = createQueuedThreadMessageId();
   const row = db
     .insert(queuedThreadMessages)
     .values({
@@ -84,7 +84,7 @@ export function createDraft(
   return row;
 }
 
-export function getDraft(db: DbConnection, id: string) {
+export function getQueuedThreadMessage(db: DbConnection, id: string) {
   return (
     db
       .select()
@@ -94,7 +94,7 @@ export function getDraft(db: DbConnection, id: string) {
   );
 }
 
-export function listDrafts(db: DbConnection, threadId: string) {
+export function listQueuedThreadMessages(db: DbConnection, threadId: string) {
   return db
     .select()
     .from(queuedThreadMessages)
@@ -109,13 +109,13 @@ export function listDrafts(db: DbConnection, threadId: string) {
     .all();
 }
 
-export function listIdleThreadsWithQueuedDrafts(
+export function listIdleThreadsWithQueuedMessages(
   db: DbConnection,
-): QueuedDraftThreadRow[] {
+): QueuedMessageThreadRow[] {
   return db
     .select({
       threadId: threads.id,
-      oldestDraftCreatedAt: min(queuedThreadMessages.createdAt),
+      oldestQueuedMessageCreatedAt: min(queuedThreadMessages.createdAt),
     })
     .from(queuedThreadMessages)
     .innerJoin(threads, eq(threads.id, queuedThreadMessages.threadId))
@@ -135,12 +135,12 @@ export function listIdleThreadsWithQueuedDrafts(
     .all();
 }
 
-export function claimDraft(
+export function claimQueuedThreadMessage(
   db: DbConnection,
   notifier: DbNotifier,
   id: string,
-): ClaimedDraftRow | null {
-  const claimedDraft = db.transaction(
+): ClaimedQueuedThreadMessageRow | null {
+  const claimedQueuedMessage = db.transaction(
     (tx) => {
       const existing = tx
         .select()
@@ -152,7 +152,7 @@ export function claimDraft(
       }
 
       const now = Date.now();
-      const claimToken = createDraftClaimToken();
+      const claimToken = createQueuedThreadMessageClaimToken();
       const updated = tx
         .update(queuedThreadMessages)
         .set({ claimedAt: now, claimToken, updatedAt: now })
@@ -166,25 +166,25 @@ export function claimDraft(
         .returning()
         .get();
 
-      return requireClaimedDraft(updated ?? null);
+      return requireClaimedQueuedThreadMessage(updated ?? null);
     },
     { behavior: "immediate" },
   );
 
-  if (claimedDraft) {
-    notifier.notifyThread(claimedDraft.threadId, ["queue-changed"]);
+  if (claimedQueuedMessage) {
+    notifier.notifyThread(claimedQueuedMessage.threadId, ["queue-changed"]);
   }
-  return claimedDraft;
+  return claimedQueuedMessage;
 }
 
-export function claimNextDraft(
+export function claimNextQueuedThreadMessage(
   db: DbConnection,
   notifier: DbNotifier,
   threadId: string,
-): ClaimedDraftRow | null {
-  const claimedDraft = db.transaction(
+): ClaimedQueuedThreadMessageRow | null {
+  const claimedQueuedMessage = db.transaction(
     (tx) => {
-      const nextDraft = tx
+      const nextQueuedMessage = tx
         .select()
         .from(queuedThreadMessages)
         .where(
@@ -200,18 +200,18 @@ export function claimNextDraft(
         )
         .limit(1)
         .get();
-      if (!nextDraft) {
+      if (!nextQueuedMessage) {
         return null;
       }
 
       const now = Date.now();
-      const claimToken = createDraftClaimToken();
+      const claimToken = createQueuedThreadMessageClaimToken();
       const updated = tx
         .update(queuedThreadMessages)
         .set({ claimedAt: now, claimToken, updatedAt: now })
         .where(
           and(
-            eq(queuedThreadMessages.id, nextDraft.id),
+            eq(queuedThreadMessages.id, nextQueuedMessage.id),
             isNull(queuedThreadMessages.claimedAt),
             isNull(queuedThreadMessages.claimToken),
           ),
@@ -219,21 +219,21 @@ export function claimNextDraft(
         .returning()
         .get();
 
-      return requireClaimedDraft(updated ?? null);
+      return requireClaimedQueuedThreadMessage(updated ?? null);
     },
     { behavior: "immediate" },
   );
 
-  if (claimedDraft) {
-    notifier.notifyThread(claimedDraft.threadId, ["queue-changed"]);
+  if (claimedQueuedMessage) {
+    notifier.notifyThread(claimedQueuedMessage.threadId, ["queue-changed"]);
   }
-  return claimedDraft;
+  return claimedQueuedMessage;
 }
 
-export function releaseDraftClaim(
+export function releaseQueuedMessageClaim(
   db: DbConnection,
   notifier: DbNotifier,
-  args: ReleaseDraftClaimArgs,
+  args: ReleaseQueuedMessageClaimArgs,
 ): boolean {
   const existing = db
     .select()
@@ -268,10 +268,10 @@ export function releaseDraftClaim(
   return true;
 }
 
-export function releaseStaleDraftClaims(
+export function releaseStaleQueuedMessageClaims(
   db: DbConnection,
   notifier: DbNotifier,
-  args: ReleaseStaleDraftClaimsArgs,
+  args: ReleaseStaleQueuedMessageClaimsArgs,
 ): number {
   const staleRows = db
     .select({
@@ -309,9 +309,9 @@ export function releaseStaleDraftClaims(
   return result.changes;
 }
 
-export function deleteClaimedDraftInTransaction(
+export function deleteClaimedQueuedThreadMessageInTransaction(
   db: DbTransaction,
-  args: DeleteClaimedDraftInTransactionArgs,
+  args: DeleteClaimedQueuedThreadMessageInTransactionArgs,
 ): boolean {
   const deleted =
     db
@@ -327,10 +327,10 @@ export function deleteClaimedDraftInTransaction(
   return deleted !== null;
 }
 
-export function deleteClaimedDraft(
+export function deleteClaimedQueuedThreadMessage(
   db: DbConnection,
   notifier: DbNotifier,
-  args: DeleteClaimedDraftArgs,
+  args: DeleteClaimedQueuedThreadMessageArgs,
 ): boolean {
   const existing = db
     .select()
@@ -360,9 +360,9 @@ export function deleteClaimedDraft(
   return true;
 }
 
-export function deleteDraftInTransaction(
+export function deleteQueuedThreadMessageInTransaction(
   db: DbTransaction,
-  args: DeleteDraftInTransactionArgs,
+  args: DeleteQueuedThreadMessageInTransactionArgs,
 ): boolean {
   const deleted =
     db
@@ -373,7 +373,7 @@ export function deleteDraftInTransaction(
   return deleted !== null;
 }
 
-export function deleteDraft(
+export function deleteQueuedThreadMessage(
   db: DbConnection,
   notifier: DbNotifier,
   id: string,

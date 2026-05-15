@@ -1,16 +1,16 @@
 import {
   archiveThread,
-  createDraft,
-  deleteDraft,
+  createQueuedThreadMessage,
+  deleteQueuedThreadMessage,
   getEnvironment,
-  getDraft,
+  getQueuedThreadMessage,
   unarchiveThread,
   updateThread,
 } from "@bb/db";
 import {
   archiveThreadRequestSchema,
-  createDraftRequestSchema,
-  sendDraftRequestSchema,
+  createQueuedMessageRequestSchema,
+  sendQueuedMessageRequestSchema,
   sendMessageRequestSchema,
   typedRoutes,
   type PublicApiSchema,
@@ -19,7 +19,7 @@ import type { Hono } from "hono";
 import type { Thread } from "@bb/domain";
 import type { AppDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
-import { toQueuedMessage } from "../../services/threads/drafts.js";
+import { toThreadQueuedMessage } from "../../services/threads/thread-queued-messages.js";
 import {
   advanceEnvironmentCleanup,
   requestEnvironmentCleanup,
@@ -31,9 +31,9 @@ import {
   requirePublicThreadEnvironment,
 } from "../../services/lib/entity-lookup.js";
 import {
-  requestQueuedDraftAutoSendForThread,
-  sendQueuedDraft,
-} from "../../services/threads/queued-drafts.js";
+  requestQueuedMessageAutoSendForThread,
+  sendQueuedMessage,
+} from "../../services/threads/queued-messages.js";
 import { requireManagerChildThreadsConfirmation } from "../../services/threads/manager-child-confirmation.js";
 import {
   ensureThreadIsNotAwaitingUserInteraction,
@@ -100,8 +100,8 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
   );
 
   post(
-    "/threads/:id/drafts",
-    createDraftRequestSchema,
+    "/threads/:id/queued-messages",
+    createQueuedMessageRequestSchema,
     async (context, payload) => {
       const { thread } = requirePublicThreadEnvironment(
         deps.db,
@@ -116,7 +116,7 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
         },
         "client/turn/requested",
       );
-      const draft = createDraft(deps.db, deps.hub, {
+      const queuedMessage = createQueuedThreadMessage(deps.db, deps.hub, {
         threadId: context.req.param("id"),
         content: payload.input,
         model: execution.model,
@@ -128,18 +128,18 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
         thread.status === "idle" &&
         getLastProviderThreadId(deps, thread.id) !== null
       ) {
-        requestQueuedDraftAutoSendForThread(deps, {
-          draftId: draft.id,
+        requestQueuedMessageAutoSendForThread(deps, {
+          queuedMessageId: queuedMessage.id,
           threadId: thread.id,
         });
       }
-      return context.json(toQueuedMessage(draft), 201);
+      return context.json(toThreadQueuedMessage(queuedMessage), 201);
     },
   );
 
   post(
-    "/threads/:id/drafts/:draftId/send",
-    sendDraftRequestSchema,
+    "/threads/:id/queued-messages/:queuedMessageId/send",
+    sendQueuedMessageRequestSchema,
     async (context, payload) => {
       const { thread } = requirePublicThreadEnvironment(
         deps.db,
@@ -147,8 +147,8 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
       );
       ensureThreadIsWritable(thread);
       ensureThreadIsNotAwaitingUserInteraction(deps, thread.id);
-      const queuedMessage = await sendQueuedDraft(deps, {
-        draftId: context.req.param("draftId"),
+      const queuedMessage = await sendQueuedMessage(deps, {
+        queuedMessageId: context.req.param("queuedMessageId"),
         mode: payload.mode,
         threadId: context.req.param("id"),
       });
@@ -156,18 +156,21 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
     },
   );
 
-  del("/threads/:id/drafts/:draftId", (context) => {
-    const draft = getDraft(deps.db, context.req.param("draftId"));
-    if (!draft || draft.threadId !== context.req.param("id")) {
-      throw new ApiError(404, "invalid_request", "Draft not found");
+  del("/threads/:id/queued-messages/:queuedMessageId", (context) => {
+    const queuedMessage = getQueuedThreadMessage(
+      deps.db,
+      context.req.param("queuedMessageId"),
+    );
+    if (!queuedMessage || queuedMessage.threadId !== context.req.param("id")) {
+      throw new ApiError(404, "invalid_request", "Queued message not found");
     }
-    const deleted = deleteDraft(
+    const deleted = deleteQueuedThreadMessage(
       deps.db,
       deps.hub,
-      context.req.param("draftId"),
+      context.req.param("queuedMessageId"),
     );
     if (!deleted) {
-      throw new ApiError(404, "invalid_request", "Draft not found");
+      throw new ApiError(404, "invalid_request", "Queued message not found");
     }
     return context.json({ ok: true });
   });

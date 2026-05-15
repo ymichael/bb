@@ -7,4 +7,6 @@ export type PathProjectAutomationId = {
   param: { id: string; automationId: string };
 };
 export type PathProviderId = { param: { providerId: string } };
-export type PathThreadAndDraft = { param: { id: string; draftId: string } };
+export type PathThreadAndQueuedMessage = {
+  param: { id: string; queuedMessageId: string };
+};

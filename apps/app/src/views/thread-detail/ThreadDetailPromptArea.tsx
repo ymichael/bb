@@ -31,15 +31,15 @@ import { usePromptMentions } from "@/hooks/usePromptMentions";
 import { useThreadCreationOptions } from "@/hooks/useThreadCreationOptions";
 import { useUploadPromptAttachment } from "@/hooks/mutations/project-mutations";
 import {
-  useCreateThreadDraft,
-  useDeleteThreadDraft,
-  useSendThreadDraft,
+  useCreateThreadQueuedMessage,
+  useDeleteThreadQueuedMessage,
+  useSendThreadQueuedMessage,
   useStopThread,
 } from "@/hooks/mutations/thread-runtime-mutations";
 import {
   getLatestPendingInteraction,
   useThreadDefaultExecutionOptions,
-  useThreadDrafts,
+  useThreadQueuedMessages,
   useThreadPromptHistory,
 } from "@/hooks/queries/thread-queries";
 import { getMutationErrorMessage } from "@/lib/mutation-errors";
@@ -133,7 +133,7 @@ function getPromptPlaceholder(
   }
 }
 
-function shouldQueueFollowUpDraft(
+function shouldQueueFollowUpMessage(
   displayStatus: ThreadRuntimeDisplayStatus,
 ): boolean {
   return displayStatus === "active" || displayStatus === "host-reconnecting";
@@ -172,7 +172,7 @@ export function ThreadDetailPromptArea({
       staleTime: composerQueriesStaleTime,
     },
   );
-  const { data: queuedMessages = [] } = useThreadDrafts(thread.id, {
+  const { data: queuedMessages = [] } = useThreadQueuedMessages(thread.id, {
     enabled: composerQueriesEnabled,
     refetchOnMount: composerQueriesRefetchOnMount,
     staleTime: composerQueriesStaleTime,
@@ -185,9 +185,9 @@ export function ThreadDetailPromptArea({
       staleTime: composerQueriesStaleTime,
     },
   );
-  const createDraft = useCreateThreadDraft();
-  const sendDraft = useSendThreadDraft();
-  const deleteDraft = useDeleteThreadDraft();
+  const createQueuedMessage = useCreateThreadQueuedMessage();
+  const sendQueuedMessage = useSendThreadQueuedMessage();
+  const deleteQueuedMessage = useDeleteThreadQueuedMessage();
   const stopThread = useStopThread();
   const uploadPromptAttachment = useUploadPromptAttachment();
   const promptDraft = usePromptDraftStorage({
@@ -253,14 +253,14 @@ export function ThreadDetailPromptArea({
     getLatestPendingInteraction(pendingInteractions);
   const hasPendingInteraction = activePendingInteraction !== null;
   const isQueueMutationPending =
-    createDraft.isPending ||
-    sendDraft.isPending ||
-    deleteDraft.isPending ||
+    createQueuedMessage.isPending ||
+    sendQueuedMessage.isPending ||
+    deleteQueuedMessage.isPending ||
     isSteerBatchSending;
   const isFollowUpSubmitting =
     sendMessage.isPending ||
     isEnvironmentActionPending ||
-    createDraft.isPending ||
+    createQueuedMessage.isPending ||
     isSteerBatchSending;
   const submitMode: FollowUpSubmitMode = (() => {
     if (isStopRequested) {
@@ -379,10 +379,10 @@ export function ThreadDetailPromptArea({
     promptDraft.clearIfCurrentMatches(submittedDraft);
     setAttachmentError(null);
 
-    const isQueuingDraft = shouldQueueFollowUpDraft(runtimeDisplayStatus);
+    const isQueuingMessage = shouldQueueFollowUpMessage(runtimeDisplayStatus);
     try {
-      if (isQueuingDraft) {
-        await createDraft.mutateAsync({
+      if (isQueuingMessage) {
+        await createQueuedMessage.mutateAsync({
           id: thread.id,
           input: submittedInput,
           model: activeModel?.model ?? selectedModel,
@@ -405,15 +405,15 @@ export function ThreadDetailPromptArea({
       toast.error(
         getMutationErrorMessage({
           error: nextError,
-          fallbackMessage: isQueuingDraft
-            ? "Failed to queue follow-up."
+          fallbackMessage: isQueuingMessage
+            ? "Failed to queue message."
             : "Failed to send follow-up.",
         }),
       );
     }
   }, [
     activeModel?.model,
-    createDraft,
+    createQueuedMessage,
     currentPromptDraft,
     currentPromptDraftInput,
     promptDraft,
@@ -446,7 +446,7 @@ export function ThreadDetailPromptArea({
 
     try {
       for (const queuedMessage of queuedMessages) {
-        await sendDraft.mutateAsync({
+        await sendQueuedMessage.mutateAsync({
           id: thread.id,
           mode: "steer",
           queuedMessageId: queuedMessage.id,
@@ -474,7 +474,7 @@ export function ThreadDetailPromptArea({
     currentPromptDraftInput,
     promptDraft,
     queuedMessages,
-    sendDraft,
+    sendQueuedMessage,
     sendFollowUpInput,
     thread.id,
   ]);
@@ -489,7 +489,7 @@ export function ThreadDetailPromptArea({
       }
 
       setProcessingQueuedMessageId(messageId);
-      void sendDraft
+      void sendQueuedMessage
         .mutateAsync({
           id: thread.id,
           mode: "auto",
@@ -502,7 +502,7 @@ export function ThreadDetailPromptArea({
           toast.error(
             getMutationErrorMessage({
               error: nextError,
-              fallbackMessage: "Failed to send queued follow-up.",
+              fallbackMessage: "Failed to send queued message.",
             }),
           );
         })
@@ -512,7 +512,7 @@ export function ThreadDetailPromptArea({
           );
         });
     },
-    [queuedMessages, sendDraft, thread.id],
+    [queuedMessages, sendQueuedMessage, thread.id],
   );
 
   const handleEditQueuedMessage = useCallback(
@@ -525,7 +525,7 @@ export function ThreadDetailPromptArea({
       }
 
       setProcessingQueuedMessageId(messageId);
-      void deleteDraft
+      void deleteQueuedMessage
         .mutateAsync({
           id: thread.id,
           queuedMessageId: messageId,
@@ -539,7 +539,7 @@ export function ThreadDetailPromptArea({
           toast.error(
             getMutationErrorMessage({
               error: nextError,
-              fallbackMessage: "Failed to edit queued follow-up.",
+              fallbackMessage: "Failed to edit queued message.",
             }),
           );
         })
@@ -549,13 +549,13 @@ export function ThreadDetailPromptArea({
           );
         });
     },
-    [deleteDraft, promptDraft, queuedMessages, thread.id],
+    [deleteQueuedMessage, promptDraft, queuedMessages, thread.id],
   );
 
   const handleDeleteQueuedMessage = useCallback(
     (messageId: string) => {
       setProcessingQueuedMessageId(messageId);
-      void deleteDraft
+      void deleteQueuedMessage
         .mutateAsync({
           id: thread.id,
           queuedMessageId: messageId,
@@ -564,7 +564,7 @@ export function ThreadDetailPromptArea({
           toast.error(
             getMutationErrorMessage({
               error: nextError,
-              fallbackMessage: "Failed to delete queued follow-up.",
+              fallbackMessage: "Failed to delete queued message.",
             }),
           );
         })
@@ -574,7 +574,7 @@ export function ThreadDetailPromptArea({
           );
         });
     },
-    [deleteDraft, thread.id],
+    [deleteQueuedMessage, thread.id],
   );
 
   const handlePromptBannerFileClick = useCallback(

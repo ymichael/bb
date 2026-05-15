@@ -4,7 +4,7 @@ import { Icon } from "@/components/ui/icon.js";
 import { PromptStackCard } from "@/components/promptbox/banner/PromptStackCard";
 import {
   countQueuedMessageAttachments,
-  formatQueuedFollowUpPreview,
+  formatQueuedMessagePreview,
 } from "@/views/thread-detail/threadQueuedMessages";
 
 export interface QueuedMessagesListProps {
@@ -29,10 +29,7 @@ export function QueuedMessagesList({
   if (queuedMessages.length === 0) return null;
 
   return (
-    <PromptStackCard
-      ariaLabel="Queued follow-up messages"
-      className="overflow-hidden"
-    >
+    <PromptStackCard ariaLabel="Queued messages" className="overflow-hidden">
       <div className="flex items-center justify-between px-2.5 pb-1 pt-2.5">
         <p className="text-xs text-muted-foreground">
           Queued ({queuedMessages.length})
@@ -40,7 +37,7 @@ export function QueuedMessagesList({
       </div>
       <ul>
         {queuedMessages.map((queuedMessage, index) => {
-          const preview = formatQueuedFollowUpPreview(queuedMessage.content);
+          const preview = formatQueuedMessagePreview(queuedMessage.content);
           const attachmentCount = countQueuedMessageAttachments(
             queuedMessage.content,
           );

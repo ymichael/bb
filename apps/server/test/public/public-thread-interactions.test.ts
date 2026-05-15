@@ -1,4 +1,4 @@
-import { createDraft } from "@bb/db";
+import { createQueuedThreadMessage } from "@bb/db";
 import { turnScope } from "@bb/domain";
 import type { PendingInteractionCreate } from "@bb/domain";
 import { describe, expect, it } from "vitest";
@@ -595,7 +595,7 @@ describe("public thread interaction routes", () => {
     }
   });
 
-  it("rejects send and draft-send while a thread awaits user interaction", async () => {
+  it("rejects send and queued-message send while a thread awaits user interaction", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host, session } = seedHostSession(harness.deps, {
@@ -614,9 +614,9 @@ describe("public thread interaction routes", () => {
         environmentId: environment.id,
         status: "idle",
       });
-      const draft = createDraft(harness.db, harness.hub, {
+      const queuedMessage = createQueuedThreadMessage(harness.db, harness.hub, {
         threadId: thread.id,
-        content: [{ type: "text", text: "Queued draft" }],
+        content: [{ type: "text", text: "Queued message" }],
         model: "gpt-5",
         serviceTier: "default",
         reasoningLevel: "medium",
@@ -666,8 +666,8 @@ describe("public thread interaction routes", () => {
           "Thread is awaiting user interaction. Resolve the pending interaction before sending another prompt.",
       });
 
-      const draftSendResponse = await harness.app.request(
-        `/api/v1/threads/${thread.id}/drafts/${draft.id}/send`,
+      const queuedMessageSendResponse = await harness.app.request(
+        `/api/v1/threads/${thread.id}/queued-messages/${queuedMessage.id}/send`,
         {
           method: "POST",
           headers: {
@@ -676,8 +676,8 @@ describe("public thread interaction routes", () => {
           body: JSON.stringify({ mode: "auto" }),
         },
       );
-      expect(draftSendResponse.status).toBe(409);
-      await expect(readJson(draftSendResponse)).resolves.toEqual({
+      expect(queuedMessageSendResponse.status).toBe(409);
+      await expect(readJson(queuedMessageSendResponse)).resolves.toEqual({
         code: "awaiting_user_interaction",
         message:
           "Thread is awaiting user interaction. Resolve the pending interaction before sending another prompt.",

@@ -7,7 +7,7 @@ import type {
 import { z } from "zod";
 import { ApiError } from "../../errors.js";
 
-interface StoredDraftRow {
+interface StoredQueuedThreadMessageRow {
   content: string;
   createdAt: number;
   id: string;
@@ -19,8 +19,8 @@ interface StoredDraftRow {
   updatedAt: number;
 }
 
-function parseStoredDraftContent(
-  row: Pick<StoredDraftRow, "content" | "id" | "threadId">,
+function parseStoredQueuedThreadMessageContent(
+  row: Pick<StoredQueuedThreadMessageRow, "content" | "id" | "threadId">,
 ): PromptInput[] {
   let content: unknown;
   try {
@@ -29,7 +29,7 @@ function parseStoredDraftContent(
     throw new ApiError(
       500,
       "internal_error",
-      `Stored draft ${row.id} for thread ${row.threadId} is not valid JSON`,
+      `Stored queued message ${row.id} for thread ${row.threadId} is not valid JSON`,
     );
   }
 
@@ -38,17 +38,19 @@ function parseStoredDraftContent(
     throw new ApiError(
       500,
       "internal_error",
-      `Stored draft ${row.id} for thread ${row.threadId} is malformed`,
+      `Stored queued message ${row.id} for thread ${row.threadId} is malformed`,
     );
   }
 
   return parsed.data;
 }
 
-export function toQueuedMessage(row: StoredDraftRow): ThreadQueuedMessage {
+export function toThreadQueuedMessage(
+  row: StoredQueuedThreadMessageRow,
+): ThreadQueuedMessage {
   return threadQueuedMessageSchema.parse({
     id: row.id,
-    content: parseStoredDraftContent(row),
+    content: parseStoredQueuedThreadMessageContent(row),
     model: row.model,
     reasoningLevel: row.reasoningLevel,
     permissionMode: row.permissionMode,

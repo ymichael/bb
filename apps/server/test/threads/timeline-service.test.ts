@@ -2224,7 +2224,7 @@ describe("buildThreadTimeline", () => {
     });
   });
 
-  it("loads details for stale turn-summary ranges whose queued draft is accepted by the next turn", async () => {
+  it("loads details for stale turn-summary ranges whose queued message is accepted by the next turn", async () => {
     const harness = await createTestAppHarness();
     harnesses.push(harness);
 
@@ -2366,7 +2366,7 @@ describe("buildThreadTimeline", () => {
     ]);
   });
 
-  it("keeps requested-turn accepted drafts while filtering drafts accepted by later turns", async () => {
+  it("keeps requested-turn accepted queued messages while filtering queued messages accepted by later turns", async () => {
     const harness = await createTestAppHarness();
     harnesses.push(harness);
 

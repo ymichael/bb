@@ -7,9 +7,9 @@ import {
 } from "@bb/domain";
 import type {
   PromptHistoryResponse,
-  CreateDraftRequest,
-  SendDraftMode,
-  SendDraftResponse,
+  CreateQueuedMessageRequest,
+  SendQueuedMessageMode,
+  SendQueuedMessageResponse,
   TimelineConversationAttachments,
   TimelineRow,
 } from "@bb/server-contract";
@@ -40,24 +40,24 @@ import {
 import {
   invalidateProjectPromptHistoryQueries,
   refetchThreadListsAfterComposerThreadCreate,
-  invalidateThreadDraftSendQueries,
+  invalidateThreadQueuedMessageSendQueries,
   invalidateThreadAcceptedMessageQueries,
   invalidateThreadAcceptedMessageQueriesWithoutRealtime,
   invalidateThreadQueueQueries,
   invalidateThreadStopQueries,
 } from "../cache-effects";
 
-interface CreateThreadDraftMutationRequest extends CreateDraftRequest {
+interface CreateThreadQueuedMessageMutationRequest extends CreateQueuedMessageRequest {
   id: string;
 }
 
-interface SendThreadDraftMutationRequest {
+interface SendThreadQueuedMessageMutationRequest {
   id: string;
-  mode: SendDraftMode;
+  mode: SendQueuedMessageMode;
   queuedMessageId: string;
 }
 
-interface DeleteThreadDraftMutationRequest {
+interface DeleteThreadQueuedMessageMutationRequest {
   id: string;
   queuedMessageId: string;
 }
@@ -95,7 +95,7 @@ function buildQueuedPromptHistoryEntry(
   queuedMessage: ThreadQueuedMessage,
 ): PromptHistoryEntry {
   return {
-    id: `draft:${queuedMessage.id}`,
+    id: `queued-message:${queuedMessage.id}`,
     createdAt: queuedMessage.createdAt,
     input: queuedMessage.content,
   };
@@ -382,12 +382,12 @@ export function useSendThreadMessage() {
   });
 }
 
-export function useCreateThreadDraft() {
+export function useCreateThreadQueuedMessage() {
   const queryClient = useQueryClient();
 
   return useMutation({
     meta: {
-      errorMessage: "Failed to queue follow-up.",
+      errorMessage: "Failed to queue message.",
       showErrorToast: false,
     },
     mutationFn: ({
@@ -397,8 +397,8 @@ export function useCreateThreadDraft() {
       serviceTier,
       reasoningLevel,
       permissionMode,
-    }: CreateThreadDraftMutationRequest): Promise<ThreadQueuedMessage> =>
-      api.createThreadDraft(id, {
+    }: CreateThreadQueuedMessageMutationRequest): Promise<ThreadQueuedMessage> =>
+      api.createThreadQueuedMessage(id, {
         input,
         model,
         serviceTier,
@@ -416,36 +416,42 @@ export function useCreateThreadDraft() {
   });
 }
 
-export function useSendThreadDraft() {
+export function useSendThreadQueuedMessage() {
   const queryClient = useQueryClient();
 
   return useMutation({
     meta: {
-      errorMessage: "Failed to send queued follow-up.",
+      errorMessage: "Failed to send queued message.",
       showErrorToast: false,
     },
     mutationFn: ({
       id,
       mode,
       queuedMessageId,
-    }: SendThreadDraftMutationRequest): Promise<SendDraftResponse> =>
-      api.sendThreadDraft(id, queuedMessageId, { mode }),
+    }: SendThreadQueuedMessageMutationRequest): Promise<SendQueuedMessageResponse> =>
+      api.sendThreadQueuedMessage(id, queuedMessageId, { mode }),
     onSuccess: (_data, variables) => {
-      invalidateThreadDraftSendQueries({ queryClient, threadId: variables.id });
+      invalidateThreadQueuedMessageSendQueries({
+        queryClient,
+        threadId: variables.id,
+      });
     },
   });
 }
 
-export function useDeleteThreadDraft() {
+export function useDeleteThreadQueuedMessage() {
   const queryClient = useQueryClient();
 
   return useMutation({
     meta: {
-      errorMessage: "Failed to delete queued follow-up.",
+      errorMessage: "Failed to delete queued message.",
       showErrorToast: false,
     },
-    mutationFn: ({ id, queuedMessageId }: DeleteThreadDraftMutationRequest) =>
-      api.deleteThreadDraft(id, queuedMessageId),
+    mutationFn: ({
+      id,
+      queuedMessageId,
+    }: DeleteThreadQueuedMessageMutationRequest) =>
+      api.deleteThreadQueuedMessage(id, queuedMessageId),
     onSuccess: (_data, variables) => {
       invalidateThreadQueueQueries({ queryClient, threadId: variables.id });
     },

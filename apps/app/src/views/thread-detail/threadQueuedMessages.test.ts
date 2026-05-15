@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { PromptInput } from "@bb/domain";
 import {
-  formatQueuedFollowUpPreview,
+  formatQueuedMessagePreview,
   queuedInputToDraft,
 } from "./threadQueuedMessages";
 
@@ -12,9 +12,7 @@ describe("threadQueuedMessages", () => {
       { type: "text", text: "Second line" },
     ];
 
-    expect(formatQueuedFollowUpPreview(input)).toBe(
-      "First line\n\nSecond line",
-    );
+    expect(formatQueuedMessagePreview(input)).toBe("First line\n\nSecond line");
   });
 
   it("falls back to attachment summaries when no text is present", () => {
@@ -27,7 +25,7 @@ describe("threadQueuedMessages", () => {
       },
     ];
 
-    expect(formatQueuedFollowUpPreview(input)).toBe(
+    expect(formatQueuedMessagePreview(input)).toBe(
       "Attachment only (notes.md)",
     );
   });
@@ -40,7 +38,7 @@ describe("threadQueuedMessages", () => {
       },
     ];
 
-    expect(formatQueuedFollowUpPreview(input)).toBe(
+    expect(formatQueuedMessagePreview(input)).toBe(
       "Attachment only (Attachment)",
     );
     expect(queuedInputToDraft(input).attachments[0]?.name).toBe("Attachment");

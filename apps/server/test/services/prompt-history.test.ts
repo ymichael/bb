@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   archiveThread,
   createConnection,
-  createDraft,
+  createQueuedThreadMessage,
   createProject,
   createPromptHistoryEntry,
   createThread,
@@ -311,7 +311,7 @@ describe("prompt history service", () => {
     ]);
   });
 
-  it("returns thread follow-up history with queued drafts merged in", () => {
+  it("returns thread follow-up history with queued messages merged in", () => {
     const { db, firstProject, logger } = setup();
     const thread = createThread(db, noopNotifier, {
       projectId: firstProject.id,
@@ -345,7 +345,7 @@ describe("prompt history service", () => {
       createdAt: 40,
       input: [{ type: "text", text: "Add regression coverage" }],
     });
-    createDraft(db, noopNotifier, {
+    createQueuedThreadMessage(db, noopNotifier, {
       threadId: thread.id,
       content: [{ type: "text", text: "Add regression coverage" }],
       model: "gpt-5",
@@ -364,7 +364,7 @@ describe("prompt history service", () => {
       ),
     ).toEqual([
       {
-        id: expect.stringMatching(/^draft:/u),
+        id: expect.stringMatching(/^queued-message:/u),
         createdAt: expect.any(Number),
         input: [{ type: "text", text: "Add regression coverage" }],
       },

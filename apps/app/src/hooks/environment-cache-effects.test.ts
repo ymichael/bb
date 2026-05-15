@@ -63,14 +63,14 @@ describe("environment cache effects", () => {
     });
     queryClient.setQueryData(removedComposerBootstrapKey, {
       defaultExecutionOptions: null,
-      drafts: [],
+      queuedMessages: [],
       executionOptions: { providers: [], models: [] },
       pendingInteractions: [],
       promptHistory: [],
     });
     queryClient.setQueryData(retainedComposerBootstrapKey, {
       defaultExecutionOptions: null,
-      drafts: [],
+      queuedMessages: [],
       executionOptions: { providers: [], models: [] },
       pendingInteractions: [],
       promptHistory: [],
@@ -82,8 +82,12 @@ describe("environment cache effects", () => {
       queryClient,
     });
 
-    expect(queryClient.getQueryData(removedExecutionOptionsKey)).toBeUndefined();
-    expect(queryClient.getQueryData(removedComposerBootstrapKey)).toBeUndefined();
+    expect(
+      queryClient.getQueryData(removedExecutionOptionsKey),
+    ).toBeUndefined();
+    expect(
+      queryClient.getQueryData(removedComposerBootstrapKey),
+    ).toBeUndefined();
     expect(queryClient.getQueryData(removedWorkStatusKey)).toBeUndefined();
     expect(queryClient.getQueryData(retainedExecutionOptionsKey)).toEqual({
       providers: [],
@@ -91,7 +95,7 @@ describe("environment cache effects", () => {
     });
     expect(queryClient.getQueryData(retainedComposerBootstrapKey)).toEqual({
       defaultExecutionOptions: null,
-      drafts: [],
+      queuedMessages: [],
       executionOptions: { providers: [], models: [] },
       pendingInteractions: [],
       promptHistory: [],

@@ -1,16 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { hostDaemonCommands, listEvents } from "@bb/db";
 import type { PromptInput } from "@bb/domain";
-import { sendQueuedDraft } from "../../src/services/threads/queued-drafts.js";
+import { sendQueuedMessage } from "../../src/services/threads/queued-messages.js";
 import { sendThreadMessage } from "../../src/services/threads/thread-send.js";
 import { createCommandApprovalPayload } from "../helpers/pending-interactions.js";
 import { assertPromptHistoryForTurnRequest } from "../helpers/prompt-history.js";
 import {
-  seedDraft,
   seedEnvironment,
   seedHost,
   seedHostSession,
   seedProjectWithSource,
+  seedQueuedMessage,
   seedThread,
   seedThreadRuntimeState,
   seedTurnStarted,
@@ -225,11 +225,11 @@ describe("sendThreadMessage", () => {
     },
   );
 
-  it("records thread prompt history for idle queued draft auto-sends", async () => {
+  it("records thread prompt history for idle queued message auto-sends", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps, {
-        id: "host-thread-send-queued-draft-history",
+        id: "host-thread-send-queued-message-history",
       });
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -246,19 +246,19 @@ describe("sendThreadMessage", () => {
       seedThreadRuntimeState(harness.deps, {
         threadId: thread.id,
         environmentId: environment.id,
-        providerThreadId: "provider-thread-send-queued-draft-history",
+        providerThreadId: "provider-thread-send-queued-message-history",
       });
       const input: PromptInput[] = [
-        { type: "text", text: "send queued draft" },
+        { type: "text", text: "send queued message" },
       ];
-      const draft = seedDraft(harness.deps, {
+      const queuedMessage = seedQueuedMessage(harness.deps, {
         threadId: thread.id,
         content: input,
       });
 
-      await sendQueuedDraft(harness.deps, {
-        draftId: draft.id,
+      await sendQueuedMessage(harness.deps, {
         mode: "auto",
+        queuedMessageId: queuedMessage.id,
         threadId: thread.id,
       });
 

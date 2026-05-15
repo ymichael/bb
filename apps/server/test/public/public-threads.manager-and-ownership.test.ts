@@ -6,7 +6,7 @@ import {
 import {
   events,
   archiveThread,
-  getDraft,
+  getQueuedThreadMessage,
   getThread,
   hostDaemonCommands,
   markThreadDeleted,
@@ -26,7 +26,7 @@ import {
 import { readJson } from "../helpers/json.js";
 import { waitForThreadEnvironment } from "./public-thread-assertions.js";
 import {
-  seedDraft,
+  seedQueuedMessage,
   seedEnvironment,
   seedEvent,
   seedHost,
@@ -176,7 +176,7 @@ describe("public thread manager and ownership routes", () => {
     }
   });
 
-  it("queues thread.rename, returns thread events, sends drafts, and creates manager threads", async () => {
+  it("queues thread.rename, returns thread events, sends queued messages, and creates manager threads", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps);
@@ -237,23 +237,23 @@ describe("public thread manager and ownership routes", () => {
         }),
       ]);
 
-      const draft = seedDraft(harness.deps, {
+      const queuedMessage = seedQueuedMessage(harness.deps, {
         threadId: thread.id,
-        content: [{ type: "text", text: "Draft content" }],
+        content: [{ type: "text", text: "Queued message content" }],
         model: "gpt-5",
         serviceTier: "default",
       });
       seedEvent(harness.deps, {
         threadId: thread.id,
         environmentId: environment.id,
-        providerThreadId: "provider-draft",
+        providerThreadId: "provider-queuedMessage",
         sequence: 2,
         type: "thread/identity",
         scope: threadScope(),
         data: {},
       });
-      const draftSendResponse = await harness.app.request(
-        `/api/v1/threads/${thread.id}/drafts/${draft.id}/send`,
+      const queuedMessageSendResponse = await harness.app.request(
+        `/api/v1/threads/${thread.id}/queued-messages/${queuedMessage.id}/send`,
         {
           method: "POST",
           headers: {
@@ -262,20 +262,20 @@ describe("public thread manager and ownership routes", () => {
           body: JSON.stringify({ mode: "auto" }),
         },
       );
-      expect(draftSendResponse.status).toBe(200);
-      const draftCommand = await waitForQueuedCommand(
+      expect(queuedMessageSendResponse.status).toBe(200);
+      const queuedMessageCommand = await waitForQueuedCommand(
         harness,
         ({ command }) =>
           command.type === "turn.submit" && command.threadId === thread.id,
       );
-      expect(draftCommand.command).toMatchObject({
+      expect(queuedMessageCommand.command).toMatchObject({
         environmentId: environment.id,
         options: {
           model: "gpt-5",
           serviceTier: "default",
         },
       });
-      expect(getDraft(harness.db, draft.id)).toBeNull();
+      expect(getQueuedThreadMessage(harness.db, queuedMessage.id)).toBeNull();
 
       // Manager creation returns immediately — thread.start is queued with
       // default preferences (skipPreferences: true on initial start).

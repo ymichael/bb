@@ -44,7 +44,7 @@ import {
   requestThreadStop,
 } from "../threads/thread-lifecycle.js";
 import { advanceThreadProvisioning } from "../threads/thread-provisioning.js";
-import { runQueuedDraftAutoSendSweep } from "../threads/queued-drafts.js";
+import { runQueuedMessageAutoSendSweep } from "../threads/queued-messages.js";
 
 export type EvaluateManagedEnvironmentArchiveCleanupFn =
   typeof advanceEnvironmentCleanup;
@@ -363,7 +363,7 @@ export async function runPeriodicSweeps(
     await sweepDueNudges(deps);
     await runEnvironmentProvisioningSweep(deps);
     await runThreadLifecycleSweep(deps);
-    await runQueuedDraftAutoSendSweep(deps);
+    await runQueuedMessageAutoSendSweep(deps);
     await runIdleSandboxSuspendSweep(deps);
     await runManagedEnvironmentArchiveCleanupSweep(
       deps,

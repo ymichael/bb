@@ -22,7 +22,7 @@ import {
   allHostQueryKeyPrefix,
   allSystemExecutionOptionsQueryKeyPrefix,
   allThreadComposerBootstrapQueryKeyPrefix,
-  allThreadDraftsQueryKeyPrefix,
+  allThreadQueuedMessagesQueryKeyPrefix,
   allThreadPendingInteractionsQueryKeyPrefix,
   allThreadQueryKeyPrefix,
   allThreadTimelineQueryKeyPrefix,
@@ -35,7 +35,7 @@ import {
   projectSourceBranchesQueryKeyPrefix,
   projectsQueryKey,
   systemProvidersQueryKey,
-  threadDraftsQueryKey,
+  threadQueuedMessagesQueryKey,
   threadPendingInteractionsQueryKey,
   threadPromptHistoryQueryKey,
   threadPromptHistoryQueryKeyPrefix,
@@ -96,8 +96,8 @@ export const REALTIME_THREAD_CHANGE_REGISTRY = {
   "queue-changed": {
     flush: "debounced",
     dirty: [
-      dirtyThreadDraftQueries, // Composer queue reads drafts directly.
-      dirtyThreadPromptHistoryQueries, // Composer recall includes queued drafts.
+      dirtyThreadQueuedMessageQueries, // Composer queue reads queued messages directly.
+      dirtyThreadPromptHistoryQueries, // Composer recall includes queued messages.
     ],
   },
   "archived-changed": {
@@ -345,12 +345,12 @@ function dirtyThreadTimelineQueries({
     : [allThreadTimelineQueryKeyPrefix()];
 }
 
-function dirtyThreadDraftQueries({
+function dirtyThreadQueuedMessageQueries({
   threadId,
 }: ThreadRealtimeDirtyContext): QueryKey[] {
   return threadId
-    ? [threadDraftsQueryKey(threadId)]
-    : [allThreadDraftsQueryKeyPrefix()];
+    ? [threadQueuedMessagesQueryKey(threadId)]
+    : [allThreadQueuedMessagesQueryKeyPrefix()];
 }
 
 function dirtyThreadPromptHistoryQueries({

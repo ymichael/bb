@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ThreadListEntry, ThreadWithRuntime } from "@bb/domain";
 import type {
   PromptHistoryResponse,
-  SendDraftResponse,
+  SendQueuedMessageResponse,
   ThreadTimelineResponse,
 } from "@bb/server-contract";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
@@ -19,8 +19,8 @@ import {
 } from "../queries/query-keys";
 import {
   useCreateThread,
-  useCreateThreadDraft,
-  useSendThreadDraft,
+  useCreateThreadQueuedMessage,
+  useSendThreadQueuedMessage,
   useSendThreadMessage,
   useStopThread,
 } from "./thread-runtime-mutations";
@@ -28,8 +28,8 @@ import {
 vi.mock("@/lib/api", () => ({
   HttpError: class HttpError extends Error {},
   createThread: vi.fn(),
-  createThreadDraft: vi.fn(),
-  sendThreadDraft: vi.fn(),
+  createThreadQueuedMessage: vi.fn(),
+  sendThreadQueuedMessage: vi.fn(),
   sendThreadMessage: vi.fn(),
   stopThread: vi.fn(),
 }));
@@ -49,7 +49,7 @@ const queuedMessage = {
   serviceTier: "default",
   createdAt: 1,
   updatedAt: 1,
-} satisfies SendDraftResponse["queuedMessage"];
+} satisfies SendQueuedMessageResponse["queuedMessage"];
 
 const createdThread = {
   id: "thread-created",
@@ -677,10 +677,12 @@ describe("thread runtime mutations", () => {
     ).toBeNull();
   });
 
-  it("adds queued follow-up history immediately after draft creation succeeds", async () => {
-    vi.mocked(api.createThreadDraft).mockResolvedValue(queuedMessage);
+  it("adds queued message history immediately after queued message creation succeeds", async () => {
+    vi.mocked(api.createThreadQueuedMessage).mockResolvedValue(queuedMessage);
     const { queryClient, wrapper } = createQueryClientTestHarness();
-    const { result } = renderHook(() => useCreateThreadDraft(), { wrapper });
+    const { result } = renderHook(() => useCreateThreadQueuedMessage(), {
+      wrapper,
+    });
 
     await act(async () => {
       await result.current.mutateAsync({
@@ -695,7 +697,7 @@ describe("thread runtime mutations", () => {
       ),
     ).toEqual([
       {
-        id: "draft:queued-1",
+        id: "queued-message:queued-1",
         createdAt: 1,
         input: [{ type: "text", text: "Continue" }],
       },

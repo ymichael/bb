@@ -4,7 +4,7 @@ import {
   automations,
   createConnection,
   createAutomationId,
-  createDraftId,
+  createQueuedThreadMessageId,
   createEnvironmentId,
   createEnvironmentProvisioningId,
   createEventId,
@@ -181,7 +181,7 @@ describe("db rebuild schema", () => {
       .run();
     db.insert(queuedThreadMessages)
       .values({
-        id: createDraftId(),
+        id: createQueuedThreadMessageId(),
         threadId,
         content: "[]",
         model: "gpt-5",
@@ -711,7 +711,7 @@ describe("db rebuild schema", () => {
     closeConnection(db);
   });
 
-  it("cascades thread deletion to events, prompt history, and queued drafts", () => {
+  it("cascades thread deletion to events, prompt history, and queued messages", () => {
     const db = createConnection(":memory:");
     migrate(db);
 
@@ -741,7 +741,7 @@ describe("db rebuild schema", () => {
       .run();
     db.insert(queuedThreadMessages)
       .values({
-        id: createDraftId(),
+        id: createQueuedThreadMessageId(),
         threadId,
         content: "[]",
         model: "gpt-5",
@@ -853,7 +853,7 @@ describe("db rebuild schema", () => {
     expect(createManagerThreadNudgeId()).toMatch(/^mnge_/u);
     expect(createEventId()).toMatch(/^evt_/u);
     expect(createPromptHistoryEntryId()).toMatch(/^phist_/u);
-    expect(createDraftId()).toMatch(/^draft_/u);
+    expect(createQueuedThreadMessageId()).toMatch(/^qmsg_/u);
     expect(createHostDaemonSessionId()).toMatch(/^hses_/u);
     expect(createHostDaemonCommandId()).toMatch(/^hcmd_/u);
   });

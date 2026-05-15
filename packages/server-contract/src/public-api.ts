@@ -19,7 +19,7 @@ import type {
   PathProjectAutomationId,
   PathProjectId,
   PathProviderId,
-  PathThreadAndDraft,
+  PathThreadAndQueuedMessage,
 } from "./common.js";
 import type {
   ArchiveThreadRequest,
@@ -31,7 +31,7 @@ import type {
   CreateAutomationRequest,
   CreateHostJoinRequest,
   CreateHostJoinResponse,
-  CreateDraftRequest,
+  CreateQueuedMessageRequest,
   CreateManagerThreadRequest,
   CreateProjectRequest,
   CreateProjectSourceRequest,
@@ -59,13 +59,13 @@ import type {
   PromptHistoryResponse,
   ProjectResponse,
   ProjectWithThreadsResponse,
-  SendDraftRequest,
-  SendDraftResponse,
+  SendQueuedMessageRequest,
+  SendQueuedMessageResponse,
   SendMessageRequest,
   ResolvePendingInteractionRequest,
   ThreadAssignedChildSummaryResponse,
   ThreadComposerBootstrapResponse,
-  ThreadDraftListResponse,
+  ThreadQueuedMessageListResponse,
   GithubRepoInfo,
   GithubReposQuery,
   SandboxEnvVar,
@@ -373,7 +373,7 @@ export type PublicApiSchema = {
      * Send a message to a thread.
      * Idle thread → starts a new turn. Active thread with mode=steer → steers the current turn.
      * senderThreadId marks immediate agent-to-agent CLI messages so the server can add reply guidance.
-     * Draft routes intentionally omit it because drafts are stored queued messages,
+     * Queued-message routes intentionally omit it because they are stored queued messages,
      * not immediate sends from a live sender thread.
      */
     $post: Endpoint<PathId & { json: SendMessageRequest }, { ok: true }>;
@@ -382,20 +382,20 @@ export type PublicApiSchema = {
     /** Load initial composer state and prime the canonical composer query caches. */
     $get: Endpoint<PathId, ThreadComposerBootstrapResponse>;
   };
-  "/threads/:id/drafts": {
-    $get: Endpoint<PathId, ThreadDraftListResponse>;
-    /** Create a queued draft. Use /threads/:id/send for immediate agent-to-agent messages. */
+  "/threads/:id/queued-messages": {
+    $get: Endpoint<PathId, ThreadQueuedMessageListResponse>;
+    /** Create a queued message. Use /threads/:id/send for immediate agent-to-agent messages. */
     $post: Endpoint<
-      PathId & { json: CreateDraftRequest },
+      PathId & { json: CreateQueuedMessageRequest },
       ThreadQueuedMessage,
       201
     >;
   };
-  "/threads/:id/drafts/:draftId/send": {
-    /** Send a previously created queued draft in the requested mode, then delete the draft. */
+  "/threads/:id/queued-messages/:queuedMessageId/send": {
+    /** Send a previously created queued message in the requested mode, then delete the queued message. */
     $post: Endpoint<
-      PathThreadAndDraft & { json: SendDraftRequest },
-      SendDraftResponse
+      PathThreadAndQueuedMessage & { json: SendQueuedMessageRequest },
+      SendQueuedMessageResponse
     >;
   };
   "/threads/:id/prompt-history": {
@@ -404,8 +404,8 @@ export type PublicApiSchema = {
       PromptHistoryResponse
     >;
   };
-  "/threads/:id/drafts/:draftId": {
-    $delete: Endpoint<PathThreadAndDraft, { ok: true }>;
+  "/threads/:id/queued-messages/:queuedMessageId": {
+    $delete: Endpoint<PathThreadAndQueuedMessage, { ok: true }>;
   };
   "/threads/:id/stop": {
     $post: Endpoint<PathId, { ok: true }>;

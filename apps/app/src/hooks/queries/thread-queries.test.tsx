@@ -15,8 +15,8 @@ import {
   useThreadComposerBootstrap,
   useThreadDetailBootstrap,
   useThreadDefaultExecutionOptions,
-  useThreadDrafts,
   useThreadHostFilePreview,
+  useThreadQueuedMessages,
   useThreadPendingInteractions,
   useThreadPromptHistory,
 } from "./thread-queries";
@@ -24,8 +24,8 @@ import {
   hostsQueryKey,
   systemExecutionOptionsQueryKey,
   threadDefaultExecutionOptionsQueryKey,
-  threadDraftsQueryKey,
   threadHostFilePreviewQueryKey,
+  threadQueuedMessagesQueryKey,
   threadPendingInteractionsQueryKey,
   threadPromptHistoryQueryKey,
   threadQueryKey,
@@ -242,10 +242,10 @@ describe("thread query bootstraps", () => {
       serviceTier: "default",
       source: "client/turn/requested",
     };
-    const drafts = [
+    const queuedMessages = [
       {
-        id: "draft-1",
-        content: [{ type: "text", text: "queued follow-up" }],
+        id: "qmsg-1",
+        content: [{ type: "text", text: "queued message" }],
         createdAt: 1,
         model: "gpt-5.5",
         permissionMode: "workspace-write",
@@ -303,7 +303,7 @@ describe("thread query bootstraps", () => {
           bootstrapRequestCount += 1;
           return jsonResponse({
             defaultExecutionOptions,
-            drafts,
+            queuedMessages,
             executionOptions,
             pendingInteractions: [],
             promptHistory,
@@ -318,10 +318,10 @@ describe("thread query bootstraps", () => {
         },
       },
       {
-        pathname: "/api/v1/threads/thread-1/drafts",
+        pathname: "/api/v1/threads/thread-1/queued-messages",
         handler: () => {
           fallbackRequestCount += 1;
-          return jsonResponse(drafts);
+          return jsonResponse(queuedMessages);
         },
       },
       {
@@ -367,7 +367,7 @@ describe("thread query bootstraps", () => {
           refetchOnMount: bootstrap.isSuccess ? false : "always",
           staleTime: seededStaleTime,
         });
-        const draftList = useThreadDrafts("thread-1", {
+        const queuedMessageList = useThreadQueuedMessages("thread-1", {
           enabled: canonicalEnabled,
           refetchOnMount: bootstrap.isSuccess ? false : "always",
           staleTime: seededStaleTime,
@@ -394,7 +394,7 @@ describe("thread query bootstraps", () => {
           bootstrap,
           creationOptions,
           defaultExecution,
-          draftList,
+          queuedMessageList,
           history,
           interactions,
         };
@@ -405,7 +405,7 @@ describe("thread query bootstraps", () => {
     await waitFor(() => {
       expect(result.current.bootstrap.status).toBe("success");
       expect(result.current.defaultExecution.data?.model).toBe("gpt-5.5");
-      expect(result.current.draftList.data).toEqual(drafts);
+      expect(result.current.queuedMessageList.data).toEqual(queuedMessages);
       expect(result.current.creationOptions.selectedProviderId).toBe("codex");
       expect(result.current.creationOptions.modelOptions).toEqual([
         {
@@ -421,9 +421,9 @@ describe("thread query bootstraps", () => {
         threadDefaultExecutionOptionsQueryKey("thread-1"),
       ),
     ).toEqual(defaultExecutionOptions);
-    expect(queryClient.getQueryData(threadDraftsQueryKey("thread-1"))).toEqual(
-      drafts,
-    );
+    expect(
+      queryClient.getQueryData(threadQueuedMessagesQueryKey("thread-1")),
+    ).toEqual(queuedMessages);
     expect(
       queryClient.getQueryData(threadPromptHistoryQueryKey("thread-1")),
     ).toEqual(promptHistory);

@@ -1,6 +1,6 @@
 import {
   createEnvironment,
-  createDraft,
+  createQueuedThreadMessage,
   deriveStoredEventItemFields,
   getLatestThreadSequence,
   hasStoredTurnStarted,
@@ -168,7 +168,7 @@ export function seedThread(
   });
 }
 
-export function seedDraft(
+export function seedQueuedMessage(
   deps: Pick<AppDeps, "db" | "hub">,
   args: {
     content: PromptInput[];
@@ -179,7 +179,7 @@ export function seedDraft(
     serviceTier?: string;
   },
 ) {
-  return createDraft(deps.db, deps.hub, {
+  return createQueuedThreadMessage(deps.db, deps.hub, {
     threadId: args.threadId,
     content: args.content,
     model: args.model ?? "gpt-5",

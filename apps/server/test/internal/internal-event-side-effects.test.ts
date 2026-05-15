@@ -4,11 +4,11 @@ import {
   createAutomation,
   deleteAutomation,
   events,
-  getDraft,
+  getQueuedThreadMessage,
   getEnvironment,
   getThread,
   hostDaemonCommands,
-  listDrafts,
+  listQueuedThreadMessages,
   listManagerThreadNudgesByThread,
   markThreadDeleted,
   markThreadStopRequested,
@@ -32,7 +32,7 @@ import {
   createScheduleTrigger,
 } from "../helpers/schedules.js";
 import {
-  seedDraft,
+  seedQueuedMessage,
   seedEnvironment,
   seedEvent,
   seedHostSession,
@@ -43,7 +43,7 @@ import {
 } from "../helpers/seed.js";
 import { createCommandApprovalPayload } from "../helpers/pending-interactions.js";
 import { queueManagerSystemMessage } from "../../src/services/threads/manager-system-messages.js";
-import { sendNextQueuedDraftIfPresent } from "../../src/services/threads/queued-drafts.js";
+import { sendNextQueuedMessageIfPresent } from "../../src/services/threads/queued-messages.js";
 import { createTestAppHarness } from "../helpers/test-app.js";
 
 describe("internal event side effects", () => {
@@ -126,7 +126,7 @@ describe("internal event side effects", () => {
     }
   });
 
-  it("auto-sends the next queued draft when a turn completes", async () => {
+  it("auto-sends the next queued message when a turn completes", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host, session } = seedHostSession(harness.deps, {
@@ -138,7 +138,7 @@ describe("internal event side effects", () => {
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
-        path: "/tmp/queued-draft-auto-send",
+        path: "/tmp/queued-message-auto-send",
       });
       const thread = seedThread(harness.deps, {
         projectId: project.id,
@@ -163,7 +163,7 @@ describe("internal event side effects", () => {
         type: "turn/started",
         data: {},
       });
-      const draft = seedDraft(harness.deps, {
+      const queuedMessage = seedQueuedMessage(harness.deps, {
         threadId: thread.id,
         content: [{ type: "text", text: "Queued follow-up" }],
         model: "gpt-5",
@@ -206,7 +206,7 @@ describe("internal event side effects", () => {
           providerThreadId: "provider-auto-send",
         },
       });
-      expect(getDraft(harness.db, draft.id)).toBeNull();
+      expect(getQueuedThreadMessage(harness.db, queuedMessage.id)).toBeNull();
       expect(
         harness.db.select().from(threads).where(eq(threads.id, thread.id)).get()
           ?.status,
@@ -216,11 +216,11 @@ describe("internal event side effects", () => {
     }
   });
 
-  it("responds before manager queued-draft auto-send waits on preferences", async () => {
+  it("responds before manager queued-message auto-send waits on preferences", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host, session } = seedHostSession(harness.deps, {
-        id: "host-event-manager-draft-auto-send",
+        id: "host-event-manager-queued-message-auto-send",
       });
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -228,7 +228,7 @@ describe("internal event side effects", () => {
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
-        path: "/tmp/manager-queued-draft-auto-send",
+        path: "/tmp/manager-queued-message-auto-send",
       });
       const thread = seedThread(harness.deps, {
         projectId: project.id,
@@ -239,11 +239,11 @@ describe("internal event side effects", () => {
       seedThreadRuntimeState(harness.deps, {
         threadId: thread.id,
         environmentId: environment.id,
-        providerThreadId: "provider-manager-draft-auto-send",
+        providerThreadId: "provider-manager-queued-message-auto-send",
         inputText: "Initial manager task",
         model: "gpt-5.4",
       });
-      seedDraft(harness.deps, {
+      seedQueuedMessage(harness.deps, {
         threadId: thread.id,
         content: [{ type: "text", text: "Queued manager follow-up" }],
         model: "gpt-5",
@@ -252,8 +252,8 @@ describe("internal event side effects", () => {
       seedTurnStarted(harness.deps, {
         threadId: thread.id,
         environmentId: environment.id,
-        turnId: "turn-manager-draft-auto-send",
-        providerThreadId: "provider-manager-draft-auto-send",
+        turnId: "turn-manager-queued-message-auto-send",
+        providerThreadId: "provider-manager-queued-message-auto-send",
       });
 
       const responsePromise = harness.app.request("/internal/session/events", {
@@ -267,8 +267,8 @@ describe("internal event side effects", () => {
               event: {
                 type: "turn/completed",
                 threadId: thread.id,
-                providerThreadId: "provider-manager-draft-auto-send",
-                scope: turnScope("turn-manager-draft-auto-send"),
+                providerThreadId: "provider-manager-queued-message-auto-send",
+                scope: turnScope("turn-manager-queued-message-auto-send"),
                 status: "completed",
               },
             }),
@@ -314,7 +314,7 @@ describe("internal event side effects", () => {
     }
   });
 
-  it("auto-sends the next queued draft even when a pending interaction exists", async () => {
+  it("auto-sends the next queued message even when a pending interaction exists", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host, session } = seedHostSession(harness.deps, {
@@ -326,7 +326,7 @@ describe("internal event side effects", () => {
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
-        path: "/tmp/queued-draft-auto-send-pending-interaction",
+        path: "/tmp/queued-message-auto-send-pending-interaction",
       });
       const thread = seedThread(harness.deps, {
         projectId: project.id,
@@ -351,7 +351,7 @@ describe("internal event side effects", () => {
         type: "turn/started",
         data: {},
       });
-      seedDraft(harness.deps, {
+      seedQueuedMessage(harness.deps, {
         threadId: thread.id,
         content: [
           { type: "text", text: "Queued follow-up with pending interaction" },
@@ -383,7 +383,7 @@ describe("internal event side effects", () => {
       }
 
       await expect(
-        sendNextQueuedDraftIfPresent(harness.deps, {
+        sendNextQueuedMessageIfPresent(harness.deps, {
           threadId: thread.id,
         }),
       ).resolves.toBe(true);
@@ -466,7 +466,7 @@ describe("internal event side effects", () => {
       const childEnvironment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
-        path: "/tmp/queued-draft-manager-notify-failure",
+        path: "/tmp/queued-message-manager-notify-failure",
       });
       const managerEnvironment = seedEnvironment(harness.deps, {
         hostId: host.id,
@@ -504,7 +504,7 @@ describe("internal event side effects", () => {
         type: "turn/started",
         data: {},
       });
-      const draft = seedDraft(harness.deps, {
+      const queuedMessage = seedQueuedMessage(harness.deps, {
         threadId: childThread.id,
         content: [
           {
@@ -553,7 +553,7 @@ describe("internal event side effects", () => {
           providerThreadId: "provider-manager-notify-failure",
         },
       });
-      expect(getDraft(harness.db, draft.id)).toBeNull();
+      expect(getQueuedThreadMessage(harness.db, queuedMessage.id)).toBeNull();
       expect(getThread(harness.db, childThread.id)?.status).toBe("active");
       expect(loggerError).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -1617,7 +1617,7 @@ describe("internal event side effects", () => {
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
-        path: "/tmp/queued-draft-dedupe",
+        path: "/tmp/queued-message-dedupe",
       });
       const thread = seedThread(harness.deps, {
         projectId: project.id,
@@ -1642,13 +1642,13 @@ describe("internal event side effects", () => {
         type: "turn/started",
         data: {},
       });
-      seedDraft(harness.deps, {
+      seedQueuedMessage(harness.deps, {
         threadId: thread.id,
         content: [{ type: "text", text: "Queued follow-up one" }],
         model: "gpt-5",
         serviceTier: "default",
       });
-      seedDraft(harness.deps, {
+      seedQueuedMessage(harness.deps, {
         threadId: thread.id,
         content: [{ type: "text", text: "Queued follow-up two" }],
         model: "gpt-5",
@@ -1701,7 +1701,7 @@ describe("internal event side effects", () => {
       expect(harness.db.select().from(hostDaemonCommands).all()).toHaveLength(
         1,
       );
-      expect(listDrafts(harness.db, thread.id)).toHaveLength(1);
+      expect(listQueuedThreadMessages(harness.db, thread.id)).toHaveLength(1);
       expect(
         harness.db.select().from(threads).where(eq(threads.id, thread.id)).get()
           ?.status,
@@ -1723,7 +1723,7 @@ describe("internal event side effects", () => {
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
-        path: "/tmp/queued-draft-mixed-batch",
+        path: "/tmp/queued-message-mixed-batch",
       });
       const threadA = seedThread(harness.deps, {
         projectId: project.id,
@@ -1757,19 +1757,19 @@ describe("internal event side effects", () => {
         });
       }
 
-      seedDraft(harness.deps, {
+      seedQueuedMessage(harness.deps, {
         threadId: threadA.id,
         content: [{ type: "text", text: "Queued follow-up one" }],
         model: "gpt-5",
         serviceTier: "default",
       });
-      seedDraft(harness.deps, {
+      seedQueuedMessage(harness.deps, {
         threadId: threadA.id,
         content: [{ type: "text", text: "Queued follow-up two" }],
         model: "gpt-5",
         serviceTier: "default",
       });
-      seedDraft(harness.deps, {
+      seedQueuedMessage(harness.deps, {
         threadId: threadB.id,
         content: [{ type: "text", text: "Queued follow-up three" }],
         model: "gpt-5",
@@ -1847,8 +1847,8 @@ describe("internal event side effects", () => {
           command.type === "turn.submit" && command.threadId === threadB.id,
       );
 
-      expect(listDrafts(harness.db, threadA.id)).toHaveLength(1);
-      expect(listDrafts(harness.db, threadB.id)).toHaveLength(0);
+      expect(listQueuedThreadMessages(harness.db, threadA.id)).toHaveLength(1);
+      expect(listQueuedThreadMessages(harness.db, threadB.id)).toHaveLength(0);
       expect(harness.db.select().from(hostDaemonCommands).all()).toHaveLength(
         2,
       );

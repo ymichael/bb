@@ -2,14 +2,14 @@ import { eq } from "drizzle-orm";
 import {
   createProject,
   environments,
-  getDraft,
+  getQueuedThreadMessage,
   projectSources,
   threads,
 } from "@bb/db";
 import { describe, expect, it } from "vitest";
 import { readJson } from "../helpers/json.js";
 import {
-  seedDraft,
+  seedQueuedMessage,
   seedEnvironment,
   seedHostSession,
   seedProjectWithSource,
@@ -160,11 +160,11 @@ describe("public authorization regressions", () => {
     }
   });
 
-  it("does not delete a draft through another thread route", async () => {
+  it("does not delete a queued message through another thread route", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps, {
-        id: "host-draft-delete",
+        id: "host-queued-message-delete",
       });
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -181,17 +181,17 @@ describe("public authorization regressions", () => {
         projectId: project.id,
         environmentId: environment.id,
       });
-      seedDraft(harness.deps, {
+      seedQueuedMessage(harness.deps, {
         threadId: threadA.id,
-        content: [{ type: "text", text: "Draft A" }],
+        content: [{ type: "text", text: "Queued message A" }],
       });
-      const draftB = seedDraft(harness.deps, {
+      const queuedMessageB = seedQueuedMessage(harness.deps, {
         threadId: threadB.id,
-        content: [{ type: "text", text: "Draft B" }],
+        content: [{ type: "text", text: "Queued message B" }],
       });
 
       const response = await harness.app.request(
-        `/api/v1/threads/${threadA.id}/drafts/${draftB.id}`,
+        `/api/v1/threads/${threadA.id}/queued-messages/${queuedMessageB.id}`,
         {
           method: "DELETE",
         },
@@ -201,8 +201,10 @@ describe("public authorization regressions", () => {
       await expect(readJson(response)).resolves.toMatchObject({
         code: "invalid_request",
       });
-      expect(getDraft(harness.db, draftB.id)).toMatchObject({
-        id: draftB.id,
+      expect(
+        getQueuedThreadMessage(harness.db, queuedMessageB.id),
+      ).toMatchObject({
+        id: queuedMessageB.id,
         threadId: threadB.id,
       });
     } finally {

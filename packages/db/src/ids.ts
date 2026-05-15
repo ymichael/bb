@@ -72,12 +72,12 @@ export function createPromptHistoryEntryId(): string {
   return createId("phist");
 }
 
-export function createDraftId(): string {
-  return createId("draft");
+export function createQueuedThreadMessageId(): string {
+  return createId("qmsg");
 }
 
-export function createDraftClaimToken(): string {
-  return createId("dclaim");
+export function createQueuedThreadMessageClaimToken(): string {
+  return createId("qclaim");
 }
 
 export function createPendingInteractionId(): string {

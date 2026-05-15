@@ -11,7 +11,7 @@ import {
   createHostJoinResponseSchema,
   createLocalPersistentHostJoinRequest,
   createPersistentHostJoinRequest,
-  createDraftRequestSchema,
+  createQueuedMessageRequestSchema,
   createManagerThreadRequestSchema,
   createProjectSourceRequestSchema,
   createPublicApiClient,
@@ -20,7 +20,7 @@ import {
   baseBranchSpecSchema,
   gitBranchNameSchema,
   resolvePendingInteractionRequestSchema,
-  sendDraftRequestSchema,
+  sendQueuedMessageRequestSchema,
   sendMessageRequestSchema,
   threadListResponseSchema,
   threadPendingInteractionsResponseSchema,
@@ -53,14 +53,14 @@ const INTENTIONAL_OPTIONAL_SERVER_FIELDS: Record<string, string> = {
     "Host join initiation may omit hostId when the server should generate a new persistent host id.",
   "createHostJoinRequestSchema.hostType":
     "Host join initiation may omit hostType and let the server choose the default persistent host policy.",
-  "createDraftRequestSchema.model":
-    "Queued drafts may inherit the thread's default model.",
-  "createDraftRequestSchema.reasoningLevel":
-    "Queued drafts may inherit the thread's default reasoning level.",
-  "createDraftRequestSchema.permissionMode":
-    "Queued drafts may inherit the thread's default permission mode.",
-  "createDraftRequestSchema.serviceTier":
-    "Queued drafts may inherit the thread's default service tier.",
+  "createQueuedMessageRequestSchema.model":
+    "Queued messages may inherit the thread's default model.",
+  "createQueuedMessageRequestSchema.reasoningLevel":
+    "Queued messages may inherit the thread's default reasoning level.",
+  "createQueuedMessageRequestSchema.permissionMode":
+    "Queued messages may inherit the thread's default permission mode.",
+  "createQueuedMessageRequestSchema.serviceTier":
+    "Queued messages may inherit the thread's default service tier.",
   "updateAutomationRequestSchema.action":
     "Automation PATCH requests omit action when leaving it unchanged.",
   "updateAutomationRequestSchema.action.threadRequest.environment.workspace.branch":
@@ -128,7 +128,7 @@ const INTENTIONAL_OPTIONAL_SERVER_FIELDS: Record<string, string> = {
   "sendMessageRequestSchema.reasoningLevel":
     "Follow-up sends may inherit the thread's default reasoning level.",
   "sendMessageRequestSchema.senderThreadId":
-    "Immediate agent-to-agent CLI sends include the current thread; user-originated sends and queued drafts omit live sender context.",
+    "Immediate agent-to-agent CLI sends include the current thread; user-originated sends and queued messages omit live sender context.",
   "sendMessageRequestSchema.serviceTier":
     "Follow-up sends may inherit the thread's default service tier.",
   "systemExecutionOptionsQuerySchema.environmentId":
@@ -468,10 +468,10 @@ describe("server-contract canonical schemas", () => {
       mode: "auto",
     });
 
-    expect(sendDraftRequestSchema.parse({ mode: "auto" })).toEqual({
+    expect(sendQueuedMessageRequestSchema.parse({ mode: "auto" })).toEqual({
       mode: "auto",
     });
-    expect(() => sendDraftRequestSchema.parse({})).toThrow();
+    expect(() => sendQueuedMessageRequestSchema.parse({})).toThrow();
 
     expect(
       threadListResponseSchema.parse([
@@ -716,7 +716,7 @@ describe("server-contract canonical schemas", () => {
     });
 
     expect(
-      createDraftRequestSchema.parse({
+      createQueuedMessageRequestSchema.parse({
         input: [{ type: "text", text: "Queue this with inherited defaults" }],
       }),
     ).toMatchObject({
@@ -766,9 +766,10 @@ describe("server-contract clients", () => {
         .pathname,
     ).toBe("/api/v1/threads/thr_123/send");
     expect(
-      publicClient.threads[":id"].drafts.$url({ param: { id: "thr_123" } })
-        .pathname,
-    ).toBe("/api/v1/threads/thr_123/drafts");
+      publicClient.threads[":id"]["queued-messages"].$url({
+        param: { id: "thr_123" },
+      }).pathname,
+    ).toBe("/api/v1/threads/thr_123/queued-messages");
     expect(
       publicClient.threads[":id"]["composer-bootstrap"].$url({
         param: { id: "thr_123" },
@@ -937,7 +938,8 @@ describe("server-contract clients", () => {
     const optionalFieldPaths = collectOptionalFieldPaths({
       apiErrorSchema: contract.apiErrorSchema,
       commitActionResponseSchema: contract.commitActionResponseSchema,
-      createDraftRequestSchema: contract.createDraftRequestSchema,
+      createQueuedMessageRequestSchema:
+        contract.createQueuedMessageRequestSchema,
       createAutomationRequestSchema: contract.createAutomationRequestSchema,
       createHostJoinRequestSchema: contract.createHostJoinRequestSchema,
       createManagerThreadRequestSchema:
@@ -947,8 +949,8 @@ describe("server-contract clients", () => {
       environmentStatusResponseSchema: contract.environmentStatusResponseSchema,
       threadStorageFilesQuerySchema: contract.threadStorageFilesQuerySchema,
       projectFilesQuerySchema: contract.projectFilesQuerySchema,
-      sendDraftRequestSchema: contract.sendDraftRequestSchema,
-      sendDraftResponseSchema: contract.sendDraftResponseSchema,
+      sendQueuedMessageRequestSchema: contract.sendQueuedMessageRequestSchema,
+      sendQueuedMessageResponseSchema: contract.sendQueuedMessageResponseSchema,
       sendMessageRequestSchema: contract.sendMessageRequestSchema,
       squashMergeActionResponseSchema: contract.squashMergeActionResponseSchema,
       systemExecutionOptionsQuerySchema:

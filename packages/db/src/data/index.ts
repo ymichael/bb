@@ -392,31 +392,31 @@ export type {
 } from "./sessions.js";
 
 export {
-  claimDraft,
-  claimNextDraft,
-  createDraft,
-  deleteClaimedDraft,
-  deleteClaimedDraftInTransaction,
-  deleteDraft,
-  deleteDraftInTransaction,
-  getDraft,
-  listIdleThreadsWithQueuedDrafts,
-  listDrafts,
-  releaseDraftClaim,
-  releaseStaleDraftClaims,
-} from "./drafts.js";
+  claimQueuedThreadMessage,
+  claimNextQueuedThreadMessage,
+  createQueuedThreadMessage,
+  deleteClaimedQueuedThreadMessage,
+  deleteClaimedQueuedThreadMessageInTransaction,
+  deleteQueuedThreadMessage,
+  deleteQueuedThreadMessageInTransaction,
+  getQueuedThreadMessage,
+  listIdleThreadsWithQueuedMessages,
+  listQueuedThreadMessages,
+  releaseQueuedMessageClaim,
+  releaseStaleQueuedMessageClaims,
+} from "./queued-thread-messages.js";
 export type {
-  ClaimedDraftRow,
-  ClaimedDraftMutationArgs,
-  CreateDraftInput,
-  DeleteClaimedDraftArgs,
-  DeleteClaimedDraftInTransactionArgs,
-  DeleteDraftInTransactionArgs,
-  DraftRow,
-  QueuedDraftThreadRow,
-  ReleaseDraftClaimArgs,
-  ReleaseStaleDraftClaimsArgs,
-} from "./drafts.js";
+  ClaimedQueuedThreadMessageRow,
+  ClaimedQueuedThreadMessageMutationArgs,
+  CreateQueuedThreadMessageInput,
+  DeleteClaimedQueuedThreadMessageArgs,
+  DeleteClaimedQueuedThreadMessageInTransactionArgs,
+  DeleteQueuedThreadMessageInTransactionArgs,
+  QueuedThreadMessageRow,
+  QueuedMessageThreadRow,
+  ReleaseQueuedMessageClaimArgs,
+  ReleaseStaleQueuedMessageClaimsArgs,
+} from "./queued-thread-messages.js";
 
 export {
   COMPLETED_COMMAND_PAYLOAD_RETENTION_MS,

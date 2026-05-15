@@ -351,28 +351,34 @@ export const sendMessageRequestSchema = z.object({
 });
 export type SendMessageRequest = z.infer<typeof sendMessageRequestSchema>;
 
-export const sendDraftModeSchema = z.enum(["auto", "steer"]);
-export type SendDraftMode = z.infer<typeof sendDraftModeSchema>;
+export const sendQueuedMessageModeSchema = z.enum(["auto", "steer"]);
+export type SendQueuedMessageMode = z.infer<typeof sendQueuedMessageModeSchema>;
 
-export const createDraftRequestSchema = z.object({
+export const createQueuedMessageRequestSchema = z.object({
   input: z.array(promptInputSchema).min(1),
   model: z.string().optional(),
   serviceTier: serviceTierSchema.optional(),
   reasoningLevel: reasoningLevelSchema.optional(),
   permissionMode: permissionModeSchema.optional(),
 });
-export type CreateDraftRequest = z.infer<typeof createDraftRequestSchema>;
+export type CreateQueuedMessageRequest = z.infer<
+  typeof createQueuedMessageRequestSchema
+>;
 
-export const sendDraftRequestSchema = z.object({
-  mode: sendDraftModeSchema,
+export const sendQueuedMessageRequestSchema = z.object({
+  mode: sendQueuedMessageModeSchema,
 });
-export type SendDraftRequest = z.infer<typeof sendDraftRequestSchema>;
+export type SendQueuedMessageRequest = z.infer<
+  typeof sendQueuedMessageRequestSchema
+>;
 
-export const sendDraftResponseSchema = z.object({
+export const sendQueuedMessageResponseSchema = z.object({
   ok: z.literal(true),
   queuedMessage: threadQueuedMessageSchema,
 });
-export type SendDraftResponse = z.infer<typeof sendDraftResponseSchema>;
+export type SendQueuedMessageResponse = z.infer<
+  typeof sendQueuedMessageResponseSchema
+>;
 
 export const threadListResponseSchema = z.array(threadListEntrySchema);
 export type ThreadListResponse = z.infer<typeof threadListResponseSchema>;
@@ -420,9 +426,11 @@ export type ResolvePendingInteractionRequest = z.infer<
   typeof resolvePendingInteractionRequestSchema
 >;
 
-export const threadDraftListResponseSchema = z.array(threadQueuedMessageSchema);
-export type ThreadDraftListResponse = z.infer<
-  typeof threadDraftListResponseSchema
+export const threadQueuedMessageListResponseSchema = z.array(
+  threadQueuedMessageSchema,
+);
+export type ThreadQueuedMessageListResponse = z.infer<
+  typeof threadQueuedMessageListResponseSchema
 >;
 
 export const threadAssignedChildSummaryResponseSchema = z.object({
@@ -688,7 +696,7 @@ export type SystemExecutionOptionsResponse = z.infer<
 
 export const threadComposerBootstrapResponseSchema = z.object({
   defaultExecutionOptions: resolvedThreadExecutionOptionsSchema.nullable(),
-  drafts: threadDraftListResponseSchema,
+  queuedMessages: threadQueuedMessageListResponseSchema,
   executionOptions: systemExecutionOptionsResponseSchema,
   pendingInteractions: threadPendingInteractionsResponseSchema,
   promptHistory: promptHistoryResponseSchema,
