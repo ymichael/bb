@@ -572,10 +572,17 @@ export function ThreadDetailView() {
     (link: ThreadTimelineLocalFileLink) => {
       const resolution = resolveThreadLocalFileLink({
         link,
+        threadId: isManagerThread ? threadId : null,
+        threadStorageRootPath: isManagerThread ? threadStorageRootPath : null,
         workspaceRootPath: localWorkspaceRootPath,
       });
       if (resolution.kind === "app-route") {
         return false;
+      }
+      if (resolution.kind === "open-thread-storage-path") {
+        openStorageFile(resolution.request.relativePath);
+        openSecondaryPanel("thread-info");
+        return true;
       }
       if (resolution.kind === "error") {
         toast.error("Failed to open file locally", {
@@ -592,7 +599,15 @@ export function ThreadDetailView() {
       });
       return true;
     },
-    [openWorkspaceFile, localWorkspaceRootPath],
+    [
+      isManagerThread,
+      localWorkspaceRootPath,
+      openSecondaryPanel,
+      openStorageFile,
+      openWorkspaceFile,
+      threadId,
+      threadStorageRootPath,
+    ],
   );
   const handleTimelineTitleAction = useCallback<TimelineTitleActionResolver>(
     (action) => {

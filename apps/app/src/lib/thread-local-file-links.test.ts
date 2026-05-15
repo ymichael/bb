@@ -43,7 +43,7 @@ describe("resolveThreadLocalFileLink", () => {
       }),
     ).toEqual({
       description:
-        "Thread file links can only open files inside the current workspace.",
+        "Thread file links can only open files inside the current workspace or thread storage.",
       kind: "error",
     });
   });
@@ -79,7 +79,7 @@ describe("resolveThreadLocalFileLink", () => {
       }),
     ).toEqual({
       description:
-        "Thread file links can only open files inside the current workspace.",
+        "Thread file links can only open files inside the current workspace or thread storage.",
       kind: "error",
     });
   });
@@ -95,7 +95,7 @@ describe("resolveThreadLocalFileLink", () => {
       }),
     ).toEqual({
       description:
-        "Thread file links can only open files inside the current workspace.",
+        "Thread file links can only open files inside the current workspace or thread storage.",
       kind: "error",
     });
   });
@@ -117,6 +117,68 @@ describe("resolveThreadLocalFileLink", () => {
         relativePath: "src/file.ts",
         workspaceRootPath: "/projects/my-repo",
       },
+    });
+  });
+
+  it("opens thread storage links relative to the storage root", () => {
+    expect(
+      resolveThreadLocalFileLink({
+        link: {
+          lineNumber: null,
+          path: "/Users/me/.bb/thread-storage/thr-manager/reports/result.md",
+        },
+        threadId: "thr-manager",
+        threadStorageRootPath: "/Users/me/.bb/thread-storage/thr-manager",
+        workspaceRootPath: "/Users/me/project",
+      }),
+    ).toEqual({
+      kind: "open-thread-storage-path",
+      request: {
+        lineNumber: null,
+        path: "/Users/me/.bb/thread-storage/thr-manager/reports/result.md",
+        relativePath: "reports/result.md",
+        rootPath: "/Users/me/.bb/thread-storage/thr-manager",
+      },
+    });
+  });
+
+  it("opens current thread storage links even before the storage root is loaded", () => {
+    expect(
+      resolveThreadLocalFileLink({
+        link: {
+          lineNumber: 8,
+          path: "/Users/me/.bb/thread-storage/thr-manager/notes/status.md",
+        },
+        threadId: "thr-manager",
+        threadStorageRootPath: null,
+        workspaceRootPath: null,
+      }),
+    ).toEqual({
+      kind: "open-thread-storage-path",
+      request: {
+        lineNumber: 8,
+        path: "/Users/me/.bb/thread-storage/thr-manager/notes/status.md",
+        relativePath: "notes/status.md",
+        rootPath: "/Users/me/.bb/thread-storage/thr-manager",
+      },
+    });
+  });
+
+  it("does not treat another thread's storage as current storage", () => {
+    expect(
+      resolveThreadLocalFileLink({
+        link: {
+          lineNumber: null,
+          path: "/Users/me/.bb/thread-storage/thr-other/report.md",
+        },
+        threadId: "thr-manager",
+        threadStorageRootPath: "/Users/me/.bb/thread-storage/thr-manager",
+        workspaceRootPath: "/Users/me/project",
+      }),
+    ).toEqual({
+      description:
+        "Thread file links can only open files inside the current workspace or thread storage.",
+      kind: "error",
     });
   });
 });
