@@ -2,21 +2,24 @@
 import type { ChildProcess } from "node:child_process";
 import { spawn } from "node:child_process";
 import { existsSync, realpathSync } from "node:fs";
-import { access, readFile } from "node:fs/promises";
+import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { parseArgs } from "node:util";
 import { z } from "zod";
 
 const DEFAULT_SERVER_PORT = 38886;
 const DEFAULT_HOST_DAEMON_PORT = 38887;
 const DEFAULT_DATA_DIR_NAME = ".bb";
+const CONFIG_FILE_NAME = "config.json";
 const HOST_AUTH_FILE_NAME = "auth.json";
 const HOST_ID_FILE_NAME = "host-id";
 const HEALTH_CHECK_TIMEOUT_MS = 15_000;
 const HEALTH_CHECK_INTERVAL_MS = 100;
 const START_COMMAND = "start";
 const HOST_DAEMON_COMMAND = "host-daemon";
+const HOST_DAEMON_JOIN_COMMAND = "join";
 
 const hostJoinResponseSchema = z
   .object({
@@ -25,15 +28,30 @@ const hostJoinResponseSchema = z
   })
   .passthrough();
 
-export type HostJoinResponse = z.infer<typeof hostJoinResponseSchema>;
+const managedConfigSchema = z.object({
+  serverUrl: z.string().min(1).optional(),
+});
 
-export interface HostJoinRequestBody {
+export type HostJoinResponse = z.infer<typeof hostJoinResponseSchema>;
+export type ManagedConfig = z.infer<typeof managedConfigSchema>;
+
+export interface PersistentHostJoinRequestBody {
+  hostId?: string;
+  hostType?: "persistent";
+}
+
+export interface LocalHostJoinRequestBody {
   hostId?: string;
   hostType: "persistent";
   joinMode: "local";
 }
 
+export type HostJoinRequestBody =
+  | LocalHostJoinRequestBody
+  | PersistentHostJoinRequestBody;
+
 export interface CreateHostJoinRequestBodyArgs {
+  localJoin: boolean;
   requestedHostId: string | null;
 }
 
@@ -54,8 +72,17 @@ export interface ResolveBbAppStartContextArgs {
   homeDir: string;
 }
 
+export interface ResolveBbAppRuntimeContextArgs {
+  entrypointUrl: string;
+  env: NodeJS.ProcessEnv;
+  homeDir: string;
+  options: LauncherCliOptions;
+  serverUrlMode: "local" | "managed";
+}
+
 export interface BbAppStartContext {
   appDistDir: string;
+  configFile: string;
   daemonBundleDir: string;
   daemonEntry: string;
   daemonLockDir: string;
@@ -91,6 +118,22 @@ export interface HelpCommand {
 export interface InvalidCommand {
   command: string;
   kind: "invalid";
+}
+
+export interface LauncherCliOptions {
+  dataDir?: string;
+  enrollKey?: string;
+  help: boolean;
+  hostDaemonPort?: string;
+  hostId?: string;
+  joinCode?: string;
+  serverPort?: string;
+  serverUrl?: string;
+}
+
+export interface ParsedLauncherArgs {
+  options: LauncherCliOptions;
+  positionals: string[];
 }
 
 interface ManagedSpawnArgs {
@@ -134,7 +177,8 @@ interface WaitForHealthArgs {
   url: string;
 }
 
-interface RequestLocalHostJoinArgs {
+interface RequestHostJoinArgs {
+  localJoin: boolean;
   requestedHostId: string | null;
   serverUrl: string;
 }
@@ -174,6 +218,36 @@ interface ResolveEnrollmentRequirementsArgs {
 interface ResolveHostDaemonServerUrlArgs {
   context: BbAppStartContext;
   env: NodeJS.ProcessEnv;
+}
+
+interface CreateHostDaemonJoinEnvArgs {
+  context: BbAppStartContext;
+  env: NodeJS.ProcessEnv;
+  serverUrl: string;
+}
+
+interface CreateEnvFromOptionsArgs {
+  env: NodeJS.ProcessEnv;
+  options: LauncherCliOptions;
+}
+
+interface ResolveManagedConfigArgs {
+  dataDir: string;
+}
+
+interface WriteManagedConfigArgs {
+  config: ManagedConfig;
+  dataDir: string;
+}
+
+interface ResolveServerUrlArgs {
+  config: ManagedConfig;
+  defaultServerUrl: string;
+  env: NodeJS.ProcessEnv;
+}
+
+interface ResolveHostDaemonCommandResult {
+  kind: "join" | "start";
 }
 
 function color(code: number, value: string): string {
@@ -220,12 +294,98 @@ function formatReadyOutputRow(label: string, value: string): string {
   return `${dim(label.padEnd("daemon".length))} ${value}`;
 }
 
+function createDefaultLauncherOptions(): LauncherCliOptions {
+  return { help: false };
+}
+
 function trimToUndefined(value: string | undefined): string | undefined {
   if (value === undefined) {
     return undefined;
   }
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function readStringOption(
+  value: boolean | string | string[] | undefined,
+): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  return trimToUndefined(value);
+}
+
+function readBooleanOption(
+  value: boolean | string | string[] | undefined,
+): boolean {
+  return value === true;
+}
+
+function chooseServerUrlOption(
+  serverUrl: string | undefined,
+  server: string | undefined,
+): string | undefined {
+  if (serverUrl !== undefined && server !== undefined && serverUrl !== server) {
+    throw new Error("--server-url and --server must match when both are set");
+  }
+  return serverUrl ?? server;
+}
+
+export function parseLauncherArgs(args: string[]): ParsedLauncherArgs {
+  const parsed = parseArgs({
+    allowPositionals: true,
+    args,
+    options: {
+      "data-dir": { type: "string" },
+      "enroll-key": { type: "string" },
+      "host-daemon-port": { type: "string" },
+      "host-id": { type: "string" },
+      "join-code": { type: "string" },
+      "server-port": { type: "string" },
+      "server-url": { type: "string" },
+      help: { short: "h", type: "boolean" },
+      server: { type: "string" },
+    },
+  });
+  const options: LauncherCliOptions = {
+    help: readBooleanOption(parsed.values.help),
+  };
+  const dataDir = readStringOption(parsed.values["data-dir"]);
+  const enrollKey = readStringOption(parsed.values["enroll-key"]);
+  const hostDaemonPort = readStringOption(parsed.values["host-daemon-port"]);
+  const hostId = readStringOption(parsed.values["host-id"]);
+  const joinCode = readStringOption(parsed.values["join-code"]);
+  const serverPort = readStringOption(parsed.values["server-port"]);
+  const serverUrl = chooseServerUrlOption(
+    readStringOption(parsed.values["server-url"]),
+    readStringOption(parsed.values.server),
+  );
+  if (dataDir !== undefined) {
+    options.dataDir = dataDir;
+  }
+  if (enrollKey !== undefined) {
+    options.enrollKey = enrollKey;
+  }
+  if (hostDaemonPort !== undefined) {
+    options.hostDaemonPort = hostDaemonPort;
+  }
+  if (hostId !== undefined) {
+    options.hostId = hostId;
+  }
+  if (joinCode !== undefined) {
+    options.joinCode = joinCode;
+  }
+  if (serverPort !== undefined) {
+    options.serverPort = serverPort;
+  }
+  if (serverUrl !== undefined) {
+    options.serverUrl = serverUrl;
+  }
+
+  return {
+    options,
+    positionals: parsed.positionals,
+  };
 }
 
 function expandHomeDirectory(pathValue: string, homeDir: string): string {
@@ -266,6 +426,83 @@ export function resolvePort(args: ResolvePortArgs): number {
   throw new Error(`${args.name} must be a valid TCP port`);
 }
 
+function createEnvFromOptions(
+  args: CreateEnvFromOptionsArgs,
+): NodeJS.ProcessEnv {
+  const env = { ...args.env };
+  if (args.options.dataDir !== undefined) {
+    env.BB_DATA_DIR = args.options.dataDir;
+  }
+  if (args.options.hostDaemonPort !== undefined) {
+    env.BB_HOST_DAEMON_PORT = args.options.hostDaemonPort;
+  }
+  if (args.options.serverPort !== undefined) {
+    env.BB_SERVER_PORT = args.options.serverPort;
+  }
+  if (args.options.serverUrl !== undefined) {
+    env.BB_SERVER_URL = args.options.serverUrl;
+  }
+  if (args.options.hostId !== undefined) {
+    env.BB_HOST_ID = args.options.hostId;
+  }
+  if (args.options.joinCode !== undefined) {
+    env.BB_HOST_ENROLL_KEY = args.options.joinCode;
+  }
+  if (args.options.enrollKey !== undefined) {
+    env.BB_HOST_ENROLL_KEY = args.options.enrollKey;
+  }
+  return env;
+}
+
+function resolveServerUrl(args: ResolveServerUrlArgs): string {
+  return (
+    trimToUndefined(args.env.BB_SERVER_URL) ??
+    args.config.serverUrl ??
+    args.defaultServerUrl
+  );
+}
+
+async function readManagedConfig(
+  args: ResolveManagedConfigArgs,
+): Promise<ManagedConfig> {
+  try {
+    const rawConfig = await readFile(
+      join(args.dataDir, CONFIG_FILE_NAME),
+      "utf8",
+    );
+    return managedConfigSchema.parse(JSON.parse(rawConfig));
+  } catch (error) {
+    if (error instanceof SyntaxError) {
+      throw new Error(
+        `Invalid bb-app config JSON at ${join(args.dataDir, CONFIG_FILE_NAME)}`,
+      );
+    }
+    if (error instanceof z.ZodError) {
+      throw new Error(
+        `Invalid bb-app config at ${join(args.dataDir, CONFIG_FILE_NAME)}: ${error.message}`,
+      );
+    }
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+      return {};
+    }
+    throw error;
+  }
+}
+
+async function writeManagedConfig(args: WriteManagedConfigArgs): Promise<void> {
+  await mkdir(args.dataDir, { recursive: true });
+  const existingConfig = await readManagedConfig({ dataDir: args.dataDir });
+  const nextConfig: ManagedConfig = {
+    ...existingConfig,
+    ...args.config,
+  };
+  await writeFile(
+    join(args.dataDir, CONFIG_FILE_NAME),
+    `${JSON.stringify(nextConfig, null, 2)}\n`,
+    { encoding: "utf8", mode: 0o600 },
+  );
+}
+
 export function resolveBbAppStartContext(
   args: ResolveBbAppStartContextArgs,
 ): BbAppStartContext {
@@ -286,6 +523,7 @@ export function resolveBbAppStartContext(
 
   return {
     appDistDir: resolve(packageRoot, "app", "dist"),
+    configFile: join(dataDir, CONFIG_FILE_NAME),
     daemonBundleDir,
     daemonEntry: resolve(daemonBundleDir, "daemon-bundle.mjs"),
     daemonLockDir: `${join(dataDir, "daemon.lock")}.lock`,
@@ -297,27 +535,79 @@ export function resolveBbAppStartContext(
     packageRoot,
     serverEntry: resolve(packageRoot, "server", "dist", "index.js"),
     serverPort,
-    serverUrl: `http://127.0.0.1:${serverPort}`,
+    serverUrl:
+      trimToUndefined(args.env.BB_SERVER_URL) ??
+      `http://127.0.0.1:${serverPort}`,
   };
+}
+
+export async function resolveBbAppRuntimeContext(
+  args: ResolveBbAppRuntimeContextArgs,
+): Promise<BbAppStartContext> {
+  const initialEnv = createEnvFromOptions({
+    env: args.env,
+    options: args.options,
+  });
+  if (args.serverUrlMode === "local") {
+    const localEnv = { ...initialEnv };
+    delete localEnv.BB_SERVER_URL;
+    return resolveBbAppStartContext({
+      entrypointUrl: args.entrypointUrl,
+      env: localEnv,
+      homeDir: args.homeDir,
+    });
+  }
+
+  const initialContext = resolveBbAppStartContext({
+    entrypointUrl: args.entrypointUrl,
+    env: initialEnv,
+    homeDir: args.homeDir,
+  });
+  const config = await readManagedConfig({ dataDir: initialContext.dataDir });
+  const finalEnv = {
+    ...initialEnv,
+    BB_SERVER_URL: resolveServerUrl({
+      config,
+      defaultServerUrl: initialContext.serverUrl,
+      env: initialEnv,
+    }),
+  };
+  return resolveBbAppStartContext({
+    entrypointUrl: args.entrypointUrl,
+    env: finalEnv,
+    homeDir: args.homeDir,
+  });
 }
 
 export function createHostJoinRequestBody(
   args: CreateHostJoinRequestBodyArgs,
 ): HostJoinRequestBody {
-  const requestBody: HostJoinRequestBody = {
-    hostType: "persistent",
-    joinMode: "local",
-  };
+  if (args.localJoin) {
+    const requestBody: LocalHostJoinRequestBody = {
+      hostType: "persistent",
+      joinMode: "local",
+    };
+    if (args.requestedHostId !== null) {
+      requestBody.hostId = args.requestedHostId;
+    }
+    return requestBody;
+  }
 
+  const requestBody: PersistentHostJoinRequestBody = {
+    hostType: "persistent",
+  };
   if (args.requestedHostId !== null) {
     requestBody.hostId = args.requestedHostId;
   }
-
   return requestBody;
 }
 
 export function resolveBbAppCommand(args: string[]): BbAppCommand {
-  if (args.length === 0 || args[0] === START_COMMAND) {
+  if (args.length === 0) {
+    return { kind: "start" };
+  }
+
+  if (args[0] === START_COMMAND && args.length === 1) {
     return { kind: "start" };
   }
 
@@ -338,9 +628,7 @@ export function resolveBbAppCommand(args: string[]): BbAppCommand {
   };
 }
 
-function requiredArtifactPaths(
-  context: BbAppStartContext,
-): ArtifactPath[] {
+function requiredArtifactPaths(context: BbAppStartContext): ArtifactPath[] {
   return [
     { label: "server entry", path: context.serverEntry },
     { label: "host daemon entry", path: context.daemonEntry },
@@ -357,9 +645,7 @@ function requiredArtifactPaths(
   ];
 }
 
-export function assertBbAppArtifacts(
-  context: BbAppStartContext,
-): void {
+export function assertBbAppArtifacts(context: BbAppStartContext): void {
   const missingArtifact = requiredArtifactPaths(context).find(
     (artifact) => !existsSync(artifact.path),
   );
@@ -390,12 +676,13 @@ async function readPersistedHostId(dataDir: string): Promise<string | null> {
   }
 }
 
-export async function requestLocalHostJoin(
-  args: RequestLocalHostJoinArgs,
+export async function requestHostJoin(
+  args: RequestHostJoinArgs,
 ): Promise<HostJoinResponse> {
   const response = await fetch(`${args.serverUrl}/api/v1/hosts/join`, {
     body: JSON.stringify(
       createHostJoinRequestBody({
+        localJoin: args.localJoin,
         requestedHostId: args.requestedHostId,
       }),
     ),
@@ -428,7 +715,8 @@ export async function maybeAddAutoJoinEnv(
   const requestedHostId =
     trimToUndefined(args.env.BB_HOST_ID) ??
     (await readPersistedHostId(args.dataDir));
-  const joinResponse = await requestLocalHostJoin({
+  const joinResponse = await requestHostJoin({
+    localJoin: true,
     requestedHostId,
     serverUrl: args.serverUrl,
   });
@@ -617,6 +905,57 @@ function resolveEnrollmentRequirements(
   };
 }
 
+function resolveHostDaemonCommand(
+  args: string[],
+): ResolveHostDaemonCommandResult {
+  if (args.length === 0) {
+    return { kind: "start" };
+  }
+  if (args.length === 1 && args[0] === HOST_DAEMON_JOIN_COMMAND) {
+    return { kind: "join" };
+  }
+  throw new Error(
+    `bb-app host-daemon accepts no subcommand except ${HOST_DAEMON_JOIN_COMMAND}`,
+  );
+}
+
+function isLoopbackServerUrl(serverUrl: string): boolean {
+  const { hostname } = new URL(serverUrl);
+  return (
+    hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1"
+  );
+}
+
+async function createHostDaemonJoinEnv(
+  args: CreateHostDaemonJoinEnvArgs,
+): Promise<NodeJS.ProcessEnv> {
+  const requestedHostId =
+    trimToUndefined(args.env.BB_HOST_ID) ??
+    (await readPersistedHostId(args.context.dataDir));
+  const joinResponse = await requestHostJoin({
+    localJoin: isLoopbackServerUrl(args.serverUrl),
+    requestedHostId,
+    serverUrl: args.serverUrl,
+  });
+
+  if (requestedHostId !== null && joinResponse.hostId !== requestedHostId) {
+    throw new Error(
+      `Join response host ID ${joinResponse.hostId} does not match persisted host ID ${requestedHostId}`,
+    );
+  }
+
+  await writeManagedConfig({
+    config: { serverUrl: args.serverUrl },
+    dataDir: args.context.dataDir,
+  });
+
+  return {
+    ...args.env,
+    BB_HOST_ENROLL_KEY: joinResponse.joinCode,
+    BB_HOST_ID: joinResponse.hostId,
+  };
+}
+
 async function runBundledCliCommand(
   context: BbAppStartContext,
   args: string[],
@@ -633,10 +972,12 @@ async function runBundledCliCommand(
 export async function runBbCli(
   cliArgs: string[] = process.argv.slice(2),
 ): Promise<void> {
-  const context = resolveBbAppStartContext({
+  const context = await resolveBbAppRuntimeContext({
     entrypointUrl: import.meta.url,
     env: process.env,
     homeDir: homedir(),
+    options: createDefaultLauncherOptions(),
+    serverUrlMode: "managed",
   });
   assertBbAppArtifacts(context);
   process.exitCode = await runBundledCliCommand(context, cliArgs);
@@ -645,14 +986,25 @@ export async function runBbCli(
 export async function runBbServer(
   cliArgs: string[] = process.argv.slice(2),
 ): Promise<void> {
-  if (cliArgs.length > 0) {
+  const parsedArgs = parseLauncherArgs(cliArgs);
+  if (parsedArgs.options.help) {
+    process.stdout.write(`bb-server
+
+Usage:
+  bb-server [--data-dir <path>] [--server-port <port>]
+`);
+    return;
+  }
+  if (parsedArgs.positionals.length > 0) {
     throw new Error("bb-server does not accept arguments.");
   }
 
-  const context = resolveBbAppStartContext({
+  const context = await resolveBbAppRuntimeContext({
     entrypointUrl: import.meta.url,
     env: process.env,
     homeDir: homedir(),
+    options: parsedArgs.options,
+    serverUrlMode: "local",
   });
   assertBbAppArtifacts(context);
 
@@ -667,18 +1019,29 @@ export async function runBbServer(
 async function runHostDaemonOnly(
   context: BbAppStartContext,
   args: string[],
+  options: LauncherCliOptions,
 ): Promise<void> {
-  if (args.length > 0) {
-    throw new Error(`${HOST_DAEMON_COMMAND} does not accept arguments.`);
-  }
+  const command = resolveHostDaemonCommand(args);
 
   const serverUrl = resolveHostDaemonServerUrl({
     context,
     env: process.env,
   });
+  const baseDaemonEnv = createEnvFromOptions({
+    env: process.env,
+    options,
+  });
+  const joinEnv =
+    command.kind === "join"
+      ? await createHostDaemonJoinEnv({
+          context,
+          env: baseDaemonEnv,
+          serverUrl,
+        })
+      : baseDaemonEnv;
   const daemonEnv = createHostDaemonOnlyEnv({
     context,
-    env: process.env,
+    env: joinEnv,
     serverUrl,
   });
   const enrollment = resolveEnrollmentRequirements({
@@ -704,10 +1067,8 @@ async function runHostDaemonOnly(
       `Not enrolled - set BB_HOST_ENROLL_KEY to join ${serverUrl}`,
     );
     process.stdout.write("\n");
-    log(" ", dim("Required env vars for first-time enrollment:"));
-    log(" ", dim("  BB_SERVER_URL          Target bb server URL"));
-    log(" ", dim("  BB_HOST_ENROLL_KEY     Enroll key from the server"));
-    log(" ", dim("  BB_HOST_ID             Host ID from the join command"));
+    log(" ", dim("Run this command to request enrollment and start daemon:"));
+    log(" ", dim(`  bb-app host-daemon join --server-url ${serverUrl}`));
     process.stdout.write("\n");
     process.exitCode = 1;
     return;
@@ -780,13 +1141,26 @@ async function runHostDaemonOnly(
 export async function runBbHostDaemon(
   cliArgs: string[] = process.argv.slice(2),
 ): Promise<void> {
-  const context = resolveBbAppStartContext({
+  const parsedArgs = parseLauncherArgs(cliArgs);
+  if (parsedArgs.options.help) {
+    process.stdout.write(`bb-host-daemon
+
+Usage:
+  bb-host-daemon [--server-url <url>]
+  bb-host-daemon join --server-url <url>
+`);
+    return;
+  }
+
+  const context = await resolveBbAppRuntimeContext({
     entrypointUrl: import.meta.url,
     env: process.env,
     homeDir: homedir(),
+    options: parsedArgs.options,
+    serverUrlMode: "managed",
   });
   assertBbAppArtifacts(context);
-  await runHostDaemonOnly(context, cliArgs);
+  await runHostDaemonOnly(context, parsedArgs.positionals, parsedArgs.options);
 }
 
 function installTerminationSignalForwarding(
@@ -820,9 +1194,10 @@ function printBbAppHelp(): void {
   process.stdout.write(`bb-app
 
 Usage:
-  bb-app
+  bb-app [--data-dir <path>] [--server-port <port>] [--host-daemon-port <port>]
   bb-app start
-  bb-app host-daemon
+  bb-app host-daemon [--server-url <url>]
+  bb-app host-daemon join --server-url <url>
 
 CLI:
   npx --package bb-app bb <command>
@@ -832,14 +1207,14 @@ CLI:
 export async function runBbApp(
   cliArgs: string[] = process.argv.slice(2),
 ): Promise<void> {
-  const context = resolveBbAppStartContext({
-    entrypointUrl: import.meta.url,
-    env: process.env,
-    homeDir: homedir(),
-  });
-  assertBbAppArtifacts(context);
+  const parsedArgs = parseLauncherArgs(cliArgs);
 
-  const command = resolveBbAppCommand(cliArgs);
+  if (parsedArgs.options.help) {
+    printBbAppHelp();
+    return;
+  }
+
+  const command = resolveBbAppCommand(parsedArgs.positionals);
   if (command.kind === "help") {
     printBbAppHelp();
     return;
@@ -850,8 +1225,18 @@ export async function runBbApp(
     process.exitCode = 1;
     return;
   }
+
+  const context = await resolveBbAppRuntimeContext({
+    entrypointUrl: import.meta.url,
+    env: process.env,
+    homeDir: homedir(),
+    options: parsedArgs.options,
+    serverUrlMode: command.kind === "host-daemon" ? "managed" : "local",
+  });
+  assertBbAppArtifacts(context);
+
   if (command.kind === "host-daemon") {
-    await runHostDaemonOnly(context, command.args);
+    await runHostDaemonOnly(context, command.args, parsedArgs.options);
     return;
   }
 

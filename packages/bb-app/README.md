@@ -19,12 +19,9 @@ npx --package bb-app bb thread list
 To run only a host daemon against an existing server:
 
 ```bash
-BB_SERVER_URL=http://127.0.0.1:38886 \
-BB_HOST_ID=<host-id> \
-BB_HOST_ENROLL_KEY=<join-code> \
-npx bb-app host-daemon
+npx bb-app host-daemon join --server-url http://127.0.0.1:38886
 ```
 
-Use the host ID and join code from the server/app join command. After the
-daemon is enrolled, `BB_HOST_ENROLL_KEY` can be omitted for the same data
-directory.
+The join command requests enrollment material from the server, starts the
+daemon, and stores the server URL in the bb data directory config. After the
+daemon is enrolled, use `npx bb-app host-daemon` for the same data directory.

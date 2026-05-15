@@ -6,6 +6,8 @@ import { describe, expect, it } from "vitest";
 import {
   createHostJoinRequestBody,
   isMainModule,
+  parseLauncherArgs,
+  resolveBbAppRuntimeContext,
   resolveDataDir,
   resolvePort,
   resolveBbAppStartContext,
@@ -15,13 +17,13 @@ import {
 describe("bb-app launcher", () => {
   it("resolves production defaults for npx startup", () => {
     const context = resolveBbAppStartContext({
-      entrypointUrl: pathToFileURL("/repo/packages/bb-app/dist/bb-app.js")
-        .href,
+      entrypointUrl: pathToFileURL("/repo/packages/bb-app/dist/bb-app.js").href,
       env: {},
       homeDir: "/home/tester",
     });
 
     expect(context.dataDir).toBe("/home/tester/.bb");
+    expect(context.configFile).toBe("/home/tester/.bb/config.json");
     expect(context.serverPort).toBe(38886);
     expect(context.daemonPort).toBe(38887);
     expect(context.serverUrl).toBe("http://127.0.0.1:38886");
@@ -52,16 +54,38 @@ describe("bb-app launcher", () => {
   });
 
   it("creates the same local persistent join request as pnpm start", () => {
-    expect(createHostJoinRequestBody({ requestedHostId: null })).toEqual({
+    expect(
+      createHostJoinRequestBody({ localJoin: true, requestedHostId: null }),
+    ).toEqual({
       hostType: "persistent",
       joinMode: "local",
     });
     expect(
-      createHostJoinRequestBody({ requestedHostId: "host_local" }),
+      createHostJoinRequestBody({
+        localJoin: true,
+        requestedHostId: "host_local",
+      }),
     ).toEqual({
       hostId: "host_local",
       hostType: "persistent",
       joinMode: "local",
+    });
+  });
+
+  it("creates persistent remote join requests without local mode", () => {
+    expect(
+      createHostJoinRequestBody({ localJoin: false, requestedHostId: null }),
+    ).toEqual({
+      hostType: "persistent",
+    });
+    expect(
+      createHostJoinRequestBody({
+        localJoin: false,
+        requestedHostId: "host_remote",
+      }),
+    ).toEqual({
+      hostId: "host_remote",
+      hostType: "persistent",
     });
   });
 
@@ -86,11 +110,76 @@ describe("bb-app launcher", () => {
       args: [],
       kind: "host-daemon",
     });
+    expect(resolveBbAppCommand(["host-daemon", "join"])).toEqual({
+      args: ["join"],
+      kind: "host-daemon",
+    });
   });
 
   it("prints help for help requests", () => {
     expect(resolveBbAppCommand(["--help"])).toEqual({ kind: "help" });
     expect(resolveBbAppCommand(["help"])).toEqual({ kind: "help" });
+  });
+
+  it("parses launcher flags separately from commands", () => {
+    expect(
+      parseLauncherArgs([
+        "host-daemon",
+        "join",
+        "--data-dir",
+        "~/bb-data",
+        "--server-url",
+        "https://bb.example.test",
+        "--host-daemon-port",
+        "48887",
+      ]),
+    ).toEqual({
+      options: {
+        dataDir: "~/bb-data",
+        help: false,
+        hostDaemonPort: "48887",
+        serverUrl: "https://bb.example.test",
+      },
+      positionals: ["host-daemon", "join"],
+    });
+  });
+
+  it("uses managed config server URL when env and flags omit it", async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "bb-app-config-"));
+    writeFileSync(
+      join(dataDir, "config.json"),
+      JSON.stringify({ serverUrl: "https://bb.example.test" }),
+      "utf8",
+    );
+
+    const context = await resolveBbAppRuntimeContext({
+      entrypointUrl: pathToFileURL("/repo/packages/bb-app/dist/bb-app.js").href,
+      env: { BB_DATA_DIR: dataDir },
+      homeDir: "/home/tester",
+      options: { help: false },
+      serverUrlMode: "managed",
+    });
+
+    expect(context.serverUrl).toBe("https://bb.example.test");
+  });
+
+  it("keeps full-stack startup local even when managed config has a server URL", async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "bb-app-local-config-"));
+    writeFileSync(
+      join(dataDir, "config.json"),
+      JSON.stringify({ serverUrl: "https://bb.example.test" }),
+      "utf8",
+    );
+
+    const context = await resolveBbAppRuntimeContext({
+      entrypointUrl: pathToFileURL("/repo/packages/bb-app/dist/bb-app.js").href,
+      env: { BB_DATA_DIR: dataDir },
+      homeDir: "/home/tester",
+      options: { help: false },
+      serverUrlMode: "local",
+    });
+
+    expect(context.serverUrl).toBe("http://127.0.0.1:38886");
   });
 
   it("detects npm bin symlinks as the main module", () => {
