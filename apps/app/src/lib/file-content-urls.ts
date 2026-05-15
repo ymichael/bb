@@ -23,3 +23,15 @@ export function buildThreadStorageContentUrl(
     }),
   );
 }
+
+export function buildThreadHostFileContentUrl(
+  threadId: string,
+  path: string,
+): string {
+  return toRelativeUrl(
+    apiClient.threads[":id"]["host-files"].content.$url({
+      param: { id: threadId },
+      query: { path },
+    }),
+  );
+}

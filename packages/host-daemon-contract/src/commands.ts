@@ -230,8 +230,10 @@ export const hostSyncRuntimeMaterialCommandSchema = z.object({
 });
 
 /**
- * Read a file from an absolute host path while enforcing that the resolved file
- * stays under the declared absolute root.
+ * Read a file from an absolute host path. When `rootPath` is provided, the
+ * daemon enforces that the resolved file stays under that declared absolute
+ * root. When `rootPath` is omitted, the daemon reads the explicit absolute
+ * disk path without containment-root checks.
  *
  * When `ref` is set, the file is read from git history at that ref instead of
  * from disk. `rootPath` is then interpreted as the repo root, the path becomes
@@ -240,12 +242,22 @@ export const hostSyncRuntimeMaterialCommandSchema = z.object({
  * only difference is the source of bytes. A missing object at `ref` (e.g.
  * the file did not exist at that ref) returns empty content, not an error.
  */
-export const hostReadFileCommandSchema = z.object({
-  type: z.literal("host.read_file"),
-  path: z.string().min(1),
-  rootPath: z.string().min(1),
-  ref: z.string().min(1).optional(),
-});
+export const hostReadFileCommandSchema = z
+  .object({
+    type: z.literal("host.read_file"),
+    path: z.string().min(1),
+    rootPath: z.string().min(1).optional(),
+    ref: z.string().min(1).optional(),
+  })
+  .superRefine((command, context) => {
+    if (command.ref !== undefined && command.rootPath === undefined) {
+      context.addIssue({
+        code: "custom",
+        path: ["rootPath"],
+        message: "rootPath is required when ref is set",
+      });
+    }
+  });
 
 export const hostListFilesCommandSchema = z.object({
   type: z.literal("host.list_files"),

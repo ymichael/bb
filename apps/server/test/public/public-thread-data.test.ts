@@ -1737,6 +1737,168 @@ describe("public thread data routes", () => {
     }
   });
 
+  it("serves host file content from the thread environment host without requiring a ready environment", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      seedHostSession(harness.deps, { id: "host-other" });
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-thread-environment",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/project-source",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/project-source",
+        status: "provisioning",
+      });
+      harness.db
+        .update(environments)
+        .set({
+          path: null,
+          status: "provisioning",
+          updatedAt: Date.now(),
+        })
+        .where(eq(environments.id, environment.id))
+        .run();
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+      });
+      const hostFilePath = "/Users/me/notes/plan.md";
+      const fileBytes = new TextEncoder().encode("# Plan\n");
+
+      const filePromise = harness.app.request(
+        `/api/v1/threads/${thread.id}/host-files/content?path=${encodeURIComponent(hostFilePath)}`,
+      );
+      const fileCommand = await waitForQueuedCommand(
+        harness,
+        ({ command, row }) =>
+          row.hostId === host.id &&
+          command.type === "host.read_file" &&
+          command.path === hostFilePath,
+      );
+      expect(fileCommand.command).toEqual({
+        type: "host.read_file",
+        path: hostFilePath,
+      });
+      await reportQueuedCommandSuccess(
+        harness,
+        fileCommand,
+        {
+          path: hostFilePath,
+          content: "# Plan\n",
+          contentEncoding: "utf8",
+          mimeType: "text/markdown",
+          sizeBytes: fileBytes.byteLength,
+        },
+        { hostId: host.id },
+      );
+      const fileResponse = await filePromise;
+      expect(fileResponse.status).toBe(200);
+      expect(fileResponse.headers.get("content-type")).toBe("text/markdown");
+      expect(new Uint8Array(await fileResponse.arrayBuffer())).toEqual(
+        fileBytes,
+      );
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("rejects host file content requests for threads without environments", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: null,
+      });
+
+      const response = await harness.app.request(
+        `/api/v1/threads/${thread.id}/host-files/content?path=${encodeURIComponent("/Users/me/notes/plan.md")}`,
+      );
+
+      expect(response.status).toBe(409);
+      await expect(readJson(response)).resolves.toEqual({
+        code: "invalid_request",
+        message: "Thread has no environment",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it.each([
+    {
+      errorCode: "invalid_path",
+      errorMessage: "Path is a directory, not a file",
+      expectedStatus: 400,
+    },
+    {
+      errorCode: "ENOENT",
+      errorMessage: "Path does not exist",
+      expectedStatus: 404,
+    },
+    {
+      errorCode: "file_too_large",
+      errorMessage: "File exceeds limit",
+      expectedStatus: 413,
+    },
+  ])(
+    "maps host file $errorCode errors to user-facing responses",
+    async ({ errorCode, errorMessage, expectedStatus }) => {
+      const harness = await createTestAppHarness();
+      try {
+        const { host } = seedHostSession(harness.deps);
+        const { project } = seedProjectWithSource(harness.deps, {
+          hostId: host.id,
+        });
+        const environment = seedEnvironment(harness.deps, {
+          hostId: host.id,
+          projectId: project.id,
+        });
+        const thread = seedThread(harness.deps, {
+          projectId: project.id,
+          environmentId: environment.id,
+        });
+        const hostFilePath = "/Users/me/notes/plan.md";
+
+        const filePromise = harness.app.request(
+          `/api/v1/threads/${thread.id}/host-files/content?path=${encodeURIComponent(hostFilePath)}`,
+        );
+        const fileCommand = await waitForQueuedCommand(
+          harness,
+          ({ command }) =>
+            command.type === "host.read_file" && command.path === hostFilePath,
+        );
+        const fileErrorResponse = await reportQueuedCommandError(
+          harness,
+          fileCommand,
+          {
+            errorCode,
+            errorMessage,
+          },
+        );
+        expect(fileErrorResponse.status).toBe(200);
+
+        const fileResponse = await filePromise;
+        expect(fileResponse.status).toBe(expectedStatus);
+        await expect(readJson(fileResponse)).resolves.toEqual({
+          code: errorCode,
+          message: errorMessage,
+          retryable: false,
+        });
+      } finally {
+        await harness.cleanup();
+      }
+    },
+  );
+
   it("maps thread storage root-escape failures to invalid_path", async () => {
     const harness = await createTestAppHarness();
     try {

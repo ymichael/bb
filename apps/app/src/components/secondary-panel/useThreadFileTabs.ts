@@ -9,10 +9,12 @@ import { areEnvironmentFilePreviewSourcesEqual } from "@/lib/file-preview";
 import {
   clearActiveFileTab,
   clearWorkspaceTabsForEnvironment,
+  getActiveHostFileTab,
   getActiveStorageFilePath,
   getActiveWorkspaceFileTab,
   normalizeThreadSecondaryPanelState,
   pruneStorageFileTabs,
+  type HostFileTabState,
   type ThreadSecondaryPanelFileTabRef,
   type ThreadSecondaryPanelFileTabsState,
   type ThreadSecondaryPanelState,
@@ -61,6 +63,28 @@ function removeStorageFileTab(
   return nextTabs.length === tabs.length ? tabs : nextTabs;
 }
 
+function upsertHostFileTab(
+  tabs: readonly HostFileTabState[],
+  nextTab: HostFileTabState,
+): readonly HostFileTabState[] {
+  const existingTab = tabs.find((tab) => tab.path === nextTab.path);
+  if (!existingTab) {
+    return [...tabs, nextTab];
+  }
+  if (existingTab.lineNumber === nextTab.lineNumber) {
+    return tabs;
+  }
+  return tabs.map((tab) => (tab.path === nextTab.path ? nextTab : tab));
+}
+
+function removeHostFileTab(
+  tabs: readonly HostFileTabState[],
+  path: string,
+): readonly HostFileTabState[] {
+  const nextTabs = tabs.filter((tab) => tab.path !== path);
+  return nextTabs.length === tabs.length ? tabs : nextTabs;
+}
+
 function buildActiveWorkspaceFileTab(
   path: string,
 ): ThreadSecondaryPanelFileTabRef {
@@ -75,6 +99,13 @@ function buildActiveStorageFileTab(
 ): ThreadSecondaryPanelFileTabRef {
   return {
     type: "storage",
+    path,
+  };
+}
+
+function buildActiveHostFileTab(path: string): ThreadSecondaryPanelFileTabRef {
+  return {
+    type: "host-file",
     path,
   };
 }
@@ -264,6 +295,71 @@ export function useThreadFileTabs({
     [isManagerThread, updatePanelState],
   );
 
+  const openHostFile = useCallback(
+    ({ lineNumber, path }: HostFileTabState) => {
+      if (!threadId) return;
+      updatePanelState((state) => {
+        const hostFiles = upsertHostFileTab(state.fileTabs.hostFiles, {
+          lineNumber,
+          path,
+        });
+        const isAlreadyActive =
+          state.fileTabs.active?.type === "host-file" &&
+          state.fileTabs.active.path === path;
+        if (hostFiles === state.fileTabs.hostFiles && isAlreadyActive) {
+          return state;
+        }
+        return setFileTabs(state, {
+          ...state.fileTabs,
+          hostFiles,
+          active: buildActiveHostFileTab(path),
+        });
+      });
+      setSecondaryPanel("thread-info");
+    },
+    [setSecondaryPanel, threadId, updatePanelState],
+  );
+
+  const closeHostFileTab = useCallback(
+    (path: string) => {
+      updatePanelState((state) => {
+        const hostFiles = removeHostFileTab(state.fileTabs.hostFiles, path);
+        if (hostFiles === state.fileTabs.hostFiles) {
+          return state;
+        }
+        return setFileTabs(state, {
+          ...state.fileTabs,
+          hostFiles,
+          active:
+            state.fileTabs.active?.type === "host-file" &&
+            state.fileTabs.active.path === path
+              ? null
+              : state.fileTabs.active,
+        });
+      });
+    },
+    [updatePanelState],
+  );
+
+  const activateHostFileTab = useCallback(
+    (path: string) => {
+      updatePanelState((state) => {
+        if (
+          !state.fileTabs.hostFiles.some((tab) => tab.path === path) ||
+          (state.fileTabs.active?.type === "host-file" &&
+            state.fileTabs.active.path === path)
+        ) {
+          return state;
+        }
+        return setFileTabs(state, {
+          ...state.fileTabs,
+          active: buildActiveHostFileTab(path),
+        });
+      });
+    },
+    [updatePanelState],
+  );
+
   const closeStorageFileTab = useCallback(
     (path: string) => {
       if (!isManagerThread || path === PINNED_STORAGE_FILE_PATH) return;
@@ -322,21 +418,28 @@ export function useThreadFileTabs({
   const activeStorageFilePath = isManagerThread
     ? getActiveStorageFilePath(panelState)
     : null;
+  const activeHostFileTab = getActiveHostFileTab(panelState);
   const openStorageFilePaths = isManagerThread
     ? panelState.fileTabs.storage
     : [];
 
   return {
+    activateHostFileTab,
     activateStorageFileTab,
     activateWorkspaceFileTab,
+    activeHostFileLineNumber: activeHostFileTab?.lineNumber ?? null,
+    activeHostFilePath: activeHostFileTab?.path ?? null,
     activeStorageFilePath,
     activeWorkspaceFileLineNumber: activeWorkspaceFileTab?.lineNumber ?? null,
     activeWorkspaceFilePath: activeWorkspaceFileTab?.path ?? null,
     activeWorkspaceFileSource: activeWorkspaceFileTab?.source ?? null,
     activeWorkspaceFileStatusLabel: activeWorkspaceFileTab?.statusLabel ?? null,
     clearActiveFileTabs,
+    closeHostFileTab,
     closeStorageFileTab,
     closeWorkspaceFileTab,
+    openHostFile,
+    openHostFileTabs: panelState.fileTabs.hostFiles,
     openStorageFile,
     openStorageFilePaths,
     openWorkspaceFile,

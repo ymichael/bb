@@ -78,7 +78,10 @@ import {
   type FilePreview,
   type FilePreviewTarget,
 } from "./file-preview";
-import { buildThreadStorageContentUrl } from "./file-content-urls";
+import {
+  buildThreadHostFileContentUrl,
+  buildThreadStorageContentUrl,
+} from "./file-content-urls";
 import type { ThreadStorageFileListOptions } from "./thread-storage-files";
 export type { FilePreview } from "./file-preview";
 
@@ -729,6 +732,21 @@ export async function getThreadStorageFilePreview(
     {
       path,
       url: buildThreadStorageContentUrl(id, path),
+    },
+    signal,
+  );
+}
+
+export async function getThreadHostFilePreview(
+  id: string,
+  path: string,
+  signal?: AbortSignal,
+): Promise<FilePreview> {
+  return loadFilePreview(
+    {
+      name: path.split("/").at(-1),
+      path,
+      url: buildThreadHostFileContentUrl(id, path),
     },
     signal,
   );

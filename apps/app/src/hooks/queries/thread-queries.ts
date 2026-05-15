@@ -48,6 +48,7 @@ import {
   threadQueryKey,
   threadStorageFilesQueryKey,
   threadStorageFilePreviewQueryKey,
+  threadHostFilePreviewQueryKey,
   threadTimelineQueryKey,
   type ArchivedThreadsKindFilter,
 } from "./query-keys";
@@ -381,6 +382,29 @@ export function useThreadStorageFilePreview(
         signal,
       ),
     enabled: (options?.enabled ?? true) && Boolean(id) && Boolean(path),
+    refetchOnWindowFocus: false,
+  });
+}
+
+export function useThreadHostFilePreview(
+  id: string,
+  environmentId: string | null | undefined,
+  path: string | null,
+  options?: QueryOptions,
+) {
+  return useQuery<FilePreview>({
+    queryKey: threadHostFilePreviewQueryKey(id, environmentId, path),
+    queryFn: ({ signal }) =>
+      api.getThreadHostFilePreview(
+        requireThreadId(id, "useThreadHostFilePreview"),
+        path ?? "",
+        signal,
+      ),
+    enabled:
+      (options?.enabled ?? true) &&
+      Boolean(id) &&
+      Boolean(environmentId) &&
+      Boolean(path),
     refetchOnWindowFocus: false,
   });
 }

@@ -336,6 +336,7 @@ describe("thread secondary panel state hooks", () => {
         },
       ],
       storage: ["STATUS.md"],
+      hostFiles: [{ lineNumber: 3, path: "/Users/me/notes.md" }],
       active: { type: "workspace", path: "src/app.ts" },
     } satisfies ThreadSecondaryPanelState["fileTabs"];
     seedStoredState(

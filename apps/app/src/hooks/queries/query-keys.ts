@@ -28,6 +28,7 @@ export const THREAD_PENDING_INTERACTIONS_QUERY_KEY =
   "threadPendingInteractions";
 export const THREAD_STORAGE_FILES_QUERY_KEY = "threadStorageFiles";
 export const THREAD_STORAGE_FILE_PREVIEW_QUERY_KEY = "threadStorageFilePreview";
+export const THREAD_HOST_FILE_PREVIEW_QUERY_KEY = "threadHostFilePreview";
 export const ENVIRONMENT_QUERY_KEY = "environment";
 export const ENVIRONMENT_WORK_STATUS_QUERY_KEY = "environmentWorkStatus";
 export const ENVIRONMENT_MERGE_BASE_BRANCHES_QUERY_KEY =
@@ -200,6 +201,19 @@ export type ThreadStorageFilePreviewQueryKey = readonly [
 ];
 export type ThreadStorageFilePreviewQueryKeyPrefix = readonly [
   typeof THREAD_STORAGE_FILE_PREVIEW_QUERY_KEY,
+  string,
+];
+export type AllThreadHostFilePreviewQueryKeyPrefix = readonly [
+  typeof THREAD_HOST_FILE_PREVIEW_QUERY_KEY,
+];
+export type ThreadHostFilePreviewQueryKey = readonly [
+  typeof THREAD_HOST_FILE_PREVIEW_QUERY_KEY,
+  string,
+  string | null | undefined,
+  string | null,
+];
+export type ThreadHostFilePreviewQueryKeyPrefix = readonly [
+  typeof THREAD_HOST_FILE_PREVIEW_QUERY_KEY,
   string,
 ];
 export type EnvironmentQueryKeyPrefix = readonly [typeof ENVIRONMENT_QUERY_KEY];
@@ -538,6 +552,24 @@ export function threadStorageFilePreviewQueryKeyPrefix(
   threadId: string,
 ): ThreadStorageFilePreviewQueryKeyPrefix {
   return [THREAD_STORAGE_FILE_PREVIEW_QUERY_KEY, threadId];
+}
+
+export function threadHostFilePreviewQueryKey(
+  threadId: string,
+  environmentId: string | null | undefined,
+  path: string | null,
+): ThreadHostFilePreviewQueryKey {
+  return [THREAD_HOST_FILE_PREVIEW_QUERY_KEY, threadId, environmentId, path];
+}
+
+export function allThreadHostFilePreviewQueryKeyPrefix(): AllThreadHostFilePreviewQueryKeyPrefix {
+  return [THREAD_HOST_FILE_PREVIEW_QUERY_KEY];
+}
+
+export function threadHostFilePreviewQueryKeyPrefix(
+  threadId: string,
+): ThreadHostFilePreviewQueryKeyPrefix {
+  return [THREAD_HOST_FILE_PREVIEW_QUERY_KEY, threadId];
 }
 
 export function allEnvironmentQueryKeyPrefix(): EnvironmentQueryKeyPrefix {

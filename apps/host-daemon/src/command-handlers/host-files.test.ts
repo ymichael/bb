@@ -58,6 +58,22 @@ afterEach(async () => {
 });
 
 describe("readHostFile (no ref — disk read)", () => {
+  it("reads explicit file contents from disk without a rootPath", async () => {
+    const repoPath = await initRepo();
+    const filePath = path.join(repoPath, "host-notes.md");
+    await fs.writeFile(filePath, "host notes", "utf8");
+
+    const result = await readHostFile({
+      type: "host.read_file",
+      path: filePath,
+    });
+
+    expect(result.path).toBe(filePath);
+    expect(result.content).toBe("host notes");
+    expect(result.contentEncoding).toBe("utf8");
+    expect(result.sizeBytes).toBe(10);
+  });
+
   it("reads file contents from disk", async () => {
     const repoPath = await initRepo();
     const filePath = path.join(repoPath, "hello.txt");
@@ -102,6 +118,22 @@ describe("readHostFile (no ref — disk read)", () => {
     expect(isExpectedCommandDispatchError(thrown)).toBe(true);
   });
 
+  it("marks missing rootless targets as expected", async () => {
+    const repoPath = await initRepo();
+    const missingPath = path.join(repoPath, "HOST-NOTES.md");
+    const thrown = await captureReadHostFileError({
+      type: "host.read_file",
+      path: missingPath,
+    });
+
+    expect(thrown).toMatchObject({
+      code: "ENOENT",
+      message: `Path does not exist: ${missingPath}`,
+      name: "ExpectedCommandDispatchError",
+    });
+    expect(isExpectedCommandDispatchError(thrown)).toBe(true);
+  });
+
   it("does not mark missing roots as expected", async () => {
     const parentPath = await makeTempDir("bb-host-files-missing-root-");
     const rootPath = path.join(parentPath, "missing-root");
@@ -119,9 +151,38 @@ describe("readHostFile (no ref — disk read)", () => {
     });
     expect(isExpectedCommandDispatchError(thrown)).toBe(false);
   });
+
+  it("rejects rootless directory paths", async () => {
+    const repoPath = await initRepo();
+
+    await expect(
+      readHostFile({
+        type: "host.read_file",
+        path: repoPath,
+      }),
+    ).rejects.toMatchObject({
+      code: "invalid_path",
+      message: "Path is a directory, not a file",
+    });
+  });
 });
 
 describe("readHostFile (with ref — git history read)", () => {
+  it("rejects ref reads without rootPath", async () => {
+    const repoPath = await initRepo();
+
+    await expect(
+      readHostFile({
+        type: "host.read_file",
+        path: path.join(repoPath, "tracked.txt"),
+        ref: "HEAD",
+      }),
+    ).rejects.toMatchObject({
+      code: "invalid_path",
+      message: "rootPath is required when ref is set",
+    });
+  });
+
   it("reads file contents at a specific ref", async () => {
     const repoPath = await initRepo();
     const filePath = path.join(repoPath, "tracked.txt");

@@ -193,6 +193,26 @@ describe("workspace command dispatch", () => {
     expect(result.sizeBytes).toBe("durable manager notes".length);
   });
 
+  it("covers rootless host.read_file for explicit disk paths", async () => {
+    const tempDir = await makeTempDir("bb-dispatch-host-read-file-rootless-");
+    const filePath = path.join(tempDir, "notes.md");
+    await fs.writeFile(filePath, "explicit host notes");
+
+    const harness = createHarness();
+    const result = await dispatchCommand(
+      {
+        type: "host.read_file",
+        path: filePath,
+      },
+      harness.dispatchOptions(),
+    );
+
+    expect(result.path).toBe(filePath);
+    expect(result.content).toBe("explicit host notes");
+    expect(result.contentEncoding).toBe("utf8");
+    expect(result.sizeBytes).toBe("explicit host notes".length);
+  });
+
   it("returns base64 for image files", async () => {
     const tempDir = await makeTempDir("bb-dispatch-host-read-image-");
     const imagePath = path.join(tempDir, "preview.png");
@@ -247,6 +267,44 @@ describe("workspace command dispatch", () => {
     ).rejects.toMatchObject({
       code: "ENOENT",
       message: expect.stringContaining("Path does not exist"),
+    });
+  });
+
+  it("normalizes missing rootless host.read_file paths to ENOENT", async () => {
+    const tempDir = await makeTempDir(
+      "bb-dispatch-host-read-rootless-missing-",
+    );
+    const harness = createHarness();
+
+    await expect(
+      dispatchCommand(
+        {
+          type: "host.read_file",
+          path: path.join(tempDir, "missing.md"),
+        },
+        harness.dispatchOptions(),
+      ),
+    ).rejects.toMatchObject({
+      code: "ENOENT",
+      message: expect.stringContaining("Path does not exist"),
+    });
+  });
+
+  it("rejects rootless host.read_file directory paths", async () => {
+    const tempDir = await makeTempDir("bb-dispatch-host-read-rootless-dir-");
+    const harness = createHarness();
+
+    await expect(
+      dispatchCommand(
+        {
+          type: "host.read_file",
+          path: tempDir,
+        },
+        harness.dispatchOptions(),
+      ),
+    ).rejects.toMatchObject({
+      code: "invalid_path",
+      message: "Path is a directory, not a file",
     });
   });
 
@@ -387,5 +445,4 @@ describe("workspace command dispatch", () => {
     expect(result.contentEncoding).toBe("base64");
     expect(result.content).toBe(bytes.toString("base64"));
   });
-
 });

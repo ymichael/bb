@@ -5,6 +5,7 @@ import type { Hono } from "hono";
 import { PROMPT_HISTORY_ENTRY_LIMIT, threadEventTypeSchema } from "@bb/domain";
 import {
   promptHistoryQuerySchema,
+  threadHostFileContentQuerySchema,
   threadStorageContentQuerySchema,
   threadStorageFilesQuerySchema,
   threadEventWaitQuerySchema,
@@ -420,6 +421,32 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
             type: "host.read_file",
             path: path.join(target.storagePath, query.path),
             rootPath: target.storagePath,
+          },
+        });
+        return createDaemonFileContentResponse(result);
+      } catch (error) {
+        return remapDaemonFileRouteError(error);
+      }
+    },
+  );
+
+  get(
+    "/threads/:id/host-files/content",
+    threadHostFileContentQuerySchema,
+    async (context, query) => {
+      const thread = requirePublicThread(deps.db, context.req.param("id"));
+      if (!thread.environmentId) {
+        throw new ApiError(409, "invalid_request", "Thread has no environment");
+      }
+      const environment = requireEnvironment(deps.db, thread.environmentId);
+
+      try {
+        const result = await queueCommandAndWait(deps, {
+          hostId: environment.hostId,
+          timeoutMs: COMMAND_TIMEOUT_MS,
+          command: {
+            type: "host.read_file",
+            path: query.path,
           },
         });
         return createDaemonFileContentResponse(result);

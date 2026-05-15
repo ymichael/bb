@@ -43,7 +43,13 @@ const workspaceFileTabStateSchema = z
     statusLabel: workspaceFilePreviewStatusLabelSchema,
   })
   .strict();
-const threadSecondaryPanelFileTabRefSchema = z.discriminatedUnion("type", [
+const hostFileTabStateSchema = z
+  .object({
+    lineNumber: z.number().int().positive().nullable(),
+    path: z.string().min(1),
+  })
+  .strict();
+const threadSecondaryPanelFileTabV1RefSchema = z.discriminatedUnion("type", [
   z
     .object({
       type: z.literal("workspace"),
@@ -57,11 +63,39 @@ const threadSecondaryPanelFileTabRefSchema = z.discriminatedUnion("type", [
     })
     .strict(),
 ]);
+const threadSecondaryPanelFileTabRefSchema = z.discriminatedUnion("type", [
+  z
+    .object({
+      type: z.literal("workspace"),
+      path: z.string().min(1),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("storage"),
+      path: z.string().min(1),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("host-file"),
+      path: z.string().min(1),
+    })
+    .strict(),
+]);
 const threadSecondaryPanelFileTabsStateSchema = z
   .object({
     workspace: z.array(workspaceFileTabStateSchema),
     storage: z.array(z.string().min(1)),
+    hostFiles: z.array(hostFileTabStateSchema),
     active: threadSecondaryPanelFileTabRefSchema.nullable(),
+  })
+  .strict();
+const threadSecondaryPanelFileTabsV1StateSchema = z
+  .object({
+    workspace: z.array(workspaceFileTabStateSchema),
+    storage: z.array(z.string().min(1)),
+    active: threadSecondaryPanelFileTabV1RefSchema.nullable(),
   })
   .strict();
 const threadSecondaryPanelStateSchema = z
@@ -73,12 +107,26 @@ const threadSecondaryPanelStateSchema = z
     lastUsedAt: z.number().int().nonnegative(),
   })
   .strict();
+const threadSecondaryPanelV1StateSchema = z
+  .object({
+    version: z.literal(THREAD_SECONDARY_PANEL_STATE_STORAGE_VERSION),
+    activePanel: threadSecondaryPanelSchema.nullable(),
+    environmentId: z.string().min(1).nullable(),
+    fileTabs: threadSecondaryPanelFileTabsV1StateSchema,
+    lastUsedAt: z.number().int().nonnegative(),
+  })
+  .strict();
 
 export interface WorkspaceFileTabState {
   lineNumber: number | null;
   path: string;
   source: EnvironmentFilePreviewSource;
   statusLabel: WorkspaceFilePreviewStatusLabel | null;
+}
+
+export interface HostFileTabState {
+  lineNumber: number | null;
+  path: string;
 }
 
 interface ActiveWorkspaceFileTabRef {
@@ -91,13 +139,20 @@ interface ActiveStorageFileTabRef {
   path: string;
 }
 
+interface ActiveHostFileTabRef {
+  type: "host-file";
+  path: string;
+}
+
 export type ThreadSecondaryPanelFileTabRef =
   | ActiveWorkspaceFileTabRef
-  | ActiveStorageFileTabRef;
+  | ActiveStorageFileTabRef
+  | ActiveHostFileTabRef;
 
 export interface ThreadSecondaryPanelFileTabsState {
   workspace: readonly WorkspaceFileTabState[];
   storage: readonly string[];
+  hostFiles: readonly HostFileTabState[];
   active: ThreadSecondaryPanelFileTabRef | null;
 }
 
@@ -205,6 +260,26 @@ function areStorageFileTabsEqual(
   return true;
 }
 
+function areHostFileTabsEqual(
+  a: readonly HostFileTabState[],
+  b: readonly HostFileTabState[],
+): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i += 1) {
+    const aTab = a[i];
+    const bTab = b[i];
+    if (
+      !aTab ||
+      !bTab ||
+      aTab.path !== bTab.path ||
+      aTab.lineNumber !== bTab.lineNumber
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
 function areActiveFileTabsEqual(
   a: ThreadSecondaryPanelFileTabRef | null,
   b: ThreadSecondaryPanelFileTabRef | null,
@@ -219,6 +294,13 @@ function findWorkspaceFileTab(
   tabs: readonly WorkspaceFileTabState[],
   path: string,
 ): WorkspaceFileTabState | null {
+  return tabs.find((tab) => tab.path === path) ?? null;
+}
+
+function findHostFileTab(
+  tabs: readonly HostFileTabState[],
+  path: string,
+): HostFileTabState | null {
   return tabs.find((tab) => tab.path === path) ?? null;
 }
 
@@ -246,6 +328,19 @@ function dedupeStorageFileTabs(tabs: readonly string[]): string[] {
   return nextTabs;
 }
 
+function dedupeHostFileTabs(
+  tabs: readonly HostFileTabState[],
+): HostFileTabState[] {
+  const seenPaths = new Set<string>();
+  const nextTabs: HostFileTabState[] = [];
+  for (const tab of tabs) {
+    if (seenPaths.has(tab.path)) continue;
+    seenPaths.add(tab.path);
+    nextTabs.push(tab);
+  }
+  return nextTabs;
+}
+
 function normalizeActiveFileTab(
   fileTabs: ThreadSecondaryPanelFileTabsState,
   isManagerThread: boolean,
@@ -254,6 +349,11 @@ function normalizeActiveFileTab(
   if (active === null) return null;
   if (active.type === "workspace") {
     return findWorkspaceFileTab(fileTabs.workspace, active.path) === null
+      ? null
+      : active;
+  }
+  if (active.type === "host-file") {
+    return findHostFileTab(fileTabs.hostFiles, active.path) === null
       ? null
       : active;
   }
@@ -271,6 +371,7 @@ export function createEmptyThreadSecondaryPanelState(
     fileTabs: args.fileTabs ?? {
       workspace: [],
       storage: [],
+      hostFiles: [],
       active: null,
     },
     lastUsedAt: args.lastUsedAt ?? 0,
@@ -337,14 +438,38 @@ function parseThreadSecondaryPanelStateForStorage({
   }
 
   const stateResult = threadSecondaryPanelStateSchema.safeParse(parsedValue);
-  if (!stateResult.success) {
+  if (stateResult.success) {
+    if (isThreadSecondaryPanelStateExpired({ now, state: stateResult.data })) {
+      return {
+        shouldPrune: true,
+        state: initialValue,
+      };
+    }
+
+    return {
+      shouldPrune: false,
+      state: stateResult.data,
+    };
+  }
+
+  const legacyStateResult =
+    threadSecondaryPanelV1StateSchema.safeParse(parsedValue);
+  if (!legacyStateResult.success) {
     return {
       shouldPrune: true,
       state: initialValue,
     };
   }
 
-  if (isThreadSecondaryPanelStateExpired({ now, state: stateResult.data })) {
+  const migratedState: ThreadSecondaryPanelState = {
+    ...legacyStateResult.data,
+    fileTabs: {
+      ...legacyStateResult.data.fileTabs,
+      hostFiles: [],
+    },
+  };
+
+  if (isThreadSecondaryPanelStateExpired({ now, state: migratedState })) {
     return {
       shouldPrune: true,
       state: initialValue,
@@ -353,7 +478,7 @@ function parseThreadSecondaryPanelStateForStorage({
 
   return {
     shouldPrune: false,
-    state: stateResult.data,
+    state: migratedState,
   };
 }
 
@@ -371,13 +496,16 @@ export function normalizeThreadSecondaryPanelState({
   const storage = isManagerThread
     ? dedupeStorageFileTabs(state.fileTabs.storage)
     : [];
+  const hostFiles = dedupeHostFileTabs(state.fileTabs.hostFiles);
   const fileTabs: ThreadSecondaryPanelFileTabsState = {
     workspace,
     storage,
+    hostFiles,
     active: normalizeActiveFileTab(
       {
         workspace,
         storage,
+        hostFiles,
         active: state.fileTabs.active,
       },
       isManagerThread,
@@ -387,6 +515,7 @@ export function normalizeThreadSecondaryPanelState({
   if (
     areWorkspaceFileTabsEqual(workspace, state.fileTabs.workspace) &&
     areStorageFileTabsEqual(storage, state.fileTabs.storage) &&
+    areHostFileTabsEqual(hostFiles, state.fileTabs.hostFiles) &&
     areActiveFileTabsEqual(fileTabs.active, state.fileTabs.active)
   ) {
     return state;
@@ -416,6 +545,16 @@ export function getActiveStorageFilePath(
     return null;
   }
   return state.fileTabs.storage.includes(active.path) ? active.path : null;
+}
+
+export function getActiveHostFileTab(
+  state: ThreadSecondaryPanelState,
+): HostFileTabState | null {
+  const active = state.fileTabs.active;
+  if (active?.type !== "host-file") {
+    return null;
+  }
+  return findHostFileTab(state.fileTabs.hostFiles, active.path);
 }
 
 export function clearActiveFileTab(

@@ -16,6 +16,7 @@ import {
   useThreadDetailBootstrap,
   useThreadDefaultExecutionOptions,
   useThreadDrafts,
+  useThreadHostFilePreview,
   useThreadPendingInteractions,
   useThreadPromptHistory,
 } from "./thread-queries";
@@ -24,6 +25,7 @@ import {
   systemExecutionOptionsQueryKey,
   threadDefaultExecutionOptionsQueryKey,
   threadDraftsQueryKey,
+  threadHostFilePreviewQueryKey,
   threadPendingInteractionsQueryKey,
   threadPromptHistoryQueryKey,
   threadQueryKey,
@@ -477,5 +479,85 @@ describe("thread prompt history query", () => {
     await waitFor(() => {
       expect(route.getSignal()?.aborted).toBe(true);
     });
+  });
+});
+
+describe("thread host file preview query", () => {
+  it("loads host file content lazily through the thread-scoped route", async () => {
+    const hostPath = "/Users/me/notes/plan.md";
+    let requestUrl: URL | null = null;
+    installFetchRoutes([
+      {
+        pathname: "/api/v1/threads/thread-1/host-files/content",
+        handler: (request) => {
+          requestUrl = new URL(request.url);
+          return new Response("# Plan\n", {
+            headers: { "content-type": "text/markdown" },
+          });
+        },
+      },
+    ]);
+    const { queryClient, wrapper } = createWrapper();
+
+    const { result } = renderHook(
+      () => useThreadHostFilePreview("thread-1", "env-1", hostPath),
+      { wrapper },
+    );
+
+    await waitFor(() => {
+      expect(result.current.status).toBe("success");
+    });
+    expect(requestUrl?.searchParams.get("path")).toBe(hostPath);
+    expect(result.current.data).toMatchObject({
+      kind: "text",
+      path: hostPath,
+      name: "plan.md",
+      content: "# Plan\n",
+    });
+    expect(
+      queryClient.getQueryData(
+        threadHostFilePreviewQueryKey("thread-1", "env-1", hostPath),
+      ),
+    ).toEqual(result.current.data);
+  });
+
+  it("does not fetch host file content until enabled with a path", () => {
+    const fetchMock = installFetchRoutes([
+      {
+        pathname: "/api/v1/threads/thread-1/host-files/content",
+        handler: () => new Response("unused"),
+      },
+    ]);
+    const { wrapper } = createWrapper();
+
+    renderHook(
+      () =>
+        useThreadHostFilePreview("thread-1", "env-1", null, {
+          enabled: true,
+        }),
+      { wrapper },
+    );
+
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("does not fetch host file content without a thread environment", () => {
+    const fetchMock = installFetchRoutes([
+      {
+        pathname: "/api/v1/threads/thread-1/host-files/content",
+        handler: () => new Response("unused"),
+      },
+    ]);
+    const { wrapper } = createWrapper();
+
+    renderHook(
+      () =>
+        useThreadHostFilePreview("thread-1", null, "/Users/me/notes/plan.md", {
+          enabled: true,
+        }),
+      { wrapper },
+    );
+
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

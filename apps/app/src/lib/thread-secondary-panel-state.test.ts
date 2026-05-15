@@ -9,6 +9,7 @@ import {
   clearWorkspaceTabsForEnvironment,
   createEmptyThreadSecondaryPanelState,
   getActiveStorageFilePath,
+  getActiveHostFileTab,
   getActiveWorkspaceFileTab,
   getThreadSecondaryPanelStateStorageKey,
   normalizeThreadSecondaryPanelState,
@@ -41,6 +42,7 @@ function makeState(
         },
       ],
       storage: ["STATUS.md", "notes.md"],
+      hostFiles: [{ lineNumber: 9, path: "/Users/me/notes.md" }],
       active: { type: "workspace", path: "src/app.ts" },
     },
     lastUsedAt: NOW,
@@ -60,6 +62,32 @@ describe("thread secondary panel state storage", () => {
         storedValue,
       }),
     ).toEqual(state);
+  });
+
+  it("migrates persisted v1 state without host-file tabs", () => {
+    const state = makeState();
+    const legacyFileTabs = {
+      workspace: state.fileTabs.workspace,
+      storage: state.fileTabs.storage,
+      active: state.fileTabs.active,
+    };
+
+    expect(
+      parseThreadSecondaryPanelState({
+        initialValue: EMPTY_THREAD_SECONDARY_PANEL_STATE,
+        now: NOW,
+        storedValue: JSON.stringify({
+          ...state,
+          fileTabs: legacyFileTabs,
+        }),
+      }),
+    ).toEqual({
+      ...state,
+      fileTabs: {
+        ...legacyFileTabs,
+        hostFiles: [],
+      },
+    });
   });
 
   it("falls back for invalid JSON and invalid shapes", () => {
@@ -104,6 +132,13 @@ describe("thread secondary panel state storage", () => {
         ...validState,
         fileTabs: {
           ...validState.fileTabs,
+          hostFiles: [{ lineNumber: 0, path: "/Users/me/notes.md" }],
+        },
+      },
+      {
+        ...validState,
+        fileTabs: {
+          ...validState.fileTabs,
           active: { type: "unknown", path: "src/app.ts" },
         },
       },
@@ -119,6 +154,13 @@ describe("thread secondary panel state storage", () => {
         fileTabs: {
           ...validState.fileTabs,
           storage: [""],
+        },
+      },
+      {
+        ...validState,
+        fileTabs: {
+          ...validState.fileTabs,
+          hostFiles: [{ lineNumber: null, path: "" }],
         },
       },
     ].map((value) => JSON.stringify(value));
@@ -197,6 +239,7 @@ describe("thread secondary panel tab normalization", () => {
         fileTabs: {
           workspace: [],
           storage: ["STATUS.md"],
+          hostFiles: [],
           active: { type: "storage", path: "STATUS.md" },
         },
       }),
@@ -218,6 +261,7 @@ describe("thread secondary panel tab normalization", () => {
     expect(nextState.fileTabs.workspace).toEqual([]);
     expect(nextState.fileTabs.active).toBeNull();
     expect(nextState.fileTabs.storage).toEqual(state.fileTabs.storage);
+    expect(nextState.fileTabs.hostFiles).toEqual(state.fileTabs.hostFiles);
   });
 
   it("prunes storage tabs against the available thread storage files", () => {
@@ -225,6 +269,7 @@ describe("thread secondary panel tab normalization", () => {
       fileTabs: {
         workspace: [],
         storage: ["STATUS.md", "missing.md"],
+        hostFiles: [],
         active: { type: "storage", path: "missing.md" },
       },
     });
@@ -253,10 +298,24 @@ describe("thread secondary panel tab normalization", () => {
       fileTabs: {
         workspace: [],
         storage: ["STATUS.md"],
+        hostFiles: [],
         active: { type: "storage", path: "STATUS.md" },
       },
     });
     expect(getActiveStorageFilePath(storageState)).toBe("STATUS.md");
+
+    const hostFileState = makeState({
+      fileTabs: {
+        workspace: [],
+        storage: [],
+        hostFiles: [{ lineNumber: 9, path: "/Users/me/notes.md" }],
+        active: { type: "host-file", path: "/Users/me/notes.md" },
+      },
+    });
+    expect(getActiveHostFileTab(hostFileState)).toEqual({
+      lineNumber: 9,
+      path: "/Users/me/notes.md",
+    });
 
     expect(clearActiveFileTab(storageState).fileTabs.active).toBeNull();
   });

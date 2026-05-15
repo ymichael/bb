@@ -31,6 +31,7 @@ import {
   useThread,
   useThreadComposerBootstrap,
   useThreadDetailBootstrap,
+  useThreadHostFilePreview,
   useThreadPendingInteractions,
   useThreads,
 } from "../../hooks/queries/thread-queries";
@@ -207,16 +208,22 @@ export function ThreadDetailView() {
     threadType: thread?.type,
   });
   const {
+    activateHostFileTab,
     activateStorageFileTab,
     activateWorkspaceFileTab,
+    activeHostFileLineNumber,
+    activeHostFilePath,
     activeStorageFilePath,
     activeWorkspaceFileLineNumber,
     activeWorkspaceFilePath,
     activeWorkspaceFileSource,
     activeWorkspaceFileStatusLabel,
     clearActiveFileTabs,
+    closeHostFileTab,
     closeStorageFileTab,
     closeWorkspaceFileTab,
+    openHostFile,
+    openHostFileTabs,
     openStorageFile,
     openStorageFilePaths,
     openWorkspaceFile,
@@ -294,6 +301,18 @@ export function ThreadDetailView() {
     thread?.environmentId,
     activeWorkspaceFilePath,
     activeWorkspaceFileSource,
+  );
+  const {
+    data: hostFilePreview,
+    error: hostFilePreviewError,
+    isLoading: isHostFilePreviewLoading,
+  } = useThreadHostFilePreview(
+    thread?.id ?? "",
+    thread?.environmentId,
+    activeHostFilePath,
+    {
+      enabled: isSecondaryPanelActive && activeHostFilePath !== null,
+    },
   );
   const {
     closeThreadSecondaryPanel,
@@ -384,16 +403,28 @@ export function ThreadDetailView() {
           onClose: () => closeStorageFileTab(path),
         }))
       : [];
-    const tabs = [...workspaceTabs, ...storageTabs];
+    const hostFileTabs = openHostFileTabs.map((tab) => ({
+      id: `host-file:${tab.path}`,
+      filename: tab.path.split("/").at(-1) ?? tab.path,
+      isActive: tab.path === activeHostFilePath,
+      statusLabel: null,
+      onSelect: () => activateHostFileTab(tab.path),
+      onClose: () => closeHostFileTab(tab.path),
+    }));
+    const tabs = [...workspaceTabs, ...hostFileTabs, ...storageTabs];
     return tabs.length > 0 ? tabs : undefined;
   }, [
+    activateHostFileTab,
     activateStorageFileTab,
     activateWorkspaceFileTab,
+    activeHostFilePath,
     activeStorageFilePath,
     activeWorkspaceFilePath,
+    closeHostFileTab,
     closeStorageFileTab,
     closeWorkspaceFileTab,
     isManagerThread,
+    openHostFileTabs,
     openStorageFilePaths,
     openWorkspaceFileTabs,
   ]);
@@ -432,7 +463,7 @@ export function ThreadDetailView() {
     preferredTarget,
     workspaceOpenTargets,
   } = useLocalOpenTargets({
-    enabled: localWorkspaceRootPath !== null,
+    enabled: threadEnvironmentIsLocal,
   });
   const bootstrapResolvedMissingEnvironmentHost =
     threadDetailBootstrapQuery.isSuccess &&
@@ -571,6 +602,8 @@ export function ThreadDetailView() {
   const handleOpenTimelineLocalFileLink = useCallback(
     (link: ThreadTimelineLocalFileLink) => {
       const resolution = resolveThreadLocalFileLink({
+        hostFileLinksAvailable:
+          thread?.environmentId !== null && thread?.environmentId !== undefined,
         link,
         workspaceRootPath: localWorkspaceRootPath,
       });
@@ -584,15 +617,28 @@ export function ThreadDetailView() {
         return true;
       }
 
-      openWorkspaceFile({
+      if (resolution.kind === "open-workspace-path") {
+        openWorkspaceFile({
+          lineNumber: resolution.request.lineNumber,
+          path: resolution.request.relativePath,
+          source: { kind: "working-tree" },
+          statusLabel: null,
+        });
+        return true;
+      }
+
+      openHostFile({
         lineNumber: resolution.request.lineNumber,
-        path: resolution.request.relativePath,
-        source: { kind: "working-tree" },
-        statusLabel: null,
+        path: resolution.request.path,
       });
       return true;
     },
-    [openWorkspaceFile, localWorkspaceRootPath],
+    [
+      localWorkspaceRootPath,
+      openHostFile,
+      openWorkspaceFile,
+      thread?.environmentId,
+    ],
   );
   const handleTimelineTitleAction = useCallback<TimelineTitleActionResolver>(
     (action) => {
@@ -800,6 +846,15 @@ export function ThreadDetailView() {
     canOpenPreferredTarget,
     openInPreferredTarget: openPathInPreferredTarget,
   });
+  const handleOpenHostFileInEditor =
+    threadEnvironmentIsLocal && canOpenPreferredTarget
+      ? (path: string) => {
+          void openPathInPreferredTarget({
+            lineNumber: activeHostFileLineNumber,
+            path,
+          });
+        }
+      : undefined;
   const fileTabContent = activeWorkspaceFilePath ? (
     <SecondaryPanelFilePreview
       activePath={activeWorkspaceFilePath}
@@ -809,6 +864,16 @@ export function ThreadDetailView() {
       lineNumber={activeWorkspaceFileLineNumber}
       onOpenInEditor={handleOpenFileInEditor}
       statusLabel={activeWorkspaceFileStatusLabel}
+    />
+  ) : activeHostFilePath ? (
+    <SecondaryPanelFilePreview
+      activePath={activeHostFilePath}
+      error={hostFilePreviewError}
+      filePreview={hostFilePreview}
+      isLoading={isHostFilePreviewLoading}
+      lineNumber={activeHostFileLineNumber}
+      onOpenInEditor={handleOpenHostFileInEditor}
+      statusLabel={null}
     />
   ) : activeStorageFilePath ? (
     <ThreadStorageFilePreview

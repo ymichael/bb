@@ -814,6 +814,12 @@ describe("server-contract clients", () => {
       }).pathname,
     ).toBe("/api/v1/threads/thr_123/thread-storage/content");
     expect(
+      publicClient.threads[":id"]["host-files"].content.$url({
+        param: { id: "thr_123" },
+        query: { path: "/Users/me/notes/plan.md" },
+      }).pathname,
+    ).toBe("/api/v1/threads/thr_123/host-files/content");
+    expect(
       publicClient.threads[":id"].interactions.$url({
         param: { id: "thr_123" },
       }).pathname,
@@ -853,6 +859,11 @@ describe("server-contract clients", () => {
     expect(() =>
       contract.threadStorageFilesQuerySchema.parse({ query: longQuery }),
     ).toThrow();
+    expect(
+      contract.threadHostFileContentQuerySchema.parse({
+        path: "/Users/me/notes/plan.md",
+      }),
+    ).toEqual({ path: "/Users/me/notes/plan.md" });
   });
 
   it("rejects zero timeline pagination cursor sequences", () => {

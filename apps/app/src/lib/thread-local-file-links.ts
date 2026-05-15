@@ -3,20 +3,26 @@ import { matchPath } from "react-router-dom";
 import { APP_ROUTE_PATTERNS } from "./app-route-paths";
 
 const THREAD_LOCAL_FILE_LINK_UNAVAILABLE_DESCRIPTION =
-  "Thread file links are only available for ready local workspaces.";
-const THREAD_LOCAL_FILE_LINK_OUTSIDE_WORKSPACE_DESCRIPTION =
-  "Thread file links can only open files inside the current workspace.";
+  "Thread file links are only available when the thread has an environment.";
+const THREAD_LOCAL_FILE_LINK_INVALID_PATH_DESCRIPTION =
+  "Thread file links must use absolute file paths.";
 
 export interface ResolveThreadLocalFileLinkArgs {
+  hostFileLinksAvailable: boolean;
   link: ThreadTimelineLocalFileLink;
   workspaceRootPath: string | null;
 }
 
-export interface ThreadLocalFileLinkOpenRequest {
+export interface ThreadWorkspaceFileLinkOpenRequest {
   lineNumber: number | null;
   path: string;
   relativePath: string;
   workspaceRootPath: string;
+}
+
+export interface ThreadHostFileLinkOpenRequest {
+  lineNumber: number | null;
+  path: string;
 }
 
 interface ThreadLocalFileLinkAppRouteResolution {
@@ -28,9 +34,14 @@ interface ThreadLocalFileLinkErrorResolution {
   kind: "error";
 }
 
-interface ThreadLocalFileLinkOpenResolution {
-  kind: "open-local-path";
-  request: ThreadLocalFileLinkOpenRequest;
+interface ThreadWorkspaceFileLinkOpenResolution {
+  kind: "open-workspace-path";
+  request: ThreadWorkspaceFileLinkOpenRequest;
+}
+
+interface ThreadHostFileLinkOpenResolution {
+  kind: "open-host-path";
+  request: ThreadHostFileLinkOpenRequest;
 }
 
 interface WorkspacePathWithinRootArgs {
@@ -52,7 +63,8 @@ interface NormalizedThreadLocalFileLinkPath {
 export type ThreadLocalFileLinkResolution =
   | ThreadLocalFileLinkAppRouteResolution
   | ThreadLocalFileLinkErrorResolution
-  | ThreadLocalFileLinkOpenResolution;
+  | ThreadWorkspaceFileLinkOpenResolution
+  | ThreadHostFileLinkOpenResolution;
 
 function isAppRoutePath(path: string): boolean {
   return APP_ROUTE_PATTERNS.some(
@@ -141,32 +153,46 @@ export function resolveThreadLocalFileLink(
     };
   }
 
-  if (args.workspaceRootPath === null) {
+  const normalizedPath = normalizeAbsolutePath(args.link.path);
+  if (!normalizedPath) {
+    return {
+      description: THREAD_LOCAL_FILE_LINK_INVALID_PATH_DESCRIPTION,
+      kind: "error",
+    };
+  }
+
+  const openRequest =
+    args.workspaceRootPath === null
+      ? null
+      : normalizeThreadLocalFileLinkPath({
+          linkPath: normalizedPath,
+          workspaceRootPath: args.workspaceRootPath,
+        });
+
+  if (openRequest) {
+    return {
+      kind: "open-workspace-path",
+      request: {
+        lineNumber: args.link.lineNumber,
+        path: openRequest.path,
+        relativePath: openRequest.relativePath,
+        workspaceRootPath: openRequest.workspaceRootPath,
+      },
+    };
+  }
+
+  if (!args.hostFileLinksAvailable) {
     return {
       description: THREAD_LOCAL_FILE_LINK_UNAVAILABLE_DESCRIPTION,
       kind: "error",
     };
   }
 
-  const openRequest = normalizeThreadLocalFileLinkPath({
-    linkPath: args.link.path,
-    workspaceRootPath: args.workspaceRootPath,
-  });
-
-  if (!openRequest) {
-    return {
-      description: THREAD_LOCAL_FILE_LINK_OUTSIDE_WORKSPACE_DESCRIPTION,
-      kind: "error",
-    };
-  }
-
   return {
-    kind: "open-local-path",
+    kind: "open-host-path",
     request: {
       lineNumber: args.link.lineNumber,
-      path: openRequest.path,
-      relativePath: openRequest.relativePath,
-      workspaceRootPath: openRequest.workspaceRootPath,
+      path: normalizedPath,
     },
   };
 }

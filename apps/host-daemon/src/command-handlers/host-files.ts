@@ -60,14 +60,21 @@ export async function readHostFile(
     throw new CommandDispatchError("invalid_path", "Path must be absolute");
   }
 
-  if (!path.isAbsolute(command.rootPath)) {
+  const rootPath = command.rootPath;
+  if (rootPath !== undefined && !path.isAbsolute(rootPath)) {
     throw new CommandDispatchError("invalid_path", "rootPath must be absolute");
   }
 
   if (command.ref !== undefined) {
+    if (rootPath === undefined) {
+      throw new CommandDispatchError(
+        "invalid_path",
+        "rootPath is required when ref is set",
+      );
+    }
     assertSafeGitRef(command.ref);
     return readFileFromGitRef({
-      rootPath: command.rootPath,
+      rootPath,
       resolvedPath: command.path,
       resultPath: command.path,
       ref: command.ref,
@@ -77,6 +84,6 @@ export async function readHostFile(
   return readFileForTransport({
     resolvedPath: command.path,
     resultPath: command.path,
-    rootPath: command.rootPath,
+    ...(rootPath !== undefined ? { rootPath } : {}),
   });
 }

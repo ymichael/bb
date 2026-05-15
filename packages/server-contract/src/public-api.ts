@@ -46,6 +46,7 @@ import type {
   EnvironmentStatusQuery,
   EnvironmentStatusResponse,
   ThreadStorageContentQuery,
+  ThreadHostFileContentQuery,
   ThreadStorageFilesQuery,
   ProjectAttachmentContentQuery,
   ProjectBranchesQuery,
@@ -504,6 +505,18 @@ export type PublicApiSchema = {
      */
     $get: Endpoint<
       PathId & { query: ThreadStorageContentQuery },
+      Uint8Array,
+      200,
+      "binary"
+    >;
+  };
+  "/threads/:id/host-files/content": {
+    /**
+     * Serve one explicit absolute file path from the thread environment host
+     * as raw bytes with `Content-Type`. Proxies to rootless `host.read_file`.
+     */
+    $get: Endpoint<
+      PathId & { query: ThreadHostFileContentQuery },
       Uint8Array,
       200,
       "binary"

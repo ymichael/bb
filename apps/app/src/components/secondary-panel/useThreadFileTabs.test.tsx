@@ -200,6 +200,63 @@ describe("useThreadFileTabs", () => {
     expect(result.current.activeStorageFilePath).toBe("notes.md");
   });
 
+  it("opens, activates, and closes host-file tabs", () => {
+    const { result } = renderThreadFileTabsHook({
+      environmentId: "env-one",
+      threadType: "standard",
+      storageFiles: undefined,
+      threadId: "thr-host-files",
+    });
+    const firstTab = {
+      lineNumber: 12,
+      path: "/Users/me/notes/plan.md",
+    };
+    const secondTab = {
+      lineNumber: null,
+      path: "/Users/me/notes/todo.md",
+    };
+
+    act(() => {
+      result.current.openHostFile(firstTab);
+      result.current.openHostFile(secondTab);
+    });
+
+    expect(result.current.openHostFileTabs).toEqual([firstTab, secondTab]);
+    expect(result.current.activeHostFilePath).toBe(secondTab.path);
+    expect(result.current.activeHostFileLineNumber).toBeNull();
+    expect(readStoredState("thr-host-files").activePanel).toBe("thread-info");
+
+    act(() => {
+      result.current.activateHostFileTab(firstTab.path);
+    });
+    expect(result.current.activeHostFilePath).toBe(firstTab.path);
+    expect(result.current.activeHostFileLineNumber).toBe(12);
+
+    act(() => {
+      result.current.closeHostFileTab(firstTab.path);
+    });
+    expect(result.current.openHostFileTabs).toEqual([secondTab]);
+    expect(result.current.activeHostFilePath).toBeNull();
+  });
+
+  it("updates host-file line numbers without duplicating tabs", () => {
+    const { result } = renderThreadFileTabsHook({
+      environmentId: "env-one",
+      threadType: "standard",
+      storageFiles: undefined,
+      threadId: "thr-host-file-dedupe",
+    });
+    const path = "/Users/me/notes/plan.md";
+
+    act(() => {
+      result.current.openHostFile({ lineNumber: 12, path });
+      result.current.openHostFile({ lineNumber: 20, path });
+    });
+
+    expect(result.current.openHostFileTabs).toEqual([{ lineNumber: 20, path }]);
+    expect(result.current.activeHostFileLineNumber).toBe(20);
+  });
+
   it("clears workspace tabs when the environment changes", async () => {
     const { result, rerender } = renderThreadFileTabsHook({
       environmentId: "env-one",
@@ -271,6 +328,7 @@ describe("useThreadFileTabs", () => {
         fileTabs: {
           workspace: [],
           storage: ["STATUS.md", "notes.md"],
+          hostFiles: [],
           active: { type: "storage", path: "notes.md" },
         },
         lastUsedAt: NOW,
@@ -323,6 +381,7 @@ describe("useThreadFileTabs", () => {
         fileTabs: {
           workspace: [workspaceTab],
           storage: [],
+          hostFiles: [],
           active: { type: "workspace", path: "src/app.ts" },
         },
         lastUsedAt: NOW,
@@ -366,6 +425,7 @@ describe("useThreadFileTabs", () => {
         fileTabs: {
           workspace: [],
           storage: ["notes.md"],
+          hostFiles: [],
           active: { type: "storage", path: "notes.md" },
         },
         lastUsedAt: NOW,
@@ -416,6 +476,7 @@ describe("useThreadFileTabs", () => {
         fileTabs: {
           workspace: [],
           storage: ["STATUS.md", "notes.md"],
+          hostFiles: [],
           active: { type: "storage", path: "STATUS.md" },
         },
         lastUsedAt: NOW,
@@ -458,6 +519,7 @@ describe("useThreadFileTabs", () => {
         fileTabs: {
           workspace: [workspaceTab],
           storage: [],
+          hostFiles: [],
           active: { type: "workspace", path: "src/app.ts" },
         },
         lastUsedAt: NOW,
@@ -490,6 +552,7 @@ describe("useThreadFileTabs", () => {
         fileTabs: {
           workspace: [],
           storage: ["STATUS.md", "notes.md"],
+          hostFiles: [],
           active: { type: "storage", path: "notes.md" },
         },
         lastUsedAt: NOW,
@@ -529,6 +592,7 @@ describe("useThreadFileTabs", () => {
           fileTabs: {
             workspace: [],
             storage: ["STATUS.md"],
+            hostFiles: [],
             active: { type: "storage", path: "STATUS.md" },
           },
           lastUsedAt: Date.now(),

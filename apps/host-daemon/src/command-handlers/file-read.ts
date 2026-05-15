@@ -121,7 +121,7 @@ async function throwMissingTargetOrRethrow(
 
   const rootPath = args.rootPath;
   if (!rootPath) {
-    throw error;
+    throw createMissingTargetError(args.resultPath);
   }
 
   await resolveRootPathOrThrowMissingPath({
