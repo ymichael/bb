@@ -36,6 +36,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button.js";
 import { EmptyState } from "@/components/ui/empty-state.js";
 import { Icon } from "@/components/ui/icon.js";
+import { OverflowFade } from "@/components/ui/overflow-fade.js";
 import { SidebarGroupContent, SidebarMenu, SidebarMenuItem, SidebarMenuSkeleton, SidebarStickyStack, SidebarStickyTier } from "@/components/ui/sidebar.js";
 import { COARSE_POINTER_ADD_PROJECT_BUTTON_SIZE_CLASS, COARSE_POINTER_ICON_SIZE_CLASS, COARSE_POINTER_ROW_ACTION_SIZE_CLASS, COARSE_POINTER_ROW_HEIGHT_CLASS } from "@/components/ui/coarse-pointer-sizing.js";
 import { ProjectRow } from "./ProjectRow";
@@ -51,16 +52,13 @@ import {
 } from "./sidebarRowClasses";
 
 interface ProjectListProps {
-  onNewChat?: () => void;
-  onNewManager?: (projectId: string) => void;
   onNewProject?: () => void;
   onProjectSelect?: () => void;
   selectedProjectId?: string;
   isCreatingProject?: boolean;
-  isManagerActionPending?: boolean;
 }
 
-interface ProjectListActionButtonsProps {
+export interface ProjectListActionButtonsProps {
   onNewChat?: () => void;
   onNewManager?: (projectId: string) => void;
   selectedProjectId?: string;
@@ -73,10 +71,6 @@ interface ProjectListSectionLabelProps {
 }
 
 interface ProjectListShellProps {
-  onNewChat?: () => void;
-  onNewManager?: (projectId: string) => void;
-  selectedProjectId?: string;
-  isManagerActionPending?: boolean;
   onNewProject?: () => void;
   isCreatingProject?: boolean;
   children: ReactNode;
@@ -204,11 +198,12 @@ function ProjectListSectionLabel({
           <Icon name="Plus" className={COARSE_POINTER_ICON_SIZE_CLASS} />
         </button>
       ) : null}
+      <OverflowFade placement="below" tone="sidebar" size="sm" />
     </SidebarStickyTier>
   );
 }
 
-function ProjectListActionButtons({
+export function ProjectListActionButtons({
   onNewChat,
   onNewManager,
   selectedProjectId,
@@ -269,45 +264,28 @@ function ProjectListActionButtons({
 }
 
 export function ProjectListShell({
-  onNewChat,
-  onNewManager,
-  selectedProjectId,
-  isManagerActionPending = false,
   onNewProject,
   isCreatingProject = false,
   children,
 }: ProjectListShellProps) {
   return (
-    <>
-      <div className="px-2 pt-2 group-data-[collapsible=icon]:hidden">
-        <ProjectListActionButtons
-          onNewChat={onNewChat}
-          onNewManager={onNewManager}
-          selectedProjectId={selectedProjectId}
-          isManagerActionPending={isManagerActionPending}
-        />
-      </div>
-      <SidebarStickyStack data-sidebar-sticky-density="compact-actions">
-        <ProjectListSectionLabel
-          onNewProject={onNewProject}
-          isCreatingProject={isCreatingProject}
-        />
-        <SidebarGroupContent>
-          <SidebarMenu className="gap-1">{children}</SidebarMenu>
-        </SidebarGroupContent>
-      </SidebarStickyStack>
-    </>
+    <SidebarStickyStack data-sidebar-sticky-density="compact-actions">
+      <ProjectListSectionLabel
+        onNewProject={onNewProject}
+        isCreatingProject={isCreatingProject}
+      />
+      <SidebarGroupContent>
+        <SidebarMenu className="gap-1">{children}</SidebarMenu>
+      </SidebarGroupContent>
+    </SidebarStickyStack>
   );
 }
 
 function ProjectListComponent({
-  onNewChat,
-  onNewManager,
   onNewProject,
   onProjectSelect,
   selectedProjectId,
   isCreatingProject = false,
-  isManagerActionPending = false,
 }: ProjectListProps) {
   const sidebarBootstrapQuery = useSidebarBootstrap();
   const hasSidebarBootstrapSettled =
@@ -456,10 +434,6 @@ function ProjectListComponent({
 
   return (
     <ProjectListShell
-      onNewChat={onNewChat}
-      onNewManager={onNewManager}
-      selectedProjectId={selectedProjectId}
-      isManagerActionPending={isManagerActionPending}
       onNewProject={onNewProject}
       isCreatingProject={isCreatingProject}
     >

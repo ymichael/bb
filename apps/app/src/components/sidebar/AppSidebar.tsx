@@ -2,6 +2,7 @@ import { useCallback, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { Link, useNavigate } from "react-router-dom";
 import { Icon } from "@/components/ui/icon.js";
+import { OverflowFade } from "@/components/ui/overflow-fade.js";
 import {
   Sidebar,
   SidebarContent,
@@ -13,7 +14,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar.js";
 import { COARSE_POINTER_CHILD_ICON_BUTTON_CLASS } from "@/components/ui/coarse-pointer-sizing.js";
-import { ProjectList } from "./ProjectList";
+import { ProjectList, ProjectListActionButtons } from "./ProjectList";
 import { useQuickCreateProjectController } from "@/hooks/useQuickCreateProject";
 
 interface AppSidebarProps {
@@ -67,10 +68,16 @@ export function AppSidebar({
         <div className="flex h-12 shrink-0 items-center px-2">
           <SidebarTrigger />
         </div>
-        <SidebarContent>
-          <ProjectList
+        <div className="shrink-0 px-2 py-2 group-data-[collapsible=icon]:hidden">
+          <ProjectListActionButtons
             onNewChat={newChatAction}
             onNewManager={newManagerAction}
+            selectedProjectId={selectedProjectId}
+            isManagerActionPending={isManagerActionPending}
+          />
+        </div>
+        <SidebarContent>
+          <ProjectList
             onNewProject={
               quickCreateProject.isAvailable
                 ? quickCreateProject.openCreateDialog
@@ -79,10 +86,10 @@ export function AppSidebar({
             onProjectSelect={closeOnMobile}
             selectedProjectId={selectedProjectId}
             isCreatingProject={quickCreateProject.isCreating}
-            isManagerActionPending={isManagerActionPending}
           />
         </SidebarContent>
-        <SidebarFooter>
+        <SidebarFooter className="relative">
+          <OverflowFade placement="above" tone="sidebar" size="sm" />
           <SidebarMenu className="flex-row items-center">
             <SidebarMenuItem>
               <SidebarMenuButton

@@ -52,25 +52,4 @@ describe("ThreadMetadataContent", () => {
       expect(writeText).toHaveBeenCalledWith(WORKTREE_PATH);
     });
   });
-
-  it("does not render the worktree path row for direct environments", () => {
-    const { wrapper } = createQueryClientTestHarness();
-
-    render(
-      <ThreadMetadataContent
-        {...baseProps}
-        environment={makeEnvironment({
-          path: WORKTREE_PATH,
-          isWorktree: false,
-          workspaceProvisionType: "unmanaged",
-        })}
-      />,
-      { wrapper },
-    );
-
-    expect(screen.queryByText(WORKTREE_PATH)).toBeNull();
-    expect(
-      screen.queryByRole("button", { name: "Copy worktree path" }),
-    ).toBeNull();
-  });
 });

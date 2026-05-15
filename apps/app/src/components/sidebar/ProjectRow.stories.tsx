@@ -11,7 +11,7 @@ import {
 import { SidebarMenu, SidebarStickyStack } from "@/components/ui/sidebar.js";
 import { ProjectActionsProvider } from "@/components/project/ProjectActionsProvider";
 import { ThreadActionsProvider } from "@/components/thread/ThreadActionsProvider";
-import { ProjectListShell } from "./ProjectList";
+import { ProjectListActionButtons, ProjectListShell } from "./ProjectList";
 import { ProjectRow, type ProjectThreadListState } from "./ProjectRow";
 import { StoryCard, StoryRow } from "../../../.ladle/story-card";
 
@@ -452,12 +452,15 @@ export function Full() {
         hint="action buttons + three projects: bb (active) with a 4-child manager + 2 standalones; pierre with 3 standalones; ingest-pipeline with a manager + 1 standalone"
       >
         <SidebarStage>
-          <ProjectListShell
-            onNewChat={noop}
-            onNewManager={noop}
-            selectedProjectId="proj_full_a"
-            onNewProject={noop}
-          >
+          <div className="px-2 pb-2">
+            <ProjectListActionButtons
+              onNewChat={noop}
+              onNewManager={noop}
+              selectedProjectId="proj_full_a"
+              isManagerActionPending={false}
+            />
+          </div>
+          <ProjectListShell onNewProject={noop}>
             {fullProjects.map(({ key, ...args }) => (
               <InteractiveProjectRow key={key} {...args} />
             ))}

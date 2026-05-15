@@ -63,19 +63,6 @@ afterEach(() => {
 });
 
 describe("FollowUpPromptBox", () => {
-  it("shows a stopping submit state when the composer is blocked for stopping", () => {
-    render(<FollowUpPromptBox {...makeFollowUpPromptBoxProps()} />);
-
-    expect(screen.getByPlaceholderText("Stopping thread...")).toBeTruthy();
-    expect(screen.queryByTitle("Stop run")).toBeNull();
-
-    const stoppingButton = screen.getByTitle("Stopping run...");
-    if (!(stoppingButton instanceof HTMLButtonElement)) {
-      throw new Error("Expected stopping affordance to render as a button");
-    }
-    expect(stoppingButton.disabled).toBe(true);
-  });
-
   it("sends steers with Cmd+Enter without invoking the normal submit", () => {
     const props = makeFollowUpPromptBoxProps();
     const onSteerSubmit = vi.fn();

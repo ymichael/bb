@@ -17,17 +17,20 @@ export const SIDEBAR_ROW_INTERACTIVE_STATE_CLASS =
  * under the center of the project chevron/folder icon. The coarse-pointer
  * variant nudges the line a few px right to follow the larger icon.
  *
- * The line uses `z-50` so it draws on top of manager-row and selected-row
- * backgrounds (which would otherwise occlude a behind-row line); at 1px
- * wide it never overlaps row text, which starts at pl-8 / pl-14.
+ * Z-index sits between the manager (z-40) and project (z-50) sticky tiers
+ * so the line paints over manager rows and ordinary thread rows (showing
+ * through their hover/active backgrounds) but a stuck project row covers
+ * it cleanly.
  */
 export const SIDEBAR_PROJECT_GROUP_LINE_CLASS =
-  "before:pointer-events-none before:absolute before:bottom-0 before:left-4 before:top-0 before:z-50 before:w-px before:bg-sidebar-foreground/15 before:content-[''] max-md:pointer-coarse:before:left-5";
+  "before:pointer-events-none before:absolute before:bottom-0 before:left-4 before:top-0 before:z-[45] before:w-px before:bg-sidebar-foreground/15 before:content-[''] max-md:pointer-coarse:before:left-5";
 
 /**
  * Hairline that runs through a manager's managed-child list, sitting under
- * the center of the manager's user icon. Same z-50 trick as the project
- * line so it stays visible behind active/hover row backgrounds.
+ * the center of the manager's user icon. Z-index sits below both the
+ * manager (z-40) and project (z-50) sticky tiers so a stuck manager or
+ * project row covers the line, while ordinary thread rows still let it
+ * show through their hover/active backgrounds.
  */
 export const SIDEBAR_MANAGER_GROUP_LINE_CLASS =
-  "before:pointer-events-none before:absolute before:bottom-0 before:left-10 before:top-0 before:z-50 before:w-px before:bg-sidebar-foreground/15 before:content-['']";
+  "before:pointer-events-none before:absolute before:bottom-0 before:left-10 before:top-0 before:z-30 before:w-px before:bg-sidebar-foreground/15 before:content-['']";

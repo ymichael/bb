@@ -4,6 +4,7 @@ import type { ProjectResponse } from "@bb/server-contract";
 import { NavLink } from "react-router-dom";
 import { EmptyState } from "@/components/ui/empty-state.js";
 import { Icon } from "@/components/ui/icon.js";
+import { OverflowFade } from "@/components/ui/overflow-fade.js";
 import { SidebarStickyTier } from "@/components/ui/sidebar.js";
 import {
   ProjectActionsContextMenu,
@@ -172,6 +173,7 @@ export function ProjectRow({
                 : "opacity-0 group-hover/project-row:opacity-100 group-focus-within/project-row:opacity-100",
             )}
           />
+          <OverflowFade placement="below" tone="sidebar" size="sm" />
         </SidebarStickyTier>
       </ProjectActionsContextMenu>
 
