@@ -9,7 +9,7 @@ import {
   findLocalPathProjectSourceForHost,
   type ThreadListEntry,
 } from "@bb/domain";
-import { useLocation } from "react-router-dom";
+import { useAppRoute } from "@/hooks/useAppRoute";
 import {
   getConnectionAwareQueryState,
   useConnectionAwareQueryState,
@@ -334,7 +334,7 @@ function ProjectListComponent({
     combine: combineProjectThreadQueries,
   });
   const { localHostId } = useHostDaemon();
-  const location = useLocation();
+  const { threadId: selectedThreadId, isProjectMainView } = useAppRoute();
 
   const localSourceTargets = useMemo(() => {
     if (!localHostId || !projects) return [];
@@ -374,9 +374,6 @@ function ProjectListComponent({
   const [collapsedManagerIdList, setCollapsedManagerIdList] = useAtom(
     collapsedManagerIdsAtom,
   );
-  const selectedThreadId = location.pathname.match(
-    /^\/projects\/[^/]+\/threads\/([^/]+)/,
-  )?.[1];
   const collapsedProjectIds = useMemo(
     () => new Set(collapsedProjectIdList),
     [collapsedProjectIdList],
@@ -460,7 +457,7 @@ function ProjectListComponent({
               project={project}
               threadListState={threadListState}
               selectedThreadId={selectedThreadId}
-              isActive={selectedProjectId === project.id && !selectedThreadId}
+              isActive={selectedProjectId === project.id && isProjectMainView}
               isCollapsed={collapsedProjectIds.has(project.id)}
               collapsedManagerIds={collapsedManagerIds}
               isLocalPathInvalid={isLocalPathInvalid}

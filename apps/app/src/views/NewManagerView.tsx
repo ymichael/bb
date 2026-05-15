@@ -5,7 +5,6 @@ import {
   useMemo,
   useState,
   type FormEvent,
-  type ReactNode,
 } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import type {
@@ -22,10 +21,7 @@ import { FormError } from "@/components/ui/form-error.js";
 import { Icon } from "@/components/ui/icon.js";
 import { Input } from "@/components/ui/input.js";
 import { PageShell } from "@/components/ui/page-shell.js";
-import {
-  SettingsRow,
-  SettingsRowList,
-} from "@/components/ui/settings-section.js";
+import { COARSE_POINTER_PROMPT_ACTION_BUTTON_CLASS } from "@/components/ui/coarse-pointer-sizing.js";
 import { useHireProjectManager } from "@/hooks/mutations/project-mutations";
 import { useSystemExecutionOptions } from "@/hooks/queries/system-queries";
 import { useEffectiveHosts } from "@/hooks/queries/effective-hosts";
@@ -92,13 +88,6 @@ export function NewManagerView() {
     },
     [navigate, projectId],
   );
-  const handleCancel = useCallback(() => {
-    if (projectId) {
-      navigate(`/projects/${projectId}`);
-    } else {
-      navigate("/");
-    }
-  }, [navigate, projectId]);
 
   if (!projectId) {
     return (
@@ -118,25 +107,22 @@ export function NewManagerView() {
   }
 
   return (
-    <PageShell contentClassName="pt-8 md:pt-12">
-      <div className="mx-auto w-full max-w-md">
-        <NewManagerForm
-          projectId={projectId}
-          projects={projects}
-          projectsAreLoaded={projectsAreLoaded}
-          providers={providers}
-          providersAreLoaded={providersAreLoaded}
-          hosts={hosts}
-          isLocalHost={isLocalHost}
-          models={models}
-          selectedProviderId={selectedProviderId}
-          onSelectedProviderIdChange={setSelectedProviderId}
-          onProjectChange={handleProjectChange}
-          onCancel={handleCancel}
-          onHire={handleHire}
-          isHirePending={hireManager.isPending}
-        />
-      </div>
+    <PageShell contentClassName="pt-4 md:pt-5">
+      <NewManagerForm
+        projectId={projectId}
+        projects={projects}
+        projectsAreLoaded={projectsAreLoaded}
+        providers={providers}
+        providersAreLoaded={providersAreLoaded}
+        hosts={hosts}
+        isLocalHost={isLocalHost}
+        models={models}
+        selectedProviderId={selectedProviderId}
+        onSelectedProviderIdChange={setSelectedProviderId}
+        onProjectChange={handleProjectChange}
+        onHire={handleHire}
+        isHirePending={hireManager.isPending}
+      />
     </PageShell>
   );
 }
@@ -153,7 +139,6 @@ export interface NewManagerFormProps {
   selectedProviderId: string;
   onSelectedProviderIdChange: (providerId: string) => void;
   onProjectChange: (projectId: string) => void;
-  onCancel: () => void;
   onHire: (params: HireProjectManagerRequest) => Promise<void>;
   isHirePending: boolean;
 }
@@ -170,12 +155,10 @@ export function NewManagerForm({
   selectedProviderId,
   onSelectedProviderIdChange,
   onProjectChange,
-  onCancel,
   onHire,
   isHirePending,
 }: NewManagerFormProps) {
   const nameInputId = useId();
-  const formTitleId = useId();
 
   const [managerName, setManagerName] = useState("");
   const [selectedModel, setSelectedModel] = useState<string>("");
@@ -420,176 +403,125 @@ export function NewManagerForm({
 
   const isSubmitInProgress = isPending || isHirePending;
 
-  const projectName = selectedProject?.name;
-
   return (
     <form
-      aria-labelledby={formTitleId}
-      className="space-y-6"
+      aria-label="Hire manager"
+      className="space-y-1"
       onSubmit={handleHire}
     >
-      <header className="flex flex-col items-center gap-4 text-center">
-        <div className="flex size-14 items-center justify-center rounded-full bg-muted text-muted-foreground">
-          <Icon name="UserRoundPlus" className="size-6" aria-hidden />
-        </div>
-        <div className="space-y-2">
-          <h1
-            id={formTitleId}
-            className="text-xl font-semibold leading-tight tracking-tight text-foreground"
-          >
-            New Manager
-          </h1>
-          <p className="text-left text-sm leading-relaxed text-muted-foreground">
+      <div className="flex items-center px-3.5">
+        {projectOptions.length > 0 ? (
+          <OptionPicker
+            label="Project"
+            value={effectiveProjectId}
+            options={projectOptions}
+            onChange={handleProjectChange}
+            className="h-8 text-sm"
+          />
+        ) : (
+          <LoadingOrEmptyText
+            isLoading={!projectsAreLoaded}
+            message={unavailableProjectMessage}
+          />
+        )}
+      </div>
+
+      <div className="relative w-full rounded-lg border border-input bg-background pb-2">
+        <div className="space-y-1 px-4 pt-3">
+          <p className="text-sm font-medium text-foreground">New Manager</p>
+          <p className="text-sm leading-relaxed text-muted-foreground">
             Managers are special threads that have persistent memory and can
             help you coordinate work by delegating tasks to managed child
-            threads. Hiring starts a new thread
-            {projectName ? (
-              <>
-                {" "}
-                on{" "}
-                <span className="font-medium text-foreground">
-                  {projectName}
-                </span>
-              </>
-            ) : null}
-            .
+            threads.
           </p>
         </div>
-      </header>
 
-      <Input
-        id={nameInputId}
-        value={managerName}
-        placeholder="Give them a name (optional)"
-        autoFocus
-        disabled={isPending}
-        aria-label="Manager name"
-        className="h-10 border-border bg-card px-3 text-sm"
-        onChange={(event) => {
-          setManagerName(event.target.value);
-          setError(null);
-        }}
-      />
+        <div className="px-4 pt-3">
+          <Input
+            id={nameInputId}
+            value={managerName}
+            placeholder="Give them a name (optional)"
+            disabled={isPending}
+            aria-label="Manager name"
+            className="h-10 border-muted-foreground/30 text-sm"
+            onChange={(event) => {
+              setManagerName(event.target.value);
+              setError(null);
+            }}
+          />
+        </div>
 
-      <div className="rounded-lg border border-border bg-card px-3 py-1">
-        <SettingsRowList>
-          <ConfigRow label="Project">
-            {projectOptions.length > 0 ? (
-              <OptionPicker
-                label="Project"
-                value={effectiveProjectId}
-                options={projectOptions}
-                onChange={handleProjectChange}
-                align="end"
-              />
+        <div className="flex flex-row items-center gap-3 px-3.5 pt-1.5">
+          <div className="flex min-w-0 flex-1 flex-row items-center gap-1">
+            {hasSelectedProvider ? (
+              modelOptions.length > 0 ? (
+                <>
+                  <ProviderModelPicker
+                    providerOptions={providerOptions}
+                    selectedProviderId={selectedProviderValue}
+                    onSelectedProviderChange={handleProviderChange}
+                    hasMultipleProviders={providers.length > 1}
+                    modelValue={selectedModel}
+                    modelOptions={modelOptions}
+                    onModelChange={handleModelChange}
+                    formatModelLabel={formatModelLabel}
+                    fastModeEnabled={false}
+                    onFastModeChange={() => {}}
+                    showFastModeToggle={false}
+                    muted
+                  />
+                  {reasoningOptions.length > 0 ? (
+                    <OptionPicker
+                      label="Reasoning"
+                      value={
+                        effectiveReasoningLevel ?? reasoningOptions[0]!.value
+                      }
+                      options={reasoningOptions}
+                      onChange={handleReasoningLevelChange}
+                      muted
+                    />
+                  ) : null}
+                  <HostPicker
+                    hosts={hosts}
+                    eligibleHosts={eligibleHosts}
+                    selectedHostId={selectedHostId}
+                    onChange={setSelectedHostId}
+                    isLocalHost={isLocalHost}
+                    muted
+                  />
+                </>
+              ) : (
+                <LoadingOrEmptyText isLoading message="Loading models…" />
+              )
             ) : (
               <LoadingOrEmptyText
-                isLoading={!projectsAreLoaded}
-                message={unavailableProjectMessage}
+                isLoading={!providersAreLoaded}
+                message={unavailableProviderMessage}
               />
             )}
-          </ConfigRow>
-          <ConfigRow label="Model">
-            <div className="flex min-w-0 flex-wrap items-center justify-end gap-1.5">
-              {hasSelectedProvider ? (
-                modelOptions.length > 0 ? (
-                  <>
-                    <ProviderModelPicker
-                      providerOptions={providerOptions}
-                      selectedProviderId={selectedProviderValue}
-                      onSelectedProviderChange={handleProviderChange}
-                      hasMultipleProviders={providers.length > 1}
-                      modelValue={selectedModel}
-                      modelOptions={modelOptions}
-                      onModelChange={handleModelChange}
-                      formatModelLabel={formatModelLabel}
-                      fastModeEnabled={false}
-                      onFastModeChange={() => {}}
-                      showFastModeToggle={false}
-                    />
-                    {reasoningOptions.length > 0 ? (
-                      <OptionPicker
-                        label="Reasoning"
-                        value={
-                          effectiveReasoningLevel ?? reasoningOptions[0]!.value
-                        }
-                        options={reasoningOptions}
-                        onChange={handleReasoningLevelChange}
-                        align="end"
-                      />
-                    ) : null}
-                  </>
-                ) : (
-                  <LoadingOrEmptyText isLoading message="Loading models…" />
-                )
+          </div>
+          <div className="flex shrink-0 flex-row items-center gap-1">
+            <Button
+              type="submit"
+              size="sm"
+              variant="default"
+              title={isSubmitInProgress ? "Hiring…" : "Hire manager"}
+              aria-label="Hire Manager"
+              disabled={isSubmitInProgress}
+              className={COARSE_POINTER_PROMPT_ACTION_BUTTON_CLASS}
+            >
+              {isSubmitInProgress ? (
+                <Icon name="Spinner" className="size-4 animate-spin" />
               ) : (
-                <LoadingOrEmptyText
-                  isLoading={!providersAreLoaded}
-                  message={unavailableProviderMessage}
-                />
+                <Icon name="UserRoundPlus" className="size-4" />
               )}
-            </div>
-          </ConfigRow>
-          <ConfigRow label="Host">
-            <HostPicker
-              hosts={hosts}
-              eligibleHosts={eligibleHosts}
-              selectedHostId={selectedHostId}
-              onChange={setSelectedHostId}
-              isLocalHost={isLocalHost}
-            />
-          </ConfigRow>
-        </SettingsRowList>
+            </Button>
+          </div>
+        </div>
       </div>
 
       <FormError message={error} />
-
-      <div className="flex flex-col gap-2">
-        <Button
-          type="submit"
-          disabled={isSubmitInProgress}
-          className="h-10 w-full"
-        >
-          {isSubmitInProgress ? (
-            <>
-              <Icon name="Spinner" className="animate-spin" aria-hidden />
-              Hiring…
-            </>
-          ) : (
-            <>
-              <Icon name="UserRoundPlus" aria-hidden />
-              Hire Manager
-            </>
-          )}
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          onClick={onCancel}
-          disabled={isSubmitInProgress}
-          className="w-full"
-        >
-          Cancel
-        </Button>
-      </div>
     </form>
-  );
-}
-
-function ConfigRow({
-  label,
-  children,
-}: {
-  label: string;
-  children: ReactNode;
-}) {
-  return (
-    <SettingsRow>
-      <span className="text-xs font-medium text-muted-foreground">{label}</span>
-      <div className="ml-auto flex min-w-0 items-center justify-end">
-        {children}
-      </div>
-    </SettingsRow>
   );
 }
 

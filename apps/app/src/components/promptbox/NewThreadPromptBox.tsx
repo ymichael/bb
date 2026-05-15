@@ -117,6 +117,7 @@ export function NewThreadPromptBoxUI({
         value={value}
         onChange={onChange}
         onSubmit={onSubmit}
+        autoFocus
         history={history}
         mentions={mentions}
         mentionMenuPlacement="bottom"

@@ -114,7 +114,15 @@ const routeTitles: Record<string, { title: string; subtitle?: string }> = {
 };
 
 interface AppHeaderProps {
-  isProjectMainView: boolean;
+  /**
+   * True for any project-scoped route (main, new-manager, archived, settings).
+   * Drives the unbordered chrome and the project action icons on the right;
+   * also suppresses meta.title in the center (project name is conveyed by the
+   * page-level project picker, not the chrome).
+   */
+  usesProjectChromeStyle: boolean;
+  isArchivedView: boolean;
+  isSettingsView: boolean;
   projectId?: string;
   project?: ProjectResponse;
   meta: {
@@ -125,21 +133,16 @@ interface AppHeaderProps {
 }
 
 function AppHeader({
-  isProjectMainView,
+  usesProjectChromeStyle,
+  isArchivedView,
+  isSettingsView,
   projectId,
   project,
   meta,
 }: AppHeaderProps) {
-  const showProjectMenuButton = isProjectMainView && !!project;
-  const showProjectNameInHeader = !isProjectMainView;
-  const headerBreadcrumbs = showProjectNameInHeader
-    ? meta.breadcrumbs
-    : undefined;
-  const headerTitle = headerBreadcrumbs
-    ? undefined
-    : showProjectNameInHeader
-      ? meta.title
-      : undefined;
+  const headerBreadcrumbs = meta.breadcrumbs;
+  const headerTitle =
+    headerBreadcrumbs || usesProjectChromeStyle ? undefined : meta.title;
 
   const hasCenterContent =
     Boolean(headerBreadcrumbs) ||
@@ -195,15 +198,19 @@ function AppHeader({
   ) : null;
 
   const actions =
-    isProjectMainView && projectId ? (
+    usesProjectChromeStyle && projectId ? (
       <>
         <Link
           to={`/projects/${projectId}/settings`}
           className={cn(
             HEADER_ICON_BUTTON_CLASS,
-            "inline-flex items-center justify-center text-muted-foreground transition-colors hover:bg-state-hover hover:text-foreground",
+            "inline-flex items-center justify-center transition-colors",
+            isSettingsView
+              ? "bg-state-active text-foreground"
+              : "text-muted-foreground hover:bg-state-hover hover:text-foreground",
           )}
           aria-label="Project settings"
+          aria-current={isSettingsView ? "page" : undefined}
           title="Project settings"
         >
           <Icon name="Settings" />
@@ -212,14 +219,18 @@ function AppHeader({
           to={`/projects/${projectId}/archived`}
           className={cn(
             HEADER_ICON_BUTTON_CLASS,
-            "inline-flex items-center justify-center text-muted-foreground transition-colors hover:bg-state-hover hover:text-foreground",
+            "inline-flex items-center justify-center transition-colors",
+            isArchivedView
+              ? "bg-state-active text-foreground"
+              : "text-muted-foreground hover:bg-state-hover hover:text-foreground",
           )}
           aria-label="Archived threads"
+          aria-current={isArchivedView ? "page" : undefined}
           title="Archived threads"
         >
           <Icon name="Archive" />
         </Link>
-        {showProjectMenuButton && project ? (
+        {project ? (
           <ProjectActionsMenu
             project={project}
             triggerClassName={HEADER_ICON_BUTTON_CLASS}
@@ -230,7 +241,7 @@ function AppHeader({
 
   return (
     <AppPageHeader
-      bordered={!isProjectMainView}
+      bordered={!usesProjectChromeStyle}
       center={center}
       actions={actions}
     />
@@ -319,7 +330,7 @@ export function AppLayout({ children }: AppLayoutProps) {
             { label: "Archived" },
           ],
         }
-      : isNewManagerView && projectId
+      : isSettingsView && projectId
         ? {
             title: "",
             subtitle: undefined,
@@ -328,27 +339,15 @@ export function AppLayout({ children }: AppLayoutProps) {
                 label: projectLabel ?? projectId,
                 to: `/projects/${projectId}`,
               },
-              { label: "New Manager" },
+              { label: "Settings" },
             ],
           }
-        : isSettingsView && projectId
+        : projectId
           ? {
-              title: "",
+              title: projectLabel ?? projectId,
               subtitle: undefined,
-              breadcrumbs: [
-                {
-                  label: projectLabel ?? projectId,
-                  to: `/projects/${projectId}`,
-                },
-                { label: "Settings" },
-              ],
             }
-          : projectId
-            ? {
-                title: projectLabel ?? projectId,
-                subtitle: undefined,
-              }
-            : (routeTitles[location.pathname] ?? { title: "" });
+          : (routeTitles[location.pathname] ?? { title: "" });
 
   const documentTitle = (() => {
     if (isThreadView) {
@@ -470,7 +469,14 @@ export function AppLayout({ children }: AppLayoutProps) {
               ) : null}
               {showHeader ? (
                 <AppHeader
-                  isProjectMainView={isProjectMainView}
+                  usesProjectChromeStyle={
+                    isProjectMainView ||
+                    isNewManagerView ||
+                    isArchivedView ||
+                    isSettingsView
+                  }
+                  isArchivedView={isArchivedView}
+                  isSettingsView={isSettingsView}
                   projectId={projectId}
                   project={project}
                   meta={meta}
