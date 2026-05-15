@@ -16,9 +16,10 @@
  */
 
 import { randomUUID } from "node:crypto";
+import { realpathSync } from "node:fs";
 import { resolve as resolvePath } from "node:path";
 import { createInterface } from "node:readline";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import type {
   CanUseTool,
   PermissionResult,
@@ -1268,10 +1269,15 @@ function shutdownGracefully(message: string): void {
 
 function isMainModule(): boolean {
   const entryPoint = process.argv[1];
-  return (
-    entryPoint !== undefined &&
-    import.meta.url === pathToFileURL(resolvePath(entryPoint)).href
-  );
+  if (entryPoint === undefined) return false;
+  try {
+    return (
+      realpathSync(fileURLToPath(import.meta.url)) ===
+      realpathSync(resolvePath(entryPoint))
+    );
+  } catch {
+    return false;
+  }
 }
 
 if (isMainModule()) {

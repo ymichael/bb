@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 
 const HTTP_WAIT_TIMEOUT_MS = 60_000;
 const HTTP_WAIT_INTERVAL_MS = 250;
+const BRIDGE_WAIT_TIMEOUT_MS = 10_000;
 const PROCESS_STOP_TIMEOUT_MS = 5_000;
 
 const scriptsDir = dirname(fileURLToPath(import.meta.url));
@@ -42,6 +43,10 @@ function collectProcessOutput(childProcess) {
     output.stderr += chunk.toString("utf8");
   });
   return output;
+}
+
+function isRecord(value) {
+  return typeof value === "object" && value !== null;
 }
 
 function waitForProcessExit(childProcess) {
@@ -202,6 +207,156 @@ async function packTarball() {
   return join(tempRoot, entry.filename);
 }
 
+async function extractTarball(tarballPath) {
+  const extractDir = join(tempRoot, "extracted-package");
+  await mkdir(extractDir, { recursive: true });
+  await runCommand({
+    args: ["-xzf", tarballPath, "-C", extractDir],
+    command: "tar",
+    label: "extract bb-app tarball",
+  });
+  return join(extractDir, "package");
+}
+
+function waitForJsonRpcResponse({ childProcess, id, label, output }) {
+  return new Promise((resolvePromise, reject) => {
+    let buffer = "";
+    let settled = false;
+
+    const cleanup = () => {
+      clearTimeout(timeout);
+      childProcess.stdout?.off("data", onData);
+      childProcess.off("exit", onExit);
+    };
+    const settle = (callback, value) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      cleanup();
+      callback(value);
+    };
+    const parseLine = (line) => {
+      const trimmed = line.trim();
+      if (!trimmed) {
+        return;
+      }
+
+      let parsed;
+      try {
+        parsed = JSON.parse(trimmed);
+      } catch (error) {
+        settle(
+          reject,
+          new Error(
+            `${label} emitted invalid JSON-RPC output: ${trimmed}\n${formatProcessOutput(output)}`,
+          ),
+        );
+        return;
+      }
+
+      if (isRecord(parsed) && parsed.id === id) {
+        settle(resolvePromise, parsed);
+      }
+    };
+    const onData = (chunk) => {
+      buffer += chunk.toString("utf8");
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+      for (const line of lines) {
+        if (settled) {
+          return;
+        }
+        parseLine(line);
+      }
+    };
+    const onExit = (code, signal) => {
+      settle(
+        reject,
+        new Error(
+          `${label} exited before response ${id} with ${code ?? signal}\n${formatProcessOutput(output)}`,
+        ),
+      );
+    };
+    const timeout = setTimeout(() => {
+      settle(
+        reject,
+        new Error(
+          `${label} timed out waiting for response ${id}\n${formatProcessOutput(output)}`,
+        ),
+      );
+    }, BRIDGE_WAIT_TIMEOUT_MS);
+
+    childProcess.stdout?.on("data", onData);
+    childProcess.once("exit", onExit);
+  });
+}
+
+async function smokeBridgeModelList({ bridgePath, label }) {
+  const childProcess = spawn(process.execPath, [bridgePath], {
+    cwd: tempRoot,
+    stdio: ["pipe", "pipe", "pipe"],
+  });
+  const output = collectProcessOutput(childProcess);
+  const modelListResponsePromise = waitForJsonRpcResponse({
+    childProcess,
+    id: 2,
+    label,
+    output,
+  });
+  childProcess.stdin.write(
+    `${JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "initialize",
+      params: { clientInfo: { name: "bb-app-smoke", version: "0.0.0" } },
+    })}\n`,
+  );
+  childProcess.stdin.write(
+    `${JSON.stringify({
+      jsonrpc: "2.0",
+      id: 2,
+      method: "model/list",
+      params: {},
+    })}\n`,
+  );
+  const modelListResponse = await modelListResponsePromise;
+  childProcess.stdin.end();
+  const result = await waitForProcessExit(childProcess);
+  if (result.code !== 0) {
+    throw new Error(
+      `${label} failed with ${result.code ?? result.signal}\n${formatProcessOutput(output)}`,
+    );
+  }
+
+  if (
+    !("result" in modelListResponse) ||
+    !isRecord(modelListResponse.result) ||
+    !Array.isArray(modelListResponse.result.models)
+  ) {
+    throw new Error(
+      `${label} did not return a model/list response\n${formatProcessOutput(output)}`,
+    );
+  }
+}
+
+async function smokeProviderBridgeBundles(tarballPath) {
+  const packageDir = await extractTarball(tarballPath);
+  await smokeBridgeModelList({
+    bridgePath: join(
+      packageDir,
+      "host-daemon",
+      "dist",
+      "bb-claude-code-bridge.mjs",
+    ),
+    label: "Claude Code bridge model/list",
+  });
+  await smokeBridgeModelList({
+    bridgePath: join(packageDir, "host-daemon", "dist", "bb-pi-bridge.mjs"),
+    label: "Pi bridge model/list",
+  });
+}
+
 async function smokeHelpCommands(tarballPath) {
   await runCommand({
     args: createNpxArgs(tarballPath, "bb-app", ["--help"]),
@@ -341,6 +496,7 @@ async function smokeDaemonJoin(tarballPath) {
 
 try {
   const tarballPath = await packTarball();
+  await smokeProviderBridgeBundles(tarballPath);
   await smokeHelpCommands(tarballPath);
   await smokeFullStack(tarballPath);
   await smokeDaemonJoin(tarballPath);
