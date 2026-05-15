@@ -2,6 +2,7 @@ import type { ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { DEFAULT_HOST_DAEMON_LOCAL_BIND_HOST } from "@bb/host-daemon-contract";
 import type { PortableChildProcess } from "@bb/process-utils";
 import {
   bold,
@@ -182,7 +183,7 @@ export async function main(): Promise<void> {
 
     try {
       await waitForHealth(
-        `http://localhost:${context.daemonPort}/health`,
+        `http://${DEFAULT_HOST_DAEMON_LOCAL_BIND_HOST}:${context.daemonPort}/health`,
         daemonProcess,
       );
     } catch {

@@ -9,6 +9,7 @@ const HTTP_WAIT_TIMEOUT_MS = 60_000;
 const HTTP_WAIT_INTERVAL_MS = 250;
 const BRIDGE_WAIT_TIMEOUT_MS = 10_000;
 const PROCESS_STOP_TIMEOUT_MS = 5_000;
+const DEFAULT_HOST_DAEMON_LOCAL_BIND_HOST = "127.0.0.1";
 
 const scriptsDir = dirname(fileURLToPath(import.meta.url));
 const packageRoot = resolve(scriptsDir, "..");
@@ -410,7 +411,7 @@ async function smokeFullStack(tarballPath) {
     await waitForHttp({
       label: stack.label,
       processRef: stack,
-      url: `http://localhost:${daemonPort}/health`,
+      url: `http://${DEFAULT_HOST_DAEMON_LOCAL_BIND_HOST}:${daemonPort}/health`,
     });
     await runCommand({
       args: createNpxArgs(tarballPath, "bb", ["status"]),
@@ -476,7 +477,7 @@ async function smokeDaemonJoin(tarballPath) {
     await waitForHttp({
       label: daemon.label,
       processRef: daemon,
-      url: `http://localhost:${daemonPort}/health`,
+      url: `http://${DEFAULT_HOST_DAEMON_LOCAL_BIND_HOST}:${daemonPort}/health`,
     });
     const configJson = JSON.parse(
       await readFile(join(daemonDataDir, "config.json"), "utf8"),

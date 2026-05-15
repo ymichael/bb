@@ -11,6 +11,7 @@ import { z } from "zod";
 
 const DEFAULT_SERVER_PORT = 38886;
 const DEFAULT_HOST_DAEMON_PORT = 38887;
+const DEFAULT_HOST_DAEMON_LOCAL_BIND_HOST = "127.0.0.1";
 const DEFAULT_DATA_DIR_NAME = ".bb";
 const CONFIG_FILE_NAME = "config.json";
 const HOST_AUTH_FILE_NAME = "auth.json";
@@ -1103,7 +1104,7 @@ async function runHostDaemonOnly(
     try {
       await waitForHealth({
         childProcess: daemonProcess,
-        url: `http://localhost:${context.daemonPort}/health`,
+        url: `http://${DEFAULT_HOST_DAEMON_LOCAL_BIND_HOST}:${context.daemonPort}/health`,
       });
     } catch {
       endStep(red("✗"), "Host daemon failed to start");
@@ -1315,7 +1316,7 @@ export async function runBbApp(
     try {
       await waitForHealth({
         childProcess: daemonProcess,
-        url: `http://localhost:${context.daemonPort}/health`,
+        url: `http://${DEFAULT_HOST_DAEMON_LOCAL_BIND_HOST}:${context.daemonPort}/health`,
       });
     } catch {
       endStep(red("✗"), "Host daemon failed to start");

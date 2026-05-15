@@ -8,8 +8,10 @@ import type { EmptyInput, Endpoint } from "./common.js";
 // ---------------------------------------------------------------------------
 
 export const DEFAULT_HOST_DAEMON_LOCAL_HEALTH_PATH = "/health";
+export const DEFAULT_HOST_DAEMON_LOCAL_BIND_HOST = "127.0.0.1";
 export const DEFAULT_HOST_DAEMON_LOCAL_HEALTH_VALUE = "ok";
-export const DEFAULT_EPHEMERAL_HOST_DAEMON_LOCAL_BIND_HOST = "127.0.0.1";
+export const DEFAULT_EPHEMERAL_HOST_DAEMON_LOCAL_BIND_HOST =
+  DEFAULT_HOST_DAEMON_LOCAL_BIND_HOST;
 export const DEFAULT_EPHEMERAL_HOST_DAEMON_LOCAL_HEALTH_VALUE =
   "bb-host-daemon";
 export const DEFAULT_EPHEMERAL_HOST_DAEMON_LOCAL_PORT = 9111;
