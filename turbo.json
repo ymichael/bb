@@ -220,6 +220,11 @@
     "test": {
       "dependsOn": []
     },
+    "smoke:tarball": {
+      "dependsOn": ["build"],
+      "cache": false,
+      "outputs": []
+    },
     "@bb/integration-tests#test": {
       "dependsOn": [],
       "inputs": [
