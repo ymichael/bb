@@ -3,7 +3,7 @@ import { roundDurationMs } from "../lib/duration.js";
 import type { ServerLogger } from "../../types.js";
 
 export interface EventLoopStallMonitorOptions {
-  logger: Pick<ServerLogger, "warn">;
+  logger: Pick<ServerLogger, "debug">;
 }
 
 export interface EventLoopStallMonitor {
@@ -30,7 +30,7 @@ export function startEventLoopStallMonitor(
   const interval = setInterval(() => {
     const maxDelayMs = nanosecondsToMilliseconds(histogram.max);
     if (maxDelayMs >= DEFAULT_EVENT_LOOP_STALL_LOG_THRESHOLD_MS) {
-      options.logger.warn(
+      options.logger.debug(
         {
           intervalMs: DEFAULT_EVENT_LOOP_STALL_MONITOR_INTERVAL_MS,
           maxDelayMs: roundDurationMs(maxDelayMs),

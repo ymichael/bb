@@ -39,6 +39,7 @@ export interface RunningTestServer extends TestAppHarness {
 }
 
 export const testLogger = {
+  debug(): void {},
   error(): void {},
   info(): void {},
   warn(): void {},

@@ -74,6 +74,7 @@ describe("server skeleton", () => {
   it("logs public API requests that exceed the slow request threshold", async () => {
     const harness = await createTestAppHarness();
     const logger = {
+      debug: vi.fn(),
       error: vi.fn(),
       info: vi.fn(),
       warn: vi.fn(),
@@ -90,7 +91,7 @@ describe("server skeleton", () => {
     try {
       const response = await serverApp.app.request("/api/v1/hosts");
       expect(response.status).toBe(200);
-      expect(logger.warn).toHaveBeenCalledWith(
+      expect(logger.debug).toHaveBeenCalledWith(
         expect.objectContaining({
           durationMs: expect.any(Number),
           method: "GET",
@@ -108,6 +109,7 @@ describe("server skeleton", () => {
   it("does not log slow API requests for thread event long-poll waits", async () => {
     const harness = await createTestAppHarness();
     const logger = {
+      debug: vi.fn(),
       error: vi.fn(),
       info: vi.fn(),
       warn: vi.fn(),
@@ -135,7 +137,7 @@ describe("server skeleton", () => {
       );
 
       expect(response.status).toBe(204);
-      expect(logger.warn).not.toHaveBeenCalled();
+      expect(logger.debug).not.toHaveBeenCalled();
     } finally {
       await serverApp.closeWebSockets();
       await harness.cleanup();

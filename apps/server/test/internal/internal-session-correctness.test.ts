@@ -434,6 +434,7 @@ describe("internal session correctness", () => {
         .run();
 
       const logger = {
+        debug: vi.fn(),
         error: vi.fn(),
         info: vi.fn(),
         warn: vi.fn(),
@@ -472,6 +473,7 @@ describe("internal session correctness", () => {
       });
 
       const logger = {
+        debug: vi.fn(),
         error: vi.fn(),
         info: vi.fn(),
         warn: vi.fn(),

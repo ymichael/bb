@@ -77,7 +77,7 @@ describe("event loop stall monitor", () => {
       meanDelayMs: 25,
       p99DelayMs: 450,
     });
-    const logger = { warn: vi.fn() };
+    const logger = { debug: vi.fn() };
 
     const monitor = startEventLoopStallMonitor({ logger });
     vi.advanceTimersByTime(EVENT_LOOP_STALL_MONITOR_INTERVAL_MS);
@@ -88,7 +88,7 @@ describe("event loop stall monitor", () => {
     expect(histogram.enable).toHaveBeenCalledTimes(1);
     expect(histogram.percentile).toHaveBeenCalledWith(99);
     expect(histogram.reset).toHaveBeenCalledTimes(1);
-    expect(logger.warn).toHaveBeenCalledWith(
+    expect(logger.debug).toHaveBeenCalledWith(
       {
         intervalMs: 5_000,
         maxDelayMs: 500,
@@ -109,12 +109,12 @@ describe("event loop stall monitor", () => {
       meanDelayMs: 25,
       p99DelayMs: 450,
     });
-    const logger = { warn: vi.fn() };
+    const logger = { debug: vi.fn() };
 
     const monitor = startEventLoopStallMonitor({ logger });
     vi.advanceTimersByTime(EVENT_LOOP_STALL_MONITOR_INTERVAL_MS);
 
-    expect(logger.warn).not.toHaveBeenCalled();
+    expect(logger.debug).not.toHaveBeenCalled();
     expect(histogram.reset).toHaveBeenCalledTimes(1);
 
     monitor.stop();
@@ -126,7 +126,7 @@ describe("event loop stall monitor", () => {
       meanDelayMs: 25,
       p99DelayMs: 450,
     });
-    const logger = { warn: vi.fn() };
+    const logger = { debug: vi.fn() };
 
     const monitor = startEventLoopStallMonitor({ logger });
     monitor.stop();
@@ -134,6 +134,6 @@ describe("event loop stall monitor", () => {
 
     expect(histogram.disable).toHaveBeenCalledTimes(1);
     expect(histogram.reset).not.toHaveBeenCalled();
-    expect(logger.warn).not.toHaveBeenCalled();
+    expect(logger.debug).not.toHaveBeenCalled();
   });
 });

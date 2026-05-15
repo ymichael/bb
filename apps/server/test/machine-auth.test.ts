@@ -10,6 +10,7 @@ import { createMachineAuthService } from "../src/services/machine-auth.js";
 const tempDirs: string[] = [];
 
 const testLogger = {
+  debug(): void {},
   error(): void {},
   info(): void {},
   warn(): void {},

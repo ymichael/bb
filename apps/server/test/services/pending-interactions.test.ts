@@ -107,6 +107,7 @@ describe("pending interaction lifecycle", () => {
     const harness = await createTestAppHarness();
     try {
       const logger = {
+        debug: vi.fn(),
         error: vi.fn(),
         info: vi.fn(),
         warn: vi.fn(),

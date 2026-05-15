@@ -67,6 +67,7 @@ function createCommitMessageDeps(): TestCommitMessageDeps {
     sandboxIdleThresholdMs: 300_000,
   };
   const logger = {
+    debug: vi.fn(),
     error: vi.fn(),
     info: vi.fn(),
     warn: vi.fn(),

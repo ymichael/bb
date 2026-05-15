@@ -8,30 +8,30 @@ import {
 import { migrate } from "../src/migrate.js";
 import { hosts } from "../src/schema.js";
 
-interface LoggedWarning {
+interface LoggedDebug {
   fields: SlowDbQueryLogFields;
   message: string;
 }
 
 class CapturingSlowQueryLogger implements SlowDbQueryLogger {
-  readonly warnings: LoggedWarning[] = [];
+  readonly debugLogs: LoggedDebug[] = [];
 
-  warn(fields: SlowDbQueryLogFields, message: string): void {
-    this.warnings.push({ fields, message });
+  debug(fields: SlowDbQueryLogFields, message: string): void {
+    this.debugLogs.push({ fields, message });
   }
 
   clear(): void {
-    this.warnings.length = 0;
+    this.debugLogs.length = 0;
   }
 }
 
-function getOnlyWarning(logger: CapturingSlowQueryLogger): LoggedWarning {
-  expect(logger.warnings).toHaveLength(1);
-  const warning = logger.warnings[0];
-  if (!warning) {
-    throw new Error("Expected slow query warning");
+function getOnlyDebugLog(logger: CapturingSlowQueryLogger): LoggedDebug {
+  expect(logger.debugLogs).toHaveLength(1);
+  const debugLog = logger.debugLogs[0];
+  if (!debugLog) {
+    throw new Error("Expected slow query debug log");
   }
-  return warning;
+  return debugLog;
 }
 
 describe("createConnection", () => {
@@ -44,12 +44,12 @@ describe("createConnection", () => {
 
     db.$client.prepare("SELECT ? AS value").get("sensitive-value");
 
-    const warning = getOnlyWarning(logger);
-    expect(warning.message).toBe("Slow DB query");
-    expect(warning.fields.operation).toBe("get");
-    expect(warning.fields.bindingArgumentCount).toBe(1);
-    expect(warning.fields.sql).toBe("SELECT ? AS value");
-    expect(warning.fields.sql).not.toContain("sensitive-value");
+    const debugLog = getOnlyDebugLog(logger);
+    expect(debugLog.message).toBe("Slow DB query");
+    expect(debugLog.fields.operation).toBe("get");
+    expect(debugLog.fields.bindingArgumentCount).toBe(1);
+    expect(debugLog.fields.sql).toBe("SELECT ? AS value");
+    expect(debugLog.fields.sql).not.toContain("sensitive-value");
 
     db.$client.close();
   });
@@ -63,9 +63,9 @@ describe("createConnection", () => {
 
     db.$client.prepare("SELECT 'sensitive-literal' AS value").get();
 
-    const warning = getOnlyWarning(logger);
-    expect(warning.fields.sql).toBe("SELECT '?' AS value");
-    expect(warning.fields.sql).not.toContain("sensitive-literal");
+    const debugLog = getOnlyDebugLog(logger);
+    expect(debugLog.fields.sql).toBe("SELECT '?' AS value");
+    expect(debugLog.fields.sql).not.toContain("sensitive-literal");
 
     db.$client.close();
   });
@@ -95,13 +95,13 @@ describe("createConnection", () => {
       .get();
 
     expect(row?.name).toBe("Drizzle Host");
-    const warning = getOnlyWarning(logger);
-    expect(warning.message).toBe("Slow DB query");
-    expect(warning.fields.operation).toBe("get");
-    expect(warning.fields.bindingArgumentCount).toBe(1);
-    expect(warning.fields.sql).toContain("from");
-    expect(warning.fields.sql).toContain("hosts");
-    expect(warning.fields.sql).not.toContain("host-drizzle");
+    const debugLog = getOnlyDebugLog(logger);
+    expect(debugLog.message).toBe("Slow DB query");
+    expect(debugLog.fields.operation).toBe("get");
+    expect(debugLog.fields.bindingArgumentCount).toBe(1);
+    expect(debugLog.fields.sql).toContain("from");
+    expect(debugLog.fields.sql).toContain("hosts");
+    expect(debugLog.fields.sql).not.toContain("host-drizzle");
 
     db.$client.close();
   });
@@ -118,9 +118,9 @@ describe("createConnection", () => {
 
     db.$client.prepare(longSql).get();
 
-    const warning = getOnlyWarning(logger);
-    expect(warning.fields.sql).toHaveLength(1_000);
-    expect(warning.fields.sql.endsWith("...")).toBe(true);
+    const debugLog = getOnlyDebugLog(logger);
+    expect(debugLog.fields.sql).toHaveLength(1_000);
+    expect(debugLog.fields.sql.endsWith("...")).toBe(true);
 
     db.$client.close();
   });

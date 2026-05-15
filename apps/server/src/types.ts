@@ -10,7 +10,7 @@ import type { SandboxEnvService } from "./services/sandbox-env/types.js";
 import type { LifecycleDedupers } from "./lifecycle-dedupers.js";
 import type { NotificationHub } from "./ws/hub.js";
 
-export type ServerLogger = Pick<Logger, "error" | "info" | "warn">;
+export type ServerLogger = Pick<Logger, "debug" | "error" | "info" | "warn">;
 
 export interface ServerRuntimeConfig {
   anthropicApiKey: string;

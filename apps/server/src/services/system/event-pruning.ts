@@ -169,7 +169,7 @@ export function pruneThreadEventHistoryBestEffort(
     const result = pruneThreadEventHistory(deps, args);
     const durationMs = performance.now() - startedAt;
     if (durationMs >= SLOW_THREAD_EVENT_PRUNE_LOG_THRESHOLD_MS) {
-      deps.logger.warn(
+      deps.logger.debug(
         {
           durationMs: roundDurationMs(durationMs),
           latestSequence: result.latestSequence,

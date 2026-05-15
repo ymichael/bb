@@ -366,6 +366,7 @@ describe("daemon command wait context", () => {
   it("logs slow command waits that complete successfully", async () => {
     const harness = await createTestAppHarness();
     const logger = {
+      debug: vi.fn(),
       error: vi.fn(),
       info: vi.fn(),
       warn: vi.fn(),
@@ -401,7 +402,7 @@ describe("daemon command wait context", () => {
       recordThreadStopSuccess({ commandId, harness });
 
       await expect(waitForResult).resolves.toEqual({});
-      expect(logger.warn).toHaveBeenCalledWith(
+      expect(logger.debug).toHaveBeenCalledWith(
         expect.objectContaining({
           commandId,
           commandType: "thread.stop",
@@ -422,6 +423,7 @@ describe("daemon command wait context", () => {
   it("logs slow command waits with provider failure details", async () => {
     const harness = await createTestAppHarness();
     const logger = {
+      debug: vi.fn(),
       error: vi.fn(),
       info: vi.fn(),
       warn: vi.fn(),
@@ -464,7 +466,7 @@ describe("daemon command wait context", () => {
       });
 
       await expect(waitForResult).rejects.toThrow("Provider unavailable");
-      expect(logger.warn).toHaveBeenCalledWith(
+      expect(logger.debug).toHaveBeenCalledWith(
         expect.objectContaining({
           commandId,
           commandType: "thread.stop",

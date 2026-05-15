@@ -176,7 +176,7 @@ export function createApp(
         thresholdMs: slowApiRequestLogThresholdMs,
       })
     ) {
-      deps.logger.warn(
+      deps.logger.debug(
         {
           durationMs: roundDurationMs(durationMs),
           method: context.req.method,

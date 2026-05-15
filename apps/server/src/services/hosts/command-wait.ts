@@ -105,7 +105,7 @@ function logSlowCommandWait(
   if (args.durationMs < SLOW_HOST_COMMAND_WAIT_LOG_THRESHOLD_MS) {
     return;
   }
-  deps.logger.warn(
+  deps.logger.debug(
     {
       commandId: args.commandId,
       commandType: args.commandType,

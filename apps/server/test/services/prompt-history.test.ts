@@ -38,6 +38,7 @@ function setup() {
     source: { type: "local_path", hostId: host.id, path: "/tmp/project-b" },
   }).project;
   const logger = {
+    debug: vi.fn(),
     error: vi.fn(),
     info: vi.fn(),
     warn: vi.fn(),

@@ -12,7 +12,7 @@ export interface SlowDbQueryLogFields {
 }
 
 export interface SlowDbQueryLogger {
-  warn(fields: SlowDbQueryLogFields, message: string): void;
+  debug(fields: SlowDbQueryLogFields, message: string): void;
 }
 
 export interface CreateConnectionOptions {
@@ -74,7 +74,7 @@ function runTimedStatementOperation<TValue>(
   } finally {
     const durationMs = performance.now() - startedAt;
     if (durationMs >= args.config.thresholdMs) {
-      args.config.logger.warn(
+      args.config.logger.debug(
         {
           bindingArgumentCount: args.bindingArgumentCount,
           durationMs: roundDurationMs(durationMs),

@@ -30,7 +30,7 @@ import { queueCommand, reportCommandResult } from "../src/data/commands.js";
 type SqliteParameter = string | number | bigint | Buffer | null;
 type LoggedSqlPredicate = (fields: SlowDbQueryLogFields) => boolean;
 
-interface LoggedWarning {
+interface LoggedDebug {
   fields: SlowDbQueryLogFields;
   message: string;
 }
@@ -57,7 +57,7 @@ interface TestDb {
   thread: IdentifiedRow;
 }
 
-interface FindOnlyWarningArgs {
+interface FindOnlyDebugLogArgs {
   logger: CapturingSlowQueryLogger;
   predicate: LoggedSqlPredicate;
 }
@@ -70,20 +70,20 @@ interface QueryPlanDetailsArgs {
 
 interface AssertEmittedQueryPlanUsesIndexArgs {
   db: DbConnection;
+  debugLog: LoggedDebug;
   indexName: string;
   params: readonly SqliteParameter[];
-  warning: LoggedWarning;
 }
 
 class CapturingSlowQueryLogger implements SlowDbQueryLogger {
-  readonly warnings: LoggedWarning[] = [];
+  readonly debugLogs: LoggedDebug[] = [];
 
-  warn: SlowDbQueryLogger["warn"] = (fields, message) => {
-    this.warnings.push({ fields, message });
+  debug: SlowDbQueryLogger["debug"] = (fields, message) => {
+    this.debugLogs.push({ fields, message });
   };
 
   clear(): void {
-    this.warnings.length = 0;
+    this.debugLogs.length = 0;
   }
 }
 
@@ -110,16 +110,16 @@ function setup(): TestDb {
   return { db, host, logger, thread };
 }
 
-function findOnlyWarning(args: FindOnlyWarningArgs): LoggedWarning {
-  const matches = args.logger.warnings.filter((warning) =>
-    args.predicate(warning.fields),
+function findOnlyDebugLog(args: FindOnlyDebugLogArgs): LoggedDebug {
+  const matches = args.logger.debugLogs.filter((debugLog) =>
+    args.predicate(debugLog.fields),
   );
-  expect(matches.map((warning) => warning.fields.sql)).toHaveLength(1);
-  const warning = matches[0];
-  if (!warning) {
-    throw new Error("Expected one matching SQL warning");
+  expect(matches.map((debugLog) => debugLog.fields.sql)).toHaveLength(1);
+  const debugLog = matches[0];
+  if (!debugLog) {
+    throw new Error("Expected one matching SQL debug log");
   }
-  return warning;
+  return debugLog;
 }
 
 function queryPlanDetails(args: QueryPlanDetailsArgs): string {
@@ -134,12 +134,12 @@ function queryPlanDetails(args: QueryPlanDetailsArgs): string {
 function assertEmittedQueryPlanUsesIndex(
   args: AssertEmittedQueryPlanUsesIndexArgs,
 ): void {
-  expect(args.warning.fields.bindingArgumentCount).toBe(args.params.length);
+  expect(args.debugLog.fields.bindingArgumentCount).toBe(args.params.length);
   expect(
     queryPlanDetails({
       db: args.db,
       params: args.params,
-      sql: args.warning.fields.sql,
+      sql: args.debugLog.fields.sql,
     }),
   ).toContain(`USING INDEX ${args.indexName}`);
 }
@@ -164,7 +164,7 @@ describe("slow query index plans", () => {
 
     pruneCompletedCommandPayloads(db, { completedBefore });
 
-    const warning = findOnlyWarning({
+    const debugLog = findOnlyDebugLog({
       logger,
       predicate: (fields) =>
         fields.operation === "run" &&
@@ -172,9 +172,9 @@ describe("slow query index plans", () => {
     });
     assertEmittedQueryPlanUsesIndex({
       db,
+      debugLog,
       indexName: "host_daemon_commands_payload_prune_idx",
       params: ["{}", null, "success", "error", completedBefore, "{}"],
-      warning,
     });
 
     db.$client.close();
@@ -197,7 +197,7 @@ describe("slow query index plans", () => {
 
     sweepExpiredCommands(db, noopNotifier, now);
 
-    const warning = findOnlyWarning({
+    const debugLog = findOnlyDebugLog({
       logger,
       predicate: (fields) =>
         fields.operation === "all" &&
@@ -205,9 +205,9 @@ describe("slow query index plans", () => {
     });
     assertEmittedQueryPlanUsesIndex({
       db,
+      debugLog,
       indexName: "host_daemon_commands_state_fetched_at_idx",
       params: ["fetched", now, 20 * 60_000, 60_000],
-      warning,
     });
 
     db.$client.close();
@@ -224,7 +224,7 @@ describe("slow query index plans", () => {
 
     fetchCommands(db, noopNotifier, { hostId: host.id });
 
-    const warning = findOnlyWarning({
+    const debugLog = findOnlyDebugLog({
       logger,
       predicate: (fields) =>
         fields.operation === "all" &&
@@ -233,9 +233,9 @@ describe("slow query index plans", () => {
     });
     assertEmittedQueryPlanUsesIndex({
       db,
+      debugLog,
       indexName: "host_daemon_commands_host_state_cursor_idx",
       params: [host.id, "pending", 100],
-      warning,
     });
 
     db.$client.close();
@@ -258,7 +258,7 @@ describe("slow query index plans", () => {
       }),
     ).toBe(true);
 
-    const warning = findOnlyWarning({
+    const debugLog = findOnlyDebugLog({
       logger,
       predicate: (fields) =>
         fields.operation === "get" &&
@@ -267,9 +267,9 @@ describe("slow query index plans", () => {
     });
     assertEmittedQueryPlanUsesIndex({
       db,
+      debugLog,
       indexName: "host_daemon_commands_host_state_cursor_idx",
       params: [host.id, "turn.submit", "pending", "fetched", "thr_target"],
-      warning,
     });
 
     db.$client.close();
@@ -324,7 +324,7 @@ describe("slow query index plans", () => {
       threadId: thread.id,
     });
 
-    const warning = findOnlyWarning({
+    const debugLog = findOnlyDebugLog({
       logger,
       predicate: (fields) =>
         fields.operation === "run" &&
@@ -333,6 +333,7 @@ describe("slow query index plans", () => {
     });
     assertEmittedQueryPlanUsesIndex({
       db,
+      debugLog,
       indexName: "events_thread_type_sequence_idx",
       params: [
         thread.id,
@@ -344,7 +345,6 @@ describe("slow query index plans", () => {
         "thread/contextWindowUsage/updated",
         "$.contextWindowUsage.modelContextWindow",
       ],
-      warning,
     });
 
     db.$client.close();
