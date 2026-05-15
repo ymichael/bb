@@ -1,3 +1,5 @@
+/// <reference types="vitest/jsdom" />
+
 /**
  * Shared vitest setup.
  *
@@ -7,6 +9,22 @@
  * `GitDiffCard` sticky-header sentinel) reach for them during mount; without
  * polyfills they throw in every test that indirectly renders such a component.
  */
+if (typeof window !== "undefined" && typeof jsdom !== "undefined") {
+  /**
+   * Node 26 defines global storage accessors. Vitest keeps existing globals
+   * when it overlays jsdom, then aliases `window` to `globalThis`, so browser
+   * tests need the jsdom storage objects restored explicitly.
+   */
+  Object.defineProperty(window, "localStorage", {
+    configurable: true,
+    value: jsdom.window.localStorage,
+  });
+  Object.defineProperty(window, "sessionStorage", {
+    configurable: true,
+    value: jsdom.window.sessionStorage,
+  });
+}
+
 if (typeof window !== "undefined" && !window.matchMedia) {
   window.matchMedia = (query: string) => ({
     matches: false,
