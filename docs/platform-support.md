@@ -131,8 +131,8 @@ rebuild the native dependency, for example `npm rebuild better-sqlite3`.
   typecheck, lint, test, and Linux smoke coverage.
 - CI covers Node.js 22, 24, and 26 on Ubuntu and macOS. Node.js 20 runs as a
   best-effort compatibility signal only.
-- The `bb-app` tarball smoke runs on Ubuntu with Node.js 24 and validates the
-  packed npm artifact through `npx --package`.
+- The `bb-app` tarball smoke runs on Ubuntu and macOS with Node.js 22, 24, and
+  26, and validates the packed npm artifact through `npx --package`.
 - Native Windows CI is intentionally not required because Windows support uses
   the Linux runtime path inside WSL2 rather than a separate native Windows
   product path.

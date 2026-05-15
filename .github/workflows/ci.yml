@@ -50,10 +50,10 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .turbo/cache
-          key: ${{ runner.os }}-turbo-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
+          key: ${{ runner.os }}-node-${{ matrix.node-version }}-turbo-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
           restore-keys: |
-            ${{ runner.os }}-turbo-${{ hashFiles('pnpm-lock.yaml') }}-
-            ${{ runner.os }}-turbo-
+            ${{ runner.os }}-node-${{ matrix.node-version }}-turbo-${{ hashFiles('pnpm-lock.yaml') }}-
+            ${{ runner.os }}-node-${{ matrix.node-version }}-turbo-
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --prefer-offline
@@ -62,5 +62,5 @@ jobs:
         run: pnpm exec turbo run build typecheck lint test --cache-dir=.turbo/cache --output-logs=new-only
 
       - name: Smoke bb-app tarball
-        if: matrix.os == 'ubuntu-latest' && matrix.node-version == '24.x'
+        if: matrix.node-version != '20.x'
         run: pnpm exec turbo run smoke:tarball --filter=bb-app --cache-dir=.turbo/cache --output-logs=new-only
