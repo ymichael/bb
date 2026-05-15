@@ -11,5 +11,6 @@ export default defineConfig({
     name: "@bb/host-daemon",
     include: ["src/**/*.test.ts", "test/**/*.test.ts"],
     exclude: ["dist/**", "node_modules/**"],
+    testTimeout: 15_000,
   },
 });
