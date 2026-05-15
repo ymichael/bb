@@ -142,7 +142,6 @@
         "$TURBO_ROOT$/packages/bb-app/scripts/**",
         "$TURBO_ROOT$/packages/bb-app/src/**",
         "$TURBO_ROOT$/packages/bb-app/tsconfig.json",
-        "$TURBO_ROOT$/packages/bb-app/tsconfig.build.json",
         "$TURBO_ROOT$/packages/tsconfig/*.json",
         "$TURBO_ROOT$/scripts/*.mjs"
       ],

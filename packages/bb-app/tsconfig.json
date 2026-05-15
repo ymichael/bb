@@ -1,7 +1,11 @@
 {
-  "extends": ["./tsconfig.build.json", "@bb/tsconfig/typecheck-overrides.json"],
+  "extends": [
+    "@bb/tsconfig/base.json",
+    "@bb/tsconfig/typecheck-overrides.json"
+  ],
   "compilerOptions": {
-    "rootDir": "."
+    "rootDir": ".",
+    "types": ["node"]
   },
   "include": ["src", "test"]
 }
