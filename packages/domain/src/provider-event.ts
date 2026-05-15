@@ -96,6 +96,25 @@ export type ThreadEventWebFetchItem = z.infer<
   typeof threadEventWebFetchItemSchema
 >;
 
+export const threadEventTextTruncationSchema = z.object({
+  originalLength: z.number(),
+  retainedHeadLength: z.number(),
+  retainedTailLength: z.number(),
+  truncatedAt: z.number(),
+});
+export type ThreadEventTextTruncation = z.infer<
+  typeof threadEventTextTruncationSchema
+>;
+
+export const threadEventItemTruncationSchema = z.object({
+  aggregatedOutput: threadEventTextTruncationSchema.optional(),
+  result: threadEventTextTruncationSchema.optional(),
+  resultText: threadEventTextTruncationSchema.optional(),
+});
+export type ThreadEventItemTruncation = z.infer<
+  typeof threadEventItemTruncationSchema
+>;
+
 export const threadEventUserContentSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("text"), text: z.string() }),
   z.object({ type: z.literal("image"), url: z.string() }),
@@ -200,6 +219,7 @@ export const threadEventItemSchema = z.discriminatedUnion("type", [
     aggregatedOutput: z.string().optional(),
     exitCode: z.number().optional(),
     durationMs: z.number().optional(),
+    truncation: threadEventItemTruncationSchema.optional(),
     parentToolCallId: z.string().optional(),
   }),
   z.object({
@@ -222,6 +242,7 @@ export const threadEventItemSchema = z.discriminatedUnion("type", [
     result: z.unknown().optional(),
     error: z.string().optional(),
     durationMs: z.number().optional(),
+    truncation: threadEventItemTruncationSchema.optional(),
     parentToolCallId: z.string().optional(),
   }),
   z.object({

@@ -1,19 +1,32 @@
 import {
+  compactDatabase,
+  COMPLETED_COMMAND_ROW_RETENTION_MS,
   COMPLETED_COMMAND_PAYLOAD_RETENTION_MS,
+  COMPLETED_EVENT_OUTPUT_RETENTION_MS,
+  DATABASE_COMPACTION_MIN_RECLAIMABLE_BYTES,
+  DATABASE_COMPACTION_MIN_RECLAIMABLE_RATIO,
+  DEFAULT_COMPLETED_COMMAND_PRUNE_BATCH_SIZE,
+  DEFAULT_COMPLETED_EVENT_OUTPUT_TRUNCATION_BATCH_SIZE,
+  getDatabaseCompactionStats,
+  getDatabaseMaintenanceActivity,
   getActiveSession,
   getEnvironment,
   getThread,
+  isDatabaseMaintenanceIdle,
   listHostThreadIds,
   listStopRequestedThreads,
   listEnvironmentOperations,
   listThreadOperations,
+  pruneCompletedCommands,
   pruneCompletedCommandPayloads,
+  shouldCompactDatabase,
   sweepEphemeralHostsPendingCleanup,
   sweepIdleEphemeralHostsEligibleForSuspend,
   sweepDestroyingEnvironments,
   sweepExpiredCommands,
   sweepExpiredLeases,
   sweepManagedEnvironments,
+  truncateCompletedEventItemOutputs,
 } from "@bb/db";
 import { activeLifecycleOperationStates } from "@bb/domain";
 import type {
@@ -49,6 +62,64 @@ import { runQueuedMessageAutoSendSweep } from "../threads/queued-messages.js";
 export type EvaluateManagedEnvironmentArchiveCleanupFn =
   typeof advanceEnvironmentCleanup;
 export type DestroyHostFn = typeof destroyHost;
+export type DatabaseMaintenanceSweepDeps = Pick<AppDeps, "db" | "logger">;
+
+const DATABASE_MAINTENANCE_CHECK_INTERVAL_MS = 60 * 60_000;
+
+let lastDatabaseMaintenanceCheckAt = 0;
+let databaseMaintenanceRunning = false;
+
+export function runDatabaseMaintenanceSweep(
+  deps: DatabaseMaintenanceSweepDeps,
+  now: number = Date.now(),
+): void {
+  if (databaseMaintenanceRunning) {
+    return;
+  }
+
+  if (
+    now - lastDatabaseMaintenanceCheckAt <
+    DATABASE_MAINTENANCE_CHECK_INTERVAL_MS
+  ) {
+    return;
+  }
+
+  lastDatabaseMaintenanceCheckAt = now;
+
+  const activity = getDatabaseMaintenanceActivity(deps.db);
+  if (!isDatabaseMaintenanceIdle(activity)) {
+    deps.logger.debug(
+      { activity },
+      "Database maintenance skipped while app work is active",
+    );
+    return;
+  }
+
+  const stats = getDatabaseCompactionStats(deps.db);
+  if (
+    !shouldCompactDatabase({
+      minReclaimableBytes: DATABASE_COMPACTION_MIN_RECLAIMABLE_BYTES,
+      minReclaimableRatio: DATABASE_COMPACTION_MIN_RECLAIMABLE_RATIO,
+      stats,
+    })
+  ) {
+    deps.logger.debug(
+      { stats },
+      "Database maintenance skipped below compaction threshold",
+    );
+    return;
+  }
+
+  databaseMaintenanceRunning = true;
+  try {
+    const result = compactDatabase(deps.db);
+    deps.logger.info({ result }, "Database compaction completed");
+  } catch (error) {
+    deps.logger.warn({ err: error }, "Database compaction failed");
+  } finally {
+    databaseMaintenanceRunning = false;
+  }
+}
 
 export async function runManagedEnvironmentArchiveCleanupSweep(
   deps: LoggedSandboxWorkSessionDeps,
@@ -332,6 +403,8 @@ export async function runPeriodicSweeps(
   >,
 ): Promise<void> {
   try {
+    const now = Date.now();
+
     await deps.machineAuth.pruneExpiredKeys();
     const expired = sweepExpiredCommands(deps.db, deps.hub);
     if (expired.erroredCommandIds.length > 0) {
@@ -340,7 +413,16 @@ export async function runPeriodicSweeps(
       });
     }
     pruneCompletedCommandPayloads(deps.db, {
-      completedBefore: Date.now() - COMPLETED_COMMAND_PAYLOAD_RETENTION_MS,
+      completedBefore: now - COMPLETED_COMMAND_PAYLOAD_RETENTION_MS,
+    });
+    truncateCompletedEventItemOutputs(deps.db, {
+      createdBefore: now - COMPLETED_EVENT_OUTPUT_RETENTION_MS,
+      limit: DEFAULT_COMPLETED_EVENT_OUTPUT_TRUNCATION_BATCH_SIZE,
+      truncatedAt: now,
+    });
+    pruneCompletedCommands(deps.db, {
+      completedBefore: now - COMPLETED_COMMAND_ROW_RETENTION_MS,
+      limit: DEFAULT_COMPLETED_COMMAND_PRUNE_BATCH_SIZE,
     });
     const expiredLeases = sweepExpiredLeases(deps.db, deps.hub);
     if (expiredLeases.expiredSessionIds.length > 0) {
@@ -371,6 +453,7 @@ export async function runPeriodicSweeps(
     );
     await runProjectDeletionSweep(deps);
     await runEphemeralHostCleanupSweep(deps, destroyHost);
+    runDatabaseMaintenanceSweep(deps, now);
   } catch (error) {
     deps.logger.error({ err: error }, "Periodic sweep failed");
   }

@@ -1,15 +1,22 @@
 import { describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { createConnection } from "../../src/connection.js";
+import type { DbConnection } from "../../src/connection.js";
+import { createEventId } from "../../src/ids.js";
 import { migrate } from "../../src/migrate.js";
 import { noopNotifier } from "../../src/notifier.js";
 import type { DbNotifier } from "../../src/notifier.js";
 import {
+  COMPLETED_EVENT_OUTPUT_RETAINED_HEAD_CHARS,
+  COMPLETED_EVENT_OUTPUT_RETAINED_TAIL_CHARS,
+  COMPLETED_EVENT_OUTPUT_TRUNCATION_THRESHOLD_CHARS,
+  pruneCompletedCommands,
   pruneCompletedCommandPayloads,
   sweepDestroyingEnvironments,
   sweepExpiredCommands,
   sweepExpiredLeases,
   sweepManagedEnvironments,
+  truncateCompletedEventItemOutputs,
 } from "../../src/data/sweeps.js";
 import { upsertHost } from "../../src/data/hosts.js";
 import { createProject } from "../../src/data/projects.js";
@@ -31,6 +38,7 @@ import {
 } from "../../src/data/commands.js";
 import {
   environments,
+  events,
   hostDaemonCommands,
   hostDaemonSessions,
   threads,
@@ -48,6 +56,42 @@ function setup() {
     source: { type: "local_path", hostId: host.id, path: "/tmp/test" },
   });
   return { db, host, project };
+}
+
+interface InsertCompletedItemEventArgs {
+  createdAt: number;
+  db: DbConnection;
+  item: object;
+  itemId: string;
+  itemKind: "commandExecution" | "toolCall" | "webFetch" | "webSearch";
+  sequence: number;
+  threadId: string;
+}
+
+function insertCompletedItemEvent(args: InsertCompletedItemEventArgs): string {
+  const id = createEventId();
+  args.db
+    .insert(events)
+    .values({
+      id,
+      threadId: args.threadId,
+      scopeKind: "turn",
+      turnId: "turn_1",
+      providerThreadId: "provider-thread-1",
+      sequence: args.sequence,
+      type: "item/completed",
+      itemId: args.itemId,
+      itemKind: args.itemKind,
+      data: JSON.stringify({
+        item: args.item,
+        providerThreadId: "provider-thread-1",
+        threadId: args.threadId,
+        type: "item/completed",
+      }),
+      createdAt: args.createdAt,
+    })
+    .run();
+  return id;
 }
 
 describe("sweepExpiredCommands", () => {
@@ -376,6 +420,435 @@ describe("pruneCompletedCommandPayloads", () => {
     });
     expect(pruneCompletedCommandPayloads(db, { completedBefore })).toEqual({
       pruned: 0,
+    });
+  });
+});
+
+describe("pruneCompletedCommands", () => {
+  it("deletes only old terminal command rows", () => {
+    const { db, host } = setup();
+    const now = Date.now();
+    const staleCompletedAt = now - 10_000;
+    const freshCompletedAt = now;
+    const completedBefore = now - 5_000;
+
+    const staleSuccess = queueCommand(db, noopNotifier, {
+      hostId: host.id,
+      type: "workspace.status",
+      payload: "{}",
+    });
+    const staleError = queueCommand(db, noopNotifier, {
+      hostId: host.id,
+      type: "workspace.diff",
+      payload: "{}",
+    });
+    const freshSuccess = queueCommand(db, noopNotifier, {
+      hostId: host.id,
+      type: "workspace.commit",
+      payload: "{}",
+    });
+    const fetchedCommand = queueCommand(db, noopNotifier, {
+      hostId: host.id,
+      type: "host.read_file",
+      payload: "{}",
+    });
+
+    reportCommandResult(db, noopNotifier, {
+      commandId: staleSuccess.id,
+      state: "success",
+      completedAt: staleCompletedAt,
+      resultPayload: JSON.stringify({ ok: true }),
+    });
+    reportCommandResult(db, noopNotifier, {
+      commandId: staleError.id,
+      state: "error",
+      completedAt: staleCompletedAt,
+      resultPayload: JSON.stringify({ errorMessage: "failed" }),
+    });
+    reportCommandResult(db, noopNotifier, {
+      commandId: freshSuccess.id,
+      state: "success",
+      completedAt: freshCompletedAt,
+      resultPayload: JSON.stringify({ ok: true }),
+    });
+    fetchCommands(db, noopNotifier, { hostId: host.id });
+
+    expect(
+      pruneCompletedCommands(db, {
+        completedBefore,
+        limit: 100,
+      }),
+    ).toEqual({ deleted: 2 });
+
+    expect(
+      db
+        .select()
+        .from(hostDaemonCommands)
+        .all()
+        .map((command) => command.id),
+    ).toEqual([freshSuccess.id, fetchedCommand.id]);
+  });
+
+  it("honors the delete batch limit", () => {
+    const { db, host } = setup();
+    const now = Date.now();
+    const completedAt = now - 10_000;
+    const completedBefore = now - 5_000;
+
+    for (const type of [
+      "workspace.status",
+      "workspace.diff",
+      "workspace.commit",
+    ]) {
+      const command = queueCommand(db, noopNotifier, {
+        hostId: host.id,
+        type,
+        payload: "{}",
+      });
+      reportCommandResult(db, noopNotifier, {
+        commandId: command.id,
+        state: "success",
+        completedAt,
+        resultPayload: null,
+      });
+    }
+
+    expect(
+      pruneCompletedCommands(db, {
+        completedBefore,
+        limit: 2,
+      }),
+    ).toEqual({ deleted: 2 });
+    expect(db.select().from(hostDaemonCommands).all()).toHaveLength(1);
+  });
+});
+
+describe("truncateCompletedEventItemOutputs", () => {
+  it("truncates old large completed item outputs with metadata", () => {
+    const { db, project } = setup();
+    const thread = createThread(db, noopNotifier, {
+      projectId: project.id,
+      providerId: "codex",
+      status: "idle",
+    });
+    const now = Date.now();
+    const staleCreatedAt = now - 10_000;
+    const freshCreatedAt = now;
+    const createdBefore = now - 5_000;
+    const commandOutput =
+      "command-head-" +
+      "a".repeat(COMPLETED_EVENT_OUTPUT_TRUNCATION_THRESHOLD_CHARS) +
+      "-command-tail";
+    const toolResult =
+      "tool-head-" +
+      "b".repeat(COMPLETED_EVENT_OUTPUT_TRUNCATION_THRESHOLD_CHARS) +
+      "-tool-tail";
+    const webSearchResultText =
+      "search-head-" +
+      "c".repeat(COMPLETED_EVENT_OUTPUT_TRUNCATION_THRESHOLD_CHARS) +
+      "-search-tail";
+    const webFetchResultText =
+      "fetch-head-" +
+      "d".repeat(COMPLETED_EVENT_OUTPUT_TRUNCATION_THRESHOLD_CHARS) +
+      "-fetch-tail";
+    const smallOutput = "short output";
+
+    const commandEventId = insertCompletedItemEvent({
+      createdAt: staleCreatedAt,
+      db,
+      item: {
+        type: "commandExecution",
+        id: "cmd-item",
+        command: "rg large",
+        cwd: "/tmp/project",
+        status: "completed",
+        approvalStatus: null,
+        aggregatedOutput: commandOutput,
+      },
+      itemId: "cmd-item",
+      itemKind: "commandExecution",
+      sequence: 1,
+      threadId: thread.id,
+    });
+    const toolEventId = insertCompletedItemEvent({
+      createdAt: staleCreatedAt,
+      db,
+      item: {
+        type: "toolCall",
+        id: "tool-item",
+        tool: "Read",
+        status: "completed",
+        result: toolResult,
+      },
+      itemId: "tool-item",
+      itemKind: "toolCall",
+      sequence: 2,
+      threadId: thread.id,
+    });
+    const freshEventId = insertCompletedItemEvent({
+      createdAt: freshCreatedAt,
+      db,
+      item: {
+        type: "commandExecution",
+        id: "fresh-item",
+        command: "rg fresh",
+        cwd: "/tmp/project",
+        status: "completed",
+        approvalStatus: null,
+        aggregatedOutput: commandOutput,
+      },
+      itemId: "fresh-item",
+      itemKind: "commandExecution",
+      sequence: 3,
+      threadId: thread.id,
+    });
+    const webSearchEventId = insertCompletedItemEvent({
+      createdAt: staleCreatedAt,
+      db,
+      item: {
+        type: "webSearch",
+        id: "web-search-item",
+        queries: ["retention policy"],
+        resultText: webSearchResultText,
+      },
+      itemId: "web-search-item",
+      itemKind: "webSearch",
+      sequence: 4,
+      threadId: thread.id,
+    });
+    const webFetchEventId = insertCompletedItemEvent({
+      createdAt: staleCreatedAt,
+      db,
+      item: {
+        type: "webFetch",
+        id: "web-fetch-item",
+        url: "https://example.com/large",
+        prompt: null,
+        pattern: null,
+        resultText: webFetchResultText,
+      },
+      itemId: "web-fetch-item",
+      itemKind: "webFetch",
+      sequence: 5,
+      threadId: thread.id,
+    });
+    const smallEventId = insertCompletedItemEvent({
+      createdAt: staleCreatedAt,
+      db,
+      item: {
+        type: "commandExecution",
+        id: "small-item",
+        command: "pwd",
+        cwd: "/tmp/project",
+        status: "completed",
+        approvalStatus: null,
+        aggregatedOutput: smallOutput,
+      },
+      itemId: "small-item",
+      itemKind: "commandExecution",
+      sequence: 6,
+      threadId: thread.id,
+    });
+
+    const result = truncateCompletedEventItemOutputs(db, {
+      createdBefore,
+      limit: 10,
+      truncatedAt: now,
+    });
+
+    expect(result).toEqual({
+      commandExecutionOutputs: 1,
+      toolCallResults: 1,
+      webFetchResultTexts: 1,
+      webSearchResultTexts: 1,
+    });
+
+    const commandData = JSON.parse(
+      db.select().from(events).where(eq(events.id, commandEventId)).get()
+        ?.data ?? "{}",
+    );
+    expect(commandData.item.aggregatedOutput).not.toBe(commandOutput);
+    expect(commandData.item.aggregatedOutput).toContain(
+      "output truncated by retention policy",
+    );
+    expect(commandData.item.aggregatedOutput.startsWith(commandOutput.slice(0, COMPLETED_EVENT_OUTPUT_RETAINED_HEAD_CHARS))).toBe(true);
+    expect(commandData.item.aggregatedOutput.endsWith(commandOutput.slice(-COMPLETED_EVENT_OUTPUT_RETAINED_TAIL_CHARS))).toBe(true);
+    expect(commandData.item.truncation.aggregatedOutput).toEqual({
+      originalLength: commandOutput.length,
+      retainedHeadLength: COMPLETED_EVENT_OUTPUT_RETAINED_HEAD_CHARS,
+      retainedTailLength: COMPLETED_EVENT_OUTPUT_RETAINED_TAIL_CHARS,
+      truncatedAt: now,
+    });
+
+    const toolData = JSON.parse(
+      db.select().from(events).where(eq(events.id, toolEventId)).get()?.data ??
+        "{}",
+    );
+    expect(toolData.item.result).not.toBe(toolResult);
+    expect(toolData.item.result).toContain(
+      "output truncated by retention policy",
+    );
+    expect(toolData.item.result.startsWith(toolResult.slice(0, COMPLETED_EVENT_OUTPUT_RETAINED_HEAD_CHARS))).toBe(true);
+    expect(toolData.item.result.endsWith(toolResult.slice(-COMPLETED_EVENT_OUTPUT_RETAINED_TAIL_CHARS))).toBe(true);
+    expect(toolData.item.truncation.result).toEqual({
+      originalLength: toolResult.length,
+      retainedHeadLength: COMPLETED_EVENT_OUTPUT_RETAINED_HEAD_CHARS,
+      retainedTailLength: COMPLETED_EVENT_OUTPUT_RETAINED_TAIL_CHARS,
+      truncatedAt: now,
+    });
+
+    const webSearchData = JSON.parse(
+      db
+        .select()
+        .from(events)
+        .where(eq(events.id, webSearchEventId))
+        .get()?.data ?? "{}",
+    );
+    expect(webSearchData.item.resultText).not.toBe(webSearchResultText);
+    expect(webSearchData.item.resultText).toContain(
+      "output truncated by retention policy",
+    );
+    expect(
+      webSearchData.item.resultText.startsWith(
+        webSearchResultText.slice(0, COMPLETED_EVENT_OUTPUT_RETAINED_HEAD_CHARS),
+      ),
+    ).toBe(true);
+    expect(
+      webSearchData.item.resultText.endsWith(
+        webSearchResultText.slice(-COMPLETED_EVENT_OUTPUT_RETAINED_TAIL_CHARS),
+      ),
+    ).toBe(true);
+    expect(webSearchData.item.truncation.resultText).toEqual({
+      originalLength: webSearchResultText.length,
+      retainedHeadLength: COMPLETED_EVENT_OUTPUT_RETAINED_HEAD_CHARS,
+      retainedTailLength: COMPLETED_EVENT_OUTPUT_RETAINED_TAIL_CHARS,
+      truncatedAt: now,
+    });
+
+    const webFetchData = JSON.parse(
+      db.select().from(events).where(eq(events.id, webFetchEventId)).get()
+        ?.data ?? "{}",
+    );
+    expect(webFetchData.item.resultText).not.toBe(webFetchResultText);
+    expect(webFetchData.item.resultText).toContain(
+      "output truncated by retention policy",
+    );
+    expect(
+      webFetchData.item.resultText.startsWith(
+        webFetchResultText.slice(0, COMPLETED_EVENT_OUTPUT_RETAINED_HEAD_CHARS),
+      ),
+    ).toBe(true);
+    expect(
+      webFetchData.item.resultText.endsWith(
+        webFetchResultText.slice(-COMPLETED_EVENT_OUTPUT_RETAINED_TAIL_CHARS),
+      ),
+    ).toBe(true);
+    expect(webFetchData.item.truncation.resultText).toEqual({
+      originalLength: webFetchResultText.length,
+      retainedHeadLength: COMPLETED_EVENT_OUTPUT_RETAINED_HEAD_CHARS,
+      retainedTailLength: COMPLETED_EVENT_OUTPUT_RETAINED_TAIL_CHARS,
+      truncatedAt: now,
+    });
+
+    const freshData = JSON.parse(
+      db.select().from(events).where(eq(events.id, freshEventId)).get()?.data ??
+        "{}",
+    );
+    expect(freshData.item.aggregatedOutput).toBe(commandOutput);
+    const smallData = JSON.parse(
+      db.select().from(events).where(eq(events.id, smallEventId)).get()?.data ??
+        "{}",
+    );
+    expect(smallData.item.aggregatedOutput).toBe(smallOutput);
+
+    expect(
+      truncateCompletedEventItemOutputs(db, {
+        createdBefore,
+        limit: 10,
+        truncatedAt: now,
+      }),
+    ).toEqual({
+      commandExecutionOutputs: 0,
+      toolCallResults: 0,
+      webFetchResultTexts: 0,
+      webSearchResultTexts: 0,
+    });
+  });
+
+  it("advances durable cursors past old small outputs", () => {
+    const { db, project } = setup();
+    const thread = createThread(db, noopNotifier, {
+      projectId: project.id,
+      providerId: "codex",
+      status: "idle",
+    });
+    const now = Date.now();
+    const staleCreatedAt = now - 10_000;
+    const createdBefore = now - 5_000;
+    const largeOutput =
+      "command-head-" +
+      "a".repeat(COMPLETED_EVENT_OUTPUT_TRUNCATION_THRESHOLD_CHARS) +
+      "-command-tail";
+
+    insertCompletedItemEvent({
+      createdAt: staleCreatedAt,
+      db,
+      item: {
+        type: "commandExecution",
+        id: "small-before-large",
+        command: "pwd",
+        cwd: "/tmp/project",
+        status: "completed",
+        approvalStatus: null,
+        aggregatedOutput: "small output",
+      },
+      itemId: "small-before-large",
+      itemKind: "commandExecution",
+      sequence: 1,
+      threadId: thread.id,
+    });
+    const largeEventId = insertCompletedItemEvent({
+      createdAt: staleCreatedAt + 1,
+      db,
+      item: {
+        type: "commandExecution",
+        id: "large-after-small",
+        command: "cat large",
+        cwd: "/tmp/project",
+        status: "completed",
+        approvalStatus: null,
+        aggregatedOutput: largeOutput,
+      },
+      itemId: "large-after-small",
+      itemKind: "commandExecution",
+      sequence: 2,
+      threadId: thread.id,
+    });
+
+    expect(
+      truncateCompletedEventItemOutputs(db, {
+        createdBefore,
+        limit: 1,
+        truncatedAt: now,
+      }).commandExecutionOutputs,
+    ).toBe(0);
+    expect(
+      truncateCompletedEventItemOutputs(db, {
+        createdBefore,
+        limit: 1,
+        truncatedAt: now,
+      }).commandExecutionOutputs,
+    ).toBe(1);
+
+    const largeData = JSON.parse(
+      db.select().from(events).where(eq(events.id, largeEventId)).get()?.data ??
+        "{}",
+    );
+    expect(largeData.item.truncation.aggregatedOutput).toEqual({
+      originalLength: largeOutput.length,
+      retainedHeadLength: COMPLETED_EVENT_OUTPUT_RETAINED_HEAD_CHARS,
+      retainedTailLength: COMPLETED_EVENT_OUTPUT_RETAINED_TAIL_CHARS,
+      truncatedAt: now,
     });
   });
 });

@@ -4,11 +4,13 @@ import { migrate } from "../../src/migrate.js";
 import { noopNotifier } from "../../src/notifier.js";
 import {
   getPendingEnvironmentCommand,
+  getHostCommandCursor,
   hasPendingHostCommandForThread,
   fetchCommands,
   queueCommand,
   reportCommandResult,
 } from "../../src/data/commands.js";
+import { pruneCompletedCommands } from "../../src/data/sweeps.js";
 import { upsertHost } from "../../src/data/hosts.js";
 
 function setup() {
@@ -67,6 +69,54 @@ describe("commands", () => {
     // Each host starts at cursor 1
     expect(cmd1.cursor).toBe(1);
     expect(cmd2.cursor).toBe(1);
+  });
+
+  it("keeps cursors monotonic after old terminal commands are pruned", () => {
+    const { db, host } = setup();
+    const now = Date.now();
+    const completedAt = now - 10_000;
+    const completedBefore = now - 5_000;
+
+    const cmd1 = queueCommand(db, noopNotifier, {
+      hostId: host.id,
+      type: "workspace.status",
+      payload: "{}",
+    });
+    const cmd2 = queueCommand(db, noopNotifier, {
+      hostId: host.id,
+      type: "workspace.diff",
+      payload: "{}",
+    });
+    const cmd3 = queueCommand(db, noopNotifier, {
+      hostId: host.id,
+      type: "workspace.commit",
+      payload: "{}",
+    });
+
+    for (const command of [cmd1, cmd2, cmd3]) {
+      reportCommandResult(db, noopNotifier, {
+        commandId: command.id,
+        state: "success",
+        completedAt,
+        resultPayload: JSON.stringify({ ok: true }),
+      });
+    }
+
+    expect(
+      pruneCompletedCommands(db, {
+        completedBefore,
+        limit: 100,
+      }),
+    ).toEqual({ deleted: 3 });
+
+    const next = queueCommand(db, noopNotifier, {
+      hostId: host.id,
+      type: "workspace.status",
+      payload: "{}",
+    });
+
+    expect(next.cursor).toBe(4);
+    expect(getHostCommandCursor(db, host.id)).toBe(4);
   });
 
   it("fetches pending commands and marks as fetched", () => {

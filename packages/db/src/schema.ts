@@ -127,6 +127,7 @@ export const hosts = sqliteTable(
     provider: text("provider"),
     externalId: text("external_id"),
     lastActivityAt: integer("last_activity_at"),
+    commandCursor: integer("command_cursor").notNull().default(0),
     suspendedAt: integer("suspended_at"),
     destroyedAt: integer("destroyed_at"),
     lastSeenAt: integer("last_seen_at"),
@@ -339,6 +340,9 @@ export const threads = sqliteTable(
       table.archivedAt,
       table.deletedAt,
     ),
+    index("threads_active_maintenance_idx")
+      .on(table.status)
+      .where(sql`${table.deletedAt} IS NULL`),
   ],
 );
 
@@ -411,11 +415,6 @@ export const events = sqliteTable(
       table.type,
       table.sequence,
     ),
-    index("events_thread_item_id_sequence_idx").on(
-      table.threadId,
-      table.itemId,
-      table.sequence,
-    ),
     index("events_thread_turn_type_item_sequence_idx").on(
       table.threadId,
       table.turnId,
@@ -423,14 +422,10 @@ export const events = sqliteTable(
       table.itemId,
       table.sequence,
     ),
-    index("events_thread_turn_type_item_kind_item_idx").on(
-      table.threadId,
-      table.turnId,
-      table.type,
-      table.itemKind,
-      table.itemId,
-    ),
     index("events_environment_idx").on(table.environmentId),
+    index("events_completed_item_truncation_idx")
+      .on(table.itemKind, table.createdAt, table.id)
+      .where(sql`${table.type} = 'item/completed'`),
     check(
       "events_scope_shape_check",
       sql`(
@@ -438,6 +433,28 @@ export const events = sqliteTable(
         OR
         (${table.scopeKind} = 'thread' AND ${table.turnId} IS NULL)
       )`,
+    ),
+  ],
+);
+
+export const maintenanceScanCursors = sqliteTable(
+  "maintenance_scan_cursors",
+  {
+    id: text("id").primaryKey(),
+    policy: text("policy").notNull(),
+    version: integer("version").notNull(),
+    itemKind: text("item_kind").$type<ThreadEventItemType>().notNull(),
+    outputPath: text("output_path").notNull(),
+    lastCreatedAt: integer("last_created_at").notNull().default(0),
+    lastEventId: text("last_event_id").notNull().default(""),
+    updatedAt: integer("updated_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("maintenance_scan_cursors_path_idx").on(
+      table.policy,
+      table.version,
+      table.itemKind,
+      table.outputPath,
     ),
   ],
 );
@@ -581,6 +598,9 @@ export const hostDaemonCommands = sqliteTable(
         sql`${table.completedAt} IS NOT NULL
           AND (${table.payload} <> '{}' OR ${table.resultPayload} IS NOT NULL)`,
       ),
+    index("host_daemon_commands_completed_prune_idx")
+      .on(table.completedAt)
+      .where(sql`${table.completedAt} IS NOT NULL`),
   ],
 );
 

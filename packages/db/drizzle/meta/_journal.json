@@ -71,6 +71,20 @@
       "when": 1778880000000,
       "tag": "0009_prompt_history_entries",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1778966400000,
+      "tag": "0010_command_retention_maintenance",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1779052800000,
+      "tag": "0011_maintenance_cursor_indexes",
+      "breakpoints": true
     }
   ]
 }

@@ -323,6 +323,7 @@ export {
   cancelCommand,
   deleteQueuedCommandInTransaction,
   getCommand,
+  getHostCommandCursor,
   getPendingEnvironmentCommand,
   hasPendingHostCommandForThread,
   queueCommand,
@@ -419,8 +420,14 @@ export type {
 } from "./queued-thread-messages.js";
 
 export {
+  COMPLETED_COMMAND_ROW_RETENTION_MS,
   COMPLETED_COMMAND_PAYLOAD_RETENTION_MS,
+  COMPLETED_EVENT_OUTPUT_RETENTION_MS,
+  DEFAULT_COMPLETED_COMMAND_PRUNE_BATCH_SIZE,
+  DEFAULT_COMPLETED_EVENT_OUTPUT_TRUNCATION_BATCH_SIZE,
+  pruneCompletedCommands,
   pruneCompletedCommandPayloads,
+  truncateCompletedEventItemOutputs,
   sweepEphemeralHostsPendingCleanup,
   sweepIdleEphemeralHostsEligibleForSuspend,
   sweepExpiredCommands,
@@ -429,7 +436,27 @@ export {
   sweepManagedEnvironments,
 } from "./sweeps.js";
 export type {
+  PruneCompletedCommandsArgs,
+  PruneCompletedCommandsResult,
   PruneCompletedCommandPayloadsArgs,
   PruneCompletedCommandPayloadsResult,
   SweepExpiredLeasesResult,
+  TruncateCompletedEventItemOutputsArgs,
+  TruncateCompletedEventItemOutputsResult,
 } from "./sweeps.js";
+
+export {
+  compactDatabase,
+  DATABASE_COMPACTION_MIN_RECLAIMABLE_BYTES,
+  DATABASE_COMPACTION_MIN_RECLAIMABLE_RATIO,
+  getDatabaseCompactionStats,
+  getDatabaseMaintenanceActivity,
+  isDatabaseMaintenanceIdle,
+  shouldCompactDatabase,
+} from "./maintenance.js";
+export type {
+  CompactDatabaseResult,
+  DatabaseCompactionDecisionArgs,
+  DatabaseCompactionStats,
+  DatabaseMaintenanceActivity,
+} from "./maintenance.js";

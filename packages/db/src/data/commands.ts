@@ -1,7 +1,7 @@
-import { and, eq, inArray, max, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import type { DbConnection, DbTransaction } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
-import { hostDaemonCommands } from "../schema.js";
+import { hostDaemonCommands, hosts } from "../schema.js";
 import { createHostDaemonCommandId } from "../ids.js";
 
 export interface QueueCommandInput {
@@ -47,13 +47,19 @@ function queueCommandRecord(
   const now = Date.now();
   const id = createHostDaemonCommandId();
 
-  const maxRow = db
-    .select({ maxCursor: max(hostDaemonCommands.cursor) })
-    .from(hostDaemonCommands)
-    .where(eq(hostDaemonCommands.hostId, input.hostId))
-    .get();
+  const cursorRow =
+    db
+      .update(hosts)
+      .set({ commandCursor: sql`${hosts.commandCursor} + 1` })
+      .where(eq(hosts.id, input.hostId))
+      .returning({ cursor: hosts.commandCursor })
+      .get() ?? null;
 
-  const cursor = (maxRow?.maxCursor ?? 0) + 1;
+  if (!cursorRow) {
+    throw new Error(`Cannot queue command for missing host ${input.hostId}`);
+  }
+
+  const cursor = cursorRow.cursor;
 
   return db
     .insert(hostDaemonCommands)
@@ -70,6 +76,20 @@ function queueCommandRecord(
     })
     .returning()
     .get();
+}
+
+export function getHostCommandCursor(
+  db: CommandReadConnection,
+  hostId: string,
+): number | null {
+  const row =
+    db
+      .select({ cursor: hosts.commandCursor })
+      .from(hosts)
+      .where(eq(hosts.id, hostId))
+      .get() ?? null;
+
+  return row?.cursor ?? null;
 }
 
 export function queueCommandInTransaction(
