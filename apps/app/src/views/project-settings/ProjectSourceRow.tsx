@@ -6,7 +6,7 @@ import {
 import { Icon } from "@/components/ui/icon.js";
 import { LocalhostBadge } from "@/components/ui/localhost-badge.js";
 import { SettingsRow } from "@/components/ui/settings-section.js";
-import { StatusPill } from "@/components/ui/status-pill.js";
+import { Pill } from "@/components/ui/pill.js";
 import { GitHubIcon } from "@/components/icons/GitHubIcon";
 import { PersistentHostIconName } from "@/lib/host-display";
 import { Button } from "@/components/ui/button.js";
@@ -60,7 +60,7 @@ export function ProjectSourceRow({
           </span>
         ) : null}
         {isLocalPathInvalid ? (
-          <StatusPill variant="destructive">Invalid local path</StatusPill>
+          <Pill variant="destructive">Invalid local path</Pill>
         ) : null}
       </span>
       <DropdownMenu>

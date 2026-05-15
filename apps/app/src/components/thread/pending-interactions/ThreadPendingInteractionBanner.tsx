@@ -12,7 +12,7 @@ import {
 } from "@bb/domain";
 import { Button } from "@/components/ui/button.js";
 import { ExpandableLine } from "@/components/ui/expandable-line.js";
-import { StatusPill } from "@/components/ui/status-pill.js";
+import { Pill } from "@/components/ui/pill.js";
 import { getDetailScrollMaxHeightClass } from "@/components/ui/detail-scroll-size.js";
 import { useResolveThreadPendingInteraction } from "@/hooks/mutations/thread-interaction-mutations";
 import { getMutationErrorMessage } from "@/lib/mutation-errors";
@@ -84,7 +84,7 @@ export function ThreadPendingInteractionBanner({
           </ExpandableLine>
         </h3>
         {isResolving ? (
-          <StatusPill variant="secondary">Delivering</StatusPill>
+          <Pill variant="secondary">Delivering</Pill>
         ) : null}
       </div>
 

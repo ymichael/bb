@@ -1,3 +1,4 @@
+import { Badge } from "@/components/ui/badge.js";
 import { cn } from "@/lib/utils";
 
 interface HostStatusDotProps {
@@ -17,21 +18,16 @@ export function HostStatusDot({ className }: HostStatusDotProps) {
   );
 }
 
-interface HostOfflinePillProps {
+interface HostOfflineBadgeProps {
   className?: string;
 }
 
-/** Small pill indicating a host is offline. */
-export function HostOfflinePill({ className }: HostOfflinePillProps) {
+/** Small badge indicating a host is offline. */
+export function HostOfflineBadge({ className }: HostOfflineBadgeProps) {
   return (
-    <span
-      className={cn(
-        "shrink-0 rounded-full bg-muted px-1.5 py-px text-xs font-medium text-muted-foreground",
-        className,
-      )}
-    >
+    <Badge variant="muted" className={cn("shrink-0", className)}>
       offline
-    </span>
+    </Badge>
   );
 }
 
@@ -40,7 +36,7 @@ interface HostStatusBadgeProps {
   className?: string;
 }
 
-/** Renders a green dot when connected, or an "offline" pill when not. */
+/** Renders a green dot when connected, or an "offline" badge when not. */
 export function HostStatusBadge({
   connected,
   className,
@@ -48,6 +44,6 @@ export function HostStatusBadge({
   return connected ? (
     <HostStatusDot className={className} />
   ) : (
-    <HostOfflinePill className={className} />
+    <HostOfflineBadge className={className} />
   );
 }

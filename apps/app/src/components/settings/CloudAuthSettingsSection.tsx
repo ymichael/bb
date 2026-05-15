@@ -1,13 +1,13 @@
 import type { CloudAuthProviderId } from "@bb/agent-providers";
 import type { CloudAuthConnection } from "@bb/server-contract";
-import { StatusPill, type StatusPillVariant } from "@/components/ui/status-pill.js";
+import { Pill, type PillVariant } from "@/components/ui/pill.js";
 import { Button } from "@/components/ui/button.js";
 import { SettingsCard, SettingsRowList } from "@/components/ui/settings-section.js";
 import { CONNECTED_DOT_CLASS } from "@/components/settings/constants";
 
 const CLOUD_AUTH_STATUS_DISPLAY: Record<
   CloudAuthConnection["status"],
-  { pillVariant: StatusPillVariant; label: string }
+  { pillVariant: PillVariant; label: string }
 > = {
   connected: { pillVariant: "emphasis", label: "Connected" },
   invalid: { pillVariant: "destructive", label: "Needs attention" },
@@ -54,13 +54,13 @@ function CloudAuthRow({
         {isConnected ? (
           <span className={CONNECTED_DOT_CLASS} title="Connected" />
         ) : isPendingAttempt ? (
-          <StatusPill variant="secondary">Connecting…</StatusPill>
+          <Pill variant="secondary">Connecting…</Pill>
         ) : (
-          <StatusPill
+          <Pill
             variant={CLOUD_AUTH_STATUS_DISPLAY[connection.status].pillVariant}
           >
             {CLOUD_AUTH_STATUS_DISPLAY[connection.status].label}
-          </StatusPill>
+          </Pill>
         )}
         <span className="flex-1" />
         <div className="flex shrink-0 gap-1.5">

@@ -2,7 +2,6 @@ import { memo, useState } from "react";
 import type { ThreadListEntry } from "@bb/domain";
 import { Icon, type IconName } from "@/components/ui/icon.js";
 import { OverflowFade } from "@/components/ui/overflow-fade.js";
-import { Pill } from "@/components/ui/pill.js";
 import { SidebarStickyTier } from "@/components/ui/sidebar.js";
 import { NavLink } from "react-router-dom";
 import {
@@ -50,7 +49,6 @@ interface ThreadRowProps {
   projectId: string;
   thread: ThreadListEntry;
   isActive: boolean;
-  isPromoted?: boolean;
   onProjectSelect?: () => void;
   options: ThreadRowOptions;
 }
@@ -259,7 +257,6 @@ function ThreadRowComponent({
   projectId,
   thread,
   isActive,
-  isPromoted = false,
   onProjectSelect,
   options,
 }: ThreadRowProps) {
@@ -321,11 +318,6 @@ function ThreadRowComponent({
       ) : null}
       <span className="flex min-w-0 flex-1 items-center gap-1.5">
         <span className="min-w-0 truncate">{threadTitle}</span>
-        {isPromoted ? (
-          <Pill variant="emphasis" className="shrink-0">
-            promoted
-          </Pill>
-        ) : null}
       </span>
       <span
         className={cn(

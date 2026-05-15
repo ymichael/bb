@@ -144,7 +144,7 @@ ProjectRow.displayName = "ProjectRow";
 
 const THREAD_ROW_TSX = `import { memo, useMemo } from "react";
 import { SidebarMenuButton, SidebarMenuItem } from "@/components/ui/sidebar.js";
-import { StatusPill } from "@/components/ui/status-pill.js";
+import { Pill } from "@/components/ui/pill.js";
 import { cn } from "@/lib/utils";
 import { getEnvironmentWorkspaceDisplayIconName } from "@/lib/environment-workspace-display";
 import type { ThreadListEntry } from "@bb/server-contract";
@@ -223,9 +223,9 @@ function ThreadRowComponent({
           ) : null}
         </span>
         {isManager ? (
-          <StatusPill variant="outline" className="shrink-0">
+          <Pill variant="outline" className="shrink-0">
             manager
-          </StatusPill>
+          </Pill>
         ) : null}
       </SidebarMenuButton>
       <span

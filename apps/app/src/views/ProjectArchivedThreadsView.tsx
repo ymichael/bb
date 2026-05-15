@@ -121,7 +121,7 @@ export function ProjectArchivedThreadsView() {
                           {getThreadDisplayTitle(thread)}
                         </span>
                         {pillLabel ? (
-                          <Pill variant="secondary" className="shrink-0">
+                          <Pill variant="outline" className="shrink-0">
                             {pillLabel}
                           </Pill>
                         ) : null}

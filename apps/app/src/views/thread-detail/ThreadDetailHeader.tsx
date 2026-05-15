@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button.js";
 import { COARSE_POINTER_TOOLBAR_ACTION_BUTTON_CLASS } from "@/components/ui/coarse-pointer-sizing.js";
 import { Icon } from "@/components/ui/icon.js";
 import { SplitButton } from "@/components/ui/split-button.js";
-import { StatusPill } from "@/components/ui/status-pill.js";
+import { Pill } from "@/components/ui/pill.js";
 import { useIsCompactViewport } from "@/components/ui/hooks/use-compact-viewport.js";
 import {
   AppPageHeader,
@@ -53,10 +53,10 @@ export function ThreadDetailHeader({
     <>
       <p className="truncate text-sm font-semibold">{threadTitle}</p>
       {isManagerThread ? (
-        <StatusPill variant="outline">manager</StatusPill>
+        <Pill variant="outline">manager</Pill>
       ) : null}
       {!isManagerThread && isManagedThread ? (
-        <StatusPill variant="outline">managed</StatusPill>
+        <Pill variant="outline">managed</Pill>
       ) : null}
     </>
   );
